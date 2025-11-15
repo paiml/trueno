@@ -70,6 +70,24 @@ pub enum OpComplexity {
 
 /// Select the best available backend for the current platform
 ///
+/// This function performs runtime CPU feature detection and selects the most
+/// optimized backend available. The selection follows this priority:
+///
+/// **x86/x86_64**:
+/// 1. AVX-512 (if `avx512f` feature detected)
+/// 2. AVX2 (if `avx2` and `fma` features detected)
+/// 3. AVX (if `avx` feature detected)
+/// 4. SSE2 (baseline for x86_64)
+/// 5. Scalar (fallback)
+///
+/// **ARM**:
+/// 1. NEON (if available)
+/// 2. Scalar (fallback)
+///
+/// **WASM**: SIMD128 (if available), else Scalar
+///
+/// **Other platforms**: Scalar
+///
 /// # Returns
 ///
 /// The most optimized backend available on this CPU/platform
@@ -83,8 +101,75 @@ pub enum OpComplexity {
 /// println!("Using backend: {:?}", backend);
 /// ```
 pub fn select_best_available_backend() -> Backend {
-    // For now, return Scalar (will implement CPU detection later)
-    Backend::Scalar
+    #[cfg(target_arch = "x86_64")]
+    {
+        // x86_64 SIMD feature detection (priority order)
+        if is_x86_feature_detected!("avx512f") {
+            return Backend::AVX512;
+        }
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            return Backend::AVX2;
+        }
+        if is_x86_feature_detected!("avx") {
+            return Backend::AVX;
+        }
+        if is_x86_feature_detected!("sse2") {
+            return Backend::SSE2;
+        }
+        Backend::Scalar
+    }
+
+    #[cfg(target_arch = "x86")]
+    {
+        // x86 (32-bit) - similar detection
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            return Backend::AVX2;
+        }
+        if is_x86_feature_detected!("avx") {
+            return Backend::AVX;
+        }
+        if is_x86_feature_detected!("sse2") {
+            return Backend::SSE2;
+        }
+        Backend::Scalar
+    }
+
+    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    {
+        // ARM64 with NEON
+        Backend::NEON
+    }
+
+    #[cfg(all(target_arch = "arm", target_feature = "neon"))]
+    {
+        // ARM32 with NEON
+        Backend::NEON
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        // WebAssembly
+        #[cfg(target_feature = "simd128")]
+        {
+            Backend::WasmSIMD
+        }
+        #[cfg(not(target_feature = "simd128"))]
+        {
+            Backend::Scalar
+        }
+    }
+
+    // Fallback for other architectures
+    #[cfg(not(any(
+        target_arch = "x86_64",
+        target_arch = "x86",
+        target_arch = "aarch64",
+        target_arch = "arm",
+        target_arch = "wasm32"
+    )))]
+    {
+        Backend::Scalar
+    }
 }
 
 #[cfg(test)]
@@ -106,7 +191,42 @@ mod tests {
     #[test]
     fn test_select_best_available_backend() {
         let backend = select_best_available_backend();
-        // Currently returns Scalar (baseline implementation)
-        assert_eq!(backend, Backend::Scalar);
+
+        // On x86_64, we should get at least SSE2 (baseline for x86_64)
+        // or a more advanced SIMD backend if available
+        #[cfg(target_arch = "x86_64")]
+        {
+            // x86_64 baseline is SSE2, so we should never get Scalar on x86_64
+            assert_ne!(backend, Backend::Scalar);
+            // Verify it's one of the x86 SIMD backends
+            assert!(matches!(
+                backend,
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512
+            ));
+        }
+
+        // On other platforms, we might get Scalar or platform-specific SIMD
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            // Just verify we got a valid backend
+            assert!(matches!(
+                backend,
+                Backend::Scalar
+                    | Backend::SSE2
+                    | Backend::AVX
+                    | Backend::AVX2
+                    | Backend::AVX512
+                    | Backend::NEON
+                    | Backend::WasmSIMD
+            ));
+        }
+    }
+
+    #[test]
+    fn test_backend_selection_is_deterministic() {
+        // Backend selection should be deterministic (same result on multiple calls)
+        let backend1 = select_best_available_backend();
+        let backend2 = select_best_available_backend();
+        assert_eq!(backend1, backend2);
     }
 }
