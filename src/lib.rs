@@ -28,6 +28,7 @@
 //! assert_eq!(result.as_slice(), &[6.0, 8.0, 10.0, 12.0]);
 //! ```
 
+pub mod backends;
 pub mod error;
 pub mod vector;
 
