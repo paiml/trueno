@@ -442,3 +442,237 @@ mod tests {
         assert_eq!(v.max().unwrap(), -1.0);
     }
 }
+
+#[cfg(test)]
+mod property_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    // Property test: Addition is commutative (a + b == b + a)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_add_commutative(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100),
+            b in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            // Use minimum length to ensure both vectors have same size
+            let len = a.len().min(b.len());
+            let a_vec: Vec<f32> = a.into_iter().take(len).collect();
+            let b_vec: Vec<f32> = b.into_iter().take(len).collect();
+
+            let va = Vector::from_slice(&a_vec);
+            let vb = Vector::from_slice(&b_vec);
+
+            let result1 = va.add(&vb).unwrap();
+            let result2 = vb.add(&va).unwrap();
+
+            prop_assert_eq!(result1.as_slice(), result2.as_slice());
+        }
+    }
+
+    // Property test: Addition is associative ((a + b) + c == a + (b + c))
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_add_associative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..50),
+            b in prop::collection::vec(-100.0f32..100.0, 1..50),
+            c in prop::collection::vec(-100.0f32..100.0, 1..50)
+        ) {
+            let len = a.len().min(b.len()).min(c.len());
+            let a_vec: Vec<f32> = a.into_iter().take(len).collect();
+            let b_vec: Vec<f32> = b.into_iter().take(len).collect();
+            let c_vec: Vec<f32> = c.into_iter().take(len).collect();
+
+            let va = Vector::from_slice(&a_vec);
+            let vb = Vector::from_slice(&b_vec);
+            let vc = Vector::from_slice(&c_vec);
+
+            let ab = va.add(&vb).unwrap();
+            let abc = ab.add(&vc).unwrap();
+
+            let bc = vb.add(&vc).unwrap();
+            let a_bc = va.add(&bc).unwrap();
+
+            // Use approximate equality for floating point (relaxed for associativity)
+            for (x, y) in abc.as_slice().iter().zip(a_bc.as_slice()) {
+                prop_assert!((x - y).abs() < 1e-4);
+            }
+        }
+    }
+
+    // Property test: Multiplication is commutative
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_mul_commutative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            b in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let len = a.len().min(b.len());
+            let a_vec: Vec<f32> = a.into_iter().take(len).collect();
+            let b_vec: Vec<f32> = b.into_iter().take(len).collect();
+
+            let va = Vector::from_slice(&a_vec);
+            let vb = Vector::from_slice(&b_vec);
+
+            let result1 = va.mul(&vb).unwrap();
+            let result2 = vb.mul(&va).unwrap();
+
+            prop_assert_eq!(result1.as_slice(), result2.as_slice());
+        }
+    }
+
+    // Property test: Dot product is commutative
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_dot_commutative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            b in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let len = a.len().min(b.len());
+            let a_vec: Vec<f32> = a.into_iter().take(len).collect();
+            let b_vec: Vec<f32> = b.into_iter().take(len).collect();
+
+            let va = Vector::from_slice(&a_vec);
+            let vb = Vector::from_slice(&b_vec);
+
+            let result1 = va.dot(&vb).unwrap();
+            let result2 = vb.dot(&va).unwrap();
+
+            prop_assert!((result1 - result2).abs() < 1e-3);
+        }
+    }
+
+    // Property test: Identity element for addition (a + 0 == a)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_add_identity(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let zero = Vector::from_slice(&vec![0.0; a.len()]);
+
+            let result = va.add(&zero).unwrap();
+
+            prop_assert_eq!(result.as_slice(), va.as_slice());
+        }
+    }
+
+    // Property test: Identity element for multiplication (a * 1 == a)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_mul_identity(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let one = Vector::from_slice(&vec![1.0; a.len()]);
+
+            let result = va.mul(&one).unwrap();
+
+            for (x, y) in result.as_slice().iter().zip(va.as_slice()) {
+                prop_assert!((x - y).abs() < 1e-5);
+            }
+        }
+    }
+
+    // Property test: Zero element for multiplication (a * 0 == 0)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_mul_zero(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let zero = Vector::from_slice(&vec![0.0; a.len()]);
+
+            let result = va.mul(&zero).unwrap();
+
+            for x in result.as_slice() {
+                prop_assert_eq!(*x, 0.0);
+            }
+        }
+    }
+
+    // Property test: Distributive property (a * (b + c) == a * b + a * c)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_distributive(
+            a in prop::collection::vec(-10.0f32..10.0, 1..50),
+            b in prop::collection::vec(-10.0f32..10.0, 1..50),
+            c in prop::collection::vec(-10.0f32..10.0, 1..50)
+        ) {
+            let len = a.len().min(b.len()).min(c.len());
+            let a_vec: Vec<f32> = a.into_iter().take(len).collect();
+            let b_vec: Vec<f32> = b.into_iter().take(len).collect();
+            let c_vec: Vec<f32> = c.into_iter().take(len).collect();
+
+            let va = Vector::from_slice(&a_vec);
+            let vb = Vector::from_slice(&b_vec);
+            let vc = Vector::from_slice(&c_vec);
+
+            // a * (b + c)
+            let bc = vb.add(&vc).unwrap();
+            let left = va.mul(&bc).unwrap();
+
+            // a * b + a * c
+            let ab = va.mul(&vb).unwrap();
+            let ac = va.mul(&vc).unwrap();
+            let right = ab.add(&ac).unwrap();
+
+            for (x, y) in left.as_slice().iter().zip(right.as_slice()) {
+                prop_assert!((x - y).abs() < 1e-3);
+            }
+        }
+    }
+
+    // Property test: Sum is consistent
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sum_matches_manual(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.sum().unwrap();
+            let manual_sum: f32 = a.iter().sum();
+
+            prop_assert!((result - manual_sum).abs() < 1e-3);
+        }
+    }
+
+    // Property test: Max is actually maximum
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_max_is_maximum(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.max().unwrap();
+
+            // Verify result is >= all elements
+            for &x in a.iter() {
+                prop_assert!(result >= x);
+            }
+
+            // Verify result is actually in the vector
+            prop_assert!(a.contains(&result));
+        }
+    }
+}
