@@ -299,8 +299,22 @@ mod tests {
     #[test]
     fn test_auto_backend_resolution() {
         let v = Vector::from_slice_with_backend(&[1.0], Backend::Auto);
-        // Auto should be resolved to Scalar (currently)
-        assert_eq!(v.backend(), Backend::Scalar);
+        // Auto should be resolved to best available backend
+        let expected_backend = crate::select_best_available_backend();
+        assert_eq!(v.backend(), expected_backend);
+
+        // Verify it's not still Backend::Auto after resolution
+        assert_ne!(v.backend(), Backend::Auto);
+
+        // On x86_64, should be a SIMD backend (not Scalar)
+        #[cfg(target_arch = "x86_64")]
+        {
+            assert_ne!(v.backend(), Backend::Scalar);
+            assert!(matches!(
+                v.backend(),
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512
+            ));
+        }
     }
 
     // Add operation tests
