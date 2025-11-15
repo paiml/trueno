@@ -1,5 +1,9 @@
 //! Vector type with multi-backend support
 
+use crate::backends::scalar::ScalarBackend;
+#[cfg(target_arch = "x86_64")]
+use crate::backends::sse2::Sse2Backend;
+use crate::backends::VectorBackend;
 use crate::{Backend, Result, TruenoError};
 
 /// High-performance vector with multi-backend support
@@ -154,12 +158,31 @@ impl Vector<f32> {
             });
         }
 
-        let result: Vec<f32> = self
-            .data
-            .iter()
-            .zip(&other.data)
-            .map(|(a, b)| a + b)
-            .collect();
+        let mut result = vec![0.0; self.len()];
+
+        // Dispatch to appropriate backend
+        unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::add(&self.data, &other.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    // For now, all x86 backends use SSE2 implementation
+                    // TODO: Add AVX2, AVX512 optimized versions
+                    Sse2Backend::add(&self.data, &other.data, &mut result);
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    // Fallback to scalar on non-x86_64
+                    ScalarBackend::add(&self.data, &other.data, &mut result);
+                }
+                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                    // Not yet implemented, use scalar
+                    ScalarBackend::add(&self.data, &other.data, &mut result);
+                }
+            }
+        }
 
         Ok(Self {
             data: result,
@@ -188,12 +211,27 @@ impl Vector<f32> {
             });
         }
 
-        let result: Vec<f32> = self
-            .data
-            .iter()
-            .zip(&other.data)
-            .map(|(a, b)| a * b)
-            .collect();
+        let mut result = vec![0.0; self.len()];
+
+        // Dispatch to appropriate backend
+        unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::mul(&self.data, &other.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    Sse2Backend::mul(&self.data, &other.data, &mut result);
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::mul(&self.data, &other.data, &mut result);
+                }
+                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                    ScalarBackend::mul(&self.data, &other.data, &mut result);
+                }
+            }
+        }
 
         Ok(Self {
             data: result,
@@ -222,7 +260,24 @@ impl Vector<f32> {
             });
         }
 
-        let result: f32 = self.data.iter().zip(&other.data).map(|(a, b)| a * b).sum();
+        let result = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::dot(&self.data, &other.data)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    Sse2Backend::dot(&self.data, &other.data)
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::dot(&self.data, &other.data)
+                }
+                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                    ScalarBackend::dot(&self.data, &other.data)
+                }
+            }
+        };
 
         Ok(result)
     }
@@ -238,7 +293,26 @@ impl Vector<f32> {
     /// assert_eq!(v.sum().unwrap(), 10.0);
     /// ```
     pub fn sum(&self) -> Result<f32> {
-        Ok(self.data.iter().sum())
+        let result = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::sum(&self.data)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    Sse2Backend::sum(&self.data)
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::sum(&self.data)
+                }
+                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                    ScalarBackend::sum(&self.data)
+                }
+            }
+        };
+
+        Ok(result)
     }
 
     /// Find maximum element
@@ -256,11 +330,30 @@ impl Vector<f32> {
     ///
     /// Returns [`TruenoError::InvalidInput`] if vector is empty.
     pub fn max(&self) -> Result<f32> {
-        self.data
-            .iter()
-            .copied()
-            .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .ok_or_else(|| TruenoError::InvalidInput("Empty vector".to_string()))
+        if self.data.is_empty() {
+            return Err(TruenoError::InvalidInput("Empty vector".to_string()));
+        }
+
+        let result = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::max(&self.data)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    Sse2Backend::max(&self.data)
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::max(&self.data)
+                }
+                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                    ScalarBackend::max(&self.data)
+                }
+            }
+        };
+
+        Ok(result)
     }
 }
 
@@ -665,7 +758,8 @@ mod property_tests {
             let result = va.sum().unwrap();
             let manual_sum: f32 = a.iter().sum();
 
-            prop_assert!((result - manual_sum).abs() < 1e-3);
+            // Relaxed tolerance for SIMD vs scalar accumulation order differences
+            prop_assert!((result - manual_sum).abs() < 1e-2);
         }
     }
 
