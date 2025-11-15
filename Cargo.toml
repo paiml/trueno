@@ -1,0 +1,27 @@
+[package]
+name = "trueno"
+version = "0.1.0"
+edition = "2021"
+authors = ["Pragmatic AI Labs"]
+license = "MIT"
+description = "Multi-target high-performance compute library (SIMD/GPU/WASM)"
+repository = "https://github.com/paiml/trueno"
+readme = "README.md"
+keywords = ["simd", "gpu", "wasm", "performance", "vectorization"]
+categories = ["algorithms", "mathematics", "science"]
+
+[dependencies]
+thiserror = "2.0"
+
+[dev-dependencies]
+proptest = "1.8"
+criterion = "0.5"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[lib]
+name = "trueno"
+path = "src/lib.rs"
