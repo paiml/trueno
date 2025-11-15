@@ -1,0 +1,194 @@
+# PMAT Quality Gates Configuration for Trueno
+# EXTREME TDD quality standards
+# https://github.com/paiml/pmat-mcp-agent-toolkit
+
+[quality-gates]
+# Enable all quality checks
+enabled = true
+fail-on-violation = true
+
+[quality-gates.provability]
+# Formal verification (deferred to Phase 2+)
+enabled = false  # Enable after SIMD implementations
+
+[quality-gates.coverage]
+# Test coverage thresholds
+enabled = true
+min-line-coverage = 85.0
+min-branch-coverage = 80.0
+target-coverage = 100.0
+
+[quality-gates.complexity]
+# Code complexity limits
+enabled = true
+max-cyclomatic = 10
+max-cognitive = 15
+max-complexity-p99 = 50
+warn-cyclomatic = 5
+warn-cognitive = 10
+
+[quality-gates.dead-code]
+# Dead code detection
+enabled = true
+max-dead-code-percentage = 5.0
+exclude-patterns = [
+    "*/tests/*",
+    "*/benches/*",
+    "*/examples/*"
+]
+
+[quality-gates.entropy]
+# Complexity entropy (code diversity)
+# Note: Low entropy expected in Phase 1 (scalar baseline)
+enabled = true
+min-entropy = 0.5  # Relaxed for Phase 1
+target-entropy = 2.0  # Will increase with SIMD/GPU backends
+
+[quality-gates.satd]
+# Self-Admitted Technical Debt detection
+enabled = true
+max-satd-items = 5
+severity-thresholds = { high = 0, medium = 3, low = 5 }
+patterns = [
+    "TODO",
+    "FIXME",
+    "HACK",
+    "XXX",
+    "BUG",
+    "DEBT"
+]
+
+[quality-gates.security]
+# Security vulnerability checks
+enabled = true
+deny-unsafe = false  # Allow unsafe in backend implementations only
+max-unsafe-blocks = 10  # Limited to SIMD/GPU backends
+
+[quality-gates.duplicates]
+# Code duplication detection
+enabled = true
+max-duplication-percentage = 5.0
+min-duplicate-lines = 6
+
+[quality-gates.mutation]
+# Mutation testing (via cargo-mutants)
+enabled = true
+min-kill-rate = 80.0
+timeout-multiplier = 2.0
+
+[quality-gates.formatting]
+# Code formatting (cargo fmt)
+enabled = true
+strict = true
+
+[quality-gates.linting]
+# Linting (cargo clippy)
+enabled = true
+deny-warnings = true
+pedantic = false  # Enable after Phase 1
+
+[tdg]
+# Technical Debt Grading
+enabled = true
+min-grade = 90.0  # A- minimum
+target-grade = 95.0  # A target
+
+[repo-health]
+# Repository health scoring
+enabled = true
+min-score = 70.0
+target-score = 90.0
+
+[performance]
+# Performance requirements
+max-test-duration = 300  # 5 minutes
+max-coverage-duration = 600  # 10 minutes
+max-precommit-duration = 30  # 30 seconds
+
+[pre-commit]
+# Pre-commit hook configuration
+enabled = true
+checks = [
+    "formatting",
+    "linting",
+    "test-fast",
+    "dead-code"
+]
+parallel = true
+
+[ci]
+# CI/CD quality gates
+enabled = true
+checks = [
+    "formatting",
+    "linting",
+    "test",
+    "coverage",
+    "complexity",
+    "dead-code",
+    "satd",
+    "security",
+    "duplicates"
+]
+
+[exclude]
+# Paths to exclude from analysis
+paths = [
+    "target/",
+    ".git/",
+    "node_modules/",
+    "proptest-regressions/",
+    "*.lock"
+]
+
+[roadmap]
+# Phase-based quality gates
+
+[roadmap.phase1]
+name = "Scalar Baseline"
+min-coverage = 90.0
+max-complexity = 5
+allow-unsafe = false
+
+[roadmap.phase2]
+name = "x86 SIMD"
+min-coverage = 85.0
+max-complexity = 15
+allow-unsafe = true  # SIMD intrinsics only
+max-unsafe-blocks = 20
+
+[roadmap.phase3]
+name = "ARM SIMD"
+min-coverage = 85.0
+max-complexity = 15
+allow-unsafe = true
+max-unsafe-blocks = 30
+
+[roadmap.phase4]
+name = "GPU Compute"
+min-coverage = 80.0  # GPU testing is complex
+max-complexity = 20
+allow-unsafe = true
+max-unsafe-blocks = 50
+
+[toyota-way]
+# Toyota Production System principles
+enabled = true
+
+[toyota-way.jidoka]
+# Built-in quality (stop the line on defects)
+enabled = true
+auto-fix = false
+require-tests = true
+
+[toyota-way.kaizen]
+# Continuous improvement
+enabled = true
+track-improvements = true
+min-improvement-percentage = 10.0  # Benchmark requirement
+
+[toyota-way.genchi-genbutsu]
+# Go and see (measure reality)
+enabled = true
+require-benchmarks = true
+min-benchmark-runs = 10
