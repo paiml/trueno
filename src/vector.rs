@@ -452,6 +452,75 @@ impl Vector<f32> {
         })
     }
 
+    /// Element-wise division
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let a = Vector::from_slice(&[10.0, 20.0, 30.0]);
+    /// let b = Vector::from_slice(&[2.0, 4.0, 5.0]);
+    /// let result = a.div(&b).unwrap();
+    ///
+    /// assert_eq!(result.as_slice(), &[5.0, 5.0, 6.0]);
+    /// ```
+    pub fn div(&self, other: &Self) -> Result<Self> {
+        if self.len() != other.len() {
+            return Err(TruenoError::SizeMismatch {
+                expected: self.len(),
+                actual: other.len(),
+            });
+        }
+
+        let mut result = vec![0.0; self.len()];
+
+        // Dispatch to appropriate backend
+        unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::div(&self.data, &other.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => {
+                    Sse2Backend::div(&self.data, &other.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => {
+                    Avx2Backend::div(&self.data, &other.data, &mut result);
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::div(&self.data, &other.data, &mut result);
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => {
+                    NeonBackend::div(&self.data, &other.data, &mut result);
+                }
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => {
+                    ScalarBackend::div(&self.data, &other.data, &mut result);
+                }
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => {
+                    WasmBackend::div(&self.data, &other.data, &mut result);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => {
+                    ScalarBackend::div(&self.data, &other.data, &mut result);
+                }
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::div(&self.data, &other.data, &mut result);
+                }
+            }
+        }
+
+        Ok(Self {
+            data: result,
+            backend: self.backend,
+        })
+    }
+
     /// Dot product
     ///
     /// # Examples
@@ -967,6 +1036,55 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // Division operation tests
+    #[test]
+    fn test_div() {
+        let a = Vector::from_slice(&[10.0, 20.0, 30.0]);
+        let b = Vector::from_slice(&[2.0, 4.0, 5.0]);
+        let result = a.div(&b).unwrap();
+        assert_eq!(result.as_slice(), &[5.0, 5.0, 6.0]);
+    }
+
+    #[test]
+    fn test_div_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let b: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.div(&b).unwrap();
+        assert_eq!(result.as_slice(), &[]);
+    }
+
+    #[test]
+    fn test_div_single() {
+        let a = Vector::from_slice(&[10.0]);
+        let b = Vector::from_slice(&[2.0]);
+        let result = a.div(&b).unwrap();
+        assert_eq!(result.as_slice(), &[5.0]);
+    }
+
+    #[test]
+    fn test_div_size_mismatch() {
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let b = Vector::from_slice(&[4.0, 5.0]);
+        let result = a.div(&b);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_div_by_one() {
+        let a = Vector::from_slice(&[5.0, 10.0, 15.0]);
+        let b = Vector::from_slice(&[1.0, 1.0, 1.0]);
+        let result = a.div(&b).unwrap();
+        assert_eq!(result.as_slice(), &[5.0, 10.0, 15.0]);
+    }
+
+    #[test]
+    fn test_div_fractional() {
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let b = Vector::from_slice(&[2.0, 4.0, 8.0]);
+        let result = a.div(&b).unwrap();
+        assert_eq!(result.as_slice(), &[0.5, 0.5, 0.375]);
+    }
+
     // Dot product tests
     #[test]
     fn test_dot() {
@@ -1361,6 +1479,78 @@ mod property_tests {
             let result2 = vb.mul(&va).unwrap();
 
             prop_assert_eq!(result1.as_slice(), result2.as_slice());
+        }
+    }
+
+    // Property test: Division identity (a / 1 == a)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_div_identity(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let ones = Vector::from_slice(&vec![1.0; a.len()]);
+
+            let result = va.div(&ones).unwrap();
+
+            for (x, y) in result.as_slice().iter().zip(va.as_slice()) {
+                prop_assert!((x - y).abs() < 1e-5);
+            }
+        }
+    }
+
+    // Property test: Division inverse (a / a == 1, for non-zero a)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_div_inverse(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            // Filter out zeros to avoid division edge cases
+            let a_nonzero: Vec<f32> = a.into_iter()
+                .map(|x| if x.abs() < 1e-5 { 1.0 } else { x })
+                .collect();
+
+            let va = Vector::from_slice(&a_nonzero);
+            let result = va.div(&va).unwrap();
+
+            // All elements should be 1.0 (or very close)
+            for &x in result.as_slice() {
+                prop_assert!((x - 1.0).abs() < 1e-4);
+            }
+        }
+    }
+
+    // Property test: Division-multiplication inverse (a / b) * b ≈ a
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_div_mul_inverse(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100),
+            b in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let len = a.len().min(b.len());
+            let a_vec: Vec<f32> = a.into_iter().take(len).collect();
+
+            // Filter out zeros from b to avoid division by zero edge cases
+            let b_vec: Vec<f32> = b.into_iter().take(len)
+                .map(|x| if x.abs() < 1e-3 { 1.0 } else { x })
+                .collect();
+
+            let va = Vector::from_slice(&a_vec);
+            let vb = Vector::from_slice(&b_vec);
+
+            let divided = va.div(&vb).unwrap();
+            let restored = divided.mul(&vb).unwrap();
+
+            // Restored should approximately equal original
+            for (original, restored_val) in a_vec.iter().zip(restored.as_slice()) {
+                prop_assert!((original - restored_val).abs() < 1e-2);
+            }
         }
     }
 

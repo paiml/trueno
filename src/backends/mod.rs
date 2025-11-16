@@ -72,6 +72,14 @@ pub trait VectorBackend {
     /// - `result` must have length >= `a.len()`
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]);
 
+    /// Element-wise division: a[i] / b[i]
+    ///
+    /// # Safety
+    ///
+    /// - `a` and `b` must have the same length
+    /// - `result` must have length >= `a.len()`
+    unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]);
+
     /// Dot product: sum(a[i] * b[i])
     ///
     /// # Safety

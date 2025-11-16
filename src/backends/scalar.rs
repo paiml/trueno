@@ -32,6 +32,12 @@ impl VectorBackend for ScalarBackend {
         }
     }
 
+    unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
+        for i in 0..a.len() {
+            result[i] = a[i] / b[i];
+        }
+    }
+
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let mut sum = 0.0;
         for i in 0..a.len() {

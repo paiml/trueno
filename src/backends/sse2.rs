@@ -94,6 +94,26 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm_loadu_ps(b.as_ptr().add(i));
+            let vresult = _mm_div_ps(va, vb);
+            _mm_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        for j in i..len {
+            result[j] = a[j] / b[j];
+        }
+    }
+
+    #[target_feature(enable = "sse2")]
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
