@@ -2153,6 +2153,29 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Rounds each element to the nearest integer.
+    ///
+    /// Uses "round half away from zero" strategy:
+    /// - 0.5 rounds to 1.0, 1.5 rounds to 2.0, -1.5 rounds to -2.0, etc.
+    /// - Positive halfway cases round up, negative halfway cases round down.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.2, 3.7, -2.3, -2.8]);
+    /// let result = v.round().unwrap();
+    /// assert_eq!(result.as_slice(), &[3.0, 4.0, -2.0, -3.0]);
+    /// ```
+    pub fn round(&self) -> Result<Vector<f32>> {
+        let round_data: Vec<f32> = self.data.iter().map(|x| x.round()).collect();
+        Ok(Vector {
+            data: round_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4267,6 +4290,49 @@ mod tests {
     fn test_ceil_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.ceil().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_round_basic() {
+        let a = Vector::from_slice(&[3.2, 3.7, -2.3, -2.8, 5.0]);
+        let result = a.round().unwrap();
+        assert_eq!(result.as_slice(), &[3.0, 4.0, -2.0, -3.0, 5.0]);
+    }
+
+    #[test]
+    fn test_round_positive() {
+        let a = Vector::from_slice(&[1.4, 1.5, 1.6, 2.5]);
+        let result = a.round().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_round_negative() {
+        let a = Vector::from_slice(&[-1.4, -1.5, -1.6, -2.5]);
+        let result = a.round().unwrap();
+        assert_eq!(result.as_slice(), &[-1.0, -2.0, -2.0, -3.0]);
+    }
+
+    #[test]
+    fn test_round_halfway() {
+        // Rust's round() uses "round half away from zero"
+        let a = Vector::from_slice(&[0.5, 1.5, 2.5, 3.5, 4.5]);
+        let result = a.round().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn test_round_zero() {
+        let a = Vector::from_slice(&[0.0, -0.0, 0.3, -0.3]);
+        let result = a.round().unwrap();
+        assert_eq!(result.as_slice(), &[0.0, -0.0, 0.0, -0.0]);
+    }
+
+    #[test]
+    fn test_round_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.round().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -7296,6 +7362,78 @@ mod property_tests {
                     output >= input,
                     "ceil should be >= input at {}: ceil({}) = {} < {}",
                     i, input, output, input
+                );
+            }
+        }
+    }
+
+    // Property test: round correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_round_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.round().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.round();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "round failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: round idempotence - round(round(x)) = round(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_round_idempotence(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let round_once = va.round().unwrap();
+            let round_twice = round_once.round().unwrap();
+
+            for (i, (&once, &twice)) in round_once.as_slice().iter()
+                .zip(round_twice.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (once - twice).abs() < 1e-5,
+                    "round idempotence failed at {}: round(round({})) = {} != {}",
+                    i, a[i], twice, once
+                );
+            }
+        }
+    }
+
+    // Property test: round distance - |round(x) - x| <= 0.5
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_round_distance(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.round().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let distance = (output - input).abs();
+                prop_assert!(
+                    distance <= 0.5 + 1e-5,  // Small epsilon for floating point precision
+                    "round distance should be <= 0.5 at {}: |round({}) - {}| = {} > 0.5",
+                    i, input, input, distance
                 );
             }
         }
