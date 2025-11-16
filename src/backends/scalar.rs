@@ -61,6 +61,18 @@ impl VectorBackend for ScalarBackend {
         }
         minimum
     }
+
+    unsafe fn argmax(a: &[f32]) -> usize {
+        let mut max_value = a[0];
+        let mut max_index = 0;
+        for (i, &val) in a.iter().enumerate() {
+            if val > max_value {
+                max_value = val;
+                max_index = i;
+            }
+        }
+        max_index
+    }
 }
 
 #[cfg(test)]

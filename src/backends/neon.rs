@@ -196,6 +196,49 @@ impl VectorBackend for NeonBackend {
 
         result
     }
+
+    #[target_feature(enable = "neon")]
+    unsafe fn argmax(a: &[f32]) -> usize {
+        let len = a.len();
+        let mut i = 0;
+
+        // Track maximum value and index
+        let mut max_value = a[0];
+        let mut max_index = 0;
+
+        // Start with first element broadcast to all lanes
+        let mut vmax = vdupq_n_f32(a[0]);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            vmax = vmaxq_f32(vmax, va);
+            i += 4;
+        }
+
+        // Horizontal max: find maximum across all 4 lanes (for potential future optimization)
+        // Use pairwise max to find the maximum
+        let max2 = vpmax_f32(vget_low_f32(vmax), vget_high_f32(vmax));
+        let max1 = vpmax_f32(max2, max2);
+
+        // Find the index by checking all elements processed by SIMD
+        for (idx, &val) in a[..i].iter().enumerate() {
+            if val > max_value {
+                max_value = val;
+                max_index = idx;
+            }
+        }
+
+        // Check remaining elements
+        for (idx, &val) in a[i..].iter().enumerate() {
+            if val > max_value {
+                max_value = val;
+                max_index = i + idx;
+            }
+        }
+
+        max_index
+    }
 }
 
 #[cfg(test)]
