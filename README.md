@@ -290,6 +290,29 @@ Benchmark results are stored in `target/criterion/` and include:
 - Backend comparison (Scalar vs SIMD vs GPU)
 - Regression detection
 
+## Examples
+
+Trueno includes several runnable examples demonstrating real-world use cases:
+
+```bash
+# Machine Learning: Cosine similarity, L2 normalization, k-NN
+cargo run --release --example ml_similarity
+
+# Performance: Compare Scalar vs SSE2 backends
+cargo run --release --example performance_demo
+
+# Backend Detection: Runtime CPU feature detection
+cargo run --release --example backend_detection
+```
+
+**ML Example Features**:
+- Document similarity for recommendation systems
+- Feature normalization for neural networks
+- k-Nearest Neighbors classification
+- Demonstrates 340% speedup for dot products
+
+See `examples/` directory for complete code.
+
 ## Project Structure
 
 ```
