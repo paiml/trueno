@@ -28,13 +28,13 @@ pub mod avx2;
 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
 pub mod neon;
 
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
+
 // Future backends
 //
 // #[cfg(target_arch = "x86_64")]
 // pub mod avx512;
-//
-// #[cfg(target_arch = "wasm32")]
-// pub mod wasm;
 
 /// Backend trait defining common operations
 ///

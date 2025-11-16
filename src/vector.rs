@@ -7,6 +7,8 @@ use crate::backends::sse2::Sse2Backend;
 use crate::backends::avx2::Avx2Backend;
 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
 use crate::backends::neon::NeonBackend;
+#[cfg(target_arch = "wasm32")]
+use crate::backends::wasm::WasmBackend;
 use crate::backends::VectorBackend;
 use crate::{Backend, Result, TruenoError};
 
@@ -275,7 +277,16 @@ impl Vector<f32> {
                     // Fallback to scalar on non-ARM
                     ScalarBackend::add(&self.data, &other.data, &mut result);
                 }
-                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => {
+                    WasmBackend::add(&self.data, &other.data, &mut result);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => {
+                    // Fallback to scalar on non-WASM
+                    ScalarBackend::add(&self.data, &other.data, &mut result);
+                }
+                Backend::GPU | Backend::Auto => {
                     // Not yet implemented, use scalar
                     ScalarBackend::add(&self.data, &other.data, &mut result);
                 }
@@ -337,7 +348,15 @@ impl Vector<f32> {
                 Backend::NEON => {
                     ScalarBackend::mul(&self.data, &other.data, &mut result);
                 }
-                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => {
+                    WasmBackend::mul(&self.data, &other.data, &mut result);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => {
+                    ScalarBackend::mul(&self.data, &other.data, &mut result);
+                }
+                Backend::GPU | Backend::Auto => {
                     ScalarBackend::mul(&self.data, &other.data, &mut result);
                 }
             }
@@ -387,7 +406,11 @@ impl Vector<f32> {
                 Backend::NEON => NeonBackend::dot(&self.data, &other.data),
                 #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
                 Backend::NEON => ScalarBackend::dot(&self.data, &other.data),
-                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::dot(&self.data, &other.data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::dot(&self.data, &other.data),
+                Backend::GPU | Backend::Auto => {
                     ScalarBackend::dot(&self.data, &other.data)
                 }
             }
@@ -424,7 +447,11 @@ impl Vector<f32> {
                 Backend::NEON => NeonBackend::sum(&self.data),
                 #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
                 Backend::NEON => ScalarBackend::sum(&self.data),
-                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::sum(&self.data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::sum(&self.data),
+                Backend::GPU | Backend::Auto => {
                     ScalarBackend::sum(&self.data)
                 }
             }
@@ -469,7 +496,11 @@ impl Vector<f32> {
                 Backend::NEON => NeonBackend::max(&self.data),
                 #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
                 Backend::NEON => ScalarBackend::max(&self.data),
-                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::max(&self.data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::max(&self.data),
+                Backend::GPU | Backend::Auto => {
                     ScalarBackend::max(&self.data)
                 }
             }
