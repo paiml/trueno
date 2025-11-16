@@ -404,8 +404,8 @@ trueno/
 - [ ] Convolutions (conv2d)
 - [ ] Async GPU API
 
-**Phase 7 Progress**: Core vector operations complete with 268 tests passing. The library now supports:
-- **Element-wise operations**: add, sub, mul, div, abs (absolute value), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm), sin (sine), cos (cosine), tan (tangent), asin (arcsine)
+**Phase 7 Progress**: Core vector operations complete with 277 tests passing. The library now supports:
+- **Element-wise operations**: add, sub, mul, div, abs (absolute value), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm), sin (sine), cos (cosine), tan (tangent), asin (arcsine), acos (arccosine)
 - **Scalar operations**: scale (scalar multiplication with full SIMD support)
 - **Dot product**: Optimized for ML/scientific computing
 - **Reductions**: sum (naive + Kahan), min, max
@@ -413,7 +413,7 @@ trueno/
 - **Vector norms**: L1 (Manhattan), L2 (Euclidean), L∞ (max norm), normalization to unit vectors
 - **Numerical stability**: Kahan summation for accurate floating-point accumulation
 - **FMA optimization**: Hardware-accelerated fused multiply-add on AVX2 and NEON platforms
-- **Mathematical functions**: Element-wise square root, reciprocal, power, exponential, logarithm, trigonometric (sine, cosine, tangent), and inverse trigonometric (arcsine) for ML, signal processing (waveforms, oscillators, phase recovery), physics simulations, graphics (perspective projection, inverse transformations), navigation (GPS, spherical trigonometry), and Fourier analysis
+- **Mathematical functions**: Element-wise square root, reciprocal, power, exponential, logarithm, trigonometric (sine, cosine, tangent), and inverse trigonometric (arcsine, arccosine) for ML, signal processing (waveforms, oscillators, phase recovery), physics simulations, graphics (perspective projection, inverse transformations, lighting models), navigation (GPS, spherical trigonometry, bearing calculations), robotics (orientation calculations), and Fourier analysis
 
 ## Contributing
 
