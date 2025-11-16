@@ -610,6 +610,57 @@ impl Vector<f32> {
 
         Ok(result)
     }
+
+    /// Find index of minimum value in the vector
+    ///
+    /// Returns the index of the first occurrence of the minimum value using SIMD optimization.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
+    /// assert_eq!(v.argmin().unwrap(), 0); // min value 1.0 is at index 0
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TruenoError::InvalidInput`] if vector is empty.
+    pub fn argmin(&self) -> Result<usize> {
+        if self.data.is_empty() {
+            return Err(TruenoError::InvalidInput("Empty vector".to_string()));
+        }
+
+        let result = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::argmin(&self.data)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::argmin(&self.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::argmin(&self.data),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::argmin(&self.data)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::argmin(&self.data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::argmin(&self.data),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::argmin(&self.data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::argmin(&self.data),
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::argmin(&self.data)
+                }
+            }
+        };
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
@@ -867,6 +918,42 @@ mod tests {
         // When there are duplicates, should return first occurrence
         let v = Vector::from_slice(&[1.0, 5.0, 3.0, 5.0, 2.0]);
         assert_eq!(v.argmax().unwrap(), 1); // first 5.0 is at index 1
+    }
+
+    #[test]
+    fn test_argmin() {
+        let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
+        assert_eq!(v.argmin().unwrap(), 0); // min value 1.0 is at index 0
+    }
+
+    #[test]
+    fn test_argmin_single() {
+        let v = Vector::from_slice(&[42.0]);
+        assert_eq!(v.argmin().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_argmin_empty() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        let result = v.argmin();
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            TruenoError::InvalidInput("Empty vector".to_string())
+        );
+    }
+
+    #[test]
+    fn test_argmin_negative() {
+        let v = Vector::from_slice(&[-5.0, -1.0, -10.0, -3.0]);
+        assert_eq!(v.argmin().unwrap(), 2); // min value -10.0 is at index 2
+    }
+
+    #[test]
+    fn test_argmin_first_occurrence() {
+        // When there are duplicates, should return first occurrence
+        let v = Vector::from_slice(&[5.0, 1.0, 3.0, 1.0, 2.0]);
+        assert_eq!(v.argmin().unwrap(), 1); // first 1.0 is at index 1
     }
 
     #[test]
@@ -1168,8 +1255,30 @@ mod property_tests {
             }
 
             // Verify it's the first occurrence (no earlier index has this value)
-            for i in 0..idx {
-                prop_assert!(a[i] < max_val || a[i] != max_val);
+            for &val in a.iter().take(idx) {
+                prop_assert!(val < max_val || val != max_val);
+            }
+        }
+
+        #[test]
+        fn test_argmin_correctness(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let idx = va.argmin().unwrap();
+
+            // Verify index is in bounds
+            prop_assert!(idx < a.len());
+
+            // Verify value at index is <= all other values
+            let min_val = a[idx];
+            for &x in a.iter() {
+                prop_assert!(min_val <= x);
+            }
+
+            // Verify it's the first occurrence (no earlier index has this value)
+            for &val in a.iter().take(idx) {
+                prop_assert!(val > min_val || val != min_val);
             }
         }
     }

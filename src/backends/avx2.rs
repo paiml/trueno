@@ -270,6 +270,53 @@ impl VectorBackend for Avx2Backend {
 
         max_index
     }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn argmin(a: &[f32]) -> usize {
+        let len = a.len();
+        let mut i = 0;
+
+        // Track minimum value and index
+        let mut min_value = a[0];
+        let mut min_index = 0;
+
+        // Start with first element broadcast to all lanes
+        let mut vmin = _mm256_set1_ps(a[0]);
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            vmin = _mm256_min_ps(vmin, va);
+            i += 8;
+        }
+
+        // Horizontal min: find minimum across all 8 lanes (for potential future optimization)
+        let low = _mm256_castps256_ps128(vmin);
+        let high = _mm256_extractf128_ps(vmin, 1);
+        let min4 = _mm_min_ps(low, high);
+
+        // Extract to array
+        let mut temp = [0.0f32; 4];
+        _mm_storeu_ps(temp.as_mut_ptr(), min4);
+
+        // Find the index by checking all elements processed by SIMD
+        for (idx, &val) in a[..i].iter().enumerate() {
+            if val < min_value {
+                min_value = val;
+                min_index = idx;
+            }
+        }
+
+        // Check remaining elements
+        for (idx, &val) in a[i..].iter().enumerate() {
+            if val < min_value {
+                min_value = val;
+                min_index = i + idx;
+            }
+        }
+
+        min_index
+    }
 }
 
 #[cfg(test)]

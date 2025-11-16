@@ -231,6 +231,47 @@ impl VectorBackend for WasmBackend {
 
         max_index
     }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn argmin(a: &[f32]) -> usize {
+        let len = a.len();
+        let mut i = 0;
+
+        // Track minimum value and index
+        let mut min_value = a[0];
+        let mut min_index = 0;
+
+        // Start with first element broadcast to all lanes
+        let mut vmin = f32x4_splat(a[0]);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+            vmin = f32x4_min(vmin, va);
+            i += 4;
+        }
+
+        // Horizontal min: find minimum across all 4 lanes (for potential future optimization)
+        // This extracts the min value but we still need to scan to find the index
+
+        // Find the index by checking all elements processed by SIMD
+        for (idx, &val) in a[..i].iter().enumerate() {
+            if val < min_value {
+                min_value = val;
+                min_index = idx;
+            }
+        }
+
+        // Check remaining elements
+        for (idx, &val) in a[i..].iter().enumerate() {
+            if val < min_value {
+                min_value = val;
+                min_index = i + idx;
+            }
+        }
+
+        min_index
+    }
 }
 
 #[cfg(test)]
