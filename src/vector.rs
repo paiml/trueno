@@ -2176,6 +2176,30 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Truncates each element toward zero (removes fractional part).
+    ///
+    /// Truncation always moves toward zero:
+    /// - Positive values: equivalent to floor() (e.g., 3.7 → 3.0)
+    /// - Negative values: equivalent to ceil() (e.g., -3.7 → -3.0)
+    /// - This differs from floor() which always rounds down
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.7, -2.7, 5.0]);
+    /// let result = v.trunc().unwrap();
+    /// assert_eq!(result.as_slice(), &[3.0, -2.0, 5.0]);
+    /// ```
+    pub fn trunc(&self) -> Result<Vector<f32>> {
+        let trunc_data: Vec<f32> = self.data.iter().map(|x| x.trunc()).collect();
+        Ok(Vector {
+            data: trunc_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4333,6 +4357,49 @@ mod tests {
     fn test_round_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.round().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_trunc_basic() {
+        let a = Vector::from_slice(&[3.2, 3.7, -2.3, -2.8, 5.0]);
+        let result = a.trunc().unwrap();
+        assert_eq!(result.as_slice(), &[3.0, 3.0, -2.0, -2.0, 5.0]);
+    }
+
+    #[test]
+    fn test_trunc_positive() {
+        let a = Vector::from_slice(&[1.1, 1.9, 2.5, 3.99]);
+        let result = a.trunc().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_trunc_negative() {
+        let a = Vector::from_slice(&[-1.1, -1.9, -2.5, -3.99]);
+        let result = a.trunc().unwrap();
+        assert_eq!(result.as_slice(), &[-1.0, -1.0, -2.0, -3.0]);
+    }
+
+    #[test]
+    fn test_trunc_toward_zero() {
+        // Verify trunc() always moves toward zero
+        let a = Vector::from_slice(&[2.7, -2.7, 5.3, -5.3]);
+        let result = a.trunc().unwrap();
+        assert_eq!(result.as_slice(), &[2.0, -2.0, 5.0, -5.0]);
+    }
+
+    #[test]
+    fn test_trunc_zero() {
+        let a = Vector::from_slice(&[0.0, -0.0, 0.9, -0.9]);
+        let result = a.trunc().unwrap();
+        assert_eq!(result.as_slice(), &[0.0, -0.0, 0.0, -0.0]);
+    }
+
+    #[test]
+    fn test_trunc_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.trunc().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -7434,6 +7501,77 @@ mod property_tests {
                     distance <= 0.5 + 1e-5,  // Small epsilon for floating point precision
                     "round distance should be <= 0.5 at {}: |round({}) - {}| = {} > 0.5",
                     i, input, input, distance
+                );
+            }
+        }
+    }
+
+    // Property test: trunc correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_trunc_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.trunc().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.trunc();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "trunc failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: trunc idempotence - trunc(trunc(x)) = trunc(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_trunc_idempotence(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let trunc_once = va.trunc().unwrap();
+            let trunc_twice = trunc_once.trunc().unwrap();
+
+            for (i, (&once, &twice)) in trunc_once.as_slice().iter()
+                .zip(trunc_twice.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (once - twice).abs() < 1e-5,
+                    "trunc idempotence failed at {}: trunc(trunc({})) = {} != {}",
+                    i, a[i], twice, once
+                );
+            }
+        }
+    }
+
+    // Property test: trunc moves toward zero - |trunc(x)| <= |x|
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_trunc_toward_zero(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.trunc().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    output.abs() <= input.abs() + 1e-5,  // Small epsilon for floating point
+                    "trunc should move toward zero at {}: |trunc({})| = {} > |{}| = {}",
+                    i, input, output.abs(), input, input.abs()
                 );
             }
         }
