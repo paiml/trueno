@@ -1043,6 +1043,75 @@ impl Vector<f32> {
 
         Ok(result)
     }
+
+    /// Compute the L∞ norm (infinity norm / max norm) of the vector
+    ///
+    /// Returns the maximum absolute value: ||v||∞ = max(|v[i]|)
+    ///
+    /// The L∞ norm is used in:
+    /// - Numerical analysis (error bounds, stability analysis)
+    /// - Optimization (Chebyshev approximation)
+    /// - Signal processing (peak detection)
+    /// - Distance metrics (Chebyshev distance)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.0, -7.0, 5.0, -2.0]);
+    /// let norm = v.norm_linf().unwrap();
+    ///
+    /// // max(|3|, |-7|, |5|, |-2|) = 7
+    /// assert!((norm - 7.0).abs() < 1e-5);
+    /// ```
+    ///
+    /// # Empty Vector
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v: Vector<f32> = Vector::from_slice(&[]);
+    /// assert_eq!(v.norm_linf().unwrap(), 0.0);
+    /// ```
+    pub fn norm_linf(&self) -> Result<f32> {
+        if self.data.is_empty() {
+            return Ok(0.0);
+        }
+
+        // Create a vector of absolute values
+        let abs_values: Vec<f32> = self.data.iter().map(|x| x.abs()).collect();
+
+        // Find the maximum absolute value using existing max() implementation
+        let max_abs = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::max(&abs_values)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::max(&abs_values),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::max(&abs_values),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::max(&abs_values)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::max(&abs_values),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::max(&abs_values),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::max(&abs_values),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::max(&abs_values),
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::max(&abs_values)
+                }
+            }
+        };
+
+        Ok(max_abs)
+    }
 }
 
 #[cfg(test)]
@@ -1592,6 +1661,52 @@ mod tests {
         let v: Vector<f32> = Vector::from_slice(&[]);
         let result = v.norm_l1().unwrap();
         assert_eq!(result, 0.0);
+    }
+
+    // L∞ Norm (infinity/max norm) tests
+    #[test]
+    fn test_norm_linf_basic() {
+        let v = Vector::from_slice(&[3.0, -7.0, 5.0, -2.0]);
+        let result = v.norm_linf().unwrap();
+        // max(|3|, |-7|, |5|, |-2|) = max(3, 7, 5, 2) = 7
+        assert!((result - 7.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_linf_all_positive() {
+        let v = Vector::from_slice(&[1.0, 2.0, 5.0, 3.0]);
+        let result = v.norm_linf().unwrap();
+        // max(1, 2, 5, 3) = 5
+        assert!((result - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_linf_all_negative() {
+        let v = Vector::from_slice(&[-1.0, -9.0, -3.0]);
+        let result = v.norm_linf().unwrap();
+        // max(|-1|, |-9|, |-3|) = max(1, 9, 3) = 9
+        assert!((result - 9.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_linf_zero_vector() {
+        let v = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = v.norm_linf().unwrap();
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_norm_linf_empty_vector() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        let result = v.norm_linf().unwrap();
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_norm_linf_single_element() {
+        let v = Vector::from_slice(&[-42.5]);
+        let result = v.norm_linf().unwrap();
+        assert!((result - 42.5).abs() < 1e-5);
     }
 
     #[test]
@@ -2355,10 +2470,18 @@ mod property_tests {
 
             // Should satisfy: ||c*v||₁ = |c| * ||v||₁
             let expected = scalar.abs() * norm_a;
+
+            // Use relative tolerance for large values
+            let tolerance = if expected.abs() > 1.0 {
+                expected.abs() * 1e-5 // Relative tolerance
+            } else {
+                1e-2 // Absolute tolerance for small values
+            };
+
             prop_assert!(
-                (norm_scaled - expected).abs() < 1e-2,
-                "Homogeneity violated: {} != |{}| * {} = {}",
-                norm_scaled, scalar, norm_a, expected
+                (norm_scaled - expected).abs() < tolerance,
+                "Homogeneity violated: {} != |{}| * {} = {}, diff = {}",
+                norm_scaled, scalar, norm_a, expected, (norm_scaled - expected).abs()
             );
         }
     }
@@ -2388,6 +2511,94 @@ mod property_tests {
                 (norm - manual_sum).abs() < tolerance,
                 "L1 norm {} != manual sum {}, diff = {}",
                 norm, manual_sum, (norm - manual_sum).abs()
+            );
+        }
+    }
+
+    // Property test: L∞ norm absolute homogeneity
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_norm_linf_absolute_homogeneity(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            scalar in -10.0f32..10.0
+        ) {
+            prop_assume!(!a.is_empty());
+
+            // Absolute homogeneity: ||c * v||∞ = |c| * ||v||∞
+            let va = Vector::from_slice(&a);
+            let norm_a = va.norm_linf().unwrap();
+
+            // Scale the vector
+            let scalars = vec![scalar; a.len()];
+            let vs = Vector::from_slice(&scalars);
+            let scaled = va.mul(&vs).unwrap();
+
+            let norm_scaled = scaled.norm_linf().unwrap();
+
+            // Should satisfy: ||c*v||∞ = |c| * ||v||∞
+            let expected = scalar.abs() * norm_a;
+            prop_assert!(
+                (norm_scaled - expected).abs() < 1e-3,
+                "Homogeneity violated: {} != |{}| * {} = {}",
+                norm_scaled, scalar, norm_a, expected
+            );
+        }
+    }
+
+    // Property test: L∞ norm equals max of absolute values
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_norm_linf_definition(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            prop_assume!(!a.is_empty());
+
+            let va = Vector::from_slice(&a);
+            let norm = va.norm_linf().unwrap();
+
+            // Manual calculation of max(|a[i]|)
+            let manual_max = a.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
+
+            prop_assert!(
+                (norm - manual_max).abs() < 1e-5,
+                "L∞ norm {} != manual max {}",
+                norm, manual_max
+            );
+        }
+    }
+
+    // Property test: L∞ norm submultiplicativity (Hölder's inequality special case)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_norm_linf_submultiplicative(
+            len in 1usize..100,
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            b in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            // For element-wise multiplication: ||a ⊙ b||∞ <= ||a||∞ * ||b||∞
+            let actual_len = len.min(a.len()).min(b.len());
+            let a_trimmed = &a[..actual_len];
+            let b_trimmed = &b[..actual_len];
+
+            let va = Vector::from_slice(a_trimmed);
+            let vb = Vector::from_slice(b_trimmed);
+
+            let norm_a = va.norm_linf().unwrap();
+            let norm_b = vb.norm_linf().unwrap();
+            let product = va.mul(&vb).unwrap();
+            let norm_product = product.norm_linf().unwrap();
+
+            // Submultiplicativity should hold
+            prop_assert!(
+                norm_product <= norm_a * norm_b + 1e-3,
+                "Submultiplicativity violated: {} > {} * {}",
+                norm_product, norm_a, norm_b
             );
         }
     }
