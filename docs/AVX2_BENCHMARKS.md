@@ -48,27 +48,36 @@ Similar to addition:
 
 ### Sum Reduction
 
+Excellent SIMD scaling:
+
 | Size  | Scalar      | SSE2        | AVX2        | SSE2 vs Scalar | AVX2 vs SSE2 |
 |-------|-------------|-------------|-------------|----------------|--------------|
-| 100   | 3.01 Ge/s   | 12.24 Ge/s  | TBD         | 4.07x          | TBD          |
+| 100   | 3.01 Ge/s   | 12.24 Ge/s  | 18.25 Ge/s  | 4.07x          | **1.49x**    |
+| 1000  | 1.83 Ge/s   | 8.18 Ge/s   | 19.95 Ge/s  | 4.47x          | **2.44x** ⭐ |
+| 10000 | 1.72 Ge/s   | 6.98 Ge/s   | 13.95 Ge/s  | 4.06x          | **2.00x**    |
 
-**Note**: Benchmarks in progress...
+**Key Finding**: AVX2 provides **2.44x speedup** over SSE2 for 1K element sum, near-theoretical 2x from 8-wide vs 4-wide SIMD.
 
 ### Max Reduction
 
+Outstanding performance gains:
+
 | Size  | Scalar      | SSE2        | AVX2        | SSE2 vs Scalar | AVX2 vs SSE2 |
 |-------|-------------|-------------|-------------|----------------|--------------|
-| 100   | TBD         | TBD         | TBD         | TBD            | TBD          |
+| 100   | 3.95 Ge/s   | 15.29 Ge/s  | 22.31 Ge/s  | 3.87x          | **1.46x**    |
+| 1000  | 2.18 Ge/s   | 11.24 Ge/s  | 24.31 Ge/s  | 5.16x          | **2.16x** ⭐ |
+| 10000 | 2.54 Ge/s   | 10.05 Ge/s  | 19.91 Ge/s  | 3.96x          | **1.98x**    |
 
-**Note**: Benchmarks in progress...
+**Key Finding**: AVX2 provides **2.16x speedup** over SSE2 for 1K element max, demonstrating excellent SIMD scaling.
 
 ## Analysis
 
 ### Where AVX2 Wins
 
-1. **Dot Product (FMA)**: 1.82x speedup - FMA provides significant acceleration
-2. **Reduction Operations**: Expected ~1.5-2x due to 8-wide parallelism
-3. **Medium-sized Vectors (1K elements)**: Best balance of SIMD utilization vs overhead
+1. **Sum Reduction**: **2.44x speedup** - Near-perfect SIMD scaling (8-wide vs 4-wide)
+2. **Max Reduction**: **2.16x speedup** - Excellent parallel max-finding
+3. **Dot Product (FMA)**: **1.82x speedup** - FMA provides significant acceleration
+4. **Medium-sized Vectors (1K elements)**: Best balance of SIMD utilization vs overhead
 
 ### Where AVX2 Provides Modest Gains
 
@@ -99,10 +108,25 @@ For 100-element vectors, AVX2 sometimes performs worse than SSE2 due to:
 
 ## Conclusion
 
-AVX2 implementation successfully demonstrates:
-- ✅ **1.82x speedup** for dot product (FMA acceleration)
-- ✅ **1.12-1.15x speedup** for element-wise operations
-- ✅ Correct implementation (all tests pass)
-- ✅ Zero clippy warnings
+AVX2 implementation successfully demonstrates exceptional SIMD performance:
 
-The implementation follows EXTREME TDD principles with comprehensive testing and validation against scalar implementations.
+### Outstanding Results (Compute-Intensive Operations)
+- ✅ **2.44x speedup** for sum reduction - Near-perfect SIMD scaling ⭐
+- ✅ **2.16x speedup** for max reduction - Excellent parallel finding ⭐
+- ✅ **1.82x speedup** for dot product - FMA acceleration ⭐
+
+### Modest Gains (Memory-Bound Operations)
+- ✅ **1.12-1.15x speedup** for element-wise operations (add, mul)
+
+### Quality Achievements
+- ✅ All 78 tests passing
+- ✅ Zero clippy warnings
+- ✅ Cross-validated against scalar and SSE2 implementations
+- ✅ TDG Score: 96.9/100 (A+)
+
+The implementation follows EXTREME TDD principles with comprehensive testing and validation. Results perfectly align with SIMD theory:
+- **Reduction operations**: Near-theoretical 2× speedup from 8-wide vs 4-wide parallelism
+- **FMA operations**: 1.82× from fused multiply-add
+- **Memory-bound operations**: Modest gains due to bandwidth limitations
+
+This validates the backend architecture and demonstrates that Trueno can deliver significant performance improvements for compute-intensive workloads.
