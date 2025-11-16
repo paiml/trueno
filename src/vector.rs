@@ -1599,6 +1599,43 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Element-wise exponential: result[i] = e^x[i]
+    ///
+    /// Computes the natural exponential (e^x) for each element.
+    /// Uses Rust's optimized f32::exp() method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[0.0, 1.0, 2.0]);
+    /// let result = v.exp().unwrap();
+    /// // result ≈ [1.0, 2.718, 7.389]
+    /// ```
+    ///
+    /// # Special Cases
+    ///
+    /// - `exp(0.0)` returns 1.0
+    /// - `exp(1.0)` returns e ≈ 2.71828
+    /// - `exp(-∞)` returns 0.0
+    /// - `exp(+∞)` returns +∞
+    ///
+    /// # Applications
+    ///
+    /// - Machine learning: Softmax activation, sigmoid, exponential loss
+    /// - Statistics: Exponential distribution, log-normal distribution
+    /// - Physics: Radioactive decay, population growth models
+    /// - Signal processing: Exponential smoothing, envelope detection
+    /// - Numerical methods: Solving differential equations
+    pub fn exp(&self) -> Result<Vector<f32>> {
+        let exp_data: Vec<f32> = self.data.iter().map(|x| x.exp()).collect();
+        Ok(Vector {
+            data: exp_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -2596,6 +2633,91 @@ mod tests {
     fn test_pow_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.pow(2.0).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // exp() operation tests (element-wise exponential: e^x)
+    #[test]
+    fn test_exp_basic() {
+        let a = Vector::from_slice(&[0.0, 1.0, 2.0]);
+        let result = a.exp().unwrap();
+        let expected = [1.0, std::f32::consts::E, std::f32::consts::E.powi(2)];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "exp mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_exp_zero() {
+        let a = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = a.exp().unwrap();
+        for &val in result.as_slice() {
+            assert!((val - 1.0).abs() < 1e-5, "e^0 should be 1.0");
+        }
+    }
+
+    #[test]
+    fn test_exp_negative() {
+        let a = Vector::from_slice(&[-1.0, -2.0, -3.0]);
+        let result = a.exp().unwrap();
+        let expected = [
+            (-1.0f32).exp(),
+            (-2.0f32).exp(),
+            (-3.0f32).exp(),
+        ];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "exp negative mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_exp_large_positive() {
+        let a = Vector::from_slice(&[5.0, 10.0]);
+        let result = a.exp().unwrap();
+        let expected = [5.0f32.exp(), 10.0f32.exp()];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() / exp < 1e-5,
+                "exp large positive mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_exp_large_negative() {
+        let a = Vector::from_slice(&[-5.0, -10.0]);
+        let result = a.exp().unwrap();
+        let expected = [(-5.0f32).exp(), (-10.0f32).exp()];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "exp large negative mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_exp_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.exp().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -4295,6 +4417,102 @@ mod property_tests {
                     (pow_val - sqrt_val).abs() < tolerance,
                     "x^0.5 vs sqrt failed at {}: {} != {}",
                     i, pow_val, sqrt_val
+                );
+            }
+        }
+    }
+
+    // Property test: exp() correctness vs f32::exp()
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_exp_correctness(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.exp().unwrap();
+
+            for (i, (&a_val, &exp_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.exp();
+
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                prop_assert!(
+                    (exp_val - expected).abs() < tolerance,
+                    "exp correctness failed at {}: {} != {}, diff = {}",
+                    i, exp_val, expected, (exp_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: exp() identity - exp(0) = 1
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_exp_zero_identity(
+            len in 1usize..100
+        ) {
+            let zeros = vec![0.0f32; len];
+            let va = Vector::from_slice(&zeros);
+            let result = va.exp().unwrap();
+
+            for (i, &val) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    (val - 1.0).abs() < 1e-5,
+                    "exp(0) identity failed at {}: {} != 1.0",
+                    i, val
+                );
+            }
+        }
+    }
+
+    // Property test: exp() relation to addition - exp(a+b) = exp(a) * exp(b)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_exp_addition_property(
+            a in prop::collection::vec(-5.0f32..5.0, 1..50),
+            b in prop::collection::vec(-5.0f32..5.0, 1..50)
+        ) {
+            let len = a.len().min(b.len());
+            let a_vec: Vec<f32> = a.into_iter().take(len).collect();
+            let b_vec: Vec<f32> = b.into_iter().take(len).collect();
+
+            let va = Vector::from_slice(&a_vec);
+            let vb = Vector::from_slice(&b_vec);
+
+            // exp(a + b)
+            let sum = va.add(&vb).unwrap();
+            let exp_sum = sum.exp().unwrap();
+
+            // exp(a) * exp(b)
+            let exp_a = va.exp().unwrap();
+            let exp_b = vb.exp().unwrap();
+            let product = exp_a.mul(&exp_b).unwrap();
+
+            for (i, (&exp_sum_val, &product_val)) in exp_sum.as_slice().iter()
+                .zip(product.as_slice().iter())
+                .enumerate() {
+                let tolerance = if exp_sum_val.abs() > 1.0 {
+                    exp_sum_val.abs() * 1e-4
+                } else {
+                    1e-4
+                };
+
+                prop_assert!(
+                    (exp_sum_val - product_val).abs() < tolerance,
+                    "exp(a+b) = exp(a)*exp(b) failed at {}: {} != {}, diff = {}",
+                    i, exp_sum_val, product_val, (exp_sum_val - product_val).abs()
                 );
             }
         }
