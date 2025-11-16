@@ -1636,6 +1636,44 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Element-wise natural logarithm: result[i] = ln(x[i])
+    ///
+    /// Computes the natural logarithm (base e) for each element.
+    /// Uses Rust's optimized f32::ln() method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, std::f32::consts::E, std::f32::consts::E.powi(2)]);
+    /// let result = v.ln().unwrap();
+    /// // result ≈ [0.0, 1.0, 2.0]
+    /// ```
+    ///
+    /// # Special Cases
+    ///
+    /// - `ln(1.0)` returns 0.0
+    /// - `ln(e)` returns 1.0
+    /// - `ln(x)` for x ≤ 0 returns NaN
+    /// - `ln(0.0)` returns -∞
+    /// - `ln(+∞)` returns +∞
+    ///
+    /// # Applications
+    ///
+    /// - Machine learning: Log loss, log-likelihood, softmax normalization
+    /// - Statistics: Log-normal distribution, log transformation for skewed data
+    /// - Information theory: Entropy calculation, mutual information
+    /// - Economics: Log returns, elasticity calculations
+    /// - Signal processing: Decibel conversion, log-frequency analysis
+    pub fn ln(&self) -> Result<Vector<f32>> {
+        let ln_data: Vec<f32> = self.data.iter().map(|x| x.ln()).collect();
+        Ok(Vector {
+            data: ln_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -2718,6 +2756,88 @@ mod tests {
     fn test_exp_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.exp().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // ln() operation tests (element-wise natural logarithm: ln(x))
+    #[test]
+    fn test_ln_basic() {
+        let a = Vector::from_slice(&[1.0, std::f32::consts::E, std::f32::consts::E.powi(2)]);
+        let result = a.ln().unwrap();
+        let expected = [0.0, 1.0, 2.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "ln mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_ln_one() {
+        let a = Vector::from_slice(&[1.0, 1.0, 1.0]);
+        let result = a.ln().unwrap();
+        for &val in result.as_slice() {
+            assert!((val - 0.0).abs() < 1e-5, "ln(1) should be 0.0");
+        }
+    }
+
+    #[test]
+    fn test_ln_small_values() {
+        let a = Vector::from_slice(&[0.1, 0.5, 0.9]);
+        let result = a.ln().unwrap();
+        let expected = [0.1f32.ln(), 0.5f32.ln(), 0.9f32.ln()];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "ln small values mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_ln_large_values() {
+        let a = Vector::from_slice(&[10.0, 100.0, 1000.0]);
+        let result = a.ln().unwrap();
+        let expected = [10.0f32.ln(), 100.0f32.ln(), 1000.0f32.ln()];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "ln large values mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_ln_inverse_exp() {
+        // Test that ln(exp(x)) = x
+        let a = Vector::from_slice(&[0.5, 1.0, 2.0, 3.0]);
+        let exp_result = a.exp().unwrap();
+        let ln_result = exp_result.ln().unwrap();
+        for (i, (&original, &recovered)) in a.as_slice().iter().zip(ln_result.as_slice().iter()).enumerate() {
+            assert!(
+                (original - recovered).abs() < 1e-5,
+                "ln(exp(x)) != x at {}: {} != {}",
+                i,
+                original,
+                recovered
+            );
+        }
+    }
+
+    #[test]
+    fn test_ln_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.ln().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -4513,6 +4633,110 @@ mod property_tests {
                     (exp_sum_val - product_val).abs() < tolerance,
                     "exp(a+b) = exp(a)*exp(b) failed at {}: {} != {}, diff = {}",
                     i, exp_sum_val, product_val, (exp_sum_val - product_val).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: ln() correctness vs f32::ln()
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_ln_correctness(
+            a in prop::collection::vec(0.1f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.ln().unwrap();
+
+            for (i, (&a_val, &ln_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.ln();
+
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                prop_assert!(
+                    (ln_val - expected).abs() < tolerance,
+                    "ln correctness failed at {}: {} != {}, diff = {}",
+                    i, ln_val, expected, (ln_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: ln() inverse of exp() - ln(exp(x)) = x
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_ln_inverse_exp_property(
+            a in prop::collection::vec(-5.0f32..5.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let exp_result = va.exp().unwrap();
+            let ln_result = exp_result.ln().unwrap();
+
+            for (i, (&original, &recovered)) in a.iter()
+                .zip(ln_result.as_slice().iter())
+                .enumerate() {
+                let tolerance = if original.abs() > 1.0 {
+                    original.abs() * 1e-4
+                } else {
+                    1e-4
+                };
+
+                prop_assert!(
+                    (original - recovered).abs() < tolerance,
+                    "ln(exp(x)) != x at {}: {} != {}, diff = {}",
+                    i, original, recovered, (original - recovered).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: ln() product rule - ln(a*b) = ln(a) + ln(b)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_ln_product_rule(
+            a in prop::collection::vec(0.1f32..10.0, 1..50),
+            b in prop::collection::vec(0.1f32..10.0, 1..50)
+        ) {
+            let len = a.len().min(b.len());
+            let a_vec: Vec<f32> = a.into_iter().take(len).collect();
+            let b_vec: Vec<f32> = b.into_iter().take(len).collect();
+
+            let va = Vector::from_slice(&a_vec);
+            let vb = Vector::from_slice(&b_vec);
+
+            // ln(a * b)
+            let product = va.mul(&vb).unwrap();
+            let ln_product = product.ln().unwrap();
+
+            // ln(a) + ln(b)
+            let ln_a = va.ln().unwrap();
+            let ln_b = vb.ln().unwrap();
+            let sum = ln_a.add(&ln_b).unwrap();
+
+            for (i, (&ln_prod_val, &sum_val)) in ln_product.as_slice().iter()
+                .zip(sum.as_slice().iter())
+                .enumerate() {
+                let tolerance = if ln_prod_val.abs() > 1.0 {
+                    ln_prod_val.abs() * 1e-4
+                } else {
+                    1e-4
+                };
+
+                prop_assert!(
+                    (ln_prod_val - sum_val).abs() < tolerance,
+                    "ln(a*b) = ln(a)+ln(b) failed at {}: {} != {}, diff = {}",
+                    i, ln_prod_val, sum_val, (ln_prod_val - sum_val).abs()
                 );
             }
         }
