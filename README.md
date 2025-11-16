@@ -33,19 +33,32 @@ let max = a.max().unwrap();            // 4.0
 
 ## Performance
 
-Trueno delivers **exceptional performance** for compute-intensive operations:
+Trueno delivers **exceptional performance** through multi-level SIMD optimization:
 
-| Operation | Speedup (SSE2 vs Scalar) | Use Case |
-|-----------|-------------------------|----------|
+### SSE2 (128-bit SIMD) vs Scalar
+
+| Operation | Speedup | Use Case |
+|-----------|---------|----------|
 | **Dot Product** | **340%** faster | Machine learning, signal processing |
 | **Sum Reduction** | **315%** faster | Statistics, aggregations |
 | **Max Finding** | **348%** faster | Data analysis, optimization |
 | Element-wise Add | 3-10% faster | Memory-bound (limited SIMD benefit) |
 | Element-wise Mul | 5-6% faster | Memory-bound (limited SIMD benefit) |
 
-**Key Insight**: SIMD excels at compute-intensive operations but can't overcome memory bandwidth limitations.
+### AVX2 (256-bit SIMD) vs SSE2
 
-**📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) for tuning tips and detailed analysis.**
+| Operation | Speedup | Notes |
+|-----------|---------|-------|
+| **Dot Product** | **182%** faster | FMA (fused multiply-add) acceleration |
+| Element-wise Add | 15% faster | Memory bandwidth limited |
+| Element-wise Mul | 12% faster | Memory bandwidth limited |
+
+**Key Insights**:
+- SIMD excels at compute-intensive operations (dot product, reductions)
+- Element-wise operations are memory-bound, limiting SIMD gains
+- AVX2's FMA provides significant acceleration for dot products
+
+**📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
 
 ## Features
 
