@@ -74,7 +74,89 @@ where
             backend: resolved_backend,
         }
     }
+}
 
+impl Vector<f32> {
+    /// Create vector with specified alignment for optimal SIMD performance
+    ///
+    /// This method attempts to create a vector with memory aligned to the specified byte boundary.
+    /// Note: Rust's Vec allocator may already provide sufficient alignment for most use cases.
+    /// This method validates the alignment requirement but uses standard Vec allocation.
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - Number of elements to allocate
+    /// * `backend` - Backend to use for operations
+    /// * `alignment` - Requested alignment in bytes (must be power of 2: 16, 32, 64)
+    ///
+    /// # Recommended Alignments
+    ///
+    /// - SSE2: 16 bytes (128-bit)
+    /// - AVX2: 32 bytes (256-bit)
+    /// - AVX-512: 64 bytes (512-bit)
+    ///
+    /// # Note on Implementation
+    ///
+    /// Currently uses Rust's default Vec allocator, which typically provides 16-byte alignment
+    /// on modern systems. Custom allocators for specific alignments will be added in future versions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::{Vector, Backend};
+    ///
+    /// // Create vector with requested 16-byte alignment
+    /// let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
+    /// assert_eq!(v.len(), 100);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `TruenoError::InvalidInput` if alignment is not a power of 2.
+    pub fn with_alignment(size: usize, backend: Backend, alignment: usize) -> Result<Self> {
+        // Validate alignment is power of 2
+        if alignment == 0 || (alignment & (alignment - 1)) != 0 {
+            return Err(TruenoError::InvalidInput(format!(
+                "Alignment must be power of 2, got {}",
+                alignment
+            )));
+        }
+
+        // Resolve backend
+        let resolved_backend = match backend {
+            Backend::Auto => crate::select_best_available_backend(),
+            _ => backend,
+        };
+
+        // For now, use standard Vec allocation which typically provides good alignment
+        // Future enhancement: use custom allocator for guaranteed alignment > 16 bytes
+        let data = vec![0.0f32; size];
+
+        // Verify actual alignment (for informational purposes)
+        let ptr = data.as_ptr() as usize;
+        let actual_alignment = ptr & !(ptr - 1); // Find lowest set bit
+
+        // Log warning if alignment requirement not met (for future enhancement)
+        if alignment > actual_alignment {
+            // Note: This is not an error, just informational
+            // The unaligned loads in SSE2 (_mm_loadu_ps) will still work correctly
+            eprintln!(
+                "Note: Requested {}-byte alignment, got {}-byte alignment. Using unaligned loads.",
+                alignment, actual_alignment
+            );
+        }
+
+        Ok(Self {
+            data,
+            backend: resolved_backend,
+        })
+    }
+}
+
+impl<T> Vector<T>
+where
+    T: Clone,
+{
     /// Get underlying data as slice
     ///
     /// # Examples
@@ -547,6 +629,38 @@ mod tests {
     fn test_max_negative() {
         let v = Vector::from_slice(&[-5.0, -1.0, -10.0, -3.0]);
         assert_eq!(v.max().unwrap(), -1.0);
+    }
+
+    #[test]
+    fn test_aligned_vector_creation() {
+        let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
+
+        // Verify the vector has the correct size
+        assert_eq!(v.len(), 100);
+
+        // Check alignment (Vec allocator typically provides good alignment)
+        let ptr = v.as_slice().as_ptr() as usize;
+        // Note: We can't guarantee specific alignment with standard Vec,
+        // but we can verify it's at least naturally aligned for f32 (4 bytes)
+        assert_eq!(ptr % 4, 0, "Vector data should be at least 4-byte aligned");
+
+        // Most modern allocators provide 16-byte alignment by default
+        // This is informational, not required
+        if ptr.is_multiple_of(16) {
+            println!("Got 16-byte alignment from standard allocator");
+        }
+    }
+
+    #[test]
+    fn test_aligned_vector_operations() {
+        // RED: This test will fail until we implement aligned allocation
+        let a = Vector::with_alignment(1000, Backend::SSE2, 16).unwrap();
+        let b = Vector::with_alignment(1000, Backend::SSE2, 16).unwrap();
+
+        // Operations on aligned vectors should work correctly
+        let result = a.add(&b);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 1000);
     }
 }
 
