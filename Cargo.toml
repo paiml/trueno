@@ -25,3 +25,7 @@ codegen-units = 1
 [lib]
 name = "trueno"
 path = "src/lib.rs"
+
+[[bench]]
+name = "vector_ops"
+harness = false
