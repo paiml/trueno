@@ -376,6 +376,29 @@ impl VectorBackend for WasmBackend {
 
         result
     }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast scalar to all 4 lanes
+        let scalar_vec = f32x4_splat(scalar);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+            let vresult = f32x4_mul(va, scalar_vec);
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] * scalar;
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

@@ -154,4 +154,15 @@ pub trait VectorBackend {
     ///
     /// - Can handle empty slice (returns 0.0)
     unsafe fn norm_l1(a: &[f32]) -> f32;
+
+    /// Scalar multiplication: result[i] = a[i] * scalar
+    ///
+    /// Multiplies all elements by a scalar value.
+    /// Used in vector scaling, normalization, and linear transformations.
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slice
+    unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]);
 }
