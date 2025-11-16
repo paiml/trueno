@@ -1998,6 +1998,40 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes the hyperbolic tangent (tanh) of each element.
+    ///
+    /// # Mathematical Definition
+    ///
+    /// tanh(x) = sinh(x) / cosh(x) = (e^x - e^(-x)) / (e^x + e^(-x))
+    ///
+    /// # Properties
+    ///
+    /// - Domain: (-∞, +∞)
+    /// - Range: (-1, 1)
+    /// - Odd function: tanh(-x) = -tanh(x)
+    /// - tanh(0) = 0
+    /// - Bounded: -1 < tanh(x) < 1 for all x
+    /// - Commonly used as activation function in neural networks
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[0.0, 1.0, -1.0]);
+    /// let result = v.tanh().unwrap();
+    /// assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    /// // All values are in range (-1, 1)
+    /// assert!(result.as_slice().iter().all(|&x| x > -1.0 && x < 1.0));
+    /// ```
+    pub fn tanh(&self) -> Result<Vector<f32>> {
+        let tanh_data: Vec<f32> = self.data.iter().map(|x| x.tanh()).collect();
+        Ok(Vector {
+            data: tanh_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -3804,6 +3838,64 @@ mod tests {
     fn test_cosh_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.cosh().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // tanh() tests
+    #[test]
+    fn test_tanh_basic() {
+        let a = Vector::from_slice(&[0.0, 1.0, -1.0]);
+        let result = a.tanh().unwrap();
+        let expected = [0.0_f32.tanh(), 1.0_f32.tanh(), (-1.0_f32).tanh()];
+        for (r, e) in result.as_slice().iter().zip(expected.iter()) {
+            assert!((r - e).abs() < 1e-5, "Expected {}, got {}", e, r);
+        }
+    }
+
+    #[test]
+    fn test_tanh_zero() {
+        let a = Vector::from_slice(&[0.0]);
+        let result = a.tanh().unwrap();
+        assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_tanh_range() {
+        // tanh(x) is bounded: -1 <= tanh(x) <= 1
+        // For very large values, it approaches ±1 in floating-point
+        let a = Vector::from_slice(&[10.0, -10.0, 100.0]);
+        let result = a.tanh().unwrap();
+        for &val in result.as_slice() {
+            assert!((-1.0..=1.0).contains(&val), "tanh value {} out of range [-1, 1]", val);
+        }
+    }
+
+    #[test]
+    fn test_tanh_negative() {
+        let a = Vector::from_slice(&[-2.0]);
+        let result = a.tanh().unwrap();
+        let expected = (-2.0_f32).tanh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_tanh_sinh_cosh_relation() {
+        // tanh(x) = sinh(x) / cosh(x)
+        let a = Vector::from_slice(&[1.5]);
+        let tanh_result = a.tanh().unwrap();
+        let sinh_result = a.sinh().unwrap();
+        let cosh_result = a.cosh().unwrap();
+        let ratio = sinh_result.as_slice()[0] / cosh_result.as_slice()[0];
+        assert!(
+            (tanh_result.as_slice()[0] - ratio).abs() < 1e-5,
+            "tanh(x) = sinh(x)/cosh(x)"
+        );
+    }
+
+    #[test]
+    fn test_tanh_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.tanh().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -6365,6 +6457,110 @@ mod property_tests {
                     (identity - 1.0).abs() < tolerance,
                     "Hyperbolic identity failed at {}: cosh^2({}) - sinh^2({}) = {} != 1",
                     i, c, s, identity
+                );
+            }
+        }
+    }
+
+    // Property test: tanh correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_tanh_correctness(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.tanh().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.tanh();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "tanh failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: tanh is odd function - tanh(-x) = -tanh(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_tanh_odd_function(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let tanh_pos = va.tanh().unwrap();
+
+            let a_neg: Vec<f32> = a.iter().map(|x| -x).collect();
+            let va_neg = Vector::from_slice(&a_neg);
+            let tanh_neg = va_neg.tanh().unwrap();
+
+            for (i, (&pos, &neg)) in tanh_pos.as_slice().iter()
+                .zip(tanh_neg.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (pos + neg).abs() < 1e-5,
+                    "tanh odd function failed at {}: tanh(-x)={} != -tanh(x)={}",
+                    i, neg, -pos
+                );
+            }
+        }
+    }
+
+    // Property test: tanh = sinh/cosh relation
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_tanh_sinh_cosh_relation(
+            a in prop::collection::vec(-5.0f32..5.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let tanh_result = va.tanh().unwrap();
+            let sinh_result = va.sinh().unwrap();
+            let cosh_result = va.cosh().unwrap();
+
+            for (i, (&t, (&s, &c))) in tanh_result.as_slice().iter()
+                .zip(sinh_result.as_slice().iter().zip(cosh_result.as_slice().iter()))
+                .enumerate() {
+                let ratio = s / c;
+                // Use relative tolerance for numerical stability
+                let tolerance = if ratio.abs() > 1.0 {
+                    ratio.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+                prop_assert!(
+                    (t - ratio).abs() < tolerance,
+                    "tanh = sinh/cosh failed at {}: tanh({}) = {} != {}/{}={}",
+                    i, t, t, s, c, ratio
+                );
+            }
+        }
+    }
+
+    // Property test: tanh range bound -1 <= tanh(x) <= 1
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_tanh_range_bound(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.tanh().unwrap();
+
+            for (i, &output) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    (-1.0..=1.0).contains(&output),
+                    "tanh range bound failed at {}: {} not in [-1, 1]",
+                    i, output
                 );
             }
         }
