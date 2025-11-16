@@ -101,6 +101,29 @@ impl VectorBackend for NeonBackend {
     }
 
     #[target_feature(enable = "neon")]
+    unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let vb = vld1q_f32(b.as_ptr().add(i));
+
+            let vresult = vdivq_f32(va, vb);
+
+            vst1q_f32(result.as_mut_ptr().add(i), vresult);
+
+            i += 4;
+        }
+
+        // Handle remaining elements
+        for j in i..len {
+            result[j] = a[j] / b[j];
+        }
+    }
+
+    #[target_feature(enable = "neon")]
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;

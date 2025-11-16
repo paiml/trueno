@@ -97,6 +97,29 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
+    #[target_feature(enable = "avx2")]
+    unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm256_loadu_ps(b.as_ptr().add(i));
+
+            let vresult = _mm256_div_ps(va, vb);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+
+            i += 8;
+        }
+
+        // Handle remaining elements
+        for j in i..len {
+            result[j] = a[j] / b[j];
+        }
+    }
+
     #[target_feature(enable = "avx2", enable = "fma")]
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let len = a.len();
