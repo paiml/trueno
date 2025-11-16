@@ -30,6 +30,10 @@ pub enum TruenoError {
     /// Invalid input
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+
+    /// Division by zero (e.g., normalizing zero vector)
+    #[error("Division by zero")]
+    DivisionByZero,
 }
 
 #[cfg(test)]
@@ -77,5 +81,11 @@ mod tests {
             actual: 5,
         };
         assert_eq!(err1, err2);
+    }
+
+    #[test]
+    fn test_division_by_zero_error() {
+        let err = TruenoError::DivisionByZero;
+        assert_eq!(err.to_string(), "Division by zero");
     }
 }
