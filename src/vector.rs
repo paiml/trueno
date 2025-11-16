@@ -2226,6 +2226,30 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Returns the sign of each element.
+    ///
+    /// Returns:
+    /// - `1.0` if the value is positive (including +0.0 and +∞)
+    /// - `-1.0` if the value is negative (including -0.0 and -∞)
+    /// - `NaN` if the value is NaN
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[5.0, -3.0, 0.0, -0.0]);
+    /// let result = v.signum().unwrap();
+    /// assert_eq!(result.as_slice(), &[1.0, -1.0, 1.0, -1.0]);
+    /// ```
+    pub fn signum(&self) -> Result<Vector<f32>> {
+        let signum_data: Vec<f32> = self.data.iter().map(|x| x.signum()).collect();
+        Ok(Vector {
+            data: signum_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4478,6 +4502,49 @@ mod tests {
     fn test_fract_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.fract().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_signum_basic() {
+        let a = Vector::from_slice(&[5.0, -3.0, 0.0, -0.0]);
+        let result = a.signum().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, -1.0, 1.0, -1.0]);
+    }
+
+    #[test]
+    fn test_signum_positive() {
+        let a = Vector::from_slice(&[0.1, 1.0, 100.0, f32::INFINITY]);
+        let result = a.signum().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_signum_negative() {
+        let a = Vector::from_slice(&[-0.1, -1.0, -100.0, f32::NEG_INFINITY]);
+        let result = a.signum().unwrap();
+        assert_eq!(result.as_slice(), &[-1.0, -1.0, -1.0, -1.0]);
+    }
+
+    #[test]
+    fn test_signum_mixed() {
+        let a = Vector::from_slice(&[42.5, -17.3, 0.0001, -0.0001]);
+        let result = a.signum().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, -1.0, 1.0, -1.0]);
+    }
+
+    #[test]
+    fn test_signum_zero_handling() {
+        // Rust's signum treats +0.0 as positive (1.0) and -0.0 as negative (-1.0)
+        let a = Vector::from_slice(&[0.0, -0.0]);
+        let result = a.signum().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, -1.0]);
+    }
+
+    #[test]
+    fn test_signum_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.signum().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -7721,6 +7788,79 @@ mod property_tests {
                     "fract magnitude should be < 1 at {}: |fract({})| = {} >= 1",
                     i, a[i], output.abs()
                 );
+            }
+        }
+    }
+
+    // Property test: signum correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_signum_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.signum().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.signum();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "signum failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: signum range - always -1, 0, or 1
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_signum_range(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.signum().unwrap();
+
+            for (i, &output) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    output == 1.0 || output == -1.0 || output.is_nan(),
+                    "signum should be 1.0, -1.0, or NaN at {}: signum({}) = {}",
+                    i, a[i], output
+                );
+            }
+        }
+    }
+
+    // Property test: signum * abs = identity (for non-zero)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_signum_abs_identity(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let signum_result = va.signum().unwrap();
+            let abs_result = va.abs().unwrap();
+
+            for (i, (&input, (&sign, &magnitude))) in a.iter()
+                .zip(signum_result.as_slice().iter().zip(abs_result.as_slice().iter()))
+                .enumerate() {
+                // Skip zero values as they have special behavior
+                if input.abs() > 1e-10 {
+                    let reconstructed = sign * magnitude;
+                    prop_assert!(
+                        (reconstructed - input).abs() < 1e-5,
+                        "signum*abs identity failed at {}: {} != signum({}) * abs({}) = {} * {} = {}",
+                        i, input, input, input, sign, magnitude, reconstructed
+                    );
+                }
             }
         }
     }
