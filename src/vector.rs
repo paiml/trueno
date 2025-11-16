@@ -1753,6 +1753,50 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes element-wise tangent (tan) of the vector.
+    ///
+    /// Returns a new vector where each element is the tangent of the corresponding input element.
+    /// tan(x) = sin(x) / cos(x)
+    ///
+    /// # Returns
+    /// - `Ok(Vector<f32>)`: New vector with tan(x) for each element
+    ///
+    /// # Properties
+    /// - Odd function: tan(-x) = -tan(x)
+    /// - Period: 2π (not π, despite common misconception)
+    /// - Undefined at x = π/2 + nπ (where n is any integer)
+    /// - tan(x) = sin(x) / cos(x)
+    /// - Range: (-∞, +∞)
+    ///
+    /// # Performance
+    /// - Iterator map pattern for cache efficiency
+    /// - Leverages Rust's optimized f32::tan()
+    /// - Auto-vectorized by LLVM on supporting platforms
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::Vector;
+    /// use std::f32::consts::PI;
+    ///
+    /// let angles = Vector::from_slice(&[0.0, PI / 4.0, -PI / 4.0]);
+    /// let result = angles.tan().unwrap();
+    /// // Result: [0.0, 1.0, -1.0] (approximately)
+    /// ```
+    ///
+    /// # Use Cases
+    /// - Trigonometry: Slope calculations, angle relationships
+    /// - Signal processing: Phase analysis, modulation
+    /// - Physics: Projectile trajectories, optics (Snell's law angles)
+    /// - Graphics: Perspective projection, field of view calculations
+    /// - Engineering: Slope gradients, tangent lines to curves
+    pub fn tan(&self) -> Result<Vector<f32>> {
+        let tan_data: Vec<f32> = self.data.iter().map(|x| x.tan()).collect();
+        Ok(Vector {
+            data: tan_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -3094,6 +3138,92 @@ mod tests {
     fn test_cos_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.cos().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_tan_basic() {
+        use std::f32::consts::PI;
+        // tan(0) = 0, tan(π/4) = 1, tan(-π/4) = -1
+        let a = Vector::from_slice(&[0.0, PI / 4.0, -PI / 4.0]);
+        let result = a.tan().unwrap();
+        let expected = [0.0, 1.0, -1.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "tan basic mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_tan_zero() {
+        let a = Vector::from_slice(&[0.0]);
+        let result = a.tan().unwrap();
+        assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_tan_quarter_circle() {
+        use std::f32::consts::PI;
+        // tan(π/4) = 1
+        let a = Vector::from_slice(&[PI / 4.0]);
+        let result = a.tan().unwrap();
+        assert!((result.as_slice()[0] - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_tan_negative() {
+        use std::f32::consts::PI;
+        // tan is odd: tan(-x) = -tan(x)
+        let a = Vector::from_slice(&[-PI / 4.0, -PI / 6.0]);
+        let result = a.tan().unwrap();
+        let expected = [-1.0, -(1.0 / 3.0_f32.sqrt())];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "tan negative mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_tan_sin_cos_relation() {
+        use std::f32::consts::PI;
+        // tan(x) = sin(x) / cos(x)
+        let a = Vector::from_slice(&[PI / 6.0, PI / 4.0, PI / 3.0]);
+        let tan_result = a.tan().unwrap();
+        let sin_result = a.sin().unwrap();
+        let cos_result = a.cos().unwrap();
+
+        for (i, ((&tan_val, &sin_val), &cos_val)) in tan_result
+            .as_slice()
+            .iter()
+            .zip(sin_result.as_slice().iter())
+            .zip(cos_result.as_slice().iter())
+            .enumerate()
+        {
+            let expected = sin_val / cos_val;
+            assert!(
+                (tan_val - expected).abs() < 1e-5,
+                "tan(x) != sin(x)/cos(x) at {}: {} != {}",
+                i,
+                tan_val,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_tan_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.tan().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -5141,6 +5271,90 @@ mod property_tests {
                     (sum_of_squares - 1.0).abs() < 1e-5,
                     "Pythagorean identity failed at {}: sin²+cos² = {} != 1.0",
                     i, sum_of_squares
+                );
+            }
+        }
+    }
+
+    // Property test: tan() correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_tan_correctness(
+            a in prop::collection::vec(-1.5f32..1.5, 1..100)
+        ) {
+            // Use limited range to avoid tan asymptotes at ±π/2
+            let va = Vector::from_slice(&a);
+            let result = va.tan().unwrap();
+
+            for (i, (&a_val, &tan_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.tan();
+
+                prop_assert!(
+                    (tan_val - expected).abs() < 1e-5,
+                    "tan correctness failed at {}: {} != {}, diff = {}",
+                    i, tan_val, expected, (tan_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: tan(x) = sin(x) / cos(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_tan_sin_cos_identity(
+            a in prop::collection::vec(-1.5f32..1.5, 1..100)
+        ) {
+            // Avoid asymptotes at ±π/2 where cos(x) ≈ 0
+            let va = Vector::from_slice(&a);
+            let tan_result = va.tan().unwrap();
+            let sin_result = va.sin().unwrap();
+            let cos_result = va.cos().unwrap();
+
+            for (i, ((&tan_val, &sin_val), &cos_val)) in tan_result.as_slice().iter()
+                .zip(sin_result.as_slice().iter())
+                .zip(cos_result.as_slice().iter())
+                .enumerate() {
+                // Skip values where cos is very small (near asymptote)
+                if cos_val.abs() > 1e-3 {
+                    let expected = sin_val / cos_val;
+                    prop_assert!(
+                        (tan_val - expected).abs() < 1e-4,
+                        "tan(x) != sin(x)/cos(x) at {}: {} != {}, cos={}",
+                        i, tan_val, expected, cos_val
+                    );
+                }
+            }
+        }
+    }
+
+    // Property test: tan is odd function - tan(-x) = -tan(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_tan_odd_function(
+            a in prop::collection::vec(-1.5f32..1.5, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let tan_pos = va.tan().unwrap();
+
+            let a_neg: Vec<f32> = a.iter().map(|x| -x).collect();
+            let va_neg = Vector::from_slice(&a_neg);
+            let tan_neg = va_neg.tan().unwrap();
+
+            for (i, (&pos, &neg)) in tan_pos.as_slice().iter()
+                .zip(tan_neg.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (pos + neg).abs() < 1e-5,
+                    "tan odd function failed at {}: tan(-x)={} != -tan(x)={}",
+                    i, neg, -pos
                 );
             }
         }
