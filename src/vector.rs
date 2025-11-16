@@ -1381,6 +1381,98 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Fused multiply-add: result[i] = self[i] * b[i] + c[i]
+    ///
+    /// Computes element-wise fused multiply-add operation. On hardware with FMA support
+    /// (AVX2, NEON), this is a single instruction with better performance and numerical
+    /// accuracy (no intermediate rounding). On platforms without FMA (SSE2, WASM), uses
+    /// separate multiply and add operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `b` - The second vector to multiply with
+    /// * `c` - The vector to add to the product
+    ///
+    /// # Returns
+    ///
+    /// A new vector where each element is `self[i] * b[i] + c[i]`
+    ///
+    /// # Errors
+    ///
+    /// Returns `SizeMismatch` if vector lengths don't match
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let a = Vector::from_slice(&[2.0, 3.0, 4.0]);
+    /// let b = Vector::from_slice(&[5.0, 6.0, 7.0]);
+    /// let c = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let result = a.fma(&b, &c).unwrap();
+    /// assert_eq!(result.as_slice(), &[11.0, 20.0, 31.0]);  // [2*5+1, 3*6+2, 4*7+3]
+    /// ```
+    ///
+    /// # Use Cases
+    ///
+    /// - Neural networks: matrix multiplication, backpropagation
+    /// - Scientific computing: polynomial evaluation, numerical integration
+    /// - Graphics: transformation matrices, shader computations
+    /// - Physics simulations: force calculations, particle systems
+    pub fn fma(&self, b: &Vector<f32>, c: &Vector<f32>) -> Result<Vector<f32>> {
+        if self.len() != b.len() {
+            return Err(TruenoError::SizeMismatch {
+                expected: self.len(),
+                actual: b.len(),
+            });
+        }
+        if self.len() != c.len() {
+            return Err(TruenoError::SizeMismatch {
+                expected: self.len(),
+                actual: c.len(),
+            });
+        }
+
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            unsafe {
+                match self.backend {
+                    Backend::Scalar => {
+                        ScalarBackend::fma(&self.data, &b.data, &c.data, &mut result_data)
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::SSE2 | Backend::AVX => {
+                        Sse2Backend::fma(&self.data, &b.data, &c.data, &mut result_data)
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::AVX2 | Backend::AVX512 => {
+                        Avx2Backend::fma(&self.data, &b.data, &c.data, &mut result_data)
+                    }
+                    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                    Backend::NEON => {
+                        NeonBackend::fma(&self.data, &b.data, &c.data, &mut result_data)
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    Backend::WASM => {
+                        WasmBackend::fma(&self.data, &b.data, &c.data, &mut result_data)
+                    }
+                    Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
+                    Backend::Auto => {
+                        return Err(TruenoError::UnsupportedBackend(Backend::Auto));
+                    }
+                    #[allow(unreachable_patterns)]
+                    _ => ScalarBackend::fma(&self.data, &b.data, &c.data, &mut result_data),
+                }
+            }
+        }
+
+        Ok(Vector {
+            data: result_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -2168,6 +2260,74 @@ mod tests {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let b: Vector<f32> = Vector::from_slice(&[]);
         let result = a.lerp(&b, 0.5).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // fma() operation tests (fused multiply-add: a * b + c)
+    #[test]
+    fn test_fma_basic() {
+        let a = Vector::from_slice(&[2.0, 3.0, 4.0]);
+        let b = Vector::from_slice(&[5.0, 6.0, 7.0]);
+        let c = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = a.fma(&b, &c).unwrap();
+        // Expected: [2*5+1, 3*6+2, 4*7+3] = [11, 20, 31]
+        assert_eq!(result.as_slice(), &[11.0, 20.0, 31.0]);
+    }
+
+    #[test]
+    fn test_fma_zeros() {
+        let a = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let b = Vector::from_slice(&[5.0, 6.0, 7.0]);
+        let c = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = a.fma(&b, &c).unwrap();
+        // Expected: [0*5+1, 0*6+2, 0*7+3] = [1, 2, 3]
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_fma_ones() {
+        let a = Vector::from_slice(&[2.0, 3.0, 4.0]);
+        let b = Vector::from_slice(&[1.0, 1.0, 1.0]);
+        let c = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = a.fma(&b, &c).unwrap();
+        // Expected: [2*1+0, 3*1+0, 4*1+0] = [2, 3, 4]
+        assert_eq!(result.as_slice(), &[2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_fma_negatives() {
+        let a = Vector::from_slice(&[-2.0, 3.0, -4.0]);
+        let b = Vector::from_slice(&[5.0, -6.0, 7.0]);
+        let c = Vector::from_slice(&[1.0, 2.0, -3.0]);
+        let result = a.fma(&b, &c).unwrap();
+        // Expected: [-2*5+1, 3*(-6)+2, -4*7+(-3)] = [-9, -16, -31]
+        assert_eq!(result.as_slice(), &[-9.0, -16.0, -31.0]);
+    }
+
+    #[test]
+    fn test_fma_size_mismatch_b() {
+        let a = Vector::from_slice(&[1.0, 2.0]);
+        let b = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let c = Vector::from_slice(&[1.0, 2.0]);
+        let result = a.fma(&b, &c);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fma_size_mismatch_c() {
+        let a = Vector::from_slice(&[1.0, 2.0]);
+        let b = Vector::from_slice(&[1.0, 2.0]);
+        let c = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = a.fma(&b, &c);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fma_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let b: Vector<f32> = Vector::from_slice(&[]);
+        let c: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.fma(&b, &c).unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -3441,6 +3601,125 @@ mod property_tests {
                     (fwd - rev).abs() < tolerance,
                     "Symmetry failed at {}: {} != {}, diff = {}",
                     i, fwd, rev, (fwd - rev).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: fma() correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_fma_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            b in prop::collection::vec(-100.0f32..100.0, 1..100),
+            c in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let len = a.len().min(b.len()).min(c.len());
+            let a_trimmed = &a[..len];
+            let b_trimmed = &b[..len];
+            let c_trimmed = &c[..len];
+
+            let va = Vector::from_slice(a_trimmed);
+            let vb = Vector::from_slice(b_trimmed);
+            let vc = Vector::from_slice(c_trimmed);
+
+            let result = va.fma(&vb, &vc).unwrap();
+
+            // Verify: result[i] = a[i] * b[i] + c[i]
+            for (i, ((&a_val, &b_val), (&c_val, &result_val))) in a_trimmed.iter()
+                .zip(b_trimmed.iter())
+                .zip(c_trimmed.iter().zip(result.as_slice().iter()))
+                .enumerate() {
+                let expected = a_val * b_val + c_val;
+
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-5
+                } else {
+                    1e-4
+                };
+
+                prop_assert!(
+                    (result_val - expected).abs() < tolerance,
+                    "FMA correctness failed at {}: {} != {}, diff = {}",
+                    i, result_val, expected, (result_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: fma() with zero multiplication
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_fma_zero_mul(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            c in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            // fma(a, 0, c) = 0 * a + c = c
+            let len = a.len().min(c.len());
+            let a_trimmed = &a[..len];
+            let c_trimmed = &c[..len];
+
+            let va = Vector::from_slice(a_trimmed);
+            let vc = Vector::from_slice(c_trimmed);
+            let zeros = vec![0.0; len];
+            let vzero = Vector::from_slice(&zeros);
+
+            let result = va.fma(&vzero, &vc).unwrap();
+
+            for (i, (&result_val, &c_val)) in result.as_slice().iter()
+                .zip(c_trimmed.iter())
+                .enumerate() {
+                prop_assert!(
+                    (result_val - c_val).abs() < 1e-10,
+                    "Zero multiplication failed at {}: {} != {}, diff = {}",
+                    i, result_val, c_val, (result_val - c_val).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: fma() relation to mul and add
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_fma_vs_mul_add(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            b in prop::collection::vec(-100.0f32..100.0, 1..100),
+            c in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let len = a.len().min(b.len()).min(c.len());
+            let a_trimmed = &a[..len];
+            let b_trimmed = &b[..len];
+            let c_trimmed = &c[..len];
+
+            let va = Vector::from_slice(a_trimmed);
+            let vb = Vector::from_slice(b_trimmed);
+            let vc = Vector::from_slice(c_trimmed);
+
+            // fma(a, b, c) should approximately equal mul(a, b) + c
+            let fma_result = va.fma(&vb, &vc).unwrap();
+            let mul_result = va.mul(&vb).unwrap();
+            let add_result = mul_result.add(&vc).unwrap();
+
+            for (i, (&fma_val, &add_val)) in fma_result.as_slice().iter()
+                .zip(add_result.as_slice().iter())
+                .enumerate() {
+                // FMA can have better accuracy, so use slightly higher tolerance
+                let tolerance = if fma_val.abs() > 1.0 {
+                    fma_val.abs() * 1e-5
+                } else {
+                    1e-4
+                };
+
+                prop_assert!(
+                    (fma_val - add_val).abs() < tolerance,
+                    "FMA vs mul+add failed at {}: {} != {}, diff = {}",
+                    i, fma_val, add_val, (fma_val - add_val).abs()
                 );
             }
         }

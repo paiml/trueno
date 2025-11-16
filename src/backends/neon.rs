@@ -568,6 +568,58 @@ impl VectorBackend for NeonBackend {
             i += 1;
         }
     }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let vb = vld1q_f32(b.as_ptr().add(i));
+            let vc = vld1q_f32(c.as_ptr().add(i));
+
+            // result = a * b + c
+            // Using FMA: vfmaq_f32(c, a, b) = c + a * b = a * b + c
+            let vresult = vfmaq_f32(vc, va, vb);
+
+            vst1q_f32(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] * b[i] + c[i];
+            i += 1;
+        }
+    }
+
+    #[cfg(target_arch = "arm")]
+    unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let vb = vld1q_f32(b.as_ptr().add(i));
+            let vc = vld1q_f32(c.as_ptr().add(i));
+
+            // result = a * b + c
+            // Using FMA: vmlaq_f32(c, a, b) = c + a * b = a * b + c
+            let vresult = vmlaq_f32(vc, va, vb);
+
+            vst1q_f32(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] * b[i] + c[i];
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

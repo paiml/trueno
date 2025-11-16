@@ -154,6 +154,15 @@ impl VectorBackend for ScalarBackend {
             result[i] = a_val + t * (b_val - a_val);
         }
     }
+
+    unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
+        for (i, ((&a_val, &b_val), &c_val)) in
+            a.iter().zip(b.iter()).zip(c.iter()).enumerate()
+        {
+            // result = a * b + c
+            result[i] = a_val * b_val + c_val;
+        }
+    }
 }
 
 #[cfg(test)]

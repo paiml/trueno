@@ -504,6 +504,32 @@ impl VectorBackend for Avx2Backend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "avx2", enable = "fma")]
+    unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm256_loadu_ps(b.as_ptr().add(i));
+            let vc = _mm256_loadu_ps(c.as_ptr().add(i));
+
+            // result = a * b + c
+            // Using FMA: result = fma(a, b, c) = a * b + c
+            let vresult = _mm256_fmadd_ps(va, vb, vc);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 8;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] * b[i] + c[i];
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]
