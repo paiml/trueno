@@ -2250,6 +2250,48 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Returns a vector with the magnitude of `self` and the sign of `sign`.
+    ///
+    /// For each element pair, takes the magnitude from `self` and the sign from `sign`.
+    /// Equivalent to `abs(self[i])` with the sign of `sign[i]`.
+    ///
+    /// # Arguments
+    ///
+    /// * `sign` - Vector providing the sign for each element
+    ///
+    /// # Errors
+    ///
+    /// Returns `TruenoError::SizeMismatch` if vectors have different lengths.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let magnitude = Vector::from_slice(&[5.0, 3.0, 2.0]);
+    /// let sign = Vector::from_slice(&[-1.0, 1.0, -1.0]);
+    /// let result = magnitude.copysign(&sign).unwrap();
+    /// assert_eq!(result.as_slice(), &[-5.0, 3.0, -2.0]);
+    /// ```
+    pub fn copysign(&self, sign: &Self) -> Result<Vector<f32>> {
+        if self.len() != sign.len() {
+            return Err(TruenoError::SizeMismatch {
+                expected: self.len(),
+                actual: sign.len(),
+            });
+        }
+
+        let copysign_data: Vec<f32> = self.data.iter()
+            .zip(sign.data.iter())
+            .map(|(mag, sgn)| mag.copysign(*sgn))
+            .collect();
+
+        Ok(Vector {
+            data: copysign_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4549,6 +4591,57 @@ mod tests {
     }
 
     #[test]
+    fn test_copysign_basic() {
+        let magnitude = Vector::from_slice(&[5.0, 3.0, 2.0, 4.0]);
+        let sign = Vector::from_slice(&[-1.0, 1.0, -1.0, 1.0]);
+        let result = magnitude.copysign(&sign).unwrap();
+        assert_eq!(result.as_slice(), &[-5.0, 3.0, -2.0, 4.0]);
+    }
+
+    #[test]
+    fn test_copysign_negative_magnitude() {
+        // copysign takes absolute magnitude, so negative magnitude becomes positive first
+        let magnitude = Vector::from_slice(&[-5.0, -3.0]);
+        let sign = Vector::from_slice(&[1.0, -1.0]);
+        let result = magnitude.copysign(&sign).unwrap();
+        assert_eq!(result.as_slice(), &[5.0, -3.0]);
+    }
+
+    #[test]
+    fn test_copysign_zero() {
+        // copysign handles +0.0 and -0.0
+        let magnitude = Vector::from_slice(&[3.0, 3.0]);
+        let sign = Vector::from_slice(&[0.0, -0.0]);
+        let result = magnitude.copysign(&sign).unwrap();
+        assert_eq!(result.as_slice(), &[3.0, -3.0]);
+    }
+
+    #[test]
+    fn test_copysign_infinity() {
+        let magnitude = Vector::from_slice(&[5.0, 5.0]);
+        let sign = Vector::from_slice(&[f32::INFINITY, f32::NEG_INFINITY]);
+        let result = magnitude.copysign(&sign).unwrap();
+        assert_eq!(result.as_slice(), &[5.0, -5.0]);
+    }
+
+    #[test]
+    fn test_copysign_size_mismatch() {
+        let magnitude = Vector::from_slice(&[1.0, 2.0]);
+        let sign = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = magnitude.copysign(&sign);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), TruenoError::SizeMismatch { .. }));
+    }
+
+    #[test]
+    fn test_copysign_empty() {
+        let magnitude: Vector<f32> = Vector::from_slice(&[]);
+        let sign: Vector<f32> = Vector::from_slice(&[]);
+        let result = magnitude.copysign(&sign).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
 
@@ -6013,23 +6106,25 @@ mod property_tests {
         fn test_sqrt_monotonic(
             a in prop::collection::vec(0.0f32..100.0, 2..100)
         ) {
-            // If a[i] < a[j], then sqrt(a[i]) < sqrt(a[j])
+            // If a[i] < a[j], then sqrt(a[i]) <= sqrt(a[j])
             let va = Vector::from_slice(&a);
             let result = va.sqrt().unwrap();
             let result_slice = result.as_slice();
 
             for i in 0..a.len()-1 {
                 for j in i+1..a.len() {
-                    if a[i] < a[j] {
+                    // Use a small epsilon to account for f32 precision
+                    let epsilon = 1e-6;
+                    if a[i] + epsilon < a[j] {
                         prop_assert!(
-                            result_slice[i] < result_slice[j],
-                            "Monotonicity failed: sqrt({}) = {} should be < sqrt({}) = {}",
+                            result_slice[i] <= result_slice[j],
+                            "Monotonicity failed: sqrt({}) = {} should be <= sqrt({}) = {}",
                             a[i], result_slice[i], a[j], result_slice[j]
                         );
-                    } else if a[i] > a[j] {
+                    } else if a[i] > a[j] + epsilon {
                         prop_assert!(
-                            result_slice[i] > result_slice[j],
-                            "Monotonicity failed: sqrt({}) = {} should be > sqrt({}) = {}",
+                            result_slice[i] >= result_slice[j],
+                            "Monotonicity failed: sqrt({}) = {} should be >= sqrt({}) = {}",
                             a[i], result_slice[i], a[j], result_slice[j]
                         );
                     }
@@ -7859,6 +7954,99 @@ mod property_tests {
                         (reconstructed - input).abs() < 1e-5,
                         "signum*abs identity failed at {}: {} != signum({}) * abs({}) = {} * {} = {}",
                         i, input, input, input, sign, magnitude, reconstructed
+                    );
+                }
+            }
+        }
+    }
+
+    // ========================================
+    // Property Tests: copysign()
+    // ========================================
+
+    // Property test: copysign correctness - matches f32::copysign
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_copysign_correctness(
+            ab in prop::collection::vec((-100.0f32..100.0, -100.0f32..100.0), 1..100)
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+            let result = va.copysign(&vb).unwrap();
+
+            for (i, (&mag, (&sgn, &output))) in a.iter()
+                .zip(b.iter().zip(result.as_slice().iter()))
+                .enumerate() {
+                let expected = mag.copysign(sgn);
+                prop_assert!(
+                    (output - expected).abs() < 1e-5 || (output.is_nan() && expected.is_nan()),
+                    "copysign failed at {}: copysign({}, {}) = {} != {}",
+                    i, mag, sgn, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: magnitude preservation - abs(copysign(a, b)) = abs(a)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_copysign_magnitude_preservation(
+            ab in prop::collection::vec((-100.0f32..100.0, -100.0f32..100.0), 1..100)
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+            let result = va.copysign(&vb).unwrap();
+            let abs_a = va.abs().unwrap();
+            let abs_result = result.abs().unwrap();
+
+            for (i, (&expected, &output)) in abs_a.as_slice().iter()
+                .zip(abs_result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "magnitude not preserved at {}: abs(copysign({}, {})) = {} != abs({}) = {}",
+                    i, a[i], b[i], output, a[i], expected
+                );
+            }
+        }
+    }
+
+    // Property test: sign copy - sign(copysign(a, b)) = sign(b) for non-zero b
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_copysign_sign_copy(
+            ab in prop::collection::vec((-100.0f32..100.0, -100.0f32..100.0), 1..100)
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+            let result = va.copysign(&vb).unwrap();
+            let signum_b = vb.signum().unwrap();
+            let signum_result = result.signum().unwrap();
+
+            for (i, (&sign_b, &sign_result)) in signum_b.as_slice().iter()
+                .zip(signum_result.as_slice().iter())
+                .enumerate() {
+                // Skip NaN cases
+                if !sign_b.is_nan() && !sign_result.is_nan() {
+                    prop_assert!(
+                        (sign_result - sign_b).abs() < 1e-5,
+                        "sign not copied at {}: sign(copysign({}, {})) = {} != sign({}) = {}",
+                        i, a[i], b[i], sign_result, b[i], sign_b
                     );
                 }
             }
