@@ -396,18 +396,20 @@ trueno/
 - [ ] Multi-GPU support
 
 ### Phase 7: Advanced Operations (IN PROGRESS)
-- [x] Element-wise subtraction (sub)
+- [x] Element-wise subtraction (sub) and division (div)
 - [x] Reductions: min, max, sum, sum_kahan (Kahan summation)
 - [x] Index finding: argmax, argmin
+- [x] Vector norms: norm_l2 (Euclidean norm), normalize (unit vector)
 - [ ] Matrix operations (matmul, transpose)
 - [ ] Convolutions (conv2d)
 - [ ] Async GPU API
 
-**Phase 7 Progress**: Core vector operations complete with 97 tests passing. The library now supports:
-- **Element-wise operations**: add, sub, mul
+**Phase 7 Progress**: Core vector operations complete with 121 tests passing. The library now supports:
+- **Element-wise operations**: add, sub, mul, div
 - **Dot product**: Optimized for ML/scientific computing
 - **Reductions**: sum (naive + Kahan), min, max
 - **Index operations**: argmin, argmax
+- **Vector norms**: L2 norm (Euclidean length), normalization to unit vectors
 - **Numerical stability**: Kahan summation for accurate floating-point accumulation
 
 ## Contributing

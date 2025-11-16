@@ -932,6 +932,52 @@ impl Vector<f32> {
 
         Ok(result)
     }
+
+    /// Normalize the vector to unit length (L2 norm = 1)
+    ///
+    /// Returns a new vector in the same direction but with magnitude 1.
+    ///
+    /// # Errors
+    ///
+    /// Returns `TruenoError::DivisionByZero` if the vector has zero norm (cannot normalize zero vector).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.0, 4.0]);
+    /// let unit = v.normalize().unwrap();
+    ///
+    /// // Result is [0.6, 0.8] (a unit vector)
+    /// assert!((unit.as_slice()[0] - 0.6).abs() < 1e-5);
+    /// assert!((unit.as_slice()[1] - 0.8).abs() < 1e-5);
+    ///
+    /// // Verify it's a unit vector (norm = 1)
+    /// assert!((unit.norm_l2().unwrap() - 1.0).abs() < 1e-5);
+    /// ```
+    ///
+    /// # Zero Vector Error
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let v = Vector::from_slice(&[0.0, 0.0]);
+    /// assert!(matches!(v.normalize(), Err(TruenoError::DivisionByZero)));
+    /// ```
+    pub fn normalize(&self) -> Result<Vector<f32>> {
+        let norm = self.norm_l2()?;
+
+        // Check for zero or near-zero norm (cannot normalize zero vector)
+        if norm.abs() < 1e-10 {
+            return Err(TruenoError::DivisionByZero);
+        }
+
+        // Divide each element by the norm
+        // Create a vector filled with the norm value
+        let norm_vec = Vector::from_slice(&vec![norm; self.len()]);
+        self.div(&norm_vec)
+    }
 }
 
 #[cfg(test)]
@@ -1401,6 +1447,47 @@ mod tests {
         let v = Vector::from_slice(&[-3.0, -4.0]);
         let result = v.norm_l2().unwrap();
         assert!((result - 5.0).abs() < 1e-5); // sqrt((-3)^2 + (-4)^2) = 5
+    }
+
+    // Normalize (unit vector) tests
+    #[test]
+    fn test_normalize() {
+        let v = Vector::from_slice(&[3.0, 4.0]);
+        let result = v.normalize().unwrap();
+        // Should be [0.6, 0.8] (3/5, 4/5)
+        assert!((result.as_slice()[0] - 0.6).abs() < 1e-5);
+        assert!((result.as_slice()[1] - 0.8).abs() < 1e-5);
+        // Verify it's a unit vector
+        let norm = result.norm_l2().unwrap();
+        assert!((norm - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_normalize_already_unit() {
+        let v = Vector::from_slice(&[1.0, 0.0, 0.0]);
+        let result = v.normalize().unwrap();
+        assert!((result.as_slice()[0] - 1.0).abs() < 1e-5);
+        assert!((result.as_slice()[1] - 0.0).abs() < 1e-5);
+        assert!((result.as_slice()[2] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_normalize_zero_vector() {
+        let v = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = v.normalize();
+        // Should error on zero vector (division by zero norm)
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_normalize_negative() {
+        let v = Vector::from_slice(&[-3.0, -4.0]);
+        let result = v.normalize().unwrap();
+        // Should be [-0.6, -0.8]
+        assert!((result.as_slice()[0] - (-0.6)).abs() < 1e-5);
+        assert!((result.as_slice()[1] - (-0.8)).abs() < 1e-5);
+        let norm = result.norm_l2().unwrap();
+        assert!((norm - 1.0).abs() < 1e-5);
     }
 
     #[test]
@@ -2048,6 +2135,63 @@ mod property_tests {
             // sum(scalar * v) = scalar * sum(v)
             let expected = scalar * sum_original;
             prop_assert!((sum_scaled - expected).abs() < 1e-2);
+        }
+    }
+
+    // Property test: Normalized vector has unit norm
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_normalize_unit_norm(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            // Skip if vector is too close to zero (would cause division by zero)
+            let norm_squared: f32 = a.iter().map(|x| x * x).sum();
+            prop_assume!(norm_squared > 1e-6);
+
+            let va = Vector::from_slice(&a);
+            let normalized = va.normalize().unwrap();
+
+            // The normalized vector should have L2 norm = 1
+            let norm = normalized.norm_l2().unwrap();
+            prop_assert!((norm - 1.0).abs() < 1e-4, "norm = {}, expected 1.0", norm);
+        }
+    }
+
+    // Property test: Normalization preserves direction (scaling invariance)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_normalize_direction_invariant(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            scale in 0.1f32..10.0
+        ) {
+            // Skip if vector is too close to zero
+            let norm_squared: f32 = a.iter().map(|x| x * x).sum();
+            prop_assume!(norm_squared > 1e-6);
+
+            let va = Vector::from_slice(&a);
+
+            // Scale the vector
+            let scales = vec![scale; a.len()];
+            let vs = Vector::from_slice(&scales);
+            let scaled = va.mul(&vs).unwrap();
+
+            // Both should normalize to the same direction
+            let norm_a = va.normalize().unwrap();
+            let norm_scaled = scaled.normalize().unwrap();
+
+            // Check each element is close
+            for (i, (&val_a, &val_scaled)) in norm_a.as_slice().iter()
+                .zip(norm_scaled.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (val_a - val_scaled).abs() < 1e-4,
+                    "Element {} differs: {} vs {}", i, val_a, val_scaled
+                );
+            }
         }
     }
 }
