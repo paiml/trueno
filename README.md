@@ -404,7 +404,7 @@ trueno/
 - [ ] Convolutions (conv2d)
 - [ ] Async GPU API
 
-**Phase 7 Progress**: Core vector operations complete with 286 tests passing. The library now supports:
+**Phase 7 Progress**: Core vector operations complete with 287 tests passing. The library now supports:
 - **Element-wise operations**: add, sub, mul, div, abs (absolute value), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm), sin (sine), cos (cosine), tan (tangent), asin (arcsine), acos (arccosine), atan (arctangent)
 - **Scalar operations**: scale (scalar multiplication with full SIMD support)
 - **Dot product**: Optimized for ML/scientific computing
