@@ -1674,6 +1674,45 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Element-wise sine: result[i] = sin(x[i])
+    ///
+    /// Computes the sine for each element (input in radians).
+    /// Uses Rust's optimized f32::sin() method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    /// use std::f32::consts::PI;
+    ///
+    /// let v = Vector::from_slice(&[0.0, PI / 2.0, PI]);
+    /// let result = v.sin().unwrap();
+    /// // result ≈ [0.0, 1.0, 0.0]
+    /// ```
+    ///
+    /// # Special Cases
+    ///
+    /// - `sin(0)` returns 0.0
+    /// - `sin(π/2)` returns 1.0
+    /// - `sin(π)` returns 0.0 (approximately)
+    /// - `sin(-x)` returns -sin(x) (odd function)
+    /// - Periodic with period 2π: sin(x + 2π) = sin(x)
+    ///
+    /// # Applications
+    ///
+    /// - Signal processing: Waveform generation, oscillators, modulation
+    /// - Physics: Harmonic motion, wave propagation, pendulums
+    /// - Audio: Synthesizers, tone generation, effects processing
+    /// - Graphics: Animation, rotation transformations, procedural generation
+    /// - Fourier analysis: Frequency decomposition, spectral analysis
+    pub fn sin(&self) -> Result<Vector<f32>> {
+        let sin_data: Vec<f32> = self.data.iter().map(|x| x.sin()).collect();
+        Ok(Vector {
+            data: sin_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -2838,6 +2877,93 @@ mod tests {
     fn test_ln_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.ln().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // sin() operation tests (element-wise sine)
+    #[test]
+    fn test_sin_basic() {
+        use std::f32::consts::PI;
+        let a = Vector::from_slice(&[0.0, PI / 2.0, PI, 3.0 * PI / 2.0]);
+        let result = a.sin().unwrap();
+        let expected = [0.0, 1.0, 0.0, -1.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "sin mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_sin_zero() {
+        let a = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = a.sin().unwrap();
+        for &val in result.as_slice() {
+            assert!((val - 0.0).abs() < 1e-5, "sin(0) should be 0.0");
+        }
+    }
+
+    #[test]
+    fn test_sin_quarter_circle() {
+        use std::f32::consts::PI;
+        let a = Vector::from_slice(&[PI / 6.0, PI / 4.0, PI / 3.0]);
+        let result = a.sin().unwrap();
+        let expected = [0.5, std::f32::consts::FRAC_1_SQRT_2, (3.0f32).sqrt() / 2.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "sin quarter circle mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_sin_negative() {
+        use std::f32::consts::PI;
+        let a = Vector::from_slice(&[-PI / 2.0, -PI, -3.0 * PI / 2.0]);
+        let result = a.sin().unwrap();
+        let expected = [-1.0, 0.0, 1.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "sin negative mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_sin_periodicity() {
+        use std::f32::consts::PI;
+        // sin(x + 2π) = sin(x)
+        let a = Vector::from_slice(&[0.5, 1.0, 1.5]);
+        let b = Vector::from_slice(&[0.5 + 2.0 * PI, 1.0 + 2.0 * PI, 1.5 + 2.0 * PI]);
+        let result_a = a.sin().unwrap();
+        let result_b = b.sin().unwrap();
+        for (i, (&res_a, &res_b)) in result_a.as_slice().iter().zip(result_b.as_slice().iter()).enumerate() {
+            assert!(
+                (res_a - res_b).abs() < 1e-5,
+                "sin periodicity failed at {}: {} != {}",
+                i,
+                res_a,
+                res_b
+            );
+        }
+    }
+
+    #[test]
+    fn test_sin_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.sin().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -4737,6 +4863,82 @@ mod property_tests {
                     (ln_prod_val - sum_val).abs() < tolerance,
                     "ln(a*b) = ln(a)+ln(b) failed at {}: {} != {}, diff = {}",
                     i, ln_prod_val, sum_val, (ln_prod_val - sum_val).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: sin() correctness vs f32::sin()
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sin_correctness(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.sin().unwrap();
+
+            for (i, (&a_val, &sin_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.sin();
+
+                prop_assert!(
+                    (sin_val - expected).abs() < 1e-5,
+                    "sin correctness failed at {}: {} != {}, diff = {}",
+                    i, sin_val, expected, (sin_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: sin() range [-1, 1]
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sin_range(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.sin().unwrap();
+
+            for (i, &sin_val) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    (-1.0..=1.0).contains(&sin_val),
+                    "sin range failed at {}: {} not in [-1, 1]",
+                    i, sin_val
+                );
+            }
+        }
+    }
+
+    // Property test: sin() periodicity - sin(x + 2π) = sin(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sin_periodicity_property(
+            a in prop::collection::vec(-5.0f32..5.0, 1..50)
+        ) {
+            use std::f32::consts::PI;
+
+            let va = Vector::from_slice(&a);
+            let sin_a = va.sin().unwrap();
+
+            // Add 2π to each element
+            let a_plus_2pi: Vec<f32> = a.iter().map(|&x| x + 2.0 * PI).collect();
+            let va_plus_2pi = Vector::from_slice(&a_plus_2pi);
+            let sin_a_plus_2pi = va_plus_2pi.sin().unwrap();
+
+            for (i, (&sin_val, &sin_periodic_val)) in sin_a.as_slice().iter()
+                .zip(sin_a_plus_2pi.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (sin_val - sin_periodic_val).abs() < 1e-5,
+                    "sin periodicity failed at {}: {} != {}, diff = {}",
+                    i, sin_val, sin_periodic_val, (sin_val - sin_periodic_val).abs()
                 );
             }
         }

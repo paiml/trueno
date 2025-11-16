@@ -404,8 +404,8 @@ trueno/
 - [ ] Convolutions (conv2d)
 - [ ] Async GPU API
 
-**Phase 7 Progress**: Core vector operations complete with 232 tests passing. The library now supports:
-- **Element-wise operations**: add, sub, mul, div, abs (absolute value), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm)
+**Phase 7 Progress**: Core vector operations complete with 241 tests passing. The library now supports:
+- **Element-wise operations**: add, sub, mul, div, abs (absolute value), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm), sin (sine)
 - **Scalar operations**: scale (scalar multiplication with full SIMD support)
 - **Dot product**: Optimized for ML/scientific computing
 - **Reductions**: sum (naive + Kahan), min, max
@@ -413,7 +413,7 @@ trueno/
 - **Vector norms**: L1 (Manhattan), L2 (Euclidean), L∞ (max norm), normalization to unit vectors
 - **Numerical stability**: Kahan summation for accurate floating-point accumulation
 - **FMA optimization**: Hardware-accelerated fused multiply-add on AVX2 and NEON platforms
-- **Mathematical functions**: Element-wise square root, reciprocal, power, exponential, and logarithm for ML (log loss, softmax), statistics (log-normal, transformations), and information theory (entropy)
+- **Mathematical functions**: Element-wise square root, reciprocal, power, exponential, logarithm, and trigonometric (sine) for ML, signal processing (waveforms, oscillators), physics simulations, and Fourier analysis
 
 ## Contributing
 
