@@ -31,6 +31,22 @@ let sum = a.sum().unwrap();            // 10.0
 let max = a.max().unwrap();            // 4.0
 ```
 
+## Performance
+
+Trueno delivers **exceptional performance** for compute-intensive operations:
+
+| Operation | Speedup (SSE2 vs Scalar) | Use Case |
+|-----------|-------------------------|----------|
+| **Dot Product** | **340%** faster | Machine learning, signal processing |
+| **Sum Reduction** | **315%** faster | Statistics, aggregations |
+| **Max Finding** | **348%** faster | Data analysis, optimization |
+| Element-wise Add | 3-10% faster | Memory-bound (limited SIMD benefit) |
+| Element-wise Mul | 5-6% faster | Memory-bound (limited SIMD benefit) |
+
+**Key Insight**: SIMD excels at compute-intensive operations but can't overcome memory bandwidth limitations.
+
+**📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) for tuning tips and detailed analysis.**
+
 ## Features
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
