@@ -147,6 +147,13 @@ impl VectorBackend for ScalarBackend {
             result[i] = val.max(min_val).min(max_val);
         }
     }
+
+    unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
+        for (i, (&a_val, &b_val)) in a.iter().zip(b.iter()).enumerate() {
+            // result = a + t * (b - a)
+            result[i] = a_val + t * (b_val - a_val);
+        }
+    }
 }
 
 #[cfg(test)]

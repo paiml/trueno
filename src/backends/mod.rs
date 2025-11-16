@@ -177,4 +177,17 @@ pub trait VectorBackend {
     /// - Can handle empty slice
     /// - Assumes min_val <= max_val (caller must validate)
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]);
+
+    /// Linear interpolation: result[i] = a[i] + t * (b[i] - a[i])
+    ///
+    /// Computes element-wise linear interpolation between two vectors.
+    /// When t=0, returns a; when t=1, returns b; values outside [0,1] extrapolate.
+    /// Used in graphics, animation, neural networks, and signal processing.
+    ///
+    /// # Safety
+    ///
+    /// - `a` and `b` must have the same length
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]);
 }

@@ -510,6 +510,64 @@ impl VectorBackend for NeonBackend {
             i += 1;
         }
     }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast t to all 4 lanes
+        let t_vec = vdupq_n_f32(t);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let vb = vld1q_f32(b.as_ptr().add(i));
+
+            // result = a + t * (b - a)
+            // Can use FMA: vfmaq_f32(a, t, b-a) = a + t * (b - a)
+            let diff = vsubq_f32(vb, va);
+            let vresult = vfmaq_f32(va, t_vec, diff);
+
+            vst1q_f32(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] + t * (b[i] - a[i]);
+            i += 1;
+        }
+    }
+
+    #[cfg(target_arch = "arm")]
+    unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast t to all 4 lanes
+        let t_vec = vdupq_n_f32(t);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let vb = vld1q_f32(b.as_ptr().add(i));
+
+            // result = a + t * (b - a)
+            // ARMv7 NEON also has FMA: vmlaq_f32(a, t, b-a) = a + t * (b - a)
+            let diff = vsubq_f32(vb, va);
+            let vresult = vmlaq_f32(va, t_vec, diff);
+
+            vst1q_f32(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] + t * (b[i] - a[i]);
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

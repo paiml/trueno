@@ -424,6 +424,35 @@ impl VectorBackend for Sse2Backend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast t to all 4 lanes
+        let t_vec = _mm_set1_ps(t);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm_loadu_ps(b.as_ptr().add(i));
+
+            // result = a + t * (b - a)
+            let diff = _mm_sub_ps(vb, va);
+            let scaled_diff = _mm_mul_ps(t_vec, diff);
+            let vresult = _mm_add_ps(va, scaled_diff);
+
+            _mm_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] + t * (b[i] - a[i]);
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]
