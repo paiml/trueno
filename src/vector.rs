@@ -2115,6 +2115,25 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes the floor (round down to nearest integer) of each element.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.7, -2.3, 5.0]);
+    /// let result = v.floor().unwrap();
+    /// assert_eq!(result.as_slice(), &[3.0, -3.0, 5.0]);
+    /// ```
+    pub fn floor(&self) -> Result<Vector<f32>> {
+        let floor_data: Vec<f32> = self.data.iter().map(|x| x.floor()).collect();
+        Ok(Vector {
+            data: floor_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4145,6 +4164,48 @@ mod tests {
     fn test_atanh_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.atanh().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_floor_basic() {
+        let a = Vector::from_slice(&[3.7, -2.3, 5.0]);
+        let result = a.floor().unwrap();
+        assert_eq!(result.as_slice(), &[3.0, -3.0, 5.0]);
+    }
+
+    #[test]
+    fn test_floor_positive() {
+        let a = Vector::from_slice(&[1.1, 2.9, 3.5]);
+        let result = a.floor().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_floor_negative() {
+        let a = Vector::from_slice(&[-1.1, -2.9, -3.5]);
+        let result = a.floor().unwrap();
+        assert_eq!(result.as_slice(), &[-2.0, -3.0, -4.0]);
+    }
+
+    #[test]
+    fn test_floor_integers() {
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0, -4.0]);
+        let result = a.floor().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0, -4.0]);
+    }
+
+    #[test]
+    fn test_floor_zero() {
+        let a = Vector::from_slice(&[0.0, -0.0]);
+        let result = a.floor().unwrap();
+        assert_eq!(result.as_slice(), &[0.0, -0.0]);
+    }
+
+    #[test]
+    fn test_floor_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.floor().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -7032,6 +7093,77 @@ mod property_tests {
                     (original - reconstructed).abs() < tolerance,
                     "atanh(tanh(x)) != x at {}: {} != {}",
                     i, reconstructed, original
+                );
+            }
+        }
+    }
+
+    // Property test: floor correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_floor_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.floor().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.floor();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "floor failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: floor idempotence - floor(floor(x)) = floor(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_floor_idempotence(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let floor_once = va.floor().unwrap();
+            let floor_twice = floor_once.floor().unwrap();
+
+            for (i, (&once, &twice)) in floor_once.as_slice().iter()
+                .zip(floor_twice.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (once - twice).abs() < 1e-5,
+                    "floor idempotence failed at {}: floor(floor({})) = {} != {}",
+                    i, a[i], twice, once
+                );
+            }
+        }
+    }
+
+    // Property test: floor always <= original value
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_floor_less_than_or_equal(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.floor().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    output <= input,
+                    "floor should be <= input at {}: floor({}) = {} > {}",
+                    i, input, output, input
                 );
             }
         }
