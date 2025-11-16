@@ -51,6 +51,16 @@ impl VectorBackend for ScalarBackend {
         }
         maximum
     }
+
+    unsafe fn min(a: &[f32]) -> f32 {
+        let mut minimum = a[0];
+        for &val in &a[1..] {
+            if val < minimum {
+                minimum = val;
+            }
+        }
+        minimum
+    }
 }
 
 #[cfg(test)]
@@ -99,5 +109,12 @@ mod tests {
         let a = [1.0, 5.0, 3.0, 2.0];
         let result = unsafe { ScalarBackend::max(&a) };
         assert_eq!(result, 5.0);
+    }
+
+    #[test]
+    fn test_scalar_min() {
+        let a = [1.0, 5.0, 3.0, 2.0];
+        let result = unsafe { ScalarBackend::min(&a) };
+        assert_eq!(result, 1.0);
     }
 }

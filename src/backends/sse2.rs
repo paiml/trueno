@@ -155,6 +155,39 @@ impl VectorBackend for Sse2Backend {
 
         maximum
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn min(a: &[f32]) -> f32 {
+        let len = a.len();
+        let mut i = 0;
+
+        // Initialize with first element broadcast to all lanes
+        let mut min_vec = _mm_set1_ps(a[0]);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            min_vec = _mm_min_ps(min_vec, va);
+            i += 4;
+        }
+
+        // Extract minimum from SIMD register
+        let mut min_array = [0.0f32; 4];
+        _mm_storeu_ps(min_array.as_mut_ptr(), min_vec);
+        let mut minimum = min_array[0]
+            .min(min_array[1])
+            .min(min_array[2])
+            .min(min_array[3]);
+
+        // Handle remaining elements
+        for &val in &a[i..len] {
+            if val < minimum {
+                minimum = val;
+            }
+        }
+
+        minimum
+    }
 }
 
 #[cfg(test)]
@@ -209,6 +242,13 @@ mod tests {
         let a = [1.0, 5.0, 3.0, 2.0, 4.0];
         let result = unsafe { Sse2Backend::max(&a) };
         assert_eq!(result, 5.0);
+    }
+
+    #[test]
+    fn test_sse2_min() {
+        let a = [1.0, 5.0, 3.0, 2.0, 4.0];
+        let result = unsafe { Sse2Backend::min(&a) };
+        assert_eq!(result, 1.0);
     }
 
     #[test]

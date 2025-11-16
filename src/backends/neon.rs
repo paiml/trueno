@@ -164,6 +164,38 @@ impl VectorBackend for NeonBackend {
 
         result
     }
+
+    #[target_feature(enable = "neon")]
+    unsafe fn min(a: &[f32]) -> f32 {
+        let len = a.len();
+        let mut i = 0;
+
+        // Start with first element broadcast to all lanes
+        let mut vmin = vdupq_n_f32(a[0]);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            vmin = vminq_f32(vmin, va);
+            i += 4;
+        }
+
+        // Horizontal min: find minimum across all 4 lanes
+        // Use pairwise min to find the minimum
+        let min2 = vpmin_f32(vget_low_f32(vmin), vget_high_f32(vmin));
+        let min1 = vpmin_f32(min2, min2);
+
+        let mut result = vget_lane_f32(min1, 0);
+
+        // Check remaining elements
+        for &val in &a[i..] {
+            if val < result {
+                result = val;
+            }
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]
@@ -259,6 +291,22 @@ mod tests {
         let result = unsafe { NeonBackend::max(&a) };
 
         assert_eq!(result, 9.0);
+    }
+
+    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+    #[test]
+    fn test_neon_min() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        let a = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0];
+
+        let result = unsafe { NeonBackend::min(&a) };
+
+        assert_eq!(result, 1.0);
     }
 
     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]

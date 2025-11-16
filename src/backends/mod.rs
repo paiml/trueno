@@ -84,4 +84,11 @@ pub trait VectorBackend {
     ///
     /// - `a` must not be empty
     unsafe fn max(a: &[f32]) -> f32;
+
+    /// Min reduction: min(a[i])
+    ///
+    /// # Safety
+    ///
+    /// - `a` must not be empty
+    unsafe fn min(a: &[f32]) -> f32;
 }

@@ -182,6 +182,47 @@ impl VectorBackend for Avx2Backend {
 
         result
     }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn min(a: &[f32]) -> f32 {
+        let len = a.len();
+        let mut i = 0;
+
+        // Start with first element broadcast to all lanes
+        let mut vmin = _mm256_set1_ps(a[0]);
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            vmin = _mm256_min_ps(vmin, va);
+            i += 8;
+        }
+
+        // Horizontal min: find minimum across all 8 lanes
+        let low = _mm256_castps256_ps128(vmin);
+        let high = _mm256_extractf128_ps(vmin, 1);
+        let min4 = _mm_min_ps(low, high);
+
+        // Extract to array and find min
+        let mut temp = [0.0f32; 4];
+        _mm_storeu_ps(temp.as_mut_ptr(), min4);
+
+        let mut result = temp[0];
+        for &val in &temp[1..] {
+            if val < result {
+                result = val;
+            }
+        }
+
+        // Check remaining elements
+        for &val in &a[i..] {
+            if val < result {
+                result = val;
+            }
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]
@@ -272,6 +313,21 @@ mod tests {
         let result = unsafe { Avx2Backend::max(&a) };
 
         assert_eq!(result, 9.0);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_min() {
+        if !is_x86_feature_detected!("avx2") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2");
+            return;
+        }
+
+        let a = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0];
+
+        let result = unsafe { Avx2Backend::min(&a) };
+
+        assert_eq!(result, 1.0);
     }
 
     #[cfg(target_arch = "x86_64")]
