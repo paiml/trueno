@@ -48,6 +48,32 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time using SSE2 (128-bit = 4 x f32)
+        while i + 4 <= len {
+            // Load 4 floats from a and b
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm_loadu_ps(b.as_ptr().add(i));
+
+            // Subtract them
+            let vresult = _mm_sub_ps(va, vb);
+
+            // Store result
+            _mm_storeu_ps(result.as_mut_ptr().add(i), vresult);
+
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
+        for j in i..len {
+            result[j] = a[j] - b[j];
+        }
+    }
+
+    #[target_feature(enable = "sse2")]
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;

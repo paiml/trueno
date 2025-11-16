@@ -49,6 +49,32 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time using AVX2 (256-bit = 8 x f32)
+        while i + 8 <= len {
+            // Load 8 floats from a and b
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm256_loadu_ps(b.as_ptr().add(i));
+
+            // Subtract them
+            let vresult = _mm256_sub_ps(va, vb);
+
+            // Store result
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        for j in i..len {
+            result[j] = a[j] - b[j];
+        }
+    }
+
+    #[target_feature(enable = "avx2")]
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;

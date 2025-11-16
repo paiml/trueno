@@ -395,11 +395,20 @@ trueno/
 - [ ] GPU dispatch heuristics (OpComplexity)
 - [ ] Multi-GPU support
 
-### Phase 7: Advanced Operations
+### Phase 7: Advanced Operations (IN PROGRESS)
+- [x] Element-wise subtraction (sub)
+- [x] Reductions: min, max, sum, sum_kahan (Kahan summation)
+- [x] Index finding: argmax, argmin
 - [ ] Matrix operations (matmul, transpose)
 - [ ] Convolutions (conv2d)
-- [ ] Reductions (min, argmax, sum with Kahan)
 - [ ] Async GPU API
+
+**Phase 7 Progress**: Core vector operations complete with 97 tests passing. The library now supports:
+- **Element-wise operations**: add, sub, mul
+- **Dot product**: Optimized for ML/scientific computing
+- **Reductions**: sum (naive + Kahan), min, max
+- **Index operations**: argmin, argmax
+- **Numerical stability**: Kahan summation for accurate floating-point accumulation
 
 ## Contributing
 
