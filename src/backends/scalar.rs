@@ -20,6 +20,12 @@ impl VectorBackend for ScalarBackend {
         }
     }
 
+    unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
+        for i in 0..a.len() {
+            result[i] = a[i] - b[i];
+        }
+    }
+
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         for i in 0..a.len() {
             result[i] = a[i] * b[i];

@@ -49,6 +49,32 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time using SIMD128 (128-bit = 4 x f32)
+        while i + 4 <= len {
+            // Load 4 floats from a and b
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+            let vb = v128_load(b.as_ptr().add(i) as *const v128);
+
+            // Subtract them
+            let vresult = f32x4_sub(va, vb);
+
+            // Store result
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, vresult);
+
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
+        for j in i..len {
+            result[j] = a[j] - b[j];
+        }
+    }
+
+    #[target_feature(enable = "simd128")]
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
