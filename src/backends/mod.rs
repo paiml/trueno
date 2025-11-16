@@ -165,4 +165,16 @@ pub trait VectorBackend {
     /// - `result` must have the same length as `a`
     /// - Can handle empty slice
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]);
+
+    /// Clamp elements to range [min_val, max_val]: result[i] = max(min_val, min(a[i], max_val))
+    ///
+    /// Constrains each element to the specified range.
+    /// Used in neural networks (gradient clipping), graphics (color clamping), and signal processing.
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slice
+    /// - Assumes min_val <= max_val (caller must validate)
+    unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]);
 }
