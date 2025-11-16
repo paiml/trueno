@@ -85,6 +85,20 @@ impl VectorBackend for ScalarBackend {
         }
         min_index
     }
+
+    unsafe fn sum_kahan(a: &[f32]) -> f32 {
+        let mut sum = 0.0;
+        let mut c = 0.0; // Compensation for lost low-order bits
+
+        for &value in a {
+            let y = value - c;  // Subtract the compensation
+            let t = sum + y;    // Add to sum
+            c = (t - sum) - y;  // Update compensation
+            sum = t;            // Update sum
+        }
+
+        sum
+    }
 }
 
 #[cfg(test)]

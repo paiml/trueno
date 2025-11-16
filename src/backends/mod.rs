@@ -109,4 +109,14 @@ pub trait VectorBackend {
     ///
     /// - `a` must not be empty
     unsafe fn argmin(a: &[f32]) -> usize;
+
+    /// Kahan summation: numerically stable sum(a[i])
+    ///
+    /// Uses the Kahan summation algorithm to reduce floating-point rounding errors
+    /// when summing many numbers. Tracks a running compensation for lost low-order bits.
+    ///
+    /// # Safety
+    ///
+    /// - Can handle empty slice (returns 0.0)
+    unsafe fn sum_kahan(a: &[f32]) -> f32;
 }
