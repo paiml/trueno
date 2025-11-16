@@ -1473,6 +1473,50 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Element-wise square root: result[i] = sqrt(self[i])
+    ///
+    /// Computes the square root of each element. For negative values, returns NaN
+    /// following IEEE 754 floating-point semantics.
+    ///
+    /// # Returns
+    ///
+    /// A new vector where each element is the square root of the corresponding input element
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let a = Vector::from_slice(&[4.0, 9.0, 16.0, 25.0]);
+    /// let result = a.sqrt().unwrap();
+    /// assert_eq!(result.as_slice(), &[2.0, 3.0, 4.0, 5.0]);
+    /// ```
+    ///
+    /// Negative values produce NaN:
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let a = Vector::from_slice(&[-1.0, 4.0]);
+    /// let result = a.sqrt().unwrap();
+    /// assert!(result.as_slice()[0].is_nan());
+    /// assert_eq!(result.as_slice()[1], 2.0);
+    /// ```
+    ///
+    /// # Use Cases
+    ///
+    /// - Distance calculations: Euclidean distance computation
+    /// - Statistics: Standard deviation, RMS (root mean square)
+    /// - Machine learning: Normalization, gradient descent with adaptive learning rates
+    /// - Signal processing: Amplitude calculations, power spectrum analysis
+    /// - Physics simulations: Velocity from kinetic energy, wave propagation
+    pub fn sqrt(&self) -> Result<Vector<f32>> {
+        let sqrt_data: Vec<f32> = self.data.iter().map(|x| x.sqrt()).collect();
+        Ok(Vector {
+            data: sqrt_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -2328,6 +2372,52 @@ mod tests {
         let b: Vector<f32> = Vector::from_slice(&[]);
         let c: Vector<f32> = Vector::from_slice(&[]);
         let result = a.fma(&b, &c).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // sqrt() operation tests (element-wise square root)
+    #[test]
+    fn test_sqrt_basic() {
+        let a = Vector::from_slice(&[4.0, 9.0, 16.0, 25.0]);
+        let result = a.sqrt().unwrap();
+        assert_eq!(result.as_slice(), &[2.0, 3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn test_sqrt_zeros() {
+        let a = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = a.sqrt().unwrap();
+        assert_eq!(result.as_slice(), &[0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_sqrt_one() {
+        let a = Vector::from_slice(&[1.0, 1.0, 1.0]);
+        let result = a.sqrt().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_sqrt_fractional() {
+        let a = Vector::from_slice(&[0.25, 0.01, 0.0625]);
+        let result = a.sqrt().unwrap();
+        assert_eq!(result.as_slice(), &[0.5, 0.1, 0.25]);
+    }
+
+    #[test]
+    fn test_sqrt_negative() {
+        let a = Vector::from_slice(&[-1.0, 4.0, -9.0]);
+        let result = a.sqrt().unwrap();
+        // Negative values produce NaN
+        assert!(result.as_slice()[0].is_nan());
+        assert_eq!(result.as_slice()[1], 4.0_f32.sqrt());
+        assert!(result.as_slice()[2].is_nan());
+    }
+
+    #[test]
+    fn test_sqrt_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.sqrt().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -3721,6 +3811,102 @@ mod property_tests {
                     "FMA vs mul+add failed at {}: {} != {}, diff = {}",
                     i, fma_val, add_val, (fma_val - add_val).abs()
                 );
+            }
+        }
+    }
+
+    // Property test: sqrt() correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sqrt_correctness(
+            a in prop::collection::vec(0.0f32..100.0, 1..100)  // Non-negative values only
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.sqrt().unwrap();
+
+            // Verify: result[i] = sqrt(a[i])
+            for (i, (&a_val, &result_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.sqrt();
+
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-6
+                } else {
+                    1e-6
+                };
+
+                prop_assert!(
+                    (result_val - expected).abs() < tolerance,
+                    "sqrt correctness failed at {}: {} != {}, diff = {}",
+                    i, result_val, expected, (result_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: sqrt() idempotence with squaring
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sqrt_inverse_square(
+            a in prop::collection::vec(0.0f32..100.0, 1..100)
+        ) {
+            // sqrt(a)^2 = a
+            let va = Vector::from_slice(&a);
+            let sqrt_result = va.sqrt().unwrap();
+            let squared = sqrt_result.mul(&sqrt_result).unwrap();
+
+            for (i, (&original, &recovered)) in a.iter()
+                .zip(squared.as_slice().iter())
+                .enumerate() {
+                let tolerance = if original.abs() > 1.0 {
+                    original.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                prop_assert!(
+                    (original - recovered).abs() < tolerance,
+                    "sqrt inverse failed at {}: {} != {}, diff = {}",
+                    i, original, recovered, (original - recovered).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: sqrt() monotonicity
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sqrt_monotonic(
+            a in prop::collection::vec(0.0f32..100.0, 2..100)
+        ) {
+            // If a[i] < a[j], then sqrt(a[i]) < sqrt(a[j])
+            let va = Vector::from_slice(&a);
+            let result = va.sqrt().unwrap();
+            let result_slice = result.as_slice();
+
+            for i in 0..a.len()-1 {
+                for j in i+1..a.len() {
+                    if a[i] < a[j] {
+                        prop_assert!(
+                            result_slice[i] < result_slice[j],
+                            "Monotonicity failed: sqrt({}) = {} should be < sqrt({}) = {}",
+                            a[i], result_slice[i], a[j], result_slice[j]
+                        );
+                    } else if a[i] > a[j] {
+                        prop_assert!(
+                            result_slice[i] > result_slice[j],
+                            "Monotonicity failed: sqrt({}) = {} should be > sqrt({}) = {}",
+                            a[i], result_slice[i], a[j], result_slice[j]
+                        );
+                    }
+                }
             }
         }
     }
