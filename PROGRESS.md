@@ -7,14 +7,15 @@
 
 ## Overall Metrics
 
-- **TDG Score**: 96.9/100 (A+)
+- **TDG Score**: 97.2/100 (A+) ⬆️ improved from 96.9
 - **Test Coverage**: 95.21% (95% line, 100% region, 94% branch)
-- **Total Tests**: 65 (52 unit + 13 doc tests)
+- **Total Tests**: 68 (54 unit + 14 doc tests)
 - **Benchmarks**: 15 (5 operations × 3 sizes)
+- **Examples**: 3 (ml_similarity, performance_demo, backend_detection)
 - **Clippy Warnings**: 0
 - **Dead Code**: 0%
-- **Total Commits**: 11
-- **Total LOC**: ~1,800 lines
+- **Total Commits**: 18 (8 in current session)
+- **Total LOC**: ~2,000 lines
 
 ## Phase 1: Scalar Baseline ✅ COMPLETE
 
@@ -94,9 +95,9 @@
 
 ### Quality Metrics (Phase 2 Final)
 - Test Coverage: 95.21% (platform-specific branches expected)
-- PMAT TDG: 96.9/100 (A+)
-- Cyclomatic Complexity: Well-distributed
-- Cognitive Complexity: 25 (select_best_available_backend - justified)
+- PMAT TDG: 97.2/100 (A+) ⬆️
+- Cyclomatic Complexity: Median 2.0, Max 10 (justified)
+- Cognitive Complexity: Median 1.0, Max 23 (select_best_available_backend - justified)
 - Clippy Warnings: 0
 - Dead Code: 0%
 - SATD Comments: 1 (TODO for AVX2/AVX-512)
@@ -108,6 +109,12 @@
 4. Implement SSE2 and Scalar backend modules with SIMD intrinsics
 5. Integrate SSE2 and Scalar backends into Vector API
 6. Add comprehensive SSE2 vs Scalar benchmarks with Criterion
+7. Update project documentation to reflect Phase 2 completion
+8. Add Vector::with_alignment() API following EXTREME TDD
+9. Add comprehensive performance documentation and tuning guide
+10. Add interactive performance demonstration example
+11. Add machine learning vector operations example
+12. Add Examples section to README documenting runnable examples
 
 ### Key Technical Achievements
 
@@ -134,9 +141,38 @@
    - Throughput measurement in Gelem/s
    - Comprehensive analysis with root cause investigation
 
+## Phase 2.5: Documentation and Examples ✅ COMPLETE
+
+Following PMAT EXTREME TDD workflow (2025-11-16 session):
+
+### Implemented
+- ✅ Machine learning example (`examples/ml_similarity.rs`)
+  - Cosine similarity for document/recommendation systems
+  - L2 normalization for neural network preprocessing
+  - k-Nearest Neighbors classification
+  - Demonstrates real-world SIMD benefits
+- ✅ Updated README with Examples section
+  - Documents all 3 runnable examples
+  - Makes examples discoverable for users
+- ✅ Comprehensive performance investigation
+  - Analyzed memory bandwidth bottleneck
+  - Created PERFORMANCE_GUIDE.md (339 lines)
+  - Added `with_alignment()` API for future optimization
+
+### Quality Impact
+- **TDG**: 96.9 → 97.2/100 (A+) ⬆️
+- **Commits**: +2 (ml_similarity, README update)
+- **Examples**: 2 → 3 (+ml_similarity)
+- **Documentation**: +PERFORMANCE_GUIDE.md (comprehensive tuning guide)
+
+### Toyota Way Applied
+- **Genchi Genbutsu**: Investigated alignment hypothesis, discovered memory bandwidth root cause
+- **Kaizen**: Continuous TDG improvement (97.2/100)
+- **Jidoka**: Zero defects, all quality gates passing
+
 ## Test Statistics
 
-### Unit Tests (52)
+### Unit Tests (54)
 - Error handling: 5 tests
 - Backend enum: 3 tests
 - Vector operations: 30 tests
@@ -157,9 +193,14 @@
 9. Sum consistency (with relaxed SIMD tolerance)
 10. Max correctness
 
-### Documentation Tests (13)
+### Documentation Tests (14)
 - All docstring examples verified
 - Examples use both default and explicit backends
+
+### Runnable Examples (3)
+- `backend_detection.rs` - Runtime CPU feature detection demo
+- `performance_demo.rs` - Interactive SSE2 vs Scalar benchmarks
+- `ml_similarity.rs` - ML operations (cosine similarity, L2 norm, k-NN)
 
 ### Benchmarks (15)
 - add: 3 sizes (100, 1K, 10K)
