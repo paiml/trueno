@@ -3,6 +3,8 @@
 use crate::backends::scalar::ScalarBackend;
 #[cfg(target_arch = "x86_64")]
 use crate::backends::sse2::Sse2Backend;
+#[cfg(target_arch = "x86_64")]
+use crate::backends::avx2::Avx2Backend;
 use crate::backends::VectorBackend;
 use crate::{Backend, Result, TruenoError};
 
@@ -249,10 +251,13 @@ impl Vector<f32> {
                     ScalarBackend::add(&self.data, &other.data, &mut result);
                 }
                 #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    // For now, all x86 backends use SSE2 implementation
-                    // TODO: Add AVX2, AVX512 optimized versions
+                Backend::SSE2 | Backend::AVX => {
                     Sse2Backend::add(&self.data, &other.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => {
+                    // AVX2 backend (AVX-512 uses AVX2 for now)
+                    Avx2Backend::add(&self.data, &other.data, &mut result);
                 }
                 #[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
@@ -302,8 +307,12 @@ impl Vector<f32> {
                     ScalarBackend::mul(&self.data, &other.data, &mut result);
                 }
                 #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                Backend::SSE2 | Backend::AVX => {
                     Sse2Backend::mul(&self.data, &other.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => {
+                    Avx2Backend::mul(&self.data, &other.data, &mut result);
                 }
                 #[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
@@ -348,9 +357,9 @@ impl Vector<f32> {
                     ScalarBackend::dot(&self.data, &other.data)
                 }
                 #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    Sse2Backend::dot(&self.data, &other.data)
-                }
+                Backend::SSE2 | Backend::AVX => Sse2Backend::dot(&self.data, &other.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(&self.data, &other.data),
                 #[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
                     ScalarBackend::dot(&self.data, &other.data)
@@ -381,9 +390,9 @@ impl Vector<f32> {
                     ScalarBackend::sum(&self.data)
                 }
                 #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    Sse2Backend::sum(&self.data)
-                }
+                Backend::SSE2 | Backend::AVX => Sse2Backend::sum(&self.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::sum(&self.data),
                 #[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
                     ScalarBackend::sum(&self.data)
@@ -422,9 +431,9 @@ impl Vector<f32> {
                     ScalarBackend::max(&self.data)
                 }
                 #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    Sse2Backend::max(&self.data)
-                }
+                Backend::SSE2 | Backend::AVX => Sse2Backend::max(&self.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::max(&self.data),
                 #[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
                     ScalarBackend::max(&self.data)
