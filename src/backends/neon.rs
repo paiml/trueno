@@ -416,6 +416,52 @@ impl VectorBackend for NeonBackend {
 
         result
     }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast scalar to all 4 lanes
+        let scalar_vec = vdupq_n_f32(scalar);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let vresult = vmulq_f32(va, scalar_vec);
+            vst1q_f32(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] * scalar;
+            i += 1;
+        }
+    }
+
+    #[cfg(target_arch = "arm")]
+    unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast scalar to all 4 lanes
+        let scalar_vec = vdupq_n_f32(scalar);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let vresult = vmulq_f32(va, scalar_vec);
+            vst1q_f32(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] * scalar;
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

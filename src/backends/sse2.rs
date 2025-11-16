@@ -377,6 +377,29 @@ impl VectorBackend for Sse2Backend {
 
         result
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast scalar to all 4 lanes
+        let scalar_vec = _mm_set1_ps(scalar);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm_mul_ps(va, scalar_vec);
+            _mm_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] * scalar;
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

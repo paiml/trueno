@@ -135,6 +135,12 @@ impl VectorBackend for ScalarBackend {
         }
         sum
     }
+
+    unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val * scalar;
+        }
+    }
 }
 
 #[cfg(test)]

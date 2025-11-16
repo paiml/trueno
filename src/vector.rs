@@ -1146,6 +1146,78 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Scalar multiplication (scale all elements by a scalar value)
+    ///
+    /// Returns a new vector where each element is multiplied by the scalar.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+    /// let result = v.scale(2.0).unwrap();
+    ///
+    /// assert_eq!(result.as_slice(), &[2.0, 4.0, 6.0, 8.0]);
+    /// ```
+    ///
+    /// # Scaling by Zero
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let result = v.scale(0.0).unwrap();
+    /// assert_eq!(result.as_slice(), &[0.0, 0.0, 0.0]);
+    /// ```
+    ///
+    /// # Negative Scaling
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, -2.0, 3.0]);
+    /// let result = v.scale(-2.0).unwrap();
+    /// assert_eq!(result.as_slice(), &[-2.0, 4.0, -6.0]);
+    /// ```
+    pub fn scale(&self, scalar: f32) -> Result<Vector<f32>> {
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            unsafe {
+                match self.backend {
+                    Backend::Scalar => ScalarBackend::scale(&self.data, scalar, &mut result_data),
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::SSE2 | Backend::AVX => {
+                        Sse2Backend::scale(&self.data, scalar, &mut result_data)
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::AVX2 | Backend::AVX512 => {
+                        Avx2Backend::scale(&self.data, scalar, &mut result_data)
+                    }
+                    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                    Backend::NEON => NeonBackend::scale(&self.data, scalar, &mut result_data),
+                    #[cfg(target_arch = "wasm32")]
+                    Backend::WASM => WasmBackend::scale(&self.data, scalar, &mut result_data),
+                    Backend::GPU => {
+                        return Err(TruenoError::UnsupportedBackend(Backend::GPU))
+                    }
+                    Backend::Auto => {
+                        // Auto should have been resolved at creation time
+                        return Err(TruenoError::UnsupportedBackend(Backend::Auto));
+                    }
+                    #[allow(unreachable_patterns)]
+                    _ => ScalarBackend::scale(&self.data, scalar, &mut result_data),
+                }
+            }
+        }
+
+        Ok(Vector {
+            data: result_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1776,6 +1848,49 @@ mod tests {
     fn test_abs_empty() {
         let v: Vector<f32> = Vector::from_slice(&[]);
         let result = v.abs().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // Scalar multiplication (scale) tests
+    #[test]
+    fn test_scale_basic() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        let result = v.scale(2.0).unwrap();
+        assert_eq!(result.as_slice(), &[2.0, 4.0, 6.0, 8.0]);
+    }
+
+    #[test]
+    fn test_scale_by_zero() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = v.scale(0.0).unwrap();
+        assert_eq!(result.as_slice(), &[0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_scale_by_negative() {
+        let v = Vector::from_slice(&[1.0, -2.0, 3.0]);
+        let result = v.scale(-2.0).unwrap();
+        assert_eq!(result.as_slice(), &[-2.0, 4.0, -6.0]);
+    }
+
+    #[test]
+    fn test_scale_by_one() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = v.scale(1.0).unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_scale_by_fraction() {
+        let v = Vector::from_slice(&[2.0, 4.0, 6.0]);
+        let result = v.scale(0.5).unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_scale_empty() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        let result = v.scale(2.0).unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -2738,6 +2853,119 @@ mod property_tests {
                     (output - expected).abs() < 1e-5,
                     "Incorrect abs at {}: {} -> {}, expected {}",
                     i, input, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: scale() distributivity over addition
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_scale_distributive(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            scalar in -10.0f32..10.0
+        ) {
+            // scalar * (a + a) = (scalar * a) + (scalar * a)
+            let va = Vector::from_slice(&a);
+            let va_plus_va = va.add(&va).unwrap();
+            let scaled_sum = va_plus_va.scale(scalar).unwrap();
+
+            let scaled_a = va.scale(scalar).unwrap();
+            let sum_of_scaled = scaled_a.add(&scaled_a).unwrap();
+
+            for (i, (&val1, &val2)) in scaled_sum.as_slice().iter()
+                .zip(sum_of_scaled.as_slice().iter())
+                .enumerate() {
+                let tolerance = if val1.abs() > 1.0 {
+                    val1.abs() * 1e-5
+                } else {
+                    1e-3
+                };
+                prop_assert!(
+                    (val1 - val2).abs() < tolerance,
+                    "Distributivity failed at {}: {} != {}, diff = {}",
+                    i, val1, val2, (val1 - val2).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: scale() with 1.0 is identity
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_scale_identity(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.scale(1.0).unwrap();
+
+            for (i, (&original, &scaled)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (original - scaled).abs() < 1e-5,
+                    "Identity failed at {}: {} != {}",
+                    i, original, scaled
+                );
+            }
+        }
+    }
+
+    // Property test: scale() with 0.0 gives zeros
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_scale_zero(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.scale(0.0).unwrap();
+
+            for (i, &val) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    val.abs() < 1e-10,
+                    "Zero scaling failed at {}: {} != 0.0",
+                    i, val
+                );
+            }
+        }
+    }
+
+    // Property test: scale() associativity
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_scale_associative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            scalar1 in -10.0f32..10.0,
+            scalar2 in -10.0f32..10.0
+        ) {
+            // (a * s1) * s2 = a * (s1 * s2)
+            let va = Vector::from_slice(&a);
+            let scaled_once = va.scale(scalar1).unwrap();
+            let scaled_twice = scaled_once.scale(scalar2).unwrap();
+
+            let combined_scalar = scalar1 * scalar2;
+            let scaled_combined = va.scale(combined_scalar).unwrap();
+
+            for (i, (&val1, &val2)) in scaled_twice.as_slice().iter()
+                .zip(scaled_combined.as_slice().iter())
+                .enumerate() {
+                let tolerance = if val1.abs() > 1.0 {
+                    val1.abs() * 1e-4  // Slightly higher tolerance for double scaling
+                } else {
+                    1e-3
+                };
+                prop_assert!(
+                    (val1 - val2).abs() < tolerance,
+                    "Associativity failed at {}: {} != {}, diff = {}",
+                    i, val1, val2, (val1 - val2).abs()
                 );
             }
         }
