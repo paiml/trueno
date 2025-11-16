@@ -336,6 +336,17 @@ impl VectorBackend for NeonBackend {
         // Kahan summation is inherently sequential, use scalar implementation
         super::scalar::ScalarBackend::sum_kahan(a)
     }
+
+    #[target_feature(enable = "neon")]
+    unsafe fn norm_l2(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        // L2 norm is sqrt(dot(a, a))
+        let sum_of_squares = Self::dot(a, a);
+        sum_of_squares.sqrt()
+    }
 }
 
 #[cfg(test)]
