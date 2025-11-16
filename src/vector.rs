@@ -2360,6 +2360,28 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Element-wise negation (unary minus).
+    ///
+    /// Returns a new vector where each element is the negation of the corresponding
+    /// element from self.
+    ///
+    /// Properties: Double negation is identity: -(-x) = x
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::Vector;
+    /// let a = Vector::from_slice(&[1.0, -2.0, 3.0]);
+    /// let result = a.neg().unwrap();
+    /// assert_eq!(result.as_slice(), &[-1.0, 2.0, -3.0]);
+    /// ```
+    pub fn neg(&self) -> Result<Vector<f32>> {
+        let neg_data: Vec<f32> = self.data.iter().map(|x| -x).collect();
+        Ok(Vector {
+            data: neg_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4816,6 +4838,65 @@ mod tests {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let b: Vector<f32> = Vector::from_slice(&[]);
         let result = a.maximum(&b).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // ========================================
+    // Unit Tests: neg()
+    // ========================================
+
+    #[test]
+    fn test_neg_basic() {
+        let a = Vector::from_slice(&[1.0, -2.0, 3.0, -4.0]);
+        let result = a.neg().unwrap();
+        assert_eq!(result.as_slice(), &[-1.0, 2.0, -3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_neg_zero() {
+        let a = Vector::from_slice(&[0.0, -0.0]);
+        let result = a.neg().unwrap();
+        // -0.0 becomes 0.0, 0.0 becomes -0.0
+        assert_eq!(result.as_slice()[0], -0.0);
+        assert_eq!(result.as_slice()[1], 0.0);
+    }
+
+    #[test]
+    fn test_neg_double_negation() {
+        // Property: -(-x) = x (double negation is identity)
+        let a = Vector::from_slice(&[1.0, -2.0, 3.0, -4.0, 5.0]);
+        let neg_once = a.neg().unwrap();
+        let neg_twice = neg_once.neg().unwrap();
+        for (i, (&original, &double_neg)) in a.as_slice().iter()
+            .zip(neg_twice.as_slice().iter())
+            .enumerate() {
+            assert!(
+                (original - double_neg).abs() < 1e-6,
+                "Double negation failed at {}: -(-{}) = {} != {}",
+                i, original, double_neg, original
+            );
+        }
+    }
+
+    #[test]
+    fn test_neg_nan() {
+        let a = Vector::from_slice(&[f32::NAN, 5.0]);
+        let result = a.neg().unwrap();
+        assert!(result.as_slice()[0].is_nan());
+        assert_eq!(result.as_slice()[1], -5.0);
+    }
+
+    #[test]
+    fn test_neg_infinity() {
+        let a = Vector::from_slice(&[f32::INFINITY, f32::NEG_INFINITY]);
+        let result = a.neg().unwrap();
+        assert_eq!(result.as_slice(), &[f32::NEG_INFINITY, f32::INFINITY]);
+    }
+
+    #[test]
+    fn test_neg_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.neg().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -8392,6 +8473,85 @@ mod property_tests {
                     (output - input).abs() < 1e-5 || (output.is_nan() && input.is_nan()),
                     "idempotence failed at {}: maximum({}, {}) = {} != {}",
                     i, input, input, output, input
+                );
+            }
+        }
+    }
+
+    // ========================================
+    // Property Tests: neg()
+    // ========================================
+
+    // Property test: double negation is identity - -(-x) = x
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_neg_double_negation_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let neg_once = va.neg().unwrap();
+            let neg_twice = neg_once.neg().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(neg_twice.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (output - input).abs() < 1e-5 || (output.is_nan() && input.is_nan()),
+                    "double negation failed at {}: -(-{}) = {} != {}",
+                    i, input, output, input
+                );
+            }
+        }
+    }
+
+    // Property test: negation sign flip - sign(neg(x)) = -sign(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_neg_sign_flip(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let neg_result = va.neg().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(neg_result.as_slice().iter())
+                .enumerate() {
+                // Skip zero and NaN
+                if input.abs() > 1e-10 && !input.is_nan() {
+                    prop_assert!(
+                        (input.signum() + output.signum()).abs() < 1e-5,
+                        "sign flip failed at {}: sign({}) + sign(-{}) = {} + {} != 0",
+                        i, input, input, input.signum(), output.signum()
+                    );
+                }
+            }
+        }
+    }
+
+    // Property test: negation preserves magnitude - abs(neg(x)) = abs(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_neg_magnitude_preservation(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let neg_result = va.neg().unwrap();
+            let abs_a = va.abs().unwrap();
+            let abs_neg_a = neg_result.abs().unwrap();
+
+            for (i, (&expected, &output)) in abs_a.as_slice().iter()
+                .zip(abs_neg_a.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "magnitude not preserved at {}: abs(-{}) = {} != abs({}) = {}",
+                    i, a[i], output, a[i], expected
                 );
             }
         }
