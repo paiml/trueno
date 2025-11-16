@@ -2292,6 +2292,40 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Element-wise minimum of two vectors.
+    ///
+    /// Returns a new vector where each element is the minimum of the corresponding
+    /// elements from self and other.
+    ///
+    /// NaN handling: Prefers non-NaN values (NAN.min(x) = x).
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::Vector;
+    /// let a = Vector::from_slice(&[1.0, 5.0, 3.0]);
+    /// let b = Vector::from_slice(&[2.0, 3.0, 4.0]);
+    /// let result = a.minimum(&b).unwrap();
+    /// assert_eq!(result.as_slice(), &[1.0, 3.0, 3.0]);
+    /// ```
+    pub fn minimum(&self, other: &Self) -> Result<Vector<f32>> {
+        if self.len() != other.len() {
+            return Err(TruenoError::SizeMismatch {
+                expected: self.len(),
+                actual: other.len(),
+            });
+        }
+
+        let minimum_data: Vec<f32> = self.data.iter()
+            .zip(other.data.iter())
+            .map(|(a, b)| a.min(*b))
+            .collect();
+
+        Ok(Vector {
+            data: minimum_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4638,6 +4672,61 @@ mod tests {
         let magnitude: Vector<f32> = Vector::from_slice(&[]);
         let sign: Vector<f32> = Vector::from_slice(&[]);
         let result = magnitude.copysign(&sign).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // ========================================
+    // Unit Tests: minimum()
+    // ========================================
+
+    #[test]
+    fn test_minimum_basic() {
+        let a = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
+        let b = Vector::from_slice(&[2.0, 3.0, 4.0, 1.0]);
+        let result = a.minimum(&b).unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 3.0, 3.0, 1.0]);
+    }
+
+    #[test]
+    fn test_minimum_negative() {
+        let a = Vector::from_slice(&[-1.0, -5.0, 3.0]);
+        let b = Vector::from_slice(&[-2.0, -3.0, 4.0]);
+        let result = a.minimum(&b).unwrap();
+        assert_eq!(result.as_slice(), &[-2.0, -5.0, 3.0]);
+    }
+
+    #[test]
+    fn test_minimum_nan() {
+        // NaN handling: NAN.min(x) = x (prefers non-NaN)
+        let a = Vector::from_slice(&[f32::NAN, 5.0, f32::NAN]);
+        let b = Vector::from_slice(&[3.0, f32::NAN, f32::NAN]);
+        let result = a.minimum(&b).unwrap();
+        assert_eq!(result.as_slice()[0], 3.0);
+        assert_eq!(result.as_slice()[1], 5.0);
+        assert!(result.as_slice()[2].is_nan());
+    }
+
+    #[test]
+    fn test_minimum_infinity() {
+        let a = Vector::from_slice(&[f32::INFINITY, 5.0, f32::NEG_INFINITY]);
+        let b = Vector::from_slice(&[3.0, f32::INFINITY, -10.0]);
+        let result = a.minimum(&b).unwrap();
+        assert_eq!(result.as_slice(), &[3.0, 5.0, f32::NEG_INFINITY]);
+    }
+
+    #[test]
+    fn test_minimum_size_mismatch() {
+        let a = Vector::from_slice(&[1.0, 2.0]);
+        let b = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = a.minimum(&b);
+        assert!(matches!(result, Err(TruenoError::SizeMismatch { .. })));
+    }
+
+    #[test]
+    fn test_minimum_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let b: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.minimum(&b).unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -8049,6 +8138,89 @@ mod property_tests {
                         i, a[i], b[i], sign_result, b[i], sign_b
                     );
                 }
+            }
+        }
+    }
+
+    // ========================================
+    // Property Tests: minimum()
+    // ========================================
+
+    // Property test: minimum correctness - matches f32::min
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_minimum_correctness(
+            ab in prop::collection::vec((-100.0f32..100.0, -100.0f32..100.0), 1..100)
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+            let result = va.minimum(&vb).unwrap();
+
+            for (i, (&x, (&y, &output))) in a.iter()
+                .zip(b.iter().zip(result.as_slice().iter()))
+                .enumerate() {
+                let expected = x.min(y);
+                prop_assert!(
+                    (output - expected).abs() < 1e-5 || (output.is_nan() && expected.is_nan()),
+                    "minimum failed at {}: minimum({}, {}) = {} != {}",
+                    i, x, y, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: commutativity - minimum(a, b) = minimum(b, a)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_minimum_commutative(
+            ab in prop::collection::vec((-100.0f32..100.0, -100.0f32..100.0), 1..100)
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+            let result1 = va.minimum(&vb).unwrap();
+            let result2 = vb.minimum(&va).unwrap();
+
+            for (i, (&r1, &r2)) in result1.as_slice().iter()
+                .zip(result2.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (r1 - r2).abs() < 1e-5 || (r1.is_nan() && r2.is_nan()),
+                    "commutativity failed at {}: minimum({}, {}) = {} != minimum({}, {}) = {}",
+                    i, a[i], b[i], r1, b[i], a[i], r2
+                );
+            }
+        }
+    }
+
+    // Property test: idempotence - minimum(a, a) = a
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_minimum_idempotent(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.minimum(&va).unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (output - input).abs() < 1e-5 || (output.is_nan() && input.is_nan()),
+                    "idempotence failed at {}: minimum({}, {}) = {} != {}",
+                    i, input, input, output, input
+                );
             }
         }
     }
