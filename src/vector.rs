@@ -1517,6 +1517,50 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Element-wise reciprocal: result[i] = 1 / self[i]
+    ///
+    /// Computes the reciprocal (multiplicative inverse) of each element.
+    /// For zero values, returns infinity following IEEE 754 floating-point semantics.
+    ///
+    /// # Returns
+    ///
+    /// A new vector where each element is the reciprocal of the corresponding input element
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let a = Vector::from_slice(&[2.0, 4.0, 5.0, 10.0]);
+    /// let result = a.recip().unwrap();
+    /// assert_eq!(result.as_slice(), &[0.5, 0.25, 0.2, 0.1]);
+    /// ```
+    ///
+    /// Zero values produce infinity:
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let a = Vector::from_slice(&[0.0, 2.0]);
+    /// let result = a.recip().unwrap();
+    /// assert!(result.as_slice()[0].is_infinite());
+    /// assert_eq!(result.as_slice()[1], 0.5);
+    /// ```
+    ///
+    /// # Use Cases
+    ///
+    /// - Division optimization: `a / b` → `a * recip(b)` (multiplication is faster)
+    /// - Neural networks: Learning rate schedules, weight normalization
+    /// - Statistics: Harmonic mean calculations, inverse transformations
+    /// - Physics: Resistance (R = 1/G), optical power (P = 1/f)
+    /// - Signal processing: Frequency to period conversion, filter design
+    pub fn recip(&self) -> Result<Vector<f32>> {
+        let recip_data: Vec<f32> = self.data.iter().map(|x| x.recip()).collect();
+        Ok(Vector {
+            data: recip_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -2418,6 +2462,52 @@ mod tests {
     fn test_sqrt_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.sqrt().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // recip() operation tests (element-wise reciprocal: 1/x)
+    #[test]
+    fn test_recip_basic() {
+        let a = Vector::from_slice(&[2.0, 4.0, 5.0, 10.0]);
+        let result = a.recip().unwrap();
+        assert_eq!(result.as_slice(), &[0.5, 0.25, 0.2, 0.1]);
+    }
+
+    #[test]
+    fn test_recip_ones() {
+        let a = Vector::from_slice(&[1.0, 1.0, 1.0]);
+        let result = a.recip().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn test_recip_negatives() {
+        let a = Vector::from_slice(&[-2.0, -4.0, -0.5]);
+        let result = a.recip().unwrap();
+        assert_eq!(result.as_slice(), &[-0.5, -0.25, -2.0]);
+    }
+
+    #[test]
+    fn test_recip_fractional() {
+        let a = Vector::from_slice(&[0.5, 0.25, 0.1]);
+        let result = a.recip().unwrap();
+        assert_eq!(result.as_slice(), &[2.0, 4.0, 10.0]);
+    }
+
+    #[test]
+    fn test_recip_zero() {
+        let a = Vector::from_slice(&[0.0, 2.0, 0.0]);
+        let result = a.recip().unwrap();
+        // 1/0 = infinity
+        assert!(result.as_slice()[0].is_infinite());
+        assert_eq!(result.as_slice()[1], 0.5);
+        assert!(result.as_slice()[2].is_infinite());
+    }
+
+    #[test]
+    fn test_recip_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.recip().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -3907,6 +3997,103 @@ mod property_tests {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    // Property test: recip() correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_recip_correctness(
+            a in prop::collection::vec(0.1f32..100.0, 1..100)  // Avoid zeros and very small values
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.recip().unwrap();
+
+            // Verify: result[i] = 1 / a[i]
+            for (i, (&a_val, &result_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = 1.0 / a_val;
+
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-6
+                } else {
+                    1e-6
+                };
+
+                prop_assert!(
+                    (result_val - expected).abs() < tolerance,
+                    "recip correctness failed at {}: {} != {}, diff = {}",
+                    i, result_val, expected, (result_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: recip() inverse property
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_recip_inverse(
+            a in prop::collection::vec(0.1f32..100.0, 1..100)
+        ) {
+            // recip(recip(a)) = a
+            let va = Vector::from_slice(&a);
+            let recip_once = va.recip().unwrap();
+            let recip_twice = recip_once.recip().unwrap();
+
+            for (i, (&original, &recovered)) in a.iter()
+                .zip(recip_twice.as_slice().iter())
+                .enumerate() {
+                let tolerance = if original.abs() > 1.0 {
+                    original.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                prop_assert!(
+                    (original - recovered).abs() < tolerance,
+                    "recip inverse failed at {}: {} != {}, diff = {}",
+                    i, original, recovered, (original - recovered).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: recip() relation to division
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_recip_vs_division(
+            a in prop::collection::vec(0.1f32..100.0, 1..100),
+            scalar in 0.1f32..100.0
+        ) {
+            // scalar * recip(a) should equal scalar / a
+            let va = Vector::from_slice(&a);
+            let recip_result = va.recip().unwrap();
+            let scaled = recip_result.scale(scalar).unwrap();
+
+            for (i, (&a_val, &scaled_val)) in a.iter()
+                .zip(scaled.as_slice().iter())
+                .enumerate() {
+                let expected = scalar / a_val;
+
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                prop_assert!(
+                    (scaled_val - expected).abs() < tolerance,
+                    "recip vs division failed at {}: {} != {}, diff = {}",
+                    i, scaled_val, expected, (scaled_val - expected).abs()
+                );
             }
         }
     }
