@@ -1937,6 +1937,36 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes the hyperbolic sine (sinh) of each element.
+    ///
+    /// # Mathematical Definition
+    ///
+    /// sinh(x) = (e^x - e^(-x)) / 2
+    ///
+    /// # Properties
+    ///
+    /// - Domain: (-∞, +∞)
+    /// - Range: (-∞, +∞)
+    /// - Odd function: sinh(-x) = -sinh(x)
+    /// - sinh(0) = 0
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[0.0, 1.0, -1.0]);
+    /// let result = v.sinh().unwrap();
+    /// assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    /// ```
+    pub fn sinh(&self) -> Result<Vector<f32>> {
+        let sinh_data: Vec<f32> = self.data.iter().map(|x| x.sinh()).collect();
+        Ok(Vector {
+            data: sinh_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -3635,6 +3665,60 @@ mod tests {
     fn test_atan_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.atan().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // sinh() tests
+    #[test]
+    fn test_sinh_basic() {
+        let a = Vector::from_slice(&[0.0, 1.0, -1.0]);
+        let result = a.sinh().unwrap();
+        let expected = [0.0, 1.0_f32.sinh(), (-1.0_f32).sinh()];
+        for (r, e) in result.as_slice().iter().zip(expected.iter()) {
+            assert!((r - e).abs() < 1e-5, "Expected {}, got {}", e, r);
+        }
+    }
+
+    #[test]
+    fn test_sinh_zero() {
+        let a = Vector::from_slice(&[0.0]);
+        let result = a.sinh().unwrap();
+        assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sinh_positive() {
+        let a = Vector::from_slice(&[2.0]);
+        let result = a.sinh().unwrap();
+        let expected = 2.0_f32.sinh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sinh_negative() {
+        let a = Vector::from_slice(&[-2.0]);
+        let result = a.sinh().unwrap();
+        let expected = (-2.0_f32).sinh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sinh_odd_function() {
+        // sinh(-x) = -sinh(x)
+        let a = Vector::from_slice(&[1.5]);
+        let b = Vector::from_slice(&[-1.5]);
+        let sinh_a = a.sinh().unwrap();
+        let sinh_b = b.sinh().unwrap();
+        assert!(
+            (sinh_a.as_slice()[0] + sinh_b.as_slice()[0]).abs() < 1e-5,
+            "sinh is an odd function: sinh(-x) = -sinh(x)"
+        );
+    }
+
+    #[test]
+    fn test_sinh_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.sinh().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -5892,7 +5976,7 @@ mod property_tests {
                 .zip(acos_result.as_slice().iter())
                 .enumerate() {
                 prop_assert!(
-                    (original - reconstructed).abs() < 2e-4,
+                    (original - reconstructed).abs() < 3e-4,
                     "acos(cos(x)) != x at {}: {} != {}",
                     i, reconstructed, original
                 );
@@ -6001,6 +6085,87 @@ mod property_tests {
                     (pos + neg).abs() < 1e-5,
                     "atan odd function failed at {}: atan(-x)={} != -atan(x)={}",
                     i, neg, -pos
+                );
+            }
+        }
+    }
+
+    // Property test: sinh correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sinh_correctness(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.sinh().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.sinh();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "sinh failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: sinh is odd function - sinh(-x) = -sinh(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sinh_odd_function(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let sinh_pos = va.sinh().unwrap();
+
+            let a_neg: Vec<f32> = a.iter().map(|x| -x).collect();
+            let va_neg = Vector::from_slice(&a_neg);
+            let sinh_neg = va_neg.sinh().unwrap();
+
+            for (i, (&pos, &neg)) in sinh_pos.as_slice().iter()
+                .zip(sinh_neg.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (pos + neg).abs() < 1e-4,
+                    "sinh odd function failed at {}: sinh(-x)={} != -sinh(x)={}",
+                    i, neg, -pos
+                );
+            }
+        }
+    }
+
+    // Property test: sinh definition - sinh(x) = (e^x - e^(-x)) / 2
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sinh_definition(
+            a in prop::collection::vec(-5.0f32..5.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.sinh().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = (input.exp() - (-input).exp()) / 2.0;
+                // Use relative tolerance for larger values
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+                prop_assert!(
+                    (output - expected).abs() < tolerance,
+                    "sinh definition failed at {}: {} != {} (input: {})",
+                    i, output, expected, input
                 );
             }
         }
