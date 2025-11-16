@@ -1889,6 +1889,54 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes element-wise arctangent (atan/tan⁻¹) of the vector.
+    ///
+    /// Returns a new vector where each element is the inverse tangent of the corresponding input element.
+    /// This is the inverse function of tan: if y = tan(x), then x = atan(y).
+    ///
+    /// # Returns
+    /// - `Ok(Vector<f32>)`: New vector with atan(x) for each element
+    ///
+    /// # Properties
+    /// - Domain: All real numbers (-∞, +∞)
+    /// - Range: (-π/2, π/2)
+    /// - Odd function: atan(-x) = -atan(x)
+    /// - Inverse relation: atan(tan(x)) = x for x ∈ (-π/2, π/2)
+    /// - atan(0) = 0
+    /// - atan(1) = π/4
+    /// - atan(-1) = -π/4
+    /// - lim(x→∞) atan(x) = π/2
+    /// - lim(x→-∞) atan(x) = -π/2
+    ///
+    /// # Performance
+    /// - Iterator map pattern for cache efficiency
+    /// - Leverages Rust's optimized f32::atan()
+    /// - Auto-vectorized by LLVM on supporting platforms
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::Vector;
+    /// use std::f32::consts::PI;
+    ///
+    /// let values = Vector::from_slice(&[0.0, 1.0, -1.0]);
+    /// let result = values.atan().unwrap();
+    /// // Result: [0.0, π/4, -π/4] (approximately)
+    /// ```
+    ///
+    /// # Use Cases
+    /// - Physics: Angle calculations from slopes, velocity components
+    /// - Signal processing: Phase unwrapping, FM demodulation
+    /// - Graphics: Rotation calculations, camera orientation
+    /// - Robotics: Inverse kinematics, steering angles
+    /// - Navigation: Heading calculations from coordinates
+    pub fn atan(&self) -> Result<Vector<f32>> {
+        let atan_data: Vec<f32> = self.data.iter().map(|x| x.atan()).collect();
+        Ok(Vector {
+            data: atan_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -3500,6 +3548,93 @@ mod tests {
     fn test_acos_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.acos().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_atan_basic() {
+        use std::f32::consts::PI;
+        // atan(0) = 0, atan(1) = π/4, atan(-1) = -π/4
+        let a = Vector::from_slice(&[0.0, 1.0, -1.0, 1.732]); // 1.732 ≈ √3 for atan(√3) = π/3
+        let result = a.atan().unwrap();
+        let expected = [0.0, PI / 4.0, -PI / 4.0, PI / 3.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-3,
+                "atan basic mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_atan_zero() {
+        let a = Vector::from_slice(&[0.0]);
+        let result = a.atan().unwrap();
+        assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_atan_range() {
+        use std::f32::consts::PI;
+        // atan range is (-π/2, π/2) for all real inputs
+        let a = Vector::from_slice(&[-1000.0, -10.0, -1.0, 0.0, 1.0, 10.0, 1000.0]);
+        let result = a.atan().unwrap();
+        for (i, &res) in result.as_slice().iter().enumerate() {
+            assert!(
+                (-PI / 2.0..PI / 2.0).contains(&res),
+                "atan range violation at {}: {} not in (-π/2, π/2)",
+                i,
+                res
+            );
+        }
+    }
+
+    #[test]
+    fn test_atan_negative() {
+        use std::f32::consts::PI;
+        // atan is odd: atan(-x) = -atan(x)
+        let a = Vector::from_slice(&[-1.0, -1.732]);
+        let result = a.atan().unwrap();
+        let expected = [-PI / 4.0, -PI / 3.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-3,
+                "atan negative mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_atan_tan_inverse() {
+        use std::f32::consts::PI;
+        // atan(tan(x)) = x for x in (-π/2, π/2)
+        let a = Vector::from_slice(&[-PI / 4.0, 0.0, PI / 6.0, PI / 4.0]);
+        let tan_result = a.tan().unwrap();
+        let atan_result = tan_result.atan().unwrap();
+
+        for (i, (&original, &reconstructed)) in
+            a.as_slice().iter().zip(atan_result.as_slice().iter()).enumerate()
+        {
+            assert!(
+                (original - reconstructed).abs() < 1e-5,
+                "atan(tan(x)) != x at {}: {} != {}",
+                i,
+                reconstructed,
+                original
+            );
+        }
+    }
+
+    #[test]
+    fn test_atan_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.atan().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -5788,6 +5923,84 @@ mod property_tests {
                     (neg - expected).abs() < 1e-5,
                     "acos symmetry failed at {}: acos(-x)={} != π - acos(x)={}",
                     i, neg, expected
+                );
+            }
+        }
+    }
+
+    // Property test: atan() correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_atan_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            // atan accepts all real numbers
+            let va = Vector::from_slice(&a);
+            let result = va.atan().unwrap();
+
+            for (i, (&a_val, &atan_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.atan();
+
+                prop_assert!(
+                    (atan_val - expected).abs() < 1e-5,
+                    "atan correctness failed at {}: {} != {}, diff = {}",
+                    i, atan_val, expected, (atan_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: atan(tan(x)) = x for x in (-π/2, π/2)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_atan_tan_inverse(
+            a in prop::collection::vec(-1.5f32..1.5, 1..100)
+        ) {
+            // Test range within (-π/2, π/2) to ensure inverse property
+            let va = Vector::from_slice(&a);
+            let tan_result = va.tan().unwrap();
+            let atan_result = tan_result.atan().unwrap();
+
+            for (i, (&original, &reconstructed)) in a.iter()
+                .zip(atan_result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (original - reconstructed).abs() < 1e-5,
+                    "atan(tan(x)) != x at {}: {} != {}",
+                    i, reconstructed, original
+                );
+            }
+        }
+    }
+
+    // Property test: atan is odd function - atan(-x) = -atan(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_atan_odd_function(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let atan_pos = va.atan().unwrap();
+
+            let a_neg: Vec<f32> = a.iter().map(|x| -x).collect();
+            let va_neg = Vector::from_slice(&a_neg);
+            let atan_neg = va_neg.atan().unwrap();
+
+            for (i, (&pos, &neg)) in atan_pos.as_slice().iter()
+                .zip(atan_neg.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (pos + neg).abs() < 1e-5,
+                    "atan odd function failed at {}: atan(-x)={} != -atan(x)={}",
+                    i, neg, -pos
                 );
             }
         }
