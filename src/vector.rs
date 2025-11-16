@@ -868,6 +868,70 @@ impl Vector<f32> {
 
         Ok(result)
     }
+
+    /// L2 norm (Euclidean norm)
+    ///
+    /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
+    /// This is mathematically equivalent to sqrt(dot(self, self)).
+    ///
+    /// # Performance
+    ///
+    /// Uses optimized SIMD implementations via the dot product operation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.0, 4.0]);
+    /// let norm = v.norm_l2().unwrap();
+    /// assert!((norm - 5.0).abs() < 1e-5); // sqrt(3^2 + 4^2) = 5
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns 0.0 for empty vectors (consistent with the mathematical definition).
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v: Vector<f32> = Vector::from_slice(&[]);
+    /// assert_eq!(v.norm_l2().unwrap(), 0.0);
+    /// ```
+    pub fn norm_l2(&self) -> Result<f32> {
+        if self.data.is_empty() {
+            return Ok(0.0);
+        }
+
+        let result = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::norm_l2(&self.data)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::norm_l2(&self.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::norm_l2(&self.data),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::norm_l2(&self.data)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::norm_l2(&self.data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::norm_l2(&self.data),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::norm_l2(&self.data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::norm_l2(&self.data),
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::norm_l2(&self.data)
+                }
+            }
+        };
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
@@ -1301,6 +1365,42 @@ mod tests {
         // When there are duplicates, should return first occurrence
         let v = Vector::from_slice(&[5.0, 1.0, 3.0, 1.0, 2.0]);
         assert_eq!(v.argmin().unwrap(), 1); // first 1.0 is at index 1
+    }
+
+    // L2 norm (Euclidean norm) tests
+    #[test]
+    fn test_norm_l2() {
+        let v = Vector::from_slice(&[3.0, 4.0]);
+        let result = v.norm_l2().unwrap();
+        assert!((result - 5.0).abs() < 1e-5); // sqrt(3^2 + 4^2) = 5
+    }
+
+    #[test]
+    fn test_norm_l2_single() {
+        let v = Vector::from_slice(&[7.0]);
+        let result = v.norm_l2().unwrap();
+        assert!((result - 7.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l2_empty() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        let result = v.norm_l2().unwrap();
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_norm_l2_unit_vector() {
+        let v = Vector::from_slice(&[1.0, 0.0, 0.0]);
+        let result = v.norm_l2().unwrap();
+        assert!((result - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l2_negative() {
+        let v = Vector::from_slice(&[-3.0, -4.0]);
+        let result = v.norm_l2().unwrap();
+        assert!((result - 5.0).abs() < 1e-5); // sqrt((-3)^2 + (-4)^2) = 5
     }
 
     #[test]
@@ -1805,6 +1905,73 @@ mod property_tests {
                 // If any non-zero element, result should be positive
                 prop_assert!(result > 0.0);
             }
+        }
+    }
+
+    // Property test: L2 norm is always non-negative
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_norm_l2_nonnegative(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let norm = va.norm_l2().unwrap();
+
+            // ||v|| >= 0 always
+            prop_assert!(norm >= 0.0);
+
+            // If all zeros, norm should be exactly zero
+            if a.iter().all(|&x| x.abs() < 1e-6) {
+                prop_assert!(norm < 1e-5);
+            }
+        }
+    }
+
+    // Property test: L2 norm equals sqrt(dot(a, a))
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_norm_l2_equals_sqrt_dot(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let norm = va.norm_l2().unwrap();
+            let dot_self = va.dot(&va).unwrap();
+
+            // ||a|| = sqrt(a·a)
+            // Use relative tolerance for large values
+            let relative_error = if dot_self > 0.0 {
+                ((norm * norm - dot_self) / dot_self).abs()
+            } else {
+                (norm * norm - dot_self).abs()
+            };
+            prop_assert!(relative_error < 1e-4 || (norm * norm - dot_self).abs() < 1e-2);
+        }
+    }
+
+    // Property test: Scaling property ||c*a|| = |c| * ||a||
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_norm_l2_scaling(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            c in -10.0f32..10.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let norm_a = va.norm_l2().unwrap();
+
+            // Create c*a
+            let scaled: Vec<f32> = a.iter().map(|&x| c * x).collect();
+            let v_scaled = Vector::from_slice(&scaled);
+            let norm_scaled = v_scaled.norm_l2().unwrap();
+
+            // ||c*a|| = |c| * ||a||
+            let expected = c.abs() * norm_a;
+            prop_assert!((norm_scaled - expected).abs() < 1e-2);
         }
     }
 

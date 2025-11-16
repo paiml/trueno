@@ -135,4 +135,13 @@ pub trait VectorBackend {
     ///
     /// - Can handle empty slice (returns 0.0)
     unsafe fn sum_kahan(a: &[f32]) -> f32;
+
+    /// L2 norm (Euclidean norm): sqrt(sum(a[i]^2))
+    ///
+    /// Computes the Euclidean length of the vector. This is equivalent to sqrt(dot(a, a)).
+    ///
+    /// # Safety
+    ///
+    /// - Can handle empty slice (returns 0.0)
+    unsafe fn norm_l2(a: &[f32]) -> f32;
 }
