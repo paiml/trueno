@@ -5,6 +5,8 @@ use crate::backends::scalar::ScalarBackend;
 use crate::backends::sse2::Sse2Backend;
 #[cfg(target_arch = "x86_64")]
 use crate::backends::avx2::Avx2Backend;
+#[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+use crate::backends::neon::NeonBackend;
 use crate::backends::VectorBackend;
 use crate::{Backend, Result, TruenoError};
 
@@ -264,7 +266,16 @@ impl Vector<f32> {
                     // Fallback to scalar on non-x86_64
                     ScalarBackend::add(&self.data, &other.data, &mut result);
                 }
-                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => {
+                    NeonBackend::add(&self.data, &other.data, &mut result);
+                }
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => {
+                    // Fallback to scalar on non-ARM
+                    ScalarBackend::add(&self.data, &other.data, &mut result);
+                }
+                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
                     // Not yet implemented, use scalar
                     ScalarBackend::add(&self.data, &other.data, &mut result);
                 }
@@ -314,11 +325,19 @@ impl Vector<f32> {
                 Backend::AVX2 | Backend::AVX512 => {
                     Avx2Backend::mul(&self.data, &other.data, &mut result);
                 }
-                #[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
                     ScalarBackend::mul(&self.data, &other.data, &mut result);
                 }
-                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => {
+                    NeonBackend::mul(&self.data, &other.data, &mut result);
+                }
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => {
+                    ScalarBackend::mul(&self.data, &other.data, &mut result);
+                }
+                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
                     ScalarBackend::mul(&self.data, &other.data, &mut result);
                 }
             }
@@ -364,7 +383,11 @@ impl Vector<f32> {
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
                     ScalarBackend::dot(&self.data, &other.data)
                 }
-                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::dot(&self.data, &other.data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::dot(&self.data, &other.data),
+                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
                     ScalarBackend::dot(&self.data, &other.data)
                 }
             }
@@ -397,7 +420,11 @@ impl Vector<f32> {
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
                     ScalarBackend::sum(&self.data)
                 }
-                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::sum(&self.data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::sum(&self.data),
+                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
                     ScalarBackend::sum(&self.data)
                 }
             }
@@ -438,7 +465,11 @@ impl Vector<f32> {
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
                     ScalarBackend::max(&self.data)
                 }
-                Backend::NEON | Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::max(&self.data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::max(&self.data),
+                Backend::WasmSIMD | Backend::GPU | Backend::Auto => {
                     ScalarBackend::max(&self.data)
                 }
             }
