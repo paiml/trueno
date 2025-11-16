@@ -978,6 +978,71 @@ impl Vector<f32> {
         let norm_vec = Vector::from_slice(&vec![norm; self.len()]);
         self.div(&norm_vec)
     }
+
+    /// Compute the L1 norm (Manhattan norm) of the vector
+    ///
+    /// Returns the sum of absolute values: ||v||₁ = sum(|v[i]|)
+    ///
+    /// The L1 norm is used in:
+    /// - Machine learning (L1 regularization, Lasso regression)
+    /// - Distance metrics (Manhattan distance)
+    /// - Sparse modeling and feature selection
+    /// - Signal processing
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.0, -4.0, 5.0]);
+    /// let norm = v.norm_l1().unwrap();
+    ///
+    /// // |3| + |-4| + |5| = 12
+    /// assert!((norm - 12.0).abs() < 1e-5);
+    /// ```
+    ///
+    /// # Empty Vector
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v: Vector<f32> = Vector::from_slice(&[]);
+    /// assert_eq!(v.norm_l1().unwrap(), 0.0);
+    /// ```
+    pub fn norm_l1(&self) -> Result<f32> {
+        if self.data.is_empty() {
+            return Ok(0.0);
+        }
+
+        let result = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::norm_l1(&self.data)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::norm_l1(&self.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::norm_l1(&self.data),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::norm_l1(&self.data)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::norm_l1(&self.data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::norm_l1(&self.data),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::norm_l1(&self.data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::norm_l1(&self.data),
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::norm_l1(&self.data)
+                }
+            }
+        };
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
@@ -1488,6 +1553,45 @@ mod tests {
         assert!((result.as_slice()[1] - (-0.8)).abs() < 1e-5);
         let norm = result.norm_l2().unwrap();
         assert!((norm - 1.0).abs() < 1e-5);
+    }
+
+    // L1 Norm (Manhattan norm) tests
+    #[test]
+    fn test_norm_l1_basic() {
+        let v = Vector::from_slice(&[3.0, -4.0, 5.0]);
+        let result = v.norm_l1().unwrap();
+        // |3| + |-4| + |5| = 3 + 4 + 5 = 12
+        assert!((result - 12.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l1_all_positive() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        let result = v.norm_l1().unwrap();
+        // 1 + 2 + 3 + 4 = 10
+        assert!((result - 10.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l1_all_negative() {
+        let v = Vector::from_slice(&[-1.0, -2.0, -3.0]);
+        let result = v.norm_l1().unwrap();
+        // |-1| + |-2| + |-3| = 1 + 2 + 3 = 6
+        assert!((result - 6.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l1_zero_vector() {
+        let v = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = v.norm_l1().unwrap();
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_norm_l1_empty_vector() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        let result = v.norm_l1().unwrap();
+        assert_eq!(result, 0.0);
     }
 
     #[test]
@@ -2192,6 +2296,99 @@ mod property_tests {
                     "Element {} differs: {} vs {}", i, val_a, val_scaled
                 );
             }
+        }
+    }
+
+    // Property test: L1 norm triangle inequality
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_norm_l1_triangle_inequality(
+            len in 1usize..100,
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            b in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            // Triangle inequality: ||a + b||₁ <= ||a||₁ + ||b||₁
+            // Use same length for both vectors
+            let actual_len = len.min(a.len()).min(b.len());
+            let a_trimmed = &a[..actual_len];
+            let b_trimmed = &b[..actual_len];
+
+            let va = Vector::from_slice(a_trimmed);
+            let vb = Vector::from_slice(b_trimmed);
+
+            let norm_a = va.norm_l1().unwrap();
+            let norm_b = vb.norm_l1().unwrap();
+            let sum = va.add(&vb).unwrap();
+            let norm_sum = sum.norm_l1().unwrap();
+
+            // Triangle inequality should hold
+            prop_assert!(
+                norm_sum <= norm_a + norm_b + 1e-3,
+                "Triangle inequality violated: {} > {} + {}",
+                norm_sum, norm_a, norm_b
+            );
+        }
+    }
+
+    // Property test: L1 norm absolute homogeneity
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_norm_l1_absolute_homogeneity(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            scalar in -10.0f32..10.0
+        ) {
+            // Absolute homogeneity: ||c * v||₁ = |c| * ||v||₁
+            let va = Vector::from_slice(&a);
+
+            let norm_a = va.norm_l1().unwrap();
+
+            // Scale the vector
+            let scalars = vec![scalar; a.len()];
+            let vs = Vector::from_slice(&scalars);
+            let scaled = va.mul(&vs).unwrap();
+
+            let norm_scaled = scaled.norm_l1().unwrap();
+
+            // Should satisfy: ||c*v||₁ = |c| * ||v||₁
+            let expected = scalar.abs() * norm_a;
+            prop_assert!(
+                (norm_scaled - expected).abs() < 1e-2,
+                "Homogeneity violated: {} != |{}| * {} = {}",
+                norm_scaled, scalar, norm_a, expected
+            );
+        }
+    }
+
+    // Property test: L1 norm equals sum of absolute values
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_norm_l1_definition(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let norm = va.norm_l1().unwrap();
+
+            // Manual calculation of sum(|a[i]|)
+            let manual_sum: f32 = a.iter().map(|x| x.abs()).sum();
+
+            // Use relative tolerance for large values
+            let tolerance = if manual_sum.abs() > 1.0 {
+                manual_sum.abs() * 1e-5 // Relative tolerance
+            } else {
+                1e-3 // Absolute tolerance for small values
+            };
+
+            prop_assert!(
+                (norm - manual_sum).abs() < tolerance,
+                "L1 norm {} != manual sum {}, diff = {}",
+                norm, manual_sum, (norm - manual_sum).abs()
+            );
         }
     }
 }

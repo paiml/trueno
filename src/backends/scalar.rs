@@ -123,6 +123,18 @@ impl VectorBackend for ScalarBackend {
         }
         sum_of_squares.sqrt()
     }
+
+    unsafe fn norm_l1(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let mut sum = 0.0;
+        for &val in a {
+            sum += val.abs();
+        }
+        sum
+    }
 }
 
 #[cfg(test)]
