@@ -2134,6 +2134,25 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes the ceiling (round up to nearest integer) of each element.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.2, -2.7, 5.0]);
+    /// let result = v.ceil().unwrap();
+    /// assert_eq!(result.as_slice(), &[4.0, -2.0, 5.0]);
+    /// ```
+    pub fn ceil(&self) -> Result<Vector<f32>> {
+        let ceil_data: Vec<f32> = self.data.iter().map(|x| x.ceil()).collect();
+        Ok(Vector {
+            data: ceil_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4206,6 +4225,48 @@ mod tests {
     fn test_floor_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.floor().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_ceil_basic() {
+        let a = Vector::from_slice(&[3.2, -2.7, 5.0]);
+        let result = a.ceil().unwrap();
+        assert_eq!(result.as_slice(), &[4.0, -2.0, 5.0]);
+    }
+
+    #[test]
+    fn test_ceil_positive() {
+        let a = Vector::from_slice(&[1.1, 2.9, 3.5]);
+        let result = a.ceil().unwrap();
+        assert_eq!(result.as_slice(), &[2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_ceil_negative() {
+        let a = Vector::from_slice(&[-1.1, -2.9, -3.5]);
+        let result = a.ceil().unwrap();
+        assert_eq!(result.as_slice(), &[-1.0, -2.0, -3.0]);
+    }
+
+    #[test]
+    fn test_ceil_integers() {
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0, -4.0]);
+        let result = a.ceil().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0, -4.0]);
+    }
+
+    #[test]
+    fn test_ceil_zero() {
+        let a = Vector::from_slice(&[0.0, -0.0]);
+        let result = a.ceil().unwrap();
+        assert_eq!(result.as_slice(), &[0.0, -0.0]);
+    }
+
+    #[test]
+    fn test_ceil_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.ceil().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -7163,6 +7224,77 @@ mod property_tests {
                 prop_assert!(
                     output <= input,
                     "floor should be <= input at {}: floor({}) = {} > {}",
+                    i, input, output, input
+                );
+            }
+        }
+    }
+
+    // Property test: ceil correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_ceil_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.ceil().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.ceil();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "ceil failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: ceil idempotence - ceil(ceil(x)) = ceil(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_ceil_idempotence(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let ceil_once = va.ceil().unwrap();
+            let ceil_twice = ceil_once.ceil().unwrap();
+
+            for (i, (&once, &twice)) in ceil_once.as_slice().iter()
+                .zip(ceil_twice.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (once - twice).abs() < 1e-5,
+                    "ceil idempotence failed at {}: ceil(ceil({})) = {} != {}",
+                    i, a[i], twice, once
+                );
+            }
+        }
+    }
+
+    // Property test: ceil always >= original value
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_ceil_greater_than_or_equal(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.ceil().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    output >= input,
+                    "ceil should be >= input at {}: ceil({}) = {} < {}",
                     i, input, output, input
                 );
             }
