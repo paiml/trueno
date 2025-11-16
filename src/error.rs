@@ -34,6 +34,10 @@ pub enum TruenoError {
     /// Division by zero (e.g., normalizing zero vector)
     #[error("Division by zero")]
     DivisionByZero,
+
+    /// Empty vector (e.g., computing mean of empty vector)
+    #[error("Empty vector")]
+    EmptyVector,
 }
 
 #[cfg(test)]
@@ -87,5 +91,11 @@ mod tests {
     fn test_division_by_zero_error() {
         let err = TruenoError::DivisionByZero;
         assert_eq!(err.to_string(), "Division by zero");
+    }
+
+    #[test]
+    fn test_empty_vector_error() {
+        let err = TruenoError::EmptyVector;
+        assert_eq!(err.to_string(), "Empty vector");
     }
 }

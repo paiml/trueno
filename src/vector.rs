@@ -896,6 +896,43 @@ impl Vector<f32> {
         self.dot(self)
     }
 
+    /// Arithmetic mean (average)
+    ///
+    /// Computes the arithmetic mean of all elements: sum(a[i]) / n.
+    ///
+    /// # Performance
+    ///
+    /// Uses optimized SIMD sum() implementation, then divides by length.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+    /// let avg = v.mean().unwrap();
+    /// assert!((avg - 2.5).abs() < 1e-5); // (1+2+3+4)/4 = 2.5
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns an error for empty vectors (division by zero).
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let v: Vector<f32> = Vector::from_slice(&[]);
+    /// assert!(matches!(v.mean(), Err(TruenoError::EmptyVector)));
+    /// ```
+    pub fn mean(&self) -> Result<f32> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        let total = self.sum()?;
+        Ok(total / self.len() as f32)
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -4974,6 +5011,52 @@ mod tests {
         assert_eq!(result, 0.0);
     }
 
+    // ========================================================================
+    // Tests for mean() - arithmetic average
+    // ========================================================================
+
+    #[test]
+    fn test_mean_basic() {
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        let result = a.mean().unwrap();
+        assert!((result - 2.5).abs() < 1e-5); // (1+2+3+4)/4 = 2.5
+    }
+
+    #[test]
+    fn test_mean_negative() {
+        let a = Vector::from_slice(&[-2.0, -4.0, -6.0]);
+        let result = a.mean().unwrap();
+        assert!((result - (-4.0)).abs() < 1e-5); // (-2-4-6)/3 = -4.0
+    }
+
+    #[test]
+    fn test_mean_mixed() {
+        let a = Vector::from_slice(&[-10.0, 0.0, 10.0]);
+        let result = a.mean().unwrap();
+        assert!(result.abs() < 1e-5); // (-10+0+10)/3 = 0.0
+    }
+
+    #[test]
+    fn test_mean_single() {
+        let a = Vector::from_slice(&[42.0]);
+        let result = a.mean().unwrap();
+        assert!((result - 42.0).abs() < 1e-5); // 42/1 = 42
+    }
+
+    #[test]
+    fn test_mean_all_same() {
+        let a = Vector::from_slice(&[5.0, 5.0, 5.0, 5.0, 5.0]);
+        let result = a.mean().unwrap();
+        assert!((result - 5.0).abs() < 1e-5); // (5+5+5+5+5)/5 = 5
+    }
+
+    #[test]
+    fn test_mean_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.mean();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -8696,6 +8779,66 @@ mod property_tests {
                 (sum_sq_scaled - expected).abs() < tolerance,
                 "sum_of_squares({} * v) = {} != {}^2 * {} = {}",
                 k, sum_sq_scaled, k, sum_sq_original, expected
+            );
+        }
+
+        /// Property test: mean(v) is between min(v) and max(v)
+        #[test]
+        fn test_mean_bounds(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let mean_val = va.mean().unwrap();
+            let min_val = va.min().unwrap();
+            let max_val = va.max().unwrap();
+
+            prop_assert!(
+                mean_val >= min_val && mean_val <= max_val,
+                "mean({}) = {} not in range [{}, {}]",
+                mean_val, mean_val, min_val, max_val
+            );
+        }
+
+        /// Property test: mean(v + c) = mean(v) + c (translation property)
+        #[test]
+        fn test_mean_translation(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100),
+            c in -10.0f32..10.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let mean_original = va.mean().unwrap();
+
+            // Create translated vector: v + c
+            let translated: Vec<f32> = a.iter().map(|x| x + c).collect();
+            let vt = Vector::from_slice(&translated);
+            let mean_translated = vt.mean().unwrap();
+
+            let expected = mean_original + c;
+            let tolerance = 1e-4 * expected.abs().max(1.0);
+            prop_assert!(
+                (mean_translated - expected).abs() < tolerance,
+                "mean(v + {}) = {} != mean(v) + {} = {}",
+                c, mean_translated, c, expected
+            );
+        }
+
+        /// Property test: mean(k*v) = k*mean(v) (scaling property)
+        #[test]
+        fn test_mean_scaling(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100),
+            k in -5.0f32..5.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let mean_original = va.mean().unwrap();
+            let scaled = va.scale(k).unwrap();
+            let mean_scaled = scaled.mean().unwrap();
+
+            let expected = k * mean_original;
+            let tolerance = 1e-4 * expected.abs().max(1.0);
+            prop_assert!(
+                (mean_scaled - expected).abs() < tolerance,
+                "mean({} * v) = {} != {} * mean(v) = {}",
+                k, mean_scaled, k, expected
             );
         }
     }
