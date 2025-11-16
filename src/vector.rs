@@ -1713,6 +1713,46 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Element-wise cosine: result[i] = cos(x[i])
+    ///
+    /// Computes the cosine for each element (input in radians).
+    /// Uses Rust's optimized f32::cos() method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    /// use std::f32::consts::PI;
+    ///
+    /// let v = Vector::from_slice(&[0.0, PI / 2.0, PI]);
+    /// let result = v.cos().unwrap();
+    /// // result ≈ [1.0, 0.0, -1.0]
+    /// ```
+    ///
+    /// # Special Cases
+    ///
+    /// - `cos(0)` returns 1.0
+    /// - `cos(π/2)` returns 0.0 (approximately)
+    /// - `cos(π)` returns -1.0
+    /// - `cos(-x)` returns cos(x) (even function)
+    /// - Periodic with period 2π: cos(x + 2π) = cos(x)
+    /// - Relation to sine: cos(x) = sin(x + π/2)
+    ///
+    /// # Applications
+    ///
+    /// - Signal processing: Phase-shifted waveforms, I/Q modulation, quadrature signals
+    /// - Physics: Projectile motion, wave interference, damped oscillations
+    /// - Graphics: Rotation matrices, camera transforms, circular motion
+    /// - Audio: Stereo panning, spatial audio, frequency synthesis
+    /// - Engineering: Control systems, frequency response, AC circuits
+    pub fn cos(&self) -> Result<Vector<f32>> {
+        let cos_data: Vec<f32> = self.data.iter().map(|x| x.cos()).collect();
+        Ok(Vector {
+            data: cos_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -2964,6 +3004,96 @@ mod tests {
     fn test_sin_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.sin().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // cos() operation tests (element-wise cosine)
+    #[test]
+    fn test_cos_basic() {
+        use std::f32::consts::PI;
+        let a = Vector::from_slice(&[0.0, PI / 2.0, PI, 3.0 * PI / 2.0]);
+        let result = a.cos().unwrap();
+        let expected = [1.0, 0.0, -1.0, 0.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "cos mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_cos_zero() {
+        let a = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = a.cos().unwrap();
+        for &val in result.as_slice() {
+            assert!((val - 1.0).abs() < 1e-5, "cos(0) should be 1.0");
+        }
+    }
+
+    #[test]
+    fn test_cos_quarter_circle() {
+        use std::f32::consts::PI;
+        let a = Vector::from_slice(&[PI / 6.0, PI / 4.0, PI / 3.0]);
+        let result = a.cos().unwrap();
+        let expected = [(3.0f32).sqrt() / 2.0, std::f32::consts::FRAC_1_SQRT_2, 0.5];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "cos quarter circle mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_cos_negative() {
+        use std::f32::consts::PI;
+        let a = Vector::from_slice(&[-PI / 2.0, -PI, -3.0 * PI / 2.0]);
+        let result = a.cos().unwrap();
+        let expected = [0.0, -1.0, 0.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "cos negative mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_cos_sin_relation() {
+        use std::f32::consts::PI;
+        // cos(x) = sin(x + π/2)
+        let a = Vector::from_slice(&[0.0, PI / 6.0, PI / 4.0, PI / 3.0]);
+        let cos_result = a.cos().unwrap();
+
+        let a_plus_pi_2: Vec<f32> = a.as_slice().iter().map(|&x| x + PI / 2.0).collect();
+        let shifted = Vector::from_slice(&a_plus_pi_2);
+        let sin_result = shifted.sin().unwrap();
+
+        for (i, (&cos_val, &sin_val)) in cos_result.as_slice().iter().zip(sin_result.as_slice().iter()).enumerate() {
+            assert!(
+                (cos_val - sin_val).abs() < 1e-5,
+                "cos(x) = sin(x + π/2) failed at {}: {} != {}",
+                i,
+                cos_val,
+                sin_val
+            );
+        }
+    }
+
+    #[test]
+    fn test_cos_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.cos().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -4939,6 +5069,78 @@ mod property_tests {
                     (sin_val - sin_periodic_val).abs() < 1e-5,
                     "sin periodicity failed at {}: {} != {}, diff = {}",
                     i, sin_val, sin_periodic_val, (sin_val - sin_periodic_val).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: cos() correctness vs f32::cos()
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_cos_correctness(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.cos().unwrap();
+
+            for (i, (&a_val, &cos_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.cos();
+
+                prop_assert!(
+                    (cos_val - expected).abs() < 1e-5,
+                    "cos correctness failed at {}: {} != {}, diff = {}",
+                    i, cos_val, expected, (cos_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: cos() range [-1, 1]
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_cos_range(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.cos().unwrap();
+
+            for (i, &cos_val) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    (-1.0..=1.0).contains(&cos_val),
+                    "cos range failed at {}: {} not in [-1, 1]",
+                    i, cos_val
+                );
+            }
+        }
+    }
+
+    // Property test: Pythagorean identity - sin²(x) + cos²(x) = 1
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_pythagorean_identity(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let sin_result = va.sin().unwrap();
+            let cos_result = va.cos().unwrap();
+
+            for (i, (&sin_val, &cos_val)) in sin_result.as_slice().iter()
+                .zip(cos_result.as_slice().iter())
+                .enumerate() {
+                let sum_of_squares = sin_val * sin_val + cos_val * cos_val;
+
+                prop_assert!(
+                    (sum_of_squares - 1.0).abs() < 1e-5,
+                    "Pythagorean identity failed at {}: sin²+cos² = {} != 1.0",
+                    i, sum_of_squares
                 );
             }
         }
