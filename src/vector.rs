@@ -1218,6 +1218,85 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Clamp elements to range [min_val, max_val]
+    ///
+    /// Returns a new vector where each element is constrained to the specified range.
+    /// Elements below min_val become min_val, elements above max_val become max_val.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-5.0, 0.0, 5.0, 10.0, 15.0]);
+    /// let result = v.clamp(0.0, 10.0).unwrap();
+    ///
+    /// assert_eq!(result.as_slice(), &[0.0, 0.0, 5.0, 10.0, 10.0]);
+    /// ```
+    ///
+    /// # Negative Range
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-10.0, -5.0, 0.0, 5.0]);
+    /// let result = v.clamp(-8.0, -2.0).unwrap();
+    /// assert_eq!(result.as_slice(), &[-8.0, -5.0, -2.0, -2.0]);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if min_val > max_val.
+    pub fn clamp(&self, min_val: f32, max_val: f32) -> Result<Vector<f32>> {
+        // Validate range
+        if min_val > max_val {
+            return Err(TruenoError::InvalidInput(format!(
+                "Invalid clamp range: min ({}) > max ({})",
+                min_val, max_val
+            )));
+        }
+
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            unsafe {
+                match self.backend {
+                    Backend::Scalar => {
+                        ScalarBackend::clamp(&self.data, min_val, max_val, &mut result_data)
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::SSE2 | Backend::AVX => {
+                        Sse2Backend::clamp(&self.data, min_val, max_val, &mut result_data)
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::AVX2 | Backend::AVX512 => {
+                        Avx2Backend::clamp(&self.data, min_val, max_val, &mut result_data)
+                    }
+                    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                    Backend::NEON => {
+                        NeonBackend::clamp(&self.data, min_val, max_val, &mut result_data)
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    Backend::WASM => {
+                        WasmBackend::clamp(&self.data, min_val, max_val, &mut result_data)
+                    }
+                    Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
+                    Backend::Auto => {
+                        // Auto should have been resolved at creation time
+                        return Err(TruenoError::UnsupportedBackend(Backend::Auto));
+                    }
+                    #[allow(unreachable_patterns)]
+                    _ => ScalarBackend::clamp(&self.data, min_val, max_val, &mut result_data),
+                }
+            }
+        }
+
+        Ok(Vector {
+            data: result_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1892,6 +1971,63 @@ mod tests {
         let v: Vector<f32> = Vector::from_slice(&[]);
         let result = v.scale(2.0).unwrap();
         assert_eq!(result.len(), 0);
+    }
+
+    // Clamp tests
+    #[test]
+    fn test_clamp_basic() {
+        let v = Vector::from_slice(&[-5.0, 0.0, 5.0, 10.0, 15.0]);
+        let result = v.clamp(0.0, 10.0).unwrap();
+        assert_eq!(result.as_slice(), &[0.0, 0.0, 5.0, 10.0, 10.0]);
+    }
+
+    #[test]
+    fn test_clamp_all_within_range() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = v.clamp(0.0, 10.0).unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_clamp_all_below_min() {
+        let v = Vector::from_slice(&[-5.0, -3.0, -1.0]);
+        let result = v.clamp(0.0, 10.0).unwrap();
+        assert_eq!(result.as_slice(), &[0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_clamp_all_above_max() {
+        let v = Vector::from_slice(&[15.0, 20.0, 25.0]);
+        let result = v.clamp(0.0, 10.0).unwrap();
+        assert_eq!(result.as_slice(), &[10.0, 10.0, 10.0]);
+    }
+
+    #[test]
+    fn test_clamp_negative_range() {
+        let v = Vector::from_slice(&[-10.0, -5.0, 0.0, 5.0]);
+        let result = v.clamp(-8.0, -2.0).unwrap();
+        assert_eq!(result.as_slice(), &[-8.0, -5.0, -2.0, -2.0]);
+    }
+
+    #[test]
+    fn test_clamp_empty() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        let result = v.clamp(0.0, 10.0).unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_clamp_same_min_max() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = v.clamp(2.5, 2.5).unwrap();
+        assert_eq!(result.as_slice(), &[2.5, 2.5, 2.5]);
+    }
+
+    #[test]
+    fn test_clamp_invalid_range() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = v.clamp(10.0, 0.0); // min > max
+        assert!(result.is_err());
     }
 
     #[test]
@@ -2967,6 +3103,82 @@ mod property_tests {
                     "Associativity failed at {}: {} != {}, diff = {}",
                     i, val1, val2, (val1 - val2).abs()
                 );
+            }
+        }
+    }
+
+    // Property test: clamp() bounds enforcement
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_clamp_bounds(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            min_val in -50.0f32..0.0,
+            max_val in 0.0f32..50.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.clamp(min_val, max_val).unwrap();
+
+            for (i, &val) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    val >= min_val && val <= max_val,
+                    "Value {} out of bounds [{}, {}] at index {}",
+                    val, min_val, max_val, i
+                );
+            }
+        }
+    }
+
+    // Property test: clamp() idempotence
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_clamp_idempotent(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            min_val in -50.0f32..0.0,
+            max_val in 0.0f32..50.0
+        ) {
+            // clamp(clamp(v)) = clamp(v)
+            let va = Vector::from_slice(&a);
+            let clamped_once = va.clamp(min_val, max_val).unwrap();
+            let clamped_twice = clamped_once.clamp(min_val, max_val).unwrap();
+
+            for (i, (&val1, &val2)) in clamped_once.as_slice().iter()
+                .zip(clamped_twice.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (val1 - val2).abs() < 1e-10,
+                    "Idempotence failed at {}: {} != {}",
+                    i, val1, val2
+                );
+            }
+        }
+    }
+
+    // Property test: clamp() monotonicity
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_clamp_monotonic(
+            a in prop::collection::vec(-100.0f32..100.0, 2..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.clamp(-50.0, 50.0).unwrap();
+
+            // For any i < j, if a[i] <= a[j], then clamp(a[i]) <= clamp(a[j])
+            for i in 0..a.len() - 1 {
+                for j in i + 1..a.len() {
+                    if a[i] <= a[j] {
+                        prop_assert!(
+                            result.as_slice()[i] <= result.as_slice()[j],
+                            "Monotonicity violated: a[{}]={} <= a[{}]={} but clamp[{}]={} > clamp[{}]={}",
+                            i, a[i], j, a[j], i, result.as_slice()[i], j, result.as_slice()[j]
+                        );
+                    }
+                }
             }
         }
     }

@@ -400,6 +400,30 @@ impl VectorBackend for Sse2Backend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast min and max to all 4 lanes
+        let min_vec = _mm_set1_ps(min_val);
+        let max_vec = _mm_set1_ps(max_val);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let clamped = _mm_min_ps(_mm_max_ps(va, min_vec), max_vec);
+            _mm_storeu_ps(result.as_mut_ptr().add(i), clamped);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i].max(min_val).min(max_val);
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

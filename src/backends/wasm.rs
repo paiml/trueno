@@ -399,6 +399,30 @@ impl VectorBackend for WasmBackend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast min and max to all 4 lanes
+        let min_vec = f32x4_splat(min_val);
+        let max_vec = f32x4_splat(max_val);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+            let clamped = f32x4_pmin(f32x4_pmax(va, min_vec), max_vec);
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, clamped);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i].max(min_val).min(max_val);
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

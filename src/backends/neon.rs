@@ -462,6 +462,54 @@ impl VectorBackend for NeonBackend {
             i += 1;
         }
     }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast min and max to all 4 lanes
+        let min_vec = vdupq_n_f32(min_val);
+        let max_vec = vdupq_n_f32(max_val);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let clamped = vminq_f32(vmaxq_f32(va, min_vec), max_vec);
+            vst1q_f32(result.as_mut_ptr().add(i), clamped);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i].max(min_val).min(max_val);
+            i += 1;
+        }
+    }
+
+    #[cfg(target_arch = "arm")]
+    unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast min and max to all 4 lanes
+        let min_vec = vdupq_n_f32(min_val);
+        let max_vec = vdupq_n_f32(max_val);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let clamped = vminq_f32(vmaxq_f32(va, min_vec), max_vec);
+            vst1q_f32(result.as_mut_ptr().add(i), clamped);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i].max(min_val).min(max_val);
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]
