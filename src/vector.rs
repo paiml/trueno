@@ -2200,6 +2200,32 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Returns the fractional part of each element.
+    ///
+    /// The fractional part has the same sign as the original value:
+    /// - Positive: fract(3.7) = 0.7
+    /// - Negative: fract(-3.7) = -0.7
+    /// - Decomposition property: x = trunc(x) + fract(x)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.7, -2.3, 5.0]);
+    /// let result = v.fract().unwrap();
+    /// // Fractional parts: 0.7, -0.3, 0.0
+    /// assert!((result.as_slice()[0] - 0.7).abs() < 1e-5);
+    /// assert!((result.as_slice()[1] - (-0.3)).abs() < 1e-5);
+    /// ```
+    pub fn fract(&self) -> Result<Vector<f32>> {
+        let fract_data: Vec<f32> = self.data.iter().map(|x| x.fract()).collect();
+        Ok(Vector {
+            data: fract_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4400,6 +4426,58 @@ mod tests {
     fn test_trunc_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.trunc().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_fract_basic() {
+        let a = Vector::from_slice(&[3.7, -2.3, 5.0]);
+        let result = a.fract().unwrap();
+        // fract returns fractional part with same sign
+        assert!((result.as_slice()[0] - 0.7).abs() < 1e-5);
+        assert!((result.as_slice()[1] - (-0.3)).abs() < 1e-5);
+        assert!((result.as_slice()[2] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_fract_positive() {
+        let a = Vector::from_slice(&[1.2, 2.5, 3.9]);
+        let result = a.fract().unwrap();
+        assert!((result.as_slice()[0] - 0.2).abs() < 1e-5);
+        assert!((result.as_slice()[1] - 0.5).abs() < 1e-5);
+        assert!((result.as_slice()[2] - 0.9).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_fract_negative() {
+        let a = Vector::from_slice(&[-1.2, -2.5, -3.9]);
+        let result = a.fract().unwrap();
+        assert!((result.as_slice()[0] - (-0.2)).abs() < 1e-5);
+        assert!((result.as_slice()[1] - (-0.5)).abs() < 1e-5);
+        assert!((result.as_slice()[2] - (-0.9)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_fract_integers() {
+        let a = Vector::from_slice(&[1.0, 2.0, -3.0, 0.0]);
+        let result = a.fract().unwrap();
+        assert_eq!(result.as_slice(), &[0.0, 0.0, -0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_fract_range() {
+        // fract() is always in range [0, 1) for positive, (-1, 0] for negative
+        let a = Vector::from_slice(&[0.1, 0.5, 0.9, -0.1, -0.5, -0.9]);
+        let result = a.fract().unwrap();
+        for &val in result.as_slice() {
+            assert!(val.abs() < 1.0, "fract value should be in range (-1, 1): {}", val);
+        }
+    }
+
+    #[test]
+    fn test_fract_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.fract().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -7572,6 +7650,76 @@ mod property_tests {
                     output.abs() <= input.abs() + 1e-5,  // Small epsilon for floating point
                     "trunc should move toward zero at {}: |trunc({})| = {} > |{}| = {}",
                     i, input, output.abs(), input, input.abs()
+                );
+            }
+        }
+    }
+
+    // Property test: fract correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_fract_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.fract().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.fract();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "fract failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: fract decomposition - x = trunc(x) + fract(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_fract_decomposition(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let trunc_result = va.trunc().unwrap();
+            let fract_result = va.fract().unwrap();
+
+            for (i, (&input, (&t, &f))) in a.iter()
+                .zip(trunc_result.as_slice().iter().zip(fract_result.as_slice().iter()))
+                .enumerate() {
+                let reconstructed = t + f;
+                prop_assert!(
+                    (reconstructed - input).abs() < 1e-5,
+                    "decomposition failed at {}: {} != trunc({}) + fract({}) = {} + {} = {}",
+                    i, input, input, input, t, f, reconstructed
+                );
+            }
+        }
+    }
+
+    // Property test: fract magnitude - |fract(x)| < 1
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_fract_magnitude(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.fract().unwrap();
+
+            for (i, &output) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    output.abs() < 1.0,
+                    "fract magnitude should be < 1 at {}: |fract({})| = {} >= 1",
+                    i, a[i], output.abs()
                 );
             }
         }
