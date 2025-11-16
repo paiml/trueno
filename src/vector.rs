@@ -1797,6 +1797,52 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes element-wise arcsine (asin/sin⁻¹) of the vector.
+    ///
+    /// Returns a new vector where each element is the inverse sine of the corresponding input element.
+    /// This is the inverse function of sin: if y = sin(x), then x = asin(y).
+    ///
+    /// # Returns
+    /// - `Ok(Vector<f32>)`: New vector with asin(x) for each element
+    ///
+    /// # Properties
+    /// - Domain: [-1, 1] (inputs outside this range produce NaN)
+    /// - Range: [-π/2, π/2]
+    /// - Odd function: asin(-x) = -asin(x)
+    /// - Inverse relation: asin(sin(x)) = x for x ∈ [-π/2, π/2]
+    /// - asin(0) = 0
+    /// - asin(1) = π/2
+    /// - asin(-1) = -π/2
+    ///
+    /// # Performance
+    /// - Iterator map pattern for cache efficiency
+    /// - Leverages Rust's optimized f32::asin()
+    /// - Auto-vectorized by LLVM on supporting platforms
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::Vector;
+    /// use std::f32::consts::PI;
+    ///
+    /// let values = Vector::from_slice(&[0.0, 0.5, 1.0]);
+    /// let result = values.asin().unwrap();
+    /// // Result: [0.0, π/6, π/2] (approximately)
+    /// ```
+    ///
+    /// # Use Cases
+    /// - Physics: Calculating angles from sine values in mechanics, optics
+    /// - Signal processing: Phase recovery, demodulation
+    /// - Graphics: Inverse transformations, angle calculations
+    /// - Navigation: GPS calculations, spherical trigonometry
+    /// - Control systems: Inverse kinematics, servo positioning
+    pub fn asin(&self) -> Result<Vector<f32>> {
+        let asin_data: Vec<f32> = self.data.iter().map(|x| x.asin()).collect();
+        Ok(Vector {
+            data: asin_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -3224,6 +3270,93 @@ mod tests {
     fn test_tan_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.tan().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_asin_basic() {
+        use std::f32::consts::PI;
+        // asin(0) = 0, asin(1) = π/2, asin(-1) = -π/2, asin(0.5) = π/6
+        let a = Vector::from_slice(&[0.0, 1.0, -1.0, 0.5]);
+        let result = a.asin().unwrap();
+        let expected = [0.0, PI / 2.0, -PI / 2.0, PI / 6.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "asin basic mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_asin_zero() {
+        let a = Vector::from_slice(&[0.0]);
+        let result = a.asin().unwrap();
+        assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_asin_range() {
+        use std::f32::consts::PI;
+        // asin domain is [-1, 1], range is [-π/2, π/2]
+        let a = Vector::from_slice(&[-1.0, -0.5, 0.0, 0.5, 1.0]);
+        let result = a.asin().unwrap();
+        for (i, &res) in result.as_slice().iter().enumerate() {
+            assert!(
+                (-PI / 2.0..=PI / 2.0).contains(&res),
+                "asin range violation at {}: {} not in [-π/2, π/2]",
+                i,
+                res
+            );
+        }
+    }
+
+    #[test]
+    fn test_asin_negative() {
+        use std::f32::consts::PI;
+        // asin is odd: asin(-x) = -asin(x)
+        let a = Vector::from_slice(&[-0.5, -0.707]);
+        let result = a.asin().unwrap();
+        let expected = [-PI / 6.0, -PI / 4.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-3,
+                "asin negative mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_asin_sin_inverse() {
+        use std::f32::consts::PI;
+        // asin(sin(x)) = x for x in [-π/2, π/2]
+        let a = Vector::from_slice(&[-PI / 4.0, 0.0, PI / 6.0, PI / 4.0]);
+        let sin_result = a.sin().unwrap();
+        let asin_result = sin_result.asin().unwrap();
+
+        for (i, (&original, &reconstructed)) in
+            a.as_slice().iter().zip(asin_result.as_slice().iter()).enumerate()
+        {
+            assert!(
+                (original - reconstructed).abs() < 1e-5,
+                "asin(sin(x)) != x at {}: {} != {}",
+                i,
+                reconstructed,
+                original
+            );
+        }
+    }
+
+    #[test]
+    fn test_asin_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.asin().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -5354,6 +5487,84 @@ mod property_tests {
                 prop_assert!(
                     (pos + neg).abs() < 1e-5,
                     "tan odd function failed at {}: tan(-x)={} != -tan(x)={}",
+                    i, neg, -pos
+                );
+            }
+        }
+    }
+
+    // Property test: asin() correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_asin_correctness(
+            a in prop::collection::vec(-1.0f32..1.0, 1..100)
+        ) {
+            // Domain is [-1, 1] for asin
+            let va = Vector::from_slice(&a);
+            let result = va.asin().unwrap();
+
+            for (i, (&a_val, &asin_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.asin();
+
+                prop_assert!(
+                    (asin_val - expected).abs() < 1e-5,
+                    "asin correctness failed at {}: {} != {}, diff = {}",
+                    i, asin_val, expected, (asin_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: asin(sin(x)) = x for x in [-π/2, π/2]
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_asin_sin_inverse(
+            a in prop::collection::vec(-1.5f32..1.5, 1..100)
+        ) {
+            // Test range within [-π/2, π/2] to ensure inverse property
+            let va = Vector::from_slice(&a);
+            let sin_result = va.sin().unwrap();
+            let asin_result = sin_result.asin().unwrap();
+
+            for (i, (&original, &reconstructed)) in a.iter()
+                .zip(asin_result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (original - reconstructed).abs() < 1e-5,
+                    "asin(sin(x)) != x at {}: {} != {}",
+                    i, reconstructed, original
+                );
+            }
+        }
+    }
+
+    // Property test: asin is odd function - asin(-x) = -asin(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_asin_odd_function(
+            a in prop::collection::vec(-1.0f32..1.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let asin_pos = va.asin().unwrap();
+
+            let a_neg: Vec<f32> = a.iter().map(|x| -x).collect();
+            let va_neg = Vector::from_slice(&a_neg);
+            let asin_neg = va_neg.asin().unwrap();
+
+            for (i, (&pos, &neg)) in asin_pos.as_slice().iter()
+                .zip(asin_neg.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (pos + neg).abs() < 1e-5,
+                    "asin odd function failed at {}: asin(-x)={} != -asin(x)={}",
                     i, neg, -pos
                 );
             }
