@@ -2093,6 +2093,28 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes the inverse hyperbolic tangent (atanh) of each element.
+    ///
+    /// Domain: (-1, 1)
+    /// Range: (-∞, +∞)
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[0.0, 0.5, -0.5]);
+    /// let result = v.atanh().unwrap();
+    /// // atanh(0) = 0, atanh(0.5) ≈ 0.549, atanh(-0.5) ≈ -0.549
+    /// ```
+    pub fn atanh(&self) -> Result<Vector<f32>> {
+        let atanh_data: Vec<f32> = self.data.iter().map(|x| x.atanh()).collect();
+        Ok(Vector {
+            data: atanh_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -4064,6 +4086,65 @@ mod tests {
     fn test_acosh_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.acosh().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_atanh_basic() {
+        let a = Vector::from_slice(&[0.0, 0.5, -0.5]);
+        let result = a.atanh().unwrap();
+        let expected: Vec<f32> = vec![0.0_f32.atanh(), 0.5_f32.atanh(), (-0.5_f32).atanh()];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "atanh failed at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_atanh_zero() {
+        let a = Vector::from_slice(&[0.0]);
+        let result = a.atanh().unwrap();
+        assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_atanh_positive() {
+        let a = Vector::from_slice(&[0.5]);
+        let result = a.atanh().unwrap();
+        let expected = 0.5_f32.atanh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_atanh_negative() {
+        let a = Vector::from_slice(&[-0.5]);
+        let result = a.atanh().unwrap();
+        let expected = (-0.5_f32).atanh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_atanh_odd_function() {
+        // atanh(-x) = -atanh(x)
+        let a = Vector::from_slice(&[0.5]);
+        let neg_a = Vector::from_slice(&[-0.5]);
+        let result_a = a.atanh().unwrap();
+        let result_neg_a = neg_a.atanh().unwrap();
+        assert!(
+            (result_a.as_slice()[0] + result_neg_a.as_slice()[0]).abs() < 1e-5,
+            "atanh(-x) = -atanh(x)"
+        );
+    }
+
+    #[test]
+    fn test_atanh_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.atanh().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -6873,6 +6954,84 @@ mod property_tests {
                     output >= 0.0,
                     "acosh range failed at {}: {} not >= 0",
                     i, output
+                );
+            }
+        }
+    }
+
+    // Property test: atanh correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_atanh_correctness(
+            a in prop::collection::vec(-0.99f32..0.99, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.atanh().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.atanh();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "atanh failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: atanh is odd function: atanh(-x) = -atanh(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_atanh_odd_function(
+            a in prop::collection::vec(-0.99f32..0.99, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let neg_a: Vec<f32> = a.iter().map(|x| -x).collect();
+            let v_neg_a = Vector::from_slice(&neg_a);
+
+            let result_a = va.atanh().unwrap();
+            let result_neg_a = v_neg_a.atanh().unwrap();
+
+            for (i, (&res_a, &res_neg_a)) in result_a.as_slice().iter()
+                .zip(result_neg_a.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (res_a + res_neg_a).abs() < 1e-5,
+                    "atanh(-x) != -atanh(x) at {}: {} != {}",
+                    i, res_neg_a, -res_a
+                );
+            }
+        }
+    }
+
+    // Property test: atanh(tanh(x)) = x inverse relation
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_atanh_tanh_inverse(
+            a in prop::collection::vec(-5.0f32..5.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let tanh_result = va.tanh().unwrap();
+            let atanh_result = tanh_result.atanh().unwrap();
+
+            for (i, (&original, &reconstructed)) in a.iter()
+                .zip(atanh_result.as_slice().iter())
+                .enumerate() {
+                // Use adaptive tolerance: numerical precision degrades as tanh(x) approaches ±1
+                // For large |x|, tanh(x) ≈ ±1 and atanh near ±1 has compounding errors
+                let tolerance = 1e-5 * (1.0 + original.abs() * 10.0);
+                prop_assert!(
+                    (original - reconstructed).abs() < tolerance,
+                    "atanh(tanh(x)) != x at {}: {} != {}",
+                    i, reconstructed, original
                 );
             }
         }
