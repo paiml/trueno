@@ -347,6 +347,75 @@ impl VectorBackend for NeonBackend {
         let sum_of_squares = Self::dot(a, a);
         sum_of_squares.sqrt()
     }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn norm_l1(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for 4-way parallel accumulation
+        let mut acc = vdupq_n_f32(0.0);
+
+        // Process 4 elements at a time using NEON (128-bit = 4 x f32)
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+
+            // Compute absolute value using NEON intrinsic
+            let abs_va = vabsq_f32(va);
+
+            // Accumulate
+            acc = vaddq_f32(acc, abs_va);
+
+            i += 4;
+        }
+
+        // Horizontal sum: sum all 4 lanes
+        let mut result = vaddvq_f32(acc);
+
+        // Handle remaining elements with scalar code
+        for &val in &a[i..] {
+            result += val.abs();
+        }
+
+        result
+    }
+
+    #[cfg(target_arch = "arm")]
+    unsafe fn norm_l1(a: &[f32]) -> f32 {
+        // ARMv7 NEON implementation (32-bit ARM)
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        let mut acc = vdupq_n_f32(0.0);
+
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let abs_va = vabsq_f32(va);
+            acc = vaddq_f32(acc, abs_va);
+            i += 4;
+        }
+
+        // Manual horizontal sum for ARMv7 (no vaddvq_f32)
+        let mut result = {
+            let sum_halves = vpadd_f32(vget_low_f32(acc), vget_high_f32(acc));
+            let sum_all = vpadd_f32(sum_halves, sum_halves);
+            vget_lane_f32(sum_all, 0)
+        };
+
+        for &val in &a[i..] {
+            result += val.abs();
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]

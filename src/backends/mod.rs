@@ -144,4 +144,14 @@ pub trait VectorBackend {
     ///
     /// - Can handle empty slice (returns 0.0)
     unsafe fn norm_l2(a: &[f32]) -> f32;
+
+    /// L1 norm (Manhattan norm): sum(|a[i]|)
+    ///
+    /// Computes the sum of absolute values of all elements.
+    /// Used in machine learning (L1 regularization), distance metrics, and sparse modeling.
+    ///
+    /// # Safety
+    ///
+    /// - Can handle empty slice (returns 0.0)
+    unsafe fn norm_l1(a: &[f32]) -> f32;
 }

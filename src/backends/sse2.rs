@@ -334,6 +334,49 @@ impl VectorBackend for Sse2Backend {
         let sum_of_squares = Self::dot(a, a);
         sum_of_squares.sqrt()
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn norm_l1(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for 4-way parallel accumulation
+        let mut acc = _mm_setzero_ps();
+
+        // SSE2 doesn't have abs for floats, use bitwise AND to clear sign bit
+        let sign_mask = _mm_set1_ps(f32::from_bits(0x7FFF_FFFF));
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+
+            // Compute absolute value by clearing sign bit
+            let abs_va = _mm_and_ps(va, sign_mask);
+
+            // Accumulate
+            acc = _mm_add_ps(acc, abs_va);
+
+            i += 4;
+        }
+
+        // Horizontal sum: extract all 4 lanes and sum them
+        let mut result = {
+            let temp = _mm_add_ps(acc, _mm_movehl_ps(acc, acc));
+            let temp = _mm_add_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
+
+        // Handle remaining elements with scalar code
+        for &val in &a[i..] {
+            result += val.abs();
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]

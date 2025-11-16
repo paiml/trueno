@@ -337,6 +337,45 @@ impl VectorBackend for WasmBackend {
         let sum_of_squares = Self::dot(a, a);
         sum_of_squares.sqrt()
     }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn norm_l1(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for 4-way parallel accumulation
+        let mut acc = f32x4_splat(0.0);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+
+            // Compute absolute value
+            let abs_va = f32x4_abs(va);
+
+            // Accumulate
+            acc = f32x4_add(acc, abs_va);
+
+            i += 4;
+        }
+
+        // Horizontal sum: extract all 4 lanes and sum them
+        let mut result = f32x4_extract_lane::<0>(acc)
+            + f32x4_extract_lane::<1>(acc)
+            + f32x4_extract_lane::<2>(acc)
+            + f32x4_extract_lane::<3>(acc);
+
+        // Handle remaining elements with scalar code
+        for &val in &a[i..] {
+            result += val.abs();
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]

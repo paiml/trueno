@@ -382,6 +382,52 @@ impl VectorBackend for Avx2Backend {
         let sum_of_squares = Self::dot(a, a);
         sum_of_squares.sqrt()
     }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn norm_l1(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for 8-way parallel accumulation
+        let mut acc = _mm256_setzero_ps();
+
+        // Create mask to clear sign bit (absolute value)
+        let sign_mask = _mm256_set1_ps(f32::from_bits(0x7FFF_FFFF));
+
+        // Process 8 elements at a time using AVX2 (256-bit = 8 x f32)
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+
+            // Compute absolute value by clearing sign bit
+            let abs_va = _mm256_and_ps(va, sign_mask);
+
+            // Accumulate
+            acc = _mm256_add_ps(acc, abs_va);
+
+            i += 8;
+        }
+
+        // Horizontal sum across all 8 lanes
+        let mut result = {
+            // Sum upper and lower 128-bit halves
+            let sum_halves = _mm_add_ps(_mm256_castps256_ps128(acc), _mm256_extractf128_ps(acc, 1));
+            // Horizontal sum of 4 elements
+            let temp = _mm_add_ps(sum_halves, _mm_movehl_ps(sum_halves, sum_halves));
+            let temp = _mm_add_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
+
+        // Handle remaining elements with scalar code
+        for &val in &a[i..] {
+            result += val.abs();
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]
