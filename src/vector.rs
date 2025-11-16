@@ -1967,6 +1967,37 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes the hyperbolic cosine (cosh) of each element.
+    ///
+    /// # Mathematical Definition
+    ///
+    /// cosh(x) = (e^x + e^(-x)) / 2
+    ///
+    /// # Properties
+    ///
+    /// - Domain: (-∞, +∞)
+    /// - Range: [1, +∞)
+    /// - Even function: cosh(-x) = cosh(x)
+    /// - cosh(0) = 1
+    /// - Always positive: cosh(x) ≥ 1 for all x
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[0.0, 1.0, -1.0]);
+    /// let result = v.cosh().unwrap();
+    /// assert!((result.as_slice()[0] - 1.0).abs() < 1e-5);
+    /// ```
+    pub fn cosh(&self) -> Result<Vector<f32>> {
+        let cosh_data: Vec<f32> = self.data.iter().map(|x| x.cosh()).collect();
+        Ok(Vector {
+            data: cosh_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -3719,6 +3750,60 @@ mod tests {
     fn test_sinh_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.sinh().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // cosh() tests
+    #[test]
+    fn test_cosh_basic() {
+        let a = Vector::from_slice(&[0.0, 1.0, -1.0]);
+        let result = a.cosh().unwrap();
+        let expected = [0.0_f32.cosh(), 1.0_f32.cosh(), (-1.0_f32).cosh()];
+        for (r, e) in result.as_slice().iter().zip(expected.iter()) {
+            assert!((r - e).abs() < 1e-5, "Expected {}, got {}", e, r);
+        }
+    }
+
+    #[test]
+    fn test_cosh_zero() {
+        let a = Vector::from_slice(&[0.0]);
+        let result = a.cosh().unwrap();
+        assert!((result.as_slice()[0] - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_cosh_positive() {
+        let a = Vector::from_slice(&[2.0]);
+        let result = a.cosh().unwrap();
+        let expected = 2.0_f32.cosh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_cosh_negative() {
+        let a = Vector::from_slice(&[-2.0]);
+        let result = a.cosh().unwrap();
+        let expected = (-2.0_f32).cosh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_cosh_even_function() {
+        // cosh(-x) = cosh(x)
+        let a = Vector::from_slice(&[1.5]);
+        let b = Vector::from_slice(&[-1.5]);
+        let cosh_a = a.cosh().unwrap();
+        let cosh_b = b.cosh().unwrap();
+        assert!(
+            (cosh_a.as_slice()[0] - cosh_b.as_slice()[0]).abs() < 1e-5,
+            "cosh is an even function: cosh(-x) = cosh(x)"
+        );
+    }
+
+    #[test]
+    fn test_cosh_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.cosh().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -6166,6 +6251,120 @@ mod property_tests {
                     (output - expected).abs() < tolerance,
                     "sinh definition failed at {}: {} != {} (input: {})",
                     i, output, expected, input
+                );
+            }
+        }
+    }
+
+    // Property test: cosh correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_cosh_correctness(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.cosh().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.cosh();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "cosh failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: cosh is even function - cosh(-x) = cosh(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_cosh_even_function(
+            a in prop::collection::vec(-10.0f32..10.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let cosh_pos = va.cosh().unwrap();
+
+            let a_neg: Vec<f32> = a.iter().map(|x| -x).collect();
+            let va_neg = Vector::from_slice(&a_neg);
+            let cosh_neg = va_neg.cosh().unwrap();
+
+            for (i, (&pos, &neg)) in cosh_pos.as_slice().iter()
+                .zip(cosh_neg.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (pos - neg).abs() < 1e-4,
+                    "cosh even function failed at {}: cosh(-x)={} != cosh(x)={}",
+                    i, neg, pos
+                );
+            }
+        }
+    }
+
+    // Property test: cosh definition - cosh(x) = (e^x + e^(-x)) / 2
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_cosh_definition(
+            a in prop::collection::vec(-5.0f32..5.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.cosh().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = (input.exp() + (-input).exp()) / 2.0;
+                // Use relative tolerance for larger values
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+                prop_assert!(
+                    (output - expected).abs() < tolerance,
+                    "cosh definition failed at {}: {} != {} (input: {})",
+                    i, output, expected, input
+                );
+            }
+        }
+    }
+
+    // Property test: hyperbolic identity - cosh^2(x) - sinh^2(x) = 1
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_cosh_sinh_identity(
+            a in prop::collection::vec(-5.0f32..5.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let cosh_result = va.cosh().unwrap();
+            let sinh_result = va.sinh().unwrap();
+
+            for (i, (&c, &s)) in cosh_result.as_slice().iter()
+                .zip(sinh_result.as_slice().iter())
+                .enumerate() {
+                let identity = c * c - s * s;
+                // Use relative tolerance for numerical stability
+                // Since we're computing c^2 - s^2, tolerance scales with squared values
+                let max_squared = c.abs().max(s.abs()).powi(2);
+                let tolerance = if max_squared > 1.0 {
+                    max_squared * 1e-4
+                } else {
+                    1e-5
+                };
+                prop_assert!(
+                    (identity - 1.0).abs() < tolerance,
+                    "Hyperbolic identity failed at {}: cosh^2({}) - sinh^2({}) = {} != 1",
+                    i, c, s, identity
                 );
             }
         }
