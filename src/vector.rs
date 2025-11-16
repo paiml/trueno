@@ -1297,6 +1297,90 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Linear interpolation between two vectors
+    ///
+    /// Computes element-wise linear interpolation: `result[i] = a[i] + t * (b[i] - a[i])`
+    ///
+    /// - When `t = 0.0`, returns `self`
+    /// - When `t = 1.0`, returns `other`
+    /// - Values outside `[0, 1]` perform extrapolation
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let a = Vector::from_slice(&[0.0, 10.0, 20.0]);
+    /// let b = Vector::from_slice(&[100.0, 110.0, 120.0]);
+    /// let result = a.lerp(&b, 0.5).unwrap();
+    ///
+    /// assert_eq!(result.as_slice(), &[50.0, 60.0, 70.0]);
+    /// ```
+    ///
+    /// # Extrapolation
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let a = Vector::from_slice(&[0.0, 10.0]);
+    /// let b = Vector::from_slice(&[10.0, 20.0]);
+    ///
+    /// // t > 1.0 extrapolates beyond b
+    /// let result = a.lerp(&b, 2.0).unwrap();
+    /// assert_eq!(result.as_slice(), &[20.0, 30.0]);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `SizeMismatch` if vectors have different lengths.
+    pub fn lerp(&self, other: &Vector<f32>, t: f32) -> Result<Vector<f32>> {
+        if self.len() != other.len() {
+            return Err(TruenoError::SizeMismatch {
+                expected: self.len(),
+                actual: other.len(),
+            });
+        }
+
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            unsafe {
+                match self.backend {
+                    Backend::Scalar => {
+                        ScalarBackend::lerp(&self.data, &other.data, t, &mut result_data)
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::SSE2 | Backend::AVX => {
+                        Sse2Backend::lerp(&self.data, &other.data, t, &mut result_data)
+                    }
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::AVX2 | Backend::AVX512 => {
+                        Avx2Backend::lerp(&self.data, &other.data, t, &mut result_data)
+                    }
+                    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                    Backend::NEON => {
+                        NeonBackend::lerp(&self.data, &other.data, t, &mut result_data)
+                    }
+                    #[cfg(target_arch = "wasm32")]
+                    Backend::WASM => {
+                        WasmBackend::lerp(&self.data, &other.data, t, &mut result_data)
+                    }
+                    Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
+                    Backend::Auto => {
+                        return Err(TruenoError::UnsupportedBackend(Backend::Auto));
+                    }
+                    #[allow(unreachable_patterns)]
+                    _ => ScalarBackend::lerp(&self.data, &other.data, t, &mut result_data),
+                }
+            }
+        }
+
+        Ok(Vector {
+            data: result_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -2028,6 +2112,63 @@ mod tests {
         let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
         let result = v.clamp(10.0, 0.0); // min > max
         assert!(result.is_err());
+    }
+
+    // Linear interpolation (lerp) tests
+    #[test]
+    fn test_lerp_basic() {
+        let a = Vector::from_slice(&[0.0, 10.0, 20.0]);
+        let b = Vector::from_slice(&[100.0, 110.0, 120.0]);
+        let result = a.lerp(&b, 0.5).unwrap();
+        assert_eq!(result.as_slice(), &[50.0, 60.0, 70.0]);
+    }
+
+    #[test]
+    fn test_lerp_at_zero() {
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let b = Vector::from_slice(&[4.0, 5.0, 6.0]);
+        let result = a.lerp(&b, 0.0).unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0]); // Should return a
+    }
+
+    #[test]
+    fn test_lerp_at_one() {
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let b = Vector::from_slice(&[4.0, 5.0, 6.0]);
+        let result = a.lerp(&b, 1.0).unwrap();
+        assert_eq!(result.as_slice(), &[4.0, 5.0, 6.0]); // Should return b
+    }
+
+    #[test]
+    fn test_lerp_extrapolate_above() {
+        let a = Vector::from_slice(&[0.0, 10.0]);
+        let b = Vector::from_slice(&[10.0, 20.0]);
+        let result = a.lerp(&b, 2.0).unwrap();
+        assert_eq!(result.as_slice(), &[20.0, 30.0]); // Extrapolation beyond b
+    }
+
+    #[test]
+    fn test_lerp_extrapolate_below() {
+        let a = Vector::from_slice(&[10.0, 20.0]);
+        let b = Vector::from_slice(&[20.0, 30.0]);
+        let result = a.lerp(&b, -1.0).unwrap();
+        assert_eq!(result.as_slice(), &[0.0, 10.0]); // Extrapolation before a
+    }
+
+    #[test]
+    fn test_lerp_size_mismatch() {
+        let a = Vector::from_slice(&[1.0, 2.0]);
+        let b = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = a.lerp(&b, 0.5);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_lerp_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let b: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.lerp(&b, 0.5).unwrap();
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -3179,6 +3320,128 @@ mod property_tests {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    // Property test: lerp() at endpoints
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_lerp_endpoints(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            b in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let len = a.len().min(b.len());
+            let a_trimmed = &a[..len];
+            let b_trimmed = &b[..len];
+
+            let va = Vector::from_slice(a_trimmed);
+            let vb = Vector::from_slice(b_trimmed);
+
+            // t=0 should return a
+            let result_zero = va.lerp(&vb, 0.0).unwrap();
+            for (i, (&actual, &expected)) in result_zero.as_slice().iter()
+                .zip(a_trimmed.iter())
+                .enumerate() {
+                prop_assert!(
+                    (actual - expected).abs() < 1e-5,
+                    "lerp(t=0) failed at {}: {} != {}",
+                    i, actual, expected
+                );
+            }
+
+            // t=1 should return b
+            let result_one = va.lerp(&vb, 1.0).unwrap();
+            for (i, (&actual, &expected)) in result_one.as_slice().iter()
+                .zip(b_trimmed.iter())
+                .enumerate() {
+                prop_assert!(
+                    (actual - expected).abs() < 1e-5,
+                    "lerp(t=1) failed at {}: {} != {}",
+                    i, actual, expected
+                );
+            }
+        }
+    }
+
+    // Property test: lerp() linearity
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_lerp_linearity(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            b in prop::collection::vec(-100.0f32..100.0, 1..100),
+            t in 0.0f32..1.0
+        ) {
+            let len = a.len().min(b.len());
+            let a_trimmed = &a[..len];
+            let b_trimmed = &b[..len];
+
+            let va = Vector::from_slice(a_trimmed);
+            let vb = Vector::from_slice(b_trimmed);
+
+            let result = va.lerp(&vb, t).unwrap();
+
+            // Verify: result[i] = a[i] + t * (b[i] - a[i])
+            for (i, ((&a_val, &b_val), &result_val)) in a_trimmed.iter()
+                .zip(b_trimmed.iter())
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val + t * (b_val - a_val);
+
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-5
+                } else {
+                    1e-4
+                };
+
+                prop_assert!(
+                    (result_val - expected).abs() < tolerance,
+                    "Linearity failed at {}: {} != {}, diff = {}",
+                    i, result_val, expected, (result_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: lerp() symmetry
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_lerp_symmetry(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            b in prop::collection::vec(-100.0f32..100.0, 1..100),
+            t in 0.0f32..1.0
+        ) {
+            let len = a.len().min(b.len());
+            let a_trimmed = &a[..len];
+            let b_trimmed = &b[..len];
+
+            let va = Vector::from_slice(a_trimmed);
+            let vb = Vector::from_slice(b_trimmed);
+
+            // lerp(a, b, t) should equal lerp(b, a, 1-t)
+            let forward = va.lerp(&vb, t).unwrap();
+            let reverse = vb.lerp(&va, 1.0 - t).unwrap();
+
+            for (i, (&fwd, &rev)) in forward.as_slice().iter()
+                .zip(reverse.as_slice().iter())
+                .enumerate() {
+                let tolerance = if fwd.abs() > 1.0 {
+                    fwd.abs() * 1e-5
+                } else {
+                    1e-4
+                };
+
+                prop_assert!(
+                    (fwd - rev).abs() < tolerance,
+                    "Symmetry failed at {}: {} != {}, diff = {}",
+                    i, fwd, rev, (fwd - rev).abs()
+                );
             }
         }
     }

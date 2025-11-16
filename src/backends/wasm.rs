@@ -423,6 +423,35 @@ impl VectorBackend for WasmBackend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Broadcast t to all 4 lanes
+        let t_vec = f32x4_splat(t);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+            let vb = v128_load(b.as_ptr().add(i) as *const v128);
+
+            // result = a + t * (b - a)
+            let diff = f32x4_sub(vb, va);
+            let scaled_diff = f32x4_mul(t_vec, diff);
+            let vresult = f32x4_add(va, scaled_diff);
+
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] + t * (b[i] - a[i]);
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]
