@@ -1,0 +1,319 @@
+//! AVX2 backend implementation (x86_64 advanced SIMD)
+//!
+//! This backend uses AVX2 intrinsics for 256-bit SIMD operations with FMA.
+//! AVX2 is available on Intel Haswell (2013+) and AMD Excavator (2015+) CPUs.
+//!
+//! # Performance
+//!
+//! Expected speedup: 8x for operations on aligned f32 vectors (8 elements per register)
+//! FMA provides additional speedup for dot product operations.
+//!
+//! # Safety
+//!
+//! All AVX2 intrinsics are marked `unsafe` by Rust. This module carefully isolates
+//! all unsafe code and verifies correctness through comprehensive testing.
+
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+
+use super::VectorBackend;
+
+/// AVX2 backend (256-bit SIMD for x86_64)
+pub struct Avx2Backend;
+
+impl VectorBackend for Avx2Backend {
+    #[target_feature(enable = "avx2")]
+    unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time using AVX2 (256-bit = 8 x f32)
+        while i + 8 <= len {
+            // Load 8 floats from a and b
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm256_loadu_ps(b.as_ptr().add(i));
+
+            // Add them
+            let vresult = _mm256_add_ps(va, vb);
+
+            // Store result
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        for j in i..len {
+            result[j] = a[j] + b[j];
+        }
+    }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm256_loadu_ps(b.as_ptr().add(i));
+
+            let vresult = _mm256_mul_ps(va, vb);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+
+            i += 8;
+        }
+
+        // Handle remaining elements
+        for j in i..len {
+            result[j] = a[j] * b[j];
+        }
+    }
+
+    #[target_feature(enable = "avx2", enable = "fma")]
+    unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for 8-way parallel accumulation
+        let mut acc = _mm256_setzero_ps();
+
+        // Process 8 elements at a time with FMA
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm256_loadu_ps(b.as_ptr().add(i));
+
+            // Fused multiply-add: acc = acc + (va * vb)
+            acc = _mm256_fmadd_ps(va, vb, acc);
+
+            i += 8;
+        }
+
+        // Horizontal sum: reduce 8 lanes to single value
+        // Step 1: Extract high and low 128-bit halves
+        let low = _mm256_castps256_ps128(acc);
+        let high = _mm256_extractf128_ps(acc, 1);
+
+        // Step 2: Add high and low halves (now 4 elements)
+        let sum4 = _mm_add_ps(low, high);
+
+        // Step 3: Horizontal add to get 2 elements
+        let sum2 = _mm_hadd_ps(sum4, sum4);
+
+        // Step 4: Final horizontal add to get 1 element
+        let sum1 = _mm_hadd_ps(sum2, sum2);
+
+        // Extract the final sum
+        let mut result = _mm_cvtss_f32(sum1);
+
+        // Handle remaining elements with scalar code
+        result += a[i..].iter().zip(&b[i..]).map(|(x, y)| x * y).sum::<f32>();
+
+        result
+    }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn sum(a: &[f32]) -> f32 {
+        let len = a.len();
+        let mut i = 0;
+
+        let mut acc = _mm256_setzero_ps();
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            acc = _mm256_add_ps(acc, va);
+            i += 8;
+        }
+
+        // Horizontal sum (same as dot product reduction)
+        let low = _mm256_castps256_ps128(acc);
+        let high = _mm256_extractf128_ps(acc, 1);
+        let sum4 = _mm_add_ps(low, high);
+        let sum2 = _mm_hadd_ps(sum4, sum4);
+        let sum1 = _mm_hadd_ps(sum2, sum2);
+
+        let mut result = _mm_cvtss_f32(sum1);
+
+        // Handle remaining elements
+        result += a[i..].iter().sum::<f32>();
+
+        result
+    }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn max(a: &[f32]) -> f32 {
+        let len = a.len();
+        let mut i = 0;
+
+        // Start with first element broadcast to all lanes
+        let mut vmax = _mm256_set1_ps(a[0]);
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            vmax = _mm256_max_ps(vmax, va);
+            i += 8;
+        }
+
+        // Horizontal max: find maximum across all 8 lanes
+        let low = _mm256_castps256_ps128(vmax);
+        let high = _mm256_extractf128_ps(vmax, 1);
+        let max4 = _mm_max_ps(low, high);
+
+        // Extract to array and find max
+        let mut temp = [0.0f32; 4];
+        _mm_storeu_ps(temp.as_mut_ptr(), max4);
+
+        let mut result = temp[0];
+        for &val in &temp[1..] {
+            if val > result {
+                result = val;
+            }
+        }
+
+        // Check remaining elements
+        for &val in &a[i..] {
+            if val > result {
+                result = val;
+            }
+        }
+
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_add() {
+        if !is_x86_feature_detected!("avx2") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2");
+            return;
+        }
+
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let b = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
+        let mut result = vec![0.0; 9];
+
+        unsafe {
+            Avx2Backend::add(&a, &b, &mut result);
+        }
+
+        assert_eq!(result, vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_mul() {
+        if !is_x86_feature_detected!("avx2") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2");
+            return;
+        }
+
+        let a = vec![2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let b = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let mut result = vec![0.0; 9];
+
+        unsafe {
+            Avx2Backend::mul(&a, &b, &mut result);
+        }
+
+        assert_eq!(result, vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_dot() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        let b = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
+
+        let result = unsafe { Avx2Backend::dot(&a, &b) };
+
+        // 1*9 + 2*8 + 3*7 + 4*6 + 5*5 + 6*4 + 7*3 + 8*2 + 9*1
+        // = 9 + 16 + 21 + 24 + 25 + 24 + 21 + 16 + 9 = 165
+        assert!((result - 165.0).abs() < 1e-5);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_sum() {
+        if !is_x86_feature_detected!("avx2") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2");
+            return;
+        }
+
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+
+        let result = unsafe { Avx2Backend::sum(&a) };
+
+        assert!((result - 45.0).abs() < 1e-5);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_max() {
+        if !is_x86_feature_detected!("avx2") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2");
+            return;
+        }
+
+        let a = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0];
+
+        let result = unsafe { Avx2Backend::max(&a) };
+
+        assert_eq!(result, 9.0);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = vec![1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5];
+        let b = vec![10.5, 9.5, 8.5, 7.5, 6.5, 5.5, 4.5, 3.5, 2.5, 1.5];
+
+        // Test add
+        let mut avx2_result = vec![0.0; 10];
+        let mut scalar_result = vec![0.0; 10];
+        unsafe {
+            Avx2Backend::add(&a, &b, &mut avx2_result);
+            ScalarBackend::add(&a, &b, &mut scalar_result);
+        }
+        for (avx2, scalar) in avx2_result.iter().zip(&scalar_result) {
+            assert!((avx2 - scalar).abs() < 1e-5);
+        }
+
+        // Test dot
+        let (avx2_dot, scalar_dot) = unsafe {
+            (Avx2Backend::dot(&a, &b), ScalarBackend::dot(&a, &b))
+        };
+        assert!((avx2_dot - scalar_dot).abs() < 1e-3); // Relaxed tolerance for FMA
+
+        // Test sum
+        let (avx2_sum, scalar_sum) = unsafe {
+            (Avx2Backend::sum(&a), ScalarBackend::sum(&a))
+        };
+        assert!((avx2_sum - scalar_sum).abs() < 1e-3);
+
+        // Test max
+        let (avx2_max, scalar_max) = unsafe {
+            (Avx2Backend::max(&a), ScalarBackend::max(&a))
+        };
+        assert_eq!(avx2_max, scalar_max);
+    }
+}
