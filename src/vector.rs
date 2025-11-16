@@ -2063,6 +2063,36 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes the inverse hyperbolic cosine (acosh) of each element.
+    ///
+    /// # Mathematical Definition
+    ///
+    /// acosh(x) = ln(x + sqrt(x² - 1))
+    ///
+    /// # Properties
+    ///
+    /// - Domain: [1, +∞)
+    /// - Range: [0, +∞)
+    /// - acosh(1) = 0
+    /// - Inverse of cosh: acosh(cosh(x)) = x for x >= 0
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let result = v.acosh().unwrap();
+    /// assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    /// ```
+    pub fn acosh(&self) -> Result<Vector<f32>> {
+        let acosh_data: Vec<f32> = self.data.iter().map(|x| x.acosh()).collect();
+        Ok(Vector {
+            data: acosh_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -3981,6 +4011,59 @@ mod tests {
     fn test_asinh_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.asinh().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // acosh() tests
+    #[test]
+    fn test_acosh_basic() {
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = a.acosh().unwrap();
+        let expected = [1.0_f32.acosh(), 2.0_f32.acosh(), 3.0_f32.acosh()];
+        for (r, e) in result.as_slice().iter().zip(expected.iter()) {
+            assert!((r - e).abs() < 1e-5, "Expected {}, got {}", e, r);
+        }
+    }
+
+    #[test]
+    fn test_acosh_one() {
+        let a = Vector::from_slice(&[1.0]);
+        let result = a.acosh().unwrap();
+        assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_acosh_positive() {
+        let a = Vector::from_slice(&[2.0]);
+        let result = a.acosh().unwrap();
+        let expected = 2.0_f32.acosh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_acosh_large() {
+        let a = Vector::from_slice(&[10.0]);
+        let result = a.acosh().unwrap();
+        let expected = 10.0_f32.acosh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_acosh_cosh_relation() {
+        // acosh(cosh(x)) = x for x >= 0
+        let a = Vector::from_slice(&[1.5]);
+        let cosh_result = a.cosh().unwrap();
+        let acosh_result = cosh_result.acosh().unwrap();
+        assert!(
+            (a.as_slice()[0] - acosh_result.as_slice()[0]).abs() < 1e-5,
+            "acosh(cosh(x)) = x"
+        );
+    }
+
+    #[test]
+    fn test_acosh_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.acosh().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -6721,6 +6804,75 @@ mod property_tests {
                     (original - reconstructed).abs() < 1e-5,
                     "asinh(sinh(x)) != x at {}: {} != {}",
                     i, reconstructed, original
+                );
+            }
+        }
+    }
+
+    // Property test: acosh correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_acosh_correctness(
+            a in prop::collection::vec(1.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.acosh().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.acosh();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "acosh failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: acosh(cosh(x)) = x inverse relation for x >= 0
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_acosh_cosh_inverse(
+            a in prop::collection::vec(0.1f32..5.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let cosh_result = va.cosh().unwrap();
+            let acosh_result = cosh_result.acosh().unwrap();
+
+            for (i, (&original, &reconstructed)) in a.iter()
+                .zip(acosh_result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (original - reconstructed).abs() < 1e-5,
+                    "acosh(cosh(x)) != x at {}: {} != {}",
+                    i, reconstructed, original
+                );
+            }
+        }
+    }
+
+    // Property test: acosh range - output >= 0
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_acosh_range(
+            a in prop::collection::vec(1.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.acosh().unwrap();
+
+            for (i, &output) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    output >= 0.0,
+                    "acosh range failed at {}: {} not >= 0",
+                    i, output
                 );
             }
         }
