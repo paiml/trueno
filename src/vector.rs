@@ -933,6 +933,48 @@ impl Vector<f32> {
         Ok(total / self.len() as f32)
     }
 
+    /// Population variance
+    ///
+    /// Computes the population variance: Var(X) = E[(X - μ)²] = E[X²] - μ²
+    /// Uses the computational formula to avoid two passes over the data.
+    ///
+    /// # Performance
+    ///
+    /// Uses optimized SIMD implementations via sum_of_squares() and mean().
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+    /// let var = v.variance().unwrap();
+    /// assert!((var - 2.0).abs() < 1e-5); // Population variance
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns an error for empty vectors.
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let v: Vector<f32> = Vector::from_slice(&[]);
+    /// assert!(matches!(v.variance(), Err(TruenoError::EmptyVector)));
+    /// ```
+    pub fn variance(&self) -> Result<f32> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        let mean_val = self.mean()?;
+        let sum_sq = self.sum_of_squares()?;
+        let mean_sq = sum_sq / self.len() as f32;
+
+        // Var(X) = E[X²] - μ²
+        Ok(mean_sq - mean_val * mean_val)
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -5057,6 +5099,57 @@ mod tests {
         assert!(matches!(result, Err(TruenoError::EmptyVector)));
     }
 
+    // ========================================================================
+    // Tests for variance() - population variance
+    // ========================================================================
+
+    #[test]
+    fn test_variance_basic() {
+        // Variance of [1,2,3,4,5]: mean=3, var=E[X²]-μ²=11-9=2
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let result = a.variance().unwrap();
+        assert!((result - 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_variance_constant() {
+        // Variance of constant vector is 0
+        let a = Vector::from_slice(&[7.0, 7.0, 7.0, 7.0]);
+        let result = a.variance().unwrap();
+        assert!(result.abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_variance_single() {
+        // Variance of single element is 0
+        let a = Vector::from_slice(&[42.0]);
+        let result = a.variance().unwrap();
+        assert!(result.abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_variance_symmetric() {
+        // Variance of [-2, -1, 0, 1, 2]: mean=0, var=E[X²]=2
+        let a = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result = a.variance().unwrap();
+        assert!((result - 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_variance_two_values() {
+        // Variance of [1, 5]: mean=3, var=(1-3)²+(5-3)²/2=8/2=4
+        let a = Vector::from_slice(&[1.0, 5.0]);
+        let result = a.variance().unwrap();
+        assert!((result - 4.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_variance_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.variance();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -8839,6 +8932,63 @@ mod property_tests {
                 (mean_scaled - expected).abs() < tolerance,
                 "mean({} * v) = {} != {} * mean(v) = {}",
                 k, mean_scaled, k, expected
+            );
+        }
+
+        /// Property test: variance(v) >= 0 (non-negativity)
+        #[test]
+        fn test_variance_non_negative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let var = va.variance().unwrap();
+
+            prop_assert!(
+                var >= -1e-5, // Allow small numerical error
+                "variance = {} should be non-negative",
+                var
+            );
+        }
+
+        /// Property test: variance(k*v) = k²*variance(v) (scaling property)
+        #[test]
+        fn test_variance_scaling(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100),
+            k in -5.0f32..5.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let var_original = va.variance().unwrap();
+            let scaled = va.scale(k).unwrap();
+            let var_scaled = scaled.variance().unwrap();
+
+            let expected = k * k * var_original;
+            let tolerance = 1e-3 * expected.abs().max(1e-5);
+            prop_assert!(
+                (var_scaled - expected).abs() < tolerance,
+                "variance({} * v) = {} != {}² * variance(v) = {}",
+                k, var_scaled, k, expected
+            );
+        }
+
+        /// Property test: variance(v + c) = variance(v) (translation invariance)
+        #[test]
+        fn test_variance_translation_invariance(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100),
+            c in -10.0f32..10.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let var_original = va.variance().unwrap();
+
+            // Create translated vector: v + c
+            let translated: Vec<f32> = a.iter().map(|x| x + c).collect();
+            let vt = Vector::from_slice(&translated);
+            let var_translated = vt.variance().unwrap();
+
+            let tolerance = 1e-3 * var_original.abs().max(1e-5);
+            prop_assert!(
+                (var_translated - var_original).abs() < tolerance,
+                "variance(v + {}) = {} != variance(v) = {}",
+                c, var_translated, var_original
             );
         }
     }
