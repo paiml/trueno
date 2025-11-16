@@ -1112,6 +1112,40 @@ impl Vector<f32> {
 
         Ok(max_abs)
     }
+
+    /// Compute element-wise absolute value
+    ///
+    /// Returns a new vector where each element is the absolute value of the corresponding input element.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[3.0, -4.0, 5.0, -2.0]);
+    /// let result = v.abs().unwrap();
+    ///
+    /// assert_eq!(result.as_slice(), &[3.0, 4.0, 5.0, 2.0]);
+    /// ```
+    ///
+    /// # Empty Vector
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v: Vector<f32> = Vector::from_slice(&[]);
+    /// let result = v.abs().unwrap();
+    /// assert_eq!(result.len(), 0);
+    /// ```
+    pub fn abs(&self) -> Result<Vector<f32>> {
+        // Create a new vector with absolute values
+        let abs_data: Vec<f32> = self.data.iter().map(|x| x.abs()).collect();
+
+        Ok(Vector {
+            data: abs_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1707,6 +1741,42 @@ mod tests {
         let v = Vector::from_slice(&[-42.5]);
         let result = v.norm_linf().unwrap();
         assert!((result - 42.5).abs() < 1e-5);
+    }
+
+    // Absolute value tests
+    #[test]
+    fn test_abs_mixed() {
+        let v = Vector::from_slice(&[3.0, -4.0, 5.0, -2.0]);
+        let result = v.abs().unwrap();
+        assert_eq!(result.as_slice(), &[3.0, 4.0, 5.0, 2.0]);
+    }
+
+    #[test]
+    fn test_abs_all_positive() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = v.abs().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_abs_all_negative() {
+        let v = Vector::from_slice(&[-1.0, -2.0, -3.0]);
+        let result = v.abs().unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn test_abs_with_zeros() {
+        let v = Vector::from_slice(&[0.0, -5.0, 0.0, 3.0]);
+        let result = v.abs().unwrap();
+        assert_eq!(result.as_slice(), &[0.0, 5.0, 0.0, 3.0]);
+    }
+
+    #[test]
+    fn test_abs_empty() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        let result = v.abs().unwrap();
+        assert_eq!(result.len(), 0);
     }
 
     #[test]
@@ -2600,6 +2670,76 @@ mod property_tests {
                 "Submultiplicativity violated: {} > {} * {}",
                 norm_product, norm_a, norm_b
             );
+        }
+    }
+
+    // Property test: abs() idempotence
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_abs_idempotent(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            // abs(abs(v)) = abs(v) - applying twice should be same as once
+            let va = Vector::from_slice(&a);
+            let abs_once = va.abs().unwrap();
+            let abs_twice = abs_once.abs().unwrap();
+
+            for (i, (&val_once, &val_twice)) in abs_once.as_slice().iter()
+                .zip(abs_twice.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (val_once - val_twice).abs() < 1e-5,
+                    "Idempotence failed at {}: {} != {}",
+                    i, val_once, val_twice
+                );
+            }
+        }
+    }
+
+    // Property test: abs() is always non-negative
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_abs_non_negative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.abs().unwrap();
+
+            for (i, &val) in result.as_slice().iter().enumerate() {
+                prop_assert!(
+                    val >= 0.0,
+                    "Negative value at {}: {}",
+                    i, val
+                );
+            }
+        }
+    }
+
+    // Property test: abs() correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_abs_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.abs().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.abs();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "Incorrect abs at {}: {} -> {}, expected {}",
+                    i, input, output, expected
+                );
+            }
         }
     }
 }

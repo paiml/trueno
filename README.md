@@ -404,8 +404,8 @@ trueno/
 - [ ] Convolutions (conv2d)
 - [ ] Async GPU API
 
-**Phase 7 Progress**: Core vector operations complete with 138 tests passing. The library now supports:
-- **Element-wise operations**: add, sub, mul, div
+**Phase 7 Progress**: Core vector operations complete with 146 tests passing. The library now supports:
+- **Element-wise operations**: add, sub, mul, div, abs (absolute value)
 - **Dot product**: Optimized for ML/scientific computing
 - **Reductions**: sum (naive + Kahan), min, max
 - **Index operations**: argmin, argmax
