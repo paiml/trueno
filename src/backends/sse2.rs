@@ -230,6 +230,48 @@ impl VectorBackend for Sse2Backend {
 
         max_index
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn argmin(a: &[f32]) -> usize {
+        let len = a.len();
+        let mut i = 0;
+
+        // Track minimum value and index
+        let mut min_value = a[0];
+        let mut min_index = 0;
+
+        // Initialize with first element broadcast to all lanes
+        let mut min_vec = _mm_set1_ps(a[0]);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            min_vec = _mm_min_ps(min_vec, va);
+            i += 4;
+        }
+
+        // Extract minimum from SIMD register (for potential future optimization)
+        let mut min_array = [0.0f32; 4];
+        _mm_storeu_ps(min_array.as_mut_ptr(), min_vec);
+
+        // Find the index by checking all elements processed by SIMD
+        for (idx, &val) in a[..i].iter().enumerate() {
+            if val < min_value {
+                min_value = val;
+                min_index = idx;
+            }
+        }
+
+        // Handle remaining elements
+        for (idx, &val) in a[i..].iter().enumerate() {
+            if val < min_value {
+                min_value = val;
+                min_index = i + idx;
+            }
+        }
+
+        min_index
+    }
 }
 
 #[cfg(test)]

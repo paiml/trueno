@@ -239,6 +239,49 @@ impl VectorBackend for NeonBackend {
 
         max_index
     }
+
+    #[target_feature(enable = "neon")]
+    unsafe fn argmin(a: &[f32]) -> usize {
+        let len = a.len();
+        let mut i = 0;
+
+        // Track minimum value and index
+        let mut min_value = a[0];
+        let mut min_index = 0;
+
+        // Start with first element broadcast to all lanes
+        let mut vmin = vdupq_n_f32(a[0]);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            vmin = vminq_f32(vmin, va);
+            i += 4;
+        }
+
+        // Horizontal min: find minimum across all 4 lanes (for potential future optimization)
+        // Use pairwise min to find the minimum
+        let min2 = vpmin_f32(vget_low_f32(vmin), vget_high_f32(vmin));
+        let min1 = vpmin_f32(min2, min2);
+
+        // Find the index by checking all elements processed by SIMD
+        for (idx, &val) in a[..i].iter().enumerate() {
+            if val < min_value {
+                min_value = val;
+                min_index = idx;
+            }
+        }
+
+        // Check remaining elements
+        for (idx, &val) in a[i..].iter().enumerate() {
+            if val < min_value {
+                min_value = val;
+                min_index = i + idx;
+            }
+        }
+
+        min_index
+    }
 }
 
 #[cfg(test)]
