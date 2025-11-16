@@ -223,6 +223,53 @@ impl VectorBackend for Avx2Backend {
 
         result
     }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn argmax(a: &[f32]) -> usize {
+        let len = a.len();
+        let mut i = 0;
+
+        // Track maximum value and index
+        let mut max_value = a[0];
+        let mut max_index = 0;
+
+        // Start with first element broadcast to all lanes
+        let mut vmax = _mm256_set1_ps(a[0]);
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            vmax = _mm256_max_ps(vmax, va);
+            i += 8;
+        }
+
+        // Horizontal max: find maximum across all 8 lanes (for potential future optimization)
+        let low = _mm256_castps256_ps128(vmax);
+        let high = _mm256_extractf128_ps(vmax, 1);
+        let max4 = _mm_max_ps(low, high);
+
+        // Extract to array
+        let mut temp = [0.0f32; 4];
+        _mm_storeu_ps(temp.as_mut_ptr(), max4);
+
+        // Find the index by checking all elements processed by SIMD
+        for (idx, &val) in a[..i].iter().enumerate() {
+            if val > max_value {
+                max_value = val;
+                max_index = idx;
+            }
+        }
+
+        // Check remaining elements
+        for (idx, &val) in a[i..].iter().enumerate() {
+            if val > max_value {
+                max_value = val;
+                max_index = i + idx;
+            }
+        }
+
+        max_index
+    }
 }
 
 #[cfg(test)]

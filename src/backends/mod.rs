@@ -91,4 +91,13 @@ pub trait VectorBackend {
     ///
     /// - `a` must not be empty
     unsafe fn min(a: &[f32]) -> f32;
+
+    /// Argmax: index of maximum value
+    ///
+    /// Returns the index of the first occurrence of the maximum value.
+    ///
+    /// # Safety
+    ///
+    /// - `a` must not be empty
+    unsafe fn argmax(a: &[f32]) -> usize;
 }

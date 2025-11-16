@@ -559,6 +559,57 @@ impl Vector<f32> {
 
         Ok(result)
     }
+
+    /// Find index of maximum value in the vector
+    ///
+    /// Returns the index of the first occurrence of the maximum value using SIMD optimization.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
+    /// assert_eq!(v.argmax().unwrap(), 1); // max value 5.0 is at index 1
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TruenoError::InvalidInput`] if vector is empty.
+    pub fn argmax(&self) -> Result<usize> {
+        if self.data.is_empty() {
+            return Err(TruenoError::InvalidInput("Empty vector".to_string()));
+        }
+
+        let result = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::argmax(&self.data)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::argmax(&self.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::argmax(&self.data),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::argmax(&self.data)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::argmax(&self.data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::argmax(&self.data),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::argmax(&self.data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::argmax(&self.data),
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::argmax(&self.data)
+                }
+            }
+        };
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
@@ -780,6 +831,42 @@ mod tests {
     fn test_min_negative() {
         let v = Vector::from_slice(&[-5.0, -1.0, -10.0, -3.0]);
         assert_eq!(v.min().unwrap(), -10.0);
+    }
+
+    #[test]
+    fn test_argmax() {
+        let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
+        assert_eq!(v.argmax().unwrap(), 1); // max value 5.0 is at index 1
+    }
+
+    #[test]
+    fn test_argmax_single() {
+        let v = Vector::from_slice(&[42.0]);
+        assert_eq!(v.argmax().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_argmax_empty() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        let result = v.argmax();
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            TruenoError::InvalidInput("Empty vector".to_string())
+        );
+    }
+
+    #[test]
+    fn test_argmax_negative() {
+        let v = Vector::from_slice(&[-5.0, -1.0, -10.0, -3.0]);
+        assert_eq!(v.argmax().unwrap(), 1); // max value -1.0 is at index 1
+    }
+
+    #[test]
+    fn test_argmax_first_occurrence() {
+        // When there are duplicates, should return first occurrence
+        let v = Vector::from_slice(&[1.0, 5.0, 3.0, 5.0, 2.0]);
+        assert_eq!(v.argmax().unwrap(), 1); // first 5.0 is at index 1
     }
 
     #[test]
@@ -1062,6 +1149,28 @@ mod property_tests {
 
             // Verify result is actually in the vector
             prop_assert!(a.contains(&result));
+        }
+
+        #[test]
+        fn test_argmax_correctness(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let idx = va.argmax().unwrap();
+
+            // Verify index is in bounds
+            prop_assert!(idx < a.len());
+
+            // Verify value at index is >= all other values
+            let max_val = a[idx];
+            for &x in a.iter() {
+                prop_assert!(max_val >= x);
+            }
+
+            // Verify it's the first occurrence (no earlier index has this value)
+            for i in 0..idx {
+                prop_assert!(a[i] < max_val || a[i] != max_val);
+            }
         }
     }
 

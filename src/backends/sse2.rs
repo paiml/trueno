@@ -188,6 +188,48 @@ impl VectorBackend for Sse2Backend {
 
         minimum
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn argmax(a: &[f32]) -> usize {
+        let len = a.len();
+        let mut i = 0;
+
+        // Track maximum value and index
+        let mut max_value = a[0];
+        let mut max_index = 0;
+
+        // Initialize with first element broadcast to all lanes
+        let mut max_vec = _mm_set1_ps(a[0]);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            max_vec = _mm_max_ps(max_vec, va);
+            i += 4;
+        }
+
+        // Extract maximum from SIMD register (for potential future optimization)
+        let mut max_array = [0.0f32; 4];
+        _mm_storeu_ps(max_array.as_mut_ptr(), max_vec);
+
+        // Find the index by checking all elements processed by SIMD
+        for (idx, &val) in a[..i].iter().enumerate() {
+            if val > max_value {
+                max_value = val;
+                max_index = idx;
+            }
+        }
+
+        // Handle remaining elements
+        for (idx, &val) in a[i..].iter().enumerate() {
+            if val > max_value {
+                max_value = val;
+                max_index = i + idx;
+            }
+        }
+
+        max_index
+    }
 }
 
 #[cfg(test)]
