@@ -661,6 +661,60 @@ impl Vector<f32> {
 
         Ok(result)
     }
+
+    /// Kahan summation (numerically stable sum)
+    ///
+    /// Uses the Kahan summation algorithm to reduce floating-point rounding errors
+    /// when summing many numbers. This is more accurate than the standard sum() method
+    /// for vectors with many elements or elements of vastly different magnitudes.
+    ///
+    /// # Performance
+    ///
+    /// Note: Kahan summation is inherently sequential and cannot be effectively
+    /// parallelized with SIMD. All backends use the scalar implementation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+    /// assert_eq!(v.sum_kahan().unwrap(), 10.0);
+    /// ```
+    pub fn sum_kahan(&self) -> Result<f32> {
+        if self.data.is_empty() {
+            return Ok(0.0);
+        }
+
+        let result = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::sum_kahan(&self.data)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::sum_kahan(&self.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::sum_kahan(&self.data),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::sum_kahan(&self.data)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::sum_kahan(&self.data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::sum_kahan(&self.data),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::sum_kahan(&self.data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::sum_kahan(&self.data),
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::sum_kahan(&self.data)
+                }
+            }
+        };
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
@@ -823,6 +877,49 @@ mod tests {
     fn test_sum_single() {
         let v = Vector::from_slice(&[42.0]);
         assert_eq!(v.sum().unwrap(), 42.0);
+    }
+
+    // Kahan summation tests (numerically stable)
+    #[test]
+    fn test_sum_kahan() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(v.sum_kahan().unwrap(), 10.0);
+    }
+
+    #[test]
+    fn test_sum_kahan_empty() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        assert_eq!(v.sum_kahan().unwrap(), 0.0);
+    }
+
+    #[test]
+    fn test_sum_kahan_single() {
+        let v = Vector::from_slice(&[42.0]);
+        assert_eq!(v.sum_kahan().unwrap(), 42.0);
+    }
+
+    #[test]
+    fn test_sum_kahan_numerical_stability() {
+        // Test case that demonstrates rounding error accumulation
+        // Using many small values that can lose precision
+        let mut data = vec![1e-7f32; 10_000];
+        data.push(1.0);
+
+        let v = Vector::from_slice(&data);
+        let kahan_result = v.sum_kahan().unwrap();
+        let naive_result = v.sum().unwrap();
+
+        // Expected: 1.0 + 10000 * 1e-7 = 1.001
+        let expected = 1.001f32;
+
+        // Kahan should be more accurate than naive sum
+        let kahan_error = (kahan_result - expected).abs();
+        let naive_error = (naive_result - expected).abs();
+
+        // Kahan error should be smaller (or at most equal)
+        assert!(kahan_error <= naive_error,
+            "Kahan sum error ({}) should be <= naive sum error ({})",
+            kahan_error, naive_error);
     }
 
     // Max tests
@@ -1199,6 +1296,26 @@ mod property_tests {
 
             // Relaxed tolerance for SIMD vs scalar accumulation order differences
             prop_assert!((result - manual_sum).abs() < 1e-2);
+        }
+
+        #[test]
+        fn test_sum_kahan_correctness(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let kahan_result = va.sum_kahan().unwrap();
+            let manual_sum: f32 = a.iter().sum();
+
+            // Kahan result should be close to manual sum
+            // Note: Both use same algorithm (iter().sum() also uses compensated summation)
+            // so they should match closely
+            prop_assert!((kahan_result - manual_sum).abs() < 1e-2,
+                "Kahan sum should match manual sum closely");
+
+            // Verify Kahan produces a reasonable result
+            let expected_magnitude = a.iter().map(|x| x.abs()).sum::<f32>();
+            prop_assert!(kahan_result.abs() <= expected_magnitude + 1.0,
+                "Kahan result magnitude should be reasonable");
         }
     }
 

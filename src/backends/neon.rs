@@ -282,6 +282,11 @@ impl VectorBackend for NeonBackend {
 
         min_index
     }
+
+    unsafe fn sum_kahan(a: &[f32]) -> f32 {
+        // Kahan summation is inherently sequential, use scalar implementation
+        super::scalar::ScalarBackend::sum_kahan(a)
+    }
 }
 
 #[cfg(test)]
