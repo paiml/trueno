@@ -1561,6 +1561,44 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Element-wise power: result[i] = base[i]^n
+    ///
+    /// Raises each element to the given power `n`.
+    /// Uses Rust's optimized f32::powf() method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[2.0, 3.0, 4.0]);
+    /// let squared = v.pow(2.0).unwrap();
+    /// assert_eq!(squared.as_slice(), &[4.0, 9.0, 16.0]);
+    ///
+    /// let sqrt = v.pow(0.5).unwrap();  // Fractional power = root
+    /// ```
+    ///
+    /// # Special Cases
+    ///
+    /// - `x.pow(0.0)` returns 1.0 for all x (even x=0)
+    /// - `x.pow(1.0)` returns x (identity)
+    /// - `x.pow(-1.0)` returns 1/x (reciprocal)
+    /// - `x.pow(0.5)` returns sqrt(x) (square root)
+    ///
+    /// # Applications
+    ///
+    /// - Statistics: Power transformations (Box-Cox, Yeo-Johnson)
+    /// - Machine learning: Polynomial features, activation functions
+    /// - Physics: Inverse square law (1/r²), power laws
+    /// - Signal processing: Power spectral density, root mean square
+    pub fn pow(&self, n: f32) -> Result<Vector<f32>> {
+        let pow_data: Vec<f32> = self.data.iter().map(|x| x.powf(n)).collect();
+        Ok(Vector {
+            data: pow_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -2508,6 +2546,56 @@ mod tests {
     fn test_recip_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.recip().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // pow() operation tests (element-wise power: x^n)
+    #[test]
+    fn test_pow_basic() {
+        let a = Vector::from_slice(&[2.0, 3.0, 4.0, 5.0]);
+        let result = a.pow(2.0).unwrap();
+        assert_eq!(result.as_slice(), &[4.0, 9.0, 16.0, 25.0]);
+    }
+
+    #[test]
+    fn test_pow_cube() {
+        let a = Vector::from_slice(&[2.0, 3.0, 4.0]);
+        let result = a.pow(3.0).unwrap();
+        assert_eq!(result.as_slice(), &[8.0, 27.0, 64.0]);
+    }
+
+    #[test]
+    fn test_pow_fractional() {
+        let a = Vector::from_slice(&[4.0, 9.0, 16.0]);
+        let result = a.pow(0.5).unwrap();
+        assert_eq!(result.as_slice(), &[2.0, 3.0, 4.0]); // Square root
+    }
+
+    #[test]
+    fn test_pow_zero_exponent() {
+        let a = Vector::from_slice(&[2.0, 3.0, 4.0]);
+        let result = a.pow(0.0).unwrap();
+        assert_eq!(result.as_slice(), &[1.0, 1.0, 1.0]); // x^0 = 1
+    }
+
+    #[test]
+    fn test_pow_one_exponent() {
+        let a = Vector::from_slice(&[2.0, 3.0, 4.0]);
+        let result = a.pow(1.0).unwrap();
+        assert_eq!(result.as_slice(), &[2.0, 3.0, 4.0]); // x^1 = x
+    }
+
+    #[test]
+    fn test_pow_negative_exponent() {
+        let a = Vector::from_slice(&[2.0, 4.0, 10.0]);
+        let result = a.pow(-1.0).unwrap();
+        assert_eq!(result.as_slice(), &[0.5, 0.25, 0.1]); // x^(-1) = 1/x
+    }
+
+    #[test]
+    fn test_pow_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.pow(2.0).unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -4093,6 +4181,120 @@ mod property_tests {
                     (scaled_val - expected).abs() < tolerance,
                     "recip vs division failed at {}: {} != {}, diff = {}",
                     i, scaled_val, expected, (scaled_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: pow() correctness vs f32::powf()
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_pow_correctness(
+            a in prop::collection::vec(0.1f32..100.0, 1..100),
+            n in -3.0f32..3.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.pow(n).unwrap();
+
+            for (i, (&a_val, &pow_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.powf(n);
+
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-4
+                } else {
+                    1e-4
+                };
+
+                prop_assert!(
+                    (pow_val - expected).abs() < tolerance,
+                    "pow correctness failed at {}: {} != {}, diff = {}",
+                    i, pow_val, expected, (pow_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: Power laws
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_pow_power_laws(
+            a in prop::collection::vec(1.0f32..10.0, 1..50),
+            n in 1.0f32..3.0,
+            m in 1.0f32..3.0
+        ) {
+            // Test: (x^n)^m = x^(n*m)
+            let va = Vector::from_slice(&a);
+            let pow_n = va.pow(n).unwrap();
+            let pow_n_then_m = pow_n.pow(m).unwrap();
+            let pow_nm = va.pow(n * m).unwrap();
+
+            for (i, (&expected, &actual)) in pow_nm.as_slice().iter()
+                .zip(pow_n_then_m.as_slice().iter())
+                .enumerate() {
+                let tolerance = if expected.abs() > 1.0 {
+                    expected.abs() * 1e-3
+                } else {
+                    1e-3
+                };
+
+                prop_assert!(
+                    (expected - actual).abs() < tolerance,
+                    "pow power law failed at {}: {} != {}, diff = {}",
+                    i, expected, actual, (expected - actual).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: pow() special cases
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_pow_special_cases(
+            a in prop::collection::vec(0.1f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+
+            // x^0 = 1
+            let pow_zero = va.pow(0.0).unwrap();
+            for &val in pow_zero.as_slice() {
+                prop_assert!((val - 1.0).abs() < 1e-5, "x^0 should be 1");
+            }
+
+            // x^1 = x
+            let pow_one = va.pow(1.0).unwrap();
+            for (i, (&original, &pow_val)) in a.iter()
+                .zip(pow_one.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (original - pow_val).abs() < 1e-5,
+                    "x^1 failed at {}: {} != {}",
+                    i, original, pow_val
+                );
+            }
+
+            // x^0.5 should equal sqrt(x)
+            let pow_half = va.pow(0.5).unwrap();
+            let sqrt_result = va.sqrt().unwrap();
+            for (i, (&pow_val, &sqrt_val)) in pow_half.as_slice().iter()
+                .zip(sqrt_result.as_slice().iter())
+                .enumerate() {
+                let tolerance = if sqrt_val.abs() > 1.0 {
+                    sqrt_val.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+                prop_assert!(
+                    (pow_val - sqrt_val).abs() < tolerance,
+                    "x^0.5 vs sqrt failed at {}: {} != {}",
+                    i, pow_val, sqrt_val
                 );
             }
         }

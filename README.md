@@ -404,8 +404,8 @@ trueno/
 - [ ] Convolutions (conv2d)
 - [ ] Async GPU API
 
-**Phase 7 Progress**: Core vector operations complete with 205 tests passing. The library now supports:
-- **Element-wise operations**: add, sub, mul, div, abs (absolute value), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal)
+**Phase 7 Progress**: Core vector operations complete with 214 tests passing. The library now supports:
+- **Element-wise operations**: add, sub, mul, div, abs (absolute value), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power)
 - **Scalar operations**: scale (scalar multiplication with full SIMD support)
 - **Dot product**: Optimized for ML/scientific computing
 - **Reductions**: sum (naive + Kahan), min, max
@@ -413,7 +413,7 @@ trueno/
 - **Vector norms**: L1 (Manhattan), L2 (Euclidean), L∞ (max norm), normalization to unit vectors
 - **Numerical stability**: Kahan summation for accurate floating-point accumulation
 - **FMA optimization**: Hardware-accelerated fused multiply-add on AVX2 and NEON platforms
-- **Mathematical functions**: Element-wise square root and reciprocal for efficient division and statistical operations
+- **Mathematical functions**: Element-wise square root, reciprocal, and power for efficient transformations, division, and polynomial features
 
 ## Contributing
 
