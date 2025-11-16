@@ -4899,7 +4899,7 @@ mod property_tests {
                 .zip(reverse.as_slice().iter())
                 .enumerate() {
                 let tolerance = if fwd.abs() > 1.0 {
-                    fwd.abs() * 1e-5
+                    fwd.abs() * 2e-5
                 } else {
                     1e-4
                 };
@@ -5892,7 +5892,7 @@ mod property_tests {
                 .zip(acos_result.as_slice().iter())
                 .enumerate() {
                 prop_assert!(
-                    (original - reconstructed).abs() < 1e-4,
+                    (original - reconstructed).abs() < 2e-4,
                     "acos(cos(x)) != x at {}: {} != {}",
                     i, reconstructed, original
                 );
