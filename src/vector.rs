@@ -897,4 +897,104 @@ mod property_tests {
             prop_assert!(a.contains(&result));
         }
     }
+
+    // Property test: Dot product with self is non-negative (norm property)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_dot_self_nonnegative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.dot(&va).unwrap();
+
+            // ||v||^2 = v·v >= 0 always
+            prop_assert!(result >= 0.0);
+
+            // If all zeros, should be exactly zero
+            if a.iter().all(|&x| x == 0.0) {
+                prop_assert_eq!(result, 0.0);
+            } else {
+                // If any non-zero element, result should be positive
+                prop_assert!(result > 0.0);
+            }
+        }
+    }
+
+    // Property test: Cauchy-Schwarz inequality |a·b| <= ||a|| * ||b||
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_cauchy_schwarz(
+            a in prop::collection::vec(-100.0f32..100.0, 1..50),
+            b in prop::collection::vec(-100.0f32..100.0, 1..50)
+        ) {
+            let len = a.len().min(b.len());
+            let a_vec: Vec<f32> = a.into_iter().take(len).collect();
+            let b_vec: Vec<f32> = b.into_iter().take(len).collect();
+
+            let va = Vector::from_slice(&a_vec);
+            let vb = Vector::from_slice(&b_vec);
+
+            let dot_ab = va.dot(&vb).unwrap().abs();
+            let norm_a = va.dot(&va).unwrap().sqrt();
+            let norm_b = vb.dot(&vb).unwrap().sqrt();
+
+            // |a·b| <= ||a|| * ||b||
+            // Add small tolerance for floating point
+            prop_assert!(dot_ab <= norm_a * norm_b + 1e-3);
+        }
+    }
+
+    // Property test: Scaling property (multiply all by same constant)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_scalar_multiplication(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            scalar in -10.0f32..10.0
+        ) {
+            let va = Vector::from_slice(&a);
+
+            // Create vector of all same scalar
+            let scalars = vec![scalar; a.len()];
+            let vs = Vector::from_slice(&scalars);
+
+            let result = va.mul(&vs).unwrap();
+
+            // Each element should be a[i] * scalar
+            for (i, &val) in result.as_slice().iter().enumerate() {
+                let expected = a[i] * scalar;
+                prop_assert!((val - expected).abs() < 1e-3);
+            }
+        }
+    }
+
+    // Property test: Sum of scaled vector = scale * sum
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sum_linearity(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            scalar in -10.0f32..10.0
+        ) {
+            let va = Vector::from_slice(&a);
+
+            // Create scaled version
+            let scalars = vec![scalar; a.len()];
+            let vs = Vector::from_slice(&scalars);
+            let scaled = va.mul(&vs).unwrap();
+
+            let sum_scaled = scaled.sum().unwrap();
+            let sum_original = va.sum().unwrap();
+
+            // sum(scalar * v) = scalar * sum(v)
+            let expected = scalar * sum_original;
+            prop_assert!((sum_scaled - expected).abs() < 1e-2);
+        }
+    }
 }
