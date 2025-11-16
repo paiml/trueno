@@ -452,6 +452,33 @@ impl VectorBackend for WasmBackend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+            let vb = v128_load(b.as_ptr().add(i) as *const v128);
+            let vc = v128_load(c.as_ptr().add(i) as *const v128);
+
+            // result = a * b + c
+            // WASM SIMD128 doesn't have FMA, so we use separate mul and add
+            let product = f32x4_mul(va, vb);
+            let vresult = f32x4_add(product, vc);
+
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] * b[i] + c[i];
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

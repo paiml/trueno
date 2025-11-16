@@ -453,6 +453,33 @@ impl VectorBackend for Sse2Backend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm_loadu_ps(b.as_ptr().add(i));
+            let vc = _mm_loadu_ps(c.as_ptr().add(i));
+
+            // result = a * b + c
+            // SSE2 doesn't have FMA, so we use separate mul and add
+            let product = _mm_mul_ps(va, vb);
+            let vresult = _mm_add_ps(product, vc);
+
+            _mm_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i] * b[i] + c[i];
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

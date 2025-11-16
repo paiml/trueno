@@ -190,4 +190,18 @@ pub trait VectorBackend {
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
     unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]);
+
+    /// Fused multiply-add: result[i] = a[i] * b[i] + c[i]
+    ///
+    /// Computes element-wise fused multiply-add operation.
+    /// On hardware with FMA support, this is a single instruction with better performance
+    /// and numerical accuracy (no intermediate rounding).
+    /// Used in neural networks, matrix multiplication, and scientific computing.
+    ///
+    /// # Safety
+    ///
+    /// - `a`, `b`, and `c` must all have the same length
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]);
 }

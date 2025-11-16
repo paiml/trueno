@@ -404,14 +404,15 @@ trueno/
 - [ ] Convolutions (conv2d)
 - [ ] Async GPU API
 
-**Phase 7 Progress**: Core vector operations complete with 177 tests passing. The library now supports:
-- **Element-wise operations**: add, sub, mul, div, abs (absolute value), clamp (range constraint), lerp (linear interpolation)
+**Phase 7 Progress**: Core vector operations complete with 187 tests passing. The library now supports:
+- **Element-wise operations**: add, sub, mul, div, abs (absolute value), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add)
 - **Scalar operations**: scale (scalar multiplication with full SIMD support)
 - **Dot product**: Optimized for ML/scientific computing
 - **Reductions**: sum (naive + Kahan), min, max
 - **Index operations**: argmin, argmax
 - **Vector norms**: L1 (Manhattan), L2 (Euclidean), L∞ (max norm), normalization to unit vectors
 - **Numerical stability**: Kahan summation for accurate floating-point accumulation
+- **FMA optimization**: Hardware-accelerated fused multiply-add on AVX2 and NEON platforms
 
 ## Contributing
 
