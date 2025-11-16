@@ -869,6 +869,33 @@ impl Vector<f32> {
         Ok(result)
     }
 
+    /// Sum of squared elements
+    ///
+    /// Computes the sum of squares: sum(a[i]^2).
+    /// This is the building block for computing L2 norm and variance.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let sum_sq = v.sum_of_squares().unwrap();
+    /// assert_eq!(sum_sq, 14.0); // 1^2 + 2^2 + 3^2 = 1 + 4 + 9 = 14
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns 0.0 for empty vectors.
+    pub fn sum_of_squares(&self) -> Result<f32> {
+        if self.data.is_empty() {
+            return Ok(0.0);
+        }
+
+        // Use dot product with self: dot(self, self) = sum(a[i]^2)
+        self.dot(self)
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -4900,6 +4927,53 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
+    // ========================================
+    // Unit Tests: sum_of_squares()
+    // ========================================
+
+    #[test]
+    fn test_sum_of_squares_basic() {
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = a.sum_of_squares().unwrap();
+        assert_eq!(result, 14.0); // 1^2 + 2^2 + 3^2 = 1 + 4 + 9 = 14
+    }
+
+    #[test]
+    fn test_sum_of_squares_negative() {
+        let a = Vector::from_slice(&[-1.0, -2.0, 3.0]);
+        let result = a.sum_of_squares().unwrap();
+        assert_eq!(result, 14.0); // (-1)^2 + (-2)^2 + 3^2 = 1 + 4 + 9 = 14
+    }
+
+    #[test]
+    fn test_sum_of_squares_single() {
+        let a = Vector::from_slice(&[5.0]);
+        let result = a.sum_of_squares().unwrap();
+        assert_eq!(result, 25.0);
+    }
+
+    #[test]
+    fn test_sum_of_squares_zero() {
+        let a = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = a.sum_of_squares().unwrap();
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn test_sum_of_squares_pythagorean() {
+        // 3-4-5 Pythagorean triple
+        let a = Vector::from_slice(&[3.0, 4.0]);
+        let result = a.sum_of_squares().unwrap();
+        assert_eq!(result, 25.0); // 3^2 + 4^2 = 9 + 16 = 25
+    }
+
+    #[test]
+    fn test_sum_of_squares_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.sum_of_squares().unwrap();
+        assert_eq!(result, 0.0);
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -8554,6 +8628,75 @@ mod property_tests {
                     i, a[i], output, a[i], expected
                 );
             }
+        }
+    }
+
+    // ========================================
+    // Property Tests: sum_of_squares()
+    // ========================================
+
+    // Property test: non-negativity - sum_of_squares is always >= 0
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sum_of_squares_non_negative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.sum_of_squares().unwrap();
+
+            prop_assert!(
+                result >= 0.0,
+                "sum_of_squares should be non-negative: {} < 0",
+                result
+            );
+        }
+    }
+
+    // Property test: equivalence with dot product - sum_of_squares(v) = dot(v, v)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sum_of_squares_equals_dot_self(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let sum_sq = va.sum_of_squares().unwrap();
+            let dot_self = va.dot(&va).unwrap();
+
+            prop_assert!(
+                (sum_sq - dot_self).abs() < 1e-4,
+                "sum_of_squares should equal dot(self, self): {} != {}",
+                sum_sq, dot_self
+            );
+        }
+    }
+
+    // Property test: scaling - sum_of_squares(k*v) = k^2 * sum_of_squares(v)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_sum_of_squares_scaling(
+            a in prop::collection::vec(-10.0f32..10.0, 1..50),
+            k in -5.0f32..5.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let scaled = va.scale(k).unwrap();
+
+            let sum_sq_original = va.sum_of_squares().unwrap();
+            let sum_sq_scaled = scaled.sum_of_squares().unwrap();
+            let expected = k * k * sum_sq_original;
+
+            // Use relative tolerance for larger values
+            let tolerance = 1e-3 * expected.abs().max(1.0);
+            prop_assert!(
+                (sum_sq_scaled - expected).abs() < tolerance,
+                "sum_of_squares({} * v) = {} != {}^2 * {} = {}",
+                k, sum_sq_scaled, k, sum_sq_original, expected
+            );
         }
     }
 }
