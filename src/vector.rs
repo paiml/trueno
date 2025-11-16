@@ -508,6 +508,57 @@ impl Vector<f32> {
 
         Ok(result)
     }
+
+    /// Find minimum value in the vector
+    ///
+    /// Returns the smallest element in the vector using SIMD optimization.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
+    /// assert_eq!(v.min().unwrap(), 1.0);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TruenoError::InvalidInput`] if vector is empty.
+    pub fn min(&self) -> Result<f32> {
+        if self.data.is_empty() {
+            return Err(TruenoError::InvalidInput("Empty vector".to_string()));
+        }
+
+        let result = unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::min(&self.data)
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::min(&self.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::min(&self.data),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::min(&self.data)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::min(&self.data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::min(&self.data),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::min(&self.data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::min(&self.data),
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::min(&self.data)
+                }
+            }
+        };
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
@@ -700,6 +751,35 @@ mod tests {
     fn test_max_negative() {
         let v = Vector::from_slice(&[-5.0, -1.0, -10.0, -3.0]);
         assert_eq!(v.max().unwrap(), -1.0);
+    }
+
+    #[test]
+    fn test_min() {
+        let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
+        assert_eq!(v.min().unwrap(), 1.0);
+    }
+
+    #[test]
+    fn test_min_single() {
+        let v = Vector::from_slice(&[42.0]);
+        assert_eq!(v.min().unwrap(), 42.0);
+    }
+
+    #[test]
+    fn test_min_empty() {
+        let v: Vector<f32> = Vector::from_slice(&[]);
+        let result = v.min();
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            TruenoError::InvalidInput("Empty vector".to_string())
+        );
+    }
+
+    #[test]
+    fn test_min_negative() {
+        let v = Vector::from_slice(&[-5.0, -1.0, -10.0, -3.0]);
+        assert_eq!(v.min().unwrap(), -10.0);
     }
 
     #[test]
@@ -962,6 +1042,22 @@ mod property_tests {
             // Verify result is >= all elements
             for &x in a.iter() {
                 prop_assert!(result >= x);
+            }
+
+            // Verify result is actually in the vector
+            prop_assert!(a.contains(&result));
+        }
+
+        #[test]
+        fn test_min_is_minimum(
+            a in prop::collection::vec(-1000.0f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.min().unwrap();
+
+            // Verify result is <= all elements
+            for &x in a.iter() {
+                prop_assert!(result <= x);
             }
 
             // Verify result is actually in the vector

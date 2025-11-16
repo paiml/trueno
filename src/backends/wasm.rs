@@ -159,6 +159,37 @@ impl VectorBackend for WasmBackend {
 
         result
     }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn min(a: &[f32]) -> f32 {
+        let len = a.len();
+        let mut i = 0;
+
+        // Start with first element broadcast to all lanes
+        let mut vmin = f32x4_splat(a[0]);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+            vmin = f32x4_min(vmin, va);
+            i += 4;
+        }
+
+        // Horizontal min: find minimum across all 4 lanes
+        let mut result = f32x4_extract_lane::<0>(vmin)
+            .min(f32x4_extract_lane::<1>(vmin))
+            .min(f32x4_extract_lane::<2>(vmin))
+            .min(f32x4_extract_lane::<3>(vmin));
+
+        // Check remaining elements
+        for &val in &a[i..] {
+            if val < result {
+                result = val;
+            }
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]
@@ -223,6 +254,16 @@ mod tests {
         let result = unsafe { WasmBackend::max(&a) };
 
         assert_eq!(result, 9.0);
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[test]
+    fn test_wasm_min() {
+        let a = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0];
+
+        let result = unsafe { WasmBackend::min(&a) };
+
+        assert_eq!(result, 1.0);
     }
 
     #[cfg(target_arch = "wasm32")]
