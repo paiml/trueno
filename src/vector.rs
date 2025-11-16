@@ -2032,6 +2032,37 @@ impl Vector<f32> {
             backend: self.backend,
         })
     }
+
+    /// Computes the inverse hyperbolic sine (asinh) of each element.
+    ///
+    /// # Mathematical Definition
+    ///
+    /// asinh(x) = ln(x + sqrt(x² + 1))
+    ///
+    /// # Properties
+    ///
+    /// - Domain: (-∞, +∞)
+    /// - Range: (-∞, +∞)
+    /// - Odd function: asinh(-x) = -asinh(x)
+    /// - asinh(0) = 0
+    /// - Inverse of sinh: asinh(sinh(x)) = x
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[0.0, 1.0, -1.0]);
+    /// let result = v.asinh().unwrap();
+    /// assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    /// ```
+    pub fn asinh(&self) -> Result<Vector<f32>> {
+        let asinh_data: Vec<f32> = self.data.iter().map(|x| x.asinh()).collect();
+        Ok(Vector {
+            data: asinh_data,
+            backend: self.backend,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -3896,6 +3927,60 @@ mod tests {
     fn test_tanh_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.tanh().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // asinh() tests
+    #[test]
+    fn test_asinh_basic() {
+        let a = Vector::from_slice(&[0.0, 1.0, -1.0]);
+        let result = a.asinh().unwrap();
+        let expected = [0.0_f32.asinh(), 1.0_f32.asinh(), (-1.0_f32).asinh()];
+        for (r, e) in result.as_slice().iter().zip(expected.iter()) {
+            assert!((r - e).abs() < 1e-5, "Expected {}, got {}", e, r);
+        }
+    }
+
+    #[test]
+    fn test_asinh_zero() {
+        let a = Vector::from_slice(&[0.0]);
+        let result = a.asinh().unwrap();
+        assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_asinh_positive() {
+        let a = Vector::from_slice(&[2.0]);
+        let result = a.asinh().unwrap();
+        let expected = 2.0_f32.asinh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_asinh_negative() {
+        let a = Vector::from_slice(&[-2.0]);
+        let result = a.asinh().unwrap();
+        let expected = (-2.0_f32).asinh();
+        assert!((result.as_slice()[0] - expected).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_asinh_odd_function() {
+        // asinh(-x) = -asinh(x)
+        let a = Vector::from_slice(&[1.5]);
+        let b = Vector::from_slice(&[-1.5]);
+        let asinh_a = a.asinh().unwrap();
+        let asinh_b = b.asinh().unwrap();
+        assert!(
+            (asinh_a.as_slice()[0] + asinh_b.as_slice()[0]).abs() < 1e-5,
+            "asinh is an odd function: asinh(-x) = -asinh(x)"
+        );
+    }
+
+    #[test]
+    fn test_asinh_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.asinh().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -6561,6 +6646,81 @@ mod property_tests {
                     (-1.0..=1.0).contains(&output),
                     "tanh range bound failed at {}: {} not in [-1, 1]",
                     i, output
+                );
+            }
+        }
+    }
+
+    // Property test: asinh correctness
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_asinh_correctness(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.asinh().unwrap();
+
+            for (i, (&input, &output)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = input.asinh();
+                prop_assert!(
+                    (output - expected).abs() < 1e-5,
+                    "asinh failed at {}: {} != {}",
+                    i, output, expected
+                );
+            }
+        }
+    }
+
+    // Property test: asinh is odd function - asinh(-x) = -asinh(x)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_asinh_odd_function(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let asinh_pos = va.asinh().unwrap();
+
+            let a_neg: Vec<f32> = a.iter().map(|x| -x).collect();
+            let va_neg = Vector::from_slice(&a_neg);
+            let asinh_neg = va_neg.asinh().unwrap();
+
+            for (i, (&pos, &neg)) in asinh_pos.as_slice().iter()
+                .zip(asinh_neg.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (pos + neg).abs() < 1e-5,
+                    "asinh odd function failed at {}: asinh(-x)={} != -asinh(x)={}",
+                    i, neg, -pos
+                );
+            }
+        }
+    }
+
+    // Property test: asinh(sinh(x)) = x inverse relation
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_asinh_sinh_inverse(
+            a in prop::collection::vec(-5.0f32..5.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let sinh_result = va.sinh().unwrap();
+            let asinh_result = sinh_result.asinh().unwrap();
+
+            for (i, (&original, &reconstructed)) in a.iter()
+                .zip(asinh_result.as_slice().iter())
+                .enumerate() {
+                prop_assert!(
+                    (original - reconstructed).abs() < 1e-5,
+                    "asinh(sinh(x)) != x at {}: {} != {}",
+                    i, reconstructed, original
                 );
             }
         }
