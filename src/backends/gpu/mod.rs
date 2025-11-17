@@ -195,6 +195,54 @@ impl GpuBackend {
         Ok(result)
     }
 
+    /// 2D Convolution on GPU: output = input ⊗ kernel
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Input matrix (flattened row-major)
+    /// * `kernel` - Convolution kernel (flattened row-major)
+    /// * `input_rows` - Number of rows in input
+    /// * `input_cols` - Number of columns in input
+    /// * `kernel_rows` - Number of rows in kernel
+    /// * `kernel_cols` - Number of columns in kernel
+    ///
+    /// # Returns
+    ///
+    /// Output matrix (flattened row-major, "valid" convolution)
+    /// - output_rows = input_rows - kernel_rows + 1
+    /// - output_cols = input_cols - kernel_cols + 1
+    pub fn convolve2d(
+        &mut self,
+        input: &[f32],
+        kernel: &[f32],
+        input_rows: usize,
+        input_cols: usize,
+        kernel_rows: usize,
+        kernel_cols: usize,
+    ) -> Result<Vec<f32>, String> {
+        let device = self.ensure_device()?;
+
+        // Calculate output dimensions
+        let output_rows = input_rows.saturating_sub(kernel_rows).saturating_add(1);
+        let output_cols = input_cols.saturating_sub(kernel_cols).saturating_add(1);
+
+        // Create output buffer
+        let mut result = vec![0.0f32; output_rows * output_cols];
+
+        // Execute GPU compute
+        device.convolve2d(
+            input,
+            kernel,
+            &mut result,
+            input_rows,
+            input_cols,
+            kernel_rows,
+            kernel_cols,
+        )?;
+
+        Ok(result)
+    }
+
     /// Matrix multiplication on GPU: C = A × B
     ///
     /// # Arguments
