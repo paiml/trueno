@@ -105,7 +105,7 @@ proptest! {
         prop_assert!(v_r.exp().is_ok());
 
         let v_pos_restricted: Vec<f32> = data.iter()
-            .map(|&x| x.abs().max(0.1).min(100.0))
+            .map(|&x| x.abs().clamp(0.1, 100.0))
             .collect();
         let v_pr = Vector::from_slice(&v_pos_restricted);
         prop_assert!(v_pr.ln().is_ok());
@@ -226,7 +226,7 @@ proptest! {
 
         prop_assert!(cov.is_finite());
         prop_assert!(corr.is_finite());
-        prop_assert!(corr >= -1.0 - 1e-4 && corr <= 1.0 + 1e-4);
+        prop_assert!((-1.0 - 1e-4..=1.0 + 1e-4).contains(&corr));
     }
 }
 
