@@ -195,6 +195,27 @@ impl GpuBackend {
         Ok(result)
     }
 
+    /// Swish activation on GPU: result[i] = input[i] / (1 + exp(-input[i]))
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Input vector
+    ///
+    /// # Returns
+    ///
+    /// Vector with swish applied element-wise
+    pub fn swish(&mut self, input: &[f32]) -> Result<Vec<f32>, String> {
+        let device = self.ensure_device()?;
+
+        // Create output buffer
+        let mut result = vec![0.0f32; input.len()];
+
+        // Execute GPU compute
+        device.swish(input, &mut result)?;
+
+        Ok(result)
+    }
+
     /// 2D Convolution on GPU: output = input ⊗ kernel
     ///
     /// # Arguments
