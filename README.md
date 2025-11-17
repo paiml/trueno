@@ -164,13 +164,71 @@ let gradients = Vector::from_slice(&vec![...]);  // 500K parameters
 let clipped = gradients.clip(-1.0, 1.0).unwrap();  // Auto-uses GPU for >100K elements
 ```
 
+### Sigmoid Activation (GPU-Accelerated)
+
+| Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
+|-----------|------------|---------------|------------------|---------|
+| **Sigmoid** | 10K | ~60 µs | - | Below threshold |
+| **Sigmoid** | 100K | ~600 µs | ~60 µs | 10x target |
+| **Sigmoid** | 1M | ~6 ms | ~120 µs | 50x target |
+
+**GPU Acceleration Strategy** (OpComplexity::Low):
+- **GPU Threshold**: >100,000 elements
+- **Operation**: Element-wise σ(x) = 1 / (1 + e^(-x))
+- **Workgroups**: 256 threads per workgroup (1D dispatch)
+- **Numerical Stability**: Separate handling for positive/negative inputs
+- **Use Cases**: Binary classification, attention mechanisms, gating functions
+
+**Automatic Backend Selection**:
+- Small vectors (<100K elements): Scalar (iterator-based with stability checks)
+- Large vectors (>100K elements): GPU compute shader (10-50x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
+**Example: Neural Network Layer**
+```rust
+use trueno::Vector;
+
+// Sigmoid activation for binary classification
+let logits = Vector::from_slice(&vec![...]);  // 500K neurons
+let activations = logits.sigmoid().unwrap();  // Auto-uses GPU for >100K elements
+```
+
+### Tanh Activation (GPU-Accelerated)
+
+| Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
+|-----------|------------|---------------|------------------|---------|
+| **Tanh** | 10K | ~55 µs | - | Below threshold |
+| **Tanh** | 100K | ~550 µs | ~55 µs | 10x target |
+| **Tanh** | 1M | ~5.5 ms | ~110 µs | 50x target |
+
+**GPU Acceleration Strategy** (OpComplexity::Low):
+- **GPU Threshold**: >100,000 elements
+- **Operation**: Element-wise tanh(x) = (e^x - e^(-x)) / (e^x + e^(-x))
+- **Workgroups**: 256 threads per workgroup (1D dispatch)
+- **Numerical Stability**: Saturation handling for |x| > 20
+- **Use Cases**: LSTM, GRU, recurrent neural networks, traditional activation
+
+**Automatic Backend Selection**:
+- Small vectors (<100K elements): Scalar (standard library tanh)
+- Large vectors (>100K elements): GPU compute shader (10-50x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
+**Example: LSTM Cell**
+```rust
+use trueno::Vector;
+
+// Tanh activation in LSTM forget/input gates
+let cell_state = Vector::from_slice(&vec![...]);  // 250K hidden units
+let activated = cell_state.tanh().unwrap();  // Auto-uses GPU for >100K elements
+```
+
 **📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
 
 ## Features
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
-- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), ReLU activation (>100K elements), and clip operation (>100K elements)
+- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, sigmoid, tanh (>100K elements), and clip operation (>100K elements)
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
