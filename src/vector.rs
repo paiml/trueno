@@ -1365,6 +1365,60 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// Log-softmax activation function
+    ///
+    /// Computes the logarithm of the softmax function in a numerically stable way.
+    /// Formula: log_softmax(x)[i] = x[i] - max(x) - log(sum(exp(x[j] - max(x))))
+    ///
+    /// This is more numerically stable than computing log(softmax(x)) and is commonly
+    /// used in neural networks for computing cross-entropy loss.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let logits = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let log_probs = logits.log_softmax().unwrap();
+    ///
+    /// // Verify exp(log_softmax) = softmax
+    /// let probs_from_log: Vec<f32> = log_probs.as_slice().iter().map(|&x| x.exp()).collect();
+    /// let sum: f32 = probs_from_log.iter().sum();
+    /// assert!((sum - 1.0).abs() < 1e-5);
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns EmptyVector error for empty vectors.
+    pub fn log_softmax(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // Find max for numerical stability
+        let max_val = self.max()?;
+
+        // Compute exp(x - max) for each element
+        let exp_vals: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| (x - max_val).exp())
+            .collect();
+
+        // Compute log of sum of exponentials
+        let sum_exp: f32 = exp_vals.iter().sum();
+        let log_sum_exp = sum_exp.ln();
+
+        // log_softmax(x)[i] = x[i] - max - log_sum_exp
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| x - max_val - log_sum_exp)
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -5999,6 +6053,100 @@ mod tests {
     }
 
     #[test]
+    fn test_log_softmax_basic() {
+        // Verify exp(log_softmax(x)) == softmax(x)
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        let log_probs = v.log_softmax().unwrap();
+        let probs = v.softmax().unwrap();
+
+        for i in 0..v.len() {
+            let exp_log_prob = log_probs.data[i].exp();
+            assert!(
+                (exp_log_prob - probs.data[i]).abs() < 1e-5,
+                "exp(log_softmax)[{}] = {}, softmax[{}] = {}",
+                i,
+                exp_log_prob,
+                i,
+                probs.data[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_log_softmax_uniform() {
+        // All equal inputs → uniform log probabilities
+        let v = Vector::from_slice(&[5.0, 5.0, 5.0, 5.0]);
+        let log_probs = v.log_softmax().unwrap();
+
+        // Each should be log(1/4) = log(0.25) ≈ -1.386
+        let expected = (0.25_f32).ln();
+        for &lp in log_probs.as_slice() {
+            assert!(
+                (lp - expected).abs() < 1e-5,
+                "log_prob = {}, expected {}",
+                lp,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_log_softmax_large_values() {
+        // Test numerical stability with large values
+        let v = Vector::from_slice(&[100.0, 101.0, 102.0]);
+        let log_probs = v.log_softmax().unwrap();
+
+        // exp(log_probs) should sum to 1
+        let sum: f32 = log_probs.as_slice().iter().map(|&lp| lp.exp()).sum();
+        assert!((sum - 1.0).abs() < 1e-5);
+
+        // All log probabilities should be <= 0 (since probabilities <= 1)
+        for &lp in log_probs.as_slice() {
+            assert!(lp <= 1e-5, "log_prob = {} should be <= 0", lp);
+        }
+
+        // Largest input should have largest log probability (least negative)
+        assert!(log_probs.data[2] > log_probs.data[1]);
+        assert!(log_probs.data[1] > log_probs.data[0]);
+    }
+
+    #[test]
+    fn test_log_softmax_negative_values() {
+        // Negative values should work fine
+        let v = Vector::from_slice(&[-1.0, -2.0, -3.0]);
+        let log_probs = v.log_softmax().unwrap();
+
+        // exp(log_probs) should sum to 1
+        let sum: f32 = log_probs.as_slice().iter().map(|&lp| lp.exp()).sum();
+        assert!((sum - 1.0).abs() < 1e-5);
+
+        // All log probabilities should be <= 0
+        for &lp in log_probs.as_slice() {
+            assert!(lp <= 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_log_softmax_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.log_softmax();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
+    fn test_log_softmax_single_element() {
+        // Single element → log probability = log(1.0) = 0.0
+        let v = Vector::from_slice(&[5.0]);
+        let log_probs = v.log_softmax().unwrap();
+
+        assert!(
+            log_probs.data[0].abs() < 1e-5,
+            "log_softmax of single element should be 0.0, got {}",
+            log_probs.data[0]
+        );
+    }
+
+    #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
 
@@ -10393,6 +10541,78 @@ mod property_tests {
                     (probs1.data[i] - probs2.data[i]).abs() < 1e-4,
                     "Translation invariance violated at index {}: softmax(x)={}, softmax(x+{})={}",
                     i, probs1.data[i], c, probs2.data[i]
+                );
+            }
+        }
+    }
+
+    // ========================================================================
+    // Property tests for log_softmax() - Log probability distribution
+    // ========================================================================
+
+    proptest! {
+        /// Property test: exp(log_softmax(x)) sums to 1
+        /// Since log_softmax returns log probabilities, exponentiating should give valid probabilities
+        #[test]
+        fn test_log_softmax_exp_sums_to_one(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let log_probs = va.log_softmax().unwrap();
+
+            // Exponentiate to get probabilities
+            let sum: f32 = log_probs.as_slice().iter().map(|&lp| lp.exp()).sum();
+
+            prop_assert!(
+                (sum - 1.0).abs() < 1e-4,
+                "exp(log_softmax) sum = {}, expected 1.0",
+                sum
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: log_softmax() produces values <= 0
+        /// Since probabilities are in [0, 1], log(prob) <= 0
+        #[test]
+        fn test_log_softmax_non_positive(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let log_probs = va.log_softmax().unwrap();
+
+            for &lp in log_probs.as_slice() {
+                prop_assert!(
+                    lp <= 1e-5,
+                    "log_probability {} should be <= 0",
+                    lp
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: log_softmax() is translation invariant
+        /// log_softmax(x + c) = log_softmax(x) for any constant c
+        #[test]
+        fn test_log_softmax_translation_invariant(
+            a in prop::collection::vec(-20.0f32..20.0, 2..50),
+            c in -10.0f32..10.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let log_probs1 = va.log_softmax().unwrap();
+
+            // Add constant to all elements
+            let shifted: Vec<f32> = a.iter().map(|&x| x + c).collect();
+            let vb = Vector::from_slice(&shifted);
+            let log_probs2 = vb.log_softmax().unwrap();
+
+            // Log probabilities should be identical
+            for i in 0..log_probs1.len() {
+                prop_assert!(
+                    (log_probs1.data[i] - log_probs2.data[i]).abs() < 1e-4,
+                    "Translation invariance violated at index {}: log_softmax(x)={}, log_softmax(x+{})={}",
+                    i, log_probs1.data[i], c, log_probs2.data[i]
                 );
             }
         }
