@@ -16,8 +16,9 @@
 ## Quick Start
 
 ```rust
-use trueno::Vector;
+use trueno::{Vector, Matrix};
 
+// Vector operations
 let a = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
 let b = Vector::from_slice(&[5.0, 6.0, 7.0, 8.0]);
 
@@ -25,10 +26,15 @@ let b = Vector::from_slice(&[5.0, 6.0, 7.0, 8.0]);
 let result = a.add(&b).unwrap();
 assert_eq!(result.as_slice(), &[6.0, 8.0, 10.0, 12.0]);
 
-// Other operations
 let dot_product = a.dot(&b).unwrap();  // 70.0
 let sum = a.sum().unwrap();            // 10.0
 let max = a.max().unwrap();            // 4.0
+
+// Matrix operations (NEW in v0.1)
+let m1 = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+let m2 = Matrix::identity(2);
+let product = m1.matmul(&m2).unwrap();  // Matrix multiplication
+let transposed = m1.transpose();        // Matrix transpose
 ```
 
 ## Performance
@@ -404,12 +410,17 @@ trueno/
 - [x] Preprocessing: zscore, minmax_normalize, clip
 - [x] Statistical operations: mean, variance, stddev, covariance, correlation
 
-### Phase 8: Matrix Operations (NEXT)
-- [ ] Matrix multiplication (matmul)
-- [ ] Matrix transpose
+### Phase 8: Matrix Operations 🚧 IN PROGRESS
+- [x] Matrix<T> type with row-major storage (NumPy-compatible)
+- [x] Matrix multiplication (matmul) - naive O(n³)
+- [x] Matrix transpose
 - [ ] Matrix-vector operations
+- [ ] SIMD-optimized matmul
+- [ ] GPU dispatch for large matrices
 
-**Phase 7 Progress**: Core vector operations complete with 587 tests passing. The library now supports:
+**Phase 8 Progress**: Core matrix operations complete with 24 tests passing (611 total).
+
+**Phase 7 Status**: ✅ COMPLETE - Core vector operations with 587 tests passing. The library now supports:
 - **Element-wise operations**: add, sub, mul, div, abs (absolute value), neg (negation/unary minus), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm), sin (sine), cos (cosine), tan (tangent), asin (arcsine), acos (arccosine), atan (arctangent), sinh (hyperbolic sine), cosh (hyperbolic cosine), tanh (hyperbolic tangent), asinh (inverse hyperbolic sine), acosh (inverse hyperbolic cosine), atanh (inverse hyperbolic tangent), floor (round down), ceil (round up), round (round to nearest), trunc (truncate toward zero), fract (fractional part), signum (sign function), copysign (copy sign from one vector to another), minimum (element-wise minimum of two vectors), maximum (element-wise maximum of two vectors)
 - **Scalar operations**: scale (scalar multiplication with full SIMD support)
 - **Dot product**: Optimized for ML/scientific computing
