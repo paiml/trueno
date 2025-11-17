@@ -205,6 +205,41 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 "#;
 
+/// Swish activation compute shader (WGSL)
+///
+/// Computes element-wise swish: swish(x) = x * σ(x) = x / (1 + e^(-x))
+///
+/// Modern activation function (SiLU) used in transformers and modern architectures.
+/// GPU acceleration beneficial for large vectors (>100K elements).
+pub const SWISH_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    let len = arrayLength(&input);
+
+    if (idx < len) {
+        let x = input[idx];
+
+        // Swish: swish(x) = x * sigmoid(x) = x / (1 + exp(-x))
+        // Numerically stable implementation:
+        // For x >= 0: swish(x) = x / (1 + exp(-x))
+        // For x < 0: swish(x) = x * exp(x) / (1 + exp(x))
+        var result: f32;
+        if (x >= 0.0) {
+            result = x / (1.0 + exp(-x));
+        } else {
+            let exp_x = exp(x);
+            result = x * exp_x / (1.0 + exp_x);
+        }
+
+        output[idx] = result;
+    }
+}
+"#;
+
 /// Clip (clamp) compute shader (WGSL)
 ///
 /// Computes element-wise clip: clamp(x, min_val, max_val)
