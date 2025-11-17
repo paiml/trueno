@@ -107,13 +107,41 @@ Trueno delivers **exceptional performance** through multi-level SIMD optimizatio
 - Large images (>10K elements): GPU compute shader (10-50x speedup target)
 - Graceful fallback to scalar if GPU unavailable
 
+### ReLU Activation (GPU-Accelerated)
+
+| Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
+|-----------|------------|---------------|------------------|---------|
+| **ReLU** | 10K | ~40 µs | - | Below threshold |
+| **ReLU** | 100K | ~400 µs | ~40 µs | 10x target |
+| **ReLU** | 1M | ~4 ms | ~80 µs | 50x target |
+
+**GPU Acceleration Strategy** (OpComplexity::Low):
+- **GPU Threshold**: >100,000 elements
+- **Operation**: Simple element-wise max(0, x)
+- **Workgroups**: 256 threads per workgroup (1D dispatch)
+- **Use Cases**: Neural network inference, batch activation processing
+
+**Automatic Backend Selection**:
+- Small vectors (<100K elements): Scalar/SIMD (iterator-based)
+- Large vectors (>100K elements): GPU compute shader (10-50x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
+**Example: Neural Network Inference**
+```rust
+use trueno::Vector;
+
+// Process large activation batch (e.g., ResNet-50 layer)
+let activations = Vector::from_slice(&vec![...]);  // 1M neurons
+let output = activations.relu().unwrap();  // Auto-uses GPU for >100K elements
+```
+
 **📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
 
 ## Features
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
-- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000) and 2D convolution (>10K output elements)
+- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), and ReLU activation (>100K elements)
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
