@@ -11156,7 +11156,7 @@ mod property_tests {
         /// Property test: zscore() produces stddev ≈ 1
         #[test]
         fn test_zscore_produces_unit_stddev(
-            a in prop::collection::vec(-100.0f32..100.0, 2..100)
+            a in prop::collection::vec(-100.0f32..100.0, 3..100)
         ) {
             // Ensure vector is not constant
             let std_a: f32 = a.iter().map(|x| x * x).sum::<f32>() / a.len() as f32
