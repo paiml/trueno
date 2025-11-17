@@ -1072,6 +1072,56 @@ impl Vector<f32> {
         Ok(mean_xy - mean_x * mean_y)
     }
 
+    /// Pearson correlation coefficient
+    ///
+    /// Computes the Pearson correlation coefficient: ρ(X,Y) = Cov(X,Y) / (σx·σy)
+    /// Normalized covariance in range [-1, 1].
+    ///
+    /// # Performance
+    ///
+    /// Uses optimized SIMD implementations via covariance() and stddev().
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let y = Vector::from_slice(&[2.0, 4.0, 6.0]);
+    /// let corr = x.correlation(&y).unwrap();
+    /// assert!((corr - 1.0).abs() < 1e-5); // Perfect positive correlation
+    /// ```
+    ///
+    /// # Size mismatch
+    ///
+    /// Returns an error if vectors have different lengths.
+    ///
+    /// # Division by zero
+    ///
+    /// Returns DivisionByZero error if either vector has zero standard deviation
+    /// (i.e., is constant).
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let x = Vector::from_slice(&[5.0, 5.0, 5.0]); // Constant
+    /// let y = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// assert!(matches!(x.correlation(&y), Err(TruenoError::DivisionByZero)));
+    /// ```
+    pub fn correlation(&self, other: &Self) -> Result<f32> {
+        let cov = self.covariance(other)?;
+        let std_x = self.stddev()?;
+        let std_y = other.stddev()?;
+
+        // Check for zero standard deviation (constant vectors)
+        if std_x.abs() < 1e-10 || std_y.abs() < 1e-10 {
+            return Err(TruenoError::DivisionByZero);
+        }
+
+        // ρ(X,Y) = Cov(X,Y) / (σx·σy)
+        Ok(cov / (std_x * std_y))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -5358,6 +5408,65 @@ mod tests {
         assert!(matches!(result, Err(TruenoError::EmptyVector)));
     }
 
+    // ========================================================================
+    // Tests for correlation() - Pearson correlation coefficient
+    // ========================================================================
+
+    #[test]
+    fn test_correlation_perfect_positive() {
+        // Perfect positive linear relationship: y = 2x
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let y = Vector::from_slice(&[2.0, 4.0, 6.0]);
+        let result = x.correlation(&y).unwrap();
+        assert!((result - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_correlation_perfect_negative() {
+        // Perfect negative linear relationship
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        let y = Vector::from_slice(&[4.0, 3.0, 2.0, 1.0]);
+        let result = x.correlation(&y).unwrap();
+        assert!((result - (-1.0)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_correlation_zero() {
+        // No correlation
+        let x = Vector::from_slice(&[1.0, 2.0, 1.0, 2.0]);
+        let y = Vector::from_slice(&[1.0, 1.0, 2.0, 2.0]);
+        let result = x.correlation(&y).unwrap();
+        assert!(result.abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_correlation_self() {
+        // Correlation with self is always 1
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let result = x.correlation(&x).unwrap();
+        assert!((result - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_correlation_constant_vector() {
+        // Constant vector has zero std dev → division by zero
+        let x = Vector::from_slice(&[5.0, 5.0, 5.0]);
+        let y = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = x.correlation(&y);
+        assert!(matches!(result, Err(TruenoError::DivisionByZero)));
+    }
+
+    #[test]
+    fn test_correlation_size_mismatch() {
+        let x = Vector::from_slice(&[1.0, 2.0]);
+        let y = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = x.correlation(&y);
+        assert!(matches!(
+            result,
+            Err(TruenoError::SizeMismatch { expected: 2, actual: 3 })
+        ));
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -9319,6 +9428,90 @@ mod property_tests {
                 (cov_scaled - expected).abs() < tolerance,
                 "Cov({}*X, {}*Y) = {} != {}*{}*Cov(X,Y) = {}",
                 scale_a, scale_b, cov_scaled, scale_a, scale_b, expected
+            );
+        }
+
+        /// Property test: -1 ≤ ρ(X,Y) ≤ 1 (correlation is bounded)
+        #[test]
+        fn test_correlation_bounded(
+            ab in prop::collection::vec((-50.0f32..50.0, -50.0f32..50.0), 2..100)
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+
+            // Ensure vectors are not constant
+            let std_a: f32 = a.iter().map(|x| x * x).sum::<f32>() / a.len() as f32
+                           - (a.iter().sum::<f32>() / a.len() as f32).powi(2);
+            let std_b: f32 = b.iter().map(|y| y * y).sum::<f32>() / b.len() as f32
+                           - (b.iter().sum::<f32>() / b.len() as f32).powi(2);
+
+            if std_a < 1e-6 || std_b < 1e-6 {
+                return Ok(());  // Skip constant vectors
+            }
+
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+            let corr = va.correlation(&vb).unwrap();
+
+            prop_assert!(
+                (-1.0 - 1e-5..=1.0 + 1e-5).contains(&corr),
+                "correlation = {} not in range [-1, 1]",
+                corr
+            );
+        }
+
+        /// Property test: ρ(X,Y) = ρ(Y,X) (symmetry)
+        #[test]
+        fn test_correlation_symmetric(
+            ab in prop::collection::vec((-50.0f32..50.0, -50.0f32..50.0), 2..100)
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+
+            // Ensure vectors are not constant
+            let std_a: f32 = a.iter().map(|x| x * x).sum::<f32>() / a.len() as f32
+                           - (a.iter().sum::<f32>() / a.len() as f32).powi(2);
+            let std_b: f32 = b.iter().map(|y| y * y).sum::<f32>() / b.len() as f32
+                           - (b.iter().sum::<f32>() / b.len() as f32).powi(2);
+
+            if std_a < 1e-6 || std_b < 1e-6 {
+                return Ok(());  // Skip constant vectors
+            }
+
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+
+            let corr_ab = va.correlation(&vb).unwrap();
+            let corr_ba = vb.correlation(&va).unwrap();
+
+            let tolerance = 1e-5;
+            prop_assert!(
+                (corr_ab - corr_ba).abs() < tolerance,
+                "ρ(X,Y) = {} != ρ(Y,X) = {}",
+                corr_ab, corr_ba
+            );
+        }
+
+        /// Property test: ρ(X,X) = 1 (perfect self-correlation)
+        #[test]
+        fn test_correlation_self_is_one(
+            a in prop::collection::vec(-50.0f32..50.0, 2..100)
+        ) {
+            // Ensure vector is not constant
+            let std_a: f32 = a.iter().map(|x| x * x).sum::<f32>() / a.len() as f32
+                           - (a.iter().sum::<f32>() / a.len() as f32).powi(2);
+
+            if std_a < 1e-6 {
+                return Ok(());  // Skip constant vectors
+            }
+
+            let va = Vector::from_slice(&a);
+            let corr = va.correlation(&va).unwrap();
+
+            prop_assert!(
+                (corr - 1.0).abs() < 1e-5,
+                "ρ(X,X) = {} != 1.0",
+                corr
             );
         }
     }
