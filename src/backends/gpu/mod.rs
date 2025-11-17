@@ -130,6 +130,29 @@ impl GpuBackend {
         Ok(result)
     }
 
+    /// Clip (clamp) operation on GPU: result[i] = clamp(input[i], min_val, max_val)
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Input vector
+    /// * `min_val` - Minimum value
+    /// * `max_val` - Maximum value
+    ///
+    /// # Returns
+    ///
+    /// Vector with clip applied element-wise
+    pub fn clip(&mut self, input: &[f32], min_val: f32, max_val: f32) -> Result<Vec<f32>, String> {
+        let device = self.ensure_device()?;
+
+        // Create output buffer
+        let mut result = vec![0.0f32; input.len()];
+
+        // Execute GPU compute
+        device.clip(input, &mut result, min_val, max_val)?;
+
+        Ok(result)
+    }
+
     /// Matrix multiplication on GPU: C = A × B
     ///
     /// # Arguments

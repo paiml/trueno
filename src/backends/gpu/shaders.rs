@@ -132,6 +132,35 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 "#;
 
+/// Clip (clamp) compute shader (WGSL)
+///
+/// Computes element-wise clip: clamp(x, min_val, max_val)
+///
+/// Constrains values to the range [min_val, max_val].
+/// GPU acceleration beneficial for large vectors (>100K elements).
+pub const CLIP_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+struct ClipParams {
+    min_val: f32,
+    max_val: f32,
+}
+
+@group(0) @binding(2) var<uniform> params: ClipParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    let len = arrayLength(&input);
+
+    if (idx < len) {
+        // Clip: clamp(x, min_val, max_val) = max(min_val, min(max_val, x))
+        output[idx] = clamp(input[idx], params.min_val, params.max_val);
+    }
+}
+"#;
+
 /// 2D Convolution compute shader (WGSL)
 ///
 /// Computes 2D convolution: output = input ⊗ kernel
