@@ -975,6 +975,40 @@ impl Vector<f32> {
         Ok(mean_sq - mean_val * mean_val)
     }
 
+    /// Population standard deviation
+    ///
+    /// Computes the population standard deviation: σ = sqrt(Var(X)).
+    /// This is the square root of the variance.
+    ///
+    /// # Performance
+    ///
+    /// Uses optimized SIMD implementations via variance().
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+    /// let sd = v.stddev().unwrap();
+    /// assert!((sd - 1.4142135).abs() < 1e-5); // sqrt(2) ≈ 1.414
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns an error for empty vectors.
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let v: Vector<f32> = Vector::from_slice(&[]);
+    /// assert!(matches!(v.stddev(), Err(TruenoError::EmptyVector)));
+    /// ```
+    pub fn stddev(&self) -> Result<f32> {
+        let var = self.variance()?;
+        Ok(var.sqrt())
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -5150,6 +5184,57 @@ mod tests {
         assert!(matches!(result, Err(TruenoError::EmptyVector)));
     }
 
+    // ========================================================================
+    // Tests for stddev() - standard deviation
+    // ========================================================================
+
+    #[test]
+    fn test_stddev_basic() {
+        // stddev of [1,2,3,4,5]: variance=2, stddev=sqrt(2)≈1.414
+        let a = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let result = a.stddev().unwrap();
+        assert!((result - std::f32::consts::SQRT_2).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_stddev_constant() {
+        // stddev of constant vector is 0
+        let a = Vector::from_slice(&[7.0, 7.0, 7.0, 7.0]);
+        let result = a.stddev().unwrap();
+        assert!(result.abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_stddev_single() {
+        // stddev of single element is 0
+        let a = Vector::from_slice(&[42.0]);
+        let result = a.stddev().unwrap();
+        assert!(result.abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_stddev_symmetric() {
+        // stddev of [-2,-1,0,1,2]: variance=2, stddev=sqrt(2)
+        let a = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result = a.stddev().unwrap();
+        assert!((result - std::f32::consts::SQRT_2).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_stddev_two_values() {
+        // stddev of [1,5]: variance=4, stddev=2
+        let a = Vector::from_slice(&[1.0, 5.0]);
+        let result = a.stddev().unwrap();
+        assert!((result - 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_stddev_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.stddev();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -8989,6 +9074,63 @@ mod property_tests {
                 (var_translated - var_original).abs() < tolerance,
                 "variance(v + {}) = {} != variance(v) = {}",
                 c, var_translated, var_original
+            );
+        }
+
+        /// Property test: stddev(v) >= 0 (non-negativity)
+        #[test]
+        fn test_stddev_non_negative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let sd = va.stddev().unwrap();
+
+            prop_assert!(
+                sd >= -1e-5, // Allow small numerical error
+                "stddev = {} should be non-negative",
+                sd
+            );
+        }
+
+        /// Property test: stddev(k*v) = |k|*stddev(v) (linear scaling)
+        #[test]
+        fn test_stddev_scaling(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100),
+            k in -5.0f32..5.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let sd_original = va.stddev().unwrap();
+            let scaled = va.scale(k).unwrap();
+            let sd_scaled = scaled.stddev().unwrap();
+
+            let expected = k.abs() * sd_original;
+            let tolerance = 1e-3 * expected.abs().max(1e-5);
+            prop_assert!(
+                (sd_scaled - expected).abs() < tolerance,
+                "stddev({} * v) = {} != |{}| * stddev(v) = {}",
+                k, sd_scaled, k, expected
+            );
+        }
+
+        /// Property test: stddev(v + c) = stddev(v) (translation invariance)
+        #[test]
+        fn test_stddev_translation_invariance(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100),
+            c in -10.0f32..10.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let sd_original = va.stddev().unwrap();
+
+            // Create translated vector: v + c
+            let translated: Vec<f32> = a.iter().map(|x| x + c).collect();
+            let vt = Vector::from_slice(&translated);
+            let sd_translated = vt.stddev().unwrap();
+
+            let tolerance = 1e-3 * sd_original.abs().max(1e-5);
+            prop_assert!(
+                (sd_translated - sd_original).abs() < tolerance,
+                "stddev(v + {}) = {} != stddev(v) = {}",
+                c, sd_translated, sd_original
             );
         }
     }
