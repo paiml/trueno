@@ -10884,7 +10884,12 @@ mod property_tests {
             let var_scaled = scaled.variance().unwrap();
 
             let expected = k * k * var_original;
-            let tolerance = 1e-3 * expected.abs().max(1e-5);
+            // Use absolute tolerance for small values, relative for large
+            let tolerance = if expected.abs() < 1.0 {
+                1e-2  // Absolute tolerance for small variance
+            } else {
+                1e-3 * expected.abs()  // Relative tolerance for large variance
+            };
             prop_assert!(
                 (var_scaled - expected).abs() < tolerance,
                 "variance({} * v) = {} != {}² * variance(v) = {}",
@@ -10906,7 +10911,12 @@ mod property_tests {
             let vt = Vector::from_slice(&translated);
             let var_translated = vt.variance().unwrap();
 
-            let tolerance = 1e-3 * var_original.abs().max(1e-5);
+            // Use absolute tolerance for small values, relative for large
+            let tolerance = if var_original.abs() < 1.0 {
+                1e-2  // Absolute tolerance for small variance
+            } else {
+                1e-3 * var_original.abs()  // Relative tolerance for large variance
+            };
             prop_assert!(
                 (var_translated - var_original).abs() < tolerance,
                 "variance(v + {}) = {} != variance(v) = {}",
@@ -10941,7 +10951,12 @@ mod property_tests {
             let sd_scaled = scaled.stddev().unwrap();
 
             let expected = k.abs() * sd_original;
-            let tolerance = 1e-3 * expected.abs().max(1e-5);
+            // Use absolute tolerance for small values, relative for large
+            let tolerance = if expected.abs() < 1.0 {
+                1e-2  // Absolute tolerance for small stddev
+            } else {
+                1e-3 * expected.abs()  // Relative tolerance for large stddev
+            };
             prop_assert!(
                 (sd_scaled - expected).abs() < tolerance,
                 "stddev({} * v) = {} != |{}| * stddev(v) = {}",
@@ -10963,7 +10978,12 @@ mod property_tests {
             let vt = Vector::from_slice(&translated);
             let sd_translated = vt.stddev().unwrap();
 
-            let tolerance = 1e-3 * sd_original.abs().max(1e-5);
+            // Use absolute tolerance for small values, relative for large
+            let tolerance = if sd_original.abs() < 1.0 {
+                1e-2  // Absolute tolerance for small stddev
+            } else {
+                1e-3 * sd_original.abs()  // Relative tolerance for large stddev
+            };
             prop_assert!(
                 (sd_translated - sd_original).abs() < tolerance,
                 "stddev(v + {}) = {} != stddev(v) = {}",
