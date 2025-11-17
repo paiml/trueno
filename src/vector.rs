@@ -1009,6 +1009,69 @@ impl Vector<f32> {
         Ok(var.sqrt())
     }
 
+    /// Population covariance between two vectors
+    ///
+    /// Computes the population covariance: Cov(X,Y) = E[(X - μx)(Y - μy)]
+    /// Uses the computational formula: Cov(X,Y) = E[XY] - μx·μy
+    ///
+    /// # Performance
+    ///
+    /// Uses optimized SIMD implementations via dot() and mean().
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let y = Vector::from_slice(&[2.0, 4.0, 6.0]);
+    /// let cov = x.covariance(&y).unwrap();
+    /// assert!((cov - 2.0).abs() < 1e-5); // Perfect positive covariance
+    /// ```
+    ///
+    /// # Size mismatch
+    ///
+    /// Returns an error if vectors have different lengths.
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let x = Vector::from_slice(&[1.0, 2.0]);
+    /// let y = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// assert!(matches!(x.covariance(&y), Err(TruenoError::SizeMismatch { .. })));
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns an error for empty vectors.
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let x: Vector<f32> = Vector::from_slice(&[]);
+    /// let y: Vector<f32> = Vector::from_slice(&[]);
+    /// assert!(matches!(x.covariance(&y), Err(TruenoError::EmptyVector)));
+    /// ```
+    pub fn covariance(&self, other: &Self) -> Result<f32> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+        if self.len() != other.len() {
+            return Err(TruenoError::SizeMismatch {
+                expected: self.len(),
+                actual: other.len(),
+            });
+        }
+
+        let mean_x = self.mean()?;
+        let mean_y = other.mean()?;
+        let dot_xy = self.dot(other)?;
+        let mean_xy = dot_xy / self.len() as f32;
+
+        // Cov(X,Y) = E[XY] - μx·μy
+        Ok(mean_xy - mean_x * mean_y)
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -5235,6 +5298,66 @@ mod tests {
         assert!(matches!(result, Err(TruenoError::EmptyVector)));
     }
 
+    // ========================================================================
+    // Tests for covariance() - population covariance
+    // ========================================================================
+
+    #[test]
+    fn test_covariance_positive() {
+        // Perfect positive linear relationship: y = 2x
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let y = Vector::from_slice(&[2.0, 4.0, 6.0]);
+        let result = x.covariance(&y).unwrap();
+        // Cov(X,2X) = 2*Var(X) = 2*(2/3) = 4/3 ≈ 1.333
+        assert!((result - (4.0 / 3.0)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_covariance_negative() {
+        // Negative linear relationship
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let y = Vector::from_slice(&[3.0, 2.0, 1.0]);
+        let result = x.covariance(&y).unwrap();
+        assert!((result - (-2.0 / 3.0)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_covariance_zero() {
+        // No linear relationship
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0, 2.0]);
+        let y = Vector::from_slice(&[1.0, 3.0, 1.0, 3.0]);
+        let result = x.covariance(&y).unwrap();
+        assert!(result.abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_covariance_self() {
+        // Cov(X,X) = Var(X)
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let cov = x.covariance(&x).unwrap();
+        let var = x.variance().unwrap();
+        assert!((cov - var).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_covariance_size_mismatch() {
+        let x = Vector::from_slice(&[1.0, 2.0]);
+        let y = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = x.covariance(&y);
+        assert!(matches!(
+            result,
+            Err(TruenoError::SizeMismatch { expected: 2, actual: 3 })
+        ));
+    }
+
+    #[test]
+    fn test_covariance_empty() {
+        let x: Vector<f32> = Vector::from_slice(&[]);
+        let y: Vector<f32> = Vector::from_slice(&[]);
+        let result = x.covariance(&y);
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -9131,6 +9254,71 @@ mod property_tests {
                 (sd_translated - sd_original).abs() < tolerance,
                 "stddev(v + {}) = {} != stddev(v) = {}",
                 c, sd_translated, sd_original
+            );
+        }
+
+        /// Property test: Cov(X,X) = Var(X) (covariance with self equals variance)
+        #[test]
+        fn test_covariance_self_equals_variance(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let cov = va.covariance(&va).unwrap();
+            let var = va.variance().unwrap();
+
+            let tolerance = 1e-3 * var.abs().max(1e-5);
+            prop_assert!(
+                (cov - var).abs() < tolerance,
+                "Cov(X,X) = {} != Var(X) = {}",
+                cov, var
+            );
+        }
+
+        /// Property test: Cov(X,Y) = Cov(Y,X) (symmetry/commutativity)
+        #[test]
+        fn test_covariance_symmetric(
+            ab in prop::collection::vec((-50.0f32..50.0, -50.0f32..50.0), 1..100)
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+
+            let cov_ab = va.covariance(&vb).unwrap();
+            let cov_ba = vb.covariance(&va).unwrap();
+
+            let tolerance = 1e-4 * cov_ab.abs().max(1e-5);
+            prop_assert!(
+                (cov_ab - cov_ba).abs() < tolerance,
+                "Cov(X,Y) = {} != Cov(Y,X) = {}",
+                cov_ab, cov_ba
+            );
+        }
+
+        /// Property test: Cov(aX, bY) = ab*Cov(X,Y) (bilinearity)
+        #[test]
+        fn test_covariance_bilinearity(
+            ab in prop::collection::vec((-20.0f32..20.0, -20.0f32..20.0), 1..50),
+            scale_a in -3.0f32..3.0,
+            scale_b in -3.0f32..3.0
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+
+            let cov_original = va.covariance(&vb).unwrap();
+
+            let scaled_a = va.scale(scale_a).unwrap();
+            let scaled_b = vb.scale(scale_b).unwrap();
+            let cov_scaled = scaled_a.covariance(&scaled_b).unwrap();
+
+            let expected = scale_a * scale_b * cov_original;
+            let tolerance = 1e-3 * expected.abs().max(1e-5);
+            prop_assert!(
+                (cov_scaled - expected).abs() < tolerance,
+                "Cov({}*X, {}*Y) = {} != {}*{}*Cov(X,Y) = {}",
+                scale_a, scale_b, cov_scaled, scale_a, scale_b, expected
             );
         }
     }
