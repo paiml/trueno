@@ -1554,6 +1554,91 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// Leaky ReLU activation function
+    ///
+    /// Computes the element-wise Leaky ReLU with a configurable negative slope.
+    /// Leaky ReLU addresses the "dying ReLU" problem by allowing small negative values.
+    ///
+    /// # Formula
+    ///
+    /// ```text
+    /// leaky_relu(x, α)[i] = max(αx[i], x[i])
+    ///                     = x[i]    if x[i] > 0
+    ///                     = αx[i]   if x[i] ≤ 0
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `negative_slope`: The slope for negative values (typically 0.01)
+    ///   - Must be in range [0.0, 1.0)
+    ///   - Common values: 0.01 (default), 0.1, 0.2
+    ///   - α = 0 reduces to standard ReLU
+    ///   - α = 1 reduces to identity function
+    ///
+    /// # Properties
+    ///
+    /// - **Fixes dying ReLU**: Neurons can't completely die (always has gradient)
+    /// - **Non-zero gradient**: Gradient is α for negative inputs (not zero)
+    /// - **Unbounded positive**: No saturation for positive values
+    /// - **Parameterized**: Negative slope can be tuned or learned (PReLU)
+    ///
+    /// # Applications
+    ///
+    /// - **Deep networks**: Prevents dying neurons in very deep networks
+    /// - **GANs**: Often used in generator and discriminator networks
+    /// - **Better gradient flow**: Helps with vanishing gradient problem
+    /// - **Empirical improvements**: Often outperforms ReLU in practice
+    ///
+    /// # Performance
+    ///
+    /// This operation is memory-bound (simple multiplication and comparison).
+    /// SIMD provides modest speedups.
+    ///
+    /// # Errors
+    ///
+    /// Returns `EmptyVector` if the input vector is empty.
+    /// Returns `InvalidInput` if negative_slope is not in [0.0, 1.0).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+    /// let result = v.leaky_relu(0.01).unwrap();
+    ///
+    /// // Negative values multiplied by 0.01, positive unchanged
+    /// assert_eq!(result.as_slice(), &[-0.02, -0.01, 0.0, 1.0, 2.0]);
+    /// ```
+    pub fn leaky_relu(&self, negative_slope: f32) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // Validate negative_slope parameter
+        if !(0.0..1.0).contains(&negative_slope) {
+            return Err(TruenoError::InvalidInput(format!(
+                "negative_slope must be in [0.0, 1.0), got {}",
+                negative_slope
+            )));
+        }
+
+        // leaky_relu(x, α) = x if x > 0, αx otherwise
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| {
+                if x > 0.0 {
+                    x
+                } else {
+                    negative_slope * x
+                }
+            })
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -6434,6 +6519,85 @@ mod tests {
     }
 
     #[test]
+    fn test_leaky_relu_basic() {
+        // Basic Leaky ReLU with α = 0.01
+        let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result = v.leaky_relu(0.01).unwrap();
+
+        assert_eq!(result.as_slice(), &[-0.02, -0.01, 0.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_leaky_relu_different_slopes() {
+        // Test with different negative slopes
+        let v = Vector::from_slice(&[-10.0, 5.0]);
+
+        // α = 0.01 (default)
+        let result_001 = v.leaky_relu(0.01).unwrap();
+        assert!((result_001.data[0] - (-0.1)).abs() < 1e-6); // -10 * 0.01
+        assert_eq!(result_001.data[1], 5.0);
+
+        // α = 0.1
+        let result_01 = v.leaky_relu(0.1).unwrap();
+        assert!((result_01.data[0] - (-1.0)).abs() < 1e-6); // -10 * 0.1
+        assert_eq!(result_01.data[1], 5.0);
+
+        // α = 0.2
+        let result_02 = v.leaky_relu(0.2).unwrap();
+        assert!((result_02.data[0] - (-2.0)).abs() < 1e-6); // -10 * 0.2
+        assert_eq!(result_02.data[1], 5.0);
+    }
+
+    #[test]
+    fn test_leaky_relu_reduces_to_relu() {
+        // With α = 0, should behave like standard ReLU
+        let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let leaky = v.leaky_relu(0.0).unwrap();
+        let relu = v.relu().unwrap();
+
+        for i in 0..v.len() {
+            assert_eq!(leaky.data[i], relu.data[i], "α=0 should equal ReLU");
+        }
+    }
+
+    #[test]
+    fn test_leaky_relu_preserves_positive() {
+        // Positive values should remain unchanged regardless of α
+        let v = Vector::from_slice(&[0.5, 1.0, 5.0, 10.0]);
+        let result = v.leaky_relu(0.01).unwrap();
+
+        for i in 0..v.len() {
+            assert_eq!(
+                result.data[i], v.data[i],
+                "Positive values should be preserved"
+            );
+        }
+    }
+
+    #[test]
+    fn test_leaky_relu_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.leaky_relu(0.01);
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
+    fn test_leaky_relu_invalid_slope() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+
+        // Negative slope should fail
+        let result = v.leaky_relu(-0.1);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+
+        // Slope >= 1.0 should fail
+        let result = v.leaky_relu(1.0);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+
+        let result = v.leaky_relu(1.5);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+    }
+
+    #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
 
@@ -11038,6 +11202,81 @@ mod property_tests {
                         prop_assert!(
                             result.data[i] < result.data[j] + 1e-6,
                             "Monotonicity violated: {} < {} but σ({}) = {} >= σ({}) = {}",
+                            a[i], a[j], a[i], result.data[i], a[j], result.data[j]
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // ========================================================================
+    // Property tests for leaky_relu() - Leaky Rectified Linear Unit
+    // ========================================================================
+
+    proptest! {
+        /// Property test: leaky_relu() preserves positive values exactly
+        #[test]
+        fn test_leaky_relu_preserves_positive_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            alpha in 0.0f32..1.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.leaky_relu(alpha).unwrap();
+
+            for (i, &val) in a.iter().enumerate() {
+                if val > 0.0 {
+                    prop_assert!(
+                        (result.data[i] - val).abs() < 1e-6,
+                        "Positive value {} should be preserved, got {}",
+                        val, result.data[i]
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: leaky_relu() scales negative values by alpha
+        #[test]
+        fn test_leaky_relu_scales_negative_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            alpha in 0.01f32..0.5 // Use smaller range to avoid precision issues
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.leaky_relu(alpha).unwrap();
+
+            for (i, &val) in a.iter().enumerate() {
+                if val < 0.0 {
+                    let expected = alpha * val;
+                    prop_assert!(
+                        (result.data[i] - expected).abs() < 1e-4,
+                        "Negative value {} should be scaled by {}: expected {}, got {}",
+                        val, alpha, expected, result.data[i]
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: leaky_relu() is monotonically increasing
+        /// If x < y, then leaky_relu(x) < leaky_relu(y)
+        #[test]
+        fn test_leaky_relu_monotonic_property(
+            a in prop::collection::vec(-50.0f32..50.0, 2..100),
+            alpha in 0.01f32..0.5
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.leaky_relu(alpha).unwrap();
+
+            // Check all pairs for monotonicity
+            for i in 0..a.len() {
+                for j in 0..a.len() {
+                    if a[i] < a[j] {
+                        prop_assert!(
+                            result.data[i] < result.data[j] + 1e-5,
+                            "Monotonicity violated: {} < {} but leaky_relu({}) = {} >= leaky_relu({}) = {}",
                             a[i], a[j], a[i], result.data[i], a[j], result.data[j]
                         );
                     }
