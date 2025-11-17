@@ -395,14 +395,19 @@ trueno/
 - [ ] GPU dispatch heuristics (OpComplexity)
 - [ ] Multi-GPU support
 
-### Phase 7: Advanced Operations (IN PROGRESS)
+### Phase 7: Advanced Operations ✅ COMPLETE
 - [x] Element-wise subtraction (sub) and division (div)
 - [x] Reductions: min, max, sum, sum_kahan (Kahan summation)
 - [x] Index finding: argmax, argmin
 - [x] Vector norms: norm_l2 (Euclidean norm), normalize (unit vector)
-- [ ] Matrix operations (matmul, transpose)
-- [ ] Convolutions (conv2d)
-- [ ] Async GPU API
+- [x] Activation functions: ReLU, Leaky ReLU, ELU, Sigmoid, Softmax/Log-Softmax, GELU, Swish/SiLU
+- [x] Preprocessing: zscore, minmax_normalize, clip
+- [x] Statistical operations: mean, variance, stddev, covariance, correlation
+
+### Phase 8: Matrix Operations (NEXT)
+- [ ] Matrix multiplication (matmul)
+- [ ] Matrix transpose
+- [ ] Matrix-vector operations
 
 **Phase 7 Progress**: Core vector operations complete with 587 tests passing. The library now supports:
 - **Element-wise operations**: add, sub, mul, div, abs (absolute value), neg (negation/unary minus), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm), sin (sine), cos (cosine), tan (tangent), asin (arcsine), acos (arccosine), atan (arctangent), sinh (hyperbolic sine), cosh (hyperbolic cosine), tanh (hyperbolic tangent), asinh (inverse hyperbolic sine), acosh (inverse hyperbolic cosine), atanh (inverse hyperbolic tangent), floor (round down), ceil (round up), round (round to nearest), trunc (truncate toward zero), fract (fractional part), signum (sign function), copysign (copy sign from one vector to another), minimum (element-wise minimum of two vectors), maximum (element-wise maximum of two vectors)
