@@ -2001,6 +2001,78 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// Hard Swish activation function
+    ///
+    /// Applies the hardswish activation element-wise: hardswish(x) = x * relu6(x + 3) / 6
+    ///
+    /// Hardswish is a piece-wise linear approximation to swish, designed for efficient
+    /// computation in mobile neural networks. It's used in MobileNetV3 and avoids the
+    /// expensive sigmoid computation of standard swish.
+    ///
+    /// Properties:
+    /// - Piece-wise linear: efficient to compute
+    /// - hardswish(x) = 0 for x ≤ -3
+    /// - hardswish(x) = x for x ≥ 3
+    /// - hardswish(x) = x * (x + 3) / 6 for -3 < x < 3
+    /// - hardswish(0) = 0
+    /// - Smooth transitions at boundaries
+    ///
+    /// # Performance
+    ///
+    /// More efficient than swish as it uses only multiply/divide operations
+    /// instead of expensive exponential functions. Ideal for inference on
+    /// resource-constrained devices.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-4.0, -3.0, 0.0, 3.0, 4.0]);
+    /// let result = v.hardswish().unwrap();
+    ///
+    /// // Piece-wise linear behavior
+    /// assert_eq!(result.as_slice()[0], 0.0); // x ≤ -3 → 0
+    /// assert_eq!(result.as_slice()[1], 0.0); // x = -3 → 0
+    /// assert_eq!(result.as_slice()[2], 0.0); // x = 0 → 0
+    /// assert_eq!(result.as_slice()[3], 3.0); // x = 3 → x
+    /// assert_eq!(result.as_slice()[4], 4.0); // x ≥ 3 → x
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `EmptyVector` if the input vector is empty.
+    ///
+    /// # References
+    ///
+    /// - Howard et al. (2019): "Searching for MobileNetV3"
+    pub fn hardswish(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // Scalar implementation: hardswish(x) = x * relu6(x + 3) / 6
+        // Simplified piece-wise:
+        // - x <= -3: 0
+        // - x >= 3: x
+        // - else: x * (x + 3) / 6
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| {
+                if x <= -3.0 {
+                    0.0
+                } else if x >= 3.0 {
+                    x
+                } else {
+                    x * (x + 3.0) / 6.0
+                }
+            })
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a\[i\]^2)).
@@ -7260,6 +7332,85 @@ mod tests {
         assert!(matches!(result, Err(TruenoError::EmptyVector)));
     }
 
+    // Hardswish activation tests
+    #[test]
+    fn test_hardswish_basic() {
+        let v = Vector::from_slice(&[-4.0, -3.0, -1.5, 0.0, 1.5, 3.0, 4.0]);
+        let result = v.hardswish().unwrap();
+
+        // x <= -3: 0
+        assert_eq!(result.as_slice()[0], 0.0);
+        assert_eq!(result.as_slice()[1], 0.0);
+
+        // -3 < x < 3: x * (x + 3) / 6
+        // hardswish(-1.5) = -1.5 * 1.5 / 6 = -0.375
+        assert!((result.as_slice()[2] - (-0.375)).abs() < 1e-5);
+        // hardswish(0) = 0 * 3 / 6 = 0
+        assert_eq!(result.as_slice()[3], 0.0);
+        // hardswish(1.5) = 1.5 * 4.5 / 6 = 1.125
+        assert!((result.as_slice()[4] - 1.125).abs() < 1e-5);
+
+        // x >= 3: x
+        assert_eq!(result.as_slice()[5], 3.0);
+        assert_eq!(result.as_slice()[6], 4.0);
+    }
+
+    #[test]
+    fn test_hardswish_zero() {
+        let v = Vector::from_slice(&[0.0]);
+        let result = v.hardswish().unwrap();
+        assert_eq!(result.as_slice()[0], 0.0);
+    }
+
+    #[test]
+    fn test_hardswish_boundary_values() {
+        // Test exact boundary values
+        let v = Vector::from_slice(&[-3.0, 3.0]);
+        let result = v.hardswish().unwrap();
+
+        // At x = -3: 0 (boundary)
+        assert_eq!(result.as_slice()[0], 0.0);
+        // At x = 3: 3 (boundary)
+        assert_eq!(result.as_slice()[1], 3.0);
+    }
+
+    #[test]
+    fn test_hardswish_large_values() {
+        let v = Vector::from_slice(&[-100.0, -10.0, 10.0, 100.0]);
+        let result = v.hardswish().unwrap();
+
+        // Large negative: 0
+        assert_eq!(result.as_slice()[0], 0.0);
+        assert_eq!(result.as_slice()[1], 0.0);
+
+        // Large positive: x
+        assert_eq!(result.as_slice()[2], 10.0);
+        assert_eq!(result.as_slice()[3], 100.0);
+    }
+
+    #[test]
+    fn test_hardswish_transition_region() {
+        // Test values in the transition region (-3, 3)
+        let v = Vector::from_slice(&[-2.0, -1.0, 1.0, 2.0]);
+        let result = v.hardswish().unwrap();
+
+        // hardswish(-2) = -2 * 1 / 6 = -0.333...
+        assert!((result.as_slice()[0] - (-1.0/3.0)).abs() < 1e-5);
+        // hardswish(-1) = -1 * 2 / 6 = -0.333...
+        assert!((result.as_slice()[1] - (-1.0/3.0)).abs() < 1e-5);
+        // hardswish(1) = 1 * 4 / 6 = 0.666...
+        assert!((result.as_slice()[2] - (2.0/3.0)).abs() < 1e-5);
+        // hardswish(2) = 2 * 5 / 6 = 1.666...
+        assert!((result.as_slice()[3] - (5.0/3.0)).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_hardswish_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.hardswish();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -12154,6 +12305,96 @@ mod property_tests {
                     (result.data[i] - val).abs() < 0.01,
                     "For large positive {}, swish should ≈ x, got {} vs {}",
                     val, result.data[i], val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: hardswish() produces finite values
+        #[test]
+        fn test_hardswish_finite_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.hardswish().unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(val.is_finite(), "Hardswish output should be finite");
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: hardswish(0) = 0 always
+        #[test]
+        fn test_hardswish_zero_property(
+            _a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let v = Vector::from_slice(&[0.0]);
+            let result = v.hardswish().unwrap();
+
+            prop_assert!(
+                result.data[0].abs() < 1e-10,
+                "hardswish(0) should be 0, got {}",
+                result.data[0]
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: For x >= 3, hardswish(x) = x (identity)
+        #[test]
+        fn test_hardswish_identity_large_positive(
+            a in prop::collection::vec(3.0f32..100.0, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.hardswish().unwrap();
+
+            for (i, &val) in a.iter().enumerate() {
+                prop_assert!(
+                    (result.data[i] - val).abs() < 1e-5,
+                    "For x >= 3, hardswish(x) should = x, got {} vs {}",
+                    result.data[i], val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: For x <= -3, hardswish(x) = 0
+        #[test]
+        fn test_hardswish_zero_large_negative(
+            a in prop::collection::vec(-100.0f32..-3.0, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.hardswish().unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(
+                    val.abs() < 1e-10,
+                    "For x <= -3, hardswish(x) should = 0, got {}",
+                    val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: hardswish matches formula in transition region
+        #[test]
+        fn test_hardswish_transition_property(
+            a in prop::collection::vec(-2.999f32..2.999, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.hardswish().unwrap();
+
+            for (i, &x) in a.iter().enumerate() {
+                let expected = x * (x + 3.0) / 6.0;
+                prop_assert!(
+                    (result.data[i] - expected).abs() < 1e-5,
+                    "hardswish({}) should = {} * ({} + 3) / 6 = {}, got {}",
+                    x, x, x, expected, result.data[i]
                 );
             }
         }
