@@ -671,6 +671,220 @@ impl GpuDevice {
         Ok(())
     }
 
+    /// Execute clip (clamp) operation on GPU: result[i] = clamp(input[i], min_val, max_val)
+    pub fn clip(
+        &self,
+        input: &[f32],
+        result: &mut [f32],
+        min_val: f32,
+        max_val: f32,
+    ) -> Result<(), String> {
+        pollster::block_on(async { self.clip_async(input, result, min_val, max_val).await })
+    }
+
+    async fn clip_async(
+        &self,
+        input: &[f32],
+        result: &mut [f32],
+        min_val: f32,
+        max_val: f32,
+    ) -> Result<(), String> {
+        let len = input.len();
+
+        // Create shader module
+        let shader = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Clip Shader"),
+                source: wgpu::ShaderSource::Wgsl(shaders::CLIP_SHADER.into()),
+            });
+
+        // Create input buffer
+        let input_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Clip Input"),
+            size: std::mem::size_of_val(input) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Create output buffer
+        let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Clip Output"),
+            size: std::mem::size_of_val(result) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Create uniform buffer for clip parameters
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct ClipParams {
+            min_val: f32,
+            max_val: f32,
+        }
+
+        let params = ClipParams { min_val, max_val };
+        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Clip Params"),
+            size: std::mem::size_of::<ClipParams>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Write data
+        self.queue
+            .write_buffer(&input_buffer, 0, bytemuck::cast_slice(input));
+        self.queue
+            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
+
+        // Create bind group layout
+        let bind_group_layout =
+            self.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Clip Bind Group Layout"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
+                });
+
+        // Create bind group
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Clip Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: input_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: output_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: params_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        // Create pipeline
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Clip Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        let pipeline = self
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Clip Pipeline"),
+                layout: Some(&pipeline_layout),
+                module: &shader,
+                entry_point: "main",
+                compilation_options: Default::default(),
+                cache: None,
+            });
+
+        // Create staging buffer for reading results
+        let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Clip Staging Buffer"),
+            size: std::mem::size_of_val(result) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Create command encoder
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Clip Encoder"),
+            });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Clip Pass"),
+                timestamp_writes: None,
+            });
+            compute_pass.set_pipeline(&pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+
+            // Dispatch workgroups (256 threads per workgroup)
+            let workgroup_size = 256;
+            let num_workgroups = (len as u32).div_ceil(workgroup_size);
+
+            compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
+        }
+
+        // Copy result to staging buffer
+        encoder.copy_buffer_to_buffer(
+            &output_buffer,
+            0,
+            &staging_buffer,
+            0,
+            std::mem::size_of_val(result) as u64,
+        );
+
+        // Submit commands
+        self.queue.submit(Some(encoder.finish()));
+
+        // Read back results
+        let buffer_slice = staging_buffer.slice(..);
+        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            sender.send(result).ok();
+        });
+
+        self.device.poll(wgpu::Maintain::Wait);
+
+        receiver
+            .receive()
+            .await
+            .ok_or("Failed to receive mapping result")?
+            .map_err(|e| format!("Buffer mapping failed: {:?}", e))?;
+
+        {
+            let data = buffer_slice.get_mapped_range();
+            result.copy_from_slice(bytemuck::cast_slice(&data));
+        }
+
+        staging_buffer.unmap();
+
+        Ok(())
+    }
+
     /// Execute dot product on GPU: result = sum(a[i] * b[i])
     pub fn dot(&self, a: &[f32], b: &[f32]) -> Result<f32, String> {
         pollster::block_on(async { self.dot_async(a, b).await })
