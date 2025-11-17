@@ -2146,6 +2146,73 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// SELU (Scaled Exponential Linear Unit) activation function
+    ///
+    /// Computes selu(x) = λ * (x if x > 0 else α * (exp(x) - 1))
+    /// where λ ≈ 1.0507 and α ≈ 1.6733
+    ///
+    /// # Properties
+    ///
+    /// - **Self-normalizing**: Activations converge to zero mean and unit variance
+    /// - **Vanishing gradient prevention**: Non-zero gradient for negative inputs
+    /// - **Automatic normalization**: Reduces need for batch normalization
+    ///
+    /// # Performance
+    ///
+    /// Uses scalar implementation (GPU disabled for element-wise ops).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+    /// let result = v.selu().unwrap();
+    ///
+    /// // Positive values scaled by λ ≈ 1.0507
+    /// assert!((result.as_slice()[3] - 1.0507).abs() < 0.001);
+    /// assert!((result.as_slice()[4] - 2.1014).abs() < 0.001);
+    ///
+    /// // Zero stays zero
+    /// assert!(result.as_slice()[2].abs() < 1e-5);
+    ///
+    /// // Negative values use ELU-like formula
+    /// assert!(result.as_slice()[0] < 0.0);
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `EmptyVector` if the input vector is empty.
+    ///
+    /// # References
+    ///
+    /// - Klambauer et al. (2017): "Self-Normalizing Neural Networks"
+    pub fn selu(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // SELU constants from Klambauer et al. (2017)
+        // These specific values ensure self-normalizing property
+        const LAMBDA: f32 = 1.0507009873554804934193349852946;
+        const ALPHA: f32 = 1.6732632423543772848170429916717;
+
+        // Scalar implementation: selu(x) = λ * (x if x > 0 else α * (exp(x) - 1))
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| {
+                if x > 0.0 {
+                    LAMBDA * x
+                } else {
+                    LAMBDA * ALPHA * (x.exp() - 1.0)
+                }
+            })
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a\[i\]^2)).
@@ -7552,6 +7619,96 @@ mod tests {
         assert!(matches!(result, Err(TruenoError::EmptyVector)));
     }
 
+    // SELU unit tests
+
+    #[test]
+    fn test_selu_basic() {
+        let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result = v.selu().unwrap();
+        let data = result.as_slice();
+
+        // SELU constants
+        const LAMBDA: f32 = 1.0507009873554804934193349852946;
+        const ALPHA: f32 = 1.6732632423543772848170429916717;
+
+        // Positive values: selu(x) = λ * x
+        assert!((data[3] - LAMBDA * 1.0).abs() < 1e-5); // selu(1.0) = λ
+        assert!((data[4] - LAMBDA * 2.0).abs() < 1e-5); // selu(2.0) = 2λ
+
+        // Zero: selu(0) = 0
+        assert!(data[2].abs() < 1e-5);
+
+        // Negative values: selu(x) = λ * α * (exp(x) - 1)
+        let expected_neg1 = LAMBDA * ALPHA * ((-1.0_f32).exp() - 1.0);
+        assert!((data[1] - expected_neg1).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_selu_zero() {
+        let v = Vector::from_slice(&[0.0]);
+        let result = v.selu().unwrap();
+        assert!(result.as_slice()[0].abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_selu_positive_scaling() {
+        // For positive values, selu(x) = λ * x
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0, 10.0]);
+        let result = v.selu().unwrap();
+        let data = result.as_slice();
+
+        const LAMBDA: f32 = 1.0507009873554804934193349852946;
+
+        for (i, &x) in [1.0, 2.0, 3.0, 10.0].iter().enumerate() {
+            assert!(
+                (data[i] - LAMBDA * x).abs() < 1e-5,
+                "selu({}) should be {} but got {}",
+                x,
+                LAMBDA * x,
+                data[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_selu_negative_asymptote() {
+        // For very negative x, selu(x) → -λ * α ≈ -1.7581
+        let v = Vector::from_slice(&[-100.0]);
+        let result = v.selu().unwrap();
+
+        const LAMBDA: f32 = 1.0507009873554804934193349852946;
+        const ALPHA: f32 = 1.6732632423543772848170429916717;
+        let asymptote = -LAMBDA * ALPHA;
+
+        assert!(
+            (result.as_slice()[0] - asymptote).abs() < 1e-4,
+            "selu(-100) should approach {} but got {}",
+            asymptote,
+            result.as_slice()[0]
+        );
+    }
+
+    #[test]
+    fn test_selu_continuity_at_zero() {
+        // Test values approaching zero from both sides
+        let eps = 1e-6;
+        let v = Vector::from_slice(&[-eps, 0.0, eps]);
+        let result = v.selu().unwrap();
+        let data = result.as_slice();
+
+        // All should be very close to zero (continuous at x=0)
+        assert!(data[0].abs() < 1e-3);
+        assert!(data[1].abs() < 1e-10);
+        assert!(data[2].abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_selu_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.selu();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -12630,6 +12787,105 @@ mod property_tests {
                     result.data[i] < 0.0,
                     "mish({}) should be negative in (-1, -0.1), got {}",
                     x, result.data[i]
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: selu() produces finite values
+        #[test]
+        fn test_selu_finite_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.selu().unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(val.is_finite(), "SELU output should be finite");
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: selu(0) = 0 always
+        #[test]
+        fn test_selu_zero_property(
+            _a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let v = Vector::from_slice(&[0.0]);
+            let result = v.selu().unwrap();
+
+            prop_assert!(
+                result.data[0].abs() < 1e-10,
+                "selu(0) should be 0, got {}",
+                result.data[0]
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: For positive x, selu(x) = λ * x (linear scaling)
+        #[test]
+        fn test_selu_linear_positive(
+            a in prop::collection::vec(0.001f32..100.0, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.selu().unwrap();
+
+            const LAMBDA: f32 = 1.0507009873554804934193349852946;
+
+            for (i, &val) in a.iter().enumerate() {
+                let expected = LAMBDA * val;
+                prop_assert!(
+                    (result.data[i] - expected).abs() < 1e-4,
+                    "For positive {}, selu should = λ*x = {}, got {}",
+                    val, expected, result.data[i]
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: For large negative x, selu(x) → -λ * α ≈ -1.7581
+        #[test]
+        fn test_selu_asymptote_negative(
+            a in prop::collection::vec(-100.0f32..-20.0, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.selu().unwrap();
+
+            const LAMBDA: f32 = 1.0507009873554804934193349852946;
+            const ALPHA: f32 = 1.6732632423543772848170429916717;
+            let asymptote = -LAMBDA * ALPHA;
+
+            for &val in result.as_slice() {
+                prop_assert!(
+                    (val - asymptote).abs() < 1e-3,
+                    "For large negative x, selu should → {}, got {}",
+                    asymptote, val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: selu is monotonically increasing
+        #[test]
+        fn test_selu_monotonic_property(
+            a in prop::collection::vec(-10.0f32..10.0, 2..50)
+        ) {
+            let mut sorted = a.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+            let va = Vector::from_slice(&sorted);
+            let result = va.selu().unwrap();
+
+            for i in 1..result.data.len() {
+                prop_assert!(
+                    result.data[i] >= result.data[i-1] - 1e-5,
+                    "selu should be monotonic: selu({}) = {} >= selu({}) = {}",
+                    sorted[i], result.data[i], sorted[i-1], result.data[i-1]
                 );
             }
         }
