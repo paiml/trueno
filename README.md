@@ -362,11 +362,84 @@ let activated = ffn_hidden.gelu().unwrap();  // Auto-uses GPU for >100K elements
 
 **📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
 
+### Softmax Activation (GPU-Accelerated)
+
+| Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
+|-----------|------------|---------------|------------------|---------|
+| **Softmax** | 10K | ~120 µs | ~60 µs | 2x target |
+| **Softmax** | 100K | ~1.2 ms | ~120 µs | 10x target |
+| **Softmax** | 1M | ~12 ms | ~600 µs | 20x target |
+
+**GPU Acceleration Strategy** (OpComplexity::Medium):
+- **GPU Threshold**: >10,000 elements (multi-pass overhead higher than element-wise ops)
+- **Operation**: Multi-pass softmax(x)[i] = exp(x[i] - max) / sum(exp(x - max))
+- **Implementation**: 4-pass GPU reduction
+  - **Pass 1**: Max reduction (parallel, numerical stability)
+  - **Pass 2**: Exp-subtract (element-wise exp(x - max))
+  - **Pass 3**: Sum reduction (parallel sum of exp values)
+  - **Pass 4**: Normalize (element-wise division by sum)
+- **Workgroups**: 256 threads per workgroup (1D dispatch)
+- **Numerical Stability**: Subtracts max before exp to prevent overflow
+- **Use Cases**: Classification networks, attention mechanisms, transformers
+
+**Automatic Backend Selection**:
+- Small vectors (<10K elements): Scalar (multi-pass CPU implementation)
+- Large vectors (>10K elements): GPU compute shader (5-20x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
+**Example: Attention Mechanism**
+```rust
+use trueno::Vector;
+
+// Softmax in multi-head attention (transformer)
+let attention_scores = Vector::from_slice(&vec![...]);  // 512K scores (64 heads * 128 seq * 64 seq)
+let attention_weights = attention_scores.softmax().unwrap();  // Auto-uses GPU for >10K elements
+```
+
+### Log-Softmax Activation (GPU-Accelerated)
+
+| Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
+|-----------|------------|---------------|------------------|---------|
+| **Log-Softmax** | 10K | ~130 µs | ~65 µs | 2x target |
+| **Log-Softmax** | 100K | ~1.3 ms | ~130 µs | 10x target |
+| **Log-Softmax** | 1M | ~13 ms | ~650 µs | 20x target |
+
+**GPU Acceleration Strategy** (OpComplexity::Medium):
+- **GPU Threshold**: >10,000 elements (multi-pass overhead)
+- **Operation**: Multi-pass log_softmax(x)[i] = x[i] - max - log(sum(exp(x - max)))
+- **Implementation**: 4-pass GPU reduction (same as softmax but final step computes log)
+  - **Pass 1**: Max reduction (parallel, numerical stability)
+  - **Pass 2**: Exp-subtract (element-wise exp(x - max))
+  - **Pass 3**: Sum reduction (parallel sum of exp values)
+  - **Pass 4**: Log-normalize (element-wise x - max - log(sum))
+- **Workgroups**: 256 threads per workgroup (1D dispatch)
+- **Numerical Stability**: More stable than computing log(softmax(x))
+- **Use Cases**: Cross-entropy loss, NLL loss, classification training
+
+**Automatic Backend Selection**:
+- Small vectors (<10K elements): Scalar (multi-pass CPU implementation)
+- Large vectors (>10K elements): GPU compute shader (5-20x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
+**Example: Cross-Entropy Loss**
+```rust
+use trueno::Vector;
+
+// Log-softmax for stable cross-entropy loss computation
+let logits = Vector::from_slice(&vec![...]);  // 100K logits (1000 batch * 100 classes)
+let log_probs = logits.log_softmax().unwrap();  // Auto-uses GPU for >10K elements
+
+// Compute NLL loss: -log_probs[target_class]
+// More numerically stable than log(softmax(x))
+```
+
+**📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
+
 ## Features
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
-- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, leaky ReLU, ELU, sigmoid, tanh, swish, GELU (>100K elements), and clip operation (>100K elements)
+- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, leaky ReLU, ELU, sigmoid, tanh, swish, GELU (>100K elements), softmax, log_softmax (>10K elements), and clip operation (>100K elements)
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
