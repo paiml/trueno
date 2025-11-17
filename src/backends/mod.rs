@@ -48,7 +48,7 @@ pub mod wasm;
 /// - Result slice has sufficient capacity
 /// - Slices `a` and `b` have the same length
 pub trait VectorBackend {
-    /// Element-wise addition: a[i] + b[i]
+    /// Element-wise addition: a\[i\] + b\[i\]
     ///
     /// # Safety
     ///
@@ -56,7 +56,7 @@ pub trait VectorBackend {
     /// - `result` must have length >= `a.len()`
     unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]);
 
-    /// Element-wise subtraction: a[i] - b[i]
+    /// Element-wise subtraction: a\[i\] - b\[i\]
     ///
     /// # Safety
     ///
@@ -64,7 +64,7 @@ pub trait VectorBackend {
     /// - `result` must have length >= `a.len()`
     unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]);
 
-    /// Element-wise multiplication: a[i] * b[i]
+    /// Element-wise multiplication: a\[i\] * b\[i\]
     ///
     /// # Safety
     ///
@@ -72,7 +72,7 @@ pub trait VectorBackend {
     /// - `result` must have length >= `a.len()`
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]);
 
-    /// Element-wise division: a[i] / b[i]
+    /// Element-wise division: a\[i\] / b\[i\]
     ///
     /// # Safety
     ///
@@ -80,28 +80,28 @@ pub trait VectorBackend {
     /// - `result` must have length >= `a.len()`
     unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]);
 
-    /// Dot product: sum(a[i] * b[i])
+    /// Dot product: sum(a\[i\] * b\[i\])
     ///
     /// # Safety
     ///
     /// - `a` and `b` must have the same length
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32;
 
-    /// Sum reduction: sum(a[i])
+    /// Sum reduction: sum(a\[i\])
     ///
     /// # Safety
     ///
     /// - `a` must not be empty
     unsafe fn sum(a: &[f32]) -> f32;
 
-    /// Max reduction: max(a[i])
+    /// Max reduction: max(a\[i\])
     ///
     /// # Safety
     ///
     /// - `a` must not be empty
     unsafe fn max(a: &[f32]) -> f32;
 
-    /// Min reduction: min(a[i])
+    /// Min reduction: min(a\[i\])
     ///
     /// # Safety
     ///
@@ -126,7 +126,7 @@ pub trait VectorBackend {
     /// - `a` must not be empty
     unsafe fn argmin(a: &[f32]) -> usize;
 
-    /// Kahan summation: numerically stable sum(a[i])
+    /// Kahan summation: numerically stable sum(a\[i\])
     ///
     /// Uses the Kahan summation algorithm to reduce floating-point rounding errors
     /// when summing many numbers. Tracks a running compensation for lost low-order bits.
@@ -136,7 +136,7 @@ pub trait VectorBackend {
     /// - Can handle empty slice (returns 0.0)
     unsafe fn sum_kahan(a: &[f32]) -> f32;
 
-    /// L2 norm (Euclidean norm): sqrt(sum(a[i]^2))
+    /// L2 norm (Euclidean norm): sqrt(sum(a\[i\]^2))
     ///
     /// Computes the Euclidean length of the vector. This is equivalent to sqrt(dot(a, a)).
     ///
@@ -145,7 +145,7 @@ pub trait VectorBackend {
     /// - Can handle empty slice (returns 0.0)
     unsafe fn norm_l2(a: &[f32]) -> f32;
 
-    /// L1 norm (Manhattan norm): sum(|a[i]|)
+    /// L1 norm (Manhattan norm): sum(|a\[i\]|)
     ///
     /// Computes the sum of absolute values of all elements.
     /// Used in machine learning (L1 regularization), distance metrics, and sparse modeling.
@@ -155,7 +155,7 @@ pub trait VectorBackend {
     /// - Can handle empty slice (returns 0.0)
     unsafe fn norm_l1(a: &[f32]) -> f32;
 
-    /// Scalar multiplication: result[i] = a[i] * scalar
+    /// Scalar multiplication: result\[i\] = a\[i\] * scalar
     ///
     /// Multiplies all elements by a scalar value.
     /// Used in vector scaling, normalization, and linear transformations.
@@ -166,7 +166,7 @@ pub trait VectorBackend {
     /// - Can handle empty slice
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]);
 
-    /// Clamp elements to range [min_val, max_val]: result[i] = max(min_val, min(a[i], max_val))
+    /// Clamp elements to range [min_val, max_val]: result\[i\] = max(min_val, min(a\[i\], max_val))
     ///
     /// Constrains each element to the specified range.
     /// Used in neural networks (gradient clipping), graphics (color clamping), and signal processing.
@@ -178,10 +178,10 @@ pub trait VectorBackend {
     /// - Assumes min_val <= max_val (caller must validate)
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]);
 
-    /// Linear interpolation: result[i] = a[i] + t * (b[i] - a[i])
+    /// Linear interpolation: result\[i\] = a\[i\] + t * (b\[i\] - a\[i\])
     ///
     /// Computes element-wise linear interpolation between two vectors.
-    /// When t=0, returns a; when t=1, returns b; values outside [0,1] extrapolate.
+    /// When t=0, returns a; when t=1, returns b; values outside \[0,1\] extrapolate.
     /// Used in graphics, animation, neural networks, and signal processing.
     ///
     /// # Safety
@@ -191,7 +191,7 @@ pub trait VectorBackend {
     /// - Can handle empty slices
     unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]);
 
-    /// Fused multiply-add: result[i] = a[i] * b[i] + c[i]
+    /// Fused multiply-add: result\[i\] = a\[i\] * b\[i\] + c\[i\]
     ///
     /// Computes element-wise fused multiply-add operation.
     /// On hardware with FMA support, this is a single instruction with better performance

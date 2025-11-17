@@ -871,7 +871,7 @@ impl Vector<f32> {
 
     /// Sum of squared elements
     ///
-    /// Computes the sum of squares: sum(a[i]^2).
+    /// Computes the sum of squares: sum(a\[i\]^2).
     /// This is the building block for computing L2 norm and variance.
     ///
     /// # Examples
@@ -898,7 +898,7 @@ impl Vector<f32> {
 
     /// Arithmetic mean (average)
     ///
-    /// Computes the arithmetic mean of all elements: sum(a[i]) / n.
+    /// Computes the arithmetic mean of all elements: sum(a\[i\]) / n.
     ///
     /// # Performance
     ///
@@ -935,7 +935,7 @@ impl Vector<f32> {
 
     /// Population variance
     ///
-    /// Computes the population variance: Var(X) = E[(X - μ)²] = E[X²] - μ²
+    /// Computes the population variance: Var(X) = E\[(X - μ)²\] = E\[X²\] - μ²
     /// Uses the computational formula to avoid two passes over the data.
     ///
     /// # Performance
@@ -1012,7 +1012,7 @@ impl Vector<f32> {
     /// Population covariance between two vectors
     ///
     /// Computes the population covariance: Cov(X,Y) = E[(X - μx)(Y - μy)]
-    /// Uses the computational formula: Cov(X,Y) = E[XY] - μx·μy
+    /// Uses the computational formula: Cov(X,Y) = E\[XY\] - μx·μy
     ///
     /// # Performance
     ///
@@ -1127,7 +1127,7 @@ impl Vector<f32> {
     /// Z-score normalization (standardization)
     ///
     /// Transforms the vector to have mean = 0 and standard deviation = 1.
-    /// Each element is transformed as: z[i] = (x[i] - μ) / σ
+    /// Each element is transformed as: z\[i\] = (x\[i\] - μ) / σ
     ///
     /// This is a fundamental preprocessing step in machine learning and statistics,
     /// ensuring features have comparable scales and are centered around zero.
@@ -1197,7 +1197,7 @@ impl Vector<f32> {
     ///
     /// Transforms the vector so that the minimum value becomes 0 and the maximum
     /// value becomes 1, with all other values scaled proportionally.
-    /// Formula: x'[i] = (x[i] - min) / (max - min)
+    /// Formula: x'\[i\] = (x\[i\] - min) / (max - min)
     ///
     /// This is a fundamental preprocessing technique in machine learning, especially
     /// for algorithms sensitive to feature magnitudes (e.g., neural networks, k-NN).
@@ -1315,7 +1315,7 @@ impl Vector<f32> {
     /// Softmax activation function
     ///
     /// Converts a vector of real values into a probability distribution.
-    /// Formula: softmax(x)[i] = exp(x[i] - max(x)) / sum(exp(x[j] - max(x)))
+    /// Formula: softmax(x)\[i\] = exp(x\[i\] - max(x)) / sum(exp(x\[j\] - max(x)))
     ///
     /// Uses the numerically stable version with max subtraction to prevent overflow.
     /// The output is a probability distribution: all values in [0, 1] and sum to 1.
@@ -1370,7 +1370,7 @@ impl Vector<f32> {
     /// Log-softmax activation function
     ///
     /// Computes the logarithm of the softmax function in a numerically stable way.
-    /// Formula: log_softmax(x)[i] = x[i] - max(x) - log(sum(exp(x[j] - max(x))))
+    /// Formula: log_softmax(x)\[i\] = x\[i\] - max(x) - log(sum(exp(x\[j\] - max(x))))
     ///
     /// This is more numerically stable than computing log(softmax(x)) and is commonly
     /// used in neural networks for computing cross-entropy loss.
@@ -1429,8 +1429,8 @@ impl Vector<f32> {
     /// # Formula
     ///
     /// ```text
-    /// relu(x)[i] = max(0, x[i])
-    ///            = x[i]  if x[i] > 0
+    /// relu(x)[i] = max(0, x\[i\])
+    ///            = x\[i\]  if x\[i\] > 0
     ///            = 0     otherwise
     /// ```
     ///
@@ -1484,8 +1484,8 @@ impl Vector<f32> {
     /// # Formula
     ///
     /// ```text
-    /// sigmoid(x)[i] = 1 / (1 + exp(-x[i]))
-    ///               = exp(x[i]) / (1 + exp(x[i]))
+    /// sigmoid(x)[i] = 1 / (1 + exp(-x\[i\]))
+    ///               = exp(x\[i\]) / (1 + exp(x\[i\]))
     /// ```
     ///
     /// # Properties
@@ -1564,9 +1564,9 @@ impl Vector<f32> {
     /// # Formula
     ///
     /// ```text
-    /// leaky_relu(x, α)[i] = max(αx[i], x[i])
-    ///                     = x[i]    if x[i] > 0
-    ///                     = αx[i]   if x[i] ≤ 0
+    /// leaky_relu(x, α)[i] = max(αx\[i\], x\[i\])
+    ///                     = x\[i\]    if x\[i\] > 0
+    ///                     = αx\[i\]   if x\[i\] ≤ 0
     /// ```
     ///
     /// # Parameters
@@ -1649,8 +1649,8 @@ impl Vector<f32> {
     /// # Formula
     ///
     /// ```text
-    /// elu(x, α)[i] = x[i]           if x[i] > 0
-    ///              = α(e^x[i] - 1)  if x[i] ≤ 0
+    /// elu(x, α)[i] = x\[i\]           if x\[i\] > 0
+    ///              = α(e^x\[i\] - 1)  if x\[i\] ≤ 0
     /// ```
     ///
     /// # Parameters
@@ -1874,7 +1874,7 @@ impl Vector<f32> {
 
     /// L2 norm (Euclidean norm)
     ///
-    /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
+    /// Computes the Euclidean length of the vector: sqrt(sum(a\[i\]^2)).
     /// This is mathematically equivalent to sqrt(dot(self, self)).
     ///
     /// # Performance
@@ -1984,7 +1984,7 @@ impl Vector<f32> {
 
     /// Compute the L1 norm (Manhattan norm) of the vector
     ///
-    /// Returns the sum of absolute values: ||v||₁ = sum(|v[i]|)
+    /// Returns the sum of absolute values: ||v||₁ = sum(|v\[i\]|)
     ///
     /// The L1 norm is used in:
     /// - Machine learning (L1 regularization, Lasso regression)
@@ -2049,7 +2049,7 @@ impl Vector<f32> {
 
     /// Compute the L∞ norm (infinity norm / max norm) of the vector
     ///
-    /// Returns the maximum absolute value: ||v||∞ = max(|v[i]|)
+    /// Returns the maximum absolute value: ||v||∞ = max(|v\[i\]|)
     ///
     /// The L∞ norm is used in:
     /// - Numerical analysis (error bounds, stability analysis)
@@ -2303,7 +2303,7 @@ impl Vector<f32> {
 
     /// Linear interpolation between two vectors
     ///
-    /// Computes element-wise linear interpolation: `result[i] = a[i] + t * (b[i] - a[i])`
+    /// Computes element-wise linear interpolation: `result\[i\] = a\[i\] + t * (b\[i\] - a\[i\])`
     ///
     /// - When `t = 0.0`, returns `self`
     /// - When `t = 1.0`, returns `other`
@@ -2385,7 +2385,7 @@ impl Vector<f32> {
         })
     }
 
-    /// Fused multiply-add: result[i] = self[i] * b[i] + c[i]
+    /// Fused multiply-add: result\[i\] = self\[i\] * b\[i\] + c\[i\]
     ///
     /// Computes element-wise fused multiply-add operation. On hardware with FMA support
     /// (AVX2, NEON), this is a single instruction with better performance and numerical
@@ -2399,7 +2399,7 @@ impl Vector<f32> {
     ///
     /// # Returns
     ///
-    /// A new vector where each element is `self[i] * b[i] + c[i]`
+    /// A new vector where each element is `self\[i\] * b\[i\] + c\[i\]`
     ///
     /// # Errors
     ///
@@ -2477,7 +2477,7 @@ impl Vector<f32> {
         })
     }
 
-    /// Element-wise square root: result[i] = sqrt(self[i])
+    /// Element-wise square root: result\[i\] = sqrt(self\[i\])
     ///
     /// Computes the square root of each element. For negative values, returns NaN
     /// following IEEE 754 floating-point semantics.
@@ -2521,7 +2521,7 @@ impl Vector<f32> {
         })
     }
 
-    /// Element-wise reciprocal: result[i] = 1 / self[i]
+    /// Element-wise reciprocal: result\[i\] = 1 / self\[i\]
     ///
     /// Computes the reciprocal (multiplicative inverse) of each element.
     /// For zero values, returns infinity following IEEE 754 floating-point semantics.
@@ -2565,7 +2565,7 @@ impl Vector<f32> {
         })
     }
 
-    /// Element-wise power: result[i] = base[i]^n
+    /// Element-wise power: result\[i\] = base\[i\]^n
     ///
     /// Raises each element to the given power `n`.
     /// Uses Rust's optimized f32::powf() method.
@@ -2603,7 +2603,7 @@ impl Vector<f32> {
         })
     }
 
-    /// Element-wise exponential: result[i] = e^x[i]
+    /// Element-wise exponential: result\[i\] = e^x\[i\]
     ///
     /// Computes the natural exponential (e^x) for each element.
     /// Uses Rust's optimized f32::exp() method.
@@ -2640,7 +2640,7 @@ impl Vector<f32> {
         })
     }
 
-    /// Element-wise natural logarithm: result[i] = ln(x[i])
+    /// Element-wise natural logarithm: result\[i\] = ln(x\[i\])
     ///
     /// Computes the natural logarithm (base e) for each element.
     /// Uses Rust's optimized f32::ln() method.
@@ -2678,7 +2678,7 @@ impl Vector<f32> {
         })
     }
 
-    /// Element-wise sine: result[i] = sin(x[i])
+    /// Element-wise sine: result\[i\] = sin(x\[i\])
     ///
     /// Computes the sine for each element (input in radians).
     /// Uses Rust's optimized f32::sin() method.
@@ -2717,7 +2717,7 @@ impl Vector<f32> {
         })
     }
 
-    /// Element-wise cosine: result[i] = cos(x[i])
+    /// Element-wise cosine: result\[i\] = cos(x\[i\])
     ///
     /// Computes the cosine for each element (input in radians).
     /// Uses Rust's optimized f32::cos() method.
@@ -3257,7 +3257,7 @@ impl Vector<f32> {
     /// Returns a vector with the magnitude of `self` and the sign of `sign`.
     ///
     /// For each element pair, takes the magnitude from `self` and the sign from `sign`.
-    /// Equivalent to `abs(self[i])` with the sign of `sign[i]`.
+    /// Equivalent to `abs(self\[i\])` with the sign of `sign\[i\]`.
     ///
     /// # Arguments
     ///
@@ -11298,7 +11298,7 @@ mod property_tests {
 
     proptest! {
         /// Property test: minmax_normalize() preserves order (monotonicity)
-        /// If a[i] <= a[j], then normalized[i] <= normalized[j]
+        /// If a\[i\] <= a\[j\], then normalized\[i\] <= normalized\[j\]
         #[test]
         fn test_minmax_normalize_preserves_order(
             a in prop::collection::vec(-100.0f32..100.0, 2..100)
@@ -11364,7 +11364,7 @@ mod property_tests {
 
     proptest! {
         /// Property test: clip() preserves order (monotonicity)
-        /// If a[i] <= a[j], then clip(a)[i] <= clip(a)[j]
+        /// If a\[i\] <= a\[j\], then clip(a)[i] <= clip(a)[j]
         #[test]
         fn test_clip_preserves_order(
             a in prop::collection::vec(-100.0f32..100.0, 2..100),
