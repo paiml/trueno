@@ -1639,6 +1639,95 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// ELU (Exponential Linear Unit) activation function
+    ///
+    /// Computes the element-wise ELU with a configurable alpha parameter.
+    /// ELU pushes mean activations closer to zero, improving learning.
+    ///
+    /// # Formula
+    ///
+    /// ```text
+    /// elu(x, α)[i] = x[i]           if x[i] > 0
+    ///              = α(e^x[i] - 1)  if x[i] ≤ 0
+    /// ```
+    ///
+    /// # Parameters
+    ///
+    /// - `alpha`: Controls the saturation value for negative inputs (typically 1.0)
+    ///   - Must be > 0
+    ///   - Common value: 1.0 (original ELU paper)
+    ///   - Larger α → slower saturation for negative inputs
+    ///
+    /// # Properties
+    ///
+    /// - **Smooth**: Unlike ReLU/Leaky ReLU, has smooth gradients everywhere
+    /// - **Negative values**: Allows negative outputs (pushes mean closer to zero)
+    /// - **Bounded below**: Saturates to -α for very negative inputs
+    /// - **Unbounded above**: No saturation for positive values
+    /// - **Non-zero gradient**: Has gradient everywhere (no dead neurons)
+    ///
+    /// # Applications
+    ///
+    /// - **Deep networks**: Better gradient flow than ReLU
+    /// - **Mean activation near zero**: Reduces internal covariate shift
+    /// - **Noise robustness**: Smooth activation helps with noisy gradients
+    /// - **Empirical improvements**: Often outperforms ReLU and Leaky ReLU
+    ///
+    /// # Performance
+    ///
+    /// This operation is compute-bound due to exp() for negative values.
+    /// More expensive than ReLU/Leaky ReLU but provides better properties.
+    ///
+    /// # Errors
+    ///
+    /// Returns `EmptyVector` if the input vector is empty.
+    /// Returns `InvalidInput` if alpha <= 0.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+    /// let result = v.elu(1.0).unwrap();
+    ///
+    /// // Negative values: α(e^x - 1), positive unchanged
+    /// // elu(-2, 1) ≈ -0.865, elu(-1, 1) ≈ -0.632
+    /// assert!((result.data[0] - (-0.865)).abs() < 0.01);
+    /// assert!((result.data[1] - (-0.632)).abs() < 0.01);
+    /// assert_eq!(result.data[2], 0.0);
+    /// assert_eq!(result.data[3], 1.0);
+    /// assert_eq!(result.data[4], 2.0);
+    /// ```
+    pub fn elu(&self, alpha: f32) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // Validate alpha parameter
+        if alpha <= 0.0 {
+            return Err(TruenoError::InvalidInput(format!(
+                "alpha must be > 0, got {}",
+                alpha
+            )));
+        }
+
+        // elu(x, α) = x if x > 0, α(e^x - 1) otherwise
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| {
+                if x > 0.0 {
+                    x
+                } else {
+                    alpha * (x.exp() - 1.0)
+                }
+            })
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -6598,6 +6687,91 @@ mod tests {
     }
 
     #[test]
+    fn test_elu_basic() {
+        // Basic ELU with α = 1.0
+        let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result = v.elu(1.0).unwrap();
+
+        // elu(-2, 1) = 1*(e^-2 - 1) ≈ -0.8647
+        // elu(-1, 1) = 1*(e^-1 - 1) ≈ -0.6321
+        assert!((result.data[0] - (-0.8647)).abs() < 0.001);
+        assert!((result.data[1] - (-0.6321)).abs() < 0.001);
+        assert_eq!(result.data[2], 0.0);
+        assert_eq!(result.data[3], 1.0);
+        assert_eq!(result.data[4], 2.0);
+    }
+
+    #[test]
+    fn test_elu_different_alphas() {
+        // Test with different alpha values
+        let v = Vector::from_slice(&[-1.0, 2.0]);
+
+        // α = 1.0 (standard)
+        let result_1 = v.elu(1.0).unwrap();
+        assert!((result_1.data[0] - (-0.6321)).abs() < 0.001);
+        assert_eq!(result_1.data[1], 2.0);
+
+        // α = 0.5
+        let result_05 = v.elu(0.5).unwrap();
+        assert!((result_05.data[0] - (-0.3161)).abs() < 0.001); // 0.5 * (e^-1 - 1)
+        assert_eq!(result_05.data[1], 2.0);
+
+        // α = 2.0
+        let result_2 = v.elu(2.0).unwrap();
+        assert!((result_2.data[0] - (-1.2642)).abs() < 0.001); // 2.0 * (e^-1 - 1)
+        assert_eq!(result_2.data[1], 2.0);
+    }
+
+    #[test]
+    fn test_elu_saturation() {
+        // For very negative values, ELU saturates to -α
+        let v = Vector::from_slice(&[-10.0, -20.0, -100.0]);
+        let result = v.elu(1.0).unwrap();
+
+        // All should be very close to -1.0 (saturation at -α)
+        for &val in result.as_slice() {
+            assert!(
+                (val - (-1.0)).abs() < 0.001,
+                "ELU should saturate to -α for very negative inputs, got {}",
+                val
+            );
+        }
+    }
+
+    #[test]
+    fn test_elu_preserves_positive() {
+        // Positive values should remain unchanged
+        let v = Vector::from_slice(&[0.5, 1.0, 5.0, 10.0]);
+        let result = v.elu(1.0).unwrap();
+
+        for i in 0..v.len() {
+            assert_eq!(
+                result.data[i], v.data[i],
+                "Positive values should be preserved"
+            );
+        }
+    }
+
+    #[test]
+    fn test_elu_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.elu(1.0);
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
+    fn test_elu_invalid_alpha() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+
+        // Alpha <= 0 should fail
+        let result = v.elu(0.0);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+
+        let result = v.elu(-1.0);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+    }
+
+    #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
 
@@ -11277,6 +11451,79 @@ mod property_tests {
                         prop_assert!(
                             result.data[i] < result.data[j] + 1e-5,
                             "Monotonicity violated: {} < {} but leaky_relu({}) = {} >= leaky_relu({}) = {}",
+                            a[i], a[j], a[i], result.data[i], a[j], result.data[j]
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // ========================================================================
+    // Property tests for elu() - Exponential Linear Unit
+    // ========================================================================
+
+    proptest! {
+        /// Property test: elu() preserves positive values exactly
+        #[test]
+        fn test_elu_preserves_positive_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            alpha in 0.1f32..5.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.elu(alpha).unwrap();
+
+            for (i, &val) in a.iter().enumerate() {
+                if val > 0.0 {
+                    prop_assert!(
+                        (result.data[i] - val).abs() < 1e-6,
+                        "Positive value {} should be preserved, got {}",
+                        val, result.data[i]
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: elu() produces values >= -alpha for negative inputs
+        /// ELU saturates to -α as x → -∞
+        #[test]
+        fn test_elu_bounded_below_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            alpha in 0.1f32..5.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.elu(alpha).unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(
+                    val >= -alpha - 0.01,
+                    "ELU output {} should be >= -α = {}",
+                    val, -alpha
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: elu() is monotonically increasing
+        /// If x < y, then elu(x) < elu(y)
+        #[test]
+        fn test_elu_monotonic_property(
+            a in prop::collection::vec(-20.0f32..20.0, 2..50),
+            alpha in 0.5f32..2.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.elu(alpha).unwrap();
+
+            // Check all pairs for monotonicity
+            for i in 0..a.len() {
+                for j in 0..a.len() {
+                    if a[i] < a[j] {
+                        prop_assert!(
+                            result.data[i] < result.data[j] + 1e-5,
+                            "Monotonicity violated: {} < {} but elu({}) = {} >= elu({}) = {}",
                             a[i], a[j], a[i], result.data[i], a[j], result.data[j]
                         );
                     }
