@@ -1,5 +1,9 @@
 //! Vector type with multi-backend support
 
+// GPU thresholds intentionally set to usize::MAX to disable GPU for element-wise ops
+// See docs/performance-analysis.md - GPU is 2-65,000x SLOWER than scalar for these ops
+#![allow(clippy::absurd_extreme_comparisons)]
+
 #[cfg(target_arch = "x86_64")]
 use crate::backends::avx2::Avx2Backend;
 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
@@ -2066,6 +2070,75 @@ impl Vector<f32> {
                     x
                 } else {
                     x * (x + 3.0) / 6.0
+                }
+            })
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
+    /// Mish activation function
+    ///
+    /// Applies the mish activation element-wise: mish(x) = x * tanh(softplus(x)) = x * tanh(ln(1 + e^x))
+    ///
+    /// Mish is a self-regularizing non-monotonic activation function that often outperforms
+    /// ReLU and swish in computer vision tasks. It's used in YOLOv4 and many modern architectures.
+    ///
+    /// Properties:
+    /// - Smooth and non-monotonic (similar to swish)
+    /// - Self-regularizing: prevents dying neurons
+    /// - mish(0) ≈ 0 (small positive value)
+    /// - mish(x) ≈ x for large positive x (nearly linear)
+    /// - mish(x) ≈ 0 for large negative x
+    /// - Bounded below by ≈ -0.31 at x ≈ -1.19
+    ///
+    /// # Performance
+    ///
+    /// Compute-bound operation requiring exponential, logarithm, and tanh.
+    /// More expensive than ReLU/swish but often provides better accuracy.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+    /// let result = v.mish().unwrap();
+    ///
+    /// // Mish is smooth and self-gated
+    /// assert!(result.as_slice()[0] < 0.0); // Small negative output for negative inputs
+    /// assert!(result.as_slice()[2] > 0.0); // mish(0) is small positive
+    /// assert!(result.as_slice()[4] > 1.5); // Large positive → near linear
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `EmptyVector` if the input vector is empty.
+    ///
+    /// # References
+    ///
+    /// - Misra (2019): "Mish: A Self Regularized Non-Monotonic Neural Activation Function"
+    pub fn mish(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // Scalar implementation: mish(x) = x * tanh(softplus(x)) = x * tanh(ln(1 + e^x))
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| {
+                // Handle extreme values for numerical stability
+                if x < -20.0 {
+                    // For very negative x: softplus ≈ 0, tanh(0) ≈ 0, so mish ≈ 0
+                    0.0
+                } else if x > 20.0 {
+                    // For very positive x: softplus ≈ x, tanh(x) ≈ 1, so mish ≈ x
+                    x
+                } else {
+                    // Normal case: x * tanh(ln(1 + e^x))
+                    let softplus = (1.0 + x.exp()).ln();
+                    x * softplus.tanh()
                 }
             })
             .collect();
@@ -7395,19 +7468,87 @@ mod tests {
         let result = v.hardswish().unwrap();
 
         // hardswish(-2) = -2 * 1 / 6 = -0.333...
-        assert!((result.as_slice()[0] - (-1.0/3.0)).abs() < 1e-5);
+        assert!((result.as_slice()[0] - (-1.0 / 3.0)).abs() < 1e-5);
         // hardswish(-1) = -1 * 2 / 6 = -0.333...
-        assert!((result.as_slice()[1] - (-1.0/3.0)).abs() < 1e-5);
+        assert!((result.as_slice()[1] - (-1.0 / 3.0)).abs() < 1e-5);
         // hardswish(1) = 1 * 4 / 6 = 0.666...
-        assert!((result.as_slice()[2] - (2.0/3.0)).abs() < 1e-5);
+        assert!((result.as_slice()[2] - (2.0 / 3.0)).abs() < 1e-5);
         // hardswish(2) = 2 * 5 / 6 = 1.666...
-        assert!((result.as_slice()[3] - (5.0/3.0)).abs() < 1e-5);
+        assert!((result.as_slice()[3] - (5.0 / 3.0)).abs() < 1e-5);
     }
 
     #[test]
     fn test_hardswish_empty_vector() {
         let v = Vector::from_slice(&[]);
         let result = v.hardswish();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    // Mish activation tests
+    #[test]
+    fn test_mish_basic() {
+        let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result = v.mish().unwrap();
+
+        // mish has small negative values for negative inputs
+        assert!(result.as_slice()[0] < 0.0);
+        assert!(result.as_slice()[1] < 0.0);
+
+        // mish(0) is a small positive value (0 * tanh(ln(2)) = 0)
+        assert!(result.as_slice()[2].abs() < 1e-5);
+
+        // Positive inputs give positive outputs
+        assert!(result.as_slice()[3] > 0.0);
+        assert!(result.as_slice()[4] > 0.0);
+    }
+
+    #[test]
+    fn test_mish_zero() {
+        let v = Vector::from_slice(&[0.0]);
+        let result = v.mish().unwrap();
+        // mish(0) = 0 * tanh(ln(2)) = 0
+        assert!(result.as_slice()[0].abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_mish_large_positive() {
+        // For large positive x, mish(x) ≈ x
+        let v = Vector::from_slice(&[10.0, 20.0, 50.0]);
+        let result = v.mish().unwrap();
+
+        // Should be very close to x for large values
+        assert!((result.as_slice()[0] - 10.0).abs() < 0.001);
+        assert!((result.as_slice()[1] - 20.0).abs() < 0.001);
+        assert!((result.as_slice()[2] - 50.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_mish_large_negative() {
+        // For large negative x, mish(x) ≈ 0
+        let v = Vector::from_slice(&[-10.0, -20.0, -50.0]);
+        let result = v.mish().unwrap();
+
+        // Should be very close to 0 for large negative values
+        assert!(result.as_slice()[0].abs() < 0.001);
+        assert!(result.as_slice()[1].abs() < 1e-6);
+        assert!(result.as_slice()[2].abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_mish_minimum() {
+        // Mish has a minimum around x ≈ -1.19 with value ≈ -0.31
+        let v = Vector::from_slice(&[-1.19]);
+        let result = v.mish().unwrap();
+
+        // Should be close to the minimum value
+        assert!(result.as_slice()[0] < -0.2);
+        assert!(result.as_slice()[0] > -0.4);
+    }
+
+    #[test]
+    fn test_mish_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.mish();
         assert!(matches!(result, Err(TruenoError::EmptyVector)));
     }
 
@@ -12395,6 +12536,100 @@ mod property_tests {
                     (result.data[i] - expected).abs() < 1e-5,
                     "hardswish({}) should = {} * ({} + 3) / 6 = {}, got {}",
                     x, x, x, expected, result.data[i]
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: mish() produces finite values
+        #[test]
+        fn test_mish_finite_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.mish().unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(val.is_finite(), "Mish output should be finite");
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: mish(0) ≈ 0 (mish(0) = 0 * tanh(softplus(0)) = 0)
+        #[test]
+        fn test_mish_zero_property(
+            _a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let v = Vector::from_slice(&[0.0]);
+            let result = v.mish().unwrap();
+
+            prop_assert!(
+                result.data[0].abs() < 1e-5,
+                "mish(0) should be ≈ 0, got {}",
+                result.data[0]
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: For large positive x, mish(x) ≈ x (linear)
+        #[test]
+        fn test_mish_linear_large_positive(
+            a in prop::collection::vec(20.0f32..100.0, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.mish().unwrap();
+
+            for (i, &val) in a.iter().enumerate() {
+                // For large positive values, mish(x) should be very close to x
+                // since softplus(x) → x and tanh(x) → 1
+                prop_assert!(
+                    (result.data[i] - val).abs() < 0.01,
+                    "For large positive {}, mish should ≈ x, got {} vs {}",
+                    val, result.data[i], val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: For large negative x, mish(x) → 0
+        #[test]
+        fn test_mish_zero_large_negative(
+            a in prop::collection::vec(-100.0f32..-20.0, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.mish().unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(
+                    val.abs() < 1e-5,
+                    "For large negative x, mish(x) should → 0, got {}",
+                    val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: mish has negative region (unlike ReLU)
+        /// mish(x) can be slightly negative for x in (-1.5, 0)
+        #[test]
+        fn test_mish_negative_region_property(
+            a in prop::collection::vec(-1.0f32..-0.1, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.mish().unwrap();
+
+            for (i, &x) in a.iter().enumerate() {
+                // Mish should produce negative values in this range
+                // The minimum of mish is approximately -0.31 at x ≈ -1.07
+                prop_assert!(
+                    result.data[i] < 0.0,
+                    "mish({}) should be negative in (-1, -0.1), got {}",
+                    x, result.data[i]
                 );
             }
         }
