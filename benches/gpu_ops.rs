@@ -559,6 +559,99 @@ fn bench_gpu_gelu(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark GPU softmax activation vs scalar baseline
+fn bench_gpu_softmax(c: &mut Criterion) {
+    // Skip if GPU not available
+    if !GpuBackend::is_available() {
+        eprintln!("GPU not available, skipping GPU benchmarks");
+        return;
+    }
+
+    let mut group = c.benchmark_group("gpu_softmax");
+
+    // OpComplexity::Medium - test above 10K threshold (multi-pass overhead)
+    for size in [10_000, 100_000, 1_000_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // GPU backend
+        group.bench_with_input(BenchmarkId::new("GPU", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.01 - (size as f32) * 0.005)
+                .collect();
+            let mut gpu = GpuBackend::new();
+
+            bencher.iter(|| {
+                black_box(gpu.softmax(&data).unwrap());
+            });
+        });
+
+        // Scalar baseline (for speedup comparison)
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.01 - (size as f32) * 0.005)
+                .collect();
+
+            bencher.iter(|| {
+                // Scalar softmax implementation
+                let max_val = data.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                let exp_vals: Vec<f32> = data.iter().map(|&x| (x - max_val).exp()).collect();
+                let sum_exp: f32 = exp_vals.iter().sum();
+                let result: Vec<f32> = exp_vals.iter().map(|&e| e / sum_exp).collect();
+                black_box(result);
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark GPU log_softmax activation vs scalar baseline
+fn bench_gpu_log_softmax(c: &mut Criterion) {
+    // Skip if GPU not available
+    if !GpuBackend::is_available() {
+        eprintln!("GPU not available, skipping GPU benchmarks");
+        return;
+    }
+
+    let mut group = c.benchmark_group("gpu_log_softmax");
+
+    // OpComplexity::Medium - test above 10K threshold (multi-pass overhead)
+    for size in [10_000, 100_000, 1_000_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // GPU backend
+        group.bench_with_input(BenchmarkId::new("GPU", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.01 - (size as f32) * 0.005)
+                .collect();
+            let mut gpu = GpuBackend::new();
+
+            bencher.iter(|| {
+                black_box(gpu.log_softmax(&data).unwrap());
+            });
+        });
+
+        // Scalar baseline (for speedup comparison)
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.01 - (size as f32) * 0.005)
+                .collect();
+
+            bencher.iter(|| {
+                // Scalar log_softmax implementation
+                let max_val = data.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                let exp_vals: Vec<f32> = data.iter().map(|&x| (x - max_val).exp()).collect();
+                let sum_exp: f32 = exp_vals.iter().sum();
+                let log_sum_exp = sum_exp.ln();
+                let result: Vec<f32> = data.iter().map(|&x| x - max_val - log_sum_exp).collect();
+                black_box(result);
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_gpu_vec_add,
@@ -571,6 +664,8 @@ criterion_group!(
     bench_gpu_sigmoid,
     bench_gpu_tanh,
     bench_gpu_swish,
-    bench_gpu_gelu
+    bench_gpu_gelu,
+    bench_gpu_softmax,
+    bench_gpu_log_softmax
 );
 criterion_main!(benches);

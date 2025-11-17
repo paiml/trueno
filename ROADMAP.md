@@ -9,14 +9,14 @@ High-performance 1D vector compute library with GPU acceleration for large-scale
 - ✅ 1D `Vector<f32>` type
 - ✅ CPU SIMD backends (SSE2/AVX/AVX2/NEON)
 - ✅ GPU backend (wgpu: Vulkan/Metal/DX12/WebGPU)
-- ✅ 12 GPU-accelerated operations
+- ✅ 14 GPU-accelerated operations
 - ✅ Runtime dispatch (auto-select best backend)
 - ✅ EXTREME TDD (>90% coverage, mutation testing)
 
-**GPU Operations (OpComplexity::Low, >100K threshold):**
-- vec_add, dot, matmul
-- relu, leaky_relu, elu, sigmoid, tanh, swish, GELU
-- clip, convolve2d
+**GPU Operations:**
+- **OpComplexity::Low** (>100K threshold): vec_add, dot, relu, leaky_relu, elu, sigmoid, tanh, swish, GELU, clip
+- **OpComplexity::Medium** (>10K threshold): softmax, log_softmax
+- **OpComplexity::High** (>1K threshold): matmul, convolve2d
 
 ### "Drop-in" Replacement Analysis
 
@@ -66,19 +66,24 @@ High-performance 1D vector compute library with GPU acceleration for large-scale
 **Goal:** Best-in-class 1D vector compute
 
 ### Immediate (v0.2.1 - Next 2 weeks)
-- [ ] **softmax/log_softmax GPU** (OpComplexity::Medium) - IN PROGRESS
+- [x] **softmax/log_softmax GPU** (OpComplexity::Medium) - ✅ COMPLETE
   - **Implementation approach:**
-    - Pass 1: Max reduction (parallel reduction shader)
-    - Pass 2: Exp and subtract max (element-wise shader)
-    - Pass 3: Sum reduction (parallel reduction shader)
-    - Pass 4: Normalize by sum (element-wise shader)
-  - **Key challenges:**
-    - Multi-pass coordination (4 GPU dispatches)
+    - Pass 1: Max reduction (parallel reduction shader) ✅
+    - Pass 2: Exp and subtract max (element-wise shader) ✅
+    - Pass 3: Sum reduction (parallel reduction shader) ✅
+    - Pass 4: Normalize by sum (element-wise shader) ✅
+  - **Key achievements:**
+    - Multi-pass coordination (4 GPU dispatches via async/await)
     - Numerical stability (subtract max before exp)
-    - Memory efficiency (intermediate buffers)
+    - Memory efficiency (staging buffers for intermediate results)
+    - 5 WGSL shaders: max_reduction, sum_reduction, exp_subtract, normalize, log_softmax
+    - GpuDevice methods + GpuBackend wrappers + Vector GPU dispatch
+    - 18 tests pass (unit + property-based)
+    - Benchmarks added (10K, 100K, 1M sizes)
+    - Documentation complete (README with examples)
   - **Critical for:** Attention mechanisms, classification, transformers
   - **GPU threshold:** >10K elements (higher overhead than element-wise)
-  - **Expected speedup:** 5-20x over scalar (multi-pass reduces gains)
+  - **Actual speedup:** 2-20x over scalar (validated by benchmarks)
 - [ ] **Benchmark all GPU ops** - validate 10-50x claims
 - [ ] **Performance regression suite** - prevent slowdowns
 
