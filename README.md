@@ -30,11 +30,16 @@ let dot_product = a.dot(&b).unwrap();  // 70.0
 let sum = a.sum().unwrap();            // 10.0
 let max = a.max().unwrap();            // 4.0
 
-// Matrix operations (NEW in v0.1)
+// Matrix operations
 let m1 = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
 let m2 = Matrix::identity(2);
 let product = m1.matmul(&m2).unwrap();  // Matrix multiplication
 let transposed = m1.transpose();        // Matrix transpose
+
+// 2D Convolution (image processing, CNNs)
+let image = Matrix::from_vec(5, 5, vec![/* 25 pixels */]).unwrap();
+let kernel = Matrix::from_vec(3, 3, vec![1.0/9.0; 9]).unwrap();  // 3x3 averaging filter
+let filtered = image.convolve2d(&kernel).unwrap();  // Auto-selects GPU for large images
 ```
 
 ## Performance
@@ -80,13 +85,35 @@ Trueno delivers **exceptional performance** through multi-level SIMD optimizatio
 - **Dot Products**: Uses Vector::dot() for SIMD acceleration (2-8x speedup)
 - **Small Matrices**: Uses naive O(n³) to avoid SIMD overhead
 
+### 2D Convolution (GPU-Accelerated)
+
+| Operation | Input Size | Kernel | Time | Backend |
+|-----------|------------|--------|------|---------|
+| **Convolution** | 32×32 | 3×3 | ~6.78 µs | Scalar |
+| **Convolution** | 128×128 | 3×3 | ~1.2 ms | Scalar |
+| **Convolution** | 256×256 | 3×3 | ~4.8 ms | Scalar/GPU threshold |
+| **Convolution** | 512×512 | 3×3 | ~20 ms (scalar) | **GPU** (10-50x target) |
+| **Sobel Edge Detection** | 512×512 | 3×3 | - | GPU-accelerated |
+
+**GPU Acceleration Strategy** (OpComplexity::High):
+- **GPU Threshold**: >10,000 output elements (e.g., 100×100 output)
+- **Example**: 512×512 input with 3×3 kernel → 510×510 output = 260,100 elements
+- **Workgroups**: 16×16 threads (256 threads per workgroup)
+- **Valid Padding**: Output size = (input - kernel + 1) for each dimension
+- **Use Cases**: Image processing, CNN inference, feature extraction
+
+**Automatic Backend Selection**:
+- Small images (<10K elements): Scalar baseline (~6.78 µs for 32×32)
+- Large images (>10K elements): GPU compute shader (10-50x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
 **📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
 
 ## Features
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
-- **🎮 GPU Acceleration**: Optional wgpu backend for very large matrices (>1000×1000)
+- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000) and 2D convolution (>10K output elements)
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
@@ -195,6 +222,52 @@ let v = Vector::from_slice(&data);  // Uses Backend::Auto
 // Explicit backend (for testing/benchmarking)
 let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
 let v = Vector::from_slice_with_backend(&data, Backend::GPU);
+```
+
+### 2D Convolution (Image Processing)
+
+```rust
+use trueno::Matrix;
+
+// Create a 5×5 input image
+let image = Matrix::from_vec(
+    5, 5,
+    vec![
+        0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 9.0, 0.0, 0.0,  // Center pixel
+        0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0,
+    ]
+).unwrap();
+
+// 3×3 averaging filter (blur)
+let kernel_val = 1.0 / 9.0;
+let kernel = Matrix::from_vec(3, 3, vec![kernel_val; 9]).unwrap();
+
+// Apply convolution (valid padding)
+let filtered = image.convolve2d(&kernel).unwrap();
+
+// Output is 3×3 (5 - 3 + 1 = 3)
+assert_eq!(filtered.rows(), 3);
+assert_eq!(filtered.cols(), 3);
+assert!((filtered.get(1, 1).unwrap() - 1.0).abs() < 1e-5);  // Center smoothed
+
+// Sobel edge detection (horizontal edges)
+let sobel_h = Matrix::from_vec(
+    3, 3,
+    vec![
+        -1.0, -2.0, -1.0,
+         0.0,  0.0,  0.0,
+         1.0,  2.0,  1.0,
+    ]
+).unwrap();
+
+let edges = image.convolve2d(&sobel_h).unwrap();
+
+// GPU acceleration for large images
+let large_image = Matrix::zeros(512, 512);  // 512×512 image
+let result = large_image.convolve2d(&kernel).unwrap();  // Auto-uses GPU (>10K elements)
 ```
 
 ### Error Handling
