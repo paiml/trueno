@@ -14,7 +14,7 @@
 //! assert_eq!(m.cols(), 3);
 //! ```
 
-use crate::{Backend, TruenoError};
+use crate::{Backend, TruenoError, Vector};
 
 /// A 2D matrix with row-major storage
 ///
@@ -298,6 +298,129 @@ impl Matrix<f32> {
         }
 
         result
+    }
+
+    /// Matrix-vector multiplication (column vector): A × v
+    ///
+    /// Multiplies this matrix by a column vector, computing `A × v` where the result
+    /// is a column vector with length equal to the number of rows in `A`.
+    ///
+    /// # Mathematical Definition
+    ///
+    /// For an m×n matrix A and an n-dimensional vector v:
+    /// ```text
+    /// result[i] = Σ(j=0 to n-1) A[i,j] × v[j]
+    /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `v` - Column vector with length equal to `self.cols()`
+    ///
+    /// # Returns
+    ///
+    /// A new vector with length `self.rows()`
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if `v.len() != self.cols()`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use trueno::{Matrix, Vector};
+    ///
+    /// let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let result = m.matvec(&v).unwrap();
+    ///
+    /// // [[1, 2, 3]   [1]   [1×1 + 2×2 + 3×3]   [14]
+    /// //  [4, 5, 6]] × [2] = [4×1 + 5×2 + 6×3] = [32]
+    /// //               [3]
+    /// assert_eq!(result.as_slice(), &[14.0, 32.0]);
+    /// ```
+    pub fn matvec(&self, v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> {
+        if v.len() != self.cols {
+            return Err(TruenoError::InvalidInput(format!(
+                "Vector length {} does not match matrix columns {} for matrix-vector multiplication",
+                v.len(),
+                self.cols
+            )));
+        }
+
+        let mut result_data = vec![0.0; self.rows];
+
+        // Compute result[i] = Σ A[i,j] × v[j]
+        for (i, result_elem) in result_data.iter_mut().enumerate() {
+            let mut sum = 0.0;
+            for j in 0..self.cols {
+                sum += self.get(i, j).unwrap() * v.as_slice()[j];
+            }
+            *result_elem = sum;
+        }
+
+        Ok(Vector::from_slice(&result_data))
+    }
+
+    /// Vector-matrix multiplication (row vector): v^T × A
+    ///
+    /// Multiplies a row vector by this matrix, computing `v^T × A` where the result
+    /// is a row vector with length equal to the number of columns in `A`.
+    ///
+    /// # Mathematical Definition
+    ///
+    /// For an m-dimensional vector v and an m×n matrix A:
+    /// ```text
+    /// result[j] = Σ(i=0 to m-1) v[i] × A[i,j]
+    /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `v` - Row vector with length equal to `m.rows()`
+    /// * `m` - Matrix to multiply
+    ///
+    /// # Returns
+    ///
+    /// A new vector with length `m.cols()`
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if `v.len() != m.rows()`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use trueno::{Matrix, Vector};
+    ///
+    /// let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    /// let v = Vector::from_slice(&[1.0, 2.0]);
+    /// let result = Matrix::vecmat(&v, &m).unwrap();
+    ///
+    /// // [1, 2] × [[1, 2, 3]  = [1×1 + 2×4, 1×2 + 2×5, 1×3 + 2×6]
+    /// //           [4, 5, 6]]
+    /// //         = [9, 12, 15]
+    /// assert_eq!(result.as_slice(), &[9.0, 12.0, 15.0]);
+    /// ```
+    pub fn vecmat(v: &Vector<f32>, m: &Matrix<f32>) -> Result<Vector<f32>, TruenoError> {
+        if v.len() != m.rows {
+            return Err(TruenoError::InvalidInput(format!(
+                "Vector length {} does not match matrix rows {} for vector-matrix multiplication",
+                v.len(),
+                m.rows
+            )));
+        }
+
+        let mut result_data = vec![0.0; m.cols];
+
+        // Compute result[j] = Σ v[i] × A[i,j]
+        for (j, result_elem) in result_data.iter_mut().enumerate() {
+            let mut sum = 0.0;
+            for i in 0..m.rows {
+                sum += v.as_slice()[i] * m.get(i, j).unwrap();
+            }
+            *result_elem = sum;
+        }
+
+        Ok(Vector::from_slice(&result_data))
     }
 }
 
@@ -735,5 +858,177 @@ mod property_tests {
                 }
             }
         }
+
+        /// Matrix-vector multiplication: (A×B)×v = A×(B×v)
+        #[test]
+        fn test_matvec_associativity(
+            a in matrix_strategy(3, 4),
+            b in matrix_strategy(4, 5),
+            v_data in prop::collection::vec(-10.0f32..10.0, 5)
+        ) {
+            let v = Vector::from_slice(&v_data);
+
+            let ab = a.matmul(&b).unwrap();
+            let ab_v = ab.matvec(&v).unwrap();
+
+            let b_v = b.matvec(&v).unwrap();
+            let a_bv = a.matvec(&b_v).unwrap();
+
+            prop_assert_eq!(ab_v.len(), a_bv.len());
+
+            for i in 0..ab_v.len() {
+                let diff = (ab_v.as_slice()[i] - a_bv.as_slice()[i]).abs();
+                let max_val = ab_v.as_slice()[i].abs().max(a_bv.as_slice()[i].abs());
+                let tolerance = if max_val < 1.0 { 1e-2 } else { max_val * 1e-2 };
+
+                prop_assert!(
+                    diff < tolerance,
+                    "Associativity failed at index {}: {} != {} (diff: {}, tolerance: {})",
+                    i, ab_v.as_slice()[i], a_bv.as_slice()[i], diff, tolerance
+                );
+            }
+        }
+
+        /// Vector-matrix multiplication: v×(A×B) = (v×A)×B
+        #[test]
+        fn test_vecmat_associativity(
+            a in matrix_strategy(3, 4),
+            b in matrix_strategy(4, 5),
+            v_data in prop::collection::vec(-10.0f32..10.0, 3)
+        ) {
+            let v = Vector::from_slice(&v_data);
+
+            let ab = a.matmul(&b).unwrap();
+            let v_ab = Matrix::vecmat(&v, &ab).unwrap();
+
+            let v_a = Matrix::vecmat(&v, &a).unwrap();
+            let va_b = Matrix::vecmat(&v_a, &b).unwrap();
+
+            prop_assert_eq!(v_ab.len(), va_b.len());
+
+            for i in 0..v_ab.len() {
+                let diff = (v_ab.as_slice()[i] - va_b.as_slice()[i]).abs();
+                let max_val = v_ab.as_slice()[i].abs().max(va_b.as_slice()[i].abs());
+                let tolerance = if max_val < 1.0 { 1e-2 } else { max_val * 1e-2 };
+
+                prop_assert!(
+                    diff < tolerance,
+                    "Associativity failed at index {}: {} != {} (diff: {}, tolerance: {})",
+                    i, v_ab.as_slice()[i], va_b.as_slice()[i], diff, tolerance
+                );
+            }
+        }
+    }
+
+    // Unit tests for matrix-vector operations
+    #[test]
+    fn test_matvec_basic() {
+        let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = m.matvec(&v).unwrap();
+
+        // [[1, 2, 3]   [1]   [14]
+        //  [4, 5, 6]] × [2] = [32]
+        //               [3]
+        assert_eq!(result.len(), 2);
+        assert!((result.as_slice()[0] - 14.0).abs() < 1e-6);
+        assert!((result.as_slice()[1] - 32.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_matvec_identity() {
+        let m = Matrix::identity(3);
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = m.matvec(&v).unwrap();
+
+        // I×v = v
+        assert_eq!(result.as_slice(), v.as_slice());
+    }
+
+    #[test]
+    fn test_matvec_dimension_mismatch() {
+        let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let v = Vector::from_slice(&[1.0, 2.0]); // Wrong size
+
+        assert!(m.matvec(&v).is_err());
+    }
+
+    #[test]
+    fn test_vecmat_basic() {
+        let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let v = Vector::from_slice(&[1.0, 2.0]);
+        let result = Matrix::vecmat(&v, &m).unwrap();
+
+        // [1, 2] × [[1, 2, 3]  = [9, 12, 15]
+        //           [4, 5, 6]]
+        assert_eq!(result.len(), 3);
+        assert!((result.as_slice()[0] - 9.0).abs() < 1e-6);
+        assert!((result.as_slice()[1] - 12.0).abs() < 1e-6);
+        assert!((result.as_slice()[2] - 15.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_vecmat_identity() {
+        let m = Matrix::identity(3);
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = Matrix::vecmat(&v, &m).unwrap();
+
+        // v×I = v
+        assert_eq!(result.as_slice(), v.as_slice());
+    }
+
+    #[test]
+    fn test_vecmat_dimension_mismatch() {
+        let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]); // Wrong size
+
+        assert!(Matrix::vecmat(&v, &m).is_err());
+    }
+
+    #[test]
+    fn test_matvec_zero_vector() {
+        let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let v = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = m.matvec(&v).unwrap();
+
+        // A×0 = 0
+        assert_eq!(result.as_slice(), &[0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_vecmat_zero_vector() {
+        let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let v = Vector::from_slice(&[0.0, 0.0]);
+        let result = Matrix::vecmat(&v, &m).unwrap();
+
+        // 0×A = 0
+        assert_eq!(result.as_slice(), &[0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_matvec_transpose_equivalence() {
+        // v^T × A = (A^T × v)^T
+        // If A is m×n and v is m-dimensional, then:
+        // - v^T × A is n-dimensional
+        // - A^T is n×m, so A^T × v needs v to be n-dimensional
+        // Actually, this is wrong. Let me use correct equivalence:
+        // If A is m×n, v is n-dimensional:
+        // - A × v is m-dimensional (matrix-vector)
+        // - A^T is n×m, u is m-dimensional:
+        // - u^T × A is n-dimensional (vector-matrix)
+        // These are equivalent when u = A × v
+
+        let m = Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let v = Vector::from_slice(&[1.0, 2.0]); // 2-dimensional
+
+        // A × v (3×2 times 2D = 3D result)
+        let av = m.matvec(&v).unwrap();
+
+        // v^T × A^T (2D times 2×3 = 3D result)
+        let m_t = m.transpose(); // Now 2×3
+        let v_mt = Matrix::vecmat(&v, &m_t).unwrap();
+
+        // (A × v)^T = v^T × A^T
+        assert_eq!(av.as_slice(), v_mt.as_slice());
     }
 }
