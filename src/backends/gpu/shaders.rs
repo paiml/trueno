@@ -166,6 +166,41 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 "#;
 
+/// ELU (Exponential Linear Unit) activation compute shader (WGSL)
+///
+/// Computes element-wise ELU: elu(x, α) = x if x > 0, else α(e^x - 1)
+///
+/// ELU has smooth gradients everywhere and pushes mean activations closer to zero,
+/// improving learning in deep networks.
+/// GPU acceleration beneficial for large vectors (>100K elements).
+pub const ELU_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+struct EluParams {
+    alpha: f32,
+}
+
+@group(0) @binding(2) var<uniform> params: EluParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    let len = arrayLength(&input);
+
+    if (idx < len) {
+        let x = input[idx];
+
+        // ELU: elu(x, α) = x if x > 0, else α(e^x - 1)
+        if (x > 0.0) {
+            output[idx] = x;
+        } else {
+            output[idx] = params.alpha * (exp(x) - 1.0);
+        }
+    }
+}
+"#;
+
 /// Sigmoid activation compute shader (WGSL)
 ///
 /// Computes element-wise sigmoid: σ(x) = 1 / (1 + e^(-x))

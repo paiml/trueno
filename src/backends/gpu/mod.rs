@@ -152,6 +152,28 @@ impl GpuBackend {
         Ok(result)
     }
 
+    /// ELU activation on GPU: result[i] = x if x > 0, else alpha * (exp(x) - 1)
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Input vector
+    /// * `alpha` - Scaling factor for negative values (typically 1.0)
+    ///
+    /// # Returns
+    ///
+    /// Vector with ELU applied element-wise
+    pub fn elu(&mut self, input: &[f32], alpha: f32) -> Result<Vec<f32>, String> {
+        let device = self.ensure_device()?;
+
+        // Create output buffer
+        let mut result = vec![0.0f32; input.len()];
+
+        // Execute GPU compute
+        device.elu(input, &mut result, alpha)?;
+
+        Ok(result)
+    }
+
     /// Clip (clamp) operation on GPU: result[i] = clamp(input[i], min_val, max_val)
     ///
     /// # Arguments
