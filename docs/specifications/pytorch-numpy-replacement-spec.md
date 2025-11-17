@@ -1872,7 +1872,272 @@ This drastically lowers the activation energy for new users who want to do trans
 
 ---
 
-## 13. Conclusion
+## 13. Tiered TDD-X Workflow & Quality Gates (Certeza Insights)
+
+This section integrates lessons from the **certeza** project (https://github.com/paiml/certeza), a scientific experiment achieving **97.7% mutation score** through asymptotic test effectiveness. Certeza demonstrates that EXTREME TDD is achievable and sustainable when verification is properly tiered [1,2,3].
+
+### 13.1 The Flow State Problem
+
+**Critical Finding**: Different verification techniques operate at different time scales. Fast feedback enables flow state; slow feedback causes context switching waste [certeza spec §2.2]. Running mutation testing on every file save destroys productivity (10-100x loss) [4].
+
+**Anti-Pattern** ❌:
+```bash
+# NEVER do this - destroys flow state
+watch -n 1 'cargo mutants'  # Running mutation tests every second
+```
+
+**Solution**: Tiered feedback loops that match verification intensity to development phase [5,6].
+
+### 13.2 Tiered Workflow (Certeza Model)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│              Tiered TDD-X Workflow                        │
+├──────────────────────────────────────────────────────────┤
+│                                                           │
+│  TIER 1: ON-SAVE (Sub-second feedback)                   │
+│  ├─ Write failing unit/property test                     │
+│  ├─ Implement minimal code                               │
+│  ├─ Run focused test suite                               │
+│  ├─ Static analysis (cargo check, clippy)                │
+│  └─ Iterate rapidly in flow state                        │
+│                                                           │
+│  TIER 2: ON-COMMIT (1-5 minutes)                         │
+│  ├─ Full property-based test suite                       │
+│  ├─ Coverage analysis (target: 90%+ line)                │
+│  ├─ Integration tests                                    │
+│  ├─ Differential testing (vs NumPy/PyTorch)              │
+│  └─ Pre-commit hook enforcement                          │
+│                                                           │
+│  TIER 3: ON-MERGE/NIGHTLY (Hours)                        │
+│  ├─ Comprehensive mutation testing                       │
+│  │  └─ Target: ≥80% score, analyze survivors            │
+│  ├─ Formal verification (critical paths)                 │
+│  ├─ Performance benchmarks                               │
+│  ├─ Security audits                                      │
+│  └─ CI/CD gate for main branch                           │
+│                                                           │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Workflow Mapping** (Trueno-Specific):
+
+| Activity | Tier | Frequency | Time Budget | Purpose |
+|----------|------|-----------|-------------|---------|
+| Unit tests (focused) | 1 | Every save | <1s | Rapid iteration |
+| Clippy (fast mode) | 1 | Every save | <1s | Quick lint check |
+| Property tests (focused) | 1 | Every save | <3s | Design validation |
+| Full test suite | 2 | Every commit | <5m | Regression prevention |
+| Coverage analysis | 2 | Every commit | <2m | Completeness check |
+| Differential testing | 2 | Every commit | <5m | NumPy/PyTorch equivalence |
+| Mutation testing | 3 | Pre-merge/nightly | <2h | Test quality assurance |
+| Formal verification | 3 | Pre-merge | <4h | Proof of invariants |
+| Benchmarks (full suite) | 3 | Nightly | <1h | Performance regression |
+
+### 13.3 Risk-Based Verification Matrix
+
+**Core Principle**: Not all code requires the same verification intensity. Apply rigorous techniques to high-risk components [certeza spec §2.3].
+
+**Trueno Component Classification**:
+
+```
+       │ Low Complexity  │ Medium Complexity │ High Complexity
+───────┼─────────────────┼───────────────────┼─────────────────
+High   │ Property +      │ Property +        │ Property +
+Crit   │ Coverage +      │ Coverage +        │ Coverage +
+       │ Mutation (85%)  │ Mutation (90%)    │ Mutation (90%) +
+       │                 │                   │ Formal Verify
+───────┼─────────────────┼───────────────────┼─────────────────
+Medium │ Property +      │ Property +        │ Property +
+Crit   │ Coverage (95%)  │ Coverage +        │ Coverage +
+       │                 │ Mutation (80%)    │ Mutation (85%)
+───────┼─────────────────┼───────────────────┼─────────────────
+Low    │ Unit Tests +    │ Unit Tests +      │ Property +
+Crit   │ Coverage (90%)  │ Property +        │ Coverage (95%)
+       │                 │ Coverage (90%)    │
+```
+
+**Component Risk Assessment** (Trueno-Specific):
+
+| Risk Level | Component Examples | Verification Approach | Rationale |
+|------------|-------------------|----------------------|-----------|
+| **Very High** | SIMD intrinsics (`unsafe` blocks), GPU compute shaders (WGSL), autograd reverse-mode AD engine, memory allocators | Property + Coverage (95%) + Mutation (90%) + Formal | Memory safety, correctness-critical, high complexity |
+| **High** | Tensor operations (matmul, conv2d), broadcasting logic, gradient computation, optimizer updates | Property + Coverage (95%) + Mutation (85-90%) | Core algorithms, numerical correctness critical |
+| **Medium** | Activation functions (relu, sigmoid), loss functions, data loaders, layer implementations | Property + Coverage (90%) + Mutation (80%) | Important but less complex, well-understood algorithms |
+| **Low** | Utility functions, simple accessors, configuration parsing, error messages | Unit tests + Coverage (90%) | Low complexity, limited failure modes |
+
+**Resource Allocation**: Spend 40% of verification time on the 5-10% highest-risk code (SIMD intrinsics, GPU shaders, autograd engine) [7].
+
+### 13.4 Testing Pyramid Distribution
+
+Following certeza's empirically validated distribution [certeza README]:
+
+```
+               ┌─────────────────┐
+               │  Formal (Kani)  │  <- Invariant proofs
+               │   ~1-5% code    │     (capacity >= len, no overflows)
+               ├─────────────────┤
+               │   Integration   │  <- System properties
+               │    ~10% tests   │     (end-to-end workflows)
+               ├─────────────────┤
+               │  Property-Based │  <- Algorithmic correctness
+               │    ~30% tests   │     (commutativity, associativity)
+               ├─────────────────┤
+               │   Unit Tests    │  <- Basic functionality
+               │    ~60% tests   │     (edge cases, error handling)
+               └─────────────────┘
+
+         Coverage ────────────────────> Mutation ────────────────────> Properties
+```
+
+**Trueno Target Distribution** (v1.0.0):
+- **Unit tests**: ~150-200 tests (60%) - Basic operation correctness, edge cases
+- **Property-based tests**: ~75-100 properties (30%) - Equivalence with NumPy/PyTorch, mathematical properties
+- **Integration tests**: ~25-30 scenarios (10%) - End-to-end training, model inference
+- **Formal verification**: ~3-5 proofs (1-5% of code) - Tensor invariants, bounds checking
+
+**Property-Based Testing Emphasis** (Inspired by certeza's 53 properties):
+
+```rust
+use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn test_add_commutative(
+        a in prop::collection::vec(-1000.0f32..1000.0, 1..10000),
+        b in prop::collection::vec(-1000.0f32..1000.0, 1..10000)
+    ) {
+        let a_vec = Vector::from_slice(&a);
+        let b_vec = Vector::from_slice(&b);
+
+        let ab = a_vec.add(&b_vec).unwrap();
+        let ba = b_vec.add(&a_vec).unwrap();
+
+        // Commutativity: a + b == b + a
+        assert_tensors_close(&ab, &ba, 1e-5);
+    }
+
+    #[test]
+    fn test_numpy_equivalence(
+        a in prop::collection::vec(-100.0f32..100.0, 1..1000)
+    ) {
+        // Differential testing: Trueno must match NumPy
+        let trueno_result = Vector::from_slice(&a).exp().unwrap();
+        let numpy_result = call_numpy_exp(&a);  // Via PyO3
+
+        assert_tensors_close(&trueno_result, &numpy_result, 1e-5);
+    }
+}
+```
+
+### 13.5 Quality Gates Per Tier
+
+**Tier 1: ON-SAVE** (Sub-second):
+```bash
+make tier1  # Certeza-style Makefile target
+```
+- ✅ `cargo check` passes
+- ✅ `cargo clippy --lib` (fast mode) - zero warnings
+- ✅ Unit tests pass (focused subset)
+- ✅ Property tests pass (small case count: PROPTEST_CASES=10)
+
+**Tier 2: ON-COMMIT** (1-5 minutes):
+```bash
+make tier2
+```
+- ✅ `cargo fmt --check` - code formatted
+- ✅ `cargo clippy --all-targets --all-features` - zero warnings
+- ✅ Full test suite passes (`cargo test --all-features`)
+- ✅ Coverage ≥90% (`cargo llvm-cov`)
+- ✅ Property tests pass (full cases: PROPTEST_CASES=256-1000)
+- ✅ Differential tests pass (vs NumPy/PyTorch, error < 1e-5)
+- ✅ PMAT TDG ≥B+ (85/100)
+- ✅ Zero SATD comments (TODO/FIXME/HACK)
+
+**Tier 3: ON-MERGE/NIGHTLY** (Hours):
+```bash
+make tier3
+```
+- ✅ Mutation testing ≥80% kill rate (`cargo mutants`)
+- ✅ Benchmarks: no regressions >5%
+- ✅ Security audit (`cargo audit`, `cargo deny`)
+- ✅ Formal verification passes (Kani proofs for critical invariants)
+- ✅ PMAT repo score ≥90/110
+
+### 13.6 Anti-Patterns to Avoid
+
+Based on certeza specification §2.2 and empirical findings:
+
+1. **❌ Running Mutation Tests on Every Save**
+   - **Problem**: Destroys flow state (10-100x productivity loss)
+   - **Solution**: Run mutation tests only in Tier 3 (pre-merge/nightly)
+
+2. **❌ Chasing Metrics Without Understanding**
+   - **Problem**: Goodhart's Law - "When a measure becomes a target, it ceases to be a good measure"
+   - **Solution**: Mutation analysis is a learning exercise, not just a metric
+
+3. **❌ Applying Full Verification to Low-Risk Code**
+   - **Problem**: Over-processing waste (Toyota Way: *Muda*)
+   - **Solution**: Risk-based resource allocation (40% time on 5-10% highest-risk code)
+
+4. **❌ Ignoring Cognitive Load Limits**
+   - **Problem**: Analyzing 1000 surviving mutants in one session causes burnout
+   - **Solution**: Time-boxing (2-hour sessions), batching, pair programming for mutation analysis
+
+5. **❌ Skipping Differential Testing**
+   - **Problem**: Missing NumPy/PyTorch incompatibilities until production
+   - **Solution**: Every operation must have differential test (vs NumPy/PyTorch)
+
+6. **❌ No Gradient Checking for Autograd**
+   - **Problem**: Analytical gradients may be incorrect (chain rule bugs)
+   - **Solution**: Automated gradient checking (analytical vs numerical) for every autograd operation
+
+### 13.7 Certeza as Empirical Proof
+
+**Key Finding**: certeza achieved **97.7% mutation score** with 231 tests, proving that EXTREME TDD targets are achievable and sustainable when properly tiered [certeza README].
+
+**Certeza Achievement Breakdown**:
+- **Unit tests**: 150+ tests (60%)
+- **Property-based tests**: 53 properties (30%)
+- **Integration tests**: 26 scenarios (10%)
+- **Formal verification**: 3 Kani proofs (capacity invariant, push/pop correctness, bounds checking)
+- **Mutation score**: 97.7% (only ~10 surviving mutants out of 400+)
+- **Coverage**: >95% line coverage
+
+**Lesson for Trueno**: If a simple vector data structure (certeza::TruenoVec) can achieve 97.7% mutation score, then trueno's operations (elementwise ops, reductions, activations) can achieve ≥90% mutation score by following the same tiered workflow.
+
+**Workflow Commands** (Trueno should adopt certeza's Makefile structure):
+
+```bash
+# Tier 1: Sub-second feedback (flow state)
+make tier1
+
+# Tier 2: Pre-commit (1-5 minutes)
+make tier2
+
+# Tier 3: Pre-merge/nightly (hours)
+make tier3
+
+# Kaizen: Continuous improvement cycle
+make kaizen  # Analyze coverage, complexity, TDG, binary size
+
+# Demo mode: Interactive demonstration
+make demo-mode
+```
+
+### 13.8 References (Certeza-Specific)
+
+1. Certeza Specification: "Asymptotic Test Effectiveness: A Practical Framework for High-Assurance Rust Verification" (v1.1, ~14K words)
+2. Certeza README: 97.7% mutation score achievement with 231 tests
+3. Jia, Y., & Harman, M. (2011). An analysis and survey of the development of mutation testing. *IEEE TSE, 37(5)*.
+4. Fowler, M. (2013). *Refactoring: Improving the Design of Existing Code* (2nd ed.). Chapter on Test-Driven Development and flow state.
+5. Google Testing Blog. (2014). Test Sizes. https://testing.googleblog.com/2010/12/test-sizes.html
+6. Humble, J., & Farley, D. (2010). *Continuous Delivery: Reliable Software Releases through Build, Test, and Deployment Automation*. Addison-Wesley.
+7. McConnell, S. (2004). *Code Complete* (2nd ed.). Microsoft Press. Chapter 20: Software Quality Landscape.
+
+---
+
+## 14. Conclusion
 
 Trueno is strategically positioned to become the **de facto PyTorch/NumPy replacement for Rust**. This specification defines a clear, achievable roadmap:
 
@@ -1896,7 +2161,7 @@ Trueno is strategically positioned to become the **de facto PyTorch/NumPy replac
 
 ---
 
-## 14. Academic References
+## 15. Academic References
 
 This specification is grounded in academic research and industry best practices. Key publications informing Trueno's design:
 
@@ -1936,11 +2201,12 @@ This specification is grounded in academic research and industry best practices.
 
 ---
 
-**Document Version**: 1.1
+**Document Version**: 1.2
 **Last Updated**: 2025-11-17
 **Status**: Living Document (update as roadmap evolves)
 **Owner**: Trueno Core Team
 
 **Changelog**:
+- **v1.2** (2025-11-17): Added Section 13 - Tiered TDD-X Workflow & Quality Gates based on certeza scientific experiment (97.7% mutation score). Includes: tiered workflow (tier1/tier2/tier3), risk-based verification matrix, testing pyramid distribution, quality gates per tier, anti-patterns, certeza empirical proof. ~270 lines added.
 - **v1.1** (2025-11-17): Added Kaizen improvements: tensor type trade-offs, storage layout considerations, broadcasting quality gates, autograd gradient checking, differential/fuzz testing, tensor compiler vision, error message quality, model hub strategy, academic citations
 - **v1.0** (2025-11-17): Initial comprehensive specification
