@@ -733,6 +733,14 @@ impl GpuDevice {
         })
     }
 
+    /// Execute sigmoid activation on GPU: result[i] = 1 / (1 + exp(-input[i]))
+    pub fn sigmoid(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        pollster::block_on(async {
+            self.execute_element_wise_op("Sigmoid", shaders::SIGMOID_SHADER, input, result, None)
+                .await
+        })
+    }
+
     /// Execute clip (clamp) operation on GPU: result[i] = clamp(input[i], min_val, max_val)
     pub fn clip(
         &self,
