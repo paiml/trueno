@@ -68,7 +68,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Dot product reduction shader (WGSL)
 ///
 /// Computes sum(a[i] * b[i]) using parallel reduction
-#[allow(dead_code)] // Reserved for future vector operations on GPU
 pub const DOT_PRODUCT_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
