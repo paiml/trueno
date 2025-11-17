@@ -733,6 +733,35 @@ impl GpuDevice {
         })
     }
 
+    /// Execute leaky ReLU activation on GPU: result[i] = max(negative_slope * input[i], input[i])
+    pub fn leaky_relu(
+        &self,
+        input: &[f32],
+        result: &mut [f32],
+        negative_slope: f32,
+    ) -> Result<(), String> {
+        // Pack leaky_relu parameters as uniform buffer data
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct LeakyReluParams {
+            negative_slope: f32,
+        }
+
+        let params = LeakyReluParams { negative_slope };
+        let uniform_data = bytemuck::bytes_of(&params);
+
+        pollster::block_on(async {
+            self.execute_element_wise_op(
+                "LeakyReLU",
+                shaders::LEAKY_RELU_SHADER,
+                input,
+                result,
+                Some(uniform_data),
+            )
+            .await
+        })
+    }
+
     /// Execute sigmoid activation on GPU: result[i] = 1 / (1 + exp(-input[i]))
     pub fn sigmoid(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
         pollster::block_on(async {

@@ -130,6 +130,28 @@ impl GpuBackend {
         Ok(result)
     }
 
+    /// Leaky ReLU activation on GPU: result[i] = max(negative_slope * input[i], input[i])
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Input vector
+    /// * `negative_slope` - Slope for negative values (typically 0.01)
+    ///
+    /// # Returns
+    ///
+    /// Vector with leaky ReLU applied element-wise
+    pub fn leaky_relu(&mut self, input: &[f32], negative_slope: f32) -> Result<Vec<f32>, String> {
+        let device = self.ensure_device()?;
+
+        // Create output buffer
+        let mut result = vec![0.0f32; input.len()];
+
+        // Execute GPU compute
+        device.leaky_relu(input, &mut result, negative_slope)?;
+
+        Ok(result)
+    }
+
     /// Clip (clamp) operation on GPU: result[i] = clamp(input[i], min_val, max_val)
     ///
     /// # Arguments
