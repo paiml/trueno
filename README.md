@@ -155,6 +155,35 @@ let activations = Vector::from_slice(&vec![...]);  // 1M neurons
 let output = activations.relu().unwrap();  // Auto-uses GPU for >100K elements
 ```
 
+### Leaky ReLU Activation (GPU-Accelerated)
+
+| Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
+|-----------|------------|---------------|------------------|---------|
+| **Leaky ReLU** | 10K | ~42 µs | - | Below threshold |
+| **Leaky ReLU** | 100K | ~420 µs | ~42 µs | 10x target |
+| **Leaky ReLU** | 1M | ~4.2 ms | ~85 µs | 50x target |
+
+**GPU Acceleration Strategy** (OpComplexity::Low):
+- **GPU Threshold**: >100,000 elements
+- **Operation**: Element-wise leaky_relu(x, α) = x if x > 0, else αx
+- **Workgroups**: 256 threads per workgroup (1D dispatch)
+- **Parameters**: Runtime negative_slope (α) via uniform buffer
+- **Use Cases**: GANs, deep networks (prevents "dying ReLU" problem)
+
+**Automatic Backend Selection**:
+- Small vectors (<100K elements): Scalar/SIMD (iterator-based)
+- Large vectors (>100K elements): GPU compute shader (10-50x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
+**Example: GAN Generator Network**
+```rust
+use trueno::Vector;
+
+// Leaky ReLU for GAN generator (prevents vanishing gradients)
+let hidden = Vector::from_slice(&vec![...]);  // 512K hidden units
+let activated = hidden.leaky_relu(0.01).unwrap();  // Auto-uses GPU for >100K elements
+```
+
 ### Clip (Clamp) Operation (GPU-Accelerated)
 
 | Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
@@ -308,7 +337,7 @@ let activated = ffn_hidden.gelu().unwrap();  // Auto-uses GPU for >100K elements
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
-- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, sigmoid, tanh, swish, GELU (>100K elements), and clip operation (>100K elements)
+- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, leaky ReLU, sigmoid, tanh, swish, GELU (>100K elements), and clip operation (>100K elements)
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
