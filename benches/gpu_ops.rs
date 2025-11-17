@@ -213,6 +213,57 @@ fn bench_gpu_relu(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark GPU leaky ReLU activation vs scalar baseline
+///
+/// Tests GPU acceleration for element-wise leaky ReLU with parameter.
+/// GPU threshold: >100K elements (OpComplexity::Low)
+fn bench_gpu_leaky_relu(c: &mut Criterion) {
+    // Skip if GPU not available
+    if !GpuBackend::is_available() {
+        eprintln!("GPU not available, skipping GPU benchmarks");
+        return;
+    }
+
+    let mut group = c.benchmark_group("gpu_leaky_relu");
+
+    // Test sizes: 10K (below threshold), 100K (at threshold), 1M (well above)
+    for size in [10_000, 100_000, 1_000_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        let negative_slope = 0.01; // Standard leaky ReLU slope
+
+        // GPU backend
+        group.bench_with_input(BenchmarkId::new("GPU", size), size, |bencher, &size| {
+            // Mix of positive and negative values to test leaky ReLU logic
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.5 - (size as f32) * 0.25)
+                .collect();
+            let mut gpu = GpuBackend::new();
+
+            bencher.iter(|| {
+                black_box(gpu.leaky_relu(&data, negative_slope).unwrap());
+            });
+        });
+
+        // Scalar baseline (for speedup comparison)
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.5 - (size as f32) * 0.25)
+                .collect();
+
+            bencher.iter(|| {
+                let result: Vec<f32> = data
+                    .iter()
+                    .map(|&x| if x > 0.0 { x } else { negative_slope * x })
+                    .collect();
+                black_box(result);
+            });
+        });
+    }
+
+    group.finish();
+}
+
 /// Benchmark GPU clip operation vs scalar baseline
 ///
 /// Tests GPU acceleration for element-wise operations with parameters.
@@ -463,6 +514,7 @@ criterion_group!(
     bench_gpu_dot,
     bench_gpu_matmul,
     bench_gpu_relu,
+    bench_gpu_leaky_relu,
     bench_gpu_clip,
     bench_gpu_sigmoid,
     bench_gpu_tanh,
