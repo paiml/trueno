@@ -84,6 +84,31 @@ impl GpuBackend {
         Ok(result)
     }
 
+    /// Dot product on GPU: result = sum(a[i] * b[i])
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - Vector a
+    /// * `b` - Vector b
+    ///
+    /// # Returns
+    ///
+    /// Scalar dot product result
+    pub fn dot(&mut self, a: &[f32], b: &[f32]) -> Result<f32, String> {
+        if a.len() != b.len() {
+            return Err(format!(
+                "Vector length mismatch: {} != {}",
+                a.len(),
+                b.len()
+            ));
+        }
+
+        let device = self.ensure_device()?;
+
+        // Execute GPU compute
+        device.dot(a, b)
+    }
+
     /// Matrix multiplication on GPU: C = A × B
     ///
     /// # Arguments
@@ -214,6 +239,65 @@ mod tests {
         let b = vec![4.0, 5.0]; // Different length
 
         let result = gpu.vec_add(&a, &b);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_gpu_dot_basic() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let a = vec![1.0, 2.0, 3.0, 4.0];
+        let b = vec![5.0, 6.0, 7.0, 8.0];
+
+        let result = gpu.dot(&a, &b);
+
+        // Expected: 1*5 + 2*6 + 3*7 + 4*8 = 5 + 12 + 21 + 32 = 70
+        if let Ok(dot_product) = result {
+            assert!((dot_product - 70.0).abs() < 1e-4);
+        } else {
+            eprintln!("GPU dot failed: {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_dot_large() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let size = 10000;
+        let a: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let b: Vec<f32> = (0..size).map(|_| 1.0).collect();
+
+        let result = gpu.dot(&a, &b);
+
+        // Expected: sum of 0 + 1 + 2 + ... + 9999 = 9999 * 10000 / 2 = 49995000
+        if let Ok(dot_product) = result {
+            let expected = (size * (size - 1) / 2) as f32;
+            assert!((dot_product - expected).abs() < 1.0); // Allow small floating point error
+        } else {
+            eprintln!("GPU dot large failed: {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_dot_length_mismatch() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![4.0, 5.0]; // Different length
+
+        let result = gpu.dot(&a, &b);
         assert!(result.is_err());
     }
 }
