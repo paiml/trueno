@@ -78,11 +78,12 @@ GPU Speedup:       ⚠️ Matmul ONLY 2-10x (13/14 ops slower, see analysis)
   - Makefile targets: `bench-save-baseline`, `bench-compare`, `bench-gpu`
   - **Status**: Infrastructure ready, CI integration pending
 
-- [ ] **Implement GPU strategic decision**
-  - Disable GPU dispatch for 13 element-wise operations
-  - Keep GPU: matmul only (≥500×500)
-  - Update OpComplexity thresholds
-  - **Success Criteria**: No GPU used for vec_add, dot, activations
+- [x] **Implement GPU strategic decision** ✅ COMPLETE
+  - Set GPU_THRESHOLD = usize::MAX for 10 activation functions
+  - Lowered matmul threshold: 1000 → 500 (empirical data)
+  - GPU now used ONLY for matmul ≥500×500 (2-10x speedup)
+  - All element-wise ops use scalar/SIMD only
+  - **Result**: Eliminated 2-65,000x slowdowns on activation functions
 
 #### Quality Gates (v0.2.1)
 
