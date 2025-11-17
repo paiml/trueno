@@ -248,13 +248,13 @@ impl Matrix<f32> {
 
         let mut result = Matrix::zeros(self.rows, other.cols);
 
-        // Backend selection strategy:
-        // 1. GPU for very large matrices (>1000×1000) - 10-50x speedup
+        // Backend selection strategy (empirical - see docs/performance-analysis.md):
+        // 1. GPU for large matrices (≥500×500) - 2-10x speedup (measured)
         // 2. SIMD for medium-large matrices (>64×64) - 2-8x speedup
         // 3. Naive for small matrices - lowest overhead
 
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 1000;
+        const GPU_THRESHOLD: usize = 500; // Empirical: 2x at 500×500, 9.6x at 1000×1000
         const SIMD_THRESHOLD: usize = 64;
 
         // Try GPU first for very large matrices
