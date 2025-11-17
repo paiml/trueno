@@ -1310,6 +1310,61 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// Softmax activation function
+    ///
+    /// Converts a vector of real values into a probability distribution.
+    /// Formula: softmax(x)[i] = exp(x[i] - max(x)) / sum(exp(x[j] - max(x)))
+    ///
+    /// Uses the numerically stable version with max subtraction to prevent overflow.
+    /// The output is a probability distribution: all values in [0, 1] and sum to 1.
+    ///
+    /// This is the standard activation function for multi-class classification in neural networks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let logits = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let probs = logits.softmax().unwrap();
+    ///
+    /// // Verify sum ≈ 1
+    /// let sum: f32 = probs.as_slice().iter().sum();
+    /// assert!((sum - 1.0).abs() < 1e-5);
+    ///
+    /// // Verify all values in [0, 1]
+    /// for &p in probs.as_slice() {
+    ///     assert!(p >= 0.0 && p <= 1.0);
+    /// }
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns EmptyVector error for empty vectors (cannot compute softmax).
+    pub fn softmax(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // Find max for numerical stability (prevents overflow in exp)
+        let max_val = self.max()?;
+
+        // Compute exp(x - max) for each element
+        let exp_vals: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| (x - max_val).exp())
+            .collect();
+
+        // Compute sum of exponentials
+        let sum_exp: f32 = exp_vals.iter().sum();
+
+        // Normalize by sum
+        let data: Vec<f32> = exp_vals.iter().map(|&e| e / sum_exp).collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -5862,6 +5917,87 @@ mod tests {
         assert_eq!(clipped.as_slice(), &[7.0, 7.0, 7.0, 7.0]);
     }
 
+    // ========================================================================
+    // Tests for softmax() - Softmax activation (probability distribution)
+    // ========================================================================
+
+    #[test]
+    fn test_softmax_basic() {
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let probs = v.softmax().unwrap();
+
+        // Verify sum ≈ 1
+        let sum: f32 = probs.as_slice().iter().sum();
+        assert!((sum - 1.0).abs() < 1e-5, "sum = {}, expected 1", sum);
+
+        // Verify all values in [0, 1]
+        for &p in probs.as_slice() {
+            assert!((0.0..=1.0).contains(&p), "prob = {} not in [0, 1]", p);
+        }
+
+        // Largest input should have largest probability
+        assert!(probs.data[2] > probs.data[1]);
+        assert!(probs.data[1] > probs.data[0]);
+    }
+
+    #[test]
+    fn test_softmax_uniform() {
+        // All equal inputs → uniform distribution
+        let v = Vector::from_slice(&[5.0, 5.0, 5.0, 5.0]);
+        let probs = v.softmax().unwrap();
+
+        // Each should be 1/4 = 0.25
+        for &p in probs.as_slice() {
+            assert!((p - 0.25).abs() < 1e-5, "prob = {}, expected 0.25", p);
+        }
+    }
+
+    #[test]
+    fn test_softmax_large_values() {
+        // Test numerical stability with large values
+        let v = Vector::from_slice(&[100.0, 101.0, 102.0]);
+        let probs = v.softmax().unwrap();
+
+        // Should still sum to 1
+        let sum: f32 = probs.as_slice().iter().sum();
+        assert!((sum - 1.0).abs() < 1e-5);
+
+        // Largest value should have largest probability
+        assert!(probs.data[2] > probs.data[1]);
+        assert!(probs.data[1] > probs.data[0]);
+    }
+
+    #[test]
+    fn test_softmax_negative_values() {
+        let v = Vector::from_slice(&[-3.0, -2.0, -1.0]);
+        let probs = v.softmax().unwrap();
+
+        // Verify sum ≈ 1
+        let sum: f32 = probs.as_slice().iter().sum();
+        assert!((sum - 1.0).abs() < 1e-5);
+
+        // All values should be positive
+        for &p in probs.as_slice() {
+            assert!(p > 0.0);
+        }
+    }
+
+    #[test]
+    fn test_softmax_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.softmax();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
+    fn test_softmax_single_element() {
+        // Single element → probability 1.0
+        let v = Vector::from_slice(&[5.0]);
+        let probs = v.softmax().unwrap();
+
+        assert!((probs.data[0] - 1.0).abs() < 1e-5);
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -10189,6 +10325,74 @@ mod property_tests {
                     (clipped1.data[i] - clipped2.data[i]).abs() < 1e-5,
                     "Idempotency violated at index {}: clip_once={}, clip_twice={}",
                     i, clipped1.data[i], clipped2.data[i]
+                );
+            }
+        }
+    }
+
+    // ========================================================================
+    // Property tests for softmax() - Probability distribution
+    // ========================================================================
+
+    proptest! {
+        /// Property test: softmax() produces values that sum to 1
+        #[test]
+        fn test_softmax_sums_to_one(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let probs = va.softmax().unwrap();
+            let sum: f32 = probs.as_slice().iter().sum();
+
+            prop_assert!(
+                (sum - 1.0).abs() < 1e-4,
+                "softmax sum = {}, expected 1.0",
+                sum
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: softmax() produces values in [0, 1]
+        #[test]
+        fn test_softmax_in_unit_range(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let probs = va.softmax().unwrap();
+
+            for &p in probs.as_slice() {
+                prop_assert!(
+                    (0.0..=1.0).contains(&p),
+                    "probability {} not in [0, 1]",
+                    p
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: softmax() is translation invariant
+        /// softmax(x + c) = softmax(x) for any constant c
+        #[test]
+        fn test_softmax_translation_invariant(
+            a in prop::collection::vec(-20.0f32..20.0, 2..50),
+            c in -10.0f32..10.0
+        ) {
+            let va = Vector::from_slice(&a);
+            let probs1 = va.softmax().unwrap();
+
+            // Add constant to all elements
+            let shifted: Vec<f32> = a.iter().map(|&x| x + c).collect();
+            let vb = Vector::from_slice(&shifted);
+            let probs2 = vb.softmax().unwrap();
+
+            // Probabilities should be identical
+            for i in 0..probs1.len() {
+                prop_assert!(
+                    (probs1.data[i] - probs2.data[i]).abs() < 1e-4,
+                    "Translation invariance violated at index {}: softmax(x)={}, softmax(x+{})={}",
+                    i, probs1.data[i], c, probs2.data[i]
                 );
             }
         }
