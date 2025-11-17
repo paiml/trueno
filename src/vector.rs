@@ -1419,6 +1419,61 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// ReLU (Rectified Linear Unit) activation function
+    ///
+    /// Computes the element-wise ReLU: max(0, x).
+    /// ReLU is one of the most widely used activation functions in neural networks.
+    ///
+    /// # Formula
+    ///
+    /// ```text
+    /// relu(x)[i] = max(0, x[i])
+    ///            = x[i]  if x[i] > 0
+    ///            = 0     otherwise
+    /// ```
+    ///
+    /// # Properties
+    ///
+    /// - **Non-linearity**: Introduces non-linearity while preserving linearity for positive values
+    /// - **Sparsity**: Produces exactly zero for negative inputs (sparse activations)
+    /// - **Gradient**: Derivative is 1 for positive inputs, 0 for negative (solves vanishing gradient)
+    /// - **Computational efficiency**: Simple max operation, no exponentials
+    ///
+    /// # Applications
+    ///
+    /// - **Deep neural networks**: Default activation for hidden layers
+    /// - **Convolutional networks**: Standard activation in CNNs
+    /// - **Feature learning**: Encourages sparse representations
+    ///
+    /// # Performance
+    ///
+    /// This operation is memory-bound. SIMD provides modest speedups since
+    /// the computation (comparison and selection) is simpler than memory access.
+    ///
+    /// # Errors
+    ///
+    /// Returns `EmptyVector` if the input vector is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+    /// let result = v.relu().unwrap();
+    /// assert_eq!(result.as_slice(), &[0.0, 0.0, 0.0, 1.0, 2.0]);
+    /// ```
+    pub fn relu(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // Element-wise max(0, x)
+        let data: Vec<f32> = self.data.iter().map(|&x| x.max(0.0)).collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -6147,6 +6202,75 @@ mod tests {
     }
 
     #[test]
+    fn test_relu_basic() {
+        // Basic ReLU: negative values → 0, positive values unchanged
+        let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result = v.relu().unwrap();
+
+        assert_eq!(result.as_slice(), &[0.0, 0.0, 0.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_relu_all_negative() {
+        // All negative values should become zero
+        let v = Vector::from_slice(&[-5.0, -3.0, -1.0, -0.5]);
+        let result = v.relu().unwrap();
+
+        for &val in result.as_slice() {
+            assert_eq!(val, 0.0, "All negative values should become 0");
+        }
+    }
+
+    #[test]
+    fn test_relu_all_positive() {
+        // All positive values should remain unchanged
+        let v = Vector::from_slice(&[0.5, 1.0, 3.0, 5.0]);
+        let expected = v.clone();
+        let result = v.relu().unwrap();
+
+        for i in 0..v.len() {
+            assert_eq!(
+                result.data[i], expected.data[i],
+                "Positive values should remain unchanged"
+            );
+        }
+    }
+
+    #[test]
+    fn test_relu_zero_boundary() {
+        // Zero should remain zero (boundary case)
+        let v = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = v.relu().unwrap();
+
+        for &val in result.as_slice() {
+            assert_eq!(val, 0.0, "Zero should remain zero");
+        }
+    }
+
+    #[test]
+    fn test_relu_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.relu();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
+    fn test_relu_sparsity() {
+        // ReLU creates sparse activations (zeros for negative inputs)
+        let v = Vector::from_slice(&[-10.0, 5.0, -3.0, 8.0, -1.0, 2.0]);
+        let result = v.relu().unwrap();
+
+        // Count zeros (should be 3)
+        let zero_count = result.as_slice().iter().filter(|&&x| x == 0.0).count();
+        assert_eq!(zero_count, 3, "ReLU should produce sparse activations");
+
+        // Verify positive values preserved
+        assert_eq!(result.data[1], 5.0);
+        assert_eq!(result.data[3], 8.0);
+        assert_eq!(result.data[5], 2.0);
+    }
+
+    #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
 
@@ -10613,6 +10737,73 @@ mod property_tests {
                     (log_probs1.data[i] - log_probs2.data[i]).abs() < 1e-4,
                     "Translation invariance violated at index {}: log_softmax(x)={}, log_softmax(x+{})={}",
                     i, log_probs1.data[i], c, log_probs2.data[i]
+                );
+            }
+        }
+    }
+
+    // ========================================================================
+    // Property tests for relu() - Rectified Linear Unit
+    // ========================================================================
+
+    proptest! {
+        /// Property test: relu() produces non-negative outputs
+        /// All outputs should be >= 0
+        #[test]
+        fn test_relu_non_negative(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.relu().unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(
+                    val >= 0.0,
+                    "ReLU output {} should be non-negative",
+                    val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: relu() preserves positive values
+        /// For all x > 0, relu(x) = x
+        #[test]
+        fn test_relu_preserves_positive(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.relu().unwrap();
+
+            for (i, &val) in a.iter().enumerate() {
+                if val > 0.0 {
+                    prop_assert!(
+                        (result.data[i] - val).abs() < 1e-6,
+                        "ReLU should preserve positive value: {} became {}",
+                        val, result.data[i]
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: relu() is idempotent
+        /// relu(relu(x)) = relu(x)
+        #[test]
+        fn test_relu_idempotent(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let relu1 = va.relu().unwrap();
+            let relu2 = relu1.relu().unwrap();
+
+            for (i, &orig_val) in a.iter().enumerate() {
+                prop_assert!(
+                    (relu1.data[i] - relu2.data[i]).abs() < 1e-6,
+                    "ReLU should be idempotent: relu(relu({})) = {} != relu({}) = {}",
+                    orig_val, relu2.data[i], orig_val, relu1.data[i]
                 );
             }
         }
