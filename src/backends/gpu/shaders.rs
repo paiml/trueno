@@ -132,6 +132,40 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 "#;
 
+/// Leaky ReLU activation compute shader (WGSL)
+///
+/// Computes element-wise Leaky ReLU: leaky_relu(x, α) = max(αx, x) = x if x > 0, else αx
+///
+/// Leaky ReLU addresses the "dying ReLU" problem by allowing small negative activations.
+/// GPU acceleration beneficial for large vectors (>100K elements).
+pub const LEAKY_RELU_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+struct LeakyReluParams {
+    negative_slope: f32,
+}
+
+@group(0) @binding(2) var<uniform> params: LeakyReluParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    let len = arrayLength(&input);
+
+    if (idx < len) {
+        let x = input[idx];
+
+        // Leaky ReLU: leaky_relu(x, α) = x if x > 0, else αx
+        if (x > 0.0) {
+            output[idx] = x;
+        } else {
+            output[idx] = params.negative_slope * x;
+        }
+    }
+}
+"#;
+
 /// Sigmoid activation compute shader (WGSL)
 ///
 /// Computes element-wise sigmoid: σ(x) = 1 / (1 + e^(-x))
