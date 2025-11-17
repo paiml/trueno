@@ -187,6 +187,26 @@ fmt-check: ## Check formatting without modifying
 bench: ## Run benchmarks
 	cargo bench --no-fail-fast
 
+bench-gpu: ## Run GPU benchmarks only
+	cargo bench --bench gpu_ops --all-features --no-fail-fast
+
+bench-save-baseline: ## Save current benchmark as baseline
+	@echo "📊 Running benchmarks and saving baseline..."
+	@mkdir -p .performance-baselines
+	@cargo bench --bench gpu_ops --all-features --no-fail-fast 2>&1 | tee .performance-baselines/bench-latest.txt
+	@echo "✅ Baseline saved to .performance-baselines/bench-latest.txt"
+	@echo "    To activate: cp .performance-baselines/bench-latest.txt .performance-baselines/baseline-current.txt"
+
+bench-compare: ## Compare current performance vs baseline
+	@echo "🔍 Comparing current performance vs baseline..."
+	@if [ ! -f .performance-baselines/baseline-current.txt ]; then \
+		echo "❌ No baseline found. Run 'make bench-save-baseline' first."; \
+		exit 1; \
+	fi
+	@echo "⚠️  Regression detection not yet implemented (requires benchmark parsing script)"
+	@echo "    Baseline: .performance-baselines/baseline-current.txt"
+	@echo "    Compare manually or implement extraction script"
+
 # Profiling with Renacer
 profile: ## Profile benchmarks with Renacer (syscall tracing)
 	@echo "🔬 Profiling benchmarks with Renacer..."
