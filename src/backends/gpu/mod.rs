@@ -153,6 +153,27 @@ impl GpuBackend {
         Ok(result)
     }
 
+    /// Sigmoid activation on GPU: result[i] = 1 / (1 + exp(-input[i]))
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Input vector
+    ///
+    /// # Returns
+    ///
+    /// Vector with sigmoid applied element-wise
+    pub fn sigmoid(&mut self, input: &[f32]) -> Result<Vec<f32>, String> {
+        let device = self.ensure_device()?;
+
+        // Create output buffer
+        let mut result = vec![0.0f32; input.len()];
+
+        // Execute GPU compute
+        device.sigmoid(input, &mut result)?;
+
+        Ok(result)
+    }
+
     /// Matrix multiplication on GPU: C = A × B
     ///
     /// # Arguments
