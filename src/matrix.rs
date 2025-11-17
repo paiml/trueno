@@ -589,7 +589,32 @@ impl Matrix<f32> {
         // Initialize output matrix
         let mut result = Matrix::zeros(output_rows, output_cols);
 
-        // Perform convolution (scalar baseline)
+        // Backend selection strategy:
+        // OpComplexity::High - GPU beneficial at >10K elements
+        // GPU for large images (output > 10K elements)
+        // Scalar for smaller images
+
+        #[cfg(feature = "gpu")]
+        const GPU_THRESHOLD: usize = 10_000;
+
+        // Try GPU first for large convolutions
+        #[cfg(feature = "gpu")]
+        {
+            if output_rows * output_cols >= GPU_THRESHOLD {
+                use crate::backends::gpu::GpuBackend;
+
+                if GpuBackend::is_available() {
+                    if let Ok(gpu_result) =
+                        self.convolve2d_gpu(kernel, &mut result, output_rows, output_cols)
+                    {
+                        return Ok(gpu_result);
+                    }
+                    // Fall through to scalar if GPU fails
+                }
+            }
+        }
+
+        // Scalar baseline implementation
         for out_row in 0..output_rows {
             for out_col in 0..output_cols {
                 let mut sum = 0.0;
@@ -612,6 +637,33 @@ impl Matrix<f32> {
         }
 
         Ok(result)
+    }
+
+    /// GPU-accelerated 2D convolution helper
+    #[cfg(feature = "gpu")]
+    fn convolve2d_gpu(
+        &self,
+        kernel: &Matrix<f32>,
+        result: &mut Matrix<f32>,
+        _output_rows: usize,
+        _output_cols: usize,
+    ) -> Result<Matrix<f32>, TruenoError> {
+        use crate::backends::gpu::GpuDevice;
+
+        let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
+
+        gpu.convolve2d(
+            self.as_slice(),
+            kernel.as_slice(),
+            result.data.as_mut_slice(),
+            self.rows,
+            self.cols,
+            kernel.rows,
+            kernel.cols,
+        )
+        .map_err(TruenoError::InvalidInput)?;
+
+        Ok(result.clone())
     }
 }
 
