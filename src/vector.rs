@@ -1122,6 +1122,75 @@ impl Vector<f32> {
         Ok(cov / (std_x * std_y))
     }
 
+    /// Z-score normalization (standardization)
+    ///
+    /// Transforms the vector to have mean = 0 and standard deviation = 1.
+    /// Each element is transformed as: z[i] = (x[i] - μ) / σ
+    ///
+    /// This is a fundamental preprocessing step in machine learning and statistics,
+    /// ensuring features have comparable scales and are centered around zero.
+    ///
+    /// # Performance
+    ///
+    /// Uses optimized SIMD implementations via mean() and stddev(), then applies
+    /// element-wise operations (sub, scale) which also use SIMD.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+    /// let z = v.zscore().unwrap();
+    ///
+    /// // Verify mean ≈ 0
+    /// let mean = z.mean().unwrap();
+    /// assert!(mean.abs() < 1e-5);
+    ///
+    /// // Verify stddev ≈ 1
+    /// let std = z.stddev().unwrap();
+    /// assert!((std - 1.0).abs() < 1e-5);
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns EmptyVector error for empty vectors (cannot compute mean/stddev).
+    ///
+    /// # Division by zero
+    ///
+    /// Returns DivisionByZero error if the vector has zero standard deviation
+    /// (i.e., all elements are identical/constant).
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let v = Vector::from_slice(&[5.0, 5.0, 5.0]); // Constant
+    /// assert!(matches!(v.zscore(), Err(TruenoError::DivisionByZero)));
+    /// ```
+    pub fn zscore(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        let mean_val = self.mean()?;
+        let std_val = self.stddev()?;
+
+        // Check for zero standard deviation (constant vector)
+        if std_val.abs() < 1e-10 {
+            return Err(TruenoError::DivisionByZero);
+        }
+
+        // Transform: z[i] = (x[i] - μ) / σ
+        let inv_std = 1.0 / std_val;
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| (x - mean_val) * inv_std)
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -5467,6 +5536,79 @@ mod tests {
         ));
     }
 
+    // ========================================================================
+    // Tests for zscore() - Z-score normalization (standardization)
+    // ========================================================================
+
+    #[test]
+    fn test_zscore_basic() {
+        // [1, 2, 3, 4, 5] has mean=3, stddev=sqrt(2)
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let z = v.zscore().unwrap();
+
+        // Verify mean ≈ 0
+        let mean = z.mean().unwrap();
+        assert!(mean.abs() < 1e-5, "mean = {}, expected ≈ 0", mean);
+
+        // Verify stddev ≈ 1
+        let std = z.stddev().unwrap();
+        assert!(
+            (std - 1.0).abs() < 1e-5,
+            "stddev = {}, expected ≈ 1",
+            std
+        );
+    }
+
+    #[test]
+    fn test_zscore_negative_values() {
+        // [-2, -1, 0, 1, 2] has mean=0, stddev=sqrt(2)
+        let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let z = v.zscore().unwrap();
+
+        let mean = z.mean().unwrap();
+        assert!(mean.abs() < 1e-5);
+
+        let std = z.stddev().unwrap();
+        assert!((std - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_zscore_single_element() {
+        // Single element has zero stddev → DivisionByZero
+        let v = Vector::from_slice(&[5.0]);
+        let result = v.zscore();
+        assert!(matches!(result, Err(TruenoError::DivisionByZero)));
+    }
+
+    #[test]
+    fn test_zscore_constant_vector() {
+        // All identical elements have zero stddev → DivisionByZero
+        let v = Vector::from_slice(&[3.0, 3.0, 3.0, 3.0]);
+        let result = v.zscore();
+        assert!(matches!(result, Err(TruenoError::DivisionByZero)));
+    }
+
+    #[test]
+    fn test_zscore_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.zscore();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
+    fn test_zscore_already_normalized() {
+        // Vector already with mean≈0, std≈1 should stay similar
+        let v = Vector::from_slice(&[-1.0, 0.0, 1.0]);
+        let z = v.zscore().unwrap();
+
+        // Should be close to the original (scaling might differ slightly)
+        let mean = z.mean().unwrap();
+        assert!(mean.abs() < 1e-5);
+
+        let std = z.stddev().unwrap();
+        assert!((std - 1.0).abs() < 1e-5);
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -9512,6 +9654,102 @@ mod property_tests {
                 (corr - 1.0).abs() < 1e-5,
                 "ρ(X,X) = {} != 1.0",
                 corr
+            );
+        }
+    }
+
+    // ========================================================================
+    // Property tests for zscore() - Z-score normalization
+    // ========================================================================
+
+    proptest! {
+        /// Property test: zscore() produces mean ≈ 0
+        #[test]
+        fn test_zscore_produces_zero_mean(
+            a in prop::collection::vec(-100.0f32..100.0, 2..100)
+        ) {
+            // Ensure vector is not constant
+            let std_a: f32 = a.iter().map(|x| x * x).sum::<f32>() / a.len() as f32
+                           - (a.iter().sum::<f32>() / a.len() as f32).powi(2);
+
+            if std_a < 1e-6 {
+                return Ok(());  // Skip constant vectors
+            }
+
+            let va = Vector::from_slice(&a);
+            let z = va.zscore().unwrap();
+            let mean = z.mean().unwrap();
+
+            prop_assert!(
+                mean.abs() < 1e-4,
+                "zscore mean = {}, expected ≈ 0",
+                mean
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: zscore() produces stddev ≈ 1
+        #[test]
+        fn test_zscore_produces_unit_stddev(
+            a in prop::collection::vec(-100.0f32..100.0, 2..100)
+        ) {
+            // Ensure vector is not constant
+            let std_a: f32 = a.iter().map(|x| x * x).sum::<f32>() / a.len() as f32
+                           - (a.iter().sum::<f32>() / a.len() as f32).powi(2);
+
+            if std_a < 1e-6 {
+                return Ok(());  // Skip constant vectors
+            }
+
+            let va = Vector::from_slice(&a);
+            let z = va.zscore().unwrap();
+            let std = z.stddev().unwrap();
+
+            prop_assert!(
+                (std - 1.0).abs() < 1e-4,
+                "zscore stddev = {}, expected ≈ 1",
+                std
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: zscore() preserves correlation structure
+        /// ρ(zscore(X), zscore(Y)) = ρ(X, Y)
+        #[test]
+        fn test_zscore_preserves_correlation(
+            ab in prop::collection::vec((-50.0f32..50.0, -50.0f32..50.0), 2..100)
+        ) {
+            let a: Vec<f32> = ab.iter().map(|(x, _)| *x).collect();
+            let b: Vec<f32> = ab.iter().map(|(_, y)| *y).collect();
+
+            // Ensure vectors are not constant
+            let std_a: f32 = a.iter().map(|x| x * x).sum::<f32>() / a.len() as f32
+                           - (a.iter().sum::<f32>() / a.len() as f32).powi(2);
+            let std_b: f32 = b.iter().map(|x| x * x).sum::<f32>() / b.len() as f32
+                           - (b.iter().sum::<f32>() / b.len() as f32).powi(2);
+
+            if std_a < 1e-6 || std_b < 1e-6 {
+                return Ok(());  // Skip constant vectors
+            }
+
+            let va = Vector::from_slice(&a);
+            let vb = Vector::from_slice(&b);
+
+            // Original correlation
+            let corr_orig = va.correlation(&vb).unwrap();
+
+            // Correlation after zscore
+            let za = va.zscore().unwrap();
+            let zb = vb.zscore().unwrap();
+            let corr_zscore = za.correlation(&zb).unwrap();
+
+            let tolerance = 1e-3;
+            prop_assert!(
+                (corr_orig - corr_zscore).abs() < tolerance,
+                "ρ(X,Y) = {} != ρ(zscore(X), zscore(Y)) = {}",
+                corr_orig, corr_zscore
             );
         }
     }
