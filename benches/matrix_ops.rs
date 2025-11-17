@@ -129,11 +129,108 @@ fn bench_matvec(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_convolve2d(c: &mut Criterion) {
+    let mut group = c.benchmark_group("convolve2d");
+
+    // Test various image and kernel sizes for CNN/image processing workloads
+    // Format: (input_rows, input_cols, kernel_size, description)
+    let configs = vec![
+        (32, 32, 3, "small_3x3"),         // Small image, edge detection kernel
+        (64, 64, 3, "medium_3x3"),        // Medium image, standard convolution
+        (128, 128, 3, "large_3x3"),       // Large image, typical CNN layer
+        (256, 256, 3, "xlarge_3x3"),      // Very large, approaching GPU threshold
+        (128, 128, 5, "large_5x5"),       // Larger kernel (blur, Gaussian)
+        (256, 256, 5, "xlarge_5x5"),      // Large image + large kernel
+        (512, 512, 3, "xxlarge_3x3"),     // Huge image (GPU threshold: >10K elements)
+    ];
+
+    for (rows, cols, kernel_size, desc) in configs {
+        // Create input image with non-trivial data
+        let input_data: Vec<f32> = (0..rows * cols)
+            .map(|i| ((i % 100) as f32) / 100.0)
+            .collect();
+        let input = Matrix::from_vec(rows, cols, input_data).unwrap();
+
+        // Create kernel (e.g., averaging filter)
+        let kernel_val = 1.0 / (kernel_size * kernel_size) as f32;
+        let kernel = Matrix::from_vec(
+            kernel_size,
+            kernel_size,
+            vec![kernel_val; kernel_size * kernel_size],
+        )
+        .unwrap();
+
+        let id = format!("{}x{}_k{}", rows, cols, kernel_size);
+
+        group.bench_with_input(
+            BenchmarkId::new(desc, &id),
+            &(&input, &kernel),
+            |bench, (input, kernel)| {
+                bench.iter(|| {
+                    let result = black_box(input).convolve2d(black_box(kernel)).unwrap();
+                    black_box(result);
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
+fn bench_convolve2d_edge_detection(c: &mut Criterion) {
+    let mut group = c.benchmark_group("convolve2d_edge_detection");
+
+    // Benchmark common edge detection filters (Sobel, Prewitt)
+    let sizes = vec![
+        (128, 128, "small"),
+        (256, 256, "medium"),
+        (512, 512, "large"), // GPU threshold
+    ];
+
+    for (rows, cols, desc) in sizes {
+        // Create input image
+        let input_data: Vec<f32> = (0..rows * cols)
+            .map(|i| ((i % 256) as f32) / 255.0)
+            .collect();
+        let input = Matrix::from_vec(rows, cols, input_data).unwrap();
+
+        // Sobel horizontal kernel
+        #[rustfmt::skip]
+        let sobel_h = Matrix::from_vec(
+            3,
+            3,
+            vec![
+                -1.0, -2.0, -1.0,
+                 0.0,  0.0,  0.0,
+                 1.0,  2.0,  1.0,
+            ],
+        )
+        .unwrap();
+
+        let id = format!("sobel_{}x{}", rows, cols);
+
+        group.bench_with_input(
+            BenchmarkId::new(desc, &id),
+            &(&input, &sobel_h),
+            |bench, (input, kernel)| {
+                bench.iter(|| {
+                    let result = black_box(input).convolve2d(black_box(kernel)).unwrap();
+                    black_box(result);
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_matmul_sizes,
     bench_matmul_rectangular,
     bench_transpose,
-    bench_matvec
+    bench_matvec,
+    bench_convolve2d,
+    bench_convolve2d_edge_detection
 );
 criterion_main!(benches);
