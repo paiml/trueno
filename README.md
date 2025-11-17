@@ -107,6 +107,26 @@ Trueno delivers **exceptional performance** through multi-level SIMD optimizatio
 - Large images (>10K elements): GPU compute shader (10-50x speedup target)
 - Graceful fallback to scalar if GPU unavailable
 
+**Example: Edge Detection with Sobel Operator**
+```rust
+use trueno::backends::gpu::GpuBackend;
+
+// Sobel X kernel (vertical edge detection)
+let sobel_x = vec![
+    -1.0, 0.0, 1.0,
+    -2.0, 0.0, 2.0,
+    -1.0, 0.0, 1.0,
+];
+
+// 512×512 grayscale image (flattened row-major)
+let image: Vec<f32> = vec![...]; // 262,144 elements
+
+// GPU convolution for large images (>10K output elements)
+let mut gpu = GpuBackend::new();
+let edges = gpu.convolve2d(&image, &sobel_x, 512, 512, 3, 3).unwrap();
+// Output: 510×510 = 260,100 elements (GPU-accelerated)
+```
+
 ### ReLU Activation (GPU-Accelerated)
 
 | Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
