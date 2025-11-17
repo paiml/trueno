@@ -1474,6 +1474,86 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// Sigmoid (logistic) activation function
+    ///
+    /// Computes the element-wise sigmoid: σ(x) = 1 / (1 + e^(-x)).
+    /// Sigmoid is a classic activation function that squashes inputs to the range (0, 1).
+    ///
+    /// # Formula
+    ///
+    /// ```text
+    /// sigmoid(x)[i] = 1 / (1 + exp(-x[i]))
+    ///               = exp(x[i]) / (1 + exp(x[i]))
+    /// ```
+    ///
+    /// # Properties
+    ///
+    /// - **Bounded output**: Maps all inputs to (0, 1) range
+    /// - **Smooth**: Infinitely differentiable (C^∞)
+    /// - **Symmetric**: σ(-x) = 1 - σ(x)
+    /// - **Derivative**: σ'(x) = σ(x) * (1 - σ(x))
+    /// - **Interpretable**: Output can be interpreted as probability
+    ///
+    /// # Applications
+    ///
+    /// - **Binary classification**: Final layer for binary output (0 or 1)
+    /// - **Logistic regression**: Traditional ML algorithm
+    /// - **Gating mechanisms**: LSTM/GRU gates (input, forget, output)
+    /// - **Attention mechanisms**: Soft attention weights
+    ///
+    /// # Numerical Considerations
+    ///
+    /// For very large negative inputs (x < -50), exp(-x) overflows to infinity.
+    /// However, sigmoid(x) approaches 0, so we return 0 for numerical stability.
+    /// For very large positive inputs (x > 50), exp(-x) underflows to 0,
+    /// and sigmoid(x) approaches 1.
+    ///
+    /// # Performance
+    ///
+    /// This operation is compute-bound due to the exp() operation. SIMD provides
+    /// modest speedups, but the exponential is the bottleneck.
+    ///
+    /// # Errors
+    ///
+    /// Returns `EmptyVector` if the input vector is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-2.0, 0.0, 2.0]);
+    /// let result = v.sigmoid().unwrap();
+    ///
+    /// // sigmoid(-2) ≈ 0.119, sigmoid(0) = 0.5, sigmoid(2) ≈ 0.881
+    /// assert!((result.data[0] - 0.119).abs() < 0.001);
+    /// assert!((result.data[1] - 0.5).abs() < 0.001);
+    /// assert!((result.data[2] - 0.881).abs() < 0.001);
+    /// ```
+    pub fn sigmoid(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // σ(x) = 1 / (1 + exp(-x))
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| {
+                // Handle extreme values for numerical stability
+                if x < -50.0 {
+                    0.0 // exp(-x) would overflow, but sigmoid approaches 0
+                } else if x > 50.0 {
+                    1.0 // exp(-x) underflows to 0, sigmoid approaches 1
+                } else {
+                    1.0 / (1.0 + (-x).exp())
+                }
+            })
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -6271,6 +6351,89 @@ mod tests {
     }
 
     #[test]
+    fn test_sigmoid_basic() {
+        // Basic sigmoid: negative → (0, 0.5), zero → 0.5, positive → (0.5, 1)
+        let v = Vector::from_slice(&[-2.0, 0.0, 2.0]);
+        let result = v.sigmoid().unwrap();
+
+        // sigmoid(-2) ≈ 0.1192, sigmoid(0) = 0.5, sigmoid(2) ≈ 0.8808
+        assert!((result.data[0] - 0.1192).abs() < 0.001);
+        assert!((result.data[1] - 0.5).abs() < 0.001);
+        assert!((result.data[2] - 0.8808).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_sigmoid_range() {
+        // All outputs should be in [0, 1] range (inclusive for numerical stability)
+        let v = Vector::from_slice(&[-100.0, -10.0, -1.0, 0.0, 1.0, 10.0, 100.0]);
+        let result = v.sigmoid().unwrap();
+
+        for &val in result.as_slice() {
+            assert!(
+                (0.0..=1.0).contains(&val),
+                "Sigmoid output {} not in [0, 1]",
+                val
+            );
+        }
+    }
+
+    #[test]
+    fn test_sigmoid_symmetry() {
+        // Test σ(-x) = 1 - σ(x)
+        let v = Vector::from_slice(&[-3.0, -1.5, -0.5]);
+        let v_neg = Vector::from_slice(&[3.0, 1.5, 0.5]);
+
+        let sig = v.sigmoid().unwrap();
+        let sig_neg = v_neg.sigmoid().unwrap();
+
+        for i in 0..v.len() {
+            let sum = sig.data[i] + sig_neg.data[i];
+            assert!(
+                (sum - 1.0).abs() < 1e-5,
+                "Symmetry violated: σ({}) + σ({}) = {} + {} = {} ≠ 1",
+                v.data[i],
+                v_neg.data[i],
+                sig.data[i],
+                sig_neg.data[i],
+                sum
+            );
+        }
+    }
+
+    #[test]
+    fn test_sigmoid_extreme_values() {
+        // Test numerical stability with extreme values
+        let v = Vector::from_slice(&[-100.0, -50.0, 50.0, 100.0]);
+        let result = v.sigmoid().unwrap();
+
+        // Very negative → close to 0
+        assert!(result.data[0] < 1e-6, "sigmoid(-100) should be ≈ 0");
+        assert!(result.data[1] < 1e-6, "sigmoid(-50) should be ≈ 0");
+
+        // Very positive → close to 1
+        assert!(result.data[2] > 1.0 - 1e-6, "sigmoid(50) should be ≈ 1");
+        assert!(result.data[3] > 1.0 - 1e-6, "sigmoid(100) should be ≈ 1");
+    }
+
+    #[test]
+    fn test_sigmoid_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.sigmoid();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
+    fn test_sigmoid_zero() {
+        // sigmoid(0) should be exactly 0.5
+        let v = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = v.sigmoid().unwrap();
+
+        for &val in result.as_slice() {
+            assert!((val - 0.5).abs() < 1e-7, "sigmoid(0) = {} ≠ 0.5", val);
+        }
+    }
+
+    #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
 
@@ -10805,6 +10968,80 @@ mod property_tests {
                     "ReLU should be idempotent: relu(relu({})) = {} != relu({}) = {}",
                     orig_val, relu2.data[i], orig_val, relu1.data[i]
                 );
+            }
+        }
+    }
+
+    // ========================================================================
+    // Property tests for sigmoid() - Logistic activation
+    // ========================================================================
+
+    proptest! {
+        /// Property test: sigmoid() produces values in [0, 1]
+        #[test]
+        fn test_sigmoid_bounded(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.sigmoid().unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(
+                    (0.0..=1.0).contains(&val),
+                    "Sigmoid output {} not in [0, 1]",
+                    val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: sigmoid() symmetry σ(-x) = 1 - σ(x)
+        #[test]
+        fn test_sigmoid_symmetry_property(
+            a in prop::collection::vec(-50.0f32..50.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let sig_pos = va.sigmoid().unwrap();
+
+            // Create negated vector
+            let a_neg: Vec<f32> = a.iter().map(|&x| -x).collect();
+            let va_neg = Vector::from_slice(&a_neg);
+            let sig_neg = va_neg.sigmoid().unwrap();
+
+            // σ(-x) + σ(x) should equal 1
+            for (i, &val) in a.iter().enumerate() {
+                let sum = sig_pos.data[i] + sig_neg.data[i];
+                prop_assert!(
+                    (sum - 1.0).abs() < 1e-5,
+                    "Symmetry violated: σ({}) + σ({}) = {} + {} = {} ≠ 1",
+                    val, -val, sig_pos.data[i], sig_neg.data[i], sum
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: sigmoid() is monotonically increasing
+        /// If x < y, then σ(x) < σ(y)
+        #[test]
+        fn test_sigmoid_monotonic(
+            a in prop::collection::vec(-50.0f32..50.0, 2..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.sigmoid().unwrap();
+
+            // Check all pairs for monotonicity
+            for i in 0..a.len() {
+                for j in 0..a.len() {
+                    if a[i] < a[j] {
+                        prop_assert!(
+                            result.data[i] < result.data[j] + 1e-6,
+                            "Monotonicity violated: {} < {} but σ({}) = {} >= σ({}) = {}",
+                            a[i], a[j], a[i], result.data[i], a[j], result.data[j]
+                        );
+                    }
+                }
             }
         }
     }
