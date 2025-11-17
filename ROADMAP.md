@@ -102,23 +102,31 @@ Required for Release:
 
 ### v0.2.2 - v0.2.5 (6-8 Weeks)
 
+**Strategy Pivot**: Focus on SIMD optimization (GPU unsuitable for element-wise ops)
+
 #### Deliverables
 
-- [ ] **Remaining activations** (OpComplexity::Low)
+- [ ] **Remaining activations** (SIMD-optimized, NO GPU)
   - hardswish (MobileNetV3)
   - mish (modern swish alternative)
   - selu (self-normalizing networks)
-  - **Success Criteria**: GPU speedup ≥10x at 100K+ elements
+  - **Success Criteria**: SIMD speedup ≥2-4x vs scalar (AVX2/AVX-512)
+  - **Note**: GPU disabled per v0.2.1 analysis (was 800x slower)
 
-- [ ] **GPU reductions** (OpComplexity::Medium)
-  - argmax/argmin (parallel reduction + index tracking)
-  - sum/mean/std (GPU-accelerated)
-  - **Success Criteria**: GPU speedup ≥5x at 10K+ elements
+- [ ] **SIMD-optimized reductions**
+  - argmax/argmin (SIMD parallel reduction + index tracking)
+  - sum/mean/std (already fast, benchmark for baseline)
+  - **Success Criteria**: SIMD speedup ≥2-4x vs scalar
 
-- [ ] **GPU binary ops** (OpComplexity::Low)
-  - add/sub/mul/div (element-wise)
-  - exp/log/pow/sqrt (unary ops)
-  - **Success Criteria**: GPU speedup ≥10x at 100K+ elements
+- [ ] **SIMD-optimized unary ops**
+  - exp/log/pow/sqrt (vectorized math functions)
+  - **Success Criteria**: SIMD speedup ≥2-4x vs scalar
+  - **Note**: GPU disabled (transfer overhead dominates)
+
+- [ ] **Performance regression CI**
+  - Integrate `.performance-baselines/` into CI
+  - Detect >5% regressions automatically
+  - **Success Criteria**: No undetected performance regressions
 
 #### Quality Gates (v0.2.2-v0.2.5)
 
@@ -127,9 +135,10 @@ Required for Each Release:
 ✅ EXTREME TDD cycle for each operation:
   - Implementation → Tests → Benchmarks → Documentation
 ✅ Gradient checking (prepare for Phase 3 autograd)
-✅ Backend equivalence: GPU vs SIMD vs Scalar (< 1e-5 error)
+✅ Backend equivalence: SIMD vs Scalar (< 1e-5 error)
 ✅ Test coverage ≥90%
 ✅ Mutation testing ≥80%
+✅ No performance regressions >5%
 ```
 
 ---
