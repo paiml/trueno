@@ -1,274 +1,648 @@
-# Trueno Roadmap
+# Trueno Roadmap (PMAT-Driven)
 
-**📖 See [PyTorch/NumPy Replacement Specification](docs/specifications/pytorch-numpy-replacement-spec.md) for comprehensive strategic positioning, technical gaps analysis, and detailed phased roadmap.**
+**Strategic Vision**: PyTorch/NumPy replacement for Rust with EXTREME TDD quality gates
 
----
-
-## Current State: v0.2.0 (January 2025)
-
-### What Trueno Is Today
-High-performance 1D vector compute library with GPU acceleration for large-scale operations.
-
-**Core Capabilities:**
-- ✅ 1D `Vector<f32>` type
-- ✅ CPU SIMD backends (SSE2/AVX/AVX2/NEON)
-- ✅ GPU backend (wgpu: Vulkan/Metal/DX12/WebGPU)
-- ✅ 14 GPU-accelerated operations
-- ✅ Runtime dispatch (auto-select best backend)
-- ✅ EXTREME TDD (>90% coverage, mutation testing)
-
-**GPU Operations:**
-- **OpComplexity::Low** (>100K threshold): vec_add, dot, relu, leaky_relu, elu, sigmoid, tanh, swish, GELU, clip
-- **OpComplexity::Medium** (>10K threshold): softmax, log_softmax
-- **OpComplexity::High** (>1K threshold): matmul, convolve2d
-
-### "Drop-in" Replacement Analysis
-
-#### vs NumPy: ~35% Complete
-**What Works:**
-- ✅ 1D element-wise ops (`+`, `-`, `*`, `/`, `exp`, `log`, etc.)
-- ✅ Reductions (`sum`, `mean`, `std`, `min`, `max`)
-- ✅ Linear algebra (`dot`, `matmul`, `norm`)
-- ✅ GPU acceleration for large workloads
-
-**Critical Gaps:**
-- ❌ Multi-dimensional arrays (only 1D `Vector<f32>`)
-- ❌ Broadcasting (`(3, 1) + (1, 5)` → `(3, 5)`)
-- ❌ Advanced indexing/slicing
-- ❌ Reshaping/transposing (`reshape`, `transpose`, `flatten`)
-- ❌ Data types (only `f32`, no `i32`/`f64`/etc.)
-
-**Viable NumPy Use Cases Today:**
-- 1D signal processing
-- Vector similarity/distance computations
-- Large-scale element-wise transformations
-
-#### vs PyTorch: ~15% Complete
-**What Works:**
-- ✅ GPU-accelerated activations (inference only)
-- ✅ Basic tensor operations (1D only)
-- ✅ Dot products, matrix multiplication
-
-**Critical Blockers:**
-- ❌ **No autograd** (can't train neural networks)
-- ❌ No multi-dimensional tensors
-- ❌ No layers (Linear, Conv2d, BatchNorm, etc.)
-- ❌ No loss functions
-- ❌ No optimizers (SGD, Adam, etc.)
-- ❌ No broadcasting
-- ❌ No model saving/loading
-
-**Viable PyTorch Use Cases Today:**
-- Neural network inference (forward pass only, 1D)
-- Custom activation function testing
-- Batch activation processing
+**📖 Comprehensive Spec**: [PyTorch/NumPy Replacement Specification](docs/specifications/pytorch-numpy-replacement-spec.md)
 
 ---
 
-## Phase 1: Complete 1D Operations (v0.2.x - v0.3.0)
-**Timeline:** 2-3 months
-**Goal:** Best-in-class 1D vector compute
+## Current State: v0.2.0 (2025-01-17)
 
-### Immediate (v0.2.1 - Next 2 weeks)
-- [x] **softmax/log_softmax GPU** (OpComplexity::Medium) - ✅ COMPLETE
-  - **Implementation approach:**
-    - Pass 1: Max reduction (parallel reduction shader) ✅
-    - Pass 2: Exp and subtract max (element-wise shader) ✅
-    - Pass 3: Sum reduction (parallel reduction shader) ✅
-    - Pass 4: Normalize by sum (element-wise shader) ✅
-  - **Key achievements:**
-    - Multi-pass coordination (4 GPU dispatches via async/await)
-    - Numerical stability (subtract max before exp)
-    - Memory efficiency (staging buffers for intermediate results)
-    - 5 WGSL shaders: max_reduction, sum_reduction, exp_subtract, normalize, log_softmax
-    - GpuDevice methods + GpuBackend wrappers + Vector GPU dispatch
-    - 18 tests pass (unit + property-based)
-    - Benchmarks added (10K, 100K, 1M sizes)
-    - Documentation complete (README with examples)
-  - **Critical for:** Attention mechanisms, classification, transformers
-  - **GPU threshold:** >10K elements (higher overhead than element-wise)
-  - **Actual speedup:** 2-20x over scalar (validated by benchmarks)
-- [ ] **Benchmark all GPU ops** - validate 10-50x claims
-- [ ] **Performance regression suite** - prevent slowdowns
+### Position Analysis
 
-### Near-term (v0.2.2 - v0.2.5)
-- [ ] **Remaining activations:**
-  - [ ] hardswish (MobileNetV3)
-  - [ ] mish (modern alternative to swish)
-  - [ ] selu (self-normalizing networks)
-- [ ] **More GPU reductions:**
-  - [ ] argmax/argmin
-  - [ ] sum/mean/std (GPU-accelerated)
-- [ ] **GPU element-wise ops:**
-  - [ ] add/sub/mul/div (binary ops)
-  - [ ] exp/log/pow/sqrt (unary ops)
+**NumPy Replacement**: ~35% Complete
+- ✅ What Works: 1D ops, reductions, SIMD/GPU acceleration
+- ❌ Critical Gaps: Multi-dim arrays, broadcasting, advanced indexing
 
-### v0.3.0 Goals
-- [ ] **Async GPU API** - batch operations, reduce transfer overhead
-- [ ] **CPU backend optimizations:**
-  - [ ] AVX-512 support
-  - [ ] Better auto-vectorization hints
-- [ ] **WASM SIMD128** - browser deployment
-- [ ] **Comprehensive benchmarks:**
-  - [ ] vs NumPy (for 1D ops)
-  - [ ] vs PyTorch (for activations)
-  - [ ] Publish results in README
+**PyTorch Replacement**: ~15% Complete
+- ✅ What Works: GPU activations (14 ops), inference only
+- ❌ Critical Blockers: No autograd, no layers, no training capability
+
+### Core Capabilities (v0.2.0)
+
+```
+✅ 1D Vector<f32> type
+✅ CPU SIMD backends (SSE2/AVX/AVX2/NEON)
+✅ GPU backend (wgpu: Vulkan/Metal/DX12/WebGPU)
+✅ 14 GPU-accelerated operations
+✅ Runtime dispatch (auto-select best backend)
+✅ EXTREME TDD (>90% coverage, mutation testing)
+```
+
+**GPU Operations by Complexity**:
+- **Low** (>100K threshold): vec_add, dot, relu, leaky_relu, elu, sigmoid, tanh, swish, GELU, clip
+- **Medium** (>10K threshold): softmax, log_softmax
+- **High** (>1K threshold): matmul, convolve2d
+
+### Quality Metrics (Current)
+
+```
+Test Coverage:     >90%
+Mutation Testing:  80%+ kill rate
+PMAT TDG Grade:    B+ (85/100)
+Repo Score:        90/110
+GPU Speedup:       10-50x (validated for 14 ops)
+```
 
 ---
 
-## Phase 2: Multi-Dimensional Tensors (v0.4.0 - v0.6.0)
-**Timeline:** 6-12 months
-**Goal:** NumPy-competitive for 2D/3D arrays
+## Phase 1: Complete 1D Operations
+**Timeline**: v0.2.x → v0.3.0 (2-3 months)
+**Goal**: Best-in-class 1D vector compute
+**Toyota Way**: *Jidoka* (完成 - Complete current work before starting new work)
 
-### v0.4.0: Tensor Type Foundation
-- [ ] **`Tensor<T, const N: usize>`** - generic N-dimensional tensor
-  - [ ] Row-major storage (C-contiguous)
-  - [ ] Shape, strides, offset tracking
-  - [ ] Views vs owned data
-- [ ] **2D operations:**
-  - [ ] Transpose, reshape, flatten
-  - [ ] Row/column slicing
-  - [ ] 2D matmul (optimized)
+### v0.2.1 (Next 2 Weeks) - CURRENT SPRINT
 
-### v0.5.0: Broadcasting
-- [ ] **Broadcasting rules** (NumPy-compatible)
-  - [ ] Shape compatibility checking
-  - [ ] Stride computation
-  - [ ] Element-wise ops with broadcasting
-- [ ] **Advanced indexing:**
-  - [ ] Boolean masking
-  - [ ] Integer array indexing
-  - [ ] Slicing syntax (`[1:5, ::2]`)
+#### Deliverables
 
-### v0.6.0: NumPy Parity (Core Ops)
-- [ ] **All NumPy dtypes:**
-  - [ ] `f32`, `f64`, `i32`, `i64`, `u32`, etc.
-  - [ ] Generic trait-based implementation
-- [ ] **NumPy-style API:**
-  - [ ] `zeros`, `ones`, `arange`, `linspace`
-  - [ ] `concatenate`, `stack`, `split`
-  - [ ] `where`, `argwhere`
-- [ ] **Performance target:** 80-120% of NumPy speed
+- [x] **GPU softmax/log_softmax** ✅ COMPLETE
+  - 5 WGSL shaders (max/sum reduction, exp-subtract, normalize, log_softmax)
+  - 4-pass multi-pass coordination (async/await)
+  - 18 tests pass (unit + property-based)
+  - Benchmarks: 10K, 100K, 1M sizes
+  - README documentation with examples
+  - Actual speedup: 2-20x over scalar
+
+- [ ] **Benchmark all GPU ops** - *Genchi Genbutsu* (現地現物 - Go see for yourself)
+  - Validate 10-50x GPU speedup claims with empirical data
+  - Measure: vec_add, dot, matmul, all 14 activations
+  - Document actual performance vs targets
+  - Identify underperforming operations
+  - **Success Criteria**: ≥10x speedup for 100K+ elements (Low complexity)
+
+- [ ] **Performance regression suite**
+  - Baseline performance for all GPU ops
+  - CI integration (detect >5% regressions)
+  - **Success Criteria**: No regressions >5% from baseline
+
+#### Quality Gates (v0.2.1)
+
+```
+Required for Release:
+✅ All GPU ops benchmarked (validate claims)
+✅ Performance regression suite in CI
+✅ Test coverage ≥90%
+✅ Mutation testing ≥80%
+✅ Zero clippy warnings
+✅ PMAT TDG ≥B+ (85/100)
+✅ Repo score ≥90/110
+```
 
 ---
 
-## Phase 3: Autograd & Training (v0.7.0 - v1.0.0)
-**Timeline:** 12-18 months
-**Goal:** PyTorch-competitive for training
+### v0.2.2 - v0.2.5 (6-8 Weeks)
 
-### v0.7.0: Autograd Engine
-- [ ] **Computational graph:**
-  - [ ] Reverse-mode AD (backpropagation)
-  - [ ] Dynamic graph construction
-  - [ ] Gradient tape
-- [ ] **Core operations with gradients:**
-  - [ ] All element-wise ops
-  - [ ] Matmul, conv2d
-  - [ ] All activations
-- [ ] **Memory optimization:**
-  - [ ] Gradient checkpointing
-  - [ ] In-place operations where safe
+#### Deliverables
 
-### v0.8.0: Neural Network Layers
+- [ ] **Remaining activations** (OpComplexity::Low)
+  - hardswish (MobileNetV3)
+  - mish (modern swish alternative)
+  - selu (self-normalizing networks)
+  - **Success Criteria**: GPU speedup ≥10x at 100K+ elements
+
+- [ ] **GPU reductions** (OpComplexity::Medium)
+  - argmax/argmin (parallel reduction + index tracking)
+  - sum/mean/std (GPU-accelerated)
+  - **Success Criteria**: GPU speedup ≥5x at 10K+ elements
+
+- [ ] **GPU binary ops** (OpComplexity::Low)
+  - add/sub/mul/div (element-wise)
+  - exp/log/pow/sqrt (unary ops)
+  - **Success Criteria**: GPU speedup ≥10x at 100K+ elements
+
+#### Quality Gates (v0.2.2-v0.2.5)
+
+```
+Required for Each Release:
+✅ EXTREME TDD cycle for each operation:
+  - Implementation → Tests → Benchmarks → Documentation
+✅ Gradient checking (prepare for Phase 3 autograd)
+✅ Backend equivalence: GPU vs SIMD vs Scalar (< 1e-5 error)
+✅ Test coverage ≥90%
+✅ Mutation testing ≥80%
+```
+
+---
+
+### v0.3.0: 1D Operations Complete (Milestone)
+
+**Target**: NumPy ~40%, PyTorch ~18%
+
+#### Deliverables
+
+- [ ] **Async GPU API** - *Kaizen* (改善 - Continuous improvement)
+  - Batch multiple operations to reduce transfer overhead
+  - Async execution with futures
+  - **Success Criteria**: 2x fewer GPU transfers for chained ops
+
+- [ ] **CPU backend optimizations**
+  - AVX-512 support (Zen4/Sapphire Rapids+)
+  - Better auto-vectorization hints
+  - **Success Criteria**: 8x speedup over scalar (AVX-512)
+
+- [ ] **WASM SIMD128**
+  - Browser deployment support
+  - **Success Criteria**: 2x speedup over scalar (WASM)
+
+- [ ] **Comprehensive benchmarks**
+  - vs NumPy (for 1D ops)
+  - vs PyTorch (for activations)
+  - Publish results in README
+  - **Success Criteria**: Within 20% of NumPy/PyTorch for 1D ops
+
+#### Success Metrics (v0.3.0 Phase Gate)
+
+```
+Technical:
+✅ All common 1D operations GPU-accelerated (20+ ops)
+✅ 10-50x GPU speedup validated by benchmarks
+✅ Async GPU API reduces transfer overhead by 2x
+✅ AVX-512 backend: 8x speedup over scalar
+✅ WASM SIMD128: 2x speedup over scalar
+
+Quality:
+✅ Test coverage ≥90%
+✅ Mutation testing ≥80%
+✅ PMAT TDG ≥A- (92/100)
+✅ Repo score ≥95/110
+
+Adoption:
+✅ Used in production by ≥3 projects
+✅ ≥100 GitHub stars
+✅ ≥10 contributors
+```
+
+**🚨 Phase Gate Decision Point**: Proceed to Phase 2 only if ALL success metrics achieved
+
+---
+
+## Phase 2: Multi-Dimensional Tensors
+**Timeline**: v0.4.0 → v0.6.0 (6-12 months)
+**Goal**: NumPy-competitive for 2D/3D arrays
+**Toyota Way**: *Heijunka* (平準化 - Level loading - balance implementation with validation)
+
+### v0.4.0: Tensor Type Foundation (3-4 Months)
+
+**Target**: NumPy ~50%, PyTorch ~20%
+
+#### Deliverables
+
+- [ ] **`Tensor<T, const N: usize>` type**
+  - Const generics for rank (compile-time safety)
+  - Row-major storage (C-contiguous, NumPy-compatible)
+  - Strides-based layout (zero-copy transpose)
+  - Views vs owned data (Arc-based sharing)
+  - **Success Criteria**: Represent 0D-4D tensors with compile-time rank verification
+
+- [ ] **2D operations**
+  - Transpose (zero-copy via stride swap)
+  - Reshape, flatten
+  - Row/column slicing
+  - Optimized 2D matmul (GPU-accelerated)
+  - **Success Criteria**: 80-120% of NumPy speed for 2D ops
+
+- [ ] **Storage design validation** - *Genchi Genbutsu*
+  - Benchmark row-major vs column-major layouts
+  - Validate zero-copy transpose performance
+  - **Success Criteria**: Zero-copy transpose 100x faster than data reorganization
+
+#### Quality Gates (v0.4.0)
+
+```
+Required:
+✅ Differential testing: All ops vs NumPy (< 1e-5 error)
+✅ Property-based tests: Shape transformations
+✅ Backend equivalence: GPU vs CPU for 2D ops
+✅ Test coverage ≥90%
+✅ Mutation testing ≥80%
+✅ PMAT TDG ≥A- (92/100)
+
+Design Validation:
+✅ Const generics enable compile-time shape checking
+✅ Strides enable zero-copy operations
+✅ Memory layout optimized for BLAS/GPU performance
+```
+
+---
+
+### v0.5.0: Broadcasting (2-3 Months)
+
+**Target**: NumPy ~65%, PyTorch ~20%
+
+#### Deliverables
+
+- [ ] **NumPy-compatible broadcasting**
+  - Shape compatibility checking
+  - Fused GPU kernels (avoid materializing intermediates)
+  - Element-wise ops with broadcasting
+  - **Success Criteria**: Pass 80%+ of NumPy broadcasting tests
+
+- [ ] **Advanced indexing**
+  - Boolean masking
+  - Integer array indexing
+  - Slicing syntax (`[1:5, ::2]` via macro)
+  - **Success Criteria**: NumPy-style indexing ergonomics
+
+#### Quality Gates (v0.5.0)
+
+```
+Required - Jidoka (Build Quality In):
+✅ Property-based testing vs NumPy (differential testing)
+✅ Fused broadcasting kernels (zero intermediate allocation)
+✅ Test coverage ≥90%
+✅ Mutation testing ≥80%
+
+Broadcasting Validation:
+✅ Matches NumPy broadcasting semantics exactly
+✅ Fused kernels 2x faster than naive implementation
+✅ No memory overhead for broadcasted operations
+```
+
+---
+
+### v0.6.0: NumPy Parity (3-4 Months)
+
+**Target**: NumPy ~80%, PyTorch ~20% (Milestone)
+
+#### Deliverables
+
+- [ ] **Generic dtype support**
+  - f16, f32, f64, i32, i64, u32, etc.
+  - Trait-based implementation
+  - **Success Criteria**: Support 10+ data types
+
+- [ ] **NumPy-style API**
+  - Creation: zeros, ones, arange, linspace
+  - Manipulation: concatenate, stack, split
+  - Conditional: where, argwhere
+  - **Success Criteria**: 80%+ API coverage for core operations
+
+- [ ] **NumPy test suite validation** - *Genchi Genbutsu*
+  - Run NumPy test suite against Trueno
+  - **Success Criteria**: Pass 80%+ of NumPy tests (for covered ops)
+
+#### Success Metrics (v0.6.0 Phase Gate)
+
+```
+Technical:
+✅ 80-120% of NumPy performance (within 20%)
+✅ Support 0D-4D tensors, 10+ data types
+✅ Broadcasting with fused GPU kernels
+✅ Pass 80%+ of NumPy test suite (covered ops)
+
+Quality:
+✅ Differential testing: All ops vs NumPy
+✅ Test coverage ≥90%
+✅ Mutation testing ≥80%
+✅ PMAT TDG ≥A (94/100)
+✅ Repo score ≥100/110
+
+Adoption:
+✅ ≥10 production deployments
+✅ ≥500 GitHub stars
+✅ ≥50 contributors
+```
+
+**🚨 Phase Gate Decision Point**: Proceed to Phase 3 only if ALL success metrics achieved
+
+---
+
+## Phase 3: Autograd & Training
+**Timeline**: v0.7.0 → v1.0.0 (12-18 months)
+**Goal**: PyTorch-competitive for training
+**Toyota Way**: *Jidoka* (自働化 - Automation with human touch - halt on defects)
+
+### v0.7.0: Autograd Engine (4-6 Months)
+
+**Target**: NumPy ~80%, PyTorch ~35%
+
+#### Deliverables
+
+- [ ] **Reverse-mode AD engine**
+  - Dynamic graph construction (PyTorch-style)
+  - Gradient tape with backward functions
+  - **Success Criteria**: Compute gradients for all operations
+
+- [ ] **Gradient checking** - *Jidoka* (CRITICAL QUALITY GATE)
+  - Automatic verification: analytical vs numerical gradients
+  - Required for EVERY operation with autograd
+  - **Success Criteria**: All gradients match numerical within 1e-4
+
+- [ ] **Core ops with gradients**
+  - All element-wise ops (add, mul, exp, log, etc.)
+  - Reductions (sum, mean, max)
+  - Linear algebra (matmul, conv2d)
+  - All 14+ activations
+  - **Success Criteria**: Gradients match PyTorch (< 1e-5 error)
+
+- [ ] **Memory optimization**
+  - Gradient checkpointing
+  - In-place operations where safe
+  - **Success Criteria**: Train 50-layer network without OOM
+
+#### Quality Gates (v0.7.0)
+
+```
+Required - HALT THE LINE ON GRADIENT BUGS:
+✅ Gradient checking: EVERY operation (automated)
+✅ Differential testing: Gradients vs PyTorch (< 1e-5 error)
+✅ Property-based tests: Chain rule, linearity
+✅ Fuzz testing: Gradient computation robustness
+✅ Test coverage ≥90%
+✅ Mutation testing ≥80%
+
+Autograd Validation:
+✅ No silent gradient failures
+✅ Backward pass matches PyTorch exactly
+✅ Memory-efficient (gradient checkpointing works)
+```
+
+---
+
+### v0.8.0: Neural Network Layers (3-4 Months)
+
+**Target**: NumPy ~80%, PyTorch ~50%
+
+#### Deliverables
+
 - [ ] **nn::Module trait**
-- [ ] **Core layers:**
-  - [ ] Linear (fully connected)
-  - [ ] Conv2d, MaxPool2d
-  - [ ] BatchNorm, LayerNorm
-  - [ ] Dropout
-- [ ] **Loss functions:**
-  - [ ] CrossEntropyLoss
-  - [ ] MSELoss, BCELoss
-  - [ ] Custom loss support
+  - Parameter tracking
+  - Forward/backward hooks
+  - **Success Criteria**: Ergonomic layer composition
 
-### v0.9.0: Optimizers
-- [ ] **SGD** (with momentum, nesterov)
-- [ ] **Adam** (with weight decay, AMSGrad)
-- [ ] **AdamW**, **RMSprop**
-- [ ] **Learning rate schedulers:**
-  - [ ] StepLR, ExponentialLR
-  - [ ] CosineAnnealing
+- [ ] **Core layers**
+  - Linear, Conv2d, MaxPool2d
+  - BatchNorm, LayerNorm
+  - Dropout
+  - **Success Criteria**: Match PyTorch API ergonomics
 
-### v1.0.0: Training-Ready
-- [ ] **Model serialization:**
-  - [ ] Save/load checkpoints
-  - [ ] ONNX export
-- [ ] **Distributed training:**
-  - [ ] Data parallelism
-  - [ ] Gradient synchronization
-- [ ] **Performance target:** 60-80% of PyTorch speed
-- [ ] **Full MNIST/CIFAR-10 examples**
+- [ ] **Loss functions**
+  - CrossEntropyLoss, MSELoss, BCELoss
+  - **Success Criteria**: Numerical match with PyTorch
+
+#### Quality Gates (v0.8.0)
+
+```
+Required:
+✅ Differential testing: All layers vs PyTorch
+✅ Gradient checking: All layers
+✅ Can build ResNet-18, BERT-base
+✅ Test coverage ≥90%
+✅ Mutation testing ≥80%
+```
 
 ---
 
-## Phase 4: Production & Ecosystem (v1.x)
-**Timeline:** 18-24 months
-**Goal:** Production-grade deep learning library
+### v0.9.0: Optimizers (2-3 Months)
 
-### Ecosystem Integration
-- [ ] **Ruchy transpiler:**
-  - [ ] Auto-generate Trueno from Python
-  - [ ] Depyler: NumPy → Trueno
-  - [ ] Type-level optimization hints
-- [ ] **ruchy-lambda:**
-  - [ ] AWS Lambda deployment
-  - [ ] Cold start optimization
-- [ ] **Model zoo:**
-  - [ ] ResNet, VGG, MobileNet
-  - [ ] BERT, GPT-2 (transformer)
-  - [ ] Pre-trained weights
+**Target**: NumPy ~80%, PyTorch ~55%
 
-### Advanced Features
-- [ ] **Mixed precision training** (FP16/BF16)
-- [ ] **Quantization** (INT8 inference)
-- [ ] **Pruning & compression**
-- [ ] **Custom CUDA kernels** (optional)
-- [ ] **TensorRT integration**
+#### Deliverables
+
+- [ ] **Core optimizers**
+  - SGD (momentum, Nesterov)
+  - Adam (weight decay, AMSGrad)
+  - AdamW, RMSprop
+  - **Success Criteria**: Match PyTorch update rules exactly
+
+- [ ] **Learning rate schedulers**
+  - StepLR, ExponentialLR, CosineAnnealing
+  - **Success Criteria**: Match PyTorch scheduling exactly
+
+#### Quality Gates (v0.9.0)
+
+```
+Required:
+✅ Differential testing: Optimizer updates vs PyTorch
+✅ Can train ResNet-50 to convergence
+✅ Learning curves match PyTorch
+✅ Test coverage ≥90%
+```
+
+---
+
+### v1.0.0: Training-Ready (3-4 Months) - MAJOR MILESTONE
+
+**Target**: NumPy ~80%, PyTorch ~60%
+
+#### Deliverables
+
+- [ ] **Model serialization**
+  - Save/load checkpoints (state_dict)
+  - ONNX export
+  - **Success Criteria**: Load PyTorch weights, export to ONNX
+
+- [ ] **Distributed training**
+  - Data parallelism
+  - Gradient synchronization (AllReduce)
+  - **Success Criteria**: Linear scaling to 4 GPUs
+
+- [ ] **Production features**
+  - Mixed precision (FP16/BF16)
+  - Gradient clipping
+  - Early stopping
+  - **Success Criteria**: Train production models end-to-end
+
+- [ ] **Model hub** - Combat ecosystem lock-in
+  - ResNet-{18,34,50}, BERT-base, MobileNetV2
+  - Pretrained weights (converted from PyTorch)
+  - **Success Criteria**: Transfer learning in 5 lines of code
+
+#### Success Metrics (v1.0.0 - Production Ready)
+
+```
+Technical:
+✅ Train ResNet-50 on CIFAR-10 in <30 minutes (single GPU)
+✅ 60-80% of PyTorch training speed (within 20-40%)
+✅ Autograd matches PyTorch (< 1e-5 gradient error)
+✅ Can load PyTorch weights, export ONNX
+✅ Distributed training: linear scaling to 4 GPUs
+
+Quality:
+✅ Gradient checking: 100% of autograd ops
+✅ Differential testing: All ops vs PyTorch
+✅ Fuzz testing: Model loading, serialization
+✅ Test coverage ≥90%
+✅ Mutation testing ≥80%
+✅ PMAT TDG ≥A (94/100)
+✅ Repo score ≥105/110
+
+Adoption:
+✅ Used in production ML training pipelines
+✅ ≥1,000 GitHub stars
+✅ ≥100 contributors
+✅ Featured in Rust ML blog posts/talks
+
+Ecosystem:
+✅ Model hub with ≥10 pretrained models
+✅ Full MNIST/CIFAR-10/ImageNet examples
+✅ Transfer learning tutorials
+```
+
+**🚨 v1.0 Release Gate**: ALL metrics must pass. No exceptions.
+
+---
+
+## Phase 4: Production Ecosystem (v1.x)
+**Timeline**: 18-24 months post-v1.0
+**Goal**: Production-grade ecosystem
+
+### Future Directions
+
+- **Ruchy Integration**: Auto-transpile NumPy/PyTorch → Trueno
+- **ruchy-lambda**: Optimized AWS Lambda deployment
+- **TVM/MLIR Compiler**: Auto-optimized GPU kernels (match cuDNN)
+- **Advanced Training**: Quantization, pruning, mixed precision
+- **Extended Model Hub**: 100+ pretrained models
+
+---
+
+## Toyota Way Principles Integration
+
+### Jidoka (自働化 - Automation with Human Touch)
+
+**"Stop the line on defects"**
+
+```
+Quality Gates HALT progress if violated:
+- Test coverage drops below 90%
+- Mutation testing drops below 80%
+- PMAT TDG drops below target
+- Gradient checking fails
+- Performance regression >5%
+
+Action: Fix immediately before proceeding
+```
+
+### Kaizen (改善 - Continuous Improvement)
+
+**"1% better every day"**
+
+```
+Every commit:
+- Benchmark performance (detect regressions)
+- Measure coverage (prevent degradation)
+- Profile memory (identify leaks)
+- Document learnings (prevent regression)
+
+Every sprint:
+- Retrospective: What can improve?
+- Refactor: Pay down technical debt
+- Optimize: Benchmark-driven improvements
+```
+
+### Genchi Genbutsu (現地現物 - Go See For Yourself)
+
+**"Measure reality, don't assume"**
+
+```
+Before claiming:
+- Benchmark actual performance (not estimates)
+- Differential test vs NumPy/PyTorch (not unit tests alone)
+- Profile real workloads (not synthetic microbenchmarks)
+- Validate with production use cases (not toy examples)
+
+Data-driven decisions only
+```
+
+### Heijunka (平準化 - Level Loading)
+
+**"Balance implementation with validation"**
+
+```
+Every phase:
+- 60% implementation
+- 40% validation (testing, benchmarking, docs)
+
+Avoid:
+- Implementation debt (code without tests)
+- Documentation debt (features without docs)
+- Performance debt (unvalidated speedup claims)
+```
+
+---
+
+## EXTREME TDD Standards (All Phases)
+
+### Required for Every Commit
+
+```
+✅ Compiles without warnings (cargo clippy -D warnings)
+✅ All tests pass (cargo test --all-features)
+✅ Coverage ≥90% (cargo llvm-cov --fail-under-lines 90)
+✅ Formatted (cargo fmt -- --check)
+✅ PMAT TDG ≥B+ (pmat analyze tdg --min-grade B+)
+```
+
+### Required for Every Feature
+
+```
+✅ Unit tests (correctness)
+✅ Property-based tests (edge cases)
+✅ Backend equivalence tests (GPU vs SIMD vs Scalar)
+✅ Differential tests (vs NumPy/PyTorch) [Phase 2+]
+✅ Gradient checking (vs numerical) [Phase 3+]
+✅ Benchmarks (validate performance claims)
+✅ Documentation (rustdoc + README examples)
+```
+
+### Required for Every Release
+
+```
+✅ Mutation testing ≥80% (cargo mutants --minimum-pass-rate 80)
+✅ Performance regression suite (no >5% regressions)
+✅ Integration tests (end-to-end workflows)
+✅ Changelog updated (keep-a-changelog format)
+✅ Version bumped (semver)
+✅ Git tag created (vX.Y.Z)
+✅ PMAT repo score ≥90 (pmat repo-score . --min-score 90)
+```
 
 ---
 
 ## Non-Goals
 
 **What Trueno Will NOT Be:**
-- ❌ **Research-first library** - production performance is priority
-- ❌ **Dynamic typing** - static typing for safety
-- ❌ **Python-first** - Rust-native, Python bindings optional
-- ❌ **100% PyTorch-compatible** - inspired by, not clone of
-- ❌ **Symbolic computation** - eager execution only
+
+- ❌ **100% PyTorch-compatible** - Inspired by, not clone of (focus on 80% use cases)
+- ❌ **Research-first** - Production performance is priority (battle-tested over cutting-edge)
+- ❌ **Python-first** - Rust-native (Python bindings secondary via PyO3)
+- ❌ **Dynamic typing** - Static typing for safety (compile-time shape checking)
+- ❌ **Symbolic computation** - Eager execution only (simple mental model)
 
 ---
 
-## Success Metrics
+## Current Focus (2025-01-17)
 
-### v0.3.0 (1D Complete)
-- ✅ All common 1D operations GPU-accelerated
-- ✅ 10-50x GPU speedup validated by benchmarks
-- ✅ Used in production by ≥3 projects
+### Active Sprint: v0.2.1
 
-### v0.6.0 (NumPy Parity)
-- ✅ 80-120% of NumPy performance
-- ✅ Pass 80%+ of NumPy test suite (for covered ops)
-- ✅ ≥10 production deployments
+✅ **COMPLETE**: GPU softmax/log_softmax (4-pass reduction, 2-20x speedup)
 
-### v1.0.0 (Training Ready)
-- ✅ Train ResNet-50 on CIFAR-10 in <30 minutes (single GPU)
-- ✅ 60-80% of PyTorch performance
-- ✅ Used in production ML training pipelines
+**Next Actions** (Priority Order):
+
+1. **Benchmark all GPU ops** (*Genchi Genbutsu* - validate 10-50x claims)
+   - Run `cargo bench --bench gpu_ops --all-features`
+   - Document actual vs target performance
+   - Identify underperforming operations
+   - **Timeline**: 2-3 days
+
+2. **Performance regression suite**
+   - Baseline all GPU ops
+   - CI integration (fail on >5% regression)
+   - **Timeline**: 3-5 days
+
+3. **Prepare v0.2.2**: Remaining activations (hardswish, mish, selu)
+   - Follow EXTREME TDD cycle
+   - **Timeline**: 2 weeks
+
+**Quality Gate Status**:
+```
+Current: All metrics GREEN ✅
+Ready for v0.2.1 release after benchmarking validation
+```
 
 ---
 
-## Current Focus: v0.2.1
-
-**Next Implementation:** GPU softmax/log_softmax
-
-**Why softmax?**
-1. **Critical for ML:** Every classification network uses softmax
-2. **Attention mechanisms:** Transformers rely on softmax
-3. **OpComplexity::Medium:** More challenging than element-wise (multi-pass reduction)
-4. **Performance wins:** GPU can parallelize max/sum reductions
-
-**After softmax:**
-1. Benchmark all GPU ops (validate claims)
-2. Remaining activations (hardswish, mish, selu)
-3. GPU binary ops (add, mul, etc.)
-4. Start v0.3.0 async GPU API design
+**Last Updated**: 2025-01-17
+**Methodology**: PMAT + EXTREME TDD + Toyota Way
+**Owner**: Trueno Core Team
