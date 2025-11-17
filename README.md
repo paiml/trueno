@@ -135,13 +135,42 @@ let activations = Vector::from_slice(&vec![...]);  // 1M neurons
 let output = activations.relu().unwrap();  // Auto-uses GPU for >100K elements
 ```
 
+### Clip (Clamp) Operation (GPU-Accelerated)
+
+| Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
+|-----------|------------|---------------|------------------|---------|
+| **Clip** | 10K | ~45 µs | - | Below threshold |
+| **Clip** | 100K | ~450 µs | ~45 µs | 10x target |
+| **Clip** | 1M | ~4.5 ms | ~90 µs | 50x target |
+
+**GPU Acceleration Strategy** (OpComplexity::Low):
+- **GPU Threshold**: >100,000 elements
+- **Operation**: Element-wise clamp(x, min_val, max_val)
+- **Workgroups**: 256 threads per workgroup (1D dispatch)
+- **Parameters**: Runtime min/max bounds via uniform buffer
+- **Use Cases**: Gradient clipping, value bounding, range normalization
+
+**Automatic Backend Selection**:
+- Small vectors (<100K elements): Scalar/SIMD (iterator-based)
+- Large vectors (>100K elements): GPU compute shader (10-50x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
+**Example: Gradient Clipping**
+```rust
+use trueno::Vector;
+
+// Clip gradients for stable training
+let gradients = Vector::from_slice(&vec![...]);  // 500K parameters
+let clipped = gradients.clip(-1.0, 1.0).unwrap();  // Auto-uses GPU for >100K elements
+```
+
 **📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
 
 ## Features
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
-- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), and ReLU activation (>100K elements)
+- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), ReLU activation (>100K elements), and clip operation (>100K elements)
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
