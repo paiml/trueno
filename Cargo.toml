@@ -42,3 +42,8 @@ harness = false
 [[bench]]
 name = "matrix_ops"
 harness = false
+
+[[bench]]
+name = "gpu_ops"
+harness = false
+required-features = ["gpu"]
