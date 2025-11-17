@@ -253,6 +253,7 @@ impl Matrix<f32> {
         // 2. SIMD for medium-large matrices (>64×64) - 2-8x speedup
         // 3. Naive for small matrices - lowest overhead
 
+        #[cfg(feature = "gpu")]
         const GPU_THRESHOLD: usize = 1000;
         const SIMD_THRESHOLD: usize = 64;
 
@@ -521,6 +522,96 @@ impl Matrix<f32> {
         }
 
         Ok(Vector::from_slice(&result_data))
+    }
+
+    /// Perform 2D convolution with a kernel
+    ///
+    /// Applies a 2D convolution operation using "valid" padding (no padding),
+    /// resulting in an output smaller than the input.
+    ///
+    /// # Arguments
+    ///
+    /// * `kernel` - Convolution kernel (filter) to apply
+    ///
+    /// # Returns
+    ///
+    /// Convolved matrix with dimensions:
+    /// - rows: `input.rows - kernel.rows + 1`
+    /// - cols: `input.cols - kernel.cols + 1`
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if:
+    /// - Kernel is larger than input in any dimension
+    /// - Kernel has even dimensions (center pixel ambiguous)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use trueno::Matrix;
+    ///
+    /// // 5x5 input image
+    /// let input = Matrix::from_vec(
+    ///     5, 5,
+    ///     vec![
+    ///         0.0, 0.0, 0.0, 0.0, 0.0,
+    ///         0.0, 0.0, 0.0, 0.0, 0.0,
+    ///         0.0, 0.0, 9.0, 0.0, 0.0,
+    ///         0.0, 0.0, 0.0, 0.0, 0.0,
+    ///         0.0, 0.0, 0.0, 0.0, 0.0,
+    ///     ]
+    /// ).unwrap();
+    ///
+    /// // 3x3 averaging kernel
+    /// let kernel_val = 1.0 / 9.0;
+    /// let kernel = Matrix::from_vec(
+    ///     3, 3,
+    ///     vec![kernel_val; 9]
+    /// ).unwrap();
+    ///
+    /// let result = input.convolve2d(&kernel).unwrap();
+    /// assert_eq!(result.rows(), 3); // 5 - 3 + 1
+    /// assert_eq!(result.cols(), 3);
+    /// ```
+    pub fn convolve2d(&self, kernel: &Matrix<f32>) -> Result<Matrix<f32>, TruenoError> {
+        // Validate kernel size
+        if kernel.rows > self.rows || kernel.cols > self.cols {
+            return Err(TruenoError::InvalidInput(format!(
+                "Kernel size ({}x{}) larger than input ({}x{})",
+                kernel.rows, kernel.cols, self.rows, self.cols
+            )));
+        }
+
+        // Calculate output dimensions (valid padding)
+        let output_rows = self.rows - kernel.rows + 1;
+        let output_cols = self.cols - kernel.cols + 1;
+
+        // Initialize output matrix
+        let mut result = Matrix::zeros(output_rows, output_cols);
+
+        // Perform convolution (scalar baseline)
+        for out_row in 0..output_rows {
+            for out_col in 0..output_cols {
+                let mut sum = 0.0;
+
+                // Apply kernel
+                for k_row in 0..kernel.rows {
+                    for k_col in 0..kernel.cols {
+                        let in_row = out_row + k_row;
+                        let in_col = out_col + k_col;
+
+                        let input_val = self.get(in_row, in_col).unwrap();
+                        let kernel_val = kernel.get(k_row, k_col).unwrap();
+
+                        sum += input_val * kernel_val;
+                    }
+                }
+
+                *result.get_mut(out_row, out_col).unwrap() = sum;
+            }
+        }
+
+        Ok(result)
     }
 }
 
@@ -1295,5 +1386,200 @@ mod property_tests {
 
         // (A × v)^T = v^T × A^T
         assert_eq!(av.as_slice(), v_mt.as_slice());
+    }
+
+    // ===== 2D Convolution Tests =====
+
+    #[test]
+    fn test_convolve2d_basic_3x3() {
+        // Simple 3x3 convolution with identity kernel (should preserve input)
+        let input = Matrix::from_vec(
+            3,
+            3,
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+        )
+        .unwrap();
+
+        // 1x1 identity kernel (should return center pixel)
+        let kernel = Matrix::from_vec(1, 1, vec![1.0]).unwrap();
+
+        let result = input.convolve2d(&kernel).unwrap();
+
+        // Result should be 3x3 (same input size with valid padding)
+        assert_eq!(result.rows(), 3);
+        assert_eq!(result.cols(), 3);
+        assert_eq!(result.as_slice(), input.as_slice());
+    }
+
+    #[test]
+    fn test_convolve2d_edge_detection() {
+        // Test edge detection with Sobel-like kernel
+        let input = Matrix::from_vec(
+            4,
+            4,
+            vec![
+                1.0, 1.0, 1.0, 1.0, //
+                1.0, 2.0, 2.0, 1.0, //
+                1.0, 2.0, 2.0, 1.0, //
+                1.0, 1.0, 1.0, 1.0, //
+            ],
+        )
+        .unwrap();
+
+        // Simple 3x3 horizontal edge detection kernel
+        #[rustfmt::skip]
+        let kernel = Matrix::from_vec(
+            3,
+            3,
+            vec![
+                -1.0, -1.0, -1.0,
+                 0.0,  0.0,  0.0,
+                 1.0,  1.0,  1.0,
+            ],
+        )
+        .unwrap();
+
+        let result = input.convolve2d(&kernel).unwrap();
+
+        // Result should be 2x2 (4-3+1 = 2)
+        assert_eq!(result.rows(), 2);
+        assert_eq!(result.cols(), 2);
+    }
+
+    #[test]
+    fn test_convolve2d_averaging_filter() {
+        // Test averaging filter (blur)
+        let input = Matrix::from_vec(
+            5,
+            5,
+            vec![
+                0.0, 0.0, 0.0, 0.0, 0.0, //
+                0.0, 0.0, 0.0, 0.0, 0.0, //
+                0.0, 0.0, 9.0, 0.0, 0.0, // Center pixel
+                0.0, 0.0, 0.0, 0.0, 0.0, //
+                0.0, 0.0, 0.0, 0.0, 0.0, //
+            ],
+        )
+        .unwrap();
+
+        // 3x3 averaging kernel (all 1/9)
+        let kernel_val = 1.0 / 9.0;
+        let kernel = Matrix::from_vec(
+            3,
+            3,
+            vec![
+                kernel_val, kernel_val, kernel_val, //
+                kernel_val, kernel_val, kernel_val, //
+                kernel_val, kernel_val, kernel_val, //
+            ],
+        )
+        .unwrap();
+
+        let result = input.convolve2d(&kernel).unwrap();
+
+        // Result should be 3x3
+        assert_eq!(result.rows(), 3);
+        assert_eq!(result.cols(), 3);
+
+        // Center should be 1.0 (9/9)
+        assert!((result.get(1, 1).unwrap() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_convolve2d_invalid_kernel() {
+        let input = Matrix::from_vec(3, 3, vec![1.0; 9]).unwrap();
+
+        // Kernel larger than input
+        let kernel = Matrix::from_vec(4, 4, vec![1.0; 16]).unwrap();
+
+        assert!(input.convolve2d(&kernel).is_err());
+    }
+
+    // ===== Property-Based Tests for Convolution =====
+
+    #[cfg(test)]
+    mod conv_property_tests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn test_convolve2d_output_size(
+                input_rows in 3usize..20,
+                input_cols in 3usize..20,
+                kernel_rows in 1usize..5,
+                kernel_cols in 1usize..5,
+            ) {
+                // Property: Output size is always (input - kernel + 1) for valid padding
+                if kernel_rows <= input_rows && kernel_cols <= input_cols {
+                    let input = Matrix::from_vec(input_rows, input_cols, vec![1.0; input_rows * input_cols]).unwrap();
+                    let kernel = Matrix::from_vec(kernel_rows, kernel_cols, vec![1.0; kernel_rows * kernel_cols]).unwrap();
+
+                    let result = input.convolve2d(&kernel).unwrap();
+
+                    prop_assert_eq!(result.rows(), input_rows - kernel_rows + 1);
+                    prop_assert_eq!(result.cols(), input_cols - kernel_cols + 1);
+                }
+            }
+
+            #[test]
+            fn test_convolve2d_identity_kernel(
+                input_rows in 3usize..10,
+                input_cols in 3usize..10,
+                values in prop::collection::vec(-100.0f32..100.0, 9..100)
+            ) {
+                // Property: 1x1 identity kernel preserves input
+                if values.len() >= input_rows * input_cols {
+                    let data: Vec<f32> = values.iter().take(input_rows * input_cols).copied().collect();
+                    let input = Matrix::from_vec(input_rows, input_cols, data.clone()).unwrap();
+                    let kernel = Matrix::from_vec(1, 1, vec![1.0]).unwrap();
+
+                    let result = input.convolve2d(&kernel).unwrap();
+
+                    prop_assert_eq!(result.rows(), input_rows);
+                    prop_assert_eq!(result.cols(), input_cols);
+                    prop_assert_eq!(result.as_slice(), input.as_slice());
+                }
+            }
+
+            #[test]
+            fn test_convolve2d_zero_kernel(
+                input_rows in 3usize..10,
+                input_cols in 3usize..10,
+                kernel_rows in 1usize..4,
+                kernel_cols in 1usize..4,
+            ) {
+                // Property: Zero kernel produces zero output
+                if kernel_rows <= input_rows && kernel_cols <= input_cols {
+                    let input = Matrix::from_vec(input_rows, input_cols, vec![5.0; input_rows * input_cols]).unwrap();
+                    let kernel = Matrix::from_vec(kernel_rows, kernel_cols, vec![0.0; kernel_rows * kernel_cols]).unwrap();
+
+                    let result = input.convolve2d(&kernel).unwrap();
+
+                    for &val in result.as_slice() {
+                        prop_assert!((val - 0.0).abs() < 1e-5);
+                    }
+                }
+            }
+
+            #[test]
+            fn test_convolve2d_scalar_multiplication(
+                input_rows in 3usize..10,
+                input_cols in 3usize..10,
+                scalar in -10.0f32..10.0,
+            ) {
+                // Property: Convolving with scalar * kernel = scalar * (convolve with kernel)
+                let input = Matrix::from_vec(input_rows, input_cols, vec![2.0; input_rows * input_cols]).unwrap();
+                let kernel = Matrix::from_vec(3, 3, vec![1.0; 9]).unwrap();
+                let kernel_scaled = Matrix::from_vec(3, 3, vec![scalar; 9]).unwrap();
+
+                let result1 = input.convolve2d(&kernel).unwrap();
+                let result2 = input.convolve2d(&kernel_scaled).unwrap();
+
+                for (v1, v2) in result1.as_slice().iter().zip(result2.as_slice().iter()) {
+                    prop_assert!((v1 * scalar - v2).abs() < 1e-3);
+                }
+            }
+        }
     }
 }
