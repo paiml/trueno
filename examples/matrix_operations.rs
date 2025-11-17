@@ -79,9 +79,13 @@ fn main() {
     println!("\n🎯 Matrix-Vector Multiplication (matvec)");
     println!("-----------------------------------------\n");
 
-    let matrix = Matrix::from_vec(3, 4, vec![
-        1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
-    ])
+    let matrix = Matrix::from_vec(
+        3,
+        4,
+        vec![
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+        ],
+    )
     .unwrap();
     let vector = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
 
@@ -104,9 +108,13 @@ fn main() {
     println!("\n🎯 Vector-Matrix Multiplication (vecmat)");
     println!("-----------------------------------------\n");
 
-    let matrix2 = Matrix::from_vec(3, 4, vec![
-        1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
-    ])
+    let matrix2 = Matrix::from_vec(
+        3,
+        4,
+        vec![
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+        ],
+    )
     .unwrap();
     let vector2 = Vector::from_slice(&[1.0, 2.0, 3.0]);
 
@@ -167,7 +175,7 @@ fn main() {
     println!("-------------------------------------\n");
 
     println!("Processing 3 samples through the same linear layer:");
-    let samples = vec![
+    let samples = [
         Vector::from_slice(&[1.0, 0.0, 0.0, 0.0]),
         Vector::from_slice(&[0.0, 1.0, 0.0, 0.0]),
         Vector::from_slice(&[0.0, 0.0, 1.0, 0.0]),

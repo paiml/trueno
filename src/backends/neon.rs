@@ -644,7 +644,10 @@ mod tests {
             NeonBackend::add(&a, &b, &mut result);
         }
 
-        assert_eq!(result, vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
+        assert_eq!(
+            result,
+            vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+        );
     }
 
     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
@@ -664,7 +667,10 @@ mod tests {
             NeonBackend::mul(&a, &b, &mut result);
         }
 
-        assert_eq!(result, vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]);
+        assert_eq!(
+            result,
+            vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]
+        );
     }
 
     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
@@ -759,21 +765,16 @@ mod tests {
         }
 
         // Test dot
-        let (neon_dot, scalar_dot) = unsafe {
-            (NeonBackend::dot(&a, &b), ScalarBackend::dot(&a, &b))
-        };
+        let (neon_dot, scalar_dot) =
+            unsafe { (NeonBackend::dot(&a, &b), ScalarBackend::dot(&a, &b)) };
         assert!((neon_dot - scalar_dot).abs() < 1e-3);
 
         // Test sum
-        let (neon_sum, scalar_sum) = unsafe {
-            (NeonBackend::sum(&a), ScalarBackend::sum(&a))
-        };
+        let (neon_sum, scalar_sum) = unsafe { (NeonBackend::sum(&a), ScalarBackend::sum(&a)) };
         assert!((neon_sum - scalar_sum).abs() < 1e-3);
 
         // Test max
-        let (neon_max, scalar_max) = unsafe {
-            (NeonBackend::max(&a), ScalarBackend::max(&a))
-        };
+        let (neon_max, scalar_max) = unsafe { (NeonBackend::max(&a), ScalarBackend::max(&a)) };
         assert_eq!(neon_max, scalar_max);
     }
 }

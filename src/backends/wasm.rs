@@ -496,7 +496,10 @@ mod tests {
             WasmBackend::add(&a, &b, &mut result);
         }
 
-        assert_eq!(result, vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
+        assert_eq!(
+            result,
+            vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+        );
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -510,7 +513,10 @@ mod tests {
             WasmBackend::mul(&a, &b, &mut result);
         }
 
-        assert_eq!(result, vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]);
+        assert_eq!(
+            result,
+            vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]
+        );
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -575,21 +581,16 @@ mod tests {
         }
 
         // Test dot
-        let (wasm_dot, scalar_dot) = unsafe {
-            (WasmBackend::dot(&a, &b), ScalarBackend::dot(&a, &b))
-        };
+        let (wasm_dot, scalar_dot) =
+            unsafe { (WasmBackend::dot(&a, &b), ScalarBackend::dot(&a, &b)) };
         assert!((wasm_dot - scalar_dot).abs() < 1e-3);
 
         // Test sum
-        let (wasm_sum, scalar_sum) = unsafe {
-            (WasmBackend::sum(&a), ScalarBackend::sum(&a))
-        };
+        let (wasm_sum, scalar_sum) = unsafe { (WasmBackend::sum(&a), ScalarBackend::sum(&a)) };
         assert!((wasm_sum - scalar_sum).abs() < 1e-3);
 
         // Test max
-        let (wasm_max, scalar_max) = unsafe {
-            (WasmBackend::max(&a), ScalarBackend::max(&a))
-        };
+        let (wasm_max, scalar_max) = unsafe { (WasmBackend::max(&a), ScalarBackend::max(&a)) };
         assert_eq!(wasm_max, scalar_max);
     }
 }

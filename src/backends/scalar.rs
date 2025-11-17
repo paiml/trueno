@@ -103,10 +103,10 @@ impl VectorBackend for ScalarBackend {
         let mut c = 0.0; // Compensation for lost low-order bits
 
         for &value in a {
-            let y = value - c;  // Subtract the compensation
-            let t = sum + y;    // Add to sum
-            c = (t - sum) - y;  // Update compensation
-            sum = t;            // Update sum
+            let y = value - c; // Subtract the compensation
+            let t = sum + y; // Add to sum
+            c = (t - sum) - y; // Update compensation
+            sum = t; // Update sum
         }
 
         sum
@@ -156,9 +156,7 @@ impl VectorBackend for ScalarBackend {
     }
 
     unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
-        for (i, ((&a_val, &b_val), &c_val)) in
-            a.iter().zip(b.iter()).zip(c.iter()).enumerate()
-        {
+        for (i, ((&a_val, &b_val), &c_val)) in a.iter().zip(b.iter()).zip(c.iter()).enumerate() {
             // result = a * b + c
             result[i] = a_val * b_val + c_val;
         }

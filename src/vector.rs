@@ -1,12 +1,12 @@
 //! Vector type with multi-backend support
 
-use crate::backends::scalar::ScalarBackend;
-#[cfg(target_arch = "x86_64")]
-use crate::backends::sse2::Sse2Backend;
 #[cfg(target_arch = "x86_64")]
 use crate::backends::avx2::Avx2Backend;
 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
 use crate::backends::neon::NeonBackend;
+use crate::backends::scalar::ScalarBackend;
+#[cfg(target_arch = "x86_64")]
+use crate::backends::sse2::Sse2Backend;
 #[cfg(target_arch = "wasm32")]
 use crate::backends::wasm::WasmBackend;
 use crate::backends::VectorBackend;
@@ -420,7 +420,7 @@ impl Vector<f32> {
                 Backend::AVX2 | Backend::AVX512 => {
                     Avx2Backend::mul(&self.data, &other.data, &mut result);
                 }
-#[cfg(not(target_arch = "x86_64"))]
+                #[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
                     ScalarBackend::mul(&self.data, &other.data, &mut result);
                 }
@@ -544,9 +544,7 @@ impl Vector<f32> {
 
         let result = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::dot(&self.data, &other.data)
-                }
+                Backend::Scalar => ScalarBackend::dot(&self.data, &other.data),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::dot(&self.data, &other.data),
                 #[cfg(target_arch = "x86_64")]
@@ -563,9 +561,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::dot(&self.data, &other.data),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::dot(&self.data, &other.data),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::dot(&self.data, &other.data)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::dot(&self.data, &other.data),
             }
         };
 
@@ -585,9 +581,7 @@ impl Vector<f32> {
     pub fn sum(&self) -> Result<f32> {
         let result = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::sum(&self.data)
-                }
+                Backend::Scalar => ScalarBackend::sum(&self.data),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::sum(&self.data),
                 #[cfg(target_arch = "x86_64")]
@@ -604,9 +598,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::sum(&self.data),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::sum(&self.data),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::sum(&self.data)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::sum(&self.data),
             }
         };
 
@@ -634,9 +626,7 @@ impl Vector<f32> {
 
         let result = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::max(&self.data)
-                }
+                Backend::Scalar => ScalarBackend::max(&self.data),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::max(&self.data),
                 #[cfg(target_arch = "x86_64")]
@@ -653,9 +643,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::max(&self.data),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::max(&self.data),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::max(&self.data)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::max(&self.data),
             }
         };
 
@@ -685,9 +673,7 @@ impl Vector<f32> {
 
         let result = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::min(&self.data)
-                }
+                Backend::Scalar => ScalarBackend::min(&self.data),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::min(&self.data),
                 #[cfg(target_arch = "x86_64")]
@@ -704,9 +690,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::min(&self.data),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::min(&self.data),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::min(&self.data)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::min(&self.data),
             }
         };
 
@@ -736,9 +720,7 @@ impl Vector<f32> {
 
         let result = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::argmax(&self.data)
-                }
+                Backend::Scalar => ScalarBackend::argmax(&self.data),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::argmax(&self.data),
                 #[cfg(target_arch = "x86_64")]
@@ -755,9 +737,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::argmax(&self.data),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::argmax(&self.data),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::argmax(&self.data)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::argmax(&self.data),
             }
         };
 
@@ -787,9 +767,7 @@ impl Vector<f32> {
 
         let result = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::argmin(&self.data)
-                }
+                Backend::Scalar => ScalarBackend::argmin(&self.data),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::argmin(&self.data),
                 #[cfg(target_arch = "x86_64")]
@@ -806,9 +784,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::argmin(&self.data),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::argmin(&self.data),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::argmin(&self.data)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::argmin(&self.data),
             }
         };
 
@@ -841,9 +817,7 @@ impl Vector<f32> {
 
         let result = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::sum_kahan(&self.data)
-                }
+                Backend::Scalar => ScalarBackend::sum_kahan(&self.data),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::sum_kahan(&self.data),
                 #[cfg(target_arch = "x86_64")]
@@ -860,9 +834,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::sum_kahan(&self.data),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::sum_kahan(&self.data),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::sum_kahan(&self.data)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::sum_kahan(&self.data),
             }
         };
 
@@ -1352,11 +1324,7 @@ impl Vector<f32> {
         let max_val = self.max()?;
 
         // Compute exp(x - max) for each element
-        let exp_vals: Vec<f32> = self
-            .data
-            .iter()
-            .map(|&x| (x - max_val).exp())
-            .collect();
+        let exp_vals: Vec<f32> = self.data.iter().map(|&x| (x - max_val).exp()).collect();
 
         // Compute sum of exponentials
         let sum_exp: f32 = exp_vals.iter().sum();
@@ -1401,11 +1369,7 @@ impl Vector<f32> {
         let max_val = self.max()?;
 
         // Compute exp(x - max) for each element
-        let exp_vals: Vec<f32> = self
-            .data
-            .iter()
-            .map(|&x| (x - max_val).exp())
-            .collect();
+        let exp_vals: Vec<f32> = self.data.iter().map(|&x| (x - max_val).exp()).collect();
 
         // Compute log of sum of exponentials
         let sum_exp: f32 = exp_vals.iter().sum();
@@ -1629,13 +1593,7 @@ impl Vector<f32> {
         let data: Vec<f32> = self
             .data
             .iter()
-            .map(|&x| {
-                if x > 0.0 {
-                    x
-                } else {
-                    negative_slope * x
-                }
-            })
+            .map(|&x| if x > 0.0 { x } else { negative_slope * x })
             .collect();
 
         Ok(Vector::from_slice(&data))
@@ -1718,13 +1676,7 @@ impl Vector<f32> {
         let data: Vec<f32> = self
             .data
             .iter()
-            .map(|&x| {
-                if x > 0.0 {
-                    x
-                } else {
-                    alpha * (x.exp() - 1.0)
-                }
-            })
+            .map(|&x| if x > 0.0 { x } else { alpha * (x.exp() - 1.0) })
             .collect();
 
         Ok(Vector::from_slice(&data))
@@ -1908,9 +1860,7 @@ impl Vector<f32> {
 
         let result = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::norm_l2(&self.data)
-                }
+                Backend::Scalar => ScalarBackend::norm_l2(&self.data),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::norm_l2(&self.data),
                 #[cfg(target_arch = "x86_64")]
@@ -1927,9 +1877,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::norm_l2(&self.data),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::norm_l2(&self.data),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::norm_l2(&self.data)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::norm_l2(&self.data),
             }
         };
 
@@ -2019,9 +1967,7 @@ impl Vector<f32> {
 
         let result = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::norm_l1(&self.data)
-                }
+                Backend::Scalar => ScalarBackend::norm_l1(&self.data),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::norm_l1(&self.data),
                 #[cfg(target_arch = "x86_64")]
@@ -2038,9 +1984,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::norm_l1(&self.data),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::norm_l1(&self.data),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::norm_l1(&self.data)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::norm_l1(&self.data),
             }
         };
 
@@ -2088,9 +2032,7 @@ impl Vector<f32> {
         // Find the maximum absolute value using existing max() implementation
         let max_abs = unsafe {
             match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::max(&abs_values)
-                }
+                Backend::Scalar => ScalarBackend::max(&abs_values),
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::max(&abs_values),
                 #[cfg(target_arch = "x86_64")]
@@ -2107,9 +2049,7 @@ impl Vector<f32> {
                 Backend::WasmSIMD => WasmBackend::max(&abs_values),
                 #[cfg(not(target_arch = "wasm32"))]
                 Backend::WasmSIMD => ScalarBackend::max(&abs_values),
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::max(&abs_values)
-                }
+                Backend::GPU | Backend::Auto => ScalarBackend::max(&abs_values),
             }
         };
 
@@ -2203,9 +2143,7 @@ impl Vector<f32> {
                     Backend::NEON => NeonBackend::scale(&self.data, scalar, &mut result_data),
                     #[cfg(target_arch = "wasm32")]
                     Backend::WASM => WasmBackend::scale(&self.data, scalar, &mut result_data),
-                    Backend::GPU => {
-                        return Err(TruenoError::UnsupportedBackend(Backend::GPU))
-                    }
+                    Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
                     Backend::Auto => {
                         // Auto should have been resolved at creation time
                         return Err(TruenoError::UnsupportedBackend(Backend::Auto));
@@ -3285,7 +3223,9 @@ impl Vector<f32> {
             });
         }
 
-        let copysign_data: Vec<f32> = self.data.iter()
+        let copysign_data: Vec<f32> = self
+            .data
+            .iter()
             .zip(sign.data.iter())
             .map(|(mag, sgn)| mag.copysign(*sgn))
             .collect();
@@ -3319,7 +3259,9 @@ impl Vector<f32> {
             });
         }
 
-        let minimum_data: Vec<f32> = self.data.iter()
+        let minimum_data: Vec<f32> = self
+            .data
+            .iter()
             .zip(other.data.iter())
             .map(|(a, b)| a.min(*b))
             .collect();
@@ -3353,7 +3295,9 @@ impl Vector<f32> {
             });
         }
 
-        let maximum_data: Vec<f32> = self.data.iter()
+        let maximum_data: Vec<f32> = self
+            .data
+            .iter()
             .zip(other.data.iter())
             .map(|(a, b)| a.max(*b))
             .collect();
@@ -3684,9 +3628,12 @@ mod tests {
         let naive_error = (naive_result - expected).abs();
 
         // Kahan error should be smaller (or at most equal)
-        assert!(kahan_error <= naive_error,
+        assert!(
+            kahan_error <= naive_error,
             "Kahan sum error ({}) should be <= naive sum error ({})",
-            kahan_error, naive_error);
+            kahan_error,
+            naive_error
+        );
     }
 
     // Max tests
@@ -4415,11 +4362,7 @@ mod tests {
     fn test_exp_negative() {
         let a = Vector::from_slice(&[-1.0, -2.0, -3.0]);
         let result = a.exp().unwrap();
-        let expected = [
-            (-1.0f32).exp(),
-            (-2.0f32).exp(),
-            (-3.0f32).exp(),
-        ];
+        let expected = [(-1.0f32).exp(), (-2.0f32).exp(), (-3.0f32).exp()];
         for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
             assert!(
                 (res - exp).abs() < 1e-5,
@@ -4534,7 +4477,12 @@ mod tests {
         let a = Vector::from_slice(&[0.5, 1.0, 2.0, 3.0]);
         let exp_result = a.exp().unwrap();
         let ln_result = exp_result.ln().unwrap();
-        for (i, (&original, &recovered)) in a.as_slice().iter().zip(ln_result.as_slice().iter()).enumerate() {
+        for (i, (&original, &recovered)) in a
+            .as_slice()
+            .iter()
+            .zip(ln_result.as_slice().iter())
+            .enumerate()
+        {
             assert!(
                 (original - recovered).abs() < 1e-5,
                 "ln(exp(x)) != x at {}: {} != {}",
@@ -4621,7 +4569,12 @@ mod tests {
         let b = Vector::from_slice(&[0.5 + 2.0 * PI, 1.0 + 2.0 * PI, 1.5 + 2.0 * PI]);
         let result_a = a.sin().unwrap();
         let result_b = b.sin().unwrap();
-        for (i, (&res_a, &res_b)) in result_a.as_slice().iter().zip(result_b.as_slice().iter()).enumerate() {
+        for (i, (&res_a, &res_b)) in result_a
+            .as_slice()
+            .iter()
+            .zip(result_b.as_slice().iter())
+            .enumerate()
+        {
             assert!(
                 (res_a - res_b).abs() < 1e-5,
                 "sin periodicity failed at {}: {} != {}",
@@ -4711,7 +4664,12 @@ mod tests {
         let shifted = Vector::from_slice(&a_plus_pi_2);
         let sin_result = shifted.sin().unwrap();
 
-        for (i, (&cos_val, &sin_val)) in cos_result.as_slice().iter().zip(sin_result.as_slice().iter()).enumerate() {
+        for (i, (&cos_val, &sin_val)) in cos_result
+            .as_slice()
+            .iter()
+            .zip(sin_result.as_slice().iter())
+            .enumerate()
+        {
             assert!(
                 (cos_val - sin_val).abs() < 1e-5,
                 "cos(x) = sin(x + π/2) failed at {}: {} != {}",
@@ -4882,8 +4840,11 @@ mod tests {
         let sin_result = a.sin().unwrap();
         let asin_result = sin_result.asin().unwrap();
 
-        for (i, (&original, &reconstructed)) in
-            a.as_slice().iter().zip(asin_result.as_slice().iter()).enumerate()
+        for (i, (&original, &reconstructed)) in a
+            .as_slice()
+            .iter()
+            .zip(asin_result.as_slice().iter())
+            .enumerate()
         {
             assert!(
                 (original - reconstructed).abs() < 1e-5,
@@ -4959,7 +4920,12 @@ mod tests {
         let a_neg = Vector::from_slice(&[-0.5, -0.707]);
         let result_neg = a_neg.acos().unwrap();
 
-        for (i, (&pos, &neg)) in result_pos.as_slice().iter().zip(result_neg.as_slice().iter()).enumerate() {
+        for (i, (&pos, &neg)) in result_pos
+            .as_slice()
+            .iter()
+            .zip(result_neg.as_slice().iter())
+            .enumerate()
+        {
             let expected_neg = PI - pos;
             assert!(
                 (neg - expected_neg).abs() < 1e-5,
@@ -4979,8 +4945,11 @@ mod tests {
         let cos_result = a.cos().unwrap();
         let acos_result = cos_result.acos().unwrap();
 
-        for (i, (&original, &reconstructed)) in
-            a.as_slice().iter().zip(acos_result.as_slice().iter()).enumerate()
+        for (i, (&original, &reconstructed)) in a
+            .as_slice()
+            .iter()
+            .zip(acos_result.as_slice().iter())
+            .enumerate()
         {
             assert!(
                 (original - reconstructed).abs() < 1e-5,
@@ -5066,8 +5035,11 @@ mod tests {
         let tan_result = a.tan().unwrap();
         let atan_result = tan_result.atan().unwrap();
 
-        for (i, (&original, &reconstructed)) in
-            a.as_slice().iter().zip(atan_result.as_slice().iter()).enumerate()
+        for (i, (&original, &reconstructed)) in a
+            .as_slice()
+            .iter()
+            .zip(atan_result.as_slice().iter())
+            .enumerate()
         {
             assert!(
                 (original - reconstructed).abs() < 1e-5,
@@ -5219,7 +5191,11 @@ mod tests {
         let a = Vector::from_slice(&[10.0, -10.0, 100.0]);
         let result = a.tanh().unwrap();
         for &val in result.as_slice() {
-            assert!((-1.0..=1.0).contains(&val), "tanh value {} out of range [-1, 1]", val);
+            assert!(
+                (-1.0..=1.0).contains(&val),
+                "tanh value {} out of range [-1, 1]",
+                val
+            );
         }
     }
 
@@ -5629,7 +5605,11 @@ mod tests {
         let a = Vector::from_slice(&[0.1, 0.5, 0.9, -0.1, -0.5, -0.9]);
         let result = a.fract().unwrap();
         for &val in result.as_slice() {
-            assert!(val.abs() < 1.0, "fract value should be in range (-1, 1): {}", val);
+            assert!(
+                val.abs() < 1.0,
+                "fract value should be in range (-1, 1): {}",
+                val
+            );
         }
     }
 
@@ -5723,7 +5703,10 @@ mod tests {
         let sign = Vector::from_slice(&[1.0, 2.0, 3.0]);
         let result = magnitude.copysign(&sign);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), TruenoError::SizeMismatch { .. }));
+        assert!(matches!(
+            result.unwrap_err(),
+            TruenoError::SizeMismatch { .. }
+        ));
     }
 
     #[test]
@@ -5870,13 +5853,19 @@ mod tests {
         let a = Vector::from_slice(&[1.0, -2.0, 3.0, -4.0, 5.0]);
         let neg_once = a.neg().unwrap();
         let neg_twice = neg_once.neg().unwrap();
-        for (i, (&original, &double_neg)) in a.as_slice().iter()
+        for (i, (&original, &double_neg)) in a
+            .as_slice()
+            .iter()
             .zip(neg_twice.as_slice().iter())
-            .enumerate() {
+            .enumerate()
+        {
             assert!(
                 (original - double_neg).abs() < 1e-6,
                 "Double negation failed at {}: -(-{}) = {} != {}",
-                i, original, double_neg, original
+                i,
+                original,
+                double_neg,
+                original
             );
         }
     }
@@ -6146,7 +6135,10 @@ mod tests {
         let result = x.covariance(&y);
         assert!(matches!(
             result,
-            Err(TruenoError::SizeMismatch { expected: 2, actual: 3 })
+            Err(TruenoError::SizeMismatch {
+                expected: 2,
+                actual: 3
+            })
         ));
     }
 
@@ -6213,7 +6205,10 @@ mod tests {
         let result = x.correlation(&y);
         assert!(matches!(
             result,
-            Err(TruenoError::SizeMismatch { expected: 2, actual: 3 })
+            Err(TruenoError::SizeMismatch {
+                expected: 2,
+                actual: 3
+            })
         ));
     }
 
@@ -6233,11 +6228,7 @@ mod tests {
 
         // Verify stddev ≈ 1
         let std = z.stddev().unwrap();
-        assert!(
-            (std - 1.0).abs() < 1e-5,
-            "stddev = {}, expected ≈ 1",
-            std
-        );
+        assert!((std - 1.0).abs() < 1e-5, "stddev = {}, expected ≈ 1", std);
     }
 
     #[test]

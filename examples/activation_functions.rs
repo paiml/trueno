@@ -85,7 +85,10 @@ fn main() {
     println!("✓ Softmax (multi-class output layer)");
     println!("  Input logits: {:?}", logits.as_slice());
     println!("  Output probabilities: {:?}", softmax_output.as_slice());
-    println!("  Sum: {:.6}", softmax_output.as_slice().iter().sum::<f32>());
+    println!(
+        "  Sum: {:.6}",
+        softmax_output.as_slice().iter().sum::<f32>()
+    );
     println!("  Characteristic: Outputs sum to 1.0, probabilistic\n");
 
     // Log-Softmax: Numerically stable for cross-entropy loss
@@ -125,7 +128,10 @@ fn main() {
 
     // Simulate a batch of pre-activations from a linear layer
     let layer_output = Vector::from_slice(&[0.5, -0.3, 1.2, -0.8, 2.1]);
-    println!("Layer output (pre-activation): {:?}", layer_output.as_slice());
+    println!(
+        "Layer output (pre-activation): {:?}",
+        layer_output.as_slice()
+    );
 
     // Different activation choices for different architectures
     println!("\nIf using CNN (e.g., ResNet):");

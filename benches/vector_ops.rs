@@ -252,12 +252,5 @@ fn bench_max(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_add,
-    bench_mul,
-    bench_dot,
-    bench_sum,
-    bench_max
-);
+criterion_group!(benches, bench_add, bench_mul, bench_dot, bench_sum, bench_max);
 criterion_main!(benches);
