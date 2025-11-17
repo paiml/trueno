@@ -1277,7 +1277,7 @@ impl Vector<f32> {
 
         // OpComplexity::Low - GPU threshold: >100K elements
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 100_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
@@ -1342,7 +1342,7 @@ impl Vector<f32> {
 
         // OpComplexity::Medium - GPU threshold: >10K elements (multi-pass overhead)
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 10_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 4-368x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
@@ -1407,7 +1407,7 @@ impl Vector<f32> {
 
         // OpComplexity::Medium - GPU threshold: >10K elements (multi-pass overhead)
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 10_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 4-368x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
@@ -1496,7 +1496,7 @@ impl Vector<f32> {
 
         // OpComplexity::Low - GPU threshold: >100K elements
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 100_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
@@ -1582,7 +1582,7 @@ impl Vector<f32> {
 
         // OpComplexity::Low - GPU threshold: >100K elements
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 100_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
@@ -1689,7 +1689,7 @@ impl Vector<f32> {
 
         // OpComplexity::Low - GPU threshold: >100K elements
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 100_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
@@ -1794,7 +1794,7 @@ impl Vector<f32> {
 
         // OpComplexity::Low - GPU threshold: >100K elements
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 100_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
@@ -1880,7 +1880,7 @@ impl Vector<f32> {
 
         // OpComplexity::Low - GPU threshold: >100K elements
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 100_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
@@ -1965,7 +1965,7 @@ impl Vector<f32> {
 
         // OpComplexity::Low - GPU threshold: >100K elements
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 100_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
@@ -3146,7 +3146,7 @@ impl Vector<f32> {
     pub fn tanh(&self) -> Result<Vector<f32>> {
         // OpComplexity::Low - GPU threshold: >100K elements
         #[cfg(feature = "gpu")]
-        const GPU_THRESHOLD: usize = 100_000;
+        const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
         #[cfg(feature = "gpu")]
