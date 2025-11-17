@@ -216,6 +216,27 @@ impl GpuBackend {
         Ok(result)
     }
 
+    /// GELU activation on GPU: result[i] = 0.5 * input[i] * (1 + tanh(...))
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Input vector
+    ///
+    /// # Returns
+    ///
+    /// Vector with GELU applied element-wise
+    pub fn gelu(&mut self, input: &[f32]) -> Result<Vec<f32>, String> {
+        let device = self.ensure_device()?;
+
+        // Create output buffer
+        let mut result = vec![0.0f32; input.len()];
+
+        // Execute GPU compute
+        device.gelu(input, &mut result)?;
+
+        Ok(result)
+    }
+
     /// 2D Convolution on GPU: output = input ⊗ kernel
     ///
     /// # Arguments

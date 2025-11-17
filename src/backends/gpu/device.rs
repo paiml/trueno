@@ -757,6 +757,14 @@ impl GpuDevice {
         })
     }
 
+    /// Execute GELU activation on GPU: result[i] = 0.5 * input[i] * (1 + tanh(...))
+    pub fn gelu(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        pollster::block_on(async {
+            self.execute_element_wise_op("GELU", shaders::GELU_SHADER, input, result, None)
+                .await
+        })
+    }
+
     /// Execute clip (clamp) operation on GPU: result[i] = clamp(input[i], min_val, max_val)
     pub fn clip(
         &self,
