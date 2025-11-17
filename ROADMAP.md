@@ -1,5 +1,9 @@
 # Trueno Roadmap
 
+**📖 See [PyTorch/NumPy Replacement Specification](docs/specifications/pytorch-numpy-replacement-spec.md) for comprehensive strategic positioning, technical gaps analysis, and detailed phased roadmap.**
+
+---
+
 ## Current State: v0.2.0 (January 2025)
 
 ### What Trueno Is Today

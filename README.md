@@ -445,6 +445,8 @@ let log_probs = logits.log_softmax().unwrap();  // Auto-uses GPU for >10K elemen
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
 - **🎯 Production Ready**: PMAT quality gates, Toyota Way principles
 
+**🎯 Strategic Positioning**: Trueno is designed as a **drop-in replacement** for NumPy (~35% complete) and PyTorch (~15% complete) in Rust applications. See [PyTorch/NumPy Replacement Specification](docs/specifications/pytorch-numpy-replacement-spec.md) for detailed roadmap to full parity.
+
 ## Design Principles
 
 ### Write Once, Optimize Everywhere
