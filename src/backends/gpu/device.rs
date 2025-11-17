@@ -501,25 +501,39 @@ impl GpuDevice {
         Ok(())
     }
 
-    /// Execute ReLU activation on GPU: result[i] = max(0, input[i])
-    pub fn relu(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        pollster::block_on(async { self.relu_async(input, result).await })
-    }
-
-    async fn relu_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+    /// Generic helper for element-wise GPU operations
+    ///
+    /// This helper eliminates code duplication between element-wise operations
+    /// (relu, clip, sigmoid, tanh, etc.) by abstracting the common GPU compute pattern.
+    ///
+    /// # Arguments
+    ///
+    /// * `op_name` - Operation name for labels (e.g., "ReLU", "Clip")
+    /// * `shader_source` - WGSL shader source code
+    /// * `input` - Input data
+    /// * `result` - Output buffer
+    /// * `uniform_data` - Optional uniform buffer data (e.g., clip parameters)
+    async fn execute_element_wise_op(
+        &self,
+        op_name: &str,
+        shader_source: &str,
+        input: &[f32],
+        result: &mut [f32],
+        uniform_data: Option<&[u8]>,
+    ) -> Result<(), String> {
         let len = input.len();
 
         // Create shader module
         let shader = self
             .device
             .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("ReLU Shader"),
-                source: wgpu::ShaderSource::Wgsl(shaders::RELU_SHADER.into()),
+                label: Some(&format!("{} Shader", op_name)),
+                source: wgpu::ShaderSource::Wgsl(shader_source.into()),
             });
 
         // Create input buffer
         let input_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ReLU Input"),
+            label: Some(&format!("{} Input", op_name)),
             size: std::mem::size_of_val(input) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -527,7 +541,7 @@ impl GpuDevice {
 
         // Create output buffer
         let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ReLU Output"),
+            label: Some(&format!("{} Output", op_name)),
             size: std::mem::size_of_val(result) as u64,
             usage: wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_SRC
@@ -539,56 +553,96 @@ impl GpuDevice {
         self.queue
             .write_buffer(&input_buffer, 0, bytemuck::cast_slice(input));
 
+        // Create optional uniform buffer
+        let uniform_buffer = uniform_data.map(|data| {
+            let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("{} Uniform", op_name)),
+                size: data.len() as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.queue.write_buffer(&buffer, 0, data);
+            buffer
+        });
+
+        // Create bind group layout entries (input + output + optional uniform)
+        let mut bind_group_entries = vec![
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ];
+
+        // Add uniform buffer binding if present
+        if uniform_buffer.is_some() {
+            bind_group_entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+        }
+
         // Create bind group layout
         let bind_group_layout =
             self.device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("ReLU Bind Group Layout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                    ],
+                    label: Some(&format!("{} Bind Group Layout", op_name)),
+                    entries: &bind_group_entries,
                 });
+
+        // Create bind group entries
+        let mut bind_entries = vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: input_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: output_buffer.as_entire_binding(),
+            },
+        ];
+
+        // Add uniform buffer binding if present
+        if let Some(ref uniform_buf) = uniform_buffer {
+            bind_entries.push(wgpu::BindGroupEntry {
+                binding: 2,
+                resource: uniform_buf.as_entire_binding(),
+            });
+        }
 
         // Create bind group
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("ReLU Bind Group"),
+            label: Some(&format!("{} Bind Group", op_name)),
             layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: input_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: output_buffer.as_entire_binding(),
-                },
-            ],
+            entries: &bind_entries,
         });
 
         // Create pipeline
         let pipeline_layout = self
             .device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("ReLU Pipeline Layout"),
+                label: Some(&format!("{} Pipeline Layout", op_name)),
                 bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
@@ -596,7 +650,7 @@ impl GpuDevice {
         let pipeline = self
             .device
             .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("ReLU Pipeline"),
+                label: Some(&format!("{} Pipeline", op_name)),
                 layout: Some(&pipeline_layout),
                 module: &shader,
                 entry_point: "main",
@@ -606,7 +660,7 @@ impl GpuDevice {
 
         // Create staging buffer for reading results
         let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ReLU Staging Buffer"),
+            label: Some(&format!("{} Staging Buffer", op_name)),
             size: std::mem::size_of_val(result) as u64,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -616,12 +670,12 @@ impl GpuDevice {
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("ReLU Encoder"),
+                label: Some(&format!("{} Encoder", op_name)),
             });
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("ReLU Pass"),
+                label: Some(&format!("{} Pass", op_name)),
                 timestamp_writes: None,
             });
             compute_pass.set_pipeline(&pipeline);
@@ -669,6 +723,14 @@ impl GpuDevice {
         staging_buffer.unmap();
 
         Ok(())
+    }
+
+    /// Execute ReLU activation on GPU: result[i] = max(0, input[i])
+    pub fn relu(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        pollster::block_on(async {
+            self.execute_element_wise_op("ReLU", shaders::RELU_SHADER, input, result, None)
+                .await
+        })
     }
 
     /// Execute clip (clamp) operation on GPU: result[i] = clamp(input[i], min_val, max_val)
@@ -679,45 +741,7 @@ impl GpuDevice {
         min_val: f32,
         max_val: f32,
     ) -> Result<(), String> {
-        pollster::block_on(async { self.clip_async(input, result, min_val, max_val).await })
-    }
-
-    async fn clip_async(
-        &self,
-        input: &[f32],
-        result: &mut [f32],
-        min_val: f32,
-        max_val: f32,
-    ) -> Result<(), String> {
-        let len = input.len();
-
-        // Create shader module
-        let shader = self
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Clip Shader"),
-                source: wgpu::ShaderSource::Wgsl(shaders::CLIP_SHADER.into()),
-            });
-
-        // Create input buffer
-        let input_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Clip Input"),
-            size: std::mem::size_of_val(input) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        // Create output buffer
-        let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Clip Output"),
-            size: std::mem::size_of_val(result) as u64,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        // Create uniform buffer for clip parameters
+        // Pack clip parameters as uniform buffer data
         #[repr(C)]
         #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
         struct ClipParams {
@@ -726,163 +750,18 @@ impl GpuDevice {
         }
 
         let params = ClipParams { min_val, max_val };
-        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Clip Params"),
-            size: std::mem::size_of::<ClipParams>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let uniform_data = bytemuck::bytes_of(&params);
 
-        // Write data
-        self.queue
-            .write_buffer(&input_buffer, 0, bytemuck::cast_slice(input));
-        self.queue
-            .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
-
-        // Create bind group layout
-        let bind_group_layout =
-            self.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Clip Bind Group Layout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                    ],
-                });
-
-        // Create bind group
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Clip Bind Group"),
-            layout: &bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: input_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: output_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buffer.as_entire_binding(),
-                },
-            ],
-        });
-
-        // Create pipeline
-        let pipeline_layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Clip Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-        let pipeline = self
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Clip Pipeline"),
-                layout: Some(&pipeline_layout),
-                module: &shader,
-                entry_point: "main",
-                compilation_options: Default::default(),
-                cache: None,
-            });
-
-        // Create staging buffer for reading results
-        let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Clip Staging Buffer"),
-            size: std::mem::size_of_val(result) as u64,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Clip Encoder"),
-            });
-
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Clip Pass"),
-                timestamp_writes: None,
-            });
-            compute_pass.set_pipeline(&pipeline);
-            compute_pass.set_bind_group(0, &bind_group, &[]);
-
-            // Dispatch workgroups (256 threads per workgroup)
-            let workgroup_size = 256;
-            let num_workgroups = (len as u32).div_ceil(workgroup_size);
-
-            compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
-        }
-
-        // Copy result to staging buffer
-        encoder.copy_buffer_to_buffer(
-            &output_buffer,
-            0,
-            &staging_buffer,
-            0,
-            std::mem::size_of_val(result) as u64,
-        );
-
-        // Submit commands
-        self.queue.submit(Some(encoder.finish()));
-
-        // Read back results
-        let buffer_slice = staging_buffer.slice(..);
-        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-            sender.send(result).ok();
-        });
-
-        self.device.poll(wgpu::Maintain::Wait);
-
-        receiver
-            .receive()
+        pollster::block_on(async {
+            self.execute_element_wise_op(
+                "Clip",
+                shaders::CLIP_SHADER,
+                input,
+                result,
+                Some(uniform_data),
+            )
             .await
-            .ok_or("Failed to receive mapping result")?
-            .map_err(|e| format!("Buffer mapping failed: {:?}", e))?;
-
-        {
-            let data = buffer_slice.get_mapped_range();
-            result.copy_from_slice(bytemuck::cast_slice(&data));
-        }
-
-        staging_buffer.unmap();
-
-        Ok(())
+        })
     }
 
     /// Execute dot product on GPU: result = sum(a[i] * b[i])
