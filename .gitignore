@@ -25,3 +25,8 @@ target
 
 /target
 lcov.info
+
+# Performance regression suite (runtime data)
+.performance-baselines/bench-latest.txt
+.performance-baselines/baseline-current.txt
+.kaizen/
