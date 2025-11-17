@@ -30,9 +30,11 @@
 
 pub mod backends;
 pub mod error;
+pub mod matrix;
 pub mod vector;
 
 pub use error::{Result, TruenoError};
+pub use matrix::Matrix;
 pub use vector::Vector;
 
 /// Backend execution target
@@ -56,6 +58,15 @@ pub enum Backend {
     GPU,
     /// Auto-select best available
     Auto,
+}
+
+impl Backend {
+    /// Select the best available backend for the current platform
+    ///
+    /// This is a convenience wrapper around `select_best_available_backend()`
+    pub fn select_best() -> Self {
+        select_best_available_backend()
+    }
 }
 
 /// Operation complexity for GPU dispatch eligibility
