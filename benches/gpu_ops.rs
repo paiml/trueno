@@ -167,10 +167,57 @@ fn bench_gpu_matmul(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark GPU ReLU activation vs scalar baseline
+///
+/// Tests GPU acceleration for element-wise operations.
+/// GPU threshold: >100K elements (OpComplexity::Low)
+fn bench_gpu_relu(c: &mut Criterion) {
+    // Skip if GPU not available
+    if !GpuBackend::is_available() {
+        eprintln!("GPU not available, skipping GPU benchmarks");
+        return;
+    }
+
+    let mut group = c.benchmark_group("gpu_relu");
+
+    // Test sizes: 10K (below threshold), 100K (at threshold), 1M (well above)
+    for size in [10_000, 100_000, 1_000_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // GPU backend
+        group.bench_with_input(BenchmarkId::new("GPU", size), size, |bencher, &size| {
+            // Mix of positive and negative values to test relu logic
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.5 - (size as f32) * 0.25)
+                .collect();
+            let mut gpu = GpuBackend::new();
+
+            bencher.iter(|| {
+                black_box(gpu.relu(&data).unwrap());
+            });
+        });
+
+        // Scalar baseline (for speedup comparison)
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.5 - (size as f32) * 0.25)
+                .collect();
+
+            bencher.iter(|| {
+                let result: Vec<f32> = data.iter().map(|&x| x.max(0.0)).collect();
+                black_box(result);
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_gpu_vec_add,
     bench_gpu_dot,
-    bench_gpu_matmul
+    bench_gpu_matmul,
+    bench_gpu_relu
 );
 criterion_main!(benches);
