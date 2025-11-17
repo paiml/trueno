@@ -1340,6 +1340,26 @@ impl Vector<f32> {
             return Err(TruenoError::EmptyVector);
         }
 
+        // OpComplexity::Medium - GPU threshold: >10K elements (multi-pass overhead)
+        #[cfg(feature = "gpu")]
+        const GPU_THRESHOLD: usize = 10_000;
+
+        // Try GPU first for large vectors
+        #[cfg(feature = "gpu")]
+        {
+            if self.data.len() >= GPU_THRESHOLD {
+                use crate::backends::gpu::GpuDevice;
+                if GpuDevice::is_available() {
+                    let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
+                    let mut result = vec![0.0; self.data.len()];
+                    if gpu.softmax(&self.data, &mut result).is_ok() {
+                        return Ok(Vector::from_slice(&result));
+                    }
+                }
+            }
+        }
+
+        // Scalar fallback: Multi-pass softmax for numerical stability
         // Find max for numerical stability (prevents overflow in exp)
         let max_val = self.max()?;
 
@@ -1385,6 +1405,26 @@ impl Vector<f32> {
             return Err(TruenoError::EmptyVector);
         }
 
+        // OpComplexity::Medium - GPU threshold: >10K elements (multi-pass overhead)
+        #[cfg(feature = "gpu")]
+        const GPU_THRESHOLD: usize = 10_000;
+
+        // Try GPU first for large vectors
+        #[cfg(feature = "gpu")]
+        {
+            if self.data.len() >= GPU_THRESHOLD {
+                use crate::backends::gpu::GpuDevice;
+                if GpuDevice::is_available() {
+                    let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
+                    let mut result = vec![0.0; self.data.len()];
+                    if gpu.log_softmax(&self.data, &mut result).is_ok() {
+                        return Ok(Vector::from_slice(&result));
+                    }
+                }
+            }
+        }
+
+        // Scalar fallback: Multi-pass log_softmax for numerical stability
         // Find max for numerical stability
         let max_val = self.max()?;
 

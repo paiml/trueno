@@ -281,6 +281,60 @@ impl GpuBackend {
         Ok(result)
     }
 
+    /// Softmax activation on GPU: result[i] = exp(input[i] - max) / sum(exp(input - max))
+    ///
+    /// Uses multi-pass reduction for numerical stability:
+    /// - Pass 1: Max reduction (parallel)
+    /// - Pass 2: Exp-subtract (element-wise)
+    /// - Pass 3: Sum reduction (parallel)
+    /// - Pass 4: Normalize (element-wise)
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Input vector
+    ///
+    /// # Returns
+    ///
+    /// Vector with softmax applied element-wise
+    pub fn softmax(&mut self, input: &[f32]) -> Result<Vec<f32>, String> {
+        let device = self.ensure_device()?;
+
+        // Create output buffer
+        let mut result = vec![0.0f32; input.len()];
+
+        // Execute GPU compute
+        device.softmax(input, &mut result)?;
+
+        Ok(result)
+    }
+
+    /// Log-softmax activation on GPU: result[i] = log(softmax(input)[i])
+    ///
+    /// Uses multi-pass reduction for numerical stability:
+    /// - Pass 1: Max reduction (parallel)
+    /// - Pass 2: Exp-subtract (element-wise)
+    /// - Pass 3: Sum reduction (parallel)
+    /// - Pass 4: Log-normalize (element-wise)
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - Input vector
+    ///
+    /// # Returns
+    ///
+    /// Vector with log-softmax applied element-wise
+    pub fn log_softmax(&mut self, input: &[f32]) -> Result<Vec<f32>, String> {
+        let device = self.ensure_device()?;
+
+        // Create output buffer
+        let mut result = vec![0.0f32; input.len()];
+
+        // Execute GPU compute
+        device.log_softmax(input, &mut result)?;
+
+        Ok(result)
+    }
+
     /// 2D Convolution on GPU: output = input ⊗ kernel
     ///
     /// # Arguments
