@@ -404,12 +404,12 @@ trueno/
 - [ ] Convolutions (conv2d)
 - [ ] Async GPU API
 
-**Phase 7 Progress**: Core vector operations complete with 506 tests passing. The library now supports:
+**Phase 7 Progress**: Core vector operations complete with 515 tests passing. The library now supports:
 - **Element-wise operations**: add, sub, mul, div, abs (absolute value), neg (negation/unary minus), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm), sin (sine), cos (cosine), tan (tangent), asin (arcsine), acos (arccosine), atan (arctangent), sinh (hyperbolic sine), cosh (hyperbolic cosine), tanh (hyperbolic tangent), asinh (inverse hyperbolic sine), acosh (inverse hyperbolic cosine), atanh (inverse hyperbolic tangent), floor (round down), ceil (round up), round (round to nearest), trunc (truncate toward zero), fract (fractional part), signum (sign function), copysign (copy sign from one vector to another), minimum (element-wise minimum of two vectors), maximum (element-wise maximum of two vectors)
 - **Scalar operations**: scale (scalar multiplication with full SIMD support)
 - **Dot product**: Optimized for ML/scientific computing
 - **Reductions**: sum (naive + Kahan), min, max, sum_of_squares, mean (arithmetic average), variance (population variance), stddev (standard deviation), covariance (population covariance between two vectors), correlation (Pearson correlation coefficient)
-- **Preprocessing**: zscore (z-score normalization/standardization), minmax_normalize (min-max scaling to [0,1] range)
+- **Preprocessing**: zscore (z-score normalization/standardization), minmax_normalize (min-max scaling to [0,1] range), clip (constrain values to [min,max] range)
 - **Index operations**: argmin, argmax
 - **Vector norms**: L1 (Manhattan), L2 (Euclidean), L∞ (max norm), normalization to unit vectors
 - **Numerical stability**: Kahan summation for accurate floating-point accumulation
