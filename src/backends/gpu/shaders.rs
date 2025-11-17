@@ -109,3 +109,63 @@ fn main(
     }
 }
 "#;
+
+/// 2D Convolution compute shader (WGSL)
+///
+/// Computes 2D convolution: output = input ⊗ kernel
+/// Uses "valid" padding (no padding, output smaller than input)
+///
+/// Output dimensions:
+/// - output_rows = input_rows - kernel_rows + 1
+/// - output_cols = input_cols - kernel_cols + 1
+///
+/// Uses workgroups of 16×16 threads for optimal GPU utilization
+pub const CONVOLVE2D_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read> kernel: array<f32>;
+@group(0) @binding(2) var<storage, read_write> output: array<f32>;
+
+struct ConvDimensions {
+    input_rows: u32,
+    input_cols: u32,
+    kernel_rows: u32,
+    kernel_cols: u32,
+    output_rows: u32,
+    output_cols: u32,
+}
+
+@group(0) @binding(3) var<uniform> dims: ConvDimensions;
+
+// Workgroup size: 16×16 = 256 threads
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let out_row = global_id.x;
+    let out_col = global_id.y;
+
+    // Bounds check
+    if (out_row >= dims.output_rows || out_col >= dims.output_cols) {
+        return;
+    }
+
+    var sum: f32 = 0.0;
+
+    // Apply kernel: iterate over kernel dimensions
+    for (var k_row: u32 = 0u; k_row < dims.kernel_rows; k_row = k_row + 1u) {
+        for (var k_col: u32 = 0u; k_col < dims.kernel_cols; k_col = k_col + 1u) {
+            // Input pixel coordinates
+            let in_row = out_row + k_row;
+            let in_col = out_col + k_col;
+
+            // Input and kernel are row-major
+            let input_idx = in_row * dims.input_cols + in_col;
+            let kernel_idx = k_row * dims.kernel_cols + k_col;
+
+            sum = sum + input[input_idx] * kernel[kernel_idx];
+        }
+    }
+
+    // Write output (row-major)
+    let output_idx = out_row * dims.output_cols + out_col;
+    output[output_idx] = sum;
+}
+"#;
