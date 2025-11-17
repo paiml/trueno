@@ -762,6 +762,24 @@ impl GpuDevice {
         })
     }
 
+    /// Execute ELU activation on GPU: result[i] = x if x > 0, else alpha * (exp(x) - 1)
+    pub fn elu(&self, input: &[f32], result: &mut [f32], alpha: f32) -> Result<(), String> {
+        // Pack ELU parameters as uniform buffer data
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct EluParams {
+            alpha: f32,
+        }
+
+        let params = EluParams { alpha };
+        let uniform_data = bytemuck::bytes_of(&params);
+
+        pollster::block_on(async {
+            self.execute_element_wise_op("ELU", shaders::ELU_SHADER, input, result, Some(uniform_data))
+                .await
+        })
+    }
+
     /// Execute sigmoid activation on GPU: result[i] = 1 / (1 + exp(-input[i]))
     pub fn sigmoid(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
         pollster::block_on(async {
