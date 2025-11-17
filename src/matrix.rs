@@ -248,7 +248,27 @@ impl Matrix<f32> {
 
         let mut result = Matrix::zeros(self.rows, other.cols);
 
-        // Naive O(n³) matrix multiplication: C[i,j] = Σ A[i,k] × B[k,j]
+        // Use SIMD-optimized implementation for larger matrices
+        const SIMD_THRESHOLD: usize = 64;
+        if self.rows >= SIMD_THRESHOLD
+            || self.cols >= SIMD_THRESHOLD
+            || other.cols >= SIMD_THRESHOLD
+        {
+            self.matmul_simd(other, &mut result)?;
+        } else {
+            self.matmul_naive(other, &mut result)?;
+        }
+
+        Ok(result)
+    }
+
+    /// Naive O(n³) matrix multiplication (baseline for small matrices)
+    fn matmul_naive(
+        &self,
+        other: &Matrix<f32>,
+        result: &mut Matrix<f32>,
+    ) -> Result<(), TruenoError> {
+        // C[i,j] = Σ A[i,k] × B[k,j]
         for i in 0..self.rows {
             for j in 0..other.cols {
                 let mut sum = 0.0;
@@ -258,8 +278,42 @@ impl Matrix<f32> {
                 *result.get_mut(i, j).unwrap() = sum;
             }
         }
+        Ok(())
+    }
 
-        Ok(result)
+    /// SIMD-optimized matrix multiplication using Vector operations
+    fn matmul_simd(
+        &self,
+        other: &Matrix<f32>,
+        result: &mut Matrix<f32>,
+    ) -> Result<(), TruenoError> {
+        // Strategy: Use Vector::dot() for each element computation
+        // C[i,j] = dot(A_row_i, B_col_j)
+
+        // Pre-transpose B for better cache locality (columns become rows)
+        let b_transposed = other.transpose();
+
+        for i in 0..self.rows {
+            // Extract row i from A as a slice
+            let row_start = i * self.cols;
+            let row_end = row_start + self.cols;
+            let a_row = &self.data[row_start..row_end];
+            let a_vec = Vector::from_slice(a_row);
+
+            for j in 0..other.cols {
+                // Extract row j from B^T (which is column j from B)
+                let col_start = j * b_transposed.cols;
+                let col_end = col_start + b_transposed.cols;
+                let b_col = &b_transposed.data[col_start..col_end];
+                let b_vec = Vector::from_slice(b_col);
+
+                // Compute dot product using SIMD
+                let dot_result = a_vec.dot(&b_vec)?;
+                *result.get_mut(i, j).unwrap() = dot_result;
+            }
+        }
+
+        Ok(())
     }
 
     /// Transpose the matrix (swap rows and columns)
@@ -575,6 +629,113 @@ mod tests {
         assert_eq!(c.rows(), 1);
         assert_eq!(c.cols(), 1);
         assert_eq!(c.get(0, 0), Some(&12.0));
+    }
+
+    // ===== Backend Equivalence Tests =====
+
+    #[test]
+    fn test_matmul_simd_equivalence_small() {
+        // Small matrix (below SIMD threshold) - verify both paths work
+        let a = Matrix::from_vec(8, 8, (0..64).map(|i| i as f32).collect()).unwrap();
+        let b = Matrix::from_vec(8, 8, (0..64).map(|i| (i * 2) as f32).collect()).unwrap();
+
+        let mut result_naive = Matrix::zeros(8, 8);
+        let mut result_simd = Matrix::zeros(8, 8);
+
+        a.matmul_naive(&b, &mut result_naive).unwrap();
+        a.matmul_simd(&b, &mut result_simd).unwrap();
+
+        // Results should be identical
+        for i in 0..8 {
+            for j in 0..8 {
+                let naive_val = result_naive.get(i, j).unwrap();
+                let simd_val = result_simd.get(i, j).unwrap();
+                assert!(
+                    (naive_val - simd_val).abs() < 1e-5,
+                    "Mismatch at ({}, {}): naive={}, simd={}",
+                    i,
+                    j,
+                    naive_val,
+                    simd_val
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_matmul_simd_equivalence_large() {
+        // Large matrix (above SIMD threshold) - verify SIMD correctness
+        let size = 128;
+        let a = Matrix::from_vec(
+            size,
+            size,
+            (0..size * size).map(|i| (i % 100) as f32).collect(),
+        )
+        .unwrap();
+        let b = Matrix::from_vec(
+            size,
+            size,
+            (0..size * size).map(|i| ((i * 2) % 100) as f32).collect(),
+        )
+        .unwrap();
+
+        let mut result_naive = Matrix::zeros(size, size);
+        let mut result_simd = Matrix::zeros(size, size);
+
+        a.matmul_naive(&b, &mut result_naive).unwrap();
+        a.matmul_simd(&b, &mut result_simd).unwrap();
+
+        // Results should be identical (within floating-point tolerance)
+        for i in 0..size {
+            for j in 0..size {
+                let naive_val = result_naive.get(i, j).unwrap();
+                let simd_val = result_simd.get(i, j).unwrap();
+                assert!(
+                    (naive_val - simd_val).abs() < 1e-3,
+                    "Mismatch at ({}, {}): naive={}, simd={}",
+                    i,
+                    j,
+                    naive_val,
+                    simd_val
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_matmul_simd_equivalence_rectangular() {
+        // Rectangular matrices
+        let a = Matrix::from_vec(64, 128, (0..64 * 128).map(|i| i as f32).collect()).unwrap();
+        let b = Matrix::from_vec(128, 32, (0..128 * 32).map(|i| (i * 3) as f32).collect()).unwrap();
+
+        let mut result_naive = Matrix::zeros(64, 32);
+        let mut result_simd = Matrix::zeros(64, 32);
+
+        a.matmul_naive(&b, &mut result_naive).unwrap();
+        a.matmul_simd(&b, &mut result_simd).unwrap();
+
+        // Results should be identical (use relative tolerance for large values)
+        for i in 0..64 {
+            for j in 0..32 {
+                let naive_val = result_naive.get(i, j).unwrap();
+                let simd_val = result_simd.get(i, j).unwrap();
+                let diff = (naive_val - simd_val).abs();
+                let tolerance = if naive_val.abs() > 1.0 {
+                    naive_val.abs() * 1e-5 // Relative tolerance for large values
+                } else {
+                    1e-5 // Absolute tolerance for small values
+                };
+                assert!(
+                    diff < tolerance,
+                    "Mismatch at ({}, {}): naive={}, simd={}, diff={}",
+                    i,
+                    j,
+                    naive_val,
+                    simd_val,
+                    diff
+                );
+            }
+        }
     }
 
     // ===== Transpose Tests =====
