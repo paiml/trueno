@@ -261,6 +261,44 @@ impl Matrix<f32> {
 
         Ok(result)
     }
+
+    /// Transpose the matrix (swap rows and columns)
+    ///
+    /// Returns a new matrix where element `(i, j)` of the original becomes
+    /// element `(j, i)` in the result.
+    ///
+    /// # Returns
+    ///
+    /// A new matrix with dimensions swapped: if input is `m×n`, output is `n×m`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use trueno::Matrix;
+    ///
+    /// let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    /// let t = m.transpose();
+    ///
+    /// // [[1, 2, 3],     [[1, 4],
+    /// //  [4, 5, 6]]  →   [2, 5],
+    /// //                  [3, 6]]
+    /// assert_eq!(t.rows(), 3);
+    /// assert_eq!(t.cols(), 2);
+    /// assert_eq!(t.get(0, 0), Some(&1.0));
+    /// assert_eq!(t.get(0, 1), Some(&4.0));
+    /// assert_eq!(t.get(1, 0), Some(&2.0));
+    /// ```
+    pub fn transpose(&self) -> Matrix<f32> {
+        let mut result = Matrix::zeros(self.cols, self.rows);
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                *result.get_mut(j, i).unwrap() = *self.get(i, j).unwrap();
+            }
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]
@@ -415,6 +453,100 @@ mod tests {
         assert_eq!(c.cols(), 1);
         assert_eq!(c.get(0, 0), Some(&12.0));
     }
+
+    // ===== Transpose Tests =====
+
+    #[test]
+    fn test_transpose_basic() {
+        // [[1, 2, 3],     [[1, 4],
+        //  [4, 5, 6]]  →   [2, 5],
+        //                  [3, 6]]
+        let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let t = m.transpose();
+
+        assert_eq!(t.rows(), 3);
+        assert_eq!(t.cols(), 2);
+        assert_eq!(t.get(0, 0), Some(&1.0));
+        assert_eq!(t.get(0, 1), Some(&4.0));
+        assert_eq!(t.get(1, 0), Some(&2.0));
+        assert_eq!(t.get(1, 1), Some(&5.0));
+        assert_eq!(t.get(2, 0), Some(&3.0));
+        assert_eq!(t.get(2, 1), Some(&6.0));
+    }
+
+    #[test]
+    fn test_transpose_square() {
+        // [[1, 2],     [[1, 3],
+        //  [3, 4]]  →   [2, 4]]
+        let m = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        let t = m.transpose();
+
+        assert_eq!(t.rows(), 2);
+        assert_eq!(t.cols(), 2);
+        assert_eq!(t.get(0, 0), Some(&1.0));
+        assert_eq!(t.get(0, 1), Some(&3.0));
+        assert_eq!(t.get(1, 0), Some(&2.0));
+        assert_eq!(t.get(1, 1), Some(&4.0));
+    }
+
+    #[test]
+    fn test_transpose_single_row() {
+        // [[1, 2, 3]] → [[1],
+        //                 [2],
+        //                 [3]]
+        let m = Matrix::from_vec(1, 3, vec![1.0, 2.0, 3.0]).unwrap();
+        let t = m.transpose();
+
+        assert_eq!(t.rows(), 3);
+        assert_eq!(t.cols(), 1);
+        assert_eq!(t.get(0, 0), Some(&1.0));
+        assert_eq!(t.get(1, 0), Some(&2.0));
+        assert_eq!(t.get(2, 0), Some(&3.0));
+    }
+
+    #[test]
+    fn test_transpose_single_col() {
+        // [[1],        [[1, 2, 3]]
+        //  [2],   →
+        //  [3]]
+        let m = Matrix::from_vec(3, 1, vec![1.0, 2.0, 3.0]).unwrap();
+        let t = m.transpose();
+
+        assert_eq!(t.rows(), 1);
+        assert_eq!(t.cols(), 3);
+        assert_eq!(t.get(0, 0), Some(&1.0));
+        assert_eq!(t.get(0, 1), Some(&2.0));
+        assert_eq!(t.get(0, 2), Some(&3.0));
+    }
+
+    #[test]
+    fn test_transpose_single_element() {
+        // [[5]] → [[5]]
+        let m = Matrix::from_vec(1, 1, vec![5.0]).unwrap();
+        let t = m.transpose();
+
+        assert_eq!(t.rows(), 1);
+        assert_eq!(t.cols(), 1);
+        assert_eq!(t.get(0, 0), Some(&5.0));
+    }
+
+    #[test]
+    fn test_transpose_identity() {
+        // I^T = I
+        let identity = Matrix::identity(3);
+        let t = identity.transpose();
+
+        assert_eq!(t.rows(), 3);
+        assert_eq!(t.cols(), 3);
+
+        // Check it's still identity
+        for i in 0..3 {
+            for j in 0..3 {
+                let expected = if i == j { 1.0 } else { 0.0 };
+                assert_eq!(t.get(i, j), Some(&expected));
+            }
+        }
+    }
 }
 
 // Property-based tests for matmul
@@ -529,6 +661,79 @@ mod property_tests {
 
             prop_assert_eq!(c.rows(), m);
             prop_assert_eq!(c.cols(), p);
+        }
+
+        /// Property: Double transpose returns original
+        /// (A^T)^T = A
+        #[test]
+        fn test_transpose_double_transpose(
+            a in matrix_strategy(5, 7)
+        ) {
+            let t = a.transpose();
+            let tt = t.transpose();
+
+            prop_assert_eq!(tt.rows(), a.rows());
+            prop_assert_eq!(tt.cols(), a.cols());
+
+            for i in 0..a.rows() {
+                for j in 0..a.cols() {
+                    prop_assert_eq!(tt.get(i, j), a.get(i, j));
+                }
+            }
+        }
+
+        /// Property: Transpose swaps dimensions
+        /// If A is m×n, then A^T is n×m
+        #[test]
+        fn test_transpose_dimension_swap(
+            m in 1usize..20,
+            n in 1usize..20
+        ) {
+            let a = Matrix::zeros(m, n);
+            let t = a.transpose();
+
+            prop_assert_eq!(t.rows(), n);
+            prop_assert_eq!(t.cols(), m);
+        }
+
+        /// Property: Transpose of product
+        /// (A×B)^T = B^T×A^T
+        #[test]
+        fn test_transpose_of_product(
+            a in matrix_strategy(3, 4),
+            b in matrix_strategy(4, 5)
+        ) {
+            let ab = a.matmul(&b).unwrap();
+            let ab_t = ab.transpose();
+
+            let b_t = b.transpose();
+            let a_t = a.transpose();
+            let bt_at = b_t.matmul(&a_t).unwrap();
+
+            prop_assert_eq!(ab_t.rows(), bt_at.rows());
+            prop_assert_eq!(ab_t.cols(), bt_at.cols());
+
+            // Check values with tolerance for floating-point errors
+            for i in 0..ab_t.rows() {
+                for j in 0..ab_t.cols() {
+                    let val1 = ab_t.get(i, j).unwrap();
+                    let val2 = bt_at.get(i, j).unwrap();
+                    let diff = (val1 - val2).abs();
+                    let max_val = val1.abs().max(val2.abs());
+
+                    let tolerance = if max_val < 1.0 {
+                        1e-3
+                    } else {
+                        max_val * 1e-3
+                    };
+
+                    prop_assert!(
+                        diff < tolerance,
+                        "Transpose of product failed at ({}, {}): {} != {} (diff: {}, tolerance: {})",
+                        i, j, val1, val2, diff, tolerance
+                    );
+                }
+            }
         }
     }
 }
