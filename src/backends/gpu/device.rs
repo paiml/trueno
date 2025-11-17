@@ -843,6 +843,435 @@ impl GpuDevice {
         })
     }
 
+    /// Execute softmax on GPU: result[i] = exp(input[i] - max) / sum(exp(input - max))
+    ///
+    /// Multi-pass implementation:
+    /// 1. Find max value (parallel reduction)
+    /// 2. Compute exp(x - max) (element-wise)
+    /// 3. Sum exp values (parallel reduction)
+    /// 4. Normalize by sum (element-wise)
+    pub fn softmax(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        pollster::block_on(async { self.softmax_async(input, result).await })
+    }
+
+    async fn softmax_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        // Pass 1: Find max value
+        let max_val = self.reduce_max(input).await?;
+
+        // Pass 2: Compute exp(x - max)
+        let exp_vals = self.compute_exp_subtract(input, max_val).await?;
+
+        // Pass 3: Sum exp values
+        let sum_exp = self.reduce_sum(&exp_vals).await?;
+
+        // Pass 4: Normalize by sum
+        self.normalize_by_sum(&exp_vals, result, sum_exp).await?;
+
+        Ok(())
+    }
+
+    /// Execute log_softmax on GPU: result[i] = input[i] - max - log(sum(exp(input - max)))
+    ///
+    /// Multi-pass implementation:
+    /// 1. Find max value (parallel reduction)
+    /// 2. Compute exp(x - max) (element-wise)
+    /// 3. Sum exp values (parallel reduction)
+    /// 4. Compute log_softmax (element-wise)
+    pub fn log_softmax(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        pollster::block_on(async { self.log_softmax_async(input, result).await })
+    }
+
+    async fn log_softmax_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        // Pass 1: Find max value
+        let max_val = self.reduce_max(input).await?;
+
+        // Pass 2: Compute exp(x - max)
+        let exp_vals = self.compute_exp_subtract(input, max_val).await?;
+
+        // Pass 3: Sum exp values
+        let sum_exp = self.reduce_sum(&exp_vals).await?;
+
+        // Pass 4: Compute log_softmax = x - max - log(sum_exp)
+        let log_sum_exp = sum_exp.ln();
+
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct LogSoftmaxParams {
+            max_val: f32,
+            log_sum_exp: f32,
+        }
+
+        let params = LogSoftmaxParams {
+            max_val,
+            log_sum_exp,
+        };
+        let uniform_data = bytemuck::bytes_of(&params);
+
+        self.execute_element_wise_op(
+            "LogSoftmax",
+            shaders::LOG_SOFTMAX_SHADER,
+            input,
+            result,
+            Some(uniform_data),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    /// Helper: Parallel max reduction
+    async fn reduce_max(&self, input: &[f32]) -> Result<f32, String> {
+        let len = input.len();
+        let workgroup_size = 256;
+        let num_workgroups = (len as u32).div_ceil(workgroup_size);
+
+        // Create shader module
+        let shader = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Max Reduction Shader"),
+                source: wgpu::ShaderSource::Wgsl(shaders::MAX_REDUCTION_SHADER.into()),
+            });
+
+        // Create input buffer
+        let input_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Max Reduction Input"),
+            size: std::mem::size_of_val(input) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Result buffer for partial maxes
+        let partial_results = vec![f32::NEG_INFINITY; num_workgroups as usize];
+        let result_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Max Partial Results"),
+            size: std::mem::size_of_val(partial_results.as_slice()) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        self.queue
+            .write_buffer(&input_buffer, 0, bytemuck::cast_slice(input));
+
+        // Create bind group layout
+        let bind_group_layout =
+            self.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Max Reduction Bind Group Layout"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
+                });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Max Reduction Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: input_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: result_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Max Reduction Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        let pipeline = self
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Max Reduction Pipeline"),
+                layout: Some(&pipeline_layout),
+                module: &shader,
+                entry_point: "main",
+                compilation_options: Default::default(),
+                cache: None,
+            });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Max Reduction Encoder"),
+            });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Max Reduction Pass"),
+                timestamp_writes: None,
+            });
+
+            compute_pass.set_pipeline(&pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+            compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
+        }
+
+        // Create staging buffer
+        let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Max Staging Buffer"),
+            size: std::mem::size_of_val(partial_results.as_slice()) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        encoder.copy_buffer_to_buffer(
+            &result_buffer,
+            0,
+            &staging_buffer,
+            0,
+            std::mem::size_of_val(partial_results.as_slice()) as u64,
+        );
+
+        self.queue.submit(Some(encoder.finish()));
+
+        let buffer_slice = staging_buffer.slice(..);
+        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            sender.send(result).ok();
+        });
+
+        self.device.poll(wgpu::Maintain::Wait);
+        receiver.receive().await.ok_or("Channel receive failed")?
+            .map_err(|e| format!("Buffer map failed: {:?}", e))?;
+
+        let data = buffer_slice.get_mapped_range();
+        let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
+        drop(data);
+        staging_buffer.unmap();
+
+        // Final reduction on CPU
+        Ok(result.iter().copied().fold(f32::NEG_INFINITY, f32::max))
+    }
+
+    /// Helper: Parallel sum reduction
+    async fn reduce_sum(&self, input: &[f32]) -> Result<f32, String> {
+        let len = input.len();
+        let workgroup_size = 256;
+        let num_workgroups = (len as u32).div_ceil(workgroup_size);
+
+        let shader = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Sum Reduction Shader"),
+                source: wgpu::ShaderSource::Wgsl(shaders::SUM_REDUCTION_SHADER.into()),
+            });
+
+        let input_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Sum Reduction Input"),
+            size: std::mem::size_of_val(input) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let partial_results = vec![0.0f32; num_workgroups as usize];
+        let result_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Sum Partial Results"),
+            size: std::mem::size_of_val(partial_results.as_slice()) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        self.queue
+            .write_buffer(&input_buffer, 0, bytemuck::cast_slice(input));
+
+        let bind_group_layout =
+            self.device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Sum Reduction Bind Group Layout"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
+                });
+
+        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Sum Reduction Bind Group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: input_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: result_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Sum Reduction Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
+
+        let pipeline = self
+            .device
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Sum Reduction Pipeline"),
+                layout: Some(&pipeline_layout),
+                module: &shader,
+                entry_point: "main",
+                compilation_options: Default::default(),
+                cache: None,
+            });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Sum Reduction Encoder"),
+            });
+
+        {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Sum Reduction Pass"),
+                timestamp_writes: None,
+            });
+
+            compute_pass.set_pipeline(&pipeline);
+            compute_pass.set_bind_group(0, &bind_group, &[]);
+            compute_pass.dispatch_workgroups(num_workgroups, 1, 1);
+        }
+
+        let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Sum Staging Buffer"),
+            size: std::mem::size_of_val(partial_results.as_slice()) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        encoder.copy_buffer_to_buffer(
+            &result_buffer,
+            0,
+            &staging_buffer,
+            0,
+            std::mem::size_of_val(partial_results.as_slice()) as u64,
+        );
+
+        self.queue.submit(Some(encoder.finish()));
+
+        let buffer_slice = staging_buffer.slice(..);
+        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            sender.send(result).ok();
+        });
+
+        self.device.poll(wgpu::Maintain::Wait);
+        receiver.receive().await.ok_or("Channel receive failed")?
+            .map_err(|e| format!("Buffer map failed: {:?}", e))?;
+
+        let data = buffer_slice.get_mapped_range();
+        let result: Vec<f32> = bytemuck::cast_slice(&data).to_vec();
+        drop(data);
+        staging_buffer.unmap();
+
+        // Final reduction on CPU
+        Ok(result.iter().sum())
+    }
+
+    /// Helper: Compute exp(input[i] - max_val)
+    async fn compute_exp_subtract(&self, input: &[f32], max_val: f32) -> Result<Vec<f32>, String> {
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct MaxValue {
+            max_val: f32,
+        }
+
+        let params = MaxValue { max_val };
+        let uniform_data = bytemuck::bytes_of(&params);
+
+        let mut result = vec![0.0f32; input.len()];
+        self.execute_element_wise_op(
+            "SoftmaxExp",
+            shaders::SOFTMAX_EXP_SHADER,
+            input,
+            &mut result,
+            Some(uniform_data),
+        )
+        .await?;
+
+        Ok(result)
+    }
+
+    /// Helper: Normalize by sum
+    async fn normalize_by_sum(
+        &self,
+        input: &[f32],
+        result: &mut [f32],
+        sum_val: f32,
+    ) -> Result<(), String> {
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct SumValue {
+            sum_val: f32,
+        }
+
+        let params = SumValue { sum_val };
+        let uniform_data = bytemuck::bytes_of(&params);
+
+        self.execute_element_wise_op(
+            "SoftmaxNormalize",
+            shaders::SOFTMAX_NORMALIZE_SHADER,
+            input,
+            result,
+            Some(uniform_data),
+        )
+        .await?;
+
+        Ok(())
+    }
+
     /// Execute dot product on GPU: result = sum(a[i] * b[i])
     pub fn dot(&self, a: &[f32], b: &[f32]) -> Result<f32, String> {
         pollster::block_on(async { self.dot_async(a, b).await })
