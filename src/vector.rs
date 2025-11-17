@@ -1804,6 +1804,74 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// Swish activation function (also known as SiLU - Sigmoid Linear Unit)
+    ///
+    /// Applies the Swish activation element-wise: swish(x) = x * sigmoid(x) = x / (1 + e^(-x)).
+    ///
+    /// Swish is a smooth, non-monotonic activation function that consistently matches or
+    /// outperforms ReLU in deep networks. It's used in EfficientNet, MobileNet v3, and
+    /// many modern architectures. The function is self-gated: it adaptively gates the
+    /// input based on its value.
+    ///
+    /// Properties:
+    /// - Smooth and differentiable everywhere
+    /// - Non-monotonic: has a slight "dip" for negative values
+    /// - swish(0) = 0
+    /// - swish(x) ≈ x for large positive x (linear)
+    /// - swish(x) ≈ 0 for large negative x
+    /// - Unbounded above, bounded below by ≈ -0.278 at x ≈ -1.278
+    ///
+    /// # Performance
+    ///
+    /// Compute-bound operation requiring exponential and division.
+    /// Future SIMD optimizations planned for Phase 9 (GPU backend).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+    /// let result = v.swish().unwrap();
+    ///
+    /// // Swish is smooth and self-gated
+    /// assert!(result.as_slice()[0] < 0.0); // Negative inputs → small negative outputs
+    /// assert_eq!(result.as_slice()[2], 0.0); // swish(0) = 0
+    /// assert!(result.as_slice()[4] > 1.5); // Large positive → ~linear
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `EmptyVector` if the input vector is empty.
+    ///
+    /// # References
+    ///
+    /// - Ramachandran et al. (2017): "Searching for Activation Functions"
+    /// - Also known as SiLU (Sigmoid Linear Unit): Elfwing et al. (2018)
+    pub fn swish(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // swish(x) = x * sigmoid(x) = x / (1 + e^(-x))
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| {
+                // Handle extreme values for numerical stability
+                if x < -50.0 {
+                    0.0 // sigmoid(-x) would overflow, but swish approaches 0
+                } else if x > 50.0 {
+                    x // sigmoid(x) ≈ 1, swish approaches x
+                } else {
+                    x / (1.0 + (-x).exp())
+                }
+            })
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -6933,6 +7001,77 @@ mod tests {
         assert!(matches!(result, Err(TruenoError::EmptyVector)));
     }
 
+    // ============================================================================
+    // Swish (SiLU) Tests
+    // ============================================================================
+
+    #[test]
+    fn test_swish_basic() {
+        let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result = v.swish().unwrap();
+
+        // swish(-2) ≈ -0.238, swish(-1) ≈ -0.269, swish(0) = 0
+        // swish(1) ≈ 0.731, swish(2) ≈ 1.762
+        assert!((result.as_slice()[0] - (-0.238)).abs() < 0.01);
+        assert!((result.as_slice()[1] - (-0.269)).abs() < 0.01);
+        assert_eq!(result.as_slice()[2], 0.0);
+        assert!((result.as_slice()[3] - 0.731).abs() < 0.01);
+        assert!((result.as_slice()[4] - 1.762).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_swish_zero() {
+        let v = Vector::from_slice(&[0.0]);
+        let result = v.swish().unwrap();
+        assert_eq!(result.as_slice()[0], 0.0); // swish(0) = 0
+    }
+
+    #[test]
+    fn test_swish_minimum() {
+        // Swish has a minimum value around x ≈ -1.278, value ≈ -0.278
+        let v = Vector::from_slice(&[-2.0, -1.5, -1.278, -1.0, -0.5]);
+        let result = v.swish().unwrap();
+
+        // All values should be above the minimum
+        for &val in result.as_slice() {
+            assert!(val > -0.3, "Swish value {} below minimum", val);
+        }
+
+        // The middle value (closest to -1.278) should be near the minimum
+        assert!(result.as_slice()[2] < -0.27);
+        assert!(result.as_slice()[2] > -0.29);
+    }
+
+    #[test]
+    fn test_swish_large_positive() {
+        // For large positive x, swish(x) ≈ x (linear behavior)
+        let v = Vector::from_slice(&[10.0, 20.0, 50.0]);
+        let result = v.swish().unwrap();
+
+        assert!((result.as_slice()[0] - 10.0).abs() < 0.01);
+        assert!((result.as_slice()[1] - 20.0).abs() < 0.01);
+        assert!((result.as_slice()[2] - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_swish_large_negative() {
+        // For large negative x, swish(x) ≈ 0
+        let v = Vector::from_slice(&[-10.0, -20.0, -50.0]);
+        let result = v.swish().unwrap();
+
+        // swish(-10) ≈ -0.000454, swish(-20) ≈ -4.1e-9, swish(-50) ≈ 0
+        assert!(result.as_slice()[0].abs() < 1e-3);
+        assert!(result.as_slice()[1].abs() < 1e-7);
+        assert!(result.as_slice()[2].abs() < 1e-15); // Effectively 0
+    }
+
+    #[test]
+    fn test_swish_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.swish();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -11750,6 +11889,61 @@ mod property_tests {
                 prop_assert!(
                     (result.data[i] - val).abs() < 0.01,
                     "For large positive {}, gelu should ≈ x, got {} vs {}",
+                    val, result.data[i], val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: swish() produces finite values
+        #[test]
+        fn test_swish_finite_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.swish().unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(val.is_finite(), "Swish output should be finite");
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: swish(0) = 0 always
+        #[test]
+        fn test_swish_zero_property(
+            a in prop::collection::vec(-0.001f32..0.001, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.swish().unwrap();
+
+            // For values very close to 0, swish should also be close to 0
+            for &val in result.as_slice() {
+                prop_assert!(
+                    val.abs() < 0.001,
+                    "Swish of near-zero should be near-zero, got {}",
+                    val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: For large positive x, swish(x) ≈ x (linear)
+        #[test]
+        fn test_swish_linear_large_positive(
+            a in prop::collection::vec(10.0f32..100.0, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.swish().unwrap();
+
+            for (i, &val) in a.iter().enumerate() {
+                // For large positive values, swish(x) should be very close to x
+                prop_assert!(
+                    (result.data[i] - val).abs() < 0.01,
+                    "For large positive {}, swish should ≈ x, got {} vs {}",
                     val, result.data[i], val
                 );
             }
