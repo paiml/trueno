@@ -410,6 +410,54 @@ proptest! {
         prop_assert_eq!(from_vec.rows(), rows);
         prop_assert_eq!(from_vec.cols(), cols);
     }
+
+    /// Integration test: Matrix-vector multiplication (matvec)
+    #[test]
+    fn integration_matrix_matvec(
+        m in 2usize..20,
+        n in 2usize..20
+    ) {
+        // Create m×n matrix and n-dimensional vector
+        let matrix_data = (0..m * n).map(|i| (i % 10) as f32).collect();
+        let matrix = Matrix::from_vec(m, n, matrix_data)?;
+        let vector_data: Vec<f32> = (0..n).map(|i| (i % 5) as f32).collect();
+        let vector = Vector::from_slice(&vector_data);
+
+        // Compute matrix-vector product
+        let result = matrix.matvec(&vector)?;
+
+        // Result should be m-dimensional
+        prop_assert_eq!(result.len(), m);
+
+        // Test with identity matrix: I×v = v
+        let identity = Matrix::identity(n);
+        let iv = identity.matvec(&vector)?;
+        prop_assert_eq!(iv.len(), n);
+    }
+
+    /// Integration test: Vector-matrix multiplication (vecmat)
+    #[test]
+    fn integration_matrix_vecmat(
+        m in 2usize..20,
+        n in 2usize..20
+    ) {
+        // Create m-dimensional vector and m×n matrix
+        let vector_data: Vec<f32> = (0..m).map(|i| (i % 5) as f32).collect();
+        let vector = Vector::from_slice(&vector_data);
+        let matrix_data = (0..m * n).map(|i| (i % 10) as f32).collect();
+        let matrix = Matrix::from_vec(m, n, matrix_data)?;
+
+        // Compute vector-matrix product
+        let result = Matrix::vecmat(&vector, &matrix)?;
+
+        // Result should be n-dimensional
+        prop_assert_eq!(result.len(), n);
+
+        // Test with identity matrix: v^T×I = v^T
+        let identity = Matrix::identity(m);
+        let vi = Matrix::vecmat(&vector, &identity)?;
+        prop_assert_eq!(vi.len(), m);
+    }
 }
 
 // ============================================================================

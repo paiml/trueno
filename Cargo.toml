@@ -29,3 +29,7 @@ path = "src/lib.rs"
 [[bench]]
 name = "vector_ops"
 harness = false
+
+[[bench]]
+name = "matrix_ops"
+harness = false
