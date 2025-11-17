@@ -64,6 +64,22 @@ Trueno delivers **exceptional performance** through multi-level SIMD optimizatio
 - Element-wise operations are memory-bound, limiting SIMD gains
 - AVX2's FMA provides significant acceleration for dot products
 
+### Matrix Operations (SIMD-Optimized)
+
+| Operation | Size | Time | Performance |
+|-----------|------|------|-------------|
+| **Matrix Multiply** | 64×64 | 59.9 µs | SIMD threshold |
+| **Matrix Multiply** | 128×128 | 434.9 µs | ~7x faster than naive |
+| **Matrix Multiply** | 256×256 | 2.67 ms | Scales O(n³) |
+| **Matrix Transpose** | 256×256 | 69.1 µs | Cache-optimized |
+| **Matrix-Vector** | 512×512 | 139.8 µs | SIMD dot products |
+
+**SIMD Optimization Strategy**:
+- **Threshold**: 64×64 (auto-selects SIMD vs naive)
+- **Transpose**: Pre-transpose B for cache locality (row-major access)
+- **Dot Products**: Uses Vector::dot() for SIMD acceleration (2-8x speedup)
+- **Small Matrices**: Uses naive O(n³) to avoid SIMD overhead
+
 **📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
 
 ## Features
