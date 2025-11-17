@@ -44,6 +44,20 @@ let filtered = image.convolve2d(&kernel).unwrap();  // Auto-selects GPU for larg
 
 ## Performance
 
+⚠️ **CRITICAL: GPU Performance Validation (2025-11-17)**
+
+Recent comprehensive benchmarking ([docs/performance-analysis.md](docs/performance-analysis.md)) revealed:
+
+- ✅ **GPU beneficial for**: Matrix multiplication ONLY (2-10x speedup for 500×500+ matrices)
+- ❌ **GPU detrimental for**: ALL element-wise operations (2-65,000x SLOWER than scalar)
+- 🎯 **Recommendation**: GPU backend disabled for vector operations in v0.2.1+ (matmul only)
+
+**Root cause**: 14-55ms GPU overhead (buffer allocation + PCIe transfer) dominates element-wise operations which complete in 0.01-10ms on CPU. GPU speedup requires O(N³) compute complexity to amortize transfer costs.
+
+See [performance analysis](docs/performance-analysis.md) for complete empirical data.
+
+---
+
 Trueno delivers **exceptional performance** through multi-level SIMD optimization:
 
 ### SSE2 (128-bit SIMD) vs Scalar
@@ -439,7 +453,7 @@ let log_probs = logits.log_softmax().unwrap();  // Auto-uses GPU for >10K elemen
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
-- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, leaky ReLU, ELU, sigmoid, tanh, swish, GELU (>100K elements), softmax, log_softmax (>10K elements), and clip operation (>100K elements)
+- **🎮 GPU Acceleration**: ⚠️ **Matmul ONLY** (2-10x for 500×500+) - GPU disabled for all vector operations after empirical benchmarking showed 2-65,000x slowdown (see [performance-analysis.md](docs/performance-analysis.md))
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
@@ -872,7 +886,7 @@ trueno/
 - [ ] Multi-GPU support (deferred to future phase)
 - [ ] GPU reductions (sum, max, min) (deferred to future phase)
 
-**Phase 6 Status**: ✅ COMPLETE - Full GPU compute backend with wgpu (Vulkan/Metal/DX12/WebGPU). Implemented matrix multiplication (16×16 workgroups), vector addition (256-thread workgroups), and dot product (parallel reduction). Comprehensive benchmarks validate speedup claims (10-50x target for large workloads). 765 tests passing (643 lib + 19 integration + 103 bench + GPU tests). All WGSL shaders implemented with proper async execution, buffer management, and graceful CPU fallback.
+**Phase 6 Status**: ⚠️ COMPLETE WITH CRITICAL FINDINGS - Full GPU compute backend with wgpu (Vulkan/Metal/DX12/WebGPU) implemented and **empirically validated**. Comprehensive benchmarks ([docs/performance-analysis.md](docs/performance-analysis.md)) show GPU is ONLY beneficial for matmul (2-10x for 500×500+). **All vector operations show massive slowdown** (2-65,000x) due to 14-55ms PCIe transfer overhead dominating memory-bound ops. GPU backend disabled for element-wise operations in v0.2.1+. 765 tests passing. WGSL shaders implemented with async execution and CPU fallback.
 
 ### Phase 7: Advanced Operations ✅ COMPLETE
 - [x] Element-wise subtraction (sub) and division (div)
@@ -893,7 +907,7 @@ trueno/
 - [x] Backend equivalence tests (naive vs SIMD)
 - [x] GPU dispatch for large matrices (>1000×1000 with wgpu)
 
-**Phase 8 Status**: ✅ COMPLETE - Full matrix operations with 3-tier backend selection. 759 tests passing (637 lib + 19 integration + 103 bench). Matrix multiplication automatically selects optimal backend: GPU for >1000×1000 matrices (target: 10-50x speedup), SIMD for >64×64 matrices (2-8x speedup), naive for smaller matrices (minimal overhead). GPU backend uses wgpu with WGSL compute shaders (16×16 workgroups), async execution via pollster, and graceful CPU fallback.
+**Phase 8 Status**: ✅ COMPLETE - Full matrix operations with 3-tier backend selection. 759 tests passing (637 lib + 19 integration + 103 bench). Matrix multiplication automatically selects optimal backend: **GPU for ≥500×500 matrices (empirical: 2-10x speedup)**, SIMD for >64×64 matrices (2-8x speedup), naive for smaller matrices (minimal overhead). GPU backend uses wgpu with WGSL compute shaders (16×16 workgroups), async execution via pollster, and graceful CPU fallback. See [performance-analysis.md](docs/performance-analysis.md) for complete empirical validation.
 
 **Phase 7 Status**: ✅ COMPLETE - Core vector operations with 587 tests passing. The library now supports:
 - **Element-wise operations**: add, sub, mul, div, abs (absolute value), neg (negation/unary minus), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm), sin (sine), cos (cosine), tan (tangent), asin (arcsine), acos (arccosine), atan (arctangent), sinh (hyperbolic sine), cosh (hyperbolic cosine), tanh (hyperbolic tangent), asinh (inverse hyperbolic sine), acosh (inverse hyperbolic cosine), atanh (inverse hyperbolic tangent), floor (round down), ceil (round up), round (round to nearest), trunc (truncate toward zero), fract (fractional part), signum (sign function), copysign (copy sign from one vector to another), minimum (element-wise minimum of two vectors), maximum (element-wise maximum of two vectors)
