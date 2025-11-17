@@ -242,13 +242,43 @@ let cell_state = Vector::from_slice(&vec![...]);  // 250K hidden units
 let activated = cell_state.tanh().unwrap();  // Auto-uses GPU for >100K elements
 ```
 
+### Swish Activation (GPU-Accelerated)
+
+| Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
+|-----------|------------|---------------|------------------|---------|
+| **Swish** | 10K | ~70 µs | - | Below threshold |
+| **Swish** | 100K | ~700 µs | ~70 µs | 10x target |
+| **Swish** | 1M | ~7 ms | ~140 µs | 50x target |
+
+**GPU Acceleration Strategy** (OpComplexity::Low):
+- **GPU Threshold**: >100,000 elements
+- **Operation**: Element-wise swish(x) = x * σ(x) = x / (1 + e^(-x))
+- **Workgroups**: 256 threads per workgroup (1D dispatch)
+- **Numerical Stability**: Separate handling for positive/negative inputs
+- **Use Cases**: Transformers (BERT, GPT, T5), modern neural networks, SiLU activation
+- **Also known as**: SiLU (Sigmoid Linear Unit)
+
+**Automatic Backend Selection**:
+- Small vectors (<100K elements): Scalar (iterator-based with stability checks)
+- Large vectors (>100K elements): GPU compute shader (10-50x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
+**Example: Transformer Inference**
+```rust
+use trueno::Vector;
+
+// Swish activation in transformer feed-forward network
+let ffn_output = Vector::from_slice(&vec![...]);  // 768K hidden units (BERT-large)
+let activated = ffn_output.swish().unwrap();  // Auto-uses GPU for >100K elements
+```
+
 **📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
 
 ## Features
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
-- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, sigmoid, tanh (>100K elements), and clip operation (>100K elements)
+- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, sigmoid, tanh, swish (>100K elements), and clip operation (>100K elements)
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
