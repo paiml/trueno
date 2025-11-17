@@ -31,6 +31,9 @@ pub mod neon;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 
+#[cfg(feature = "gpu")]
+pub mod gpu;
+
 // Future backends
 //
 // #[cfg(target_arch = "x86_64")]

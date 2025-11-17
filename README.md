@@ -86,6 +86,7 @@ Trueno delivers **exceptional performance** through multi-level SIMD optimizatio
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
+- **🎮 GPU Acceleration**: Optional wgpu backend for very large matrices (>1000×1000)
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
@@ -103,7 +104,7 @@ Trueno automatically selects the best backend:
 - **x86_64**: AVX-512 → AVX2 → AVX → SSE2 → Scalar
 - **ARM**: NEON → Scalar
 - **WASM**: SIMD128 → Scalar
-- **GPU**: Vulkan/Metal/DX12/WebGPU (large datasets)
+- **GPU** (optional): Vulkan/Metal/DX12/WebGPU (>1000×1000 matrices)
 
 ### Safety First
 ```rust
@@ -136,11 +137,25 @@ Add to your `Cargo.toml`:
 trueno = "0.1"
 ```
 
+### GPU Acceleration (Optional)
+
+Enable GPU support for very large matrices:
+
+```toml
+[dependencies]
+trueno = { version = "0.1", features = ["gpu"] }
+```
+
+**Requirements**:
+- Vulkan, Metal, or DirectX 12 compatible GPU
+- wgpu runtime dependencies
+- GPU backend automatically activates for matrices >1000×1000
+
 For bleeding-edge features:
 
 ```toml
 [dependencies]
-trueno = { git = "https://github.com/paiml/trueno" }
+trueno = { git = "https://github.com/paiml/trueno", features = ["gpu"] }
 ```
 
 ## Usage Examples
@@ -445,12 +460,17 @@ trueno/
 - [ ] Browser deployment example (future)
 - [ ] Edge computing use case (future)
 
-### Phase 6: GPU Compute
-- [ ] `wgpu` integration
-- [ ] Compute shader kernels (WGSL)
-- [ ] Host-device memory transfer optimization
-- [ ] GPU dispatch heuristics (OpComplexity)
+### Phase 6: GPU Compute 🚧 INITIAL IMPLEMENTATION
+- [x] `wgpu` integration (optional `gpu` feature flag)
+- [x] Compute shader kernels (WGSL) for matrix multiplication
+- [x] Host-device memory transfer with async execution
+- [x] GPU dispatch heuristics (>1000×1000 threshold)
+- [x] Automatic fallback to SIMD/CPU if GPU unavailable
+- [ ] Vector operations on GPU (add, dot product, reductions)
 - [ ] Multi-GPU support
+- [ ] Performance benchmarks (10-50x speedup target)
+
+**Phase 6 Progress**: GPU-accelerated matrix multiplication implemented with wgpu (Vulkan/Metal/DX12/WebGPU). Automatic backend selection: GPU for >1000×1000 matrices, SIMD for >64×64, naive for smaller. Complete WGSL compute shader with 16×16 workgroups. Graceful fallback if GPU unavailable.
 
 ### Phase 7: Advanced Operations ✅ COMPLETE
 - [x] Element-wise subtraction (sub) and division (div)
