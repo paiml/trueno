@@ -80,6 +80,50 @@ pub enum OpComplexity {
     High = 2,
 }
 
+/// Detect best SIMD backend for x86/x86_64 platforms
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+fn detect_x86_backend() -> Backend {
+    if is_x86_feature_detected!("avx512f") {
+        return Backend::AVX512;
+    }
+    if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+        return Backend::AVX2;
+    }
+    if is_x86_feature_detected!("avx") {
+        return Backend::AVX;
+    }
+    if is_x86_feature_detected!("sse2") {
+        return Backend::SSE2;
+    }
+    Backend::Scalar
+}
+
+/// Detect best SIMD backend for ARM platforms
+#[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+fn detect_arm_backend() -> Backend {
+    #[cfg(target_feature = "neon")]
+    {
+        Backend::NEON
+    }
+    #[cfg(not(target_feature = "neon"))]
+    {
+        Backend::Scalar
+    }
+}
+
+/// Detect best SIMD backend for WebAssembly
+#[cfg(target_arch = "wasm32")]
+fn detect_wasm_backend() -> Backend {
+    #[cfg(target_feature = "simd128")]
+    {
+        Backend::WasmSIMD
+    }
+    #[cfg(not(target_feature = "simd128"))]
+    {
+        Backend::Scalar
+    }
+}
+
 /// Select the best available backend for the current platform
 ///
 /// This function performs runtime CPU feature detection and selects the most
@@ -113,65 +157,21 @@ pub enum OpComplexity {
 /// println!("Using backend: {:?}", backend);
 /// ```
 pub fn select_best_available_backend() -> Backend {
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     {
-        // x86_64 SIMD feature detection (priority order)
-        if is_x86_feature_detected!("avx512f") {
-            return Backend::AVX512;
-        }
-        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-            return Backend::AVX2;
-        }
-        if is_x86_feature_detected!("avx") {
-            return Backend::AVX;
-        }
-        if is_x86_feature_detected!("sse2") {
-            return Backend::SSE2;
-        }
-        Backend::Scalar
+        detect_x86_backend()
     }
 
-    #[cfg(target_arch = "x86")]
+    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
     {
-        // x86 (32-bit) - similar detection
-        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-            return Backend::AVX2;
-        }
-        if is_x86_feature_detected!("avx") {
-            return Backend::AVX;
-        }
-        if is_x86_feature_detected!("sse2") {
-            return Backend::SSE2;
-        }
-        Backend::Scalar
-    }
-
-    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-    {
-        // ARM64 with NEON
-        Backend::NEON
-    }
-
-    #[cfg(all(target_arch = "arm", target_feature = "neon"))]
-    {
-        // ARM32 with NEON
-        Backend::NEON
+        detect_arm_backend()
     }
 
     #[cfg(target_arch = "wasm32")]
     {
-        // WebAssembly
-        #[cfg(target_feature = "simd128")]
-        {
-            Backend::WasmSIMD
-        }
-        #[cfg(not(target_feature = "simd128"))]
-        {
-            Backend::Scalar
-        }
+        detect_wasm_backend()
     }
 
-    // Fallback for other architectures
     #[cfg(not(any(
         target_arch = "x86_64",
         target_arch = "x86",
