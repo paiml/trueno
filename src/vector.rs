@@ -1260,6 +1260,56 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// Clip values to a specified range [min_val, max_val]
+    ///
+    /// Constrains each element to be within the specified range:
+    /// - Values below min_val become min_val
+    /// - Values above max_val become max_val
+    /// - Values within range stay unchanged
+    ///
+    /// This is useful for outlier handling, gradient clipping in neural networks,
+    /// and ensuring values stay within valid bounds.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-5.0, 0.0, 5.0, 10.0, 15.0]);
+    /// let clipped = v.clip(0.0, 10.0).unwrap();
+    ///
+    /// // Values: [-5, 0, 5, 10, 15] → [0, 0, 5, 10, 10]
+    /// assert_eq!(clipped.as_slice(), &[0.0, 0.0, 5.0, 10.0, 10.0]);
+    /// ```
+    ///
+    /// # Invalid range
+    ///
+    /// Returns InvalidInput error if min_val > max_val.
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+    /// let result = v.clip(10.0, 5.0); // min > max
+    /// assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+    /// ```
+    pub fn clip(&self, min_val: f32, max_val: f32) -> Result<Self> {
+        if min_val > max_val {
+            return Err(TruenoError::InvalidInput(format!(
+                "min_val ({}) must be <= max_val ({})",
+                min_val, max_val
+            )));
+        }
+
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| x.max(min_val).min(max_val))
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -5754,6 +5804,64 @@ mod tests {
         assert!((max - 1.0).abs() < 1e-5);
     }
 
+    // ========================================================================
+    // Tests for clip() - Constrain values to [min, max] range
+    // ========================================================================
+
+    #[test]
+    fn test_clip_basic() {
+        // [-5, 0, 5, 10, 15] clipped to [0, 10] → [0, 0, 5, 10, 10]
+        let v = Vector::from_slice(&[-5.0, 0.0, 5.0, 10.0, 15.0]);
+        let clipped = v.clip(0.0, 10.0).unwrap();
+
+        assert_eq!(clipped.as_slice(), &[0.0, 0.0, 5.0, 10.0, 10.0]);
+    }
+
+    #[test]
+    fn test_clip_no_change() {
+        // All values within range should stay unchanged
+        let v = Vector::from_slice(&[2.0, 4.0, 6.0, 8.0]);
+        let clipped = v.clip(0.0, 10.0).unwrap();
+
+        assert_eq!(clipped.as_slice(), &[2.0, 4.0, 6.0, 8.0]);
+    }
+
+    #[test]
+    fn test_clip_all_below() {
+        // All values below min → all become min
+        let v = Vector::from_slice(&[-10.0, -5.0, -2.0]);
+        let clipped = v.clip(0.0, 10.0).unwrap();
+
+        assert_eq!(clipped.as_slice(), &[0.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_clip_all_above() {
+        // All values above max → all become max
+        let v = Vector::from_slice(&[15.0, 20.0, 25.0]);
+        let clipped = v.clip(0.0, 10.0).unwrap();
+
+        assert_eq!(clipped.as_slice(), &[10.0, 10.0, 10.0]);
+    }
+
+    #[test]
+    fn test_clip_invalid_range() {
+        // min > max → InvalidInput error
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let result = v.clip(10.0, 5.0);
+
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn test_clip_equal_bounds() {
+        // min == max → all values become that value
+        let v = Vector::from_slice(&[-5.0, 0.0, 5.0, 10.0]);
+        let clipped = v.clip(7.0, 7.0).unwrap();
+
+        assert_eq!(clipped.as_slice(), &[7.0, 7.0, 7.0, 7.0]);
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -9984,6 +10092,104 @@ mod property_tests {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    // ========================================================================
+    // Property tests for clip() - Range clipping
+    // ========================================================================
+
+    proptest! {
+        /// Property test: clip() produces values within [min_val, max_val]
+        #[test]
+        fn test_clip_within_bounds(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            min_val in -50.0f32..50.0,
+            max_val in -50.0f32..50.0
+        ) {
+            // Ensure min <= max
+            let (min_val, max_val) = if min_val <= max_val {
+                (min_val, max_val)
+            } else {
+                (max_val, min_val)
+            };
+
+            let va = Vector::from_slice(&a);
+            let clipped = va.clip(min_val, max_val).unwrap();
+
+            // All values must be within [min_val, max_val]
+            for &val in clipped.as_slice() {
+                prop_assert!(
+                    (min_val..=max_val).contains(&val),
+                    "Value {} not in range [{}, {}]",
+                    val, min_val, max_val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: clip() preserves order (monotonicity)
+        /// If a[i] <= a[j], then clip(a)[i] <= clip(a)[j]
+        #[test]
+        fn test_clip_preserves_order(
+            a in prop::collection::vec(-100.0f32..100.0, 2..100),
+            min_val in -50.0f32..50.0,
+            max_val in -50.0f32..50.0
+        ) {
+            // Ensure min <= max
+            let (min_val, max_val) = if min_val <= max_val {
+                (min_val, max_val)
+            } else {
+                (max_val, min_val)
+            };
+
+            let va = Vector::from_slice(&a);
+            let clipped = va.clip(min_val, max_val).unwrap();
+
+            // Check order preservation
+            for i in 0..a.len() {
+                for j in 0..a.len() {
+                    if a[i] <= a[j] {
+                        prop_assert!(
+                            clipped.data[i] <= clipped.data[j] + 1e-5,
+                            "Order not preserved: a[{}]={} <= a[{}]={}, but clip[{}]={} > clip[{}]={}",
+                            i, a[i], j, a[j], i, clipped.data[i], j, clipped.data[j]
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: clip() is idempotent
+        /// clip(clip(X)) = clip(X)
+        #[test]
+        fn test_clip_idempotent(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100),
+            min_val in -50.0f32..50.0,
+            max_val in -50.0f32..50.0
+        ) {
+            // Ensure min <= max
+            let (min_val, max_val) = if min_val <= max_val {
+                (min_val, max_val)
+            } else {
+                (max_val, min_val)
+            };
+
+            let va = Vector::from_slice(&a);
+            let clipped1 = va.clip(min_val, max_val).unwrap();
+            let clipped2 = clipped1.clip(min_val, max_val).unwrap();
+
+            // Clipping twice should give same result
+            for i in 0..clipped1.len() {
+                prop_assert!(
+                    (clipped1.data[i] - clipped2.data[i]).abs() < 1e-5,
+                    "Idempotency violated at index {}: clip_once={}, clip_twice={}",
+                    i, clipped1.data[i], clipped2.data[i]
+                );
             }
         }
     }
