@@ -219,4 +219,105 @@ mod tests {
         let result = unsafe { ScalarBackend::min(&a) };
         assert_eq!(result, 1.0);
     }
+
+    #[test]
+    fn test_scalar_sub() {
+        let a = [5.0, 6.0, 7.0, 8.0];
+        let b = [1.0, 2.0, 3.0, 4.0];
+        let mut result = [0.0; 4];
+        unsafe {
+            ScalarBackend::sub(&a, &b, &mut result);
+        }
+        assert_eq!(result, [4.0, 4.0, 4.0, 4.0]);
+    }
+
+    #[test]
+    fn test_scalar_div() {
+        let a = [10.0, 20.0, 30.0, 40.0];
+        let b = [2.0, 4.0, 5.0, 8.0];
+        let mut result = [0.0; 4];
+        unsafe {
+            ScalarBackend::div(&a, &b, &mut result);
+        }
+        assert_eq!(result, [5.0, 5.0, 6.0, 5.0]);
+    }
+
+    #[test]
+    fn test_scalar_argmax() {
+        let a = [1.0, 5.0, 3.0, 2.0];
+        let result = unsafe { ScalarBackend::argmax(&a) };
+        assert_eq!(result, 1); // Index of 5.0
+    }
+
+    #[test]
+    fn test_scalar_argmin() {
+        let a = [5.0, 1.0, 3.0, 2.0];
+        let result = unsafe { ScalarBackend::argmin(&a) };
+        assert_eq!(result, 1); // Index of 1.0
+    }
+
+    #[test]
+    fn test_scalar_sum_kahan() {
+        let a = [1.0, 2.0, 3.0, 4.0];
+        let result = unsafe { ScalarBackend::sum_kahan(&a) };
+        assert_eq!(result, 10.0);
+    }
+
+    #[test]
+    fn test_scalar_norm_l1() {
+        let a = [1.0, -2.0, 3.0, -4.0];
+        let result = unsafe { ScalarBackend::norm_l1(&a) };
+        assert_eq!(result, 10.0); // |1| + |-2| + |3| + |-4| = 10
+    }
+
+    #[test]
+    fn test_scalar_norm_l2() {
+        let a = [3.0, 4.0];
+        let result = unsafe { ScalarBackend::norm_l2(&a) };
+        assert_eq!(result, 5.0); // sqrt(3² + 4²) = 5
+    }
+
+    #[test]
+    fn test_scalar_scale() {
+        let a = [1.0, 2.0, 3.0, 4.0];
+        let mut result = [0.0; 4];
+        unsafe {
+            ScalarBackend::scale(&a, 2.0, &mut result);
+        }
+        assert_eq!(result, [2.0, 4.0, 6.0, 8.0]);
+    }
+
+    #[test]
+    fn test_scalar_clamp() {
+        let a = [1.0, 5.0, 10.0, 15.0];
+        let mut result = [0.0; 4];
+        unsafe {
+            ScalarBackend::clamp(&a, 3.0, 12.0, &mut result);
+        }
+        assert_eq!(result, [3.0, 5.0, 10.0, 12.0]);
+    }
+
+    #[test]
+    fn test_scalar_lerp() {
+        let a = [0.0, 10.0, 20.0];
+        let b = [100.0, 110.0, 120.0];
+        let mut result = [0.0; 3];
+        unsafe {
+            ScalarBackend::lerp(&a, &b, 0.5, &mut result);
+        }
+        assert_eq!(result, [50.0, 60.0, 70.0]); // Midpoint between a and b
+    }
+
+    #[test]
+    fn test_scalar_fma() {
+        let a = [1.0, 2.0, 3.0];
+        let b = [2.0, 3.0, 4.0];
+        let c = [5.0, 6.0, 7.0];
+        let mut result = [0.0; 3];
+        unsafe {
+            ScalarBackend::fma(&a, &b, &c, &mut result);
+        }
+        // FMA: a*b + c
+        assert_eq!(result, [7.0, 12.0, 19.0]); // [1*2+5, 2*3+6, 3*4+7]
+    }
 }
