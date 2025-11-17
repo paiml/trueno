@@ -41,7 +41,7 @@ Test Coverage:     >90%
 Mutation Testing:  80%+ kill rate
 PMAT TDG Grade:    B+ (85/100)
 Repo Score:        90/110
-GPU Speedup:       10-50x (validated for 14 ops)
+GPU Speedup:       ⚠️ Matmul ONLY 2-10x (13/14 ops slower, see analysis)
 ```
 
 ---
@@ -63,17 +63,26 @@ GPU Speedup:       10-50x (validated for 14 ops)
   - README documentation with examples
   - Actual speedup: 2-20x over scalar
 
-- [ ] **Benchmark all GPU ops** - *Genchi Genbutsu* (現地現物 - Go see for yourself)
-  - Validate 10-50x GPU speedup claims with empirical data
-  - Measure: vec_add, dot, matmul, all 14 activations
-  - Document actual performance vs targets
-  - Identify underperforming operations
-  - **Success Criteria**: ≥10x speedup for 100K+ elements (Low complexity)
+- [x] **Benchmark all GPU ops** ✅ COMPLETE - *Genchi Genbutsu* (現地現物 - Go see for yourself)
+  - Measured 40+ configurations across 14 operations (1K-1M elements)
+  - **CRITICAL FINDING**: GPU UNSUITABLE for 13/14 operations
+  - ✅ Matmul: 2-10x speedup (500×500+)
+  - ❌ All element-wise: 2-65,000x SLOWER (transfer overhead dominates)
+  - Root cause: 14-55ms fixed GPU overhead >> compute time
+  - Full analysis: [docs/performance-analysis.md](docs/performance-analysis.md)
+  - **Decision**: Disable GPU for element-wise ops, focus on SIMD
 
-- [ ] **Performance regression suite**
-  - Baseline performance for all GPU ops
-  - CI integration (detect >5% regressions)
-  - **Success Criteria**: No regressions >5% from baseline
+- [x] **Performance regression suite** ✅ COMPLETE
+  - Baseline saved: `.performance-baselines/baseline-current.txt`
+  - Framework: `.performance-baselines/README.md`, `baseline-template.json`
+  - Makefile targets: `bench-save-baseline`, `bench-compare`, `bench-gpu`
+  - **Status**: Infrastructure ready, CI integration pending
+
+- [ ] **Implement GPU strategic decision**
+  - Disable GPU dispatch for 13 element-wise operations
+  - Keep GPU: matmul only (≥500×500)
+  - Update OpComplexity thresholds
+  - **Success Criteria**: No GPU used for vec_add, dot, activations
 
 #### Quality Gates (v0.2.1)
 
