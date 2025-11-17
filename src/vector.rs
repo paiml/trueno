@@ -1191,6 +1191,75 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// Min-max normalization (scaling to [0, 1] range)
+    ///
+    /// Transforms the vector so that the minimum value becomes 0 and the maximum
+    /// value becomes 1, with all other values scaled proportionally.
+    /// Formula: x'[i] = (x[i] - min) / (max - min)
+    ///
+    /// This is a fundamental preprocessing technique in machine learning, especially
+    /// for algorithms sensitive to feature magnitudes (e.g., neural networks, k-NN).
+    ///
+    /// # Performance
+    ///
+    /// Uses optimized SIMD implementations via min() and max() operations, then
+    /// applies element-wise transformation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+    /// let normalized = v.minmax_normalize().unwrap();
+    ///
+    /// // Verify range [0, 1]
+    /// let min = normalized.min().unwrap();
+    /// let max = normalized.max().unwrap();
+    /// assert!((min - 0.0).abs() < 1e-5);
+    /// assert!((max - 1.0).abs() < 1e-5);
+    /// ```
+    ///
+    /// # Empty vectors
+    ///
+    /// Returns EmptyVector error for empty vectors (cannot compute min/max).
+    ///
+    /// # Division by zero
+    ///
+    /// Returns DivisionByZero error if the vector has all identical elements
+    /// (i.e., min = max, causing division by zero in the normalization formula).
+    ///
+    /// ```
+    /// use trueno::{Vector, TruenoError};
+    ///
+    /// let v = Vector::from_slice(&[5.0, 5.0, 5.0]); // Constant
+    /// assert!(matches!(v.minmax_normalize(), Err(TruenoError::DivisionByZero)));
+    /// ```
+    pub fn minmax_normalize(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        let min_val = self.min()?;
+        let max_val = self.max()?;
+        let range = max_val - min_val;
+
+        // Check for zero range (constant vector)
+        if range.abs() < 1e-10 {
+            return Err(TruenoError::DivisionByZero);
+        }
+
+        // Transform: x'[i] = (x[i] - min) / (max - min)
+        let inv_range = 1.0 / range;
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| (x - min_val) * inv_range)
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -5609,6 +5678,82 @@ mod tests {
         assert!((std - 1.0).abs() < 1e-5);
     }
 
+    // ========================================================================
+    // Tests for minmax_normalize() - Min-max normalization to [0, 1]
+    // ========================================================================
+
+    #[test]
+    fn test_minmax_normalize_basic() {
+        // [1, 2, 3, 4, 5] → [0, 0.25, 0.5, 0.75, 1.0]
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let normalized = v.minmax_normalize().unwrap();
+
+        // Verify min = 0
+        let min = normalized.min().unwrap();
+        assert!((min - 0.0).abs() < 1e-5, "min = {}, expected 0", min);
+
+        // Verify max = 1
+        let max = normalized.max().unwrap();
+        assert!((max - 1.0).abs() < 1e-5, "max = {}, expected 1", max);
+
+        // Verify specific values
+        assert!((normalized.data[0] - 0.0).abs() < 1e-5);
+        assert!((normalized.data[2] - 0.5).abs() < 1e-5);
+        assert!((normalized.data[4] - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_minmax_normalize_negative_values() {
+        // [-10, -5, 0, 5, 10] → [0, 0.25, 0.5, 0.75, 1.0]
+        let v = Vector::from_slice(&[-10.0, -5.0, 0.0, 5.0, 10.0]);
+        let normalized = v.minmax_normalize().unwrap();
+
+        let min = normalized.min().unwrap();
+        assert!((min - 0.0).abs() < 1e-5);
+
+        let max = normalized.max().unwrap();
+        assert!((max - 1.0).abs() < 1e-5);
+
+        // Middle value should be 0.5
+        assert!((normalized.data[2] - 0.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_minmax_normalize_single_element() {
+        // Single element has zero range → DivisionByZero
+        let v = Vector::from_slice(&[5.0]);
+        let result = v.minmax_normalize();
+        assert!(matches!(result, Err(TruenoError::DivisionByZero)));
+    }
+
+    #[test]
+    fn test_minmax_normalize_constant_vector() {
+        // All identical elements have zero range → DivisionByZero
+        let v = Vector::from_slice(&[3.0, 3.0, 3.0, 3.0]);
+        let result = v.minmax_normalize();
+        assert!(matches!(result, Err(TruenoError::DivisionByZero)));
+    }
+
+    #[test]
+    fn test_minmax_normalize_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.minmax_normalize();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
+    fn test_minmax_normalize_already_normalized() {
+        // Vector already in [0, 1] should stay in [0, 1]
+        let v = Vector::from_slice(&[0.0, 0.25, 0.5, 0.75, 1.0]);
+        let normalized = v.minmax_normalize().unwrap();
+
+        let min = normalized.min().unwrap();
+        assert!((min - 0.0).abs() < 1e-5);
+
+        let max = normalized.max().unwrap();
+        assert!((max - 1.0).abs() < 1e-5);
+    }
+
     #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
@@ -9751,6 +9896,95 @@ mod property_tests {
                 "ρ(X,Y) = {} != ρ(zscore(X), zscore(Y)) = {}",
                 corr_orig, corr_zscore
             );
+        }
+    }
+
+    // ========================================================================
+    // Property tests for minmax_normalize() - Min-max normalization
+    // ========================================================================
+
+    proptest! {
+        /// Property test: minmax_normalize() produces min = 0
+        #[test]
+        fn test_minmax_normalize_produces_zero_min(
+            a in prop::collection::vec(-100.0f32..100.0, 2..100)
+        ) {
+            // Ensure vector is not constant
+            let min_a = a.iter().cloned().fold(f32::INFINITY, f32::min);
+            let max_a = a.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+
+            if (max_a - min_a).abs() < 1e-6 {
+                return Ok(());  // Skip constant vectors
+            }
+
+            let va = Vector::from_slice(&a);
+            let normalized = va.minmax_normalize().unwrap();
+            let min = normalized.min().unwrap();
+
+            prop_assert!(
+                min.abs() < 1e-4,
+                "minmax min = {}, expected ≈ 0",
+                min
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: minmax_normalize() produces max = 1
+        #[test]
+        fn test_minmax_normalize_produces_one_max(
+            a in prop::collection::vec(-100.0f32..100.0, 2..100)
+        ) {
+            // Ensure vector is not constant
+            let min_a = a.iter().cloned().fold(f32::INFINITY, f32::min);
+            let max_a = a.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+
+            if (max_a - min_a).abs() < 1e-6 {
+                return Ok(());  // Skip constant vectors
+            }
+
+            let va = Vector::from_slice(&a);
+            let normalized = va.minmax_normalize().unwrap();
+            let max = normalized.max().unwrap();
+
+            prop_assert!(
+                (max - 1.0).abs() < 1e-4,
+                "minmax max = {}, expected ≈ 1",
+                max
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: minmax_normalize() preserves order (monotonicity)
+        /// If a[i] <= a[j], then normalized[i] <= normalized[j]
+        #[test]
+        fn test_minmax_normalize_preserves_order(
+            a in prop::collection::vec(-100.0f32..100.0, 2..100)
+        ) {
+            // Ensure vector is not constant
+            let min_a = a.iter().cloned().fold(f32::INFINITY, f32::min);
+            let max_a = a.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+
+            if (max_a - min_a).abs() < 1e-6 {
+                return Ok(());  // Skip constant vectors
+            }
+
+            let va = Vector::from_slice(&a);
+            let normalized = va.minmax_normalize().unwrap();
+
+            // Check that order is preserved for all pairs
+            for i in 0..a.len() {
+                for j in 0..a.len() {
+                    if a[i] <= a[j] {
+                        prop_assert!(
+                            normalized.data[i] <= normalized.data[j] + 1e-5,
+                            "Order not preserved: a[{}]={} <= a[{}]={}, but norm[{}]={} > norm[{}]={}",
+                            i, a[i], j, a[j], i, normalized.data[i], j, normalized.data[j]
+                        );
+                    }
+                }
+            }
         }
     }
 }
