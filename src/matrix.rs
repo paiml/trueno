@@ -680,9 +680,8 @@ mod property_tests {
 
     /// Generate a matrix of given dimensions with random values
     fn matrix_strategy(rows: usize, cols: usize) -> impl Strategy<Value = Matrix<f32>> {
-        proptest::collection::vec(-100.0f32..100.0, rows * cols).prop_map(move |data| {
-            Matrix::from_vec(rows, cols, data).unwrap()
-        })
+        proptest::collection::vec(-100.0f32..100.0, rows * cols)
+            .prop_map(move |data| Matrix::from_vec(rows, cols, data).unwrap())
     }
 
     proptest! {

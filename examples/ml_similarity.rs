@@ -34,9 +34,18 @@ fn main() {
     let sim_2_3 = cosine_similarity(&doc2, &doc3);
 
     println!("\nCosine Similarities:");
-    println!("  Doc1 vs Doc2 (ML vs DL): {:.4} - Similar topics!", sim_1_2);
-    println!("  Doc1 vs Doc3 (ML vs Cooking): {:.4} - Different topics", sim_1_3);
-    println!("  Doc2 vs Doc3 (DL vs Cooking): {:.4} - Different topics", sim_2_3);
+    println!(
+        "  Doc1 vs Doc2 (ML vs DL): {:.4} - Similar topics!",
+        sim_1_2
+    );
+    println!(
+        "  Doc1 vs Doc3 (ML vs Cooking): {:.4} - Different topics",
+        sim_1_3
+    );
+    println!(
+        "  Doc2 vs Doc3 (DL vs Cooking): {:.4} - Different topics",
+        sim_2_3
+    );
 
     // Example: Feature normalization for neural network input
     println!("\n{}", "-".repeat(80));

@@ -92,6 +92,37 @@ cargo bench -- --save-baseline main
 cargo bench -- --baseline main
 ```
 
+### Profiling
+```bash
+# Install Renacer (syscall tracing and function profiling)
+cargo install renacer
+
+# Profile benchmarks to identify bottlenecks
+make profile
+
+# Generate flamegraph visualization
+make profile-flamegraph
+
+# Profile specific benchmark
+make profile-bench BENCH=vector_ops
+
+# Profile test suite to find slow tests
+make profile-test
+
+# Advanced: I/O bottleneck detection (>1ms threshold)
+renacer --function-time --source -- cargo bench vector_ops
+
+# Advanced: Generate flamegraph from profiling output
+renacer --function-time --source -- cargo bench | flamegraph.pl > flame.svg
+```
+
+**Profiling Use Cases**:
+- **SIMD Validation**: Verify SIMD optimizations show expected speedups
+- **Backend Selection**: Identify if backend dispatch overhead is significant
+- **Hot Path Analysis**: Find top 10 functions consuming most time
+- **Memory Access**: Detect cache misses and memory bottlenecks
+- **GPU Transfer**: Profile PCIe transfer overhead for GPU backend
+
 ### Quality Gates
 ```bash
 # PMAT Technical Debt Grading (minimum: B+ / 85/100)
@@ -391,6 +422,12 @@ Trueno integrates with the Pragmatic AI Labs transpiler ecosystem:
 6. **paiml-mcp-agent-toolkit (PMAT)** - Quality gates
    - Pre-commit hooks enforce >90% coverage
    - TDG grading (target: A- / 92+)
+
+7. **Renacer** - Syscall tracing and function profiling
+   - Identify performance bottlenecks and hot paths
+   - I/O bottleneck detection (>1ms threshold)
+   - Flamegraph generation for visualization
+   - Validate SIMD optimizations show expected speedups
 
 ## Documentation Standards
 

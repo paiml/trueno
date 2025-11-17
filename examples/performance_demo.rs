@@ -85,13 +85,8 @@ fn main() {
 }
 
 /// Demonstrate operation returning a scalar value
-fn demo_operation<F>(
-    name: &str,
-    data_a: &[f32],
-    data_b: &[f32],
-    op: F,
-    description: &str,
-) where
+fn demo_operation<F>(name: &str, data_a: &[f32], data_b: &[f32], op: F, description: &str)
+where
     F: Fn(&Vector<f32>, &Vector<f32>) -> f32,
 {
     const ITERATIONS: usize = 1000;
@@ -152,13 +147,8 @@ fn demo_operation<F>(
 }
 
 /// Demonstrate operation returning a Vector
-fn demo_operation_vec<F>(
-    name: &str,
-    data_a: &[f32],
-    data_b: &[f32],
-    op: F,
-    description: &str,
-) where
+fn demo_operation_vec<F>(name: &str, data_a: &[f32], data_b: &[f32], op: F, description: &str)
+where
     F: Fn(&Vector<f32>, &Vector<f32>) -> Vector<f32>,
 {
     const ITERATIONS: usize = 1000;

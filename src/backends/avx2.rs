@@ -552,7 +552,10 @@ mod tests {
             Avx2Backend::add(&a, &b, &mut result);
         }
 
-        assert_eq!(result, vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
+        assert_eq!(
+            result,
+            vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+        );
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -571,7 +574,10 @@ mod tests {
             Avx2Backend::mul(&a, &b, &mut result);
         }
 
-        assert_eq!(result, vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]);
+        assert_eq!(
+            result,
+            vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]
+        );
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -662,21 +668,16 @@ mod tests {
         }
 
         // Test dot
-        let (avx2_dot, scalar_dot) = unsafe {
-            (Avx2Backend::dot(&a, &b), ScalarBackend::dot(&a, &b))
-        };
+        let (avx2_dot, scalar_dot) =
+            unsafe { (Avx2Backend::dot(&a, &b), ScalarBackend::dot(&a, &b)) };
         assert!((avx2_dot - scalar_dot).abs() < 1e-3); // Relaxed tolerance for FMA
 
         // Test sum
-        let (avx2_sum, scalar_sum) = unsafe {
-            (Avx2Backend::sum(&a), ScalarBackend::sum(&a))
-        };
+        let (avx2_sum, scalar_sum) = unsafe { (Avx2Backend::sum(&a), ScalarBackend::sum(&a)) };
         assert!((avx2_sum - scalar_sum).abs() < 1e-3);
 
         // Test max
-        let (avx2_max, scalar_max) = unsafe {
-            (Avx2Backend::max(&a), ScalarBackend::max(&a))
-        };
+        let (avx2_max, scalar_max) = unsafe { (Avx2Backend::max(&a), ScalarBackend::max(&a)) };
         assert_eq!(avx2_max, scalar_max);
     }
 }

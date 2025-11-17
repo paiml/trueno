@@ -273,6 +273,41 @@ make pmat-analyze
 make pmat-score
 ```
 
+### Profiling & Performance Analysis
+
+Trueno integrates **Renacer** for deep performance profiling:
+
+```bash
+# Profile benchmarks to find bottlenecks
+make profile
+
+# Generate flamegraph visualization
+make profile-flamegraph
+
+# Profile specific benchmark
+make profile-bench BENCH=vector_ops
+
+# Profile test suite
+make profile-test
+```
+
+**Profiling Use Cases**:
+- 🔬 **SIMD Validation**: Verify optimizations show expected speedups (2-8x)
+- 🎯 **Hot Path Analysis**: Identify top 10 functions consuming most time
+- 💾 **Memory Bottlenecks**: Detect cache misses and memory access patterns
+- 🚀 **Backend Selection**: Validate runtime dispatch overhead is minimal
+- 📊 **Flamegraph Visualization**: Visual analysis of performance characteristics
+
+**Example Output**:
+```
+🔬 Profiling benchmark: vector_ops
+I/O Bottleneck: memcpy() - 15.2ms (42% of runtime)
+Hot Functions:
+  1. _mm256_add_ps - 3.4ms (9.4%)
+  2. Vector::dot - 2.1ms (5.8%)
+  3. backend_dispatch - 0.3ms (0.8%)
+```
+
 ### Testing Philosophy
 
 Trueno uses **multi-layered testing**:

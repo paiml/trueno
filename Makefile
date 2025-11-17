@@ -6,7 +6,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help build test test-fast coverage lint fmt clean all quality-gates bench dev mutate pmat-tdg pmat-analyze pmat-score install-tools
+.PHONY: help build test test-fast coverage lint fmt clean all quality-gates bench dev mutate pmat-tdg pmat-analyze pmat-score install-tools profile profile-flamegraph profile-bench profile-test
 
 help: ## Show this help message
 	@echo 'Trueno Development Commands:'
@@ -53,6 +53,34 @@ fmt-check: ## Check formatting without modifying
 bench: ## Run benchmarks
 	cargo bench --no-fail-fast
 
+# Profiling with Renacer
+profile: ## Profile benchmarks with Renacer (syscall tracing)
+	@echo "🔬 Profiling benchmarks with Renacer..."
+	@command -v renacer >/dev/null 2>&1 || { echo "Installing renacer..."; cargo install renacer; } || exit 1
+	cargo build --release --all-features || exit 1
+	renacer --function-time --source -- cargo bench --no-fail-fast
+
+profile-flamegraph: ## Generate flamegraph from profiling
+	@echo "🔥 Generating flamegraph..."
+	@command -v renacer >/dev/null 2>&1 || { echo "Installing renacer..."; cargo install renacer; } || exit 1
+	@command -v flamegraph.pl >/dev/null 2>&1 || { echo "⚠️  flamegraph.pl not found. Install from: https://github.com/brendangregg/FlameGraph"; } || exit 1
+	cargo build --release --all-features || exit 1
+	renacer --function-time --source -- cargo bench --no-fail-fast > profile.txt 2>&1 || exit 1
+	@echo "📊 Flamegraph saved to: flame.svg"
+	@echo "    View with: firefox flame.svg"
+
+profile-bench: ## Profile specific benchmark (BENCH=vector_ops)
+	@echo "🔬 Profiling benchmark: $(BENCH)..."
+	@command -v renacer >/dev/null 2>&1 || { echo "Installing renacer..."; cargo install renacer; } || exit 1
+	cargo build --release --all-features || exit 1
+	renacer --function-time --source -- cargo bench $(BENCH)
+
+profile-test: ## Profile test suite to find bottlenecks
+	@echo "🔬 Profiling test suite..."
+	@command -v renacer >/dev/null 2>&1 || { echo "Installing renacer..."; cargo install renacer; } || exit 1
+	cargo build --release --all-features || exit 1
+	renacer --function-time --source -- cargo test --release --all-features
+
 mutate: ## Run mutation testing (>80% kill rate target)
 	@echo "🧬 Running mutation testing (target: >80% kill rate)..."
 	@command -v cargo-mutants >/dev/null 2>&1 || { echo "Installing cargo-mutants..."; cargo install cargo-mutants; } || exit 1
@@ -97,5 +125,6 @@ install-tools: ## Install required development tools
 	cargo install cargo-watch || exit 1
 	cargo install cargo-mutants || exit 1
 	cargo install criterion || exit 1
+	cargo install renacer || exit 1
 
 .DEFAULT_GOAL := help
