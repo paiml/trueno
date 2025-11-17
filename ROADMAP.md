@@ -564,38 +564,96 @@ Avoid:
 
 ## EXTREME TDD Standards (All Phases)
 
-### Required for Every Commit
+**Framework**: Certeza Tiered Workflow (97.7% mutation score proof)
+**Reference**: [Spec §13: Tiered TDD-X Workflow](docs/specifications/pytorch-numpy-replacement-spec.md#13-tiered-tdd-x-workflow--quality-gates-certeza-insights)
+
+### Tier 1: ON-SAVE (Sub-second feedback)
+
+**Purpose**: Rapid iteration in flow state, catch obvious errors fast
+
+```bash
+make tier1  # Target: <1 second execution
+```
 
 ```
-✅ Compiles without warnings (cargo clippy -D warnings)
+✅ Type checking (cargo check)
+✅ Linting (cargo clippy --lib -D warnings)
+✅ Unit tests - focused (cargo test --lib <module>)
+✅ Property tests - small cases (PROPTEST_CASES=10)
+```
+
+**Anti-Pattern** ❌: Running full test suite, mutation testing, or benchmarks on every save (destroys flow state, 10-100x productivity loss)
+
+### Tier 2: ON-COMMIT (1-5 minutes)
+
+**Purpose**: Comprehensive validation before committing, prevent regressions
+
+```bash
+make tier2  # Target: <5 minutes execution
+```
+
+```
+✅ Formatted (cargo fmt -- --check)
+✅ Full clippy (cargo clippy --all-targets --all-features -D warnings)
 ✅ All tests pass (cargo test --all-features)
 ✅ Coverage ≥90% (cargo llvm-cov --fail-under-lines 90)
-✅ Formatted (cargo fmt -- --check)
+✅ Property tests - full (PROPTEST_CASES=256-1000)
+✅ Backend equivalence tests (GPU vs SIMD vs Scalar)
+✅ Differential tests (vs NumPy/PyTorch) [Phase 2+]
+✅ Gradient checking (vs numerical) [Phase 3+]
 ✅ PMAT TDG ≥B+ (pmat analyze tdg --min-grade B+)
+✅ Zero SATD comments (TODO/FIXME/HACK)
 ```
+
+**Pre-commit hook**: Enforces Tier 2 quality gates (fail commit if violations)
+
+### Tier 3: ON-MERGE/NIGHTLY (Hours)
+
+**Purpose**: Test quality assurance, performance validation, release readiness
+
+```bash
+make tier3  # Target: <2 hours execution
+```
+
+```
+✅ Mutation testing ≥80% (cargo mutants --minimum-pass-rate 80)
+✅ Benchmarks - full suite (cargo bench --all-features)
+✅ Performance regression suite (no >5% regressions)
+✅ Security audit (cargo audit && cargo deny check)
+✅ Integration tests (end-to-end workflows)
+✅ Formal verification [critical paths only] (cargo kani)
+✅ PMAT repo score ≥90 (pmat repo-score . --min-score 90)
+```
+
+**CI/CD Gate**: Tier 3 must pass before merge to main
 
 ### Required for Every Feature
 
 ```
-✅ Unit tests (correctness)
-✅ Property-based tests (edge cases)
-✅ Backend equivalence tests (GPU vs SIMD vs Scalar)
-✅ Differential tests (vs NumPy/PyTorch) [Phase 2+]
-✅ Gradient checking (vs numerical) [Phase 3+]
-✅ Benchmarks (validate performance claims)
+✅ Unit tests (correctness, edge cases)
+✅ Property-based tests (mathematical properties, commutativity, etc.)
+✅ Backend equivalence tests (all backends produce identical results)
+✅ Differential tests (vs NumPy/PyTorch, error < 1e-5) [Phase 2+]
+✅ Gradient checking (analytical vs numerical) [Phase 3+]
+✅ Benchmarks (validate performance claims, prove ≥10% speedup)
 ✅ Documentation (rustdoc + README examples)
 ```
+
+**Testing Pyramid Distribution** (Certeza model):
+- **60%**: Unit tests (basic functionality)
+- **30%**: Property-based tests (algorithmic correctness)
+- **10%**: Integration tests (end-to-end workflows)
+- **1-5%**: Formal verification (critical invariants)
 
 ### Required for Every Release
 
 ```
-✅ Mutation testing ≥80% (cargo mutants --minimum-pass-rate 80)
-✅ Performance regression suite (no >5% regressions)
-✅ Integration tests (end-to-end workflows)
+✅ All Tier 3 gates pass
 ✅ Changelog updated (keep-a-changelog format)
 ✅ Version bumped (semver)
 ✅ Git tag created (vX.Y.Z)
-✅ PMAT repo score ≥90 (pmat repo-score . --min-score 90)
+✅ Performance benchmarks published
+✅ Migration guide updated (if breaking changes)
 ```
 
 ---
@@ -620,29 +678,40 @@ Avoid:
 
 **Next Actions** (Priority Order):
 
-1. **Benchmark all GPU ops** (*Genchi Genbutsu* - validate 10-50x claims)
-   - Run `cargo bench --bench gpu_ops --all-features`
+1. **Create Tiered Makefile** (*Certeza Workflow Integration*)
+   - Add `make tier1` (sub-second: check, clippy-fast, unit tests)
+   - Add `make tier2` (1-5min: full tests, coverage, property tests)
+   - Add `make tier3` (hours: mutation testing, benchmarks, formal verification)
+   - Add `make kaizen` (continuous improvement cycle)
+   - **Reference**: [Spec §13: Tiered TDD-X Workflow](docs/specifications/pytorch-numpy-replacement-spec.md#13-tiered-tdd-x-workflow--quality-gates-certeza-insights)
+   - **Inspired by**: certeza's 97.7% mutation score with sustainable workflow
+   - **Timeline**: 1-2 days
+
+2. **Benchmark all GPU ops** (*Genchi Genbutsu* - validate 10-50x claims)
+   - Run `cargo bench --bench gpu_ops --all-features` (Tier 3)
    - Document actual vs target performance
    - Identify underperforming operations
    - **Timeline**: 2-3 days
 
-2. **Performance regression suite**
+3. **Performance regression suite**
    - Baseline all GPU ops
    - CI integration (fail on >5% regression)
    - **Timeline**: 3-5 days
 
-3. **Prepare v0.2.2**: Remaining activations (hardswish, mish, selu)
-   - Follow EXTREME TDD cycle
+4. **Prepare v0.2.2**: Remaining activations (hardswish, mish, selu)
+   - Follow EXTREME TDD cycle with tiered workflow
    - **Timeline**: 2 weeks
 
 **Quality Gate Status**:
 ```
 Current: All metrics GREEN ✅
 Ready for v0.2.1 release after benchmarking validation
+Next: Implement tiered workflow for sustainable development
 ```
 
 ---
 
 **Last Updated**: 2025-01-17
-**Methodology**: PMAT + EXTREME TDD + Toyota Way
+**Methodology**: PMAT + EXTREME TDD + Toyota Way + **Certeza Tiered Workflow**
 **Owner**: Trueno Core Team
+**Specification**: [PyTorch/NumPy Replacement Spec v1.2](docs/specifications/pytorch-numpy-replacement-spec.md) (with certeza insights)
