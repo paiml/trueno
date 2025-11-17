@@ -1728,6 +1728,80 @@ impl Vector<f32> {
         Ok(Vector::from_slice(&data))
     }
 
+    /// GELU (Gaussian Error Linear Unit) activation function
+    ///
+    /// Computes the element-wise GELU activation using the tanh approximation.
+    /// GELU is the activation function used in transformers (BERT, GPT, etc.).
+    ///
+    /// # Formula
+    ///
+    /// ```text
+    /// gelu(x) ≈ 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
+    /// ```
+    ///
+    /// This is the tanh approximation which is faster than the exact form
+    /// involving the error function (erf).
+    ///
+    /// # Properties
+    ///
+    /// - **Smooth**: Infinitely differentiable everywhere
+    /// - **Non-monotonic**: Unlike ReLU variants, has slight non-monotonicity near zero
+    /// - **Stochastic regularizer**: Can be viewed as adaptive dropout
+    /// - **Zero-centered**: Mean activation close to zero
+    /// - **Bounded below**: Approaches 0 as x → -∞
+    /// - **Unbounded above**: Linear growth for large positive x
+    ///
+    /// # Applications
+    ///
+    /// - **Transformers**: BERT, GPT-2, GPT-3, GPT-4 (default activation)
+    /// - **Vision transformers**: ViT, DINO, MAE
+    /// - **Modern architectures**: State-of-the-art NLP and vision models
+    /// - **Better than ReLU**: Empirically outperforms ReLU in many tasks
+    ///
+    /// # Performance
+    ///
+    /// This operation is compute-intensive (tanh, x³ calculations).
+    /// More expensive than ReLU but comparable to ELU.
+    ///
+    /// # Errors
+    ///
+    /// Returns `EmptyVector` if the input vector is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+    /// let result = v.gelu().unwrap();
+    ///
+    /// // GELU is smooth and non-monotonic near zero
+    /// assert!(result.data[0] < 0.0); // Negative inputs → small negative outputs
+    /// assert_eq!(result.data[2], 0.0); // gelu(0) = 0
+    /// assert!(result.data[4] > 1.5); // Large positive → ~linear
+    /// ```
+    pub fn gelu(&self) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        // GELU approximation: 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
+        const SQRT_2_OVER_PI: f32 = 0.797_884_6; // √(2/π)
+        const COEFF: f32 = 0.044_715;
+
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| {
+                let x_cubed = x * x * x;
+                let inner = SQRT_2_OVER_PI * (x + COEFF * x_cubed);
+                0.5 * x * (1.0 + inner.tanh())
+            })
+            .collect();
+
+        Ok(Vector::from_slice(&data))
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a[i]^2)).
@@ -6772,6 +6846,92 @@ mod tests {
     }
 
     #[test]
+    fn test_gelu_basic() {
+        // Basic GELU behavior
+        let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result = v.gelu().unwrap();
+
+        // gelu(0) should be exactly 0
+        assert_eq!(result.data[2], 0.0);
+
+        // Negative values should give small negative outputs
+        assert!(result.data[0] < 0.0 && result.data[0] > -0.1);
+        assert!(result.data[1] < 0.0 && result.data[1] > -0.2);
+
+        // Positive values should be positive and approach linear for large x
+        assert!(result.data[3] > 0.8);
+        assert!(result.data[4] > 1.8);
+    }
+
+    #[test]
+    fn test_gelu_zero() {
+        // gelu(0) should be exactly 0
+        let v = Vector::from_slice(&[0.0, 0.0, 0.0]);
+        let result = v.gelu().unwrap();
+
+        for &val in result.as_slice() {
+            assert_eq!(val, 0.0, "gelu(0) should be 0");
+        }
+    }
+
+    #[test]
+    fn test_gelu_smoothness() {
+        // GELU is smooth everywhere - test that it produces reasonable values
+        let v = Vector::from_slice(&[-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0]);
+        let result = v.gelu().unwrap();
+
+        // All outputs should be finite
+        for &val in result.as_slice() {
+            assert!(val.is_finite(), "GELU output should be finite");
+        }
+
+        // Verify increasing trend (though not strictly monotonic)
+        // Generally gelu increases with x
+        assert!(result.data[0] < result.data[3]); // gelu(-3) < gelu(0)
+        assert!(result.data[3] < result.data[6]); // gelu(0) < gelu(3)
+    }
+
+    #[test]
+    fn test_gelu_large_positive() {
+        // For large positive x, gelu(x) ≈ x (linear behavior)
+        let v = Vector::from_slice(&[5.0, 10.0, 20.0]);
+        let result = v.gelu().unwrap();
+
+        for i in 0..v.len() {
+            // Should be very close to x for large positive values
+            assert!(
+                (result.data[i] - v.data[i]).abs() < 0.01,
+                "gelu({}) = {} should ≈ {} for large positive x",
+                v.data[i],
+                result.data[i],
+                v.data[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_gelu_large_negative() {
+        // For large negative x, gelu(x) ≈ 0
+        let v = Vector::from_slice(&[-5.0, -10.0, -20.0]);
+        let result = v.gelu().unwrap();
+
+        for &val in result.as_slice() {
+            assert!(
+                val.abs() < 0.001,
+                "gelu should approach 0 for large negative inputs, got {}",
+                val
+            );
+        }
+    }
+
+    #[test]
+    fn test_gelu_empty_vector() {
+        let v = Vector::from_slice(&[]);
+        let result = v.gelu();
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
     fn test_aligned_vector_creation() {
         let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
 
@@ -11528,6 +11688,66 @@ mod property_tests {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    // ========================================================================
+    // Property tests for gelu() - Gaussian Error Linear Unit
+    // ========================================================================
+
+    proptest! {
+        /// Property test: gelu() produces finite values
+        #[test]
+        fn test_gelu_finite_property(
+            a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.gelu().unwrap();
+
+            for &val in result.as_slice() {
+                prop_assert!(
+                    val.is_finite(),
+                    "GELU output {} should be finite",
+                    val
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// Property test: gelu(0) = 0
+        #[test]
+        fn test_gelu_zero_property(
+            _a in prop::collection::vec(-100.0f32..100.0, 1..100)
+        ) {
+            let v = Vector::from_slice(&[0.0]);
+            let result = v.gelu().unwrap();
+
+            prop_assert!(
+                result.data[0].abs() < 1e-10,
+                "gelu(0) should be 0, got {}",
+                result.data[0]
+            );
+        }
+    }
+
+    proptest! {
+        /// Property test: For large positive x, gelu(x) ≈ x
+        #[test]
+        fn test_gelu_linear_large_positive(
+            a in prop::collection::vec(5.0f32..100.0, 1..50)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.gelu().unwrap();
+
+            for (i, &val) in a.iter().enumerate() {
+                // For large positive values, gelu(x) should be very close to x
+                prop_assert!(
+                    (result.data[i] - val).abs() < 0.01,
+                    "For large positive {}, gelu should ≈ x, got {} vs {}",
+                    val, result.data[i], val
+                );
             }
         }
     }
