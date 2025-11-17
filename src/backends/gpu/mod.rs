@@ -54,6 +54,36 @@ impl GpuBackend {
         GpuDevice::is_available()
     }
 
+    /// Vector addition on GPU: c = a + b
+    ///
+    /// # Arguments
+    ///
+    /// * `a` - Vector a
+    /// * `b` - Vector b
+    ///
+    /// # Returns
+    ///
+    /// Vector c (element-wise sum)
+    pub fn vec_add(&mut self, a: &[f32], b: &[f32]) -> Result<Vec<f32>, String> {
+        if a.len() != b.len() {
+            return Err(format!(
+                "Vector length mismatch: {} != {}",
+                a.len(),
+                b.len()
+            ));
+        }
+
+        let device = self.ensure_device()?;
+
+        // Create output buffer
+        let mut result = vec![0.0f32; a.len()];
+
+        // Execute GPU compute
+        device.vec_add(a, b, &mut result)?;
+
+        Ok(result)
+    }
+
     /// Matrix multiplication on GPU: C = A × B
     ///
     /// # Arguments
@@ -113,5 +143,77 @@ impl GpuBackend {
 impl Default for GpuBackend {
     fn default() -> Self {
         Self
+    }
+}
+
+// ===== GPU Tests =====
+
+#[cfg(test)]
+#[cfg(feature = "gpu")]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gpu_vec_add_basic() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let a = vec![1.0, 2.0, 3.0, 4.0];
+        let b = vec![5.0, 6.0, 7.0, 8.0];
+
+        let result = gpu.vec_add(&a, &b);
+
+        if let Ok(c) = result {
+            assert_eq!(c.len(), 4);
+            assert!((c[0] - 6.0).abs() < 1e-4);
+            assert!((c[1] - 8.0).abs() < 1e-4);
+            assert!((c[2] - 10.0).abs() < 1e-4);
+            assert!((c[3] - 12.0).abs() < 1e-4);
+        } else {
+            eprintln!("GPU vec_add failed: {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_vec_add_large() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let size = 10000;
+        let a: Vec<f32> = (0..size).map(|i| i as f32).collect();
+        let b: Vec<f32> = (0..size).map(|i| (i * 2) as f32).collect();
+
+        let result = gpu.vec_add(&a, &b);
+
+        if let Ok(c) = result {
+            assert_eq!(c.len(), size);
+            // Check first few elements
+            assert!((c[0] - 0.0).abs() < 1e-4); // 0 + 0
+            assert!((c[1] - 3.0).abs() < 1e-4); // 1 + 2
+            assert!((c[100] - 300.0).abs() < 1e-4); // 100 + 200
+        } else {
+            eprintln!("GPU vec_add large failed: {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_vec_add_length_mismatch() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![4.0, 5.0]; // Different length
+
+        let result = gpu.vec_add(&a, &b);
+        assert!(result.is_err());
     }
 }

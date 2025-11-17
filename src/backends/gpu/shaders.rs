@@ -49,7 +49,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Vector addition compute shader (WGSL)
 ///
 /// Computes c = a + b element-wise
-#[allow(dead_code)] // Reserved for future vector operations on GPU
 pub const VEC_ADD_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
