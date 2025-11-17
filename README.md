@@ -272,13 +272,43 @@ let ffn_output = Vector::from_slice(&vec![...]);  // 768K hidden units (BERT-lar
 let activated = ffn_output.swish().unwrap();  // Auto-uses GPU for >100K elements
 ```
 
+### GELU Activation (GPU-Accelerated)
+
+| Operation | Vector Size | Time (Scalar) | Time (GPU Target) | Speedup |
+|-----------|------------|---------------|------------------|---------|
+| **GELU** | 10K | ~80 µs | - | Below threshold |
+| **GELU** | 100K | ~800 µs | ~80 µs | 10x target |
+| **GELU** | 1M | ~8 ms | ~160 µs | 50x target |
+
+**GPU Acceleration Strategy** (OpComplexity::Low):
+- **GPU Threshold**: >100,000 elements
+- **Operation**: Element-wise GELU(x) ≈ 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
+- **Workgroups**: 256 threads per workgroup (1D dispatch)
+- **Approximation**: Tanh-based (standard in production)
+- **Use Cases**: BERT, GPT-2, GPT-3, Vision Transformers, modern NLP models
+- **THE activation**: Standard in transformer architectures since 2018
+
+**Automatic Backend Selection**:
+- Small vectors (<100K elements): Scalar (iterator-based tanh approximation)
+- Large vectors (>100K elements): GPU compute shader (10-50x speedup target)
+- Graceful fallback to scalar if GPU unavailable
+
+**Example: BERT Inference**
+```rust
+use trueno::Vector;
+
+// GELU activation in BERT transformer layer
+let ffn_hidden = Vector::from_slice(&vec![...]);  // 3.07M elements (BERT-base: 768 * 4 * 1024 batch)
+let activated = ffn_hidden.gelu().unwrap();  // Auto-uses GPU for >100K elements
+```
+
 **📖 See [Performance Guide](docs/PERFORMANCE_GUIDE.md) and [AVX2 Benchmarks](docs/AVX2_BENCHMARKS.md) for detailed analysis.**
 
 ## Features
 
 - **🚀 Write Once, Optimize Everywhere**: Single algorithm, multiple backends
 - **⚡ Runtime Dispatch**: Auto-select best implementation based on CPU features
-- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, sigmoid, tanh, swish (>100K elements), and clip operation (>100K elements)
+- **🎮 GPU Acceleration**: Optional wgpu backend for matmul (>1000×1000), 2D convolution (>10K output elements), activations: ReLU, sigmoid, tanh, swish, GELU (>100K elements), and clip operation (>100K elements)
 - **🛡️ Zero Unsafe in Public API**: Safety via type system, `unsafe` isolated in backends
 - **📊 Benchmarked Performance**: Every optimization proves ≥10% speedup
 - **🧪 Extreme TDD**: >90% test coverage, mutation testing, property-based tests
