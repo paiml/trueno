@@ -414,11 +414,12 @@ trueno/
 - [x] Matrix<T> type with row-major storage (NumPy-compatible)
 - [x] Matrix multiplication (matmul) - naive O(n³)
 - [x] Matrix transpose
-- [ ] Matrix-vector operations
+- [x] Matrix-vector operations (matvec, vecmat)
+- [x] Comprehensive examples (matrix_operations.rs)
 - [ ] SIMD-optimized matmul
 - [ ] GPU dispatch for large matrices
 
-**Phase 8 Progress**: Core matrix operations complete with 24 tests passing (611 total).
+**Phase 8 Progress**: Matrix operations complete with 35 tests passing (633 total). Matrix-vector multiplication (matvec, vecmat) implemented with associativity verification. Comprehensive example demonstrates neural network linear layer use case.
 
 **Phase 7 Status**: ✅ COMPLETE - Core vector operations with 587 tests passing. The library now supports:
 - **Element-wise operations**: add, sub, mul, div, abs (absolute value), neg (negation/unary minus), clamp (range constraint), lerp (linear interpolation), fma (fused multiply-add), sqrt (square root), recip (reciprocal), pow (power), exp (exponential), ln (natural logarithm), sin (sine), cos (cosine), tan (tangent), asin (arcsine), acos (arccosine), atan (arctangent), sinh (hyperbolic sine), cosh (hyperbolic cosine), tanh (hyperbolic tangent), asinh (inverse hyperbolic sine), acosh (inverse hyperbolic cosine), atanh (inverse hyperbolic tangent), floor (round down), ceil (round up), round (round to nearest), trunc (truncate toward zero), fract (fractional part), signum (sign function), copysign (copy sign from one vector to another), minimum (element-wise minimum of two vectors), maximum (element-wise maximum of two vectors)
