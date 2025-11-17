@@ -352,6 +352,111 @@ fn bench_gpu_tanh(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark GPU swish activation vs scalar baseline
+///
+/// Tests GPU acceleration for element-wise swish activation.
+/// GPU threshold: >100K elements (OpComplexity::Low)
+fn bench_gpu_swish(c: &mut Criterion) {
+    // Skip if GPU not available
+    if !GpuBackend::is_available() {
+        eprintln!("GPU not available, skipping GPU benchmarks");
+        return;
+    }
+
+    let mut group = c.benchmark_group("gpu_swish");
+
+    // Test sizes: 10K (below threshold), 100K (at threshold), 1M (well above)
+    for size in [10_000, 100_000, 1_000_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // GPU backend
+        group.bench_with_input(BenchmarkId::new("GPU", size), size, |bencher, &size| {
+            // Mix of positive and negative values to test swish logic
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.001 - (size as f32) * 0.0005)
+                .collect();
+            let mut gpu = GpuBackend::new();
+
+            bencher.iter(|| {
+                black_box(gpu.swish(&data).unwrap());
+            });
+        });
+
+        // Scalar baseline (for speedup comparison)
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.001 - (size as f32) * 0.0005)
+                .collect();
+
+            bencher.iter(|| {
+                let result: Vec<f32> = data
+                    .iter()
+                    .map(|&x| x / (1.0 + (-x).exp()))
+                    .collect();
+                black_box(result);
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark GPU GELU activation vs scalar baseline
+///
+/// Tests GPU acceleration for element-wise GELU activation.
+/// GPU threshold: >100K elements (OpComplexity::Low)
+fn bench_gpu_gelu(c: &mut Criterion) {
+    // Skip if GPU not available
+    if !GpuBackend::is_available() {
+        eprintln!("GPU not available, skipping GPU benchmarks");
+        return;
+    }
+
+    let mut group = c.benchmark_group("gpu_gelu");
+
+    // Test sizes: 10K (below threshold), 100K (at threshold), 1M (well above)
+    for size in [10_000, 100_000, 1_000_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // GPU backend
+        group.bench_with_input(BenchmarkId::new("GPU", size), size, |bencher, &size| {
+            // Mix of positive and negative values to test GELU logic
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.001 - (size as f32) * 0.0005)
+                .collect();
+            let mut gpu = GpuBackend::new();
+
+            bencher.iter(|| {
+                black_box(gpu.gelu(&data).unwrap());
+            });
+        });
+
+        // Scalar baseline (for speedup comparison)
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32) * 0.001 - (size as f32) * 0.0005)
+                .collect();
+
+            bencher.iter(|| {
+                const SQRT_2_OVER_PI: f32 = 0.7978846;
+                const COEFF: f32 = 0.044715;
+
+                let result: Vec<f32> = data
+                    .iter()
+                    .map(|&x| {
+                        let x_cubed = x * x * x;
+                        let inner = SQRT_2_OVER_PI * (x + COEFF * x_cubed);
+                        0.5 * x * (1.0 + inner.tanh())
+                    })
+                    .collect();
+                black_box(result);
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_gpu_vec_add,
@@ -360,6 +465,8 @@ criterion_group!(
     bench_gpu_relu,
     bench_gpu_clip,
     bench_gpu_sigmoid,
-    bench_gpu_tanh
+    bench_gpu_tanh,
+    bench_gpu_swish,
+    bench_gpu_gelu
 );
 criterion_main!(benches);
