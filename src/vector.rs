@@ -1797,7 +1797,26 @@ impl Vector<f32> {
             return Err(TruenoError::EmptyVector);
         }
 
-        // GELU approximation: 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
+        // OpComplexity::Low - GPU threshold: >100K elements
+        #[cfg(feature = "gpu")]
+        const GPU_THRESHOLD: usize = 100_000;
+
+        // Try GPU first for large vectors
+        #[cfg(feature = "gpu")]
+        {
+            if self.data.len() >= GPU_THRESHOLD {
+                use crate::backends::gpu::GpuDevice;
+                if GpuDevice::is_available() {
+                    let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
+                    let mut result = vec![0.0; self.data.len()];
+                    if gpu.gelu(&self.data, &mut result).is_ok() {
+                        return Ok(Vector::from_slice(&result));
+                    }
+                }
+            }
+        }
+
+        // Scalar fallback: GELU approximation: 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
         const SQRT_2_OVER_PI: f32 = 0.797_884_6; // √(2/π)
         const COEFF: f32 = 0.044_715;
 

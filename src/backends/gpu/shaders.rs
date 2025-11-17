@@ -240,6 +240,39 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 "#;
 
+/// GELU activation compute shader (WGSL)
+///
+/// Computes element-wise GELU using tanh approximation:
+/// GELU(x) ≈ 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
+///
+/// Standard activation in BERT, GPT-2, GPT-3, and modern transformers.
+/// GPU acceleration beneficial for large vectors (>100K elements).
+pub const GELU_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    let len = arrayLength(&input);
+
+    if (idx < len) {
+        let x = input[idx];
+
+        // GELU approximation (tanh-based):
+        // GELU(x) ≈ 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
+        let SQRT_2_OVER_PI: f32 = 0.7978846; // √(2/π)
+        let COEFF: f32 = 0.044715;
+
+        let x_cubed = x * x * x;
+        let inner = SQRT_2_OVER_PI * (x + COEFF * x_cubed);
+        let result = 0.5 * x * (1.0 + tanh(inner));
+
+        output[idx] = result;
+    }
+}
+"#;
+
 /// Clip (clamp) compute shader (WGSL)
 ///
 /// Computes element-wise clip: clamp(x, min_val, max_val)
