@@ -66,10 +66,19 @@ High-performance 1D vector compute library with GPU acceleration for large-scale
 **Goal:** Best-in-class 1D vector compute
 
 ### Immediate (v0.2.1 - Next 2 weeks)
-- [ ] **softmax/log_softmax GPU** (OpComplexity::Medium) - NEXT UP
-  - Multi-pass reduction (max → sum → normalize)
-  - Critical for attention mechanisms, classification
-  - Numerically stable implementation
+- [ ] **softmax/log_softmax GPU** (OpComplexity::Medium) - IN PROGRESS
+  - **Implementation approach:**
+    - Pass 1: Max reduction (parallel reduction shader)
+    - Pass 2: Exp and subtract max (element-wise shader)
+    - Pass 3: Sum reduction (parallel reduction shader)
+    - Pass 4: Normalize by sum (element-wise shader)
+  - **Key challenges:**
+    - Multi-pass coordination (4 GPU dispatches)
+    - Numerical stability (subtract max before exp)
+    - Memory efficiency (intermediate buffers)
+  - **Critical for:** Attention mechanisms, classification, transformers
+  - **GPU threshold:** >10K elements (higher overhead than element-wise)
+  - **Expected speedup:** 5-20x over scalar (multi-pass reduces gains)
 - [ ] **Benchmark all GPU ops** - validate 10-50x claims
 - [ ] **Performance regression suite** - prevent slowdowns
 
