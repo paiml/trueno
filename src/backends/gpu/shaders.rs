@@ -167,6 +167,44 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 "#;
 
+/// Tanh (hyperbolic tangent) activation compute shader (WGSL)
+///
+/// Computes element-wise tanh: tanh(x) = (e^x - e^(-x)) / (e^x + e^(-x))
+///
+/// Classic activation function used in LSTM, GRU, and traditional neural networks.
+/// GPU acceleration beneficial for large vectors (>100K elements).
+pub const TANH_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    let len = arrayLength(&input);
+
+    if (idx < len) {
+        let x = input[idx];
+
+        // Tanh: tanh(x) = (e^x - e^(-x)) / (e^x + e^(-x))
+        //                = (e^(2x) - 1) / (e^(2x) + 1)
+        // Numerically stable implementation:
+        // For |x| > 20: tanh(x) ≈ sign(x) (saturates at ±1)
+        // Otherwise: use standard formula
+        var result: f32;
+        if (x > 20.0) {
+            result = 1.0;
+        } else if (x < -20.0) {
+            result = -1.0;
+        } else {
+            let exp_2x = exp(2.0 * x);
+            result = (exp_2x - 1.0) / (exp_2x + 1.0);
+        }
+
+        output[idx] = result;
+    }
+}
+"#;
+
 /// Clip (clamp) compute shader (WGSL)
 ///
 /// Computes element-wise clip: clamp(x, min_val, max_val)

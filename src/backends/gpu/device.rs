@@ -741,6 +741,14 @@ impl GpuDevice {
         })
     }
 
+    /// Execute tanh activation on GPU: result[i] = tanh(input[i])
+    pub fn tanh(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        pollster::block_on(async {
+            self.execute_element_wise_op("Tanh", shaders::TANH_SHADER, input, result, None)
+                .await
+        })
+    }
+
     /// Execute clip (clamp) operation on GPU: result[i] = clamp(input[i], min_val, max_val)
     pub fn clip(
         &self,
