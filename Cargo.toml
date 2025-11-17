@@ -12,10 +12,18 @@ categories = ["algorithms", "mathematics", "science"]
 
 [dependencies]
 thiserror = "2.0"
+wgpu = { version = "22", optional = true }
+pollster = { version = "0.3", optional = true }
+bytemuck = { version = "1.14", features = ["derive"], optional = true }
+futures-intrusive = { version = "0.5", optional = true }
 
 [dev-dependencies]
 proptest = "1.8"
 criterion = "0.5"
+
+[features]
+default = []
+gpu = ["wgpu", "pollster", "bytemuck", "futures-intrusive"]
 
 [profile.release]
 opt-level = 3
