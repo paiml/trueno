@@ -110,6 +110,28 @@ fn main(
 }
 "#;
 
+/// ReLU activation compute shader (WGSL)
+///
+/// Computes element-wise ReLU: max(0, x)
+///
+/// This is one of the simplest GPU operations - a single comparison and selection per element.
+/// GPU acceleration beneficial for large vectors (>100K elements).
+pub const RELU_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    let len = arrayLength(&input);
+
+    if (idx < len) {
+        // ReLU: max(0, x)
+        output[idx] = max(0.0, input[idx]);
+    }
+}
+"#;
+
 /// 2D Convolution compute shader (WGSL)
 ///
 /// Computes 2D convolution: output = input ⊗ kernel
