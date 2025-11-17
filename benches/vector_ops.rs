@@ -252,5 +252,179 @@ fn bench_max(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_add, bench_mul, bench_dot, bench_sum, bench_max);
+/// Benchmark ReLU activation function
+fn bench_relu(c: &mut Criterion) {
+    let mut group = c.benchmark_group("relu");
+
+    // Test various sizes: small (100), medium (1K, 10K), large (100K, 1M - GPU candidates)
+    for size in [100, 1000, 10000, 100_000, 1_000_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Generate data with mix of positive and negative values
+        let data: Vec<f32> = (0..*size)
+            .map(|i| (i as f32) * 0.5 - (*size as f32) * 0.25)
+            .collect();
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(v.relu().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(v.relu().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(v.relu().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark softmax activation function
+fn bench_softmax(c: &mut Criterion) {
+    let mut group = c.benchmark_group("softmax");
+
+    // Softmax is more expensive (exp, sum, div) - test up to 100K
+    for size in [100, 1000, 10000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        let data: Vec<f32> = (0..*size).map(|i| (i as f32) * 0.01).collect();
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(v.softmax().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(v.softmax().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(v.softmax().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark log_softmax activation function
+fn bench_log_softmax(c: &mut Criterion) {
+    let mut group = c.benchmark_group("log_softmax");
+
+    for size in [100, 1000, 10000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        let data: Vec<f32> = (0..*size).map(|i| (i as f32) * 0.01).collect();
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(v.log_softmax().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(v.log_softmax().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(v.log_softmax().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark clip (clamp) operation
+fn bench_clip(c: &mut Criterion) {
+    let mut group = c.benchmark_group("clip");
+
+    for size in [100, 1000, 10000, 100_000, 1_000_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        let data: Vec<f32> = (0..*size).map(|i| (i as f32) * 0.5).collect();
+        let min_val = 100.0;
+        let max_val = 5000.0;
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(v.clip(min_val, max_val).unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(v.clip(min_val, max_val).unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(v.clip(min_val, max_val).unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_add,
+    bench_mul,
+    bench_dot,
+    bench_sum,
+    bench_max,
+    bench_relu,
+    bench_softmax,
+    bench_log_softmax,
+    bench_clip
+);
 criterion_main!(benches);
