@@ -1,7 +1,12 @@
 # Trueno Makefile - EXTREME TDD Quality Gates
 # All targets must complete within time constraints
 
-.PHONY: help build test test-fast coverage lint fmt clean all quality-gates
+# Quality directives (bashrs enforcement)
+.SUFFIXES:
+.DELETE_ON_ERROR:
+.ONESHELL:
+
+.PHONY: help build test test-fast coverage lint fmt clean all quality-gates bench dev mutate pmat-tdg pmat-analyze pmat-score install-tools
 
 help: ## Show this help message
 	@echo 'Trueno Development Commands:'
@@ -50,13 +55,13 @@ bench: ## Run benchmarks
 
 mutate: ## Run mutation testing (>80% kill rate target)
 	@echo "🧬 Running mutation testing (target: >80% kill rate)..."
-	@command -v cargo-mutants >/dev/null 2>&1 || { echo "Installing cargo-mutants..."; cargo install cargo-mutants; }
+	@command -v cargo-mutants >/dev/null 2>&1 || { echo "Installing cargo-mutants..."; cargo install cargo-mutants; } || exit 1
 	cargo mutants --timeout 60
 
 clean: ## Clean build artifacts
 	cargo clean
-	rm -rf target/
-	rm -f lcov.info
+	rm -rf target/ || exit 1
+	rm -f lcov.info || exit 1
 
 quality-gates: lint fmt-check test-fast coverage ## Run all quality gates (pre-commit)
 	@echo ""
@@ -88,9 +93,9 @@ dev: ## Run in development mode with auto-reload
 	cargo watch -x 'test --all-features'
 
 install-tools: ## Install required development tools
-	cargo install cargo-llvm-cov
-	cargo install cargo-watch
-	cargo install cargo-mutants
-	cargo install criterion
+	cargo install cargo-llvm-cov || exit 1
+	cargo install cargo-watch || exit 1
+	cargo install cargo-mutants || exit 1
+	cargo install criterion || exit 1
 
 .DEFAULT_GOAL := help
