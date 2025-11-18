@@ -169,6 +169,52 @@ fn bench_mul(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark scalar multiplication (vector * scalar)
+fn bench_scale(c: &mut Criterion) {
+    let mut group = c.benchmark_group("scale");
+
+    for size in [100, 1000, 10000, 100000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::Scalar);
+            let scalar = 2.5f32;
+
+            bencher.iter(|| {
+                black_box(a.scale(scalar).unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::SSE2);
+            let scalar = 2.5f32;
+
+            bencher.iter(|| {
+                black_box(a.scale(scalar).unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::AVX2);
+            let scalar = 2.5f32;
+
+            bencher.iter(|| {
+                black_box(a.scale(scalar).unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 /// Benchmark element-wise division
 fn bench_div(c: &mut Criterion) {
     let mut group = c.benchmark_group("div");
@@ -831,6 +877,7 @@ criterion_group!(
     bench_add,
     bench_sub,
     bench_mul,
+    bench_scale,
     bench_div,
     bench_fma,
     bench_dot,
