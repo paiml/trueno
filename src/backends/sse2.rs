@@ -379,6 +379,49 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    unsafe fn norm_linf(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for maximum value
+        let mut max_vec = _mm_setzero_ps();
+
+        // SSE2 doesn't have abs for floats, use bitwise AND to clear sign bit
+        let sign_mask = _mm_set1_ps(f32::from_bits(0x7FFF_FFFF));
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            // Compute absolute value
+            let abs_va = _mm_and_ps(va, sign_mask);
+            // Update maximum
+            max_vec = _mm_max_ps(max_vec, abs_va);
+            i += 4;
+        }
+
+        // Horizontal max: extract all 4 lanes and take maximum
+        let mut result = {
+            let temp = _mm_max_ps(max_vec, _mm_movehl_ps(max_vec, max_vec));
+            let temp = _mm_max_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
+
+        // Handle remaining elements with scalar code
+        for &val in &a[i..] {
+            let abs_val = val.abs();
+            if abs_val > result {
+                result = abs_val;
+            }
+        }
+
+        result
+    }
+
+    #[target_feature(enable = "sse2")]
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;

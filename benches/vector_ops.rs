@@ -958,6 +958,49 @@ fn bench_norm_l2(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark L-infinity norm (max absolute value) - currently uses temp allocation
+fn bench_norm_linf(c: &mut Criterion) {
+    let mut group = c.benchmark_group("norm_linf");
+
+    for size in [100, 1000, 10000, 100000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&data, Backend::Scalar);
+
+            bencher.iter(|| {
+                black_box(a.norm_linf().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, &size| {
+            let data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&data, Backend::SSE2);
+
+            bencher.iter(|| {
+                black_box(a.norm_linf().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, &size| {
+            let data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX2);
+
+            bencher.iter(|| {
+                black_box(a.norm_linf().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 /// Benchmark absolute value (currently scalar-only, no SIMD backend)
 fn bench_abs(c: &mut Criterion) {
     let mut group = c.benchmark_group("abs");
@@ -1024,6 +1067,7 @@ criterion_group!(
     bench_clip,
     bench_norm_l1,
     bench_norm_l2,
+    bench_norm_linf,
     bench_abs
 );
 criterion_main!(benches);

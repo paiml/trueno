@@ -466,6 +466,55 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    unsafe fn norm_linf(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for 8-way parallel max
+        let mut max_vec = _mm256_setzero_ps();
+
+        // Create mask to clear sign bit (absolute value)
+        let sign_mask = _mm256_set1_ps(f32::from_bits(0x7FFF_FFFF));
+
+        // Process 8 elements at a time using AVX2 (256-bit = 8 x f32)
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+
+            // Compute absolute value by clearing sign bit
+            let abs_va = _mm256_and_ps(va, sign_mask);
+
+            // Track maximum
+            max_vec = _mm256_max_ps(max_vec, abs_va);
+
+            i += 8;
+        }
+
+        // Horizontal max across all 8 lanes
+        let mut result = {
+            // Max of upper and lower 128-bit halves
+            let max_halves = _mm_max_ps(_mm256_castps256_ps128(max_vec), _mm256_extractf128_ps(max_vec, 1));
+            // Horizontal max of 4 elements
+            let temp = _mm_max_ps(max_halves, _mm_movehl_ps(max_halves, max_halves));
+            let temp = _mm_max_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
+
+        // Handle remaining elements with scalar code
+        for &val in &a[i..] {
+            let abs_val = val.abs();
+            if abs_val > result {
+                result = abs_val;
+            }
+        }
+
+        result
+    }
+
+    #[target_feature(enable = "avx2")]
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;

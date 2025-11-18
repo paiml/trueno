@@ -158,6 +158,16 @@ pub trait VectorBackend {
     /// - Can handle empty slice (returns 0.0)
     unsafe fn norm_l1(a: &[f32]) -> f32;
 
+    /// L-infinity norm (maximum absolute value): max(|a\[i\]|)
+    ///
+    /// Computes the maximum absolute value of all elements.
+    /// Used in optimization (constraint checking), numerical analysis, and error bounds.
+    ///
+    /// # Safety
+    ///
+    /// - Can handle empty slice (returns 0.0)
+    unsafe fn norm_linf(a: &[f32]) -> f32;
+
     /// Scalar multiplication: result\[i\] = a\[i\] * scalar
     ///
     /// Multiplies all elements by a scalar value.
