@@ -872,6 +872,50 @@ fn bench_swish(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark tanh activation function
+fn bench_tanh(c: &mut Criterion) {
+    let mut group = c.benchmark_group("tanh");
+
+    // Tanh requires exp() - test up to 100K
+    for size in [100, 1000, 10000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Generate data with mix of positive and negative values in [-3.5, 3.5] range
+        // (avoiding saturation region where tanh(x) ≈ ±1)
+        let data: Vec<f32> = (0..*size)
+            .map(|i| (i as f32) / (*size as f32) * 7.0 - 3.5)
+            .collect();
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(v.tanh().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(v.tanh().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(v.tanh().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 /// Benchmark L1 norm (sum of absolute values)
 fn bench_norm_l1(c: &mut Criterion) {
     let mut group = c.benchmark_group("norm_l1");
@@ -1062,6 +1106,7 @@ criterion_group!(
     bench_sigmoid,
     bench_gelu,
     bench_swish,
+    bench_tanh,
     bench_softmax,
     bench_log_softmax,
     bench_clip,

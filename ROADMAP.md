@@ -177,7 +177,7 @@ Required for Each Release:
   - SIMD implementations for all VectorBackend operations:
     - Element-wise: add, sub, mul, div, abs, scale, clamp
     - Reductions: sum, max, min, argmax, argmin, dot, norm_l1, norm_l2, norm_linf
-    - Activations: relu, exp, sigmoid, gelu, swish (with SIMD exp approximation)
+    - Activations: relu, exp, sigmoid, gelu, swish, tanh (with SIMD exp approximation)
     - Interpolation: lerp, fma
   - **Success Criteria**: 2x speedup over scalar (WASM) ✅ Achieved via SIMD128
 
