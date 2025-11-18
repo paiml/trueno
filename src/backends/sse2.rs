@@ -693,9 +693,77 @@ impl VectorBackend for Sse2Backend {
 
     #[target_feature(enable = "sse2")]
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
-        // SSE2 doesn't have native exp(), use scalar with numerical stability
-        // Future optimization: implement fast exp approximation
-        for (i, &val) in a.iter().enumerate() {
+        // sigmoid(x) = 1 / (1 + exp(-x))
+        // Use SIMD exp approximation with range reduction
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for exp(-x) computation
+        let log2e = _mm_set1_ps(std::f32::consts::LOG2_E);
+        let ln2 = _mm_set1_ps(std::f32::consts::LN_2);
+        let half = _mm_set1_ps(0.5);
+        let one = _mm_set1_ps(1.0);
+
+        // Taylor series coefficients for e^r
+        let c1 = _mm_set1_ps(1.0);
+        let c2 = _mm_set1_ps(0.5);
+        let c3 = _mm_set1_ps(0.166_666_67);
+        let c4 = _mm_set1_ps(0.041_666_668);
+        let c5 = _mm_set1_ps(0.008_333_334);
+        let c6 = _mm_set1_ps(0.001_388_889);
+
+        // Limits for overflow/underflow
+        let exp_hi = _mm_set1_ps(88.376_26);
+        let exp_lo = _mm_set1_ps(-87.336_55);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let x = _mm_loadu_ps(a.as_ptr().add(i));
+
+            // Compute -x for exp(-x)
+            let neg_x = _mm_sub_ps(_mm_setzero_ps(), x);
+
+            // Clamp to avoid overflow/underflow
+            let neg_x = _mm_max_ps(_mm_min_ps(neg_x, exp_hi), exp_lo);
+
+            // Range reduction: exp(-x) computation
+            let x_scaled = _mm_mul_ps(neg_x, log2e);
+
+            // SSE2 floor emulation
+            let k_plus_half = _mm_add_ps(x_scaled, half);
+            let k_int = _mm_cvttps_epi32(k_plus_half);
+            let k = _mm_cvtepi32_ps(k_int);
+            let mask = _mm_cmpgt_ps(k, k_plus_half);
+            let k = _mm_sub_ps(k, _mm_and_ps(mask, one));
+
+            let r = _mm_sub_ps(neg_x, _mm_mul_ps(k, ln2));
+
+            // Polynomial approximation using Horner's method (no FMA in SSE2)
+            let mut p = c6;
+            p = _mm_add_ps(_mm_mul_ps(p, r), c5);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c4);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c3);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c2);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c1);
+            p = _mm_add_ps(_mm_mul_ps(p, r), one);
+
+            // Scale by 2^k
+            let k_int = _mm_cvtps_epi32(k);
+            let k_shifted = _mm_slli_epi32(k_int, 23);
+            let scale = _mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(one), k_shifted));
+            let exp_neg_x = _mm_mul_ps(p, scale);
+
+            // sigmoid = 1 / (1 + exp(-x))
+            let denom = _mm_add_ps(one, exp_neg_x);
+            let sigmoid_result = _mm_div_ps(one, denom);
+
+            _mm_storeu_ps(result.as_mut_ptr().add(i), sigmoid_result);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            let val = a[i];
             result[i] = if val < -50.0 {
                 0.0
             } else if val > 50.0 {
@@ -703,35 +771,190 @@ impl VectorBackend for Sse2Backend {
             } else {
                 1.0 / (1.0 + (-val).exp())
             };
+            i += 1;
         }
     }
 
     #[target_feature(enable = "sse2")]
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
-        // SSE2 doesn't have native tanh(), use scalar
-        // Future optimization: implement fast tanh approximation
+        // gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
+        // Use SIMD tanh via: tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+        let len = a.len();
+        let mut i = 0;
+
+        // GELU constants
+        let sqrt_2_over_pi = _mm_set1_ps(0.797_884_6);
+        let coeff = _mm_set1_ps(0.044715);
+        let half = _mm_set1_ps(0.5);
+        let one = _mm_set1_ps(1.0);
+        let two = _mm_set1_ps(2.0);
+
+        // Constants for exp computation
+        let log2e = _mm_set1_ps(std::f32::consts::LOG2_E);
+        let ln2 = _mm_set1_ps(std::f32::consts::LN_2);
+
+        // Taylor series coefficients for e^r
+        let c1 = _mm_set1_ps(1.0);
+        let c2 = _mm_set1_ps(0.5);
+        let c3 = _mm_set1_ps(0.166_666_67);
+        let c4 = _mm_set1_ps(0.041_666_668);
+        let c5 = _mm_set1_ps(0.008_333_334);
+        let c6 = _mm_set1_ps(0.001_388_889);
+
+        // Limits for overflow/underflow
+        let exp_hi = _mm_set1_ps(88.376_26);
+        let exp_lo = _mm_set1_ps(-87.336_55);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let x = _mm_loadu_ps(a.as_ptr().add(i));
+
+            // Compute inner = sqrt(2/π) * (x + 0.044715 * x³)
+            let x2 = _mm_mul_ps(x, x);
+            let x3 = _mm_mul_ps(x2, x);
+            let inner_sum = _mm_add_ps(x, _mm_mul_ps(coeff, x3));
+            let inner = _mm_mul_ps(sqrt_2_over_pi, inner_sum);
+
+            // Compute tanh(inner) = (exp(2*inner) - 1) / (exp(2*inner) + 1)
+            let two_inner = _mm_mul_ps(two, inner);
+
+            // Clamp to avoid overflow/underflow
+            let two_inner = _mm_max_ps(_mm_min_ps(two_inner, exp_hi), exp_lo);
+
+            // Range reduction for exp(2*inner)
+            let x_scaled = _mm_mul_ps(two_inner, log2e);
+
+            // SSE2 floor emulation
+            let k_plus_half = _mm_add_ps(x_scaled, half);
+            let k_int = _mm_cvttps_epi32(k_plus_half);
+            let k = _mm_cvtepi32_ps(k_int);
+            let mask = _mm_cmpgt_ps(k, k_plus_half);
+            let k = _mm_sub_ps(k, _mm_and_ps(mask, one));
+
+            let r = _mm_sub_ps(two_inner, _mm_mul_ps(k, ln2));
+
+            // Polynomial approximation using Horner's method (no FMA in SSE2)
+            let mut p = c6;
+            p = _mm_add_ps(_mm_mul_ps(p, r), c5);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c4);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c3);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c2);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c1);
+            p = _mm_add_ps(_mm_mul_ps(p, r), one);
+
+            // Scale by 2^k
+            let k_int = _mm_cvtps_epi32(k);
+            let k_shifted = _mm_slli_epi32(k_int, 23);
+            let scale = _mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(one), k_shifted));
+            let exp_2inner = _mm_mul_ps(p, scale);
+
+            // tanh = (exp(2x) - 1) / (exp(2x) + 1)
+            let tanh_numer = _mm_sub_ps(exp_2inner, one);
+            let tanh_denom = _mm_add_ps(exp_2inner, one);
+            let tanh_result = _mm_div_ps(tanh_numer, tanh_denom);
+
+            // gelu = 0.5 * x * (1 + tanh)
+            let one_plus_tanh = _mm_add_ps(one, tanh_result);
+            let gelu_result = _mm_mul_ps(half, _mm_mul_ps(x, one_plus_tanh));
+
+            _mm_storeu_ps(result.as_mut_ptr().add(i), gelu_result);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
         const SQRT_2_OVER_PI: f32 = 0.797_884_6;
         const COEFF: f32 = 0.044715;
 
-        for (i, &x) in a.iter().enumerate() {
+        while i < len {
+            let x = a[i];
             let x3 = x * x * x;
             let inner = SQRT_2_OVER_PI * (x + COEFF * x3);
             result[i] = 0.5 * x * (1.0 + inner.tanh());
+            i += 1;
         }
     }
 
     #[target_feature(enable = "sse2")]
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
-        // SSE2 doesn't have native exp(), use scalar
-        for (i, &x) in a.iter().enumerate() {
-            if x < -50.0 {
-                result[i] = 0.0;
+        // swish(x) = x * sigmoid(x) = x / (1 + exp(-x))
+        // Use SIMD exp approximation with range reduction
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for exp(-x) computation
+        let log2e = _mm_set1_ps(std::f32::consts::LOG2_E);
+        let ln2 = _mm_set1_ps(std::f32::consts::LN_2);
+        let half = _mm_set1_ps(0.5);
+        let one = _mm_set1_ps(1.0);
+
+        // Taylor series coefficients for e^r
+        let c1 = _mm_set1_ps(1.0);
+        let c2 = _mm_set1_ps(0.5);
+        let c3 = _mm_set1_ps(0.166_666_67);
+        let c4 = _mm_set1_ps(0.041_666_668);
+        let c5 = _mm_set1_ps(0.008_333_334);
+        let c6 = _mm_set1_ps(0.001_388_889);
+
+        // Limits for overflow/underflow
+        let exp_hi = _mm_set1_ps(88.376_26);
+        let exp_lo = _mm_set1_ps(-87.336_55);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let x = _mm_loadu_ps(a.as_ptr().add(i));
+
+            // Compute -x for exp(-x)
+            let neg_x = _mm_sub_ps(_mm_setzero_ps(), x);
+
+            // Clamp to avoid overflow/underflow
+            let neg_x = _mm_max_ps(_mm_min_ps(neg_x, exp_hi), exp_lo);
+
+            // Range reduction: exp(-x) computation
+            let x_scaled = _mm_mul_ps(neg_x, log2e);
+
+            // SSE2 floor emulation
+            let k_plus_half = _mm_add_ps(x_scaled, half);
+            let k_int = _mm_cvttps_epi32(k_plus_half);
+            let k = _mm_cvtepi32_ps(k_int);
+            let mask = _mm_cmpgt_ps(k, k_plus_half);
+            let k = _mm_sub_ps(k, _mm_and_ps(mask, one));
+
+            let r = _mm_sub_ps(neg_x, _mm_mul_ps(k, ln2));
+
+            // Polynomial approximation using Horner's method (no FMA in SSE2)
+            let mut p = c6;
+            p = _mm_add_ps(_mm_mul_ps(p, r), c5);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c4);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c3);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c2);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c1);
+            p = _mm_add_ps(_mm_mul_ps(p, r), one);
+
+            // Scale by 2^k
+            let k_int = _mm_cvtps_epi32(k);
+            let k_shifted = _mm_slli_epi32(k_int, 23);
+            let scale = _mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(one), k_shifted));
+            let exp_neg_x = _mm_mul_ps(p, scale);
+
+            // swish = x / (1 + exp(-x))
+            let denom = _mm_add_ps(one, exp_neg_x);
+            let swish_result = _mm_div_ps(x, denom);
+
+            _mm_storeu_ps(result.as_mut_ptr().add(i), swish_result);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            let x = a[i];
+            result[i] = if x < -50.0 {
+                0.0
             } else if x > 50.0 {
-                result[i] = x;
+                x
             } else {
-                let sigmoid = 1.0 / (1.0 + (-x).exp());
-                result[i] = x * sigmoid;
-            }
+                x / (1.0 + (-x).exp())
+            };
+            i += 1;
         }
     }
 }
