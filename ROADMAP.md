@@ -6,7 +6,7 @@
 
 ---
 
-## Current State: v0.2.1 (2025-11-18)
+## Current State: v0.2.2 (2025-11-18)
 
 ### Position Analysis
 
@@ -39,10 +39,10 @@
 ```
 Test Coverage:     >90%
 Mutation Testing:  80%+ kill rate
-PMAT TDG Grade:    A (91.2/100)
+PMAT TDG Grade:    A (92.1/100)
 Repo Score:        90/110
 GPU Speedup:       ⚠️ Matmul ONLY 2-10x (13/14 ops slower, see analysis)
-Total Tests:       826+ tests
+Total Tests:       889 tests (759 unit + 21 integration + 109 doc)
 ```
 
 ---
@@ -697,32 +697,43 @@ make tier3  # Target: <2 hours execution
 
 ### Active Sprint: v0.2.2 → v0.3.0
 
-✅ **COMPLETE (v0.2.1)**:
-- GPU performance analysis (13/14 ops disabled - 2-65,000x slower)
-- Remaining activations (hardswish, mish, selu, relu)
-- Math operations (log2, log10)
-- TDG score improved to A (91.2/100)
+✅ **COMPLETE (v0.2.2 - Released 2025-11-18)**:
+- **CRITICAL FIX**: Missing abs() SIMD implementation (Issue #2) - unblocked downstream projects
+- **SIMD Optimization**: argmax/argmin (2.8-3.1x speedup with SIMD index tracking)
+- **Performance Analysis**: Documented memory-bound vs compute-bound patterns for 7+ operations
+  - Compute-bound (4-12x SIMD benefit): min, argmax/argmin, norm_l1, norm_l2, dot, sum
+  - Memory-bound (~1x SIMD benefit): sub, div, fma, scale, abs
+- **Documentation**: Fixed broken links, comprehensive CHANGELOG
+- **Quality**: TDG score 92.1/100 (A), 889 tests passing, zero clippy warnings
+- **Release**: Published to crates.io, GitHub release created, Issue #2 closed
+
+**EXPLORED & DEFERRED**:
+- **SIMD sigmoid** (*Hansei* - Learning from failed attempt)
+  - Attempted: Polynomial exp() approximation (4th/6th order Taylor series)
+  - Issue: Taylor series diverges for |x| > 2 (symmetry tests failed)
+  - Root Cause: Requires **range reduction** for production-quality exp()
+    ```
+    exp(x) = 2^n * 2^r where n=integer, r∈[0,1)
+    Complexity: 2-3 hours proper implementation + testing
+    ```
+  - Decision: Deferred to future work (sigmoid, gelu, tanh all need transcendentals)
+  - Value: Prevented rework, documented complexity for future
 
 **Next Actions** (Priority Order):
 
-1. **Performance regression CI** (*Jidoka* - Stop the line on regressions)
-   - Integrate `.performance-baselines/` into CI
-   - Detect >5% regressions automatically
-   - **Timeline**: 1-2 days
+1. **SIMD Transcendental Functions** (*Genchi Genbutsu* - Measure before proceeding)
+   - Implement range reduction for exp() approximation
+   - Apply to sigmoid, gelu, swish, tanh
+   - **Success Criteria**: ≥2-4x speedup, all tests pass
+   - **Timeline**: 1-2 weeks (2-3 hours per function)
+   - **Blocker**: Requires exp/tanh with range reduction
 
-2. **SIMD optimization for activations** (*Kaizen* - 1% better every day)
-   - AVX2/AVX-512 implementations for relu, sigmoid, gelu, swish
-   - Benchmark against scalar baseline
-   - **Success Criteria**: ≥2-4x speedup
-   - **Timeline**: 1-2 weeks
+2. **Alternative SIMD Targets** (*Kaizen* - Quick wins first)
+   - Operations without transcendentals
+   - Check for unoptimized element-wise ops
+   - **Timeline**: 1-2 days per operation
 
-3. **SIMD optimization for reductions**
-   - Parallel reduction with index tracking (argmax/argmin)
-   - Sum with Kahan summation (numerically stable)
-   - **Success Criteria**: ≥2-4x speedup
-   - **Timeline**: 1 week
-
-4. **WASM SIMD128 backend**
+3. **WASM SIMD128 backend**
    - Browser deployment support
    - **Success Criteria**: 2x speedup over scalar
    - **Timeline**: 2 weeks
@@ -730,10 +741,11 @@ make tier3  # Target: <2 hours execution
 **Quality Gate Status**:
 ```
 Current: All metrics GREEN ✅
-TDG: A (91.2/100)
-Tests: 826+ passing
+TDG: A (92.1/100)
+Tests: 889 passing (759 unit + 21 integration + 109 doc)
 Coverage: >90%
-Next: SIMD optimization sprint
+Release: v0.2.2 published to crates.io
+Next: SIMD transcendental functions (requires range reduction)
 ```
 
 ---
