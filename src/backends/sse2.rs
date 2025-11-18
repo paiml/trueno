@@ -480,6 +480,32 @@ impl VectorBackend for Sse2Backend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn relu(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Zero vector for max comparison
+        let zero = _mm_setzero_ps();
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+
+            // ReLU: max(0, x)
+            let vresult = _mm_max_ps(zero, va);
+
+            _mm_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = if a[i] > 0.0 { a[i] } else { 0.0 };
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

@@ -620,6 +620,58 @@ impl VectorBackend for NeonBackend {
             i += 1;
         }
     }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn relu(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Zero vector for max comparison
+        let zero = vdupq_n_f32(0.0);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+
+            // ReLU: max(0, x)
+            let vresult = vmaxq_f32(zero, va);
+
+            vst1q_f32(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = if a[i] > 0.0 { a[i] } else { 0.0 };
+            i += 1;
+        }
+    }
+
+    #[cfg(target_arch = "arm")]
+    unsafe fn relu(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Zero vector for max comparison
+        let zero = vdupq_n_f32(0.0);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+
+            // ReLU: max(0, x)
+            let vresult = vmaxq_f32(zero, va);
+
+            vst1q_f32(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = if a[i] > 0.0 { a[i] } else { 0.0 };
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]

@@ -479,6 +479,32 @@ impl VectorBackend for WasmBackend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn relu(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Zero vector for max comparison
+        let zero = f32x4_splat(0.0);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+
+            // ReLU: max(0, x)
+            let vresult = f32x4_max(zero, va);
+
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = if a[i] > 0.0 { a[i] } else { 0.0 };
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]
