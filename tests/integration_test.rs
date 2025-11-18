@@ -487,6 +487,71 @@ proptest! {
         let max_scalar = v_scalar.max()?;
         prop_assert_eq!(max_auto, max_scalar);
     }
+
+    /// Integration test: Backend equivalence for activation functions
+    #[test]
+    fn integration_backend_equivalence_activations(
+        data in prop::collection::vec(-10.0f32..10.0, 50..100)
+    ) {
+        // Scalar backend as reference
+        let v_scalar = Vector::from_slice_with_backend(&data, Backend::Scalar);
+        let v_auto = Vector::from_slice(&data);
+
+        // ReLU - should produce identical results across backends
+        let relu_scalar = v_scalar.relu()?;
+        let relu_auto = v_auto.relu()?;
+        for (s, a) in relu_scalar.as_slice().iter().zip(relu_auto.as_slice().iter()) {
+            prop_assert!((s - a).abs() < 1e-5, "ReLU mismatch: scalar={}, auto={}", s, a);
+        }
+
+        // Sigmoid - tolerance for numerical differences
+        let sigmoid_scalar = v_scalar.sigmoid()?;
+        let sigmoid_auto = v_auto.sigmoid()?;
+        for (s, a) in sigmoid_scalar.as_slice().iter().zip(sigmoid_auto.as_slice().iter()) {
+            prop_assert!((s - a).abs() < 1e-5, "Sigmoid mismatch: scalar={}, auto={}", s, a);
+        }
+
+        // GELU - tolerance for numerical differences
+        let gelu_scalar = v_scalar.gelu()?;
+        let gelu_auto = v_auto.gelu()?;
+        for (s, a) in gelu_scalar.as_slice().iter().zip(gelu_auto.as_slice().iter()) {
+            prop_assert!((s - a).abs() < 1e-4, "GELU mismatch: scalar={}, auto={}", s, a);
+        }
+
+        // Swish - tolerance for numerical differences
+        let swish_scalar = v_scalar.swish()?;
+        let swish_auto = v_auto.swish()?;
+        for (s, a) in swish_scalar.as_slice().iter().zip(swish_auto.as_slice().iter()) {
+            prop_assert!((s - a).abs() < 1e-5, "Swish mismatch: scalar={}, auto={}", s, a);
+        }
+    }
+
+    /// Integration test: Backend equivalence for norms and reductions
+    #[test]
+    fn integration_backend_equivalence_norms(
+        data in prop::collection::vec(-50.0f32..50.0, 50..100)
+    ) {
+        let v_scalar = Vector::from_slice_with_backend(&data, Backend::Scalar);
+        let v_auto = Vector::from_slice(&data);
+
+        // L1 norm
+        let l1_scalar = v_scalar.norm_l1()?;
+        let l1_auto = v_auto.norm_l1()?;
+        prop_assert!((l1_scalar - l1_auto).abs() < 1e-3 * l1_scalar.abs().max(1.0),
+            "L1 norm mismatch: scalar={}, auto={}", l1_scalar, l1_auto);
+
+        // L2 norm
+        let l2_scalar = v_scalar.norm_l2()?;
+        let l2_auto = v_auto.norm_l2()?;
+        prop_assert!((l2_scalar - l2_auto).abs() < 1e-3 * l2_scalar.abs().max(1.0),
+            "L2 norm mismatch: scalar={}, auto={}", l2_scalar, l2_auto);
+
+        // Dot product
+        let dot_scalar = v_scalar.dot(&v_scalar)?;
+        let dot_auto = v_auto.dot(&v_auto)?;
+        prop_assert!((dot_scalar - dot_auto).abs() < 1e-3 * dot_scalar.abs().max(1.0),
+            "Dot product mismatch: scalar={}, auto={}", dot_scalar, dot_auto);
+    }
 }
 
 // ============================================================================
