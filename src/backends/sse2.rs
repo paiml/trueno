@@ -804,4 +804,57 @@ mod tests {
 
         assert_eq!(scalar_result, sse2_result);
     }
+
+    #[test]
+    fn test_sse2_lerp_matches_scalar() {
+        let a = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
+        let b = [100.0, 110.0, 120.0, 130.0, 140.0, 150.0, 160.0];
+
+        let mut scalar_result = [0.0; 7];
+        let mut sse2_result = [0.0; 7];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::lerp(&a, &b, 0.25, &mut scalar_result);
+            Sse2Backend::lerp(&a, &b, 0.25, &mut sse2_result);
+        }
+
+        for (s, e) in scalar_result.iter().zip(sse2_result.iter()) {
+            assert!(
+                (s - e).abs() < 1e-5,
+                "lerp mismatch: scalar={}, sse2={}",
+                s,
+                e
+            );
+        }
+    }
+
+    #[test]
+    fn test_sse2_argmax_matches_scalar() {
+        let a = [1.0, 5.0, 3.0, 10.0, 2.0, 8.0, 4.0];
+
+        let scalar_result = unsafe { super::super::scalar::ScalarBackend::argmax(&a) };
+        let sse2_result = unsafe { Sse2Backend::argmax(&a) };
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_argmin_matches_scalar() {
+        let a = [5.0, 1.0, 3.0, 10.0, 2.0, 8.0, 4.0];
+
+        let scalar_result = unsafe { super::super::scalar::ScalarBackend::argmin(&a) };
+        let sse2_result = unsafe { Sse2Backend::argmin(&a) };
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_sum_kahan_matches_scalar() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+
+        let scalar_result = unsafe { super::super::scalar::ScalarBackend::sum_kahan(&a) };
+        let sse2_result = unsafe { Sse2Backend::sum_kahan(&a) };
+
+        assert!((scalar_result - sse2_result).abs() < 1e-5);
+    }
 }
