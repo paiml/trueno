@@ -280,22 +280,13 @@ impl VectorBackend for Avx2Backend {
         let mut vmax = _mm256_set1_ps(a[0]);
         let mut vmax_idx = _mm256_set1_ps(0.0); // Track indices as floats
 
+        // Initialize index vector [0, 1, 2, 3, 4, 5, 6, 7] and increment constant
+        let mut vidx_current = _mm256_set_ps(7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 0.0);
+        let vinc = _mm256_set1_ps(8.0);
+
         // Process 8 elements at a time with index tracking
         while i + 8 <= len {
             let va = _mm256_loadu_ps(a.as_ptr().add(i));
-
-            // Create vector of current indices [i, i+1, i+2, ..., i+7]
-            let base_idx = i as f32;
-            let vidx = _mm256_set_ps(
-                base_idx + 7.0,
-                base_idx + 6.0,
-                base_idx + 5.0,
-                base_idx + 4.0,
-                base_idx + 3.0,
-                base_idx + 2.0,
-                base_idx + 1.0,
-                base_idx,
-            );
 
             // Compare: va > vmax (strict greater-than to preserve first occurrence)
             // _CMP_GT_OQ = 30 (ordered, quiet, greater-than)
@@ -303,8 +294,10 @@ impl VectorBackend for Avx2Backend {
 
             // Conditionally update max values and indices using blend
             vmax = _mm256_blendv_ps(vmax, va, mask);
-            vmax_idx = _mm256_blendv_ps(vmax_idx, vidx, mask);
+            vmax_idx = _mm256_blendv_ps(vmax_idx, vidx_current, mask);
 
+            // Increment index vector for next iteration
+            vidx_current = _mm256_add_ps(vidx_current, vinc);
             i += 8;
         }
 
@@ -345,22 +338,13 @@ impl VectorBackend for Avx2Backend {
         let mut vmin = _mm256_set1_ps(a[0]);
         let mut vmin_idx = _mm256_set1_ps(0.0); // Track indices as floats
 
+        // Initialize index vector [0, 1, 2, 3, 4, 5, 6, 7] and increment constant
+        let mut vidx_current = _mm256_set_ps(7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 0.0);
+        let vinc = _mm256_set1_ps(8.0);
+
         // Process 8 elements at a time with index tracking
         while i + 8 <= len {
             let va = _mm256_loadu_ps(a.as_ptr().add(i));
-
-            // Create vector of current indices [i, i+1, i+2, ..., i+7]
-            let base_idx = i as f32;
-            let vidx = _mm256_set_ps(
-                base_idx + 7.0,
-                base_idx + 6.0,
-                base_idx + 5.0,
-                base_idx + 4.0,
-                base_idx + 3.0,
-                base_idx + 2.0,
-                base_idx + 1.0,
-                base_idx,
-            );
 
             // Compare: va < vmin (strict less-than to preserve first occurrence)
             // _CMP_LT_OQ = 17 (ordered, quiet, less-than)
@@ -368,8 +352,10 @@ impl VectorBackend for Avx2Backend {
 
             // Conditionally update min values and indices using blend
             vmin = _mm256_blendv_ps(vmin, va, mask);
-            vmin_idx = _mm256_blendv_ps(vmin_idx, vidx, mask);
+            vmin_idx = _mm256_blendv_ps(vmin_idx, vidx_current, mask);
 
+            // Increment index vector for next iteration
+            vidx_current = _mm256_add_ps(vidx_current, vinc);
             i += 8;
         }
 
