@@ -1,10 +1,10 @@
 [package]
 name = "trueno"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
-description = "Multi-target high-performance compute library (SIMD/GPU/WASM)"
+description = "High-performance SIMD compute library with GPU support for matrix operations"
 repository = "https://github.com/paiml/trueno"
 readme = "README.md"
 keywords = ["simd", "gpu", "wasm", "performance", "vectorization"]
