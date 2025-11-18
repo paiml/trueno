@@ -282,34 +282,52 @@ impl VectorBackend for Avx2Backend {
         let mut max_value = a[0];
         let mut max_index = 0;
 
-        // Start with first element broadcast to all lanes
+        // Initialize SIMD vectors with first element value and index 0
         let mut vmax = _mm256_set1_ps(a[0]);
+        let mut vmax_idx = _mm256_set1_ps(0.0); // Track indices as floats
 
-        // Process 8 elements at a time
+        // Process 8 elements at a time with index tracking
         while i + 8 <= len {
             let va = _mm256_loadu_ps(a.as_ptr().add(i));
-            vmax = _mm256_max_ps(vmax, va);
+
+            // Create vector of current indices [i, i+1, i+2, ..., i+7]
+            let base_idx = i as f32;
+            let vidx = _mm256_set_ps(
+                base_idx + 7.0,
+                base_idx + 6.0,
+                base_idx + 5.0,
+                base_idx + 4.0,
+                base_idx + 3.0,
+                base_idx + 2.0,
+                base_idx + 1.0,
+                base_idx,
+            );
+
+            // Compare: va > vmax (strict greater-than to preserve first occurrence)
+            // _CMP_GT_OQ = 30 (ordered, quiet, greater-than)
+            let mask = _mm256_cmp_ps::<30>(va, vmax);
+
+            // Conditionally update max values and indices using blend
+            vmax = _mm256_blendv_ps(vmax, va, mask);
+            vmax_idx = _mm256_blendv_ps(vmax_idx, vidx, mask);
+
             i += 8;
         }
 
-        // Horizontal max: find maximum across all 8 lanes (for potential future optimization)
-        let low = _mm256_castps256_ps128(vmax);
-        let high = _mm256_extractf128_ps(vmax, 1);
-        let max4 = _mm_max_ps(low, high);
+        // Horizontal reduction: find max value and its index across all 8 lanes
+        let mut values = [0.0f32; 8];
+        let mut indices = [0.0f32; 8];
+        _mm256_storeu_ps(values.as_mut_ptr(), vmax);
+        _mm256_storeu_ps(indices.as_mut_ptr(), vmax_idx);
 
-        // Extract to array
-        let mut temp = [0.0f32; 4];
-        _mm_storeu_ps(temp.as_mut_ptr(), max4);
-
-        // Find the index by checking all elements processed by SIMD
-        for (idx, &val) in a[..i].iter().enumerate() {
-            if val > max_value {
-                max_value = val;
-                max_index = idx;
+        for lane in 0..8 {
+            if values[lane] > max_value {
+                max_value = values[lane];
+                max_index = indices[lane] as usize;
             }
         }
 
-        // Check remaining elements
+        // Check remaining elements (scalar fallback)
         for (idx, &val) in a[i..].iter().enumerate() {
             if val > max_value {
                 max_value = val;
@@ -329,34 +347,52 @@ impl VectorBackend for Avx2Backend {
         let mut min_value = a[0];
         let mut min_index = 0;
 
-        // Start with first element broadcast to all lanes
+        // Initialize SIMD vectors with first element value and index 0
         let mut vmin = _mm256_set1_ps(a[0]);
+        let mut vmin_idx = _mm256_set1_ps(0.0); // Track indices as floats
 
-        // Process 8 elements at a time
+        // Process 8 elements at a time with index tracking
         while i + 8 <= len {
             let va = _mm256_loadu_ps(a.as_ptr().add(i));
-            vmin = _mm256_min_ps(vmin, va);
+
+            // Create vector of current indices [i, i+1, i+2, ..., i+7]
+            let base_idx = i as f32;
+            let vidx = _mm256_set_ps(
+                base_idx + 7.0,
+                base_idx + 6.0,
+                base_idx + 5.0,
+                base_idx + 4.0,
+                base_idx + 3.0,
+                base_idx + 2.0,
+                base_idx + 1.0,
+                base_idx,
+            );
+
+            // Compare: va < vmin (strict less-than to preserve first occurrence)
+            // _CMP_LT_OQ = 17 (ordered, quiet, less-than)
+            let mask = _mm256_cmp_ps::<17>(va, vmin);
+
+            // Conditionally update min values and indices using blend
+            vmin = _mm256_blendv_ps(vmin, va, mask);
+            vmin_idx = _mm256_blendv_ps(vmin_idx, vidx, mask);
+
             i += 8;
         }
 
-        // Horizontal min: find minimum across all 8 lanes (for potential future optimization)
-        let low = _mm256_castps256_ps128(vmin);
-        let high = _mm256_extractf128_ps(vmin, 1);
-        let min4 = _mm_min_ps(low, high);
+        // Horizontal reduction: find min value and its index across all 8 lanes
+        let mut values = [0.0f32; 8];
+        let mut indices = [0.0f32; 8];
+        _mm256_storeu_ps(values.as_mut_ptr(), vmin);
+        _mm256_storeu_ps(indices.as_mut_ptr(), vmin_idx);
 
-        // Extract to array
-        let mut temp = [0.0f32; 4];
-        _mm_storeu_ps(temp.as_mut_ptr(), min4);
-
-        // Find the index by checking all elements processed by SIMD
-        for (idx, &val) in a[..i].iter().enumerate() {
-            if val < min_value {
-                min_value = val;
-                min_index = idx;
+        for lane in 0..8 {
+            if values[lane] < min_value {
+                min_value = values[lane];
+                min_index = indices[lane] as usize;
             }
         }
 
-        // Check remaining elements
+        // Check remaining elements (scalar fallback)
         for (idx, &val) in a[i..].iter().enumerate() {
             if val < min_value {
                 min_value = val;
