@@ -750,4 +750,77 @@ mod tests {
         let (avx2_max, scalar_max) = unsafe { (Avx2Backend::max(&a), ScalarBackend::max(&a)) };
         assert_eq!(avx2_max, scalar_max);
     }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_relu() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        // Test with 16 elements (2 AVX2 registers of 8 f32s)
+        let a = [
+            -3.0, -1.0, 0.0, 1.0, 3.0, -2.0, 2.0, -0.5, -4.0, 4.0, -5.0, 5.0, 0.0, -0.1, 0.1, 10.0,
+        ];
+        let mut result = [0.0; 16];
+        unsafe {
+            Avx2Backend::relu(&a, &mut result);
+        }
+        let expected = [
+            0.0, 0.0, 0.0, 1.0, 3.0, 0.0, 2.0, 0.0, 0.0, 4.0, 0.0, 5.0, 0.0, 0.0, 0.1, 10.0,
+        ];
+        assert_eq!(result, expected);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_relu_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-5.0, -3.0, -1.0, 0.0, 1.0, 3.0, 5.0, -2.0, 2.0, -4.0, 4.0];
+        let mut avx2_result = [0.0; 11];
+        let mut scalar_result = [0.0; 11];
+
+        unsafe {
+            Avx2Backend::relu(&a, &mut avx2_result);
+            ScalarBackend::relu(&a, &mut scalar_result);
+        }
+
+        assert_eq!(avx2_result, scalar_result);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_sigmoid_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-10.0, -1.0, 0.0, 1.0, 10.0];
+        let mut avx2_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+
+        unsafe {
+            Avx2Backend::sigmoid(&a, &mut avx2_result);
+            ScalarBackend::sigmoid(&a, &mut scalar_result);
+        }
+
+        for (avx2, scalar) in avx2_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (avx2 - scalar).abs() < 1e-6,
+                "sigmoid mismatch: avx2={}, scalar={}",
+                avx2,
+                scalar
+            );
+        }
+    }
 }
