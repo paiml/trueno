@@ -888,4 +888,66 @@ mod tests {
 
         assert!((scalar_result - sse2_result).abs() < 1e-5);
     }
+
+    #[test]
+    fn test_sse2_mul_matches_scalar() {
+        let a = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5];
+        let b = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+
+        let mut scalar_result = [0.0; 7];
+        let mut sse2_result = [0.0; 7];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::mul(&a, &b, &mut scalar_result);
+            Sse2Backend::mul(&a, &b, &mut sse2_result);
+        }
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_add_matches_scalar() {
+        let a = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5];
+        let b = [8.5, 9.5, 10.5, 11.5, 12.5, 13.5, 14.5];
+
+        let mut scalar_result = [0.0; 7];
+        let mut sse2_result = [0.0; 7];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::add(&a, &b, &mut scalar_result);
+            Sse2Backend::add(&a, &b, &mut sse2_result);
+        }
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_sum_matches_scalar() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+
+        let scalar_result = unsafe { super::super::scalar::ScalarBackend::sum(&a) };
+        let sse2_result = unsafe { Sse2Backend::sum(&a) };
+
+        assert!((scalar_result - sse2_result).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sse2_max_matches_scalar() {
+        let a = [1.0, 5.0, 3.0, 7.0, 2.0, 8.0, 4.0];
+
+        let scalar_result = unsafe { super::super::scalar::ScalarBackend::max(&a) };
+        let sse2_result = unsafe { Sse2Backend::max(&a) };
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_min_matches_scalar() {
+        let a = [5.0, 1.0, 3.0, 7.0, 2.0, 8.0, 4.0];
+
+        let scalar_result = unsafe { super::super::scalar::ScalarBackend::min(&a) };
+        let sse2_result = unsafe { Sse2Backend::min(&a) };
+
+        assert_eq!(scalar_result, sse2_result);
+    }
 }
