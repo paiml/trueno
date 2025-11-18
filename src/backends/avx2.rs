@@ -996,4 +996,90 @@ mod tests {
 
         assert_eq!(avx2_result, scalar_result);
     }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_lerp_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0];
+        let b = [
+            100.0, 110.0, 120.0, 130.0, 140.0, 150.0, 160.0, 170.0, 180.0,
+        ];
+        let mut avx2_result = [0.0; 9];
+        let mut scalar_result = [0.0; 9];
+
+        unsafe {
+            Avx2Backend::lerp(&a, &b, 0.25, &mut avx2_result);
+            ScalarBackend::lerp(&a, &b, 0.25, &mut scalar_result);
+        }
+
+        for (avx2, scalar) in avx2_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (avx2 - scalar).abs() < 1e-5,
+                "lerp mismatch: avx2={}, scalar={}",
+                avx2,
+                scalar
+            );
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_argmax_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.0, 5.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
+
+        let avx2_result = unsafe { Avx2Backend::argmax(&a) };
+        let scalar_result = unsafe { ScalarBackend::argmax(&a) };
+
+        assert_eq!(avx2_result, scalar_result);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_argmin_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [5.0, 1.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
+
+        let avx2_result = unsafe { Avx2Backend::argmin(&a) };
+        let scalar_result = unsafe { ScalarBackend::argmin(&a) };
+
+        assert_eq!(avx2_result, scalar_result);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_sum_kahan_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+
+        let avx2_result = unsafe { Avx2Backend::sum_kahan(&a) };
+        let scalar_result = unsafe { ScalarBackend::sum_kahan(&a) };
+
+        assert!((avx2_result - scalar_result).abs() < 1e-5);
+    }
 }
