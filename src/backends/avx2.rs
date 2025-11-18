@@ -140,21 +140,17 @@ impl VectorBackend for Avx2Backend {
         }
 
         // Horizontal sum: reduce 8 lanes to single value
-        // Step 1: Extract high and low 128-bit halves
-        let low = _mm256_castps256_ps128(acc);
-        let high = _mm256_extractf128_ps(acc, 1);
-
-        // Step 2: Add high and low halves (now 4 elements)
-        let sum4 = _mm_add_ps(low, high);
-
-        // Step 3: Horizontal add to get 2 elements
-        let sum2 = _mm_hadd_ps(sum4, sum4);
-
-        // Step 4: Final horizontal add to get 1 element
-        let sum1 = _mm_hadd_ps(sum2, sum2);
-
-        // Extract the final sum
-        let mut result = _mm_cvtss_f32(sum1);
+        let mut result = {
+            // Sum upper and lower 128-bit halves
+            let sum_halves = _mm_add_ps(
+                _mm256_castps256_ps128(acc),
+                _mm256_extractf128_ps(acc, 1),
+            );
+            // Horizontal sum of 4 elements using faster movehl/shuffle
+            let temp = _mm_add_ps(sum_halves, _mm_movehl_ps(sum_halves, sum_halves));
+            let temp = _mm_add_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
 
         // Handle remaining elements with scalar code
         result += a[i..].iter().zip(&b[i..]).map(|(x, y)| x * y).sum::<f32>();
@@ -176,14 +172,18 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        // Horizontal sum (same as dot product reduction)
-        let low = _mm256_castps256_ps128(acc);
-        let high = _mm256_extractf128_ps(acc, 1);
-        let sum4 = _mm_add_ps(low, high);
-        let sum2 = _mm_hadd_ps(sum4, sum4);
-        let sum1 = _mm_hadd_ps(sum2, sum2);
-
-        let mut result = _mm_cvtss_f32(sum1);
+        // Horizontal sum: reduce 8 lanes to single value
+        let mut result = {
+            // Sum upper and lower 128-bit halves
+            let sum_halves = _mm_add_ps(
+                _mm256_castps256_ps128(acc),
+                _mm256_extractf128_ps(acc, 1),
+            );
+            // Horizontal sum of 4 elements using faster movehl/shuffle
+            let temp = _mm_add_ps(sum_halves, _mm_movehl_ps(sum_halves, sum_halves));
+            let temp = _mm_add_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
 
         // Handle remaining elements
         result += a[i..].iter().sum::<f32>();
