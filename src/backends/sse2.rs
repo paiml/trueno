@@ -857,4 +857,35 @@ mod tests {
 
         assert!((scalar_result - sse2_result).abs() < 1e-5);
     }
+
+    #[test]
+    fn test_sse2_norm_l1_matches_scalar() {
+        let a = [1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0];
+
+        let scalar_result = unsafe { super::super::scalar::ScalarBackend::norm_l1(&a) };
+        let sse2_result = unsafe { Sse2Backend::norm_l1(&a) };
+
+        assert!((scalar_result - sse2_result).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sse2_norm_l2_matches_scalar() {
+        let a = [3.0, 4.0, 0.0, 0.0, 5.0, 12.0, 0.0];
+
+        let scalar_result = unsafe { super::super::scalar::ScalarBackend::norm_l2(&a) };
+        let sse2_result = unsafe { Sse2Backend::norm_l2(&a) };
+
+        assert!((scalar_result - sse2_result).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sse2_dot_matches_scalar() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let b = [7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
+
+        let scalar_result = unsafe { super::super::scalar::ScalarBackend::dot(&a, &b) };
+        let sse2_result = unsafe { Sse2Backend::dot(&a, &b) };
+
+        assert!((scalar_result - sse2_result).abs() < 1e-5);
+    }
 }
