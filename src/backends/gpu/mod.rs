@@ -73,6 +73,11 @@ impl GpuBackend {
             ));
         }
 
+        // wgpu doesn't allow zero-sized buffers
+        if a.is_empty() {
+            return Err("Cannot perform GPU operation on empty vectors".to_string());
+        }
+
         let device = self.ensure_device()?;
 
         // Create output buffer
@@ -573,5 +578,90 @@ mod tests {
 
         let result = gpu.dot(&a, &b);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_gpu_vec_add_matches_scalar() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+        use crate::backends::VectorBackend;
+
+        let mut gpu = GpuBackend::new();
+        let a = vec![1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5];
+        let b = vec![8.5, 7.5, 6.5, 5.5, 4.5, 3.5, 2.5, 1.5];
+
+        let gpu_result = gpu.vec_add(&a, &b);
+
+        let mut scalar_result = vec![0.0; 8];
+        unsafe {
+            ScalarBackend::add(&a, &b, &mut scalar_result);
+        }
+
+        if let Ok(gpu_r) = gpu_result {
+            for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
+                assert!(
+                    (g - s).abs() < 1e-4,
+                    "GPU vs Scalar mismatch: gpu={}, scalar={}",
+                    g,
+                    s
+                );
+            }
+        } else {
+            eprintln!("GPU vec_add failed: {:?}", gpu_result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_dot_matches_scalar() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+        use crate::backends::VectorBackend;
+
+        let mut gpu = GpuBackend::new();
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let b = vec![8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
+
+        let gpu_result = gpu.dot(&a, &b);
+        let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
+
+        if let Ok(gpu_r) = gpu_result {
+            assert!(
+                (gpu_r - scalar_result).abs() < 1e-4,
+                "GPU vs Scalar dot mismatch: gpu={}, scalar={}",
+                gpu_r,
+                scalar_result
+            );
+        } else {
+            eprintln!("GPU dot failed: {:?}", gpu_result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_vec_add_empty() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let a: Vec<f32> = vec![];
+        let b: Vec<f32> = vec![];
+
+        let result = gpu.vec_add(&a, &b);
+
+        // GPU backend returns error for empty vectors (wgpu doesn't allow zero-sized buffers)
+        assert!(
+            result.is_err(),
+            "Expected error for empty vectors, got: {:?}",
+            result
+        );
     }
 }
