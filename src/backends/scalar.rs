@@ -142,6 +142,12 @@ impl VectorBackend for ScalarBackend {
         }
     }
 
+    unsafe fn abs(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.abs();
+        }
+    }
+
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
         for (i, &val) in a.iter().enumerate() {
             result[i] = val.max(min_val).min(max_val);
