@@ -890,4 +890,99 @@ mod tests {
             eprintln!("GPU elu failed: {:?}", result);
         }
     }
+
+    #[test]
+    fn test_gpu_tanh_basic() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
+
+        let result = gpu.tanh(&input);
+
+        if let Ok(output) = result {
+            for (r, &x) in output.iter().zip(input.iter()) {
+                let expected = x.tanh();
+                assert!(
+                    (r - expected).abs() < 1e-4,
+                    "Tanh mismatch: got={}, expected={}",
+                    r,
+                    expected
+                );
+            }
+        } else {
+            eprintln!("GPU tanh failed: {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_softmax_basic() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![1.0, 2.0, 3.0, 4.0];
+
+        let result = gpu.softmax(&input);
+
+        if let Ok(output) = result {
+            // Softmax should sum to 1
+            let sum: f32 = output.iter().sum();
+            assert!(
+                (sum - 1.0).abs() < 1e-3,
+                "Softmax sum should be 1, got {}",
+                sum
+            );
+
+            // All values should be positive
+            for &v in &output {
+                assert!(v > 0.0, "Softmax values should be positive");
+            }
+
+            // Later values should be larger (input is increasing)
+            for i in 1..output.len() {
+                assert!(
+                    output[i] > output[i - 1],
+                    "Softmax should preserve order for increasing input"
+                );
+            }
+        } else {
+            eprintln!("GPU softmax failed: {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_log_softmax_basic() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![1.0, 2.0, 3.0, 4.0];
+
+        let result = gpu.log_softmax(&input);
+
+        if let Ok(output) = result {
+            // log_softmax values should all be negative (log of probability < 1)
+            for &v in &output {
+                assert!(v <= 0.0, "Log softmax values should be <= 0, got {}", v);
+            }
+
+            // exp(log_softmax) should sum to 1
+            let exp_sum: f32 = output.iter().map(|x| x.exp()).sum();
+            assert!(
+                (exp_sum - 1.0).abs() < 1e-3,
+                "exp(log_softmax) should sum to 1, got {}",
+                exp_sum
+            );
+        } else {
+            eprintln!("GPU log_softmax failed: {:?}", result);
+        }
+    }
 }
