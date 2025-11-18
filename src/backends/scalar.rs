@@ -233,6 +233,13 @@ impl VectorBackend for ScalarBackend {
             }
         }
     }
+
+    unsafe fn tanh(a: &[f32], result: &mut [f32]) {
+        // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+        for (i, &x) in a.iter().enumerate() {
+            result[i] = x.tanh();
+        }
+    }
 }
 
 #[cfg(test)]

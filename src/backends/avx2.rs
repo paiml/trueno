@@ -142,10 +142,7 @@ impl VectorBackend for Avx2Backend {
         // Horizontal sum: reduce 8 lanes to single value
         let mut result = {
             // Sum upper and lower 128-bit halves
-            let sum_halves = _mm_add_ps(
-                _mm256_castps256_ps128(acc),
-                _mm256_extractf128_ps(acc, 1),
-            );
+            let sum_halves = _mm_add_ps(_mm256_castps256_ps128(acc), _mm256_extractf128_ps(acc, 1));
             // Horizontal sum of 4 elements using faster movehl/shuffle
             let temp = _mm_add_ps(sum_halves, _mm_movehl_ps(sum_halves, sum_halves));
             let temp = _mm_add_ss(temp, _mm_shuffle_ps(temp, temp, 1));
@@ -175,10 +172,7 @@ impl VectorBackend for Avx2Backend {
         // Horizontal sum: reduce 8 lanes to single value
         let mut result = {
             // Sum upper and lower 128-bit halves
-            let sum_halves = _mm_add_ps(
-                _mm256_castps256_ps128(acc),
-                _mm256_extractf128_ps(acc, 1),
-            );
+            let sum_halves = _mm_add_ps(_mm256_castps256_ps128(acc), _mm256_extractf128_ps(acc, 1));
             // Horizontal sum of 4 elements using faster movehl/shuffle
             let temp = _mm_add_ps(sum_halves, _mm_movehl_ps(sum_halves, sum_halves));
             let temp = _mm_add_ss(temp, _mm_shuffle_ps(temp, temp, 1));
@@ -209,10 +203,8 @@ impl VectorBackend for Avx2Backend {
         // Horizontal max: find maximum across all 8 lanes
         let mut result = {
             // Max of upper and lower 128-bit halves
-            let max_halves = _mm_max_ps(
-                _mm256_castps256_ps128(vmax),
-                _mm256_extractf128_ps(vmax, 1),
-            );
+            let max_halves =
+                _mm_max_ps(_mm256_castps256_ps128(vmax), _mm256_extractf128_ps(vmax, 1));
             // Horizontal max of 4 elements
             let temp = _mm_max_ps(max_halves, _mm_movehl_ps(max_halves, max_halves));
             let temp = _mm_max_ss(temp, _mm_shuffle_ps(temp, temp, 1));
@@ -247,10 +239,8 @@ impl VectorBackend for Avx2Backend {
         // Horizontal min: find minimum across all 8 lanes
         let mut result = {
             // Min of upper and lower 128-bit halves
-            let min_halves = _mm_min_ps(
-                _mm256_castps256_ps128(vmin),
-                _mm256_extractf128_ps(vmin, 1),
-            );
+            let min_halves =
+                _mm_min_ps(_mm256_castps256_ps128(vmin), _mm256_extractf128_ps(vmin, 1));
             // Horizontal min of 4 elements
             let temp = _mm_min_ps(min_halves, _mm_movehl_ps(min_halves, min_halves));
             let temp = _mm_min_ss(temp, _mm_shuffle_ps(temp, temp, 1));
@@ -706,10 +696,7 @@ impl VectorBackend for Avx2Backend {
             // 2^k is computed by adding k to the exponent bits
             let k_int = _mm256_cvtps_epi32(k);
             let k_shifted = _mm256_slli_epi32(k_int, 23); // shift to exponent position
-            let scale = _mm256_castsi256_ps(_mm256_add_epi32(
-                _mm256_castps_si256(one),
-                k_shifted,
-            ));
+            let scale = _mm256_castsi256_ps(_mm256_add_epi32(_mm256_castps_si256(one), k_shifted));
 
             // Final result: e^x = e^r * 2^k
             let vresult = _mm256_mul_ps(p, scale);
@@ -777,10 +764,7 @@ impl VectorBackend for Avx2Backend {
             // Scale by 2^k
             let k_int = _mm256_cvtps_epi32(k);
             let k_shifted = _mm256_slli_epi32(k_int, 23);
-            let scale = _mm256_castsi256_ps(_mm256_add_epi32(
-                _mm256_castps_si256(one),
-                k_shifted,
-            ));
+            let scale = _mm256_castsi256_ps(_mm256_add_epi32(_mm256_castps_si256(one), k_shifted));
             let exp_neg_x = _mm256_mul_ps(p, scale);
 
             // sigmoid = 1 / (1 + exp(-x))
@@ -868,10 +852,7 @@ impl VectorBackend for Avx2Backend {
             // Scale by 2^k
             let k_int = _mm256_cvtps_epi32(k);
             let k_shifted = _mm256_slli_epi32(k_int, 23);
-            let scale = _mm256_castsi256_ps(_mm256_add_epi32(
-                _mm256_castps_si256(one),
-                k_shifted,
-            ));
+            let scale = _mm256_castsi256_ps(_mm256_add_epi32(_mm256_castps_si256(one), k_shifted));
             let exp_2inner = _mm256_mul_ps(p, scale);
 
             // tanh = (exp(2x) - 1) / (exp(2x) + 1)
@@ -952,10 +933,7 @@ impl VectorBackend for Avx2Backend {
             // Scale by 2^k
             let k_int = _mm256_cvtps_epi32(k);
             let k_shifted = _mm256_slli_epi32(k_int, 23);
-            let scale = _mm256_castsi256_ps(_mm256_add_epi32(
-                _mm256_castps_si256(one),
-                k_shifted,
-            ));
+            let scale = _mm256_castsi256_ps(_mm256_add_epi32(_mm256_castps_si256(one), k_shifted));
             let exp_neg_x = _mm256_mul_ps(p, scale);
 
             // swish = x / (1 + exp(-x))
@@ -976,6 +954,78 @@ impl VectorBackend for Avx2Backend {
             } else {
                 x / (1.0 + (-x).exp())
             };
+            i += 1;
+        }
+    }
+
+    #[target_feature(enable = "avx2")]
+    unsafe fn tanh(a: &[f32], result: &mut [f32]) {
+        // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+        // Use SIMD exp approximation with range reduction
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for exp(2x) computation
+        let log2e = _mm256_set1_ps(std::f32::consts::LOG2_E);
+        let ln2 = _mm256_set1_ps(std::f32::consts::LN_2);
+        let half = _mm256_set1_ps(0.5);
+        let one = _mm256_set1_ps(1.0);
+        let two = _mm256_set1_ps(2.0);
+
+        // Taylor series coefficients for e^r
+        let c1 = _mm256_set1_ps(1.0);
+        let c2 = _mm256_set1_ps(0.5);
+        let c3 = _mm256_set1_ps(0.166_666_67);
+        let c4 = _mm256_set1_ps(0.041_666_668);
+        let c5 = _mm256_set1_ps(0.008_333_334);
+        let c6 = _mm256_set1_ps(0.001_388_889);
+
+        // Limits for overflow/underflow
+        let exp_hi = _mm256_set1_ps(88.376_26);
+        let exp_lo = _mm256_set1_ps(-87.336_55);
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let x = _mm256_loadu_ps(a.as_ptr().add(i));
+
+            // Compute 2*x for exp(2*x)
+            let two_x = _mm256_mul_ps(two, x);
+
+            // Clamp to avoid overflow/underflow
+            let two_x = _mm256_max_ps(_mm256_min_ps(two_x, exp_hi), exp_lo);
+
+            // Range reduction: exp(2*x) computation
+            let x_scaled = _mm256_mul_ps(two_x, log2e);
+            let k = _mm256_floor_ps(_mm256_add_ps(x_scaled, half));
+            let r = _mm256_sub_ps(two_x, _mm256_mul_ps(k, ln2));
+
+            // Polynomial approximation using Horner's method with FMA
+            let mut p = c6;
+            p = _mm256_fmadd_ps(p, r, c5);
+            p = _mm256_fmadd_ps(p, r, c4);
+            p = _mm256_fmadd_ps(p, r, c3);
+            p = _mm256_fmadd_ps(p, r, c2);
+            p = _mm256_fmadd_ps(p, r, c1);
+            p = _mm256_fmadd_ps(p, r, one);
+
+            // Scale by 2^k
+            let k_int = _mm256_cvtps_epi32(k);
+            let k_shifted = _mm256_slli_epi32(k_int, 23);
+            let scale = _mm256_castsi256_ps(_mm256_add_epi32(_mm256_castps_si256(one), k_shifted));
+            let exp_2x = _mm256_mul_ps(p, scale);
+
+            // tanh = (exp(2x) - 1) / (exp(2x) + 1)
+            let tanh_numer = _mm256_sub_ps(exp_2x, one);
+            let tanh_denom = _mm256_add_ps(exp_2x, one);
+            let tanh_result = _mm256_div_ps(tanh_numer, tanh_denom);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), tanh_result);
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].tanh();
             i += 1;
         }
     }

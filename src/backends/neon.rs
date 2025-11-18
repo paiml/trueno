@@ -899,6 +899,65 @@ impl VectorBackend for NeonBackend {
         }
     }
 
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn tanh(a: &[f32], result: &mut [f32]) {
+        // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants
+        let log2e = vdupq_n_f32(std::f32::consts::LOG2_E);
+        let ln2 = vdupq_n_f32(std::f32::consts::LN_2);
+        let one = vdupq_n_f32(1.0);
+        let two = vdupq_n_f32(2.0);
+        let half = vdupq_n_f32(0.5);
+
+        // Taylor series coefficients for exp(y)
+        let c1 = vdupq_n_f32(1.0);
+        let c2 = vdupq_n_f32(0.5);
+        let c3 = vdupq_n_f32(0.166_666_67);
+        let c4 = vdupq_n_f32(0.041_666_668);
+        let c5 = vdupq_n_f32(0.008_333_334);
+        let c6 = vdupq_n_f32(0.001_388_889);
+
+        while i + 4 <= len {
+            let x = vld1q_f32(a.as_ptr().add(i));
+
+            // Compute exp(2x) for tanh = (exp(2x) - 1) / (exp(2x) + 1)
+            let z = vmulq_f32(two, x);
+
+            // Range reduction: k = floor(z * log2(e) + 0.5)
+            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(z, log2e), half));
+            let k = vcvtq_s32_f32(kf);
+            let r = vsubq_f32(z, vmulq_f32(kf, ln2));
+
+            // Polynomial approximation using Horner's method
+            let mut poly = vaddq_f32(c5, vmulq_f32(r, c6));
+            poly = vaddq_f32(c4, vmulq_f32(r, poly));
+            poly = vaddq_f32(c3, vmulq_f32(r, poly));
+            poly = vaddq_f32(c2, vmulq_f32(r, poly));
+            poly = vaddq_f32(c1, vmulq_f32(r, poly));
+            poly = vaddq_f32(one, vmulq_f32(r, poly));
+
+            // Scale by 2^k using IEEE754 exponent manipulation
+            let k_shifted = vshlq_n_s32(vaddq_s32(k, vdupq_n_s32(127)), 23);
+            let exp_2x = vmulq_f32(poly, vreinterpretq_f32_s32(k_shifted));
+
+            // tanh = (exp(2x) - 1) / (exp(2x) + 1)
+            let tanh_result = vdivq_f32(vsubq_f32(exp_2x, one), vaddq_f32(exp_2x, one));
+
+            vst1q_f32(result.as_mut_ptr().add(i), tanh_result);
+            i += 4;
+        }
+
+        // Scalar fallback for remainder
+        while i < len {
+            let val = a[i];
+            result[i] = val.tanh();
+            i += 1;
+        }
+    }
+
     #[cfg(target_arch = "arm")]
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
         // ARM32: use scalar since NEON division requires Newton-Raphson
@@ -911,6 +970,14 @@ impl VectorBackend for NeonBackend {
                 let sigmoid = 1.0 / (1.0 + (-x).exp());
                 result[i] = x * sigmoid;
             }
+        }
+    }
+
+    #[cfg(target_arch = "arm")]
+    unsafe fn tanh(a: &[f32], result: &mut [f32]) {
+        // ARM32: use scalar fallback since NEON division requires Newton-Raphson
+        for (i, &x) in a.iter().enumerate() {
+            result[i] = x.tanh();
         }
     }
 }
@@ -1277,6 +1344,33 @@ mod tests {
             assert!(
                 (n - s).abs() < 1e-5,
                 "swish mismatch: neon={}, scalar={}",
+                n,
+                s
+            );
+        }
+    }
+
+    #[test]
+    fn test_neon_tanh_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut neon_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            NeonBackend::tanh(&a, &mut neon_result);
+            ScalarBackend::tanh(&a, &mut scalar_result);
+        }
+        for (n, s) in neon_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (n - s).abs() < 1e-5,
+                "tanh mismatch: neon={}, scalar={}",
                 n,
                 s
             );

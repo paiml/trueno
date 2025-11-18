@@ -841,6 +841,71 @@ impl VectorBackend for WasmBackend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn tanh(a: &[f32], result: &mut [f32]) {
+        // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+        // Using range reduction for exp(2x)
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for exp computation
+        let log2e = f32x4_splat(std::f32::consts::LOG2_E);
+        let ln2 = f32x4_splat(std::f32::consts::LN_2);
+        let one = f32x4_splat(1.0);
+        let two = f32x4_splat(2.0);
+        let half = f32x4_splat(0.5);
+
+        // Taylor series coefficients for exp(r)
+        let c1 = f32x4_splat(1.0);
+        let c2 = f32x4_splat(0.5);
+        let c3 = f32x4_splat(0.166_666_67);
+        let c4 = f32x4_splat(0.041_666_668);
+        let c5 = f32x4_splat(0.008_333_334);
+        let c6 = f32x4_splat(0.001_388_889);
+
+        while i + 4 <= len {
+            let x = v128_load(a.as_ptr().add(i) as *const v128);
+
+            // Compute exp(2x) using range reduction
+            // First compute 2x
+            let two_x = f32x4_mul(two, x);
+
+            // Range reduction: exp(2x) = 2^k * exp(r)
+            // k = floor(2x * log2(e) + 0.5)
+            let kf = f32x4_floor(f32x4_add(f32x4_mul(two_x, log2e), half));
+            let k = i32x4_trunc_sat_f32x4(kf);
+
+            // r = 2x - k * ln(2)
+            let r = f32x4_sub(two_x, f32x4_mul(kf, ln2));
+
+            // Polynomial approximation for exp(r) using Horner's method
+            let mut poly = f32x4_add(c5, f32x4_mul(r, c6));
+            poly = f32x4_add(c4, f32x4_mul(r, poly));
+            poly = f32x4_add(c3, f32x4_mul(r, poly));
+            poly = f32x4_add(c2, f32x4_mul(r, poly));
+            poly = f32x4_add(c1, f32x4_mul(r, poly));
+            poly = f32x4_add(one, f32x4_mul(r, poly));
+
+            // Scale by 2^k using IEEE754 exponent manipulation
+            let k_shifted = i32x4_shl(i32x4_add(k, i32x4_splat(127)), 23);
+            let exp_2x = f32x4_mul(poly, k_shifted);
+
+            // tanh = (exp(2x) - 1) / (exp(2x) + 1)
+            let numerator = f32x4_sub(exp_2x, one);
+            let denominator = f32x4_add(exp_2x, one);
+            let tanh_result = f32x4_div(numerator, denominator);
+
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, tanh_result);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar fallback
+        while i < len {
+            result[i] = a[i].tanh();
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1102,6 +1167,27 @@ mod tests {
             assert!(
                 (w - s).abs() < 1e-5,
                 "swish mismatch: wasm={}, scalar={}",
+                w,
+                s
+            );
+        }
+    }
+
+    #[test]
+    fn test_wasm_tanh_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut wasm_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            WasmBackend::tanh(&a, &mut wasm_result);
+            ScalarBackend::tanh(&a, &mut scalar_result);
+        }
+        for (w, s) in wasm_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (w - s).abs() < 1e-5,
+                "tanh mismatch: wasm={}, scalar={}",
                 w,
                 s
             );
