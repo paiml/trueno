@@ -229,4 +229,15 @@ pub trait VectorBackend {
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]);
+
+    /// GELU activation: result\[i\] = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
+    ///
+    /// Gaussian Error Linear Unit - smooth non-monotonic activation.
+    /// Used in BERT, GPT, and modern transformers.
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn gelu(a: &[f32], result: &mut [f32]);
 }
