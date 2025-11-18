@@ -1642,23 +1642,49 @@ impl Vector<f32> {
             }
         }
 
-        // Scalar fallback: σ(x) = 1 / (1 + exp(-x))
-        let data: Vec<f32> = self
-            .data
-            .iter()
-            .map(|&x| {
-                // Handle extreme values for numerical stability
-                if x < -50.0 {
-                    0.0 // exp(-x) would overflow, but sigmoid approaches 0
-                } else if x > 50.0 {
-                    1.0 // exp(-x) underflows to 0, sigmoid approaches 1
-                } else {
-                    1.0 / (1.0 + (-x).exp())
-                }
-            })
-            .collect();
+        let mut result = vec![0.0; self.len()];
 
-        Ok(Vector::from_slice(&data))
+        // Dispatch to appropriate backend
+        unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::sigmoid(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => {
+                    Sse2Backend::sigmoid(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => {
+                    Avx2Backend::sigmoid(&self.data, &mut result);
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::sigmoid(&self.data, &mut result);
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => {
+                    NeonBackend::sigmoid(&self.data, &mut result);
+                }
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => {
+                    ScalarBackend::sigmoid(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => {
+                    WasmBackend::sigmoid(&self.data, &mut result);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => {
+                    ScalarBackend::sigmoid(&self.data, &mut result);
+                }
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::sigmoid(&self.data, &mut result);
+                }
+            }
+        }
+
+        Ok(Vector::from_slice(&result))
     }
 
     /// Leaky ReLU activation function

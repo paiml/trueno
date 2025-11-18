@@ -218,4 +218,15 @@ pub trait VectorBackend {
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
     unsafe fn relu(a: &[f32], result: &mut [f32]);
+
+    /// Sigmoid activation: result\[i\] = 1 / (1 + exp(-a\[i\]))
+    ///
+    /// Logistic sigmoid function - maps inputs to (0, 1) range.
+    /// Used in binary classification and as gating mechanism.
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn sigmoid(a: &[f32], result: &mut [f32]);
 }

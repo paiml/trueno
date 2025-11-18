@@ -672,6 +672,34 @@ impl VectorBackend for NeonBackend {
             i += 1;
         }
     }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
+        // NEON doesn't have native exp(), use scalar with numerical stability
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = if val < -50.0 {
+                0.0
+            } else if val > 50.0 {
+                1.0
+            } else {
+                1.0 / (1.0 + (-val).exp())
+            };
+        }
+    }
+
+    #[cfg(target_arch = "arm")]
+    unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
+        // NEON doesn't have native exp(), use scalar with numerical stability
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = if val < -50.0 {
+                0.0
+            } else if val > 50.0 {
+                1.0
+            } else {
+                1.0 / (1.0 + (-val).exp())
+            };
+        }
+    }
 }
 
 #[cfg(test)]
