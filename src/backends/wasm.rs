@@ -523,13 +523,28 @@ impl VectorBackend for WasmBackend {
     #[target_feature(enable = "simd128")]
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
         // WASM SIMD128 doesn't have native tanh(), use scalar
-        const SQRT_2_OVER_PI: f32 = 0.7978845608;
+        const SQRT_2_OVER_PI: f32 = 0.797_884_6;
         const COEFF: f32 = 0.044715;
 
         for (i, &x) in a.iter().enumerate() {
             let x3 = x * x * x;
             let inner = SQRT_2_OVER_PI * (x + COEFF * x3);
             result[i] = 0.5 * x * (1.0 + inner.tanh());
+        }
+    }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn swish(a: &[f32], result: &mut [f32]) {
+        // WASM SIMD128 doesn't have native exp(), use scalar
+        for (i, &x) in a.iter().enumerate() {
+            if x < -50.0 {
+                result[i] = 0.0;
+            } else if x > 50.0 {
+                result[i] = x;
+            } else {
+                let sigmoid = 1.0 / (1.0 + (-x).exp());
+                result[i] = x * sigmoid;
+            }
         }
     }
 }

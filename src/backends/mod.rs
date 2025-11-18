@@ -240,4 +240,15 @@ pub trait VectorBackend {
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
     unsafe fn gelu(a: &[f32], result: &mut [f32]);
+
+    /// Swish activation: result\[i\] = x * sigmoid(x) = x / (1 + exp(-x))
+    ///
+    /// Self-gated activation function (also called SiLU).
+    /// Used in EfficientNet, MobileNetV3.
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn swish(a: &[f32], result: &mut [f32]);
 }
