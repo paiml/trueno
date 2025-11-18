@@ -24,6 +24,11 @@ criterion = "0.5"
 [features]
 default = []
 gpu = ["wgpu", "pollster", "bytemuck", "futures-intrusive"]
+# Chaos engineering features (from renacer v0.4.1)
+chaos-basic = []
+chaos-network = ["chaos-basic"]
+chaos-byzantine = ["chaos-basic"]
+chaos-full = ["chaos-network", "chaos-byzantine"]
 
 [profile.release]
 opt-level = 3
