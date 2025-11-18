@@ -1,6 +1,6 @@
 //! Activation Functions Example
 //!
-//! Demonstrates all 8 activation functions available in Trueno for neural network
+//! Demonstrates all 11 activation functions available in Trueno for neural network
 //! architectures. Each activation function is shown with its typical use case and
 //! characteristics.
 //!
@@ -72,6 +72,27 @@ fn main() {
     println!("  Output: {:?}", swish_output.as_slice());
     println!("  Characteristic: Self-gated, smooth, unbounded above\n");
 
+    // Hardswish: Efficient approximation for mobile
+    let hardswish_output = input.hardswish().unwrap();
+    println!("✓ Hardswish (x * clip(x+3, 0, 6) / 6)");
+    println!("  Use case: MobileNetV3, efficient on-device inference");
+    println!("  Output: {:?}", hardswish_output.as_slice());
+    println!("  Characteristic: Fast computation, no exp(), mobile-optimized\n");
+
+    // Mish: Self-regularized non-monotonic
+    let mish_output = input.mish().unwrap();
+    println!("✓ Mish (x * tanh(softplus(x)))");
+    println!("  Use case: YOLOv4, modern object detection");
+    println!("  Output: {:?}", mish_output.as_slice());
+    println!("  Characteristic: Smooth, self-regularized, non-monotonic\n");
+
+    // SELU: Self-normalizing
+    let selu_output = input.selu().unwrap();
+    println!("✓ SELU (λ * elu(x, α))");
+    println!("  Use case: Self-normalizing neural networks");
+    println!("  Output: {:?}", selu_output.as_slice());
+    println!("  Characteristic: Self-normalizing, reduces need for batch norm\n");
+
     // ========================================================================
     // Probabilistic Activations
     // ========================================================================
@@ -116,6 +137,9 @@ fn main() {
     print_activation_row("Sigmoid     ", &test_points.sigmoid().unwrap());
     print_activation_row("GELU        ", &test_points.gelu().unwrap());
     print_activation_row("Swish       ", &test_points.swish().unwrap());
+    print_activation_row("Hardswish   ", &test_points.hardswish().unwrap());
+    print_activation_row("Mish        ", &test_points.mish().unwrap());
+    print_activation_row("SELU        ", &test_points.selu().unwrap());
 
     println!("\n");
 
@@ -146,7 +170,19 @@ fn main() {
     let efficientnet_activation = layer_output.swish().unwrap();
     println!("  → Swish: {:?}", efficientnet_activation.as_slice());
 
-    println!("\n✨ All activation functions computed with SIMD optimization!");
+    println!("\nIf using MobileNetV3 (on-device):");
+    let mobilenet_activation = layer_output.hardswish().unwrap();
+    println!("  → Hardswish: {:?}", mobilenet_activation.as_slice());
+
+    println!("\nIf using YOLOv4 (object detection):");
+    let yolo_activation = layer_output.mish().unwrap();
+    println!("  → Mish: {:?}", yolo_activation.as_slice());
+
+    println!("\nIf using self-normalizing network:");
+    let snn_activation = layer_output.selu().unwrap();
+    println!("  → SELU: {:?}", snn_activation.as_slice());
+
+    println!("\n✨ All 11 activation functions computed with SIMD optimization!");
     println!("   Backend auto-selected: AVX2 > SSE2 > NEON > Scalar");
 }
 
