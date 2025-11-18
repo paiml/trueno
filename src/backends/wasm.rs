@@ -661,4 +661,156 @@ mod tests {
         let (wasm_max, scalar_max) = unsafe { (WasmBackend::max(&a), ScalarBackend::max(&a)) };
         assert_eq!(wasm_max, scalar_max);
     }
+
+    #[test]
+    fn test_wasm_sub_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [5.0, 6.0, 7.0, 8.0];
+        let b = [1.0, 2.0, 3.0, 4.0];
+        let mut wasm_result = [0.0; 4];
+        let mut scalar_result = [0.0; 4];
+        unsafe {
+            WasmBackend::sub(&a, &b, &mut wasm_result);
+            ScalarBackend::sub(&a, &b, &mut scalar_result);
+        }
+        assert_eq!(wasm_result, scalar_result);
+    }
+
+    #[test]
+    fn test_wasm_mul_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5];
+        let b = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let mut wasm_result = [0.0; 9];
+        let mut scalar_result = [0.0; 9];
+        unsafe {
+            WasmBackend::mul(&a, &b, &mut wasm_result);
+            ScalarBackend::mul(&a, &b, &mut scalar_result);
+        }
+        assert_eq!(wasm_result, scalar_result);
+    }
+
+    #[test]
+    fn test_wasm_div_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [10.0, 20.0, 30.0, 40.0];
+        let b = [2.0, 4.0, 5.0, 8.0];
+        let mut wasm_result = [0.0; 4];
+        let mut scalar_result = [0.0; 4];
+        unsafe {
+            WasmBackend::div(&a, &b, &mut wasm_result);
+            ScalarBackend::div(&a, &b, &mut scalar_result);
+        }
+        assert_eq!(wasm_result, scalar_result);
+    }
+
+    #[test]
+    fn test_wasm_min_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [5.0, 1.0, 3.0, 2.0];
+        let wasm_result = unsafe { WasmBackend::min(&a) };
+        let scalar_result = unsafe { ScalarBackend::min(&a) };
+        assert_eq!(wasm_result, scalar_result);
+    }
+
+    #[test]
+    fn test_wasm_argmax_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.0, 5.0, 3.0, 2.0];
+        let wasm_result = unsafe { WasmBackend::argmax(&a) };
+        let scalar_result = unsafe { ScalarBackend::argmax(&a) };
+        assert_eq!(wasm_result, scalar_result);
+    }
+
+    #[test]
+    fn test_wasm_argmin_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [5.0, 1.0, 3.0, 2.0];
+        let wasm_result = unsafe { WasmBackend::argmin(&a) };
+        let scalar_result = unsafe { ScalarBackend::argmin(&a) };
+        assert_eq!(wasm_result, scalar_result);
+    }
+
+    #[test]
+    fn test_wasm_relu_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-3.0, -1.0, 0.0, 1.0, 3.0];
+        let mut wasm_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            WasmBackend::relu(&a, &mut wasm_result);
+            ScalarBackend::relu(&a, &mut scalar_result);
+        }
+        assert_eq!(wasm_result, scalar_result);
+    }
+
+    #[test]
+    fn test_wasm_sigmoid_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut wasm_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            WasmBackend::sigmoid(&a, &mut wasm_result);
+            ScalarBackend::sigmoid(&a, &mut scalar_result);
+        }
+        for (w, s) in wasm_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (w - s).abs() < 1e-5,
+                "sigmoid mismatch: wasm={}, scalar={}",
+                w,
+                s
+            );
+        }
+    }
+
+    #[test]
+    fn test_wasm_gelu_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut wasm_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            WasmBackend::gelu(&a, &mut wasm_result);
+            ScalarBackend::gelu(&a, &mut scalar_result);
+        }
+        for (w, s) in wasm_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (w - s).abs() < 1e-5,
+                "gelu mismatch: wasm={}, scalar={}",
+                w,
+                s
+            );
+        }
+    }
+
+    #[test]
+    fn test_wasm_swish_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut wasm_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            WasmBackend::swish(&a, &mut wasm_result);
+            ScalarBackend::swish(&a, &mut scalar_result);
+        }
+        for (w, s) in wasm_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (w - s).abs() < 1e-5,
+                "swish mismatch: wasm={}, scalar={}",
+                w,
+                s
+            );
+        }
+    }
 }
