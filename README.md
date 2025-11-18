@@ -976,7 +976,6 @@ If you use Trueno in academic work, please cite:
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/paiml/trueno/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/paiml/trueno/discussions)
 - **Email**: contact@paiml.com
 
 ---

@@ -169,5 +169,5 @@ Flags: -C opt-level=3 -C lto=true -C codegen-units=1
 ## References
 
 - [Criterion.rs Documentation](https://bheisler.github.io/criterion.rs/book/)
-- [Intel SSE2 Intrinsics Guide](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/)
+- [Intel Intrinsics Guide](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html)
 - [Phase 2 Progress Document](../PROGRESS.md)
