@@ -3005,6 +3005,80 @@ impl Vector<f32> {
         })
     }
 
+    /// Element-wise base-2 logarithm: result\[i\] = log₂(x\[i\])
+    ///
+    /// Computes the base-2 logarithm for each element.
+    /// Uses Rust's optimized f32::log2() method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 2.0, 4.0, 8.0]);
+    /// let result = v.log2().unwrap();
+    /// // result ≈ [0.0, 1.0, 2.0, 3.0]
+    /// ```
+    ///
+    /// # Special Cases
+    ///
+    /// - `log2(1.0)` returns 0.0
+    /// - `log2(2.0)` returns 1.0
+    /// - `log2(x)` for x ≤ 0 returns NaN
+    /// - `log2(0.0)` returns -∞
+    /// - `log2(+∞)` returns +∞
+    ///
+    /// # Applications
+    ///
+    /// - Information theory: Entropy in bits, mutual information
+    /// - Computer science: Bit manipulation, binary search complexity
+    /// - Audio: Octave calculations, pitch detection
+    /// - Data compression: Huffman coding, arithmetic coding
+    pub fn log2(&self) -> Result<Vector<f32>> {
+        let log2_data: Vec<f32> = self.data.iter().map(|x| x.log2()).collect();
+        Ok(Vector {
+            data: log2_data,
+            backend: self.backend,
+        })
+    }
+
+    /// Element-wise base-10 logarithm: result\[i\] = log₁₀(x\[i\])
+    ///
+    /// Computes the base-10 (common) logarithm for each element.
+    /// Uses Rust's optimized f32::log10() method.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let v = Vector::from_slice(&[1.0, 10.0, 100.0, 1000.0]);
+    /// let result = v.log10().unwrap();
+    /// // result ≈ [0.0, 1.0, 2.0, 3.0]
+    /// ```
+    ///
+    /// # Special Cases
+    ///
+    /// - `log10(1.0)` returns 0.0
+    /// - `log10(10.0)` returns 1.0
+    /// - `log10(x)` for x ≤ 0 returns NaN
+    /// - `log10(0.0)` returns -∞
+    /// - `log10(+∞)` returns +∞
+    ///
+    /// # Applications
+    ///
+    /// - Audio: Decibel calculations (dB = 20 * log10(amplitude))
+    /// - Chemistry: pH calculations (-log10(H+ concentration))
+    /// - Seismology: Richter scale
+    /// - Scientific notation: Order of magnitude calculations
+    pub fn log10(&self) -> Result<Vector<f32>> {
+        let log10_data: Vec<f32> = self.data.iter().map(|x| x.log10()).collect();
+        Ok(Vector {
+            data: log10_data,
+            backend: self.backend,
+        })
+    }
+
     /// Element-wise sine: result\[i\] = sin(x\[i\])
     ///
     /// Computes the sine for each element (input in radians).
@@ -4906,6 +4980,138 @@ mod tests {
     fn test_ln_empty() {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let result = a.ln().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // log2() operation tests (element-wise base-2 logarithm)
+
+    #[test]
+    fn test_log2_basic() {
+        let a = Vector::from_slice(&[1.0, 2.0, 4.0, 8.0, 16.0]);
+        let result = a.log2().unwrap();
+        let expected = [0.0, 1.0, 2.0, 3.0, 4.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "log2 mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_log2_one() {
+        let a = Vector::from_slice(&[1.0, 1.0, 1.0]);
+        let result = a.log2().unwrap();
+        for &val in result.as_slice() {
+            assert!((val - 0.0).abs() < 1e-5, "log2(1) should be 0.0");
+        }
+    }
+
+    #[test]
+    fn test_log2_fractional() {
+        let a = Vector::from_slice(&[0.5, 0.25, 0.125]);
+        let result = a.log2().unwrap();
+        let expected = [-1.0, -2.0, -3.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "log2 fractional mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_log2_non_powers() {
+        let a = Vector::from_slice(&[3.0, 5.0, 10.0]);
+        let result = a.log2().unwrap();
+        let expected = [3.0f32.log2(), 5.0f32.log2(), 10.0f32.log2()];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "log2 non-powers mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_log2_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.log2().unwrap();
+        assert_eq!(result.len(), 0);
+    }
+
+    // log10() operation tests (element-wise base-10 logarithm)
+
+    #[test]
+    fn test_log10_basic() {
+        let a = Vector::from_slice(&[1.0, 10.0, 100.0, 1000.0]);
+        let result = a.log10().unwrap();
+        let expected = [0.0, 1.0, 2.0, 3.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "log10 mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_log10_one() {
+        let a = Vector::from_slice(&[1.0, 1.0, 1.0]);
+        let result = a.log10().unwrap();
+        for &val in result.as_slice() {
+            assert!((val - 0.0).abs() < 1e-5, "log10(1) should be 0.0");
+        }
+    }
+
+    #[test]
+    fn test_log10_fractional() {
+        let a = Vector::from_slice(&[0.1, 0.01, 0.001]);
+        let result = a.log10().unwrap();
+        let expected = [-1.0, -2.0, -3.0];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "log10 fractional mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_log10_non_powers() {
+        let a = Vector::from_slice(&[2.0, 5.0, 50.0]);
+        let result = a.log10().unwrap();
+        let expected = [2.0f32.log10(), 5.0f32.log10(), 50.0f32.log10()];
+        for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (res - exp).abs() < 1e-5,
+                "log10 non-powers mismatch at {}: {} != {}",
+                i,
+                res,
+                exp
+            );
+        }
+    }
+
+    #[test]
+    fn test_log10_empty() {
+        let a: Vector<f32> = Vector::from_slice(&[]);
+        let result = a.log10().unwrap();
         assert_eq!(result.len(), 0);
     }
 
@@ -9607,6 +9813,106 @@ mod property_tests {
                     (ln_prod_val - sum_val).abs() < tolerance,
                     "ln(a*b) = ln(a)+ln(b) failed at {}: {} != {}, diff = {}",
                     i, ln_prod_val, sum_val, (ln_prod_val - sum_val).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: log2() correctness vs f32::log2()
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_log2_correctness(
+            a in prop::collection::vec(0.001f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.log2().unwrap();
+
+            for (i, (&a_val, &log2_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.log2();
+
+                prop_assert!(
+                    (log2_val - expected).abs() < 1e-4,
+                    "log2 correctness failed at {}: {} != {}, diff = {}",
+                    i, log2_val, expected, (log2_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: log2(2^n) = n (power of 2 property)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50))]
+
+        #[test]
+        fn test_log2_power_property(
+            n in prop::collection::vec(-10i32..10, 1..50)
+        ) {
+            let powers: Vec<f32> = n.iter().map(|&exp| 2.0f32.powi(exp)).collect();
+            let va = Vector::from_slice(&powers);
+            let result = va.log2().unwrap();
+
+            for (&exp_val, &log2_val) in n.iter()
+                .zip(result.as_slice().iter()) {
+                let expected = exp_val as f32;
+
+                prop_assert!(
+                    (log2_val - expected).abs() < 1e-4,
+                    "log2(2^{}) should be {}, got {}, diff = {}",
+                    exp_val, expected, log2_val, (log2_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: log10() correctness vs f32::log10()
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn test_log10_correctness(
+            a in prop::collection::vec(0.001f32..1000.0, 1..100)
+        ) {
+            let va = Vector::from_slice(&a);
+            let result = va.log10().unwrap();
+
+            for (i, (&a_val, &log10_val)) in a.iter()
+                .zip(result.as_slice().iter())
+                .enumerate() {
+                let expected = a_val.log10();
+
+                prop_assert!(
+                    (log10_val - expected).abs() < 1e-4,
+                    "log10 correctness failed at {}: {} != {}, diff = {}",
+                    i, log10_val, expected, (log10_val - expected).abs()
+                );
+            }
+        }
+    }
+
+    // Property test: log10(10^n) = n (power of 10 property)
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(50))]
+
+        #[test]
+        fn test_log10_power_property(
+            n in prop::collection::vec(-3i32..6, 1..30)
+        ) {
+            let powers: Vec<f32> = n.iter().map(|&exp| 10.0f32.powi(exp)).collect();
+            let va = Vector::from_slice(&powers);
+            let result = va.log10().unwrap();
+
+            for (&exp_val, &log10_val) in n.iter()
+                .zip(result.as_slice().iter()) {
+                let expected = exp_val as f32;
+
+                prop_assert!(
+                    (log10_val - expected).abs() < 1e-3,
+                    "log10(10^{}) should be {}, got {}, diff = {}",
+                    exp_val, expected, log10_val, (log10_val - expected).abs()
                 );
             }
         }
