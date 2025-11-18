@@ -724,4 +724,84 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_sse2_sub_matches_scalar() {
+        let a = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0];
+        let b = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+
+        let mut scalar_result = [0.0; 7];
+        let mut sse2_result = [0.0; 7];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::sub(&a, &b, &mut scalar_result);
+            Sse2Backend::sub(&a, &b, &mut sse2_result);
+        }
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_div_matches_scalar() {
+        let a = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0];
+        let b = [2.0, 4.0, 5.0, 8.0, 10.0, 12.0, 14.0];
+
+        let mut scalar_result = [0.0; 7];
+        let mut sse2_result = [0.0; 7];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::div(&a, &b, &mut scalar_result);
+            Sse2Backend::div(&a, &b, &mut sse2_result);
+        }
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_scale_matches_scalar() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let scalar = 2.5;
+
+        let mut scalar_result = [0.0; 7];
+        let mut sse2_result = [0.0; 7];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::scale(&a, scalar, &mut scalar_result);
+            Sse2Backend::scale(&a, scalar, &mut sse2_result);
+        }
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_clamp_matches_scalar() {
+        let a = [1.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0];
+
+        let mut scalar_result = [0.0; 7];
+        let mut sse2_result = [0.0; 7];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::clamp(&a, 5.0, 20.0, &mut scalar_result);
+            Sse2Backend::clamp(&a, 5.0, 20.0, &mut sse2_result);
+        }
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_fma_matches_scalar() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let b = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let c = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0];
+
+        let mut scalar_result = [0.0; 7];
+        let mut sse2_result = [0.0; 7];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::fma(&a, &b, &c, &mut scalar_result);
+            Sse2Backend::fma(&a, &b, &c, &mut sse2_result);
+        }
+
+        assert_eq!(scalar_result, sse2_result);
+    }
 }
