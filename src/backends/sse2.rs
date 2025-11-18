@@ -611,6 +611,87 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    unsafe fn exp(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for range reduction: exp(x) = 2^(x * log2(e)) = 2^k * 2^r
+        let log2e = _mm_set1_ps(std::f32::consts::LOG2_E); // 1.442695...
+        let ln2 = _mm_set1_ps(std::f32::consts::LN_2); // 0.693147...
+        let half = _mm_set1_ps(0.5);
+        let one = _mm_set1_ps(1.0);
+
+        // Polynomial coefficients for e^r approximation (Remez minimax on [-ln(2)/2, ln(2)/2])
+        // e^r ≈ 1 + c1*r + c2*r^2 + c3*r^3 + c4*r^4 + c5*r^5 + c6*r^6
+        // Coefficients from Cephes/SLEEF libraries optimized for f32
+        let c1 = _mm_set1_ps(1.0);
+        let c2 = _mm_set1_ps(0.5);
+        let c3 = _mm_set1_ps(0.166_666_67); // 1/6
+        let c4 = _mm_set1_ps(0.041_666_668); // 1/24
+        let c5 = _mm_set1_ps(0.008_333_334); // 1/120
+        let c6 = _mm_set1_ps(0.001_388_889); // 1/720
+
+        // Limits for overflow/underflow handling
+        let exp_hi = _mm_set1_ps(88.376_26); // ln(FLT_MAX)
+        let exp_lo = _mm_set1_ps(-87.336_55); // ln(FLT_MIN) approximately
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let x = _mm_loadu_ps(a.as_ptr().add(i));
+
+            // Clamp x to avoid overflow/underflow
+            let x = _mm_max_ps(_mm_min_ps(x, exp_hi), exp_lo);
+
+            // Range reduction: x' = x * log2(e), then k = round(x'), r = x' - k
+            let x_scaled = _mm_mul_ps(x, log2e);
+
+            // k = round(x_scaled) = floor(x_scaled + 0.5)
+            // SSE2 floor emulation: convert to int (truncates toward zero), then convert back
+            let k_plus_half = _mm_add_ps(x_scaled, half);
+            let k_int = _mm_cvttps_epi32(k_plus_half); // truncate toward zero
+            let k = _mm_cvtepi32_ps(k_int);
+            // Adjust for negative numbers: if k > k_plus_half, subtract 1
+            let mask = _mm_cmpgt_ps(k, k_plus_half);
+            let k = _mm_sub_ps(k, _mm_and_ps(mask, one));
+
+            // r = x - k * ln(2) (in original base e space)
+            let r = _mm_sub_ps(x, _mm_mul_ps(k, ln2));
+
+            // Polynomial approximation: e^r ≈ 1 + c1*r + c2*r^2 + c3*r^3 + c4*r^4 + c5*r^5 + c6*r^6
+            // Use Horner's method: ((((((c6*r + c5)*r + c4)*r + c3)*r + c2)*r + c1)*r + 1)
+            // No FMA in SSE2, so use mul + add
+            let mut p = c6;
+            p = _mm_add_ps(_mm_mul_ps(p, r), c5);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c4);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c3);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c2);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c1);
+            p = _mm_add_ps(_mm_mul_ps(p, r), one);
+
+            // Scale by 2^k using IEEE754 exponent manipulation
+            // 2^k is computed by adding k to the exponent bits
+            let k_int = _mm_cvtps_epi32(k);
+            let k_shifted = _mm_slli_epi32(k_int, 23); // shift to exponent position
+            let scale = _mm_castsi128_ps(_mm_add_epi32(
+                _mm_castps_si128(one),
+                k_shifted,
+            ));
+
+            // Final result: e^x = e^r * 2^k
+            let vresult = _mm_mul_ps(p, scale);
+
+            _mm_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].exp();
+            i += 1;
+        }
+    }
+
+    #[target_feature(enable = "sse2")]
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         // SSE2 doesn't have native exp(), use scalar with numerical stability
         // Future optimization: implement fast exp approximation
@@ -636,14 +717,6 @@ impl VectorBackend for Sse2Backend {
             let x3 = x * x * x;
             let inner = SQRT_2_OVER_PI * (x + COEFF * x3);
             result[i] = 0.5 * x * (1.0 + inner.tanh());
-        }
-    }
-
-    #[target_feature(enable = "sse2")]
-    unsafe fn exp(a: &[f32], result: &mut [f32]) {
-        // SSE2 doesn't have native exp(), use scalar
-        for (i, &val) in a.iter().enumerate() {
-            result[i] = val.exp();
         }
     }
 

@@ -3101,9 +3101,35 @@ impl Vector<f32> {
     /// - Signal processing: Exponential smoothing, envelope detection
     /// - Numerical methods: Solving differential equations
     pub fn exp(&self) -> Result<Vector<f32>> {
-        let exp_data: Vec<f32> = self.data.iter().map(|x| x.exp()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            unsafe {
+                match self.backend {
+                    Backend::Scalar => ScalarBackend::exp(&self.data, &mut result_data),
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::SSE2 | Backend::AVX => Sse2Backend::exp(&self.data, &mut result_data),
+                    #[cfg(target_arch = "x86_64")]
+                    Backend::AVX2 | Backend::AVX512 => {
+                        Avx2Backend::exp(&self.data, &mut result_data)
+                    }
+                    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                    Backend::NEON => NeonBackend::exp(&self.data, &mut result_data),
+                    #[cfg(target_arch = "wasm32")]
+                    Backend::WASM => WasmBackend::exp(&self.data, &mut result_data),
+                    Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
+                    Backend::Auto => {
+                        // Auto should have been resolved at creation time
+                        return Err(TruenoError::UnsupportedBackend(Backend::Auto));
+                    }
+                    #[allow(unreachable_patterns)]
+                    _ => ScalarBackend::exp(&self.data, &mut result_data),
+                }
+            }
+        }
+
         Ok(Vector {
-            data: exp_data,
+            data: result_data,
             backend: self.backend,
         })
     }

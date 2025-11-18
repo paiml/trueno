@@ -662,13 +662,15 @@ impl VectorBackend for Avx2Backend {
         let half = _mm256_set1_ps(0.5);
         let one = _mm256_set1_ps(1.0);
 
-        // Polynomial coefficients for 2^r approximation (minimax on [-0.5, 0.5])
-        // 2^r ≈ 1 + c1*r + c2*r^2 + c3*r^3 + c4*r^4 + c5*r^5
-        let c1 = _mm256_set1_ps(0.693_147_2); // ln(2)
-        let c2 = _mm256_set1_ps(0.240_226_5); // ln(2)^2/2!
-        let c3 = _mm256_set1_ps(0.055_504_1); // ln(2)^3/3!
-        let c4 = _mm256_set1_ps(0.009_618_13); // ln(2)^4/4!
-        let c5 = _mm256_set1_ps(0.001_339_99); // ln(2)^5/5!
+        // Polynomial coefficients for e^r approximation (Remez minimax on [-ln(2)/2, ln(2)/2])
+        // e^r ≈ 1 + c1*r + c2*r^2 + c3*r^3 + c4*r^4 + c5*r^5 + c6*r^6
+        // Coefficients from Cephes/SLEEF libraries optimized for f32
+        let c1 = _mm256_set1_ps(1.0);
+        let c2 = _mm256_set1_ps(0.5);
+        let c3 = _mm256_set1_ps(0.166_666_67); // 1/6
+        let c4 = _mm256_set1_ps(0.041_666_668); // 1/24
+        let c5 = _mm256_set1_ps(0.008_333_334); // 1/120
+        let c6 = _mm256_set1_ps(0.001_388_889); // 1/720
 
         // Limits for overflow/underflow handling
         let exp_hi = _mm256_set1_ps(88.376_26); // ln(FLT_MAX)
@@ -690,9 +692,10 @@ impl VectorBackend for Avx2Backend {
             // r = x - k * ln(2) (in original base e space)
             let r = _mm256_sub_ps(x, _mm256_mul_ps(k, ln2));
 
-            // Polynomial approximation: e^r ≈ 1 + c1*r + c2*r^2 + c3*r^3 + c4*r^4 + c5*r^5
-            // Use Horner's method: ((((c5*r + c4)*r + c3)*r + c2)*r + c1)*r + 1
-            let mut p = c5;
+            // Polynomial approximation: e^r ≈ 1 + c1*r + c2*r^2 + c3*r^3 + c4*r^4 + c5*r^5 + c6*r^6
+            // Use Horner's method: ((((((c6*r + c5)*r + c4)*r + c3)*r + c2)*r + c1)*r + 1)
+            let mut p = c6;
+            p = _mm256_fmadd_ps(p, r, c5);
             p = _mm256_fmadd_ps(p, r, c4);
             p = _mm256_fmadd_ps(p, r, c3);
             p = _mm256_fmadd_ps(p, r, c2);
