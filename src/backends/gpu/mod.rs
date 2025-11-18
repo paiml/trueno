@@ -664,4 +664,136 @@ mod tests {
             result
         );
     }
+
+    #[test]
+    fn test_gpu_relu_matches_scalar() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+        use crate::backends::VectorBackend;
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![-3.0, -1.0, 0.0, 1.0, 3.0, -2.5, 2.5, 0.5];
+
+        let gpu_result = gpu.relu(&input);
+        let mut scalar_result = vec![0.0; input.len()];
+        unsafe {
+            ScalarBackend::relu(&input, &mut scalar_result);
+        }
+
+        if let Ok(gpu_r) = gpu_result {
+            for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
+                assert!(
+                    (g - s).abs() < 1e-4,
+                    "GPU vs Scalar relu mismatch: gpu={}, scalar={}",
+                    g,
+                    s
+                );
+            }
+        } else {
+            eprintln!("GPU relu failed: {:?}", gpu_result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_sigmoid_matches_scalar() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+        use crate::backends::VectorBackend;
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![-3.0, -1.0, 0.0, 1.0, 3.0, -2.5, 2.5, 0.5];
+
+        let gpu_result = gpu.sigmoid(&input);
+        let mut scalar_result = vec![0.0; input.len()];
+        unsafe {
+            ScalarBackend::sigmoid(&input, &mut scalar_result);
+        }
+
+        if let Ok(gpu_r) = gpu_result {
+            for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
+                assert!(
+                    (g - s).abs() < 1e-3,
+                    "GPU vs Scalar sigmoid mismatch: gpu={}, scalar={}",
+                    g,
+                    s
+                );
+            }
+        } else {
+            eprintln!("GPU sigmoid failed: {:?}", gpu_result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_gelu_matches_scalar() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+        use crate::backends::VectorBackend;
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![-2.0, -1.0, 0.0, 1.0, 2.0, -0.5, 0.5, 1.5];
+
+        let gpu_result = gpu.gelu(&input);
+        let mut scalar_result = vec![0.0; input.len()];
+        unsafe {
+            ScalarBackend::gelu(&input, &mut scalar_result);
+        }
+
+        if let Ok(gpu_r) = gpu_result {
+            for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
+                assert!(
+                    (g - s).abs() < 1e-2,
+                    "GPU vs Scalar gelu mismatch: gpu={}, scalar={}",
+                    g,
+                    s
+                );
+            }
+        } else {
+            eprintln!("GPU gelu failed: {:?}", gpu_result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_swish_matches_scalar() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+        use crate::backends::VectorBackend;
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![-3.0, -1.0, 0.0, 1.0, 3.0, -2.5, 2.5, 0.5];
+
+        let gpu_result = gpu.swish(&input);
+        let mut scalar_result = vec![0.0; input.len()];
+        unsafe {
+            ScalarBackend::swish(&input, &mut scalar_result);
+        }
+
+        if let Ok(gpu_r) = gpu_result {
+            for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
+                assert!(
+                    (g - s).abs() < 1e-3,
+                    "GPU vs Scalar swish mismatch: gpu={}, scalar={}",
+                    g,
+                    s
+                );
+            }
+        } else {
+            eprintln!("GPU swish failed: {:?}", gpu_result);
+        }
+    }
 }
