@@ -373,4 +373,49 @@ mod tests {
         }
         assert_eq!(result, [0.0, 0.0, 0.0, 1.0, 3.0]);
     }
+
+    #[test]
+    fn test_scalar_sigmoid() {
+        let a = [-51.0, -1.0, 0.0, 1.0, 51.0];
+        let mut result = [0.0; 5];
+        unsafe {
+            ScalarBackend::sigmoid(&a, &mut result);
+        }
+        // sigmoid(-51) = 0, sigmoid(0) = 0.5, sigmoid(51) = 1
+        assert_eq!(result[0], 0.0); // Clamped to 0 for numerical stability
+        assert!((result[1] - 0.2689).abs() < 0.001); // sigmoid(-1)
+        assert_eq!(result[2], 0.5); // sigmoid(0)
+        assert!((result[3] - 0.7311).abs() < 0.001); // sigmoid(1)
+        assert_eq!(result[4], 1.0); // Clamped to 1 for numerical stability
+    }
+
+    #[test]
+    fn test_scalar_gelu() {
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut result = [0.0; 5];
+        unsafe {
+            ScalarBackend::gelu(&a, &mut result);
+        }
+        // GELU approximation values
+        assert!((result[0] - (-0.0454)).abs() < 0.01); // gelu(-2)
+        assert!((result[1] - (-0.1588)).abs() < 0.01); // gelu(-1)
+        assert_eq!(result[2], 0.0); // gelu(0) = 0
+        assert!((result[3] - 0.8413).abs() < 0.01); // gelu(1)
+        assert!((result[4] - 1.9545).abs() < 0.01); // gelu(2)
+    }
+
+    #[test]
+    fn test_scalar_swish() {
+        let a = [-51.0, -1.0, 0.0, 1.0, 51.0];
+        let mut result = [0.0; 5];
+        unsafe {
+            ScalarBackend::swish(&a, &mut result);
+        }
+        // swish(x) = x * sigmoid(x)
+        assert_eq!(result[0], 0.0); // x * 0 = 0 (numerical stability)
+        assert!((result[1] - (-0.2689)).abs() < 0.001); // -1 * sigmoid(-1)
+        assert_eq!(result[2], 0.0); // 0 * sigmoid(0) = 0
+        assert!((result[3] - 0.7311).abs() < 0.001); // 1 * sigmoid(1)
+        assert_eq!(result[4], 51.0); // x * 1 = x (numerical stability)
+    }
 }
