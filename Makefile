@@ -203,9 +203,12 @@ bench-compare: ## Compare current performance vs baseline
 		echo "❌ No baseline found. Run 'make bench-save-baseline' first."; \
 		exit 1; \
 	fi
-	@echo "⚠️  Regression detection not yet implemented (requires benchmark parsing script)"
-	@echo "    Baseline: .performance-baselines/baseline-current.txt"
-	@echo "    Compare manually or implement extraction script"
+	@echo "Running benchmarks..."
+	@cargo bench --bench gpu_ops --all-features --no-fail-fast 2>&1 | tee /tmp/bench-current.txt
+	@echo "Comparing against baseline..."
+	@python3 scripts/check_regression.py \
+		--baseline .performance-baselines/baseline-current.txt \
+		--current /tmp/bench-current.txt
 
 # Profiling with Renacer
 profile: ## Profile benchmarks with Renacer (syscall tracing)
