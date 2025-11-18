@@ -207,4 +207,15 @@ pub trait VectorBackend {
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
     unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]);
+
+    /// ReLU activation: result\[i\] = max(0, a\[i\])
+    ///
+    /// Rectified Linear Unit - the most common activation function in neural networks.
+    /// Sets negative values to zero, passes positive values unchanged.
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn relu(a: &[f32], result: &mut [f32]);
 }

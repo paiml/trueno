@@ -1517,10 +1517,49 @@ impl Vector<f32> {
             }
         }
 
-        // Scalar fallback: Element-wise max(0, x)
-        let data: Vec<f32> = self.data.iter().map(|&x| x.max(0.0)).collect();
+        let mut result = vec![0.0; self.len()];
 
-        Ok(Vector::from_slice(&data))
+        // Dispatch to appropriate SIMD backend
+        unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::relu(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => {
+                    Sse2Backend::relu(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => {
+                    Avx2Backend::relu(&self.data, &mut result);
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::relu(&self.data, &mut result);
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => {
+                    NeonBackend::relu(&self.data, &mut result);
+                }
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => {
+                    ScalarBackend::relu(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => {
+                    WasmBackend::relu(&self.data, &mut result);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => {
+                    ScalarBackend::relu(&self.data, &mut result);
+                }
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::relu(&self.data, &mut result);
+                }
+            }
+        }
+
+        Ok(Vector::from_slice(&result))
     }
 
     /// Sigmoid (logistic) activation function

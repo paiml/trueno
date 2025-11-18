@@ -161,6 +161,12 @@ impl VectorBackend for ScalarBackend {
             result[i] = a_val * b_val + c_val;
         }
     }
+
+    unsafe fn relu(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = if val > 0.0 { val } else { 0.0 };
+        }
+    }
 }
 
 #[cfg(test)]
@@ -317,5 +323,15 @@ mod tests {
         }
         // FMA: a*b + c
         assert_eq!(result, [7.0, 12.0, 19.0]); // [1*2+5, 2*3+6, 3*4+7]
+    }
+
+    #[test]
+    fn test_scalar_relu() {
+        let a = [-3.0, -1.0, 0.0, 1.0, 3.0];
+        let mut result = [0.0; 5];
+        unsafe {
+            ScalarBackend::relu(&a, &mut result);
+        }
+        assert_eq!(result, [0.0, 0.0, 0.0, 1.0, 3.0]);
     }
 }
