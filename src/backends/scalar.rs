@@ -167,6 +167,19 @@ impl VectorBackend for ScalarBackend {
             result[i] = if val > 0.0 { val } else { 0.0 };
         }
     }
+
+    unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            // Handle extreme values for numerical stability
+            result[i] = if val < -50.0 {
+                0.0 // exp(-x) would overflow, but sigmoid approaches 0
+            } else if val > 50.0 {
+                1.0 // exp(-x) underflows to 0, sigmoid approaches 1
+            } else {
+                1.0 / (1.0 + (-val).exp())
+            };
+        }
+    }
 }
 
 #[cfg(test)]

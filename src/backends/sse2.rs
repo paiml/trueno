@@ -506,6 +506,21 @@ impl VectorBackend for Sse2Backend {
             i += 1;
         }
     }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
+        // SSE2 doesn't have native exp(), use scalar with numerical stability
+        // Future optimization: implement fast exp approximation
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = if val < -50.0 {
+                0.0
+            } else if val > 50.0 {
+                1.0
+            } else {
+                1.0 / (1.0 + (-val).exp())
+            };
+        }
+    }
 }
 
 #[cfg(test)]
