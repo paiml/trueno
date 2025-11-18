@@ -678,4 +678,50 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_sse2_gelu_matches_scalar() {
+        // Verify SSE2 gelu produces same results as scalar
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+
+        let mut scalar_result = [0.0; 5];
+        let mut sse2_result = [0.0; 5];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::gelu(&a, &mut scalar_result);
+            Sse2Backend::gelu(&a, &mut sse2_result);
+        }
+
+        for (s, e) in scalar_result.iter().zip(sse2_result.iter()) {
+            assert!(
+                (s - e).abs() < 1e-5,
+                "gelu mismatch: scalar={}, sse2={}",
+                s,
+                e
+            );
+        }
+    }
+
+    #[test]
+    fn test_sse2_swish_matches_scalar() {
+        // Verify SSE2 swish produces same results as scalar
+        let a = [-10.0, -1.0, 0.0, 1.0, 10.0];
+
+        let mut scalar_result = [0.0; 5];
+        let mut sse2_result = [0.0; 5];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::swish(&a, &mut scalar_result);
+            Sse2Backend::swish(&a, &mut sse2_result);
+        }
+
+        for (s, e) in scalar_result.iter().zip(sse2_result.iter()) {
+            assert!(
+                (s - e).abs() < 1e-5,
+                "swish mismatch: scalar={}, sse2={}",
+                s,
+                e
+            );
+        }
+    }
 }

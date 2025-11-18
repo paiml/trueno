@@ -823,4 +823,62 @@ mod tests {
             );
         }
     }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_gelu_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut avx2_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+
+        unsafe {
+            Avx2Backend::gelu(&a, &mut avx2_result);
+            ScalarBackend::gelu(&a, &mut scalar_result);
+        }
+
+        for (avx2, scalar) in avx2_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (avx2 - scalar).abs() < 1e-5,
+                "gelu mismatch: avx2={}, scalar={}",
+                avx2,
+                scalar
+            );
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_swish_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-10.0, -1.0, 0.0, 1.0, 10.0];
+        let mut avx2_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+
+        unsafe {
+            Avx2Backend::swish(&a, &mut avx2_result);
+            ScalarBackend::swish(&a, &mut scalar_result);
+        }
+
+        for (avx2, scalar) in avx2_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (avx2 - scalar).abs() < 1e-5,
+                "swish mismatch: avx2={}, scalar={}",
+                avx2,
+                scalar
+            );
+        }
+    }
 }
