@@ -629,4 +629,53 @@ mod tests {
 
         assert_eq!(scalar_result, sse2_result);
     }
+
+    #[test]
+    fn test_sse2_relu() {
+        let a = [-3.0, -1.0, 0.0, 1.0, 3.0, -2.0, 2.0, -0.5];
+        let mut result = [0.0; 8];
+        unsafe {
+            Sse2Backend::relu(&a, &mut result);
+        }
+        assert_eq!(result, [0.0, 0.0, 0.0, 1.0, 3.0, 0.0, 2.0, 0.0]);
+    }
+
+    #[test]
+    fn test_sse2_relu_matches_scalar() {
+        // Verify SSE2 relu produces same results as scalar
+        let a = [-5.0, -3.0, -1.0, 0.0, 1.0, 3.0, 5.0];
+
+        let mut scalar_result = [0.0; 7];
+        let mut sse2_result = [0.0; 7];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::relu(&a, &mut scalar_result);
+            Sse2Backend::relu(&a, &mut sse2_result);
+        }
+
+        assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_sigmoid_matches_scalar() {
+        // Verify SSE2 sigmoid produces same results as scalar
+        let a = [-10.0, -1.0, 0.0, 1.0, 10.0];
+
+        let mut scalar_result = [0.0; 5];
+        let mut sse2_result = [0.0; 5];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::sigmoid(&a, &mut scalar_result);
+            Sse2Backend::sigmoid(&a, &mut sse2_result);
+        }
+
+        for (s, e) in scalar_result.iter().zip(sse2_result.iter()) {
+            assert!(
+                (s - e).abs() < 1e-6,
+                "sigmoid mismatch: scalar={}, sse2={}",
+                s,
+                e
+            );
+        }
+    }
 }
