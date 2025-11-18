@@ -378,6 +378,138 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    unsafe fn norm_linf(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for max absolute value
+        let mut vmax = f32x4_splat(0.0);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+
+            // Compute absolute value and track max
+            let abs_va = f32x4_abs(va);
+            vmax = f32x4_max(vmax, abs_va);
+
+            i += 4;
+        }
+
+        // Horizontal max: find maximum across all 4 lanes
+        let mut result = f32x4_extract_lane::<0>(vmax)
+            .max(f32x4_extract_lane::<1>(vmax))
+            .max(f32x4_extract_lane::<2>(vmax))
+            .max(f32x4_extract_lane::<3>(vmax));
+
+        // Handle remaining elements
+        for &val in &a[i..] {
+            let abs_val = val.abs();
+            if abs_val > result {
+                result = abs_val;
+            }
+        }
+
+        result
+    }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn abs(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let va = v128_load(a.as_ptr().add(i) as *const v128);
+            let vresult = f32x4_abs(va);
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i].abs();
+            i += 1;
+        }
+    }
+
+    #[target_feature(enable = "simd128")]
+    unsafe fn exp(a: &[f32], result: &mut [f32]) {
+        // WASM SIMD128 exp using range reduction: exp(x) = 2^k * e^r
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants
+        let log2e = f32x4_splat(std::f32::consts::LOG2_E);
+        let ln2 = f32x4_splat(std::f32::consts::LN_2);
+        let half = f32x4_splat(0.5);
+        let one = f32x4_splat(1.0);
+
+        // Taylor series coefficients
+        let c1 = f32x4_splat(1.0);
+        let c2 = f32x4_splat(0.5);
+        let c3 = f32x4_splat(0.166_666_67);
+        let c4 = f32x4_splat(0.041_666_668);
+        let c5 = f32x4_splat(0.008_333_334);
+        let c6 = f32x4_splat(0.001_388_889);
+
+        // Limits
+        let exp_hi = f32x4_splat(88.376_26);
+        let exp_lo = f32x4_splat(-87.336_55);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let x = v128_load(a.as_ptr().add(i) as *const v128);
+
+            // Clamp to avoid overflow/underflow
+            let x = f32x4_pmin(f32x4_pmax(x, exp_lo), exp_hi);
+
+            // Range reduction
+            let x_scaled = f32x4_mul(x, log2e);
+
+            // k = floor(x_scaled + 0.5)
+            let k = f32x4_floor(f32x4_add(x_scaled, half));
+            let r = f32x4_sub(x, f32x4_mul(k, ln2));
+
+            // Polynomial approximation using Horner's method
+            let mut p = c6;
+            p = f32x4_add(f32x4_mul(p, r), c5);
+            p = f32x4_add(f32x4_mul(p, r), c4);
+            p = f32x4_add(f32x4_mul(p, r), c3);
+            p = f32x4_add(f32x4_mul(p, r), c2);
+            p = f32x4_add(f32x4_mul(p, r), c1);
+            p = f32x4_add(f32x4_mul(p, r), one);
+
+            // Scale by 2^k using IEEE754 exponent manipulation
+            let k_int = i32x4_trunc_sat_f32x4(k);
+            let k_shifted = i32x4_shl(k_int, 23);
+            let one_bits = i32x4_splat(0x3f80_0000_i32); // 1.0f32 as bits
+            let scale = v128_bitselect(
+                i32x4_add(one_bits, k_shifted),
+                one_bits,
+                i32x4_ne(k_int, i32x4_splat(0)),
+            );
+            // Simpler approach: just add k_shifted to the one bits
+            let scale = i32x4_add(one_bits, k_shifted);
+
+            let vresult = f32x4_mul(p, scale);
+
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, vresult);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].exp();
+            i += 1;
+        }
+    }
+
+    #[target_feature(enable = "simd128")]
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
