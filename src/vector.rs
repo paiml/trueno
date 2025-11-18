@@ -2107,7 +2107,7 @@ impl Vector<f32> {
     ///
     /// // Mish is smooth and self-gated
     /// assert!(result.as_slice()[0] < 0.0); // Small negative output for negative inputs
-    /// assert!(result.as_slice()[2] > 0.0); // mish(0) is small positive
+    /// assert!(result.as_slice()[2].abs() < 1e-5); // mish(0) = 0
     /// assert!(result.as_slice()[4] > 1.5); // Large positive → near linear
     /// ```
     ///
