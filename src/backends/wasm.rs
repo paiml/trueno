@@ -640,8 +640,61 @@ impl VectorBackend for WasmBackend {
 
     #[target_feature(enable = "simd128")]
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
-        // WASM SIMD128 doesn't have native exp(), use scalar with numerical stability
-        for (i, &val) in a.iter().enumerate() {
+        // sigmoid(x) = 1 / (1 + exp(-x))
+        // SIMD implementation using range reduction for exp
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for exp(-x) computation
+        let log2e = f32x4_splat(std::f32::consts::LOG2_E);
+        let ln2 = f32x4_splat(std::f32::consts::LN_2);
+        let one = f32x4_splat(1.0);
+        let half = f32x4_splat(0.5);
+
+        // Taylor series coefficients for exp: 1/2!, 1/3!, 1/4!, 1/5!, 1/6!
+        let c1 = f32x4_splat(1.0);
+        let c2 = f32x4_splat(0.5);
+        let c3 = f32x4_splat(0.166_666_67);
+        let c4 = f32x4_splat(0.041_666_668);
+        let c5 = f32x4_splat(0.008_333_334);
+        let c6 = f32x4_splat(0.001_388_889);
+
+        while i + 4 <= len {
+            let x = v128_load(a.as_ptr().add(i) as *const v128);
+            // Compute -x for exp(-x)
+            let neg_x = f32x4_sub(f32x4_splat(0.0), x);
+
+            // Range reduction: exp(x) = 2^k * exp(r)
+            // k = floor(x * log2(e) + 0.5)
+            let kf = f32x4_floor(f32x4_add(f32x4_mul(neg_x, log2e), half));
+            let k = i32x4_trunc_sat_f32x4(kf);
+
+            // r = x - k * ln(2)
+            let r = f32x4_sub(neg_x, f32x4_mul(kf, ln2));
+
+            // Polynomial approximation for exp(r) using Horner's method
+            // exp(r) ≈ 1 + r + r²/2! + r³/3! + r⁴/4! + r⁵/5! + r⁶/6!
+            let mut poly = f32x4_add(c5, f32x4_mul(r, c6));
+            poly = f32x4_add(c4, f32x4_mul(r, poly));
+            poly = f32x4_add(c3, f32x4_mul(r, poly));
+            poly = f32x4_add(c2, f32x4_mul(r, poly));
+            poly = f32x4_add(c1, f32x4_mul(r, poly));
+            poly = f32x4_add(one, f32x4_mul(r, poly));
+
+            // Scale by 2^k using IEEE754 exponent manipulation
+            let k_shifted = i32x4_shl(i32x4_add(k, i32x4_splat(127)), 23);
+            let exp_neg_x = f32x4_mul(poly, k_shifted);
+
+            // sigmoid = 1 / (1 + exp(-x))
+            let sigmoid_result = f32x4_div(one, f32x4_add(one, exp_neg_x));
+
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, sigmoid_result);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar fallback
+        while i < len {
+            let val = a[i];
             result[i] = if val < -50.0 {
                 0.0
             } else if val > 50.0 {
@@ -649,26 +702,134 @@ impl VectorBackend for WasmBackend {
             } else {
                 1.0 / (1.0 + (-val).exp())
             };
+            i += 1;
         }
     }
 
     #[target_feature(enable = "simd128")]
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
-        // WASM SIMD128 doesn't have native tanh(), use scalar
-        const SQRT_2_OVER_PI: f32 = 0.797_884_6;
-        const COEFF: f32 = 0.044715;
+        // gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
+        // tanh(z) = (exp(2z) - 1) / (exp(2z) + 1)
+        let len = a.len();
+        let mut i = 0;
 
-        for (i, &x) in a.iter().enumerate() {
+        // Constants
+        let sqrt_2_over_pi = f32x4_splat(0.797_884_6);
+        let coeff = f32x4_splat(0.044715);
+        let half = f32x4_splat(0.5);
+        let one = f32x4_splat(1.0);
+        let two = f32x4_splat(2.0);
+
+        // exp constants
+        let log2e = f32x4_splat(std::f32::consts::LOG2_E);
+        let ln2 = f32x4_splat(std::f32::consts::LN_2);
+        let c1 = f32x4_splat(1.0);
+        let c2 = f32x4_splat(0.5);
+        let c3 = f32x4_splat(0.166_666_67);
+        let c4 = f32x4_splat(0.041_666_668);
+        let c5 = f32x4_splat(0.008_333_334);
+        let c6 = f32x4_splat(0.001_388_889);
+
+        while i + 4 <= len {
+            let x = v128_load(a.as_ptr().add(i) as *const v128);
+
+            // inner = sqrt(2/π) * (x + 0.044715 * x³)
+            let x2 = f32x4_mul(x, x);
+            let x3 = f32x4_mul(x2, x);
+            let inner = f32x4_mul(sqrt_2_over_pi, f32x4_add(x, f32x4_mul(coeff, x3)));
+
+            // Compute exp(2 * inner) for tanh
+            let z = f32x4_mul(two, inner);
+
+            // Range reduction for exp(z)
+            let kf = f32x4_floor(f32x4_add(f32x4_mul(z, log2e), half));
+            let k = i32x4_trunc_sat_f32x4(kf);
+            let r = f32x4_sub(z, f32x4_mul(kf, ln2));
+
+            // Polynomial approximation for exp(r)
+            let mut poly = f32x4_add(c5, f32x4_mul(r, c6));
+            poly = f32x4_add(c4, f32x4_mul(r, poly));
+            poly = f32x4_add(c3, f32x4_mul(r, poly));
+            poly = f32x4_add(c2, f32x4_mul(r, poly));
+            poly = f32x4_add(c1, f32x4_mul(r, poly));
+            poly = f32x4_add(one, f32x4_mul(r, poly));
+
+            // Scale by 2^k
+            let k_shifted = i32x4_shl(i32x4_add(k, i32x4_splat(127)), 23);
+            let exp_2z = f32x4_mul(poly, k_shifted);
+
+            // tanh = (exp(2z) - 1) / (exp(2z) + 1)
+            let tanh_val = f32x4_div(f32x4_sub(exp_2z, one), f32x4_add(exp_2z, one));
+
+            // gelu = 0.5 * x * (1 + tanh)
+            let gelu_result = f32x4_mul(half, f32x4_mul(x, f32x4_add(one, tanh_val)));
+
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, gelu_result);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar fallback
+        while i < len {
+            let x = a[i];
             let x3 = x * x * x;
-            let inner = SQRT_2_OVER_PI * (x + COEFF * x3);
+            let inner = 0.797_884_6 * (x + 0.044715 * x3);
             result[i] = 0.5 * x * (1.0 + inner.tanh());
+            i += 1;
         }
     }
 
     #[target_feature(enable = "simd128")]
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
-        // WASM SIMD128 doesn't have native exp(), use scalar
-        for (i, &x) in a.iter().enumerate() {
+        // swish(x) = x * sigmoid(x) = x / (1 + exp(-x))
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for exp(-x) computation
+        let log2e = f32x4_splat(std::f32::consts::LOG2_E);
+        let ln2 = f32x4_splat(std::f32::consts::LN_2);
+        let one = f32x4_splat(1.0);
+        let half = f32x4_splat(0.5);
+
+        // Taylor series coefficients
+        let c1 = f32x4_splat(1.0);
+        let c2 = f32x4_splat(0.5);
+        let c3 = f32x4_splat(0.166_666_67);
+        let c4 = f32x4_splat(0.041_666_668);
+        let c5 = f32x4_splat(0.008_333_334);
+        let c6 = f32x4_splat(0.001_388_889);
+
+        while i + 4 <= len {
+            let x = v128_load(a.as_ptr().add(i) as *const v128);
+            // Compute -x for exp(-x)
+            let neg_x = f32x4_sub(f32x4_splat(0.0), x);
+
+            // Range reduction: exp(x) = 2^k * exp(r)
+            let kf = f32x4_floor(f32x4_add(f32x4_mul(neg_x, log2e), half));
+            let k = i32x4_trunc_sat_f32x4(kf);
+            let r = f32x4_sub(neg_x, f32x4_mul(kf, ln2));
+
+            // Polynomial approximation for exp(r)
+            let mut poly = f32x4_add(c5, f32x4_mul(r, c6));
+            poly = f32x4_add(c4, f32x4_mul(r, poly));
+            poly = f32x4_add(c3, f32x4_mul(r, poly));
+            poly = f32x4_add(c2, f32x4_mul(r, poly));
+            poly = f32x4_add(c1, f32x4_mul(r, poly));
+            poly = f32x4_add(one, f32x4_mul(r, poly));
+
+            // Scale by 2^k
+            let k_shifted = i32x4_shl(i32x4_add(k, i32x4_splat(127)), 23);
+            let exp_neg_x = f32x4_mul(poly, k_shifted);
+
+            // swish = x / (1 + exp(-x))
+            let swish_result = f32x4_div(x, f32x4_add(one, exp_neg_x));
+
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, swish_result);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar fallback
+        while i < len {
+            let x = a[i];
             if x < -50.0 {
                 result[i] = 0.0;
             } else if x > 50.0 {
@@ -677,6 +838,7 @@ impl VectorBackend for WasmBackend {
                 let sigmoid = 1.0 / (1.0 + (-x).exp());
                 result[i] = x * sigmoid;
             }
+            i += 1;
         }
     }
 }
