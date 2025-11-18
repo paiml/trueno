@@ -218,6 +218,61 @@ fn bench_div(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark fused multiply-add (a*b+c)
+fn bench_fma(c: &mut Criterion) {
+    let mut group = c.benchmark_group("fma");
+
+    for size in [100, 1000, 10000, 100000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let c_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::Scalar);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::Scalar);
+            let c = Vector::from_slice_with_backend(&c_data, Backend::Scalar);
+
+            bencher.iter(|| {
+                black_box(a.fma(&b, &c).unwrap());
+            });
+        });
+
+        // SSE2 backend (note: SSE2 doesn't have FMA, uses separate mul+add)
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let c_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::SSE2);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::SSE2);
+            let c = Vector::from_slice_with_backend(&c_data, Backend::SSE2);
+
+            bencher.iter(|| {
+                black_box(a.fma(&b, &c).unwrap());
+            });
+        });
+
+        // AVX2 backend (uses hardware FMA instruction)
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let c_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::AVX2);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::AVX2);
+            let c = Vector::from_slice_with_backend(&c_data, Backend::AVX2);
+
+            bencher.iter(|| {
+                black_box(a.fma(&b, &c).unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 /// Benchmark dot product
 fn bench_dot(c: &mut Criterion) {
     let mut group = c.benchmark_group("dot");
@@ -777,6 +832,7 @@ criterion_group!(
     bench_sub,
     bench_mul,
     bench_div,
+    bench_fma,
     bench_dot,
     bench_sum,
     bench_max,
