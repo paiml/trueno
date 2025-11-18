@@ -847,7 +847,7 @@ mod tests {
 
         if let Ok(output) = result {
             // Expected: max(negative_slope * x, x)
-            let expected = vec![-0.03, -0.01, 0.0, 1.0, 3.0];
+            let expected = [-0.03, -0.01, 0.0, 1.0, 3.0];
             for (r, e) in output.iter().zip(expected.iter()) {
                 assert!(
                     (r - e).abs() < 1e-4,
