@@ -136,6 +136,21 @@ impl VectorBackend for ScalarBackend {
         sum
     }
 
+    unsafe fn norm_linf(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let mut max_val = 0.0_f32;
+        for &val in a {
+            let abs_val = val.abs();
+            if abs_val > max_val {
+                max_val = abs_val;
+            }
+        }
+        max_val
+    }
+
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         for (i, &val) in a.iter().enumerate() {
             result[i] = val * scalar;
