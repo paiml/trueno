@@ -283,4 +283,16 @@ pub trait VectorBackend {
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
     unsafe fn swish(a: &[f32], result: &mut [f32]);
+
+    /// Hyperbolic tangent activation: result\[i\] = tanh(a\[i\]) = (exp(2x) - 1) / (exp(2x) + 1)
+    ///
+    /// Hyperbolic tangent - maps inputs to (-1, 1) range.
+    /// Classic activation function from early neural networks.
+    /// Used in RNNs, LSTMs, and as smooth alternative to ReLU.
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn tanh(a: &[f32], result: &mut [f32]);
 }

@@ -672,10 +672,7 @@ impl VectorBackend for Sse2Backend {
             // 2^k is computed by adding k to the exponent bits
             let k_int = _mm_cvtps_epi32(k);
             let k_shifted = _mm_slli_epi32(k_int, 23); // shift to exponent position
-            let scale = _mm_castsi128_ps(_mm_add_epi32(
-                _mm_castps_si128(one),
-                k_shifted,
-            ));
+            let scale = _mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(one), k_shifted));
 
             // Final result: e^x = e^r * 2^k
             let vresult = _mm_mul_ps(p, scale);
@@ -953,6 +950,93 @@ impl VectorBackend for Sse2Backend {
                 x
             } else {
                 x / (1.0 + (-x).exp())
+            };
+            i += 1;
+        }
+    }
+
+    #[target_feature(enable = "sse2")]
+    unsafe fn tanh(a: &[f32], result: &mut [f32]) {
+        // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
+        // Use SIMD exp approximation with range reduction
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for exp(2x) computation
+        let log2e = _mm_set1_ps(std::f32::consts::LOG2_E);
+        let ln2 = _mm_set1_ps(std::f32::consts::LN_2);
+        let half = _mm_set1_ps(0.5);
+        let one = _mm_set1_ps(1.0);
+        let two = _mm_set1_ps(2.0);
+
+        // Taylor series coefficients for e^r
+        let c1 = _mm_set1_ps(1.0);
+        let c2 = _mm_set1_ps(0.5);
+        let c3 = _mm_set1_ps(0.166_666_67);
+        let c4 = _mm_set1_ps(0.041_666_668);
+        let c5 = _mm_set1_ps(0.008_333_334);
+        let c6 = _mm_set1_ps(0.001_388_889);
+
+        // Limits for overflow/underflow
+        let exp_hi = _mm_set1_ps(88.376_26);
+        let exp_lo = _mm_set1_ps(-87.336_55);
+
+        // Process 4 elements at a time
+        while i + 4 <= len {
+            let x = _mm_loadu_ps(a.as_ptr().add(i));
+
+            // Compute 2x for exp(2x)
+            let two_x = _mm_mul_ps(two, x);
+
+            // Clamp to avoid overflow/underflow
+            let two_x = _mm_max_ps(_mm_min_ps(two_x, exp_hi), exp_lo);
+
+            // Range reduction: exp(2x) computation
+            let x_scaled = _mm_mul_ps(two_x, log2e);
+
+            // SSE2 floor emulation
+            let k_plus_half = _mm_add_ps(x_scaled, half);
+            let k_int = _mm_cvttps_epi32(k_plus_half);
+            let k = _mm_cvtepi32_ps(k_int);
+            let mask = _mm_cmpgt_ps(k, k_plus_half);
+            let k = _mm_sub_ps(k, _mm_and_ps(mask, one));
+
+            let r = _mm_sub_ps(two_x, _mm_mul_ps(k, ln2));
+
+            // Polynomial approximation using Horner's method (no FMA in SSE2)
+            let mut p = c6;
+            p = _mm_add_ps(_mm_mul_ps(p, r), c5);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c4);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c3);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c2);
+            p = _mm_add_ps(_mm_mul_ps(p, r), c1);
+            p = _mm_add_ps(_mm_mul_ps(p, r), one);
+
+            // Scale by 2^k
+            let k_int = _mm_cvtps_epi32(k);
+            let k_shifted = _mm_slli_epi32(k_int, 23);
+            let scale = _mm_castsi128_ps(_mm_add_epi32(_mm_castps_si128(one), k_shifted));
+            let exp_2x = _mm_mul_ps(p, scale);
+
+            // tanh = (exp(2x) - 1) / (exp(2x) + 1)
+            let tanh_numer = _mm_sub_ps(exp_2x, one);
+            let tanh_denom = _mm_add_ps(exp_2x, one);
+            let tanh_result = _mm_div_ps(tanh_numer, tanh_denom);
+
+            _mm_storeu_ps(result.as_mut_ptr().add(i), tanh_result);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            let x = a[i];
+            result[i] = if x < -30.0 {
+                -1.0
+            } else if x > 30.0 {
+                1.0
+            } else {
+                let exp_2x = (2.0 * x).exp();
+                (exp_2x - 1.0) / (exp_2x + 1.0)
             };
             i += 1;
         }
@@ -1356,5 +1440,28 @@ mod tests {
         let sse2_result = unsafe { Sse2Backend::min(&a) };
 
         assert_eq!(scalar_result, sse2_result);
+    }
+
+    #[test]
+    fn test_sse2_tanh_matches_scalar() {
+        // Verify SSE2 tanh produces same results as scalar
+        let a = [-10.0, -1.0, 0.0, 1.0, 10.0];
+
+        let mut scalar_result = [0.0; 5];
+        let mut sse2_result = [0.0; 5];
+
+        unsafe {
+            super::super::scalar::ScalarBackend::tanh(&a, &mut scalar_result);
+            Sse2Backend::tanh(&a, &mut sse2_result);
+        }
+
+        for (s, e) in scalar_result.iter().zip(sse2_result.iter()) {
+            assert!(
+                (s - e).abs() < 1e-5,
+                "tanh mismatch: scalar={}, sse2={}",
+                s,
+                e
+            );
+        }
     }
 }
