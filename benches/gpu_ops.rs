@@ -107,11 +107,7 @@ fn bench_gpu_dot(c: &mut Criterion) {
             let data_b = generate_test_data(size);
 
             bencher.iter(|| {
-                let result: f32 = data_a
-                    .iter()
-                    .zip(data_b.iter())
-                    .map(|(a, b)| a * b)
-                    .sum();
+                let result: f32 = data_a.iter().zip(data_b.iter()).map(|(a, b)| a * b).sum();
                 black_box(result);
             });
         });
@@ -396,10 +392,7 @@ fn bench_gpu_sigmoid(c: &mut Criterion) {
                 .collect();
 
             bencher.iter(|| {
-                let result: Vec<f32> = data
-                    .iter()
-                    .map(|&x| 1.0 / (1.0 + (-x).exp()))
-                    .collect();
+                let result: Vec<f32> = data.iter().map(|&x| 1.0 / (1.0 + (-x).exp())).collect();
                 black_box(result);
             });
         });
@@ -491,10 +484,7 @@ fn bench_gpu_swish(c: &mut Criterion) {
                 .collect();
 
             bencher.iter(|| {
-                let result: Vec<f32> = data
-                    .iter()
-                    .map(|&x| x / (1.0 + (-x).exp()))
-                    .collect();
+                let result: Vec<f32> = data.iter().map(|&x| x / (1.0 + (-x).exp())).collect();
                 black_box(result);
             });
         });

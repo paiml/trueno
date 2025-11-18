@@ -30,3 +30,5 @@ lcov.info
 .performance-baselines/bench-latest.txt
 .performance-baselines/baseline-current.txt
 .kaizen/
+lcov.info
+scripts/__pycache__/
