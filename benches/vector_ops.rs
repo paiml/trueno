@@ -415,6 +415,135 @@ fn bench_clip(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark sigmoid activation function
+fn bench_sigmoid(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sigmoid");
+
+    // Sigmoid requires exp() - test up to 100K
+    for size in [100, 1000, 10000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Generate data with mix of positive and negative values
+        let data: Vec<f32> = (0..*size)
+            .map(|i| (i as f32) * 0.1 - (*size as f32) * 0.05)
+            .collect();
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(v.sigmoid().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(v.sigmoid().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(v.sigmoid().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark GELU activation function
+fn bench_gelu(c: &mut Criterion) {
+    let mut group = c.benchmark_group("gelu");
+
+    // GELU requires tanh() - test up to 100K
+    for size in [100, 1000, 10000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Generate data with mix of positive and negative values
+        let data: Vec<f32> = (0..*size)
+            .map(|i| (i as f32) * 0.1 - (*size as f32) * 0.05)
+            .collect();
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(v.gelu().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(v.gelu().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(v.gelu().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark swish activation function
+fn bench_swish(c: &mut Criterion) {
+    let mut group = c.benchmark_group("swish");
+
+    // Swish requires exp() for sigmoid - test up to 100K
+    for size in [100, 1000, 10000, 100_000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Generate data with mix of positive and negative values
+        let data: Vec<f32> = (0..*size)
+            .map(|i| (i as f32) * 0.1 - (*size as f32) * 0.05)
+            .collect();
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(v.swish().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(v.swish().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(v.swish().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_add,
@@ -423,6 +552,9 @@ criterion_group!(
     bench_sum,
     bench_max,
     bench_relu,
+    bench_sigmoid,
+    bench_gelu,
+    bench_swish,
     bench_softmax,
     bench_log_softmax,
     bench_clip
