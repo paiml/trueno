@@ -958,6 +958,49 @@ fn bench_norm_l2(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark absolute value (currently scalar-only, no SIMD backend)
+fn bench_abs(c: &mut Criterion) {
+    let mut group = c.benchmark_group("abs");
+
+    for size in [100, 1000, 10000, 100000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&data, Backend::Scalar);
+
+            bencher.iter(|| {
+                black_box(a.abs().unwrap());
+            });
+        });
+
+        // SSE2 backend (currently uses same scalar code)
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, &size| {
+            let data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&data, Backend::SSE2);
+
+            bencher.iter(|| {
+                black_box(a.abs().unwrap());
+            });
+        });
+
+        // AVX2 backend (currently uses same scalar code)
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, &size| {
+            let data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX2);
+
+            bencher.iter(|| {
+                black_box(a.abs().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_add,
@@ -980,6 +1023,7 @@ criterion_group!(
     bench_log_softmax,
     bench_clip,
     bench_norm_l1,
-    bench_norm_l2
+    bench_norm_l2,
+    bench_abs
 );
 criterion_main!(benches);
