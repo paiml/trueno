@@ -1453,12 +1453,8 @@ mod property_tests {
     #[test]
     fn test_convolve2d_basic_3x3() {
         // Simple 3x3 convolution with identity kernel (should preserve input)
-        let input = Matrix::from_vec(
-            3,
-            3,
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
-        )
-        .unwrap();
+        let input =
+            Matrix::from_vec(3, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]).unwrap();
 
         // 1x1 identity kernel (should return center pixel)
         let kernel = Matrix::from_vec(1, 1, vec![1.0]).unwrap();
@@ -1560,7 +1556,6 @@ mod property_tests {
     #[cfg(test)]
     mod conv_property_tests {
         use super::*;
-        
 
         proptest! {
             #[test]

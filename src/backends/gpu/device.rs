@@ -775,8 +775,14 @@ impl GpuDevice {
         let uniform_data = bytemuck::bytes_of(&params);
 
         pollster::block_on(async {
-            self.execute_element_wise_op("ELU", shaders::ELU_SHADER, input, result, Some(uniform_data))
-                .await
+            self.execute_element_wise_op(
+                "ELU",
+                shaders::ELU_SHADER,
+                input,
+                result,
+                Some(uniform_data),
+            )
+            .await
         })
     }
 
@@ -1060,7 +1066,10 @@ impl GpuDevice {
         });
 
         self.device.poll(wgpu::Maintain::Wait);
-        receiver.receive().await.ok_or("Channel receive failed")?
+        receiver
+            .receive()
+            .await
+            .ok_or("Channel receive failed")?
             .map_err(|e| format!("Buffer map failed: {:?}", e))?;
 
         let data = buffer_slice.get_mapped_range();
@@ -1208,7 +1217,10 @@ impl GpuDevice {
         });
 
         self.device.poll(wgpu::Maintain::Wait);
-        receiver.receive().await.ok_or("Channel receive failed")?
+        receiver
+            .receive()
+            .await
+            .ok_or("Channel receive failed")?
             .map_err(|e| format!("Buffer map failed: {:?}", e))?;
 
         let data = buffer_slice.get_mapped_range();
@@ -1662,13 +1674,13 @@ impl GpuDevice {
         });
 
         // Create pipeline layout
-        let pipeline_layout =
-            self.device
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Convolve2D Pipeline Layout"),
-                    bind_group_layouts: &[&bind_group_layout],
-                    push_constant_ranges: &[],
-                });
+        let pipeline_layout = self
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Convolve2D Pipeline Layout"),
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
         // Create compute pipeline
         let pipeline = self
