@@ -135,13 +135,13 @@ fn bench_convolve2d(c: &mut Criterion) {
     // Test various image and kernel sizes for CNN/image processing workloads
     // Format: (input_rows, input_cols, kernel_size, description)
     let configs = vec![
-        (32, 32, 3, "small_3x3"),         // Small image, edge detection kernel
-        (64, 64, 3, "medium_3x3"),        // Medium image, standard convolution
-        (128, 128, 3, "large_3x3"),       // Large image, typical CNN layer
-        (256, 256, 3, "xlarge_3x3"),      // Very large, approaching GPU threshold
-        (128, 128, 5, "large_5x5"),       // Larger kernel (blur, Gaussian)
-        (256, 256, 5, "xlarge_5x5"),      // Large image + large kernel
-        (512, 512, 3, "xxlarge_3x3"),     // Huge image (GPU threshold: >10K elements)
+        (32, 32, 3, "small_3x3"),     // Small image, edge detection kernel
+        (64, 64, 3, "medium_3x3"),    // Medium image, standard convolution
+        (128, 128, 3, "large_3x3"),   // Large image, typical CNN layer
+        (256, 256, 3, "xlarge_3x3"),  // Very large, approaching GPU threshold
+        (128, 128, 5, "large_5x5"),   // Larger kernel (blur, Gaussian)
+        (256, 256, 5, "xlarge_5x5"),  // Large image + large kernel
+        (512, 512, 3, "xxlarge_3x3"), // Huge image (GPU threshold: >10K elements)
     ];
 
     for (rows, cols, kernel_size, desc) in configs {
