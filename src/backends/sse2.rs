@@ -640,6 +640,14 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    unsafe fn exp(a: &[f32], result: &mut [f32]) {
+        // SSE2 doesn't have native exp(), use scalar
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.exp();
+        }
+    }
+
+    #[target_feature(enable = "sse2")]
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
         // SSE2 doesn't have native exp(), use scalar
         for (i, &x) in a.iter().enumerate() {

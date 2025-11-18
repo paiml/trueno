@@ -189,6 +189,12 @@ impl VectorBackend for ScalarBackend {
         }
     }
 
+    unsafe fn exp(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.exp();
+        }
+    }
+
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         for (i, &val) in a.iter().enumerate() {
             // Handle extreme values for numerical stability

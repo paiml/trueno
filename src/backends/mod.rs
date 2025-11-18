@@ -240,6 +240,17 @@ pub trait VectorBackend {
     /// - Can handle empty slices
     unsafe fn relu(a: &[f32], result: &mut [f32]);
 
+    /// Exponential function: result\[i\] = exp(a\[i\])
+    ///
+    /// Computes e^x for each element using range reduction for numerical accuracy.
+    /// Foundation for sigmoid, softmax, GELU, and other activation functions.
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn exp(a: &[f32], result: &mut [f32]);
+
     /// Sigmoid activation: result\[i\] = 1 / (1 + exp(-a\[i\]))
     ///
     /// Logistic sigmoid function - maps inputs to (0, 1) range.
