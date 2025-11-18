@@ -913,4 +913,216 @@ mod tests {
         let (neon_max, scalar_max) = unsafe { (NeonBackend::max(&a), ScalarBackend::max(&a)) };
         assert_eq!(neon_max, scalar_max);
     }
+
+    #[test]
+    fn test_neon_sub_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [5.0, 6.0, 7.0, 8.0];
+        let b = [1.0, 2.0, 3.0, 4.0];
+        let mut neon_result = [0.0; 4];
+        let mut scalar_result = [0.0; 4];
+        unsafe {
+            NeonBackend::sub(&a, &b, &mut neon_result);
+            ScalarBackend::sub(&a, &b, &mut scalar_result);
+        }
+        assert_eq!(neon_result, scalar_result);
+    }
+
+    #[test]
+    fn test_neon_mul_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5];
+        let b = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let mut neon_result = [0.0; 9];
+        let mut scalar_result = [0.0; 9];
+        unsafe {
+            NeonBackend::mul(&a, &b, &mut neon_result);
+            ScalarBackend::mul(&a, &b, &mut scalar_result);
+        }
+        assert_eq!(neon_result, scalar_result);
+    }
+
+    #[test]
+    fn test_neon_div_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [10.0, 20.0, 30.0, 40.0];
+        let b = [2.0, 4.0, 5.0, 8.0];
+        let mut neon_result = [0.0; 4];
+        let mut scalar_result = [0.0; 4];
+        unsafe {
+            NeonBackend::div(&a, &b, &mut neon_result);
+            ScalarBackend::div(&a, &b, &mut scalar_result);
+        }
+        assert_eq!(neon_result, scalar_result);
+    }
+
+    #[test]
+    fn test_neon_min_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [5.0, 1.0, 3.0, 2.0];
+        let neon_result = unsafe { NeonBackend::min(&a) };
+        let scalar_result = unsafe { ScalarBackend::min(&a) };
+        assert_eq!(neon_result, scalar_result);
+    }
+
+    #[test]
+    fn test_neon_argmax_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.0, 5.0, 3.0, 2.0];
+        let neon_result = unsafe { NeonBackend::argmax(&a) };
+        let scalar_result = unsafe { ScalarBackend::argmax(&a) };
+        assert_eq!(neon_result, scalar_result);
+    }
+
+    #[test]
+    fn test_neon_argmin_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [5.0, 1.0, 3.0, 2.0];
+        let neon_result = unsafe { NeonBackend::argmin(&a) };
+        let scalar_result = unsafe { ScalarBackend::argmin(&a) };
+        assert_eq!(neon_result, scalar_result);
+    }
+
+    #[test]
+    fn test_neon_relu_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-3.0, -1.0, 0.0, 1.0, 3.0];
+        let mut neon_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            NeonBackend::relu(&a, &mut neon_result);
+            ScalarBackend::relu(&a, &mut scalar_result);
+        }
+        assert_eq!(neon_result, scalar_result);
+    }
+
+    #[test]
+    fn test_neon_sigmoid_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut neon_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            NeonBackend::sigmoid(&a, &mut neon_result);
+            ScalarBackend::sigmoid(&a, &mut scalar_result);
+        }
+        for (n, s) in neon_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (n - s).abs() < 1e-5,
+                "sigmoid mismatch: neon={}, scalar={}",
+                n,
+                s
+            );
+        }
+    }
+
+    #[test]
+    fn test_neon_gelu_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut neon_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            NeonBackend::gelu(&a, &mut neon_result);
+            ScalarBackend::gelu(&a, &mut scalar_result);
+        }
+        for (n, s) in neon_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (n - s).abs() < 1e-5,
+                "gelu mismatch: neon={}, scalar={}",
+                n,
+                s
+            );
+        }
+    }
+
+    #[test]
+    fn test_neon_swish_matches_scalar() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let mut neon_result = [0.0; 5];
+        let mut scalar_result = [0.0; 5];
+        unsafe {
+            NeonBackend::swish(&a, &mut neon_result);
+            ScalarBackend::swish(&a, &mut scalar_result);
+        }
+        for (n, s) in neon_result.iter().zip(scalar_result.iter()) {
+            assert!(
+                (n - s).abs() < 1e-5,
+                "swish mismatch: neon={}, scalar={}",
+                n,
+                s
+            );
+        }
+    }
 }
