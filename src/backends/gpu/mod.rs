@@ -796,4 +796,98 @@ mod tests {
             eprintln!("GPU swish failed: {:?}", gpu_result);
         }
     }
+
+    #[test]
+    fn test_gpu_clip_matches_scalar() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+        use crate::backends::VectorBackend;
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![1.0, 5.0, 10.0, 15.0, -3.0, 20.0, 7.5, 0.0];
+        let min_val = 3.0;
+        let max_val = 12.0;
+
+        let gpu_result = gpu.clip(&input, min_val, max_val);
+        let mut scalar_result = vec![0.0; input.len()];
+        unsafe {
+            ScalarBackend::clamp(&input, min_val, max_val, &mut scalar_result);
+        }
+
+        if let Ok(gpu_r) = gpu_result {
+            for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
+                assert!(
+                    (g - s).abs() < 1e-4,
+                    "GPU vs Scalar clip mismatch: gpu={}, scalar={}",
+                    g,
+                    s
+                );
+            }
+        } else {
+            eprintln!("GPU clip failed: {:?}", gpu_result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_leaky_relu_basic() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![-3.0, -1.0, 0.0, 1.0, 3.0];
+        let negative_slope = 0.01;
+
+        let result = gpu.leaky_relu(&input, negative_slope);
+
+        if let Ok(output) = result {
+            // Expected: max(negative_slope * x, x)
+            let expected = vec![-0.03, -0.01, 0.0, 1.0, 3.0];
+            for (r, e) in output.iter().zip(expected.iter()) {
+                assert!(
+                    (r - e).abs() < 1e-4,
+                    "Leaky ReLU mismatch: got={}, expected={}",
+                    r,
+                    e
+                );
+            }
+        } else {
+            eprintln!("GPU leaky_relu failed: {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_gpu_elu_basic() {
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
+        let alpha = 1.0;
+
+        let result = gpu.elu(&input, alpha);
+
+        if let Ok(output) = result {
+            // Expected: x if x > 0, else alpha * (exp(x) - 1)
+            for (i, (r, &x)) in output.iter().zip(input.iter()).enumerate() {
+                let expected = if x > 0.0 { x } else { alpha * (x.exp() - 1.0) };
+                assert!(
+                    (r - expected).abs() < 1e-3,
+                    "ELU mismatch at {}: got={}, expected={}",
+                    i,
+                    r,
+                    expected
+                );
+            }
+        } else {
+            eprintln!("GPU elu failed: {:?}", result);
+        }
+    }
 }
