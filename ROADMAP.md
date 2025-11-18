@@ -132,6 +132,15 @@ Required for Release:
   - ✅ Integrated into CI workflow (`.github/workflows/ci.yml`)
   - **Success Criteria**: Detect >5% regressions automatically
 
+- [x] **SIMD optimization: norm_linf** ✅ **COMPLETE** - *Kaizen* (改善 - Quick wins first)
+  - ✅ Eliminated temporary vector allocation (13-43% scalar speedup)
+  - ✅ Single-pass AVX2 abs+max (8-way parallel, bitwise AND + max)
+  - ✅ Single-pass SSE2 abs+max (4-way parallel)
+  - ✅ Horizontal reduction with 128-bit halves extraction
+  - **Result**: 1.1-3.2x total speedup across all sizes
+  - **Benchmarks**: 100 elem 3.2x, 1K 3.0x, 10K 2.1x, 100K 2.1x
+  - **Next**: Continue SIMD optimization for other reduction ops
+
 #### Quality Gates (v0.2.2-v0.2.5)
 
 ```
