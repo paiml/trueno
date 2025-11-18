@@ -402,6 +402,32 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    unsafe fn abs(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Create mask to clear sign bit (0x7FFFFFFF for all elements)
+        let sign_mask = _mm_set1_ps(f32::from_bits(0x7FFF_FFFF));
+
+        // Process 4 elements at a time using SSE2 (128-bit = 4 x f32)
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+
+            // Compute absolute value by clearing sign bit
+            let abs_va = _mm_and_ps(va, sign_mask);
+
+            _mm_storeu_ps(result.as_mut_ptr().add(i), abs_va);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].abs();
+            i += 1;
+        }
+    }
+
+    #[target_feature(enable = "sse2")]
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;

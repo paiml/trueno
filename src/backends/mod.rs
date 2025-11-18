@@ -169,6 +169,17 @@ pub trait VectorBackend {
     /// - Can handle empty slice
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]);
 
+    /// Absolute value: result\[i\] = |a\[i\]|
+    ///
+    /// Computes the absolute value of each element.
+    /// Used in distance metrics (L1 norm), numerical stability, and signal processing.
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slice
+    unsafe fn abs(a: &[f32], result: &mut [f32]);
+
     /// Clamp elements to range [min_val, max_val]: result\[i\] = max(min_val, min(a\[i\], max_val))
     ///
     /// Constrains each element to the specified range.
