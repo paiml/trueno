@@ -130,12 +130,12 @@ impl VectorBackend for Sse2Backend {
             i += 4;
         }
 
-        // Horizontal sum of the SIMD accumulator
-        // sum_vec contains [a, b, c, d]
-        // We need to compute a + b + c + d
-        let mut sum_array = [0.0f32; 4];
-        _mm_storeu_ps(sum_array.as_mut_ptr(), sum_vec);
-        let mut sum = sum_array[0] + sum_array[1] + sum_array[2] + sum_array[3];
+        // Horizontal sum using faster movehl/shuffle pattern
+        let mut sum = {
+            let temp = _mm_add_ps(sum_vec, _mm_movehl_ps(sum_vec, sum_vec));
+            let temp = _mm_add_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
 
         // Handle remaining elements with scalar code
         for j in i..len {
@@ -158,10 +158,12 @@ impl VectorBackend for Sse2Backend {
             i += 4;
         }
 
-        // Horizontal sum
-        let mut sum_array = [0.0f32; 4];
-        _mm_storeu_ps(sum_array.as_mut_ptr(), sum_vec);
-        let mut sum = sum_array[0] + sum_array[1] + sum_array[2] + sum_array[3];
+        // Horizontal sum using faster movehl/shuffle pattern
+        let mut sum = {
+            let temp = _mm_add_ps(sum_vec, _mm_movehl_ps(sum_vec, sum_vec));
+            let temp = _mm_add_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
 
         // Handle remaining elements
         sum += a[i..len].iter().sum::<f32>();
@@ -184,13 +186,12 @@ impl VectorBackend for Sse2Backend {
             i += 4;
         }
 
-        // Extract maximum from SIMD register
-        let mut max_array = [0.0f32; 4];
-        _mm_storeu_ps(max_array.as_mut_ptr(), max_vec);
-        let mut maximum = max_array[0]
-            .max(max_array[1])
-            .max(max_array[2])
-            .max(max_array[3]);
+        // Horizontal max using faster movehl/shuffle pattern
+        let mut maximum = {
+            let temp = _mm_max_ps(max_vec, _mm_movehl_ps(max_vec, max_vec));
+            let temp = _mm_max_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
 
         // Handle remaining elements
         for &val in &a[i..len] {
@@ -217,13 +218,12 @@ impl VectorBackend for Sse2Backend {
             i += 4;
         }
 
-        // Extract minimum from SIMD register
-        let mut min_array = [0.0f32; 4];
-        _mm_storeu_ps(min_array.as_mut_ptr(), min_vec);
-        let mut minimum = min_array[0]
-            .min(min_array[1])
-            .min(min_array[2])
-            .min(min_array[3]);
+        // Horizontal min using faster movehl/shuffle pattern
+        let mut minimum = {
+            let temp = _mm_min_ps(min_vec, _mm_movehl_ps(min_vec, min_vec));
+            let temp = _mm_min_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
 
         // Handle remaining elements
         for &val in &a[i..len] {
