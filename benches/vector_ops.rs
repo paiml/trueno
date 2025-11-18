@@ -74,6 +74,55 @@ fn bench_add(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark element-wise subtraction
+fn bench_sub(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sub");
+
+    for size in [100, 1000, 10000, 100000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::Scalar);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::Scalar);
+
+            bencher.iter(|| {
+                black_box(a.sub(&b).unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::SSE2);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::SSE2);
+
+            bencher.iter(|| {
+                black_box(a.sub(&b).unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::AVX2);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::AVX2);
+
+            bencher.iter(|| {
+                black_box(a.sub(&b).unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 /// Benchmark element-wise multiplication
 fn bench_mul(c: &mut Criterion) {
     let mut group = c.benchmark_group("mul");
@@ -113,6 +162,55 @@ fn bench_mul(c: &mut Criterion) {
 
             bencher.iter(|| {
                 black_box(a.mul(&b).unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark element-wise division
+fn bench_div(c: &mut Criterion) {
+    let mut group = c.benchmark_group("div");
+
+    for size in [100, 1000, 10000, 100000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::Scalar);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::Scalar);
+
+            bencher.iter(|| {
+                black_box(a.div(&b).unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::SSE2);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::SSE2);
+
+            bencher.iter(|| {
+                black_box(a.div(&b).unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::AVX2);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::AVX2);
+
+            bencher.iter(|| {
+                black_box(a.div(&b).unwrap());
             });
         });
     }
@@ -676,7 +774,9 @@ fn bench_swish(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_add,
+    bench_sub,
     bench_mul,
+    bench_div,
     bench_dot,
     bench_sum,
     bench_max,
