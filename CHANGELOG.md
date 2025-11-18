@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-11-18
+
+### Added
+
+#### Activation Functions
+- `hardswish()` - MobileNetV3 efficient activation
+- `mish()` - Modern swish alternative (x * tanh(softplus(x)))
+- `selu()` - Self-normalizing exponential linear unit
+- `relu()` - ReLU with EXTREME TDD
+
+#### Math Operations
+- `log2()` - Base-2 logarithm (information theory, entropy)
+- `log10()` - Base-10 logarithm (decibels, pH)
+
+#### Documentation
+- Comprehensive GPU performance analysis (`docs/performance-analysis.md`)
+- Performance baselines for regression detection
+
+### Changed
+
+#### Critical GPU Performance Optimization
+- **GPU disabled for ALL element-wise operations** (2-65,000x slower than scalar!)
+- **GPU enabled ONLY for matmul** (2-10x speedup at 500×500+)
+- Updated OpComplexity thresholds based on empirical benchmarks
+- Lowered matmul GPU threshold from 1000 to 500 (proven 2x speedup)
+
+#### Documentation Updates
+- README updated with honest GPU performance claims
+- ROADMAP pivoted from GPU to SIMD optimization strategy
+
+### Fixed
+- False GPU speedup claims (advertised 10-50x, actual was 2-65,000x SLOWER)
+- GPU overhead analysis: 14-55ms fixed cost per operation
+
+### Performance
+
+#### GPU Benchmark Results (Empirical - Genchi Genbutsu)
+| Operation | Size | GPU vs Scalar | Result |
+|-----------|------|---------------|--------|
+| vec_add | 1M | 510x SLOWER | ❌ GPU disabled |
+| dot | 1M | 93x SLOWER | ❌ GPU disabled |
+| relu | 1M | 824x SLOWER | ❌ GPU disabled |
+| matmul | 500×500 | **2.01x faster** | ✅ GPU enabled |
+| matmul | 1000×1000 | **9.59x faster** | ✅ GPU enabled |
+
+**Root Cause**: 14-55ms GPU overhead (buffer allocation + PCIe transfer) dominates execution time for element-wise ops.
+
+### Testing
+- 33 new tests for activations (hardswish, mish, selu)
+- 14 new tests for log2/log10
+- Property-based tests for all new functions
+- Total: 699+ tests
+
+### Closes
+- Issue #1: Element-wise transcendental functions (log2, ln, exp)
+
+---
+
 ## [0.1.0] - 2025-01-17
 
 ### Added
@@ -146,12 +204,12 @@ let transposed = m.transpose();
 
 ## [Unreleased]
 
-### Planned for v0.2.0
+### Planned for v0.3.0
+- SIMD-optimized activation functions (AVX2/AVX-512)
+- Performance regression CI integration
 - Matrix-vector multiplication
-- SIMD-optimized matrix operations
-- GPU dispatch for large matrices
-- Additional activation functions (Mish, PReLU)
-- Extended backend support
+- Additional backends (WASM SIMD128)
 
+[0.2.1]: https://github.com/paiml/trueno/releases/tag/v0.2.1
 [0.1.0]: https://github.com/paiml/trueno/releases/tag/v0.1.0
-[Unreleased]: https://github.com/paiml/trueno/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/paiml/trueno/compare/v0.2.1...HEAD
