@@ -2597,9 +2597,7 @@ impl Vector<f32> {
                 match self.backend {
                     Backend::Scalar => ScalarBackend::abs(&self.data, &mut result_data),
                     #[cfg(target_arch = "x86_64")]
-                    Backend::SSE2 | Backend::AVX => {
-                        Sse2Backend::abs(&self.data, &mut result_data)
-                    }
+                    Backend::SSE2 | Backend::AVX => Sse2Backend::abs(&self.data, &mut result_data),
                     #[cfg(target_arch = "x86_64")]
                     Backend::AVX2 | Backend::AVX512 => {
                         Avx2Backend::abs(&self.data, &mut result_data)
