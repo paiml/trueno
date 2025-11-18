@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2025-11-18
+
+### Fixed
+- **CRITICAL**: Missing SIMD implementation for `abs()` operation (Issue #2)
+  - Blocked downstream projects (realizar)
+  - Added implementations in AVX2Backend, SSE2Backend, ScalarBackend
+  - Uses bitwise AND with `0x7FFFFFFF` to clear sign bit
+  - All 109 tests pass, backend equivalence verified
+
+### Performance
+- **argmax/argmin SIMD optimization**: 2.8-3.1x speedup
+  - Replaced scalar index scan with SIMD index tracking
+  - Uses comparison masks and blend operations
+  - Processes 8 elements/iteration (AVX2) or 4 elements/iteration (SSE2)
+
+### Added
+- Comprehensive performance benchmarks for 7 operations:
+  - `norm_l1()` - L1 norm (4-11x SIMD speedup, compute-bound)
+  - `norm_l2()` - L2 norm (4-9x SIMD speedup, compute-bound)
+  - `scale()` - Scalar multiplication (~1x speedup, memory-bound)
+  - `fma()` - Fused multiply-add (~1x speedup, memory-bound despite FMA hardware)
+  - `sub()` - Subtraction (~1x speedup, memory-bound)
+  - `div()` - Division (~1x speedup, memory-bound)
+  - `abs()` - Absolute value (~1.1x speedup, memory-bound)
+  - `min()` - Minimum reduction (6-10x SIMD speedup)
+
+### Documentation
+- **Performance pattern analysis documented**:
+  - **Compute-bound operations** (4-12x SIMD benefit): min, argmax/argmin, norm_l1, norm_l2, dot, sum
+  - **Memory-bound operations** (~1x SIMD benefit): sub, div, fma, scale, abs
+  - Root cause: Memory bandwidth saturation prevents SIMD benefit for simple operations
+
+### Testing
+- All 889 tests passing (759 unit + 21 integration + 109 doc)
+- Zero clippy warnings
+- EXTREME TDD methodology with RED-GREEN-REFACTOR cycle applied for abs()
+
+### Closes
+- Issue #2: Missing abs trait implementation in VectorBackend
+
+---
+
 ## [0.2.1] - 2025-11-18
 
 ### Added
@@ -210,6 +252,7 @@ let transposed = m.transpose();
 - Matrix-vector multiplication
 - Additional backends (WASM SIMD128)
 
+[0.2.2]: https://github.com/paiml/trueno/releases/tag/v0.2.2
 [0.2.1]: https://github.com/paiml/trueno/releases/tag/v0.2.1
 [0.1.0]: https://github.com/paiml/trueno/releases/tag/v0.1.0
-[Unreleased]: https://github.com/paiml/trueno/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/paiml/trueno/compare/v0.2.2...HEAD
