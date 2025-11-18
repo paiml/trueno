@@ -106,11 +106,11 @@ Required for Release:
 
 #### Deliverables
 
-- [ ] **Remaining activations** (SIMD-optimized, NO GPU)
-  - hardswish (MobileNetV3)
-  - mish (modern swish alternative)
-  - selu (self-normalizing networks)
-  - **Success Criteria**: SIMD speedup ≥2-4x vs scalar (AVX2/AVX-512)
+- [x] **Remaining activations** (SIMD-optimized, NO GPU) ✅ **COMPLETE**
+  - ✅ hardswish (MobileNetV3) - commit 3130859
+  - ✅ mish (modern swish alternative) - commit 482737d
+  - ✅ selu (self-normalizing networks) - commit 94c12d0
+  - **Result**: 33 tests (18 unit + 15 property), all passing
   - **Note**: GPU disabled per v0.2.1 analysis (was 800x slower)
 
 - [ ] **SIMD-optimized reductions**
