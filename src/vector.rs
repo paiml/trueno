@@ -2535,30 +2535,27 @@ impl Vector<f32> {
             return Ok(0.0);
         }
 
-        // Create a vector of absolute values
-        let abs_values: Vec<f32> = self.data.iter().map(|x| x.abs()).collect();
-
-        // Find the maximum absolute value using existing max() implementation
+        // Use optimized SIMD backend for single-pass abs+max
         let max_abs = unsafe {
             match self.backend {
-                Backend::Scalar => ScalarBackend::max(&abs_values),
+                Backend::Scalar => ScalarBackend::norm_linf(&self.data),
                 #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => Sse2Backend::max(&abs_values),
+                Backend::SSE2 | Backend::AVX => Sse2Backend::norm_linf(&self.data),
                 #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => Avx2Backend::max(&abs_values),
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::norm_linf(&self.data),
                 #[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::max(&abs_values)
+                    ScalarBackend::norm_linf(&self.data)
                 }
                 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => NeonBackend::max(&abs_values),
+                Backend::NEON => ScalarBackend::norm_linf(&self.data), // NEON fallback
                 #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => ScalarBackend::max(&abs_values),
+                Backend::NEON => ScalarBackend::norm_linf(&self.data),
                 #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => WasmBackend::max(&abs_values),
+                Backend::WasmSIMD => ScalarBackend::norm_linf(&self.data), // WASM fallback
                 #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => ScalarBackend::max(&abs_values),
-                Backend::GPU | Backend::Auto => ScalarBackend::max(&abs_values),
+                Backend::WasmSIMD => ScalarBackend::norm_linf(&self.data),
+                Backend::GPU | Backend::Auto => ScalarBackend::norm_linf(&self.data),
             }
         };
 

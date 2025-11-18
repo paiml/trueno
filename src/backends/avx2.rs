@@ -496,7 +496,10 @@ impl VectorBackend for Avx2Backend {
         // Horizontal max across all 8 lanes
         let mut result = {
             // Max of upper and lower 128-bit halves
-            let max_halves = _mm_max_ps(_mm256_castps256_ps128(max_vec), _mm256_extractf128_ps(max_vec, 1));
+            let max_halves = _mm_max_ps(
+                _mm256_castps256_ps128(max_vec),
+                _mm256_extractf128_ps(max_vec, 1),
+            );
             // Horizontal max of 4 elements
             let temp = _mm_max_ps(max_halves, _mm_movehl_ps(max_halves, max_halves));
             let temp = _mm_max_ss(temp, _mm_shuffle_ps(temp, temp, 1));
