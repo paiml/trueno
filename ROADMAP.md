@@ -737,10 +737,16 @@ make tier3  # Target: <2 hours execution
    - **Timeline**: 1-2 weeks (2-3 hours per function)
    - **Blocker**: Requires exp/tanh with range reduction
 
-2. **Alternative SIMD Targets** (*Kaizen* - Quick wins first)
-   - Operations without transcendentals
-   - Check for unoptimized element-wise ops
-   - **Timeline**: 1-2 days per operation
+2. **Alternative SIMD Targets** (*Kaizen* - Quick wins first) ✅ **COMPLETE**
+   - ✅ Horizontal reduction optimization (dot, sum, max, min, norm_l1, norm_linf)
+     - Replaced _mm_hadd_ps/array extraction with movehl_ps/shuffle_ps pattern
+     - Applied to both AVX2 and SSE2 backends
+   - ✅ argmax/argmin index vector optimization (AVX2: 14-17% speedup)
+     - Replaced per-iteration _mm256_set_ps with incremental _mm256_add_ps
+   - ✅ SSE2 argmax/argmin SIMD index tracking
+     - Eliminated O(n) scalar loop with SIMD blend emulation
+   - **Result**: All horizontal reductions now use consistent optimized patterns
+   - **Timeline**: Completed in single session
 
 3. **WASM SIMD128 backend**
    - Browser deployment support
