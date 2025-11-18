@@ -182,8 +182,8 @@ fn main() {
     let snn_activation = layer_output.selu().unwrap();
     println!("  → SELU: {:?}", snn_activation.as_slice());
 
-    println!("\n✨ All 11 activation functions computed with SIMD optimization!");
-    println!("   Backend auto-selected: AVX2 > SSE2 > NEON > Scalar");
+    println!("\n✨ All 11 activation functions computed successfully!");
+    println!("   Note: Activations use scalar ops; SIMD optimization planned for v0.3.0");
 }
 
 fn print_activation_row(name: &str, output: &Vector<f32>) {
