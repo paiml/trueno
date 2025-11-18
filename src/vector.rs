@@ -1966,21 +1966,49 @@ impl Vector<f32> {
             }
         }
 
-        // Scalar fallback: GELU approximation: 0.5 * x * (1 + tanh(√(2/π) * (x + 0.044715 * x³)))
-        const SQRT_2_OVER_PI: f32 = 0.797_884_6; // √(2/π)
-        const COEFF: f32 = 0.044_715;
+        let mut result = vec![0.0; self.len()];
 
-        let data: Vec<f32> = self
-            .data
-            .iter()
-            .map(|&x| {
-                let x_cubed = x * x * x;
-                let inner = SQRT_2_OVER_PI * (x + COEFF * x_cubed);
-                0.5 * x * (1.0 + inner.tanh())
-            })
-            .collect();
+        // Dispatch to appropriate backend
+        unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::gelu(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => {
+                    Sse2Backend::gelu(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => {
+                    Avx2Backend::gelu(&self.data, &mut result);
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::gelu(&self.data, &mut result);
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => {
+                    NeonBackend::gelu(&self.data, &mut result);
+                }
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => {
+                    ScalarBackend::gelu(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => {
+                    WasmBackend::gelu(&self.data, &mut result);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => {
+                    ScalarBackend::gelu(&self.data, &mut result);
+                }
+                Backend::GPU | Backend::Auto => {
+                    ScalarBackend::gelu(&self.data, &mut result);
+                }
+            }
+        }
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_slice(&result))
     }
 
     /// Swish activation function (also known as SiLU - Sigmoid Linear Unit)
