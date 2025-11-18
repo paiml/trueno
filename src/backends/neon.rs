@@ -675,8 +675,57 @@ impl VectorBackend for NeonBackend {
 
     #[cfg(target_arch = "aarch64")]
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
-        // NEON doesn't have native exp(), use scalar with numerical stability
-        for (i, &val) in a.iter().enumerate() {
+        // sigmoid(x) = 1 / (1 + exp(-x))
+        // SIMD implementation using range reduction for exp
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for exp(-x) computation
+        let log2e = vdupq_n_f32(std::f32::consts::LOG2_E);
+        let ln2 = vdupq_n_f32(std::f32::consts::LN_2);
+        let one = vdupq_n_f32(1.0);
+        let half = vdupq_n_f32(0.5);
+        let zero = vdupq_n_f32(0.0);
+
+        // Taylor series coefficients
+        let c1 = vdupq_n_f32(1.0);
+        let c2 = vdupq_n_f32(0.5);
+        let c3 = vdupq_n_f32(0.166_666_67);
+        let c4 = vdupq_n_f32(0.041_666_668);
+        let c5 = vdupq_n_f32(0.008_333_334);
+        let c6 = vdupq_n_f32(0.001_388_889);
+
+        while i + 4 <= len {
+            let x = vld1q_f32(a.as_ptr().add(i));
+            let neg_x = vsubq_f32(zero, x);
+
+            // Range reduction: k = floor(x * log2(e) + 0.5)
+            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(neg_x, log2e), half));
+            let k = vcvtq_s32_f32(kf);
+            let r = vsubq_f32(neg_x, vmulq_f32(kf, ln2));
+
+            // Polynomial approximation using Horner's method
+            let mut poly = vaddq_f32(c5, vmulq_f32(r, c6));
+            poly = vaddq_f32(c4, vmulq_f32(r, poly));
+            poly = vaddq_f32(c3, vmulq_f32(r, poly));
+            poly = vaddq_f32(c2, vmulq_f32(r, poly));
+            poly = vaddq_f32(c1, vmulq_f32(r, poly));
+            poly = vaddq_f32(one, vmulq_f32(r, poly));
+
+            // Scale by 2^k
+            let k_shifted = vshlq_n_s32(vaddq_s32(k, vdupq_n_s32(127)), 23);
+            let exp_neg_x = vmulq_f32(poly, vreinterpretq_f32_s32(k_shifted));
+
+            // sigmoid = 1 / (1 + exp(-x))
+            let sigmoid_result = vdivq_f32(one, vaddq_f32(one, exp_neg_x));
+
+            vst1q_f32(result.as_mut_ptr().add(i), sigmoid_result);
+            i += 4;
+        }
+
+        // Scalar fallback
+        while i < len {
+            let val = a[i];
             result[i] = if val < -50.0 {
                 0.0
             } else if val > 50.0 {
@@ -684,12 +733,13 @@ impl VectorBackend for NeonBackend {
             } else {
                 1.0 / (1.0 + (-val).exp())
             };
+            i += 1;
         }
     }
 
     #[cfg(target_arch = "arm")]
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
-        // NEON doesn't have native exp(), use scalar with numerical stability
+        // ARM32: use scalar since NEON division requires Newton-Raphson
         for (i, &val) in a.iter().enumerate() {
             result[i] = if val < -50.0 {
                 0.0
@@ -703,20 +753,78 @@ impl VectorBackend for NeonBackend {
 
     #[cfg(target_arch = "aarch64")]
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
-        // NEON doesn't have native tanh(), use scalar
-        const SQRT_2_OVER_PI: f32 = 0.797_884_6;
-        const COEFF: f32 = 0.044715;
+        // gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
+        let len = a.len();
+        let mut i = 0;
 
-        for (i, &x) in a.iter().enumerate() {
+        // Constants
+        let sqrt_2_over_pi = vdupq_n_f32(0.797_884_6);
+        let coeff = vdupq_n_f32(0.044715);
+        let half = vdupq_n_f32(0.5);
+        let one = vdupq_n_f32(1.0);
+        let two = vdupq_n_f32(2.0);
+
+        // exp constants
+        let log2e = vdupq_n_f32(std::f32::consts::LOG2_E);
+        let ln2 = vdupq_n_f32(std::f32::consts::LN_2);
+        let c1 = vdupq_n_f32(1.0);
+        let c2 = vdupq_n_f32(0.5);
+        let c3 = vdupq_n_f32(0.166_666_67);
+        let c4 = vdupq_n_f32(0.041_666_668);
+        let c5 = vdupq_n_f32(0.008_333_334);
+        let c6 = vdupq_n_f32(0.001_388_889);
+
+        while i + 4 <= len {
+            let x = vld1q_f32(a.as_ptr().add(i));
+
+            // inner = sqrt(2/π) * (x + 0.044715 * x³)
+            let x2 = vmulq_f32(x, x);
+            let x3 = vmulq_f32(x2, x);
+            let inner = vmulq_f32(sqrt_2_over_pi, vaddq_f32(x, vmulq_f32(coeff, x3)));
+
+            // Compute exp(2 * inner) for tanh
+            let z = vmulq_f32(two, inner);
+
+            // Range reduction
+            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(z, log2e), half));
+            let k = vcvtq_s32_f32(kf);
+            let r = vsubq_f32(z, vmulq_f32(kf, ln2));
+
+            // Polynomial
+            let mut poly = vaddq_f32(c5, vmulq_f32(r, c6));
+            poly = vaddq_f32(c4, vmulq_f32(r, poly));
+            poly = vaddq_f32(c3, vmulq_f32(r, poly));
+            poly = vaddq_f32(c2, vmulq_f32(r, poly));
+            poly = vaddq_f32(c1, vmulq_f32(r, poly));
+            poly = vaddq_f32(one, vmulq_f32(r, poly));
+
+            // Scale by 2^k
+            let k_shifted = vshlq_n_s32(vaddq_s32(k, vdupq_n_s32(127)), 23);
+            let exp_2z = vmulq_f32(poly, vreinterpretq_f32_s32(k_shifted));
+
+            // tanh = (exp(2z) - 1) / (exp(2z) + 1)
+            let tanh_val = vdivq_f32(vsubq_f32(exp_2z, one), vaddq_f32(exp_2z, one));
+
+            // gelu = 0.5 * x * (1 + tanh)
+            let gelu_result = vmulq_f32(half, vmulq_f32(x, vaddq_f32(one, tanh_val)));
+
+            vst1q_f32(result.as_mut_ptr().add(i), gelu_result);
+            i += 4;
+        }
+
+        // Scalar fallback
+        while i < len {
+            let x = a[i];
             let x3 = x * x * x;
-            let inner = SQRT_2_OVER_PI * (x + COEFF * x3);
+            let inner = 0.797_884_6 * (x + 0.044715 * x3);
             result[i] = 0.5 * x * (1.0 + inner.tanh());
+            i += 1;
         }
     }
 
     #[cfg(target_arch = "arm")]
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
-        // NEON doesn't have native tanh(), use scalar
+        // ARM32: use scalar since NEON division requires Newton-Raphson
         const SQRT_2_OVER_PI: f32 = 0.797_884_6;
         const COEFF: f32 = 0.044715;
 
@@ -729,8 +837,56 @@ impl VectorBackend for NeonBackend {
 
     #[cfg(target_arch = "aarch64")]
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
-        // NEON doesn't have native exp(), use scalar
-        for (i, &x) in a.iter().enumerate() {
+        // swish(x) = x / (1 + exp(-x))
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants
+        let log2e = vdupq_n_f32(std::f32::consts::LOG2_E);
+        let ln2 = vdupq_n_f32(std::f32::consts::LN_2);
+        let one = vdupq_n_f32(1.0);
+        let half = vdupq_n_f32(0.5);
+        let zero = vdupq_n_f32(0.0);
+
+        // Taylor series coefficients
+        let c1 = vdupq_n_f32(1.0);
+        let c2 = vdupq_n_f32(0.5);
+        let c3 = vdupq_n_f32(0.166_666_67);
+        let c4 = vdupq_n_f32(0.041_666_668);
+        let c5 = vdupq_n_f32(0.008_333_334);
+        let c6 = vdupq_n_f32(0.001_388_889);
+
+        while i + 4 <= len {
+            let x = vld1q_f32(a.as_ptr().add(i));
+            let neg_x = vsubq_f32(zero, x);
+
+            // Range reduction
+            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(neg_x, log2e), half));
+            let k = vcvtq_s32_f32(kf);
+            let r = vsubq_f32(neg_x, vmulq_f32(kf, ln2));
+
+            // Polynomial
+            let mut poly = vaddq_f32(c5, vmulq_f32(r, c6));
+            poly = vaddq_f32(c4, vmulq_f32(r, poly));
+            poly = vaddq_f32(c3, vmulq_f32(r, poly));
+            poly = vaddq_f32(c2, vmulq_f32(r, poly));
+            poly = vaddq_f32(c1, vmulq_f32(r, poly));
+            poly = vaddq_f32(one, vmulq_f32(r, poly));
+
+            // Scale by 2^k
+            let k_shifted = vshlq_n_s32(vaddq_s32(k, vdupq_n_s32(127)), 23);
+            let exp_neg_x = vmulq_f32(poly, vreinterpretq_f32_s32(k_shifted));
+
+            // swish = x / (1 + exp(-x))
+            let swish_result = vdivq_f32(x, vaddq_f32(one, exp_neg_x));
+
+            vst1q_f32(result.as_mut_ptr().add(i), swish_result);
+            i += 4;
+        }
+
+        // Scalar fallback
+        while i < len {
+            let x = a[i];
             if x < -50.0 {
                 result[i] = 0.0;
             } else if x > 50.0 {
@@ -739,12 +895,13 @@ impl VectorBackend for NeonBackend {
                 let sigmoid = 1.0 / (1.0 + (-x).exp());
                 result[i] = x * sigmoid;
             }
+            i += 1;
         }
     }
 
     #[cfg(target_arch = "arm")]
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
-        // NEON doesn't have native exp(), use scalar
+        // ARM32: use scalar since NEON division requires Newton-Raphson
         for (i, &x) in a.iter().enumerate() {
             if x < -50.0 {
                 result[i] = 0.0;
