@@ -207,20 +207,17 @@ impl VectorBackend for Avx2Backend {
         }
 
         // Horizontal max: find maximum across all 8 lanes
-        let low = _mm256_castps256_ps128(vmax);
-        let high = _mm256_extractf128_ps(vmax, 1);
-        let max4 = _mm_max_ps(low, high);
-
-        // Extract to array and find max
-        let mut temp = [0.0f32; 4];
-        _mm_storeu_ps(temp.as_mut_ptr(), max4);
-
-        let mut result = temp[0];
-        for &val in &temp[1..] {
-            if val > result {
-                result = val;
-            }
-        }
+        let mut result = {
+            // Max of upper and lower 128-bit halves
+            let max_halves = _mm_max_ps(
+                _mm256_castps256_ps128(vmax),
+                _mm256_extractf128_ps(vmax, 1),
+            );
+            // Horizontal max of 4 elements
+            let temp = _mm_max_ps(max_halves, _mm_movehl_ps(max_halves, max_halves));
+            let temp = _mm_max_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
 
         // Check remaining elements
         for &val in &a[i..] {
@@ -248,20 +245,17 @@ impl VectorBackend for Avx2Backend {
         }
 
         // Horizontal min: find minimum across all 8 lanes
-        let low = _mm256_castps256_ps128(vmin);
-        let high = _mm256_extractf128_ps(vmin, 1);
-        let min4 = _mm_min_ps(low, high);
-
-        // Extract to array and find min
-        let mut temp = [0.0f32; 4];
-        _mm_storeu_ps(temp.as_mut_ptr(), min4);
-
-        let mut result = temp[0];
-        for &val in &temp[1..] {
-            if val < result {
-                result = val;
-            }
-        }
+        let mut result = {
+            // Min of upper and lower 128-bit halves
+            let min_halves = _mm_min_ps(
+                _mm256_castps256_ps128(vmin),
+                _mm256_extractf128_ps(vmin, 1),
+            );
+            // Horizontal min of 4 elements
+            let temp = _mm_min_ps(min_halves, _mm_movehl_ps(min_halves, min_halves));
+            let temp = _mm_min_ss(temp, _mm_shuffle_ps(temp, temp, 1));
+            _mm_cvtss_f32(temp)
+        };
 
         // Check remaining elements
         for &val in &a[i..] {
