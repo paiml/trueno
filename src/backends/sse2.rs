@@ -240,29 +240,46 @@ impl VectorBackend for Sse2Backend {
         let len = a.len();
         let mut i = 0;
 
-        // Track maximum value and index
-        let mut max_value = a[0];
-        let mut max_index = 0;
+        // Initialize SIMD vectors with first element value and index 0
+        let mut vmax = _mm_set1_ps(a[0]);
+        let mut vmax_idx = _mm_set1_ps(0.0); // Track indices as floats
 
-        // Initialize with first element broadcast to all lanes
-        let mut max_vec = _mm_set1_ps(a[0]);
+        // Initialize index vector [0, 1, 2, 3] and increment constant
+        let mut vidx_current = _mm_set_ps(3.0, 2.0, 1.0, 0.0);
+        let vinc = _mm_set1_ps(4.0);
 
-        // Process 4 elements at a time
+        // Process 4 elements at a time with index tracking
         while i + 4 <= len {
             let va = _mm_loadu_ps(a.as_ptr().add(i));
-            max_vec = _mm_max_ps(max_vec, va);
+
+            // Compare: va > vmax (strict greater-than to preserve first occurrence)
+            let mask = _mm_cmpgt_ps(va, vmax);
+
+            // Conditionally update max values and indices using SSE2 blend emulation
+            // blend = (mask & new) | (~mask & old)
+            vmax = _mm_or_ps(_mm_and_ps(mask, va), _mm_andnot_ps(mask, vmax));
+            vmax_idx = _mm_or_ps(
+                _mm_and_ps(mask, vidx_current),
+                _mm_andnot_ps(mask, vmax_idx),
+            );
+
+            // Increment index vector for next iteration
+            vidx_current = _mm_add_ps(vidx_current, vinc);
             i += 4;
         }
 
-        // Extract maximum from SIMD register (for potential future optimization)
+        // Horizontal reduction: find max and its index across 4 lanes
         let mut max_array = [0.0f32; 4];
-        _mm_storeu_ps(max_array.as_mut_ptr(), max_vec);
+        let mut idx_array = [0.0f32; 4];
+        _mm_storeu_ps(max_array.as_mut_ptr(), vmax);
+        _mm_storeu_ps(idx_array.as_mut_ptr(), vmax_idx);
 
-        // Find the index by checking all elements processed by SIMD
-        for (idx, &val) in a[..i].iter().enumerate() {
-            if val > max_value {
-                max_value = val;
-                max_index = idx;
+        let mut max_value = max_array[0];
+        let mut max_index = idx_array[0] as usize;
+        for j in 1..4 {
+            if max_array[j] > max_value {
+                max_value = max_array[j];
+                max_index = idx_array[j] as usize;
             }
         }
 
@@ -282,29 +299,46 @@ impl VectorBackend for Sse2Backend {
         let len = a.len();
         let mut i = 0;
 
-        // Track minimum value and index
-        let mut min_value = a[0];
-        let mut min_index = 0;
+        // Initialize SIMD vectors with first element value and index 0
+        let mut vmin = _mm_set1_ps(a[0]);
+        let mut vmin_idx = _mm_set1_ps(0.0); // Track indices as floats
 
-        // Initialize with first element broadcast to all lanes
-        let mut min_vec = _mm_set1_ps(a[0]);
+        // Initialize index vector [0, 1, 2, 3] and increment constant
+        let mut vidx_current = _mm_set_ps(3.0, 2.0, 1.0, 0.0);
+        let vinc = _mm_set1_ps(4.0);
 
-        // Process 4 elements at a time
+        // Process 4 elements at a time with index tracking
         while i + 4 <= len {
             let va = _mm_loadu_ps(a.as_ptr().add(i));
-            min_vec = _mm_min_ps(min_vec, va);
+
+            // Compare: va < vmin (strict less-than to preserve first occurrence)
+            let mask = _mm_cmplt_ps(va, vmin);
+
+            // Conditionally update min values and indices using SSE2 blend emulation
+            // blend = (mask & new) | (~mask & old)
+            vmin = _mm_or_ps(_mm_and_ps(mask, va), _mm_andnot_ps(mask, vmin));
+            vmin_idx = _mm_or_ps(
+                _mm_and_ps(mask, vidx_current),
+                _mm_andnot_ps(mask, vmin_idx),
+            );
+
+            // Increment index vector for next iteration
+            vidx_current = _mm_add_ps(vidx_current, vinc);
             i += 4;
         }
 
-        // Extract minimum from SIMD register (for potential future optimization)
+        // Horizontal reduction: find min and its index across 4 lanes
         let mut min_array = [0.0f32; 4];
-        _mm_storeu_ps(min_array.as_mut_ptr(), min_vec);
+        let mut idx_array = [0.0f32; 4];
+        _mm_storeu_ps(min_array.as_mut_ptr(), vmin);
+        _mm_storeu_ps(idx_array.as_mut_ptr(), vmin_idx);
 
-        // Find the index by checking all elements processed by SIMD
-        for (idx, &val) in a[..i].iter().enumerate() {
-            if val < min_value {
-                min_value = val;
-                min_index = idx;
+        let mut min_value = min_array[0];
+        let mut min_index = idx_array[0] as usize;
+        for j in 1..4 {
+            if min_array[j] < min_value {
+                min_value = min_array[j];
+                min_index = idx_array[j] as usize;
             }
         }
 
