@@ -2079,23 +2079,50 @@ impl Vector<f32> {
             }
         }
 
-        // Scalar fallback: swish(x) = x * sigmoid(x) = x / (1 + e^(-x))
-        let data: Vec<f32> = self
-            .data
-            .iter()
-            .map(|&x| {
-                // Handle extreme values for numerical stability
-                if x < -50.0 {
-                    0.0 // sigmoid(-x) would overflow, but swish approaches 0
-                } else if x > 50.0 {
-                    x // sigmoid(x) ≈ 1, swish approaches x
-                } else {
-                    x / (1.0 + (-x).exp())
-                }
-            })
-            .collect();
+        let mut result = vec![0.0; self.len()];
 
-        Ok(Vector::from_slice(&data))
+        // Dispatch to appropriate SIMD backend
+        unsafe {
+            match self.backend {
+                Backend::Scalar => {
+                    ScalarBackend::swish(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => {
+                    Sse2Backend::swish(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => {
+                    Avx2Backend::swish(&self.data, &mut result);
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::swish(&self.data, &mut result);
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => {
+                    NeonBackend::swish(&self.data, &mut result);
+                }
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => {
+                    ScalarBackend::swish(&self.data, &mut result);
+                }
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => {
+                    WasmBackend::swish(&self.data, &mut result);
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => {
+                    ScalarBackend::swish(&self.data, &mut result);
+                }
+                Backend::GPU | Backend::Auto => {
+                    // Not yet implemented, use scalar
+                    ScalarBackend::swish(&self.data, &mut result);
+                }
+            }
+        }
+
+        Ok(Vector::from_slice(&result))
     }
 
     /// Hard Swish activation function
