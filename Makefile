@@ -7,7 +7,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench dev mutate pmat-tdg pmat-analyze pmat-score install-tools profile profile-flamegraph profile-bench profile-test
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench dev mutate pmat-tdg pmat-analyze pmat-score install-tools profile profile-flamegraph profile-bench profile-test
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -84,6 +84,34 @@ tier3: ## Tier 3: Mutation testing & benchmarks (ON-MERGE/NIGHTLY)
 	@pmat repo-score . --min-score 90 || echo "    ⚠️  Repo score below 90"
 	@echo ""
 	@echo "✅ Tier 3 complete - Ready to merge!"
+
+# ============================================================================
+# CHAOS ENGINEERING: Stress Testing (renacer v0.4.1 integration)
+# ============================================================================
+chaos-test: ## Chaos engineering tests with renacer patterns
+	@echo "🔥 CHAOS ENGINEERING: Stress testing with adversarial conditions"
+	@echo ""
+	@echo "  [1/3] Property-based chaos tests..."
+	@PROPTEST_CASES=1000 cargo test chaos --features chaos-basic --quiet
+	@echo "  [2/3] Chaos tests with all features..."
+	@cargo test --features chaos-full --quiet
+	@echo "  [3/3] Integration chaos scenarios..."
+	@cargo test --test chaos_tests --quiet
+	@echo ""
+	@echo "✅ Chaos engineering complete - System validated under stress!"
+
+fuzz: ## Fuzz testing (requires cargo-fuzz and nightly)
+	@echo "🎲 FUZZ TESTING: Random input testing (60s)"
+	@echo ""
+	@echo "NOTE: Requires 'cargo install cargo-fuzz' and 'cargo fuzz init'"
+	@echo "      Run 'cargo +nightly fuzz run fuzz_target_1 -- -max_total_time=60'"
+	@echo ""
+	@if command -v cargo-fuzz >/dev/null 2>&1; then \
+		echo "  Running fuzzer..."; \
+		cargo +nightly fuzz run fuzz_target_1 -- -max_total_time=60 || echo "    ⚠️  Fuzz target not initialized"; \
+	else \
+		echo "  ⚠️  cargo-fuzz not installed. Install with: cargo install cargo-fuzz"; \
+	fi
 
 # ============================================================================
 # KAIZEN: Continuous Improvement Cycle

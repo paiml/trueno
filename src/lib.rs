@@ -29,6 +29,7 @@
 //! ```
 
 pub mod backends;
+pub mod chaos;
 pub mod error;
 pub mod matrix;
 pub mod vector;
