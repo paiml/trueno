@@ -652,6 +652,77 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    unsafe fn exp(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for range reduction: exp(x) = 2^(x * log2(e)) = 2^k * 2^r
+        let log2e = _mm256_set1_ps(std::f32::consts::LOG2_E); // 1.442695...
+        let ln2 = _mm256_set1_ps(std::f32::consts::LN_2); // 0.693147...
+        let half = _mm256_set1_ps(0.5);
+        let one = _mm256_set1_ps(1.0);
+
+        // Polynomial coefficients for 2^r approximation (minimax on [-0.5, 0.5])
+        // 2^r ≈ 1 + c1*r + c2*r^2 + c3*r^3 + c4*r^4 + c5*r^5
+        let c1 = _mm256_set1_ps(0.693_147_2); // ln(2)
+        let c2 = _mm256_set1_ps(0.240_226_5); // ln(2)^2/2!
+        let c3 = _mm256_set1_ps(0.055_504_1); // ln(2)^3/3!
+        let c4 = _mm256_set1_ps(0.009_618_13); // ln(2)^4/4!
+        let c5 = _mm256_set1_ps(0.001_339_99); // ln(2)^5/5!
+
+        // Limits for overflow/underflow handling
+        let exp_hi = _mm256_set1_ps(88.376_26); // ln(FLT_MAX)
+        let exp_lo = _mm256_set1_ps(-87.336_55); // ln(FLT_MIN) approximately
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let x = _mm256_loadu_ps(a.as_ptr().add(i));
+
+            // Clamp x to avoid overflow/underflow
+            let x = _mm256_max_ps(_mm256_min_ps(x, exp_hi), exp_lo);
+
+            // Range reduction: x' = x * log2(e), then k = round(x'), r = x' - k
+            let x_scaled = _mm256_mul_ps(x, log2e);
+
+            // k = round(x_scaled) = floor(x_scaled + 0.5)
+            let k = _mm256_floor_ps(_mm256_add_ps(x_scaled, half));
+
+            // r = x - k * ln(2) (in original base e space)
+            let r = _mm256_sub_ps(x, _mm256_mul_ps(k, ln2));
+
+            // Polynomial approximation: e^r ≈ 1 + c1*r + c2*r^2 + c3*r^3 + c4*r^4 + c5*r^5
+            // Use Horner's method: ((((c5*r + c4)*r + c3)*r + c2)*r + c1)*r + 1
+            let mut p = c5;
+            p = _mm256_fmadd_ps(p, r, c4);
+            p = _mm256_fmadd_ps(p, r, c3);
+            p = _mm256_fmadd_ps(p, r, c2);
+            p = _mm256_fmadd_ps(p, r, c1);
+            p = _mm256_fmadd_ps(p, r, one);
+
+            // Scale by 2^k using IEEE754 exponent manipulation
+            // 2^k is computed by adding k to the exponent bits
+            let k_int = _mm256_cvtps_epi32(k);
+            let k_shifted = _mm256_slli_epi32(k_int, 23); // shift to exponent position
+            let scale = _mm256_castsi256_ps(_mm256_add_epi32(
+                _mm256_castps_si256(one),
+                k_shifted,
+            ));
+
+            // Final result: e^x = e^r * 2^k
+            let vresult = _mm256_mul_ps(p, scale);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].exp();
+            i += 1;
+        }
+    }
+
+    #[target_feature(enable = "avx2")]
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         // AVX2 doesn't have native exp(), use scalar with numerical stability
         // Future optimization: implement fast exp approximation using FMA
