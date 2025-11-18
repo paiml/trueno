@@ -246,7 +246,8 @@ jobs:
         run: rm -f Cargo.lock
 
       - name: Check with MSRV
-        run: cargo check --all-features
+        # Note: GPU feature requires Rust 1.74+ (wgpu dependency), so we skip it for MSRV
+        run: cargo check
 
   # Build documentation
   docs:
