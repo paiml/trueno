@@ -562,7 +562,9 @@ impl Vector<f32> {
                 #[cfg(target_arch = "x86_64")]
                 Backend::SSE2 | Backend::AVX => Sse2Backend::dot(&self.data, &other.data),
                 #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(&self.data, &other.data),
+                Backend::AVX2 => Avx2Backend::dot(&self.data, &other.data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX512 => Avx512Backend::dot(&self.data, &other.data),
                 #[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
                     ScalarBackend::dot(&self.data, &other.data)
