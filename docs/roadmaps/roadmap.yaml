@@ -110,3 +110,28 @@ roadmap:
       - Includes comprehensive AVX-512 feature highlights
       - Performance benchmark table (11-12x dot, 9.8-10.2x sum, 8-12x max/min)
       - Quality metrics (819 tests, TDG 92.4/100)
+
+  - id: refactor-complexity-a-plus
+    title: "Refactor to reduce complexity: A (92.27) → A+ (93+)"
+    status: in_progress
+    type: quality
+    priority: high
+    github_issue: "paiml/trueno#4"
+    description: |
+      Refactor large files to reduce structural complexity and achieve A+ grade.
+
+      Current state:
+      - Overall: 92.27/100 (A) - need +0.73 for A+ (93+)
+      - vector.rs: 68.2 (D+) - structural_complexity = 0
+      - avx2.rs: 71.4 (C) - structural_complexity = 0
+      - backends: All have structural_complexity = 0
+
+      Root cause: Files too large with high cyclomatic complexity
+
+      Strategy:
+      1. Split vector.rs (13,478 lines) into modules
+      2. Extract complex functions into helpers
+      3. Reduce nesting depth in conditionals
+      4. Split backend files into sub-modules
+
+      Target: ≥93/100 (A+) for v0.4.0 release
