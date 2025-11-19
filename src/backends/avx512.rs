@@ -513,14 +513,14 @@ mod tests {
                 Avx512Backend::add(&a, &b, &mut result);
             }
 
-            for i in 0..1000 {
+            for (i, &value) in result.iter().enumerate().take(1000) {
                 let expected = i as f32 * 0.5 + i as f32 * 0.3;
                 assert!(
-                    (result[i] - expected).abs() < 1e-5,
+                    (value - expected).abs() < 1e-5,
                     "Mismatch at index {}: expected {}, got {}",
                     i,
                     expected,
-                    result[i]
+                    value
                 );
             }
         });
@@ -662,10 +662,10 @@ mod tests {
                 }
 
                 // Verify all elements, especially the remainder portion
-                for i in 0..size {
+                for (i, &value) in result.iter().enumerate().take(size) {
                     let expected = i as f32 + (size - i) as f32;
                     assert_eq!(
-                        result[i], expected,
+                        value, expected,
                         "Remainder test failed at size {} (remainder {}), index {}",
                         size, remainder, i
                     );

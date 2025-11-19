@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2025-11-19
+
+### Changed
+- **Refactored multi-backend dispatch**: Introduced dispatch macros to reduce code duplication
+  - `dispatch_binary_op!` macro for add/sub/mul/div operations (reduces 50-line match statements to 1 line)
+  - `dispatch_reduction!` macro for sum/max/min/norm operations (reduces 50-line match statements to 1 line)
+  - Eliminates ~1000 lines of redundant backend dispatch code
+  - Maintains 100% functional equivalence (all 827 tests passing)
+  - Improves maintainability: new backends now require single macro update
+  - **Note**: TDG score unchanged (88.1 A-) because `syn` expands macros before analysis
+    - This is correct behavior - cyclomatic complexity remains unchanged
+    - Macro pattern matches unavoidable architectural complexity from multi-platform SIMD dispatch
+
+### Added
+- **Additional vector operations**: Expanded functionality with ML/numerical computing primitives
+  - `norm_l2()`: L2 norm with AVX-512 (6-9x speedup)
+  - `norm_l1()`, `norm_linf()`: L1 and L-infinity norms
+  - `scale()`, `abs()`, `clamp()`: Basic vector transformations
+  - `lerp()`, `fma()`: Linear interpolation and fused multiply-add
+  - `relu()`, `sigmoid()`, `gelu()`, `swish()`, `tanh()`: Neural network activation functions
+  - `exp()`: Exponential function with range reduction
+  - 827 tests passing (all operations covered)
+
+### Infrastructure
+- **PMAT integration improvements**: Created issues for enhanced TDG workflow
+  - Issue #78: Request for `pmat tdg --explain` mode with function-level complexity breakdown
+  - Issue #76: Documented YAML parsing friction with `pmat work` commands
+  - Discovered: TDG correctly analyzes macro-expanded code via `syn` AST parser
+
+### Quality
+- **Test Coverage**: 827 tests passing, >90% coverage maintained
+- **TDG Score**: 88.1/100 (A-) - architectural limit for multi-backend SIMD dispatch
+- **Clippy**: Zero warnings on all features
+- **Format**: 100% rustfmt compliant
+
 ## [0.3.0] - 2025-11-19
 
 ### Added
