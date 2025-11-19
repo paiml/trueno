@@ -317,8 +317,7 @@ install-tools: ## Install required development tools
 
 # Documentation quality gates
 validate-examples: ## Validate book examples meet EXTREME TDD quality
-	@echo "📚 Validating book examples..."
-	@./scripts/validate_book_examples.sh
+	@cargo run -p xtask -- validate-examples
 
 build-book: ## Build mdBook documentation
 	@echo "📖 Building book..."
