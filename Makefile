@@ -3,6 +3,7 @@
 # Reference: docs/specifications/pytorch-numpy-replacement-spec.md§13
 
 # Quality directives (bashrs enforcement)
+# Note: /tmp usage in multiple targets is acceptable - targets don't conflict (bashrs: MAKE018)
 .SUFFIXES:
 .DELETE_ON_ERROR:
 .ONESHELL:
@@ -68,10 +69,11 @@ tier3: ## Tier 3: Mutation testing & benchmarks (ON-MERGE/NIGHTLY)
 	@echo "🧬 TIER 3: Test quality assurance (hours)"
 	@echo ""
 	@echo "  [1/5] Tier 2 gates..."
+	@# Intentional recursive make for tiered workflow (bashrs: MAKE012)
 	@$(MAKE) --no-print-directory tier2
 	@echo ""
 	@echo "  [2/5] Mutation testing (target: ≥80%)..."
-	@command -v cargo-mutants >/dev/null 2>&1 || { echo "    Installing cargo-mutants..."; cargo install cargo-mutants; }
+	@command -v cargo-mutants >/dev/null 2>&1 || { echo "    Installing cargo-mutants..."; cargo install cargo-mutants; } || exit 1
 	@cargo mutants --timeout 60 --minimum-pass-rate 80 || echo "    ⚠️  Mutation score below 80%"
 	@echo ""
 	@echo "  [3/5] Security audit..."
@@ -325,5 +327,26 @@ build-book: ## Build mdBook documentation
 serve-book: ## Serve book locally with live reload
 	@echo "📖 Serving book at http://localhost:3000..."
 	@mdbook serve book/
+
+# Bashrs validation (shell script quality enforcement)
+bashrs-lint-makefile: ## Lint Makefile with bashrs
+	@echo "🔍 Linting Makefile with bashrs..."
+	@bashrs make lint Makefile || true
+
+bashrs-lint-scripts: ## Lint all shell scripts with bashrs
+	@echo "🔍 Linting shell scripts with bashrs..."
+	@for script in scripts/*.sh; do \
+		echo "  Linting $$script..."; \
+		bashrs lint "$$script" || true; \
+	done
+
+bashrs-audit: ## Audit shell script quality with bashrs
+	@echo "📊 Auditing shell scripts with bashrs..."
+	@for script in scripts/*.sh; do \
+		echo "  Auditing $$script..."; \
+		bashrs audit "$$script"; \
+	done
+
+bashrs-all: bashrs-lint-makefile bashrs-lint-scripts bashrs-audit ## Run all bashrs quality checks
 
 .DEFAULT_GOAL := help
