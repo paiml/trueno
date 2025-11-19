@@ -597,6 +597,7 @@ mod tests {
         let gpu_result = gpu.vec_add(&a, &b);
 
         let mut scalar_result = vec![0.0; 8];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             ScalarBackend::add(&a, &b, &mut scalar_result);
         }
@@ -630,6 +631,7 @@ mod tests {
         let b = vec![8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
 
         let gpu_result = gpu.dot(&a, &b);
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
 
         if let Ok(gpu_r) = gpu_result {
@@ -680,6 +682,7 @@ mod tests {
 
         let gpu_result = gpu.relu(&input);
         let mut scalar_result = vec![0.0; input.len()];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             ScalarBackend::relu(&input, &mut scalar_result);
         }
@@ -713,6 +716,7 @@ mod tests {
 
         let gpu_result = gpu.sigmoid(&input);
         let mut scalar_result = vec![0.0; input.len()];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             ScalarBackend::sigmoid(&input, &mut scalar_result);
         }
@@ -746,6 +750,7 @@ mod tests {
 
         let gpu_result = gpu.gelu(&input);
         let mut scalar_result = vec![0.0; input.len()];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             ScalarBackend::gelu(&input, &mut scalar_result);
         }
@@ -779,6 +784,7 @@ mod tests {
 
         let gpu_result = gpu.swish(&input);
         let mut scalar_result = vec![0.0; input.len()];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             ScalarBackend::swish(&input, &mut scalar_result);
         }
@@ -814,6 +820,7 @@ mod tests {
 
         let gpu_result = gpu.clip(&input, min_val, max_val);
         let mut scalar_result = vec![0.0; input.len()];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             ScalarBackend::clamp(&input, min_val, max_val, &mut scalar_result);
         }
