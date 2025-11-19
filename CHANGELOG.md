@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Commit 6cd7ba2
 
 ### Quality
+- **Mutation testing improvements**: Backend error handling test
+  - Killed Backend::Auto deletion mutant (src/vector.rs:3145) with defensive error test
+  - Improved test coverage for backend fallback paths
+  - Known limitation: 3 GPU mutants (tanh, is_available, reduce_sum) require GPU hardware to test
+  - Tests skip gracefully when GPU unavailable (prevents CI breakage)
 - **Bashrs enforcement**: Shell script quality validation
   - Replaced C-grade shell validation with A-grade Rust xtask
   - Enforces bashrs validation for Makefile and all shell scripts
