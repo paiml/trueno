@@ -37,3 +37,4 @@ scripts/__pycache__/
 book/book/
 book/_site/
 _site/
+perf.data
