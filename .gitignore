@@ -32,3 +32,6 @@ lcov.info
 .kaizen/
 lcov.info
 scripts/__pycache__/
+
+# mdBook generated output
+book/book/
