@@ -18,6 +18,64 @@ use crate::backends::wasm::WasmBackend;
 use crate::backends::VectorBackend;
 use crate::{Backend, Result, TruenoError};
 
+/// Macro to dispatch binary operations to appropriate backend
+macro_rules! dispatch_binary_op {
+    ($backend:expr, $op:ident, $a:expr, $b:expr, $result:expr) => {
+        unsafe {
+            match $backend {
+                Backend::Scalar => ScalarBackend::$op($a, $b, $result),
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::$op($a, $b, $result),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 => Avx2Backend::$op($a, $b, $result),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX512 => Avx512Backend::$op($a, $b, $result),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::$op($a, $b, $result)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::$op($a, $b, $result),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::$op($a, $b, $result),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::$op($a, $b, $result),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::$op($a, $b, $result),
+                Backend::GPU | Backend::Auto => ScalarBackend::$op($a, $b, $result),
+            }
+        }
+    };
+}
+
+/// Macro to dispatch reduction operations (return f32)
+macro_rules! dispatch_reduction {
+    ($backend:expr, $op:ident, $data:expr) => {
+        unsafe {
+            match $backend {
+                Backend::Scalar => ScalarBackend::$op($data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::$op($data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 => Avx2Backend::$op($data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX512 => Avx512Backend::$op($data),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => ScalarBackend::$op($data),
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::$op($data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::$op($data),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::$op($data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::$op($data),
+                Backend::GPU | Backend::Auto => ScalarBackend::$op($data),
+            }
+        }
+    };
+}
+
 /// High-performance vector with multi-backend support
 ///
 /// # Examples
@@ -253,55 +311,7 @@ impl Vector<f32> {
         }
 
         let mut result = vec![0.0; self.len()];
-
-        // Dispatch to appropriate backend
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        unsafe {
-            match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::add(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => {
-                    Sse2Backend::add(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 => {
-                    Avx2Backend::add(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX512 => {
-                    Avx512Backend::add(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    // Fallback to scalar on non-x86_64
-                    ScalarBackend::add(&self.data, &other.data, &mut result);
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => {
-                    NeonBackend::add(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => {
-                    // Fallback to scalar on non-ARM
-                    ScalarBackend::add(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => {
-                    WasmBackend::add(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => {
-                    // Fallback to scalar on non-WASM
-                    ScalarBackend::add(&self.data, &other.data, &mut result);
-                }
-                Backend::GPU | Backend::Auto => {
-                    // Not yet implemented, use scalar
-                    ScalarBackend::add(&self.data, &other.data, &mut result);
-                }
-            }
-        }
+        dispatch_binary_op!(self.backend, add, &self.data, &other.data, &mut result);
 
         Ok(Self {
             data: result,
@@ -341,52 +351,7 @@ impl Vector<f32> {
         }
 
         let mut result = vec![0.0; self.len()];
-
-        // Dispatch to appropriate backend
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        unsafe {
-            match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::sub(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => {
-                    Sse2Backend::sub(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => {
-                    // AVX2 backend (AVX-512 uses AVX2 for now)
-                    Avx2Backend::sub(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    // Fallback to scalar on non-x86_64
-                    ScalarBackend::sub(&self.data, &other.data, &mut result);
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => {
-                    NeonBackend::sub(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => {
-                    // Fallback to scalar on non-ARM
-                    ScalarBackend::sub(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => {
-                    WasmBackend::sub(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => {
-                    // Fallback to scalar on non-WASM
-                    ScalarBackend::sub(&self.data, &other.data, &mut result);
-                }
-                Backend::GPU | Backend::Auto => {
-                    // Not yet implemented, use scalar
-                    ScalarBackend::sub(&self.data, &other.data, &mut result);
-                }
-            }
-        }
+        dispatch_binary_op!(self.backend, sub, &self.data, &other.data, &mut result);
 
         Ok(Self {
             data: result,
@@ -416,47 +381,7 @@ impl Vector<f32> {
         }
 
         let mut result = vec![0.0; self.len()];
-
-        // Dispatch to appropriate backend
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        unsafe {
-            match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::mul(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => {
-                    Sse2Backend::mul(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => {
-                    Avx2Backend::mul(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::mul(&self.data, &other.data, &mut result);
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => {
-                    NeonBackend::mul(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => {
-                    ScalarBackend::mul(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => {
-                    WasmBackend::mul(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => {
-                    ScalarBackend::mul(&self.data, &other.data, &mut result);
-                }
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::mul(&self.data, &other.data, &mut result);
-                }
-            }
-        }
+        dispatch_binary_op!(self.backend, mul, &self.data, &other.data, &mut result);
 
         Ok(Self {
             data: result,
@@ -486,47 +411,7 @@ impl Vector<f32> {
         }
 
         let mut result = vec![0.0; self.len()];
-
-        // Dispatch to appropriate backend
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        unsafe {
-            match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::div(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => {
-                    Sse2Backend::div(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => {
-                    Avx2Backend::div(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::div(&self.data, &other.data, &mut result);
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => {
-                    NeonBackend::div(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => {
-                    ScalarBackend::div(&self.data, &other.data, &mut result);
-                }
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => {
-                    WasmBackend::div(&self.data, &other.data, &mut result);
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => {
-                    ScalarBackend::div(&self.data, &other.data, &mut result);
-                }
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::div(&self.data, &other.data, &mut result);
-                }
-            }
-        }
+        dispatch_binary_op!(self.backend, div, &self.data, &other.data, &mut result);
 
         Ok(Self {
             data: result,
