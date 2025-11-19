@@ -32,3 +32,32 @@ roadmap:
       Performance validation:
       - Benchmark argmax/argmin at sizes 1000, 10000
       - Target: 8x+ speedup vs scalar baseline
+
+  - id: start-aprender
+    title: "Start Aprender ML library Phase 1"
+    status: todo
+    type: feature
+    priority: high
+    description: |
+      Begin Aprender implementation using specification at:
+      ../aprender/docs/specifications/graph-traditional-descriptive-statistics-spec.md
+
+      Phase 1 goals:
+      - Project setup with EXTREME TDD + PMAT quality gates
+      - Implement traditional descriptive statistics
+      - Integrate with Trueno for SIMD-accelerated primitives
+
+  - id: publish-trueno-v0-3-0
+    title: "Publish Trueno v0.3.0 with AVX-512"
+    status: todo
+    type: release
+    priority: medium
+    description: |
+      Release Trueno v0.3.0 with complete AVX-512 backend support.
+
+      Includes:
+      - 5 phases of AVX-512 implementation (add, dot, sum, max/min, argmax/argmin)
+      - 819 tests passing
+      - TDG score 92.4/100 (A)
+      - Update version in Cargo.toml
+      - Create GitHub release with CHANGELOG
