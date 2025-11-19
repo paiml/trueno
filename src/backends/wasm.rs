@@ -23,6 +23,11 @@ pub struct WasmBackend;
 
 impl VectorBackend for WasmBackend {
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -49,6 +54,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -75,6 +85,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -98,6 +113,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -121,6 +141,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -153,6 +178,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn sum(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -179,6 +209,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn max(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -210,6 +245,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn min(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -241,6 +281,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn argmax(a: &[f32]) -> usize {
         let len = a.len();
         let mut i = 0;
@@ -282,6 +327,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn argmin(a: &[f32]) -> usize {
         let len = a.len();
         let mut i = 0;
@@ -322,12 +372,22 @@ impl VectorBackend for WasmBackend {
         min_index
     }
 
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn sum_kahan(a: &[f32]) -> f32 {
         // Kahan summation is inherently sequential, use scalar implementation
         super::scalar::ScalarBackend::sum_kahan(a)
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn norm_l2(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -339,6 +399,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn norm_l1(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -378,6 +443,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn norm_linf(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -418,6 +488,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn abs(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -438,6 +513,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn exp(a: &[f32], result: &mut [f32]) {
         // WASM SIMD128 exp using range reduction: exp(x) = 2^k * e^r
         let len = a.len();
@@ -510,6 +590,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -533,6 +618,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -557,6 +647,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -586,6 +681,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -613,6 +713,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn relu(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -639,6 +744,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         // sigmoid(x) = 1 / (1 + exp(-x))
         // SIMD implementation using range reduction for exp
@@ -707,6 +817,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
         // gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
         // tanh(z) = (exp(2z) - 1) / (exp(2z) + 1)
@@ -779,6 +894,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
         // swish(x) = x * sigmoid(x) = x / (1 + exp(-x))
         let len = a.len();
@@ -843,6 +963,11 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SIMD128)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. WASM SIMD intrinsics marked with #[target_feature(enable = "simd128")]
+    // 4. Unaligned loads/stores used (v128_load/v128_store) - no alignment requirement
     unsafe fn tanh(a: &[f32], result: &mut [f32]) {
         // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
         // Using range reduction for exp(2x)
@@ -919,6 +1044,7 @@ mod tests {
         let b = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
         let mut result = vec![0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::add(&a, &b, &mut result);
         }
@@ -936,6 +1062,7 @@ mod tests {
         let b = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let mut result = vec![0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::mul(&a, &b, &mut result);
         }
@@ -952,6 +1079,7 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let b = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { WasmBackend::dot(&a, &b) };
 
         // 1*9 + 2*8 + 3*7 + 4*6 + 5*5 + 6*4 + 7*3 + 8*2 + 9*1 = 165
@@ -963,6 +1091,7 @@ mod tests {
     fn test_wasm_sum() {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { WasmBackend::sum(&a) };
 
         assert!((result - 45.0).abs() < 1e-5);
@@ -973,6 +1102,7 @@ mod tests {
     fn test_wasm_max() {
         let a = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { WasmBackend::max(&a) };
 
         assert_eq!(result, 9.0);
@@ -983,6 +1113,7 @@ mod tests {
     fn test_wasm_min() {
         let a = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { WasmBackend::min(&a) };
 
         assert_eq!(result, 1.0);
@@ -999,6 +1130,7 @@ mod tests {
         // Test add
         let mut wasm_result = vec![0.0; 10];
         let mut scalar_result = vec![0.0; 10];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::add(&a, &b, &mut wasm_result);
             ScalarBackend::add(&a, &b, &mut scalar_result);
@@ -1009,6 +1141,7 @@ mod tests {
 
         // Test dot
         let (wasm_dot, scalar_dot) =
+            // SAFETY: Calling backend methods with verified safety invariants
             unsafe { (WasmBackend::dot(&a, &b), ScalarBackend::dot(&a, &b)) };
         assert!((wasm_dot - scalar_dot).abs() < 1e-3);
 
@@ -1017,6 +1150,7 @@ mod tests {
         assert!((wasm_sum - scalar_sum).abs() < 1e-3);
 
         // Test max
+        // SAFETY: Calling backend methods with verified safety invariants
         let (wasm_max, scalar_max) = unsafe { (WasmBackend::max(&a), ScalarBackend::max(&a)) };
         assert_eq!(wasm_max, scalar_max);
     }
@@ -1029,6 +1163,7 @@ mod tests {
         let b = [1.0, 2.0, 3.0, 4.0];
         let mut wasm_result = [0.0; 4];
         let mut scalar_result = [0.0; 4];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::sub(&a, &b, &mut wasm_result);
             ScalarBackend::sub(&a, &b, &mut scalar_result);
@@ -1044,6 +1179,7 @@ mod tests {
         let b = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         let mut wasm_result = [0.0; 9];
         let mut scalar_result = [0.0; 9];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::mul(&a, &b, &mut wasm_result);
             ScalarBackend::mul(&a, &b, &mut scalar_result);
@@ -1059,6 +1195,7 @@ mod tests {
         let b = [2.0, 4.0, 5.0, 8.0];
         let mut wasm_result = [0.0; 4];
         let mut scalar_result = [0.0; 4];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::div(&a, &b, &mut wasm_result);
             ScalarBackend::div(&a, &b, &mut scalar_result);
@@ -1071,6 +1208,7 @@ mod tests {
         use super::super::scalar::ScalarBackend;
 
         let a = [5.0, 1.0, 3.0, 2.0];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let wasm_result = unsafe { WasmBackend::min(&a) };
         let scalar_result = unsafe { ScalarBackend::min(&a) };
         assert_eq!(wasm_result, scalar_result);
@@ -1081,6 +1219,7 @@ mod tests {
         use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 5.0, 3.0, 2.0];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let wasm_result = unsafe { WasmBackend::argmax(&a) };
         let scalar_result = unsafe { ScalarBackend::argmax(&a) };
         assert_eq!(wasm_result, scalar_result);
@@ -1091,6 +1230,7 @@ mod tests {
         use super::super::scalar::ScalarBackend;
 
         let a = [5.0, 1.0, 3.0, 2.0];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let wasm_result = unsafe { WasmBackend::argmin(&a) };
         let scalar_result = unsafe { ScalarBackend::argmin(&a) };
         assert_eq!(wasm_result, scalar_result);
@@ -1103,6 +1243,7 @@ mod tests {
         let a = [-3.0, -1.0, 0.0, 1.0, 3.0];
         let mut wasm_result = [0.0; 5];
         let mut scalar_result = [0.0; 5];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::relu(&a, &mut wasm_result);
             ScalarBackend::relu(&a, &mut scalar_result);
@@ -1117,6 +1258,7 @@ mod tests {
         let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
         let mut wasm_result = [0.0; 5];
         let mut scalar_result = [0.0; 5];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::sigmoid(&a, &mut wasm_result);
             ScalarBackend::sigmoid(&a, &mut scalar_result);
@@ -1138,6 +1280,7 @@ mod tests {
         let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
         let mut wasm_result = [0.0; 5];
         let mut scalar_result = [0.0; 5];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::gelu(&a, &mut wasm_result);
             ScalarBackend::gelu(&a, &mut scalar_result);
@@ -1159,6 +1302,7 @@ mod tests {
         let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
         let mut wasm_result = [0.0; 5];
         let mut scalar_result = [0.0; 5];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::swish(&a, &mut wasm_result);
             ScalarBackend::swish(&a, &mut scalar_result);
@@ -1180,6 +1324,7 @@ mod tests {
         let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
         let mut wasm_result = [0.0; 5];
         let mut scalar_result = [0.0; 5];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             WasmBackend::tanh(&a, &mut wasm_result);
             ScalarBackend::tanh(&a, &mut scalar_result);

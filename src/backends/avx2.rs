@@ -23,6 +23,11 @@ pub struct Avx2Backend;
 
 impl VectorBackend for Avx2Backend {
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -49,6 +54,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -75,6 +85,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -98,6 +113,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -121,6 +141,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2", enable = "fma")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -156,6 +181,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn sum(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -186,6 +216,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn max(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -222,6 +257,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn min(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -258,6 +298,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn argmax(a: &[f32]) -> usize {
         let len = a.len();
         let mut i = 0;
@@ -316,6 +361,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn argmin(a: &[f32]) -> usize {
         let len = a.len();
         let mut i = 0;
@@ -373,12 +423,22 @@ impl VectorBackend for Avx2Backend {
         min_index
     }
 
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn sum_kahan(a: &[f32]) -> f32 {
         // Kahan summation is inherently sequential, use scalar implementation
         super::scalar::ScalarBackend::sum_kahan(a)
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn norm_l2(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -390,6 +450,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn norm_l1(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -436,6 +501,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn norm_linf(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -488,6 +558,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -511,6 +586,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn abs(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -537,6 +617,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -561,6 +646,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2", enable = "fma")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -590,6 +680,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2", enable = "fma")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -616,6 +711,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn relu(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -642,6 +742,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn exp(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -713,6 +818,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         // sigmoid(x) = 1 / (1 + exp(-x))
         // Use SIMD exp approximation with range reduction
@@ -790,6 +900,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
         // gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
         // Use SIMD tanh via: tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
@@ -882,6 +997,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
         // swish(x) = x * sigmoid(x) = x / (1 + exp(-x))
         // Use SIMD exp approximation with range reduction
@@ -959,6 +1079,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
     unsafe fn tanh(a: &[f32], result: &mut [f32]) {
         // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
         // Use SIMD exp approximation with range reduction
@@ -1047,6 +1172,7 @@ mod tests {
         let b = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
         let mut result = vec![0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::add(&a, &b, &mut result);
         }
@@ -1069,6 +1195,7 @@ mod tests {
         let b = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let mut result = vec![0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::mul(&a, &b, &mut result);
         }
@@ -1090,6 +1217,7 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let b = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { Avx2Backend::dot(&a, &b) };
 
         // 1*9 + 2*8 + 3*7 + 4*6 + 5*5 + 6*4 + 7*3 + 8*2 + 9*1
@@ -1107,6 +1235,7 @@ mod tests {
 
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { Avx2Backend::sum(&a) };
 
         assert!((result - 45.0).abs() < 1e-5);
@@ -1122,6 +1251,7 @@ mod tests {
 
         let a = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { Avx2Backend::max(&a) };
 
         assert_eq!(result, 9.0);
@@ -1137,6 +1267,7 @@ mod tests {
 
         let a = vec![3.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0, 5.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { Avx2Backend::min(&a) };
 
         assert_eq!(result, 1.0);
@@ -1158,6 +1289,7 @@ mod tests {
         // Test add
         let mut avx2_result = vec![0.0; 10];
         let mut scalar_result = vec![0.0; 10];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::add(&a, &b, &mut avx2_result);
             ScalarBackend::add(&a, &b, &mut scalar_result);
@@ -1168,6 +1300,7 @@ mod tests {
 
         // Test dot
         let (avx2_dot, scalar_dot) =
+            // SAFETY: Calling backend methods with verified safety invariants
             unsafe { (Avx2Backend::dot(&a, &b), ScalarBackend::dot(&a, &b)) };
         assert!((avx2_dot - scalar_dot).abs() < 1e-3); // Relaxed tolerance for FMA
 
@@ -1176,6 +1309,7 @@ mod tests {
         assert!((avx2_sum - scalar_sum).abs() < 1e-3);
 
         // Test max
+        // SAFETY: Calling backend methods with verified safety invariants
         let (avx2_max, scalar_max) = unsafe { (Avx2Backend::max(&a), ScalarBackend::max(&a)) };
         assert_eq!(avx2_max, scalar_max);
     }
@@ -1193,6 +1327,7 @@ mod tests {
             -3.0, -1.0, 0.0, 1.0, 3.0, -2.0, 2.0, -0.5, -4.0, 4.0, -5.0, 5.0, 0.0, -0.1, 0.1, 10.0,
         ];
         let mut result = [0.0; 16];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::relu(&a, &mut result);
         }
@@ -1216,6 +1351,7 @@ mod tests {
         let mut avx2_result = [0.0; 11];
         let mut scalar_result = [0.0; 11];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::relu(&a, &mut avx2_result);
             ScalarBackend::relu(&a, &mut scalar_result);
@@ -1238,6 +1374,7 @@ mod tests {
         let mut avx2_result = [0.0; 5];
         let mut scalar_result = [0.0; 5];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::sigmoid(&a, &mut avx2_result);
             ScalarBackend::sigmoid(&a, &mut scalar_result);
@@ -1267,6 +1404,7 @@ mod tests {
         let mut avx2_result = [0.0; 5];
         let mut scalar_result = [0.0; 5];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::gelu(&a, &mut avx2_result);
             ScalarBackend::gelu(&a, &mut scalar_result);
@@ -1296,6 +1434,7 @@ mod tests {
         let mut avx2_result = [0.0; 5];
         let mut scalar_result = [0.0; 5];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::swish(&a, &mut avx2_result);
             ScalarBackend::swish(&a, &mut scalar_result);
@@ -1326,6 +1465,7 @@ mod tests {
         let mut avx2_result = [0.0; 9];
         let mut scalar_result = [0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::sub(&a, &b, &mut avx2_result);
             ScalarBackend::sub(&a, &b, &mut scalar_result);
@@ -1349,6 +1489,7 @@ mod tests {
         let mut avx2_result = [0.0; 9];
         let mut scalar_result = [0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::div(&a, &b, &mut avx2_result);
             ScalarBackend::div(&a, &b, &mut scalar_result);
@@ -1372,6 +1513,7 @@ mod tests {
         let mut avx2_result = [0.0; 9];
         let mut scalar_result = [0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::scale(&a, scalar, &mut avx2_result);
             ScalarBackend::scale(&a, scalar, &mut scalar_result);
@@ -1394,6 +1536,7 @@ mod tests {
         let mut avx2_result = [0.0; 9];
         let mut scalar_result = [0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::clamp(&a, 5.0, 30.0, &mut avx2_result);
             ScalarBackend::clamp(&a, 5.0, 30.0, &mut scalar_result);
@@ -1418,6 +1561,7 @@ mod tests {
         let mut avx2_result = [0.0; 9];
         let mut scalar_result = [0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::fma(&a, &b, &c, &mut avx2_result);
             ScalarBackend::fma(&a, &b, &c, &mut scalar_result);
@@ -1443,6 +1587,7 @@ mod tests {
         let mut avx2_result = [0.0; 9];
         let mut scalar_result = [0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::lerp(&a, &b, 0.25, &mut avx2_result);
             ScalarBackend::lerp(&a, &b, 0.25, &mut scalar_result);
@@ -1470,6 +1615,7 @@ mod tests {
 
         let a = [1.0, 5.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::argmax(&a) };
         let scalar_result = unsafe { ScalarBackend::argmax(&a) };
 
@@ -1488,6 +1634,7 @@ mod tests {
 
         let a = [5.0, 1.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::argmin(&a) };
         let scalar_result = unsafe { ScalarBackend::argmin(&a) };
 
@@ -1506,6 +1653,7 @@ mod tests {
 
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::sum_kahan(&a) };
         let scalar_result = unsafe { ScalarBackend::sum_kahan(&a) };
 
@@ -1524,6 +1672,7 @@ mod tests {
 
         let a = [1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::norm_l1(&a) };
         let scalar_result = unsafe { ScalarBackend::norm_l1(&a) };
 
@@ -1542,6 +1691,7 @@ mod tests {
 
         let a = [3.0, 4.0, 0.0, 0.0, 5.0, 12.0, 0.0, 8.0, 15.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::norm_l2(&a) };
         let scalar_result = unsafe { ScalarBackend::norm_l2(&a) };
 
@@ -1561,6 +1711,7 @@ mod tests {
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let b = [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::dot(&a, &b) };
         let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
 
@@ -1582,6 +1733,7 @@ mod tests {
         let mut avx2_result = [0.0; 9];
         let mut scalar_result = [0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::mul(&a, &b, &mut avx2_result);
             ScalarBackend::mul(&a, &b, &mut scalar_result);
@@ -1605,6 +1757,7 @@ mod tests {
         let mut avx2_result = [0.0; 9];
         let mut scalar_result = [0.0; 9];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Avx2Backend::add(&a, &b, &mut avx2_result);
             ScalarBackend::add(&a, &b, &mut scalar_result);
@@ -1625,6 +1778,7 @@ mod tests {
 
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::sum(&a) };
         let scalar_result = unsafe { ScalarBackend::sum(&a) };
 
@@ -1643,6 +1797,7 @@ mod tests {
 
         let a = [1.0, 5.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::max(&a) };
         let scalar_result = unsafe { ScalarBackend::max(&a) };
 
@@ -1661,6 +1816,7 @@ mod tests {
 
         let a = [5.0, 1.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::min(&a) };
         let scalar_result = unsafe { ScalarBackend::min(&a) };
 

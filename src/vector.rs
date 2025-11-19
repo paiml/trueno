@@ -253,6 +253,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate backend
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
                 Backend::Scalar => {
@@ -337,6 +338,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate backend
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
                 Backend::Scalar => {
@@ -411,6 +413,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate backend
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
                 Backend::Scalar => {
@@ -480,6 +483,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate backend
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
                 Backend::Scalar => {
@@ -546,6 +550,7 @@ impl Vector<f32> {
             });
         }
 
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let result = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::dot(&self.data, &other.data),
@@ -583,6 +588,7 @@ impl Vector<f32> {
     /// assert_eq!(v.sum().unwrap(), 10.0);
     /// ```
     pub fn sum(&self) -> Result<f32> {
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let result = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::sum(&self.data),
@@ -628,6 +634,7 @@ impl Vector<f32> {
             return Err(TruenoError::InvalidInput("Empty vector".to_string()));
         }
 
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let result = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::max(&self.data),
@@ -675,6 +682,7 @@ impl Vector<f32> {
             return Err(TruenoError::InvalidInput("Empty vector".to_string()));
         }
 
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let result = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::min(&self.data),
@@ -722,6 +730,7 @@ impl Vector<f32> {
             return Err(TruenoError::InvalidInput("Empty vector".to_string()));
         }
 
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let result = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::argmax(&self.data),
@@ -769,6 +778,7 @@ impl Vector<f32> {
             return Err(TruenoError::InvalidInput("Empty vector".to_string()));
         }
 
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let result = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::argmin(&self.data),
@@ -819,6 +829,7 @@ impl Vector<f32> {
             return Ok(0.0);
         }
 
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let result = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::sum_kahan(&self.data),
@@ -1520,6 +1531,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate SIMD backend
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
                 Backend::Scalar => {
@@ -1645,6 +1657,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate backend
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
                 Backend::Scalar => {
@@ -1969,6 +1982,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate backend
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
                 Backend::Scalar => {
@@ -2082,6 +2096,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate SIMD backend
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
                 Backend::Scalar => {
@@ -2367,6 +2382,7 @@ impl Vector<f32> {
             return Ok(0.0);
         }
 
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let result = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::norm_l2(&self.data),
@@ -2474,6 +2490,7 @@ impl Vector<f32> {
             return Ok(0.0);
         }
 
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let result = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::norm_l1(&self.data),
@@ -2536,6 +2553,7 @@ impl Vector<f32> {
         }
 
         // Use optimized SIMD backend for single-pass abs+max
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         let max_abs = unsafe {
             match self.backend {
                 Backend::Scalar => ScalarBackend::norm_linf(&self.data),
@@ -2590,6 +2608,7 @@ impl Vector<f32> {
         let mut result_data = vec![0.0; self.len()];
 
         if !self.data.is_empty() {
+            // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
             unsafe {
                 match self.backend {
                     Backend::Scalar => ScalarBackend::abs(&self.data, &mut result_data),
@@ -2658,6 +2677,7 @@ impl Vector<f32> {
         let mut result_data = vec![0.0; self.len()];
 
         if !self.data.is_empty() {
+            // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
             unsafe {
                 match self.backend {
                     Backend::Scalar => ScalarBackend::scale(&self.data, scalar, &mut result_data),
@@ -2731,6 +2751,7 @@ impl Vector<f32> {
         let mut result_data = vec![0.0; self.len()];
 
         if !self.data.is_empty() {
+            // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
             unsafe {
                 match self.backend {
                     Backend::Scalar => {
@@ -2816,6 +2837,7 @@ impl Vector<f32> {
         let mut result_data = vec![0.0; self.len()];
 
         if !self.data.is_empty() {
+            // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
             unsafe {
                 match self.backend {
                     Backend::Scalar => {
@@ -2908,6 +2930,7 @@ impl Vector<f32> {
         let mut result_data = vec![0.0; self.len()];
 
         if !self.data.is_empty() {
+            // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
             unsafe {
                 match self.backend {
                     Backend::Scalar => {
@@ -3104,6 +3127,7 @@ impl Vector<f32> {
         let mut result_data = vec![0.0; self.len()];
 
         if !self.data.is_empty() {
+            // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
             unsafe {
                 match self.backend {
                     Backend::Scalar => ScalarBackend::exp(&self.data, &mut result_data),
@@ -3623,6 +3647,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate SIMD backend
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
                 Backend::Scalar => {

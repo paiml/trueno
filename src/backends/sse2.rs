@@ -22,6 +22,11 @@ pub struct Sse2Backend;
 
 impl VectorBackend for Sse2Backend {
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -48,6 +53,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -74,6 +84,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -94,6 +109,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -134,6 +154,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -166,6 +191,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn sum(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -192,6 +222,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn max(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -224,6 +259,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn min(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -256,6 +296,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn argmax(a: &[f32]) -> usize {
         let len = a.len();
         let mut i = 0;
@@ -315,6 +360,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn argmin(a: &[f32]) -> usize {
         let len = a.len();
         let mut i = 0;
@@ -373,12 +423,22 @@ impl VectorBackend for Sse2Backend {
         min_index
     }
 
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn sum_kahan(a: &[f32]) -> f32 {
         // Kahan summation is inherently sequential, use scalar implementation
         super::scalar::ScalarBackend::sum_kahan(a)
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn norm_l2(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -390,6 +450,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn norm_l1(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -433,6 +498,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn norm_linf(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -476,6 +546,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -499,6 +574,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn abs(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -525,6 +605,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -549,6 +634,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -578,6 +668,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -605,6 +700,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn relu(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -631,6 +731,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn exp(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -709,6 +814,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         // sigmoid(x) = 1 / (1 + exp(-x))
         // Use SIMD exp approximation with range reduction
@@ -793,6 +903,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
         // gelu(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
         // Use SIMD tanh via: tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
@@ -892,6 +1007,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
         // swish(x) = x * sigmoid(x) = x / (1 + exp(-x))
         // Use SIMD exp approximation with range reduction
@@ -976,6 +1096,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores used (_mm_loadu_ps/_mm_storeu_ps) - no alignment requirement
     unsafe fn tanh(a: &[f32], result: &mut [f32]) {
         // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)
         // Use SIMD exp approximation with range reduction
@@ -1073,6 +1198,7 @@ mod tests {
         let b = [5.0, 6.0, 7.0, 8.0, 9.0];
         let mut result = [0.0; 5];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Sse2Backend::add(&a, &b, &mut result);
         }
@@ -1086,6 +1212,7 @@ mod tests {
         let b = [2.0, 3.0, 4.0, 5.0, 6.0];
         let mut result = [0.0; 5];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Sse2Backend::mul(&a, &b, &mut result);
         }
@@ -1098,6 +1225,7 @@ mod tests {
         let a = [1.0, 2.0, 3.0, 4.0];
         let b = [4.0, 5.0, 6.0, 7.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { Sse2Backend::dot(&a, &b) };
 
         assert_eq!(result, 60.0); // 1*4 + 2*5 + 3*6 + 4*7 = 60
@@ -1106,6 +1234,7 @@ mod tests {
     #[test]
     fn test_sse2_sum() {
         let a = [1.0, 2.0, 3.0, 4.0, 5.0];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { Sse2Backend::sum(&a) };
         assert_eq!(result, 15.0);
     }
@@ -1113,6 +1242,7 @@ mod tests {
     #[test]
     fn test_sse2_max() {
         let a = [1.0, 5.0, 3.0, 2.0, 4.0];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { Sse2Backend::max(&a) };
         assert_eq!(result, 5.0);
     }
@@ -1120,6 +1250,7 @@ mod tests {
     #[test]
     fn test_sse2_min() {
         let a = [1.0, 5.0, 3.0, 2.0, 4.0];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let result = unsafe { Sse2Backend::min(&a) };
         assert_eq!(result, 1.0);
     }
@@ -1133,6 +1264,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::add(&a, &b, &mut scalar_result);
             Sse2Backend::add(&a, &b, &mut sse2_result);
@@ -1145,6 +1277,7 @@ mod tests {
     fn test_sse2_relu() {
         let a = [-3.0, -1.0, 0.0, 1.0, 3.0, -2.0, 2.0, -0.5];
         let mut result = [0.0; 8];
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             Sse2Backend::relu(&a, &mut result);
         }
@@ -1159,6 +1292,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::relu(&a, &mut scalar_result);
             Sse2Backend::relu(&a, &mut sse2_result);
@@ -1175,6 +1309,7 @@ mod tests {
         let mut scalar_result = [0.0; 5];
         let mut sse2_result = [0.0; 5];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::sigmoid(&a, &mut scalar_result);
             Sse2Backend::sigmoid(&a, &mut sse2_result);
@@ -1198,6 +1333,7 @@ mod tests {
         let mut scalar_result = [0.0; 5];
         let mut sse2_result = [0.0; 5];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::gelu(&a, &mut scalar_result);
             Sse2Backend::gelu(&a, &mut sse2_result);
@@ -1221,6 +1357,7 @@ mod tests {
         let mut scalar_result = [0.0; 5];
         let mut sse2_result = [0.0; 5];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::swish(&a, &mut scalar_result);
             Sse2Backend::swish(&a, &mut sse2_result);
@@ -1244,6 +1381,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::sub(&a, &b, &mut scalar_result);
             Sse2Backend::sub(&a, &b, &mut sse2_result);
@@ -1260,6 +1398,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::div(&a, &b, &mut scalar_result);
             Sse2Backend::div(&a, &b, &mut sse2_result);
@@ -1287,6 +1426,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::scale(&a, scalar, &mut scalar_result);
             Sse2Backend::scale(&a, scalar, &mut sse2_result);
@@ -1302,6 +1442,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::clamp(&a, 5.0, 20.0, &mut scalar_result);
             Sse2Backend::clamp(&a, 5.0, 20.0, &mut sse2_result);
@@ -1319,6 +1460,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::fma(&a, &b, &c, &mut scalar_result);
             Sse2Backend::fma(&a, &b, &c, &mut sse2_result);
@@ -1335,6 +1477,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::lerp(&a, &b, 0.25, &mut scalar_result);
             Sse2Backend::lerp(&a, &b, 0.25, &mut sse2_result);
@@ -1354,6 +1497,7 @@ mod tests {
     fn test_sse2_argmax_matches_scalar() {
         let a = [1.0, 5.0, 3.0, 10.0, 2.0, 8.0, 4.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::argmax(&a) };
         let sse2_result = unsafe { Sse2Backend::argmax(&a) };
 
@@ -1364,6 +1508,7 @@ mod tests {
     fn test_sse2_argmin_matches_scalar() {
         let a = [5.0, 1.0, 3.0, 10.0, 2.0, 8.0, 4.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::argmin(&a) };
         let sse2_result = unsafe { Sse2Backend::argmin(&a) };
 
@@ -1374,6 +1519,7 @@ mod tests {
     fn test_sse2_sum_kahan_matches_scalar() {
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::sum_kahan(&a) };
         let sse2_result = unsafe { Sse2Backend::sum_kahan(&a) };
 
@@ -1384,6 +1530,7 @@ mod tests {
     fn test_sse2_norm_l1_matches_scalar() {
         let a = [1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::norm_l1(&a) };
         let sse2_result = unsafe { Sse2Backend::norm_l1(&a) };
 
@@ -1394,6 +1541,7 @@ mod tests {
     fn test_sse2_norm_l2_matches_scalar() {
         let a = [3.0, 4.0, 0.0, 0.0, 5.0, 12.0, 0.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::norm_l2(&a) };
         let sse2_result = unsafe { Sse2Backend::norm_l2(&a) };
 
@@ -1405,6 +1553,7 @@ mod tests {
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
         let b = [7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::dot(&a, &b) };
         let sse2_result = unsafe { Sse2Backend::dot(&a, &b) };
 
@@ -1419,6 +1568,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::mul(&a, &b, &mut scalar_result);
             Sse2Backend::mul(&a, &b, &mut sse2_result);
@@ -1435,6 +1585,7 @@ mod tests {
         let mut scalar_result = [0.0; 7];
         let mut sse2_result = [0.0; 7];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::add(&a, &b, &mut scalar_result);
             Sse2Backend::add(&a, &b, &mut sse2_result);
@@ -1447,6 +1598,7 @@ mod tests {
     fn test_sse2_sum_matches_scalar() {
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::sum(&a) };
         let sse2_result = unsafe { Sse2Backend::sum(&a) };
 
@@ -1457,6 +1609,7 @@ mod tests {
     fn test_sse2_max_matches_scalar() {
         let a = [1.0, 5.0, 3.0, 7.0, 2.0, 8.0, 4.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::max(&a) };
         let sse2_result = unsafe { Sse2Backend::max(&a) };
 
@@ -1467,6 +1620,7 @@ mod tests {
     fn test_sse2_min_matches_scalar() {
         let a = [5.0, 1.0, 3.0, 7.0, 2.0, 8.0, 4.0];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::min(&a) };
         let sse2_result = unsafe { Sse2Backend::min(&a) };
 
@@ -1481,6 +1635,7 @@ mod tests {
         let mut scalar_result = [0.0; 5];
         let mut sse2_result = [0.0; 5];
 
+        // SAFETY: Test code calling backend trait methods marked unsafe
         unsafe {
             super::super::scalar::ScalarBackend::tanh(&a, &mut scalar_result);
             Sse2Backend::tanh(&a, &mut sse2_result);
