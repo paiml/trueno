@@ -61,36 +61,9 @@ macro_rules! dispatch_reduction {
                 #[cfg(target_arch = "x86_64")]
                 Backend::AVX512 => Avx512Backend::$op($data),
                 #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => ScalarBackend::$op($data),
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => NeonBackend::$op($data),
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => ScalarBackend::$op($data),
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => WasmBackend::$op($data),
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => ScalarBackend::$op($data),
-                Backend::GPU | Backend::Auto => ScalarBackend::$op($data),
-            }
-        }
-    };
-}
-
-
-/// Macro to dispatch index-finding operations (return usize)
-macro_rules! dispatch_index_op {
-    ($backend:expr, $op:ident, $data:expr) => {
-        unsafe {
-            match $backend {
-                Backend::Scalar => ScalarBackend::$op($data),
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => Sse2Backend::$op($data),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 => Avx2Backend::$op($data),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX512 => Avx512Backend::$op($data),
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => ScalarBackend::$op($data),
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::$op($data)
+                }
                 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
                 Backend::NEON => NeonBackend::$op($data),
                 #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
