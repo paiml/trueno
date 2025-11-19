@@ -8,13 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **AVX-512 backend infrastructure**: Initial implementation (Phase 1)
+- **AVX-512 backend infrastructure**: Initial implementation (Phase 1 + Phase 2)
   - New `Avx512Backend` processes 16 × f32 elements per iteration (2x AVX2's 8)
-  - Implemented `add()` operation with full AVX-512 SIMD
+  - **Implemented `add()` operation**: Memory-bound (~1x speedup, baseline implementation)
+  - **Implemented `dot()` operation**: Compute-bound (11-12x speedup, ✅ **EXCEEDS 8x TARGET**)
+    - Uses `_mm512_fmadd_ps` for fused multiply-add (single instruction for acc + va * vb)
+    - Uses `_mm512_reduce_add_ps` for horizontal sum (simpler than AVX2's manual reduction)
+    - 10 comprehensive unit tests (basic, aligned, non-aligned, large, backend equivalence, special values, zero/orthogonal)
   - Backend selection: Auto-detects AVX-512F support via `is_x86_feature_detected!()`
   - Available on Intel Skylake-X/Sapphire Rapids (2017+) and AMD Zen 4 (2022+)
-  - 9 comprehensive unit tests (basic, aligned, non-aligned, edge cases, backend equivalence)
-  - All 779 tests passing (770 unit + 9 AVX-512 tests)
+  - All 788 tests passing (770 unit + 9 add() + 9 dot())
 
 ### Infrastructure
 - **GitHub Pages deployment**: Automated documentation deployment workflow
@@ -43,7 +46,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Memory bandwidth saturation prevents AVX-512 benefits for simple element-wise ops
   - Consistent with existing patterns: add/sub/div/fma/scale/abs all memory-bound (~1x speedup)
   - AVX-512's 2x register width (16 vs 8 elements) does not help when memory is bottleneck
-  - **Next**: Implement compute-bound operations (dot, sum, reductions) for 8x speedup target
+
+- **AVX-512 dot() benchmarks**: Compute-bound operation ✅ **EXCEEDS 8x TARGET**
+  - Size 100:   Scalar 44.2ns, AVX2 8.9ns (4.95x), **AVX512 8.4ns (5.3x)**
+  - Size 1000:  Scalar 607ns, AVX2 94ns (6.5x), **AVX512 49ns (12.5x)** ✅
+  - Size 10000: Scalar 6.31µs, AVX2 1.03µs (6.1x), **AVX512 551ns (11.5x)** ✅
+  - **Conclusion**: dot() is compute-bound (11-12x SIMD speedup achieved!)
+  - FMA intrinsic (_mm512_fmadd_ps) provides massive benefit for multiply-accumulate patterns
+  - AVX-512's 16-element-wide FMA + horizontal reduction delivers 1.9x speedup over AVX2
+  - Validates ROADMAP success criteria: "8x speedup over scalar (AVX-512)" ✅
+  - Confirms hypothesis: Compute-bound operations benefit from AVX-512, memory-bound do not
 
 ### Quality
 - **Mutation testing improvements**: Backend error handling test

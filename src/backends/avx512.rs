@@ -79,9 +79,39 @@ impl VectorBackend for Avx512Backend {
     }
 
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=16 for AVX-512)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads used (_mm512_loadu_ps) - no alignment requirement
+    // 5. FMA intrinsic (_mm512_fmadd_ps) provides better performance and numerical accuracy
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
-        // Scalar fallback (AVX-512 optimization pending)
-        a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for 16-way parallel accumulation
+        let mut acc = _mm512_setzero_ps();
+
+        // Process 16 elements at a time with FMA
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm512_loadu_ps(b.as_ptr().add(i));
+
+            // Fused multiply-add: acc = acc + (va * vb)
+            // This is a single instruction on AVX-512 hardware
+            acc = _mm512_fmadd_ps(va, vb, acc);
+
+            i += 16;
+        }
+
+        // Horizontal sum: reduce 16 lanes to single value
+        // AVX-512 provides a convenient intrinsic for this
+        let mut result = _mm512_reduce_add_ps(acc);
+
+        // Handle remaining elements with scalar code
+        result += a[i..].iter().zip(&b[i..]).map(|(x, y)| x * y).sum::<f32>();
+
+        result
     }
 
     #[target_feature(enable = "avx512f")]
@@ -446,6 +476,176 @@ mod tests {
                         size, remainder, i);
                 }
             }
+        });
+    }
+
+    // =====================
+    // AVX-512 dot() tests
+    // =====================
+
+    #[test]
+    fn test_avx512_dot_basic() {
+        avx512_test(|| {
+            let a = vec![1.0, 2.0, 3.0, 4.0];
+            let b = vec![5.0, 6.0, 7.0, 8.0];
+            // Expected: 1*5 + 2*6 + 3*7 + 4*8 = 5 + 12 + 21 + 32 = 70
+            let result = unsafe { Avx512Backend::dot(&a, &b) };
+            assert!((result - 70.0).abs() < 1e-5, "Expected 70.0, got {}", result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_dot_aligned_16() {
+        avx512_test(|| {
+            // Test with exactly 16 elements (one AVX-512 register)
+            let a: Vec<f32> = (0..16).map(|i| i as f32).collect();
+            let b: Vec<f32> = (0..16).map(|i| (i + 1) as f32).collect();
+            // Expected: sum of i * (i + 1) for i in 0..16
+            // = 0*1 + 1*2 + 2*3 + ... + 15*16
+            let expected: f32 = (0..16).map(|i| (i * (i + 1)) as f32).sum();
+
+            let result = unsafe { Avx512Backend::dot(&a, &b) };
+            assert!((result - expected).abs() < 1e-4, "Expected {}, got {}", expected, result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_dot_non_aligned() {
+        avx512_test(|| {
+            // Test with 18 elements (16 + 2 remainder)
+            let a: Vec<f32> = (0..18).map(|i| (i as f32) * 1.5).collect();
+            let b: Vec<f32> = (0..18).map(|i| (i as f32) * 0.7).collect();
+            // Expected: sum of (i * 1.5) * (i * 0.7) = sum of i^2 * 1.05
+            let expected: f32 = (0..18).map(|i| ((i * i) as f32) * 1.05).sum();
+
+            let result = unsafe { Avx512Backend::dot(&a, &b) };
+            assert!((result - expected).abs() < 1e-3, "Expected {}, got {}", expected, result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_dot_large() {
+        avx512_test(|| {
+            // Test with 1000 elements (62 full AVX-512 registers + 8 remainder)
+            let size = 1000;
+            let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.5).collect();
+            let b: Vec<f32> = (0..size).map(|i| (i as f32) * 0.3).collect();
+            // Expected: sum of (i * 0.5) * (i * 0.3) = sum of i^2 * 0.15
+            let expected: f32 = (0..size).map(|i| ((i * i) as f32) * 0.15).sum();
+
+            let result = unsafe { Avx512Backend::dot(&a, &b) };
+            // Larger tolerance for accumulation of floating point errors
+            assert!((result - expected).abs() / expected.abs() < 1e-4,
+                "Expected {}, got {}, relative error: {}",
+                expected, result, ((result - expected).abs() / expected.abs()));
+        });
+    }
+
+    #[test]
+    fn test_avx512_dot_equivalence_to_scalar() {
+        avx512_test(|| {
+            // Backend equivalence: AVX-512 should produce same results as Scalar
+            let sizes = vec![1, 7, 15, 16, 17, 32, 63, 100, 1000];
+
+            for size in sizes {
+                let a: Vec<f32> = (0..size).map(|i| (i as f32 * 1.5) - 50.0).collect();
+                let b: Vec<f32> = (0..size).map(|i| (i as f32 * 0.7) + 20.0).collect();
+
+                let result_avx512 = unsafe { Avx512Backend::dot(&a, &b) };
+                let result_scalar = unsafe { ScalarBackend::dot(&a, &b) };
+
+                // Use relative tolerance for larger values
+                let tolerance = if result_scalar.abs() > 1.0 {
+                    result_scalar.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                assert!((result_avx512 - result_scalar).abs() < tolerance,
+                    "Backend mismatch at size {}: AVX512={}, Scalar={}, diff={}",
+                    size, result_avx512, result_scalar, (result_avx512 - result_scalar).abs());
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_dot_special_values() {
+        avx512_test(|| {
+            // Test with zero, negative, small, and large values
+            let a = vec![0.0, -1.0, 1.0, -5.0, 5.0, 1e-10, 1e10, -1e10,
+                         2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+            let b = vec![10.0, 2.0, 3.0, -2.0, 4.0, 2e-10, 2e10, -2e10,
+                         1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+
+            // Expected: 0*10 + (-1)*2 + 1*3 + (-5)*(-2) + 5*4 + (1e-10)*(2e-10) + (1e10)*(2e10) + (-1e10)*(-2e10) + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9
+            //         = 0 - 2 + 3 + 10 + 20 + 2e-20 + 2e20 + 2e20 + 44
+            //         = 75 + 2e-20 + 4e20
+            // Note: 2e-20 is negligible compared to 4e20
+
+            let result = unsafe { Avx512Backend::dot(&a, &b) };
+            let expected = unsafe { ScalarBackend::dot(&a, &b) };
+
+            // Use relative tolerance due to large values
+            let rel_error = if expected.abs() > 1.0 {
+                (result - expected).abs() / expected.abs()
+            } else {
+                (result - expected).abs()
+            };
+
+            assert!(rel_error < 1e-5,
+                "Expected {}, got {}, relative error: {}",
+                expected, result, rel_error);
+        });
+    }
+
+    #[test]
+    fn test_avx512_dot_remainder_sizes() {
+        avx512_test(|| {
+            // Test all remainder sizes from 16+1 to 16+15
+            for remainder in 1..=15 {
+                let size = 16 + remainder;
+                let a: Vec<f32> = (0..size).map(|i| (i as f32) + 1.0).collect();
+                let b: Vec<f32> = (0..size).map(|i| (i as f32) + 2.0).collect();
+
+                let result_avx512 = unsafe { Avx512Backend::dot(&a, &b) };
+                let result_scalar = unsafe { ScalarBackend::dot(&a, &b) };
+
+                let tolerance = if result_scalar.abs() > 1.0 {
+                    result_scalar.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                assert!((result_avx512 - result_scalar).abs() < tolerance,
+                    "Remainder test failed at size {} (remainder {}): AVX512={}, Scalar={}",
+                    size, remainder, result_avx512, result_scalar);
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_dot_zero_vector() {
+        avx512_test(|| {
+            let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0,
+                         9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0];
+            let b = vec![0.0; 16];
+
+            let result = unsafe { Avx512Backend::dot(&a, &b) };
+            assert_eq!(result, 0.0, "Dot product with zero vector should be 0.0, got {}", result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_dot_orthogonal() {
+        avx512_test(|| {
+            // Orthogonal vectors: [1, 0, 0, 0, ...] and [0, 1, 0, 0, ...]
+            let mut a = vec![0.0; 16];
+            let mut b = vec![0.0; 16];
+            a[0] = 1.0;
+            b[1] = 1.0;
+
+            let result = unsafe { Avx512Backend::dot(&a, &b) };
+            assert_eq!(result, 0.0, "Dot product of orthogonal vectors should be 0.0, got {}", result);
         });
     }
 }
