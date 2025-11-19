@@ -6,6 +6,8 @@
 
 #[cfg(target_arch = "x86_64")]
 use crate::backends::avx2::Avx2Backend;
+#[cfg(target_arch = "x86_64")]
+use crate::backends::avx512::Avx512Backend;
 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
 use crate::backends::neon::NeonBackend;
 use crate::backends::scalar::ScalarBackend;
@@ -264,9 +266,12 @@ impl Vector<f32> {
                     Sse2Backend::add(&self.data, &other.data, &mut result);
                 }
                 #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => {
-                    // AVX2 backend (AVX-512 uses AVX2 for now)
+                Backend::AVX2 => {
                     Avx2Backend::add(&self.data, &other.data, &mut result);
+                }
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX512 => {
+                    Avx512Backend::add(&self.data, &other.data, &mut result);
                 }
                 #[cfg(not(target_arch = "x86_64"))]
                 Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {

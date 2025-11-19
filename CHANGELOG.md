@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **AVX-512 backend infrastructure**: Initial implementation (Phase 1)
+  - New `Avx512Backend` processes 16 × f32 elements per iteration (2x AVX2's 8)
+  - Implemented `add()` operation with full AVX-512 SIMD
+  - Backend selection: Auto-detects AVX-512F support via `is_x86_feature_detected!()`
+  - Available on Intel Skylake-X/Sapphire Rapids (2017+) and AMD Zen 4 (2022+)
+  - 9 comprehensive unit tests (basic, aligned, non-aligned, edge cases, backend equivalence)
+  - All 779 tests passing (770 unit + 9 AVX-512 tests)
+
 ### Infrastructure
 - **GitHub Pages deployment**: Automated documentation deployment workflow
   - Combines mdBook guide and rustdoc API documentation
@@ -24,6 +33,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AVX512 FMA tolerance**: Increased tolerance for 3-way matmul associativity
   - Addresses floating-point precision differences in AVX-512 FMA operations
   - Commit 6cd7ba2
+
+### Performance
+- **AVX-512 add() benchmarks**: Memory-bound operation analysis
+  - Size 100:   Scalar 50.9ns, AVX2 44.4ns (1.15x), **AVX512 44.8ns (1.14x)**
+  - Size 1000:  Scalar 113.7ns, AVX2 101.1ns (1.12x), **AVX512 117.3ns (0.97x)**
+  - Size 10000: Scalar 1.117µs, AVX2 1.106µs (1.01x), **AVX512 1.122µs (0.99x)**
+  - **Conclusion**: add() is memory-bound (~1x SIMD benefit)
+  - Memory bandwidth saturation prevents AVX-512 benefits for simple element-wise ops
+  - Consistent with existing patterns: add/sub/div/fma/scale/abs all memory-bound (~1x speedup)
+  - AVX-512's 2x register width (16 vs 8 elements) does not help when memory is bottleneck
+  - **Next**: Implement compute-bound operations (dot, sum, reductions) for 8x speedup target
 
 ### Quality
 - **Mutation testing improvements**: Backend error handling test

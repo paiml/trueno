@@ -34,10 +34,8 @@ pub mod wasm;
 #[cfg(feature = "gpu")]
 pub mod gpu;
 
-// Future backends
-//
-// #[cfg(target_arch = "x86_64")]
-// pub mod avx512;
+#[cfg(target_arch = "x86_64")]
+pub mod avx512;
 
 /// Backend trait defining common operations
 ///
