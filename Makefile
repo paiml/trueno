@@ -311,5 +311,19 @@ install-tools: ## Install required development tools
 	cargo install cargo-mutants || exit 1
 	cargo install criterion || exit 1
 	cargo install renacer || exit 1
+	cargo install mdbook || exit 1
+
+# Documentation quality gates
+validate-examples: ## Validate book examples meet EXTREME TDD quality
+	@echo "📚 Validating book examples..."
+	@./scripts/validate_book_examples.sh
+
+build-book: ## Build mdBook documentation
+	@echo "📖 Building book..."
+	@mdbook build book/
+
+serve-book: ## Serve book locally with live reload
+	@echo "📖 Serving book at http://localhost:3000..."
+	@mdbook serve book/
 
 .DEFAULT_GOAL := help
