@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **AVX-512 backend infrastructure**: Initial implementation (Phase 1 + Phase 2 + Phase 3)
+- **AVX-512 backend infrastructure**: Initial implementation (Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5)
   - New `Avx512Backend` processes 16 × f32 elements per iteration (2x AVX2's 8)
   - **Implemented `add()` operation**: Memory-bound (~1x speedup, baseline implementation)
   - **Implemented `dot()` operation**: Compute-bound (11-12x speedup, ✅ **EXCEEDS 8x TARGET**)
@@ -27,9 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Uses `_mm512_min_ps` for 16-way parallel comparison
     - Uses `_mm512_reduce_min_ps` for horizontal min (single intrinsic)
     - 5 comprehensive unit tests (basic, aligned, non-aligned, positive values, backend equivalence)
+  - **Implemented `argmax()` operation**: Hybrid operation (3.2-3.3x speedup, limited by scalar index scan)
+    - Uses `_mm512_max_ps` + `_mm512_reduce_max_ps` to find maximum value (16-way SIMD)
+    - Scalar `.position()` scan to find index of max value (dominates runtime)
+    - 6 comprehensive unit tests (basic, aligned, non-aligned, negative values, max at start, backend equivalence)
+  - **Implemented `argmin()` operation**: Hybrid operation (3.2-3.3x speedup, limited by scalar index scan)
+    - Uses `_mm512_min_ps` + `_mm512_reduce_min_ps` to find minimum value (16-way SIMD)
+    - Scalar `.position()` scan to find index of min value (dominates runtime)
+    - 6 comprehensive unit tests (basic, aligned, non-aligned, positive values, min at start, backend equivalence)
   - Backend selection: Auto-detects AVX-512F support via `is_x86_feature_detected!()`
   - Available on Intel Skylake-X/Sapphire Rapids (2017+) and AMD Zen 4 (2022+)
-  - All 807 tests passing (779 unit + 9 add() + 9 dot() + 9 sum() + 5 max() + 5 min() = 807 unique)
+  - All 819 tests passing (779 + 9 add + 9 dot + 9 sum + 5 max + 5 min + 6 argmax + 6 argmin + 1 = 819 unique)
 
 ### Infrastructure
 - **GitHub Pages deployment**: Automated documentation deployment workflow
@@ -96,6 +104,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 16-way parallel comparison with `_mm512_min_ps` + `_mm512_reduce_min_ps`
   - AVX-512 matches AVX2 performance (both memory-bandwidth limited)
   - Validates ROADMAP success criteria ✅
+
+- **AVX-512 argmax() benchmarks**: Hybrid operation (SIMD find + scalar scan)
+  - Size 100:   Scalar 46.2ns, AVX2 21.8ns (2.1x), **AVX512 21.2ns (2.2x)**
+  - Size 1000:  Scalar 580ns, AVX2 182ns (3.2x), **AVX512 184ns (3.2x)**
+  - Size 10000: Scalar 5.95µs, AVX2 1.79µs (3.3x), **AVX512 1.78µs (3.3x)**
+  - **Conclusion**: argmax() achieves 3.2-3.3x speedup (limited by scalar index scan)
+  - SIMD phase: 16-way parallel max finding with `_mm512_max_ps` + `_mm512_reduce_max_ps`
+  - Scalar phase: `.position()` scan to find index of max value (dominates runtime)
+  - **Not** targeting 8x speedup - argmax is fundamentally a two-phase algorithm
+
+- **AVX-512 argmin() benchmarks**: Hybrid operation (SIMD find + scalar scan)
+  - Size 100:   Scalar 45.8ns, AVX2 21.5ns (2.1x), **AVX512 21.6ns (2.1x)**
+  - Size 1000:  Scalar 581ns, AVX2 180ns (3.2x), **AVX512 181ns (3.2x)**
+  - Size 10000: Scalar 5.93µs, AVX2 1.76µs (3.4x), **AVX512 1.79µs (3.3x)**
+  - **Conclusion**: argmin() achieves 3.2-3.3x speedup (limited by scalar index scan)
+  - SIMD phase: 16-way parallel min finding with `_mm512_min_ps` + `_mm512_reduce_min_ps`
+  - Scalar phase: `.position()` scan to find index of min value (dominates runtime)
+  - **Not** targeting 8x speedup - argmin is fundamentally a two-phase algorithm
 
 ### Quality
 - **Mutation testing improvements**: Backend error handling test

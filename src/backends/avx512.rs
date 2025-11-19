@@ -214,21 +214,71 @@ impl VectorBackend for Avx512Backend {
 
     #[target_feature(enable = "avx512f")]
     unsafe fn argmax(a: &[f32]) -> usize {
-        // Scalar fallback (AVX-512 optimization pending)
+        if a.is_empty() {
+            return 0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Start with first element broadcast to all 16 lanes
+        let mut vmax = _mm512_set1_ps(a[0]);
+
+        // Process 16 elements at a time to find max value
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            vmax = _mm512_max_ps(vmax, va);
+            i += 16;
+        }
+
+        // Horizontal max: find maximum value across all 16 lanes
+        let mut max_val = _mm512_reduce_max_ps(vmax);
+
+        // Check remaining elements
+        for &val in &a[i..] {
+            if val > max_val {
+                max_val = val;
+            }
+        }
+
+        // Find the index of the first occurrence of max_val
         a.iter()
-            .enumerate()
-            .max_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap())
-            .map(|(i, _)| i)
+            .position(|&x| x == max_val)
             .unwrap_or(0)
     }
 
     #[target_feature(enable = "avx512f")]
     unsafe fn argmin(a: &[f32]) -> usize {
-        // Scalar fallback (AVX-512 optimization pending)
+        if a.is_empty() {
+            return 0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Start with first element broadcast to all 16 lanes
+        let mut vmin = _mm512_set1_ps(a[0]);
+
+        // Process 16 elements at a time to find min value
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            vmin = _mm512_min_ps(vmin, va);
+            i += 16;
+        }
+
+        // Horizontal min: find minimum value across all 16 lanes
+        let mut min_val = _mm512_reduce_min_ps(vmin);
+
+        // Check remaining elements
+        for &val in &a[i..] {
+            if val < min_val {
+                min_val = val;
+            }
+        }
+
+        // Find the index of the first occurrence of min_val
         a.iter()
-            .enumerate()
-            .min_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap())
-            .map(|(i, _)| i)
+            .position(|&x| x == min_val)
             .unwrap_or(0)
     }
 
@@ -980,6 +1030,134 @@ mod tests {
                 let a: Vec<f32> = (0..size).map(|i| ((i * 7) % 100) as f32 - 50.0).collect();
                 let result_avx512 = unsafe { Avx512Backend::min(&a) };
                 let result_scalar = unsafe { ScalarBackend::min(&a) };
+                assert_eq!(result_avx512, result_scalar,
+                    "Backend mismatch at size {}: AVX512={}, Scalar={}",
+                    size, result_avx512, result_scalar);
+            }
+        });
+    }
+
+    // ============================================================================
+    // argmax() tests
+    // ============================================================================
+
+    #[test]
+    fn test_avx512_argmax_basic() {
+        avx512_test(|| {
+            let a = vec![1.0, 5.0, 3.0, 9.0, 2.0];
+            let result = unsafe { Avx512Backend::argmax(&a) };
+            assert_eq!(result, 3); // Index of 9.0
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmax_aligned_16() {
+        avx512_test(|| {
+            let a: Vec<f32> = (0..16).map(|i| i as f32).collect();
+            let result = unsafe { Avx512Backend::argmax(&a) };
+            assert_eq!(result, 15); // Maximum is at index 15
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmax_non_aligned_18() {
+        avx512_test(|| {
+            let a: Vec<f32> = (0..18).map(|i| i as f32).collect();
+            let result = unsafe { Avx512Backend::argmax(&a) };
+            assert_eq!(result, 17); // Maximum is at index 17
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmax_negative_values() {
+        avx512_test(|| {
+            let a = vec![-5.0, -2.0, -8.0, -1.0, -10.0];
+            let result = unsafe { Avx512Backend::argmax(&a) };
+            assert_eq!(result, 3); // Index of -1.0
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmax_max_at_start() {
+        avx512_test(|| {
+            let a = vec![100.0, 1.0, 2.0, 3.0, 4.0];
+            let result = unsafe { Avx512Backend::argmax(&a) };
+            assert_eq!(result, 0); // Maximum is at index 0
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmax_backend_equivalence() {
+        avx512_test(|| {
+            let sizes = [16, 17, 100, 1000, 10000, 16384, 16385, 100000, 1000000];
+            for &size in &sizes {
+                let a: Vec<f32> = (0..size).map(|i| ((i * 13) % 100) as f32 - 50.0).collect();
+                let result_avx512 = unsafe { Avx512Backend::argmax(&a) };
+                let result_scalar = unsafe { ScalarBackend::argmax(&a) };
+                assert_eq!(result_avx512, result_scalar,
+                    "Backend mismatch at size {}: AVX512={}, Scalar={}",
+                    size, result_avx512, result_scalar);
+            }
+        });
+    }
+
+    // ============================================================================
+    // argmin() tests
+    // ============================================================================
+
+    #[test]
+    fn test_avx512_argmin_basic() {
+        avx512_test(|| {
+            let a = vec![5.0, 1.0, 9.0, 3.0, 2.0];
+            let result = unsafe { Avx512Backend::argmin(&a) };
+            assert_eq!(result, 1); // Index of 1.0
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmin_aligned_16() {
+        avx512_test(|| {
+            let a: Vec<f32> = (0..16).rev().map(|i| i as f32).collect();
+            let result = unsafe { Avx512Backend::argmin(&a) };
+            assert_eq!(result, 15); // Minimum is at index 15
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmin_non_aligned_18() {
+        avx512_test(|| {
+            let a: Vec<f32> = (0..18).rev().map(|i| i as f32).collect();
+            let result = unsafe { Avx512Backend::argmin(&a) };
+            assert_eq!(result, 17); // Minimum is at index 17
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmin_positive_values() {
+        avx512_test(|| {
+            let a = vec![10.0, 5.0, 8.0, 2.0, 15.0];
+            let result = unsafe { Avx512Backend::argmin(&a) };
+            assert_eq!(result, 3); // Index of 2.0
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmin_min_at_start() {
+        avx512_test(|| {
+            let a = vec![1.0, 100.0, 200.0, 300.0, 400.0];
+            let result = unsafe { Avx512Backend::argmin(&a) };
+            assert_eq!(result, 0); // Minimum is at index 0
+        });
+    }
+
+    #[test]
+    fn test_avx512_argmin_backend_equivalence() {
+        avx512_test(|| {
+            let sizes = [16, 17, 100, 1000, 10000, 16384, 16385, 100000, 1000000];
+            for &size in &sizes {
+                let a: Vec<f32> = (0..size).map(|i| ((i * 13) % 100) as f32 - 50.0).collect();
+                let result_avx512 = unsafe { Avx512Backend::argmin(&a) };
+                let result_scalar = unsafe { ScalarBackend::argmin(&a) };
                 assert_eq!(result_avx512, result_scalar,
                     "Backend mismatch at size {}: AVX512={}, Scalar={}",
                     size, result_avx512, result_scalar);
