@@ -69,6 +69,18 @@ fn bench_add(c: &mut Criterion) {
                 black_box(a.add(&b).unwrap());
             });
         });
+
+        // AVX-512 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX512", size), size, |bencher, &size| {
+            let data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX512);
+            let b = Vector::from_slice_with_backend(&data, Backend::AVX512);
+
+            bencher.iter(|| {
+                black_box(a.add(&b).unwrap());
+            });
+        });
     }
 
     group.finish();
