@@ -5145,6 +5145,27 @@ mod tests {
         assert_eq!(result.len(), 0);
     }
 
+    #[test]
+    fn test_exp_backend_auto_unsupported() {
+        // EXTREME TDD: Kill mutant that deletes Backend::Auto match arm
+        // Direct construction bypasses normal backend resolution (testing defensive code)
+        let v = Vector {
+            data: vec![1.0, 2.0, 3.0],
+            backend: Backend::Auto,
+        };
+
+        let result = v.exp();
+
+        // Should return UnsupportedBackend error, not fall through to wildcard
+        assert!(result.is_err(), "exp() should error for Backend::Auto");
+        match result.unwrap_err() {
+            TruenoError::UnsupportedBackend(Backend::Auto) => {
+                // Expected error
+            }
+            other => panic!("Expected UnsupportedBackend(Auto), got {:?}", other),
+        }
+    }
+
     // ln() operation tests (element-wise natural logarithm: ln(x))
     #[test]
     fn test_ln_basic() {
