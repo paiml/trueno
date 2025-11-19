@@ -427,6 +427,17 @@ fn bench_sum(c: &mut Criterion) {
                 black_box(a.sum().unwrap());
             });
         });
+
+        // AVX512 backend (16 elements per iteration)
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX512", size), size, |bencher, &size| {
+            let data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX512);
+
+            bencher.iter(|| {
+                black_box(a.sum().unwrap());
+            });
+        });
     }
 
     group.finish();

@@ -115,9 +115,33 @@ impl VectorBackend for Avx512Backend {
     }
 
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=16 for AVX-512)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads used (_mm512_loadu_ps) - no alignment requirement
     unsafe fn sum(a: &[f32]) -> f32 {
-        // Scalar fallback (AVX-512 optimization pending)
-        a.iter().sum()
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for 16-way parallel accumulation
+        let mut acc = _mm512_setzero_ps();
+
+        // Process 16 elements at a time
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            acc = _mm512_add_ps(acc, va);
+            i += 16;
+        }
+
+        // Horizontal sum: reduce 16 lanes to single value
+        // AVX-512 provides a convenient intrinsic for this
+        let mut result = _mm512_reduce_add_ps(acc);
+
+        // Handle remaining elements with scalar code
+        result += a[i..].iter().sum::<f32>();
+
+        result
     }
 
     #[target_feature(enable = "avx512f")]
@@ -646,6 +670,150 @@ mod tests {
 
             let result = unsafe { Avx512Backend::dot(&a, &b) };
             assert_eq!(result, 0.0, "Dot product of orthogonal vectors should be 0.0, got {}", result);
+        });
+    }
+
+    // =====================
+    // AVX-512 sum() tests
+    // =====================
+
+    #[test]
+    fn test_avx512_sum_basic() {
+        avx512_test(|| {
+            let a = vec![1.0, 2.0, 3.0, 4.0];
+            // Expected: 1 + 2 + 3 + 4 = 10
+            let result = unsafe { Avx512Backend::sum(&a) };
+            assert!((result - 10.0).abs() < 1e-5, "Expected 10.0, got {}", result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_sum_aligned_16() {
+        avx512_test(|| {
+            // Test with exactly 16 elements (one AVX-512 register)
+            let a: Vec<f32> = (0..16).map(|i| i as f32).collect();
+            // Expected: sum of 0..16 = 0+1+2+...+15 = 120
+            let expected: f32 = (0..16).map(|i| i as f32).sum();
+
+            let result = unsafe { Avx512Backend::sum(&a) };
+            assert!((result - expected).abs() < 1e-4, "Expected {}, got {}", expected, result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_sum_non_aligned() {
+        avx512_test(|| {
+            // Test with 18 elements (16 + 2 remainder)
+            let a: Vec<f32> = (0..18).map(|i| (i as f32) * 1.5).collect();
+            // Expected: sum of (i * 1.5) for i in 0..18
+            let expected: f32 = (0..18).map(|i| (i as f32) * 1.5).sum();
+
+            let result = unsafe { Avx512Backend::sum(&a) };
+            assert!((result - expected).abs() < 1e-3, "Expected {}, got {}", expected, result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_sum_large() {
+        avx512_test(|| {
+            // Test with 1000 elements (62 full AVX-512 registers + 8 remainder)
+            let size = 1000;
+            let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.5).collect();
+            // Expected: sum of (i * 0.5) for i in 0..1000
+            let expected: f32 = (0..size).map(|i| (i as f32) * 0.5).sum();
+
+            let result = unsafe { Avx512Backend::sum(&a) };
+            // Larger tolerance for accumulation of floating point errors
+            let rel_error = if expected.abs() > 1.0 {
+                (result - expected).abs() / expected.abs()
+            } else {
+                (result - expected).abs()
+            };
+            assert!(rel_error < 1e-4,
+                "Expected {}, got {}, relative error: {}",
+                expected, result, rel_error);
+        });
+    }
+
+    #[test]
+    fn test_avx512_sum_equivalence_to_scalar() {
+        avx512_test(|| {
+            // Backend equivalence: AVX-512 should produce same results as Scalar
+            let sizes = vec![1, 7, 15, 16, 17, 32, 63, 100, 1000];
+
+            for size in sizes {
+                let a: Vec<f32> = (0..size).map(|i| (i as f32 * 1.5) - 50.0).collect();
+
+                let result_avx512 = unsafe { Avx512Backend::sum(&a) };
+                let result_scalar = unsafe { ScalarBackend::sum(&a) };
+
+                // Use relative tolerance for larger values
+                let tolerance = if result_scalar.abs() > 1.0 {
+                    result_scalar.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                assert!((result_avx512 - result_scalar).abs() < tolerance,
+                    "Backend mismatch at size {}: AVX512={}, Scalar={}, diff={}",
+                    size, result_avx512, result_scalar, (result_avx512 - result_scalar).abs());
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_sum_negative_values() {
+        avx512_test(|| {
+            let a = vec![-1.0, -2.0, -3.0, -4.0, 5.0, 6.0, 7.0, 8.0,
+                         -9.0, -10.0, 11.0, 12.0, -13.0, 14.0, -15.0, 16.0];
+            // Expected: -1 - 2 - 3 - 4 + 5 + 6 + 7 + 8 - 9 - 10 + 11 + 12 - 13 + 14 - 15 + 16 = 22
+            let expected = 22.0;
+
+            let result = unsafe { Avx512Backend::sum(&a) };
+            assert!((result - expected).abs() < 1e-5,
+                "Expected {}, got {}", expected, result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_sum_zero_vector() {
+        avx512_test(|| {
+            let a = vec![0.0; 16];
+            let result = unsafe { Avx512Backend::sum(&a) };
+            assert_eq!(result, 0.0, "Sum of zeros should be 0.0, got {}", result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_sum_single_element() {
+        avx512_test(|| {
+            let a = vec![42.0];
+            let result = unsafe { Avx512Backend::sum(&a) };
+            assert_eq!(result, 42.0, "Sum of single element should be that element, got {}", result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_sum_remainder_sizes() {
+        avx512_test(|| {
+            // Test all remainder sizes from 16+1 to 16+15
+            for remainder in 1..=15 {
+                let size = 16 + remainder;
+                let a: Vec<f32> = (0..size).map(|i| (i as f32) + 1.0).collect();
+
+                let result_avx512 = unsafe { Avx512Backend::sum(&a) };
+                let result_scalar = unsafe { ScalarBackend::sum(&a) };
+
+                let tolerance = if result_scalar.abs() > 1.0 {
+                    result_scalar.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                assert!((result_avx512 - result_scalar).abs() < tolerance,
+                    "Remainder test failed at size {} (remainder {}): AVX512={}, Scalar={}",
+                    size, remainder, result_avx512, result_scalar);
+            }
         });
     }
 }
