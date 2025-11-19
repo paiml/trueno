@@ -50,9 +50,7 @@ pub fn run() -> Result<()> {
     });
 
     // Step 2: Run clippy on examples
-    results.add_step(2, "Clippy lints", || {
-        step_clippy_examples(&project_root)
-    });
+    results.add_step(2, "Clippy lints", || step_clippy_examples(&project_root));
 
     // Step 3: Verify module documentation
     results.add_step(3, "Module documentation", || {
@@ -87,8 +85,7 @@ pub fn run() -> Result<()> {
 
 /// Get the project root directory
 fn get_project_root() -> Result<PathBuf> {
-    let current = std::env::current_dir()
-        .context("Failed to get current directory")?;
+    let current = std::env::current_dir().context("Failed to get current directory")?;
 
     // Look for Cargo.toml in current dir or parent
     if current.join("Cargo.toml").exists() {
@@ -107,14 +104,15 @@ fn get_project_root() -> Result<PathBuf> {
 /// Collect all example .rs files
 fn collect_examples(examples_dir: &Path) -> Result<Vec<PathBuf>> {
     if !examples_dir.exists() {
-        bail!("Examples directory does not exist: {}", examples_dir.display());
+        bail!(
+            "Examples directory does not exist: {}",
+            examples_dir.display()
+        );
     }
 
     let mut examples = Vec::new();
 
-    for entry in fs::read_dir(examples_dir)
-        .context("Failed to read examples directory")?
-    {
+    for entry in fs::read_dir(examples_dir).context("Failed to read examples directory")? {
         let entry = entry?;
         let path = entry.path();
 
@@ -177,11 +175,15 @@ fn step_check_module_docs(examples: &[PathBuf]) -> Result<()> {
     }
 
     if !missing_docs.is_empty() {
-        let names: Vec<_> = missing_docs.iter()
+        let names: Vec<_> = missing_docs
+            .iter()
             .filter_map(|p| p.file_name())
             .filter_map(|n| n.to_str())
             .collect();
-        bail!("Examples missing module documentation (//!):\n  {}", names.join("\n  "));
+        bail!(
+            "Examples missing module documentation (//!):\n  {}",
+            names.join("\n  ")
+        );
     }
 
     Ok(())
@@ -189,8 +191,8 @@ fn step_check_module_docs(examples: &[PathBuf]) -> Result<()> {
 
 /// Check if a file has module documentation
 fn has_module_doc(path: &Path) -> Result<bool> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {}", path.display()))?;
+    let content =
+        fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
 
     // Look for //! comments in first 10 lines
     for line in content.lines().take(10) {
@@ -222,12 +224,13 @@ fn step_check_runnable(examples: &[PathBuf], project_root: &Path) -> Result<()> 
         }
 
         // Try to run it with timeout
-        let example_name = example.file_stem()
+        let example_name = example
+            .file_stem()
             .and_then(|s| s.to_str())
             .ok_or_else(|| anyhow!("Invalid example filename"))?;
 
         match run_example_with_timeout(example_name, project_root, TIMEOUT_SECS) {
-            Ok(_) => {}, // Success
+            Ok(_) => {} // Success
             Err(e) => {
                 errors.push(format!("{}: {}", example_name, e));
             }
@@ -243,8 +246,8 @@ fn step_check_runnable(examples: &[PathBuf], project_root: &Path) -> Result<()> 
 
 /// Check if example has a main function
 fn has_main_function(path: &Path) -> Result<bool> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read {}", path.display()))?;
+    let content =
+        fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
 
     let main_regex = Regex::new(r"fn\s+main\s*\(").unwrap();
     Ok(main_regex.is_match(&content))
@@ -352,10 +355,7 @@ fn step_check_book_references(examples: &[PathBuf], book_dir: &Path) -> Result<(
 fn find_markdown_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
-    for entry in WalkDir::new(dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) == Some("md") {
             files.push(path.to_path_buf());
