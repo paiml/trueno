@@ -80,7 +80,7 @@ roadmap:
 
   - id: avx512-norm-l2
     title: "Implement AVX-512 norm_l2 (8x+ speedup expected)"
-    status: todo
+    status: in_progress
     type: feature
     priority: high
     description: |

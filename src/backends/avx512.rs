@@ -293,9 +293,39 @@ impl VectorBackend for Avx512Backend {
     }
 
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads used (_mm512_loadu_ps) - no alignment requirement
     unsafe fn norm_l2(a: &[f32]) -> f32 {
-        // Scalar fallback (AVX-512 optimization pending)
-        a.iter().map(|x| x * x).sum::<f32>().sqrt()
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for sum of squares
+        let mut acc = _mm512_setzero_ps();
+
+        // Process 16 elements at a time: compute x^2 and accumulate
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let squared = _mm512_mul_ps(va, va);
+            acc = _mm512_add_ps(acc, squared);
+            i += 16;
+        }
+
+        // Horizontal sum: reduce 16 lanes to single value
+        let mut sum_of_squares = _mm512_reduce_add_ps(acc);
+
+        // Handle remaining elements with scalar code
+        for &val in &a[i..] {
+            sum_of_squares += val * val;
+        }
+
+        sum_of_squares.sqrt()
     }
 
     #[target_feature(enable = "avx512f")]
@@ -1289,6 +1319,139 @@ mod tests {
                     size, result_avx512, result_scalar
                 );
             }
+        });
+    }
+
+    // ============================================================
+    // norm_l2 Tests
+    // ============================================================
+
+    #[test]
+    fn test_avx512_norm_l2_basic() {
+        avx512_test(|| {
+            let a = vec![3.0, 4.0];
+            // Expected: sqrt(3^2 + 4^2) = sqrt(9 + 16) = sqrt(25) = 5.0
+            let result = unsafe { Avx512Backend::norm_l2(&a) };
+            assert!((result - 5.0).abs() < 1e-5, "Expected 5.0, got {}", result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_norm_l2_empty() {
+        avx512_test(|| {
+            let a: Vec<f32> = vec![];
+            let result = unsafe { Avx512Backend::norm_l2(&a) };
+            assert_eq!(result, 0.0, "L2 norm of empty vector should be 0.0");
+        });
+    }
+
+    #[test]
+    fn test_avx512_norm_l2_single() {
+        avx512_test(|| {
+            let a = vec![7.0];
+            // Expected: sqrt(7^2) = 7.0
+            let result = unsafe { Avx512Backend::norm_l2(&a) };
+            assert!((result - 7.0).abs() < 1e-5, "Expected 7.0, got {}", result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_norm_l2_aligned_16() {
+        avx512_test(|| {
+            // Test with exactly 16 elements (one AVX-512 register)
+            let a = vec![1.0; 16];
+            // Expected: sqrt(16 * 1^2) = sqrt(16) = 4.0
+            let result = unsafe { Avx512Backend::norm_l2(&a) };
+            assert!((result - 4.0).abs() < 1e-5, "Expected 4.0, got {}", result);
+        });
+    }
+
+    #[test]
+    fn test_avx512_norm_l2_non_aligned() {
+        avx512_test(|| {
+            // Test with 18 elements (16 + 2 remainder)
+            let a: Vec<f32> = (0..18).map(|i| (i as f32) + 1.0).collect();
+            // Expected: sqrt(sum((i+1)^2 for i in 0..18))
+            let expected = (0..18)
+                .map(|i| ((i as f32) + 1.0) * ((i as f32) + 1.0))
+                .sum::<f32>()
+                .sqrt();
+
+            let result = unsafe { Avx512Backend::norm_l2(&a) };
+            assert!(
+                (result - expected).abs() < 1e-3,
+                "Expected {}, got {}",
+                expected,
+                result
+            );
+        });
+    }
+
+    #[test]
+    fn test_avx512_norm_l2_large() {
+        avx512_test(|| {
+            // Test with 1000 elements
+            let size = 1000;
+            let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.1).collect();
+            let expected = (0..size)
+                .map(|i| ((i as f32) * 0.1) * ((i as f32) * 0.1))
+                .sum::<f32>()
+                .sqrt();
+
+            let result = unsafe { Avx512Backend::norm_l2(&a) };
+            let rel_error = if expected.abs() > 1.0 {
+                (result - expected).abs() / expected.abs()
+            } else {
+                (result - expected).abs()
+            };
+            assert!(
+                rel_error < 1e-4,
+                "Expected {}, got {}, relative error: {}",
+                expected,
+                result,
+                rel_error
+            );
+        });
+    }
+
+    #[test]
+    fn test_avx512_norm_l2_equivalence_to_scalar() {
+        avx512_test(|| {
+            // Backend equivalence: AVX-512 should produce same results as Scalar
+            let sizes = vec![0, 1, 7, 15, 16, 17, 32, 63, 100, 1000];
+
+            for size in sizes {
+                let a: Vec<f32> = (0..size).map(|i| (i as f32 * 0.7) - 10.0).collect();
+
+                let result_avx512 = unsafe { Avx512Backend::norm_l2(&a) };
+                let result_scalar = unsafe { ScalarBackend::norm_l2(&a) };
+
+                // Use relative tolerance for larger values
+                let tolerance = if result_scalar.abs() > 1.0 {
+                    result_scalar.abs() * 1e-5
+                } else {
+                    1e-5
+                };
+
+                assert!(
+                    (result_avx512 - result_scalar).abs() < tolerance,
+                    "Backend mismatch at size {}: AVX512={}, Scalar={}, diff={}",
+                    size,
+                    result_avx512,
+                    result_scalar,
+                    (result_avx512 - result_scalar).abs()
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_norm_l2_negative_values() {
+        avx512_test(|| {
+            let a = vec![-3.0, -4.0];
+            // Expected: sqrt((-3)^2 + (-4)^2) = sqrt(9 + 16) = 5.0
+            let result = unsafe { Avx512Backend::norm_l2(&a) };
+            assert!((result - 5.0).abs() < 1e-5, "Expected 5.0, got {}", result);
         });
     }
 }
