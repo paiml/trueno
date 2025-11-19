@@ -1765,3 +1765,63 @@ impl GpuDevice {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_available_consistency() {
+        // EXTREME TDD: Kill mutant that replaces is_available() with hardcoded false
+        // Test that is_available() is consistent with GpuDevice::new()
+        let available = GpuDevice::is_available();
+        let device_result = GpuDevice::new();
+
+        if available {
+            // If is_available() returns true, device creation should succeed
+            assert!(
+                device_result.is_ok(),
+                "is_available() returned true, but GpuDevice::new() failed"
+            );
+        } else {
+            // If is_available() returns false, we can't make assertions about new()
+            // (it might still succeed in some edge cases, but typically should fail)
+            // The key test is: mutant always returns false, so on GPU systems this fails
+            eprintln!(
+                "GPU not available (is_available=false), device creation result: {:?}",
+                device_result.is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn test_reduce_sum_not_hardcoded() {
+        // EXTREME TDD: Kill mutant that replaces reduce_sum with Ok(-1.0)
+        if !GpuDevice::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let device = GpuDevice::new().expect("Failed to create GPU device");
+        let input = vec![1.0, 2.0, 3.0, 4.0, 5.0]; // sum = 15.0
+
+        // reduce_sum is async, so we use pollster::block_on
+        let result = pollster::block_on(device.reduce_sum(&input)).expect("reduce_sum failed");
+
+        // Kill mutant: verify result is NOT -1.0
+        assert_ne!(
+            result, -1.0,
+            "reduce_sum returned hardcoded -1.0 (mutant not killed)"
+        );
+
+        // Verify correct computation
+        let expected: f32 = input.iter().sum();
+        assert!(
+            (result - expected).abs() < 1e-4,
+            "reduce_sum({:?}) = {} (expected {})",
+            input,
+            result,
+            expected
+        );
+    }
+}

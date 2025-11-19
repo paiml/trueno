@@ -926,6 +926,39 @@ mod tests {
     }
 
     #[test]
+    fn test_gpu_tanh_not_hardcoded() {
+        // EXTREME TDD: Kill mutant that replaces return with Ok(vec![-1.0])
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let mut gpu = GpuBackend::new();
+        let input = vec![1.0, 2.0, 3.0];
+
+        let result = gpu.tanh(&input).expect("GPU tanh should succeed");
+
+        // Kill mutant: verify result is NOT all -1.0 values
+        assert_ne!(
+            result,
+            vec![-1.0, -1.0, -1.0],
+            "GPU tanh returned hardcoded -1.0 values (mutant not killed)"
+        );
+
+        // Verify correct computation
+        for (i, &x) in input.iter().enumerate() {
+            let expected = x.tanh();
+            assert!(
+                (result[i] - expected).abs() < 1e-4,
+                "tanh({}) = {} (expected {})",
+                x,
+                result[i],
+                expected
+            );
+        }
+    }
+
+    #[test]
     fn test_gpu_softmax_basic() {
         if !GpuBackend::is_available() {
             eprintln!("GPU not available, skipping test");
