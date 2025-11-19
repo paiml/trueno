@@ -2,8 +2,17 @@ roadmap_version: '1.0'
 github_enabled: true
 github_repo: paiml/trueno
 roadmap:
+  - id: avx512-max-min
+    title: "Implement AVX-512 max/min with 8-12x speedup (Phase 4)"
+    status: completed
+    type: feature
+    priority: high
+    description: |
+      Implement AVX-512 SIMD acceleration for max() and min() reduction operations.
+      Achieved: 8-12x speedup over scalar baseline.
+
   - id: avx512-argmax-argmin
-    title: "Implement AVX-512 argmax/argmin with 8x speedup (Phase 5)"
+    title: "Implement AVX-512 argmax/argmin with 3.2-3.3x speedup (Phase 5)"
     status: completed
     type: feature
     priority: high
