@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Infrastructure
+- **GitHub Pages deployment**: Automated documentation deployment workflow
+  - Combines mdBook guide and rustdoc API documentation
+  - Deploys to GitHub Pages on push to main branch
+  - API documentation available at `/api` subdirectory
+  - Workflow file: `.github/workflows/deploy-docs.yml`
+
+### Documentation
+- **Fixed Intel Intrinsics Guide reference**: Updated to mirror URL
+  - Original Intel URL blocked automated link validation (HTTP 403)
+  - Now references automation-friendly mirror at `laruence.com/sse`
+  - Passes PMAT `validate-docs` quality gate (136/136 links valid)
+
+### Fixed
+- **AVX512 FMA tolerance**: Increased tolerance for 3-way matmul associativity
+  - Addresses floating-point precision differences in AVX-512 FMA operations
+  - Commit 6cd7ba2
+
+### Quality
+- **Bashrs enforcement**: Shell script quality validation
+  - Replaced C-grade shell validation with A-grade Rust xtask
+  - Enforces bashrs validation for Makefile and all shell scripts
+  - Handles missing shell scripts gracefully
+
+---
+
 ## [0.2.2] - 2025-11-18
 
 ### Fixed
