@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "xtask"]
+exclude = []
+
 [package]
 name = "trueno"
 version = "0.2.2"
