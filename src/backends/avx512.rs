@@ -242,9 +242,7 @@ impl VectorBackend for Avx512Backend {
         }
 
         // Find the index of the first occurrence of max_val
-        a.iter()
-            .position(|&x| x == max_val)
-            .unwrap_or(0)
+        a.iter().position(|&x| x == max_val).unwrap_or(0)
     }
 
     #[target_feature(enable = "avx512f")]
@@ -277,9 +275,7 @@ impl VectorBackend for Avx512Backend {
         }
 
         // Find the index of the first occurrence of min_val
-        a.iter()
-            .position(|&x| x == min_val)
-            .unwrap_or(0)
+        a.iter().position(|&x| x == min_val).unwrap_or(0)
     }
 
     #[target_feature(enable = "avx512f")]
@@ -489,8 +485,13 @@ mod tests {
 
             for i in 0..1000 {
                 let expected = i as f32 * 0.5 + i as f32 * 0.3;
-                assert!((result[i] - expected).abs() < 1e-5,
-                    "Mismatch at index {}: expected {}, got {}", i, expected, result[i]);
+                assert!(
+                    (result[i] - expected).abs() < 1e-5,
+                    "Mismatch at index {}: expected {}, got {}",
+                    i,
+                    expected,
+                    result[i]
+                );
             }
         });
     }
@@ -513,21 +514,32 @@ mod tests {
     #[test]
     fn test_avx512_add_negative_values() {
         avx512_test(|| {
-            let a = vec![-1.0, -2.0, -3.0, -4.0, 5.0, 6.0, 7.0, 8.0,
-                         9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0];
-            let b = vec![10.0, 20.0, 30.0, 40.0, -50.0, -60.0, -70.0, -80.0,
-                         1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+            let a = vec![
+                -1.0, -2.0, -3.0, -4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
+                15.0, 16.0,
+            ];
+            let b = vec![
+                10.0, 20.0, 30.0, 40.0, -50.0, -60.0, -70.0, -80.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0,
+                7.0, 8.0,
+            ];
             let mut result = vec![0.0; 16];
-            let expected = vec![9.0, 18.0, 27.0, 36.0, -45.0, -54.0, -63.0, -72.0,
-                               10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0];
+            let expected = vec![
+                9.0, 18.0, 27.0, 36.0, -45.0, -54.0, -63.0, -72.0, 10.0, 12.0, 14.0, 16.0, 18.0,
+                20.0, 22.0, 24.0,
+            ];
 
             unsafe {
                 Avx512Backend::add(&a, &b, &mut result);
             }
 
             for i in 0..16 {
-                assert!((result[i] - expected[i]).abs() < 1e-5,
-                    "Mismatch at index {}: expected {}, got {}", i, expected[i], result[i]);
+                assert!(
+                    (result[i] - expected[i]).abs() < 1e-5,
+                    "Mismatch at index {}: expected {}, got {}",
+                    i,
+                    expected[i],
+                    result[i]
+                );
             }
         });
     }
@@ -551,9 +563,14 @@ mod tests {
                 }
 
                 for i in 0..size {
-                    assert!((result_avx512[i] - result_scalar[i]).abs() < 1e-5,
+                    assert!(
+                        (result_avx512[i] - result_scalar[i]).abs() < 1e-5,
                         "Backend mismatch at size {} index {}: AVX512={}, Scalar={}",
-                        size, i, result_avx512[i], result_scalar[i]);
+                        size,
+                        i,
+                        result_avx512[i],
+                        result_scalar[i]
+                    );
                 }
             }
         });
@@ -563,12 +580,28 @@ mod tests {
     fn test_avx512_add_special_values() {
         avx512_test(|| {
             // Test with infinity, zero, and very small/large values
-            let a = vec![0.0, -0.0, f32::INFINITY, f32::NEG_INFINITY,
-                         1e-20, -1e-20, 1e20, -1e20,
-                         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-            let b = vec![0.0, 0.0, 1.0, -1.0,
-                         2e-20, -2e-20, 2e20, -2e20,
-                         1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+            let a = vec![
+                0.0,
+                -0.0,
+                f32::INFINITY,
+                f32::NEG_INFINITY,
+                1e-20,
+                -1e-20,
+                1e20,
+                -1e20,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ];
+            let b = vec![
+                0.0, 0.0, 1.0, -1.0, 2e-20, -2e-20, 2e20, -2e20, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0,
+                8.0,
+            ];
             let mut result = vec![0.0; 16];
 
             unsafe {
@@ -601,9 +634,11 @@ mod tests {
                 // Verify all elements, especially the remainder portion
                 for i in 0..size {
                     let expected = i as f32 + (size - i) as f32;
-                    assert_eq!(result[i], expected,
+                    assert_eq!(
+                        result[i], expected,
                         "Remainder test failed at size {} (remainder {}), index {}",
-                        size, remainder, i);
+                        size, remainder, i
+                    );
                 }
             }
         });
@@ -620,7 +655,11 @@ mod tests {
             let b = vec![5.0, 6.0, 7.0, 8.0];
             // Expected: 1*5 + 2*6 + 3*7 + 4*8 = 5 + 12 + 21 + 32 = 70
             let result = unsafe { Avx512Backend::dot(&a, &b) };
-            assert!((result - 70.0).abs() < 1e-5, "Expected 70.0, got {}", result);
+            assert!(
+                (result - 70.0).abs() < 1e-5,
+                "Expected 70.0, got {}",
+                result
+            );
         });
     }
 
@@ -635,7 +674,12 @@ mod tests {
             let expected: f32 = (0..16).map(|i| (i * (i + 1)) as f32).sum();
 
             let result = unsafe { Avx512Backend::dot(&a, &b) };
-            assert!((result - expected).abs() < 1e-4, "Expected {}, got {}", expected, result);
+            assert!(
+                (result - expected).abs() < 1e-4,
+                "Expected {}, got {}",
+                expected,
+                result
+            );
         });
     }
 
@@ -649,7 +693,12 @@ mod tests {
             let expected: f32 = (0..18).map(|i| ((i * i) as f32) * 1.05).sum();
 
             let result = unsafe { Avx512Backend::dot(&a, &b) };
-            assert!((result - expected).abs() < 1e-3, "Expected {}, got {}", expected, result);
+            assert!(
+                (result - expected).abs() < 1e-3,
+                "Expected {}, got {}",
+                expected,
+                result
+            );
         });
     }
 
@@ -665,9 +714,13 @@ mod tests {
 
             let result = unsafe { Avx512Backend::dot(&a, &b) };
             // Larger tolerance for accumulation of floating point errors
-            assert!((result - expected).abs() / expected.abs() < 1e-4,
+            assert!(
+                (result - expected).abs() / expected.abs() < 1e-4,
                 "Expected {}, got {}, relative error: {}",
-                expected, result, ((result - expected).abs() / expected.abs()));
+                expected,
+                result,
+                ((result - expected).abs() / expected.abs())
+            );
         });
     }
 
@@ -691,9 +744,14 @@ mod tests {
                     1e-5
                 };
 
-                assert!((result_avx512 - result_scalar).abs() < tolerance,
+                assert!(
+                    (result_avx512 - result_scalar).abs() < tolerance,
                     "Backend mismatch at size {}: AVX512={}, Scalar={}, diff={}",
-                    size, result_avx512, result_scalar, (result_avx512 - result_scalar).abs());
+                    size,
+                    result_avx512,
+                    result_scalar,
+                    (result_avx512 - result_scalar).abs()
+                );
             }
         });
     }
@@ -702,10 +760,14 @@ mod tests {
     fn test_avx512_dot_special_values() {
         avx512_test(|| {
             // Test with zero, negative, small, and large values
-            let a = vec![0.0, -1.0, 1.0, -5.0, 5.0, 1e-10, 1e10, -1e10,
-                         2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
-            let b = vec![10.0, 2.0, 3.0, -2.0, 4.0, 2e-10, 2e10, -2e10,
-                         1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+            let a = vec![
+                0.0, -1.0, 1.0, -5.0, 5.0, 1e-10, 1e10, -1e10, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0,
+                9.0,
+            ];
+            let b = vec![
+                10.0, 2.0, 3.0, -2.0, 4.0, 2e-10, 2e10, -2e10, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                1.0,
+            ];
 
             // Expected: 0*10 + (-1)*2 + 1*3 + (-5)*(-2) + 5*4 + (1e-10)*(2e-10) + (1e10)*(2e10) + (-1e10)*(-2e10) + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9
             //         = 0 - 2 + 3 + 10 + 20 + 2e-20 + 2e20 + 2e20 + 44
@@ -722,9 +784,13 @@ mod tests {
                 (result - expected).abs()
             };
 
-            assert!(rel_error < 1e-5,
+            assert!(
+                rel_error < 1e-5,
                 "Expected {}, got {}, relative error: {}",
-                expected, result, rel_error);
+                expected,
+                result,
+                rel_error
+            );
         });
     }
 
@@ -746,9 +812,14 @@ mod tests {
                     1e-5
                 };
 
-                assert!((result_avx512 - result_scalar).abs() < tolerance,
+                assert!(
+                    (result_avx512 - result_scalar).abs() < tolerance,
                     "Remainder test failed at size {} (remainder {}): AVX512={}, Scalar={}",
-                    size, remainder, result_avx512, result_scalar);
+                    size,
+                    remainder,
+                    result_avx512,
+                    result_scalar
+                );
             }
         });
     }
@@ -756,12 +827,18 @@ mod tests {
     #[test]
     fn test_avx512_dot_zero_vector() {
         avx512_test(|| {
-            let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0,
-                         9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0];
+            let a = vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+                16.0,
+            ];
             let b = vec![0.0; 16];
 
             let result = unsafe { Avx512Backend::dot(&a, &b) };
-            assert_eq!(result, 0.0, "Dot product with zero vector should be 0.0, got {}", result);
+            assert_eq!(
+                result, 0.0,
+                "Dot product with zero vector should be 0.0, got {}",
+                result
+            );
         });
     }
 
@@ -775,7 +852,11 @@ mod tests {
             b[1] = 1.0;
 
             let result = unsafe { Avx512Backend::dot(&a, &b) };
-            assert_eq!(result, 0.0, "Dot product of orthogonal vectors should be 0.0, got {}", result);
+            assert_eq!(
+                result, 0.0,
+                "Dot product of orthogonal vectors should be 0.0, got {}",
+                result
+            );
         });
     }
 
@@ -789,7 +870,11 @@ mod tests {
             let a = vec![1.0, 2.0, 3.0, 4.0];
             // Expected: 1 + 2 + 3 + 4 = 10
             let result = unsafe { Avx512Backend::sum(&a) };
-            assert!((result - 10.0).abs() < 1e-5, "Expected 10.0, got {}", result);
+            assert!(
+                (result - 10.0).abs() < 1e-5,
+                "Expected 10.0, got {}",
+                result
+            );
         });
     }
 
@@ -802,7 +887,12 @@ mod tests {
             let expected: f32 = (0..16).map(|i| i as f32).sum();
 
             let result = unsafe { Avx512Backend::sum(&a) };
-            assert!((result - expected).abs() < 1e-4, "Expected {}, got {}", expected, result);
+            assert!(
+                (result - expected).abs() < 1e-4,
+                "Expected {}, got {}",
+                expected,
+                result
+            );
         });
     }
 
@@ -815,7 +905,12 @@ mod tests {
             let expected: f32 = (0..18).map(|i| (i as f32) * 1.5).sum();
 
             let result = unsafe { Avx512Backend::sum(&a) };
-            assert!((result - expected).abs() < 1e-3, "Expected {}, got {}", expected, result);
+            assert!(
+                (result - expected).abs() < 1e-3,
+                "Expected {}, got {}",
+                expected,
+                result
+            );
         });
     }
 
@@ -835,9 +930,13 @@ mod tests {
             } else {
                 (result - expected).abs()
             };
-            assert!(rel_error < 1e-4,
+            assert!(
+                rel_error < 1e-4,
                 "Expected {}, got {}, relative error: {}",
-                expected, result, rel_error);
+                expected,
+                result,
+                rel_error
+            );
         });
     }
 
@@ -860,9 +959,14 @@ mod tests {
                     1e-5
                 };
 
-                assert!((result_avx512 - result_scalar).abs() < tolerance,
+                assert!(
+                    (result_avx512 - result_scalar).abs() < tolerance,
                     "Backend mismatch at size {}: AVX512={}, Scalar={}, diff={}",
-                    size, result_avx512, result_scalar, (result_avx512 - result_scalar).abs());
+                    size,
+                    result_avx512,
+                    result_scalar,
+                    (result_avx512 - result_scalar).abs()
+                );
             }
         });
     }
@@ -870,14 +974,20 @@ mod tests {
     #[test]
     fn test_avx512_sum_negative_values() {
         avx512_test(|| {
-            let a = vec![-1.0, -2.0, -3.0, -4.0, 5.0, 6.0, 7.0, 8.0,
-                         -9.0, -10.0, 11.0, 12.0, -13.0, 14.0, -15.0, 16.0];
+            let a = vec![
+                -1.0, -2.0, -3.0, -4.0, 5.0, 6.0, 7.0, 8.0, -9.0, -10.0, 11.0, 12.0, -13.0, 14.0,
+                -15.0, 16.0,
+            ];
             // Expected: -1 - 2 - 3 - 4 + 5 + 6 + 7 + 8 - 9 - 10 + 11 + 12 - 13 + 14 - 15 + 16 = 22
             let expected = 22.0;
 
             let result = unsafe { Avx512Backend::sum(&a) };
-            assert!((result - expected).abs() < 1e-5,
-                "Expected {}, got {}", expected, result);
+            assert!(
+                (result - expected).abs() < 1e-5,
+                "Expected {}, got {}",
+                expected,
+                result
+            );
         });
     }
 
@@ -895,7 +1005,11 @@ mod tests {
         avx512_test(|| {
             let a = vec![42.0];
             let result = unsafe { Avx512Backend::sum(&a) };
-            assert_eq!(result, 42.0, "Sum of single element should be that element, got {}", result);
+            assert_eq!(
+                result, 42.0,
+                "Sum of single element should be that element, got {}",
+                result
+            );
         });
     }
 
@@ -916,9 +1030,14 @@ mod tests {
                     1e-5
                 };
 
-                assert!((result_avx512 - result_scalar).abs() < tolerance,
+                assert!(
+                    (result_avx512 - result_scalar).abs() < tolerance,
                     "Remainder test failed at size {} (remainder {}): AVX512={}, Scalar={}",
-                    size, remainder, result_avx512, result_scalar);
+                    size,
+                    remainder,
+                    result_avx512,
+                    result_scalar
+                );
             }
         });
     }
@@ -973,9 +1092,11 @@ mod tests {
                 let a: Vec<f32> = (0..size).map(|i| ((i * 7) % 100) as f32 - 50.0).collect();
                 let result_avx512 = unsafe { Avx512Backend::max(&a) };
                 let result_scalar = unsafe { ScalarBackend::max(&a) };
-                assert_eq!(result_avx512, result_scalar,
+                assert_eq!(
+                    result_avx512, result_scalar,
                     "Backend mismatch at size {}: AVX512={}, Scalar={}",
-                    size, result_avx512, result_scalar);
+                    size, result_avx512, result_scalar
+                );
             }
         });
     }
@@ -1030,9 +1151,11 @@ mod tests {
                 let a: Vec<f32> = (0..size).map(|i| ((i * 7) % 100) as f32 - 50.0).collect();
                 let result_avx512 = unsafe { Avx512Backend::min(&a) };
                 let result_scalar = unsafe { ScalarBackend::min(&a) };
-                assert_eq!(result_avx512, result_scalar,
+                assert_eq!(
+                    result_avx512, result_scalar,
                     "Backend mismatch at size {}: AVX512={}, Scalar={}",
-                    size, result_avx512, result_scalar);
+                    size, result_avx512, result_scalar
+                );
             }
         });
     }
@@ -1094,9 +1217,11 @@ mod tests {
                 let a: Vec<f32> = (0..size).map(|i| ((i * 13) % 100) as f32 - 50.0).collect();
                 let result_avx512 = unsafe { Avx512Backend::argmax(&a) };
                 let result_scalar = unsafe { ScalarBackend::argmax(&a) };
-                assert_eq!(result_avx512, result_scalar,
+                assert_eq!(
+                    result_avx512, result_scalar,
                     "Backend mismatch at size {}: AVX512={}, Scalar={}",
-                    size, result_avx512, result_scalar);
+                    size, result_avx512, result_scalar
+                );
             }
         });
     }
@@ -1158,9 +1283,11 @@ mod tests {
                 let a: Vec<f32> = (0..size).map(|i| ((i * 13) % 100) as f32 - 50.0).collect();
                 let result_avx512 = unsafe { Avx512Backend::argmin(&a) };
                 let result_scalar = unsafe { ScalarBackend::argmin(&a) };
-                assert_eq!(result_avx512, result_scalar,
+                assert_eq!(
+                    result_avx512, result_scalar,
                     "Backend mismatch at size {}: AVX512={}, Scalar={}",
-                    size, result_avx512, result_scalar);
+                    size, result_avx512, result_scalar
+                );
             }
         });
     }

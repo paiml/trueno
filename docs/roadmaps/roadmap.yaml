@@ -35,10 +35,13 @@ roadmap:
 
   - id: start-aprender
     title: "Start Aprender ML library Phase 1"
-    status: todo
+    status: blocked
     type: feature
     priority: high
+    github_issue: "paiml/aprender#12"
     description: |
+      BLOCKED: Different repository - tracked in paiml/aprender#12
+
       Begin Aprender implementation using specification at:
       ../aprender/docs/specifications/graph-traditional-descriptive-statistics-spec.md
 
@@ -49,7 +52,7 @@ roadmap:
 
   - id: publish-trueno-v0-3-0
     title: "Publish Trueno v0.3.0 with AVX-512"
-    status: todo
+    status: in_progress
     type: release
     priority: medium
     description: |
