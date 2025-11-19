@@ -334,17 +334,25 @@ bashrs-lint-makefile: ## Lint Makefile with bashrs
 
 bashrs-lint-scripts: ## Lint all shell scripts with bashrs
 	@echo "🔍 Linting shell scripts with bashrs..."
-	@for script in scripts/*.sh; do \
-		echo "  Linting $$script..."; \
-		bashrs lint "$$script" || true; \
-	done
+	@if ls scripts/*.sh 1>/dev/null 2>&1; then \
+		for script in scripts/*.sh; do \
+			echo "  Linting $$script..."; \
+			bashrs lint "$$script" || true; \
+		done; \
+	else \
+		echo "  ℹ️  No shell scripts found (replaced with Rust xtask - A-grade quality)"; \
+	fi
 
 bashrs-audit: ## Audit shell script quality with bashrs
 	@echo "📊 Auditing shell scripts with bashrs..."
-	@for script in scripts/*.sh; do \
-		echo "  Auditing $$script..."; \
-		bashrs audit "$$script"; \
-	done
+	@if ls scripts/*.sh 1>/dev/null 2>&1; then \
+		for script in scripts/*.sh; do \
+			echo "  Auditing $$script..."; \
+			bashrs audit "$$script"; \
+		done; \
+	else \
+		echo "  ℹ️  No shell scripts found (replaced with Rust xtask - A-grade quality)"; \
+	fi
 
 bashrs-all: bashrs-lint-makefile bashrs-lint-scripts bashrs-audit ## Run all bashrs quality checks
 
