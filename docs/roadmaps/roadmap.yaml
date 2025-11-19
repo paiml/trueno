@@ -1,0 +1,25 @@
+roadmap_version: '1.0'
+github_enabled: true
+github_repo: paiml/trueno
+roadmap:
+  - id: avx512-max-min
+    title: "Implement AVX-512 max/min with 8-12x speedup (Phase 4)"
+    status: in_progress
+    type: feature
+    priority: high
+    description: |
+      Implement AVX-512 SIMD acceleration for max() and min() reduction operations.
+      Target: ≥8x speedup over scalar baseline for compute-bound reductions.
+
+      Implementation:
+      - 16-way parallel comparison using _mm512_max_ps/_mm512_min_ps
+      - Horizontal reduction with _mm512_reduce_max_ps/_mm512_reduce_min_ps
+      - Scalar fallback for remainder elements
+
+      Testing:
+      - 10 tests (5 max, 5 min): basic, aligned, non-aligned, edge cases, backend equivalence
+      - Target: 807 total tests passing
+
+      Performance validation:
+      - Benchmark max/min at sizes 1000, 10000
+      - Target: 8-12x speedup vs scalar baseline
