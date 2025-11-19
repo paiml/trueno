@@ -76,6 +76,35 @@ macro_rules! dispatch_reduction {
     };
 }
 
+
+/// Macro to dispatch index-finding operations (return usize)
+macro_rules! dispatch_index_op {
+    ($backend:expr, $op:ident, $data:expr) => {
+        unsafe {
+            match $backend {
+                Backend::Scalar => ScalarBackend::$op($data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::$op($data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 => Avx2Backend::$op($data),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX512 => Avx512Backend::$op($data),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => ScalarBackend::$op($data),
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::$op($data),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::$op($data),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::$op($data),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::$op($data),
+                Backend::GPU | Backend::Auto => ScalarBackend::$op($data),
+            }
+        }
+    };
+}
+
 /// High-performance vector with multi-backend support
 ///
 /// # Examples
@@ -480,31 +509,7 @@ impl Vector<f32> {
     /// assert_eq!(v.sum().unwrap(), 10.0);
     /// ```
     pub fn sum(&self) -> Result<f32> {
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        let result = unsafe {
-            match self.backend {
-                Backend::Scalar => ScalarBackend::sum(&self.data),
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => Sse2Backend::sum(&self.data),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => Avx2Backend::sum(&self.data),
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::sum(&self.data)
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => NeonBackend::sum(&self.data),
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => ScalarBackend::sum(&self.data),
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => WasmBackend::sum(&self.data),
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => ScalarBackend::sum(&self.data),
-                Backend::GPU | Backend::Auto => ScalarBackend::sum(&self.data),
-            }
-        };
-
-        Ok(result)
+        Ok(dispatch_reduction!(self.backend, sum, &self.data))
     }
 
     /// Find maximum element
