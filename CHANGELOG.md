@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-11-19
+
 ### Added
 - **AVX-512 backend infrastructure**: Initial implementation (Phase 1 + Phase 2 + Phase 3 + Phase 4 + Phase 5)
   - New `Avx512Backend` processes 16 × f32 elements per iteration (2x AVX2's 8)

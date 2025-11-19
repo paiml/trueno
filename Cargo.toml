@@ -4,7 +4,7 @@ exclude = []
 
 [package]
 name = "trueno"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
