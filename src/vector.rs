@@ -364,6 +364,31 @@ impl Vector<f32> {
         }
 
         let mut result = vec![0.0; self.len()];
+
+        // Use parallel processing for large arrays
+        #[cfg(feature = "parallel")]
+        {
+            const PARALLEL_THRESHOLD: usize = 100_000; // Threshold for element-wise ops
+            const CHUNK_SIZE: usize = 65536; // 64K elements = 256KB, cache-friendly
+
+            if self.len() >= PARALLEL_THRESHOLD {
+                use rayon::prelude::*;
+
+                self.data
+                    .par_chunks(CHUNK_SIZE)
+                    .zip(other.data.par_chunks(CHUNK_SIZE))
+                    .zip(result.par_chunks_mut(CHUNK_SIZE))
+                    .for_each(|((chunk_a, chunk_b), chunk_out)| {
+                        dispatch_binary_op!(self.backend, add, chunk_a, chunk_b, chunk_out);
+                    });
+
+                return Ok(Self {
+                    data: result,
+                    backend: self.backend,
+                });
+            }
+        }
+
         dispatch_binary_op!(self.backend, add, &self.data, &other.data, &mut result);
 
         Ok(Self {
@@ -404,6 +429,31 @@ impl Vector<f32> {
         }
 
         let mut result = vec![0.0; self.len()];
+
+        // Use parallel processing for large arrays
+        #[cfg(feature = "parallel")]
+        {
+            const PARALLEL_THRESHOLD: usize = 100_000;
+            const CHUNK_SIZE: usize = 65536;
+
+            if self.len() >= PARALLEL_THRESHOLD {
+                use rayon::prelude::*;
+
+                self.data
+                    .par_chunks(CHUNK_SIZE)
+                    .zip(other.data.par_chunks(CHUNK_SIZE))
+                    .zip(result.par_chunks_mut(CHUNK_SIZE))
+                    .for_each(|((chunk_a, chunk_b), chunk_out)| {
+                        dispatch_binary_op!(self.backend, sub, chunk_a, chunk_b, chunk_out);
+                    });
+
+                return Ok(Self {
+                    data: result,
+                    backend: self.backend,
+                });
+            }
+        }
+
         dispatch_binary_op!(self.backend, sub, &self.data, &other.data, &mut result);
 
         Ok(Self {
@@ -434,6 +484,31 @@ impl Vector<f32> {
         }
 
         let mut result = vec![0.0; self.len()];
+
+        // Use parallel processing for large arrays
+        #[cfg(feature = "parallel")]
+        {
+            const PARALLEL_THRESHOLD: usize = 100_000;
+            const CHUNK_SIZE: usize = 65536;
+
+            if self.len() >= PARALLEL_THRESHOLD {
+                use rayon::prelude::*;
+
+                self.data
+                    .par_chunks(CHUNK_SIZE)
+                    .zip(other.data.par_chunks(CHUNK_SIZE))
+                    .zip(result.par_chunks_mut(CHUNK_SIZE))
+                    .for_each(|((chunk_a, chunk_b), chunk_out)| {
+                        dispatch_binary_op!(self.backend, mul, chunk_a, chunk_b, chunk_out);
+                    });
+
+                return Ok(Self {
+                    data: result,
+                    backend: self.backend,
+                });
+            }
+        }
+
         dispatch_binary_op!(self.backend, mul, &self.data, &other.data, &mut result);
 
         Ok(Self {
@@ -464,6 +539,31 @@ impl Vector<f32> {
         }
 
         let mut result = vec![0.0; self.len()];
+
+        // Use parallel processing for large arrays
+        #[cfg(feature = "parallel")]
+        {
+            const PARALLEL_THRESHOLD: usize = 100_000;
+            const CHUNK_SIZE: usize = 65536;
+
+            if self.len() >= PARALLEL_THRESHOLD {
+                use rayon::prelude::*;
+
+                self.data
+                    .par_chunks(CHUNK_SIZE)
+                    .zip(other.data.par_chunks(CHUNK_SIZE))
+                    .zip(result.par_chunks_mut(CHUNK_SIZE))
+                    .for_each(|((chunk_a, chunk_b), chunk_out)| {
+                        dispatch_binary_op!(self.backend, div, chunk_a, chunk_b, chunk_out);
+                    });
+
+                return Ok(Self {
+                    data: result,
+                    backend: self.backend,
+                });
+            }
+        }
+
         dispatch_binary_op!(self.backend, div, &self.data, &other.data, &mut result);
 
         Ok(Self {
@@ -2986,6 +3086,29 @@ impl Vector<f32> {
         let mut result_data = vec![0.0; self.len()];
 
         if !self.data.is_empty() {
+            // Use parallel processing for large arrays
+            #[cfg(feature = "parallel")]
+            {
+                const PARALLEL_THRESHOLD: usize = 100_000;
+                const CHUNK_SIZE: usize = 65536;
+
+                if self.len() >= PARALLEL_THRESHOLD {
+                    use rayon::prelude::*;
+
+                    self.data
+                        .par_chunks(CHUNK_SIZE)
+                        .zip(result_data.par_chunks_mut(CHUNK_SIZE))
+                        .for_each(|(chunk_in, chunk_out)| {
+                            dispatch_unary_op!(self.backend, sqrt, chunk_in, chunk_out);
+                        });
+
+                    return Ok(Vector {
+                        data: result_data,
+                        backend: self.backend,
+                    });
+                }
+            }
+
             dispatch_unary_op!(self.backend, sqrt, &self.data, &mut result_data);
         }
 
@@ -3115,6 +3238,48 @@ impl Vector<f32> {
         let mut result_data = vec![0.0; self.len()];
 
         if !self.data.is_empty() {
+            // Use parallel processing for large arrays
+            #[cfg(feature = "parallel")]
+            {
+                const PARALLEL_THRESHOLD: usize = 100_000;
+                const CHUNK_SIZE: usize = 65536;
+
+                if self.len() >= PARALLEL_THRESHOLD {
+                    use rayon::prelude::*;
+
+                    self.data
+                        .par_chunks(CHUNK_SIZE)
+                        .zip(result_data.par_chunks_mut(CHUNK_SIZE))
+                        .for_each(|(chunk_in, chunk_out)| {
+                            // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
+                            unsafe {
+                                match self.backend {
+                                    Backend::Scalar => ScalarBackend::exp(chunk_in, chunk_out),
+                                    #[cfg(target_arch = "x86_64")]
+                                    Backend::SSE2 | Backend::AVX => Sse2Backend::exp(chunk_in, chunk_out),
+                                    #[cfg(target_arch = "x86_64")]
+                                    Backend::AVX2 | Backend::AVX512 => {
+                                        Avx2Backend::exp(chunk_in, chunk_out)
+                                    }
+                                    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                                    Backend::NEON => NeonBackend::exp(chunk_in, chunk_out),
+                                    #[cfg(target_arch = "wasm32")]
+                                    Backend::WASM => WasmBackend::exp(chunk_in, chunk_out),
+                                    Backend::GPU => ScalarBackend::exp(chunk_in, chunk_out),
+                                    Backend::Auto => ScalarBackend::exp(chunk_in, chunk_out),
+                                    #[allow(unreachable_patterns)]
+                                    _ => ScalarBackend::exp(chunk_in, chunk_out),
+                                }
+                            }
+                        });
+
+                    return Ok(Vector {
+                        data: result_data,
+                        backend: self.backend,
+                    });
+                }
+            }
+
             // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
             unsafe {
                 match self.backend {
