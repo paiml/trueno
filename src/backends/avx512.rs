@@ -1600,4 +1600,141 @@ mod tests {
             );
         });
     }
+
+    #[test]
+    fn test_avx512_scale_scalar_fallback() {
+        avx512_test(|| {
+            // Test scalar fallback for scale (not yet SIMD optimized)
+            let a = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+            let scalar = 2.5;
+            let mut avx512_result = vec![0.0; a.len()];
+            let mut scalar_result = vec![0.0; a.len()];
+
+            // SAFETY: Test code calling backend trait methods
+            unsafe {
+                Avx512Backend::scale(&a, scalar, &mut avx512_result);
+                ScalarBackend::scale(&a, scalar, &mut scalar_result);
+            }
+
+            for i in 0..a.len() {
+                assert!(
+                    (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "scale mismatch at index {}: avx512={}, scalar={}",
+                    i,
+                    avx512_result[i],
+                    scalar_result[i]
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_abs_scalar_fallback() {
+        avx512_test(|| {
+            // Test scalar fallback for abs (not yet SIMD optimized)
+            let a = vec![-3.0, 1.0, -4.0, 0.0, 5.0, -2.0];
+            let mut avx512_result = vec![0.0; a.len()];
+            let mut scalar_result = vec![0.0; a.len()];
+
+            // SAFETY: Test code calling backend trait methods
+            unsafe {
+                Avx512Backend::abs(&a, &mut avx512_result);
+                ScalarBackend::abs(&a, &mut scalar_result);
+            }
+
+            for i in 0..a.len() {
+                assert!(
+                    (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "abs mismatch at index {}: avx512={}, scalar={}",
+                    i,
+                    avx512_result[i],
+                    scalar_result[i]
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_clamp_scalar_fallback() {
+        avx512_test(|| {
+            // Test scalar fallback for clamp (not yet SIMD optimized)
+            let a = vec![-5.0, 0.0, 3.0, 7.0, 10.0];
+            let min_val = 0.0;
+            let max_val = 5.0;
+            let mut avx512_result = vec![0.0; a.len()];
+            let mut scalar_result = vec![0.0; a.len()];
+
+            // SAFETY: Test code calling backend trait methods
+            unsafe {
+                Avx512Backend::clamp(&a, min_val, max_val, &mut avx512_result);
+                ScalarBackend::clamp(&a, min_val, max_val, &mut scalar_result);
+            }
+
+            for i in 0..a.len() {
+                assert!(
+                    (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "clamp mismatch at index {}: avx512={}, scalar={}",
+                    i,
+                    avx512_result[i],
+                    scalar_result[i]
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_lerp_scalar_fallback() {
+        avx512_test(|| {
+            // Test scalar fallback for lerp (not yet SIMD optimized)
+            let a = vec![0.0, 1.0, 2.0, 3.0];
+            let b = vec![10.0, 20.0, 30.0, 40.0];
+            let t = 0.5;
+            let mut avx512_result = vec![0.0; a.len()];
+            let mut scalar_result = vec![0.0; a.len()];
+
+            // SAFETY: Test code calling backend trait methods
+            unsafe {
+                Avx512Backend::lerp(&a, &b, t, &mut avx512_result);
+                ScalarBackend::lerp(&a, &b, t, &mut scalar_result);
+            }
+
+            for i in 0..a.len() {
+                assert!(
+                    (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "lerp mismatch at index {}: avx512={}, scalar={}",
+                    i,
+                    avx512_result[i],
+                    scalar_result[i]
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_fma_scalar_fallback() {
+        avx512_test(|| {
+            // Test scalar fallback for fma (not yet SIMD optimized)
+            let a = vec![1.0, 2.0, 3.0, 4.0];
+            let b = vec![2.0, 3.0, 4.0, 5.0];
+            let c = vec![1.0, 1.0, 1.0, 1.0];
+            let mut avx512_result = vec![0.0; a.len()];
+            let mut scalar_result = vec![0.0; a.len()];
+
+            // SAFETY: Test code calling backend trait methods
+            unsafe {
+                Avx512Backend::fma(&a, &b, &c, &mut avx512_result);
+                ScalarBackend::fma(&a, &b, &c, &mut scalar_result);
+            }
+
+            for i in 0..a.len() {
+                assert!(
+                    (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "fma mismatch at index {}: avx512={}, scalar={}",
+                    i,
+                    avx512_result[i],
+                    scalar_result[i]
+                );
+            }
+        });
+    }
 }
