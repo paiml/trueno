@@ -2172,4 +2172,39 @@ mod tests {
                     "round({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
         }
     }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_norm_linf_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        // Test various input sizes
+        let test_cases = vec![
+            vec![],                                                  // empty
+            vec![5.0],                                               // single element
+            vec![-3.0, 1.0, -4.0, 1.0, 5.0],                        // small vector
+            vec![-10.0, 5.0, 3.0, 7.0, -2.0, 8.0, 4.0],            // 7 elements
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],          // 8 elements (aligned)
+            vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0], // 9 elements (remainder)
+        ];
+
+        for test_vec in test_cases {
+            // SAFETY: Test code calling backend trait methods marked unsafe
+            let scalar_result = unsafe { ScalarBackend::norm_linf(&test_vec) };
+            let avx2_result = unsafe { Avx2Backend::norm_linf(&test_vec) };
+
+            assert!(
+                (scalar_result - avx2_result).abs() < 1e-5,
+                "norm_linf mismatch for {:?}: scalar={}, avx2={}",
+                test_vec,
+                scalar_result,
+                avx2_result
+            );
+        }
+    }
 }
