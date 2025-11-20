@@ -1186,6 +1186,101 @@ impl VectorBackend for Sse2Backend {
             i += 1;
         }
     }
+
+    unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time with SIMD
+        while i + 4 <= len {
+            let vec = _mm_loadu_ps(a.as_ptr().add(i));
+            let sqrt_vec = _mm_sqrt_ps(vec);
+            _mm_storeu_ps(result.as_mut_ptr().add(i), sqrt_vec);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i].sqrt();
+            i += 1;
+        }
+    }
+
+    unsafe fn recip(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time with SIMD
+        // Note: _mm_rcp_ps is an approximation with ~12-bit precision
+        // For exact results, we use division
+        let one = _mm_set1_ps(1.0);
+        while i + 4 <= len {
+            let vec = _mm_loadu_ps(a.as_ptr().add(i));
+            let recip_vec = _mm_div_ps(one, vec);
+            _mm_storeu_ps(result.as_mut_ptr().add(i), recip_vec);
+            i += 4;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i].recip();
+            i += 1;
+        }
+    }
+
+    unsafe fn ln(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback for transcendental functions
+        // TODO: Implement SIMD ln approximation
+        super::scalar::ScalarBackend::ln(a, result);
+    }
+
+    unsafe fn log2(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback for transcendental functions
+        // TODO: Implement SIMD log2 approximation
+        super::scalar::ScalarBackend::log2(a, result);
+    }
+
+    unsafe fn log10(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback for transcendental functions
+        // TODO: Implement SIMD log10 approximation
+        super::scalar::ScalarBackend::log10(a, result);
+    }
+
+    unsafe fn sin(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback for transcendental functions
+        // TODO: Implement SIMD sin approximation
+        super::scalar::ScalarBackend::sin(a, result);
+    }
+
+    unsafe fn cos(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback for transcendental functions
+        // TODO: Implement SIMD cos approximation
+        super::scalar::ScalarBackend::cos(a, result);
+    }
+
+    unsafe fn tan(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback for transcendental functions
+        // TODO: Implement SIMD tan approximation
+        super::scalar::ScalarBackend::tan(a, result);
+    }
+
+    unsafe fn floor(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback - floor requires SSE4.1 (_mm_floor_ps)
+        // TODO: Add SSE4.1 detection and implementation
+        super::scalar::ScalarBackend::floor(a, result);
+    }
+
+    unsafe fn ceil(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback - ceil requires SSE4.1 (_mm_ceil_ps)
+        // TODO: Add SSE4.1 detection and implementation
+        super::scalar::ScalarBackend::ceil(a, result);
+    }
+
+    unsafe fn round(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback - round requires SSE4.1 (_mm_round_ps)
+        // TODO: Add SSE4.1 detection and implementation
+        super::scalar::ScalarBackend::round(a, result);
+    }
 }
 
 #[cfg(test)]

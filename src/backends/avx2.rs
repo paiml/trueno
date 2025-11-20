@@ -1154,6 +1154,79 @@ impl VectorBackend for Avx2Backend {
             i += 1;
         }
     }
+
+    unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time with AVX2
+        while i + 8 <= len {
+            let vec = _mm256_loadu_ps(a.as_ptr().add(i));
+            let sqrt_vec = _mm256_sqrt_ps(vec);
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), sqrt_vec);
+            i += 8;
+        }
+
+        // Handle remaining elements
+        while i < len {
+            result[i] = a[i].sqrt();
+            i += 1;
+        }
+    }
+
+    unsafe fn recip(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        let one = _mm256_set1_ps(1.0);
+        while i + 8 <= len {
+            let vec = _mm256_loadu_ps(a.as_ptr().add(i));
+            let recip_vec = _mm256_div_ps(one, vec);
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), recip_vec);
+            i += 8;
+        }
+
+        while i < len {
+            result[i] = a[i].recip();
+            i += 1;
+        }
+    }
+
+    unsafe fn ln(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ln(a, result);
+    }
+
+    unsafe fn log2(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log2(a, result);
+    }
+
+    unsafe fn log10(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log10(a, result);
+    }
+
+    unsafe fn sin(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::sin(a, result);
+    }
+
+    unsafe fn cos(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::cos(a, result);
+    }
+
+    unsafe fn tan(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::tan(a, result);
+    }
+
+    unsafe fn floor(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::floor(a, result);
+    }
+
+    unsafe fn ceil(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ceil(a, result);
+    }
+
+    unsafe fn round(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::round(a, result);
+    }
 }
 
 #[cfg(test)]
