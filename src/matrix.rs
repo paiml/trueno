@@ -328,9 +328,9 @@ impl Matrix<f32> {
         // 2. Direct backend dot() calls - eliminates O(n²) Vector allocations
         // 3. Block-wise transpose is now cache-optimized (see transpose())
 
-        use crate::backends::{VectorBackend, scalar::ScalarBackend};
         #[cfg(target_arch = "x86_64")]
-        use crate::backends::{sse2::Sse2Backend, avx2::Avx2Backend};
+        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
+        use crate::backends::{scalar::ScalarBackend, VectorBackend};
 
         // Pre-transpose B for better cache locality (columns become rows)
         // With our optimized block-wise transpose, this is now very fast
