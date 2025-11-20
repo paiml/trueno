@@ -1777,4 +1777,30 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_sse2_norm_linf_matches_scalar() {
+        // Verify SSE2 norm_linf produces same results as scalar
+        let test_cases = vec![
+            vec![],                                          // empty
+            vec![5.0],                                       // single element
+            vec![-3.0, 1.0, -4.0, 1.0, 5.0],                // various values
+            vec![-10.0, 5.0, 3.0, 7.0, -2.0, 8.0, 4.0],    // 7 elements (remainder)
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],  // 8 elements (aligned)
+        ];
+
+        for test_vec in test_cases {
+            // SAFETY: Test code calling backend trait methods marked unsafe
+            let scalar_result = unsafe { super::super::scalar::ScalarBackend::norm_linf(&test_vec) };
+            let sse2_result = unsafe { Sse2Backend::norm_linf(&test_vec) };
+
+            assert!(
+                (scalar_result - sse2_result).abs() < 1e-5,
+                "norm_linf mismatch for {:?}: scalar={}, sse2={}",
+                test_vec,
+                scalar_result,
+                sse2_result
+            );
+        }
+    }
 }
