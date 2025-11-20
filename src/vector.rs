@@ -2428,10 +2428,9 @@ impl Vector<f32> {
             return Err(TruenoError::DivisionByZero);
         }
 
-        // Divide each element by the norm
-        // Create a vector filled with the norm value
-        let norm_vec = Vector::from_slice(&vec![norm; self.len()]);
-        self.div(&norm_vec)
+        // Divide each element by the norm using scalar multiplication
+        // This avoids creating an intermediate vector
+        self.scale(1.0 / norm)
     }
 
     /// Compute the L1 norm (Manhattan norm) of the vector
