@@ -193,11 +193,11 @@ test-fast: ## Run tests quickly (<5 min target)
 test-verbose: ## Run tests with verbose output
 	cargo test --all-features -- --nocapture --test-threads=1
 
-coverage: ## Generate coverage report (>85% required, <10 min target)
-	@echo "📊 Generating coverage report (target: >85%, <10 min)..."
+coverage: ## Generate coverage report (>90% required, <10 min target)
+	@echo "📊 Generating coverage report (target: >90%, <10 min)..."
 	@# Temporarily disable mold linker (breaks LLVM coverage)
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+	@cargo llvm-cov --all-features --workspace --exclude-from-report xtask --lcov --output-path lcov.info
 	@cargo llvm-cov report --html --output-dir target/coverage/html
 	@# Restore mold linker
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
