@@ -1232,7 +1232,7 @@ impl VectorBackend for Avx2Backend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Vector;
+    
 
     #[cfg(target_arch = "x86_64")]
     #[test]
@@ -1460,6 +1460,47 @@ mod tests {
                 "sigmoid mismatch: avx2={}, scalar={}",
                 avx2,
                 scalar
+            );
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_exp_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        // Test various ranges: negative, zero, positive, large values
+        let test_values = vec![
+            -10.0, -5.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0,
+            -50.0, 87.0, -87.0, // near overflow/underflow limits
+        ];
+        let mut avx2_result = vec![0.0; test_values.len()];
+        let mut scalar_result = vec![0.0; test_values.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::exp(&test_values, &mut avx2_result);
+            ScalarBackend::exp(&test_values, &mut scalar_result);
+        }
+
+        for (i, (avx2, scalar)) in avx2_result.iter().zip(scalar_result.iter()).enumerate() {
+            let rel_error = if scalar.abs() > 1e-10 {
+                (avx2 - scalar).abs() / scalar.abs()
+            } else {
+                (avx2 - scalar).abs()
+            };
+            assert!(
+                rel_error < 1e-5,
+                "exp({}) mismatch: avx2={}, scalar={}, rel_error={}",
+                test_values[i],
+                avx2,
+                scalar,
+                rel_error
             );
         }
     }
@@ -2129,6 +2170,41 @@ mod tests {
         for i in 0..a.len() {
             assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
                     "round({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_norm_linf_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        // Test various input sizes
+        let test_cases = vec![
+            vec![],                                                  // empty
+            vec![5.0],                                               // single element
+            vec![-3.0, 1.0, -4.0, 1.0, 5.0],                        // small vector
+            vec![-10.0, 5.0, 3.0, 7.0, -2.0, 8.0, 4.0],            // 7 elements
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],          // 8 elements (aligned)
+            vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0], // 9 elements (remainder)
+        ];
+
+        for test_vec in test_cases {
+            // SAFETY: Test code calling backend trait methods marked unsafe
+            let scalar_result = unsafe { ScalarBackend::norm_linf(&test_vec) };
+            let avx2_result = unsafe { Avx2Backend::norm_linf(&test_vec) };
+
+            assert!(
+                (scalar_result - avx2_result).abs() < 1e-5,
+                "norm_linf mismatch for {:?}: scalar={}, avx2={}",
+                test_vec,
+                scalar_result,
+                avx2_result
+            );
         }
     }
 }

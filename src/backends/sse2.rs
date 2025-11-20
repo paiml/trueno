@@ -1411,6 +1411,47 @@ mod tests {
         }
     }
 
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_sse2_exp_matches_scalar() {
+        if !is_x86_feature_detected!("sse2") {
+            eprintln!("Skipping SSE2 test: CPU does not support SSE2");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        // Test various ranges: negative, zero, positive, large values
+        let test_values = vec![
+            -10.0, -5.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0,
+            -50.0, 87.0, -87.0, // near overflow/underflow limits
+        ];
+        let mut sse2_result = vec![0.0; test_values.len()];
+        let mut scalar_result = vec![0.0; test_values.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Sse2Backend::exp(&test_values, &mut sse2_result);
+            ScalarBackend::exp(&test_values, &mut scalar_result);
+        }
+
+        for (i, (sse2, scalar)) in sse2_result.iter().zip(scalar_result.iter()).enumerate() {
+            let rel_error = if scalar.abs() > 1e-10 {
+                (sse2 - scalar).abs() / scalar.abs()
+            } else {
+                (sse2 - scalar).abs()
+            };
+            assert!(
+                rel_error < 1e-5,
+                "exp({}) mismatch: sse2={}, scalar={}, rel_error={}",
+                test_values[i],
+                sse2,
+                scalar,
+                rel_error
+            );
+        }
+    }
+
     #[test]
     fn test_sse2_gelu_matches_scalar() {
         // Verify SSE2 gelu produces same results as scalar
@@ -1733,6 +1774,32 @@ mod tests {
                 "tanh mismatch: scalar={}, sse2={}",
                 s,
                 e
+            );
+        }
+    }
+
+    #[test]
+    fn test_sse2_norm_linf_matches_scalar() {
+        // Verify SSE2 norm_linf produces same results as scalar
+        let test_cases = vec![
+            vec![],                                          // empty
+            vec![5.0],                                       // single element
+            vec![-3.0, 1.0, -4.0, 1.0, 5.0],                // various values
+            vec![-10.0, 5.0, 3.0, 7.0, -2.0, 8.0, 4.0],    // 7 elements (remainder)
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],  // 8 elements (aligned)
+        ];
+
+        for test_vec in test_cases {
+            // SAFETY: Test code calling backend trait methods marked unsafe
+            let scalar_result = unsafe { super::super::scalar::ScalarBackend::norm_linf(&test_vec) };
+            let sse2_result = unsafe { Sse2Backend::norm_linf(&test_vec) };
+
+            assert!(
+                (scalar_result - sse2_result).abs() < 1e-5,
+                "norm_linf mismatch for {:?}: scalar={}, sse2={}",
+                test_vec,
+                scalar_result,
+                sse2_result
             );
         }
     }
