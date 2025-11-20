@@ -1,3 +1,7 @@
+# Trueno Benchmark Dependencies
+# Used by UV to manage Python benchmark environment
+# Usage: uv run --with numpy --with torch python_comparison.py
+
 [project]
 name = "trueno-benchmarks"
 version = "0.3.0"
@@ -7,7 +11,3 @@ dependencies = [
     "numpy>=1.24.0",
     "torch>=2.0.0",
 ]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"

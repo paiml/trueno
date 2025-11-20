@@ -258,17 +258,15 @@ bench-comprehensive: ## Run comprehensive benchmarks (Trueno vs NumPy vs PyTorch
 
 bench-python: ## Run Python benchmarks (NumPy + PyTorch) only
 	@echo "🐍 Running Python benchmarks (NumPy + PyTorch)..."
-	@echo "Estimated time: 2-3 minutes"
+	@echo "Estimated time: 2-3 minutes (includes dependency download)"
 	@echo ""
 	@command -v uv >/dev/null 2>&1 || { \
 		echo "❌ UV not installed. Install with:"; \
-		echo "  curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh"; \
-		echo "  bash /tmp/uv-install.sh"; \
-		echo "  rm -f /tmp/uv-install.sh"; \
+		echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"; \
 		exit 1; \
 	}
-	@cd benchmarks && uv pip install --system --quiet numpy torch 2>/dev/null || true
-	@uv run benchmarks/python_comparison.py
+	@echo "Installing dependencies with UV..."
+	@cd benchmarks && uv run --with numpy --with torch python_comparison.py
 	@echo "✅ Results: benchmarks/python_results.json"
 
 bench-compare-frameworks: ## Generate comparison report (requires Rust + Python benchmarks)
@@ -281,7 +279,7 @@ bench-compare-frameworks: ## Generate comparison report (requires Rust + Python 
 		echo "❌ Python benchmarks not found. Run 'make bench-python' first."; \
 		exit 1; \
 	fi
-	@uv run benchmarks/compare_results.py
+	@cd benchmarks && uv run --with numpy --with torch compare_results.py
 	@echo ""
 	@echo "✅ Comparison complete!"
 	@echo "   Report: benchmarks/comparison_report.md"
