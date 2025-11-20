@@ -136,6 +136,17 @@ impl Matrix<f32> {
         Matrix::new(rows, cols)
     }
 
+    /// Creates a matrix filled with zeros using a specific backend
+    /// (Internal use only - reuses backend from parent matrix)
+    fn zeros_with_backend(rows: usize, cols: usize, backend: Backend) -> Self {
+        Matrix {
+            rows,
+            cols,
+            data: vec![0.0; rows * cols],
+            backend,
+        }
+    }
+
     /// Creates an identity matrix (square matrix with 1s on diagonal)
     ///
     /// # Example
@@ -246,7 +257,7 @@ impl Matrix<f32> {
             )));
         }
 
-        let mut result = Matrix::zeros(self.rows, other.cols);
+        let mut result = Matrix::zeros_with_backend(self.rows, other.cols, self.backend);
 
         // Backend selection strategy (empirical - see docs/performance-analysis.md):
         // 1. GPU for large matrices (≥500×500) - 2-10x speedup (measured)
@@ -390,7 +401,7 @@ impl Matrix<f32> {
     /// assert_eq!(t.get(1, 0), Some(&2.0));
     /// ```
     pub fn transpose(&self) -> Matrix<f32> {
-        let mut result = Matrix::zeros(self.cols, self.rows);
+        let mut result = Matrix::zeros_with_backend(self.cols, self.rows, self.backend);
 
         for i in 0..self.rows {
             for j in 0..self.cols {
@@ -586,8 +597,8 @@ impl Matrix<f32> {
         let output_rows = self.rows - kernel.rows + 1;
         let output_cols = self.cols - kernel.cols + 1;
 
-        // Initialize output matrix
-        let mut result = Matrix::zeros(output_rows, output_cols);
+        // Initialize output matrix (reuse parent's backend)
+        let mut result = Matrix::zeros_with_backend(output_rows, output_cols, self.backend);
 
         // Backend selection strategy:
         // OpComplexity::High - GPU beneficial at >10K elements
