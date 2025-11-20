@@ -403,9 +403,26 @@ impl Matrix<f32> {
     pub fn transpose(&self) -> Matrix<f32> {
         let mut result = Matrix::zeros_with_backend(self.cols, self.rows, self.backend);
 
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                *result.get_mut(j, i).unwrap() = *self.get(i, j).unwrap();
+        // Use block-wise transpose for better cache locality
+        // Block size of 64 fits well in L1 cache (64*64*4 = 16KB for f32)
+        const BLOCK_SIZE: usize = 64;
+
+        // Process matrix in BLOCK_SIZE x BLOCK_SIZE blocks
+        for i_block in (0..self.rows).step_by(BLOCK_SIZE) {
+            for j_block in (0..self.cols).step_by(BLOCK_SIZE) {
+                // Process elements within this block
+                let i_end = (i_block + BLOCK_SIZE).min(self.rows);
+                let j_end = (j_block + BLOCK_SIZE).min(self.cols);
+
+                for i in i_block..i_end {
+                    // Direct slice access within row for better performance
+                    let src_row_start = i * self.cols;
+                    for j in j_block..j_end {
+                        // result[j, i] = self[i, j]
+                        // Use direct indexing instead of get/get_mut for speed
+                        result.data[j * result.cols + i] = self.data[src_row_start + j];
+                    }
+                }
             }
         }
 
