@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# UV
+.venv/
+venv/
+
+# Benchmark results
+python_results.json
+comparison_report.md
+comparison_summary.json
