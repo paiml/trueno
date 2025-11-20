@@ -320,10 +320,20 @@ impl Matrix<f32> {
         other: &Matrix<f32>,
         result: &mut Matrix<f32>,
     ) -> Result<(), TruenoError> {
-        // Strategy: Use Vector::dot() for each element computation
+        // Strategy: Use SIMD dot product for each element computation
         // C[i,j] = dot(A_row_i, B_col_j)
+        //
+        // Optimizations:
+        // 1. Pre-transpose B for cache locality (columns→rows)
+        // 2. Direct backend dot() calls - eliminates O(n²) Vector allocations
+        // 3. Block-wise transpose is now cache-optimized (see transpose())
+
+        use crate::backends::{VectorBackend, scalar::ScalarBackend};
+        #[cfg(target_arch = "x86_64")]
+        use crate::backends::{sse2::Sse2Backend, avx2::Avx2Backend};
 
         // Pre-transpose B for better cache locality (columns become rows)
+        // With our optimized block-wise transpose, this is now very fast
         let b_transposed = other.transpose();
 
         for i in 0..self.rows {
@@ -331,18 +341,46 @@ impl Matrix<f32> {
             let row_start = i * self.cols;
             let row_end = row_start + self.cols;
             let a_row = &self.data[row_start..row_end];
-            let a_vec = Vector::from_slice(a_row);
 
             for j in 0..other.cols {
                 // Extract row j from B^T (which is column j from B)
                 let col_start = j * b_transposed.cols;
                 let col_end = col_start + b_transposed.cols;
                 let b_col = &b_transposed.data[col_start..col_end];
-                let b_vec = Vector::from_slice(b_col);
 
-                // Compute dot product using SIMD
-                let dot_result = a_vec.dot(&b_vec)?;
-                *result.get_mut(i, j).unwrap() = dot_result;
+                // Compute dot product using SIMD backend directly
+                // This eliminates Vector allocation overhead
+                // SAFETY: Backend dot() maintains safety invariants
+                let dot_result = unsafe {
+                    match self.backend {
+                        Backend::Scalar => ScalarBackend::dot(a_row, b_col),
+                        #[cfg(target_arch = "x86_64")]
+                        Backend::SSE2 | Backend::AVX => Sse2Backend::dot(a_row, b_col),
+                        #[cfg(target_arch = "x86_64")]
+                        Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(a_row, b_col),
+                        #[cfg(not(target_arch = "x86_64"))]
+                        Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                            ScalarBackend::dot(a_row, b_col)
+                        }
+                        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                        Backend::NEON => {
+                            use crate::backends::neon::NeonBackend;
+                            NeonBackend::dot(a_row, b_col)
+                        }
+                        #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                        Backend::NEON => ScalarBackend::dot(a_row, b_col),
+                        #[cfg(target_arch = "wasm32")]
+                        Backend::WasmSIMD => {
+                            use crate::backends::wasm::WasmBackend;
+                            WasmBackend::dot(a_row, b_col)
+                        }
+                        #[cfg(not(target_arch = "wasm32"))]
+                        Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
+                        Backend::GPU | Backend::Auto => ScalarBackend::dot(a_row, b_col),
+                    }
+                };
+
+                result.data[i * result.cols + j] = dot_result;
             }
         }
 
