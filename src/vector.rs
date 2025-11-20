@@ -1068,7 +1068,7 @@ impl Vector<f32> {
             .map(|&x| (x - mean_val) * inv_std)
             .collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// Min-max normalization (scaling to [0, 1] range)
@@ -1137,7 +1137,7 @@ impl Vector<f32> {
             .map(|&x| (x - min_val) * inv_range)
             .collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// Clip values to a specified range [min_val, max_val]
@@ -1194,7 +1194,7 @@ impl Vector<f32> {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
                     if gpu.clip(&self.data, &mut result, min_val, max_val).is_ok() {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
@@ -1207,7 +1207,7 @@ impl Vector<f32> {
             .map(|&x| x.max(min_val).min(max_val))
             .collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// Softmax activation function
@@ -1259,7 +1259,7 @@ impl Vector<f32> {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
                     if gpu.softmax(&self.data, &mut result).is_ok() {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
@@ -1278,7 +1278,7 @@ impl Vector<f32> {
         // Normalize by sum
         let data: Vec<f32> = exp_vals.iter().map(|&e| e / sum_exp).collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// Log-softmax activation function
@@ -1324,7 +1324,7 @@ impl Vector<f32> {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
                     if gpu.log_softmax(&self.data, &mut result).is_ok() {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
@@ -1348,7 +1348,7 @@ impl Vector<f32> {
             .map(|&x| x - max_val - log_sum_exp)
             .collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// ReLU (Rectified Linear Unit) activation function
@@ -1413,7 +1413,7 @@ impl Vector<f32> {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
                     if gpu.relu(&self.data, &mut result).is_ok() {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
@@ -1597,7 +1597,7 @@ impl Vector<f32> {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
                     if gpu.sigmoid(&self.data, &mut result).is_ok() {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
@@ -1646,7 +1646,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice(&result))
+        Ok(Vector::from_vec(result))
     }
 
     /// Leaky ReLU activation function
@@ -1734,7 +1734,7 @@ impl Vector<f32> {
                         .leaky_relu(&self.data, &mut result, negative_slope)
                         .is_ok()
                     {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
@@ -1747,7 +1747,7 @@ impl Vector<f32> {
             .map(|&x| if x > 0.0 { x } else { negative_slope * x })
             .collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// ELU (Exponential Linear Unit) activation function
@@ -1836,7 +1836,7 @@ impl Vector<f32> {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
                     if gpu.elu(&self.data, &mut result, alpha).is_ok() {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
@@ -1849,7 +1849,7 @@ impl Vector<f32> {
             .map(|&x| if x > 0.0 { x } else { alpha * (x.exp() - 1.0) })
             .collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// GELU (Gaussian Error Linear Unit) activation function
@@ -1922,7 +1922,7 @@ impl Vector<f32> {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
                     if gpu.gelu(&self.data, &mut result).is_ok() {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
@@ -1971,7 +1971,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice(&result))
+        Ok(Vector::from_vec(result))
     }
 
     /// Swish activation function (also known as SiLU - Sigmoid Linear Unit)
@@ -2036,7 +2036,7 @@ impl Vector<f32> {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
                     if gpu.swish(&self.data, &mut result).is_ok() {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
@@ -2086,7 +2086,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice(&result))
+        Ok(Vector::from_vec(result))
     }
 
     /// Hard Swish activation function
@@ -2158,7 +2158,7 @@ impl Vector<f32> {
             })
             .collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// Mish activation function
@@ -2227,7 +2227,7 @@ impl Vector<f32> {
             })
             .collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// SELU (Scaled Exponential Linear Unit) activation function
@@ -2294,7 +2294,7 @@ impl Vector<f32> {
             })
             .collect();
 
-        Ok(Vector::from_slice(&data))
+        Ok(Vector::from_vec(data))
     }
 
     /// L2 norm (Euclidean norm)
@@ -3587,7 +3587,7 @@ impl Vector<f32> {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
                     if gpu.tanh(&self.data, &mut result).is_ok() {
-                        return Ok(Vector::from_slice(&result));
+                        return Ok(Vector::from_vec(result));
                     }
                 }
             }
