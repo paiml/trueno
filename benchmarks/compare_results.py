@@ -51,19 +51,15 @@ class BenchmarkComparator:
             if len(parts) < 4:
                 continue
 
-            # Extract group and benchmark name
+            # Extract group, backend, and size from path structure
+            # Path structure: target/criterion/<operation>/<backend>/<size>/base/estimates.json
             group_idx = parts.index("criterion") + 1
-            if group_idx >= len(parts) - 2:
+            if group_idx + 2 >= len(parts):
                 continue
 
             group = parts[group_idx]  # e.g., "add", "dot", "relu"
-            bench_name = parts[group_idx + 1]  # e.g., "Scalar/100", "AVX2/10000"
-
-            # Parse backend and size from bench_name
-            if "/" not in bench_name:
-                continue
-
-            backend, size_str = bench_name.split("/")
+            backend = parts[group_idx + 1]  # e.g., "Scalar", "SSE2", "AVX2", "AVX512"
+            size_str = parts[group_idx + 2]  # e.g., "100", "1000", "10000"
 
             try:
                 with open(estimates_file, "r") as f:
