@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score install-tools profile profile-flamegraph profile-bench profile-test
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -288,9 +288,9 @@ bench-compare-frameworks: ## Generate comparison report (requires Rust + Python 
 	@echo "View report:"
 	@echo "  cat benchmarks/comparison_report.md"
 
-# Profiling with Renacer
+# Profiling with Renacer (v0.5.0+)
 profile: ## Profile benchmarks with Renacer (syscall tracing)
-	@echo "🔬 Profiling benchmarks with Renacer..."
+	@echo "🔬 Profiling benchmarks with Renacer v0.5.0..."
 	@command -v renacer >/dev/null 2>&1 || { echo "Installing renacer..."; cargo install renacer; } || exit 1
 	cargo build --release --all-features || exit 1
 	renacer --function-time --source -- cargo bench --no-fail-fast
@@ -315,6 +315,48 @@ profile-test: ## Profile test suite to find bottlenecks
 	@command -v renacer >/dev/null 2>&1 || { echo "Installing renacer..."; cargo install renacer; } || exit 1
 	cargo build --release --all-features || exit 1
 	renacer --function-time --source -- cargo test --release --all-features
+
+# OpenTelemetry Distributed Tracing (Renacer 0.5.0+)
+profile-otlp-jaeger: ## Profile with OTLP export to Jaeger (requires Docker)
+	@echo "📊 Profiling with OpenTelemetry export to Jaeger..."
+	@command -v docker >/dev/null 2>&1 || { echo "❌ Docker required. Install from: https://docs.docker.com/get-docker/"; exit 1; }
+	@echo "Starting Jaeger All-in-One..."
+	@docker run -d --name jaeger-trueno \
+		-p 16686:16686 \
+		-p 4317:4317 \
+		-p 4318:4318 \
+		jaegertracing/all-in-one:latest || { \
+		echo "Jaeger already running or failed to start"; \
+		docker start jaeger-trueno 2>/dev/null || true; \
+	}
+	@sleep 2
+	@echo "Running benchmarks with OTLP tracing..."
+	@cargo build --release --all-features || exit 1
+	@renacer --function-time --source \
+		--otlp-endpoint http://localhost:4317 \
+		--otlp-service-name trueno-benchmarks \
+		-- cargo bench --no-fail-fast
+	@echo ""
+	@echo "✅ Traces exported to Jaeger"
+	@echo "   View at: http://localhost:16686"
+	@echo "   Stop Jaeger: docker stop jaeger-trueno && docker rm jaeger-trueno"
+
+profile-otlp-tempo: ## Profile with OTLP export to Grafana Tempo (requires Docker Compose)
+	@echo "📊 Profiling with OpenTelemetry export to Grafana Tempo..."
+	@command -v docker-compose >/dev/null 2>&1 || { echo "❌ Docker Compose required"; exit 1; }
+	@echo "Starting Grafana Tempo stack..."
+	@docker-compose -f docs/profiling/docker-compose-tempo.yml up -d || exit 1
+	@sleep 5
+	@echo "Running benchmarks with OTLP tracing..."
+	@cargo build --release --all-features || exit 1
+	@renacer --function-time --source \
+		--otlp-endpoint http://localhost:4317 \
+		--otlp-service-name trueno-benchmarks \
+		-- cargo bench --no-fail-fast
+	@echo ""
+	@echo "✅ Traces exported to Tempo"
+	@echo "   Grafana UI: http://localhost:3000 (admin/admin)"
+	@echo "   Stop stack: docker-compose -f docs/profiling/docker-compose-tempo.yml down"
 
 mutate: ## Run mutation testing (>80% kill rate target)
 	@echo "🧬 Running mutation testing (target: >80% kill rate)..."

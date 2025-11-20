@@ -94,7 +94,7 @@ cargo bench -- --baseline main
 
 ### Profiling
 ```bash
-# Install Renacer (syscall tracing and function profiling)
+# Install Renacer v0.5.0+ (syscall tracing and function profiling)
 cargo install renacer
 
 # Profile benchmarks to identify bottlenecks
@@ -122,6 +122,37 @@ renacer --function-time --source -- cargo bench | flamegraph.pl > flame.svg
 - **Hot Path Analysis**: Find top 10 functions consuming most time
 - **Memory Access**: Detect cache misses and memory bottlenecks
 - **GPU Transfer**: Profile PCIe transfer overhead for GPU backend
+
+### Distributed Tracing with OpenTelemetry (Renacer v0.5.0+)
+
+**NEW:** Export syscall traces to observability backends (Jaeger, Grafana Tempo, etc.)
+
+```bash
+# Profile with Jaeger (easiest - single Docker container)
+make profile-otlp-jaeger
+
+# View traces at: http://localhost:16686
+# Stop Jaeger: docker stop jaeger-trueno && docker rm jaeger-trueno
+
+# Profile with Grafana Tempo (production-ready stack)
+make profile-otlp-tempo
+
+# View traces at: http://localhost:3000 (admin/admin)
+# Stop stack: docker-compose -f docs/profiling/docker-compose-tempo.yml down
+```
+
+**OTLP Features**:
+- **Span Hierarchy**: Process root span → syscall child spans
+- **Rich Attributes**: syscall name, result, duration, source location (file:line)
+- **Distributed Context**: Trace benchmark execution across all syscalls
+- **Integration**: Works with all Renacer features (--source, -T, --function-time)
+- **Backends**: Jaeger, Grafana Tempo, Elastic APM, Honeycomb, any OTLP-compatible collector
+
+**Use Cases**:
+- **End-to-End Visibility**: See entire benchmark execution timeline
+- **Cross-Service Tracing**: Correlate Trueno benchmarks with production traces
+- **Performance Regression Detection**: Compare trace spans across releases
+- **Team Collaboration**: Share trace links for performance discussions
 
 ### Quality Gates
 ```bash
