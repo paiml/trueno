@@ -7,6 +7,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/trueno.svg)](https://crates.io/crates/trueno)
 
+<div align="center">
+  <img src="docs/images/trueno-vs-numpy-pytorch.png" alt="Trueno vs NumPy/PyTorch Performance Comparison" width="100%">
+</div>
+
 **Trueno** (Spanish: "thunder") provides unified, high-performance compute primitives across three execution targets:
 
 1. **CPU SIMD** - x86 (SSE2/AVX/AVX2/AVX-512), ARM (NEON), WASM (SIMD128)
@@ -42,78 +46,21 @@ let kernel = Matrix::from_vec(3, 3, vec![1.0/9.0; 9]).unwrap();  // 3x3 averagin
 let filtered = image.convolve2d(&kernel).unwrap();  // Auto-selects GPU for large images
 ```
 
-## Why Trueno is Faster than NumPy/PyTorch
+## Performance vs NumPy/PyTorch
 
-<div align="center">
-  <img src="docs/images/trueno-vs-numpy-pytorch.png" alt="Trueno vs NumPy/PyTorch Performance Comparison" width="100%">
-</div>
+**Dot Product (1K elements):**
+- Trueno AVX-512: **11.9x vs scalar** | **1.6x vs NumPy** | **2.8x vs PyTorch**
 
-### 5 Technical Advantages
+**Matrix Multiply (500×500):**
+- Trueno GPU: **2-10x faster** than scalar
 
-| Advantage | Trueno (Rust) | NumPy/PyTorch (Python) | Impact |
-|-----------|---------------|------------------------|--------|
-| **Zero Overhead** | Compiled to native code, no GIL, no interpreter | Python interpreter + GIL contention | **2-4x baseline** |
-| **Explicit SIMD** | Guaranteed AVX2/AVX-512 intrinsics (8-16 f32/cycle) | Relies on unreliable compiler auto-vectorization | **4-8x compute** |
-| **Intelligent GPU** | Workload-aware dispatch (matmul at 500×500+) | Always uses GPU (even when PCIe overhead dominates) | **2-10x large ops** |
-| **Memory Layout** | SIMD-aligned `Vec<T>`, zero-copy, no object overhead | Python object wrapper overhead, reference counting | **1.5-3x fewer cache misses** |
-| **Backend Efficiency** | Resolve once at Vector creation | May check on every operation | **Eliminates redundant checks** |
-
-### Empirical Results
-
-**Dot Product (1K elements)**:
-- Trueno SSE2: **4.4x faster** than scalar baseline (340% speedup)
-- Trueno AVX2: **8.1x faster** than scalar baseline (FMA acceleration)
-- Trueno AVX-512: **11.9x faster** than scalar baseline
-- Trueno AVX-512 vs NumPy*: **1.6x faster** (352ns vs 576ns)
-- Trueno AVX-512 vs PyTorch*: **2.8x faster** (352ns vs 988ns)
-
-**Matrix Multiplication (500×500)**:
-- Trueno GPU: **2-10x faster** than scalar (empirically validated)
-- PyTorch: Often slower for small matrices (PCIe transfer overhead dominates)
-
-**Note:** *NumPy also uses SIMD (OpenBLAS/MKL), so the advantage vs NumPy/PyTorch is smaller than vs scalar baseline. The key benefit is **guaranteed** SIMD performance without relying on compiler auto-vectorization, plus zero Python interpreter overhead. See [benchmarks/README.md](benchmarks/README.md) for detailed comparison methodology.*
-
-_Feedback on benchmark methodology welcome via [GitHub Issues](https://github.com/paiml/trueno/issues)._
-
-### How to Replicate These Results
-
-**Quick Benchmark** (5 minutes):
+**Replicate:**
 ```bash
-# Install dependencies (one-time setup)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Run comprehensive comparison
-make bench-comprehensive
+curl -LsSf https://astral.sh/uv/install.sh | sh  # Install UV (one-time)
+make bench-comprehensive                          # 12-17 minutes
 ```
 
-**Detailed Analysis**:
-```bash
-# 1. Run Trueno benchmarks (Rust/Criterion)
-make bench                      # 10-15 minutes
-
-# 2. Run Python benchmarks (NumPy/PyTorch)
-make bench-python              # 2-3 minutes
-
-# 3. Generate comparison report
-make bench-compare-frameworks  # <1 minute
-```
-
-**Results Location**:
-- `benchmarks/comparison_report.md` - Performance comparison report
-- `benchmarks/comparison_summary.json` - Machine-readable data
-- `target/criterion/` - Detailed Criterion benchmark data
-
-**Prerequisites**:
-- Rust 1.70+ (install: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
-- Python 3.8+ with NumPy/PyTorch (installed automatically by `make` targets)
-- x86_64 CPU with AVX2 support (check: `cat /proc/cpuinfo | grep avx2`)
-
-**Success Criteria** (v0.3.0):
-- ✅ Trueno within 20% of NumPy for ≥80% of 1D operations
-- ✅ Dot product shows 340%+ speedup with AVX2
-- ✅ Matrix operations competitive with OpenBLAS/MKL
-
-See [`benchmarks/README.md`](benchmarks/README.md) for detailed benchmark documentation and methodology.
+_See [benchmarks/README.md](benchmarks/README.md) for methodology. Feedback welcome via [issues](https://github.com/paiml/trueno/issues)._
 
 ## Performance
 
