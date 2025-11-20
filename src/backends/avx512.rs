@@ -1526,4 +1526,78 @@ mod tests {
             assert!((result - 5.0).abs() < 1e-5, "Expected 5.0, got {}", result);
         });
     }
+
+    #[test]
+    fn test_avx512_norm_l1_scalar_fallback() {
+        avx512_test(|| {
+            // Test scalar fallback for norm_l1 (not yet SIMD optimized)
+            let test_cases = vec![
+                vec![],
+                vec![5.0],
+                vec![-3.0, 1.0, -4.0, 1.0, 5.0],
+                vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            ];
+
+            for test_vec in test_cases {
+                // SAFETY: Test code calling backend trait methods
+                let avx512_result = unsafe { Avx512Backend::norm_l1(&test_vec) };
+                let scalar_result = unsafe { ScalarBackend::norm_l1(&test_vec) };
+
+                assert!(
+                    (avx512_result - scalar_result).abs() < 1e-5,
+                    "norm_l1 mismatch for {:?}: avx512={}, scalar={}",
+                    test_vec,
+                    avx512_result,
+                    scalar_result
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_norm_linf_scalar_fallback() {
+        avx512_test(|| {
+            // Test scalar fallback for norm_linf (not yet SIMD optimized)
+            let test_cases = vec![
+                vec![],
+                vec![5.0],
+                vec![-3.0, 1.0, -4.0, 1.0, 5.0],
+                vec![-10.0, 5.0, 3.0, 7.0, -2.0, 8.0, 4.0],
+                vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+            ];
+
+            for test_vec in test_cases {
+                // SAFETY: Test code calling backend trait methods
+                let avx512_result = unsafe { Avx512Backend::norm_linf(&test_vec) };
+                let scalar_result = unsafe { ScalarBackend::norm_linf(&test_vec) };
+
+                assert!(
+                    (avx512_result - scalar_result).abs() < 1e-5,
+                    "norm_linf mismatch for {:?}: avx512={}, scalar={}",
+                    test_vec,
+                    avx512_result,
+                    scalar_result
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn test_avx512_sum_kahan_scalar_fallback() {
+        avx512_test(|| {
+            // Test scalar fallback for sum_kahan (not yet SIMD optimized)
+            let test_vec = vec![1.0e10, 1.0, -1.0e10, 1.0]; // Tests numerical stability
+
+            // SAFETY: Test code calling backend trait methods
+            let avx512_result = unsafe { Avx512Backend::sum_kahan(&test_vec) };
+            let scalar_result = unsafe { ScalarBackend::sum_kahan(&test_vec) };
+
+            assert!(
+                (avx512_result - scalar_result).abs() < 1e-5,
+                "sum_kahan mismatch: avx512={}, scalar={}",
+                avx512_result,
+                scalar_result
+            );
+        });
+    }
 }
