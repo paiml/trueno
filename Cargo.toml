@@ -16,6 +16,7 @@ categories = ["algorithms", "mathematics", "science"]
 
 [dependencies]
 thiserror = "2.0"
+rayon = { version = "1.10", optional = true }
 wgpu = { version = "22", optional = true }
 pollster = { version = "0.3", optional = true }
 bytemuck = { version = "1.14", features = ["derive"], optional = true }
@@ -27,6 +28,7 @@ criterion = "0.5"
 
 [features]
 default = []
+parallel = ["rayon"]
 gpu = ["wgpu", "pollster", "bytemuck", "futures-intrusive"]
 # Chaos engineering features (from renacer v0.4.1)
 chaos-basic = []
