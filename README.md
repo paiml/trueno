@@ -777,16 +777,28 @@ cargo test property_tests -- --nocapture
 
 ### 🏆 Comprehensive Comparison vs NumPy/PyTorch
 
-Run the full benchmark suite comparing Trueno against NumPy and PyTorch:
+**Makefile Targets** (Recommended):
 
 ```bash
-./benchmarks/run_all.sh
+# Complete comparison suite (Rust + NumPy + PyTorch + Analysis)
+make bench-comprehensive    # ~12-17 minutes, interactive confirmation
+
+# Individual components
+make bench                  # Rust benchmarks only (~10-15 min)
+make bench-python          # Python benchmarks only (~2 min)
+make bench-compare-frameworks  # Generate comparison report
 ```
 
-This runs:
-1. ✅ Trueno benchmarks (Rust/Criterion) - 5-10 minutes
+**Alternative** (Direct script execution):
+
+```bash
+./benchmarks/run_all.sh    # Same as make bench-comprehensive
+```
+
+**What's Included**:
+1. ✅ Trueno benchmarks (Rust/Criterion) - 10-15 minutes
 2. ✅ Python benchmarks (NumPy/PyTorch) - 2-3 minutes
-3. ✅ Comparative analysis and report generation
+3. ✅ Comparative analysis and report generation - <1 minute
 
 **Results**:
 - `benchmarks/comparison_report.md` - Performance comparison report
@@ -800,24 +812,45 @@ See [`benchmarks/README.md`](benchmarks/README.md) for detailed documentation.
 ### Rust-Only Benchmarks
 
 ```bash
-# Run all benchmarks
+# Run all Rust benchmarks
 make bench
 
 # Benchmark specific operation
 cargo bench -- add
 cargo bench -- dot
+
+# GPU benchmarks (if available)
+make bench-gpu
+
+# Save baseline for regression detection
+make bench-save-baseline
+make bench-compare
 ```
 
-Benchmark results are stored in `target/criterion/` and include:
+**Benchmark results** stored in `target/criterion/`:
 - Throughput (elements/second)
 - Latency (mean, median, p95, p99)
 - Backend comparison (Scalar vs SSE2 vs AVX2 vs AVX-512)
-- Regression detection
+- Statistical analysis (outliers, confidence intervals)
 
 **Operations Benchmarked** (25 total):
 - Element-wise: `add`, `sub`, `mul`, `div`, `scale`, `abs`, `clamp`, `lerp`, `fma`
 - Reductions: `dot`, `sum`, `max`, `min`, `argmax`, `argmin`, `norm_l1`, `norm_l2`, `norm_linf`
 - Activations: `relu`, `sigmoid`, `tanh`, `gelu`, `swish`, `exp`, `softmax`, `log_softmax`
+
+### Dependencies
+
+**Rust**: Included in `dev-dependencies` (Criterion)
+
+**Python** (for comprehensive comparison):
+```bash
+# Install UV (Rust-based Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh
+bash /tmp/uv-install.sh
+rm -f /tmp/uv-install.sh
+
+# Dependencies installed automatically by make targets
+```
 
 ## Examples
 

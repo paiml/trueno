@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench dev mutate pmat-tdg pmat-analyze pmat-score install-tools profile profile-flamegraph profile-bench profile-test
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score install-tools profile profile-flamegraph profile-bench profile-test
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -239,6 +239,56 @@ bench-compare: ## Compare current performance vs baseline
 	@python3 scripts/check_regression.py \
 		--baseline .performance-baselines/baseline-current.txt \
 		--current /tmp/bench-current.txt
+
+bench-comprehensive: ## Run comprehensive benchmarks (Trueno vs NumPy vs PyTorch)
+	@echo "🏆 Comprehensive Benchmark Suite (Trueno vs NumPy vs PyTorch)"
+	@echo ""
+	@echo "This will take 12-17 minutes:"
+	@echo "  • Rust benchmarks (Criterion): ~10-15 min"
+	@echo "  • Python benchmarks: ~2 min"
+	@echo "  • Analysis & report generation: <1 min"
+	@echo ""
+	@read -p "Continue? [y/N] " -n 1 -r; \
+	echo; \
+	if [[ ! $$REPLY =~ ^[Yy]$$ ]]; then \
+		echo "Cancelled."; \
+		exit 1; \
+	fi
+	@./benchmarks/run_all.sh
+
+bench-python: ## Run Python benchmarks (NumPy + PyTorch) only
+	@echo "🐍 Running Python benchmarks (NumPy + PyTorch)..."
+	@echo "Estimated time: 2-3 minutes"
+	@echo ""
+	@command -v uv >/dev/null 2>&1 || { \
+		echo "❌ UV not installed. Install with:"; \
+		echo "  curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh"; \
+		echo "  bash /tmp/uv-install.sh"; \
+		echo "  rm -f /tmp/uv-install.sh"; \
+		exit 1; \
+	}
+	@cd benchmarks && uv pip install --system --quiet numpy torch 2>/dev/null || true
+	@uv run benchmarks/python_comparison.py
+	@echo "✅ Results: benchmarks/python_results.json"
+
+bench-compare-frameworks: ## Generate comparison report (requires Rust + Python benchmarks)
+	@echo "📊 Generating Trueno vs NumPy vs PyTorch comparison report..."
+	@if [ ! -d target/criterion ] || [ -z "$$(ls -A target/criterion 2>/dev/null)" ]; then \
+		echo "❌ Rust benchmarks not found. Run 'make bench' first."; \
+		exit 1; \
+	fi
+	@if [ ! -f benchmarks/python_results.json ]; then \
+		echo "❌ Python benchmarks not found. Run 'make bench-python' first."; \
+		exit 1; \
+	fi
+	@uv run benchmarks/compare_results.py
+	@echo ""
+	@echo "✅ Comparison complete!"
+	@echo "   Report: benchmarks/comparison_report.md"
+	@echo "   JSON:   benchmarks/comparison_summary.json"
+	@echo ""
+	@echo "View report:"
+	@echo "  cat benchmarks/comparison_report.md"
 
 # Profiling with Renacer
 profile: ## Profile benchmarks with Renacer (syscall tracing)
