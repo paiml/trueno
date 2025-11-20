@@ -125,6 +125,27 @@ where
         }
     }
 
+    /// Create vector from an existing Vec (takes ownership, no copy)
+    ///
+    /// This is more efficient than `from_slice` when you already have a Vec
+    /// and don't need to keep it, as it avoids an extra allocation and copy.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let data = vec![1.0, 2.0, 3.0];
+    /// let v = Vector::from_vec(data);
+    /// assert_eq!(v.len(), 3);
+    /// ```
+    pub fn from_vec(data: Vec<T>) -> Self {
+        Self {
+            data,
+            backend: crate::select_best_available_backend(),
+        }
+    }
+
     /// Create vector with specific backend (for benchmarking or testing)
     ///
     /// # Examples
@@ -1400,10 +1421,10 @@ impl Vector<f32> {
 
         let mut result = vec![0.0; self.len()];
 
-        // Use parallel processing for large arrays (reduces TLB pressure and memory allocation overhead)
+        // Use parallel processing for very large arrays (reduces TLB pressure and improves cache utilization)
         #[cfg(feature = "parallel")]
         {
-            const PARALLEL_THRESHOLD: usize = 100_000;
+            const PARALLEL_THRESHOLD: usize = 500_000; // Increased to avoid overhead at smaller sizes
             const CHUNK_SIZE: usize = 65536; // 64K elements = 256KB, cache-friendly
 
             if self.len() >= PARALLEL_THRESHOLD {
@@ -1454,7 +1475,7 @@ impl Vector<f32> {
                         }
                     });
 
-                return Ok(Vector::from_slice(&result));
+                return Ok(Vector::from_vec(result)); // Use from_vec to avoid extra copy
             }
         }
 
@@ -1499,7 +1520,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice(&result))
+        Ok(Vector::from_vec(result)) // Use from_vec to avoid extra copy
     }
 
     /// Sigmoid (logistic) activation function
