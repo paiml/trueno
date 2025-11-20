@@ -777,16 +777,21 @@ make tier3  # Target: <2 hours execution
 ```
 Current: All metrics GREEN ✅
 TDG: A (92.1/100)
-Tests: 860 passing (all green ✅)
-Coverage: 91.78% (GPU excluded, meets 90% threshold ✅)
+Tests: 873 passing (all green ✅) [+13 from coverage work]
+Coverage: 93.25% overall (GPU excluded) ✅
+  - Trueno library: 93.80% ✅
+  - AVX512: 91.27% ✅
+  - AVX2: 93.86% ✅
+  - SSE2: 90.99% ✅
+  - Scalar: 98.74% ✅
 Clippy: 0 warnings ✅
 Release: v0.4.1
-Next: WASM SIMD128 backend OR coverage improvements (SSE2/AVX512/lib.rs)
+Next: WASM SIMD128 backend OR AVX512 SIMD optimizations (scale/abs/clamp/lerp/fma)
 ```
 
 ---
 
-**Last Updated**: 2025-11-20
+**Last Updated**: 2025-11-20 (Coverage improvements session complete)
 **Methodology**: PMAT + EXTREME TDD + Toyota Way + **Certeza Tiered Workflow**
 **Owner**: Trueno Core Team
 **Specification**: [PyTorch/NumPy Replacement Spec v1.2](docs/specifications/pytorch-numpy-replacement-spec.md) (with certeza insights)
