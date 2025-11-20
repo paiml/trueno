@@ -1232,7 +1232,7 @@ impl VectorBackend for Avx2Backend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Vector;
+    
 
     #[cfg(target_arch = "x86_64")]
     #[test]
