@@ -1142,14 +1142,12 @@ impl VectorBackend for NeonBackend {
     }
 
     unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for now
-        // TODO: Implement NEON sqrt (vsqrtq_f32)
+        // Scalar fallback: NEON sqrt available as vsqrtq_f32 intrinsic
         super::scalar::ScalarBackend::sqrt(a, result);
     }
 
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for now
-        // TODO: Implement NEON recip approximation
+        // Scalar fallback: NEON reciprocal requires estimate + Newton-Raphson refinement
         super::scalar::ScalarBackend::recip(a, result);
     }
 
