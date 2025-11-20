@@ -7,6 +7,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Crates.io](https://img.shields.io/crates/v/trueno.svg)](https://crates.io/crates/trueno)
 
+<div align="center">
+  <img src="docs/images/trueno-vs-numpy-pytorch.png" alt="Trueno vs NumPy/PyTorch Performance Comparison" width="100%">
+</div>
+
 **Trueno** (Spanish: "thunder") provides unified, high-performance compute primitives across three execution targets:
 
 1. **CPU SIMD** - x86 (SSE2/AVX/AVX2/AVX-512), ARM (NEON), WASM (SIMD128)
@@ -41,6 +45,22 @@ let image = Matrix::from_vec(5, 5, vec![/* 25 pixels */]).unwrap();
 let kernel = Matrix::from_vec(3, 3, vec![1.0/9.0; 9]).unwrap();  // 3x3 averaging filter
 let filtered = image.convolve2d(&kernel).unwrap();  // Auto-selects GPU for large images
 ```
+
+## Performance vs NumPy/PyTorch
+
+**Dot Product (1K elements):**
+- Trueno AVX-512: **11.9x vs scalar** | **1.6x vs NumPy** | **2.8x vs PyTorch**
+
+**Matrix Multiply (500×500):**
+- Trueno GPU: **2-10x faster** than scalar
+
+**Replicate:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh  # Install UV (one-time)
+make bench-comprehensive                          # 12-17 minutes
+```
+
+_See [benchmarks/README.md](benchmarks/README.md) for methodology. Feedback welcome via [issues](https://github.com/paiml/trueno/issues)._
 
 ## Performance
 
