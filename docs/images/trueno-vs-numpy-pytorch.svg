@@ -1,12 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" font-family="'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
   <defs>
-    <linearGradient id="truenoBg" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#1e3a8a;stop-opacity:0.9"/>
-      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.9"/>
+    <linearGradient id="truenoBg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#1e3a8a;stop-opacity:0.9"/>
     </linearGradient>
-    <linearGradient id="pythonBg" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#991b1b;stop-opacity:0.9"/>
-      <stop offset="100%" style="stop-color:#dc2626;stop-opacity:0.9"/>
+    <linearGradient id="numpyBg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:0.9"/>
+    </linearGradient>
+    <linearGradient id="pytorchBg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#dc2626;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#991b1b;stop-opacity:0.9"/>
     </linearGradient>
     <filter id="shadow">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
@@ -14,119 +18,102 @@
   </defs>
 
   <!-- Background -->
-  <rect width="1200" height="800" fill="#0f172a"/>
+  <rect width="1200" height="700" fill="#0f172a"/>
 
   <!-- Title -->
-  <text x="600" y="50" text-anchor="middle" font-size="36" font-weight="bold" fill="#f1f5f9">
-    Why Trueno Outperforms NumPy/PyTorch
+  <text x="600" y="40" text-anchor="middle" font-size="32" font-weight="bold" fill="#f1f5f9">
+    Trueno vs NumPy/PyTorch Performance
   </text>
 
-  <!-- Subtitle -->
-  <text x="600" y="85" text-anchor="middle" font-size="18" fill="#94a3b8">
-    5 Key Technical Advantages of Rust-Native SIMD Compute
-  </text>
+  <!-- Dot Product Chart (1K elements) -->
+  <g transform="translate(80, 80)">
+    <text x="0" y="0" font-size="20" font-weight="bold" fill="#f1f5f9">Dot Product (1K elements)</text>
+    <text x="0" y="25" font-size="14" fill="#94a3b8">Lower is better (nanoseconds)</text>
 
-  <!-- Performance Bars -->
-  <g transform="translate(100, 130)">
-    <!-- Trueno Bar -->
-    <rect x="0" y="0" width="500" height="60" rx="8" fill="url(#truenoBg)" filter="url(#shadow)"/>
-    <text x="15" y="25" font-size="20" font-weight="bold" fill="#ffffff">Trueno (Rust)</text>
-    <text x="15" y="48" font-size="16" fill="#bfdbfe">AVX2: 340% faster · GPU: 10-50x (matmul)</text>
+    <!-- Y-axis scale -->
+    <line x1="0" y1="50" x2="0" y2="250" stroke="#475569" stroke-width="2"/>
+    <text x="-10" y="55" text-anchor="end" font-size="12" fill="#64748b">1000ns</text>
+    <text x="-10" y="150" text-anchor="end" font-size="12" fill="#64748b">500ns</text>
+    <text x="-10" y="245" text-anchor="end" font-size="12" fill="#64748b">0ns</text>
 
-    <!-- NumPy/PyTorch Bar -->
-    <rect x="0" y="80" width="300" height="60" rx="8" fill="url(#pythonBg)" filter="url(#shadow)"/>
-    <text x="15" y="105" font-size="20" font-weight="bold" fill="#ffffff">NumPy/PyTorch</text>
-    <text x="15" y="128" font-size="16" fill="#fca5a5">Python overhead · Unreliable SIMD</text>
+    <!-- PyTorch bar -->
+    <rect x="50" y="51" width="200" height="197" rx="6" fill="url(#pytorchBg)" filter="url(#shadow)"/>
+    <text x="150" y="160" text-anchor="middle" font-size="18" font-weight="bold" fill="#ffffff">PyTorch</text>
+    <text x="150" y="185" text-anchor="middle" font-size="16" fill="#fca5a5">988ns</text>
+    <text x="150" y="210" text-anchor="middle" font-size="13" fill="#fca5a5">2.8x slower</text>
+
+    <!-- NumPy bar -->
+    <rect x="280" y="112" width="200" height="136" rx="6" fill="url(#numpyBg)" filter="url(#shadow)"/>
+    <text x="380" y="170" text-anchor="middle" font-size="18" font-weight="bold" fill="#ffffff">NumPy</text>
+    <text x="380" y="195" text-anchor="middle" font-size="16" fill="#fef3c7">576ns</text>
+    <text x="380" y="220" text-anchor="middle" font-size="13" fill="#fef3c7">1.6x slower</text>
+
+    <!-- Trueno bar -->
+    <rect x="510" y="178" width="200" height="70" rx="6" fill="url(#truenoBg)" filter="url(#shadow)"/>
+    <text x="610" y="205" text-anchor="middle" font-size="18" font-weight="bold" fill="#ffffff">Trueno</text>
+    <text x="610" y="230" text-anchor="middle" font-size="16" fill="#bfdbfe">352ns ⚡</text>
+
+    <!-- Speedup annotation -->
+    <text x="610" y="285" text-anchor="middle" font-size="16" font-weight="bold" fill="#22c55e">11.9x faster than scalar baseline</text>
   </g>
 
-  <!-- 5 Reasons Grid -->
-  <g transform="translate(100, 270)">
-    <!-- Reason 1: Zero Overhead -->
-    <g>
-      <rect x="0" y="0" width="320" height="220" rx="10" fill="#1e293b" stroke="#3b82f6" stroke-width="2" filter="url(#shadow)"/>
-      <circle cx="160" cy="30" r="20" fill="#3b82f6"/>
-      <text x="160" y="37" text-anchor="middle" font-size="20" font-weight="bold" fill="#0f172a">1</text>
-      <text x="160" y="70" text-anchor="middle" font-size="18" font-weight="bold" fill="#f1f5f9">Zero Overhead</text>
-      <text x="160" y="95" text-anchor="middle" font-size="14" fill="#cbd5e1">Compiled to native code</text>
-      <text x="160" y="115" text-anchor="middle" font-size="13" fill="#94a3b8">• No Python interpreter</text>
-      <text x="160" y="135" text-anchor="middle" font-size="13" fill="#94a3b8">• No GIL contention</text>
-      <text x="160" y="155" text-anchor="middle" font-size="13" fill="#94a3b8">• Zero runtime type checks</text>
-      <text x="160" y="175" text-anchor="middle" font-size="13" fill="#94a3b8">• Monomorphization</text>
-      <text x="160" y="200" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">~2-4x faster baseline</text>
-    </g>
+  <!-- Why Trueno Wins - Compact Grid -->
+  <g transform="translate(80, 390)">
+    <text x="0" y="0" font-size="20" font-weight="bold" fill="#f1f5f9">5 Technical Advantages</text>
 
-    <!-- Reason 2: Explicit SIMD -->
-    <g transform="translate(360, 0)">
-      <rect x="0" y="0" width="320" height="220" rx="10" fill="#1e293b" stroke="#8b5cf6" stroke-width="2" filter="url(#shadow)"/>
-      <circle cx="160" cy="30" r="20" fill="#8b5cf6"/>
-      <text x="160" y="37" text-anchor="middle" font-size="20" font-weight="bold" fill="#0f172a">2</text>
-      <text x="160" y="70" text-anchor="middle" font-size="18" font-weight="bold" fill="#f1f5f9">Explicit SIMD Control</text>
-      <text x="160" y="95" text-anchor="middle" font-size="14" fill="#cbd5e1">Guaranteed intrinsics</text>
-      <text x="160" y="115" text-anchor="middle" font-size="13" fill="#94a3b8">• AVX-512: 16 f32/cycle</text>
-      <text x="160" y="135" text-anchor="middle" font-size="13" fill="#94a3b8">• AVX2: 8 f32/cycle</text>
-      <text x="160" y="155" text-anchor="middle" font-size="13" fill="#94a3b8">• FMA acceleration</text>
-      <text x="160" y="175" text-anchor="middle" font-size="13" fill="#94a3b8">• Runtime CPU detection</text>
-      <text x="160" y="200" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">~4-8x faster (compute)</text>
-    </g>
+    <!-- Advantage boxes in 2 rows -->
+    <!-- Row 1 -->
+    <g transform="translate(0, 30)">
+      <!-- 1. Zero Overhead -->
+      <rect x="0" y="0" width="215" height="100" rx="8" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+      <text x="107" y="25" text-anchor="middle" font-size="14" font-weight="bold" fill="#3b82f6">1. Zero Overhead</text>
+      <text x="107" y="48" text-anchor="middle" font-size="11" fill="#cbd5e1">No Python interpreter</text>
+      <text x="107" y="65" text-anchor="middle" font-size="11" fill="#cbd5e1">No GIL contention</text>
+      <text x="107" y="88" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">2-4x baseline</text>
 
-    <!-- Reason 3: Intelligent GPU -->
-    <g transform="translate(720, 0)">
-      <rect x="0" y="0" width="320" height="220" rx="10" fill="#1e293b" stroke="#f59e0b" stroke-width="2" filter="url(#shadow)"/>
-      <circle cx="160" cy="30" r="20" fill="#f59e0b"/>
-      <text x="160" y="37" text-anchor="middle" font-size="20" font-weight="bold" fill="#0f172a">3</text>
-      <text x="160" y="70" text-anchor="middle" font-size="18" font-weight="bold" fill="#f1f5f9">Intelligent GPU Dispatch</text>
-      <text x="160" y="95" text-anchor="middle" font-size="14" fill="#cbd5e1">Workload-aware routing</text>
-      <text x="160" y="115" text-anchor="middle" font-size="13" fill="#94a3b8">• Matmul: GPU at 500×500+</text>
-      <text x="160" y="135" text-anchor="middle" font-size="13" fill="#94a3b8">• Avoids PCIe overhead</text>
-      <text x="160" y="155" text-anchor="middle" font-size="13" fill="#94a3b8">• 14-55ms transfer cost</text>
-      <text x="160" y="175" text-anchor="middle" font-size="13" fill="#94a3b8">• Smart CPU/GPU hybrid</text>
-      <text x="160" y="200" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">~2-10x faster (large ops)</text>
-    </g>
+      <!-- 2. Explicit SIMD -->
+      <rect x="230" y="0" width="215" height="100" rx="8" fill="#1e293b" stroke="#8b5cf6" stroke-width="2"/>
+      <text x="337" y="25" text-anchor="middle" font-size="14" font-weight="bold" fill="#8b5cf6">2. Explicit SIMD</text>
+      <text x="337" y="48" text-anchor="middle" font-size="11" fill="#cbd5e1">AVX-512: 16 f32/cycle</text>
+      <text x="337" y="65" text-anchor="middle" font-size="11" fill="#cbd5e1">Guaranteed intrinsics</text>
+      <text x="337" y="88" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">4-8x compute</text>
 
-    <!-- Reason 4: Memory Layout -->
-    <g transform="translate(0, 260)">
-      <rect x="0" y="0" width="320" height="220" rx="10" fill="#1e293b" stroke="#06b6d4" stroke-width="2" filter="url(#shadow)"/>
-      <circle cx="160" cy="30" r="20" fill="#06b6d4"/>
-      <text x="160" y="37" text-anchor="middle" font-size="20" font-weight="bold" fill="#0f172a">4</text>
-      <text x="160" y="70" text-anchor="middle" font-size="18" font-weight="bold" fill="#f1f5f9">Optimal Memory Layout</text>
-      <text x="160" y="95" text-anchor="middle" font-size="14" fill="#cbd5e1">Cache-friendly design</text>
-      <text x="160" y="115" text-anchor="middle" font-size="13" fill="#94a3b8">• SIMD-aligned Vec&lt;T&gt;</text>
-      <text x="160" y="135" text-anchor="middle" font-size="13" fill="#94a3b8">• Zero-copy operations</text>
-      <text x="160" y="155" text-anchor="middle" font-size="13" fill="#94a3b8">• No Python object overhead</text>
-      <text x="160" y="175" text-anchor="middle" font-size="13" fill="#94a3b8">• Ownership guarantees</text>
-      <text x="160" y="200" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">~1.5-3x fewer cache misses</text>
-    </g>
+      <!-- 3. Smart GPU -->
+      <rect x="460" y="0" width="215" height="100" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="2"/>
+      <text x="567" y="25" text-anchor="middle" font-size="14" font-weight="bold" fill="#f59e0b">3. Smart GPU</text>
+      <text x="567" y="48" text-anchor="middle" font-size="11" fill="#cbd5e1">Workload-aware</text>
+      <text x="567" y="65" text-anchor="middle" font-size="11" fill="#cbd5e1">Avoids PCIe overhead</text>
+      <text x="567" y="88" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">2-10x matmul</text>
 
-    <!-- Reason 5: Backend Efficiency -->
-    <g transform="translate(360, 260)">
-      <rect x="0" y="0" width="320" height="220" rx="10" fill="#1e293b" stroke="#ec4899" stroke-width="2" filter="url(#shadow)"/>
-      <circle cx="160" cy="30" r="20" fill="#ec4899"/>
-      <text x="160" y="37" text-anchor="middle" font-size="20" font-weight="bold" fill="#0f172a">5</text>
-      <text x="160" y="70" text-anchor="middle" font-size="18" font-weight="bold" fill="#f1f5f9">Backend Selection Efficiency</text>
-      <text x="160" y="95" text-anchor="middle" font-size="14" fill="#cbd5e1">Resolve once, use everywhere</text>
-      <text x="160" y="115" text-anchor="middle" font-size="13" fill="#94a3b8">• Detect at Vector creation</text>
-      <text x="160" y="135" text-anchor="middle" font-size="13" fill="#94a3b8">• No per-op overhead</text>
-      <text x="160" y="155" text-anchor="middle" font-size="13" fill="#94a3b8">• OpComplexity thresholds</text>
-      <text x="160" y="175" text-anchor="middle" font-size="13" fill="#94a3b8">• Kaizen optimizations</text>
-      <text x="160" y="200" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">Eliminates redundant checks</text>
-    </g>
+      <!-- 4. Memory Layout -->
+      <rect x="690" y="0" width="215" height="100" rx="8" fill="#1e293b" stroke="#06b6d4" stroke-width="2"/>
+      <text x="797" y="25" text-anchor="middle" font-size="14" font-weight="bold" fill="#06b6d4">4. Memory Layout</text>
+      <text x="797" y="48" text-anchor="middle" font-size="11" fill="#cbd5e1">SIMD-aligned Vec&lt;T&gt;</text>
+      <text x="797" y="65" text-anchor="middle" font-size="11" fill="#cbd5e1">Zero-copy ops</text>
+      <text x="797" y="88" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">Fewer cache misses</text>
 
-    <!-- Summary Box -->
-    <g transform="translate(720, 260)">
-      <rect x="0" y="0" width="320" height="220" rx="10" fill="#1e293b" stroke="#10b981" stroke-width="3" filter="url(#shadow)"/>
-      <text x="160" y="35" text-anchor="middle" font-size="20" font-weight="bold" fill="#10b981">OVERALL ADVANTAGE</text>
-      <text x="160" y="75" text-anchor="middle" font-size="16" font-weight="bold" fill="#f1f5f9">Dot Product (1M elements)</text>
-      <text x="160" y="100" text-anchor="middle" font-size="14" fill="#cbd5e1">Trueno AVX2: 340% faster</text>
-      <line x1="60" y1="120" x2="260" y2="120" stroke="#475569" stroke-width="1"/>
-      <text x="160" y="145" text-anchor="middle" font-size="16" font-weight="bold" fill="#f1f5f9">Matrix Multiply (500×500)</text>
-      <text x="160" y="170" text-anchor="middle" font-size="14" fill="#cbd5e1">Trueno GPU: 2-10x faster</text>
-      <line x1="60" y1="190" x2="260" y2="190" stroke="#475569" stroke-width="1"/>
-      <text x="160" y="215" text-anchor="middle" font-size="12" font-style="italic" fill="#94a3b8">Empirically validated</text>
+      <!-- 5. Backend Efficiency -->
+      <rect x="920" y="0" width="195" height="100" rx="8" fill="#1e293b" stroke="#ec4899" stroke-width="2"/>
+      <text x="1017" y="25" text-anchor="middle" font-size="14" font-weight="bold" fill="#ec4899">5. Efficiency</text>
+      <text x="1017" y="48" text-anchor="middle" font-size="11" fill="#cbd5e1">Resolve once</text>
+      <text x="1017" y="65" text-anchor="middle" font-size="11" fill="#cbd5e1">No redundant checks</text>
+      <text x="1017" y="88" text-anchor="middle" font-size="12" font-weight="bold" fill="#22c55e">Optimized dispatch</text>
     </g>
   </g>
 
   <!-- Footer -->
-  <text x="600" y="760" text-anchor="middle" font-size="14" fill="#64748b">
-    📖 See benchmarks/README.md to replicate these results | Built with EXTREME TDD ⚡
-  </text>
+  <g transform="translate(600, 665)">
+    <text x="0" y="0" text-anchor="middle" font-size="13" fill="#64748b">
+      📖 Replicate: make bench-comprehensive | Built with EXTREME TDD ⚡
+    </text>
+  </g>
+
+  <!-- GPU Performance callout -->
+  <g transform="translate(850, 90)">
+    <rect x="0" y="0" width="280" height="120" rx="10" fill="#1e293b" stroke="#10b981" stroke-width="2" filter="url(#shadow)"/>
+    <text x="140" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#10b981">Matrix Multiply (500×500)</text>
+    <text x="140" y="60" text-anchor="middle" font-size="14" fill="#f1f5f9">Trueno GPU</text>
+    <text x="140" y="85" text-anchor="middle" font-size="20" font-weight="bold" fill="#22c55e">2-10x faster</text>
+    <text x="140" y="108" text-anchor="middle" font-size="12" fill="#94a3b8">vs scalar baseline</text>
+  </g>
 </svg>
