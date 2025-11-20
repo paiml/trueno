@@ -73,7 +73,7 @@ Results in: `target/criterion/<operation>/<backend>/<size>/`
 ### Python Benchmarks Only
 
 ```bash
-python3 benchmarks/python_comparison.py
+uv run benchmarks/python_comparison.py
 ```
 
 Results in: `benchmarks/python_results.json`
@@ -81,7 +81,7 @@ Results in: `benchmarks/python_results.json`
 ### Generate Comparison Report
 
 ```bash
-python3 benchmarks/compare_results.py
+uv run benchmarks/compare_results.py
 ```
 
 Requires both Rust and Python benchmarks to be run first.
@@ -92,15 +92,18 @@ Requires both Rust and Python benchmarks to be run first.
 - Criterion.rs (included in `dev-dependencies`)
 - Trueno with all features enabled
 
-### Python
+### Python (via UV - Rust-based package manager)
 ```bash
-pip install numpy torch
+# Install UV (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies
+cd benchmarks
+uv pip install numpy torch
 ```
 
-Or use the automated installer:
-```bash
-pip install -r benchmarks/requirements.txt
-```
+UV is a Rust-based Python package manager that's significantly faster than pip.
+Dependencies are defined in `benchmarks/pyproject.toml`.
 
 ## 📈 Expected Results
 
@@ -140,7 +143,7 @@ pip install -r benchmarks/requirements.txt
 ### Python dependencies missing
 
 ```bash
-pip3 install numpy torch
+cd benchmarks && uv pip install numpy torch
 ```
 
 ### Criterion benchmarks not found

@@ -22,15 +22,23 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Check if Python dependencies are installed
-echo "📦 Checking Python dependencies..."
-if ! python3 -c "import numpy, torch" 2>/dev/null; then
-    echo -e "${YELLOW}⚠️  Python dependencies missing. Installing...${NC}"
-    pip3 install numpy torch --quiet
-    echo -e "${GREEN}✅ Python dependencies installed${NC}"
+# Check if UV is installed
+echo "📦 Checking UV (Rust-based Python package manager)..."
+if ! command -v uv &> /dev/null; then
+    echo -e "${YELLOW}⚠️  UV not found. Installing...${NC}"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.cargo/bin:$PATH"
+    echo -e "${GREEN}✅ UV installed${NC}"
 else
-    echo -e "${GREEN}✅ Python dependencies already installed${NC}"
+    echo -e "${GREEN}✅ UV already installed${NC}"
 fi
+
+# Install Python dependencies with UV
+echo "📦 Installing Python dependencies (numpy, torch)..."
+cd benchmarks
+uv pip install --quiet numpy torch
+cd ..
+echo -e "${GREEN}✅ Python dependencies installed${NC}"
 echo ""
 
 # Step 1: Run Rust benchmarks
@@ -55,7 +63,7 @@ echo ""
 echo "This will take 2-3 minutes..."
 echo ""
 
-python3 benchmarks/python_comparison.py
+uv run benchmarks/python_comparison.py
 
 echo ""
 echo -e "${GREEN}✅ Python benchmarks complete${NC}"
@@ -67,7 +75,7 @@ echo "Step 3/3: Comparing Results"
 echo "================================================================================"
 echo ""
 
-python3 benchmarks/compare_results.py
+uv run benchmarks/compare_results.py
 
 echo ""
 echo "================================================================================"

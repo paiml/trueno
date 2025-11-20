@@ -13,7 +13,7 @@ Usage:
     python benchmarks/python_comparison.py
 
 Requirements:
-    pip install numpy torch timeit
+    uv pip install numpy torch
 """
 
 import json
