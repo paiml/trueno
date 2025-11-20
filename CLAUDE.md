@@ -154,6 +154,58 @@ make profile-otlp-tempo
 - **Performance Regression Detection**: Compare trace spans across releases
 - **Team Collaboration**: Share trace links for performance discussions
 
+**OTLP Profiling Best Practices** (Institutionalized Workflow):
+
+1. **Pre-Release Performance Validation**
+   ```bash
+   # Baseline current release
+   make profile-otlp-jaeger
+   curl "localhost:16686/api/traces?service=trueno-benchmarks" > traces-v0.4.0.json
+
+   # After changes
+   make profile-otlp-jaeger
+   curl "localhost:16686/api/traces?service=trueno-benchmarks" > traces-v0.4.1.json
+
+   # Compare syscall distributions
+   python3 scripts/compare_traces.py traces-v0.4.0.json traces-v0.4.1.json
+   ```
+
+2. **Debug Performance Regression**
+   - **Symptom**: Benchmark shows slowdown
+   - **Action**: Profile with `make profile-otlp-jaeger`
+   - **Investigate**: Check for unexpected syscalls (mmap, futex, munmap)
+   - **Validate**: Zero-allocation in hot path (no mmap during compute)
+   - **Fix**: Reduce syscall overhead, pre-allocate buffers
+   - **Verify**: Re-profile and compare trace data
+
+3. **Team Collaboration Protocol**
+   - Share Jaeger UI link: `http://localhost:16686/trace/<trace-id>`
+   - Export trace JSON for async review: `curl "localhost:16686/api/traces?..."`
+   - Tag releases in Grafana Tempo for historical comparison
+   - Include trace links in performance PRs
+
+4. **CI/CD Integration**
+   ```yaml
+   # .github/workflows/performance.yml
+   - name: Profile with OTLP
+     run: make profile-otlp-export  # Exports traces to S3/GCS
+   - name: Compare with baseline
+     run: make profile-compare BASELINE=main
+   ```
+
+5. **Production Observability**
+   - Deploy Grafana Tempo in staging/production
+   - Export Trueno operation traces alongside API traces
+   - Correlate slow requests with specific syscalls
+   - Alert on unexpected syscall patterns (e.g., >10 mmap per request)
+
+**Key Insights from Empirical Analysis** (Renacer 0.5.0):
+- **Futex overhead**: Thread sync dominates for <1μs operations (up to 22x slowdown)
+- **Test harness cost**: Cargo test adds 0.9ms overhead (1600x for 547ns operation)
+- **Zero-allocation validation**: Confirmed no mmap/munmap in hot path
+- **Failed syscalls**: 19 statx ENOENT errors during test discovery (expected)
+- **Recommendation**: Use raw binaries for micro-benchmarks, avoid async for <10μs ops
+
 ### Quality Gates
 ```bash
 # PMAT Technical Debt Grading (minimum: B+ / 85/100)
