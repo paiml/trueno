@@ -64,11 +64,16 @@ let filtered = image.convolve2d(&kernel).unwrap();  // Auto-selects GPU for larg
 - Trueno SSE2: **4.4x faster** than scalar baseline (340% speedup)
 - Trueno AVX2: **8.1x faster** than scalar baseline (FMA acceleration)
 - Trueno AVX-512: **11.9x faster** than scalar baseline
-- NumPy: ~2-3x faster (limited by Python overhead + unreliable auto-vectorization)
+- Trueno AVX-512 vs NumPy*: **1.6x faster** (352ns vs 576ns)
+- Trueno AVX-512 vs PyTorch*: **2.8x faster** (352ns vs 988ns)
 
 **Matrix Multiplication (500×500)**:
 - Trueno GPU: **2-10x faster** than scalar (empirically validated)
 - PyTorch: Often slower for small matrices (PCIe transfer overhead dominates)
+
+**Note:** *NumPy also uses SIMD (OpenBLAS/MKL), so the advantage vs NumPy/PyTorch is smaller than vs scalar baseline. The key benefit is **guaranteed** SIMD performance without relying on compiler auto-vectorization, plus zero Python interpreter overhead. See [benchmarks/README.md](benchmarks/README.md) for detailed comparison methodology.*
+
+_Feedback on benchmark methodology welcome via [GitHub Issues](https://github.com/paiml/trueno/issues)._
 
 ### How to Replicate These Results
 
