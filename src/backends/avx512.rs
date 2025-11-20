@@ -55,26 +55,80 @@ impl VectorBackend for Avx512Backend {
 
     // Stub implementations for remaining methods - will implement in future phases
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
-        // Scalar fallback (AVX-512 optimization pending)
-        for i in 0..a.len() {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 16 elements at a time (512-bit = 16 x f32)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm512_loadu_ps(b.as_ptr().add(i));
+            let vresult = _mm512_sub_ps(va, vb);
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
             result[i] = a[i] - b[i];
+            i += 1;
         }
     }
 
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
-        // Scalar fallback (AVX-512 optimization pending)
-        for i in 0..a.len() {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 16 elements at a time (512-bit = 16 x f32)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm512_loadu_ps(b.as_ptr().add(i));
+            let vresult = _mm512_mul_ps(va, vb);
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
             result[i] = a[i] * b[i];
+            i += 1;
         }
     }
 
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
-        // Scalar fallback (AVX-512 optimization pending)
-        for i in 0..a.len() {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 16 elements at a time (512-bit = 16 x f32)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm512_loadu_ps(b.as_ptr().add(i));
+            let vresult = _mm512_div_ps(va, vb);
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
             result[i] = a[i] / b[i];
+            i += 1;
         }
     }
 
@@ -329,15 +383,75 @@ impl VectorBackend for Avx512Backend {
     }
 
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads used - no alignment requirement
     unsafe fn norm_l1(a: &[f32]) -> f32 {
-        // Scalar fallback (AVX-512 optimization pending)
-        a.iter().map(|x| x.abs()).sum()
+        let len = a.len();
+        let mut i = 0;
+
+        // Sign bit mask for abs
+        let sign_mask = _mm512_set1_ps(f32::from_bits(0x7FFF_FFFF));
+
+        // Accumulator for sum
+        let mut acc = _mm512_setzero_ps();
+
+        // Process 16 elements at a time
+        // norm_l1 = sum(|x|)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vabs = _mm512_and_ps(va, sign_mask);
+            acc = _mm512_add_ps(acc, vabs);
+            i += 16;
+        }
+
+        // Horizontal sum: reduce 16 lanes to single value
+        let mut result = _mm512_reduce_add_ps(acc);
+
+        // Handle remaining elements with scalar code
+        for &val in &a[i..] {
+            result += val.abs();
+        }
+
+        result
     }
 
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads used - no alignment requirement
     unsafe fn norm_linf(a: &[f32]) -> f32 {
-        // Scalar fallback (AVX-512 optimization pending)
-        a.iter().map(|x| x.abs()).fold(0.0f32, f32::max)
+        let len = a.len();
+        let mut i = 0;
+
+        // Sign bit mask for abs
+        let sign_mask = _mm512_set1_ps(f32::from_bits(0x7FFF_FFFF));
+
+        // Accumulator for max
+        let mut acc = _mm512_setzero_ps();
+
+        // Process 16 elements at a time
+        // norm_linf = max(|x|)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vabs = _mm512_and_ps(va, sign_mask);
+            acc = _mm512_max_ps(acc, vabs);
+            i += 16;
+        }
+
+        // Horizontal max: reduce 16 lanes to single value
+        let mut result = _mm512_reduce_max_ps(acc);
+
+        // Handle remaining elements with scalar code
+        for &val in &a[i..] {
+            result = result.max(val.abs());
+        }
+
+        result
     }
 
     #[target_feature(enable = "avx512f")]
@@ -498,10 +612,31 @@ impl VectorBackend for Avx512Backend {
     }
 
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn relu(a: &[f32], result: &mut [f32]) {
-        // Scalar fallback (AVX-512 optimization pending)
-        for i in 0..a.len() {
+        let len = a.len();
+        let mut i = 0;
+
+        // Create zero vector for comparison
+        let zero = _mm512_setzero_ps();
+
+        // Process 16 elements at a time
+        // relu(x) = max(x, 0)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm512_max_ps(va, zero);
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
             result[i] = a[i].max(0.0);
+            i += 1;
         }
     }
 
