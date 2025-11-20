@@ -78,6 +78,36 @@ macro_rules! dispatch_reduction {
     };
 }
 
+/// Macro to dispatch unary operations (a -> result)
+macro_rules! dispatch_unary_op {
+    ($backend:expr, $op:ident, $a:expr, $result:expr) => {
+        unsafe {
+            match $backend {
+                Backend::Scalar => ScalarBackend::$op($a, $result),
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::$op($a, $result),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 => Avx2Backend::$op($a, $result),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX512 => Avx512Backend::$op($a, $result),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::$op($a, $result)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => NeonBackend::$op($a, $result),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::$op($a, $result),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => WasmBackend::$op($a, $result),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::$op($a, $result),
+                Backend::GPU | Backend::Auto => ScalarBackend::$op($a, $result),
+            }
+        }
+    };
+}
+
 /// High-performance vector with multi-backend support
 ///
 /// # Examples
@@ -2398,10 +2428,9 @@ impl Vector<f32> {
             return Err(TruenoError::DivisionByZero);
         }
 
-        // Divide each element by the norm
-        // Create a vector filled with the norm value
-        let norm_vec = Vector::from_slice(&vec![norm; self.len()]);
-        self.div(&norm_vec)
+        // Divide each element by the norm using scalar multiplication
+        // This avoids creating an intermediate vector
+        self.scale(1.0 / norm)
     }
 
     /// Compute the L1 norm (Manhattan norm) of the vector
@@ -2954,9 +2983,14 @@ impl Vector<f32> {
     /// - Signal processing: Amplitude calculations, power spectrum analysis
     /// - Physics simulations: Velocity from kinetic energy, wave propagation
     pub fn sqrt(&self) -> Result<Vector<f32>> {
-        let sqrt_data: Vec<f32> = self.data.iter().map(|x| x.sqrt()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, sqrt, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: sqrt_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -2998,9 +3032,14 @@ impl Vector<f32> {
     /// - Physics: Resistance (R = 1/G), optical power (P = 1/f)
     /// - Signal processing: Frequency to period conversion, filter design
     pub fn recip(&self) -> Result<Vector<f32>> {
-        let recip_data: Vec<f32> = self.data.iter().map(|x| x.recip()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, recip, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: recip_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -3138,9 +3177,14 @@ impl Vector<f32> {
     /// - Economics: Log returns, elasticity calculations
     /// - Signal processing: Decibel conversion, log-frequency analysis
     pub fn ln(&self) -> Result<Vector<f32>> {
-        let ln_data: Vec<f32> = self.data.iter().map(|x| x.ln()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, ln, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: ln_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -3175,9 +3219,14 @@ impl Vector<f32> {
     /// - Audio: Octave calculations, pitch detection
     /// - Data compression: Huffman coding, arithmetic coding
     pub fn log2(&self) -> Result<Vector<f32>> {
-        let log2_data: Vec<f32> = self.data.iter().map(|x| x.log2()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, log2, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: log2_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -3212,9 +3261,14 @@ impl Vector<f32> {
     /// - Seismology: Richter scale
     /// - Scientific notation: Order of magnitude calculations
     pub fn log10(&self) -> Result<Vector<f32>> {
-        let log10_data: Vec<f32> = self.data.iter().map(|x| x.log10()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, log10, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: log10_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -3251,9 +3305,14 @@ impl Vector<f32> {
     /// - Graphics: Animation, rotation transformations, procedural generation
     /// - Fourier analysis: Frequency decomposition, spectral analysis
     pub fn sin(&self) -> Result<Vector<f32>> {
-        let sin_data: Vec<f32> = self.data.iter().map(|x| x.sin()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, sin, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: sin_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -3291,9 +3350,14 @@ impl Vector<f32> {
     /// - Audio: Stereo panning, spatial audio, frequency synthesis
     /// - Engineering: Control systems, frequency response, AC circuits
     pub fn cos(&self) -> Result<Vector<f32>> {
-        let cos_data: Vec<f32> = self.data.iter().map(|x| x.cos()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, cos, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: cos_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -3335,9 +3399,14 @@ impl Vector<f32> {
     /// - Graphics: Perspective projection, field of view calculations
     /// - Engineering: Slope gradients, tangent lines to curves
     pub fn tan(&self) -> Result<Vector<f32>> {
-        let tan_data: Vec<f32> = self.data.iter().map(|x| x.tan()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, tan, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: tan_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -3750,9 +3819,14 @@ impl Vector<f32> {
     /// assert_eq!(result.as_slice(), &[3.0, -3.0, 5.0]);
     /// ```
     pub fn floor(&self) -> Result<Vector<f32>> {
-        let floor_data: Vec<f32> = self.data.iter().map(|x| x.floor()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, floor, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: floor_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -3769,9 +3843,14 @@ impl Vector<f32> {
     /// assert_eq!(result.as_slice(), &[4.0, -2.0, 5.0]);
     /// ```
     pub fn ceil(&self) -> Result<Vector<f32>> {
-        let ceil_data: Vec<f32> = self.data.iter().map(|x| x.ceil()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, ceil, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: ceil_data,
+            data: result_data,
             backend: self.backend,
         })
     }
@@ -3792,9 +3871,14 @@ impl Vector<f32> {
     /// assert_eq!(result.as_slice(), &[3.0, 4.0, -2.0, -3.0]);
     /// ```
     pub fn round(&self) -> Result<Vector<f32>> {
-        let round_data: Vec<f32> = self.data.iter().map(|x| x.round()).collect();
+        let mut result_data = vec![0.0; self.len()];
+
+        if !self.data.is_empty() {
+            dispatch_unary_op!(self.backend, round, &self.data, &mut result_data);
+        }
+
         Ok(Vector {
-            data: round_data,
+            data: result_data,
             backend: self.backend,
         })
     }

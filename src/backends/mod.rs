@@ -293,4 +293,92 @@ pub trait VectorBackend {
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
     unsafe fn tanh(a: &[f32], result: &mut [f32]);
+
+    /// Square root: result\[i\] = sqrt(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn sqrt(a: &[f32], result: &mut [f32]);
+
+    /// Reciprocal: result\[i\] = 1 / a\[i\]
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn recip(a: &[f32], result: &mut [f32]);
+
+    /// Natural logarithm: result\[i\] = ln(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn ln(a: &[f32], result: &mut [f32]);
+
+    /// Base-2 logarithm: result\[i\] = log2(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn log2(a: &[f32], result: &mut [f32]);
+
+    /// Base-10 logarithm: result\[i\] = log10(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn log10(a: &[f32], result: &mut [f32]);
+
+    /// Sine: result\[i\] = sin(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn sin(a: &[f32], result: &mut [f32]);
+
+    /// Cosine: result\[i\] = cos(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn cos(a: &[f32], result: &mut [f32]);
+
+    /// Tangent: result\[i\] = tan(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn tan(a: &[f32], result: &mut [f32]);
+
+    /// Floor: result\[i\] = floor(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn floor(a: &[f32], result: &mut [f32]);
+
+    /// Ceiling: result\[i\] = ceil(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn ceil(a: &[f32], result: &mut [f32]);
+
+    /// Round: result\[i\] = round(a\[i\])
+    ///
+    /// # Safety
+    ///
+    /// - `result` must have the same length as `a`
+    /// - Can handle empty slices
+    unsafe fn round(a: &[f32], result: &mut [f32]);
 }

@@ -1031,6 +1031,54 @@ impl VectorBackend for WasmBackend {
             i += 1;
         }
     }
+
+    unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback for now
+        // TODO: Implement WASM SIMD sqrt (f32x4_sqrt)
+        super::scalar::ScalarBackend::sqrt(a, result);
+    }
+
+    unsafe fn recip(a: &[f32], result: &mut [f32]) {
+        // Use scalar fallback for now
+        // TODO: Implement WASM SIMD recip
+        super::scalar::ScalarBackend::recip(a, result);
+    }
+
+    unsafe fn ln(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ln(a, result);
+    }
+
+    unsafe fn log2(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log2(a, result);
+    }
+
+    unsafe fn log10(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log10(a, result);
+    }
+
+    unsafe fn sin(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::sin(a, result);
+    }
+
+    unsafe fn cos(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::cos(a, result);
+    }
+
+    unsafe fn tan(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::tan(a, result);
+    }
+
+    unsafe fn floor(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::floor(a, result);
+    }
+
+    unsafe fn ceil(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ceil(a, result);
+    }
+
+    unsafe fn round(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::round(a, result);
+    }
 }
 
 #[cfg(test)]
