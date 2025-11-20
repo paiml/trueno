@@ -193,16 +193,28 @@ test-fast: ## Run tests quickly (<5 min target)
 test-verbose: ## Run tests with verbose output
 	cargo test --all-features -- --nocapture --test-threads=1
 
-coverage: ## Generate coverage report (>90% required, <10 min target)
-	@echo "📊 Generating coverage report (target: >90%, <10 min)..."
+coverage: ## Generate coverage report (>90% required for ALL code, <10 min target)
+	@echo "📊 Generating coverage report (target: ≥90% for ALL code)..."
 	@# Temporarily disable mold linker (breaks LLVM coverage)
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@cargo llvm-cov --all-features --workspace --exclude-from-report xtask --lcov --output-path lcov.info
+	@cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 	@cargo llvm-cov report --html --output-dir target/coverage/html
 	@# Restore mold linker
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo "✅ Coverage report: target/coverage/html/index.html"
-	@cargo llvm-cov report | grep TOTAL
+	@echo ""
+	@echo "📊 Coverage by Component:"
+	@cargo llvm-cov report | python3 -c "import sys; lines = list(sys.stdin); trueno = [l for l in lines if l.startswith('src/') and 'xtask' not in l]; xtask = [l for l in lines if 'xtask' in l]; total_all = [l for l in lines if l.startswith('TOTAL')]; t_total = sum(int(l.split()[7]) for l in trueno); t_uncov = sum(int(l.split()[8]) for l in trueno); t_cov = 100*(t_total-t_uncov)/t_total if t_total > 0 else 0; x_total = sum(int(l.split()[7]) for l in xtask); x_uncov = sum(int(l.split()[8]) for l in xtask); x_cov = 100*(x_total-x_uncov)/x_total if x_total > 0 else 0; print(f'   Trueno library: {t_cov:.2f}% ({t_total-t_uncov:,}/{t_total:,} lines)'); print(f'   xtask:          {x_cov:.2f}% ({x_total-x_uncov:,}/{x_total:,} lines)'); all_total = t_total + x_total; all_cov = t_total - t_uncov + x_total - x_uncov; all_pct = 100*all_cov/all_total if all_total > 0 else 0; print(f'   Overall:        {all_pct:.2f}% ({all_cov:,}/{all_total:,} lines)'); print(''); fails = []; [fails.append(f'Trueno ({t_cov:.2f}%)') if t_cov < 90 else None, fails.append(f'xtask ({x_cov:.2f}%)') if x_cov < 90 else None, fails.append(f'Overall ({all_pct:.2f}%)') if all_pct < 90 else None]; print('   ✅ PASS: All components ≥90%' if not fails else f'   ✗ FAIL: {\", \".join(fails)} below 90%')"
+
+coverage-check: ## Enforce 90% coverage threshold (BLOCKS on failure)
+	@echo "🔒 Enforcing 90% coverage threshold..."
+	@# Temporarily disable mold linker (breaks LLVM coverage)
+	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
+	@cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info > /dev/null 2>&1
+	@# Restore mold linker
+	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
+	@cargo llvm-cov report | python3 -c "import sys; lines = list(sys.stdin); trueno = [l for l in lines if l.startswith('src/') and 'xtask' not in l]; xtask = [l for l in lines if 'xtask' in l]; t_total = sum(int(l.split()[7]) for l in trueno); t_uncov = sum(int(l.split()[8]) for l in trueno); t_cov = 100*(t_total-t_uncov)/t_total if t_total > 0 else 0; x_total = sum(int(l.split()[7]) for l in xtask); x_uncov = sum(int(l.split()[8]) for l in xtask); x_cov = 100*(x_total-x_uncov)/x_total if x_total > 0 else 0; all_total = t_total + x_total; all_cov = t_total - t_uncov + x_total - x_uncov; all_pct = 100*all_cov/all_total if all_total > 0 else 0; print(f'Overall coverage: {all_pct:.2f}%'); sys.exit(1 if all_pct < 90 else 0)"
+	@echo "✅ Coverage threshold met (≥90%)"
 
 lint: ## Run clippy (zero warnings allowed)
 	@echo "🔍 Running clippy (zero warnings policy)..."

@@ -260,7 +260,7 @@ class BenchmarkRunner:
             lambda size: (torch.randn(size, dtype=torch.float32),),
         )
 
-    def save_results(self, output_file: str = "benchmarks/python_results.json"):
+    def save_results(self, output_file: str = "python_results.json"):
         """Save benchmark results to JSON file"""
         with open(output_file, "w") as f:
             json.dump(self.results, f, indent=2)
