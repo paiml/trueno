@@ -11,6 +11,18 @@
   <img src="docs/images/trueno-vs-numpy-pytorch.png" alt="Trueno vs NumPy/PyTorch Performance Comparison" width="100%">
 </div>
 
+## 🤥 The Lambda Lie: "Just Wrap Python in C++"
+
+<div align="center">
+  <img src="docs/images/python-c-lambda-lie.png" alt="The Lambda Lie: Wrapping Python in C++ makes serverless WORSE" width="100%">
+</div>
+
+**The Truth**: Each "optimization" layer makes Lambda deployment **WORSE**. Python wrapped in C++ gives you fast local compute but **HUGE** binaries (10-50MB) and **MASSIVE** cold starts (28-86ms). Trueno gives you **BOTH**: 1.6x faster locally (10.8µs dot product) **AND** 12.8x faster on Lambda (6.70ms cold start, 396KB binary). No wrapping needed.
+
+_See [TRUENO_LAMBDA_ADVANTAGE.md](docs/TRUENO_LAMBDA_ADVANTAGE.md) for the complete story._
+
+---
+
 **Trueno** (Spanish: "thunder") provides unified, high-performance compute primitives across three execution targets:
 
 1. **CPU SIMD** - x86 (SSE2/AVX/AVX2/AVX-512), ARM (NEON), WASM (SIMD128)
