@@ -27,22 +27,13 @@ echo "📦 Checking UV (Rust-based Python package manager)..."
 if ! command -v uv &> /dev/null; then
     echo -e "${YELLOW}⚠️  UV not found. Please install UV first:${NC}"
     echo ""
-    echo "  curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh"
-    echo "  bash /tmp/uv-install.sh"
-    echo "  rm -f /tmp/uv-install.sh"
+    echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"
     echo ""
     echo "Or visit: https://docs.astral.sh/uv/getting-started/installation/"
     exit 1
 else
-    echo -e "${GREEN}✅ UV already installed${NC}"
+    echo -e "${GREEN}✅ UV installed (dependencies will be managed automatically)${NC}"
 fi
-
-# Install Python dependencies with UV
-echo "📦 Installing Python dependencies (numpy, torch)..."
-cd benchmarks || exit 1
-uv pip install --system --quiet numpy torch
-cd .. || exit 1
-echo -e "${GREEN}✅ Python dependencies installed${NC}"
 echo ""
 
 # Step 1: Run Rust benchmarks
@@ -64,10 +55,11 @@ echo "==========================================================================
 echo "Step 2/3: Running Python (NumPy/PyTorch) Benchmarks"
 echo "================================================================================"
 echo ""
-echo "This will take 2-3 minutes..."
+echo "This will take 2-3 minutes (includes dependency download)..."
 echo ""
 
-uv run benchmarks/python_comparison.py
+cd benchmarks && uv run --with numpy --with torch python_comparison.py
+cd ..
 
 echo ""
 echo -e "${GREEN}✅ Python benchmarks complete${NC}"
@@ -79,7 +71,8 @@ echo "Step 3/3: Comparing Results"
 echo "================================================================================"
 echo ""
 
-uv run benchmarks/compare_results.py
+cd benchmarks && uv run --with numpy --with torch compare_results.py
+cd ..
 
 echo ""
 echo "================================================================================"
