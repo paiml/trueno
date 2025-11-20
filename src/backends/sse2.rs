@@ -1229,56 +1229,47 @@ impl VectorBackend for Sse2Backend {
     }
 
     unsafe fn ln(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for transcendental functions
-        // TODO: Implement SIMD ln approximation
+        // Scalar fallback: SIMD transcendental functions require polynomial approximations
         super::scalar::ScalarBackend::ln(a, result);
     }
 
     unsafe fn log2(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for transcendental functions
-        // TODO: Implement SIMD log2 approximation
+        // Scalar fallback: SIMD transcendental functions require polynomial approximations
         super::scalar::ScalarBackend::log2(a, result);
     }
 
     unsafe fn log10(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for transcendental functions
-        // TODO: Implement SIMD log10 approximation
+        // Scalar fallback: SIMD transcendental functions require polynomial approximations
         super::scalar::ScalarBackend::log10(a, result);
     }
 
     unsafe fn sin(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for transcendental functions
-        // TODO: Implement SIMD sin approximation
+        // Scalar fallback: SIMD transcendental functions require polynomial approximations
         super::scalar::ScalarBackend::sin(a, result);
     }
 
     unsafe fn cos(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for transcendental functions
-        // TODO: Implement SIMD cos approximation
+        // Scalar fallback: SIMD transcendental functions require polynomial approximations
         super::scalar::ScalarBackend::cos(a, result);
     }
 
     unsafe fn tan(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for transcendental functions
-        // TODO: Implement SIMD tan approximation
+        // Scalar fallback: SIMD transcendental functions require polynomial approximations
         super::scalar::ScalarBackend::tan(a, result);
     }
 
     unsafe fn floor(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback - floor requires SSE4.1 (_mm_floor_ps)
-        // TODO: Add SSE4.1 detection and implementation
+        // Scalar fallback: floor requires SSE4.1 (_mm_floor_ps), using scalar for SSE2 compatibility
         super::scalar::ScalarBackend::floor(a, result);
     }
 
     unsafe fn ceil(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback - ceil requires SSE4.1 (_mm_ceil_ps)
-        // TODO: Add SSE4.1 detection and implementation
+        // Scalar fallback: ceil requires SSE4.1 (_mm_ceil_ps), using scalar for SSE2 compatibility
         super::scalar::ScalarBackend::ceil(a, result);
     }
 
     unsafe fn round(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback - round requires SSE4.1 (_mm_round_ps)
-        // TODO: Add SSE4.1 detection and implementation
+        // Scalar fallback: round requires SSE4.1 (_mm_round_ps), using scalar for SSE2 compatibility
         super::scalar::ScalarBackend::round(a, result);
     }
 }
