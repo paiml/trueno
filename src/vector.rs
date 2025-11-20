@@ -1400,7 +1400,65 @@ impl Vector<f32> {
 
         let mut result = vec![0.0; self.len()];
 
-        // Dispatch to appropriate SIMD backend
+        // Use parallel processing for large arrays (reduces TLB pressure and memory allocation overhead)
+        #[cfg(feature = "parallel")]
+        {
+            const PARALLEL_THRESHOLD: usize = 100_000;
+            const CHUNK_SIZE: usize = 65536; // 64K elements = 256KB, cache-friendly
+
+            if self.len() >= PARALLEL_THRESHOLD {
+                use rayon::prelude::*;
+
+                self.data
+                    .par_chunks(CHUNK_SIZE)
+                    .zip(result.par_chunks_mut(CHUNK_SIZE))
+                    .for_each(|(chunk_in, chunk_out)| {
+                        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
+                        unsafe {
+                            match self.backend {
+                                Backend::Scalar => {
+                                    ScalarBackend::relu(chunk_in, chunk_out);
+                                }
+                                #[cfg(target_arch = "x86_64")]
+                                Backend::SSE2 | Backend::AVX => {
+                                    Sse2Backend::relu(chunk_in, chunk_out);
+                                }
+                                #[cfg(target_arch = "x86_64")]
+                                Backend::AVX2 | Backend::AVX512 => {
+                                    Avx2Backend::relu(chunk_in, chunk_out);
+                                }
+                                #[cfg(not(target_arch = "x86_64"))]
+                                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                                    ScalarBackend::relu(chunk_in, chunk_out);
+                                }
+                                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                                Backend::NEON => {
+                                    NeonBackend::relu(chunk_in, chunk_out);
+                                }
+                                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                                Backend::NEON => {
+                                    ScalarBackend::relu(chunk_in, chunk_out);
+                                }
+                                #[cfg(target_arch = "wasm32")]
+                                Backend::WasmSIMD => {
+                                    WasmBackend::relu(chunk_in, chunk_out);
+                                }
+                                #[cfg(not(target_arch = "wasm32"))]
+                                Backend::WasmSIMD => {
+                                    ScalarBackend::relu(chunk_in, chunk_out);
+                                }
+                                Backend::GPU | Backend::Auto => {
+                                    ScalarBackend::relu(chunk_in, chunk_out);
+                                }
+                            }
+                        }
+                    });
+
+                return Ok(Vector::from_slice(&result));
+            }
+        }
+
+        // Sequential processing for small arrays or when parallel feature disabled
         // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
         unsafe {
             match self.backend {
