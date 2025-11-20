@@ -94,7 +94,7 @@ cargo bench -- --baseline main
 
 ### Profiling
 ```bash
-# Install Renacer (syscall tracing and function profiling)
+# Install Renacer v0.5.0+ (syscall tracing and function profiling)
 cargo install renacer
 
 # Profile benchmarks to identify bottlenecks
@@ -122,6 +122,89 @@ renacer --function-time --source -- cargo bench | flamegraph.pl > flame.svg
 - **Hot Path Analysis**: Find top 10 functions consuming most time
 - **Memory Access**: Detect cache misses and memory bottlenecks
 - **GPU Transfer**: Profile PCIe transfer overhead for GPU backend
+
+### Distributed Tracing with OpenTelemetry (Renacer v0.5.0+)
+
+**NEW:** Export syscall traces to observability backends (Jaeger, Grafana Tempo, etc.)
+
+```bash
+# Profile with Jaeger (easiest - single Docker container)
+make profile-otlp-jaeger
+
+# View traces at: http://localhost:16686
+# Stop Jaeger: docker stop jaeger-trueno && docker rm jaeger-trueno
+
+# Profile with Grafana Tempo (production-ready stack)
+make profile-otlp-tempo
+
+# View traces at: http://localhost:3000 (admin/admin)
+# Stop stack: docker-compose -f docs/profiling/docker-compose-tempo.yml down
+```
+
+**OTLP Features**:
+- **Span Hierarchy**: Process root span → syscall child spans
+- **Rich Attributes**: syscall name, result, duration, source location (file:line)
+- **Distributed Context**: Trace benchmark execution across all syscalls
+- **Integration**: Works with all Renacer features (--source, -T, --function-time)
+- **Backends**: Jaeger, Grafana Tempo, Elastic APM, Honeycomb, any OTLP-compatible collector
+
+**Use Cases**:
+- **End-to-End Visibility**: See entire benchmark execution timeline
+- **Cross-Service Tracing**: Correlate Trueno benchmarks with production traces
+- **Performance Regression Detection**: Compare trace spans across releases
+- **Team Collaboration**: Share trace links for performance discussions
+
+**OTLP Profiling Best Practices** (Institutionalized Workflow):
+
+1. **Pre-Release Performance Validation**
+   ```bash
+   # Baseline current release
+   make profile-otlp-jaeger
+   curl "localhost:16686/api/traces?service=trueno-benchmarks" > traces-v0.4.0.json
+
+   # After changes
+   make profile-otlp-jaeger
+   curl "localhost:16686/api/traces?service=trueno-benchmarks" > traces-v0.4.1.json
+
+   # Compare syscall distributions
+   python3 scripts/compare_traces.py traces-v0.4.0.json traces-v0.4.1.json
+   ```
+
+2. **Debug Performance Regression**
+   - **Symptom**: Benchmark shows slowdown
+   - **Action**: Profile with `make profile-otlp-jaeger`
+   - **Investigate**: Check for unexpected syscalls (mmap, futex, munmap)
+   - **Validate**: Zero-allocation in hot path (no mmap during compute)
+   - **Fix**: Reduce syscall overhead, pre-allocate buffers
+   - **Verify**: Re-profile and compare trace data
+
+3. **Team Collaboration Protocol**
+   - Share Jaeger UI link: `http://localhost:16686/trace/<trace-id>`
+   - Export trace JSON for async review: `curl "localhost:16686/api/traces?..."`
+   - Tag releases in Grafana Tempo for historical comparison
+   - Include trace links in performance PRs
+
+4. **CI/CD Integration**
+   ```yaml
+   # .github/workflows/performance.yml
+   - name: Profile with OTLP
+     run: make profile-otlp-export  # Exports traces to S3/GCS
+   - name: Compare with baseline
+     run: make profile-compare BASELINE=main
+   ```
+
+5. **Production Observability**
+   - Deploy Grafana Tempo in staging/production
+   - Export Trueno operation traces alongside API traces
+   - Correlate slow requests with specific syscalls
+   - Alert on unexpected syscall patterns (e.g., >10 mmap per request)
+
+**Key Insights from Empirical Analysis** (Renacer 0.5.0):
+- **Futex overhead**: Thread sync dominates for <1μs operations (up to 22x slowdown)
+- **Test harness cost**: Cargo test adds 0.9ms overhead (1600x for 547ns operation)
+- **Zero-allocation validation**: Confirmed no mmap/munmap in hot path
+- **Failed syscalls**: 19 statx ENOENT errors during test discovery (expected)
+- **Recommendation**: Use raw binaries for micro-benchmarks, avoid async for <10μs ops
 
 ### Quality Gates
 ```bash

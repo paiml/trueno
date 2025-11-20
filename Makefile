@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score install-tools profile profile-flamegraph profile-bench profile-test
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -258,17 +258,15 @@ bench-comprehensive: ## Run comprehensive benchmarks (Trueno vs NumPy vs PyTorch
 
 bench-python: ## Run Python benchmarks (NumPy + PyTorch) only
 	@echo "🐍 Running Python benchmarks (NumPy + PyTorch)..."
-	@echo "Estimated time: 2-3 minutes"
+	@echo "Estimated time: 2-3 minutes (includes dependency download)"
 	@echo ""
 	@command -v uv >/dev/null 2>&1 || { \
 		echo "❌ UV not installed. Install with:"; \
-		echo "  curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh"; \
-		echo "  bash /tmp/uv-install.sh"; \
-		echo "  rm -f /tmp/uv-install.sh"; \
+		echo "  curl -LsSf https://astral.sh/uv/install.sh | sh"; \
 		exit 1; \
 	}
-	@cd benchmarks && uv pip install --system --quiet numpy torch 2>/dev/null || true
-	@uv run benchmarks/python_comparison.py
+	@echo "Installing dependencies with UV..."
+	@cd benchmarks && uv run --with numpy --with torch python_comparison.py
 	@echo "✅ Results: benchmarks/python_results.json"
 
 bench-compare-frameworks: ## Generate comparison report (requires Rust + Python benchmarks)
@@ -281,7 +279,7 @@ bench-compare-frameworks: ## Generate comparison report (requires Rust + Python 
 		echo "❌ Python benchmarks not found. Run 'make bench-python' first."; \
 		exit 1; \
 	fi
-	@uv run benchmarks/compare_results.py
+	@cd benchmarks && uv run --with numpy --with torch compare_results.py
 	@echo ""
 	@echo "✅ Comparison complete!"
 	@echo "   Report: benchmarks/comparison_report.md"
@@ -290,9 +288,9 @@ bench-compare-frameworks: ## Generate comparison report (requires Rust + Python 
 	@echo "View report:"
 	@echo "  cat benchmarks/comparison_report.md"
 
-# Profiling with Renacer
+# Profiling with Renacer (v0.5.0+)
 profile: ## Profile benchmarks with Renacer (syscall tracing)
-	@echo "🔬 Profiling benchmarks with Renacer..."
+	@echo "🔬 Profiling benchmarks with Renacer v0.5.0..."
 	@command -v renacer >/dev/null 2>&1 || { echo "Installing renacer..."; cargo install renacer; } || exit 1
 	cargo build --release --all-features || exit 1
 	renacer --function-time --source -- cargo bench --no-fail-fast
@@ -317,6 +315,142 @@ profile-test: ## Profile test suite to find bottlenecks
 	@command -v renacer >/dev/null 2>&1 || { echo "Installing renacer..."; cargo install renacer; } || exit 1
 	cargo build --release --all-features || exit 1
 	renacer --function-time --source -- cargo test --release --all-features
+
+# OpenTelemetry Distributed Tracing (Renacer 0.5.0+)
+profile-otlp-jaeger: ## Profile with OTLP export to Jaeger (requires Docker)
+	@echo "📊 Profiling with OpenTelemetry export to Jaeger..."
+	@command -v docker >/dev/null 2>&1 || { echo "❌ Docker required. Install from: https://docs.docker.com/get-docker/"; exit 1; }
+	@echo "Starting Jaeger All-in-One..."
+	@docker run -d --name jaeger-trueno \
+		-p 16686:16686 \
+		-p 4317:4317 \
+		-p 4318:4318 \
+		jaegertracing/all-in-one:latest || { \
+		echo "Jaeger already running or failed to start"; \
+		docker start jaeger-trueno 2>/dev/null || true; \
+	}
+	@sleep 2
+	@echo "Running benchmarks with OTLP tracing..."
+	@cargo build --release --all-features || exit 1
+	@renacer --function-time --source \
+		--otlp-endpoint http://localhost:4317 \
+		--otlp-service-name trueno-benchmarks \
+		-- cargo bench --no-fail-fast
+	@echo ""
+	@echo "✅ Traces exported to Jaeger"
+	@echo "   View at: http://localhost:16686"
+	@echo "   Stop Jaeger: docker stop jaeger-trueno && docker rm jaeger-trueno"
+
+profile-otlp-tempo: ## Profile with OTLP export to Grafana Tempo (requires Docker Compose)
+	@echo "📊 Profiling with OpenTelemetry export to Grafana Tempo..."
+	@command -v docker-compose >/dev/null 2>&1 || { echo "❌ Docker Compose required"; exit 1; }
+	@echo "Starting Grafana Tempo stack..."
+	@docker-compose -f docs/profiling/docker-compose-tempo.yml up -d || exit 1
+	@sleep 5
+	@echo "Running benchmarks with OTLP tracing..."
+	@cargo build --release --all-features || exit 1
+	@renacer --function-time --source \
+		--otlp-endpoint http://localhost:4317 \
+		--otlp-service-name trueno-benchmarks \
+		-- cargo bench --no-fail-fast
+	@echo ""
+	@echo "✅ Traces exported to Tempo"
+	@echo "   Grafana UI: http://localhost:3000 (admin/admin)"
+	@echo "   Stop stack: docker-compose -f docs/profiling/docker-compose-tempo.yml down"
+
+# OTLP Trace Analysis & CI Integration
+profile-otlp-export: ## Export OTLP traces to JSON for CI/CD (TAG=commit-sha)
+	@echo "📤 Exporting OTLP traces for CI/CD analysis..."
+	@mkdir -p target/profiling
+	@echo "Starting Jaeger (temporary)..."
+	@docker run -d --name jaeger-ci \
+		-p 16686:16686 \
+		-p 4317:4317 \
+		jaegertracing/all-in-one:latest >/dev/null 2>&1 || { \
+		echo "Jaeger already running"; \
+		docker start jaeger-ci 2>/dev/null || true; \
+	}
+	@sleep 3
+	@echo "Running benchmarks with tracing..."
+	@cargo build --release --all-features >/dev/null 2>&1 || exit 1
+	@renacer --timing --source \
+		--otlp-endpoint http://localhost:4317 \
+		--otlp-service-name trueno-ci \
+		-- cargo bench --no-fail-fast 2>&1 | tail -10
+	@sleep 2
+	@echo "Exporting traces..."
+	@TAG=$${TAG:-$$(git rev-parse --short HEAD)} && \
+	curl -s "http://localhost:16686/api/traces?service=trueno-ci&limit=1000" \
+		> target/profiling/traces-$$TAG.json && \
+	echo "✅ Exported to: target/profiling/traces-$$TAG.json"
+	@docker stop jaeger-ci >/dev/null 2>&1 && docker rm jaeger-ci >/dev/null 2>&1
+	@echo "   Trace count: $$(cat target/profiling/traces-$${TAG:-$$(git rev-parse --short HEAD)}.json | python3 -c 'import sys,json; print(len(json.load(sys.stdin)[\"data\"]))' 2>/dev/null || echo 'N/A')"
+
+profile-analyze: ## Analyze exported traces (FILE=target/profiling/traces-abc123.json)
+	@echo "📊 Analyzing trace data..."
+	@test -f "$(FILE)" || { echo "❌ File not found: $(FILE)"; exit 1; }
+	@python3 -c '\
+import sys, json; \
+from collections import defaultdict; \
+data = json.load(open("$(FILE)")); \
+syscalls = defaultdict(lambda: {"count": 0, "total_us": 0, "max_us": 0}); \
+for trace in data["data"]: \
+    for span in trace["spans"]: \
+        op = span["operationName"]; \
+        duration = next((t["value"] for t in span.get("tags", []) if t["key"] == "syscall.duration_us"), 0); \
+        if op.startswith("syscall:"): \
+            name = op.split(": ")[1]; \
+            syscalls[name]["count"] += 1; \
+            syscalls[name]["total_us"] += duration; \
+            syscalls[name]["max_us"] = max(syscalls[name]["max_us"], duration); \
+print(f"Traces: {len(data[\"data\"])}"); \
+print(f"Total syscalls: {sum(s[\"count\"] for s in syscalls.values())}"); \
+print(f"Total time: {sum(s[\"total_us\"] for s in syscalls.values())}μs\n"); \
+print("Top syscalls by time:"); \
+for name, stats in sorted(syscalls.items(), key=lambda x: x[1]["total_us"], reverse=True)[:10]: \
+    avg = stats["total_us"] / stats["count"] if stats["count"] > 0 else 0; \
+    print(f"  {name:20s} {stats[\"count\"]:5d} calls  {stats[\"total_us\"]:8d}μs  avg: {avg:6.1f}μs"); \
+'
+
+profile-compare: ## Compare traces between commits (BASELINE=v0.4.0 CURRENT=main)
+	@echo "🔍 Comparing traces: $(BASELINE) vs $(CURRENT)"
+	@test -f "target/profiling/traces-$(BASELINE).json" || { echo "❌ Baseline not found. Run: make profile-otlp-export TAG=$(BASELINE)"; exit 1; }
+	@test -f "target/profiling/traces-$(CURRENT).json" || { echo "❌ Current not found. Run: make profile-otlp-export TAG=$(CURRENT)"; exit 1; }
+	@python3 -c '\
+import sys, json; \
+from collections import defaultdict; \
+def analyze(file): \
+    data = json.load(open(file)); \
+    syscalls = defaultdict(lambda: {"count": 0, "total_us": 0}); \
+    for trace in data["data"]: \
+        for span in trace["spans"]: \
+            op = span["operationName"]; \
+            duration = next((t["value"] for t in span.get("tags", []) if t["key"] == "syscall.duration_us"), 0); \
+            if op.startswith("syscall:"): \
+                name = op.split(": ")[1]; \
+                syscalls[name]["count"] += 1; \
+                syscalls[name]["total_us"] += duration; \
+    return syscalls; \
+baseline = analyze("target/profiling/traces-$(BASELINE).json"); \
+current = analyze("target/profiling/traces-$(CURRENT).json"); \
+all_syscalls = set(baseline.keys()) | set(current.keys()); \
+print("# Performance Comparison: $(BASELINE) → $(CURRENT)\n"); \
+print("| Syscall | $(BASELINE) Calls | $(CURRENT) Calls | Δ Calls | $(BASELINE) Time (μs) | $(CURRENT) Time (μs) | Δ Time |"); \
+print("|---------|-----------|----------|---------|------------|----------|--------|"); \
+for name in sorted(all_syscalls): \
+    b_count = baseline.get(name, {}).get("count", 0); \
+    c_count = current.get(name, {}).get("count", 0); \
+    b_time = baseline.get(name, {}).get("total_us", 0); \
+    c_time = current.get(name, {}).get("total_us", 0); \
+    delta_count = c_count - b_count; \
+    delta_time = c_time - b_time; \
+    delta_count_str = f"+{delta_count}" if delta_count > 0 else str(delta_count); \
+    delta_time_str = f"+{delta_time}" if delta_time > 0 else str(delta_time); \
+    if b_count > 0 or c_count > 0: \
+        print(f"| {name:15s} | {b_count:9d} | {c_count:9d} | {delta_count_str:7s} | {b_time:10d} | {c_time:10d} | {delta_time_str:6s} |"); \
+' | tee target/profiling/comparison-$(BASELINE)-vs-$(CURRENT).md
+	@echo ""
+	@echo "✅ Report saved to: target/profiling/comparison-$(BASELINE)-vs-$(CURRENT).md"
 
 mutate: ## Run mutation testing (>80% kill rate target)
 	@echo "🧬 Running mutation testing (target: >80% kill rate)..."
