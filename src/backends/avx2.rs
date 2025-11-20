@@ -1466,6 +1466,47 @@ mod tests {
 
     #[cfg(target_arch = "x86_64")]
     #[test]
+    fn test_avx2_exp_matches_scalar() {
+        if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
+            eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        // Test various ranges: negative, zero, positive, large values
+        let test_values = vec![
+            -10.0, -5.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0,
+            -50.0, 87.0, -87.0, // near overflow/underflow limits
+        ];
+        let mut avx2_result = vec![0.0; test_values.len()];
+        let mut scalar_result = vec![0.0; test_values.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::exp(&test_values, &mut avx2_result);
+            ScalarBackend::exp(&test_values, &mut scalar_result);
+        }
+
+        for (i, (avx2, scalar)) in avx2_result.iter().zip(scalar_result.iter()).enumerate() {
+            let rel_error = if scalar.abs() > 1e-10 {
+                (avx2 - scalar).abs() / scalar.abs()
+            } else {
+                (avx2 - scalar).abs()
+            };
+            assert!(
+                rel_error < 1e-5,
+                "exp({}) mismatch: avx2={}, scalar={}, rel_error={}",
+                test_values[i],
+                avx2,
+                scalar,
+                rel_error
+            );
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
     fn test_avx2_gelu_matches_scalar() {
         if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
             eprintln!("Skipping AVX2 test: CPU does not support AVX2+FMA");
