@@ -340,6 +340,116 @@ impl VectorBackend for ScalarBackend {
             result[i] = x.tanh();
         }
     }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.sqrt();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn recip(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.recip();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn ln(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.ln();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn log2(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.log2();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn log10(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.log10();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn sin(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.sin();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn cos(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.cos();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn tan(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.tan();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn floor(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.floor();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn ceil(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.ceil();
+        }
+    }
+
+    // SAFETY: This function is safe because:
+    // 1. All slice accesses are bounds-checked by Rust iterator/enumerate
+    // 2. No raw pointer arithmetic is performed
+    // 3. Marked unsafe only to match VectorBackend trait interface
+    unsafe fn round(a: &[f32], result: &mut [f32]) {
+        for (i, &val) in a.iter().enumerate() {
+            result[i] = val.round();
+        }
+    }
 }
 
 #[cfg(test)]
