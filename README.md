@@ -807,6 +807,32 @@ make bench-compare-frameworks  # Generate comparison report
 
 **Success Criteria (v0.3.0)**: Trueno within 20% of NumPy for ≥80% of 1D operations
 
+**📊 Performance Results** (v0.3.0 - Comprehensive Benchmarks):
+
+✅ **Trueno dramatically outperforms NumPy and PyTorch:**
+- **88.5% faster than NumPy** (54/61 comparisons)
+- **90.2% faster than PyTorch** (55/61 comparisons)
+
+**Extreme speedups on reductions** (small vectors):
+- `sum`: 310.97x faster than NumPy (100 elements)
+- `max`: 356.30x faster than NumPy (100 elements)
+- `dot`: 123.97x faster than NumPy (100 elements)
+- `norm_l2`: 178.33x faster than NumPy (100 elements)
+
+**Consistent wins on element-wise operations**:
+- `add`: 1.44-12.53x faster than NumPy
+- `mul`: 1.44-17.94x faster than NumPy
+- `sub`: 1.57-12.78x faster than NumPy
+- `div`: 1.54-10.27x faster than NumPy
+
+**Optimizations needed** (slower than NumPy):
+- `tanh` at large sizes (5.59x slower at 100K elements)
+- `relu` at 1M elements (8.32x slower - investigation needed)
+
+**Architecture**: AVX-512 dominates reductions, AVX2 optimal for element-wise ops
+
+See full report: [`benchmarks/comparison_report.md`](benchmarks/comparison_report.md)
+
 See [`benchmarks/README.md`](benchmarks/README.md) for detailed documentation.
 
 ### Rust-Only Benchmarks
