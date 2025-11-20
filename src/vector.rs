@@ -4316,6 +4316,61 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_with_alignment_valid() {
+        let v = Vector::with_alignment(100, Backend::SSE2, 16).unwrap();
+        assert_eq!(v.len(), 100);
+        assert_eq!(v.backend(), Backend::SSE2);
+    }
+
+    #[test]
+    fn test_with_alignment_power_of_two() {
+        // Test various power-of-2 alignments
+        assert!(Vector::with_alignment(10, Backend::Scalar, 1).is_ok());
+        assert!(Vector::with_alignment(10, Backend::Scalar, 2).is_ok());
+        assert!(Vector::with_alignment(10, Backend::Scalar, 4).is_ok());
+        assert!(Vector::with_alignment(10, Backend::Scalar, 8).is_ok());
+        assert!(Vector::with_alignment(10, Backend::Scalar, 16).is_ok());
+        assert!(Vector::with_alignment(10, Backend::Scalar, 32).is_ok());
+        assert!(Vector::with_alignment(10, Backend::Scalar, 64).is_ok());
+    }
+
+    #[test]
+    fn test_with_alignment_invalid_zero() {
+        let result = Vector::with_alignment(100, Backend::Scalar, 0);
+        assert!(result.is_err());
+        match result {
+            Err(TruenoError::InvalidInput(msg)) => {
+                assert!(msg.contains("power of 2"));
+                assert!(msg.contains("0"));
+            }
+            _ => panic!("Expected InvalidInput error for zero alignment"),
+        }
+    }
+
+    #[test]
+    fn test_with_alignment_invalid_not_power_of_two() {
+        // Test various non-power-of-2 values
+        for alignment in &[3, 5, 6, 7, 9, 10, 12, 15, 17, 20, 24, 31, 33] {
+            let result = Vector::with_alignment(100, Backend::Scalar, *alignment);
+            assert!(result.is_err(), "Alignment {} should be invalid", alignment);
+            match result {
+                Err(TruenoError::InvalidInput(msg)) => {
+                    assert!(msg.contains("power of 2"), "Error message should mention power of 2");
+                    assert!(msg.contains(&alignment.to_string()), "Error message should mention the invalid alignment");
+                }
+                _ => panic!("Expected InvalidInput error for non-power-of-2 alignment {}", alignment),
+            }
+        }
+    }
+
+    #[test]
+    fn test_with_alignment_auto_backend_resolution() {
+        let v = Vector::with_alignment(100, Backend::Auto, 16).unwrap();
+        // Backend::Auto should be resolved to best available backend
+        assert_ne!(v.backend(), Backend::Auto);
+    }
+
     // Add operation tests
     #[test]
     fn test_add() {
@@ -8415,6 +8470,160 @@ mod tests {
         let result = a.add(&b);
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 1000);
+    }
+
+    // Parallel execution tests (for vectors >= 100_000 elements)
+    #[test]
+    fn test_add_parallel_large_vector() {
+        // Test parallel execution path for add (>= 100_000 elements)
+        const SIZE: usize = 150_000;
+        let a_data: Vec<f32> = (0..SIZE).map(|i| i as f32).collect();
+        let b_data: Vec<f32> = (0..SIZE).map(|i| (i * 2) as f32).collect();
+
+        let a = Vector::from_slice(&a_data);
+        let b = Vector::from_slice(&b_data);
+        let result = a.add(&b).unwrap();
+
+        // Verify correctness
+        assert_eq!(result.len(), SIZE);
+        for i in 0..SIZE {
+            let expected = a_data[i] + b_data[i];
+            assert!((result.as_slice()[i] - expected).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_sub_parallel_large_vector() {
+        // Test parallel execution path for sub (>= 100_000 elements)
+        const SIZE: usize = 150_000;
+        let a_data: Vec<f32> = (0..SIZE).map(|i| (i * 3) as f32).collect();
+        let b_data: Vec<f32> = (0..SIZE).map(|i| i as f32).collect();
+
+        let a = Vector::from_slice(&a_data);
+        let b = Vector::from_slice(&b_data);
+        let result = a.sub(&b).unwrap();
+
+        // Verify correctness
+        assert_eq!(result.len(), SIZE);
+        for i in 0..SIZE {
+            let expected = a_data[i] - b_data[i];
+            assert!((result.as_slice()[i] - expected).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_mul_parallel_large_vector() {
+        // Test parallel execution path for mul (>= 100_000 elements)
+        const SIZE: usize = 150_000;
+        let a_data: Vec<f32> = (0..SIZE).map(|i| (i % 100) as f32 + 1.0).collect();
+        let b_data: Vec<f32> = (0..SIZE).map(|i| 2.0 + (i % 50) as f32).collect();
+
+        let a = Vector::from_slice(&a_data);
+        let b = Vector::from_slice(&b_data);
+        let result = a.mul(&b).unwrap();
+
+        // Verify correctness
+        assert_eq!(result.len(), SIZE);
+        for i in 0..SIZE {
+            let expected = a_data[i] * b_data[i];
+            assert!((result.as_slice()[i] - expected).abs() < 1e-3);
+        }
+    }
+
+    #[test]
+    fn test_div_parallel_large_vector() {
+        // Test parallel execution path for div (>= 100_000 elements)
+        const SIZE: usize = 150_000;
+        let a_data: Vec<f32> = (0..SIZE).map(|i| (i + 100) as f32).collect();
+        let b_data: Vec<f32> = (0..SIZE).map(|i| (i % 50) as f32 + 1.0).collect();
+
+        let a = Vector::from_slice(&a_data);
+        let b = Vector::from_slice(&b_data);
+        let result = a.div(&b).unwrap();
+
+        // Verify correctness
+        assert_eq!(result.len(), SIZE);
+        for i in 0..SIZE {
+            let expected = a_data[i] / b_data[i];
+            assert!((result.as_slice()[i] - expected).abs() < 1e-3);
+        }
+    }
+
+    #[test]
+    fn test_dot_parallel_large_vector() {
+        // Test parallel execution path for dot (>= 500_000 elements)
+        const SIZE: usize = 600_000;
+        let a_data: Vec<f32> = (0..SIZE).map(|i| (i % 100) as f32).collect();
+        let b_data: Vec<f32> = (0..SIZE).map(|i| 1.0 + (i % 50) as f32).collect();
+
+        let a = Vector::from_slice(&a_data);
+        let b = Vector::from_slice(&b_data);
+        let result = a.dot(&b).unwrap();
+
+        // Verify it's a reasonable value (not checking exact value due to FP precision)
+        assert!(result.is_finite());
+        assert!(result > 0.0);
+    }
+
+    #[test]
+    fn test_fma_parallel_large_vector() {
+        // Test parallel execution path for fma (>= 100_000 elements)
+        const SIZE: usize = 150_000;
+        let a_data: Vec<f32> = (0..SIZE).map(|i| i as f32).collect();
+        let b_data: Vec<f32> = (0..SIZE).map(|_| 2.0).collect();
+        let c_data: Vec<f32> = (0..SIZE).map(|i| 10.0 + i as f32).collect();
+
+        let a = Vector::from_slice(&a_data);
+        let b = Vector::from_slice(&b_data);
+        let c = Vector::from_slice(&c_data);
+        let result = a.fma(&b, &c).unwrap();
+
+        // Verify correctness: fma(a, b, c) = a * b + c
+        assert_eq!(result.len(), SIZE);
+        for i in 0..SIZE {
+            let expected = a_data[i] * b_data[i] + c_data[i];
+            assert!((result.as_slice()[i] - expected).abs() < 1e-3);
+        }
+    }
+
+    #[test]
+    fn test_scale_parallel_large_vector() {
+        // Test parallel execution path for scale (>= 100_000 elements)
+        const SIZE: usize = 150_000;
+        let data: Vec<f32> = (0..SIZE).map(|i| i as f32).collect();
+
+        let v = Vector::from_slice(&data);
+        let result = v.scale(3.0).unwrap();
+
+        // Verify correctness
+        assert_eq!(result.len(), SIZE);
+        for i in 0..SIZE {
+            let expected = data[i] * 3.0;
+            assert!((result.as_slice()[i] - expected).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_parallel_execution_correctness() {
+        // Verify parallel and sequential execution produce same results
+        const SIZE: usize = 150_000;
+        let a_data: Vec<f32> = (0..SIZE).map(|i| (i % 1000) as f32).collect();
+        let b_data: Vec<f32> = (0..SIZE).map(|i| (i % 500) as f32 + 1.0).collect();
+
+        let a_large = Vector::from_slice(&a_data);
+        let b_large = Vector::from_slice(&b_data);
+        let result_parallel = a_large.add(&b_large).unwrap();
+
+        // Compare with small vector (sequential execution)
+        const SMALL_SIZE: usize = 100;
+        let a_small = Vector::from_slice(&a_data[..SMALL_SIZE]);
+        let b_small = Vector::from_slice(&b_data[..SMALL_SIZE]);
+        let result_sequential = a_small.add(&b_small).unwrap();
+
+        // First SMALL_SIZE elements should match
+        for i in 0..SMALL_SIZE {
+            assert_eq!(result_parallel.as_slice()[i], result_sequential.as_slice()[i]);
+        }
     }
 }
 

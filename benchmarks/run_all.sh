@@ -58,7 +58,7 @@ echo ""
 echo "This will take 2-3 minutes (includes dependency download)..."
 echo ""
 
-cd benchmarks && uv run --with numpy --with torch python_comparison.py
+cd benchmarks && uv run python_comparison.py
 cd ..
 
 echo ""
@@ -71,7 +71,7 @@ echo "Step 3/3: Comparing Results"
 echo "================================================================================"
 echo ""
 
-cd benchmarks && uv run --with numpy --with torch compare_results.py
+cd benchmarks && uv run compare_results.py
 cd ..
 
 echo ""

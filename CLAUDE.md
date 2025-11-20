@@ -19,6 +19,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+**⚠️ BEFORE YOU START: Coverage must ALWAYS be ≥90%**
+- Use `make coverage` ONLY (never `cargo llvm-cov` or `cargo-tarpaulin`)
+- Check coverage before every commit
+- Never let coverage drop below 90%
+- See detailed requirements in the Coverage section below
+
 ### Building
 ```bash
 # Standard build
@@ -56,16 +62,71 @@ cargo test --test integration_tests
 ```
 
 ### Coverage
+
+**⚠️ CRITICAL REQUIREMENT: COVERAGE MUST NEVER DIP BELOW 90%**
+
+**MANDATORY: Use `make coverage` ONLY**
+- ❌ **NEVER** use `cargo llvm-cov` directly
+- ❌ **NEVER** use `cargo-tarpaulin` (DO NOT install this tool)
+- ❌ **NEVER** use any other coverage tool
+- ✅ **ALWAYS** use `make coverage` exclusively
+
 ```bash
-# Generate coverage report
-cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+# Generate coverage report (ONLY command allowed)
+make coverage
 
-# View coverage report
-cargo llvm-cov report
-
-# Coverage must be ≥90%
-cargo llvm-cov --all-features --workspace --fail-under-lines 90
+# This will:
+# 1. Generate lcov.info file
+# 2. Create HTML report at target/coverage/html/index.html
+# 3. Display TOTAL coverage percentage
+# 4. Coverage MUST be ≥90% line coverage at ALL times
 ```
+
+**Coverage Quality Gates**:
+- **Minimum**: 90% line coverage (absolute floor, never negotiate)
+- **Target**: 95%+ line coverage
+- **Before ANY commit**: Verify coverage ≥90% with `make coverage`
+- **Before ANY PR**: Coverage must be ≥90%
+- **Adding new code**: New code must have 100% coverage
+- **Removing tests**: Only allowed if coverage remains ≥90%
+
+**AUTOMATIC ENFORCEMENT** (Cannot be bypassed):
+- ✅ **Pre-commit hook installed**: `.git/hooks/pre-commit` BLOCKS commits < 90%
+- ✅ **Make target**: `make coverage-check` exits with error if < 90%
+- ✅ **CI/CD ready**: GitHub Actions workflow template available
+
+**To verify enforcement is active**:
+```bash
+# Check pre-commit hook is installed
+ls -lh .git/hooks/pre-commit
+# Should show: -rwxr-xr-x (executable)
+
+# Test enforcement manually
+make coverage-check
+# Should show: ✅ Coverage threshold met (≥90%)
+```
+
+**What to do if coverage drops below 90%**:
+1. STOP immediately - pre-commit hook will block anyway
+2. Run `make coverage` to see detailed breakdown by component
+3. Check `target/coverage/html/index.html` to identify uncovered lines
+4. Add tests to cover those specific lines (use EXTREME TDD)
+5. Run `make coverage-check` to verify ≥90%
+6. Commit will now succeed automatically
+
+**What happens if you try to commit with < 90% coverage**:
+```
+🔍 Checking test coverage before commit...
+❌ COMMIT BLOCKED
+   Coverage: 89.5%
+   Required: 90%
+   Gap: 0.5%
+
+📊 Run 'make coverage' for detailed report
+✅ Add tests to reach 90%, then commit again
+```
+
+**Coverage is NON-NEGOTIABLE** and **AUTOMATICALLY ENFORCED** - this is a hard requirement for maintaining code quality and catching regressions early.
 
 ### Linting
 ```bash
@@ -412,9 +473,11 @@ fn test_backend_equivalence() {
 ### Every Commit Must:
 - ✅ Compile without warnings (`cargo clippy -- -D warnings`)
 - ✅ Pass all tests (`cargo test --all-features`)
-- ✅ Maintain >90% coverage (`cargo llvm-cov`)
+- ✅ Maintain ≥90% coverage (`make coverage` - MANDATORY, see Coverage section)
 - ✅ Pass rustfmt (`cargo fmt -- --check`)
 - ✅ Pass PMAT TDG ≥B+ (`pmat analyze tdg --min-grade B+`)
+
+**CRITICAL**: Before committing, ALWAYS run `make coverage` and verify line coverage is ≥90%. This is NON-NEGOTIABLE.
 
 ### Every PR Must:
 - ✅ Include tests for new functionality (all 5 categories)

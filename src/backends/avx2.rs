@@ -1232,6 +1232,7 @@ impl VectorBackend for Avx2Backend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Vector;
 
     #[cfg(target_arch = "x86_64")]
     #[test]
@@ -1894,5 +1895,240 @@ mod tests {
         let scalar_result = unsafe { ScalarBackend::min(&a) };
 
         assert_eq!(avx2_result, scalar_result);
+    }
+
+    // Tests for mathematical operations
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_sqrt_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0, 81.0, 100.0, 144.0];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::sqrt(&a, &mut avx2_result);
+            ScalarBackend::sqrt(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "sqrt({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_recip_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.0, 2.0, 4.0, 5.0, 8.0, 10.0, 16.0, 20.0, 25.0, 32.0];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::recip(&a, &mut avx2_result);
+            ScalarBackend::recip(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "recip({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_ln_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::ln(&a, &mut avx2_result);
+            ScalarBackend::ln(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "ln({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_log2_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::log2(&a, &mut avx2_result);
+            ScalarBackend::log2(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "log2({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_log10_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.0, 10.0, 100.0, 1000.0, 2.0, 20.0, 200.0, 5.0, 50.0, 500.0];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::log10(&a, &mut avx2_result);
+            ScalarBackend::log10(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "log10({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_sin_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        use std::f32::consts::PI;
+        let a = [0.0, PI/6.0, PI/4.0, PI/3.0, PI/2.0, PI, 1.5*PI, 2.0*PI, -PI/4.0, -PI/2.0];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::sin(&a, &mut avx2_result);
+            ScalarBackend::sin(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "sin({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_cos_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        use std::f32::consts::PI;
+        let a = [0.0, PI/6.0, PI/4.0, PI/3.0, PI/2.0, PI, 1.5*PI, 2.0*PI, -PI/4.0, -PI/2.0];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::cos(&a, &mut avx2_result);
+            ScalarBackend::cos(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "cos({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_tan_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        use std::f32::consts::PI;
+        let a = [0.0, PI/6.0, PI/4.0, PI/3.0, 1.0, -1.0, 0.5, -0.5, 2.0, -2.0];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::tan(&a, &mut avx2_result);
+            ScalarBackend::tan(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "tan({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_floor_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.1, 2.5, 3.9, -1.1, -2.5, -3.9, 0.1, 0.9, -0.1, -0.9];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::floor(&a, &mut avx2_result);
+            ScalarBackend::floor(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert_eq!(avx2_result[i], scalar_result[i],
+                       "floor({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_ceil_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.1, 2.5, 3.9, -1.1, -2.5, -3.9, 0.1, 0.9, -0.1, -0.9];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::ceil(&a, &mut avx2_result);
+            ScalarBackend::ceil(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert_eq!(avx2_result[i], scalar_result[i],
+                       "ceil({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_avx2_round_matches_scalar() {
+        use super::super::scalar::ScalarBackend;
+
+        let a = [1.1, 2.5, 3.9, -1.1, -2.5, -3.9, 0.1, 0.9, -0.1, -0.9];
+        let mut avx2_result = vec![0.0; a.len()];
+        let mut scalar_result = vec![0.0; a.len()];
+
+        // SAFETY: Test code calling backend trait methods marked unsafe
+        unsafe {
+            Avx2Backend::round(&a, &mut avx2_result);
+            ScalarBackend::round(&a, &mut scalar_result);
+        }
+
+        for i in 0..a.len() {
+            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                    "round({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+        }
     }
 }
