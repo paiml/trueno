@@ -3256,7 +3256,9 @@ impl Vector<f32> {
                                 match self.backend {
                                     Backend::Scalar => ScalarBackend::exp(chunk_in, chunk_out),
                                     #[cfg(target_arch = "x86_64")]
-                                    Backend::SSE2 | Backend::AVX => Sse2Backend::exp(chunk_in, chunk_out),
+                                    Backend::SSE2 | Backend::AVX => {
+                                        Sse2Backend::exp(chunk_in, chunk_out)
+                                    }
                                     #[cfg(target_arch = "x86_64")]
                                     Backend::AVX2 | Backend::AVX512 => {
                                         Avx2Backend::exp(chunk_in, chunk_out)

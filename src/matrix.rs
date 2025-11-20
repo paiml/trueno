@@ -136,6 +136,17 @@ impl Matrix<f32> {
         Matrix::new(rows, cols)
     }
 
+    /// Creates a matrix filled with zeros using a specific backend
+    /// (Internal use only - reuses backend from parent matrix)
+    fn zeros_with_backend(rows: usize, cols: usize, backend: Backend) -> Self {
+        Matrix {
+            rows,
+            cols,
+            data: vec![0.0; rows * cols],
+            backend,
+        }
+    }
+
     /// Creates an identity matrix (square matrix with 1s on diagonal)
     ///
     /// # Example
@@ -246,7 +257,7 @@ impl Matrix<f32> {
             )));
         }
 
-        let mut result = Matrix::zeros(self.rows, other.cols);
+        let mut result = Matrix::zeros_with_backend(self.rows, other.cols, self.backend);
 
         // Backend selection strategy (empirical - see docs/performance-analysis.md):
         // 1. GPU for large matrices (≥500×500) - 2-10x speedup (measured)
@@ -309,10 +320,20 @@ impl Matrix<f32> {
         other: &Matrix<f32>,
         result: &mut Matrix<f32>,
     ) -> Result<(), TruenoError> {
-        // Strategy: Use Vector::dot() for each element computation
+        // Strategy: Use SIMD dot product for each element computation
         // C[i,j] = dot(A_row_i, B_col_j)
+        //
+        // Optimizations:
+        // 1. Pre-transpose B for cache locality (columns→rows)
+        // 2. Direct backend dot() calls - eliminates O(n²) Vector allocations
+        // 3. Block-wise transpose is now cache-optimized (see transpose())
+
+        #[cfg(target_arch = "x86_64")]
+        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
+        use crate::backends::{scalar::ScalarBackend, VectorBackend};
 
         // Pre-transpose B for better cache locality (columns become rows)
+        // With our optimized block-wise transpose, this is now very fast
         let b_transposed = other.transpose();
 
         for i in 0..self.rows {
@@ -320,18 +341,46 @@ impl Matrix<f32> {
             let row_start = i * self.cols;
             let row_end = row_start + self.cols;
             let a_row = &self.data[row_start..row_end];
-            let a_vec = Vector::from_slice(a_row);
 
             for j in 0..other.cols {
                 // Extract row j from B^T (which is column j from B)
                 let col_start = j * b_transposed.cols;
                 let col_end = col_start + b_transposed.cols;
                 let b_col = &b_transposed.data[col_start..col_end];
-                let b_vec = Vector::from_slice(b_col);
 
-                // Compute dot product using SIMD
-                let dot_result = a_vec.dot(&b_vec)?;
-                *result.get_mut(i, j).unwrap() = dot_result;
+                // Compute dot product using SIMD backend directly
+                // This eliminates Vector allocation overhead
+                // SAFETY: Backend dot() maintains safety invariants
+                let dot_result = unsafe {
+                    match self.backend {
+                        Backend::Scalar => ScalarBackend::dot(a_row, b_col),
+                        #[cfg(target_arch = "x86_64")]
+                        Backend::SSE2 | Backend::AVX => Sse2Backend::dot(a_row, b_col),
+                        #[cfg(target_arch = "x86_64")]
+                        Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(a_row, b_col),
+                        #[cfg(not(target_arch = "x86_64"))]
+                        Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                            ScalarBackend::dot(a_row, b_col)
+                        }
+                        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                        Backend::NEON => {
+                            use crate::backends::neon::NeonBackend;
+                            NeonBackend::dot(a_row, b_col)
+                        }
+                        #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                        Backend::NEON => ScalarBackend::dot(a_row, b_col),
+                        #[cfg(target_arch = "wasm32")]
+                        Backend::WasmSIMD => {
+                            use crate::backends::wasm::WasmBackend;
+                            WasmBackend::dot(a_row, b_col)
+                        }
+                        #[cfg(not(target_arch = "wasm32"))]
+                        Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
+                        Backend::GPU | Backend::Auto => ScalarBackend::dot(a_row, b_col),
+                    }
+                };
+
+                result.data[i * result.cols + j] = dot_result;
             }
         }
 
@@ -390,11 +439,28 @@ impl Matrix<f32> {
     /// assert_eq!(t.get(1, 0), Some(&2.0));
     /// ```
     pub fn transpose(&self) -> Matrix<f32> {
-        let mut result = Matrix::zeros(self.cols, self.rows);
+        let mut result = Matrix::zeros_with_backend(self.cols, self.rows, self.backend);
 
-        for i in 0..self.rows {
-            for j in 0..self.cols {
-                *result.get_mut(j, i).unwrap() = *self.get(i, j).unwrap();
+        // Use block-wise transpose for better cache locality
+        // Block size of 64 fits well in L1 cache (64*64*4 = 16KB for f32)
+        const BLOCK_SIZE: usize = 64;
+
+        // Process matrix in BLOCK_SIZE x BLOCK_SIZE blocks
+        for i_block in (0..self.rows).step_by(BLOCK_SIZE) {
+            for j_block in (0..self.cols).step_by(BLOCK_SIZE) {
+                // Process elements within this block
+                let i_end = (i_block + BLOCK_SIZE).min(self.rows);
+                let j_end = (j_block + BLOCK_SIZE).min(self.cols);
+
+                for i in i_block..i_end {
+                    // Direct slice access within row for better performance
+                    let src_row_start = i * self.cols;
+                    for j in j_block..j_end {
+                        // result[j, i] = self[i, j]
+                        // Use direct indexing instead of get/get_mut for speed
+                        result.data[j * result.cols + i] = self.data[src_row_start + j];
+                    }
+                }
             }
         }
 
@@ -586,8 +652,8 @@ impl Matrix<f32> {
         let output_rows = self.rows - kernel.rows + 1;
         let output_cols = self.cols - kernel.cols + 1;
 
-        // Initialize output matrix
-        let mut result = Matrix::zeros(output_rows, output_cols);
+        // Initialize output matrix (reuse parent's backend)
+        let mut result = Matrix::zeros_with_backend(output_rows, output_cols, self.backend);
 
         // Backend selection strategy:
         // OpComplexity::High - GPU beneficial at >10K elements
