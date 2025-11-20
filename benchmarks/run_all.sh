@@ -25,19 +25,23 @@ NC='\033[0m' # No Color
 # Check if UV is installed
 echo "📦 Checking UV (Rust-based Python package manager)..."
 if ! command -v uv &> /dev/null; then
-    echo -e "${YELLOW}⚠️  UV not found. Installing...${NC}"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.cargo/bin:$PATH"
-    echo -e "${GREEN}✅ UV installed${NC}"
+    echo -e "${YELLOW}⚠️  UV not found. Please install UV first:${NC}"
+    echo ""
+    echo "  curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh"
+    echo "  bash /tmp/uv-install.sh"
+    echo "  rm -f /tmp/uv-install.sh"
+    echo ""
+    echo "Or visit: https://docs.astral.sh/uv/getting-started/installation/"
+    exit 1
 else
     echo -e "${GREEN}✅ UV already installed${NC}"
 fi
 
 # Install Python dependencies with UV
 echo "📦 Installing Python dependencies (numpy, torch)..."
-cd benchmarks
-uv pip install --quiet numpy torch
-cd ..
+cd benchmarks || exit 1
+uv pip install --system --quiet numpy torch
+cd .. || exit 1
 echo -e "${GREEN}✅ Python dependencies installed${NC}"
 echo ""
 
