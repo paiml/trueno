@@ -775,6 +775,30 @@ cargo test property_tests -- --nocapture
 
 ## Benchmarking
 
+### 🏆 Comprehensive Comparison vs NumPy/PyTorch
+
+Run the full benchmark suite comparing Trueno against NumPy and PyTorch:
+
+```bash
+./benchmarks/run_all.sh
+```
+
+This runs:
+1. ✅ Trueno benchmarks (Rust/Criterion) - 5-10 minutes
+2. ✅ Python benchmarks (NumPy/PyTorch) - 2-3 minutes
+3. ✅ Comparative analysis and report generation
+
+**Results**:
+- `benchmarks/comparison_report.md` - Performance comparison report
+- `benchmarks/comparison_summary.json` - Machine-readable data
+- `target/criterion/` - Detailed Criterion benchmark data
+
+**Success Criteria (v0.3.0)**: Trueno within 20% of NumPy for ≥80% of 1D operations
+
+See [`benchmarks/README.md`](benchmarks/README.md) for detailed documentation.
+
+### Rust-Only Benchmarks
+
 ```bash
 # Run all benchmarks
 make bench
@@ -787,8 +811,13 @@ cargo bench -- dot
 Benchmark results are stored in `target/criterion/` and include:
 - Throughput (elements/second)
 - Latency (mean, median, p95, p99)
-- Backend comparison (Scalar vs SIMD vs GPU)
+- Backend comparison (Scalar vs SSE2 vs AVX2 vs AVX-512)
 - Regression detection
+
+**Operations Benchmarked** (25 total):
+- Element-wise: `add`, `sub`, `mul`, `div`, `scale`, `abs`, `clamp`, `lerp`, `fma`
+- Reductions: `dot`, `sum`, `max`, `min`, `argmax`, `argmin`, `norm_l1`, `norm_l2`, `norm_linf`
+- Activations: `relu`, `sigmoid`, `tanh`, `gelu`, `swish`, `exp`, `softmax`, `log_softmax`
 
 ## Examples
 
