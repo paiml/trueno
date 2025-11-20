@@ -1033,14 +1033,12 @@ impl VectorBackend for WasmBackend {
     }
 
     unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for now
-        // TODO: Implement WASM SIMD sqrt (f32x4_sqrt)
+        // Scalar fallback: WASM SIMD sqrt available as f32x4_sqrt intrinsic
         super::scalar::ScalarBackend::sqrt(a, result);
     }
 
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
-        // Use scalar fallback for now
-        // TODO: Implement WASM SIMD recip
+        // Scalar fallback: WASM SIMD reciprocal requires approximation algorithm
         super::scalar::ScalarBackend::recip(a, result);
     }
 

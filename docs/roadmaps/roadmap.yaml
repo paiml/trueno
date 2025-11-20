@@ -2,143 +2,34 @@ roadmap_version: '1.0'
 github_enabled: true
 github_repo: paiml/trueno
 roadmap:
-  - id: avx512-max-min
-    title: "Implement AVX-512 max/min with 8-12x speedup (Phase 4)"
-    status: completed
-    type: feature
-    priority: high
-    description: |
-      Implement AVX-512 SIMD acceleration for max() and min() reduction operations.
-      Achieved: 8-12x speedup over scalar baseline.
+- id: coverage-enforcement-90-percent
+  github_issue: null
+  item_type: task
+  title: 'Coverage Enforcement: Achieve 90%+ with Automatic Enforcement'
+  status: done
+  priority: high
+  assigned_to: claude
+  created: 2025-11-20T18:00:00.000000000+00:00
+  updated: 2025-11-20T18:45:00.000000000+00:00
+  spec: 'Implement comprehensive coverage enforcement system to ensure code quality never drops below 90%. Pre-commit hook, CI workflow, make coverage-check target, and EXTREME TDD applied to xtask (115 tests, 89.74% coverage).'
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
 
-  - id: avx512-argmax-argmin
-    title: "Implement AVX-512 argmax/argmin with 3.2-3.3x speedup (Phase 5)"
-    status: completed
-    type: feature
-    priority: high
-    description: |
-      Implement AVX-512 SIMD acceleration for argmax() and argmin() index-finding operations.
-      Target: ≥8x speedup over scalar baseline for compute-bound reductions.
-
-      Implementation strategy:
-      - 16-way parallel comparison with index tracking
-      - Horizontal reduction to find max/min value and its index
-      - Scalar scan for exact index verification
-
-      Testing:
-      - 10 tests (5 argmax, 5 argmin)
-      - Target: 817 total tests passing
-
-      Performance validation:
-      - Benchmark argmax/argmin at sizes 1000, 10000
-      - Target: 8x+ speedup vs scalar baseline
-
-  - id: start-aprender
-    title: "Start Aprender ML library Phase 1"
-    status: completed
-    type: feature
-    priority: high
-    github_issue: "paiml/aprender#12"
-    description: |
-      COMPLETED: Work finished in paiml/aprender repository
-
-      Issue #12 closed as duplicate - all objectives completed:
-      ✅ Traditional descriptive statistics (Issue #9)
-      ✅ Trueno integration (using trueno v0.2.2)
-      ✅ Quality gates passing (471 tests, TDG 91.6/100 A)
-      ✅ Examples and documentation (Issues #10, #11)
-
-      Completed work:
-      - src/stats/mod.rs (730 lines)
-      - Quantiles, percentiles, five-number summary
-      - Histogram methods (FreedmanDiaconis, Sturges, Scott, SquareRoot)
-      - 21 comprehensive tests
-
-  - id: publish-trueno-v0-3-0
-    title: "Publish Trueno v0.3.0 with AVX-512"
-    status: completed
-    type: release
-    priority: medium
-    description: |
-      Release Trueno v0.3.0 with complete AVX-512 backend support.
-
-      Completed:
-      - 5 phases of AVX-512 implementation (add, dot, sum, max/min, argmax/argmin)
-      - 819 tests passing
-      - TDG score 92.4/100 (A)
-      - Version 0.3.0 released with git tag
-      - Pushed to GitHub
-
-  - id: avx512-sub-mul-div
-    title: "Implement AVX-512 sub/mul/div (optional - memory-bound)"
-    status: todo
-    type: feature
-    priority: low
-    description: |
-      Implement AVX-512 versions of sub(), mul(), div() element-wise operations.
-
-      Note: These are memory-bound operations (~1x speedup like add()).
-      Low priority since they won't achieve 8x target.
-
-      Implementation: 16-way SIMD with _mm512_sub_ps, _mm512_mul_ps, _mm512_div_ps
-
-  - id: avx512-norm-l2
-    title: "Implement AVX-512 norm_l2 (8x+ speedup expected)"
-    status: completed
-    type: feature
-    priority: high
-    description: |
-      Implement AVX-512 L2 norm: sqrt(sum(x^2))
-
-      Completed:
-      - AVX-512 SIMD implementation with 16-way parallel multiply-add
-      - Achieved 6-9x speedup (9.3x at size 1000, 6.2x at size 10000)
-      - Added 8 comprehensive tests (basic, empty, single, aligned, non-aligned, large, equivalence, negative)
-      - 827 tests passing
-      - Added AVX-512 benchmark configuration
-
-  - id: github-release-v0-3-0
-    title: "Create GitHub Release for v0.3.0"
-    status: completed
-    type: release
-    priority: medium
-    description: |
-      Create official GitHub Release for v0.3.0.
-
-      Completed:
-      - GitHub Release created: https://github.com/paiml/trueno/releases/tag/v0.3.0
-      - Includes comprehensive AVX-512 feature highlights
-      - Performance benchmark table (11-12x dot, 9.8-10.2x sum, 8-12x max/min)
-      - Quality metrics (819 tests, TDG 92.4/100)
-
-  - id: refactor-complexity-a-plus
-    title: "Refactor to reduce complexity: A (92.27) → A+ (93+)"
-    status: completed
-    type: quality
-    priority: high
-    github_issue: "paiml/trueno#4"
-    description: |
-      Refactor large files to reduce structural complexity and achieve A+ grade.
-
-      COMPLETED STATUS: Achieved A- (88.1/100) - Architectural limit reached
-
-      Final state:
-      - Overall: 88.1/100 (A-) - TDG correctly measures unavoidable complexity
-      - Macro refactoring: Reduced ~1000 lines of duplicated dispatch code
-      - dispatch_binary_op! and dispatch_reduction! macros centralize backend selection
-      - All 827 tests passing, zero clippy warnings, 100% rustfmt compliant
-
-      Key learnings:
-      1. Multi-backend SIMD dispatch REQUIRES 10-branch match statements (unavoidable)
-      2. TDG uses `syn` AST parser which expands macros before analysis (correct behavior)
-      3. Macros improve maintainability but don't hide cyclomatic complexity
-      4. Attempted strategies: file splitting (worse), pub(crate) fields (errors), modules (worse TDG)
-      5. A- (88.1) is practical limit for this architecture without sacrificing performance
-
-      Improvements delivered:
-      - Eliminated ~1000 lines of code duplication
-      - Centralized backend dispatch logic (easier to add new backends)
-      - Created PMAT issues #76 (roadmap friction) and #78 (--explain mode)
-      - Documented complexity patterns in trueno-db spec as reference
-
-      Released: v0.4.0
+- id: numpy-trueno-simd-comparison
+  github_issue: null
+  item_type: task
+  title: 'New task: numpy-trueno-simd-comparison'
+  status: inprogress
+  priority: medium
+  assigned_to: null
+  created: 2025-11-20T18:16:55.652418946+00:00
+  updated: 2025-11-20T18:16:55.652418946+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
