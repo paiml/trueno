@@ -1178,6 +1178,49 @@ fn bench_abs(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark exp() operation (transcendental function with range reduction)
+fn bench_exp(c: &mut Criterion) {
+    let mut group = c.benchmark_group("exp");
+
+    for size in [100, 1000, 10000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size).map(|i| (i as f32 / size as f32) * 4.0 - 2.0).collect();
+            let a = Vector::from_slice_with_backend(&data, Backend::Scalar);
+
+            bencher.iter(|| {
+                black_box(a.exp().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size).map(|i| (i as f32 / size as f32) * 4.0 - 2.0).collect();
+            let a = Vector::from_slice_with_backend(&data, Backend::SSE2);
+
+            bencher.iter(|| {
+                black_box(a.exp().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, &size| {
+            let data: Vec<f32> = (0..size).map(|i| (i as f32 / size as f32) * 4.0 - 2.0).collect();
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX2);
+
+            bencher.iter(|| {
+                black_box(a.exp().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_add,
@@ -1203,6 +1246,7 @@ criterion_group!(
     bench_norm_l1,
     bench_norm_l2,
     bench_norm_linf,
-    bench_abs
+    bench_abs,
+    bench_exp
 );
 criterion_main!(benches);
