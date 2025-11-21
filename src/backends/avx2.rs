@@ -1216,16 +1216,94 @@ impl VectorBackend for Avx2Backend {
         super::scalar::ScalarBackend::tan(a, result);
     }
 
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn floor(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::floor(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm256_floor_ps(va);
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].floor();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn ceil(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::ceil(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm256_ceil_ps(va);
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].ceil();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn round(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::round(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Rust's .round() rounds ties away from zero, but SIMD round modes don't support this.
+        // Implement manually: round(x) = sign(x) * floor(abs(x) + 0.5)
+        let half = _mm256_set1_ps(0.5);
+        let sign_mask = _mm256_set1_ps(f32::from_bits(0x8000_0000)); // Sign bit only
+        let abs_mask = _mm256_set1_ps(f32::from_bits(0x7FFF_FFFF)); // All except sign bit
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+
+            // Extract sign and absolute value
+            let sign = _mm256_and_ps(va, sign_mask);
+            let abs_val = _mm256_and_ps(va, abs_mask);
+
+            // Round away from zero: floor(abs(x) + 0.5) * sign(x)
+            let shifted = _mm256_add_ps(abs_val, half);
+            let rounded_abs = _mm256_floor_ps(shifted);
+            let vresult = _mm256_or_ps(rounded_abs, sign);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].round();
+            i += 1;
+        }
     }
 }
 

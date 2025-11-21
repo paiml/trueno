@@ -1075,16 +1075,96 @@ impl VectorBackend for Avx512Backend {
         super::scalar::ScalarBackend::tan(a, result);
     }
 
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn floor(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::floor(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 16 elements at a time
+        // Rounding mode 0x09 = round down (floor)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm512_roundscale_ps(va, 0x09);
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].floor();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn ceil(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::ceil(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 16 elements at a time
+        // Rounding mode 0x0A = round up (ceil)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm512_roundscale_ps(va, 0x0A);
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].ceil();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn round(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::round(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Rust's .round() rounds ties away from zero, but SIMD round modes don't support this.
+        // Implement manually: round(x) = sign(x) * floor(abs(x) + 0.5)
+        let half = _mm512_set1_ps(0.5);
+        let sign_mask = _mm512_set1_ps(f32::from_bits(0x8000_0000)); // Sign bit only
+        let abs_mask = _mm512_set1_ps(f32::from_bits(0x7FFF_FFFF)); // All except sign bit
+
+        // Process 16 elements at a time
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+
+            // Extract sign and absolute value
+            let sign = _mm512_and_ps(va, sign_mask);
+            let abs_val = _mm512_and_ps(va, abs_mask);
+
+            // Round away from zero: floor(abs(x) + 0.5) * sign(x)
+            let shifted = _mm512_add_ps(abs_val, half);
+            let rounded_abs = _mm512_roundscale_ps(shifted, 0x09); // floor
+            let vresult = _mm512_or_ps(rounded_abs, sign);
+
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].round();
+            i += 1;
+        }
     }
 }
 
