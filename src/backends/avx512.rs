@@ -1051,16 +1051,222 @@ impl VectorBackend for Avx512Backend {
         }
     }
 
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
+    //
+    // Natural logarithm implementation using range reduction:
+    // For x = 2^k * m where m ∈ [1, 2):
+    //   ln(x) = k*ln(2) + ln(m)
+    //   ln(m) approximated using 7th-degree polynomial
     unsafe fn ln(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::ln(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for ln calculation
+        let ln2 = _mm512_set1_ps(std::f32::consts::LN_2); // 0.693147...
+        let one = _mm512_set1_ps(1.0);
+
+        // Use atanh transformation for better accuracy
+        let two = _mm512_set1_ps(2.0);
+        let c1 = _mm512_set1_ps(1.0);
+        let c3 = _mm512_set1_ps(1.0 / 3.0);
+        let c5 = _mm512_set1_ps(1.0 / 5.0);
+        let c7 = _mm512_set1_ps(1.0 / 7.0);
+        let c9 = _mm512_set1_ps(1.0 / 9.0);
+        let c11 = _mm512_set1_ps(1.0 / 11.0);
+
+        let mantissa_mask = _mm512_set1_epi32(0x007F_FFFF_u32 as i32);
+        let exponent_127 = _mm512_set1_epi32(127 << 23);
+
+        while i + 16 <= len {
+            let x = _mm512_loadu_ps(a.as_ptr().add(i));
+            let x_int = _mm512_castps_si512(x);
+
+            let exp_biased = _mm512_srli_epi32(x_int, 23);
+            let exp_biased_masked = _mm512_and_si512(exp_biased, _mm512_set1_epi32(0xFF));
+            let k_int = _mm512_sub_epi32(exp_biased_masked, _mm512_set1_epi32(127));
+            let k = _mm512_cvtepi32_ps(k_int);
+
+            let mantissa_bits = _mm512_and_si512(x_int, mantissa_mask);
+            let m_int = _mm512_or_si512(mantissa_bits, exponent_127);
+            let m = _mm512_castsi512_ps(m_int);
+
+            // atanh transformation
+            let m_minus_1 = _mm512_sub_ps(m, one);
+            let m_plus_1 = _mm512_add_ps(m, one);
+            let u = _mm512_div_ps(m_minus_1, m_plus_1);
+            let u2 = _mm512_mul_ps(u, u);
+
+            let p = _mm512_fmadd_ps(c11, u2, c9);
+            let p = _mm512_fmadd_ps(p, u2, c7);
+            let p = _mm512_fmadd_ps(p, u2, c5);
+            let p = _mm512_fmadd_ps(p, u2, c3);
+            let p = _mm512_fmadd_ps(p, u2, c1);
+
+            let ln_m = _mm512_mul_ps(two, _mm512_mul_ps(u, p));
+
+            // ln(x) = k*ln(2) + ln(m)
+            let result_vec = _mm512_fmadd_ps(k, ln2, ln_m);
+
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), result_vec);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].ln();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
+    //
+    // Base-2 logarithm implementation using range reduction:
+    // For x = 2^k * m where m ∈ [1, 2):
+    //   log2(x) = k + log2(m)
+    //   log2(m) = ln(m) / ln(2)
     unsafe fn log2(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::log2(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        let inv_ln2 = _mm512_set1_ps(std::f32::consts::LOG2_E);
+        let one = _mm512_set1_ps(1.0);
+
+        let two = _mm512_set1_ps(2.0);
+        let c1 = _mm512_set1_ps(1.0);
+        let c3 = _mm512_set1_ps(1.0 / 3.0);
+        let c5 = _mm512_set1_ps(1.0 / 5.0);
+        let c7 = _mm512_set1_ps(1.0 / 7.0);
+        let c9 = _mm512_set1_ps(1.0 / 9.0);
+        let c11 = _mm512_set1_ps(1.0 / 11.0);
+
+        let mantissa_mask = _mm512_set1_epi32(0x007F_FFFF_u32 as i32);
+        let exponent_127 = _mm512_set1_epi32(127 << 23);
+
+        while i + 16 <= len {
+            let x = _mm512_loadu_ps(a.as_ptr().add(i));
+            let x_int = _mm512_castps_si512(x);
+
+            // Extract exponent k
+            let exp_biased = _mm512_srli_epi32(x_int, 23);
+            let exp_biased_masked = _mm512_and_si512(exp_biased, _mm512_set1_epi32(0xFF));
+            let k_int = _mm512_sub_epi32(exp_biased_masked, _mm512_set1_epi32(127));
+            let k = _mm512_cvtepi32_ps(k_int);
+
+            let mantissa_bits = _mm512_and_si512(x_int, mantissa_mask);
+            let m_int = _mm512_or_si512(mantissa_bits, exponent_127);
+            let m = _mm512_castsi512_ps(m_int);
+
+            // atanh transformation
+            let m_minus_1 = _mm512_sub_ps(m, one);
+            let m_plus_1 = _mm512_add_ps(m, one);
+            let u = _mm512_div_ps(m_minus_1, m_plus_1);
+            let u2 = _mm512_mul_ps(u, u);
+
+            let p = _mm512_fmadd_ps(c11, u2, c9);
+            let p = _mm512_fmadd_ps(p, u2, c7);
+            let p = _mm512_fmadd_ps(p, u2, c5);
+            let p = _mm512_fmadd_ps(p, u2, c3);
+            let p = _mm512_fmadd_ps(p, u2, c1);
+
+            let ln_m = _mm512_mul_ps(two, _mm512_mul_ps(u, p));
+
+            let log2_m = _mm512_mul_ps(ln_m, inv_ln2);
+
+            // log2(x) = k + log2(m)
+            let result_vec = _mm512_add_ps(k, log2_m);
+
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), result_vec);
+            i += 16;
+        }
+
+        while i < len {
+            result[i] = a[i].log2();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
+    //
+    // Base-10 logarithm implementation using range reduction:
+    // For x = 2^k * m where m ∈ [1, 2):
+    //   log10(x) = k*log10(2) + log10(m)
+    //   log10(m) = ln(m) / ln(10)
     unsafe fn log10(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::log10(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        let log10_2 = _mm512_set1_ps(std::f32::consts::LOG10_2);
+        let inv_ln10 = _mm512_set1_ps(1.0 / std::f32::consts::LN_10);
+        let one = _mm512_set1_ps(1.0);
+
+        let two = _mm512_set1_ps(2.0);
+        let c1 = _mm512_set1_ps(1.0);
+        let c3 = _mm512_set1_ps(1.0 / 3.0);
+        let c5 = _mm512_set1_ps(1.0 / 5.0);
+        let c7 = _mm512_set1_ps(1.0 / 7.0);
+        let c9 = _mm512_set1_ps(1.0 / 9.0);
+        let c11 = _mm512_set1_ps(1.0 / 11.0);
+
+        let mantissa_mask = _mm512_set1_epi32(0x007F_FFFF_u32 as i32);
+        let exponent_127 = _mm512_set1_epi32(127 << 23);
+
+        while i + 16 <= len {
+            let x = _mm512_loadu_ps(a.as_ptr().add(i));
+            let x_int = _mm512_castps_si512(x);
+
+            // Extract exponent k
+            let exp_biased = _mm512_srli_epi32(x_int, 23);
+            let exp_biased_masked = _mm512_and_si512(exp_biased, _mm512_set1_epi32(0xFF));
+            let k_int = _mm512_sub_epi32(exp_biased_masked, _mm512_set1_epi32(127));
+            let k = _mm512_cvtepi32_ps(k_int);
+
+            // Extract mantissa m ∈ [1, 2)
+            let mantissa_bits = _mm512_and_si512(x_int, mantissa_mask);
+            let m_int = _mm512_or_si512(mantissa_bits, exponent_127);
+            let m = _mm512_castsi512_ps(m_int);
+
+            // atanh transformation
+            let m_minus_1 = _mm512_sub_ps(m, one);
+            let m_plus_1 = _mm512_add_ps(m, one);
+            let u = _mm512_div_ps(m_minus_1, m_plus_1);
+            let u2 = _mm512_mul_ps(u, u);
+
+            let p = _mm512_fmadd_ps(c11, u2, c9);
+            let p = _mm512_fmadd_ps(p, u2, c7);
+            let p = _mm512_fmadd_ps(p, u2, c5);
+            let p = _mm512_fmadd_ps(p, u2, c3);
+            let p = _mm512_fmadd_ps(p, u2, c1);
+
+            let ln_m = _mm512_mul_ps(two, _mm512_mul_ps(u, p));
+
+            let log10_m = _mm512_mul_ps(ln_m, inv_ln10);
+
+            // log10(x) = k*log10(2) + log10(m)
+            let result_vec = _mm512_fmadd_ps(k, log10_2, log10_m);
+
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), result_vec);
+            i += 16;
+        }
+
+        while i < len {
+            result[i] = a[i].log10();
+            i += 1;
+        }
     }
 
     unsafe fn sin(a: &[f32], result: &mut [f32]) {
@@ -1075,16 +1281,96 @@ impl VectorBackend for Avx512Backend {
         super::scalar::ScalarBackend::tan(a, result);
     }
 
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn floor(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::floor(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 16 elements at a time
+        // Rounding mode 0x09 = round down (floor)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm512_roundscale_ps(va, 0x09);
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].floor();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn ceil(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::ceil(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 16 elements at a time
+        // Rounding mode 0x0A = round up (ceil)
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm512_roundscale_ps(va, 0x0A);
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].ceil();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn round(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::round(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Rust's .round() rounds ties away from zero, but SIMD round modes don't support this.
+        // Implement manually: round(x) = sign(x) * floor(abs(x) + 0.5)
+        let half = _mm512_set1_ps(0.5);
+        let sign_mask = _mm512_set1_ps(f32::from_bits(0x8000_0000)); // Sign bit only
+        let abs_mask = _mm512_set1_ps(f32::from_bits(0x7FFF_FFFF)); // All except sign bit
+
+        // Process 16 elements at a time
+        while i + 16 <= len {
+            let va = _mm512_loadu_ps(a.as_ptr().add(i));
+
+            // Extract sign and absolute value
+            let sign = _mm512_and_ps(va, sign_mask);
+            let abs_val = _mm512_and_ps(va, abs_mask);
+
+            // Round away from zero: floor(abs(x) + 0.5) * sign(x)
+            let shifted = _mm512_add_ps(abs_val, half);
+            let rounded_abs = _mm512_roundscale_ps(shifted, 0x09); // floor
+            let vresult = _mm512_or_ps(rounded_abs, sign);
+
+            _mm512_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 16;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].round();
+            i += 1;
+        }
     }
 }
 
