@@ -1370,6 +1370,104 @@ fn bench_log10(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark square root (sqrt)
+fn bench_sqrt(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sqrt");
+
+    for size in [100, 1000, 10000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Generate positive values in range [0.1, 100.0] for sqrt
+        let data: Vec<f32> = (0..*size).map(|i| 0.1 + (i as f32 / *size as f32) * 99.9).collect();
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let a = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(a.sqrt().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let a = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(a.sqrt().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(a.sqrt().unwrap());
+            });
+        });
+
+        // AVX512 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX512", size), size, |bencher, _size| {
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX512);
+            bencher.iter(|| {
+                black_box(a.sqrt().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark reciprocal (1/x)
+fn bench_recip(c: &mut Criterion) {
+    let mut group = c.benchmark_group("recip");
+
+    for size in [100, 1000, 10000].iter() {
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // Generate non-zero values in range [0.1, 100.0] to avoid division by zero
+        let data: Vec<f32> = (0..*size).map(|i| 0.1 + (i as f32 / *size as f32) * 99.9).collect();
+
+        // Scalar backend
+        group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
+            let a = Vector::from_slice_with_backend(&data, Backend::Scalar);
+            bencher.iter(|| {
+                black_box(a.recip().unwrap());
+            });
+        });
+
+        // SSE2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, _size| {
+            let a = Vector::from_slice_with_backend(&data, Backend::SSE2);
+            bencher.iter(|| {
+                black_box(a.recip().unwrap());
+            });
+        });
+
+        // AVX2 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, _size| {
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX2);
+            bencher.iter(|| {
+                black_box(a.recip().unwrap());
+            });
+        });
+
+        // AVX512 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX512", size), size, |bencher, _size| {
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX512);
+            bencher.iter(|| {
+                black_box(a.recip().unwrap());
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_add,
@@ -1399,6 +1497,8 @@ criterion_group!(
     bench_exp,
     bench_ln,
     bench_log2,
-    bench_log10
+    bench_log10,
+    bench_sqrt,
+    bench_recip
 );
 criterion_main!(benches);

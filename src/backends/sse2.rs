@@ -1179,6 +1179,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[target_feature(enable = "sse2")]
     unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1198,6 +1199,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[target_feature(enable = "sse2")]
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
