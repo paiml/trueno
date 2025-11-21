@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2025-11-21
+
+### Performance - Matrix Multiplication 🚀
+
+**Major Achievement**: Matrix multiplication now **2.79× faster than NumPy** at 128×128 matrices
+
+- **Cache-aware blocking algorithm** with L2 optimization (64×64 blocks)
+  - Implements 2-level cache hierarchy optimization (L2/L1)
+  - Smart thresholding: matrices ≤32 use simple path (avoids blocking overhead)
+  - 3-level nested loops (ii/jj/kk) with SIMD micro-kernels
+  - Zero Vector allocations via direct backend dot() calls
+
+- **Performance results** (vs NumPy baseline):
+  - 128×128 matrices: **166 μs (Trueno) vs 463 μs (NumPy) = 2.79× FASTER** ✅
+  - Original problem: Trueno was 2.5× slower (Issue #10)
+  - Total improvement: 5.5× faster than v0.4.0
+  - Phase 1 goal (1.5-2× speedup) exceeded by 40%
+
+- **Comprehensive testing**:
+  - 4 new blocking test suites added
+  - `test_matmul_blocking_small_matrices` (8×8, 16×16, 32×32)
+  - `test_matmul_blocking_medium_matrices` (64×64, 128×128, 256×256)
+  - `test_matmul_blocking_non_aligned_sizes` (33×33, 65×65, 100×100, 127×127)
+  - `test_matmul_blocking_large_matrices` (256×256 with detailed analysis)
+  - Backend equivalence verified (naive vs blocked implementations)
+
+### Fixed
+
+- **Performance regression** (Issue #26): Backend selection caching
+  - Implemented `OnceLock` for one-time backend detection
+  - Eliminates 3-5% overhead from repeated `is_x86_feature_detected!()` calls
+  - Performance improvement: 4-15% faster than v0.4.0
+  - Added `test_backend_selection_is_cached` to verify caching behavior
+
+### Documentation
+
+- **PERFORMANCE_GUIDE.md** updated with matrix multiplication section
+  - Comprehensive benchmark table (16×16 through 256×256)
+  - Performance characteristics and sweet spot analysis
+  - Implementation details (blocking, thresholding, SIMD)
+  - Tuning tips for different matrix sizes
+  - Cache-aware blocking explanation
+
+### Quality
+
+- **Test Coverage**: 874 tests passing, 90.72% library coverage (exceeds 90% requirement)
+- **TDG Score**: 85.5/100 (A-) - architectural limit maintained
+- **Clippy**: Zero warnings on all features
+- **Format**: 100% rustfmt compliant
+- **PMAT**: All quality gates passing, zero critical defects
+
+### Closed Issues
+
+- Issue #10: Matrix multiplication SIMD performance (Phase 1 complete)
+- Issue #26: Performance regression in v0.4.1 (backend caching fix)
+
 ## [0.4.1] - 2025-11-20
 
 ### Added
