@@ -425,6 +425,7 @@ impl VectorBackend for Sse2Backend {
         min_index
     }
 
+    #[inline]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -1204,6 +1205,11 @@ impl VectorBackend for Sse2Backend {
     }
 
     #[inline]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure proper array access
+    // 2. All pointers derived from valid slice references
+    // 3. SSE2 intrinsics marked with #[target_feature]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     #[target_feature(enable = "sse2")]
     unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
         let len = a.len();
@@ -1220,12 +1226,22 @@ impl VectorBackend for Sse2Backend {
         // Handle remaining elements
         while i < len {
             result[i] = a[i].sqrt();
+            // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+            // 1. Loop bounds ensure proper array access
+            // 2. All pointers derived from valid slice references
+            // 3. SSE2 intrinsics marked with #[target_feature]
+            // 4. Unaligned loads/stores handle unaligned data correctly
             i += 1;
         }
     }
 
     #[inline]
     #[target_feature(enable = "sse2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 4 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. SSE2 intrinsics marked with #[target_feature(enable = "sse2")]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;

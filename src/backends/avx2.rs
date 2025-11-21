@@ -433,11 +433,9 @@ impl VectorBackend for Avx2Backend {
         min_index
     }
 
-    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
-    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
-    // 2. All pointers derived from valid slice references with sufficient backing storage
-    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
-    // 4. Unaligned loads/stores used (_mm256_loadu_ps/_mm256_storeu_ps) - no alignment requirement
+    #[inline]
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Delegates to scalar implementation, no direct SIMD operations
     unsafe fn sum_kahan(a: &[f32]) -> f32 {
         // Kahan summation is inherently sequential, use scalar implementation
         super::scalar::ScalarBackend::sum_kahan(a)
@@ -1180,6 +1178,11 @@ impl VectorBackend for Avx2Backend {
     }
 
     #[inline]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure proper array access
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     #[target_feature(enable = "avx2")]
     unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
         let len = a.len();
@@ -1196,12 +1199,22 @@ impl VectorBackend for Avx2Backend {
         // Handle remaining elements
         while i < len {
             result[i] = a[i].sqrt();
+            // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+            // 1. Loop bounds ensure proper array access
+            // 2. All pointers derived from valid slice references
+            // 3. AVX2 intrinsics marked with #[target_feature]
+            // 4. Unaligned loads/stores handle unaligned data correctly
             i += 1;
         }
     }
 
     #[inline]
     #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1442,14 +1455,23 @@ impl VectorBackend for Avx2Backend {
     // Full SIMD trig functions require complex range reduction and are left for future work
     // TODO: Implement proper SIMD range reduction for sin/cos/tan
 
+    #[inline]
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Delegates to scalar implementation, no direct SIMD operations
     unsafe fn sin(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::sin(a, result);
     }
 
+    #[inline]
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Delegates to scalar implementation, no direct SIMD operations
     unsafe fn cos(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::cos(a, result);
     }
 
+    #[inline]
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Delegates to scalar implementation, no direct SIMD operations
     unsafe fn tan(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::tan(a, result);
     }

@@ -392,6 +392,7 @@ impl VectorBackend for NeonBackend {
         min_index
     }
 
+    #[inline]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
