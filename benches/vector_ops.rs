@@ -830,9 +830,11 @@ fn bench_sigmoid(c: &mut Criterion) {
     for size in [100, 1000, 10000, 100_000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
 
-        // Generate data with mix of positive and negative values
+        // Generate data in range [-6, 6] for realistic sigmoid values
+        // Previous range [-500, 500] caused scalar fast-path (returns 0/1 without exp())
+        // while SIMD computed full exp(), creating misleading benchmarks
         let data: Vec<f32> = (0..*size)
-            .map(|i| (i as f32) * 0.1 - (*size as f32) * 0.05)
+            .map(|i| (i as f32 / *size as f32) * 12.0 - 6.0)
             .collect();
 
         // Scalar backend
