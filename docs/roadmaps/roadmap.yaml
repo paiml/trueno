@@ -39,3 +39,51 @@ roadmap:
     - quality
     - extreme-tdd
     - v2.200.0
+
+- id: matmul-performance-optimization
+  github_issue: 10
+  item_type: task
+  title: "Matrix Multiplication Performance Optimization"
+  status: in_progress
+  priority: high
+  assigned_to: claude
+  created: "2025-11-21T18:38:00Z"
+  updated: "2025-11-21T18:38:00Z"
+  spec: |
+    🎯 OBJECTIVE: Close 2.5× performance gap with NumPy (0.62ms → 0.24ms target for 128×128)
+
+    STRATEGY: Hybrid approach (pure Rust + optional BLAS backend)
+
+    Phase 1: Implement 2-level cache-aware blocking (L2/L1)
+    - Add blocking parameters for cache hierarchy
+    - Implement nested loop structure with cache optimization
+    - Use SIMD for 4×4 or 8×8 micro-kernels
+    - Cache line alignment (64-byte boundaries)
+    - Expected: 1.5-2× speedup
+
+    Phase 2: Optional BLAS backend integration
+    - Add feature flag: blas-backend
+    - Integrate ndarray-linalg with MKL/OpenBLAS
+    - Safe wrapper around external BLAS calls
+    - Expected: Full NumPy parity
+
+    Testing Requirements:
+    - ≥90% test coverage (NON-NEGOTIABLE)
+    - Backend equivalence tests (pure Rust vs BLAS)
+    - Benchmark suite: 32×32, 64×64, 128×128, 256×256, 512×512, 1024×1024
+    - Property-based tests for correctness
+    - Mutation testing
+
+    Documentation:
+    - Update PERFORMANCE_GUIDE.md with matmul tuning tips
+    - Document when to use pure Rust vs BLAS backend
+    - Benchmark results and analysis
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: "3-4 days"
+  labels:
+    - performance
+    - simd
+    - optimization
+    - extreme-tdd
