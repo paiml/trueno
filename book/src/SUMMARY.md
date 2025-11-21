@@ -76,6 +76,7 @@
 # Advanced Topics
 
 - [SIMD Intrinsics](./advanced/simd-intrinsics.md)
+- [Phase 2 Micro-Kernel](./advanced/phase2-microkernel.md)
 - [GPU Compute Shaders](./advanced/gpu-shaders.md)
 - [Memory Alignment](./advanced/memory-alignment.md)
 - [Vectorization Patterns](./advanced/vectorization-patterns.md)
