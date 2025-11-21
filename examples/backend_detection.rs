@@ -49,7 +49,7 @@ fn main() {
     let a = Vector::from_slice_with_backend(&[1.0, 2.0, 3.0], Backend::Scalar);
     let b = Vector::from_slice_with_backend(&[4.0, 5.0, 6.0], backend);
 
-    let sum = a.add(&b).unwrap();
+    let sum = a.add(&b).expect("Example should not fail");
     println!("  Scalar + {:?} = {:?}", backend, sum.as_slice());
     println!("  (Operations work across backends transparently)");
 

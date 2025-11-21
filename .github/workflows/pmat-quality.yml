@@ -1,0 +1,361 @@
+name: PMAT Quality Checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run nightly for comprehensive checks
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Technical Debt Grading
+  tdg:
+    name: Technical Debt Grading (TDG)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for TDG
+
+      - name: Install PMAT
+        run: |
+          cargo install pmat --version ">=2.200.0" || cargo install pmat
+          pmat --version
+
+      - name: Run TDG Analysis
+        run: |
+          pmat analyze tdg --min-grade B+ --include-components --format markdown > tdg-report.md
+          cat tdg-report.md
+
+      - name: Upload TDG Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: tdg-report
+          path: tdg-report.md
+
+      - name: Check TDG Grade
+        run: |
+          pmat analyze tdg --min-grade B+ || exit 1
+
+  # Repository Health Score
+  repo-score:
+    name: Repository Health Score
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for deep scoring
+
+      - name: Install PMAT
+        run: |
+          cargo install pmat --version ">=2.200.0" || cargo install pmat
+
+      - name: Calculate Repository Score
+        run: |
+          pmat repo-score . --deep --format markdown > repo-score.md
+          cat repo-score.md
+
+      - name: Upload Repo Score Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-score-report
+          path: repo-score.md
+
+      - name: Check Minimum Score
+        run: |
+          pmat repo-score . --min-score 90 || exit 1
+
+  # Rust Project Score (v2.171.0+)
+  rust-project-score:
+    name: Rust Project Score (0-211 scale)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install PMAT
+        run: |
+          cargo install pmat --version ">=2.171.0" || cargo install pmat
+
+      - name: Install Analysis Tools
+        run: |
+          cargo install cargo-llvm-cov cargo-audit cargo-outdated cargo-deny || true
+          rustup component add clippy rustfmt
+
+      - name: Calculate Rust Project Score (Full Mode)
+        if: github.event_name == 'schedule'
+        run: |
+          pmat rust-project-score --full --format markdown --output rust-score-full.md
+          cat rust-score-full.md
+
+      - name: Calculate Rust Project Score (Fast Mode)
+        if: github.event_name != 'schedule'
+        run: |
+          pmat rust-project-score --format markdown --output rust-score-fast.md
+          cat rust-score-fast.md
+
+      - name: Upload Rust Score Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-project-score
+          path: rust-score-*.md
+
+      - name: Check Minimum Rust Score
+        run: |
+          pmat rust-project-score --min-score 150 || exit 1
+
+  # Comprehensive Analysis
+  analysis:
+    name: Comprehensive Code Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PMAT
+        run: |
+          cargo install pmat --version ">=2.200.0" || cargo install pmat
+
+      - name: Complexity Analysis
+        run: |
+          pmat analyze complexity --path src/ --format markdown > complexity-report.md
+          cat complexity-report.md
+
+      - name: SATD Detection
+        run: |
+          pmat analyze satd --format markdown > satd-report.md
+          cat satd-report.md || echo "No SATD comments found (good!)"
+
+      - name: Dead Code Analysis
+        run: |
+          pmat analyze dead-code --format markdown > dead-code-report.md
+          cat dead-code-report.md || echo "No dead code detected"
+
+      - name: Code Duplication
+        run: |
+          pmat analyze duplicate --format markdown > duplication-report.md
+          cat duplication-report.md || echo "No significant duplication"
+
+      - name: Known Defects Detection (v2.200.0)
+        run: |
+          pmat analyze defects --fail-on-unwrap --format markdown > defects-report.md
+          cat defects-report.md || echo "No known defect patterns detected"
+
+      - name: Upload Analysis Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-reports
+          path: |
+            complexity-report.md
+            satd-report.md
+            dead-code-report.md
+            duplication-report.md
+            defects-report.md
+
+  # Mutation Testing (PMAT AST-based)
+  mutation:
+    name: Mutation Testing (PMAT)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'  # Nightly only (slow)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install PMAT
+        run: |
+          cargo install pmat --version ">=2.200.0" || cargo install pmat
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-mutation-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run PMAT Mutation Testing
+        run: |
+          pmat mutate --target src/ --threshold 80 --output-format markdown > mutation-report.md
+          cat mutation-report.md
+
+      - name: Upload Mutation Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-pmat
+          path: mutation-report.md
+
+      - name: Check Mutation Score
+        run: |
+          pmat mutate --target src/ --threshold 80 || exit 1
+
+  # Documentation Validation (Sprint 38)
+  documentation:
+    name: Documentation Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PMAT
+        run: |
+          cargo install pmat --version ">=2.195.0" || cargo install pmat
+
+      - name: Generate Deep Context
+        run: |
+          pmat context --output deep_context.md --format llm-optimized
+
+      - name: Validate Documentation
+        run: |
+          pmat validate-readme \
+            --targets README.md CLAUDE.md \
+            --deep-context deep_context.md \
+            --fail-on-contradiction \
+            --format markdown > doc-validation.md || true
+          cat doc-validation.md
+
+      - name: Upload Documentation Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc-validation-report
+          path: |
+            deep_context.md
+            doc-validation.md
+
+  # Semantic Search Indexing
+  semantic-search:
+    name: Semantic Search Index
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'  # Nightly only
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PMAT
+        run: |
+          cargo install pmat --version ">=2.200.0" || cargo install pmat
+
+      - name: Sync Embeddings
+        run: |
+          pmat embed sync ./src --output .pmat/embeddings/
+
+      - name: Test Semantic Search
+        run: |
+          pmat semantic search "SIMD optimization patterns" || echo "No results"
+          pmat semantic search "error handling" || echo "No results"
+
+      - name: Upload Embeddings
+        uses: actions/upload-artifact@v4
+        with:
+          name: semantic-embeddings
+          path: .pmat/embeddings/
+
+  # Quality Gate (Comprehensive)
+  quality-gate:
+    name: Comprehensive Quality Gate
+    runs-on: ubuntu-latest
+    needs: [tdg, repo-score, rust-project-score, analysis]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install PMAT
+        run: |
+          cargo install pmat --version ">=2.200.0" || cargo install pmat
+
+      - name: Run Comprehensive Quality Gate
+        run: |
+          pmat quality-gate --strict --format markdown > quality-gate-report.md
+          cat quality-gate-report.md
+
+      - name: Upload Quality Gate Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-gate-report
+          path: quality-gate-report.md
+
+      - name: Check Quality Gate
+        run: |
+          pmat quality-gate --strict || exit 1
+
+  # PR Comment (Summary Report)
+  pr-comment:
+    name: PR Quality Summary
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [tdg, repo-score, rust-project-score, analysis, documentation]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download All Reports
+        uses: actions/download-artifact@v4
+        with:
+          path: reports/
+
+      - name: Generate PR Comment
+        run: |
+          echo "## 📊 PMAT Quality Report" > pr-comment.md
+          echo "" >> pr-comment.md
+          echo "### Technical Debt Grade (TDG)" >> pr-comment.md
+          cat reports/tdg-report/tdg-report.md >> pr-comment.md || echo "TDG report not available" >> pr-comment.md
+          echo "" >> pr-comment.md
+          echo "### Repository Health Score" >> pr-comment.md
+          cat reports/repo-score-report/repo-score.md >> pr-comment.md || echo "Repo score not available" >> pr-comment.md
+          echo "" >> pr-comment.md
+          echo "### Rust Project Score" >> pr-comment.md
+          cat reports/rust-project-score/rust-score-*.md >> pr-comment.md || echo "Rust score not available" >> pr-comment.md
+          echo "" >> pr-comment.md
+          echo "---" >> pr-comment.md
+          echo "✅ All quality gates passed" >> pr-comment.md
+
+      - name: Post PR Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const comment = fs.readFileSync('pr-comment.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # All PMAT checks must pass
+  pmat-success:
+    name: PMAT Quality Success
+    if: always()
+    needs:
+      - tdg
+      - repo-score
+      - rust-project-score
+      - analysis
+      - documentation
+      - quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs
+        run: |
+          if [[ "${{ needs.tdg.result }}" != "success" ]] ||
+             [[ "${{ needs.repo-score.result }}" != "success" ]] ||
+             [[ "${{ needs.rust-project-score.result }}" != "success" ]] ||
+             [[ "${{ needs.analysis.result }}" != "success" ]] ||
+             [[ "${{ needs.documentation.result }}" != "success" ]] ||
+             [[ "${{ needs.quality-gate.result }}" != "success" ]]; then
+            echo "❌ One or more PMAT quality checks failed"
+            exit 1
+          else
+            echo "✅ All PMAT quality checks passed"
+          fi

@@ -2,6 +2,31 @@
 members = [".", "xtask"]
 exclude = []
 
+# Workspace-level lints (PMAT best practices)
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+missing_docs = "warn"
+rust_2018_idioms = "warn"
+
+[workspace.lints.clippy]
+# Correctness (critical)
+correctness = { level = "deny", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+
+# Performance
+perf = { level = "warn", priority = -1 }
+
+# Known Defects (v2.200.0 - Cloudflare outage 2025-11-18)
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+unreachable = "warn"
+
+# Code quality
+complexity = "warn"
+style = "warn"
+pedantic = "warn"
+
 [package]
 name = "trueno"
 version = "0.4.1"
