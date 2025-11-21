@@ -43,12 +43,12 @@ roadmap:
 - id: matmul-performance-optimization
   github_issue: 10
   item_type: task
-  title: "Matrix Multiplication Performance Optimization"
-  status: in_progress
+  title: "Matrix Multiplication Performance Optimization - Phase 1 COMPLETE"
+  status: done
   priority: high
   assigned_to: claude
   created: "2025-11-21T18:38:00Z"
-  updated: "2025-11-21T18:38:00Z"
+  updated: "2025-11-21T18:49:00Z"
   spec: |
     🎯 OBJECTIVE: Close 2.5× performance gap with NumPy (0.62ms → 0.24ms target for 128×128)
 
@@ -86,4 +86,65 @@ roadmap:
     - performance
     - simd
     - optimization
+    - extreme-tdd
+
+- id: refactor-complexity-a-plus
+  github_issue: 4
+  item_type: task
+  title: "Refactor to reduce complexity: A (92.27) → A+ (93+)"
+  status: in_progress
+  priority: high
+  assigned_to: claude
+  created: "2025-11-21T18:51:00Z"
+  updated: "2025-11-21T18:51:00Z"
+  spec: |
+    🎯 OBJECTIVE: Achieve TDG A+ grade (93+) by reducing structural complexity
+
+    CURRENT STATE:
+    - Overall TDG: 92.27/100 (A) - need +0.73 for A+
+    - vector.rs: 68.2 (D+) - 13,478 lines, structural_complexity = 0
+    - avx2.rs: 71.4 (C) - 1,825 lines, structural_complexity = 0
+    - All backends: structural_complexity = 0 (penalized for size)
+
+    STRATEGY: 3-Phase Refactoring
+
+    Phase 1: Split vector.rs (13,478 lines → <3,000 lines)
+    - Extract test modules to tests/ directory (~9,000 lines)
+    - Create submodules: ops.rs, statistics.rs, activations.rs
+    - Extract complex functions into helpers
+    - Maintain public API compatibility
+
+    Phase 2: Refactor backends (<1,000 lines each)
+    - Extract common SIMD patterns into shared helpers
+    - Reduce nesting depth in conditionals
+    - Split large test modules
+    - Maintain zero unsafe in public API
+
+    Phase 3: Reduce cyclomatic complexity
+    - Extract nested conditionals into functions
+    - Use early returns to flatten logic
+    - Replace complex match statements with lookup tables
+    - Target: max complexity ≤22 per Sprint 84
+
+    SUCCESS CRITERIA:
+    - ✅ TDG ≥93/100 (A+)
+    - ✅ All files score >70
+    - ✅ All 845+ tests passing
+    - ✅ Zero performance regression
+    - ✅ 90%+ test coverage maintained
+
+    QUALITY GATES:
+    - cargo test --all-features (must pass)
+    - cargo clippy -- -D warnings (must pass)
+    - pmat analyze tdg --min-grade A+ (must pass)
+    - cargo bench (no regressions >5%)
+    - make coverage (≥90% maintained)
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: "1-2 days"
+  labels:
+    - refactoring
+    - quality
+    - tdg
     - extreme-tdd
