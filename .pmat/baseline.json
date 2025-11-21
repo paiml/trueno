@@ -1,20 +1,12 @@
-╭─────────────────────────────────────────────────╮
-│  Project TDG Score Report                      │
-├─────────────────────────────────────────────────┤
-│  Average Score: 85.5/100 (A-)                 │
-│  Total Files: 34                               │
-│                                                 │
-│  Language Distribution:                        │
-│  ├─ Python      :   7 files (20.6%)         │
-│  ├─ Rust        :  27 files (79.4%)         │
-│                                                 │
-│  Grade Distribution:                           │
-│  ├─ A+:  13 files (38.2%)                  │
-│  ├─ A:   2 files ( 5.9%)                  │
-│  ├─ A-:   4 files (11.8%)                  │
-│  ├─ B+:   3 files ( 8.8%)                  │
-│  ├─ B:   3 files ( 8.8%)                  │
-│  ├─ B-:   4 files (11.8%)                  │
-│  ├─ C+:   4 files (11.8%)                  │
-│  ├─ C:   1 files ( 2.9%)                  │
-╰─────────────────────────────────────────────────╯
+{
+  "version": "2.200.0",
+  "created_at": "2025-11-21T18:50:01.875283420Z",
+  "git_context": null,
+  "files": {},
+  "summary": {
+    "total_files": 0,
+    "avg_score": 0.0,
+    "grade_distribution": {},
+    "languages": {}
+  }
+}
