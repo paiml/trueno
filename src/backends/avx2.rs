@@ -1192,16 +1192,222 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used - no alignment requirement
+    //
+    // Natural logarithm implementation using range reduction:
+    // For x = 2^k * m where m ∈ [1, 2):
+    //   ln(x) = k*ln(2) + ln(m)
+    //   ln(m) approximated using 7th-degree polynomial
     unsafe fn ln(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::ln(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Constants for ln calculation
+        let ln2 = _mm256_set1_ps(std::f32::consts::LN_2);
+        let one = _mm256_set1_ps(1.0);
+
+        // Use atanh transformation: ln(m) = 2 * atanh((m-1)/(m+1)) for m ∈ [1, 2)
+        // Let u = (m-1)/(m+1), then u ∈ [0, 1/3]
+        // ln(m) = 2 * u * (1 + u²/3 + u⁴/5 + u⁶/7 + u⁸/9 + u¹⁰/11)
+        let two = _mm256_set1_ps(2.0);
+        let c1 = _mm256_set1_ps(1.0);
+        let c3 = _mm256_set1_ps(1.0 / 3.0);
+        let c5 = _mm256_set1_ps(1.0 / 5.0);
+        let c7 = _mm256_set1_ps(1.0 / 7.0);
+        let c9 = _mm256_set1_ps(1.0 / 9.0);
+        let c11 = _mm256_set1_ps(1.0 / 11.0);
+
+        let mantissa_mask = _mm256_set1_epi32(0x007F_FFFF_u32 as i32);
+        let exponent_127 = _mm256_set1_epi32(127 << 23);
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let x = _mm256_loadu_ps(a.as_ptr().add(i));
+            let x_int = _mm256_castps_si256(x);
+
+            // Extract exponent k
+            let exp_biased = _mm256_srli_epi32(x_int, 23);
+            let exp_biased_masked = _mm256_and_si256(exp_biased, _mm256_set1_epi32(0xFF));
+            let k_int = _mm256_sub_epi32(exp_biased_masked, _mm256_set1_epi32(127));
+            let k = _mm256_cvtepi32_ps(k_int);
+
+            // Extract mantissa m ∈ [1, 2)
+            let mantissa_bits = _mm256_and_si256(x_int, mantissa_mask);
+            let m_int = _mm256_or_si256(mantissa_bits, exponent_127);
+            let m = _mm256_castsi256_ps(m_int);
+
+            // Compute u = (m-1)/(m+1)
+            let m_minus_1 = _mm256_sub_ps(m, one);
+            let m_plus_1 = _mm256_add_ps(m, one);
+            let u = _mm256_div_ps(m_minus_1, m_plus_1);
+            let u2 = _mm256_mul_ps(u, u);
+
+            // P(u²) = 1 + u²*(1/3 + u²*(1/5 + u²*(1/7 + u²*(1/9 + u²*1/11))))
+            let p = _mm256_fmadd_ps(c11, u2, c9);
+            let p = _mm256_fmadd_ps(p, u2, c7);
+            let p = _mm256_fmadd_ps(p, u2, c5);
+            let p = _mm256_fmadd_ps(p, u2, c3);
+            let p = _mm256_fmadd_ps(p, u2, c1);
+
+            // ln(m) = 2 * u * P(u²)
+            let ln_m = _mm256_mul_ps(two, _mm256_mul_ps(u, p));
+
+            // ln(x) = k*ln(2) + ln(m)
+            let result_vec = _mm256_fmadd_ps(k, ln2, ln_m);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), result_vec);
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].ln();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used - no alignment requirement
+    //
+    // Base-2 logarithm implementation using range reduction:
+    // For x = 2^k * m where m ∈ [1, 2):
+    //   log2(x) = k + log2(m)
+    //   log2(m) = ln(m) / ln(2)
     unsafe fn log2(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::log2(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        let inv_ln2 = _mm256_set1_ps(std::f32::consts::LOG2_E);
+        let one = _mm256_set1_ps(1.0);
+
+        let two = _mm256_set1_ps(2.0);
+        let c1 = _mm256_set1_ps(1.0);
+        let c3 = _mm256_set1_ps(1.0 / 3.0);
+        let c5 = _mm256_set1_ps(1.0 / 5.0);
+        let c7 = _mm256_set1_ps(1.0 / 7.0);
+        let c9 = _mm256_set1_ps(1.0 / 9.0);
+        let c11 = _mm256_set1_ps(1.0 / 11.0);
+
+        let mantissa_mask = _mm256_set1_epi32(0x007F_FFFF_u32 as i32);
+        let exponent_127 = _mm256_set1_epi32(127 << 23);
+
+        while i + 8 <= len {
+            let x = _mm256_loadu_ps(a.as_ptr().add(i));
+            let x_int = _mm256_castps_si256(x);
+
+            let exp_biased = _mm256_srli_epi32(x_int, 23);
+            let exp_biased_masked = _mm256_and_si256(exp_biased, _mm256_set1_epi32(0xFF));
+            let k_int = _mm256_sub_epi32(exp_biased_masked, _mm256_set1_epi32(127));
+            let k = _mm256_cvtepi32_ps(k_int);
+
+            let mantissa_bits = _mm256_and_si256(x_int, mantissa_mask);
+            let m_int = _mm256_or_si256(mantissa_bits, exponent_127);
+            let m = _mm256_castsi256_ps(m_int);
+
+            // atanh transformation
+            let m_minus_1 = _mm256_sub_ps(m, one);
+            let m_plus_1 = _mm256_add_ps(m, one);
+            let u = _mm256_div_ps(m_minus_1, m_plus_1);
+            let u2 = _mm256_mul_ps(u, u);
+
+            let p = _mm256_fmadd_ps(c11, u2, c9);
+            let p = _mm256_fmadd_ps(p, u2, c7);
+            let p = _mm256_fmadd_ps(p, u2, c5);
+            let p = _mm256_fmadd_ps(p, u2, c3);
+            let p = _mm256_fmadd_ps(p, u2, c1);
+
+            let ln_m = _mm256_mul_ps(two, _mm256_mul_ps(u, p));
+
+            let log2_m = _mm256_mul_ps(ln_m, inv_ln2);
+            let result_vec = _mm256_add_ps(k, log2_m);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), result_vec);
+            i += 8;
+        }
+
+        while i < len {
+            result[i] = a[i].log2();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used - no alignment requirement
+    //
+    // Base-10 logarithm implementation using range reduction:
+    // For x = 2^k * m where m ∈ [1, 2):
+    //   log10(x) = k*log10(2) + log10(m)
+    //   log10(m) = ln(m) / ln(10)
     unsafe fn log10(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::log10(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        let log10_2 = _mm256_set1_ps(std::f32::consts::LOG10_2);
+        let inv_ln10 = _mm256_set1_ps(1.0 / std::f32::consts::LN_10);
+        let one = _mm256_set1_ps(1.0);
+
+        let two = _mm256_set1_ps(2.0);
+        let c1 = _mm256_set1_ps(1.0);
+        let c3 = _mm256_set1_ps(1.0 / 3.0);
+        let c5 = _mm256_set1_ps(1.0 / 5.0);
+        let c7 = _mm256_set1_ps(1.0 / 7.0);
+        let c9 = _mm256_set1_ps(1.0 / 9.0);
+        let c11 = _mm256_set1_ps(1.0 / 11.0);
+
+        let mantissa_mask = _mm256_set1_epi32(0x007F_FFFF_u32 as i32);
+        let exponent_127 = _mm256_set1_epi32(127 << 23);
+
+        while i + 8 <= len {
+            let x = _mm256_loadu_ps(a.as_ptr().add(i));
+            let x_int = _mm256_castps_si256(x);
+
+            let exp_biased = _mm256_srli_epi32(x_int, 23);
+            let exp_biased_masked = _mm256_and_si256(exp_biased, _mm256_set1_epi32(0xFF));
+            let k_int = _mm256_sub_epi32(exp_biased_masked, _mm256_set1_epi32(127));
+            let k = _mm256_cvtepi32_ps(k_int);
+
+            let mantissa_bits = _mm256_and_si256(x_int, mantissa_mask);
+            let m_int = _mm256_or_si256(mantissa_bits, exponent_127);
+            let m = _mm256_castsi256_ps(m_int);
+
+            // atanh transformation
+            let m_minus_1 = _mm256_sub_ps(m, one);
+            let m_plus_1 = _mm256_add_ps(m, one);
+            let u = _mm256_div_ps(m_minus_1, m_plus_1);
+            let u2 = _mm256_mul_ps(u, u);
+
+            let p = _mm256_fmadd_ps(c11, u2, c9);
+            let p = _mm256_fmadd_ps(p, u2, c7);
+            let p = _mm256_fmadd_ps(p, u2, c5);
+            let p = _mm256_fmadd_ps(p, u2, c3);
+            let p = _mm256_fmadd_ps(p, u2, c1);
+
+            let ln_m = _mm256_mul_ps(two, _mm256_mul_ps(u, p));
+
+            let log10_m = _mm256_mul_ps(ln_m, inv_ln10);
+            let result_vec = _mm256_fmadd_ps(k, log10_2, log10_m);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), result_vec);
+            i += 8;
+        }
+
+        while i < len {
+            result[i] = a[i].log10();
+            i += 1;
+        }
     }
 
     unsafe fn sin(a: &[f32], result: &mut [f32]) {
@@ -1216,16 +1422,94 @@ impl VectorBackend for Avx2Backend {
         super::scalar::ScalarBackend::tan(a, result);
     }
 
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn floor(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::floor(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm256_floor_ps(va);
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].floor();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn ceil(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::ceil(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vresult = _mm256_ceil_ps(va);
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].ceil();
+            i += 1;
+        }
     }
 
+    #[target_feature(enable = "avx2")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX2 intrinsics marked with #[target_feature(enable = "avx2")]
+    // 4. Unaligned loads/stores used - no alignment requirement
     unsafe fn round(a: &[f32], result: &mut [f32]) {
-        super::scalar::ScalarBackend::round(a, result);
+        let len = a.len();
+        let mut i = 0;
+
+        // Rust's .round() rounds ties away from zero, but SIMD round modes don't support this.
+        // Implement manually: round(x) = sign(x) * floor(abs(x) + 0.5)
+        let half = _mm256_set1_ps(0.5);
+        let sign_mask = _mm256_set1_ps(f32::from_bits(0x8000_0000)); // Sign bit only
+        let abs_mask = _mm256_set1_ps(f32::from_bits(0x7FFF_FFFF)); // All except sign bit
+
+        // Process 8 elements at a time
+        while i + 8 <= len {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+
+            // Extract sign and absolute value
+            let sign = _mm256_and_ps(va, sign_mask);
+            let abs_val = _mm256_and_ps(va, abs_mask);
+
+            // Round away from zero: floor(abs(x) + 0.5) * sign(x)
+            let shifted = _mm256_add_ps(abs_val, half);
+            let rounded_abs = _mm256_floor_ps(shifted);
+            let vresult = _mm256_or_ps(rounded_abs, sign);
+
+            _mm256_storeu_ps(result.as_mut_ptr().add(i), vresult);
+            i += 8;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].round();
+            i += 1;
+        }
     }
 }
 
