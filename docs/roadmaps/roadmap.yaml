@@ -33,3 +33,63 @@ roadmap:
   subtasks: []
   estimated_effort: null
   labels: []
+
+- id: pmat-v2.200-full-integration
+  github_issue: null
+  item_type: task
+  title: 'PMAT v2.200.0 Full Integration with EXTREME TDD Standards'
+  status: in_progress
+  priority: critical
+  assigned_to: claude
+  created: 2025-11-21T16:50:00.000000000+00:00
+  updated: 2025-11-21T16:50:00.000000000+00:00
+  spec: 'Comprehensive integration of all PMAT v2.200.0 features: Known Defects detection, TDG enforcement, Rust Project Score, Documentation Validation, Workflow Management, Semantic Search, MCP integration (19 tools), Toyota Way principles, Certeza framework, workspace lints'
+  acceptance_criteria:
+    - 'pmat.toml created with full v2.200.0 configuration'
+    - '.pmat-gates.toml updated with 90% coverage and strict thresholds'
+    - 'Cargo.toml updated with workspace-level lints (unwrap_used, etc.)'
+    - 'Makefile updated with 12 new PMAT commands'
+    - '.github/workflows/pmat-quality.yml created with 9 jobs'
+    - 'PMAT-INTEGRATION.md documentation complete'
+    - 'All PMAT commands verified working'
+    - 'Fix critical defects found by PMAT (.unwrap() calls)'
+    - 'Run make pmat-all successfully'
+    - 'Commit changes with quality gates passing'
+  phases:
+    - name: Configuration
+      status: done
+      tasks:
+        - 'Create pmat.toml'
+        - 'Update .pmat-gates.toml'
+        - 'Add workspace lints'
+    - name: Integration
+      status: done
+      tasks:
+        - 'Update Makefile commands'
+        - 'Create CI workflow'
+        - 'Write documentation'
+    - name: Validation
+      status: in_progress
+      tasks:
+        - 'Fix critical defects'
+        - 'Run quality gates'
+        - 'Commit changes'
+  subtasks:
+    - id: fix-unwrap-calls
+      title: 'Fix .unwrap() calls in examples'
+      status: pending
+      priority: critical
+    - id: run-pmat-all
+      title: 'Run make pmat-all successfully'
+      status: pending
+      priority: high
+    - id: commit-changes
+      title: 'Commit all changes with passing gates'
+      status: pending
+      priority: high
+  estimated_effort: '4 hours'
+  labels:
+    - pmat
+    - quality
+    - extreme-tdd
+    - v2.200.0

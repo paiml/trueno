@@ -20,7 +20,7 @@ fn main() {
     println!("📐 Matrix Construction");
     println!("----------------------\n");
 
-    let m1 = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    let m1 = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("Example should not fail");
     println!("Matrix m1 (2×3):");
     print_matrix(&m1);
 
@@ -38,15 +38,15 @@ fn main() {
     println!("\n📊 Matrix Multiplication (matmul)");
     println!("----------------------------------\n");
 
-    let a = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
-    let b = Matrix::from_vec(3, 2, vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).unwrap();
+    let a = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("Example should not fail");
+    let b = Matrix::from_vec(3, 2, vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).expect("Example should not fail");
 
     println!("Matrix A (2×3):");
     print_matrix(&a);
     println!("Matrix B (3×2):");
     print_matrix(&b);
 
-    let c = a.matmul(&b).unwrap();
+    let c = a.matmul(&b).expect("Example should not fail");
     println!("A × B (2×2):");
     print_matrix(&c);
     println!("Calculation:");
@@ -61,7 +61,7 @@ fn main() {
     println!("\n🔄 Matrix Transpose");
     println!("-------------------\n");
 
-    let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("Example should not fail");
     println!("Original matrix M (2×3):");
     print_matrix(&m);
 
@@ -86,7 +86,7 @@ fn main() {
             1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
         ],
     )
-    .unwrap();
+    .expect("Example should not fail");
     let vector = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
 
     println!("Matrix A (3×4):");
@@ -94,7 +94,7 @@ fn main() {
     println!("Vector v (4×1):");
     print_vector(&vector);
 
-    let result = matrix.matvec(&vector).unwrap();
+    let result = matrix.matvec(&vector).expect("Example should not fail");
     println!("A × v (3×1):");
     print_vector(&result);
     println!("Calculation:");
@@ -115,7 +115,7 @@ fn main() {
             1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
         ],
     )
-    .unwrap();
+    .expect("Example should not fail");
     let vector2 = Vector::from_slice(&[1.0, 2.0, 3.0]);
 
     println!("Vector v^T (1×3):");
@@ -123,7 +123,7 @@ fn main() {
     println!("Matrix A (3×4):");
     print_matrix(&matrix2);
 
-    let result2 = Matrix::vecmat(&vector2, &matrix2).unwrap();
+    let result2 = Matrix::vecmat(&vector2, &matrix2).expect("Example should not fail");
     println!("v^T × A (1×4):");
     print_vector(&result2);
     println!("Calculation:");
@@ -149,7 +149,7 @@ fn main() {
             0.3, -0.1, 0.2, 0.1, // neuron 3 weights
         ],
     )
-    .unwrap();
+    .expect("Example should not fail");
     let input = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
     let bias = Vector::from_slice(&[0.1, -0.1, 0.2]);
 
@@ -160,8 +160,8 @@ fn main() {
     println!("Bias vector b (3D):");
     print_vector(&bias);
 
-    let wx = weights.matvec(&input).unwrap();
-    let output = wx.add(&bias).unwrap();
+    let wx = weights.matvec(&input).expect("Example should not fail");
+    let output = wx.add(&bias).expect("Example should not fail");
 
     println!("Linear layer output y = W×x + b:");
     print_vector(&output);
@@ -182,8 +182,8 @@ fn main() {
     ];
 
     for (i, sample) in samples.iter().enumerate() {
-        let wx = weights.matvec(sample).unwrap();
-        let output = wx.add(&bias).unwrap();
+        let wx = weights.matvec(sample).expect("Example should not fail");
+        let output = wx.add(&bias).expect("Example should not fail");
         println!("  Sample {}: {:?}", i + 1, output.as_slice());
     }
 
@@ -193,25 +193,25 @@ fn main() {
     println!("\n✅ Verified Mathematical Properties");
     println!("------------------------------------\n");
 
-    let test_m = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+    let test_m = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).expect("Example should not fail");
     let test_v = Vector::from_slice(&[5.0, 6.0]);
 
     // Identity property: I×v = v
     let identity = Matrix::identity(2);
-    let iv = identity.matvec(&test_v).unwrap();
+    let iv = identity.matvec(&test_v).expect("Example should not fail");
     assert_eq!(iv.as_slice(), test_v.as_slice());
     println!("✓ Identity: I×v = v");
 
     // Transpose property: (A×v)^T has same values as v^T×A^T
-    let av = test_m.matvec(&test_v).unwrap();
+    let av = test_m.matvec(&test_v).expect("Example should not fail");
     let m_t = test_m.transpose();
-    let v_mt = Matrix::vecmat(&test_v, &m_t).unwrap();
+    let v_mt = Matrix::vecmat(&test_v, &m_t).expect("Example should not fail");
     assert_eq!(av.as_slice(), v_mt.as_slice());
     println!("✓ Transpose: (A×v)^T = v^T×A^T");
 
     // Zero property: A×0 = 0
     let zero_v = Vector::from_slice(&[0.0, 0.0]);
-    let result = test_m.matvec(&zero_v).unwrap();
+    let result = test_m.matvec(&zero_v).expect("Example should not fail");
     assert_eq!(result.as_slice(), &[0.0, 0.0]);
     println!("✓ Zero: A×0 = 0");
 
@@ -231,7 +231,7 @@ fn print_matrix(m: &Matrix<f32>) {
             if j > 0 {
                 print!(", ");
             }
-            print!("{:6.1}", m.get(i, j).unwrap());
+            print!("{:6.1}", m.get(i, j).expect("Example should not fail"));
         }
         println!("]");
     }

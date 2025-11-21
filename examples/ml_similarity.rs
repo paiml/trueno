@@ -61,7 +61,7 @@ fn main() {
     println!("\nL2 Normalized: {:?}", normalized.as_slice());
 
     // Verify it's a unit vector (magnitude = 1.0)
-    let magnitude = (normalized.dot(&normalized).unwrap()).sqrt();
+    let magnitude = (normalized.dot(&normalized).expect("Example should not fail")).sqrt();
     println!("Magnitude: {:.6} (should be ~1.0)", magnitude);
 
     // Example: k-Nearest Neighbors distance calculation
@@ -122,9 +122,9 @@ fn main() {
 /// Cosine similarity = (A · B) / (||A|| × ||B||)
 /// Range: [-1, 1] where 1 = identical direction, 0 = orthogonal, -1 = opposite
 fn cosine_similarity(a: &Vector<f32>, b: &Vector<f32>) -> f32 {
-    let dot = a.dot(b).unwrap();
-    let mag_a = a.dot(a).unwrap().sqrt();
-    let mag_b = b.dot(b).unwrap().sqrt();
+    let dot = a.dot(b).expect("Example should not fail");
+    let mag_a = a.dot(a).expect("Example should not fail").sqrt();
+    let mag_b = b.dot(b).expect("Example should not fail").sqrt();
     dot / (mag_a * mag_b)
 }
 
@@ -132,7 +132,7 @@ fn cosine_similarity(a: &Vector<f32>, b: &Vector<f32>) -> f32 {
 ///
 /// Returns a new vector where ||v|| = 1
 fn l2_normalize(v: &Vector<f32>) -> Vector<f32> {
-    let magnitude = v.dot(v).unwrap().sqrt();
+    let magnitude = v.dot(v).expect("Example should not fail").sqrt();
     let data: Vec<f32> = v.as_slice().iter().map(|x| x / magnitude).collect();
     Vector::from_slice(&data)
 }

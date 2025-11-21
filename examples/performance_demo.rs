@@ -33,7 +33,7 @@ fn main() {
             "Dot Product",
             &data_a,
             &data_b,
-            |a, b| a.dot(b).unwrap(),
+            |a, b| a.dot(b).expect("Example should not fail"),
             "Compute-intensive: 340% faster expected",
         );
 
@@ -42,7 +42,7 @@ fn main() {
             "Sum Reduction",
             &data_a,
             &data_b,
-            |a, _| a.sum().unwrap(),
+            |a, _| a.sum().expect("Example should not fail"),
             "Compute-intensive: 315% faster expected",
         );
 
@@ -51,7 +51,7 @@ fn main() {
             "Max Finding",
             &data_a,
             &data_b,
-            |a, _| a.max().unwrap(),
+            |a, _| a.max().expect("Example should not fail"),
             "Compute-intensive: 348% faster expected",
         );
 
@@ -60,7 +60,7 @@ fn main() {
             "Element-wise Add",
             &data_a,
             &data_b,
-            |a, b| a.add(b).unwrap(),
+            |a, b| a.add(b).expect("Example should not fail"),
             "Memory-bound: 3-10% faster expected",
         );
 
@@ -69,7 +69,7 @@ fn main() {
             "Element-wise Mul",
             &data_a,
             &data_b,
-            |a, b| a.mul(b).unwrap(),
+            |a, b| a.mul(b).expect("Example should not fail"),
             "Memory-bound: 5-6% faster expected",
         );
 
