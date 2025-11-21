@@ -152,3 +152,69 @@ roadmap:
     - quality
     - tdg
     - extreme-tdd
+
+- id: matmul-phase2-large-matrices
+  github_issue: null
+  item_type: task
+  title: "Phase 2: Matrix Multiplication for Large Matrices (256×256+) - DEFERRED"
+  status: blocked
+  priority: medium
+  assigned_to: claude
+  created: "2025-11-21T21:45:00Z"
+  updated: "2025-11-21T22:50:00Z"
+  spec: |
+    🎯 OBJECTIVE: Optimize matmul for 256×256+ matrices to match NumPy performance
+
+    CURRENT STATE (v0.5.0):
+    - 128×128: 166 μs (Trueno) vs 463 μs (NumPy) = 2.79× FASTER ✅
+    - 256×256: 1391 μs (Trueno) vs 574 μs (NumPy) = 2.4× SLOWER ❌
+
+    INVESTIGATION RESULTS (2025-11-21):
+
+    ❌ Approach 1: 3-Level Cache Blocking (L3/L2/L1) - FAILED
+    - Implemented with L3=128×128, L2=64×64
+    - Result: 7.3% REGRESSION (1492 μs vs baseline 1391 μs)
+    - Root cause: Extra loop overhead + instruction cache pollution
+    - Conclusion: Naive 3-level blocking insufficient for NumPy BLAS
+
+    KEY LEARNINGS:
+    1. NumPy uses highly optimized BLAS with register blocking + panel factorization
+    2. Compiler inlining affected by large function size (~200 lines)
+    3. Simple loop nesting adds 7%+ overhead without cache benefits
+    4. Need micro-kernels (register tiling) not just memory blocking
+
+    RECOMMENDED APPROACH (Phase 2 Revised):
+
+    Option A: Optional BLAS Backend (RECOMMENDED)
+    - Add feature flag: `blas-backend` (optional)
+    - Integrate ndarray-linalg with OpenBLAS/MKL
+    - Safe Rust wrapper around external BLAS SGEMM
+    - Auto-select: BLAS for >256×256, pure Rust otherwise
+    - Estimated effort: 2-3 days
+
+    Option B: Advanced Register Blocking
+    - Implement BLIS-style micro-kernels (4×4 or 8×4 registers)
+    - Panel-matrix algorithm with explicit prefetching
+    - Assembly micro-kernels for x86_64 AVX2
+    - Estimated effort: 1-2 weeks (complex)
+
+    Option C: Defer to v2.0
+    - Accept current 2-level blocking as "good enough"
+    - Document performance characteristics
+    - Focus on other features (convolution, GPU, etc.)
+
+    BLOCKED BY: Decision needed on approach (A/B/C)
+
+    RECOMMENDATION: **Option A** (BLAS backend feature)
+
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: "2-3 days (Option A)"
+  labels:
+    - performance
+    - simd
+    - optimization
+    - phase-2
+    - blocked
+    - investigation-complete
