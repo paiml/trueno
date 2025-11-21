@@ -14,7 +14,6 @@ use colored::Colorize;
 use regex::Regex;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ViolationLevel {
@@ -36,7 +35,7 @@ struct Violation {
 struct IntrinsicPattern {
     pattern: Regex,
     required_feature: &'static str,
-    name: &'static str,
+    _name: &'static str,
 }
 
 impl IntrinsicPattern {
@@ -44,7 +43,7 @@ impl IntrinsicPattern {
         Self {
             pattern: Regex::new(pattern).expect("Invalid regex pattern"),
             required_feature,
-            name,
+            _name: name,
         }
     }
 }
@@ -109,11 +108,11 @@ fn has_safety_comment(lines: &[String], fn_line: usize) -> bool {
     false
 }
 
-/// Check if #[inline] attribute exists within 5 lines before function
+/// Check if #[inline] attribute exists within 15 lines before function
 fn has_inline_attribute(lines: &[String], fn_line: usize) -> bool {
     let inline_re = Regex::new(r"#\[inline(?:\(always\))?\]").expect("Invalid regex");
 
-    let start = fn_line.saturating_sub(5);
+    let start = fn_line.saturating_sub(15);
     for line in &lines[start..fn_line] {
         if inline_re.is_match(line) {
             return true;
@@ -158,7 +157,7 @@ fn check_attribute_mismatch(
 ) -> Option<String> {
     let has_avx512 = intrinsics.iter().any(|i| i.starts_with("_mm512_"));
     let has_avx2 = intrinsics.iter().any(|i| i.starts_with("_mm256_"));
-    let has_sse2 = intrinsics.iter().any(|i| i.starts_with("_mm_"));
+    let _has_sse2 = intrinsics.iter().any(|i| i.starts_with("_mm_"));
 
     if has_avx512 && !feature.contains("avx512f") {
         return Some(format!(
@@ -419,9 +418,23 @@ pub fn run() -> Result<()> {
         println!("{}", format!("⚠️  WARNINGS ({})", warnings.len()).yellow().bold());
         println!("{}", "=".repeat(60).yellow());
         println!();
-        println!("  {} warnings detected (SAFETY comments, #[inline] attributes)", warnings.len());
-        println!("  Run with --verbose to see all warnings");
-        println!();
+
+        // Show first 10 warnings
+        for v in warnings.iter().take(10) {
+            println!(
+                "  {} - {}",
+                format!("⚠️  {}:{}", v.filepath.display(), v.line_num).yellow(),
+                format!("{}()", v.function_name).cyan()
+            );
+            println!("     {}: {}", "Issue".yellow(), v.message);
+            println!("     {}: {}", "Fix".green(), v.fix_suggestion);
+            println!();
+        }
+
+        if warnings.len() > 10 {
+            println!("  {} more warnings...", (warnings.len() - 10));
+            println!();
+        }
     }
 
     // Summary

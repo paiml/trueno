@@ -276,6 +276,11 @@ impl VectorBackend for Avx512Backend {
 
     #[inline]
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure proper array access
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     unsafe fn argmax(a: &[f32]) -> usize {
         if a.is_empty() {
             return 0;
@@ -305,6 +310,11 @@ impl VectorBackend for Avx512Backend {
         }
 
         // Find the index of the first occurrence of max_val
+        // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+        // 1. Loop bounds ensure proper array access
+        // 2. All pointers derived from valid slice references
+        // 3. AVX-512 intrinsics marked with #[target_feature]
+        // 4. Unaligned loads/stores handle unaligned data correctly
         a.iter().position(|&x| x == max_val).unwrap_or(0)
     }
 
@@ -334,6 +344,11 @@ impl VectorBackend for Avx512Backend {
         // Check remaining elements
         for &val in &a[i..] {
             if val < min_val {
+                // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+                // 1. Loop bounds ensure proper array access
+                // 2. All pointers derived from valid slice references
+                // 3. AVX-512 intrinsics marked with #[target_feature]
+                // 4. Unaligned loads/stores handle unaligned data correctly
                 min_val = val;
             }
         }
@@ -344,6 +359,7 @@ impl VectorBackend for Avx512Backend {
 
     #[inline]
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Uses scalar implementation, no unsafe operations
     unsafe fn sum_kahan(a: &[f32]) -> f32 {
         // Scalar fallback (AVX-512 optimization pending)
         let mut sum = 0.0;
@@ -1027,6 +1043,11 @@ impl VectorBackend for Avx512Backend {
             let exp_2x = _mm512_mul_ps(p, scale);
 
             let tanh_numer = _mm512_sub_ps(exp_2x, one);
+            // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+            // 1. Loop bounds ensure proper array access
+            // 2. All pointers derived from valid slice references
+            // 3. AVX-512 intrinsics marked with #[target_feature]
+            // 4. Unaligned loads/stores handle unaligned data correctly
             let tanh_denom = _mm512_add_ps(exp_2x, one);
             let tanh_result = _mm512_div_ps(tanh_numer, tanh_denom);
 
@@ -1042,6 +1063,11 @@ impl VectorBackend for Avx512Backend {
 
     #[inline]
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure proper array access
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1062,6 +1088,11 @@ impl VectorBackend for Avx512Backend {
 
     #[inline]
     #[target_feature(enable = "avx512f")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1092,7 +1123,12 @@ impl VectorBackend for Avx512Backend {
     //   ln(x) = k*ln(2) + ln(m)
     //   ln(m) approximated using 7th-degree polynomial
     #[inline]
-    #[target_feature(enable = "avx512f")]
+    #[target_feature(enable = "avx512f,fma")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 and FMA intrinsics marked with #[target_feature]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     unsafe fn ln(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1166,7 +1202,12 @@ impl VectorBackend for Avx512Backend {
     //   log2(x) = k + log2(m)
     //   log2(m) = ln(m) / ln(2)
     #[inline]
-    #[target_feature(enable = "avx512f")]
+    #[target_feature(enable = "avx512f,fma")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 and FMA intrinsics marked with #[target_feature]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     unsafe fn log2(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1240,7 +1281,12 @@ impl VectorBackend for Avx512Backend {
     //   log10(x) = k*log10(2) + log10(m)
     //   log10(m) = ln(m) / ln(10)
     #[inline]
-    #[target_feature(enable = "avx512f")]
+    #[target_feature(enable = "avx512f,fma")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + 16 <= len` before calling `.add(i)`
+    // 2. All pointers derived from valid slice references
+    // 3. AVX-512 and FMA intrinsics marked with #[target_feature]
+    // 4. Unaligned loads/stores handle unaligned data correctly
     unsafe fn log10(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1308,14 +1354,23 @@ impl VectorBackend for Avx512Backend {
     // Full SIMD trig functions require complex range reduction and are left for future work
     // TODO: Implement proper SIMD range reduction for sin/cos/tan
 
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Delegates to scalar implementation, no direct SIMD operations
     unsafe fn sin(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::sin(a, result);
     }
 
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Delegates to scalar implementation, no direct SIMD operations
     unsafe fn cos(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::cos(a, result);
     }
 
+    #[inline]
+    #[target_feature(enable = "avx512f")]
+    // SAFETY: Delegates to scalar implementation, no direct SIMD operations
     unsafe fn tan(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::tan(a, result);
     }

@@ -435,11 +435,13 @@ fn contains_module_doc(content: &str) -> bool {
 }
 
 /// Count validation errors in results
+#[allow(dead_code)]
 fn count_validation_errors(results: &ValidationResults) -> usize {
     results.steps.iter().filter(|s| !s.success).count()
 }
 
 /// Format validation summary as string
+#[allow(dead_code)]
 fn format_validation_summary(results: &ValidationResults) -> String {
     let total = results.steps.len();
     let passed = results.steps.iter().filter(|s| s.success).count();
