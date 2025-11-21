@@ -1064,6 +1064,7 @@ impl VectorBackend for Avx512Backend {
     // For x = 2^k * m where m ∈ [1, 2):
     //   ln(x) = k*ln(2) + ln(m)
     //   ln(m) approximated using 7th-degree polynomial
+    #[target_feature(enable = "avx512f")]
     unsafe fn ln(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1136,6 +1137,7 @@ impl VectorBackend for Avx512Backend {
     // For x = 2^k * m where m ∈ [1, 2):
     //   log2(x) = k + log2(m)
     //   log2(m) = ln(m) / ln(2)
+    #[target_feature(enable = "avx512f")]
     unsafe fn log2(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1208,6 +1210,7 @@ impl VectorBackend for Avx512Backend {
     // For x = 2^k * m where m ∈ [1, 2):
     //   log10(x) = k*log10(2) + log10(m)
     //   log10(m) = ln(m) / ln(10)
+    #[target_feature(enable = "avx512f")]
     unsafe fn log10(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
