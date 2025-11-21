@@ -79,7 +79,7 @@ fn is_fma_intrinsic(intrinsic: &str) -> bool {
     )
 }
 
-/// Check if #[target_feature] attribute exists within 5 lines before function
+/// Check if #[target_feature] attribute exists within 15 lines before function
 fn check_target_feature_attribute(
     lines: &[String],
     fn_line: usize,
@@ -87,7 +87,7 @@ fn check_target_feature_attribute(
     let target_feature_re = Regex::new(r#"#\[target_feature\(enable\s*=\s*"([^"]+)"\)\]"#)
         .expect("Invalid regex");
 
-    let start = fn_line.saturating_sub(5);
+    let start = fn_line.saturating_sub(15);
     for line in &lines[start..fn_line] {
         if let Some(caps) = target_feature_re.captures(line) {
             return Some(caps[1].to_string());
