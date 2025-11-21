@@ -1253,17 +1253,17 @@ impl VectorBackend for Sse2Backend {
     }
 
     unsafe fn floor(a: &[f32], result: &mut [f32]) {
-        // Scalar fallback: floor requires SSE4.1 (_mm_floor_ps), using scalar for SSE2 compatibility
+        // Scalar fallback: floor requires SSE4.1 (not available in SSE2)
         super::scalar::ScalarBackend::floor(a, result);
     }
 
     unsafe fn ceil(a: &[f32], result: &mut [f32]) {
-        // Scalar fallback: ceil requires SSE4.1 (_mm_ceil_ps), using scalar for SSE2 compatibility
+        // Scalar fallback: ceil requires SSE4.1 (not available in SSE2)
         super::scalar::ScalarBackend::ceil(a, result);
     }
 
     unsafe fn round(a: &[f32], result: &mut [f32]) {
-        // Scalar fallback: round requires SSE4.1 (_mm_round_ps), using scalar for SSE2 compatibility
+        // Scalar fallback: round requires SSE4.1 (not available in SSE2)
         super::scalar::ScalarBackend::round(a, result);
     }
 }
