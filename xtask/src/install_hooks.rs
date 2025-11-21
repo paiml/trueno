@@ -107,7 +107,8 @@ mod tests {
     #[test]
     fn test_pre_commit_hook_content() {
         // Verify hook contains required elements
-        assert!(PRE_COMMIT_HOOK.contains("cargo xtask check-simd"));
+        assert!(PRE_COMMIT_HOOK.contains("check-simd"));
+        assert!(PRE_COMMIT_HOOK.contains("cargo run"));
         assert!(PRE_COMMIT_HOOK.contains("#!/bin/bash"));
         assert!(PRE_COMMIT_HOOK.contains("exit"));
     }
