@@ -21,6 +21,7 @@ use super::VectorBackend;
 pub struct Sse2Backend;
 
 impl VectorBackend for Sse2Backend {
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -52,6 +53,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -83,6 +85,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -108,6 +111,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -145,6 +149,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -182,6 +187,7 @@ impl VectorBackend for Sse2Backend {
         sum
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -213,6 +219,7 @@ impl VectorBackend for Sse2Backend {
         sum
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -250,6 +257,7 @@ impl VectorBackend for Sse2Backend {
         maximum
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -287,6 +295,7 @@ impl VectorBackend for Sse2Backend {
         minimum
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -351,6 +360,7 @@ impl VectorBackend for Sse2Backend {
         max_index
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -425,6 +435,7 @@ impl VectorBackend for Sse2Backend {
         super::scalar::ScalarBackend::sum_kahan(a)
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -441,6 +452,7 @@ impl VectorBackend for Sse2Backend {
         sum_of_squares.sqrt()
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -489,6 +501,7 @@ impl VectorBackend for Sse2Backend {
         result
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -537,6 +550,7 @@ impl VectorBackend for Sse2Backend {
         result
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -565,6 +579,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -596,6 +611,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -625,6 +641,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -659,6 +676,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -691,6 +709,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -722,6 +741,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -805,6 +825,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -894,6 +915,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -998,6 +1020,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -1087,6 +1110,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for SSE2)
@@ -1179,6 +1203,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
         let len = a.len();
@@ -1199,6 +1224,7 @@ impl VectorBackend for Sse2Backend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "sse2")]
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
         let len = a.len();
