@@ -1,3 +1,4 @@
+mod check_simd;
 mod validate_examples;
 
 use anyhow::{bail, Result};
@@ -18,12 +19,13 @@ fn main() -> anyhow::Result<()> {
 /// Parse and run the command from command-line arguments (pure, testable)
 fn run_command(args: &[String]) -> Result<()> {
     if args.len() < 2 {
-        bail!("Usage: cargo xtask <command>\nCommands:\n  validate-examples  Validate book examples meet EXTREME TDD quality");
+        bail!("Usage: cargo xtask <command>\nCommands:\n  check-simd         Check SIMD attributes (pre-commit validation)\n  validate-examples  Validate book examples meet EXTREME TDD quality");
     }
 
     let command = &args[1];
 
     match command.as_str() {
+        "check-simd" => check_simd::run(),
         "validate-examples" => validate_examples::run(),
         _ => bail!("Unknown command: {}", command),
     }
