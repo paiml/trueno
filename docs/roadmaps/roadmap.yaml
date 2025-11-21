@@ -156,65 +156,85 @@ roadmap:
 - id: matmul-phase2-large-matrices
   github_issue: null
   item_type: task
-  title: "Phase 2: Matrix Multiplication for Large Matrices (256×256+) - DEFERRED"
-  status: blocked
-  priority: medium
+  title: "Phase 2: Pure Rust Micro-kernel Matrix Multiplication"
+  status: in_progress
+  priority: high
   assigned_to: claude
   created: "2025-11-21T21:45:00Z"
-  updated: "2025-11-21T22:50:00Z"
+  updated: "2025-11-21T23:00:00Z"
   spec: |
-    🎯 OBJECTIVE: Optimize matmul for 256×256+ matrices to match NumPy performance
+    🎯 OBJECTIVE: Optimize matmul for 256×256+ matrices with pure Rust micro-kernels
 
     CURRENT STATE (v0.5.0):
     - 128×128: 166 μs (Trueno) vs 463 μs (NumPy) = 2.79× FASTER ✅
     - 256×256: 1391 μs (Trueno) vs 574 μs (NumPy) = 2.4× SLOWER ❌
 
-    INVESTIGATION RESULTS (2025-11-21):
+    DECISION: **Option B** - Pure Rust Advanced Register Blocking
+    - NO external dependencies (BLAS/C libraries)
+    - Pure Rust with SIMD intrinsics (unsafe in backends only)
+    - Safe public API maintained
+    - BLIS-inspired micro-kernel design
 
-    ❌ Approach 1: 3-Level Cache Blocking (L3/L2/L1) - FAILED
-    - Implemented with L3=128×128, L2=64×64
-    - Result: 7.3% REGRESSION (1492 μs vs baseline 1391 μs)
-    - Root cause: Extra loop overhead + instruction cache pollution
-    - Conclusion: Naive 3-level blocking insufficient for NumPy BLAS
+    TECHNICAL APPROACH:
 
-    KEY LEARNINGS:
-    1. NumPy uses highly optimized BLAS with register blocking + panel factorization
-    2. Compiler inlining affected by large function size (~200 lines)
-    3. Simple loop nesting adds 7%+ overhead without cache benefits
-    4. Need micro-kernels (register tiling) not just memory blocking
+    Phase 2A: AVX2 Micro-kernels (4×4 register blocking)
+    - Implement 4×4 micro-kernel using 16 YMM registers (AVX2)
+    - Explicit register allocation for accumulation
+    - Panel-matrix multiplication pattern
+    - Zero Vector allocations (direct data[] manipulation)
 
-    RECOMMENDED APPROACH (Phase 2 Revised):
+    Phase 2B: Memory Packing
+    - Pack A matrix into row-major panels
+    - Pack B matrix into column-major panels
+    - Optimize for sequential memory access
+    - Cache-friendly data layout
 
-    Option A: Optional BLAS Backend (RECOMMENDED)
-    - Add feature flag: `blas-backend` (optional)
-    - Integrate ndarray-linalg with OpenBLAS/MKL
-    - Safe Rust wrapper around external BLAS SGEMM
-    - Auto-select: BLAS for >256×256, pure Rust otherwise
-    - Estimated effort: 2-3 days
+    Phase 2C: Optimized Outer Loop
+    - Panel size tuned for L2 cache (256KB → 64×256 panel)
+    - Minimize TLB misses with large pages
+    - Prefetch next panel while computing current
 
-    Option B: Advanced Register Blocking
-    - Implement BLIS-style micro-kernels (4×4 or 8×4 registers)
-    - Panel-matrix algorithm with explicit prefetching
-    - Assembly micro-kernels for x86_64 AVX2
-    - Estimated effort: 1-2 weeks (complex)
+    IMPLEMENTATION STRATEGY:
+    1. Start with 4×4 AVX2 micro-kernel (simplest effective size)
+    2. Benchmark at each step (no regressions allowed)
+    3. Add memory packing if micro-kernel shows improvement
+    4. Tune panel sizes based on actual performance data
 
-    Option C: Defer to v2.0
-    - Accept current 2-level blocking as "good enough"
-    - Document performance characteristics
-    - Focus on other features (convolution, GPU, etc.)
+    CONSTRAINTS (NON-NEGOTIABLE):
+    - Pure Rust (no external C/BLAS dependencies)
+    - unsafe ONLY in backend implementations
+    - Safe public API maintained
+    - Zero regressions on 128×128 performance
+    - 90%+ test coverage maintained
+    - Zero clippy warnings
 
-    BLOCKED BY: Decision needed on approach (A/B/C)
+    TARGET PERFORMANCE:
+    - 256×256: ≤600 μs (match NumPy)
+    - 512×512: Within 1.5× of NumPy
+    - 128×128: NO regression (≤170 μs maintained)
 
-    RECOMMENDATION: **Option A** (BLAS backend feature)
+    DELIVERABLES:
+    - AVX2 micro-kernel implementation in src/backends/avx2.rs
+    - Memory packing functions (if needed)
+    - Comprehensive test suite
+    - Benchmark results vs NumPy baseline
+    - Updated PERFORMANCE_GUIDE.md
+
+    TESTING:
+    - ✅ All existing tests pass
+    - ✅ New micro-kernel unit tests
+    - ✅ Property-based correctness tests
+    - ✅ Backend equivalence (micro-kernel vs standard)
+    - ✅ Performance benchmarks (32×32 through 1024×1024)
 
   acceptance_criteria: []
   phases: []
   subtasks: []
-  estimated_effort: "2-3 days (Option A)"
+  estimated_effort: "1-2 weeks"
   labels:
     - performance
     - simd
     - optimization
     - phase-2
-    - blocked
-    - investigation-complete
+    - pure-rust
+    - extreme-tdd
