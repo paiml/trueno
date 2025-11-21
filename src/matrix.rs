@@ -314,6 +314,100 @@ impl Matrix<f32> {
         Ok(())
     }
 
+    /// AVX2 micro-kernel: Compute 4 rows × 1 column using register blocking (Phase 2)
+    ///
+    /// This micro-kernel processes 4 rows of matrix A against 1 column of B_transposed
+    /// simultaneously, keeping intermediate results in AVX2 registers for efficiency.
+    ///
+    /// # Performance Benefits
+    /// - Loads B-column once, reuses for 4 A-rows (4× reduction in memory bandwidth)
+    /// - Uses FMA instructions for fused multiply-add (3× throughput vs separate ops)
+    /// - Keeps accumulators in YMM registers (no memory traffic for intermediate results)
+    ///
+    /// # Safety
+    /// - Caller must ensure all slices have the same length
+    /// - Must be called on x86_64 with AVX2 support
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2,fma")]
+    #[inline]
+    unsafe fn matmul_microkernel_4x1_avx2(
+        a_rows: [&[f32]; 4],
+        b_col: &[f32],
+        results: &mut [f32; 4],
+    ) {
+        use std::arch::x86_64::*;
+
+        let len = b_col.len();
+        let chunks = len / 8; // Process 8 f32 elements per iteration (AVX2 = 256 bits)
+
+        // Accumulators for 4 output elements (kept in registers)
+        let mut acc0 = _mm256_setzero_ps();
+        let mut acc1 = _mm256_setzero_ps();
+        let mut acc2 = _mm256_setzero_ps();
+        let mut acc3 = _mm256_setzero_ps();
+
+        // Main loop: Process 8 elements at a time
+        for i in 0..chunks {
+            let offset = i * 8;
+
+            // Load B column (reused for all 4 A rows)
+            let b_vec = _mm256_loadu_ps(b_col.as_ptr().add(offset));
+
+            // Load A rows and FMA (Fused Multiply-Add)
+            let a0_vec = _mm256_loadu_ps(a_rows[0].as_ptr().add(offset));
+            acc0 = _mm256_fmadd_ps(a0_vec, b_vec, acc0);
+
+            let a1_vec = _mm256_loadu_ps(a_rows[1].as_ptr().add(offset));
+            acc1 = _mm256_fmadd_ps(a1_vec, b_vec, acc1);
+
+            let a2_vec = _mm256_loadu_ps(a_rows[2].as_ptr().add(offset));
+            acc2 = _mm256_fmadd_ps(a2_vec, b_vec, acc2);
+
+            let a3_vec = _mm256_loadu_ps(a_rows[3].as_ptr().add(offset));
+            acc3 = _mm256_fmadd_ps(a3_vec, b_vec, acc3);
+        }
+
+        // Horizontal sum of each accumulator (reduce 8 elements to 1)
+        results[0] = Self::horizontal_sum_avx2(acc0);
+        results[1] = Self::horizontal_sum_avx2(acc1);
+        results[2] = Self::horizontal_sum_avx2(acc2);
+        results[3] = Self::horizontal_sum_avx2(acc3);
+
+        // Handle remainder elements with scalar code
+        let remainder_start = chunks * 8;
+        if remainder_start < len {
+            for i in remainder_start..len {
+                results[0] += a_rows[0][i] * b_col[i];
+                results[1] += a_rows[1][i] * b_col[i];
+                results[2] += a_rows[2][i] * b_col[i];
+                results[3] += a_rows[3][i] * b_col[i];
+            }
+        }
+    }
+
+    /// Helper: Horizontal sum of 8 f32 values in an AVX2 register
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2")]
+    #[inline]
+    unsafe fn horizontal_sum_avx2(v: std::arch::x86_64::__m256) -> f32 {
+        use std::arch::x86_64::*;
+
+        // Sum upper and lower 128-bit lanes
+        let sum128 = _mm_add_ps(
+            _mm256_castps256_ps128(v),
+            _mm256_extractf128_ps(v, 1),
+        );
+
+        // Horizontal add within 128-bit lane (4 values → 2 values)
+        let sum64 = _mm_hadd_ps(sum128, sum128);
+
+        // Horizontal add again (2 values → 1 value)
+        let sum32 = _mm_hadd_ps(sum64, sum64);
+
+        // Extract final scalar result
+        _mm_cvtss_f32(sum32)
+    }
+
     /// Cache-aware blocked matrix multiplication with SIMD optimization
     ///
     /// Uses 2-level cache blocking (L2/L1) to minimize cache misses:
@@ -369,7 +463,111 @@ impl Matrix<f32> {
                     let k_end = (kk + L2_BLOCK_SIZE).min(self.cols);
                     let block_size = k_end - kk;
 
-                    // Inner loops: Process L2 block with SIMD
+                    // Inner loops: Process L2 block with micro-kernel (Phase 2) or SIMD
+                    #[cfg(target_arch = "x86_64")]
+                    let use_microkernel = matches!(self.backend, Backend::AVX2 | Backend::AVX512);
+
+                    #[cfg(target_arch = "x86_64")]
+                    if use_microkernel {
+                        // Phase 2: Use 4×1 micro-kernel for AVX2/AVX512
+                        let mut i = ii;
+
+                        // Process 4 rows at a time with micro-kernel
+                        while i + 4 <= i_end {
+                            // Get 4 consecutive rows of A
+                            let row0_start = i * self.cols + kk;
+                            let row1_start = (i + 1) * self.cols + kk;
+                            let row2_start = (i + 2) * self.cols + kk;
+                            let row3_start = (i + 3) * self.cols + kk;
+
+                            let a_rows = [
+                                &self.data[row0_start..row0_start + block_size],
+                                &self.data[row1_start..row1_start + block_size],
+                                &self.data[row2_start..row2_start + block_size],
+                                &self.data[row3_start..row3_start + block_size],
+                            ];
+
+                            // Process each column of B with the micro-kernel
+                            for j in jj..j_end {
+                                let col_start = j * b_transposed.cols + kk;
+                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+
+                                // Compute 4 dot products simultaneously
+                                let mut partial_dots = [0.0f32; 4];
+                                unsafe {
+                                    Self::matmul_microkernel_4x1_avx2(a_rows, b_col, &mut partial_dots);
+                                }
+
+                                // Accumulate results
+                                result.data[i * result.cols + j] += partial_dots[0];
+                                result.data[(i + 1) * result.cols + j] += partial_dots[1];
+                                result.data[(i + 2) * result.cols + j] += partial_dots[2];
+                                result.data[(i + 3) * result.cols + j] += partial_dots[3];
+                            }
+
+                            i += 4;
+                        }
+
+                        // Handle remaining rows (< 4) with standard path
+                        for i in i..i_end {
+                            let row_start = i * self.cols + kk;
+                            let a_row = &self.data[row_start..row_start + block_size];
+
+                            for j in jj..j_end {
+                                let col_start = j * b_transposed.cols + kk;
+                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+
+                                let partial_dot = unsafe { Avx2Backend::dot(a_row, b_col) };
+                                result.data[i * result.cols + j] += partial_dot;
+                            }
+                        }
+                    } else {
+                        // Phase 1: Standard SIMD path (non-AVX2 backends)
+                        #[allow(unused_variables)]
+                        for i in ii..i_end {
+                            let row_start = i * self.cols + kk;
+                            let a_row = &self.data[row_start..row_start + block_size];
+
+                            for j in jj..j_end {
+                                let col_start = j * b_transposed.cols + kk;
+                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+
+                                let partial_dot = unsafe {
+                                    match self.backend {
+                                        Backend::Scalar => ScalarBackend::dot(a_row, b_col),
+                                        #[cfg(target_arch = "x86_64")]
+                                        Backend::SSE2 | Backend::AVX => Sse2Backend::dot(a_row, b_col),
+                                        #[cfg(not(target_arch = "x86_64"))]
+                                        Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                                            ScalarBackend::dot(a_row, b_col)
+                                        }
+                                        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                                        Backend::NEON => {
+                                            use crate::backends::neon::NeonBackend;
+                                            NeonBackend::dot(a_row, b_col)
+                                        }
+                                        #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                                        Backend::NEON => ScalarBackend::dot(a_row, b_col),
+                                        #[cfg(target_arch = "wasm32")]
+                                        Backend::WasmSIMD => {
+                                            use crate::backends::wasm::WasmBackend;
+                                            WasmBackend::dot(a_row, b_col)
+                                        }
+                                        #[cfg(not(target_arch = "wasm32"))]
+                                        Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
+                                        Backend::GPU | Backend::Auto | Backend::AVX2 | Backend::AVX512 => {
+                                            ScalarBackend::dot(a_row, b_col)
+                                        }
+                                    }
+                                };
+
+                                result.data[i * result.cols + j] += partial_dot;
+                            }
+                        }
+                    }
+
+                    // Non-x86_64 platforms: Use standard SIMD path
+                    #[cfg(not(target_arch = "x86_64"))]
                     for i in ii..i_end {
                         let row_start = i * self.cols + kk;
                         let a_row = &self.data[row_start..row_start + block_size];
@@ -378,19 +576,9 @@ impl Matrix<f32> {
                             let col_start = j * b_transposed.cols + kk;
                             let b_col = &b_transposed.data[col_start..col_start + block_size];
 
-                            // Compute partial dot product using SIMD
-                            // SAFETY: Backend dot() maintains safety invariants
                             let partial_dot = unsafe {
                                 match self.backend {
                                     Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                    #[cfg(target_arch = "x86_64")]
-                                    Backend::SSE2 | Backend::AVX => Sse2Backend::dot(a_row, b_col),
-                                    #[cfg(target_arch = "x86_64")]
-                                    Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(a_row, b_col),
-                                    #[cfg(not(target_arch = "x86_64"))]
-                                    Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                                        ScalarBackend::dot(a_row, b_col)
-                                    }
                                     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
                                     Backend::NEON => {
                                         use crate::backends::neon::NeonBackend;
@@ -405,11 +593,10 @@ impl Matrix<f32> {
                                     }
                                     #[cfg(not(target_arch = "wasm32"))]
                                     Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
-                                    Backend::GPU | Backend::Auto => ScalarBackend::dot(a_row, b_col),
+                                    _ => ScalarBackend::dot(a_row, b_col),
                                 }
                             };
 
-                            // Accumulate partial result (blocking requires accumulation)
                             result.data[i * result.cols + j] += partial_dot;
                         }
                     }
