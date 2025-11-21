@@ -25,6 +25,7 @@ use super::VectorBackend;
 pub struct NeonBackend;
 
 impl VectorBackend for NeonBackend {
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -56,6 +57,7 @@ impl VectorBackend for NeonBackend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -87,6 +89,7 @@ impl VectorBackend for NeonBackend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -115,6 +118,7 @@ impl VectorBackend for NeonBackend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -143,6 +147,7 @@ impl VectorBackend for NeonBackend {
         }
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -181,6 +186,7 @@ impl VectorBackend for NeonBackend {
         result
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -212,6 +218,7 @@ impl VectorBackend for NeonBackend {
         result
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -249,6 +256,7 @@ impl VectorBackend for NeonBackend {
         result
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -286,6 +294,7 @@ impl VectorBackend for NeonBackend {
         result
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -334,6 +343,7 @@ impl VectorBackend for NeonBackend {
         max_index
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -382,6 +392,7 @@ impl VectorBackend for NeonBackend {
         min_index
     }
 
+    #[inline]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -392,6 +403,7 @@ impl VectorBackend for NeonBackend {
         super::scalar::ScalarBackend::sum_kahan(a)
     }
 
+    #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
@@ -409,6 +421,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -450,6 +464,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -488,6 +504,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -516,6 +534,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -544,6 +564,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -573,6 +595,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -602,6 +626,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -636,6 +662,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -670,6 +698,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -701,6 +731,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -732,6 +764,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -763,6 +797,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -794,6 +830,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -863,6 +901,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -882,6 +922,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -958,6 +1000,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -976,6 +1020,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -1045,6 +1091,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -1109,6 +1157,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -1129,6 +1179,8 @@ impl VectorBackend for NeonBackend {
     }
 
     #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
     // 2. All pointers derived from valid slice references with sufficient backing storage
