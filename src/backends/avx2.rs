@@ -140,7 +140,7 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
-    #[target_feature(enable = "avx2", enable = "fma")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -645,7 +645,7 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
-    #[target_feature(enable = "avx2", enable = "fma")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -679,7 +679,7 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
-    #[target_feature(enable = "avx2", enable = "fma")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -741,7 +741,7 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -817,7 +817,7 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -899,7 +899,7 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -996,7 +996,7 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -1078,7 +1078,7 @@ impl VectorBackend for Avx2Backend {
         }
     }
 
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for AVX2)
     // 2. All pointers derived from valid slice references with sufficient backing storage
@@ -1193,8 +1193,7 @@ impl VectorBackend for Avx2Backend {
             i += 1;
         }
     }
-
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
     // 2. All pointers derived from valid slice references
@@ -1205,7 +1204,6 @@ impl VectorBackend for Avx2Backend {
     // For x = 2^k * m where m ∈ [1, 2):
     //   ln(x) = k*ln(2) + ln(m)
     //   ln(m) approximated using 7th-degree polynomial
-    #[target_feature(enable = "avx2")]
     unsafe fn ln(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1273,8 +1271,7 @@ impl VectorBackend for Avx2Backend {
             i += 1;
         }
     }
-
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
     // 2. All pointers derived from valid slice references
@@ -1285,7 +1282,6 @@ impl VectorBackend for Avx2Backend {
     // For x = 2^k * m where m ∈ [1, 2):
     //   log2(x) = k + log2(m)
     //   log2(m) = ln(m) / ln(2)
-    #[target_feature(enable = "avx2")]
     unsafe fn log2(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -1343,8 +1339,7 @@ impl VectorBackend for Avx2Backend {
             i += 1;
         }
     }
-
-    #[target_feature(enable = "avx2")]
+    #[target_feature(enable = "avx2,fma")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
     // 1. Loop bounds ensure `i + 8 <= len` before calling `.add(i)`
     // 2. All pointers derived from valid slice references
@@ -1355,7 +1350,6 @@ impl VectorBackend for Avx2Backend {
     // For x = 2^k * m where m ∈ [1, 2):
     //   log10(x) = k*log10(2) + log10(m)
     //   log10(m) = ln(m) / ln(10)
-    #[target_feature(enable = "avx2")]
     unsafe fn log10(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
