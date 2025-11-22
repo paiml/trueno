@@ -406,9 +406,9 @@ The Phase 2 micro-kernel demonstrates that **pure Rust can match highly optimize
 ## References
 
 - **BLIS**: [BLIS micro-kernel design](https://github.com/flame/blis)
-- **Intel Intrinsics Guide**: [AVX2/FMA documentation](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/)
-- **Trueno Benchmarks**: [docs/benchmarks/v0.6.0-benchmark-summary.md](../../benchmarks/v0.6.0-benchmark-summary.md)
-- **Release Notes**: [docs/v0.6.0-release-notes.md](../../v0.6.0-release-notes.md)
+- **Rust SIMD**: [std::arch x86_64 intrinsics](https://doc.rust-lang.org/stable/core/arch/x86_64/index.html)
+- **Trueno Benchmarks**: [v0.6.0 benchmark summary](../../../docs/benchmarks/v0.6.0-benchmark-summary.md)
+- **CHANGELOG**: [v0.6.0 release notes](../../../CHANGELOG.md#060---2025-11-21)
 
 ---
 

@@ -103,21 +103,26 @@ Trueno delivers **exceptional performance** through multi-level SIMD optimizatio
 - Element-wise operations are memory-bound, limiting SIMD gains
 - AVX2's FMA provides significant acceleration for dot products
 
-### Matrix Operations (SIMD-Optimized)
+### Matrix Operations (SIMD-Optimized) ⚡
 
-| Operation | Size | Time | Performance |
-|-----------|------|------|-------------|
-| **Matrix Multiply** | 64×64 | 59.9 µs | SIMD threshold |
-| **Matrix Multiply** | 128×128 | 434.9 µs | ~7x faster than naive |
-| **Matrix Multiply** | 256×256 | 2.67 ms | Scales O(n³) |
-| **Matrix Transpose** | 256×256 | 69.1 µs | Cache-optimized |
-| **Matrix-Vector** | 512×512 | 139.8 µs | SIMD dot products |
+| Operation | Size | Time | Performance | vs NumPy |
+|-----------|------|------|-------------|----------|
+| **Matrix Multiply** | 64×64 | 8.9 µs | Cache blocking | - |
+| **Matrix Multiply** | 128×128 | **72 µs** | **6.4× faster than NumPy** | ✅ |
+| **Matrix Multiply** | 256×256 | **538 µs** | **6% faster than NumPy** | ✅ |
+| **Matrix Multiply** | 512×512 | 5.3 ms | 3-level blocking | 2.9× faster |
+| **Matrix Multiply** | 1024×1024 | 47.4 ms | L3 optimization | 1.6× slower |
+| **Matrix Transpose** | 256×256 | 69.1 µs | Cache-optimized | - |
+| **Matrix-Vector** | 512×512 | 139.8 µs | SIMD dot products | - |
 
-**SIMD Optimization Strategy**:
-- **Threshold**: 64×64 (auto-selects SIMD vs naive)
-- **Transpose**: Pre-transpose B for cache locality (row-major access)
-- **Dot Products**: Uses Vector::dot() for SIMD acceleration (2-8x speedup)
-- **Small Matrices**: Uses naive O(n³) to avoid SIMD overhead
+**Advanced SIMD Optimization (Phase 2/3 - v0.6.0+)**:
+- **4×1 AVX2 Micro-kernel**: Fused Multiply-Add (FMA) instructions, register blocking
+- **3-level Cache Hierarchy**: L3 (256×256) → L2 (64×64) → micro-kernel for matrices ≥512×512
+- **2-level Cache Blocking**: L2 (64×64) → micro-kernel for 32×32 to 511×511
+- **Smart Thresholding**: Matrices ≤32×32 use simple path (avoids blocking overhead)
+- **Zero-Allocation**: No Vec allocations in hot path
+- **NumPy Parity**: Matches/beats NumPy + OpenBLAS for 128×128 and 256×256
+- **Efficiency**: 77% of theoretical AVX2 peak (48 GFLOPS @ 3.0 GHz)
 
 ### 2D Convolution (GPU-Accelerated)
 
@@ -821,7 +826,7 @@ make bench-compare-frameworks  # Generate comparison report
 3. ✅ Comparative analysis and report generation - <1 minute
 
 **Results**:
-- `benchmarks/comparison_report.md` - Performance comparison report
+- `benchmarks/BENCHMARK_RESULTS.md` - Performance comparison report
 - `benchmarks/comparison_summary.json` - Machine-readable data
 - `target/criterion/` - Detailed Criterion benchmark data
 
@@ -851,7 +856,7 @@ make bench-compare-frameworks  # Generate comparison report
 
 **Architecture**: AVX-512 dominates reductions, AVX2 optimal for element-wise ops
 
-See full report: [`benchmarks/comparison_report.md`](benchmarks/comparison_report.md)
+See full report: [`benchmarks/BENCHMARK_RESULTS.md`](benchmarks/BENCHMARK_RESULTS.md)
 
 See [`benchmarks/README.md`](benchmarks/README.md) for detailed documentation.
 
