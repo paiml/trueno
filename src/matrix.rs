@@ -1296,18 +1296,33 @@ impl Matrix<f32> {
             )));
         }
 
-        let mut result_data = vec![0.0; m.cols];
+        // SIMD-optimized implementation using row-wise accumulation
+        // Instead of column-wise access (cache-unfriendly), we compute:
+        // result = Σ(i) v[i] * row_i (cache-friendly, vectorizable)
+        //
+        // This approach:
+        // 1. Sequential row access (cache-friendly vs strided column access)
+        // 2. Uses SIMD scale and add operations
+        // 3. Leverages existing optimized Vector operations
 
-        // Compute result[j] = Σ v[i] × A[i,j]
-        for (j, result_elem) in result_data.iter_mut().enumerate() {
-            let mut sum = 0.0;
-            for i in 0..m.rows {
-                sum += v.as_slice()[i] * m.get(i, j).unwrap();
-            }
-            *result_elem = sum;
+        let mut result = Vector::from_slice(&vec![0.0; m.cols]);
+        let v_slice = v.as_slice();
+
+        // Accumulate each scaled row into result
+        for i in 0..m.rows {
+            let scalar = v_slice[i];
+            let row_start = i * m.cols;
+            let row = &m.data[row_start..(row_start + m.cols)];
+
+            // Create vector for this row
+            let row_vec = Vector::from_slice(row);
+
+            // result += scalar * row (using SIMD scale and add)
+            let scaled_row = row_vec.scale(scalar)?;
+            result = result.add(&scaled_row)?;
         }
 
-        Ok(Vector::from_slice(&result_data))
+        Ok(result)
     }
 
     /// Perform 2D convolution with a kernel
