@@ -1459,8 +1459,8 @@ mod tests {
 
         // Test various ranges: negative, zero, positive, large values
         let test_values = vec![
-            -10.0, -5.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0,
-            -50.0, 87.0, -87.0, // near overflow/underflow limits
+            -10.0, -5.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, -50.0, 87.0,
+            -87.0, // near overflow/underflow limits
         ];
         let mut sse2_result = vec![0.0; test_values.len()];
         let mut scalar_result = vec![0.0; test_values.len()];
@@ -1818,16 +1818,17 @@ mod tests {
     fn test_sse2_norm_linf_matches_scalar() {
         // Verify SSE2 norm_linf produces same results as scalar
         let test_cases = vec![
-            vec![],                                          // empty
-            vec![5.0],                                       // single element
-            vec![-3.0, 1.0, -4.0, 1.0, 5.0],                // various values
-            vec![-10.0, 5.0, 3.0, 7.0, -2.0, 8.0, 4.0],    // 7 elements (remainder)
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],  // 8 elements (aligned)
+            vec![],                                       // empty
+            vec![5.0],                                    // single element
+            vec![-3.0, 1.0, -4.0, 1.0, 5.0],              // various values
+            vec![-10.0, 5.0, 3.0, 7.0, -2.0, 8.0, 4.0],   // 7 elements (remainder)
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], // 8 elements (aligned)
         ];
 
         for test_vec in test_cases {
             // SAFETY: Test code calling backend trait methods marked unsafe
-            let scalar_result = unsafe { super::super::scalar::ScalarBackend::norm_linf(&test_vec) };
+            let scalar_result =
+                unsafe { super::super::scalar::ScalarBackend::norm_linf(&test_vec) };
             let sse2_result = unsafe { Sse2Backend::norm_linf(&test_vec) };
 
             assert!(

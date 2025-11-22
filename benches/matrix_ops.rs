@@ -6,12 +6,12 @@ fn bench_matmul_sizes(c: &mut Criterion) {
 
     // Test various matrix sizes to show SIMD threshold effect
     let sizes = vec![
-        (16, 16, 16),    // Small: below SIMD threshold (64)
-        (32, 32, 32),    // Medium: below threshold
-        (64, 64, 64),    // At threshold
-        (128, 128, 128), // Large: above threshold (SIMD should shine)
-        (256, 256, 256), // Very large: maximum SIMD benefit
-        (512, 512, 512), // Phase 3: Large matrix baseline
+        (16, 16, 16),       // Small: below SIMD threshold (64)
+        (32, 32, 32),       // Medium: below threshold
+        (64, 64, 64),       // At threshold
+        (128, 128, 128),    // Large: above threshold (SIMD should shine)
+        (256, 256, 256),    // Very large: maximum SIMD benefit
+        (512, 512, 512),    // Phase 3: Large matrix baseline
         (1024, 1024, 1024), // Phase 3: Very large matrix baseline
     ];
 

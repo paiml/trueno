@@ -1,5 +1,5 @@
-use trueno::Matrix;
 use std::time::Instant;
+use trueno::Matrix;
 
 fn main() {
     let size = 1024;
@@ -8,14 +8,18 @@ fn main() {
     let a = Matrix::from_vec(
         size,
         size,
-        (0..size * size).map(|i| ((i % 100) as f32) / 10.0).collect(),
+        (0..size * size)
+            .map(|i| ((i % 100) as f32) / 10.0)
+            .collect(),
     )
     .unwrap();
 
     let b = Matrix::from_vec(
         size,
         size,
-        (0..size * size).map(|i| (((i * 7) % 100) as f32) / 10.0).collect(),
+        (0..size * size)
+            .map(|i| (((i * 7) % 100) as f32) / 10.0)
+            .collect(),
     )
     .unwrap();
 
@@ -38,7 +42,11 @@ fn main() {
     let avg_time_ms = elapsed.as_secs_f64() * 1000.0 / iterations as f64;
 
     println!("\n=== Results ===");
-    println!("Total time: {:.2}ms ({} iterations)", elapsed.as_millis(), iterations);
+    println!(
+        "Total time: {:.2}ms ({} iterations)",
+        elapsed.as_millis(),
+        iterations
+    );
     println!("Average time per matmul: {:.2}ms", avg_time_ms);
 
     #[cfg(feature = "parallel")]
