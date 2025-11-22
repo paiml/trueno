@@ -427,6 +427,7 @@ impl Matrix<f32> {
     /// When called from parallel code, the caller must ensure that each thread processes
     /// a distinct row range [iii, i3_end) with no overlap. This function is safe because
     /// each thread writes only to its own row range in the result matrix.
+    #[cfg(feature = "parallel")]
     #[allow(clippy::too_many_arguments)]
     fn process_l3_row_block_seq(
         iii: usize,
@@ -629,6 +630,7 @@ impl Matrix<f32> {
             && other.cols >= L3_THRESHOLD;
 
         // Phase 4: Determine if we should use multi-threading (≥1024×1024)
+        #[cfg(feature = "parallel")]
         const PARALLEL_THRESHOLD: usize = 1024;
         #[cfg(feature = "parallel")]
         let use_parallel = self.rows >= PARALLEL_THRESHOLD
@@ -1213,15 +1215,34 @@ impl Matrix<f32> {
             )));
         }
 
-        let mut result_data = vec![0.0; self.rows];
+        #[cfg(target_arch = "x86_64")]
+        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
+        use crate::backends::{scalar::ScalarBackend, VectorBackend};
 
-        // Compute result[i] = Σ A[i,j] × v[j]
-        for (i, result_elem) in result_data.iter_mut().enumerate() {
-            let mut sum = 0.0;
-            for j in 0..self.cols {
-                sum += self.get(i, j).unwrap() * v.as_slice()[j];
-            }
-            *result_elem = sum;
+        let mut result_data = vec![0.0; self.rows];
+        let v_slice = v.as_slice();
+
+        // SIMD-optimized execution: each row-vector product is a dot product
+        // TODO: Add parallel execution for large matrices (>1024 rows) in future iteration
+        for i in 0..self.rows {
+            let row_start = i * self.cols;
+            let row = &self.data[row_start..(row_start + self.cols)];
+
+            // Use SIMD dot product for each row
+            result_data[i] = unsafe {
+                #[cfg(target_arch = "x86_64")]
+                {
+                    match self.backend {
+                        Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(row, v_slice),
+                        Backend::SSE2 | Backend::AVX => Sse2Backend::dot(row, v_slice),
+                        _ => ScalarBackend::dot(row, v_slice),
+                    }
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    ScalarBackend::dot(row, v_slice)
+                }
+            };
         }
 
         Ok(Vector::from_slice(&result_data))
@@ -1275,18 +1296,33 @@ impl Matrix<f32> {
             )));
         }
 
-        let mut result_data = vec![0.0; m.cols];
+        // SIMD-optimized implementation using row-wise accumulation
+        // Instead of column-wise access (cache-unfriendly), we compute:
+        // result = Σ(i) v[i] * row_i (cache-friendly, vectorizable)
+        //
+        // This approach:
+        // 1. Sequential row access (cache-friendly vs strided column access)
+        // 2. Uses SIMD scale and add operations
+        // 3. Leverages existing optimized Vector operations
 
-        // Compute result[j] = Σ v[i] × A[i,j]
-        for (j, result_elem) in result_data.iter_mut().enumerate() {
-            let mut sum = 0.0;
-            for i in 0..m.rows {
-                sum += v.as_slice()[i] * m.get(i, j).unwrap();
-            }
-            *result_elem = sum;
+        let mut result = Vector::from_slice(&vec![0.0; m.cols]);
+        let v_slice = v.as_slice();
+
+        // Accumulate each scaled row into result
+        for i in 0..m.rows {
+            let scalar = v_slice[i];
+            let row_start = i * m.cols;
+            let row = &m.data[row_start..(row_start + m.cols)];
+
+            // Create vector for this row
+            let row_vec = Vector::from_slice(row);
+
+            // result += scalar * row (using SIMD scale and add)
+            let scaled_row = row_vec.scale(scalar)?;
+            result = result.add(&scaled_row)?;
         }
 
-        Ok(Vector::from_slice(&result_data))
+        Ok(result)
     }
 
     /// Perform 2D convolution with a kernel
