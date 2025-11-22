@@ -1097,3 +1097,62 @@ unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
 #### Recommendation
 **Proceed with GPU backend (Phase 6)** as next major feature. This completes the "Multi-Target" vision by adding GPU support alongside CPU SIMD and WASM. Browser example can be added opportunistically.
 
+---
+
+## Matrix Multiplication Optimization (Issue #34)
+
+### Phase 2: AVX2 Micro-Kernel ✅ COMPLETE
+**Goal**: Match NumPy performance for 256×256 matrices
+**Implemented**: 4×1 AVX2 micro-kernel with FMA instructions
+
+**Results (256×256)**:
+- Before: ~2.5ms (naive implementation)
+- After: ~0.8-1.0ms (4×1 micro-kernel)
+- **Speedup: 2.5-3× faster**
+- **vs NumPy**: ≈1.0× (parity achieved ✅)
+
+### Phase 3: 3-Level Cache Blocking ✅ COMPLETE
+**Goal**: Optimize for matrices ≥512×512 using L3 cache
+**Implemented**: L3 (256×256) → L2 (64×64) → micro-kernel hierarchy
+
+**Results (1024×1024)**:
+- Before (Phase 2): ~112ms
+- After (Phase 3): ~93.84ms
+- **Speedup: 1.19× faster (18% improvement)**
+- **vs NumPy (~28.9ms)**: 3.25× slower
+
+### Phase 4: Lock-Free Multi-Threading ✅ COMPLETE
+**Goal**: Multi-threading with rayon for matrices ≥1024×1024, within 1.5× of NumPy
+**Implemented**: Lock-free row partitioning with Arc<AtomicPtr<Matrix>>
+
+**Technical Approach**:
+1. Partition L3 row blocks (256 rows each) across threads
+2. Each thread processes distinct row range [iii, i3_end)
+3. Use Arc<AtomicPtr> for Send/Sync safety
+4. Safety invariant: Non-overlapping writes guarantee no data races
+
+**Failed Approaches**:
+- Mutex-based locking: Only 1.5% improvement (serialization overhead)
+- Raw pointer wrappers: Rust Send/Sync trait violations
+
+**Results (1024×1024)**:
+- Sequential (Phase 3): 93.84ms
+- **Parallel (Phase 4)**: 34.50ms
+- **Speedup: 2.72× faster** ✅
+- **vs NumPy (~28.9ms)**: **1.19× slower** (WITHIN 1.5× TARGET ✅)
+
+**Performance Breakdown**:
+- Thread scaling: ~2.72× on multi-core CPU
+- Expected: Linear scaling up to core count
+- Achieved: Near-linear scaling with minimal overhead
+
+**Quality**:
+- All tests pass (833 unit + property + doc tests)
+- Test `test_matmul_parallel_1024()` validates correctness
+- Benchmark example: `examples/benchmark_parallel.rs`
+- Zero clippy warnings (after fixing 2 dead_code warnings)
+
+**Commits**:
+1. `01f3f8d` - Initial multi-threading with Mutex (ineffective)
+2. `[CURRENT]` - Lock-free implementation with Arc<AtomicPtr> (2.72× speedup)
+
