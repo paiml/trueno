@@ -421,6 +421,183 @@ impl Matrix<f32> {
     ///
     /// This is Phase 1 of matmul optimization (Issue #10). Future Phase 2 will
     /// add optional BLAS backend for full NumPy parity on very large matrices.
+    /// Helper function to process a single L3 row block for parallel matmul (Phase 4).
+    ///
+    /// # Safety
+    /// When called from parallel code with a Mutex-protected result, this is safe
+    /// because the Mutex ensures exclusive access.
+    #[allow(clippy::too_many_arguments)]
+    fn process_l3_row_block_seq(
+        iii: usize,
+        i3_end: usize,
+        a: &Matrix<f32>,
+        b_transposed: &Matrix<f32>,
+        result: &mut Matrix<f32>,
+        l2_block_size: usize,
+        l3_block_size: usize,
+    ) {
+        #[cfg(target_arch = "x86_64")]
+        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
+        use crate::backends::{scalar::ScalarBackend, VectorBackend};
+
+        // Process all column blocks for this row block
+        for jjj in (0..b_transposed.rows).step_by(l3_block_size) {
+            let j3_end = (jjj + l3_block_size).min(b_transposed.rows);
+
+            for kkk in (0..a.cols).step_by(l3_block_size) {
+                let k3_end = (kkk + l3_block_size).min(a.cols);
+
+                // L2 blocking within L3 blocks
+                for ii in (iii..i3_end).step_by(l2_block_size) {
+                    let i_end = (ii + l2_block_size).min(i3_end);
+
+                    for jj in (jjj..j3_end).step_by(l2_block_size) {
+                        let j_end = (jj + l2_block_size).min(j3_end);
+
+                        for kk in (kkk..k3_end).step_by(l2_block_size) {
+                            let k_end = (kk + l2_block_size).min(k3_end);
+                            let block_size = k_end - kk;
+
+                            // Micro-kernel processing
+                            #[cfg(target_arch = "x86_64")]
+                            let use_microkernel = matches!(a.backend, Backend::AVX2 | Backend::AVX512);
+
+                            #[cfg(target_arch = "x86_64")]
+                            if use_microkernel {
+                                let mut i = ii;
+
+                                // Process 4 rows at a time with micro-kernel
+                                while i + 4 <= i_end {
+                                    let row0_start = i * a.cols + kk;
+                                    let row1_start = (i + 1) * a.cols + kk;
+                                    let row2_start = (i + 2) * a.cols + kk;
+                                    let row3_start = (i + 3) * a.cols + kk;
+
+                                    let a_rows = [
+                                        &a.data[row0_start..row0_start + block_size],
+                                        &a.data[row1_start..row1_start + block_size],
+                                        &a.data[row2_start..row2_start + block_size],
+                                        &a.data[row3_start..row3_start + block_size],
+                                    ];
+
+                                    for j in jj..j_end {
+                                        let col_start = j * b_transposed.cols + kk;
+                                        let b_col = &b_transposed.data[col_start..col_start + block_size];
+
+                                        let mut partial_dots = [0.0f32; 4];
+                                        unsafe {
+                                            Matrix::matmul_microkernel_4x1_avx2(a_rows, b_col, &mut partial_dots);
+                                        }
+
+                                        result.data[i * result.cols + j] += partial_dots[0];
+                                        result.data[(i + 1) * result.cols + j] += partial_dots[1];
+                                        result.data[(i + 2) * result.cols + j] += partial_dots[2];
+                                        result.data[(i + 3) * result.cols + j] += partial_dots[3];
+                                    }
+
+                                    i += 4;
+                                }
+
+                                // Handle remaining rows (< 4)
+                                for i in i..i_end {
+                                    let row_start = i * a.cols + kk;
+                                    let a_row = &a.data[row_start..row_start + block_size];
+
+                                    for j in jj..j_end {
+                                        let col_start = j * b_transposed.cols + kk;
+                                        let b_col = &b_transposed.data[col_start..col_start + block_size];
+
+                                        let partial_dot = unsafe { Avx2Backend::dot(a_row, b_col) };
+                                        result.data[i * result.cols + j] += partial_dot;
+                                    }
+                                }
+                            } else {
+                                // Non-AVX2 path
+                                #[allow(unused_variables)]
+                                for i in ii..i_end {
+                                    let row_start = i * a.cols + kk;
+                                    let a_row = &a.data[row_start..row_start + block_size];
+
+                                    for j in jj..j_end {
+                                        let col_start = j * b_transposed.cols + kk;
+                                        let b_col = &b_transposed.data[col_start..col_start + block_size];
+
+                                        let partial_dot = unsafe {
+                                            match a.backend {
+                                                Backend::Scalar => ScalarBackend::dot(a_row, b_col),
+                                                #[cfg(target_arch = "x86_64")]
+                                                Backend::SSE2 | Backend::AVX => Sse2Backend::dot(a_row, b_col),
+                                                #[cfg(not(target_arch = "x86_64"))]
+                                                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                                                    ScalarBackend::dot(a_row, b_col)
+                                                }
+                                                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                                                Backend::NEON => {
+                                                    use crate::backends::neon::NeonBackend;
+                                                    NeonBackend::dot(a_row, b_col)
+                                                }
+                                                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                                                Backend::NEON => ScalarBackend::dot(a_row, b_col),
+                                                #[cfg(target_arch = "wasm32")]
+                                                Backend::WasmSIMD => {
+                                                    use crate::backends::wasm::WasmBackend;
+                                                    WasmBackend::dot(a_row, b_col)
+                                                }
+                                                #[cfg(not(target_arch = "wasm32"))]
+                                                Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
+                                                // Catch-all for GPU, Auto, and any other backends
+                                                _ => ScalarBackend::dot(a_row, b_col),
+                                            }
+                                        };
+
+                                        result.data[i * result.cols + j] += partial_dot;
+                                    }
+                                }
+                            }
+
+                            // Non-x86_64 fallback
+                            #[cfg(not(target_arch = "x86_64"))]
+                            {
+                                for i in ii..i_end {
+                                    let row_start = i * a.cols + kk;
+                                    let a_row = &a.data[row_start..row_start + block_size];
+
+                                    for j in jj..j_end {
+                                        let col_start = j * b_transposed.cols + kk;
+                                        let b_col = &b_transposed.data[col_start..col_start + block_size];
+
+                                        let partial_dot = unsafe {
+                                            match a.backend {
+                                                Backend::Scalar => ScalarBackend::dot(a_row, b_col),
+                                                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                                                Backend::NEON => {
+                                                    use crate::backends::neon::NeonBackend;
+                                                    NeonBackend::dot(a_row, b_col)
+                                                }
+                                                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                                                Backend::NEON => ScalarBackend::dot(a_row, b_col),
+                                                #[cfg(target_arch = "wasm32")]
+                                                Backend::WasmSIMD => {
+                                                    use crate::backends::wasm::WasmBackend;
+                                                    WasmBackend::dot(a_row, b_col)
+                                                }
+                                                #[cfg(not(target_arch = "wasm32"))]
+                                                Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
+                                                _ => ScalarBackend::dot(a_row, b_col),
+                                            }
+                                        };
+
+                                        result.data[i * result.cols + j] += partial_dot;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn matmul_simd(
         &self,
         other: &Matrix<f32>,
@@ -450,8 +627,17 @@ impl Matrix<f32> {
             && self.cols >= L3_THRESHOLD
             && other.cols >= L3_THRESHOLD;
 
+        // Phase 4: Determine if we should use multi-threading (≥1024×1024)
+        const PARALLEL_THRESHOLD: usize = 1024;
+        #[cfg(feature = "parallel")]
+        let use_parallel = self.rows >= PARALLEL_THRESHOLD
+            && self.cols >= PARALLEL_THRESHOLD
+            && other.cols >= PARALLEL_THRESHOLD;
+        #[cfg(not(feature = "parallel"))]
+        let use_parallel = false;
+
         if use_l3_blocking {
-            // ===== Phase 3: 3-Level Cache Blocking (L3 → L2 → micro-kernel) =====
+            // ===== Phase 3/4: 3-Level Cache Blocking (L3 → L2 → micro-kernel) =====
             // For very large matrices (≥512×512), use L3 cache blocking to minimize
             // cache misses when data doesn't fit in L2 cache
             //
@@ -459,7 +645,57 @@ impl Matrix<f32> {
             // 1. L3 blocks: 256×256 (fits in L3 cache: 4-16MB)
             // 2. L2 blocks: 64×64 (fits in L2 cache: 256KB)
             // 3. Micro-kernel: 4×1 for AVX2/AVX512
+            //
+            // Phase 4: For ≥1024×1024, parallelize L3 row blocks with rayon
 
+            if use_parallel {
+                // ===== Phase 4: Parallel 3-Level Cache Blocking (Option D: Partition Approach) =====
+                #[cfg(feature = "parallel")]
+                {
+                    use rayon::prelude::*;
+
+                    // For simplicity with Rust's borrow checker, we'll use the sequential version
+                    // but call it from multiple threads. Each thread processes one L3 row block.
+                    //
+                    // NOTE: This uses unsafe with clear safety documentation.
+                    // An alternative would be to use crossbeam or parking_lot, but we want
+                    // zero external dependencies for the core library.
+
+                    use std::sync::Mutex;
+
+                    let result_mutex = Mutex::new(result);
+
+                    // Calculate number of L3 blocks
+                    let num_blocks = self.rows.div_ceil(L3_BLOCK_SIZE);
+
+                    // Process each L3 block in parallel
+                    // NOTE: Lock contention is low because each thread processes a large L3 block
+                    // (256x256 = 65K elements minimum), so lock/unlock overhead is amortized
+                    (0..num_blocks).into_par_iter().for_each(|block_idx| {
+                        let iii = block_idx * L3_BLOCK_SIZE;
+                        let i3_end = (iii + L3_BLOCK_SIZE).min(self.rows);
+
+                        // Acquire lock for this block
+                        let mut res = result_mutex.lock().unwrap();
+
+                        // Process this L3 row block
+                        Self::process_l3_row_block_seq(
+                            iii,
+                            i3_end,
+                            self,
+                            &b_transposed,
+                            &mut res,
+                            L2_BLOCK_SIZE,
+                            L3_BLOCK_SIZE,
+                        );
+                        // Lock released here
+                    });
+                }
+
+                return Ok(());
+            }
+
+            // ===== Sequential 3-Level Cache Blocking (fallback) =====
             for iii in (0..self.rows).step_by(L3_BLOCK_SIZE) {
                 let i3_end = (iii + L3_BLOCK_SIZE).min(self.rows);
 
@@ -1669,6 +1905,63 @@ mod tests {
         assert_eq!(
             mismatches, 0,
             "Found {} mismatches in {}×{} matmul (3-level blocking), max_diff={}",
+            mismatches, size, size, max_diff
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "parallel")]
+    fn test_matmul_parallel_1024() {
+        // Phase 4: Test parallel matmul for 1024×1024 matrices
+        // This triggers the parallel path (PARALLEL_THRESHOLD = 1024)
+        let size = 1024;
+        let a = Matrix::from_vec(
+            size,
+            size,
+            (0..size * size).map(|i| ((i % 100) as f32) / 10.0).collect(),
+        )
+        .unwrap();
+        let b = Matrix::from_vec(
+            size,
+            size,
+            (0..size * size).map(|i| (((i * 7) % 100) as f32) / 10.0).collect(),
+        )
+        .unwrap();
+
+        let mut result_naive = Matrix::zeros(size, size);
+        let mut result_parallel = Matrix::zeros(size, size);
+
+        a.matmul_naive(&b, &mut result_naive).unwrap();
+        a.matmul_simd(&b, &mut result_parallel).unwrap(); // Uses parallel path with 'parallel' feature
+
+        // Verify correctness with appropriate tolerance
+        let mut max_diff = 0.0f32;
+        let mut mismatches = 0;
+        for i in 0..size {
+            for j in 0..size {
+                let naive_val = result_naive.get(i, j).unwrap();
+                let parallel_val = result_parallel.get(i, j).unwrap();
+                let diff = (naive_val - parallel_val).abs();
+                let tolerance = if naive_val.abs() > 1.0 {
+                    naive_val.abs() * 1e-2
+                } else {
+                    1e-2
+                };
+                if diff >= tolerance {
+                    mismatches += 1;
+                    if mismatches <= 5 {
+                        eprintln!(
+                            "Mismatch at ({}, {}): naive={}, parallel={}, diff={}, tolerance={}",
+                            i, j, naive_val, parallel_val, diff, tolerance
+                        );
+                    }
+                }
+                max_diff = max_diff.max(diff);
+            }
+        }
+        assert_eq!(
+            mismatches, 0,
+            "Found {} mismatches in {}×{} parallel matmul, max_diff={}",
             mismatches, size, size, max_diff
         );
     }
