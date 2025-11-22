@@ -1189,7 +1189,9 @@ fn bench_exp(c: &mut Criterion) {
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, &size| {
-            let data: Vec<f32> = (0..size).map(|i| (i as f32 / size as f32) * 4.0 - 2.0).collect();
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32 / size as f32) * 4.0 - 2.0)
+                .collect();
             let a = Vector::from_slice_with_backend(&data, Backend::Scalar);
 
             bencher.iter(|| {
@@ -1200,7 +1202,9 @@ fn bench_exp(c: &mut Criterion) {
         // SSE2 backend
         #[cfg(target_arch = "x86_64")]
         group.bench_with_input(BenchmarkId::new("SSE2", size), size, |bencher, &size| {
-            let data: Vec<f32> = (0..size).map(|i| (i as f32 / size as f32) * 4.0 - 2.0).collect();
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32 / size as f32) * 4.0 - 2.0)
+                .collect();
             let a = Vector::from_slice_with_backend(&data, Backend::SSE2);
 
             bencher.iter(|| {
@@ -1211,7 +1215,9 @@ fn bench_exp(c: &mut Criterion) {
         // AVX2 backend
         #[cfg(target_arch = "x86_64")]
         group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, &size| {
-            let data: Vec<f32> = (0..size).map(|i| (i as f32 / size as f32) * 4.0 - 2.0).collect();
+            let data: Vec<f32> = (0..size)
+                .map(|i| (i as f32 / size as f32) * 4.0 - 2.0)
+                .collect();
             let a = Vector::from_slice_with_backend(&data, Backend::AVX2);
 
             bencher.iter(|| {
@@ -1231,7 +1237,9 @@ fn bench_ln(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         // Generate positive values in range [0.1, 100.0] for logarithm
-        let data: Vec<f32> = (0..*size).map(|i| 0.1 + (i as f32 / *size as f32) * 99.9).collect();
+        let data: Vec<f32> = (0..*size)
+            .map(|i| 0.1 + (i as f32 / *size as f32) * 99.9)
+            .collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
@@ -1280,7 +1288,9 @@ fn bench_log2(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         // Generate positive values in range [0.1, 100.0] for logarithm
-        let data: Vec<f32> = (0..*size).map(|i| 0.1 + (i as f32 / *size as f32) * 99.9).collect();
+        let data: Vec<f32> = (0..*size)
+            .map(|i| 0.1 + (i as f32 / *size as f32) * 99.9)
+            .collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
@@ -1329,7 +1339,9 @@ fn bench_log10(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         // Generate positive values in range [0.1, 100.0] for logarithm
-        let data: Vec<f32> = (0..*size).map(|i| 0.1 + (i as f32 / *size as f32) * 99.9).collect();
+        let data: Vec<f32> = (0..*size)
+            .map(|i| 0.1 + (i as f32 / *size as f32) * 99.9)
+            .collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
@@ -1378,7 +1390,9 @@ fn bench_sqrt(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         // Generate positive values in range [0.1, 100.0] for sqrt
-        let data: Vec<f32> = (0..*size).map(|i| 0.1 + (i as f32 / *size as f32) * 99.9).collect();
+        let data: Vec<f32> = (0..*size)
+            .map(|i| 0.1 + (i as f32 / *size as f32) * 99.9)
+            .collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
@@ -1427,7 +1441,9 @@ fn bench_recip(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         // Generate non-zero values in range [0.1, 100.0] to avoid division by zero
-        let data: Vec<f32> = (0..*size).map(|i| 0.1 + (i as f32 / *size as f32) * 99.9).collect();
+        let data: Vec<f32> = (0..*size)
+            .map(|i| 0.1 + (i as f32 / *size as f32) * 99.9)
+            .collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {

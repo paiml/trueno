@@ -61,7 +61,10 @@ fn main() {
     println!("\nL2 Normalized: {:?}", normalized.as_slice());
 
     // Verify it's a unit vector (magnitude = 1.0)
-    let magnitude = (normalized.dot(&normalized).expect("Example should not fail")).sqrt();
+    let magnitude = (normalized
+        .dot(&normalized)
+        .expect("Example should not fail"))
+    .sqrt();
     println!("Magnitude: {:.6} (should be ~1.0)", magnitude);
 
     // Example: k-Nearest Neighbors distance calculation

@@ -262,4 +262,155 @@ mod tests {
             assert_eq!(backend, backend1, "Backend selection must be consistent");
         }
     }
+
+    #[test]
+    fn test_backend_select_best() {
+        // Test Backend::select_best() method
+        let backend = Backend::select_best();
+        assert_eq!(backend, select_best_available_backend());
+    }
+
+    #[test]
+    fn test_backend_variants() {
+        // Test all backend variants
+        let backends = vec![
+            Backend::Scalar,
+            Backend::SSE2,
+            Backend::AVX,
+            Backend::AVX2,
+            Backend::AVX512,
+            Backend::NEON,
+            Backend::WasmSIMD,
+            Backend::GPU,
+            Backend::Auto,
+        ];
+
+        // Verify all variants are distinct
+        for (i, backend1) in backends.iter().enumerate() {
+            for (j, backend2) in backends.iter().enumerate() {
+                if i == j {
+                    assert_eq!(backend1, backend2);
+                } else {
+                    assert_ne!(backend1, backend2);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_backend_debug() {
+        // Verify Debug trait works
+        let backend = Backend::AVX2;
+        let debug_str = format!("{:?}", backend);
+        assert!(debug_str.contains("AVX2"));
+
+        let backend = Backend::Auto;
+        let debug_str = format!("{:?}", backend);
+        assert!(debug_str.contains("Auto"));
+    }
+
+    #[test]
+    fn test_backend_clone() {
+        let backend = Backend::AVX2;
+        let cloned = backend.clone();
+        assert_eq!(backend, cloned);
+    }
+
+    #[test]
+    fn test_backend_copy() {
+        let backend = Backend::SSE2;
+        let copied = backend;
+        assert_eq!(backend, copied);
+    }
+
+    #[test]
+    fn test_op_complexity_values() {
+        assert_eq!(OpComplexity::Low as i32, 0);
+        assert_eq!(OpComplexity::Medium as i32, 1);
+        assert_eq!(OpComplexity::High as i32, 2);
+    }
+
+    #[test]
+    fn test_op_complexity_ord() {
+        // Test PartialOrd
+        assert!(OpComplexity::Low < OpComplexity::Medium);
+        assert!(OpComplexity::Medium < OpComplexity::High);
+        assert!(OpComplexity::Low < OpComplexity::High);
+
+        // Test Ord
+        use std::cmp::Ordering;
+        assert_eq!(OpComplexity::Low.cmp(&OpComplexity::Medium), Ordering::Less);
+        assert_eq!(
+            OpComplexity::Medium.cmp(&OpComplexity::High),
+            Ordering::Less
+        );
+        assert_eq!(
+            OpComplexity::High.cmp(&OpComplexity::Medium),
+            Ordering::Greater
+        );
+        assert_eq!(OpComplexity::Low.cmp(&OpComplexity::Low), Ordering::Equal);
+    }
+
+    #[test]
+    fn test_op_complexity_eq() {
+        assert_eq!(OpComplexity::Low, OpComplexity::Low);
+        assert_eq!(OpComplexity::Medium, OpComplexity::Medium);
+        assert_eq!(OpComplexity::High, OpComplexity::High);
+        assert_ne!(OpComplexity::Low, OpComplexity::High);
+    }
+
+    #[test]
+    fn test_op_complexity_debug() {
+        let complexity = OpComplexity::Medium;
+        let debug_str = format!("{:?}", complexity);
+        assert!(debug_str.contains("Medium"));
+    }
+
+    #[test]
+    fn test_op_complexity_clone() {
+        let complexity = OpComplexity::High;
+        let cloned = complexity.clone();
+        assert_eq!(complexity, cloned);
+    }
+
+    #[test]
+    fn test_op_complexity_copy() {
+        let complexity = OpComplexity::Low;
+        let copied = complexity;
+        assert_eq!(complexity, copied);
+    }
+
+    #[test]
+    fn test_trueno_error_reexport() {
+        // Verify error types are re-exported correctly
+        let _: Result<()> = Ok(());
+        let err: Result<()> = Err(TruenoError::EmptyVector);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn test_vector_reexport() {
+        // Verify Vector is re-exported correctly
+        let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        assert_eq!(v.len(), 3);
+    }
+
+    #[test]
+    fn test_matrix_reexport() {
+        // Verify Matrix is re-exported correctly
+        let m = Matrix::zeros(2, 2);
+        assert_eq!(m.rows(), 2);
+        assert_eq!(m.cols(), 2);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_detect_x86_backend() {
+        let backend = detect_x86_backend();
+        // On x86_64, we should get at least SSE2
+        assert!(matches!(
+            backend,
+            Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512
+        ));
+    }
 }
