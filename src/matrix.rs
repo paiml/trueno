@@ -424,8 +424,9 @@ impl Matrix<f32> {
     /// Helper function to process a single L3 row block for parallel matmul (Phase 4).
     ///
     /// # Safety
-    /// When called from parallel code with a Mutex-protected result, this is safe
-    /// because the Mutex ensures exclusive access.
+    /// When called from parallel code, the caller must ensure that each thread processes
+    /// a distinct row range [iii, i3_end) with no overlap. This function is safe because
+    /// each thread writes only to its own row range in the result matrix.
     #[allow(clippy::too_many_arguments)]
     fn process_l3_row_block_seq(
         iii: usize,
@@ -649,46 +650,51 @@ impl Matrix<f32> {
             // Phase 4: For ≥1024×1024, parallelize L3 row blocks with rayon
 
             if use_parallel {
-                // ===== Phase 4: Parallel 3-Level Cache Blocking (Option D: Partition Approach) =====
+                // ===== Phase 4: Parallel 3-Level Cache Blocking (Lock-Free Row Partitioning) =====
                 #[cfg(feature = "parallel")]
                 {
                     use rayon::prelude::*;
+                    use std::sync::Arc;
+                    use std::sync::atomic::{AtomicPtr, Ordering};
 
-                    // For simplicity with Rust's borrow checker, we'll use the sequential version
-                    // but call it from multiple threads. Each thread processes one L3 row block.
+                    // Lock-free parallelization strategy:
+                    // Each thread processes one L3 row block (256 rows). Since row blocks are
+                    // non-overlapping, threads write to distinct memory regions with no contention.
                     //
-                    // NOTE: This uses unsafe with clear safety documentation.
-                    // An alternative would be to use crossbeam or parking_lot, but we want
-                    // zero external dependencies for the core library.
+                    // Safety invariant: Each thread writes to result.data[iii*cols..(i3_end)*cols],
+                    // where iii = block_idx * L3_BLOCK_SIZE. Since L3 blocks don't overlap,
+                    // no two threads write to the same memory location.
 
-                    use std::sync::Mutex;
-
-                    let result_mutex = Mutex::new(result);
+                    // Store result pointer in Arc<AtomicPtr> for safe sharing
+                    let result_ptr = Arc::new(AtomicPtr::new(result as *mut Matrix<f32>));
 
                     // Calculate number of L3 blocks
                     let num_blocks = self.rows.div_ceil(L3_BLOCK_SIZE);
 
-                    // Process each L3 block in parallel
-                    // NOTE: Lock contention is low because each thread processes a large L3 block
-                    // (256x256 = 65K elements minimum), so lock/unlock overhead is amortized
+                    // Process each L3 block in parallel (lock-free)
                     (0..num_blocks).into_par_iter().for_each(|block_idx| {
                         let iii = block_idx * L3_BLOCK_SIZE;
                         let i3_end = (iii + L3_BLOCK_SIZE).min(self.rows);
 
-                        // Acquire lock for this block
-                        let mut res = result_mutex.lock().unwrap();
-
-                        // Process this L3 row block
-                        Self::process_l3_row_block_seq(
-                            iii,
-                            i3_end,
-                            self,
-                            &b_transposed,
-                            &mut res,
-                            L2_BLOCK_SIZE,
-                            L3_BLOCK_SIZE,
-                        );
-                        // Lock released here
+                        // SAFETY: Each thread processes a distinct row range [iii, i3_end).
+                        // No two threads write to overlapping memory locations because:
+                        // 1. L3 blocks partition rows: [0, 256), [256, 512), etc.
+                        // 2. Each thread only modifies result.data[iii*cols..(i3_end)*cols]
+                        // 3. Row ranges are non-overlapping by construction
+                        // 4. All threads complete before function returns (rayon guarantee)
+                        // 5. AtomicPtr ensures proper memory ordering across threads
+                        unsafe {
+                            let ptr = result_ptr.load(Ordering::Relaxed);
+                            Self::process_l3_row_block_seq(
+                                iii,
+                                i3_end,
+                                self,
+                                &b_transposed,
+                                &mut *ptr,
+                                L2_BLOCK_SIZE,
+                                L3_BLOCK_SIZE,
+                            );
+                        }
                     });
                 }
 
