@@ -1317,7 +1317,7 @@ impl Matrix<f32> {
         let v_slice = v.as_slice();
 
         // SIMD-optimized execution: each row-vector product is a dot product
-        // TODO: Add parallel execution for large matrices (>1024 rows) in future iteration
+        // Future enhancement: parallel execution for large matrices (>1024 rows)
         for (i, result) in result_data.iter_mut().enumerate() {
             let row_start = i * self.cols;
             let row = &self.data[row_start..(row_start + self.cols)];
