@@ -20,7 +20,8 @@ fn main() {
     println!("📐 Matrix Construction");
     println!("----------------------\n");
 
-    let m1 = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("Example should not fail");
+    let m1 = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        .expect("Example should not fail");
     println!("Matrix m1 (2×3):");
     print_matrix(&m1);
 
@@ -38,8 +39,10 @@ fn main() {
     println!("\n📊 Matrix Multiplication (matmul)");
     println!("----------------------------------\n");
 
-    let a = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("Example should not fail");
-    let b = Matrix::from_vec(3, 2, vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).expect("Example should not fail");
+    let a = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        .expect("Example should not fail");
+    let b = Matrix::from_vec(3, 2, vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
+        .expect("Example should not fail");
 
     println!("Matrix A (2×3):");
     print_matrix(&a);
@@ -61,7 +64,8 @@ fn main() {
     println!("\n🔄 Matrix Transpose");
     println!("-------------------\n");
 
-    let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("Example should not fail");
+    let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        .expect("Example should not fail");
     println!("Original matrix M (2×3):");
     print_matrix(&m);
 

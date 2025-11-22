@@ -1573,7 +1573,6 @@ impl VectorBackend for Avx2Backend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[cfg(target_arch = "x86_64")]
     #[test]
@@ -1817,8 +1816,8 @@ mod tests {
 
         // Test various ranges: negative, zero, positive, large values
         let test_values = vec![
-            -10.0, -5.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0,
-            -50.0, 87.0, -87.0, // near overflow/underflow limits
+            -10.0, -5.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0, -50.0, 87.0,
+            -87.0, // near overflow/underflow limits
         ];
         let mut avx2_result = vec![0.0; test_values.len()];
         let mut scalar_result = vec![0.0; test_values.len()];
@@ -2296,8 +2295,13 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
-                    "sqrt({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert!(
+                (avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                "sqrt({}) mismatch: avx2={}, scalar={}",
+                a[i],
+                avx2_result[i],
+                scalar_result[i]
+            );
         }
     }
 
@@ -2317,8 +2321,13 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
-                    "recip({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert!(
+                (avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                "recip({}) mismatch: avx2={}, scalar={}",
+                a[i],
+                avx2_result[i],
+                scalar_result[i]
+            );
         }
     }
 
@@ -2338,8 +2347,13 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
-                    "ln({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert!(
+                (avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                "ln({}) mismatch: avx2={}, scalar={}",
+                a[i],
+                avx2_result[i],
+                scalar_result[i]
+            );
         }
     }
 
@@ -2359,8 +2373,13 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
-                    "log2({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert!(
+                (avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                "log2({}) mismatch: avx2={}, scalar={}",
+                a[i],
+                avx2_result[i],
+                scalar_result[i]
+            );
         }
     }
 
@@ -2380,8 +2399,13 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
-                    "log10({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert!(
+                (avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                "log10({}) mismatch: avx2={}, scalar={}",
+                a[i],
+                avx2_result[i],
+                scalar_result[i]
+            );
         }
     }
 
@@ -2391,7 +2415,18 @@ mod tests {
         use super::super::scalar::ScalarBackend;
 
         use std::f32::consts::PI;
-        let a = [0.0, PI/6.0, PI/4.0, PI/3.0, PI/2.0, PI, 1.5*PI, 2.0*PI, -PI/4.0, -PI/2.0];
+        let a = [
+            0.0,
+            PI / 6.0,
+            PI / 4.0,
+            PI / 3.0,
+            PI / 2.0,
+            PI,
+            1.5 * PI,
+            2.0 * PI,
+            -PI / 4.0,
+            -PI / 2.0,
+        ];
         let mut avx2_result = vec![0.0; a.len()];
         let mut scalar_result = vec![0.0; a.len()];
 
@@ -2402,8 +2437,13 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
-                    "sin({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert!(
+                (avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                "sin({}) mismatch: avx2={}, scalar={}",
+                a[i],
+                avx2_result[i],
+                scalar_result[i]
+            );
         }
     }
 
@@ -2413,7 +2453,18 @@ mod tests {
         use super::super::scalar::ScalarBackend;
 
         use std::f32::consts::PI;
-        let a = [0.0, PI/6.0, PI/4.0, PI/3.0, PI/2.0, PI, 1.5*PI, 2.0*PI, -PI/4.0, -PI/2.0];
+        let a = [
+            0.0,
+            PI / 6.0,
+            PI / 4.0,
+            PI / 3.0,
+            PI / 2.0,
+            PI,
+            1.5 * PI,
+            2.0 * PI,
+            -PI / 4.0,
+            -PI / 2.0,
+        ];
         let mut avx2_result = vec![0.0; a.len()];
         let mut scalar_result = vec![0.0; a.len()];
 
@@ -2424,8 +2475,13 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
-                    "cos({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert!(
+                (avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                "cos({}) mismatch: avx2={}, scalar={}",
+                a[i],
+                avx2_result[i],
+                scalar_result[i]
+            );
         }
     }
 
@@ -2435,7 +2491,18 @@ mod tests {
         use super::super::scalar::ScalarBackend;
 
         use std::f32::consts::PI;
-        let a = [0.0, PI/6.0, PI/4.0, PI/3.0, 1.0, -1.0, 0.5, -0.5, 2.0, -2.0];
+        let a = [
+            0.0,
+            PI / 6.0,
+            PI / 4.0,
+            PI / 3.0,
+            1.0,
+            -1.0,
+            0.5,
+            -0.5,
+            2.0,
+            -2.0,
+        ];
         let mut avx2_result = vec![0.0; a.len()];
         let mut scalar_result = vec![0.0; a.len()];
 
@@ -2446,8 +2513,13 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
-                    "tan({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert!(
+                (avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                "tan({}) mismatch: avx2={}, scalar={}",
+                a[i],
+                avx2_result[i],
+                scalar_result[i]
+            );
         }
     }
 
@@ -2467,8 +2539,11 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert_eq!(avx2_result[i], scalar_result[i],
-                       "floor({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert_eq!(
+                avx2_result[i], scalar_result[i],
+                "floor({}) mismatch: avx2={}, scalar={}",
+                a[i], avx2_result[i], scalar_result[i]
+            );
         }
     }
 
@@ -2488,8 +2563,11 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert_eq!(avx2_result[i], scalar_result[i],
-                       "ceil({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert_eq!(
+                avx2_result[i], scalar_result[i],
+                "ceil({}) mismatch: avx2={}, scalar={}",
+                a[i], avx2_result[i], scalar_result[i]
+            );
         }
     }
 
@@ -2509,8 +2587,13 @@ mod tests {
         }
 
         for i in 0..a.len() {
-            assert!((avx2_result[i] - scalar_result[i]).abs() < 1e-5,
-                    "round({}) mismatch: avx2={}, scalar={}", a[i], avx2_result[i], scalar_result[i]);
+            assert!(
+                (avx2_result[i] - scalar_result[i]).abs() < 1e-5,
+                "round({}) mismatch: avx2={}, scalar={}",
+                a[i],
+                avx2_result[i],
+                scalar_result[i]
+            );
         }
     }
 
@@ -2526,9 +2609,9 @@ mod tests {
 
         // Test various input sizes
         let test_cases = vec![
-            vec![],                                                  // empty
-            vec![5.0],                                               // single element
-            vec![-3.0, 1.0, -4.0, 1.0, 5.0],                        // small vector
+            vec![],                                                // empty
+            vec![5.0],                                             // single element
+            vec![-3.0, 1.0, -4.0, 1.0, 5.0],                       // small vector
             vec![-10.0, 5.0, 3.0, 7.0, -2.0, 8.0, 4.0],            // 7 elements
             vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],          // 8 elements (aligned)
             vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0], // 9 elements (remainder)

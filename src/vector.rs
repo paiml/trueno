@@ -4356,10 +4356,19 @@ mod tests {
             assert!(result.is_err(), "Alignment {} should be invalid", alignment);
             match result {
                 Err(TruenoError::InvalidInput(msg)) => {
-                    assert!(msg.contains("power of 2"), "Error message should mention power of 2");
-                    assert!(msg.contains(&alignment.to_string()), "Error message should mention the invalid alignment");
+                    assert!(
+                        msg.contains("power of 2"),
+                        "Error message should mention power of 2"
+                    );
+                    assert!(
+                        msg.contains(&alignment.to_string()),
+                        "Error message should mention the invalid alignment"
+                    );
                 }
-                _ => panic!("Expected InvalidInput error for non-power-of-2 alignment {}", alignment),
+                _ => panic!(
+                    "Expected InvalidInput error for non-power-of-2 alignment {}",
+                    alignment
+                ),
             }
         }
     }
@@ -8622,7 +8631,10 @@ mod tests {
 
         // First SMALL_SIZE elements should match
         for i in 0..SMALL_SIZE {
-            assert_eq!(result_parallel.as_slice()[i], result_sequential.as_slice()[i]);
+            assert_eq!(
+                result_parallel.as_slice()[i],
+                result_sequential.as_slice()[i]
+            );
         }
     }
 }

@@ -71,4 +71,48 @@ mod tests {
         let result = run_command(&args);
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_run_command_check_simd() {
+        let args = vec!["xtask".to_string(), "check-simd".to_string()];
+        // check-simd will run against actual source files
+        let result = run_command(&args);
+        // Should succeed or fail based on actual source - we just test it doesn't panic
+        let _ = result;
+    }
+
+    #[test]
+    fn test_run_command_install_hooks() {
+        let args = vec!["xtask".to_string(), "install-hooks".to_string()];
+        // install-hooks requires .git directory which exists in this repo
+        let result = run_command(&args);
+        // Should run without panicking
+        let _ = result;
+    }
+
+    #[test]
+    fn test_run_command_usage_message() {
+        let args = vec!["xtask".to_string()];
+        let result = run_command(&args);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("check-simd"));
+        assert!(err_msg.contains("install-hooks"));
+        assert!(err_msg.contains("validate-examples"));
+    }
+
+    #[test]
+    fn test_run_command_with_extra_args() {
+        // Test that we parse first command arg only
+        let args = vec![
+            "xtask".to_string(),
+            "unknown".to_string(),
+            "extra".to_string(),
+        ];
+        let result = run_command(&args);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Unknown command"));
+        assert!(err.contains("unknown"));
+    }
 }
