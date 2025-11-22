@@ -131,15 +131,44 @@ fn main() {
     println!("Activation   | -5.0     | -1.0     | 0.0      | 1.0      | 5.0");
     println!("-------------|----------|----------|----------|----------|----------");
 
-    print_activation_row("ReLU        ", &test_points.relu().expect("Example should not fail"));
-    print_activation_row("Leaky ReLU  ", &test_points.leaky_relu(0.01).expect("Example should not fail"));
-    print_activation_row("ELU         ", &test_points.elu(1.0).expect("Example should not fail"));
-    print_activation_row("Sigmoid     ", &test_points.sigmoid().expect("Example should not fail"));
-    print_activation_row("GELU        ", &test_points.gelu().expect("Example should not fail"));
-    print_activation_row("Swish       ", &test_points.swish().expect("Example should not fail"));
-    print_activation_row("Hardswish   ", &test_points.hardswish().expect("Example should not fail"));
-    print_activation_row("Mish        ", &test_points.mish().expect("Example should not fail"));
-    print_activation_row("SELU        ", &test_points.selu().expect("Example should not fail"));
+    print_activation_row(
+        "ReLU        ",
+        &test_points.relu().expect("Example should not fail"),
+    );
+    print_activation_row(
+        "Leaky ReLU  ",
+        &test_points
+            .leaky_relu(0.01)
+            .expect("Example should not fail"),
+    );
+    print_activation_row(
+        "ELU         ",
+        &test_points.elu(1.0).expect("Example should not fail"),
+    );
+    print_activation_row(
+        "Sigmoid     ",
+        &test_points.sigmoid().expect("Example should not fail"),
+    );
+    print_activation_row(
+        "GELU        ",
+        &test_points.gelu().expect("Example should not fail"),
+    );
+    print_activation_row(
+        "Swish       ",
+        &test_points.swish().expect("Example should not fail"),
+    );
+    print_activation_row(
+        "Hardswish   ",
+        &test_points.hardswish().expect("Example should not fail"),
+    );
+    print_activation_row(
+        "Mish        ",
+        &test_points.mish().expect("Example should not fail"),
+    );
+    print_activation_row(
+        "SELU        ",
+        &test_points.selu().expect("Example should not fail"),
+    );
 
     println!("\n");
 

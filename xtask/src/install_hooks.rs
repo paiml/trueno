@@ -3,7 +3,6 @@
 /// Installs pre-commit hooks for Trueno development that enforce:
 /// - SIMD attribute validation (prevents missing #[target_feature])
 /// - Prevents commits causing 5.9x-21x performance degradation
-
 use anyhow::{Context, Result};
 use colored::Colorize;
 use std::fs;
@@ -54,8 +53,7 @@ pub fn run() -> Result<()> {
 
     // Create .git/hooks directory if it doesn't exist
     let hooks_dir = Path::new(".git/hooks");
-    fs::create_dir_all(hooks_dir)
-        .context("Failed to create .git/hooks directory")?;
+    fs::create_dir_all(hooks_dir).context("Failed to create .git/hooks directory")?;
 
     // Install pre-commit hook
     let pre_commit_path = hooks_dir.join("pre-commit");
@@ -71,8 +69,7 @@ pub fn run() -> Result<()> {
     }
 
     // Write the hook
-    fs::write(&pre_commit_path, PRE_COMMIT_HOOK)
-        .context("Failed to write pre-commit hook")?;
+    fs::write(&pre_commit_path, PRE_COMMIT_HOOK).context("Failed to write pre-commit hook")?;
 
     // Make it executable (Unix only)
     #[cfg(unix)]
@@ -84,7 +81,10 @@ pub fn run() -> Result<()> {
             .context("Failed to make pre-commit hook executable")?;
     }
 
-    println!("{}", "✅ Installed pre-commit hook: SIMD attribute validation".green());
+    println!(
+        "{}",
+        "✅ Installed pre-commit hook: SIMD attribute validation".green()
+    );
     println!();
 
     // Summary
@@ -103,6 +103,8 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use tempfile::TempDir;
 
     #[test]
     fn test_pre_commit_hook_content() {
@@ -111,5 +113,133 @@ mod tests {
         assert!(PRE_COMMIT_HOOK.contains("cargo run"));
         assert!(PRE_COMMIT_HOOK.contains("#!/bin/bash"));
         assert!(PRE_COMMIT_HOOK.contains("exit"));
+        assert!(PRE_COMMIT_HOOK.contains("--package xtask"));
+        assert!(PRE_COMMIT_HOOK.contains("--no-verify"));
+    }
+
+    #[test]
+    fn test_pre_commit_hook_structure() {
+        // Verify shebang is first line
+        assert!(PRE_COMMIT_HOOK.starts_with("#!/bin/bash"));
+
+        // Verify set -e for error handling
+        assert!(PRE_COMMIT_HOOK.contains("set -e"));
+
+        // Verify proper exit codes
+        assert!(PRE_COMMIT_HOOK.contains("exit 0"));
+        assert!(PRE_COMMIT_HOOK.contains("exit 1"));
+
+        // Verify error messages
+        assert!(PRE_COMMIT_HOOK.contains("FAILED"));
+    }
+
+    #[test]
+    fn test_pre_commit_hook_xtask_command() {
+        // Verify the correct xtask command is called
+        assert!(PRE_COMMIT_HOOK.contains("cargo run"));
+        assert!(PRE_COMMIT_HOOK.contains("--quiet"));
+        assert!(PRE_COMMIT_HOOK.contains("--package xtask"));
+        assert!(PRE_COMMIT_HOOK.contains("check-simd"));
+    }
+
+    #[test]
+    fn test_pre_commit_hook_has_bypass_instructions() {
+        // Verify bypass instructions are included
+        assert!(PRE_COMMIT_HOOK.contains("--no-verify"));
+        assert!(PRE_COMMIT_HOOK.contains("EMERGENCY"));
+    }
+
+    #[test]
+    fn test_run_without_git_directory() {
+        // Create temp directory without .git
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to temp directory
+        std::env::set_current_dir(&temp_dir).unwrap();
+
+        // Should fail because no .git directory
+        let result = run();
+        assert!(result.is_err());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_run_with_git_directory() {
+        // Create temp directory with .git
+        let temp_dir = TempDir::new().unwrap();
+        let git_dir = temp_dir.path().join(".git");
+        fs::create_dir(&git_dir).unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&temp_dir).unwrap();
+
+        // Should succeed
+        let result = run();
+        assert!(result.is_ok());
+
+        // Verify hook was created
+        let hook_path = git_dir.join("hooks").join("pre-commit");
+        assert!(hook_path.exists());
+
+        // Verify hook content
+        let content = fs::read_to_string(&hook_path).unwrap();
+        assert_eq!(content, PRE_COMMIT_HOOK);
+
+        // Verify executable on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let perms = fs::metadata(&hook_path).unwrap().permissions();
+            assert_eq!(perms.mode() & 0o111, 0o111); // Check executable bits
+        }
+
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_run_backs_up_existing_hook() {
+        // Create temp directory with .git
+        let temp_dir = TempDir::new().unwrap();
+        let git_dir = temp_dir.path().join(".git");
+        let hooks_dir = git_dir.join("hooks");
+        fs::create_dir_all(&hooks_dir).unwrap();
+
+        // Create existing hook
+        let hook_path = hooks_dir.join("pre-commit");
+        let mut file = fs::File::create(&hook_path).unwrap();
+        file.write_all(b"old hook content").unwrap();
+        drop(file);
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&temp_dir).unwrap();
+
+        // Run installer
+        let result = run();
+        assert!(result.is_ok());
+
+        // Verify backup was created
+        let backup_path = hooks_dir.join("pre-commit.backup");
+        assert!(backup_path.exists());
+        let backup_content = fs::read_to_string(&backup_path).unwrap();
+        assert_eq!(backup_content, "old hook content");
+
+        // Verify new hook was installed
+        let new_content = fs::read_to_string(&hook_path).unwrap();
+        assert_eq!(new_content, PRE_COMMIT_HOOK);
+
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_hook_path_construction() {
+        let hooks_dir = Path::new(".git/hooks");
+        let pre_commit = hooks_dir.join("pre-commit");
+        assert_eq!(pre_commit.to_str().unwrap(), ".git/hooks/pre-commit");
+
+        let backup = hooks_dir.join("pre-commit.backup");
+        assert_eq!(backup.to_str().unwrap(), ".git/hooks/pre-commit.backup");
     }
 }

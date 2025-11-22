@@ -393,10 +393,7 @@ impl Matrix<f32> {
         use std::arch::x86_64::*;
 
         // Sum upper and lower 128-bit lanes
-        let sum128 = _mm_add_ps(
-            _mm256_castps256_ps128(v),
-            _mm256_extractf128_ps(v, 1),
-        );
+        let sum128 = _mm_add_ps(_mm256_castps256_ps128(v), _mm256_extractf128_ps(v, 1));
 
         // Horizontal add within 128-bit lane (4 values → 2 values)
         let sum64 = _mm_hadd_ps(sum128, sum128);
@@ -462,7 +459,8 @@ impl Matrix<f32> {
 
                             // Micro-kernel processing
                             #[cfg(target_arch = "x86_64")]
-                            let use_microkernel = matches!(a.backend, Backend::AVX2 | Backend::AVX512);
+                            let use_microkernel =
+                                matches!(a.backend, Backend::AVX2 | Backend::AVX512);
 
                             #[cfg(target_arch = "x86_64")]
                             if use_microkernel {
@@ -484,11 +482,16 @@ impl Matrix<f32> {
 
                                     for j in jj..j_end {
                                         let col_start = j * b_transposed.cols + kk;
-                                        let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                        let b_col =
+                                            &b_transposed.data[col_start..col_start + block_size];
 
                                         let mut partial_dots = [0.0f32; 4];
                                         unsafe {
-                                            Matrix::matmul_microkernel_4x1_avx2(a_rows, b_col, &mut partial_dots);
+                                            Matrix::matmul_microkernel_4x1_avx2(
+                                                a_rows,
+                                                b_col,
+                                                &mut partial_dots,
+                                            );
                                         }
 
                                         result.data[i * result.cols + j] += partial_dots[0];
@@ -507,7 +510,8 @@ impl Matrix<f32> {
 
                                     for j in jj..j_end {
                                         let col_start = j * b_transposed.cols + kk;
-                                        let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                        let b_col =
+                                            &b_transposed.data[col_start..col_start + block_size];
 
                                         let partial_dot = unsafe { Avx2Backend::dot(a_row, b_col) };
                                         result.data[i * result.cols + j] += partial_dot;
@@ -522,23 +526,35 @@ impl Matrix<f32> {
 
                                     for j in jj..j_end {
                                         let col_start = j * b_transposed.cols + kk;
-                                        let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                        let b_col =
+                                            &b_transposed.data[col_start..col_start + block_size];
 
                                         let partial_dot = unsafe {
                                             match a.backend {
                                                 Backend::Scalar => ScalarBackend::dot(a_row, b_col),
                                                 #[cfg(target_arch = "x86_64")]
-                                                Backend::SSE2 | Backend::AVX => Sse2Backend::dot(a_row, b_col),
+                                                Backend::SSE2 | Backend::AVX => {
+                                                    Sse2Backend::dot(a_row, b_col)
+                                                }
                                                 #[cfg(not(target_arch = "x86_64"))]
-                                                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                                                Backend::SSE2
+                                                | Backend::AVX
+                                                | Backend::AVX2
+                                                | Backend::AVX512 => {
                                                     ScalarBackend::dot(a_row, b_col)
                                                 }
-                                                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                                                #[cfg(any(
+                                                    target_arch = "aarch64",
+                                                    target_arch = "arm"
+                                                ))]
                                                 Backend::NEON => {
                                                     use crate::backends::neon::NeonBackend;
                                                     NeonBackend::dot(a_row, b_col)
                                                 }
-                                                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                                                #[cfg(not(any(
+                                                    target_arch = "aarch64",
+                                                    target_arch = "arm"
+                                                )))]
                                                 Backend::NEON => ScalarBackend::dot(a_row, b_col),
                                                 #[cfg(target_arch = "wasm32")]
                                                 Backend::WasmSIMD => {
@@ -546,7 +562,9 @@ impl Matrix<f32> {
                                                     WasmBackend::dot(a_row, b_col)
                                                 }
                                                 #[cfg(not(target_arch = "wasm32"))]
-                                                Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
+                                                Backend::WasmSIMD => {
+                                                    ScalarBackend::dot(a_row, b_col)
+                                                }
                                                 // Catch-all for GPU, Auto, and any other backends
                                                 _ => ScalarBackend::dot(a_row, b_col),
                                             }
@@ -566,17 +584,24 @@ impl Matrix<f32> {
 
                                     for j in jj..j_end {
                                         let col_start = j * b_transposed.cols + kk;
-                                        let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                        let b_col =
+                                            &b_transposed.data[col_start..col_start + block_size];
 
                                         let partial_dot = unsafe {
                                             match a.backend {
                                                 Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                                                #[cfg(any(
+                                                    target_arch = "aarch64",
+                                                    target_arch = "arm"
+                                                ))]
                                                 Backend::NEON => {
                                                     use crate::backends::neon::NeonBackend;
                                                     NeonBackend::dot(a_row, b_col)
                                                 }
-                                                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                                                #[cfg(not(any(
+                                                    target_arch = "aarch64",
+                                                    target_arch = "arm"
+                                                )))]
                                                 Backend::NEON => ScalarBackend::dot(a_row, b_col),
                                                 #[cfg(target_arch = "wasm32")]
                                                 Backend::WasmSIMD => {
@@ -584,7 +609,9 @@ impl Matrix<f32> {
                                                     WasmBackend::dot(a_row, b_col)
                                                 }
                                                 #[cfg(not(target_arch = "wasm32"))]
-                                                Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
+                                                Backend::WasmSIMD => {
+                                                    ScalarBackend::dot(a_row, b_col)
+                                                }
                                                 _ => ScalarBackend::dot(a_row, b_col),
                                             }
                                         };
@@ -625,9 +652,8 @@ impl Matrix<f32> {
         let b_transposed = other.transpose();
 
         // Determine if we should use 3-level blocking (Phase 3)
-        let use_l3_blocking = self.rows >= L3_THRESHOLD
-            && self.cols >= L3_THRESHOLD
-            && other.cols >= L3_THRESHOLD;
+        let use_l3_blocking =
+            self.rows >= L3_THRESHOLD && self.cols >= L3_THRESHOLD && other.cols >= L3_THRESHOLD;
 
         // Phase 4: Determine if we should use multi-threading (≥1024×1024)
         #[cfg(feature = "parallel")]
@@ -656,8 +682,8 @@ impl Matrix<f32> {
                 #[cfg(feature = "parallel")]
                 {
                     use rayon::prelude::*;
-                    use std::sync::Arc;
                     use std::sync::atomic::{AtomicPtr, Ordering};
+                    use std::sync::Arc;
 
                     // Lock-free parallelization strategy:
                     // Each thread processes one L3 row block (256 rows). Since row blocks are
@@ -726,7 +752,8 @@ impl Matrix<f32> {
 
                                     // Micro-kernel processing
                                     #[cfg(target_arch = "x86_64")]
-                                    let use_microkernel = matches!(self.backend, Backend::AVX2 | Backend::AVX512);
+                                    let use_microkernel =
+                                        matches!(self.backend, Backend::AVX2 | Backend::AVX512);
 
                                     #[cfg(target_arch = "x86_64")]
                                     if use_microkernel {
@@ -748,17 +775,25 @@ impl Matrix<f32> {
 
                                             for j in jj..j_end {
                                                 let col_start = j * b_transposed.cols + kk;
-                                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                                let b_col = &b_transposed.data
+                                                    [col_start..col_start + block_size];
 
                                                 let mut partial_dots = [0.0f32; 4];
                                                 unsafe {
-                                                    Self::matmul_microkernel_4x1_avx2(a_rows, b_col, &mut partial_dots);
+                                                    Self::matmul_microkernel_4x1_avx2(
+                                                        a_rows,
+                                                        b_col,
+                                                        &mut partial_dots,
+                                                    );
                                                 }
 
                                                 result.data[i * result.cols + j] += partial_dots[0];
-                                                result.data[(i + 1) * result.cols + j] += partial_dots[1];
-                                                result.data[(i + 2) * result.cols + j] += partial_dots[2];
-                                                result.data[(i + 3) * result.cols + j] += partial_dots[3];
+                                                result.data[(i + 1) * result.cols + j] +=
+                                                    partial_dots[1];
+                                                result.data[(i + 2) * result.cols + j] +=
+                                                    partial_dots[2];
+                                                result.data[(i + 3) * result.cols + j] +=
+                                                    partial_dots[3];
                                             }
 
                                             i += 4;
@@ -767,13 +802,16 @@ impl Matrix<f32> {
                                         // Handle remaining rows (< 4)
                                         for i in i..i_end {
                                             let row_start = i * self.cols + kk;
-                                            let a_row = &self.data[row_start..row_start + block_size];
+                                            let a_row =
+                                                &self.data[row_start..row_start + block_size];
 
                                             for j in jj..j_end {
                                                 let col_start = j * b_transposed.cols + kk;
-                                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                                let b_col = &b_transposed.data
+                                                    [col_start..col_start + block_size];
 
-                                                let partial_dot = unsafe { Avx2Backend::dot(a_row, b_col) };
+                                                let partial_dot =
+                                                    unsafe { Avx2Backend::dot(a_row, b_col) };
                                                 result.data[i * result.cols + j] += partial_dot;
                                             }
                                         }
@@ -782,36 +820,58 @@ impl Matrix<f32> {
                                         #[allow(unused_variables)]
                                         for i in ii..i_end {
                                             let row_start = i * self.cols + kk;
-                                            let a_row = &self.data[row_start..row_start + block_size];
+                                            let a_row =
+                                                &self.data[row_start..row_start + block_size];
 
                                             for j in jj..j_end {
                                                 let col_start = j * b_transposed.cols + kk;
-                                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                                let b_col = &b_transposed.data
+                                                    [col_start..col_start + block_size];
 
                                                 let partial_dot = unsafe {
                                                     match self.backend {
-                                                        Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                                        #[cfg(target_arch = "x86_64")]
-                                                        Backend::SSE2 | Backend::AVX => Sse2Backend::dot(a_row, b_col),
-                                                        #[cfg(not(target_arch = "x86_64"))]
-                                                        Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                                                        Backend::Scalar => {
                                                             ScalarBackend::dot(a_row, b_col)
                                                         }
-                                                        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                                                        #[cfg(target_arch = "x86_64")]
+                                                        Backend::SSE2 | Backend::AVX => {
+                                                            Sse2Backend::dot(a_row, b_col)
+                                                        }
+                                                        #[cfg(not(target_arch = "x86_64"))]
+                                                        Backend::SSE2
+                                                        | Backend::AVX
+                                                        | Backend::AVX2
+                                                        | Backend::AVX512 => {
+                                                            ScalarBackend::dot(a_row, b_col)
+                                                        }
+                                                        #[cfg(any(
+                                                            target_arch = "aarch64",
+                                                            target_arch = "arm"
+                                                        ))]
                                                         Backend::NEON => {
                                                             use crate::backends::neon::NeonBackend;
                                                             NeonBackend::dot(a_row, b_col)
                                                         }
-                                                        #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                                                        Backend::NEON => ScalarBackend::dot(a_row, b_col),
+                                                        #[cfg(not(any(
+                                                            target_arch = "aarch64",
+                                                            target_arch = "arm"
+                                                        )))]
+                                                        Backend::NEON => {
+                                                            ScalarBackend::dot(a_row, b_col)
+                                                        }
                                                         #[cfg(target_arch = "wasm32")]
                                                         Backend::WasmSIMD => {
                                                             use crate::backends::wasm::WasmBackend;
                                                             WasmBackend::dot(a_row, b_col)
                                                         }
                                                         #[cfg(not(target_arch = "wasm32"))]
-                                                        Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
-                                                        Backend::GPU | Backend::Auto | Backend::AVX2 | Backend::AVX512 => {
+                                                        Backend::WasmSIMD => {
+                                                            ScalarBackend::dot(a_row, b_col)
+                                                        }
+                                                        Backend::GPU
+                                                        | Backend::Auto
+                                                        | Backend::AVX2
+                                                        | Backend::AVX512 => {
                                                             ScalarBackend::dot(a_row, b_col)
                                                         }
                                                     }
@@ -830,25 +890,38 @@ impl Matrix<f32> {
 
                                         for j in jj..j_end {
                                             let col_start = j * b_transposed.cols + kk;
-                                            let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                            let b_col = &b_transposed.data
+                                                [col_start..col_start + block_size];
 
                                             let partial_dot = unsafe {
                                                 match self.backend {
-                                                    Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                                    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                                                    Backend::Scalar => {
+                                                        ScalarBackend::dot(a_row, b_col)
+                                                    }
+                                                    #[cfg(any(
+                                                        target_arch = "aarch64",
+                                                        target_arch = "arm"
+                                                    ))]
                                                     Backend::NEON => {
                                                         use crate::backends::neon::NeonBackend;
                                                         NeonBackend::dot(a_row, b_col)
                                                     }
-                                                    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                                                    Backend::NEON => ScalarBackend::dot(a_row, b_col),
+                                                    #[cfg(not(any(
+                                                        target_arch = "aarch64",
+                                                        target_arch = "arm"
+                                                    )))]
+                                                    Backend::NEON => {
+                                                        ScalarBackend::dot(a_row, b_col)
+                                                    }
                                                     #[cfg(target_arch = "wasm32")]
                                                     Backend::WasmSIMD => {
                                                         use crate::backends::wasm::WasmBackend;
                                                         WasmBackend::dot(a_row, b_col)
                                                     }
                                                     #[cfg(not(target_arch = "wasm32"))]
-                                                    Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
+                                                    Backend::WasmSIMD => {
+                                                        ScalarBackend::dot(a_row, b_col)
+                                                    }
                                                     _ => ScalarBackend::dot(a_row, b_col),
                                                 }
                                             };
@@ -870,76 +943,138 @@ impl Matrix<f32> {
             // by avoiding the overhead of 3-level loop nesting
 
             for ii in (0..self.rows).step_by(L2_BLOCK_SIZE) {
-            let i_end = (ii + L2_BLOCK_SIZE).min(self.rows);
+                let i_end = (ii + L2_BLOCK_SIZE).min(self.rows);
 
-            for jj in (0..other.cols).step_by(L2_BLOCK_SIZE) {
-                let j_end = (jj + L2_BLOCK_SIZE).min(other.cols);
+                for jj in (0..other.cols).step_by(L2_BLOCK_SIZE) {
+                    let j_end = (jj + L2_BLOCK_SIZE).min(other.cols);
 
-                for kk in (0..self.cols).step_by(L2_BLOCK_SIZE) {
-                    let k_end = (kk + L2_BLOCK_SIZE).min(self.cols);
-                    let block_size = k_end - kk;
+                    for kk in (0..self.cols).step_by(L2_BLOCK_SIZE) {
+                        let k_end = (kk + L2_BLOCK_SIZE).min(self.cols);
+                        let block_size = k_end - kk;
 
-                    // Inner loops: Process L2 block with micro-kernel (Phase 2) or SIMD
-                    #[cfg(target_arch = "x86_64")]
-                    let use_microkernel = matches!(self.backend, Backend::AVX2 | Backend::AVX512);
+                        // Inner loops: Process L2 block with micro-kernel (Phase 2) or SIMD
+                        #[cfg(target_arch = "x86_64")]
+                        let use_microkernel =
+                            matches!(self.backend, Backend::AVX2 | Backend::AVX512);
 
-                    #[cfg(target_arch = "x86_64")]
-                    if use_microkernel {
-                        // Phase 2: Use 4×1 micro-kernel for AVX2/AVX512
-                        let mut i = ii;
+                        #[cfg(target_arch = "x86_64")]
+                        if use_microkernel {
+                            // Phase 2: Use 4×1 micro-kernel for AVX2/AVX512
+                            let mut i = ii;
 
-                        // Process 4 rows at a time with micro-kernel
-                        while i + 4 <= i_end {
-                            // Get 4 consecutive rows of A
-                            let row0_start = i * self.cols + kk;
-                            let row1_start = (i + 1) * self.cols + kk;
-                            let row2_start = (i + 2) * self.cols + kk;
-                            let row3_start = (i + 3) * self.cols + kk;
+                            // Process 4 rows at a time with micro-kernel
+                            while i + 4 <= i_end {
+                                // Get 4 consecutive rows of A
+                                let row0_start = i * self.cols + kk;
+                                let row1_start = (i + 1) * self.cols + kk;
+                                let row2_start = (i + 2) * self.cols + kk;
+                                let row3_start = (i + 3) * self.cols + kk;
 
-                            let a_rows = [
-                                &self.data[row0_start..row0_start + block_size],
-                                &self.data[row1_start..row1_start + block_size],
-                                &self.data[row2_start..row2_start + block_size],
-                                &self.data[row3_start..row3_start + block_size],
-                            ];
+                                let a_rows = [
+                                    &self.data[row0_start..row0_start + block_size],
+                                    &self.data[row1_start..row1_start + block_size],
+                                    &self.data[row2_start..row2_start + block_size],
+                                    &self.data[row3_start..row3_start + block_size],
+                                ];
 
-                            // Process each column of B with the micro-kernel
-                            for j in jj..j_end {
-                                let col_start = j * b_transposed.cols + kk;
-                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                // Process each column of B with the micro-kernel
+                                for j in jj..j_end {
+                                    let col_start = j * b_transposed.cols + kk;
+                                    let b_col =
+                                        &b_transposed.data[col_start..col_start + block_size];
 
-                                // Compute 4 dot products simultaneously
-                                let mut partial_dots = [0.0f32; 4];
-                                unsafe {
-                                    Self::matmul_microkernel_4x1_avx2(a_rows, b_col, &mut partial_dots);
+                                    // Compute 4 dot products simultaneously
+                                    let mut partial_dots = [0.0f32; 4];
+                                    unsafe {
+                                        Self::matmul_microkernel_4x1_avx2(
+                                            a_rows,
+                                            b_col,
+                                            &mut partial_dots,
+                                        );
+                                    }
+
+                                    // Accumulate results
+                                    result.data[i * result.cols + j] += partial_dots[0];
+                                    result.data[(i + 1) * result.cols + j] += partial_dots[1];
+                                    result.data[(i + 2) * result.cols + j] += partial_dots[2];
+                                    result.data[(i + 3) * result.cols + j] += partial_dots[3];
                                 }
 
-                                // Accumulate results
-                                result.data[i * result.cols + j] += partial_dots[0];
-                                result.data[(i + 1) * result.cols + j] += partial_dots[1];
-                                result.data[(i + 2) * result.cols + j] += partial_dots[2];
-                                result.data[(i + 3) * result.cols + j] += partial_dots[3];
+                                i += 4;
                             }
 
-                            i += 4;
-                        }
+                            // Handle remaining rows (< 4) with standard path
+                            for i in i..i_end {
+                                let row_start = i * self.cols + kk;
+                                let a_row = &self.data[row_start..row_start + block_size];
 
-                        // Handle remaining rows (< 4) with standard path
-                        for i in i..i_end {
-                            let row_start = i * self.cols + kk;
-                            let a_row = &self.data[row_start..row_start + block_size];
+                                for j in jj..j_end {
+                                    let col_start = j * b_transposed.cols + kk;
+                                    let b_col =
+                                        &b_transposed.data[col_start..col_start + block_size];
 
-                            for j in jj..j_end {
-                                let col_start = j * b_transposed.cols + kk;
-                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+                                    let partial_dot = unsafe { Avx2Backend::dot(a_row, b_col) };
+                                    result.data[i * result.cols + j] += partial_dot;
+                                }
+                            }
+                        } else {
+                            // Phase 1: Standard SIMD path (non-AVX2 backends)
+                            #[allow(unused_variables)]
+                            for i in ii..i_end {
+                                let row_start = i * self.cols + kk;
+                                let a_row = &self.data[row_start..row_start + block_size];
 
-                                let partial_dot = unsafe { Avx2Backend::dot(a_row, b_col) };
-                                result.data[i * result.cols + j] += partial_dot;
+                                for j in jj..j_end {
+                                    let col_start = j * b_transposed.cols + kk;
+                                    let b_col =
+                                        &b_transposed.data[col_start..col_start + block_size];
+
+                                    let partial_dot = unsafe {
+                                        match self.backend {
+                                            Backend::Scalar => ScalarBackend::dot(a_row, b_col),
+                                            #[cfg(target_arch = "x86_64")]
+                                            Backend::SSE2 | Backend::AVX => {
+                                                Sse2Backend::dot(a_row, b_col)
+                                            }
+                                            #[cfg(not(target_arch = "x86_64"))]
+                                            Backend::SSE2
+                                            | Backend::AVX
+                                            | Backend::AVX2
+                                            | Backend::AVX512 => ScalarBackend::dot(a_row, b_col),
+                                            #[cfg(any(
+                                                target_arch = "aarch64",
+                                                target_arch = "arm"
+                                            ))]
+                                            Backend::NEON => {
+                                                use crate::backends::neon::NeonBackend;
+                                                NeonBackend::dot(a_row, b_col)
+                                            }
+                                            #[cfg(not(any(
+                                                target_arch = "aarch64",
+                                                target_arch = "arm"
+                                            )))]
+                                            Backend::NEON => ScalarBackend::dot(a_row, b_col),
+                                            #[cfg(target_arch = "wasm32")]
+                                            Backend::WasmSIMD => {
+                                                use crate::backends::wasm::WasmBackend;
+                                                WasmBackend::dot(a_row, b_col)
+                                            }
+                                            #[cfg(not(target_arch = "wasm32"))]
+                                            Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
+                                            Backend::GPU
+                                            | Backend::Auto
+                                            | Backend::AVX2
+                                            | Backend::AVX512 => ScalarBackend::dot(a_row, b_col),
+                                        }
+                                    };
+
+                                    result.data[i * result.cols + j] += partial_dot;
+                                }
                             }
                         }
-                    } else {
-                        // Phase 1: Standard SIMD path (non-AVX2 backends)
-                        #[allow(unused_variables)]
+
+                        // Non-x86_64 platforms: Use standard SIMD path
+                        #[cfg(not(target_arch = "x86_64"))]
                         for i in ii..i_end {
                             let row_start = i * self.cols + kk;
                             let a_row = &self.data[row_start..row_start + block_size];
@@ -951,18 +1086,15 @@ impl Matrix<f32> {
                                 let partial_dot = unsafe {
                                     match self.backend {
                                         Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                        #[cfg(target_arch = "x86_64")]
-                                        Backend::SSE2 | Backend::AVX => Sse2Backend::dot(a_row, b_col),
-                                        #[cfg(not(target_arch = "x86_64"))]
-                                        Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                                            ScalarBackend::dot(a_row, b_col)
-                                        }
                                         #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
                                         Backend::NEON => {
                                             use crate::backends::neon::NeonBackend;
                                             NeonBackend::dot(a_row, b_col)
                                         }
-                                        #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                                        #[cfg(not(any(
+                                            target_arch = "aarch64",
+                                            target_arch = "arm"
+                                        )))]
                                         Backend::NEON => ScalarBackend::dot(a_row, b_col),
                                         #[cfg(target_arch = "wasm32")]
                                         Backend::WasmSIMD => {
@@ -971,9 +1103,7 @@ impl Matrix<f32> {
                                         }
                                         #[cfg(not(target_arch = "wasm32"))]
                                         Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
-                                        Backend::GPU | Backend::Auto | Backend::AVX2 | Backend::AVX512 => {
-                                            ScalarBackend::dot(a_row, b_col)
-                                        }
+                                        _ => ScalarBackend::dot(a_row, b_col),
                                     }
                                 };
 
@@ -981,43 +1111,7 @@ impl Matrix<f32> {
                             }
                         }
                     }
-
-                    // Non-x86_64 platforms: Use standard SIMD path
-                    #[cfg(not(target_arch = "x86_64"))]
-                    for i in ii..i_end {
-                        let row_start = i * self.cols + kk;
-                        let a_row = &self.data[row_start..row_start + block_size];
-
-                        for j in jj..j_end {
-                            let col_start = j * b_transposed.cols + kk;
-                            let b_col = &b_transposed.data[col_start..col_start + block_size];
-
-                            let partial_dot = unsafe {
-                                match self.backend {
-                                    Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                                    Backend::NEON => {
-                                        use crate::backends::neon::NeonBackend;
-                                        NeonBackend::dot(a_row, b_col)
-                                    }
-                                    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                                    Backend::NEON => ScalarBackend::dot(a_row, b_col),
-                                    #[cfg(target_arch = "wasm32")]
-                                    Backend::WasmSIMD => {
-                                        use crate::backends::wasm::WasmBackend;
-                                        WasmBackend::dot(a_row, b_col)
-                                    }
-                                    #[cfg(not(target_arch = "wasm32"))]
-                                    Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
-                                    _ => ScalarBackend::dot(a_row, b_col),
-                                }
-                            };
-
-                            result.data[i * result.cols + j] += partial_dot;
-                        }
-                    }
                 }
-            }
             }
         }
 
@@ -1224,12 +1318,12 @@ impl Matrix<f32> {
 
         // SIMD-optimized execution: each row-vector product is a dot product
         // TODO: Add parallel execution for large matrices (>1024 rows) in future iteration
-        for i in 0..self.rows {
+        for (i, result) in result_data.iter_mut().enumerate() {
             let row_start = i * self.cols;
             let row = &self.data[row_start..(row_start + self.cols)];
 
             // Use SIMD dot product for each row
-            result_data[i] = unsafe {
+            *result = unsafe {
                 #[cfg(target_arch = "x86_64")]
                 {
                     match self.backend {
@@ -1309,8 +1403,7 @@ impl Matrix<f32> {
         let v_slice = v.as_slice();
 
         // Accumulate each scaled row into result
-        for i in 0..m.rows {
-            let scalar = v_slice[i];
+        for (i, &scalar) in v_slice.iter().enumerate().take(m.rows) {
             let row_start = i * m.cols;
             let row = &m.data[row_start..(row_start + m.cols)];
 
@@ -1735,8 +1828,14 @@ mod tests {
         // Small matrices (≤32) should use simple path (no blocking overhead)
         let sizes = vec![8, 16, 32];
         for size in sizes {
-            let a = Matrix::from_vec(size, size, (0..size * size).map(|i| i as f32).collect()).unwrap();
-            let b = Matrix::from_vec(size, size, (0..size * size).map(|i| (i * 2) as f32).collect()).unwrap();
+            let a =
+                Matrix::from_vec(size, size, (0..size * size).map(|i| i as f32).collect()).unwrap();
+            let b = Matrix::from_vec(
+                size,
+                size,
+                (0..size * size).map(|i| (i * 2) as f32).collect(),
+            )
+            .unwrap();
 
             let mut result_naive = Matrix::zeros(size, size);
             let mut result_simd = Matrix::zeros(size, size);
@@ -1758,7 +1857,12 @@ mod tests {
                     assert!(
                         diff < tolerance,
                         "Size {}: Mismatch at ({}, {}): naive={}, simd={}, diff={}",
-                        size, i, j, naive_val, simd_val, diff
+                        size,
+                        i,
+                        j,
+                        naive_val,
+                        simd_val,
+                        diff
                     );
                 }
             }
@@ -1770,8 +1874,18 @@ mod tests {
         // Medium matrices (>32, <512) should benefit from L2 blocking
         let sizes = vec![64, 128, 256];
         for size in sizes {
-            let a = Matrix::from_vec(size, size, (0..size * size).map(|i| (i % 100) as f32).collect()).unwrap();
-            let b = Matrix::from_vec(size, size, (0..size * size).map(|i| ((i * 3) % 100) as f32).collect()).unwrap();
+            let a = Matrix::from_vec(
+                size,
+                size,
+                (0..size * size).map(|i| (i % 100) as f32).collect(),
+            )
+            .unwrap();
+            let b = Matrix::from_vec(
+                size,
+                size,
+                (0..size * size).map(|i| ((i * 3) % 100) as f32).collect(),
+            )
+            .unwrap();
 
             let mut result_naive = Matrix::zeros(size, size);
             let mut result_simd = Matrix::zeros(size, size);
@@ -1793,7 +1907,12 @@ mod tests {
                     assert!(
                         diff < tolerance,
                         "Size {}: Mismatch at ({}, {}): naive={}, simd={}, diff={}",
-                        size, i, j, naive_val, simd_val, diff
+                        size,
+                        i,
+                        j,
+                        naive_val,
+                        simd_val,
+                        diff
                     );
                 }
             }
@@ -1804,15 +1923,16 @@ mod tests {
     fn test_matmul_blocking_non_aligned_sizes() {
         // Test matrices with sizes not aligned to block boundaries
         let test_cases = vec![
-            (33, 33, 33),   // Just over small threshold
-            (65, 65, 65),   // Just over L2 block size
+            (33, 33, 33),    // Just over small threshold
+            (65, 65, 65),    // Just over L2 block size
             (100, 100, 100), // Middle of L2 block
             (127, 127, 127), // Just under 2× L2 block size
         ];
 
         for (m, k, n) in test_cases {
             let a = Matrix::from_vec(m, k, (0..m * k).map(|i| (i % 50) as f32).collect()).unwrap();
-            let b = Matrix::from_vec(k, n, (0..k * n).map(|i| ((i * 2) % 50) as f32).collect()).unwrap();
+            let b = Matrix::from_vec(k, n, (0..k * n).map(|i| ((i * 2) % 50) as f32).collect())
+                .unwrap();
 
             let mut result_naive = Matrix::zeros(m, n);
             let mut result_simd = Matrix::zeros(m, n);
@@ -1834,7 +1954,14 @@ mod tests {
                     assert!(
                         diff < tolerance,
                         "Size {}×{}×{}: Mismatch at ({}, {}): naive={}, simd={}, diff={}",
-                        m, k, n, i, j, naive_val, simd_val, diff
+                        m,
+                        k,
+                        n,
+                        i,
+                        j,
+                        naive_val,
+                        simd_val,
+                        diff
                     );
                 }
             }
@@ -1849,13 +1976,19 @@ mod tests {
         let a = Matrix::from_vec(
             size,
             size,
-            (0..size * size).map(|i| ((i % 100) as f32) / 10.0).collect()
-        ).unwrap();
+            (0..size * size)
+                .map(|i| ((i % 100) as f32) / 10.0)
+                .collect(),
+        )
+        .unwrap();
         let b = Matrix::from_vec(
             size,
             size,
-            (0..size * size).map(|i| (((i * 7) % 100) as f32) / 10.0).collect()
-        ).unwrap();
+            (0..size * size)
+                .map(|i| (((i * 7) % 100) as f32) / 10.0)
+                .collect(),
+        )
+        .unwrap();
 
         let mut result_naive = Matrix::zeros(size, size);
         let mut result_simd = Matrix::zeros(size, size);
@@ -1903,13 +2036,17 @@ mod tests {
         let a = Matrix::from_vec(
             size,
             size,
-            (0..size * size).map(|i| ((i % 100) as f32) / 10.0).collect(),
+            (0..size * size)
+                .map(|i| ((i % 100) as f32) / 10.0)
+                .collect(),
         )
         .unwrap();
         let b = Matrix::from_vec(
             size,
             size,
-            (0..size * size).map(|i| (((i * 7) % 100) as f32) / 10.0).collect(),
+            (0..size * size)
+                .map(|i| (((i * 7) % 100) as f32) / 10.0)
+                .collect(),
         )
         .unwrap();
 
@@ -1960,13 +2097,17 @@ mod tests {
         let a = Matrix::from_vec(
             size,
             size,
-            (0..size * size).map(|i| ((i % 100) as f32) / 10.0).collect(),
+            (0..size * size)
+                .map(|i| ((i % 100) as f32) / 10.0)
+                .collect(),
         )
         .unwrap();
         let b = Matrix::from_vec(
             size,
             size,
-            (0..size * size).map(|i| (((i * 7) % 100) as f32) / 10.0).collect(),
+            (0..size * size)
+                .map(|i| (((i * 7) % 100) as f32) / 10.0)
+                .collect(),
         )
         .unwrap();
 
@@ -2046,7 +2187,12 @@ mod tests {
             let v = _mm256_setr_ps(10.5, -5.25, 3.75, -8.0, 12.0, -6.5, 4.25, -2.75);
             let expected = 10.5 - 5.25 + 3.75 - 8.0 + 12.0 - 6.5 + 4.25 - 2.75;
             let sum = Matrix::<f32>::horizontal_sum_avx2(v);
-            assert!((sum - expected).abs() < 1e-5, "Expected {}, got {}", expected, sum);
+            assert!(
+                (sum - expected).abs() < 1e-5,
+                "Expected {}, got {}",
+                expected,
+                sum
+            );
         }
     }
 
@@ -2070,7 +2216,12 @@ mod tests {
             let row3: Vec<f32> = (49..=64).map(|x| x as f32).collect();
             let b_col = vec![1.0f32; 16];
 
-            let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
+            let a_rows = [
+                row0.as_slice(),
+                row1.as_slice(),
+                row2.as_slice(),
+                row3.as_slice(),
+            ];
             let mut results = [0.0f32; 4];
 
             unsafe {
@@ -2089,7 +2240,9 @@ mod tests {
                 assert!(
                     (results[i] - expected[i]).abs() < 1e-3,
                     "Row {}: expected {}, got {}",
-                    i, expected[i], results[i]
+                    i,
+                    expected[i],
+                    results[i]
                 );
             }
         }
@@ -2097,13 +2250,26 @@ mod tests {
         // Test case 2: Identity-like pattern
         // Each row is all zeros except one 1.0
         {
-            let row0 = vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-            let row1 = vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-            let row2 = vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-            let row3 = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+            let row0 = vec![
+                1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            ];
+            let row1 = vec![
+                0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            ];
+            let row2 = vec![
+                0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            ];
+            let row3 = vec![
+                0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            ];
             let b_col: Vec<f32> = (1..=16).map(|x| x as f32).collect();
 
-            let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
+            let a_rows = [
+                row0.as_slice(),
+                row1.as_slice(),
+                row2.as_slice(),
+                row3.as_slice(),
+            ];
             let mut results = [0.0f32; 4];
 
             unsafe {
@@ -2116,7 +2282,9 @@ mod tests {
                 assert!(
                     (results[i] - expected[i]).abs() < 1e-6,
                     "Row {}: expected {}, got {}",
-                    i, expected[i], results[i]
+                    i,
+                    expected[i],
+                    results[i]
                 );
             }
         }
@@ -2130,7 +2298,12 @@ mod tests {
             let row3: Vec<f32> = (31..=40).map(|x| x as f32).collect();
             let b_col = vec![2.0f32; 10];
 
-            let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
+            let a_rows = [
+                row0.as_slice(),
+                row1.as_slice(),
+                row2.as_slice(),
+                row3.as_slice(),
+            ];
             let mut results = [0.0f32; 4];
 
             unsafe {
@@ -2149,20 +2322,41 @@ mod tests {
                 assert!(
                     (results[i] - expected[i]).abs() < 1e-3,
                     "Row {}: expected {}, got {}",
-                    i, expected[i], results[i]
+                    i,
+                    expected[i],
+                    results[i]
                 );
             }
         }
 
         // Test case 4: Mixed positive/negative values
         {
-            let row0 = vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0, -10.0, 11.0, -12.0, 13.0, -14.0, 15.0, -16.0];
-            let row1 = vec![2.0, -4.0, 6.0, -8.0, 10.0, -12.0, 14.0, -16.0, 18.0, -20.0, 22.0, -24.0, 26.0, -28.0, 30.0, -32.0];
-            let row2 = vec![0.5, -1.0, 1.5, -2.0, 2.5, -3.0, 3.5, -4.0, 4.5, -5.0, 5.5, -6.0, 6.5, -7.0, 7.5, -8.0];
-            let row3 = vec![10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0];
-            let b_col = vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+            let row0 = vec![
+                1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0, -10.0, 11.0, -12.0, 13.0, -14.0,
+                15.0, -16.0,
+            ];
+            let row1 = vec![
+                2.0, -4.0, 6.0, -8.0, 10.0, -12.0, 14.0, -16.0, 18.0, -20.0, 22.0, -24.0, 26.0,
+                -28.0, 30.0, -32.0,
+            ];
+            let row2 = vec![
+                0.5, -1.0, 1.5, -2.0, 2.5, -3.0, 3.5, -4.0, 4.5, -5.0, 5.5, -6.0, 6.5, -7.0, 7.5,
+                -8.0,
+            ];
+            let row3 = vec![
+                10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0,
+                -10.0, 10.0, -10.0,
+            ];
+            let b_col = vec![
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+            ];
 
-            let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
+            let a_rows = [
+                row0.as_slice(),
+                row1.as_slice(),
+                row2.as_slice(),
+                row3.as_slice(),
+            ];
             let mut results = [0.0f32; 4];
 
             unsafe {
@@ -2181,7 +2375,9 @@ mod tests {
                 assert!(
                     (results[i] - expected[i]).abs() < 1e-4,
                     "Row {}: expected {}, got {}",
-                    i, expected[i], results[i]
+                    i,
+                    expected[i],
+                    results[i]
                 );
             }
         }
@@ -2194,7 +2390,12 @@ mod tests {
             let row3 = vec![0.0f32; 16];
             let b_col: Vec<f32> = (1..=16).map(|x| x as f32).collect();
 
-            let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
+            let a_rows = [
+                row0.as_slice(),
+                row1.as_slice(),
+                row2.as_slice(),
+                row3.as_slice(),
+            ];
             let mut results = [0.0f32; 4];
 
             unsafe {
@@ -2205,7 +2406,8 @@ mod tests {
                 assert!(
                     result.abs() < 1e-6,
                     "Row {}: expected 0.0, got {}",
-                    i, result
+                    i,
+                    result
                 );
             }
         }
@@ -2213,13 +2415,31 @@ mod tests {
         // Test case 6: Verify FMA correctness (a * b + c pattern)
         // Micro-kernel computes: sum(a[i] * b[i])
         {
-            let row0 = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0];
-            let row1 = vec![2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0, 32.0];
-            let row2 = vec![0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0];
-            let row3 = vec![3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0, 27.0, 30.0, 33.0, 36.0, 39.0, 42.0, 45.0, 48.0];
-            let b_col = vec![0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
+            let row0 = vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+                16.0,
+            ];
+            let row1 = vec![
+                2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0,
+                30.0, 32.0,
+            ];
+            let row2 = vec![
+                0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0,
+            ];
+            let row3 = vec![
+                3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0, 27.0, 30.0, 33.0, 36.0, 39.0, 42.0,
+                45.0, 48.0,
+            ];
+            let b_col = vec![
+                0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
+            ];
 
-            let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
+            let a_rows = [
+                row0.as_slice(),
+                row1.as_slice(),
+                row2.as_slice(),
+                row3.as_slice(),
+            ];
             let mut results = [0.0f32; 4];
 
             unsafe {
@@ -2238,7 +2458,9 @@ mod tests {
                 assert!(
                     (results[i] - expected[i]).abs() < 1e-3,
                     "Row {}: expected {}, got {}",
-                    i, expected[i], results[i]
+                    i,
+                    expected[i],
+                    results[i]
                 );
             }
         }

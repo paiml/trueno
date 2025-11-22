@@ -847,9 +847,7 @@ mod tests {
     #[test]
     fn test_validation_results_add_step_failure() {
         let mut results = ValidationResults::new();
-        results.add_step(1, "Test step", || {
-            anyhow::bail!("Test error")
-        });
+        results.add_step(1, "Test step", || anyhow::bail!("Test error"));
 
         assert_eq!(results.steps.len(), 1);
         assert!(!results.steps[0].success);
@@ -902,7 +900,8 @@ mod tests {
         assert_eq!(examples.len(), 3);
 
         // Verify sorted order
-        let names: Vec<_> = examples.iter()
+        let names: Vec<_> = examples
+            .iter()
             .filter_map(|p| p.file_stem())
             .filter_map(|n| n.to_str())
             .collect();
@@ -992,7 +991,11 @@ mod tests {
 
     #[test]
     fn test_format_error_list_multiple() {
-        let errors = vec!["error1".to_string(), "error2".to_string(), "error3".to_string()];
+        let errors = vec![
+            "error1".to_string(),
+            "error2".to_string(),
+            "error3".to_string(),
+        ];
         let result = format_error_list(&errors, "Failures");
         assert!(result.contains("Failures"));
         assert!(result.contains("error1"));
@@ -1031,10 +1034,7 @@ mod tests {
 
     #[test]
     fn test_extract_file_stems() {
-        let paths = vec![
-            PathBuf::from("example1.rs"),
-            PathBuf::from("example2.rs"),
-        ];
+        let paths = vec![PathBuf::from("example1.rs"), PathBuf::from("example2.rs")];
         let stems = extract_file_stems(&paths);
         assert_eq!(stems.len(), 2);
         assert!(stems.contains(&"example1".to_string()));
@@ -1136,14 +1136,12 @@ mod tests {
     #[test]
     fn test_count_validation_errors_none() {
         let results = ValidationResults {
-            steps: vec![
-                StepResult {
-                    number: 1,
-                    name: "Test".to_string(),
-                    success: true,
-                    error: None,
-                },
-            ],
+            steps: vec![StepResult {
+                number: 1,
+                name: "Test".to_string(),
+                success: true,
+                error: None,
+            }],
         };
         assert_eq!(count_validation_errors(&results), 0);
     }
@@ -1178,14 +1176,12 @@ mod tests {
     #[test]
     fn test_format_validation_summary_all_pass() {
         let results = ValidationResults {
-            steps: vec![
-                StepResult {
-                    number: 1,
-                    name: "Test".to_string(),
-                    success: true,
-                    error: None,
-                },
-            ],
+            steps: vec![StepResult {
+                number: 1,
+                name: "Test".to_string(),
+                success: true,
+                error: None,
+            }],
         };
         let summary = format_validation_summary(&results);
         assert!(summary.contains("1"));
@@ -1447,10 +1443,7 @@ mod tests {
     #[test]
     fn test_extract_file_names_invalid_unicode() {
         // Test with valid paths
-        let paths = vec![
-            PathBuf::from("example1.rs"),
-            PathBuf::from("example2.rs"),
-        ];
+        let paths = vec![PathBuf::from("example1.rs"), PathBuf::from("example2.rs")];
         let names = extract_file_names(&paths);
         assert_eq!(names.len(), 2);
     }
@@ -1607,7 +1600,7 @@ mod tests {
     #[test]
     fn test_contains_main_function_case_sensitive() {
         let content = "fn Main() {}"; // Capital M
-        // Should not match since Rust is case-sensitive and Main != main
+                                      // Should not match since Rust is case-sensitive and Main != main
         assert!(!contains_main_function(content));
     }
 
@@ -1772,7 +1765,11 @@ mod tests {
 
     #[test]
     fn test_format_error_list_preserves_order() {
-        let errors = vec!["first".to_string(), "second".to_string(), "third".to_string()];
+        let errors = vec![
+            "first".to_string(),
+            "second".to_string(),
+            "third".to_string(),
+        ];
         let result = format_error_list(&errors, "List");
         let first_pos = result.find("first").unwrap();
         let second_pos = result.find("second").unwrap();
