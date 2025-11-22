@@ -134,7 +134,51 @@ for i in 0..rows {
 - Consistent **10-15 GFLOPS** across all sizes
 - Sequential row access = cache-friendly
 - SIMD dot products provide **~4× speedup** vs scalar
-- Each row operation is independent (perfect for future parallelization)
+- Each row operation is independent (embarrassingly parallel)
+
+### Parallel Optimization (≥4096 rows)
+
+**Implementation**: Lock-free parallel execution using `Rayon` + `Arc<AtomicPtr>`
+
+```rust
+#[cfg(feature = "parallel")]
+{
+    const PARALLEL_THRESHOLD: usize = 4096;
+
+    if self.rows >= PARALLEL_THRESHOLD {
+        (0..self.rows).into_par_iter().for_each(|i| {
+            let row = &self.data[i*cols..(i+1)*cols];
+            let dot_result = unsafe {
+                Avx2Backend::dot(row, v_slice)  // SIMD dot product
+            };
+            unsafe {
+                *result_ptr.add(i) = dot_result;  // Non-overlapping writes
+            }
+        });
+    }
+}
+```
+
+**Performance Analysis**:
+
+| Matrix Size | Sequential (SIMD) | Parallel (Rayon+SIMD) | Speedup | Notes |
+|-------------|-------------------|----------------------|---------|-------|
+| 1024×512    | 14.04 GFLOPS      | (sequential used)    | —       | Below threshold |
+| 2048×512    | 14.44 GFLOPS      | (sequential used)    | —       | Below threshold |
+| 4096×512    | ~11 GFLOPS        | 12.55 GFLOPS         | 1.14×   | Threshold met, overhead present |
+| 8192×512    | ~14 GFLOPS        | **20.09 GFLOPS**     | **1.43×** | Clear benefit ✅ |
+
+**Key Findings**:
+- **Threshold rationale**: Thread overhead dominates for <4096 rows
+- **Sweet spot**: ≥8192 rows shows clear 40%+ speedup
+- **Scalability**: Performance improves with larger matrices
+- **Safety**: Non-overlapping writes ensure thread safety without locks
+
+**Why 4096 threshold?**
+- Each row computes a single dot product (~500ns-2µs for typical vectors)
+- Thread spawning overhead: ~1-10µs per task
+- Break-even point: Need enough rows to amortize thread overhead
+- Empirical testing showed 4096 rows as optimal threshold
 
 ---
 
@@ -294,10 +338,11 @@ if rows >= PARALLEL_THRESHOLD {
 
 ## Future Optimization Opportunities
 
-### 1. Parallel matvec/vecmat
-- **Potential**: Additional 2-3× speedup for large matrices
-- **Challenge**: Send/Sync requirements for parallel iteration
-- **Approach**: Similar lock-free strategy as matmul
+### 1. Parallel vecmat
+- **Status**: matvec parallelization ✅ completed (1.43× speedup for ≥8192 rows)
+- **Potential**: 2-3× speedup for large vecmat operations
+- **Challenge**: Reduction pattern (accumulation into shared result vector)
+- **Approach**: Thread-local accumulation + final reduction
 
 ### 2. Trigonometric SIMD
 - **Status**: TODOs identified in `avx2.rs` and `avx512.rs`
@@ -307,7 +352,7 @@ if rows >= PARALLEL_THRESHOLD {
 ### 3. AVX-512 Support
 - **Target**: Zen 4, Sapphire Rapids+ CPUs
 - **Benefit**: 2× wider SIMD (16-way f32 vs 8-way AVX2)
-- **Expected**: 1.5-2× additional speedup
+- **Expected**: 1.5-2× additional speedup for all operations
 
 ### 4. GPU Acceleration
 - **Target**: Very large matrices (>4096×4096)
@@ -337,6 +382,7 @@ if rows >= PARALLEL_THRESHOLD {
 # Individual operation benchmarks
 cargo run --release --example benchmark_parallel --features parallel
 cargo run --release --example benchmark_matvec
+cargo run --release --example benchmark_matvec_parallel --features parallel
 
 # Comprehensive suite
 cargo run --release --example benchmark_matrix_suite --features parallel
