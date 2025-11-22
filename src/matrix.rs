@@ -1215,15 +1215,34 @@ impl Matrix<f32> {
             )));
         }
 
-        let mut result_data = vec![0.0; self.rows];
+        #[cfg(target_arch = "x86_64")]
+        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
+        use crate::backends::{scalar::ScalarBackend, VectorBackend};
 
-        // Compute result[i] = Σ A[i,j] × v[j]
-        for (i, result_elem) in result_data.iter_mut().enumerate() {
-            let mut sum = 0.0;
-            for j in 0..self.cols {
-                sum += self.get(i, j).unwrap() * v.as_slice()[j];
-            }
-            *result_elem = sum;
+        let mut result_data = vec![0.0; self.rows];
+        let v_slice = v.as_slice();
+
+        // SIMD-optimized execution: each row-vector product is a dot product
+        // TODO: Add parallel execution for large matrices (>1024 rows) in future iteration
+        for i in 0..self.rows {
+            let row_start = i * self.cols;
+            let row = &self.data[row_start..(row_start + self.cols)];
+
+            // Use SIMD dot product for each row
+            result_data[i] = unsafe {
+                #[cfg(target_arch = "x86_64")]
+                {
+                    match self.backend {
+                        Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(row, v_slice),
+                        Backend::SSE2 | Backend::AVX => Sse2Backend::dot(row, v_slice),
+                        _ => ScalarBackend::dot(row, v_slice),
+                    }
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    ScalarBackend::dot(row, v_slice)
+                }
+            };
         }
 
         Ok(Vector::from_slice(&result_data))
