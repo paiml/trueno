@@ -312,6 +312,7 @@ mod tests {
     #[test]
     fn test_backend_clone() {
         let backend = Backend::AVX2;
+        #[allow(clippy::clone_on_copy)]
         let cloned = backend.clone();
         assert_eq!(backend, cloned);
     }
@@ -369,6 +370,7 @@ mod tests {
     #[test]
     fn test_op_complexity_clone() {
         let complexity = OpComplexity::High;
+        #[allow(clippy::clone_on_copy)]
         let cloned = complexity.clone();
         assert_eq!(complexity, cloned);
     }
