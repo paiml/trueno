@@ -3449,4 +3449,218 @@ mod tests {
             );
         }
     }
+
+    // ===== Edge Case and Remainder Tests =====
+
+    #[test]
+    fn test_avx512_mul_large_with_remainder() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // Test with size that's not multiple of 16 (AVX-512 processes 16 f32s)
+        let size = 123; // Not divisible by 16
+        let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.5).collect();
+        let b: Vec<f32> = (0..size).map(|i| (i as f32) * 0.3).collect();
+        let mut avx512_result = vec![0.0; size];
+        let mut scalar_result = vec![0.0; size];
+
+        unsafe {
+            Avx512Backend::mul(&a, &b, &mut avx512_result);
+            ScalarBackend::mul(&a, &b, &mut scalar_result);
+        }
+
+        for i in 0..size {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                "mul remainder mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_sqrt_large_with_remainder() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        let size = 97;
+        let a: Vec<f32> = (1..=size).map(|i| (i as f32) * (i as f32)).collect();
+        let mut avx512_result = vec![0.0; size];
+        let mut scalar_result = vec![0.0; size];
+
+        unsafe {
+            Avx512Backend::sqrt(&a, &mut avx512_result);
+            ScalarBackend::sqrt(&a, &mut scalar_result);
+        }
+
+        for i in 0..size {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                "sqrt remainder mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_exp_large_with_remainder() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        let size = 85;
+        let a: Vec<f32> = (0..size).map(|i| ((i as f32) - 40.0) * 0.1).collect();
+        let mut avx512_result = vec![0.0; size];
+        let mut scalar_result = vec![0.0; size];
+
+        unsafe {
+            Avx512Backend::exp(&a, &mut avx512_result);
+            ScalarBackend::exp(&a, &mut scalar_result);
+        }
+
+        for i in 0..size {
+            let rel_error = if scalar_result[i] != 0.0 {
+                (avx512_result[i] - scalar_result[i]).abs() / scalar_result[i]
+            } else {
+                (avx512_result[i] - scalar_result[i]).abs()
+            };
+            assert!(
+                rel_error < 1e-5,
+                "exp remainder mismatch at {}: avx512={}, scalar={}, rel_error={}",
+                i,
+                avx512_result[i],
+                scalar_result[i],
+                rel_error
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_relu_large_with_remainder() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        let size = 111;
+        let a: Vec<f32> = (0..size).map(|i| ((i as f32) - 50.0) * 0.5).collect();
+        let mut avx512_result = vec![0.0; size];
+        let mut scalar_result = vec![0.0; size];
+
+        unsafe {
+            Avx512Backend::relu(&a, &mut avx512_result);
+            ScalarBackend::relu(&a, &mut scalar_result);
+        }
+
+        for i in 0..size {
+            assert_eq!(
+                avx512_result[i], scalar_result[i],
+                "relu remainder mismatch at {}: avx512={}, scalar={}",
+                i, avx512_result[i], scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_sigmoid_large_with_remainder() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        let size = 99;
+        let a: Vec<f32> = (0..size).map(|i| ((i as f32) - 50.0) * 0.2).collect();
+        let mut avx512_result = vec![0.0; size];
+        let mut scalar_result = vec![0.0; size];
+
+        unsafe {
+            Avx512Backend::sigmoid(&a, &mut avx512_result);
+            ScalarBackend::sigmoid(&a, &mut scalar_result);
+        }
+
+        for i in 0..size {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-4,
+                "sigmoid remainder mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_ceil_floor_round_remainder() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        let size = 77;
+        let a: Vec<f32> = (0..size).map(|i| ((i as f32) / 10.0) - 3.0).collect();
+
+        let mut ceil_result = vec![0.0; size];
+        let mut floor_result = vec![0.0; size];
+        let mut round_result = vec![0.0; size];
+
+        unsafe {
+            Avx512Backend::ceil(&a, &mut ceil_result);
+            Avx512Backend::floor(&a, &mut floor_result);
+            Avx512Backend::round(&a, &mut round_result);
+        }
+
+        for i in 0..size {
+            let expected_ceil = a[i].ceil();
+            let expected_floor = a[i].floor();
+
+            assert!(
+                (ceil_result[i] - expected_ceil).abs() < 1e-5,
+                "ceil remainder mismatch at {}: {} vs {}",
+                i, ceil_result[i], expected_ceil
+            );
+            assert!(
+                (floor_result[i] - expected_floor).abs() < 1e-5,
+                "floor remainder mismatch at {}: {} vs {}",
+                i, floor_result[i], expected_floor
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_trig_large_with_remainder() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        let size = 93;
+        let a: Vec<f32> = (0..size).map(|i| ((i as f32) / 30.0) - 1.5).collect();
+
+        let mut sin_avx512 = vec![0.0; size];
+        let mut sin_scalar = vec![0.0; size];
+        let mut cos_avx512 = vec![0.0; size];
+        let mut cos_scalar = vec![0.0; size];
+
+        unsafe {
+            Avx512Backend::sin(&a, &mut sin_avx512);
+            ScalarBackend::sin(&a, &mut sin_scalar);
+            Avx512Backend::cos(&a, &mut cos_avx512);
+            ScalarBackend::cos(&a, &mut cos_scalar);
+        }
+
+        for i in 0..size {
+            assert!(
+                (sin_avx512[i] - sin_scalar[i]).abs() < 1e-4,
+                "sin remainder mismatch at {}: avx512={}, scalar={}",
+                i, sin_avx512[i], sin_scalar[i]
+            );
+            assert!(
+                (cos_avx512[i] - cos_scalar[i]).abs() < 1e-4,
+                "cos remainder mismatch at {}: avx512={}, scalar={}",
+                i, cos_avx512[i], cos_scalar[i]
+            );
+        }
+    }
 }
