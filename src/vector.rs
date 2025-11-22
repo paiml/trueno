@@ -8597,9 +8597,9 @@ mod tests {
 
         // Verify correctness
         assert_eq!(result.len(), SIZE);
-        for i in 0..SIZE {
-            let expected = data[i] * 3.0;
-            assert!((result.as_slice()[i] - expected).abs() < 1e-5);
+        for (&original, &scaled) in data.iter().zip(result.as_slice().iter()) {
+            let expected = original * 3.0;
+            assert!((scaled - expected).abs() < 1e-5);
         }
     }
 

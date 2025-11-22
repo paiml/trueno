@@ -1866,11 +1866,11 @@ mod tests {
                 Matrix::<f32>::matmul_microkernel_4x1_avx2(a_rows, &b_col, &mut results);
             }
 
-            for i in 0..4 {
+            for (i, &result) in results.iter().enumerate() {
                 assert!(
-                    results[i].abs() < 1e-6,
+                    result.abs() < 1e-6,
                     "Row {}: expected 0.0, got {}",
-                    i, results[i]
+                    i, result
                 );
             }
         }
