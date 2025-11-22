@@ -427,6 +427,7 @@ impl Matrix<f32> {
     /// When called from parallel code, the caller must ensure that each thread processes
     /// a distinct row range [iii, i3_end) with no overlap. This function is safe because
     /// each thread writes only to its own row range in the result matrix.
+    #[cfg(feature = "parallel")]
     #[allow(clippy::too_many_arguments)]
     fn process_l3_row_block_seq(
         iii: usize,
@@ -629,6 +630,7 @@ impl Matrix<f32> {
             && other.cols >= L3_THRESHOLD;
 
         // Phase 4: Determine if we should use multi-threading (≥1024×1024)
+        #[cfg(feature = "parallel")]
         const PARALLEL_THRESHOLD: usize = 1024;
         #[cfg(feature = "parallel")]
         let use_parallel = self.rows >= PARALLEL_THRESHOLD
