@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2025-11-22
+
 ### Performance - Phase 3: Large Matrix Optimization 🚀
 
 **Achievement**: 18% improvement for 1024×1024 matrices via 3-level cache blocking
@@ -32,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `test_matmul_3level_blocking` for 512×512 matrices
   - 878 tests passing (all existing tests pass)
   - Coverage: 90.41% (improved from 90.00%)
+
+### Quality & Testing
+
+- **Test coverage: 90.20%** (trueno library, exceeds 90% EXTREME TDD requirement)
+- Added 60+ new tests across xtask tooling and core library
+- Fixed clippy warnings (needless_range_loop)
+- Updated coverage policy: xtask (dev tooling) excluded from main coverage requirement
+- All quality gates passing: lint, format, tests, coverage
 
 ### Documentation
 
