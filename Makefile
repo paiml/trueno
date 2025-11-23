@@ -535,9 +535,25 @@ pmat-semantic-search: ## Index code for semantic search
 	@echo "🔍 Indexing code for semantic search..."
 	@pmat embed sync ./src || echo "⚠️  Semantic search not available in this PMAT version"
 
-pmat-validate-docs: ## Validate documentation (hallucination detection)
-	@echo "📚 Validating documentation..."
-	@pmat validate-readme README.md CLAUDE.md || echo "⚠️  Documentation validation not available"
+pmat-validate-docs: ## Validate documentation (hallucination detection - Phase 3.5)
+	@echo "📚 Validating documentation accuracy (Phase 3.5)..."
+	@echo ""
+	@echo "Step 1: Generating deep context..."
+	@pmat context --output deep_context.md --format llm-optimized
+	@echo ""
+	@echo "Step 2: Validating documentation files..."
+	@pmat validate-readme \
+		--targets README.md CLAUDE.md \
+		--deep-context deep_context.md \
+		--fail-on-contradiction \
+		--verbose || { \
+		echo ""; \
+		echo "❌ Documentation validation failed!"; \
+		echo "   Fix contradictions and broken references before committing"; \
+		exit 1; \
+	}
+	@echo ""
+	@echo "✅ Documentation validation complete - zero hallucinations!"
 
 pmat-work-init: ## Initialize PMAT workflow system (v2.198.0)
 	@echo "🔧 Initializing PMAT workflow system..."
