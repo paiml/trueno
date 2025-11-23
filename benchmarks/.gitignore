@@ -13,3 +13,4 @@ venv/
 python_results.json
 comparison_report.md
 comparison_summary.json
+benchmark_run.log
