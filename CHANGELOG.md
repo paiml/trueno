@@ -25,10 +25,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Testing ✅
 
-- All 928 tests passing with updated dependencies
-- 30/30 GPU tests pass with wgpu v27
+- All 937 tests passing with updated dependencies
+- 38/38 GPU tests pass with wgpu v27 (including 8 new batch tests)
 - Benchmark infrastructure verified with criterion 0.7
 - Zero clippy warnings maintained
+
+### Added ✨
+
+- **Async GPU Command Batching API** (v0.3.0 deliverable - Phase 1)
+  - **Goal**: Reduce GPU transfer overhead by 2x for chained operations
+  - **New types**:
+    - `GpuCommandBatch`: Command builder for batching GPU operations
+    - `BufferId`: Type-safe buffer identifier for intermediate results
+  - **Operations supported**: `relu`, `scale`, `add`, `mul`, `dot`
+  - **Architecture**: Command Builder pattern for explicit batching control
+    - `upload()`: Queue data for GPU upload
+    - `relu()`, `scale()`, `add()`, `mul()`, `dot()`: Queue operations (no GPU execution)
+    - `execute()`: Execute all queued operations in single batch
+    - `read()`: Download results from GPU
+  - **Transfer reduction**:
+    - Before: `relu + scale + add` = 6 transfers (3 up, 3 down)
+    - After: 2 transfers (1 up, 1 down) = **3x reduction**
+  - **New GPU shaders**:
+    - `SCALE_SHADER`: Element-wise scalar multiplication
+    - `VEC_MUL_SHADER`: Element-wise vector multiplication
+  - **Tests**:
+    - 8 comprehensive tests (buffer allocation, operation queuing, error handling, end-to-end execution)
+    - Integration test validates full workflow: upload → relu → scale → add → read
+  - **Dependencies**: Added `tokio` (dev-dependency) for async test support
 
 ## [0.7.0] - 2025-11-22
 
