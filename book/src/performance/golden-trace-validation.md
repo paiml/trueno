@@ -466,9 +466,9 @@ diff current_trace.txt golden_traces/backend_detection_summary.txt
 ## References
 
 - [Renacer GitHub](https://github.com/paiml/renacer)
-- [Integration Report](../../docs/integration-report-golden-trace.md)
-- [SIMD Performance Analysis](../../docs/performance-analysis.md)
-- [Golden Trace Analysis](../../golden_traces/ANALYSIS.md)
+- [Integration Report](../../../docs/integration-report-golden-trace.md)
+- [SIMD Performance Analysis](../../../docs/performance-analysis.md)
+- [Golden Trace Analysis](../../../golden_traces/ANALYSIS.md)
 
 ---
 
