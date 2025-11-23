@@ -53,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - 8 comprehensive tests (buffer allocation, operation queuing, error handling, end-to-end execution)
     - Integration test validates full workflow: upload → relu → scale → add → read
   - **Dependencies**: Added `tokio` (dev-dependency) for async test support
+  - **Benchmarks** (`benches/async_gpu_ops.rs`):
+    - `bench_sync_chained_ops`: Traditional sync API (6 transfers for 3 ops)
+    - `bench_async_chained_ops`: New async batch API (2 transfers for 3 ops)
+    - `bench_single_op_comparison`: Sync vs async for single operation
+    - `bench_deep_chain`: 5 chained operations (10→2 transfers = 5x reduction)
+    - **Usage**: `cargo bench --bench async_gpu_ops --features gpu`
+  - **API Enhancement**: `GpuDevice` now implements `Clone` (wgpu devices are Arc-based)
 
 ## [0.7.0] - 2025-11-22
 
