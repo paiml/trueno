@@ -38,3 +38,8 @@ book/book/
 book/_site/
 _site/
 perf.data
+
+# PMAT TDG baseline and O(1) Quality Gates metrics
+.pmat/baseline.json
+.pmat-metrics/
+deep_context.md
