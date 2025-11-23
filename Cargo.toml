@@ -51,6 +51,7 @@ futures-intrusive = { version = "0.5", optional = true }
 proptest = "1.9"
 criterion = "0.7"
 tokio = { version = "1", features = ["macros", "rt"] }
+serde_json = "1.0"
 
 [features]
 default = []

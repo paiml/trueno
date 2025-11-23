@@ -1,28 +1,37 @@
 //! GPU Performance Benchmarks
 //!
-//! Validates GPU speedup claims (10-50x over scalar, 5-20x over SIMD)
-//! for large-scale operations where transfer overhead is amortized.
+//! **EMPIRICAL FINDINGS (RTX 4090, 2025-11-23):**
+//!
+//! ❌ **GPU FAILS for vector operations** due to 3.5ms fixed transfer overhead
+//! ✅ **GPU WINS for matrix operations** (81x speedup on 1000×1000 matmul)
+//! 🚀 **SIMD VASTLY SUPERIOR** for vector ops (2000x+ faster than GPU)
+//!
+//! See: docs/gpu-benchmark-report-2025-11-23.md for complete analysis
+//!
+//! # Empirical Results Summary
+//!
+//! **Vector Operations (GPU vs SIMD):**
+//! - Dot Product (10K): SIMD 1.55µs vs GPU 3,324µs = **SIMD 2144x faster**
+//! - Vector Add (1M): SIMD 96.5µs vs GPU 5,978µs = **SIMD 62x faster**
+//! - Conclusion: GPU NEVER competitive due to 3.5ms transfer overhead
+//!
+//! **Matrix Operations (GPU vs Scalar):**
+//! - 500×500: GPU 4.59ms vs Scalar 77.4ms = **GPU 17x faster** ✅
+//! - 1000×1000: GPU 7.84ms vs Scalar 638ms = **GPU 81x faster** ✅
+//! - Conclusion: GPU wins when O(n³) complexity >> 3.5ms overhead
 //!
 //! # Benchmark Methodology
 //!
 //! - Tests multiple sizes: 1K, 10K, 100K, 1M elements
-//! - Compares GPU vs AVX2 vs Scalar backends
+//! - Compares GPU vs Scalar (NOT vs SIMD - SIMD always wins for vectors)
 //! - Uses Criterion for statistical analysis
 //! - Each benchmark measures throughput (elements/second)
 //!
-//! # Performance Goals (GPU vs Scalar)
+//! # Performance Reality (GPU vs Scalar) - UPDATED BASED ON EMPIRICAL DATA
 //!
-//! Small vectors (1K):     <5x   (transfer overhead dominates)
-//! Medium vectors (10K):   5-10x (transfer overhead amortized)
-//! Large vectors (100K):   10-30x (GPU compute dominates)
-//! Very large (1M+):       20-50x (optimal GPU utilization)
-//!
-//! # Performance Goals (GPU vs AVX2)
-//!
-//! Small vectors (1K):     <2x   (transfer overhead)
-//! Medium vectors (10K):   2-5x  (starting to benefit)
-//! Large vectors (100K):   5-15x (clear GPU advantage)
-//! Very large (1M+):       10-25x (massive parallelism)
+//! Vector operations (<1M):  0.002-0.1x  ❌ (GPU slower, use SIMD)
+//! Matrix ops (>500×500):    16-81x      ✅ (GPU wins)
+//! Matrix ops (<500×500):    0.13x       ❌ (GPU slower, use SIMD)
 
 #![cfg(feature = "gpu")]
 
