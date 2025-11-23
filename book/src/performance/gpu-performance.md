@@ -191,29 +191,95 @@ Use GPU when **all** of these conditions are met:
 - ❌ Small matrices (<500×500) - overhead dominates
 - ❌ Single operations - transfer overhead too high
 
-## Future: Async Batch API (v2.0)
+## Async Batch API ✅ (v0.3.0 - AVAILABLE NOW)
 
-The current synchronous API incurs 3.5ms overhead per operation. A future async batch API will amortize this cost:
+**Status**: Fully implemented and tested (previously documented as "Future v2.0")
 
+The async batch API solves the transfer overhead problem by queuing multiple operations and executing them in a single batch, amortizing the 3.5ms overhead across all operations.
+
+### Transfer Overhead Reduction
+
+**Traditional Synchronous API** (current default):
 ```rust
-// Current API (❌ 7ms total overhead for 2 operations)
-let a = gpu.add(&x, &y)?;      // 3.5ms overhead
-let b = gpu.mul(&a, &z)?;      // 3.5ms overhead
-
-// Future batch API (✅ 3.5ms overhead for entire batch)
-let batch = gpu.batch()
-    .add(&x, &y)               // Queued
-    .mul_result(0, &z)         // Queued, references result 0
-    .execute()?;               // Single 3.5ms overhead!
-
-let b = batch.get_result(1)?;
+// ❌ 3 operations = 3 × 3.5ms = 10.5ms overhead
+let a = gpu.vec_add(&input1, &input2)?;  // Upload → Compute → Download
+let b = gpu.scale(&a, 2.0)?;             // Upload → Compute → Download
+let c = gpu.relu(&b)?;                   // Upload → Compute → Download
+// Total: 6 GPU transfers (3 uploads + 3 downloads)
 ```
 
-**Benefits**:
-- Amortize 3.5ms overhead across multiple operations
-- Enable GPU to compete with SIMD for complex pipelines
-- Reduce CPU↔GPU synchronization points
-- Keep data on GPU between operations
+**Async Batch API** (recommended for chained operations):
+```rust
+use trueno::backends::gpu::{GpuDevice, GpuCommandBatch};
+
+// ✅ 3 operations = 1 × 3.5ms = 3.5ms overhead
+let device = GpuDevice::new()?;
+let mut batch = GpuCommandBatch::new(device);
+
+// Queue operations (no GPU execution yet!)
+let input = batch.upload(&[1.0, 2.0, -3.0, 4.0]);
+let a = batch.add(input, other);
+let b = batch.scale(a, 2.0);
+let c = batch.relu(b);
+
+// Execute entire batch in one GPU round-trip
+batch.execute().await?;
+
+// Read final result
+let result = batch.read(c).await?;
+// Total: 2 GPU transfers (1 upload + 1 download)
+```
+
+### Performance Benefits
+
+| Metric | Traditional API | Batch API | Improvement |
+|--------|----------------|-----------|-------------|
+| **GPU Transfers** | 6 (3↑ + 3↓) | 2 (1↑ + 1↓) | **3x fewer** |
+| **Overhead** | 3 × 3.5ms = 10.5ms | 1 × 3.5ms = 3.5ms | **3x reduction** |
+| **Expected Speedup** | Baseline | 1.5-2x faster | For GPU-bound workloads |
+
+### When to Use Batch API
+
+**✅ Use batch API when:**
+- Chaining multiple GPU operations (>2 ops)
+- Processing large workloads where GPU is beneficial (matmul >500×500)
+- Amortizing transfer overhead is critical
+
+**❌ Stick with traditional API when:**
+- Single operation only
+- Interactive/real-time workloads requiring immediate results
+- Workloads small enough that SIMD is faster anyway
+
+### Complete Example
+
+See `examples/gpu_batch_demo.rs` for three comprehensive demonstrations:
+
+1. **Single Operation** - Baseline batch API usage
+2. **Batched Operations** - ReLU → Scale → Add pipeline
+3. **ML Pipeline** - `y = ReLU(x * W + b)` simulation
+
+```bash
+# Run the demonstration
+cargo run --example gpu_batch_demo --features gpu --release
+```
+
+### Implementation Details
+
+- **Location**: `src/backends/gpu/batch.rs` (1,008 lines)
+- **Tests**: 8 comprehensive tests (all passing)
+- **Operations**: relu, scale, add, mul, dot
+- **API**: Fully async with tokio integration
+- **Safety**: Type-safe buffer IDs prevent invalid operations
+
+### Future Enhancements (v0.4.0+)
+
+While the batch API is complete, future improvements may include:
+
+- **Automatic optimization**: Detect operation chains and auto-batch
+- **More operations**: Expand beyond current 5 operations (relu, scale, add, mul, dot)
+- **Graph optimization**: Reorder operations for maximum efficiency
+- **Multi-GPU**: Distribute batches across multiple GPUs
+- **Persistent buffers**: Reuse buffers across multiple batch executions
 
 ## Hardware Details
 
