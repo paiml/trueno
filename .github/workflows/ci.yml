@@ -211,12 +211,51 @@ jobs:
       - name: Check for performance regressions
         if: hashFiles('.performance-baselines/baseline-current.txt') != ''
         run: |
-          echo "Running benchmarks for regression check..."
-          cargo bench --bench vector_ops --no-fail-fast 2>&1 | tee /tmp/bench-current.txt
-          echo "Comparing against baseline..."
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Performance Regression Detection"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📊 Baseline found - running regression check..."
+          echo ""
+
+          # Run benchmarks with reduced sample size for faster CI
+          cargo bench --bench vector_ops --all-features --no-fail-fast -- --sample-size 10 2>&1 | tee /tmp/bench-current.txt
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Regression Analysis"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+
+          # Run regression check (fail CI if >5% regression)
           python3 scripts/check_regression.py \
             --baseline .performance-baselines/baseline-current.txt \
-            --current /tmp/bench-current.txt || echo "Note: GPU benchmarks not available in CI"
+            --current /tmp/bench-current.txt \
+            --regression-threshold 0.05 \
+            --warning-threshold 0.02
+
+          REGRESSION_STATUS=$?
+
+          if [ $REGRESSION_STATUS -eq 0 ]; then
+            echo ""
+            echo "✅ No performance regressions detected"
+          else
+            echo ""
+            echo "❌ Performance regressions detected - see report above"
+            exit 1
+          fi
+
+      - name: Baseline status
+        if: hashFiles('.performance-baselines/baseline-current.txt') == ''
+        run: |
+          echo "⚠️  No performance baseline found"
+          echo ""
+          echo "To enable regression detection:"
+          echo "  1. Run: make bench-save-baseline"
+          echo "  2. Commit: git add .performance-baselines/baseline-current.txt"
+          echo "  3. Push to repository"
+          echo ""
+          echo "ℹ️  CI will continue without regression check"
 
   # Security audit
   security:
