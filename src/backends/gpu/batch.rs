@@ -289,7 +289,7 @@ impl GpuCommandBatch {
         }
 
         // Step 2: Upload initial data to buffers that have it
-        for (_buffer_id, buffer_info) in &self.buffers {
+        for buffer_info in self.buffers.values() {
             if let Some(data) = &buffer_info.data {
                 if let Some(gpu_buffer) = &buffer_info.gpu_buffer {
                     self.device
