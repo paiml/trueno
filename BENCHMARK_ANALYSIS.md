@@ -230,6 +230,55 @@
 
 **Recommendation**: Investigate missing benchmarks
 
+**UPDATE (2025-11-23)**: Investigation completed. Root cause was missing AVX-512 configurations in benchmark code. After adding configurations, discovered counterintuitive results - see AVX-512 Analysis section below.
+
+---
+
+## AVX-512 Analysis (New Findings)
+
+**Investigation Date**: 2025-11-23
+**Operations Tested**: mul, div, fma, scale, sub
+
+### Critical Discovery: AVX-512 Often Slower Than AVX2
+
+After fixing missing benchmark configurations, comprehensive testing revealed **AVX-512 is counterproductive** for memory-bound operations:
+
+| Operation | Size | Scalar | AVX2 | AVX-512 | AVX-512 vs Scalar | AVX-512 vs AVX2 |
+|-----------|------|--------|------|---------|-------------------|-----------------|
+| **mul** | 100 | 68 ns | 75 ns | **101 ns** | **0.67x** ❌ | 0.74x |
+| **mul** | 1K | 174 ns | 169 ns | **171 ns** | 1.01x | 0.99x |
+| **mul** | 10K | 2,125 ns | 1,977 ns | **2,335 ns** | **0.90x** ❌ | 0.85x |
+| **sub** | 1K | 169 ns | 146 ns | **195 ns** | **0.87x** ❌ | 0.75x |
+| **sub** | 10K | 2,139 ns | 1,975 ns | **2,256 ns** | **0.95x** ❌ | 0.88x |
+| **div** | 1K | 323 ns | 278 ns | **301 ns** | 1.07x | 0.92x |
+| **fma** | 100K | 38,146 ns | 37,026 ns | **39,553 ns** | **0.96x** ❌ | 0.94x |
+| **scale** | 10K | 1,519 ns | 1,416 ns | **1,620 ns** | **0.94x** ❌ | 0.87x |
+
+**Key Findings**:
+- ❌ **mul**: AVX-512 is **33% slower** than scalar at 100 elements, 10% slower at 10K
+- ❌ **sub**: AVX-512 is **13% slower** than scalar at 1K elements
+- ⚠️ **AVX-512 slower than AVX2** in 15 out of 19 test configurations (79%)
+- ✅ **Only 2 wins**: fma and scale at <1K elements (1.04-1.22x scalar)
+
+### Root Causes
+
+1. **Memory Bandwidth Bottleneck**: DDR4 ~50 GB/s shared across wider SIMD. AVX-512 can compute 16 values in parallel but can't load them any faster.
+2. **Thermal Throttling**: AVX-512 may trigger CPU frequency reduction on some architectures
+3. **Increased Overhead**: 32 ZMM registers (512-bit) require more save/restore than 16 YMM registers (256-bit)
+4. **Amdahl's Law**: Scalar overhead (loop setup, bounds checking) becomes larger fraction of total time
+
+### Recommendation: Prefer AVX2 Over AVX-512
+
+**For Memory-Bound Operations** (add, sub, mul, scale, div):
+- ✅ Use **AVX2** (consistently faster)
+- ❌ Avoid **AVX-512** (often slower)
+
+**For Compute-Bound Operations** (dot, max, min):
+- ✅ Use **AVX-512** (8-16x expected speedup)
+- ✅ Use **AVX2** as fallback (4-12x validated speedup)
+
+**Detailed Analysis**: See [AVX512_ANALYSIS.md](./AVX512_ANALYSIS.md) for complete findings.
+
 ---
 
 ## Recommendations
@@ -254,13 +303,16 @@
 2. **Medium**: Complex operations (sigmoid, exp, tanh)
 3. **Low**: Simple arithmetic (already good enough)
 
-**Backend Selection Logic**:
-- Workload size > 100K: Consider GPU
-- Workload size 1000-100K: AVX2 optimal
-- Workload size < 1000: SSE2 or scalar acceptable
+**Backend Selection Logic** (Updated Based on AVX-512 Findings):
+- **Memory-bound ops** (add, sub, mul, scale): Prefer AVX2 over AVX-512
+- **Compute-bound ops** (dot, max, min): AVX-512 > AVX2 > SSE2
+- **Workload size > 100K**: Consider GPU
+- **Workload size 1000-100K**: AVX2 optimal (avoid AVX-512 for memory-bound)
+- **Workload size < 1000**: SSE2 or scalar acceptable
 
 **Future Work**:
-- Fix missing AVX-512 benchmarks
+- ✅ Fix missing AVX-512 benchmarks (COMPLETED)
+- ⚠️ Fix backend selection to prefer AVX2 for memory-bound operations
 - GPU benchmarks for very large vectors (>100K)
 - NEON benchmarks on ARM hardware
 
@@ -342,24 +394,34 @@ Modern CPUs have:
 
 ## Next Steps
 
-1. **Fix Missing AVX-512 Benchmarks** ⚠️
-   - div, fma, mul showing 0 results
-   - Investigate timeout or implementation issues
+1. ✅ **Fix Missing AVX-512 Benchmarks** (COMPLETED 2025-11-23)
+   - Root cause: Missing benchmark configurations in benches/vector_ops.rs
+   - Added AVX-512 to: mul, div, fma, scale, sub (+65 lines)
+   - Result: Discovered AVX-512 is often slower than AVX2 for memory-bound ops
+   - See: AVX512_ANALYSIS.md for complete findings
 
-2. **Update Documentation** 📝
+2. **Fix Backend Selection Logic** 🔧 (HIGH PRIORITY)
+   - Current: Prefers AVX-512 over AVX2 unconditionally
+   - Issue: AVX-512 is 0.67-0.95x scalar for memory-bound operations
+   - Fix: Prefer AVX2 for add, sub, mul, scale, div
+   - Keep AVX-512 for compute-bound: dot, max, min (8-16x expected)
+
+3. **Update Documentation** 📝
    - README: Set realistic expectations
-   - Remove "4x for add" claim
-   - Emphasize "4-12x for dot/max/min"
+   - Remove "8x for add/mul with AVX-512" claim
+   - Add "AVX-512 not recommended for memory-bound ops" warning
+   - Emphasize "4-12x for dot/max/min with AVX2"
+   - Link to PERFORMANCE_EXPECTATIONS.md and AVX512_ANALYSIS.md
 
-3. **Add Large Vector Benchmarks** 📊
+4. **Add Large Vector Benchmarks** 📊
    - Test 100K, 1M, 10M element vectors
    - Validate GPU threshold (claimed >100K)
 
-4. **ARM NEON Benchmarks** 🔧
+5. **ARM NEON Benchmarks** 🔧
    - Validate 4x speedup claims on ARM hardware
    - Compare Apple Silicon M-series performance
 
-5. **Performance Regression Tests** 🚨
+6. **Performance Regression Tests** 🚨
    - CI: Alert on >10% slowdowns
    - Baseline: Current AVX2 dot/max/min performance
    - Prevent accidental SIMD removal
