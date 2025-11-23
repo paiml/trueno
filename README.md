@@ -495,10 +495,15 @@ let result = a.add(&b).unwrap();
 ```
 
 Trueno automatically selects the best backend:
-- **x86_64**: AVX-512 → AVX2 → AVX → SSE2 → Scalar
+- **x86_64**: AVX2 → AVX → SSE2 → Scalar (AVX-512 used for compute-bound operations only)
 - **ARM**: NEON → Scalar
 - **WASM**: SIMD128 → Scalar
 - **GPU** (optional): Vulkan/Metal/DX12/WebGPU (>1000×1000 matrices)
+
+**Operation-Aware Backend Selection** (v0.7.0+):
+- **Compute-bound** (dot, max, min): Prefers AVX-512 (6-17x speedup)
+- **Memory-bound** (add, sub, mul): Prefers AVX2 (avoids AVX-512 regression)
+- See [AVX512_ANALYSIS.md](AVX512_ANALYSIS.md) for detailed analysis
 
 ### Safety First
 ```rust
@@ -511,16 +516,33 @@ let b = Vector::from_slice(&[1.0, 2.0, 3.0]);
 assert!(a.add(&b).is_err());  // SizeMismatch error
 ```
 
-### Performance Targets
+### Validated Performance (v0.7.0)
 
-| Operation | Size | Target Speedup vs Scalar | Backend |
-|-----------|------|-------------------------|---------|
-| `add()` | 1K | 8x | AVX2 |
-| `add()` | 100K | 16x | GPU |
-| `dot()` | 10K | 12x | AVX2 + FMA |
-| `sum()` | 1M | 20x | GPU |
+**Compute-Bound Operations** (High Arithmetic Intensity):
 
-*All optimizations benchmarked with Criterion.rs, minimum 10% improvement required*
+| Operation | Size | Speedup vs Scalar | Backend | Status |
+|-----------|------|-------------------|---------|--------|
+| `dot()` | 100 | 6.4x | AVX-512 | ✅ Validated |
+| `dot()` | 1K | **17.2x** | AVX-512 | ✅ **Outstanding!** |
+| `dot()` | 10K | 8.8x | AVX-512 | ✅ Validated |
+| `max()` | 1K | 12.1x | AVX-512 | ✅ Validated |
+| `min()` | 1K | 11.8x | AVX-512 | ✅ Validated |
+
+**Memory-Bound Operations** (Low Arithmetic Intensity):
+
+| Operation | Size | Speedup vs Scalar | Backend | Status |
+|-----------|------|-------------------|---------|--------|
+| `add()` | 100 | 1.0x | AVX2 | ✅ Realistic |
+| `add()` | 1K | 1.0-1.2x | AVX2 | ✅ Realistic |
+| `mul()` | 1K | 1.0x | AVX2 | ✅ Realistic |
+| `sub()` | 1K | 1.0x | AVX2 | ✅ Realistic |
+
+**Key Insight**: Memory-bound operations are limited by DDR4 bandwidth (~50 GB/s), not computation. SIMD provides minimal benefit for add/mul/sub.
+
+**Performance Analysis Documents**:
+- [BENCHMARK_ANALYSIS.md](BENCHMARK_ANALYSIS.md) - Complete benchmark overview
+- [AVX512_ANALYSIS.md](AVX512_ANALYSIS.md) - Why AVX-512 hurts memory-bound operations
+- [AVX512_COMPUTE_BOUND_VALIDATION.md](AVX512_COMPUTE_BOUND_VALIDATION.md) - AVX-512 excellence for compute-bound
 
 ## Installation
 
@@ -580,16 +602,49 @@ let maximum = a.max().unwrap();  // 3.0
 
 ### Backend Selection
 
+**Automatic Selection** (Recommended):
+
+```rust
+use trueno::Vector;
+
+// Auto-selects best backend based on CPU features
+let v = Vector::from_slice(&data);
+
+// Operations automatically use optimal backend:
+// - Compute-bound (dot, max, min): AVX-512 if available (6-17x)
+// - Memory-bound (add, sub, mul): AVX2 (avoids AVX-512 regression)
+let dot = a.dot(&b).unwrap();  // Uses AVX-512 (17x speedup!)
+let sum = a.add(&b).unwrap();  // Uses AVX2 (avoids slowdown)
+```
+
+**Operation-Aware Selection** (v0.7.0+):
+
+```rust
+use trueno::{select_backend_for_operation, OperationType, Backend};
+
+// Select backend for specific operation type
+let backend = select_backend_for_operation(OperationType::ComputeBound);
+// Returns: Backend::AVX512 (for dot, max, min)
+
+let backend = select_backend_for_operation(OperationType::MemoryBound);
+// Returns: Backend::AVX2 (for add, sub, mul - avoids AVX-512)
+```
+
+**Explicit Backend** (for testing/benchmarking):
+
 ```rust
 use trueno::{Vector, Backend};
 
-// Auto-select best backend (recommended)
-let v = Vector::from_slice(&data);  // Uses Backend::Auto
-
-// Explicit backend (for testing/benchmarking)
+// Force specific backend
 let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
-let v = Vector::from_slice_with_backend(&data, Backend::GPU);
+let v = Vector::from_slice_with_backend(&data, Backend::AVX512);  // May be slower!
+let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
 ```
+
+**Why Operation-Aware Matters**:
+- AVX-512 is **33% slower** than scalar for multiplication (memory-bound)
+- AVX-512 is **17x faster** than scalar for dot product (compute-bound)
+- Automatic selection ensures you get the best of both worlds
 
 ### 2D Convolution (Image Processing)
 
