@@ -279,6 +279,29 @@ After fixing missing benchmark configurations, comprehensive testing revealed **
 
 **Detailed Analysis**: See [AVX512_ANALYSIS.md](./AVX512_ANALYSIS.md) for complete findings.
 
+### AVX-512 Compute-Bound Validation (2025-11-23)
+
+After implementing operation-aware backend selection, validated that AVX-512 **DOES** provide expected speedups for compute-bound operations:
+
+| Operation | Size | Scalar | AVX-512 | Speedup | Status |
+|-----------|------|--------|---------|---------|--------|
+| **dot** | 100 | 74.56 ns | 11.59 ns | **6.43x** | ✅ Excellent |
+| **dot** | 1K | 1,148.8 ns | 66.86 ns | **17.18x** | ✅ **Outstanding!** |
+| **dot** | 10K | 12,022 ns | 1,360.9 ns | **8.83x** | ✅ Meets target |
+| **max** | 1K | 1,118.1 ns | 92.39 ns | **12.10x** | ✅ Excellent |
+| **min** | 1K | 1,117.2 ns | 94.94 ns | **11.77x** | ✅ Excellent |
+
+**Average Speedups**:
+- dot: **10.81x** (6.4-17.2x range)
+- max: **9.30x** (7.4-12.1x range)
+- min: **9.13x** (7.1-11.8x range)
+
+**Conclusion**: Operation-aware backend selection **WORKS** ✅:
+- ✅ Compute-bound ops use AVX-512 → 6-17x speedup maintained
+- ✅ Memory-bound ops avoid AVX-512 → No regressions (use AVX2 instead)
+
+**See**: [AVX512_COMPUTE_BOUND_VALIDATION.md](./AVX512_COMPUTE_BOUND_VALIDATION.md) for complete analysis.
+
 ---
 
 ## Recommendations
