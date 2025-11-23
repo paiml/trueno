@@ -1313,11 +1313,55 @@ impl Matrix<f32> {
         use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
         use crate::backends::{scalar::ScalarBackend, VectorBackend};
 
-        let mut result_data = vec![0.0; self.rows];
         let v_slice = v.as_slice();
 
+        let mut result_data = vec![0.0; self.rows];
+
+        // Parallel execution for very large matrices (≥4096 rows)
+        // Note: Thread overhead dominates for smaller matrices
+        #[cfg(feature = "parallel")]
+        {
+            const PARALLEL_THRESHOLD: usize = 4096;
+
+            if self.rows >= PARALLEL_THRESHOLD {
+                use rayon::prelude::*;
+                use std::sync::atomic::{AtomicPtr, Ordering};
+                use std::sync::Arc;
+
+                let result_ptr = Arc::new(AtomicPtr::new(result_data.as_mut_ptr()));
+
+                // Process rows in parallel - each row computes an independent dot product
+                (0..self.rows).into_par_iter().for_each(|i| {
+                    let row_start = i * self.cols;
+                    let row = &self.data[row_start..(row_start + self.cols)];
+
+                    let dot_result = unsafe {
+                        #[cfg(target_arch = "x86_64")]
+                        {
+                            match self.backend {
+                                Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(row, v_slice),
+                                Backend::SSE2 | Backend::AVX => Sse2Backend::dot(row, v_slice),
+                                _ => ScalarBackend::dot(row, v_slice),
+                            }
+                        }
+                        #[cfg(not(target_arch = "x86_64"))]
+                        {
+                            ScalarBackend::dot(row, v_slice)
+                        }
+                    };
+
+                    // Write to non-overlapping memory location (thread-safe)
+                    unsafe {
+                        let ptr = result_ptr.load(Ordering::Relaxed);
+                        *ptr.add(i) = dot_result;
+                    }
+                });
+
+                return Ok(Vector::from_slice(&result_data));
+            }
+        }
+
         // SIMD-optimized execution: each row-vector product is a dot product
-        // Future enhancement: parallel execution for large matrices (>1024 rows)
         for (i, result) in result_data.iter_mut().enumerate() {
             let row_start = i * self.cols;
             let row = &self.data[row_start..(row_start + self.cols)];
@@ -2147,6 +2191,59 @@ mod tests {
             "Found {} mismatches in {}×{} parallel matmul, max_diff={}",
             mismatches, size, size, max_diff
         );
+    }
+
+    #[test]
+    #[cfg(feature = "parallel")]
+    fn test_matvec_parallel_4096() {
+        // Test parallel matvec for very large matrices (≥4096 rows)
+        // This triggers the parallel path (PARALLEL_THRESHOLD = 4096)
+        let rows = 4096;
+        let cols = 512;
+
+        let matrix = Matrix::from_vec(
+            rows,
+            cols,
+            (0..rows * cols).map(|i| ((i % 100) as f32) / 10.0).collect(),
+        )
+        .unwrap();
+
+        let vector = Vector::from_slice(
+            &(0..cols).map(|i| ((i % 50) as f32) / 5.0).collect::<Vec<f32>>(),
+        );
+
+        // Compute result (should use parallel path)
+        let result = matrix.matvec(&vector).unwrap();
+
+        // Verify result shape
+        assert_eq!(result.len(), rows);
+
+        // Verify correctness by comparing with manual dot product calculation
+        // Check a few sample rows
+        for sample_row in [0, 1024, 2048, 3072, 4095] {
+            let row_start = sample_row * cols;
+            let row = &matrix.data[row_start..(row_start + cols)];
+
+            // Manual dot product
+            let expected: f32 = row.iter()
+                .zip(vector.as_slice().iter())
+                .map(|(a, b)| a * b)
+                .sum();
+
+            let actual = result.as_slice()[sample_row];
+            let diff = (expected - actual).abs();
+            let tolerance = if expected.abs() > 1.0 {
+                expected.abs() * 1e-3
+            } else {
+                1e-3
+            };
+
+            assert!(
+                diff < tolerance,
+                "Mismatch at row {}: expected={}, actual={}, diff={}",
+                sample_row, expected, actual, diff
+            );
+        }
     }
 
     // ===== Phase 2 Micro-kernel Tests (Issue #10) =====
