@@ -834,6 +834,32 @@ Hot Functions:
   3. backend_dispatch - 0.3ms (0.8%)
 ```
 
+### Golden Trace Validation
+
+Trueno uses **Renacer 0.6.2** for syscall-level performance regression detection:
+
+```bash
+# Capture golden traces (performance baselines)
+./scripts/capture_golden_traces.sh
+
+# View trace summary
+cat golden_traces/backend_detection_summary.txt
+```
+
+**Performance Baselines** (v0.7.0):
+- `backend_detection`: 0.73ms, 87 syscalls ✅
+- `matrix_operations`: 1.56ms, 168 syscalls ✅
+- `activation_functions`: 1.30ms, 159 syscalls ✅
+- `ml_similarity`: 0.82ms, 109 syscalls ✅ (fastest)
+
+**Use Cases**:
+- 🔒 **Regression Detection**: CI fails if syscall count/latency exceeds budget
+- 🚨 **PCIe Bottleneck Detection**: Warns if GPU transfers >> compute time
+- 📊 **Build-Time Assertions**: Enforce performance contracts (`renacer.toml`)
+- 🔍 **Source Correlation**: Map syscalls to Rust source code
+
+See [docs/integration-report-golden-trace.md](docs/integration-report-golden-trace.md) for details.
+
 ### Testing Philosophy
 
 Trueno uses **multi-layered testing**:
