@@ -290,7 +290,11 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        // Polling is now handled automatically by queue submission in wgpu v27
+        // Poll device to ensure GPU work completes and callbacks are invoked
+        self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        }).ok();
 
         receiver
             .receive()
@@ -482,7 +486,11 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        // Polling is now handled automatically by queue submission in wgpu v27
+        // Poll device to ensure GPU work completes and callbacks are invoked
+        self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        }).ok();
 
         receiver
             .receive()
@@ -706,7 +714,11 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        // Polling is now handled automatically by queue submission in wgpu v27
+        // Poll device to ensure GPU work completes and callbacks are invoked
+        self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        }).ok();
 
         receiver
             .receive()
@@ -1064,7 +1076,11 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        // Polling is now handled automatically by queue submission in wgpu v27
+        // Poll device to ensure GPU work completes and callbacks are invoked
+        self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        }).ok();
         receiver
             .receive()
             .await
@@ -1215,7 +1231,11 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        // Polling is now handled automatically by queue submission in wgpu v27
+        // Poll device to ensure GPU work completes and callbacks are invoked
+        self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        }).ok();
         receiver
             .receive()
             .await
@@ -1458,7 +1478,11 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        // Polling is now handled automatically by queue submission in wgpu v27
+        // Poll device to ensure GPU work completes and callbacks are invoked
+        self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        }).ok();
 
         receiver
             .receive()
@@ -1745,7 +1769,11 @@ impl GpuDevice {
             sender.send(result).unwrap();
         });
 
-        // Polling is now handled automatically by queue submission in wgpu v27
+        // Poll device to ensure GPU work completes and callbacks are invoked
+        self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        }).ok();
 
         receiver
             .receive()
