@@ -12,7 +12,7 @@ fn main() {
             .map(|i| ((i % 100) as f32) / 10.0)
             .collect(),
     )
-    .unwrap();
+    .expect("Failed to create matrix A");
 
     let b = Matrix::from_vec(
         size,
@@ -21,12 +21,12 @@ fn main() {
             .map(|i| (((i * 7) % 100) as f32) / 10.0)
             .collect(),
     )
-    .unwrap();
+    .expect("Failed to create matrix B");
 
     // Warmup
     println!("Warmup...");
     for _ in 0..3 {
-        let _ = a.matmul(&b).unwrap();
+        let _ = a.matmul(&b).expect("Warmup matmul failed");
     }
 
     // Benchmark
@@ -35,7 +35,7 @@ fn main() {
     let start = Instant::now();
 
     for _ in 0..iterations {
-        let _ = a.matmul(&b).unwrap();
+        let _ = a.matmul(&b).expect("Benchmark matmul failed");
     }
 
     let elapsed = start.elapsed();

@@ -22,7 +22,7 @@ fn main() {
                 .map(|i| ((i % 100) as f32) / 10.0)
                 .collect(),
         )
-        .unwrap();
+        .expect("Failed to create matrix A");
 
         let matrix_b = Matrix::from_vec(
             rows,
@@ -31,7 +31,7 @@ fn main() {
                 .map(|i| (((i * 7) % 100) as f32) / 10.0)
                 .collect(),
         )
-        .unwrap();
+        .expect("Failed to create matrix B");
 
         let vector_data: Vec<f32> = (0..cols).map(|i| ((i % 50) as f32) / 5.0).collect();
         let vector = Vector::from_slice(&vector_data);
@@ -43,13 +43,13 @@ fn main() {
 
             // Warmup
             for _ in 0..2 {
-                let _ = matrix_a.matmul(&matrix_b).unwrap();
+                let _ = matrix_a.matmul(&matrix_b).expect("Warmup matmul failed");
             }
 
             let iterations = if rows <= 512 { 10 } else { 5 };
             let start = Instant::now();
             for _ in 0..iterations {
-                let _ = matrix_a.matmul(&matrix_b).unwrap();
+                let _ = matrix_a.matmul(&matrix_b).expect("Benchmark matmul failed");
             }
             let elapsed = start.elapsed();
             let avg_ms = elapsed.as_secs_f64() * 1000.0 / iterations as f64;
@@ -63,13 +63,13 @@ fn main() {
 
         // Warmup
         for _ in 0..3 {
-            let _ = matrix_a.matvec(&vector).unwrap();
+            let _ = matrix_a.matvec(&vector).expect("Warmup matvec failed");
         }
 
         let iterations = if rows <= 512 { 100 } else { 20 };
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = matrix_a.matvec(&vector).unwrap();
+            let _ = matrix_a.matvec(&vector).expect("Benchmark matvec failed");
         }
         let elapsed = start.elapsed();
         let avg_us = elapsed.as_micros() as f64 / iterations as f64;
@@ -82,13 +82,13 @@ fn main() {
 
         // Warmup
         for _ in 0..3 {
-            let _ = Matrix::vecmat(&vector, &matrix_a).unwrap();
+            let _ = Matrix::vecmat(&vector, &matrix_a).expect("Warmup vecmat failed");
         }
 
         let iterations = if rows <= 512 { 100 } else { 20 };
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = Matrix::vecmat(&vector, &matrix_a).unwrap();
+            let _ = Matrix::vecmat(&vector, &matrix_a).expect("Benchmark vecmat failed");
         }
         let elapsed = start.elapsed();
         let avg_us = elapsed.as_micros() as f64 / iterations as f64;
