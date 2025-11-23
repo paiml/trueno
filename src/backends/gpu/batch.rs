@@ -1403,7 +1403,7 @@ mod tests {
         assert_eq!(result.len(), 5);
         // All values should be in reasonable range for tanh(sigmoid(relu(x)))
         for &val in &result {
-            assert!(val >= -1.0 && val <= 1.0, "Value {} out of range", val);
+            assert!((-1.0..=1.0).contains(&val), "Value {} out of range", val);
         }
     }
 }

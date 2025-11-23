@@ -112,7 +112,7 @@ async fn demo_batched_operations() -> Result<(), String> {
     println!("\n   Final result: {:?}", result);
 
     // Verify correctness
-    let expected = vec![2.5, 4.5, 0.5, 8.5];
+    let expected = [2.5, 4.5, 0.5, 8.5];
     for (i, (&actual, &expect)) in result.iter().zip(expected.iter()).enumerate() {
         if (actual - expect).abs() > 1e-5 {
             return Err(format!(
@@ -160,7 +160,7 @@ async fn demo_ml_pipeline() -> Result<(), String> {
     println!("   ReLU:   [3, 5, 7, 9]                = [3, 5, 7, 9]");
     println!("\n   Final activation: {:?}", result);
 
-    let expected = vec![3.0, 5.0, 7.0, 9.0];
+    let expected = [3.0, 5.0, 7.0, 9.0];
     for (i, (&actual, &expect)) in result.iter().zip(expected.iter()).enumerate() {
         if (actual - expect).abs() > 1e-5 {
             return Err(format!(

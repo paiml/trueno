@@ -267,6 +267,61 @@ make profile-otlp-tempo
 - **Failed syscalls**: 19 statx ENOENT errors during test discovery (expected)
 - **Recommendation**: Use raw binaries for micro-benchmarks, avoid async for <10μs ops
 
+### Golden Trace Validation (Renacer 0.6.2)
+
+**Purpose**: Syscall-level performance regression detection for SIMD/GPU compute operations
+
+```bash
+# Capture golden traces (performance baselines)
+./scripts/capture_golden_traces.sh
+
+# View trace summary
+cat golden_traces/backend_detection_summary.txt
+
+# Validate performance assertions
+renacer --assert renacer.toml -- ./target/release/examples/backend_detection
+```
+
+**Captured Operations** (v0.7.0):
+- `backend_detection`: 0.73ms, 87 syscalls (SIMD backend selection)
+- `matrix_operations`: 1.56ms, 168 syscalls (matmul, transpose)
+- `activation_functions`: 1.30ms, 159 syscalls (ReLU, sigmoid, tanh, GELU, swish)
+- `performance_demo`: 1.51ms, 138 syscalls (comprehensive benchmark)
+- `ml_similarity`: 0.82ms, 109 syscalls (cosine, Euclidean, Manhattan)
+
+**Performance Assertions** (`renacer.toml`):
+```toml
+[[assertion]]
+name = "example_startup_latency"
+type = "critical_path"
+max_duration_ms = 100
+fail_on_violation = true  # CI fails on regression
+
+[[assertion]]
+name = "max_syscall_budget"
+type = "span_count"
+max_spans = 500
+fail_on_violation = true  # Detect I/O regressions
+
+[[assertion]]
+name = "detect_pcie_bottleneck"
+type = "anti_pattern"
+pattern = "PCIeBottleneck"
+threshold = 0.7
+fail_on_violation = false  # Warning: GPU transfers >> compute
+```
+
+**Use Cases**:
+- **Regression Detection**: CI fails if syscall count/latency exceeds budget
+- **PCIe Bottleneck Detection**: Warns if GPU transfer overhead dominates compute
+- **Source Correlation**: Map syscalls to Rust source code (`renacer -s`)
+- **OTLP Export**: Visualize syscall timelines in Jaeger/Grafana
+- **Build-Time Assertions**: Enforce performance contracts automatically
+
+**Documentation**:
+- Full integration report: `docs/integration-report-golden-trace.md`
+- Book chapter: `book/src/performance/golden-trace-validation.md`
+
 ### Quality Gates
 ```bash
 # PMAT Technical Debt Grading (minimum: B+ / 85/100)
