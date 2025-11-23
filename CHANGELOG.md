@@ -25,8 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Testing ✅
 
-- All 937 tests passing with updated dependencies
-- 38/38 GPU tests pass with wgpu v27 (including 8 new batch tests)
+- All 942 tests passing with updated dependencies (up from 936)
+- 44/44 GPU tests pass with wgpu v27 (including 14 batch tests)
 - Benchmark infrastructure verified with criterion 0.7
 - Zero clippy warnings maintained
 
@@ -37,10 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **New types**:
     - `GpuCommandBatch`: Command builder for batching GPU operations
     - `BufferId`: Type-safe buffer identifier for intermediate results
-  - **Operations supported**: `relu`, `scale`, `add`, `mul`, `dot`
+  - **Operations supported**: **10 operations total**
+    - **Activations**: `relu`, `sigmoid`, `tanh`, `swish`, `gelu`
+    - **Arithmetic**: `add`, `sub`, `mul`, `scale`, `dot`
   - **Architecture**: Command Builder pattern for explicit batching control
     - `upload()`: Queue data for GPU upload
-    - `relu()`, `scale()`, `add()`, `mul()`, `dot()`: Queue operations (no GPU execution)
+    - Operation methods: Queue operations (no GPU execution)
     - `execute()`: Execute all queued operations in single batch
     - `read()`: Download results from GPU
   - **Transfer reduction**:
@@ -49,9 +51,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **New GPU shaders**:
     - `SCALE_SHADER`: Element-wise scalar multiplication
     - `VEC_MUL_SHADER`: Element-wise vector multiplication
-  - **Tests**:
-    - 8 comprehensive tests (buffer allocation, operation queuing, error handling, end-to-end execution)
-    - Integration test validates full workflow: upload → relu → scale → add → read
+    - `VEC_SUB_SHADER`: Element-wise vector subtraction
+  - **Tests**: 14 comprehensive tests
+    - Buffer management tests (allocation, operation queuing, error handling)
+    - Operation tests (mul, dot, sigmoid, tanh, swish, gelu, sub)
+    - Integration tests (end-to-end execution, chained activations)
   - **Dependencies**: Added `tokio` (dev-dependency) for async test support
   - **Benchmarks** (`benches/async_gpu_ops.rs`):
     - `bench_sync_chained_ops`: Traditional sync API (6 transfers for 3 ops)

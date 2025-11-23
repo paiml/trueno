@@ -90,6 +90,37 @@ enum GpuOp {
         b: BufferId,
         output: BufferId, // Single-element buffer for result
     },
+
+    /// Sigmoid activation: 1 / (1 + exp(-x))
+    Sigmoid {
+        input: BufferId,
+        output: BufferId,
+    },
+
+    /// Hyperbolic tangent: tanh(x)
+    Tanh {
+        input: BufferId,
+        output: BufferId,
+    },
+
+    /// Swish activation: x * sigmoid(x)
+    Swish {
+        input: BufferId,
+        output: BufferId,
+    },
+
+    /// GELU activation: x * Φ(x) where Φ is cumulative distribution function
+    Gelu {
+        input: BufferId,
+        output: BufferId,
+    },
+
+    /// Element-wise subtraction: a - b
+    Sub {
+        a: BufferId,
+        b: BufferId,
+        output: BufferId,
+    },
 }
 
 /// Command batch for async GPU execution
@@ -258,6 +289,90 @@ impl GpuCommandBatch {
         let output = self.alloc_output(1); // Dot product returns scalar
 
         self.operations.push(GpuOp::Dot { a, b, output });
+
+        output
+    }
+
+    /// Queue sigmoid activation: 1 / (1 + exp(-x))
+    ///
+    /// Returns buffer ID for the output.
+    pub fn sigmoid(&mut self, input: BufferId) -> BufferId {
+        let size = self.buffers.get(&input)
+            .expect("Invalid buffer ID")
+            .size;
+
+        let output = self.alloc_output(size);
+
+        self.operations.push(GpuOp::Sigmoid { input, output });
+
+        output
+    }
+
+    /// Queue hyperbolic tangent: tanh(x)
+    ///
+    /// Returns buffer ID for the output.
+    pub fn tanh(&mut self, input: BufferId) -> BufferId {
+        let size = self.buffers.get(&input)
+            .expect("Invalid buffer ID")
+            .size;
+
+        let output = self.alloc_output(size);
+
+        self.operations.push(GpuOp::Tanh { input, output });
+
+        output
+    }
+
+    /// Queue Swish activation: x * sigmoid(x)
+    ///
+    /// Returns buffer ID for the output.
+    pub fn swish(&mut self, input: BufferId) -> BufferId {
+        let size = self.buffers.get(&input)
+            .expect("Invalid buffer ID")
+            .size;
+
+        let output = self.alloc_output(size);
+
+        self.operations.push(GpuOp::Swish { input, output });
+
+        output
+    }
+
+    /// Queue GELU activation: x * Φ(x)
+    ///
+    /// Returns buffer ID for the output.
+    pub fn gelu(&mut self, input: BufferId) -> BufferId {
+        let size = self.buffers.get(&input)
+            .expect("Invalid buffer ID")
+            .size;
+
+        let output = self.alloc_output(size);
+
+        self.operations.push(GpuOp::Gelu { input, output });
+
+        output
+    }
+
+    /// Queue element-wise subtraction: a - b
+    ///
+    /// Returns buffer ID for the output.
+    ///
+    /// # Panics
+    ///
+    /// Panics if buffers have different sizes.
+    pub fn sub(&mut self, a: BufferId, b: BufferId) -> BufferId {
+        let size_a = self.buffers.get(&a).expect("Invalid buffer ID").size;
+        let size_b = self.buffers.get(&b).expect("Invalid buffer ID").size;
+
+        assert_eq!(
+            size_a, size_b,
+            "Buffer size mismatch: {} vs {}",
+            size_a, size_b
+        );
+
+        let output = self.alloc_output(size_a);
+
+        self.operations.push(GpuOp::Sub { a, b, output });
 
         output
     }
@@ -459,6 +574,152 @@ impl GpuCommandBatch {
                 self.execute_binary_op(
                     shaders::DOT_PRODUCT_SHADER,
                     "Dot",
+                    a_buffer,
+                    b_buffer,
+                    output_buffer,
+                    a_info.size,
+                )
+                .await?;
+            }
+
+            GpuOp::Sigmoid { input, output } => {
+                let input_info = self
+                    .buffers
+                    .get(input)
+                    .ok_or("Invalid input buffer ID")?;
+                let output_info = self
+                    .buffers
+                    .get(output)
+                    .ok_or("Invalid output buffer ID")?;
+
+                let input_buffer = input_info
+                    .gpu_buffer
+                    .as_ref()
+                    .ok_or("Input buffer not created")?;
+                let output_buffer = output_info
+                    .gpu_buffer
+                    .as_ref()
+                    .ok_or("Output buffer not created")?;
+
+                self.execute_unary_op::<()>(
+                    shaders::SIGMOID_SHADER,
+                    "Sigmoid",
+                    input_buffer,
+                    output_buffer,
+                    input_info.size,
+                    None,
+                )
+                .await?;
+            }
+
+            GpuOp::Tanh { input, output } => {
+                let input_info = self
+                    .buffers
+                    .get(input)
+                    .ok_or("Invalid input buffer ID")?;
+                let output_info = self
+                    .buffers
+                    .get(output)
+                    .ok_or("Invalid output buffer ID")?;
+
+                let input_buffer = input_info
+                    .gpu_buffer
+                    .as_ref()
+                    .ok_or("Input buffer not created")?;
+                let output_buffer = output_info
+                    .gpu_buffer
+                    .as_ref()
+                    .ok_or("Output buffer not created")?;
+
+                self.execute_unary_op::<()>(
+                    shaders::TANH_SHADER,
+                    "Tanh",
+                    input_buffer,
+                    output_buffer,
+                    input_info.size,
+                    None,
+                )
+                .await?;
+            }
+
+            GpuOp::Swish { input, output } => {
+                let input_info = self
+                    .buffers
+                    .get(input)
+                    .ok_or("Invalid input buffer ID")?;
+                let output_info = self
+                    .buffers
+                    .get(output)
+                    .ok_or("Invalid output buffer ID")?;
+
+                let input_buffer = input_info
+                    .gpu_buffer
+                    .as_ref()
+                    .ok_or("Input buffer not created")?;
+                let output_buffer = output_info
+                    .gpu_buffer
+                    .as_ref()
+                    .ok_or("Output buffer not created")?;
+
+                self.execute_unary_op::<()>(
+                    shaders::SWISH_SHADER,
+                    "Swish",
+                    input_buffer,
+                    output_buffer,
+                    input_info.size,
+                    None,
+                )
+                .await?;
+            }
+
+            GpuOp::Gelu { input, output } => {
+                let input_info = self
+                    .buffers
+                    .get(input)
+                    .ok_or("Invalid input buffer ID")?;
+                let output_info = self
+                    .buffers
+                    .get(output)
+                    .ok_or("Invalid output buffer ID")?;
+
+                let input_buffer = input_info
+                    .gpu_buffer
+                    .as_ref()
+                    .ok_or("Input buffer not created")?;
+                let output_buffer = output_info
+                    .gpu_buffer
+                    .as_ref()
+                    .ok_or("Output buffer not created")?;
+
+                self.execute_unary_op::<()>(
+                    shaders::GELU_SHADER,
+                    "GELU",
+                    input_buffer,
+                    output_buffer,
+                    input_info.size,
+                    None,
+                )
+                .await?;
+            }
+
+            GpuOp::Sub { a, b, output } => {
+                let a_info = self.buffers.get(a).ok_or("Invalid buffer A ID")?;
+                let b_info = self.buffers.get(b).ok_or("Invalid buffer B ID")?;
+                let output_info = self
+                    .buffers
+                    .get(output)
+                    .ok_or("Invalid output buffer ID")?;
+
+                let a_buffer = a_info.gpu_buffer.as_ref().ok_or("Buffer A not created")?;
+                let b_buffer = b_info.gpu_buffer.as_ref().ok_or("Buffer B not created")?;
+                let output_buffer = output_info
+                    .gpu_buffer
+                    .as_ref()
+                    .ok_or("Output buffer not created")?;
+
+                self.execute_binary_op(
+                    shaders::VEC_SUB_SHADER,
+                    "Sub",
                     a_buffer,
                     b_buffer,
                     output_buffer,
@@ -1004,5 +1265,145 @@ mod tests {
         // For now, just verify we get a result
         assert!(!result.is_empty());
         println!("Dot product result: {:?}", result);
+    }
+
+    #[tokio::test]
+    async fn test_sigmoid_operation() {
+        if !GpuDevice::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let device = GpuDevice::new().unwrap();
+        let mut batch = GpuCommandBatch::new(device);
+
+        let input = batch.upload(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let result_id = batch.sigmoid(input);
+
+        batch.execute().await.unwrap();
+        let result = batch.read(result_id).await.unwrap();
+
+        // Sigmoid: 1 / (1 + exp(-x))
+        // sigmoid(-2) ≈ 0.119, sigmoid(0) = 0.5, sigmoid(2) ≈ 0.881
+        assert_eq!(result.len(), 5);
+        assert!((result[0] - 0.119).abs() < 0.01); // -2
+        assert!((result[2] - 0.5).abs() < 0.01);   // 0
+        assert!((result[4] - 0.881).abs() < 0.01); // 2
+    }
+
+    #[tokio::test]
+    async fn test_tanh_operation() {
+        if !GpuDevice::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let device = GpuDevice::new().unwrap();
+        let mut batch = GpuCommandBatch::new(device);
+
+        let input = batch.upload(&[-1.0, 0.0, 1.0]);
+        let result_id = batch.tanh(input);
+
+        batch.execute().await.unwrap();
+        let result = batch.read(result_id).await.unwrap();
+
+        // tanh(-1) ≈ -0.762, tanh(0) = 0, tanh(1) ≈ 0.762
+        assert_eq!(result.len(), 3);
+        assert!((result[0] - (-0.762)).abs() < 0.01);
+        assert!(result[1].abs() < 0.01);
+        assert!((result[2] - 0.762).abs() < 0.01);
+    }
+
+    #[tokio::test]
+    async fn test_swish_operation() {
+        if !GpuDevice::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let device = GpuDevice::new().unwrap();
+        let mut batch = GpuCommandBatch::new(device);
+
+        let input = batch.upload(&[0.0, 1.0, 2.0]);
+        let result_id = batch.swish(input);
+
+        batch.execute().await.unwrap();
+        let result = batch.read(result_id).await.unwrap();
+
+        // Swish: x * sigmoid(x)
+        assert_eq!(result.len(), 3);
+        assert!(result[0].abs() < 0.01); // 0 * sigmoid(0) = 0
+        assert!((result[1] - 0.731).abs() < 0.01); // 1 * sigmoid(1) ≈ 0.731
+    }
+
+    #[tokio::test]
+    async fn test_gelu_operation() {
+        if !GpuDevice::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let device = GpuDevice::new().unwrap();
+        let mut batch = GpuCommandBatch::new(device);
+
+        let input = batch.upload(&[-1.0, 0.0, 1.0]);
+        let result_id = batch.gelu(input);
+
+        batch.execute().await.unwrap();
+        let result = batch.read(result_id).await.unwrap();
+
+        // GELU: x * Φ(x) where Φ is cumulative distribution function
+        assert_eq!(result.len(), 3);
+        // GELU(0) ≈ 0, GELU(1) ≈ 0.841
+        assert!(result[1].abs() < 0.01);
+        assert!((result[2] - 0.841).abs() < 0.05);
+    }
+
+    #[tokio::test]
+    async fn test_sub_operation() {
+        if !GpuDevice::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let device = GpuDevice::new().unwrap();
+        let mut batch = GpuCommandBatch::new(device);
+
+        let a = batch.upload(&[5.0, 10.0, 15.0, 20.0]);
+        let b = batch.upload(&[1.0, 2.0, 3.0, 4.0]);
+        let result_id = batch.sub(a, b);
+
+        batch.execute().await.unwrap();
+        let result = batch.read(result_id).await.unwrap();
+
+        // Expected: [5-1, 10-2, 15-3, 20-4] = [4, 8, 12, 16]
+        assert_eq!(result, vec![4.0, 8.0, 12.0, 16.0]);
+    }
+
+    #[tokio::test]
+    async fn test_chained_activations() {
+        if !GpuDevice::is_available() {
+            eprintln!("GPU not available, skipping test");
+            return;
+        }
+
+        let device = GpuDevice::new().unwrap();
+        let mut batch = GpuCommandBatch::new(device);
+
+        // Test chaining: relu → sigmoid → tanh
+        let input = batch.upload(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let relu_out = batch.relu(input);
+        let sigmoid_out = batch.sigmoid(relu_out);
+        let final_out = batch.tanh(sigmoid_out);
+
+        batch.execute().await.unwrap();
+        let result = batch.read(final_out).await.unwrap();
+
+        // Verify we get reasonable output
+        assert_eq!(result.len(), 5);
+        // All values should be in reasonable range for tanh(sigmoid(relu(x)))
+        for &val in &result {
+            assert!(val >= -1.0 && val <= 1.0, "Value {} out of range", val);
+        }
     }
 }
