@@ -232,21 +232,18 @@ bench: ## Run benchmarks
 bench-gpu: ## Run GPU benchmarks only
 	cargo bench --bench gpu_ops --all-features --no-fail-fast
 
-bench-save-baseline: ## Save current benchmark as baseline
-	@echo "📊 Running benchmarks and saving baseline..."
-	@mkdir -p .performance-baselines
-	@cargo bench --bench gpu_ops --all-features --no-fail-fast 2>&1 | tee .performance-baselines/bench-latest.txt
-	@echo "✅ Baseline saved to .performance-baselines/bench-latest.txt"
-	@echo "    To activate: cp .performance-baselines/bench-latest.txt .performance-baselines/baseline-current.txt"
+bench-save-baseline: ## Save current benchmark as baseline (with commit metadata)
+	@./scripts/save_baseline.sh
 
-bench-compare: ## Compare current performance vs baseline
+bench-compare: ## Compare current performance vs baseline (detect regressions)
 	@echo "🔍 Comparing current performance vs baseline..."
 	@if [ ! -f .performance-baselines/baseline-current.txt ]; then \
 		echo "❌ No baseline found. Run 'make bench-save-baseline' first."; \
 		exit 1; \
 	fi
 	@echo "Running benchmarks..."
-	@cargo bench --bench gpu_ops --all-features --no-fail-fast 2>&1 | tee /tmp/bench-current.txt
+	@cargo bench --bench vector_ops --all-features --no-fail-fast 2>&1 | tee /tmp/bench-current.txt
+	@echo ""
 	@echo "Comparing against baseline..."
 	@python3 scripts/check_regression.py \
 		--baseline .performance-baselines/baseline-current.txt \
