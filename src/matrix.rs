@@ -2204,12 +2204,16 @@ mod tests {
         let matrix = Matrix::from_vec(
             rows,
             cols,
-            (0..rows * cols).map(|i| ((i % 100) as f32) / 10.0).collect(),
+            (0..rows * cols)
+                .map(|i| ((i % 100) as f32) / 10.0)
+                .collect(),
         )
         .unwrap();
 
         let vector = Vector::from_slice(
-            &(0..cols).map(|i| ((i % 50) as f32) / 5.0).collect::<Vec<f32>>(),
+            &(0..cols)
+                .map(|i| ((i % 50) as f32) / 5.0)
+                .collect::<Vec<f32>>(),
         );
 
         // Compute result (should use parallel path)
@@ -2225,7 +2229,8 @@ mod tests {
             let row = &matrix.data[row_start..(row_start + cols)];
 
             // Manual dot product
-            let expected: f32 = row.iter()
+            let expected: f32 = row
+                .iter()
                 .zip(vector.as_slice().iter())
                 .map(|(a, b)| a * b)
                 .sum();
@@ -2241,7 +2246,10 @@ mod tests {
             assert!(
                 diff < tolerance,
                 "Mismatch at row {}: expected={}, actual={}, diff={}",
-                sample_row, expected, actual, diff
+                sample_row,
+                expected,
+                actual,
+                diff
             );
         }
     }
