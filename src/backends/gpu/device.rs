@@ -27,19 +27,18 @@ impl GpuDevice {
                 force_fallback_adapter: false,
             })
             .await
-            .ok_or("Failed to find GPU adapter")?;
+            .map_err(|e| format!("Failed to find GPU adapter: {}", e))?;
 
         // Request device and queue
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("Trueno GPU Device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::Performance,
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("Trueno GPU Device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::Performance,
+                experimental_features: Default::default(),
+                trace: Default::default(),
+            })
             .await
             .map_err(|e| format!("Failed to create device: {}", e))?;
 
@@ -57,7 +56,7 @@ impl GpuDevice {
                     force_fallback_adapter: false,
                 })
                 .await
-                .is_some()
+                .is_ok()
         })
     }
 
@@ -235,7 +234,7 @@ impl GpuDevice {
                 label: Some("Matmul Pipeline"),
                 layout: Some(&pipeline_layout),
                 module: &shader,
-                entry_point: "main",
+                entry_point: Some("main"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -291,7 +290,7 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        self.device.poll(wgpu::Maintain::Wait);
+        // Polling is now handled automatically by queue submission in wgpu v27
 
         receiver
             .receive()
@@ -429,7 +428,7 @@ impl GpuDevice {
                 label: Some("Vec Add Pipeline"),
                 layout: Some(&pipeline_layout),
                 module: &shader,
-                entry_point: "main",
+                entry_point: Some("main"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -483,7 +482,7 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        self.device.poll(wgpu::Maintain::Wait);
+        // Polling is now handled automatically by queue submission in wgpu v27
 
         receiver
             .receive()
@@ -653,7 +652,7 @@ impl GpuDevice {
                 label: Some(&format!("{} Pipeline", op_name)),
                 layout: Some(&pipeline_layout),
                 module: &shader,
-                entry_point: "main",
+                entry_point: Some("main"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -707,7 +706,7 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        self.device.poll(wgpu::Maintain::Wait);
+        // Polling is now handled automatically by queue submission in wgpu v27
 
         receiver
             .receive()
@@ -1019,7 +1018,7 @@ impl GpuDevice {
                 label: Some("Max Reduction Pipeline"),
                 layout: Some(&pipeline_layout),
                 module: &shader,
-                entry_point: "main",
+                entry_point: Some("main"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -1065,7 +1064,7 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        self.device.poll(wgpu::Maintain::Wait);
+        // Polling is now handled automatically by queue submission in wgpu v27
         receiver
             .receive()
             .await
@@ -1171,7 +1170,7 @@ impl GpuDevice {
                 label: Some("Sum Reduction Pipeline"),
                 layout: Some(&pipeline_layout),
                 module: &shader,
-                entry_point: "main",
+                entry_point: Some("main"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -1216,7 +1215,7 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        self.device.poll(wgpu::Maintain::Wait);
+        // Polling is now handled automatically by queue submission in wgpu v27
         receiver
             .receive()
             .await
@@ -1408,7 +1407,7 @@ impl GpuDevice {
                 label: Some("Dot Product Pipeline"),
                 layout: Some(&pipeline_layout),
                 module: &shader,
-                entry_point: "main",
+                entry_point: Some("main"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -1459,7 +1458,7 @@ impl GpuDevice {
             sender.send(result).ok();
         });
 
-        self.device.poll(wgpu::Maintain::Wait);
+        // Polling is now handled automatically by queue submission in wgpu v27
 
         receiver
             .receive()
@@ -1689,7 +1688,7 @@ impl GpuDevice {
                 label: Some("Convolve2D Pipeline"),
                 layout: Some(&pipeline_layout),
                 module: &shader,
-                entry_point: "main",
+                entry_point: Some("main"),
                 compilation_options: Default::default(),
                 cache: None,
             });
@@ -1746,7 +1745,7 @@ impl GpuDevice {
             sender.send(result).unwrap();
         });
 
-        self.device.poll(wgpu::Maintain::Wait);
+        // Polling is now handled automatically by queue submission in wgpu v27
 
         receiver
             .receive()
