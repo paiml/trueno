@@ -120,18 +120,26 @@ Element-wise operations show variable performance, often limited by memory bandw
 ### GPU (WebGPU via wgpu)
 
 **Availability**: Systems with Vulkan/Metal/DX12 support
-**Typical speedup**: 10-50x for large workloads (>100K elements)
+**Typical speedup**: 16-81x for large matrix operations (>500×500)
 
-**Threshold**: GPU only activates for workloads ≥100,000 elements
+**IMPORTANT**: Empirical RTX 4090 benchmarking revealed that GPU has **3.5ms fixed transfer overhead**, making it slower than SIMD for vector operations at ALL sizes.
 
-| Workload Size | Recommended Backend |
-|---------------|---------------------|
-| <1K | Scalar or SSE2 |
-| 1K-100K | SSE2/AVX2 |
-| 100K-1M | GPU (if available) |
-| >1M | GPU (strongly recommended) |
+**GPU Performance Summary** (2025-11-23, RTX 4090):
+- ✅ **Matrix multiplication**: 81x speedup on 1000×1000
+- ❌ **Vector operations**: 2000x+ slower than SIMD due to transfer overhead
+- 🎯 **Recommendation**: GPU only for matrix ops >500×500, otherwise use SIMD
 
-**GPU Transfer Overhead**: ~0.5ms per operation for CPU↔GPU data transfer
+**Current Thresholds**:
+
+| Workload Type | Size Range | Recommended Backend |
+|---------------|------------|---------------------|
+| Vector operations | **Any** | **SIMD** (GPU disabled) |
+| Matrix multiplication | <500×500 | SIMD |
+| Matrix multiplication | ≥500×500 | **GPU** |
+
+**GPU Transfer Overhead**: ~3.5ms per operation for CPU↔GPU↔CPU transfer
+
+See **[GPU Performance](./gpu-performance.md)** for detailed RTX 4090 benchmark results and analysis.
 
 ## Performance by Workload Size
 
