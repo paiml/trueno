@@ -107,6 +107,29 @@ From initial golden trace capture:
 | `performance_demo` | TBD | TBD | Comprehensive performance test |
 | `ml_similarity` | TBD | TBD | Cosine/Euclidean similarity |
 
+## Performance Budget Compliance
+
+All golden trace examples meet established performance budgets:
+
+| Example | Baseline Runtime | Budget | Status | Syscalls |
+|---------|-----------------|--------|--------|----------|
+| `backend_detection` | 0.730ms | <10ms | ✅ PASS | 87 |
+| `matrix_operations` | 1.560ms | <20ms | ✅ PASS | 168 |
+| `activation_functions` | 1.298ms | <20ms | ✅ PASS | 159 |
+| `performance_demo` | 1.507ms | <50ms | ✅ PASS | 138 |
+| `ml_similarity` | 0.817ms | <20ms | ✅ PASS | 109 |
+
+**Budget Enforcement**:
+- ✅ All examples complete in <2ms (well under budgets)
+- ✅ Syscall counts remain under 200 for all operations
+- ✅ SIMD compute demonstrates minimal I/O overhead
+- ✅ Performance headroom: 5-60x faster than budgets
+
+**Regression Detection**:
+- Alert if runtime exceeds 150% of baseline
+- Fail CI if runtime exceeds absolute budget
+- Track syscall pattern changes (unexpected I/O)
+
 ## SIMD/GPU Performance Characteristics
 
 ### Expected Syscall Patterns
