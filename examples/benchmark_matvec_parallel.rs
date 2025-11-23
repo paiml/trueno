@@ -25,7 +25,7 @@ fn main() {
                 .map(|i| ((i % 100) as f32) / 10.0)
                 .collect(),
         )
-        .unwrap();
+        .expect("Failed to create matrix");
 
         let vector = Vector::from_slice(
             &(0..cols)
@@ -35,7 +35,7 @@ fn main() {
 
         // Warmup
         for _ in 0..3 {
-            let _ = matrix.matvec(&vector).unwrap();
+            let _ = matrix.matvec(&vector).expect("Warmup matvec failed");
         }
 
         // Benchmark
@@ -43,7 +43,7 @@ fn main() {
         let start = Instant::now();
 
         for _ in 0..iterations {
-            let _ = matrix.matvec(&vector).unwrap();
+            let _ = matrix.matvec(&vector).expect("Benchmark matvec failed");
         }
 
         let elapsed = start.elapsed();

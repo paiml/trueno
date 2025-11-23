@@ -158,8 +158,16 @@ fn test_golden_traces_valid_json() {
             .unwrap_or_else(|e| panic!("Invalid JSON in {}: {}", trace_path, e));
 
         // Validate required fields exist
-        assert!(parsed.get("version").is_some(), "Missing 'version' in {}", trace_path);
-        assert!(parsed.get("format").is_some(), "Missing 'format' in {}", trace_path);
+        assert!(
+            parsed.get("version").is_some(),
+            "Missing 'version' in {}",
+            trace_path
+        );
+        assert!(
+            parsed.get("format").is_some(),
+            "Missing 'format' in {}",
+            trace_path
+        );
 
         // Validate format is correct
         if let Some(format) = parsed.get("format") {
@@ -213,12 +221,14 @@ fn test_golden_trace_analysis_exists() {
         "Golden trace analysis documentation missing"
     );
 
-    let content = std::fs::read_to_string(analysis_path)
-        .expect("Failed to read ANALYSIS.md");
+    let content = std::fs::read_to_string(analysis_path).expect("Failed to read ANALYSIS.md");
 
     // Validate documentation contains key sections
     assert!(content.contains("## Overview"), "Missing Overview section");
-    assert!(content.contains("## Baseline Performance Metrics"), "Missing performance metrics");
+    assert!(
+        content.contains("## Baseline Performance Metrics"),
+        "Missing performance metrics"
+    );
     assert!(content.contains("SIMD"), "Missing SIMD documentation");
 }
 
@@ -233,11 +243,26 @@ fn test_performance_budgets_documented() {
     let content = std::fs::read_to_string(analysis_path).unwrap();
 
     // Check that all examples have documented budgets
-    assert!(content.contains("backend_detection"), "Missing backend_detection budget");
-    assert!(content.contains("matrix_operations"), "Missing matrix_operations budget");
-    assert!(content.contains("activation_functions"), "Missing activation_functions budget");
-    assert!(content.contains("performance_demo"), "Missing performance_demo budget");
-    assert!(content.contains("ml_similarity"), "Missing ml_similarity budget");
+    assert!(
+        content.contains("backend_detection"),
+        "Missing backend_detection budget"
+    );
+    assert!(
+        content.contains("matrix_operations"),
+        "Missing matrix_operations budget"
+    );
+    assert!(
+        content.contains("activation_functions"),
+        "Missing activation_functions budget"
+    );
+    assert!(
+        content.contains("performance_demo"),
+        "Missing performance_demo budget"
+    );
+    assert!(
+        content.contains("ml_similarity"),
+        "Missing ml_similarity budget"
+    );
 
     // Check that performance budget compliance is documented
     assert!(

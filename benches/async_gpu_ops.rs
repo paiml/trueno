@@ -125,37 +125,29 @@ fn bench_single_op_comparison(c: &mut Criterion) {
         let input = vec![1.0f32; size];
 
         // Sync API
-        group.bench_with_input(
-            BenchmarkId::new("sync", size),
-            &size,
-            |b, &_size| {
-                b.iter(|| {
-                    let mut result = vec![0.0f32; size];
-                    device
-                        .relu(black_box(&input), &mut result)
-                        .expect("ReLU failed");
-                    black_box(result)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("sync", size), &size, |b, &_size| {
+            b.iter(|| {
+                let mut result = vec![0.0f32; size];
+                device
+                    .relu(black_box(&input), &mut result)
+                    .expect("ReLU failed");
+                black_box(result)
+            });
+        });
 
         // Async API
-        group.bench_with_input(
-            BenchmarkId::new("async", size),
-            &size,
-            |b, &_size| {
-                b.iter(|| {
-                    let mut batch = GpuCommandBatch::new(device.clone());
-                    let input_id = batch.upload(black_box(&input));
-                    let output_id = batch.relu(input_id);
+        group.bench_with_input(BenchmarkId::new("async", size), &size, |b, &_size| {
+            b.iter(|| {
+                let mut batch = GpuCommandBatch::new(device.clone());
+                let input_id = batch.upload(black_box(&input));
+                let output_id = batch.relu(input_id);
 
-                    pollster::block_on(async {
-                        batch.execute().await.expect("Execute failed");
-                        batch.read(output_id).await.expect("Read failed")
-                    })
-                });
-            },
-        );
+                pollster::block_on(async {
+                    batch.execute().await.expect("Execute failed");
+                    batch.read(output_id).await.expect("Read failed")
+                })
+            });
+        });
     }
 
     group.finish();
