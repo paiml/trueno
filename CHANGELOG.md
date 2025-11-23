@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Dependencies 📦
+
+- **Updated all dependencies to latest crates.io versions** (2025-11-23)
+  - `wgpu`: 22.0 → 27.0.1 (major update)
+    - Fixed breaking changes: `entry_point` now uses `Option<&str>`
+    - Updated `request_adapter` API (now returns `Result`)
+    - Removed `Maintain::Wait` (polling now automatic)
+    - Added `experimental_features` and `trace` to `DeviceDescriptor`
+  - `criterion`: 0.5 → 0.7 (minor update)
+    - Replaced `criterion::black_box` with `std::hint::black_box`
+  - `thiserror`: 2.0 → 2.0.17
+  - `rayon`: 1.10 → 1.11
+  - `pollster`: 0.3 → 0.4
+  - `bytemuck`: 1.14 → 1.24
+  - `proptest`: 1.8 → 1.9
+
+### Testing ✅
+
+- All 928 tests passing with updated dependencies
+- 30/30 GPU tests pass with wgpu v27
+- Benchmark infrastructure verified with criterion 0.7
+- Zero clippy warnings maintained
+
 ## [0.7.0] - 2025-11-22
 
 ### Performance - Phase 3: Large Matrix Optimization 🚀
