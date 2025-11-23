@@ -121,24 +121,24 @@ Processing 3 samples through the same linear layer:
    • examples/performance_demo.rs - SIMD performance
 % time     seconds  usecs/call     calls    errors syscall
 ------ ----------- ----------- --------- --------- ----------------
- 54.55    0.000851           8       104           write
- 13.46    0.000210          16        13           mmap
-  4.49    0.000070          11         6           mprotect
-  3.78    0.000059          11         5           read
-  1.99    0.000031           6         5           rt_sigaction
-  3.21    0.000050          12         4           pread64
-  1.67    0.000026           6         4           unknown
-  2.24    0.000035           8         4           close
-  2.56    0.000040          10         4           newfstatat
-  3.85    0.000060          15         4           openat
-  1.22    0.000019           6         3           sigaltstack
-  1.99    0.000031          10         3           brk
-  1.41    0.000022          11         2           munmap
-  1.15    0.000018           9         2         1 arch_prctl
-  0.45    0.000007           7         1           poll
-  0.45    0.000007           7         1           getrandom
-  0.38    0.000006           6         1           set_robust_list
-  0.77    0.000012          12         1         1 access
-  0.38    0.000006           6         1           set_tid_address
+ 49.43    0.006377          61       104           write
+ 11.32    0.001460         112        13           mmap
+  4.66    0.000601         120         5           mprotect
+  2.42    0.000312          62         5           rt_sigaction
+  1.85    0.000239          59         4           close
+  1.94    0.000250          62         4         1 unknown
+  7.61    0.000982         245         4           openat
+  2.61    0.000337          84         4           fstat
+  3.57    0.000461         153         3           sigaltstack
+  2.48    0.000320         106         3           read
+  1.26    0.000163          54         3           brk
+  2.60    0.000335         167         2           munmap
+  1.66    0.000214         107         2           pread64
+  1.00    0.000129         129         1         1 access
+  0.57    0.000073          73         1           set_robust_list
+  3.05    0.000393         393         1           getrandom
+  0.57    0.000074          74         1           set_tid_address
+  0.90    0.000116         116         1           poll
+  0.51    0.000066          66         1           arch_prctl
 ------ ----------- ----------- --------- --------- ----------------
-100.00    0.001560           9       168         2 total
+100.00    0.012902          79       162         2 total
