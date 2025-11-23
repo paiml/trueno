@@ -4,6 +4,7 @@ use super::shaders;
 use wgpu;
 
 /// GPU device manager
+#[derive(Clone)]
 pub struct GpuDevice {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
