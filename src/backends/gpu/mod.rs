@@ -20,10 +20,16 @@
 //! - Automatic fallback to CPU if GPU unavailable
 
 #[cfg(feature = "gpu")]
+mod batch;
+
+#[cfg(feature = "gpu")]
 mod device;
 
 #[cfg(feature = "gpu")]
 mod shaders;
+
+#[cfg(feature = "gpu")]
+pub use batch::{BufferId, GpuCommandBatch};
 
 #[cfg(feature = "gpu")]
 pub use device::GpuDevice;
