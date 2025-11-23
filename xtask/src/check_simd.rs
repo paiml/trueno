@@ -613,13 +613,13 @@ mod tests {
             "#[target_feature(enable = \"avx2\")]".to_string(),
             "unsafe fn foo() {".to_string(),
         ];
-        assert_eq!(check_target_feature_attribute(&lines, 2), Some("avx2".to_string()));
+        assert_eq!(
+            check_target_feature_attribute(&lines, 2),
+            Some("avx2".to_string())
+        );
 
         // Test with no attribute
-        let lines = vec![
-            "".to_string(),
-            "unsafe fn foo() {".to_string(),
-        ];
+        let lines = vec!["".to_string(), "unsafe fn foo() {".to_string()];
         assert_eq!(check_target_feature_attribute(&lines, 1), None);
 
         // Test with attribute far away (>15 lines)
@@ -639,9 +639,7 @@ mod tests {
         ];
         assert!(has_safety_comment(&lines, 1));
 
-        let lines = vec![
-            "unsafe fn foo() {".to_string(),
-        ];
+        let lines = vec!["unsafe fn foo() {".to_string()];
         assert!(!has_safety_comment(&lines, 0));
 
         // Test with comment far away (>10 lines)
@@ -655,10 +653,7 @@ mod tests {
 
     #[test]
     fn test_has_inline_attribute() {
-        let lines = vec![
-            "#[inline]".to_string(),
-            "unsafe fn foo() {".to_string(),
-        ];
+        let lines = vec!["#[inline]".to_string(), "unsafe fn foo() {".to_string()];
         assert!(has_inline_attribute(&lines, 1));
 
         let lines = vec![
@@ -667,9 +662,7 @@ mod tests {
         ];
         assert!(has_inline_attribute(&lines, 1));
 
-        let lines = vec![
-            "unsafe fn foo() {".to_string(),
-        ];
+        let lines = vec!["unsafe fn foo() {".to_string()];
         assert!(!has_inline_attribute(&lines, 0));
     }
 
@@ -798,8 +791,9 @@ unsafe fn test_func() {{
         .unwrap();
 
         let violations = check_file(temp_file.path(), "avx2").unwrap();
-        assert!(violations.iter().any(|v| v.level == ViolationLevel::Error
-            && v.message.contains("FMA")));
+        assert!(violations
+            .iter()
+            .any(|v| v.level == ViolationLevel::Error && v.message.contains("FMA")));
     }
 
     #[test]
@@ -823,8 +817,7 @@ unsafe fn test_func() {{
         let violations = check_file(temp_file.path(), "avx2").unwrap();
         assert!(violations
             .iter()
-            .any(|v| v.level == ViolationLevel::Warning
-                && v.message.contains("SAFETY")));
+            .any(|v| v.level == ViolationLevel::Warning && v.message.contains("SAFETY")));
     }
 
     #[test]
@@ -848,8 +841,7 @@ unsafe fn test_func() {{
         let violations = check_file(temp_file.path(), "avx2").unwrap();
         assert!(violations
             .iter()
-            .any(|v| v.level == ViolationLevel::Warning
-                && v.message.contains("inline")));
+            .any(|v| v.level == ViolationLevel::Warning && v.message.contains("inline")));
     }
 
     #[test]

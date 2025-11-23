@@ -511,6 +511,94 @@ impl VectorBackend for NeonBackend {
     // 2. All pointers derived from valid slice references with sufficient backing storage
     // 3. NEON intrinsics marked with #[target_feature(enable = "neon")]
     // 4. Unaligned loads/stores used (vld1q_f32/vst1q_f32) - handle unaligned data
+    unsafe fn norm_linf(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        // Accumulator for 4-way parallel max
+        let mut max_vec = vdupq_n_f32(0.0);
+
+        // Process 4 elements at a time using NEON (128-bit = 4 x f32)
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+
+            // Compute absolute value
+            let abs_va = vabsq_f32(va);
+
+            // Track maximum
+            max_vec = vmaxq_f32(max_vec, abs_va);
+
+            i += 4;
+        }
+
+        // Horizontal max across all 4 lanes (aarch64 has convenient vaddvq_f32)
+        let mut result = vmaxvq_f32(max_vec);
+
+        // Check remaining elements
+        for &val in &a[i..] {
+            let abs_val = val.abs();
+            if abs_val > result {
+                result = abs_val;
+            }
+        }
+
+        result
+    }
+
+    #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. NEON intrinsics marked with #[target_feature(enable = "neon")]
+    // 4. Unaligned loads/stores used (vld1q_f32/vst1q_f32) - handle unaligned data
+    unsafe fn norm_linf(a: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+
+        let len = a.len();
+        let mut i = 0;
+
+        let mut max_vec = vdupq_n_f32(0.0);
+
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let abs_va = vabsq_f32(va);
+            max_vec = vmaxq_f32(max_vec, abs_va);
+            i += 4;
+        }
+
+        // Manual horizontal max for ARMv7 (no vmaxvq_f32)
+        let mut result = {
+            let max_halves = vpmax_f32(vget_low_f32(max_vec), vget_high_f32(max_vec));
+            let max_all = vpmax_f32(max_halves, max_halves);
+            vget_lane_f32(max_all, 0)
+        };
+
+        for &val in &a[i..] {
+            let abs_val = val.abs();
+            if abs_val > result {
+                result = abs_val;
+            }
+        }
+
+        result
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. NEON intrinsics marked with #[target_feature(enable = "neon")]
+    // 4. Unaligned loads/stores used (vld1q_f32/vst1q_f32) - handle unaligned data
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -759,6 +847,61 @@ impl VectorBackend for NeonBackend {
         // Handle remaining elements
         while i < len {
             result[i] = a[i] * b[i] + c[i];
+            i += 1;
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    #[inline]
+    #[target_feature(enable = "neon")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. NEON intrinsics marked with #[target_feature(enable = "neon")]
+    // 4. Unaligned loads/stores used (vld1q_f32/vst1q_f32) - handle unaligned data
+    unsafe fn abs(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        // Process 4 elements at a time using NEON (128-bit = 4 x f32)
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+
+            // Compute absolute value
+            let abs_va = vabsq_f32(va);
+
+            vst1q_f32(result.as_mut_ptr().add(i), abs_va);
+            i += 4;
+        }
+
+        // Handle remaining elements with scalar code
+        while i < len {
+            result[i] = a[i].abs();
+            i += 1;
+        }
+    }
+
+    #[cfg(target_arch = "arm")]
+    #[inline]
+    #[target_feature(enable = "neon")]
+    // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
+    // 2. All pointers derived from valid slice references with sufficient backing storage
+    // 3. NEON intrinsics marked with #[target_feature(enable = "neon")]
+    // 4. Unaligned loads/stores used (vld1q_f32/vst1q_f32) - handle unaligned data
+    unsafe fn abs(a: &[f32], result: &mut [f32]) {
+        let len = a.len();
+        let mut i = 0;
+
+        while i + 4 <= len {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let abs_va = vabsq_f32(va);
+            vst1q_f32(result.as_mut_ptr().add(i), abs_va);
+            i += 4;
+        }
+
+        while i < len {
+            result[i] = a[i].abs();
             i += 1;
         }
     }
@@ -1201,6 +1344,12 @@ impl VectorBackend for NeonBackend {
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
         // Scalar fallback: NEON reciprocal requires estimate + Newton-Raphson refinement
         super::scalar::ScalarBackend::recip(a, result);
+    }
+
+    unsafe fn exp(a: &[f32], result: &mut [f32]) {
+        // Scalar fallback: SIMD exp requires complex range reduction and polynomial approximation
+        // Future optimization: implement using NEON with 6th-degree polynomial (see avx2.rs)
+        super::scalar::ScalarBackend::exp(a, result);
     }
 
     unsafe fn ln(a: &[f32], result: &mut [f32]) {
