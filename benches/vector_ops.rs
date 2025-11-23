@@ -20,7 +20,8 @@
 //! - Element-wise ops:      2x (8-wide vs 4-wide SIMD)
 //! - Dot product:           2x+ (FMA acceleration)
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use trueno::{Backend, Vector};
 
 /// Generate test data for benchmarks

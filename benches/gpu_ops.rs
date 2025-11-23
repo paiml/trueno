@@ -26,7 +26,8 @@
 
 #![cfg(feature = "gpu")]
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use trueno::backends::gpu::GpuBackend;
 
 /// Generate test data for benchmarks

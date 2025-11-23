@@ -2718,7 +2718,7 @@ mod tests {
             Avx512Backend::mul(&a, &b, &mut result);
         }
 
-        let expected = vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0];
+        let expected = [2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -2773,7 +2773,7 @@ mod tests {
             Avx512Backend::div(&a, &b, &mut result);
         }
 
-        let expected = vec![5.0, 5.0, 6.0, 5.0, 5.0, 5.0, 5.0, 5.0];
+        let expected = [5.0, 5.0, 6.0, 5.0, 5.0, 5.0, 5.0, 5.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -2828,7 +2828,7 @@ mod tests {
             Avx512Backend::sub(&a, &b, &mut result);
         }
 
-        let expected = vec![9.0, 18.0, 27.0, 36.0, 45.0, 54.0, 63.0, 72.0];
+        let expected = [9.0, 18.0, 27.0, 36.0, 45.0, 54.0, 63.0, 72.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -2882,7 +2882,7 @@ mod tests {
             Avx512Backend::sqrt(&a, &mut result);
         }
 
-        let expected = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let expected = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -2938,7 +2938,8 @@ mod tests {
         for i in 0..8 {
             let expected = a[i].exp();
             assert!(
-                (result[i] - expected).abs() < 1e-5 || (result[i] - expected).abs() / expected < 1e-5,
+                (result[i] - expected).abs() < 1e-5
+                    || (result[i] - expected).abs() / expected < 1e-5,
                 "exp mismatch at {}: {} vs {} (input: {})",
                 i,
                 result[i],
@@ -2998,7 +2999,8 @@ mod tests {
         for i in 0..8 {
             let expected = a[i].ln();
             assert!(
-                (result[i] - expected).abs() < 1e-5 || (result[i] - expected).abs() / expected.abs() < 1e-4,
+                (result[i] - expected).abs() < 1e-5
+                    || (result[i] - expected).abs() / expected.abs() < 1e-4,
                 "ln mismatch at {}: {} vs {} (input: {})",
                 i,
                 result[i],
@@ -3057,7 +3059,7 @@ mod tests {
             Avx512Backend::log2(&a, &mut result);
         }
 
-        let expected = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let expected = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -3084,7 +3086,7 @@ mod tests {
             Avx512Backend::log10(&a, &mut result);
         }
 
-        let expected = vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let expected = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-4,
@@ -3111,7 +3113,7 @@ mod tests {
             Avx512Backend::recip(&a, &mut result);
         }
 
-        let expected = vec![1.0, 0.5, 0.25, 0.2, 0.1, 0.05, 0.02, 0.01];
+        let expected = [1.0, 0.5, 0.25, 0.2, 0.1, 0.05, 0.02, 0.01];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -3164,7 +3166,7 @@ mod tests {
             Avx512Backend::relu(&a, &mut result);
         }
 
-        let expected = vec![0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 0.0, 10.0];
+        let expected = [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 0.0, 10.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -3275,7 +3277,7 @@ mod tests {
             Avx512Backend::ceil(&a, &mut result);
         }
 
-        let expected = vec![2.0, 2.0, -1.0, -1.0, 0.0, 3.0, -2.0, 4.0];
+        let expected = [2.0, 2.0, -1.0, -1.0, 0.0, 3.0, -2.0, 4.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -3302,7 +3304,7 @@ mod tests {
             Avx512Backend::floor(&a, &mut result);
         }
 
-        let expected = vec![1.0, 1.0, -2.0, -2.0, 0.0, 2.0, -3.0, 3.0];
+        let expected = [1.0, 1.0, -2.0, -2.0, 0.0, 2.0, -3.0, 3.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -3331,7 +3333,7 @@ mod tests {
 
         // Note: AVX-512 round uses "round away from zero" for .5 values
         // 1.5 → 2.0, 2.5 → 3.0, -1.5 → -2.0, -2.5 → -3.0
-        let expected = vec![1.0, 2.0, 2.0, -1.0, -2.0, -2.0, 3.0, -3.0];
+        let expected = [1.0, 2.0, 2.0, -1.0, -2.0, -2.0, 3.0, -3.0];
         for i in 0..8 {
             assert!(
                 (result[i] - expected[i]).abs() < 1e-5,
@@ -3618,12 +3620,16 @@ mod tests {
             assert!(
                 (ceil_result[i] - expected_ceil).abs() < 1e-5,
                 "ceil remainder mismatch at {}: {} vs {}",
-                i, ceil_result[i], expected_ceil
+                i,
+                ceil_result[i],
+                expected_ceil
             );
             assert!(
                 (floor_result[i] - expected_floor).abs() < 1e-5,
                 "floor remainder mismatch at {}: {} vs {}",
-                i, floor_result[i], expected_floor
+                i,
+                floor_result[i],
+                expected_floor
             );
         }
     }
@@ -3653,12 +3659,16 @@ mod tests {
             assert!(
                 (sin_avx512[i] - sin_scalar[i]).abs() < 1e-4,
                 "sin remainder mismatch at {}: avx512={}, scalar={}",
-                i, sin_avx512[i], sin_scalar[i]
+                i,
+                sin_avx512[i],
+                sin_scalar[i]
             );
             assert!(
                 (cos_avx512[i] - cos_scalar[i]).abs() < 1e-4,
                 "cos remainder mismatch at {}: avx512={}, scalar={}",
-                i, cos_avx512[i], cos_scalar[i]
+                i,
+                cos_avx512[i],
+                cos_scalar[i]
             );
         }
     }
