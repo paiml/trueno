@@ -1352,7 +1352,6 @@ impl VectorBackend for Avx512Backend {
 
     // Trigonometric functions currently use scalar implementations
     // Full SIMD trig functions require complex range reduction and are left for future work
-    // TODO: Implement proper SIMD range reduction for sin/cos/tan
 
     #[inline]
     #[target_feature(enable = "avx512f")]

@@ -130,6 +130,19 @@ fn bench_sub(c: &mut Criterion) {
                 black_box(a.sub(&b).unwrap());
             });
         });
+
+        // AVX-512 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX512", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::AVX512);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::AVX512);
+
+            bencher.iter(|| {
+                black_box(a.sub(&b).unwrap());
+            });
+        });
     }
 
     group.finish();
@@ -176,6 +189,18 @@ fn bench_mul(c: &mut Criterion) {
                 black_box(a.mul(&b).unwrap());
             });
         });
+
+        // AVX-512 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX512", size), size, |bencher, &size| {
+            let data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&data, Backend::AVX512);
+            let b = Vector::from_slice_with_backend(&data, Backend::AVX512);
+
+            bencher.iter(|| {
+                black_box(a.mul(&b).unwrap());
+            });
+        });
     }
 
     group.finish();
@@ -216,6 +241,18 @@ fn bench_scale(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("AVX2", size), size, |bencher, &size| {
             let a_data = generate_test_data(size);
             let a = Vector::from_slice_with_backend(&a_data, Backend::AVX2);
+            let scalar = 2.5f32;
+
+            bencher.iter(|| {
+                black_box(a.scale(scalar).unwrap());
+            });
+        });
+
+        // AVX-512 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX512", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::AVX512);
             let scalar = 2.5f32;
 
             bencher.iter(|| {
@@ -271,6 +308,19 @@ fn bench_div(c: &mut Criterion) {
                 black_box(a.div(&b).unwrap());
             });
         });
+
+        // AVX-512 backend
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX512", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::AVX512);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::AVX512);
+
+            bencher.iter(|| {
+                black_box(a.div(&b).unwrap());
+            });
+        });
     }
 
     group.finish();
@@ -321,6 +371,21 @@ fn bench_fma(c: &mut Criterion) {
             let a = Vector::from_slice_with_backend(&a_data, Backend::AVX2);
             let b = Vector::from_slice_with_backend(&b_data, Backend::AVX2);
             let c = Vector::from_slice_with_backend(&c_data, Backend::AVX2);
+
+            bencher.iter(|| {
+                black_box(a.fma(&b, &c).unwrap());
+            });
+        });
+
+        // AVX-512 backend (uses hardware FMA instruction)
+        #[cfg(target_arch = "x86_64")]
+        group.bench_with_input(BenchmarkId::new("AVX512", size), size, |bencher, &size| {
+            let a_data = generate_test_data(size);
+            let b_data = generate_test_data(size);
+            let c_data = generate_test_data(size);
+            let a = Vector::from_slice_with_backend(&a_data, Backend::AVX512);
+            let b = Vector::from_slice_with_backend(&b_data, Backend::AVX512);
+            let c = Vector::from_slice_with_backend(&c_data, Backend::AVX512);
 
             bencher.iter(|| {
                 black_box(a.fma(&b, &c).unwrap());

@@ -103,6 +103,7 @@ pub fn run() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -150,6 +151,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_run_without_git_directory() {
         // Create temp directory without .git
         let temp_dir = TempDir::new().unwrap();
@@ -167,6 +169,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_run_with_git_directory() {
         // Create temp directory with .git
         let temp_dir = TempDir::new().unwrap();
@@ -200,6 +203,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_run_backs_up_existing_hook() {
         // Create temp directory with .git
         let temp_dir = TempDir::new().unwrap();

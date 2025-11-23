@@ -541,6 +541,7 @@ impl ValidationResults {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -715,6 +716,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_project_root_current_dir() {
         // This test assumes we're running in the project root or a subdirectory
         let result = get_project_root();
@@ -871,6 +873,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_project_root_error_path() {
         // Test by temporarily changing directory to root (which has no Cargo.toml)
         let original_dir = std::env::current_dir().unwrap();
@@ -1277,6 +1280,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_project_root_with_cargo_toml() {
         // Since we're running from the project, this should find Cargo.toml
         let result = get_project_root();
@@ -1549,6 +1553,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_step_check_runnable_with_missing_main() {
         let temp = TempDir::new().unwrap();
         let examples_dir = temp.path().join("examples");
@@ -1628,6 +1633,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_step_check_runnable_error_formatting() {
         let temp = TempDir::new().unwrap();
         let file = temp.path().join("bad.rs");
