@@ -92,28 +92,16 @@ enum GpuOp {
     },
 
     /// Sigmoid activation: 1 / (1 + exp(-x))
-    Sigmoid {
-        input: BufferId,
-        output: BufferId,
-    },
+    Sigmoid { input: BufferId, output: BufferId },
 
     /// Hyperbolic tangent: tanh(x)
-    Tanh {
-        input: BufferId,
-        output: BufferId,
-    },
+    Tanh { input: BufferId, output: BufferId },
 
     /// Swish activation: x * sigmoid(x)
-    Swish {
-        input: BufferId,
-        output: BufferId,
-    },
+    Swish { input: BufferId, output: BufferId },
 
     /// GELU activation: x * Φ(x) where Φ is cumulative distribution function
-    Gelu {
-        input: BufferId,
-        output: BufferId,
-    },
+    Gelu { input: BufferId, output: BufferId },
 
     /// Element-wise subtraction: a - b
     Sub {
@@ -191,9 +179,7 @@ impl GpuCommandBatch {
     ///
     /// Returns buffer ID for the output.
     pub fn relu(&mut self, input: BufferId) -> BufferId {
-        let size = self.buffers.get(&input)
-            .expect("Invalid buffer ID")
-            .size;
+        let size = self.buffers.get(&input).expect("Invalid buffer ID").size;
 
         let output = self.alloc_output(size);
 
@@ -206,9 +192,7 @@ impl GpuCommandBatch {
     ///
     /// Returns buffer ID for the output.
     pub fn scale(&mut self, input: BufferId, scalar: f32) -> BufferId {
-        let size = self.buffers.get(&input)
-            .expect("Invalid buffer ID")
-            .size;
+        let size = self.buffers.get(&input).expect("Invalid buffer ID").size;
 
         let output = self.alloc_output(size);
 
@@ -297,9 +281,7 @@ impl GpuCommandBatch {
     ///
     /// Returns buffer ID for the output.
     pub fn sigmoid(&mut self, input: BufferId) -> BufferId {
-        let size = self.buffers.get(&input)
-            .expect("Invalid buffer ID")
-            .size;
+        let size = self.buffers.get(&input).expect("Invalid buffer ID").size;
 
         let output = self.alloc_output(size);
 
@@ -312,9 +294,7 @@ impl GpuCommandBatch {
     ///
     /// Returns buffer ID for the output.
     pub fn tanh(&mut self, input: BufferId) -> BufferId {
-        let size = self.buffers.get(&input)
-            .expect("Invalid buffer ID")
-            .size;
+        let size = self.buffers.get(&input).expect("Invalid buffer ID").size;
 
         let output = self.alloc_output(size);
 
@@ -327,9 +307,7 @@ impl GpuCommandBatch {
     ///
     /// Returns buffer ID for the output.
     pub fn swish(&mut self, input: BufferId) -> BufferId {
-        let size = self.buffers.get(&input)
-            .expect("Invalid buffer ID")
-            .size;
+        let size = self.buffers.get(&input).expect("Invalid buffer ID").size;
 
         let output = self.alloc_output(size);
 
@@ -342,9 +320,7 @@ impl GpuCommandBatch {
     ///
     /// Returns buffer ID for the output.
     pub fn gelu(&mut self, input: BufferId) -> BufferId {
-        let size = self.buffers.get(&input)
-            .expect("Invalid buffer ID")
-            .size;
+        let size = self.buffers.get(&input).expect("Invalid buffer ID").size;
 
         let output = self.alloc_output(size);
 
@@ -388,17 +364,14 @@ impl GpuCommandBatch {
         for (buffer_id, buffer_info) in &mut self.buffers {
             let size_bytes = (buffer_info.size * std::mem::size_of::<f32>()) as u64;
 
-            let gpu_buffer = self
-                .device
-                .device
-                .create_buffer(&wgpu::BufferDescriptor {
-                    label: Some(&format!("Buffer {:?}", buffer_id)),
-                    size: size_bytes,
-                    usage: wgpu::BufferUsages::STORAGE
-                        | wgpu::BufferUsages::COPY_SRC
-                        | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
+            let gpu_buffer = self.device.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("Buffer {:?}", buffer_id)),
+                size: size_bytes,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
 
             buffer_info.gpu_buffer = Some(gpu_buffer);
         }
@@ -428,14 +401,8 @@ impl GpuCommandBatch {
 
         match op {
             GpuOp::Relu { input, output } => {
-                let input_info = self
-                    .buffers
-                    .get(input)
-                    .ok_or("Invalid input buffer ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let input_info = self.buffers.get(input).ok_or("Invalid input buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let input_buffer = input_info
                     .gpu_buffer
@@ -462,14 +429,8 @@ impl GpuCommandBatch {
                 output,
                 scalar,
             } => {
-                let input_info = self
-                    .buffers
-                    .get(input)
-                    .ok_or("Invalid input buffer ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let input_info = self.buffers.get(input).ok_or("Invalid input buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let input_buffer = input_info
                     .gpu_buffer
@@ -507,10 +468,7 @@ impl GpuCommandBatch {
             GpuOp::Add { a, b, output } => {
                 let a_info = self.buffers.get(a).ok_or("Invalid buffer A ID")?;
                 let b_info = self.buffers.get(b).ok_or("Invalid buffer B ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let a_buffer = a_info.gpu_buffer.as_ref().ok_or("Buffer A not created")?;
                 let b_buffer = b_info.gpu_buffer.as_ref().ok_or("Buffer B not created")?;
@@ -533,10 +491,7 @@ impl GpuCommandBatch {
             GpuOp::Mul { a, b, output } => {
                 let a_info = self.buffers.get(a).ok_or("Invalid buffer A ID")?;
                 let b_info = self.buffers.get(b).ok_or("Invalid buffer B ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let a_buffer = a_info.gpu_buffer.as_ref().ok_or("Buffer A not created")?;
                 let b_buffer = b_info.gpu_buffer.as_ref().ok_or("Buffer B not created")?;
@@ -559,10 +514,7 @@ impl GpuCommandBatch {
             GpuOp::Dot { a, b, output } => {
                 let a_info = self.buffers.get(a).ok_or("Invalid buffer A ID")?;
                 let b_info = self.buffers.get(b).ok_or("Invalid buffer B ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let a_buffer = a_info.gpu_buffer.as_ref().ok_or("Buffer A not created")?;
                 let b_buffer = b_info.gpu_buffer.as_ref().ok_or("Buffer B not created")?;
@@ -583,14 +535,8 @@ impl GpuCommandBatch {
             }
 
             GpuOp::Sigmoid { input, output } => {
-                let input_info = self
-                    .buffers
-                    .get(input)
-                    .ok_or("Invalid input buffer ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let input_info = self.buffers.get(input).ok_or("Invalid input buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let input_buffer = input_info
                     .gpu_buffer
@@ -613,14 +559,8 @@ impl GpuCommandBatch {
             }
 
             GpuOp::Tanh { input, output } => {
-                let input_info = self
-                    .buffers
-                    .get(input)
-                    .ok_or("Invalid input buffer ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let input_info = self.buffers.get(input).ok_or("Invalid input buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let input_buffer = input_info
                     .gpu_buffer
@@ -643,14 +583,8 @@ impl GpuCommandBatch {
             }
 
             GpuOp::Swish { input, output } => {
-                let input_info = self
-                    .buffers
-                    .get(input)
-                    .ok_or("Invalid input buffer ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let input_info = self.buffers.get(input).ok_or("Invalid input buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let input_buffer = input_info
                     .gpu_buffer
@@ -673,14 +607,8 @@ impl GpuCommandBatch {
             }
 
             GpuOp::Gelu { input, output } => {
-                let input_info = self
-                    .buffers
-                    .get(input)
-                    .ok_or("Invalid input buffer ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let input_info = self.buffers.get(input).ok_or("Invalid input buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let input_buffer = input_info
                     .gpu_buffer
@@ -705,10 +633,7 @@ impl GpuCommandBatch {
             GpuOp::Sub { a, b, output } => {
                 let a_info = self.buffers.get(a).ok_or("Invalid buffer A ID")?;
                 let b_info = self.buffers.get(b).ok_or("Invalid buffer B ID")?;
-                let output_info = self
-                    .buffers
-                    .get(output)
-                    .ok_or("Invalid output buffer ID")?;
+                let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
                 let a_buffer = a_info.gpu_buffer.as_ref().ok_or("Buffer A not created")?;
                 let b_buffer = b_info.gpu_buffer.as_ref().ok_or("Buffer B not created")?;
@@ -854,25 +779,25 @@ impl GpuCommandBatch {
                     push_constant_ranges: &[],
                 });
 
-        let pipeline = self
-            .device
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("{} Pipeline", label)),
-                layout: Some(&pipeline_layout),
-                module: &shader,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
+        let pipeline =
+            self.device
+                .device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(&format!("{} Pipeline", label)),
+                    layout: Some(&pipeline_layout),
+                    module: &shader,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    cache: None,
+                });
 
         // Execute
-        let mut encoder = self
-            .device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some(&format!("{} Encoder", label)),
-            });
+        let mut encoder =
+            self.device
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some(&format!("{} Encoder", label)),
+                });
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -985,25 +910,25 @@ impl GpuCommandBatch {
                     push_constant_ranges: &[],
                 });
 
-        let pipeline = self
-            .device
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("{} Pipeline", label)),
-                layout: Some(&pipeline_layout),
-                module: &shader,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
+        let pipeline =
+            self.device
+                .device
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(&format!("{} Pipeline", label)),
+                    layout: Some(&pipeline_layout),
+                    module: &shader,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    cache: None,
+                });
 
         // Execute
-        let mut encoder = self
-            .device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some(&format!("{} Encoder", label)),
-            });
+        let mut encoder =
+            self.device
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some(&format!("{} Encoder", label)),
+                });
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -1029,10 +954,7 @@ impl GpuCommandBatch {
     ///
     /// Must call `execute()` first.
     pub async fn read(&self, buffer_id: BufferId) -> Result<Vec<f32>, String> {
-        let buffer_info = self
-            .buffers
-            .get(&buffer_id)
-            .ok_or("Invalid buffer ID")?;
+        let buffer_info = self.buffers.get(&buffer_id).ok_or("Invalid buffer ID")?;
 
         let gpu_buffer = buffer_info
             .gpu_buffer
@@ -1042,23 +964,20 @@ impl GpuCommandBatch {
         let size_bytes = (buffer_info.size * std::mem::size_of::<f32>()) as u64;
 
         // Create staging buffer for reading
-        let staging_buffer = self
-            .device
-            .device
-            .create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Staging Buffer"),
-                size: size_bytes,
-                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+        let staging_buffer = self.device.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Staging Buffer"),
+            size: size_bytes,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
         // Copy from GPU buffer to staging buffer
-        let mut encoder = self
-            .device
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Read Encoder"),
-            });
+        let mut encoder =
+            self.device
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Read Encoder"),
+                });
 
         encoder.copy_buffer_to_buffer(gpu_buffer, 0, &staging_buffer, 0, size_bytes);
 
@@ -1287,7 +1206,7 @@ mod tests {
         // sigmoid(-2) ≈ 0.119, sigmoid(0) = 0.5, sigmoid(2) ≈ 0.881
         assert_eq!(result.len(), 5);
         assert!((result[0] - 0.119).abs() < 0.01); // -2
-        assert!((result[2] - 0.5).abs() < 0.01);   // 0
+        assert!((result[2] - 0.5).abs() < 0.01); // 0
         assert!((result[4] - 0.881).abs() < 0.01); // 2
     }
 

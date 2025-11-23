@@ -292,10 +292,12 @@ impl GpuDevice {
         });
 
         // Poll device to ensure GPU work completes and callbacks are invoked
-        self.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        }).ok();
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .ok();
 
         receiver
             .receive()
@@ -488,10 +490,12 @@ impl GpuDevice {
         });
 
         // Poll device to ensure GPU work completes and callbacks are invoked
-        self.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        }).ok();
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .ok();
 
         receiver
             .receive()
@@ -716,10 +720,12 @@ impl GpuDevice {
         });
 
         // Poll device to ensure GPU work completes and callbacks are invoked
-        self.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        }).ok();
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .ok();
 
         receiver
             .receive()
@@ -1078,10 +1084,12 @@ impl GpuDevice {
         });
 
         // Poll device to ensure GPU work completes and callbacks are invoked
-        self.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        }).ok();
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .ok();
         receiver
             .receive()
             .await
@@ -1233,10 +1241,12 @@ impl GpuDevice {
         });
 
         // Poll device to ensure GPU work completes and callbacks are invoked
-        self.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        }).ok();
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .ok();
         receiver
             .receive()
             .await
@@ -1480,10 +1490,12 @@ impl GpuDevice {
         });
 
         // Poll device to ensure GPU work completes and callbacks are invoked
-        self.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        }).ok();
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .ok();
 
         receiver
             .receive()
@@ -1771,10 +1783,12 @@ impl GpuDevice {
         });
 
         // Poll device to ensure GPU work completes and callbacks are invoked
-        self.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        }).ok();
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .ok();
 
         receiver
             .receive()
