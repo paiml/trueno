@@ -65,6 +65,49 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 "#;
 
+/// Element-wise multiplication shader (WGSL)
+///
+/// Computes c = a * b element-wise
+pub const VEC_MUL_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> a: array<f32>;
+@group(0) @binding(1) var<storage, read> b: array<f32>;
+@group(0) @binding(2) var<storage, read_write> c: array<f32>;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    let len = arrayLength(&a);
+
+    if (idx < len) {
+        c[idx] = a[idx] * b[idx];
+    }
+}
+"#;
+
+/// Scalar multiplication shader (WGSL)
+///
+/// Computes output = input * scalar element-wise
+pub const SCALE_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+struct ScaleParams {
+    scalar: f32,
+}
+
+@group(0) @binding(2) var<uniform> params: ScaleParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let idx = global_id.x;
+    let len = arrayLength(&input);
+
+    if (idx < len) {
+        output[idx] = input[idx] * params.scalar;
+    }
+}
+"#;
+
 /// Dot product reduction shader (WGSL)
 ///
 /// Computes sum(a[i] * b[i]) using parallel reduction
