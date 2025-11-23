@@ -1,5 +1,5 @@
-use trueno::{Matrix, Vector};
 use std::time::Instant;
+use trueno::{Matrix, Vector};
 
 fn main() {
     println!("╔══════════════════════════════════════════════════════════════════╗");
@@ -7,12 +7,7 @@ fn main() {
     println!("╚══════════════════════════════════════════════════════════════════╝\n");
 
     // Test sizes
-    let sizes = vec![
-        (256, 256),
-        (512, 512),
-        (1024, 1024),
-        (2048, 2048),
-    ];
+    let sizes = vec![(256, 256), (512, 512), (1024, 1024), (2048, 2048)];
 
     for (rows, cols) in sizes {
         println!("\n═══════════════════════════════════════════════════════════════════");
@@ -23,20 +18,27 @@ fn main() {
         let matrix_a = Matrix::from_vec(
             rows,
             cols,
-            (0..rows * cols).map(|i| ((i % 100) as f32) / 10.0).collect(),
-        ).unwrap();
+            (0..rows * cols)
+                .map(|i| ((i % 100) as f32) / 10.0)
+                .collect(),
+        )
+        .unwrap();
 
         let matrix_b = Matrix::from_vec(
             rows,
             cols,
-            (0..rows * cols).map(|i| (((i * 7) % 100) as f32) / 10.0).collect(),
-        ).unwrap();
+            (0..rows * cols)
+                .map(|i| (((i * 7) % 100) as f32) / 10.0)
+                .collect(),
+        )
+        .unwrap();
 
         let vector_data: Vec<f32> = (0..cols).map(|i| ((i % 50) as f32) / 5.0).collect();
         let vector = Vector::from_slice(&vector_data);
 
         // === Matrix Multiplication Benchmark ===
-        if rows <= 1024 {  // Skip very large for speed
+        if rows <= 1024 {
+            // Skip very large for speed
             print!("  Matrix Multiplication ({}×{}×{})... ", rows, cols, cols);
 
             // Warmup
@@ -109,7 +111,7 @@ fn main() {
         }
         let elapsed = start.elapsed();
         let avg_us = elapsed.as_micros() as f64 / iterations as f64;
-        let bandwidth_gb = (rows as f64 * cols as f64 * 8.0) / (avg_us * 1000.0);  // Read + Write
+        let bandwidth_gb = (rows as f64 * cols as f64 * 8.0) / (avg_us * 1000.0); // Read + Write
 
         println!("{:>8.2} µs  ({:.2} GB/s bandwidth)", avg_us, bandwidth_gb);
     }

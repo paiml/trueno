@@ -2938,7 +2938,8 @@ mod tests {
         for i in 0..8 {
             let expected = a[i].exp();
             assert!(
-                (result[i] - expected).abs() < 1e-5 || (result[i] - expected).abs() / expected < 1e-5,
+                (result[i] - expected).abs() < 1e-5
+                    || (result[i] - expected).abs() / expected < 1e-5,
                 "exp mismatch at {}: {} vs {} (input: {})",
                 i,
                 result[i],
@@ -2998,7 +2999,8 @@ mod tests {
         for i in 0..8 {
             let expected = a[i].ln();
             assert!(
-                (result[i] - expected).abs() < 1e-5 || (result[i] - expected).abs() / expected.abs() < 1e-4,
+                (result[i] - expected).abs() < 1e-5
+                    || (result[i] - expected).abs() / expected.abs() < 1e-4,
                 "ln mismatch at {}: {} vs {} (input: {})",
                 i,
                 result[i],
@@ -3618,12 +3620,16 @@ mod tests {
             assert!(
                 (ceil_result[i] - expected_ceil).abs() < 1e-5,
                 "ceil remainder mismatch at {}: {} vs {}",
-                i, ceil_result[i], expected_ceil
+                i,
+                ceil_result[i],
+                expected_ceil
             );
             assert!(
                 (floor_result[i] - expected_floor).abs() < 1e-5,
                 "floor remainder mismatch at {}: {} vs {}",
-                i, floor_result[i], expected_floor
+                i,
+                floor_result[i],
+                expected_floor
             );
         }
     }
@@ -3653,12 +3659,16 @@ mod tests {
             assert!(
                 (sin_avx512[i] - sin_scalar[i]).abs() < 1e-4,
                 "sin remainder mismatch at {}: avx512={}, scalar={}",
-                i, sin_avx512[i], sin_scalar[i]
+                i,
+                sin_avx512[i],
+                sin_scalar[i]
             );
             assert!(
                 (cos_avx512[i] - cos_scalar[i]).abs() < 1e-4,
                 "cos remainder mismatch at {}: avx512={}, scalar={}",
-                i, cos_avx512[i], cos_scalar[i]
+                i,
+                cos_avx512[i],
+                cos_scalar[i]
             );
         }
     }
