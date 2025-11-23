@@ -1,0 +1,52 @@
+=================================
+
+Auto-detected backend: AVX2
+
+x86_64 CPU Features:
+  SSE2:    true
+  AVX:     true
+  AVX2:    true
+  FMA:     true
+  AVX512F: true
+
+Backend Selection Priority:
+  x86_64: AVX-512 → AVX2+FMA → AVX → SSE2 → Scalar
+  ARM:    NEON → Scalar
+  WASM:   SIMD128 → Scalar
+
+Vector Creation:
+  Vector::from_slice() uses: AVX2
+
+Explicit Backend Selection:
+  Scalar backend: Scalar
+  Auto backend resolves to: AVX2
+
+Backend Transparency:
+  Scalar + AVX2 = [5.0, 7.0, 9.0]
+  (Operations work across backends transparently)
+
+✨ All backends provide the same API and correctness guarantees!
+   Only performance differs (8x-20x speedup with SIMD/GPU)
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 20.82    0.000152           6        23           write
+ 20.55    0.000150          11        13           mmap
+  9.18    0.000067          11         6           mprotect
+  4.25    0.000031           6         5           rt_sigaction
+  7.26    0.000053          10         5           read
+  6.30    0.000046          11         4           openat
+  3.56    0.000026           6         4           unknown
+  3.42    0.000025           6         4           pread64
+  3.70    0.000027           6         4           newfstatat
+  4.11    0.000030           7         4           close
+  3.42    0.000025           8         3           brk
+  2.74    0.000020           6         3           sigaltstack
+  2.05    0.000015           7         2         1 arch_prctl
+  3.70    0.000027          13         2           munmap
+  0.96    0.000007           7         1           set_robust_list
+  0.96    0.000007           7         1           poll
+  1.10    0.000008           8         1         1 access
+  0.96    0.000007           7         1           set_tid_address
+  0.96    0.000007           7         1           getrandom
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.000730           8        87         2 total

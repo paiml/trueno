@@ -1,0 +1,79 @@
+
+================================================================================
+
+📚 Use Case 1: Document Similarity (Recommendation System)
+
+Document 1: [0.5, 0.8, 0.0, 0.3, 0.1]
+Document 2: [0.6, 0.7, 0.1, 0.2, 0.0]
+Document 3: [0.1, 0.0, 0.9, 0.8, 0.7]
+
+Cosine Similarities:
+  Doc1 vs Doc2 (ML vs DL): 0.9747 - Similar topics!
+  Doc1 vs Doc3 (ML vs Cooking): 0.2591 - Different topics
+  Doc2 vs Doc3 (DL vs Cooking): 0.2340 - Different topics
+
+--------------------------------------------------------------------------------
+
+🧠 Use Case 2: Feature Normalization (Neural Network Preprocessing)
+
+Raw features: [35.0, 75000.0, 8.0]
+  (age=35, salary=$75k, experience=8 years)
+
+L2 Normalized: [0.00046666662, 0.9999999, 0.00010666666]
+Magnitude: 1.000000 (should be ~1.0)
+
+--------------------------------------------------------------------------------
+
+🎯 Use Case 3: k-Nearest Neighbors (Classification)
+
+Training samples:
+  Sample 1 (Class A): [1.0, 2.0]
+  Sample 2 (Class A): [1.5, 1.8]
+  Sample 3 (Class B): [8.0, 8.0]
+  Sample 4 (Class B): [9.0, 7.5]
+
+New point: [2.0, 2.5]
+
+Distances to training samples:
+  Distance to Sample 1: 1.1180
+  Distance to Sample 2: 0.8602
+  Distance to Sample 3: 8.1394
+  Distance to Sample 4: 8.6023
+
+Nearest neighbor distance: 0.8602
+Predicted class: A ✓
+
+================================================================================
+
+⚡ Performance Note:
+
+All vector operations use SIMD (SSE2/AVX2) automatically:
+  • Dot product: ~340% faster than scalar
+  • Sum (for normalization): ~315% faster
+  • Element-wise operations: Modest speedup
+
+See examples/performance_demo.rs for detailed benchmarks
+================================================================================
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 36.11    0.000295           6        45           write
+ 15.30    0.000125           9        13           mmap
+  7.34    0.000060          10         6           mprotect
+  6.24    0.000051          10         5           read
+  3.67    0.000030           6         5           rt_sigaction
+  5.02    0.000041          10         4           openat
+  3.06    0.000025           6         4           pread64
+  3.30    0.000027           6         4           newfstatat
+  3.18    0.000026           6         4           unknown
+  3.18    0.000026           6         4           close
+  2.82    0.000023           7         3           brk
+  2.33    0.000019           6         3           sigaltstack
+  1.59    0.000013           6         2         1 arch_prctl
+  2.69    0.000022          11         2           munmap
+  0.98    0.000008           8         1         1 access
+  0.73    0.000006           6         1           set_tid_address
+  0.86    0.000007           7         1           getrandom
+  0.86    0.000007           7         1           poll
+  0.73    0.000006           6         1           set_robust_list
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.000817           7       109         2 total

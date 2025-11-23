@@ -1,0 +1,134 @@
+=====================================
+
+Input vector: [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0]
+
+📊 Classic Activation Functions
+--------------------------------
+
+✓ ReLU (max(0, x))
+  Use case: Hidden layers in most neural networks
+  Output: [0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 3.0]
+  Characteristic: Zero for negative, identity for positive
+
+✓ Leaky ReLU (x if x > 0, else 0.01*x)
+  Use case: When dying ReLU is a problem
+  Output: [-0.03, -0.02, -0.01, 0.0, 1.0, 2.0, 3.0]
+  Characteristic: Small negative slope prevents neuron death
+
+✓ ELU (x if x > 0, else α(e^x - 1))
+  Use case: When smooth gradients are needed
+  Output: [-0.95021296, -0.86466473, -0.63212055, 0.0, 1.0, 2.0, 3.0]
+  Characteristic: Smooth, bounded below by -α
+
+✓ Sigmoid (1 / (1 + e^(-x)))
+  Use case: Binary classification, output layer
+  Output: [0.047425874, 0.11920292, 0.26894143, 0.5, 0.7310586, 0.880797, 0.95257413]
+  Characteristic: Bounded [0, 1], probabilistic interpretation
+
+🚀 Modern Activation Functions
+--------------------------------
+
+✓ GELU (Gaussian Error Linear Unit)
+  Use case: BERT, GPT, T5, modern transformers
+  Output: [-0.003637433, -0.04540229, -0.158808, 0.0, 0.841192, 1.9545977, 2.9963627]
+  Characteristic: Smooth, non-monotonic, better gradient flow
+
+✓ Swish/SiLU (x * sigmoid(x))
+  Use case: EfficientNet, MobileNet v3
+  Output: [-0.14227761, -0.23840584, -0.26894143, 0.0, 0.7310586, 1.761594, 2.8577225]
+  Characteristic: Self-gated, smooth, unbounded above
+
+✓ Hardswish (x * clip(x+3, 0, 6) / 6)
+  Use case: MobileNetV3, efficient on-device inference
+  Output: [0.0, -0.33333334, -0.33333334, 0.0, 0.6666667, 1.6666666, 3.0]
+  Characteristic: Fast computation, no exp(), mobile-optimized
+
+✓ Mish (x * tanh(softplus(x)))
+  Use case: YOLOv4, modern object detection
+  Output: [-0.14564739, -0.25250155, -0.3034014, 0.0, 0.86509836, 1.943959, 2.986535]
+  Characteristic: Smooth, self-regularized, non-monotonic
+
+✓ SELU (λ * elu(x, α))
+  Use case: Self-normalizing neural networks
+  Output: [-1.6705687, -1.5201665, -1.1113307, 0.0, 1.050701, 2.101402, 3.152103]
+  Characteristic: Self-normalizing, reduces need for batch norm
+
+📈 Probabilistic Activation Functions
+--------------------------------------
+
+✓ Softmax (multi-class output layer)
+  Input logits: [2.0, 1.0, 0.1]
+  Output probabilities: [0.6590012, 0.242433, 0.0985659]
+  Sum: 1.000000
+  Characteristic: Outputs sum to 1.0, probabilistic
+
+✓ Log-Softmax (numerically stable cross-entropy)
+  Output: [-0.41702995, -1.41703, -2.31703]
+  Characteristic: More stable than log(softmax(x))
+
+🔍 Behavior Comparison at Key Points
+-------------------------------------
+
+Test points: [-5.0, -1.0, 0.0, 1.0, 5.0]
+
+Activation   | -5.0     | -1.0     | 0.0      | 1.0      | 5.0
+-------------|----------|----------|----------|----------|----------
+ReLU        |   0.0000 |   0.0000 |   0.0000 |   1.0000 |   5.0000 |
+Leaky ReLU  |  -0.0500 |  -0.0100 |   0.0000 |   1.0000 |   5.0000 |
+ELU         |  -0.9933 |  -0.6321 |   0.0000 |   1.0000 |   5.0000 |
+Sigmoid     |   0.0067 |   0.2689 |   0.5000 |   0.7311 |   0.9933 |
+GELU        |  -0.0000 |  -0.1588 |   0.0000 |   0.8412 |   5.0000 |
+Swish       |  -0.0335 |  -0.2689 |   0.0000 |   0.7311 |   4.9665 |
+Hardswish   |   0.0000 |  -0.3333 |   0.0000 |   0.6667 |   5.0000 |
+Mish        |  -0.0336 |  -0.3034 |   0.0000 |   0.8651 |   4.9996 |
+SELU        |  -1.7463 |  -1.1113 |   0.0000 |   1.0507 |   5.2535 |
+
+
+🎯 Practical Example: Neural Network Layer
+-------------------------------------------
+
+Layer output (pre-activation): [0.5, -0.3, 1.2, -0.8, 2.1]
+
+If using CNN (e.g., ResNet):
+  → ReLU: [0.5, 0.0, 1.2, 0.0, 2.1]
+
+If using Transformer (e.g., BERT):
+  → GELU: [0.345714, -0.11462908, 1.0617027, -0.1695683, 2.0626688]
+
+If using EfficientNet:
+  → Swish: [0.31122968, -0.12766725, 0.92222977, -0.24802043, 1.8708966]
+
+If using MobileNetV3 (on-device):
+  → Hardswish: [0.29166666, -0.135, 0.84, -0.29333335, 1.7849998]
+
+If using YOLOv4 (object detection):
+  → Mish: [0.37524524, -0.15113318, 1.077946, -0.28396326, 2.050599]
+
+If using self-normalizing network:
+  → SELU: [0.5253505, -0.45566735, 1.2608413, -0.9681344, 2.2064722]
+
+✨ All 11 activation functions computed successfully!
+   Note: Activations use scalar ops; SIMD optimization planned for v0.3.0
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 50.08    0.000650           7        85           write
+ 13.02    0.000169           9        17           mmap
+  5.16    0.000067           9         7           mprotect
+  5.47    0.000071          10         7           read
+  2.77    0.000036           7         5           close
+  2.70    0.000035           7         5           rt_sigaction
+  2.85    0.000037           7         5           newfstatat
+  4.39    0.000057          11         5           openat
+  2.16    0.000028           7         4           unknown
+  1.93    0.000025           6         4           pread64
+  1.62    0.000021           7         3           sigaltstack
+  2.16    0.000028           9         3           brk
+  1.93    0.000025          12         2           munmap
+  1.00    0.000013           6         2         1 arch_prctl
+  0.69    0.000009           9         1         1 access
+  0.54    0.000007           7         1           getrandom
+  0.46    0.000006           6         1           set_robust_list
+  0.54    0.000007           7         1           set_tid_address
+  0.54    0.000007           7         1           poll
+------ ----------- ----------- --------- --------- ----------------
+100.00    0.001298           8       159         2 total
