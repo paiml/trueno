@@ -101,16 +101,11 @@ From initial golden trace capture:
 
 | Operation | Runtime | Syscalls | Notes |
 |-----------|---------|----------|-------|
-| `backend_detection` | **0.730ms** | **87** | SIMD backend selection ✅ |
-| `matrix_operations` | **1.560ms** | **168** | Matrix multiply/transpose ✅ |
-| `activation_functions` | **1.298ms** | **159** | ReLU, sigmoid, tanh ✅ |
-| `performance_demo` | **1.507ms** | **138** | Comprehensive performance test ✅ |
-| `ml_similarity` | **0.817ms** | **109** | Cosine/Euclidean similarity ✅ |
-
-**Performance Budget Compliance:**
-- ✅ All examples complete in <2ms (well under 100ms budget)
-- ✅ All examples use <200 syscalls (well under 500-call budget)
-- ✅ Trueno demonstrates exceptional SIMD compute performance with minimal overhead
+| `backend_detection` | TBD | TBD | SIMD backend selection |
+| `matrix_operations` | TBD | TBD | Matrix multiply/transpose |
+| `activation_functions` | TBD | TBD | ReLU, sigmoid, tanh |
+| `performance_demo` | TBD | TBD | Comprehensive performance test |
+| `ml_similarity` | TBD | TBD | Cosine/Euclidean similarity |
 
 ## SIMD/GPU Performance Characteristics
 

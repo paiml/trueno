@@ -111,24 +111,24 @@ If using self-normalizing network:
    Note: Activations use scalar ops; SIMD optimization planned for v0.3.0
 % time     seconds  usecs/call     calls    errors syscall
 ------ ----------- ----------- --------- --------- ----------------
- 50.08    0.000650           7        85           write
- 13.02    0.000169           9        17           mmap
-  5.16    0.000067           9         7           mprotect
-  5.47    0.000071          10         7           read
-  2.77    0.000036           7         5           close
-  2.70    0.000035           7         5           rt_sigaction
-  2.85    0.000037           7         5           newfstatat
-  4.39    0.000057          11         5           openat
-  2.16    0.000028           7         4           unknown
-  1.93    0.000025           6         4           pread64
-  1.62    0.000021           7         3           sigaltstack
-  2.16    0.000028           9         3           brk
-  1.93    0.000025          12         2           munmap
-  1.00    0.000013           6         2         1 arch_prctl
-  0.69    0.000009           9         1         1 access
-  0.54    0.000007           7         1           getrandom
-  0.46    0.000006           6         1           set_robust_list
-  0.54    0.000007           7         1           set_tid_address
-  0.54    0.000007           7         1           poll
+ 43.10    0.004644          54        85           write
+ 13.85    0.001492          87        17           mmap
+  7.09    0.000764         127         6           mprotect
+  3.25    0.000350          70         5           rt_sigaction
+  3.31    0.000357          71         5           close
+  8.21    0.000885         177         5           openat
+  4.27    0.000460          92         5           fstat
+  2.30    0.000248          62         4         1 unknown
+  3.13    0.000337          84         4           read
+  1.49    0.000161          53         3           sigaltstack
+  1.60    0.000172          57         3           brk
+  2.64    0.000284         142         2           munmap
+  1.49    0.000160          80         2           pread64
+  0.75    0.000081          81         1           set_robust_list
+  0.81    0.000087          87         1           getrandom
+  0.31    0.000033          33         1           arch_prctl
+  1.28    0.000138         138         1         1 access
+  0.65    0.000070          70         1           poll
+  0.47    0.000051          51         1           set_tid_address
 ------ ----------- ----------- --------- --------- ----------------
-100.00    0.001298           8       159         2 total
+100.00    0.010774          70       152         2 total
