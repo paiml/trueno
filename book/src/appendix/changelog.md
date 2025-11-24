@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2025-11-24
+
+### Added ✨
+
+- **EXTREME PMAT Integration** - O(1) Quality Gates for automated quality enforcement
+- **Golden Trace Validation** - Syscall-level performance regression detection with Renacer v0.6.2+
+- **GPU Batch API Example** - Demonstration of 3x transfer reduction for chained operations
+
+### Fixed 🐛
+
+- Replaced `.unwrap()` with `.expect()` in examples for better error messages
+- Corrected relative paths in golden-trace-validation.md documentation
+
+### Infrastructure 🔧
+
+- GitHub Actions workflow for automated golden trace validation
+- Enhanced gitignore for benchmark logs
+
+### Dependencies 📦
+
+- Updated all dependencies to latest versions (wgpu 27.0.1, criterion 0.7, thiserror 2.0.17)
+
+### Quality 🎯
+
+- Test coverage: 90.41% (exceeds 90% requirement)
+- 942 tests passing (up from 936)
+- All quality gates passing
+- Pre-commit hooks enforce coverage threshold
+
 ## [0.7.0] - 2025-11-22
 
 ### Performance - Phase 3: Large Matrix Optimization 🚀

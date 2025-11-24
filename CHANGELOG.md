@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2025-11-24
+
+### Added ✨
+
+- **EXTREME PMAT Integration** - O(1) Quality Gates
+  - Enhanced validation workflow for technical debt grading
+  - Automated quality metrics enforcement
+  - Repository health score tracking (minimum 90/110)
+
+- **Golden Trace Validation** (Renacer v0.6.2+)
+  - Syscall-level performance regression detection
+  - Captured golden traces for 5 core operations (backend_detection, matrix_operations, activation_functions, performance_demo, ml_similarity)
+  - Performance assertions via `renacer.toml` (CI fails on regression)
+  - Comprehensive documentation: `docs/integration-report-golden-trace.md`
+  - Book chapter: `book/src/performance/golden-trace-validation.md`
+  - GitHub Actions workflow for automated validation
+
+- **GPU Batch API Example**
+  - Demonstration example for async GPU command batching
+  - Shows 3x transfer reduction for chained operations
+
+### Fixed 🐛
+
+- Replaced `.unwrap()` with `.expect()` in examples for better error messages
+- Corrected relative paths in golden-trace-validation.md documentation
+- Fixed formatting issues across examples
+
+### Infrastructure 🔧
+
+- Added GitHub Actions workflow for golden trace validation
+- Updated gitignore: `direct_bench.log`, `benchmark_run.log`
+
+### Documentation 📚
+
+- Updated book: async GPU batch API now available (v0.3.0)
+- Enhanced golden trace validation documentation
+- Improved performance budget compliance reporting
+
 ### Dependencies 📦
 
 - **Updated all dependencies to latest crates.io versions** (2025-11-23)
@@ -29,6 +67,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 44/44 GPU tests pass with wgpu v27 (including 14 batch tests)
 - Benchmark infrastructure verified with criterion 0.7
 - Zero clippy warnings maintained
+- Coverage: 90%+ maintained (EXTREME TDD requirement)
+
+### Quality 🎯
+
+- Test coverage: 90.41% (exceeds 90% requirement)
+- All quality gates passing (lint, format, tests, coverage)
+- Pre-commit hooks enforce coverage threshold
+- PMAT Technical Debt Grade: B+ minimum enforced
+
+## [0.7.0] - 2025-11-22
 
 ### Added ✨
 
@@ -659,7 +707,14 @@ let transposed = m.transpose();
 - Matrix-vector multiplication
 - Additional backends (WASM SIMD128)
 
+[0.7.1]: https://github.com/paiml/trueno/releases/tag/v0.7.1
+[0.7.0]: https://github.com/paiml/trueno/releases/tag/v0.7.0
+[0.6.0]: https://github.com/paiml/trueno/releases/tag/v0.6.0
+[0.5.0]: https://github.com/paiml/trueno/releases/tag/v0.5.0
+[0.4.1]: https://github.com/paiml/trueno/releases/tag/v0.4.1
+[0.4.0]: https://github.com/paiml/trueno/releases/tag/v0.4.0
+[0.3.0]: https://github.com/paiml/trueno/releases/tag/v0.3.0
 [0.2.2]: https://github.com/paiml/trueno/releases/tag/v0.2.2
 [0.2.1]: https://github.com/paiml/trueno/releases/tag/v0.2.1
 [0.1.0]: https://github.com/paiml/trueno/releases/tag/v0.1.0
-[Unreleased]: https://github.com/paiml/trueno/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/paiml/trueno/compare/v0.7.1...HEAD
