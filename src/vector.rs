@@ -2699,7 +2699,7 @@ impl Vector<f32> {
                     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
                     Backend::NEON => NeonBackend::abs(&self.data, &mut result_data),
                     #[cfg(target_arch = "wasm32")]
-                    Backend::WASM => WasmBackend::abs(&self.data, &mut result_data),
+                    Backend::WasmSIMD => WasmBackend::abs(&self.data, &mut result_data),
                     Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
                     Backend::Auto => {
                         // Auto should have been resolved at creation time
@@ -2770,7 +2770,7 @@ impl Vector<f32> {
                     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
                     Backend::NEON => NeonBackend::scale(&self.data, scalar, &mut result_data),
                     #[cfg(target_arch = "wasm32")]
-                    Backend::WASM => WasmBackend::scale(&self.data, scalar, &mut result_data),
+                    Backend::WasmSIMD => WasmBackend::scale(&self.data, scalar, &mut result_data),
                     Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
                     Backend::Auto => {
                         // Auto should have been resolved at creation time
@@ -2848,7 +2848,7 @@ impl Vector<f32> {
                         NeonBackend::clamp(&self.data, min_val, max_val, &mut result_data)
                     }
                     #[cfg(target_arch = "wasm32")]
-                    Backend::WASM => {
+                    Backend::WasmSIMD => {
                         WasmBackend::clamp(&self.data, min_val, max_val, &mut result_data)
                     }
                     Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
@@ -2934,7 +2934,7 @@ impl Vector<f32> {
                         NeonBackend::lerp(&self.data, &other.data, t, &mut result_data)
                     }
                     #[cfg(target_arch = "wasm32")]
-                    Backend::WASM => {
+                    Backend::WasmSIMD => {
                         WasmBackend::lerp(&self.data, &other.data, t, &mut result_data)
                     }
                     Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
@@ -3027,7 +3027,7 @@ impl Vector<f32> {
                         NeonBackend::fma(&self.data, &b.data, &c.data, &mut result_data)
                     }
                     #[cfg(target_arch = "wasm32")]
-                    Backend::WASM => {
+                    Backend::WasmSIMD => {
                         WasmBackend::fma(&self.data, &b.data, &c.data, &mut result_data)
                     }
                     Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
@@ -3266,7 +3266,7 @@ impl Vector<f32> {
                                     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
                                     Backend::NEON => NeonBackend::exp(chunk_in, chunk_out),
                                     #[cfg(target_arch = "wasm32")]
-                                    Backend::WASM => WasmBackend::exp(chunk_in, chunk_out),
+                                    Backend::WasmSIMD => WasmBackend::exp(chunk_in, chunk_out),
                                     Backend::GPU => ScalarBackend::exp(chunk_in, chunk_out),
                                     Backend::Auto => ScalarBackend::exp(chunk_in, chunk_out),
                                     #[allow(unreachable_patterns)]
@@ -3295,7 +3295,7 @@ impl Vector<f32> {
                     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
                     Backend::NEON => NeonBackend::exp(&self.data, &mut result_data),
                     #[cfg(target_arch = "wasm32")]
-                    Backend::WASM => WasmBackend::exp(&self.data, &mut result_data),
+                    Backend::WasmSIMD => WasmBackend::exp(&self.data, &mut result_data),
                     Backend::GPU => return Err(TruenoError::UnsupportedBackend(Backend::GPU)),
                     Backend::Auto => {
                         // Auto should have been resolved at creation time
