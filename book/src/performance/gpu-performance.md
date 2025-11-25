@@ -348,6 +348,59 @@ Validation tests in `tests/golden_trace_validation.rs` ensure SIMD performance d
 - Renacer configuration: `renacer.toml`
 - GPU bug fix: Commit b5ca0af (missing device.poll() in wgpu v27)
 
+## WebGPU for WASM (v0.7.3)
+
+Trueno v0.7.3 introduces the `gpu-wasm` feature enabling GPU compute in browsers via WebGPU.
+
+### Feature Flag
+
+```toml
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+trueno = { version = "0.7.3", features = ["gpu-wasm"] }
+```
+
+### Platform Differences
+
+| Platform | Sync API | Async API | Runtime |
+|----------|----------|-----------|---------|
+| Native | ✅ `GpuDevice::new()` | ✅ `new_async()` | pollster |
+| WASM | ❌ (can't block) | ✅ `new_async()` | wasm-bindgen-futures |
+
+### Async-First Design
+
+All GPU operations now have async variants (`*_async`) that work on both native and WASM:
+
+```rust
+// Works on all platforms
+let device = GpuDevice::new_async().await?;
+device.matmul_async(&a, &b, &mut result, m, k, n).await?;
+device.relu_async(&input, &mut output).await?;
+```
+
+### Runtime Detection
+
+```rust
+use trueno::backends::gpu::runtime;
+
+if runtime::sync_available() {
+    // Native: can use sync APIs
+    let device = GpuDevice::new()?;
+} else {
+    // WASM: must use async
+    let device = GpuDevice::new_async().await?;
+}
+```
+
+### Real-World Example: trueno-viz
+
+[trueno-viz](https://github.com/paiml/trueno-viz) demonstrates browser-based GPU compute with Trueno:
+
+- WebGPU-accelerated matrix operations
+- WASM-compiled Rust for client-side processing
+- Interactive visualizations with GPU compute
+
+See [GPU Backend Architecture](../architecture/gpu-backend.md) for complete WebGPU documentation.
+
 ## Next Steps
 
 - **[Backend Comparison](./backend-comparison.md)** - Detailed SIMD vs GPU trade-offs

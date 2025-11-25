@@ -1,7 +1,17 @@
 //! GPU device initialization and management
+//!
+//! This module provides cross-platform GPU compute via wgpu (WebGPU).
+//!
+//! # Platform differences
+//!
+//! - **Native**: Sync wrappers available using `pollster::block_on`
+//! - **WASM**: Sync wrappers unavailable (can't block main thread); use `*_async` methods
+//!
+//! Use `runtime::sync_available()` to check at runtime.
 
 use super::shaders;
-use wgpu;
+#[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
+use super::runtime;
 
 /// GPU device manager
 #[derive(Clone)]
@@ -11,12 +21,14 @@ pub struct GpuDevice {
 }
 
 impl GpuDevice {
-    /// Initialize GPU device
+    /// Initialize GPU device (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn new() -> Result<Self, String> {
-        pollster::block_on(async { Self::new_async().await })
+        runtime::block_on(async { Self::new_async().await })
     }
 
-    async fn new_async() -> Result<Self, String> {
+    /// Initialize GPU device (async, works on all platforms)
+    pub async fn new_async() -> Result<Self, String> {
         // Create instance
         let instance = wgpu::Instance::default();
 
@@ -46,22 +58,27 @@ impl GpuDevice {
         Ok(Self { device, queue })
     }
 
-    /// Check if GPU is available
+    /// Check if GPU is available (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn is_available() -> bool {
-        pollster::block_on(async {
-            let instance = wgpu::Instance::default();
-            instance
-                .request_adapter(&wgpu::RequestAdapterOptions {
-                    power_preference: wgpu::PowerPreference::HighPerformance,
-                    compatible_surface: None,
-                    force_fallback_adapter: false,
-                })
-                .await
-                .is_ok()
-        })
+        runtime::block_on(Self::is_available_async())
     }
 
-    /// Execute matrix multiplication on GPU
+    /// Check if GPU is available (async, works on all platforms)
+    pub async fn is_available_async() -> bool {
+        let instance = wgpu::Instance::default();
+        instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: None,
+                force_fallback_adapter: false,
+            })
+            .await
+            .is_ok()
+    }
+
+    /// Execute matrix multiplication on GPU (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn matmul(
         &self,
         a: &[f32],
@@ -71,10 +88,11 @@ impl GpuDevice {
         k: usize,
         n: usize,
     ) -> Result<(), String> {
-        pollster::block_on(async { self.matmul_async(a, b, result, m, k, n).await })
+        runtime::block_on(async { self.matmul_async(a, b, result, m, k, n).await })
     }
 
-    async fn matmul_async(
+    /// Execute matrix multiplication on GPU (async, works on all platforms)
+    pub async fn matmul_async(
         &self,
         a: &[f32],
         b: &[f32],
@@ -315,12 +333,14 @@ impl GpuDevice {
         Ok(())
     }
 
-    /// Execute vector addition on GPU: c = a + b
+    /// Execute vector addition on GPU: c = a + b (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn vec_add(&self, a: &[f32], b: &[f32], result: &mut [f32]) -> Result<(), String> {
-        pollster::block_on(async { self.vec_add_async(a, b, result).await })
+        runtime::block_on(async { self.vec_add_async(a, b, result).await })
     }
 
-    async fn vec_add_async(&self, a: &[f32], b: &[f32], result: &mut [f32]) -> Result<(), String> {
+    /// Execute vector addition on GPU: c = a + b (async, works on all platforms)
+    pub async fn vec_add_async(&self, a: &[f32], b: &[f32], result: &mut [f32]) -> Result<(), String> {
         let len = a.len();
 
         // Create shader module
@@ -743,22 +763,39 @@ impl GpuDevice {
         Ok(())
     }
 
-    /// Execute ReLU activation on GPU: result[i] = max(0, input[i])
+    /// Execute ReLU activation on GPU: result[i] = max(0, input[i]) (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn relu(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        pollster::block_on(async {
+        runtime::block_on(async {
             self.execute_element_wise_op("ReLU", shaders::RELU_SHADER, input, result, None)
                 .await
         })
     }
 
-    /// Execute leaky ReLU activation on GPU: result[i] = max(negative_slope * input[i], input[i])
+    /// Execute ReLU activation on GPU (async, works on all platforms)
+    pub async fn relu_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        self.execute_element_wise_op("ReLU", shaders::RELU_SHADER, input, result, None)
+            .await
+    }
+
+    /// Execute leaky ReLU activation on GPU (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn leaky_relu(
         &self,
         input: &[f32],
         result: &mut [f32],
         negative_slope: f32,
     ) -> Result<(), String> {
-        // Pack leaky_relu parameters as uniform buffer data
+        runtime::block_on(self.leaky_relu_async(input, result, negative_slope))
+    }
+
+    /// Execute leaky ReLU activation on GPU (async, works on all platforms)
+    pub async fn leaky_relu_async(
+        &self,
+        input: &[f32],
+        result: &mut [f32],
+        negative_slope: f32,
+    ) -> Result<(), String> {
         #[repr(C)]
         #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
         struct LeakyReluParams {
@@ -768,21 +805,24 @@ impl GpuDevice {
         let params = LeakyReluParams { negative_slope };
         let uniform_data = bytemuck::bytes_of(&params);
 
-        pollster::block_on(async {
-            self.execute_element_wise_op(
-                "LeakyReLU",
-                shaders::LEAKY_RELU_SHADER,
-                input,
-                result,
-                Some(uniform_data),
-            )
-            .await
-        })
+        self.execute_element_wise_op(
+            "LeakyReLU",
+            shaders::LEAKY_RELU_SHADER,
+            input,
+            result,
+            Some(uniform_data),
+        )
+        .await
     }
 
-    /// Execute ELU activation on GPU: result[i] = x if x > 0, else alpha * (exp(x) - 1)
+    /// Execute ELU activation on GPU (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn elu(&self, input: &[f32], result: &mut [f32], alpha: f32) -> Result<(), String> {
-        // Pack ELU parameters as uniform buffer data
+        runtime::block_on(self.elu_async(input, result, alpha))
+    }
+
+    /// Execute ELU activation on GPU (async, works on all platforms)
+    pub async fn elu_async(&self, input: &[f32], result: &mut [f32], alpha: f32) -> Result<(), String> {
         #[repr(C)]
         #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
         struct EluParams {
@@ -792,51 +832,66 @@ impl GpuDevice {
         let params = EluParams { alpha };
         let uniform_data = bytemuck::bytes_of(&params);
 
-        pollster::block_on(async {
-            self.execute_element_wise_op(
-                "ELU",
-                shaders::ELU_SHADER,
-                input,
-                result,
-                Some(uniform_data),
-            )
-            .await
-        })
+        self.execute_element_wise_op(
+            "ELU",
+            shaders::ELU_SHADER,
+            input,
+            result,
+            Some(uniform_data),
+        )
+        .await
     }
 
-    /// Execute sigmoid activation on GPU: result[i] = 1 / (1 + exp(-input[i]))
+    /// Execute sigmoid activation on GPU (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn sigmoid(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        pollster::block_on(async {
-            self.execute_element_wise_op("Sigmoid", shaders::SIGMOID_SHADER, input, result, None)
-                .await
-        })
+        runtime::block_on(self.sigmoid_async(input, result))
     }
 
-    /// Execute tanh activation on GPU: result[i] = tanh(input[i])
+    /// Execute sigmoid activation on GPU (async, works on all platforms)
+    pub async fn sigmoid_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        self.execute_element_wise_op("Sigmoid", shaders::SIGMOID_SHADER, input, result, None)
+            .await
+    }
+
+    /// Execute tanh activation on GPU (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn tanh(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        pollster::block_on(async {
-            self.execute_element_wise_op("Tanh", shaders::TANH_SHADER, input, result, None)
-                .await
-        })
+        runtime::block_on(self.tanh_async(input, result))
     }
 
-    /// Execute swish activation on GPU: result[i] = input[i] / (1 + exp(-input[i]))
+    /// Execute tanh activation on GPU (async, works on all platforms)
+    pub async fn tanh_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        self.execute_element_wise_op("Tanh", shaders::TANH_SHADER, input, result, None)
+            .await
+    }
+
+    /// Execute swish activation on GPU (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn swish(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        pollster::block_on(async {
-            self.execute_element_wise_op("Swish", shaders::SWISH_SHADER, input, result, None)
-                .await
-        })
+        runtime::block_on(self.swish_async(input, result))
     }
 
-    /// Execute GELU activation on GPU: result[i] = 0.5 * input[i] * (1 + tanh(...))
+    /// Execute swish activation on GPU (async, works on all platforms)
+    pub async fn swish_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        self.execute_element_wise_op("Swish", shaders::SWISH_SHADER, input, result, None)
+            .await
+    }
+
+    /// Execute GELU activation on GPU (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn gelu(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        pollster::block_on(async {
-            self.execute_element_wise_op("GELU", shaders::GELU_SHADER, input, result, None)
-                .await
-        })
+        runtime::block_on(self.gelu_async(input, result))
     }
 
-    /// Execute clip (clamp) operation on GPU: result[i] = clamp(input[i], min_val, max_val)
+    /// Execute GELU activation on GPU (async, works on all platforms)
+    pub async fn gelu_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+        self.execute_element_wise_op("GELU", shaders::GELU_SHADER, input, result, None)
+            .await
+    }
+
+    /// Execute clip (clamp) operation on GPU (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn clip(
         &self,
         input: &[f32],
@@ -844,7 +899,17 @@ impl GpuDevice {
         min_val: f32,
         max_val: f32,
     ) -> Result<(), String> {
-        // Pack clip parameters as uniform buffer data
+        runtime::block_on(self.clip_async(input, result, min_val, max_val))
+    }
+
+    /// Execute clip (clamp) operation on GPU (async, works on all platforms)
+    pub async fn clip_async(
+        &self,
+        input: &[f32],
+        result: &mut [f32],
+        min_val: f32,
+        max_val: f32,
+    ) -> Result<(), String> {
         #[repr(C)]
         #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
         struct ClipParams {
@@ -855,30 +920,30 @@ impl GpuDevice {
         let params = ClipParams { min_val, max_val };
         let uniform_data = bytemuck::bytes_of(&params);
 
-        pollster::block_on(async {
-            self.execute_element_wise_op(
-                "Clip",
-                shaders::CLIP_SHADER,
-                input,
-                result,
-                Some(uniform_data),
-            )
-            .await
-        })
+        self.execute_element_wise_op(
+            "Clip",
+            shaders::CLIP_SHADER,
+            input,
+            result,
+            Some(uniform_data),
+        )
+        .await
     }
 
-    /// Execute softmax on GPU: result[i] = exp(input[i] - max) / sum(exp(input - max))
+    /// Execute softmax on GPU (sync, native only)
     ///
     /// Multi-pass implementation:
     /// 1. Find max value (parallel reduction)
     /// 2. Compute exp(x - max) (element-wise)
     /// 3. Sum exp values (parallel reduction)
     /// 4. Normalize by sum (element-wise)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn softmax(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        pollster::block_on(async { self.softmax_async(input, result).await })
+        runtime::block_on(async { self.softmax_async(input, result).await })
     }
 
-    async fn softmax_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+    /// Execute softmax on GPU (async, works on all platforms)
+    pub async fn softmax_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
         // Pass 1: Find max value
         let max_val = self.reduce_max(input).await?;
 
@@ -894,18 +959,20 @@ impl GpuDevice {
         Ok(())
     }
 
-    /// Execute log_softmax on GPU: result[i] = input[i] - max - log(sum(exp(input - max)))
+    /// Execute log_softmax on GPU (sync, native only)
     ///
     /// Multi-pass implementation:
     /// 1. Find max value (parallel reduction)
     /// 2. Compute exp(x - max) (element-wise)
     /// 3. Sum exp values (parallel reduction)
     /// 4. Compute log_softmax (element-wise)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn log_softmax(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        pollster::block_on(async { self.log_softmax_async(input, result).await })
+        runtime::block_on(async { self.log_softmax_async(input, result).await })
     }
 
-    async fn log_softmax_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
+    /// Execute log_softmax on GPU (async, works on all platforms)
+    pub async fn log_softmax_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
         // Pass 1: Find max value
         let max_val = self.reduce_max(input).await?;
 
@@ -1314,12 +1381,14 @@ impl GpuDevice {
         Ok(())
     }
 
-    /// Execute dot product on GPU: result = sum(a[i] * b[i])
+    /// Execute dot product on GPU (sync, native only)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn dot(&self, a: &[f32], b: &[f32]) -> Result<f32, String> {
-        pollster::block_on(async { self.dot_async(a, b).await })
+        runtime::block_on(async { self.dot_async(a, b).await })
     }
 
-    async fn dot_async(&self, a: &[f32], b: &[f32]) -> Result<f32, String> {
+    /// Execute dot product on GPU (async, works on all platforms)
+    pub async fn dot_async(&self, a: &[f32], b: &[f32]) -> Result<f32, String> {
         let len = a.len();
         let workgroup_size = 256;
         let num_workgroups = (len as u32).div_ceil(workgroup_size);
@@ -1516,7 +1585,7 @@ impl GpuDevice {
         Ok(final_result)
     }
 
-    /// Perform 2D convolution on GPU
+    /// Perform 2D convolution on GPU (sync, native only)
     ///
     /// # Arguments
     ///
@@ -1529,6 +1598,7 @@ impl GpuDevice {
     /// * `kernel_cols` - Number of columns in kernel
     ///
     /// Output dimensions: (input_rows - kernel_rows + 1) × (input_cols - kernel_cols + 1)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     #[allow(clippy::too_many_arguments)]
     pub fn convolve2d(
         &self,
@@ -1540,7 +1610,7 @@ impl GpuDevice {
         kernel_rows: usize,
         kernel_cols: usize,
     ) -> Result<(), String> {
-        pollster::block_on(async {
+        runtime::block_on(async {
             self.convolve2d_async(
                 input,
                 kernel,
@@ -1554,8 +1624,9 @@ impl GpuDevice {
         })
     }
 
+    /// Perform 2D convolution on GPU (async, works on all platforms)
     #[allow(clippy::too_many_arguments)]
-    async fn convolve2d_async(
+    pub async fn convolve2d_async(
         &self,
         input: &[f32],
         kernel: &[f32],
@@ -1808,7 +1879,7 @@ impl GpuDevice {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "gpu", not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
 
@@ -1847,8 +1918,8 @@ mod tests {
         let device = GpuDevice::new().expect("Failed to create GPU device");
         let input = vec![1.0, 2.0, 3.0, 4.0, 5.0]; // sum = 15.0
 
-        // reduce_sum is async, so we use pollster::block_on
-        let result = pollster::block_on(device.reduce_sum(&input)).expect("reduce_sum failed");
+        // reduce_sum is async, so we use runtime::block_on
+        let result = runtime::block_on(device.reduce_sum(&input)).expect("reduce_sum failed");
 
         // Kill mutant: verify result is NOT -1.0
         assert_ne!(

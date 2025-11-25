@@ -2076,7 +2076,7 @@ dependencies = [
 
 [[package]]
 name = "trueno"
-version = "0.7.2"
+version = "0.7.3"
 dependencies = [
  "bytemuck",
  "criterion",
@@ -2087,6 +2087,9 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.17",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "wgpu",
 ]
 

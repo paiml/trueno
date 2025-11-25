@@ -296,6 +296,9 @@ pub fn select_best_available_backend() -> Backend {
 /// - sub with AVX-512: 0.87x → 1.0x (use AVX2 instead)
 /// - dot with AVX-512: 7.89x (keep AVX-512)
 pub fn select_backend_for_operation(op_type: OperationType) -> Backend {
+    // Allow unused on non-x86 architectures
+    let _ = &op_type;
+
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     {
         use std::arch::is_x86_feature_detected;

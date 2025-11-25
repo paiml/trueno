@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2025-11-25
+
+### Added ✨
+
+- **WebGPU for WASM** (`gpu-wasm` feature)
+  - Cross-platform GPU compute: same code runs on native and browser
+  - Async-first API design: all GPU operations have `*_async` variants
+  - Runtime detection: `runtime::sync_available()` for platform-specific code paths
+  - New `runtime` module (`src/backends/gpu/runtime.rs`) for platform abstraction
+  - Enables [trueno-viz](https://github.com/paiml/trueno-viz) browser-based GPU visualization
+
+- **Cross-platform GPU API**
+  - `GpuDevice::new_async()` - Works on all platforms (native + WASM)
+  - `GpuDevice::is_available_async()` - Async availability check
+  - All operations now have async variants: `relu_async`, `sigmoid_async`, `matmul_async`, etc.
+  - Sync wrappers remain available on native platforms only
+
+### Changed 🔄
+
+- GPU device initialization refactored to use `runtime::block_on()` instead of direct `pollster::block_on()`
+- Conditional compilation: sync methods require `#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]`
+- All private async methods now public (`pub async fn *_async`)
+
+### Documentation 📚
+
+- **GPU Backend chapter** (`book/src/architecture/gpu-backend.md`) - Complete rewrite
+  - Platform support matrix (Linux/macOS/Windows/WASM)
+  - Feature flag comparison (`gpu` vs `gpu-wasm`)
+  - Async-first API examples
+  - trueno-viz integration guide
+  - Runtime detection patterns
+
+- **GPU Performance chapter** - Added WebGPU/WASM section
+  - Platform differences table
+  - Async API usage examples
+  - trueno-viz reference
+
+### Fixed 🐛
+
+- `select_backend_for_operation` parameter name: `_op_type` → `op_type` (parameter is used)
+- Type inference in empty slice comparisons: `&[]` → `&[] as &[f32]`
+- Unused variable in WASM backend: `scale` → `_scale`
+
+### Dependencies 📦
+
+- Added `wasm-bindgen-futures` (0.4) for WASM async support
+- Added `wasm-bindgen` (0.2) for WASM bindings
+- Added `web-sys` (0.3) for browser APIs (console logging)
+
+### Testing ✅
+
+- All 903+ tests passing
+- Coverage: 90.40% (exceeds 90% requirement)
+- Added `required-features = ["gpu"]` for `gpu_batch_demo` example
+
 ## [0.7.1] - 2025-11-24
 
 ### Added ✨

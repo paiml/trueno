@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.3] - 2025-11-25
+
+### Added ✨
+
+- **WebGPU for WASM** (`gpu-wasm` feature)
+  - Cross-platform GPU compute: native and browser support
+  - Async-first API: all GPU operations have `*_async` variants
+  - Runtime detection via `runtime::sync_available()`
+  - Enables [trueno-viz](https://github.com/paiml/trueno-viz) browser-based visualization
+
+- **Cross-platform GPU API**
+  - `GpuDevice::new_async()` - Works on all platforms
+  - All operations have async variants (`relu_async`, `matmul_async`, etc.)
+
+### Documentation 📚
+
+- Complete rewrite of [GPU Backend](../architecture/gpu-backend.md) chapter
+- Added WebGPU/WASM section to [GPU Performance](../performance/gpu-performance.md)
+- trueno-viz integration examples
+
+### Fixed 🐛
+
+- Type inference fixes for empty slice comparisons
+- Parameter naming in `select_backend_for_operation`
+
 ## [0.7.1] - 2025-11-24
 
 ### Added ✨

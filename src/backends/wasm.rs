@@ -568,7 +568,7 @@ impl VectorBackend for WasmBackend {
             let k_int = i32x4_trunc_sat_f32x4(k);
             let k_shifted = i32x4_shl(k_int, 23);
             let one_bits = i32x4_splat(0x3f80_0000_i32); // 1.0f32 as bits
-            let scale = v128_bitselect(
+            let _scale = v128_bitselect(
                 i32x4_add(one_bits, k_shifted),
                 one_bits,
                 i32x4_ne(k_int, i32x4_splat(0)),
