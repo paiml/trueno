@@ -19,19 +19,23 @@
 //! - Asynchronous execution with pollster for blocking
 //! - Automatic fallback to CPU if GPU unavailable
 
-#[cfg(feature = "gpu")]
+#[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 mod batch;
 
-#[cfg(feature = "gpu")]
+#[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 mod device;
 
-#[cfg(feature = "gpu")]
+#[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 mod shaders;
+
+#[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
+pub mod runtime;
 
 #[cfg(feature = "gpu")]
 pub use batch::{BufferId, GpuCommandBatch};
 
-#[cfg(feature = "gpu")]
+// Export GpuDevice for both native and WASM GPU features
+#[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 pub use device::GpuDevice;
 
 /// GPU backend for compute operations

@@ -4394,7 +4394,7 @@ mod tests {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let b: Vector<f32> = Vector::from_slice(&[]);
         let result = a.add(&b).unwrap();
-        assert_eq!(result.as_slice(), &[]);
+        assert_eq!(result.as_slice(), &[] as &[f32]);
     }
 
     #[test]
@@ -4434,7 +4434,7 @@ mod tests {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let b: Vector<f32> = Vector::from_slice(&[]);
         let result = a.sub(&b).unwrap();
-        assert_eq!(result.as_slice(), &[]);
+        assert_eq!(result.as_slice(), &[] as &[f32]);
     }
 
     #[test]
@@ -4482,7 +4482,7 @@ mod tests {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let b: Vector<f32> = Vector::from_slice(&[]);
         let result = a.mul(&b).unwrap();
-        assert_eq!(result.as_slice(), &[]);
+        assert_eq!(result.as_slice(), &[] as &[f32]);
     }
 
     #[test]
@@ -4507,7 +4507,7 @@ mod tests {
         let a: Vector<f32> = Vector::from_slice(&[]);
         let b: Vector<f32> = Vector::from_slice(&[]);
         let result = a.div(&b).unwrap();
-        assert_eq!(result.as_slice(), &[]);
+        assert_eq!(result.as_slice(), &[] as &[f32]);
     }
 
     #[test]
