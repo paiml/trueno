@@ -31,6 +31,7 @@
 - [Transformation Operations](./api-reference/transformations.md)
 - [Error Handling](./api-reference/error-handling.md)
 - [Backend API](./api-reference/backend-api.md)
+- [Hash Functions](./api-reference/hash-functions.md)
 
 # Performance
 

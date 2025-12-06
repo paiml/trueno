@@ -31,10 +31,12 @@
 pub mod backends;
 pub mod chaos;
 pub mod error;
+pub mod hash;
 pub mod matrix;
 pub mod vector;
 
 pub use error::{Result, TruenoError};
+pub use hash::{hash_bytes, hash_key, hash_keys_batch, hash_keys_batch_with_backend};
 pub use matrix::Matrix;
 pub use vector::Vector;
 
