@@ -205,7 +205,7 @@ coverage: ## Generate coverage report (>90% required, excludes GPU due to LLVM i
 	@echo "✅ Coverage report: target/coverage/html/index.html"
 	@echo ""
 	@echo "📊 Coverage by Component:"
-	@cargo llvm-cov report | python3 -c "import sys; lines = list(sys.stdin); trueno = [l for l in lines if l.startswith('src/') and 'xtask' not in l]; xtask = [l for l in lines if 'xtask' in l]; total_all = [l for l in lines if l.startswith('TOTAL')]; t_total = sum(int(l.split()[7]) for l in trueno); t_uncov = sum(int(l.split()[8]) for l in trueno); t_cov = 100*(t_total-t_uncov)/t_total if t_total > 0 else 0; x_total = sum(int(l.split()[7]) for l in xtask); x_uncov = sum(int(l.split()[8]) for l in xtask); x_cov = 100*(x_total-x_uncov)/x_total if x_total > 0 else 0; print(f'   Trueno library: {t_cov:.2f}% ({t_total-t_uncov:,}/{t_total:,} lines)'); print(f'   xtask:          {x_cov:.2f}% ({x_total-x_uncov:,}/{x_total:,} lines) [dev tool, not required]'); all_total = t_total + x_total; all_cov = t_total - t_uncov + x_total - x_uncov; all_pct = 100*all_cov/all_total if all_total > 0 else 0; print(f'   Overall:        {all_pct:.2f}% ({all_cov:,}/{all_total:,} lines) [informational]'); print(''); print(f'   ✅ Coverage threshold met (≥90%)' if t_cov >= 90 else f'   ✗ FAIL: Trueno library ({t_cov:.2f}%) below 90%')"
+	@cargo llvm-cov report | python3 -c "import sys; lines = list(sys.stdin); trueno = [l for l in lines if '.rs' in l and 'xtask' not in l and not l.startswith('TOTAL') and not l.startswith('-')]; xtask = [l for l in lines if 'xtask' in l and '.rs' in l]; t_total = sum(int(l.split()[7]) for l in trueno) if trueno else 0; t_uncov = sum(int(l.split()[8]) for l in trueno) if trueno else 0; t_cov = 100*(t_total-t_uncov)/t_total if t_total > 0 else 0; x_total = sum(int(l.split()[7]) for l in xtask) if xtask else 0; x_uncov = sum(int(l.split()[8]) for l in xtask) if xtask else 0; x_cov = 100*(x_total-x_uncov)/x_total if x_total > 0 else 0; print(f'   Trueno library: {t_cov:.2f}% ({t_total-t_uncov:,}/{t_total:,} lines)'); print(f'   xtask:          {x_cov:.2f}% ({x_total-x_uncov:,}/{x_total:,} lines) [dev tool, not required]'); all_total = t_total + x_total; all_cov = t_total - t_uncov + x_total - x_uncov; all_pct = 100*all_cov/all_total if all_total > 0 else 0; print(f'   Overall:        {all_pct:.2f}% ({all_cov:,}/{all_total:,} lines) [informational]'); print(''); print(f'   ✅ Coverage threshold met (≥90%)' if t_cov >= 90 else f'   ✗ FAIL: Trueno library ({t_cov:.2f}%) below 90%')"
 
 coverage-check: ## Enforce 90% coverage threshold (BLOCKS on failure, GPU excluded, xtask excluded)
 	@echo "🔒 Enforcing 90% coverage threshold (GPU excluded, xtask excluded)..."
@@ -214,7 +214,7 @@ coverage-check: ## Enforce 90% coverage threshold (BLOCKS on failure, GPU exclud
 	@cargo llvm-cov --workspace --exclude xtask --lcov --output-path lcov.info > /dev/null 2>&1
 	@# Restore mold linker
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
-	@cargo llvm-cov report | python3 -c "import sys; lines = list(sys.stdin); trueno = [l for l in lines if l.startswith('src/') and 'xtask' not in l]; t_total = sum(int(l.split()[7]) for l in trueno); t_uncov = sum(int(l.split()[8]) for l in trueno); t_cov = 100*(t_total-t_uncov)/t_total if t_total > 0 else 0; print(f'Trueno library coverage: {t_cov:.2f}%'); exit_code = 1 if t_cov < 90 else 0; print(f'✅ Coverage threshold met (≥90%)' if exit_code == 0 else f'❌ FAIL: Coverage below 90% threshold'); sys.exit(exit_code)"
+	@cargo llvm-cov report | python3 -c "import sys; lines = list(sys.stdin); trueno = [l for l in lines if '.rs' in l and 'xtask' not in l and not l.startswith('TOTAL') and not l.startswith('-')]; t_total = sum(int(l.split()[7]) for l in trueno) if trueno else 0; t_uncov = sum(int(l.split()[8]) for l in trueno) if trueno else 0; t_cov = 100*(t_total-t_uncov)/t_total if t_total > 0 else 0; print(f'Trueno library coverage: {t_cov:.2f}%'); exit_code = 1 if t_cov < 90 else 0; print(f'✅ Coverage threshold met (≥90%)' if exit_code == 0 else f'❌ FAIL: Coverage below 90% threshold'); sys.exit(exit_code)"
 
 lint: ## Run clippy (zero warnings allowed)
 	@echo "🔍 Running clippy (zero warnings policy)..."
@@ -624,3 +624,26 @@ bashrs-audit: ## Audit shell script quality with bashrs
 bashrs-all: bashrs-lint-makefile bashrs-lint-scripts bashrs-audit ## Run all bashrs quality checks
 
 .DEFAULT_GOAL := help
+
+# ============================================================================
+# RELEASE (crates.io publishing)
+# ============================================================================
+
+release-check: ## Verify package can be published (dry-run)
+	@echo "🔍 Checking release readiness..."
+	cargo publish --dry-run --allow-dirty
+	@echo "✅ Package ready for release"
+
+release: ## Publish to crates.io (requires cargo login)
+	@echo "🚀 Publishing trueno to crates.io..."
+	@echo "⚠️  Ensure all changes are committed!"
+	cargo publish
+	@echo "✅ Published successfully"
+	@echo "📦 Create GitHub release: gh release create v$$(cargo pkgid | cut -d# -f2)"
+
+release-tag: ## Create git tag for current version
+	@VERSION=$$(cargo pkgid | cut -d# -f2) && \
+	echo "🏷️  Creating tag v$$VERSION..." && \
+	git tag -a "v$$VERSION" -m "Release v$$VERSION" && \
+	git push origin "v$$VERSION" && \
+	echo "✅ Tag v$$VERSION pushed"

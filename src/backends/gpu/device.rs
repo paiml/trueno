@@ -9,9 +9,9 @@
 //!
 //! Use `runtime::sync_available()` to check at runtime.
 
-use super::shaders;
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 use super::runtime;
+use super::shaders;
 
 /// GPU device manager
 #[derive(Clone)]
@@ -340,7 +340,12 @@ impl GpuDevice {
     }
 
     /// Execute vector addition on GPU: c = a + b (async, works on all platforms)
-    pub async fn vec_add_async(&self, a: &[f32], b: &[f32], result: &mut [f32]) -> Result<(), String> {
+    pub async fn vec_add_async(
+        &self,
+        a: &[f32],
+        b: &[f32],
+        result: &mut [f32],
+    ) -> Result<(), String> {
         let len = a.len();
 
         // Create shader module
@@ -822,7 +827,12 @@ impl GpuDevice {
     }
 
     /// Execute ELU activation on GPU (async, works on all platforms)
-    pub async fn elu_async(&self, input: &[f32], result: &mut [f32], alpha: f32) -> Result<(), String> {
+    pub async fn elu_async(
+        &self,
+        input: &[f32],
+        result: &mut [f32],
+        alpha: f32,
+    ) -> Result<(), String> {
         #[repr(C)]
         #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
         struct EluParams {

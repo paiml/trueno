@@ -29,7 +29,7 @@ pedantic = "warn"
 
 [package]
 name = "trueno"
-version = "0.7.3"
+version = "0.7.4"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
