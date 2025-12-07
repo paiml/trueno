@@ -1,17 +1,31 @@
-# Trueno ⚡
+<div align="center">
 
-> **Multi-Target High-Performance Compute Library**
+<p align="center">
+  <img src=".github/trueno-hero.svg" alt="trueno" width="800">
+</p>
 
-[![CI](https://github.com/paiml/trueno/actions/workflows/ci.yml/badge.svg)](https://github.com/paiml/trueno/actions)
-[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)](https://github.com/paiml/trueno)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Crates.io](https://img.shields.io/crates/v/trueno.svg)](https://crates.io/crates/trueno)
+<h1 align="center">trueno</h1>
+
+<p align="center">
+  <b>Multi-Target High-Performance Compute Library</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/paiml/trueno/actions"><img src="https://github.com/paiml/trueno/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/paiml/trueno"><img src="https://img.shields.io/badge/coverage-100%25-brightgreen" alt="Coverage"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
+  <a href="https://crates.io/crates/trueno"><img src="https://img.shields.io/crates/v/trueno.svg" alt="Crates.io"></a>
+</p>
+
+</div>
+
+---
 
 <div align="center">
   <img src="docs/images/trueno-vs-numpy-pytorch.png" alt="Trueno vs NumPy/PyTorch Performance Comparison" width="100%">
 </div>
 
-**Trueno** (Spanish: "thunder") provides unified, high-performance compute primitives across three execution targets:
+**trueno** (Spanish: "thunder") provides unified, high-performance compute primitives across three execution targets:
 
 1. **CPU SIMD** - x86 (SSE2/AVX/AVX2/AVX-512), ARM (NEON), WASM (SIMD128)
 2. **GPU** - Vulkan/Metal/DX12/WebGPU via `wgpu`
