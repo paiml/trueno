@@ -29,7 +29,7 @@ pedantic = "warn"
 
 [package]
 name = "trueno"
-version = "0.7.4"
+version = "0.8.0"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
@@ -59,6 +59,7 @@ proptest = "1.9"
 criterion = "0.7"
 tokio = { version = "1", features = ["macros", "rt"] }
 serde_json = "1.0"
+nalgebra = "0.34"  # For eigendecomposition benchmark comparison
 
 [features]
 default = []
@@ -99,6 +100,10 @@ required-features = ["gpu"]
 name = "async_gpu_ops"
 harness = false
 required-features = ["gpu"]
+
+[[bench]]
+name = "eigen_ops"
+harness = false
 
 [[example]]
 name = "gpu_batch_demo"
