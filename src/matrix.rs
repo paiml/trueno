@@ -1603,6 +1603,110 @@ impl Matrix<f32> {
 
         Ok(result.clone())
     }
+
+    /// Lookup embeddings by indices (Issue #61: ML primitives)
+    ///
+    /// Performs embedding lookup where self is the embedding table with shape
+    /// `[vocab_size, embed_dim]` and indices specify which rows to select.
+    ///
+    /// # Arguments
+    ///
+    /// * `indices` - Slice of indices into the embedding table
+    ///
+    /// # Returns
+    ///
+    /// A matrix with shape `[indices.len(), embed_dim]` containing the selected rows
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if any index is out of bounds
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use trueno::Matrix;
+    ///
+    /// // Create embedding table: 4 words, 3-dimensional embeddings
+    /// let embeddings = Matrix::from_vec(4, 3, vec![
+    ///     1.0, 2.0, 3.0,   // word 0
+    ///     4.0, 5.0, 6.0,   // word 1
+    ///     7.0, 8.0, 9.0,   // word 2
+    ///     10.0, 11.0, 12.0 // word 3
+    /// ]).unwrap();
+    ///
+    /// // Lookup embeddings for indices [1, 3, 0]
+    /// let result = embeddings.embedding_lookup(&[1, 3, 0]).unwrap();
+    ///
+    /// assert_eq!(result.rows(), 3);
+    /// assert_eq!(result.cols(), 3);
+    /// assert_eq!(result.get(0, 0), Some(&4.0)); // word 1
+    /// assert_eq!(result.get(1, 0), Some(&10.0)); // word 3
+    /// assert_eq!(result.get(2, 0), Some(&1.0)); // word 0
+    /// ```
+    pub fn embedding_lookup(&self, indices: &[usize]) -> Result<Matrix<f32>, TruenoError> {
+        // Validate indices
+        for (i, &idx) in indices.iter().enumerate() {
+            if idx >= self.rows {
+                return Err(TruenoError::InvalidInput(format!(
+                    "Index {} at position {} is out of bounds for embedding table with {} rows",
+                    idx, i, self.rows
+                )));
+            }
+        }
+
+        // Handle empty indices
+        if indices.is_empty() {
+            return Ok(Matrix::zeros_with_backend(0, self.cols, self.backend));
+        }
+
+        // Allocate output matrix: [seq_len, embed_dim]
+        let seq_len = indices.len();
+        let embed_dim = self.cols;
+        let mut result = Matrix::zeros_with_backend(seq_len, embed_dim, self.backend);
+
+        // Copy rows from embedding table to result
+        for (out_row, &idx) in indices.iter().enumerate() {
+            let src_start = idx * embed_dim;
+            let dst_start = out_row * embed_dim;
+
+            // Copy entire row
+            result.data[dst_start..dst_start + embed_dim]
+                .copy_from_slice(&self.data[src_start..src_start + embed_dim]);
+        }
+
+        Ok(result)
+    }
+
+    /// Lookup embeddings with gradient tracking support (for training)
+    ///
+    /// Returns both the embeddings and a sparse gradient accumulator.
+    /// This is useful for sparse gradient updates in training.
+    ///
+    /// # Arguments
+    ///
+    /// * `indices` - Slice of indices into the embedding table
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (embeddings, unique_indices) where unique_indices can be used
+    /// for sparse gradient updates
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if any index is out of bounds
+    pub fn embedding_lookup_sparse(
+        &self,
+        indices: &[usize],
+    ) -> Result<(Matrix<f32>, Vec<usize>), TruenoError> {
+        let embeddings = self.embedding_lookup(indices)?;
+
+        // Get unique indices for sparse gradient updates
+        let mut unique: Vec<usize> = indices.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+
+        Ok((embeddings, unique))
+    }
 }
 
 #[cfg(test)]
@@ -3198,6 +3302,132 @@ mod property_tests {
         let kernel = Matrix::from_vec(4, 4, vec![1.0; 16]).unwrap();
 
         assert!(input.convolve2d(&kernel).is_err());
+    }
+
+    // ===== Embedding Lookup Tests (Issue #61) =====
+
+    #[test]
+    fn test_embedding_lookup_basic() {
+        // Create embedding table: 4 words, 3-dimensional embeddings
+        let embeddings = Matrix::from_vec(
+            4,
+            3,
+            vec![
+                1.0, 2.0, 3.0, // word 0
+                4.0, 5.0, 6.0, // word 1
+                7.0, 8.0, 9.0, // word 2
+                10.0, 11.0, 12.0, // word 3
+            ],
+        )
+        .unwrap();
+
+        // Lookup embeddings for indices [1, 3, 0]
+        let result = embeddings.embedding_lookup(&[1, 3, 0]).unwrap();
+
+        assert_eq!(result.rows(), 3);
+        assert_eq!(result.cols(), 3);
+
+        // Check word 1 embedding
+        assert_eq!(result.get(0, 0), Some(&4.0));
+        assert_eq!(result.get(0, 1), Some(&5.0));
+        assert_eq!(result.get(0, 2), Some(&6.0));
+
+        // Check word 3 embedding
+        assert_eq!(result.get(1, 0), Some(&10.0));
+        assert_eq!(result.get(1, 1), Some(&11.0));
+        assert_eq!(result.get(1, 2), Some(&12.0));
+
+        // Check word 0 embedding
+        assert_eq!(result.get(2, 0), Some(&1.0));
+        assert_eq!(result.get(2, 1), Some(&2.0));
+        assert_eq!(result.get(2, 2), Some(&3.0));
+    }
+
+    #[test]
+    fn test_embedding_lookup_single_index() {
+        let embeddings = Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+
+        let result = embeddings.embedding_lookup(&[1]).unwrap();
+
+        assert_eq!(result.rows(), 1);
+        assert_eq!(result.cols(), 2);
+        assert_eq!(result.get(0, 0), Some(&3.0));
+        assert_eq!(result.get(0, 1), Some(&4.0));
+    }
+
+    #[test]
+    fn test_embedding_lookup_repeated_indices() {
+        let embeddings = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+
+        // Same index can appear multiple times
+        let result = embeddings.embedding_lookup(&[0, 0, 1, 0]).unwrap();
+
+        assert_eq!(result.rows(), 4);
+        assert_eq!(result.cols(), 3);
+
+        // All index-0 rows should be identical
+        assert_eq!(result.get(0, 0), result.get(1, 0));
+        assert_eq!(result.get(0, 0), result.get(3, 0));
+    }
+
+    #[test]
+    fn test_embedding_lookup_empty_indices() {
+        let embeddings = Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+
+        let result = embeddings.embedding_lookup(&[]).unwrap();
+
+        assert_eq!(result.rows(), 0);
+        assert_eq!(result.cols(), 2);
+    }
+
+    #[test]
+    fn test_embedding_lookup_out_of_bounds() {
+        let embeddings = Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+
+        // Index 5 is out of bounds for 3-row table
+        let result = embeddings.embedding_lookup(&[0, 5, 1]);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("out of bounds"));
+    }
+
+    #[test]
+    fn test_embedding_lookup_sparse() {
+        let embeddings =
+            Matrix::from_vec(4, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).unwrap();
+
+        // Lookup with repeated indices
+        let (result, unique) = embeddings
+            .embedding_lookup_sparse(&[1, 3, 1, 0, 3])
+            .unwrap();
+
+        assert_eq!(result.rows(), 5);
+        assert_eq!(result.cols(), 2);
+
+        // Unique indices should be sorted and deduplicated
+        assert_eq!(unique, vec![0, 1, 3]);
+    }
+
+    #[test]
+    fn test_embedding_lookup_large_embeddings() {
+        // Test with realistic NLP dimensions
+        let vocab_size = 1000;
+        let embed_dim = 256;
+        let data: Vec<f32> = (0..vocab_size * embed_dim).map(|i| i as f32).collect();
+        let embeddings = Matrix::from_vec(vocab_size, embed_dim, data).unwrap();
+
+        // Lookup a sequence
+        let indices: Vec<usize> = vec![0, 500, 999, 42, 100];
+        let result = embeddings.embedding_lookup(&indices).unwrap();
+
+        assert_eq!(result.rows(), 5);
+        assert_eq!(result.cols(), embed_dim);
+
+        // Verify first element of each row
+        assert_eq!(result.get(0, 0), Some(&0.0)); // word 0
+        assert_eq!(result.get(1, 0), Some(&(500.0 * 256.0))); // word 500
+        assert_eq!(result.get(2, 0), Some(&(999.0 * 256.0))); // word 999
     }
 
     // ===== Property-Based Tests for Convolution =====
