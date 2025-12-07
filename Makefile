@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -219,6 +219,12 @@ coverage-check: ## Enforce 90% coverage threshold (BLOCKS on failure, GPU exclud
 lint: ## Run clippy (zero warnings allowed)
 	@echo "🔍 Running clippy (zero warnings policy)..."
 	cargo clippy --all-targets --all-features -- -D warnings
+
+backend-story: ## Verify all operations support all backends (Scalar/SIMD/GPU/WASM)
+	@echo "🔧 Running Backend Story Tests (CRITICAL)..."
+	@echo "   All operations MUST work on: Scalar, SSE2, AVX2, AVX512, NEON, WASM, GPU"
+	@cargo test --test backend_story
+	@echo "✅ Backend story verified - all backends supported"
 
 fmt: ## Format code
 	cargo fmt

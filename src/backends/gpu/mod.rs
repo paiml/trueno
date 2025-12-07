@@ -429,6 +429,24 @@ impl GpuBackend {
 
         Ok(result)
     }
+
+    /// Symmetric eigendecomposition on GPU
+    ///
+    /// Computes eigenvalues and eigenvectors using Jacobi algorithm with
+    /// GPU-accelerated Givens rotations.
+    ///
+    /// # Arguments
+    ///
+    /// * `matrix` - Symmetric matrix data (row-major, n×n)
+    /// * `n` - Matrix dimension
+    ///
+    /// # Returns
+    ///
+    /// Tuple of (eigenvalues, eigenvector_data) where eigenvector_data is row-major
+    pub fn symmetric_eigen(&mut self, matrix: &[f32], n: usize) -> Result<(Vec<f32>, Vec<f32>), String> {
+        let device = self.ensure_device()?;
+        device.symmetric_eigen(matrix, n)
+    }
 }
 
 #[cfg(feature = "gpu")]

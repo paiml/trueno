@@ -661,3 +661,153 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 }
 "#;
+
+/// Jacobi rotation shader (WGSL) - Apply Givens rotation to matrix columns
+///
+/// Applies rotation to columns p and q of matrix A and eigenvector matrix V:
+/// - A[:,p] = c * A[:,p] - s * A[:,q]
+/// - A[:,q] = s * old_A[:,p] + c * A[:,q]
+///
+/// Same transformation is applied to the V matrix (eigenvectors).
+///
+/// This is a single rotation step in the Jacobi eigenvalue algorithm.
+/// Parallelizes over rows (each thread handles one row).
+pub const JACOBI_ROTATION_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read_write> matrix: array<f32>;
+@group(0) @binding(1) var<storage, read_write> eigenvectors: array<f32>;
+
+struct JacobiParams {
+    n: u32,      // Matrix dimension
+    p: u32,      // First column index
+    q: u32,      // Second column index
+    c: f32,      // cos(theta)
+    s: f32,      // sin(theta)
+}
+
+@group(0) @binding(2) var<uniform> params: JacobiParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let k = global_id.x;
+    let n = params.n;
+    let p = params.p;
+    let q = params.q;
+    let c = params.c;
+    let s = params.s;
+
+    if (k >= n) {
+        return;
+    }
+
+    // Update matrix row k, columns p and q
+    let idx_kp = k * n + p;
+    let idx_kq = k * n + q;
+
+    let akp = matrix[idx_kp];
+    let akq = matrix[idx_kq];
+
+    matrix[idx_kp] = c * akp - s * akq;
+    matrix[idx_kq] = s * akp + c * akq;
+
+    // Update eigenvector matrix row k, columns p and q
+    let vkp = eigenvectors[idx_kp];
+    let vkq = eigenvectors[idx_kq];
+
+    eigenvectors[idx_kp] = c * vkp - s * vkq;
+    eigenvectors[idx_kq] = s * vkp + c * vkq;
+}
+"#;
+
+/// Find max off-diagonal element shader (WGSL) - parallel reduction
+///
+/// Finds the largest absolute off-diagonal element for Jacobi pivot selection.
+/// Returns (max_value, row_index, col_index) packed in result buffer.
+///
+/// Note: Currently unused - pivot selection done on CPU for simplicity.
+/// Future optimization: use this shader for fully GPU-based pivot selection.
+#[allow(dead_code)]
+pub const JACOBI_MAX_OFFDIAG_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> matrix: array<f32>;
+@group(0) @binding(1) var<storage, read_write> result: array<f32>;
+
+struct MatrixParams {
+    n: u32,
+}
+
+@group(0) @binding(2) var<uniform> params: MatrixParams;
+
+// Workgroup shared memory for reduction
+var<workgroup> partial_max: array<f32, 256>;
+var<workgroup> partial_row: array<u32, 256>;
+var<workgroup> partial_col: array<u32, 256>;
+
+@compute @workgroup_size(256)
+fn main(
+    @builtin(global_invocation_id) global_id: vec3<u32>,
+    @builtin(local_invocation_id) local_id: vec3<u32>,
+    @builtin(workgroup_id) workgroup_id: vec3<u32>,
+) {
+    let idx = global_id.x;
+    let local_idx = local_id.x;
+    let n = params.n;
+
+    // Total off-diagonal elements: n*(n-1)/2
+    let total_pairs = n * (n - 1u) / 2u;
+
+    // Convert linear index to (i, j) where i < j
+    var max_val: f32 = 0.0;
+    var max_row: u32 = 0u;
+    var max_col: u32 = 1u;
+
+    if (idx < total_pairs) {
+        // Map linear index to upper triangular (i, j) where i < j
+        // Using quadratic formula inversion
+        var i: u32 = 0u;
+        var j: u32 = 0u;
+        var count: u32 = 0u;
+
+        for (var row: u32 = 0u; row < n - 1u; row = row + 1u) {
+            let pairs_in_row = n - 1u - row;
+            if (count + pairs_in_row > idx) {
+                i = row;
+                j = row + 1u + (idx - count);
+                break;
+            }
+            count = count + pairs_in_row;
+        }
+
+        let aij = matrix[i * n + j];
+        max_val = abs(aij);
+        max_row = i;
+        max_col = j;
+    }
+
+    partial_max[local_idx] = max_val;
+    partial_row[local_idx] = max_row;
+    partial_col[local_idx] = max_col;
+
+    workgroupBarrier();
+
+    // Parallel reduction to find max within workgroup
+    var stride: u32 = 128u;
+    while (stride > 0u) {
+        if (local_idx < stride) {
+            if (partial_max[local_idx + stride] > partial_max[local_idx]) {
+                partial_max[local_idx] = partial_max[local_idx + stride];
+                partial_row[local_idx] = partial_row[local_idx + stride];
+                partial_col[local_idx] = partial_col[local_idx + stride];
+            }
+        }
+        stride = stride / 2u;
+        workgroupBarrier();
+    }
+
+    // First thread writes workgroup result
+    if (local_idx == 0u) {
+        let wg_idx = workgroup_id.x * 3u;
+        result[wg_idx] = partial_max[0];
+        result[wg_idx + 1u] = f32(partial_row[0]);
+        result[wg_idx + 2u] = f32(partial_col[0]);
+    }
+}
+"#;

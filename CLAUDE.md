@@ -548,6 +548,102 @@ fn test_backend_equivalence() {
 - ✅ Version bumped (semver)
 - ✅ Git tag created (`vX.Y.Z`)
 
+## Backend Story Policy (CRITICAL - NEVER VIOLATE)
+
+**⚠️ ZERO TOLERANCE: ALL OPERATIONS MUST SUPPORT ALL BACKENDS**
+
+Every operation in trueno MUST work on ALL backends:
+- ✅ **Scalar** - Baseline fallback (always works)
+- ✅ **SSE2** - x86_64 baseline SIMD
+- ✅ **AVX/AVX2** - x86_64 256-bit SIMD
+- ✅ **AVX-512** - x86_64 512-bit SIMD
+- ✅ **NEON** - ARM64 SIMD
+- ✅ **WASM SIMD128** - WebAssembly portable SIMD
+- ✅ **GPU** - wgpu compute shaders
+
+### Enforcement
+
+1. **Integration Test**: `tests/backend_story.rs` verifies all backends
+2. **Pre-commit Hook**: Blocks commits that break backend story
+3. **CI Pipeline**: Runs backend story tests on every PR
+
+### Adding New Operations
+
+When adding a new operation (e.g., `frobulate()`), you MUST:
+
+1. **Add to VectorBackend trait** (if applicable):
+   ```rust
+   // src/backends/mod.rs
+   pub trait VectorBackend {
+       // ... existing methods ...
+       unsafe fn frobulate(a: &[f32], result: &mut [f32]);
+   }
+   ```
+
+2. **Implement in ALL backend modules**:
+   - `src/backends/scalar.rs` - Pure Rust implementation
+   - `src/backends/sse2.rs` - SSE2 intrinsics
+   - `src/backends/avx2.rs` - AVX2 intrinsics
+   - `src/backends/avx512.rs` - AVX-512 intrinsics
+   - `src/backends/neon.rs` - ARM NEON intrinsics
+   - `src/backends/wasm.rs` - WASM SIMD128
+   - `src/backends/gpu/` - WGSL shader + device method
+
+3. **Add GPU shader** (if GPU-accelerable):
+   ```rust
+   // src/backends/gpu/shaders.rs
+   pub const FROBULATE_SHADER: &str = r#"..."#;
+   ```
+
+4. **Add device methods**:
+   ```rust
+   // src/backends/gpu/device.rs
+   pub fn frobulate(&self, ...) -> Result<...> { ... }
+   pub async fn frobulate_async(&self, ...) -> Result<...> { ... }
+   ```
+
+5. **Add integration test**:
+   ```rust
+   // tests/backend_story.rs
+   #[test]
+   fn test_frobulate_all_backends() {
+       // Test that frobulate works regardless of backend
+   }
+   ```
+
+### What Happens if You Violate This Policy
+
+```
+❌ COMMIT BLOCKED: Backend Story Violation
+
+The following operations are missing backend implementations:
+- frobulate: Missing GPU implementation
+
+All operations MUST work on: Scalar, SSE2, AVX2, AVX512, NEON, WASM, GPU
+
+Fix: Implement missing backends before committing.
+See: CLAUDE.md "Backend Story Policy"
+```
+
+### Exceptions
+
+**NO EXCEPTIONS.** If an operation cannot be GPU-accelerated (e.g., inherently sequential), it must still:
+1. Have a GPU method that falls back to CPU
+2. Document why GPU acceleration is not beneficial
+3. Still pass the backend story integration test
+
+Example:
+```rust
+/// GPU eigendecomposition - uses CPU fallback for small matrices
+/// where GPU transfer overhead exceeds compute benefit.
+pub fn symmetric_eigen(&self, matrix: &[f32], n: usize) -> Result<...> {
+    if n < 64 {
+        return self.symmetric_eigen_cpu(matrix, n); // CPU fallback
+    }
+    // GPU implementation for large matrices
+}
+```
+
 ## Safety Rules
 
 ### Unsafe Usage

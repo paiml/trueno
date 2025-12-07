@@ -58,6 +58,12 @@ let transposed = m1.transpose();        // Matrix transpose
 let image = Matrix::from_vec(5, 5, vec![/* 25 pixels */]).unwrap();
 let kernel = Matrix::from_vec(3, 3, vec![1.0/9.0; 9]).unwrap();  // 3x3 averaging filter
 let filtered = image.convolve2d(&kernel).unwrap();  // Auto-selects GPU for large images
+
+// Eigendecomposition (PCA, spectral analysis) - v0.8.0+
+use trueno::SymmetricEigen;
+let cov = Matrix::from_vec(2, 2, vec![3.0, 1.0, 1.0, 3.0]).unwrap();
+let eigen = SymmetricEigen::new(&cov).unwrap();
+let eigenvalues = eigen.eigenvalues();  // [4.0, 2.0] - descending order
 ```
 
 ## Performance vs NumPy/PyTorch
@@ -137,6 +143,47 @@ Trueno delivers **exceptional performance** through multi-level SIMD optimizatio
 - **Zero-Allocation**: No Vec allocations in hot path
 - **NumPy Parity**: Matches/beats NumPy + OpenBLAS for 128×128 and 256×256
 - **Efficiency**: 77% of theoretical AVX2 peak (48 GFLOPS @ 3.0 GHz)
+
+### Eigendecomposition (v0.8.0+) 🆕
+
+**SymmetricEigen** provides SIMD-accelerated eigenvalue/eigenvector computation for symmetric matrices, replacing the need for nalgebra in PCA and spectral analysis:
+
+| Matrix Size | trueno | nalgebra | Speedup |
+|-------------|--------|----------|---------|
+| 64×64 | 136 µs | 85 µs | 0.62x |
+| 128×128 | 424 µs | 471 µs | **1.11x** |
+| 256×256 | 1.26 ms | 2.78 ms | **2.2x** |
+
+```rust
+use trueno::{Matrix, SymmetricEigen};
+
+// Covariance matrix for PCA
+let cov = Matrix::from_vec(3, 3, vec![
+    5.0, 2.0, 1.0,
+    2.0, 3.0, 0.5,
+    1.0, 0.5, 1.0,
+]).unwrap();
+
+let eigen = SymmetricEigen::new(&cov).unwrap();
+
+// Eigenvalues sorted descending (PCA convention)
+let values = eigen.eigenvalues();  // [6.46, 1.77, 0.76]
+
+// First principal component explains 72% of variance
+let variance_ratio = values[0] / values.iter().sum::<f32>();
+
+// Access eigenvectors
+for (lambda, v) in eigen.iter() {
+    println!("λ={:.2}, v={:?}", lambda, v.as_slice());
+}
+```
+
+**Key Features**:
+- **Jacobi Algorithm**: Numerically stable, cache-friendly
+- **Descending Order**: Eigenvalues sorted largest-first (PCA convention)
+- **Orthonormal**: Eigenvectors satisfy V^T × V = I
+- **Reconstruction**: `eigen.reconstruct()` verifies A = V × D × V^T
+- **No Dependencies**: Replaces nalgebra for eigendecomposition
 
 ### 2D Convolution (GPU-Accelerated)
 
