@@ -1270,6 +1270,148 @@ impl Vector<f32> {
         Ok(Vector::from_vec(data))
     }
 
+    /// Layer normalization with learnable parameters (Issue #61: ML primitives)
+    ///
+    /// Applies layer normalization: `y = gamma * (x - mean) / sqrt(variance + eps) + beta`
+    ///
+    /// This is a fundamental normalization technique in transformers and other
+    /// modern neural network architectures. Unlike batch normalization, layer norm
+    /// normalizes across the feature dimension, making it suitable for sequence models.
+    ///
+    /// # Arguments
+    ///
+    /// * `gamma` - Scale parameter (typically learned, initialized to 1.0)
+    /// * `beta` - Shift parameter (typically learned, initialized to 0.0)
+    /// * `eps` - Small constant for numerical stability (typically 1e-5 or 1e-6)
+    ///
+    /// # Returns
+    ///
+    /// Normalized vector with the same shape as input
+    ///
+    /// # Errors
+    ///
+    /// Returns `SizeMismatch` if gamma or beta have different lengths than self
+    /// Returns `EmptyVector` if input is empty
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let x = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+    /// let gamma = Vector::from_slice(&[1.0, 1.0, 1.0, 1.0]); // Scale = 1
+    /// let beta = Vector::from_slice(&[0.0, 0.0, 0.0, 0.0]);  // Shift = 0
+    ///
+    /// let y = x.layer_norm(&gamma, &beta, 1e-5).unwrap();
+    ///
+    /// // Output should be approximately standardized (mean ≈ 0, std ≈ 1)
+    /// let mean: f32 = y.as_slice().iter().sum::<f32>() / y.len() as f32;
+    /// assert!(mean.abs() < 1e-5);
+    /// ```
+    ///
+    /// # Performance
+    ///
+    /// Single-pass computation using Welford's algorithm for numerical stability.
+    /// Time complexity: O(n), Space complexity: O(n).
+    pub fn layer_norm(&self, gamma: &Self, beta: &Self, eps: f32) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        if self.len() != gamma.len() {
+            return Err(TruenoError::SizeMismatch {
+                expected: self.len(),
+                actual: gamma.len(),
+            });
+        }
+
+        if self.len() != beta.len() {
+            return Err(TruenoError::SizeMismatch {
+                expected: self.len(),
+                actual: beta.len(),
+            });
+        }
+
+        // Compute mean
+        let mean_val = self.mean()?;
+
+        // Compute variance: E[(x - mean)^2]
+        let variance: f32 = self
+            .data
+            .iter()
+            .map(|&x| {
+                let diff = x - mean_val;
+                diff * diff
+            })
+            .sum::<f32>()
+            / self.len() as f32;
+
+        // Compute inverse standard deviation for numerical stability
+        let inv_std = 1.0 / (variance + eps).sqrt();
+
+        // Apply normalization: y = gamma * (x - mean) * inv_std + beta
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .zip(gamma.data.iter())
+            .zip(beta.data.iter())
+            .map(|((&x, &g), &b)| g * (x - mean_val) * inv_std + b)
+            .collect();
+
+        Ok(Vector::from_vec(data))
+    }
+
+    /// Layer normalization without learnable parameters
+    ///
+    /// Simplified version that just standardizes the input: `y = (x - mean) / sqrt(variance + eps)`
+    ///
+    /// This is equivalent to calling `layer_norm` with gamma=1 and beta=0.
+    ///
+    /// # Arguments
+    ///
+    /// * `eps` - Small constant for numerical stability (typically 1e-5)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use trueno::Vector;
+    ///
+    /// let x = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+    /// let y = x.layer_norm_simple(1e-5).unwrap();
+    ///
+    /// // Output should be standardized
+    /// let mean: f32 = y.as_slice().iter().sum::<f32>() / y.len() as f32;
+    /// assert!(mean.abs() < 1e-5);
+    /// ```
+    pub fn layer_norm_simple(&self, eps: f32) -> Result<Self> {
+        if self.data.is_empty() {
+            return Err(TruenoError::EmptyVector);
+        }
+
+        let mean_val = self.mean()?;
+
+        // Compute variance
+        let variance: f32 = self
+            .data
+            .iter()
+            .map(|&x| {
+                let diff = x - mean_val;
+                diff * diff
+            })
+            .sum::<f32>()
+            / self.len() as f32;
+
+        let inv_std = 1.0 / (variance + eps).sqrt();
+
+        let data: Vec<f32> = self
+            .data
+            .iter()
+            .map(|&x| (x - mean_val) * inv_std)
+            .collect();
+
+        Ok(Vector::from_vec(data))
+    }
+
     /// Clip values to a specified range [min_val, max_val]
     ///
     /// Constrains each element to be within the specified range:
@@ -7504,6 +7646,139 @@ mod tests {
 
         let max = normalized.max().unwrap();
         assert!((max - 1.0).abs() < 1e-5);
+    }
+
+    // ========================================================================
+    // Tests for layer_norm() - Layer normalization (Issue #61)
+    // ========================================================================
+
+    #[test]
+    fn test_layer_norm_basic() {
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        let gamma = Vector::from_slice(&[1.0, 1.0, 1.0, 1.0]);
+        let beta = Vector::from_slice(&[0.0, 0.0, 0.0, 0.0]);
+
+        let y = x.layer_norm(&gamma, &beta, 1e-5).unwrap();
+
+        // Output should have mean ≈ 0
+        let mean: f32 = y.as_slice().iter().sum::<f32>() / y.len() as f32;
+        assert!(mean.abs() < 1e-5, "Mean should be ~0, got {}", mean);
+
+        // Output should have variance ≈ 1
+        let var: f32 = y
+            .as_slice()
+            .iter()
+            .map(|&v| (v - mean).powi(2))
+            .sum::<f32>()
+            / y.len() as f32;
+        assert!(
+            (var - 1.0).abs() < 1e-3,
+            "Variance should be ~1, got {}",
+            var
+        );
+    }
+
+    #[test]
+    fn test_layer_norm_with_scale_shift() {
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        let gamma = Vector::from_slice(&[2.0, 2.0, 2.0, 2.0]); // Scale by 2
+        let beta = Vector::from_slice(&[1.0, 1.0, 1.0, 1.0]); // Shift by 1
+
+        let y = x.layer_norm(&gamma, &beta, 1e-5).unwrap();
+
+        // Output should have mean ≈ 1 (beta)
+        let mean: f32 = y.as_slice().iter().sum::<f32>() / y.len() as f32;
+        assert!((mean - 1.0).abs() < 1e-3, "Mean should be ~1, got {}", mean);
+
+        // Output should have std ≈ 2 (gamma)
+        let var: f32 = y
+            .as_slice()
+            .iter()
+            .map(|&v| (v - mean).powi(2))
+            .sum::<f32>()
+            / y.len() as f32;
+        let std = var.sqrt();
+        assert!((std - 2.0).abs() < 1e-3, "Std should be ~2, got {}", std);
+    }
+
+    #[test]
+    fn test_layer_norm_empty_vector() {
+        let x: Vector<f32> = Vector::from_slice(&[]);
+        let gamma = Vector::from_slice(&[]);
+        let beta = Vector::from_slice(&[]);
+
+        let result = x.layer_norm(&gamma, &beta, 1e-5);
+        assert!(matches!(result, Err(TruenoError::EmptyVector)));
+    }
+
+    #[test]
+    fn test_layer_norm_size_mismatch_gamma() {
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let gamma = Vector::from_slice(&[1.0, 1.0]); // Wrong size
+        let beta = Vector::from_slice(&[0.0, 0.0, 0.0]);
+
+        let result = x.layer_norm(&gamma, &beta, 1e-5);
+        assert!(matches!(result, Err(TruenoError::SizeMismatch { .. })));
+    }
+
+    #[test]
+    fn test_layer_norm_size_mismatch_beta() {
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
+        let gamma = Vector::from_slice(&[1.0, 1.0, 1.0]);
+        let beta = Vector::from_slice(&[0.0, 0.0]); // Wrong size
+
+        let result = x.layer_norm(&gamma, &beta, 1e-5);
+        assert!(matches!(result, Err(TruenoError::SizeMismatch { .. })));
+    }
+
+    #[test]
+    fn test_layer_norm_simple() {
+        let x = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        let y = x.layer_norm_simple(1e-5).unwrap();
+
+        // Output should have mean ≈ 0
+        let mean: f32 = y.as_slice().iter().sum::<f32>() / y.len() as f32;
+        assert!(mean.abs() < 1e-5, "Mean should be ~0, got {}", mean);
+    }
+
+    #[test]
+    fn test_layer_norm_constant_input() {
+        // Constant input [5, 5, 5, 5] should produce zeros (with gamma=1, beta=0)
+        let x = Vector::from_slice(&[5.0, 5.0, 5.0, 5.0]);
+        let gamma = Vector::from_slice(&[1.0, 1.0, 1.0, 1.0]);
+        let beta = Vector::from_slice(&[0.0, 0.0, 0.0, 0.0]);
+
+        let y = x.layer_norm(&gamma, &beta, 1e-5).unwrap();
+
+        // All outputs should be 0 (or very close due to eps)
+        for &v in y.as_slice() {
+            assert!(v.abs() < 1e-3, "Expected ~0, got {}", v);
+        }
+    }
+
+    #[test]
+    fn test_layer_norm_single_element() {
+        // Single element should normalize to 0 (x - mean = 0)
+        let x = Vector::from_slice(&[42.0]);
+        let gamma = Vector::from_slice(&[1.0]);
+        let beta = Vector::from_slice(&[0.0]);
+
+        let y = x.layer_norm(&gamma, &beta, 1e-5).unwrap();
+
+        assert!(y.as_slice()[0].abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_layer_norm_negative_values() {
+        let x = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
+        let gamma = Vector::from_slice(&[1.0; 5]);
+        let beta = Vector::from_slice(&[0.0; 5]);
+
+        let y = x.layer_norm(&gamma, &beta, 1e-5).unwrap();
+
+        // Should still produce mean ≈ 0
+        let mean: f32 = y.as_slice().iter().sum::<f32>() / y.len() as f32;
+        assert!(mean.abs() < 1e-5);
     }
 
     // ========================================================================
