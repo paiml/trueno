@@ -186,16 +186,22 @@ mod tests {
 
         assert_eq!(hashes.len(), 4);
         for (i, key) in keys.iter().enumerate() {
-            assert_eq!(hashes[i], hash_key(key), "Batch hash must match single hash");
+            assert_eq!(
+                hashes[i],
+                hash_key(key),
+                "Batch hash must match single hash"
+            );
         }
     }
 
     #[test]
     fn test_hash_keys_batch_large() {
-        let keys: Vec<&str> = (0..100).map(|i| {
-            // Leak strings to get &'static str for test
-            Box::leak(format!("key{i}").into_boxed_str()) as &str
-        }).collect();
+        let keys: Vec<&str> = (0..100)
+            .map(|i| {
+                // Leak strings to get &'static str for test
+                Box::leak(format!("key{i}").into_boxed_str()) as &str
+            })
+            .collect();
 
         let hashes = hash_keys_batch(&keys);
         assert_eq!(hashes.len(), 100);
@@ -212,7 +218,10 @@ mod tests {
         let scalar = hash_keys_batch_with_backend(&keys, Backend::Scalar);
         let auto = hash_keys_batch_with_backend(&keys, Backend::Auto);
 
-        assert_eq!(scalar, auto, "Scalar and Auto must produce identical results");
+        assert_eq!(
+            scalar, auto,
+            "Scalar and Auto must produce identical results"
+        );
     }
 
     #[test]
@@ -239,7 +248,11 @@ mod tests {
 
         let diff = (h1 ^ h2).count_ones();
         // Expect at least 20 bits to differ (out of 64) for good avalanche
-        assert!(diff >= 15, "Avalanche effect: {} bits differ, expected >=15", diff);
+        assert!(
+            diff >= 15,
+            "Avalanche effect: {} bits differ, expected >=15",
+            diff
+        );
     }
 
     #[test]
