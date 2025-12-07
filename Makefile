@@ -187,8 +187,16 @@ test: ## Run all tests (with output)
 	cargo test --all-features -- --nocapture
 
 test-fast: ## Run tests quickly (<5 min target)
-	@echo "⏱️  Running fast test suite (target: <5 min)..."
-	@time cargo test --all-features --quiet
+	@echo "⚡ Running fast tests (target: <5 min)..."
+	@if command -v cargo-nextest >/dev/null 2>&1; then \
+		PROPTEST_CASES=50 RUST_TEST_THREADS=$$(nproc) cargo nextest run \
+			--workspace \
+			--all-features \
+			--status-level skip \
+			--failure-output immediate; \
+	else \
+		PROPTEST_CASES=50 cargo test --workspace --all-features; \
+	fi
 
 test-verbose: ## Run tests with verbose output
 	cargo test --all-features -- --nocapture --test-threads=1
@@ -582,6 +590,7 @@ dev: ## Run in development mode with auto-reload
 
 install-tools: ## Install required development tools
 	cargo install cargo-llvm-cov || exit 1
+	cargo install cargo-nextest || exit 1
 	cargo install cargo-watch || exit 1
 	cargo install cargo-mutants || exit 1
 	cargo install criterion || exit 1
