@@ -37,7 +37,10 @@ fn demo_single_key() {
     // Demonstrate determinism
     let h1 = hash_key("test");
     let h2 = hash_key("test");
-    println!("\n   Deterministic: hash(\"test\") == hash(\"test\"): {}", h1 == h2);
+    println!(
+        "\n   Deterministic: hash(\"test\") == hash(\"test\"): {}",
+        h1 == h2
+    );
     println!();
 }
 
@@ -99,6 +102,9 @@ fn demo_performance() {
     println!("   10,000 keys x 100 iterations:");
     println!("     Batch (hash_keys_batch): {:?}", batch_time);
     println!("     Sequential (hash_key):   {:?}", seq_time);
-    println!("     Speedup: {:.2}x", seq_time.as_nanos() as f64 / batch_time.as_nanos() as f64);
+    println!(
+        "     Speedup: {:.2}x",
+        seq_time.as_nanos() as f64 / batch_time.as_nanos() as f64
+    );
     println!();
 }
