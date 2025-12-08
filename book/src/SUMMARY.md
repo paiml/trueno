@@ -26,6 +26,8 @@
 # API Reference
 
 - [Vector Operations](./api-reference/vector-operations.md)
+- [Matrix Operations](./api-reference/matrix-operations.md)
+- [Eigendecomposition](./api-reference/eigendecomposition.md)
 - [Element-wise Operations](./api-reference/element-wise.md)
 - [Reduction Operations](./api-reference/reductions.md)
 - [Transformation Operations](./api-reference/transformations.md)
