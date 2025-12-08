@@ -48,23 +48,35 @@ jobs:
 
       - name: Check coverage threshold (BLOCKS PR if < 90%)
         run: |
-          # Get trueno library coverage (excludes GPU shaders and xtask)
-          OVERALL=$(cargo llvm-cov report | tail -1 | awk '{print $10}' | sed 's/%//')
-          echo "📊 Overall coverage: ${OVERALL}%"
-          echo "   Note: GPU shaders excluded (LLVM cannot instrument them)"
-
-          if (( $(echo "$OVERALL < 90" | bc -l) )); then
-            echo ""
-            echo "❌ COVERAGE CHECK FAILED"
-            echo "   Current: ${OVERALL}%"
-            echo "   Required: 90%"
-            echo "   Gap: $(echo "90 - $OVERALL" | bc)%"
-            echo ""
-            echo "Run 'make coverage' locally to see detailed report"
-            exit 1
-          fi
-
-          echo "✅ Coverage requirement met: ${OVERALL}% ≥ 90%"
+          # Calculate Trueno library coverage only (excludes xtask dev tool)
+          # This matches the local `make coverage` behavior exactly
+          cargo llvm-cov report | python3 -c "
+          import sys
+          lines = list(sys.stdin)
+          # Filter to trueno source files only (exclude xtask, TOTAL line, separator lines)
+          trueno = [l for l in lines if '.rs' in l and 'xtask' not in l and not l.startswith('TOTAL') and not l.startswith('-')]
+          if not trueno:
+              print('❌ No coverage data found')
+              sys.exit(1)
+          # Parse line counts (columns: Regions, Missed, Cover, Lines, Missed, Cover, Branches, Missed, Cover, Filename)
+          # Lines column is at index 7, Missed lines at index 8 (0-indexed after split)
+          t_total = sum(int(l.split()[7]) for l in trueno)
+          t_uncov = sum(int(l.split()[8]) for l in trueno)
+          t_cov = 100*(t_total-t_uncov)/t_total if t_total > 0 else 0
+          print(f'📊 Trueno library coverage: {t_cov:.2f}%')
+          print(f'   Lines: {t_total-t_uncov:,}/{t_total:,}')
+          print(f'   Note: GPU shaders and xtask excluded (per project policy)')
+          print('')
+          if t_cov < 90:
+              print(f'❌ COVERAGE CHECK FAILED')
+              print(f'   Current: {t_cov:.2f}%')
+              print(f'   Required: 90%')
+              print(f'   Gap: {90-t_cov:.2f}%')
+              print('')
+              print('Run \"make coverage\" locally to see detailed report')
+              sys.exit(1)
+          print(f'✅ Coverage requirement met: {t_cov:.2f}% ≥ 90%')
+          "
 
       - name: Upload coverage to Codecov (optional)
         if: success()
