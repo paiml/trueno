@@ -42,12 +42,16 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+          # Exclude GPU (LLVM can't instrument GPU shaders) and xtask (dev tool)
+          # This matches the local `make coverage` behavior
+          cargo llvm-cov --workspace --exclude xtask --lcov --output-path lcov.info
 
       - name: Check coverage threshold (BLOCKS PR if < 90%)
         run: |
+          # Get trueno library coverage (excludes GPU shaders and xtask)
           OVERALL=$(cargo llvm-cov report | tail -1 | awk '{print $10}' | sed 's/%//')
           echo "📊 Overall coverage: ${OVERALL}%"
+          echo "   Note: GPU shaders excluded (LLVM cannot instrument them)"
 
           if (( $(echo "$OVERALL < 90" | bc -l) )); then
             echo ""
