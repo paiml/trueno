@@ -8,11 +8,15 @@ This directory contains examples demonstrating Trueno's high-performance compute
 
 | Example | Description | Command |
 |---------|-------------|---------|
+| `quickstart.rs` | **⭐ Start here!** All core features in one file | `cargo run --example quickstart` |
 | `performance_demo.rs` | Compare Scalar vs SSE2/AVX backends | `cargo run --release --example performance_demo` |
 | `matrix_operations.rs` | Matrix multiplication and transpose | `cargo run --release --example matrix_operations` |
 | `activation_functions.rs` | Neural network activations (ReLU, Sigmoid, etc.) | `cargo run --release --example activation_functions` |
 | `backend_detection.rs` | Auto-detection of available SIMD backends | `cargo run --release --example backend_detection` |
 | `ml_similarity.rs` | Cosine similarity for ML applications | `cargo run --release --example ml_similarity` |
+| `symmetric_eigen.rs` | Eigendecomposition for PCA/spectral analysis | `cargo run --release --example symmetric_eigen` |
+| `hash_demo.rs` | SIMD-optimized hashing for KV stores | `cargo run --release --example hash_demo` |
+| `gpu_batch_demo.rs` | GPU batch operations (requires `gpu` feature) | `cargo run --release --features gpu --example gpu_batch_demo` |
 
 ### Python Examples (NumPy/PyTorch Comparison)
 
@@ -161,6 +165,6 @@ See `CLAUDE.md` for development guidelines.
 
 ---
 
-**Last Updated**: 2025-11-20
-**Version**: v0.4.0
+**Last Updated**: 2025-12-08
+**Version**: v0.8.1
 **Contact**: [GitHub Issues](https://github.com/paiml/trueno/issues)

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2025-12-08
+
+### Added ✨
+
+- **Quick Start Example** (`examples/quickstart.rs`)
+  - Comprehensive example showcasing all core Trueno features in one file
+  - Vector operations, matrix math, eigendecomposition, activations, layer norm
+  - Recommended starting point for new users
+
+- **Enhanced API Documentation**
+  - `book/src/api-reference/vector-operations.md` - Complete vector API reference
+  - `book/src/api-reference/matrix-operations.md` - Matrix operations guide
+  - `book/src/api-reference/eigendecomposition.md` - SymmetricEigen documentation
+
+### Changed 🔄
+
+- Updated examples README with all current examples including `symmetric_eigen`, `hash_demo`, `gpu_batch_demo`
+- Applied `cargo fmt` formatting fixes across codebase
+- Installed PMAT TDG enforcement hooks for quality gates
+
+### Quality 📊
+
+- **Repository Score**: 100/100 (A+)
+- **TDG Score**: 90.4/100 (A)
+- **Rust Project Score**: 143.9/134 (107.4%, A+)
+- All 954 tests passing
+- Benchmarks verified: dot product 11-12x speedup (AVX-512), eigen 1.3-2.2x faster than nalgebra
+
 ## [0.7.3] - 2025-11-25
 
 ### Added ✨

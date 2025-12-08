@@ -189,7 +189,8 @@ impl SymmetricEigen {
                 });
 
                 // Reorder eigenvalues
-                let sorted_eigenvalues: Vec<f32> = indices.iter().map(|&i| eigenvalues[i]).collect();
+                let sorted_eigenvalues: Vec<f32> =
+                    indices.iter().map(|&i| eigenvalues[i]).collect();
 
                 // Create eigenvector matrix with sorted columns
                 let mut eigenvector_data = vec![0.0f32; n * n];
@@ -244,7 +245,14 @@ impl SymmetricEigen {
     /// Uses the numerically stable formula from:
     /// Golub & Van Loan, "Matrix Computations", 4th Edition
     #[inline]
-    fn jacobi_rotate(a: &mut [f32], v: &mut [f32], n: usize, p: usize, q: usize, _backend: Backend) {
+    fn jacobi_rotate(
+        a: &mut [f32],
+        v: &mut [f32],
+        n: usize,
+        p: usize,
+        q: usize,
+        _backend: Backend,
+    ) {
         let app = a[p * n + p];
         let aqq = a[q * n + q];
         let apq = a[p * n + q];
@@ -305,9 +313,10 @@ impl SymmetricEigen {
         let mut gpu = GpuBackend::new();
 
         // Execute eigendecomposition on GPU
-        let (eigenvalues, eigenvector_data) = gpu
-            .symmetric_eigen(matrix.as_slice(), n)
-            .map_err(|e| TruenoError::InvalidInput(format!("GPU eigendecomposition failed: {}", e)))?;
+        let (eigenvalues, eigenvector_data) =
+            gpu.symmetric_eigen(matrix.as_slice(), n).map_err(|e| {
+                TruenoError::InvalidInput(format!("GPU eigendecomposition failed: {}", e))
+            })?;
 
         // Sort eigenvalues in descending order
         let mut indices: Vec<usize> = (0..n).collect();
@@ -750,7 +759,10 @@ mod tests {
         let eigen = SymmetricEigen::new(&m).expect("eigendecomposition should succeed");
 
         let values = eigen.eigenvalues();
-        assert!((values[0] - 1.0).abs() < 1e-5, "first eigenvalue should be 1");
+        assert!(
+            (values[0] - 1.0).abs() < 1e-5,
+            "first eigenvalue should be 1"
+        );
         assert!(
             (values[1] - (-1.0)).abs() < 1e-5,
             "second eigenvalue should be -1"
