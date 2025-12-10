@@ -499,6 +499,145 @@ impl<'a> KernelBuilder<'a> {
         );
         dst
     }
+
+    /// Barrier synchronization (all threads in block must reach this point)
+    pub fn bar_sync(&mut self, barrier_id: u32) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Bar, PtxType::B32).label(format!("sync {}", barrier_id)),
+        );
+    }
+
+    /// Load from shared memory
+    pub fn ld_shared_f32(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Shared),
+        );
+        dst
+    }
+
+    /// Store to shared memory
+    pub fn st_shared_f32(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::F32)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Shared),
+        );
+    }
+
+    /// Warp shuffle down (for reductions)
+    pub fn shfl_down_f32(&mut self, val: VirtualReg, offset: u32, mask: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::ShflDown, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::ImmU64(offset as u64))
+                .src(Operand::ImmU64(mask as u64))
+                .label("down".to_string()),
+        );
+        dst
+    }
+
+    /// Max f32 of two values
+    pub fn max_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Max, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Exp f32 (exponential)
+    pub fn ex2_f32(&mut self, val: VirtualReg) -> VirtualReg {
+        // PTX has ex2 (base 2), we scale input by log2(e) for natural exp
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ex2, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Sub f32
+    pub fn sub_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Sub, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Div f32
+    pub fn div_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Div, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Setp less than u32
+    pub fn setp_lt_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::Pred);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Setp, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .label("lt.u32".to_string()),
+        );
+        dst
+    }
+
+    /// Multiply u32
+    pub fn mul_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mul, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::ImmU64(b as u64)),
+        );
+        dst
+    }
+
+    /// Add u32 (register + register)
+    pub fn add_u32_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Add, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Convert u32 to u64 (zero extend)
+    pub fn cvt_u64_u32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
 }
 
 /// Emit a single instruction as PTX
