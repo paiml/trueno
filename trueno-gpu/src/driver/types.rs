@@ -182,4 +182,40 @@ mod tests {
         let config = LaunchConfig::grid_2d(16, 16, 16, 16);
         assert_eq!(config.total_threads(), 16 * 16 * 16 * 16);
     }
+
+    #[test]
+    fn test_device_ptr_clone() {
+        let ptr: DevicePtr<f32> = unsafe { DevicePtr::from_raw(0x1000) };
+        let cloned = ptr.clone();
+        assert_eq!(ptr.as_raw(), cloned.as_raw());
+    }
+
+    #[test]
+    fn test_device_ptr_not_null() {
+        let ptr: DevicePtr<f32> = unsafe { DevicePtr::from_raw(0x1000) };
+        assert!(!ptr.is_null());
+    }
+
+    #[test]
+    fn test_launch_config_with_shared_mem() {
+        let config = LaunchConfig::linear(1024, 256).with_shared_mem(4096);
+        assert_eq!(config.shared_mem, 4096);
+        assert_eq!(config.grid.0, 4);
+    }
+
+    #[test]
+    fn test_launch_config_default() {
+        let config = LaunchConfig::default();
+        assert_eq!(config.grid, (1, 1, 1));
+        assert_eq!(config.block, (256, 1, 1));
+        assert_eq!(config.shared_mem, 0);
+    }
+
+    #[test]
+    fn test_device_ptr_multiple_offsets() {
+        let ptr: DevicePtr<f32> = DevicePtr::null();
+        let offset1 = ptr.byte_offset(100);
+        let offset2 = offset1.byte_offset(200);
+        assert_eq!(offset2.as_raw(), 300);
+    }
 }
