@@ -10,10 +10,16 @@
 //! - **Attention**: FlashAttention-style tiled attention
 //! - **Quantize**: Q4_K dequantization fused with matmul
 
+mod attention;
 mod gemm;
+mod layernorm;
+mod quantize;
 mod softmax;
 
-pub use gemm::{GemmKernel, GemmConfig};
+pub use attention::AttentionKernel;
+pub use gemm::{GemmConfig, GemmKernel};
+pub use layernorm::LayerNormKernel;
+pub use quantize::QuantizeKernel;
 pub use softmax::SoftmaxKernel;
 
 use crate::ptx::{PtxKernel, PtxModule};

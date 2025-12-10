@@ -334,6 +334,18 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Multiply wide (u32 * u32 -> u64) with register operands
+    pub fn mul_wide_u32_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mul, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
     /// Add u64
     pub fn add_u64(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U64);
@@ -616,6 +628,18 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Multiply u32 (register * register)
+    pub fn mul_u32_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mul, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
     /// Add u32 (register + register)
     pub fn add_u32_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
@@ -635,6 +659,160 @@ impl<'a> KernelBuilder<'a> {
             PtxInstruction::new(PtxOp::Cvt, PtxType::U64)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Convert u32 to f32
+    pub fn cvt_f32_u32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .rounding(RoundingMode::Rn),
+        );
+        dst
+    }
+
+    /// Reciprocal square root f32: dst = 1/sqrt(val)
+    pub fn rsqrt_f32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Rsqrt, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Integer division u32
+    pub fn div_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Div, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::ImmU64(b as u64)),
+        );
+        dst
+    }
+
+    /// Integer remainder (modulo) u32
+    pub fn rem_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Rem, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::ImmU64(b as u64)),
+        );
+        dst
+    }
+
+    /// Move immediate u64 value
+    pub fn mov_u64_imm(&mut self, val: u64) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmU64(val)),
+        );
+        dst
+    }
+
+    /// Multiply u64 by immediate
+    pub fn mul_u64(&mut self, a: VirtualReg, b: u64) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mul, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::ImmU64(b)),
+        );
+        dst
+    }
+
+    /// Multiply u64 (register * register)
+    pub fn mul_u64_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mul, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Branch if predicate is false (negated predicate)
+    pub fn branch_if_not(&mut self, pred: VirtualReg, label: &str) {
+        let predicate = Predicate {
+            reg: pred,
+            negated: true,
+        };
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Bra, PtxType::B32)
+                .predicated(predicate)
+                .label(label),
+        );
+    }
+
+    /// Load u32 from global memory
+    pub fn ld_global_u32(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Load u8 from global memory
+    pub fn ld_global_u8(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U8);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U8)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Convert u8 to u32 (zero extend)
+    pub fn cvt_u32_u8(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Shift right u32 (logical shift)
+    pub fn shr_u32(&mut self, val: VirtualReg, shift: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Shr, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::Reg(shift)),
+        );
+        dst
+    }
+
+    /// Bitwise AND u32 (register AND register)
+    pub fn and_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::And, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
         );
         dst
     }
