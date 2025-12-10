@@ -88,4 +88,31 @@ mod tests {
         let buffer: GpuBuffer<f32> = GpuBuffer::new(0);
         assert!(buffer.is_empty());
     }
+
+    #[test]
+    fn test_gpu_buffer_as_ptr() {
+        let buffer: GpuBuffer<f32> = GpuBuffer::new(100);
+        let ptr = buffer.as_ptr();
+        assert!(ptr.is_null()); // New buffer starts with null ptr
+    }
+
+    #[test]
+    fn test_copy_h2d_d2h() {
+        let mut buffer: GpuBuffer<f32> = GpuBuffer::new(4);
+        let src = [1.0f32, 2.0, 3.0, 4.0];
+        // Without CUDA feature, these are no-ops but should not error
+        assert!(copy_h2d(&mut buffer, &src).is_ok());
+
+        let mut dst = [0.0f32; 4];
+        assert!(copy_d2h(&buffer, &mut dst).is_ok());
+    }
+
+    #[test]
+    fn test_gpu_buffer_different_types() {
+        let buffer_f64: GpuBuffer<f64> = GpuBuffer::new(512);
+        assert_eq!(buffer_f64.size_bytes(), 512 * 8);
+
+        let buffer_u8: GpuBuffer<u8> = GpuBuffer::new(1024);
+        assert_eq!(buffer_u8.size_bytes(), 1024);
+    }
 }

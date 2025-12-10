@@ -35,3 +35,11 @@ path = "src/lib.rs"
 [[bench]]
 name = "ptx_gen"
 harness = false
+
+[[example]]
+name = "ptx_quickstart"
+path = "examples/ptx_quickstart.rs"
+
+[[example]]
+name = "gemm_kernel"
+path = "examples/gemm_kernel.rs"
