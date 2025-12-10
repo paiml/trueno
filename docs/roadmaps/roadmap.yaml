@@ -6,7 +6,7 @@ roadmap:
   github_issue: null
   item_type: task
   title: "PMAT v2.200.0 Integration - COMPLETE"
-  status: done
+  status: completed
   priority: critical
   assigned_to: claude
   created: "2025-11-21T16:50:00Z"
@@ -44,7 +44,7 @@ roadmap:
   github_issue: 10
   item_type: task
   title: "Matrix Multiplication Performance Optimization - CLOSED"
-  status: done
+  status: completed
   priority: high
   assigned_to: claude
   created: "2025-11-21T18:38:00Z"
@@ -103,7 +103,7 @@ roadmap:
   github_issue: 4
   item_type: task
   title: "Refactor to reduce complexity: A (92.27) → A+ (93+) - WON'T FIX"
-  status: wont_fix
+  status: cancelled
   priority: high
   assigned_to: claude
   created: "2025-11-21T18:51:00Z"
@@ -157,7 +157,7 @@ roadmap:
   github_issue: null
   item_type: task
   title: "Phase 2: Pure Rust Micro-kernel Matrix Multiplication - GOAL ACHIEVED!"
-  status: done
+  status: completed
   priority: high
   assigned_to: claude
   created: "2025-11-21T21:45:00Z"
@@ -255,4 +255,47 @@ roadmap:
     - optimization
     - phase-2
     - pure-rust
+    - extreme-tdd
+
+- id: TRUENO-GPU-001
+  github_issue: null
+  item_type: task
+  title: "trueno-gpu: Pure Rust PTX Generation Sub-crate"
+  status: inprogress
+  priority: high
+  assigned_to: claude
+  created: "2025-12-10T21:00:00Z"
+  updated: "2025-12-10T21:30:00Z"
+  spec: |
+    Pure Rust PTX generation for NVIDIA CUDA - no LLVM, no nvcc.
+
+    Implements trueno-gpu-spec.md v1.1:
+    - PTX builder API (TG-001)
+    - CUDA driver FFI minimal (TG-002)
+    - Memory management (TG-003)
+    - SGEMM naive kernel (TG-004)
+
+    Philosophy: Own the Stack - build everything from first principles.
+
+    Deliverables:
+    - Pure Rust PTX code generation
+    - Fluent builder API: PtxModule, PtxKernel, KernelBuilder
+    - PTX ISA instruction emission
+    - Register allocation with liveness tracking
+    - Memory pool with fragmentation tracking
+    - GEMM and Softmax kernel scaffolds
+    - Multi-backend abstraction
+    - EXTREME TDD: 79 tests + 2 doc tests
+  acceptance_criteria:
+    - PTX generation without external dependencies
+    - Zero clippy warnings
+    - 80%+ test coverage
+    - GEMM kernel produces valid PTX
+  phases: []
+  subtasks: []
+  estimated_effort: "1-2 weeks"
+  labels:
+    - gpu
+    - ptx
+    - cuda
     - extreme-tdd
