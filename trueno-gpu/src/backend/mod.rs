@@ -120,4 +120,59 @@ mod tests {
         // Should return something
         assert!(!backend.name().is_empty());
     }
+
+    #[test]
+    fn test_metal_backend_name() {
+        let backend = MetalBackend;
+        assert_eq!(backend.name(), "Metal");
+    }
+
+    #[test]
+    fn test_vulkan_backend_name() {
+        let backend = VulkanBackend;
+        assert_eq!(backend.name(), "Vulkan");
+    }
+
+    #[test]
+    fn test_vulkan_backend_unavailable() {
+        let backend = VulkanBackend;
+        assert!(!backend.is_available());
+    }
+
+    #[test]
+    fn test_cuda_backend_device_count() {
+        let backend = CudaBackend;
+        // Without CUDA, device count should be 0
+        assert_eq!(backend.device_count(), 0);
+    }
+
+    #[test]
+    fn test_metal_backend_device_count() {
+        let backend = MetalBackend;
+        assert_eq!(backend.device_count(), 0);
+    }
+
+    #[test]
+    fn test_vulkan_backend_device_count() {
+        let backend = VulkanBackend;
+        assert_eq!(backend.device_count(), 0);
+    }
+
+    #[test]
+    fn test_cuda_backend_default() {
+        let backend = CudaBackend::default();
+        assert_eq!(backend.name(), "CUDA");
+    }
+
+    #[test]
+    fn test_metal_backend_default() {
+        let backend = MetalBackend::default();
+        assert_eq!(backend.name(), "Metal");
+    }
+
+    #[test]
+    fn test_vulkan_backend_default() {
+        let backend = VulkanBackend::default();
+        assert_eq!(backend.name(), "Vulkan");
+    }
 }

@@ -427,6 +427,78 @@ impl<'a> KernelBuilder<'a> {
         self.instructions
             .push(PtxInstruction::new(PtxOp::Ret, PtxType::B32));
     }
+
+    /// Unconditional branch
+    pub fn branch(&mut self, label: &str) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Bra, PtxType::B32).label(label),
+        );
+    }
+
+    // ===== Immediate Moves =====
+
+    /// Move immediate f32 value
+    pub fn mov_f32_imm(&mut self, val: f32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmF32(val)),
+        );
+        dst
+    }
+
+    /// Move immediate u32 value
+    pub fn mov_u32_imm(&mut self, val: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmU64(val as u64)),
+        );
+        dst
+    }
+
+    // ===== Additional Arithmetic =====
+
+    /// Multiply f32
+    pub fn mul_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mul, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .rounding(RoundingMode::Rn),
+        );
+        dst
+    }
+
+    /// Add u32
+    pub fn add_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Add, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::ImmU64(b as u64)),
+        );
+        dst
+    }
+
+    /// Fused multiply-add f32: dst = a * b + c
+    pub fn fma_f32(&mut self, a: VirtualReg, b: VirtualReg, c: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Fma, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .src(Operand::Reg(c))
+                .rounding(RoundingMode::Rn),
+        );
+        dst
+    }
 }
 
 /// Emit a single instruction as PTX
