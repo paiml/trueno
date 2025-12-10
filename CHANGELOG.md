@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [trueno-gpu 0.1.0] - 2025-12-10
+
+### Added
+
+- **trueno-gpu sub-crate**: Pure Rust PTX generation for NVIDIA CUDA
+  - No LLVM, no nvcc, no external dependencies required for code generation
+  - Builder pattern API for constructing PTX modules and kernels
+  - PTX ISA 8.0 compliant output
+
+- **PTX Code Generation** (`ptx` module)
+  - `PtxModule`: Module builder with version, target, address size configuration
+  - `PtxKernel`: Kernel builder with parameters, shared memory, body generation
+  - `PtxBuilder`: Instruction builder with virtual register allocation
+  - Type system: U8, U16, U32, U64, S8, S16, S32, S64, F16, F32, F64, Pred
+  - Special registers: TidX/Y/Z, CtaIdX/Y/Z, NtidX/Y/Z
+
+- **Hand-Optimized Kernels** (`kernels` module)
+  - **GEMM**: Matrix multiplication with 3 variants
+    - Naive: Simple O(n³) implementation
+    - Tiled: Shared memory tiling for cache optimization
+    - Tensor Core: WMMA instructions for fp16 acceleration
+  - **Softmax**: Numerically stable softmax with warp shuffle reduction
+  - **LayerNorm**: Fused layer normalization with 2 variants
+    - Warp shuffle: Uses shuffle instructions for parallel reduction
+    - Shared memory: Uses shared memory for larger dimensions
+  - **Attention**: FlashAttention-style tiled attention
+    - Online softmax algorithm (never materializes N×N matrix)
+    - Causal masking support
+    - Configurable Q/KV tile sizes
+  - **Quantize**: Q4_K dequantization-fused GEMM
+    - 4-bit quantized weights (32 weights per 18-byte block)
+    - Fused dequantization during matmul
+
+- **Supporting Modules**
+  - `driver`: CUDA driver API FFI (optional, for GPU execution)
+  - `memory`: GPU memory management abstractions
+  - `backend`: Multi-backend abstraction layer
+  - `error`: Error types and Result alias
+
+### Quality
+
+- **145 unit tests** (100% passing)
+- **2 doc tests** (100% passing)
+- Zero clippy warnings
+- EXTREME TDD methodology applied throughout
+
 ## [0.8.1] - 2025-12-08
 
 ### Added ✨
