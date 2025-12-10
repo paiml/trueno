@@ -228,4 +228,80 @@ mod tests {
         assert_eq!(format!("{}", PtxType::F32), ".f32");
         assert_eq!(format!("{}", PtxStateSpace::Global), ".global");
     }
+
+    #[test]
+    fn test_unsigned_detection() {
+        assert!(PtxType::U8.is_unsigned());
+        assert!(PtxType::U16.is_unsigned());
+        assert!(PtxType::U32.is_unsigned());
+        assert!(PtxType::U64.is_unsigned());
+        assert!(!PtxType::S32.is_unsigned());
+        assert!(!PtxType::F32.is_unsigned());
+    }
+
+    #[test]
+    fn test_state_space_cached() {
+        assert!(PtxStateSpace::Const.is_cached());
+        assert!(PtxStateSpace::Tex.is_cached());
+        assert!(!PtxStateSpace::Global.is_cached());
+        assert!(!PtxStateSpace::Shared.is_cached());
+    }
+
+    #[test]
+    fn test_state_space_per_thread() {
+        assert!(PtxStateSpace::Reg.is_per_thread());
+        assert!(PtxStateSpace::Local.is_per_thread());
+        assert!(!PtxStateSpace::Global.is_per_thread());
+        assert!(!PtxStateSpace::Shared.is_per_thread());
+    }
+
+    #[test]
+    fn test_register_prefix() {
+        assert_eq!(PtxType::Pred.register_prefix(), "%p");
+        assert_eq!(PtxType::F16.register_prefix(), "%h");
+        assert_eq!(PtxType::BF16.register_prefix(), "%h");
+        assert_eq!(PtxType::F32.register_prefix(), "%f");
+        assert_eq!(PtxType::F64.register_prefix(), "%fd");
+        assert_eq!(PtxType::U32.register_prefix(), "%r");
+        assert_eq!(PtxType::S64.register_prefix(), "%r");
+    }
+
+    #[test]
+    fn test_all_type_strings() {
+        // Test all PTX type strings
+        assert_eq!(PtxType::Pred.to_ptx_string(), ".pred");
+        assert_eq!(PtxType::S8.to_ptx_string(), ".s8");
+        assert_eq!(PtxType::S16.to_ptx_string(), ".s16");
+        assert_eq!(PtxType::S64.to_ptx_string(), ".s64");
+        assert_eq!(PtxType::B8.to_ptx_string(), ".b8");
+        assert_eq!(PtxType::B16.to_ptx_string(), ".b16");
+        assert_eq!(PtxType::B32.to_ptx_string(), ".b32");
+        assert_eq!(PtxType::B64.to_ptx_string(), ".b64");
+        assert_eq!(PtxType::BF16.to_ptx_string(), ".bf16");
+    }
+
+    #[test]
+    fn test_all_state_space_strings() {
+        assert_eq!(PtxStateSpace::Local.to_ptx_string(), ".local");
+        assert_eq!(PtxStateSpace::Param.to_ptx_string(), ".param");
+        assert_eq!(PtxStateSpace::Tex.to_ptx_string(), ".tex");
+        assert_eq!(PtxStateSpace::Const.to_ptx_string(), ".const");
+    }
+
+    #[test]
+    fn test_state_space_display() {
+        assert_eq!(format!("{}", PtxStateSpace::Shared), ".shared");
+        assert_eq!(format!("{}", PtxStateSpace::Reg), ".reg");
+        assert_eq!(format!("{}", PtxStateSpace::Local), ".local");
+    }
+
+    #[test]
+    fn test_byte_type_sizes() {
+        assert_eq!(PtxType::B8.size_bytes(), 1);
+        assert_eq!(PtxType::B16.size_bytes(), 2);
+        assert_eq!(PtxType::B32.size_bytes(), 4);
+        assert_eq!(PtxType::B64.size_bytes(), 8);
+        assert_eq!(PtxType::S8.size_bytes(), 1);
+        assert_eq!(PtxType::S16.size_bytes(), 2);
+    }
 }
