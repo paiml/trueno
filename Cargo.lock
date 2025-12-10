@@ -2301,7 +2301,7 @@ dependencies = [
 
 [[package]]
 name = "trueno"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "bytemuck",
  "criterion",
@@ -2317,6 +2317,15 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
+]
+
+[[package]]
+name = "trueno-gpu"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "proptest",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

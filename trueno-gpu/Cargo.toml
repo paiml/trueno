@@ -1,0 +1,37 @@
+[package]
+name = "trueno-gpu"
+version = "0.1.0"
+edition = "2021"
+authors = ["Pragmatic AI Labs"]
+license = "MIT"
+description = "Pure Rust PTX generation for NVIDIA CUDA - no LLVM, no nvcc"
+repository = "https://github.com/paiml/trueno"
+readme = "README.md"
+keywords = ["cuda", "ptx", "gpu", "simd", "nvidia"]
+categories = ["algorithms", "mathematics", "science"]
+
+[dependencies]
+thiserror = "2.0"
+# Minimal CUDA driver FFI - only what we need
+# cuda-sys is optional - we can run PTX generation without CUDA installed
+
+[dev-dependencies]
+proptest = "1.9"
+criterion = "0.7"
+
+[features]
+default = []
+# Enable CUDA driver FFI for actual GPU execution
+cuda = []
+
+# Inherit workspace lints
+[lints]
+workspace = true
+
+[lib]
+name = "trueno_gpu"
+path = "src/lib.rs"
+
+[[bench]]
+name = "ptx_gen"
+harness = false
