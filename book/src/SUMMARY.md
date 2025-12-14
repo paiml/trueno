@@ -77,6 +77,7 @@
   - [Mutation Testing](./development/mutation-testing.md)
 - [Benchmarking](./development/benchmarking.md)
 - [Quality Gates](./development/quality-gates.md)
+- [SATD Remediation](./development/satd-remediation.md)
 - [Code Review Checklist](./development/code-review.md)
 
 # Advanced Topics

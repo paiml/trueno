@@ -5,6 +5,11 @@
 //!
 //! **Requires features:** `wasm` and `viz`
 
+// WASM exports may not always use return values - caller decides
+// WASM test sizes are always positive, cast is intentional
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::cast_sign_loss)]
+
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 

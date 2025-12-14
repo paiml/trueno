@@ -55,16 +55,18 @@ coverage: ## Generate coverage report (≥95% required)
 	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@echo "🧪 Phase 1: Running tests with instrumentation (no report)..."
-	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/)' nextest --no-tests=warn -p trueno-gpu --all-features
+	@# Exclude: tests, examples, and hardware-dependent modules (CUDA driver, WASM)
+	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs)' nextest --no-tests=warn -p trueno-gpu --all-features
 	@echo "📊 Phase 2: Generating coverage reports..."
-	@cargo llvm-cov report --html --output-dir target/coverage/html
-	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info
+	@# Exclude hardware-dependent modules from reports too
+	@cargo llvm-cov report --html --output-dir target/coverage/html --ignore-filename-regex '(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs)'
+	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info --ignore-filename-regex '(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs)'
 	@echo "⚙️  Restoring global cargo config..."
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo ""
 	@echo "📊 Coverage Summary:"
 	@echo "=================="
-	@cargo llvm-cov report --summary-only
+	@cargo llvm-cov report --summary-only --ignore-filename-regex '(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs)'
 	@echo ""
 	@echo "💡 COVERAGE INSIGHTS:"
 	@echo "- HTML report: target/coverage/html/index.html"
@@ -76,7 +78,8 @@ coverage-ci: ## Generate LCOV report for CI/CD (≥95% required)
 	@echo "=== Code Coverage for CI/CD (≥95% required) ==="
 	@cargo llvm-cov clean --workspace
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/)' nextest --no-tests=warn -p trueno-gpu --all-features
+	@# Exclude: tests, examples, and hardware-dependent modules (CUDA driver, WASM)
+	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs)' nextest --no-tests=warn -p trueno-gpu --all-features
 	@cargo llvm-cov report --lcov --output-path lcov.info
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo "✓ Coverage report generated: lcov.info"
