@@ -34,12 +34,20 @@ pub mod eigen;
 pub mod error;
 pub mod hash;
 pub mod matrix;
+pub mod monitor;
 pub mod vector;
 
 pub use eigen::SymmetricEigen;
 pub use error::{Result, TruenoError};
 pub use hash::{hash_bytes, hash_key, hash_keys_batch, hash_keys_batch_with_backend};
 pub use matrix::Matrix;
+pub use monitor::{
+    cuda_monitor_available, GpuBackend, GpuClockMetrics, GpuDeviceInfo, GpuMemoryMetrics,
+    GpuMetrics, GpuMonitor, GpuPcieMetrics, GpuPowerMetrics, GpuThermalMetrics, GpuUtilization,
+    GpuVendor, MonitorConfig, MonitorError,
+};
+#[cfg(feature = "cuda-monitor")]
+pub use monitor::{enumerate_cuda_devices, query_cuda_device_info, query_cuda_memory};
 pub use vector::Vector;
 
 /// Backend execution target
