@@ -541,6 +541,16 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
+    /// Store F16 to shared memory
+    pub fn st_shared_f16(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::F16)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Shared),
+        );
+    }
+
     /// Warp shuffle down (for reductions)
     /// Format: shfl.sync.down.b32 dst, src, delta, clamp, membermask
     pub fn shfl_down_f32(&mut self, val: VirtualReg, offset: u32, mask: u32) -> VirtualReg {
@@ -798,6 +808,18 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Load u16 from global memory (for f16 as raw bits)
+    pub fn ld_global_u16(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U16);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U16)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
     /// Convert u8 to u32 (zero extend)
     pub fn cvt_u32_u8(&mut self, val: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
@@ -833,6 +855,30 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Bitwise OR u32 (register OR register)
+    pub fn or_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Or, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Shift left u32 (register << register)
+    pub fn shl_u32(&mut self, val: VirtualReg, shift: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Shl, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::Reg(shift)),
+        );
+        dst
+    }
+
     // ===== In-Place Updates (for loops) =====
 
     /// Add u32 immediate in-place: dst = dst + imm
@@ -857,6 +903,18 @@ impl<'a> KernelBuilder<'a> {
                 .src(Operand::Reg(dst))
                 .src(Operand::Reg(src))
                 .rounding(RoundingMode::Rn),
+        );
+    }
+
+    /// Shift right u32 in-place by immediate: dst = dst >> imm
+    /// Used for stride halving in reduction loops
+    pub fn shr_u32_inplace(&mut self, dst: VirtualReg, imm: u32) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Shr, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(dst))
+                .src(Operand::ImmU64(imm as u64)),
         );
     }
 
@@ -1220,6 +1278,43 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             // ex2 requires .approx modifier for f32
             s.push_str("ex2.approx");
         }
+        PtxOp::WmmaLoadA => {
+            // WMMA load A fragment: wmma.load.a.sync.aligned.{shape}.{layout}.{type} {dst...}, [ptr], stride
+            // Label format: "m16n16k16.row.f16.stride.16"
+            if let Some(label) = &instr.label {
+                return format!("{}wmma.load.a.sync.aligned.{};\n", s, label);
+            }
+            s.push_str("wmma.load.a.sync.aligned.m16n16k16.row.f16");
+        }
+        PtxOp::WmmaLoadB => {
+            // WMMA load B fragment: wmma.load.b.sync.aligned.{shape}.{layout}.{type} {dst...}, [ptr], stride
+            if let Some(label) = &instr.label {
+                return format!("{}wmma.load.b.sync.aligned.{};\n", s, label);
+            }
+            s.push_str("wmma.load.b.sync.aligned.m16n16k16.col.f16");
+        }
+        PtxOp::WmmaLoadC => {
+            // WMMA load C fragment: wmma.load.c.sync.aligned.{shape}.{layout}.{type} {dst...}, [ptr], stride
+            if let Some(label) = &instr.label {
+                return format!("{}wmma.load.c.sync.aligned.{};\n", s, label);
+            }
+            s.push_str("wmma.load.c.sync.aligned.m16n16k16.row.f32");
+        }
+        PtxOp::WmmaMma => {
+            // WMMA MMA: wmma.mma.sync.aligned.{shape}.{alayout}.{blayout}.{dtype}.{atype} {dst...}, {a...}, {b...}, {c...}
+            // Label format: "m16n16k16.row.col.f32.f32"
+            if let Some(label) = &instr.label {
+                return format!("{}wmma.mma.sync.aligned.{};\n", s, label);
+            }
+            s.push_str("wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32");
+        }
+        PtxOp::WmmaStoreD => {
+            // WMMA store D: wmma.store.d.sync.aligned.{shape}.{layout}.{type} [ptr], {src...}, stride
+            if let Some(label) = &instr.label {
+                return format!("{}wmma.store.d.sync.aligned.{};\n", s, label);
+            }
+            s.push_str("wmma.store.d.sync.aligned.m16n16k16.row.f32");
+        }
         _ => s.push_str(&format!("{:?}", instr.op).to_lowercase()),
     }
 
@@ -1230,8 +1325,18 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
         && !instr.srcs.first().is_some_and(|src| {
             matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::U64 || vreg.ty() == PtxType::S64)
         });
-    let skip_type_suffix =
-        instr.op == PtxOp::Cvt || is_wide_mul_from_u32 || instr.op == PtxOp::ShflDown || instr.op == PtxOp::ShflIdx;
+    let skip_type_suffix = instr.op == PtxOp::Cvt
+        || is_wide_mul_from_u32
+        || instr.op == PtxOp::ShflDown
+        || instr.op == PtxOp::ShflIdx
+        || matches!(
+            instr.op,
+            PtxOp::WmmaLoadA
+                | PtxOp::WmmaLoadB
+                | PtxOp::WmmaLoadC
+                | PtxOp::WmmaMma
+                | PtxOp::WmmaStoreD
+        );
     if !skip_type_suffix {
         s.push_str(instr.ty.to_ptx_string());
     }

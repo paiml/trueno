@@ -1,6 +1,6 @@
 [package]
 name = "trueno-gpu"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
@@ -36,7 +36,7 @@ renacer = "0.7.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # GPU pixel testing with TUI visualization (Sovereign Stack)
-jugar-probar = { version = "0.3.3", optional = true }
+jugar-probar = { version = "0.4.0", optional = true }
 
 [features]
 default = []
@@ -81,4 +81,23 @@ path = "examples/gemm_kernel.rs"
 [[example]]
 name = "cuda_monitor"
 path = "examples/cuda_monitor.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "simple_attention_cuda"
+path = "examples/simple_attention_cuda.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "flash_attention_cuda"
+path = "examples/flash_attention_cuda.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "satd_kernels"
+path = "examples/satd_kernels.rs"
+
+[[example]]
+name = "gpu_pixels_render"
+path = "examples/gpu_pixels_render.rs"
 required-features = ["cuda"]

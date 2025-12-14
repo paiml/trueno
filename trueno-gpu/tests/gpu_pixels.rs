@@ -2,6 +2,8 @@
 //!
 //! Run with: cargo test --test gpu_pixels --features gpu-pixels
 //! TUI mode: cargo test --test gpu_pixels --features gpu-pixels -- --nocapture
+//!
+//! NOTE: This test requires jugar-probar v0.4+ with gpu_pixels module.
 
 #![cfg(feature = "gpu-pixels")]
 

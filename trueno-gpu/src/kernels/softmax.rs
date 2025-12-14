@@ -185,22 +185,27 @@ impl SoftmaxKernel {
                 ctx.bar_sync(0);
 
                 // ===== Block-level max reduction =====
-                // Tree reduction in shared memory
-                let stride = ctx.mov_u32_imm(128);
-                let stride_reg = stride;
+                // Tree reduction in shared memory with halving stride
+                let stride_reg = ctx.mov_u32_imm(128);
+                let one = ctx.mov_u32_imm(1);
 
                 ctx.label("max_reduce_loop");
 
-                let stride_zero = ctx.setp_lt_u32(stride_reg, tid);
+                // Exit when stride reaches 0
+                let stride_zero = ctx.setp_lt_u32(stride_reg, one);
                 ctx.branch_if(stride_zero, "max_reduce_done");
 
-                // Load neighbor value
+                // Only threads with tid < stride participate
+                let should_reduce = ctx.setp_lt_u32(tid, stride_reg);
+                ctx.branch_if_not(should_reduce, "max_skip_neighbor");
+
+                // Load neighbor value at tid + stride
                 let neighbor_tid = ctx.add_u32_reg(tid, stride_reg);
                 let block_size_reg = ctx.mov_u32_imm(block_size);
                 let neighbor_oob = ctx.setp_ge_u32(neighbor_tid, block_size_reg);
                 ctx.branch_if(neighbor_oob, "max_skip_neighbor");
 
-                let neighbor_offset = ctx.mul_wide_u32(neighbor_tid, 4);
+                let neighbor_offset = ctx.mul_u32(neighbor_tid, 4);
                 let neighbor_val = ctx.ld_shared_f32(neighbor_offset);
                 let my_val = ctx.ld_shared_f32(smem_offset);
                 let new_max = ctx.max_f32(my_val, neighbor_val);
@@ -210,9 +215,9 @@ impl SoftmaxKernel {
 
                 ctx.bar_sync(1);
 
-                // Halve stride (simplified - real impl would use shr)
-                let _next_stride = ctx.add_u32(stride_reg, 0); // placeholder
-                ctx.branch("max_reduce_done"); // Exit after one iteration for simplicity
+                // Halve stride: stride = stride >> 1
+                ctx.shr_u32_inplace(stride_reg, 1);
+                ctx.branch("max_reduce_loop"); // Loop back with halved stride
 
                 ctx.label("max_reduce_done");
 
@@ -235,12 +240,44 @@ impl SoftmaxKernel {
                 ctx.bar_sync(3);
 
                 // ===== Block-level sum reduction =====
-                // Similar tree reduction for sum (simplified)
-                let sum_val = ctx.ld_shared_f32(smem_offset);
-                // Real impl would do full tree reduction
-                let block_sum = sum_val; // Placeholder
+                // Tree reduction for sum (same pattern as max)
+                let sum_stride_reg = ctx.mov_u32_imm(128);
+
+                ctx.label("sum_reduce_loop");
+
+                // Exit when stride reaches 0
+                let sum_stride_zero = ctx.setp_lt_u32(sum_stride_reg, one);
+                ctx.branch_if(sum_stride_zero, "sum_reduce_done");
+
+                // Only threads with tid < stride participate
+                let should_sum = ctx.setp_lt_u32(tid, sum_stride_reg);
+                ctx.branch_if_not(should_sum, "sum_skip_neighbor");
+
+                // Load neighbor value at tid + stride
+                let sum_neighbor_tid = ctx.add_u32_reg(tid, sum_stride_reg);
+                let sum_neighbor_oob = ctx.setp_ge_u32(sum_neighbor_tid, block_size_reg);
+                ctx.branch_if(sum_neighbor_oob, "sum_skip_neighbor");
+
+                let sum_neighbor_offset = ctx.mul_u32(sum_neighbor_tid, 4);
+                let sum_neighbor_val = ctx.ld_shared_f32(sum_neighbor_offset);
+                let sum_my_val = ctx.ld_shared_f32(smem_offset);
+                let new_sum = ctx.add_f32(sum_my_val, sum_neighbor_val);
+                ctx.st_shared_f32(smem_offset, new_sum);
+
+                ctx.label("sum_skip_neighbor");
 
                 ctx.bar_sync(4);
+
+                // Halve stride: stride = stride >> 1
+                ctx.shr_u32_inplace(sum_stride_reg, 1);
+                ctx.branch("sum_reduce_loop"); // Loop back with halved stride
+
+                ctx.label("sum_reduce_done");
+
+                // Get sum from thread 0
+                let block_sum = ctx.ld_shared_f32(zero_offset_64);
+
+                ctx.bar_sync(5);
 
                 // ===== Divide and store =====
                 let softmax_result = ctx.div_f32(exp_val, block_sum);
@@ -354,5 +391,74 @@ mod tests {
 
         // Should have mul for log2(e) scaling
         assert!(ptx.contains("mul.f32"));
+    }
+
+    // =========================================================================
+    // SATD REMEDIATION TESTS (EXTREME TDD)
+    // These tests verify the max-reduce loop bug is fixed.
+    // Falsifiable claims per Popperian methodology.
+    // =========================================================================
+
+    #[test]
+    fn test_shared_max_reduce_loop_iterates() {
+        // FALSIFIABLE CLAIM: Max-reduce loop iterates multiple times for full reduction
+        // The SATD bug causes it to exit after one iteration.
+        let kernel = SoftmaxKernel::new(256).without_warp_shuffle();
+        let ptx = kernel.emit_ptx();
+
+        // The PTX should contain a branch back to max_reduce_loop
+        // If it only branches to max_reduce_done, the reduction is incomplete
+        let has_loop_back =
+            ptx.contains("bra max_reduce_loop") || ptx.contains("bra\tmax_reduce_loop");
+
+        assert!(
+            has_loop_back,
+            "FALSIFIED: Max-reduce loop does not branch back to loop start. \
+             Found 'bra max_reduce_done' instead of 'bra max_reduce_loop'. \
+             This means max reduction only runs once, producing wrong max."
+        );
+    }
+
+    #[test]
+    fn test_shared_max_reduce_stride_halves() {
+        // FALSIFIABLE CLAIM: Max-reduce stride is halved each iteration (128->64->32->...)
+        // If stride is not updated, loop will be infinite or wrong.
+        let kernel = SoftmaxKernel::new(256).without_warp_shuffle();
+        let ptx = kernel.emit_ptx();
+
+        // Look for stride manipulation - should see shr.u32 or div.u32 by 2
+        let has_stride_update = ptx.contains("shr.u32") || ptx.contains("div.u32");
+
+        assert!(
+            has_stride_update,
+            "FALSIFIED: Max-reduce stride is not halved. \
+             Expected shr.u32 or div.u32 for stride = stride / 2. \
+             Without this, tree reduction cannot work correctly."
+        );
+    }
+
+    #[test]
+    fn test_shared_sum_reduce_implemented() {
+        // FALSIFIABLE CLAIM: Sum reduction is fully implemented, not a placeholder
+        // The SATD bug has: `let block_sum = sum_val; // Placeholder`
+        let kernel = SoftmaxKernel::new(256).without_warp_shuffle();
+        let ptx = kernel.emit_ptx();
+
+        // Verify sum reduction loop structure exists
+        // Should have: sum_reduce_loop label, branch back, and sum_reduce_done label
+        let has_sum_loop = ptx.contains("sum_reduce_loop");
+        let has_sum_done = ptx.contains("sum_reduce_done");
+        let has_loop_back =
+            ptx.contains("bra sum_reduce_loop") || ptx.contains("bra\tsum_reduce_loop");
+
+        assert!(
+            has_sum_loop && has_sum_done && has_loop_back,
+            "FALSIFIED: Sum reduction loop structure is incomplete. \
+             has_sum_loop={}, has_sum_done={}, has_loop_back={}. \
+             A proper tree reduction needs a complete loop structure.",
+            has_sum_loop,
+            has_sum_done,
+            has_loop_back
+        );
     }
 }
