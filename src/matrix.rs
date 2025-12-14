@@ -1204,12 +1204,12 @@ impl Matrix<f32> {
         Ok(())
     }
 
-    /// WASM-optimized tiled matrix multiplication
+    /// WASM-optimized tiled matrix multiplication with SIMD inner loop
     ///
-    /// Key optimizations for WASM linear memory:
+    /// Key optimizations:
     /// 1. NO transpose - avoids O(n²) memory allocation and copy
-    /// 2. 8×8 tiled blocking - fits in WASM's limited register file
-    /// 3. Row-major traversal of A, column-major traversal of B tiles
+    /// 2. Tiled blocking with SIMD-aligned tile widths
+    /// 3. Inner j-loop uses SIMD (B rows are contiguous in memory)
     /// 4. Register accumulation to minimize memory traffic
     ///
     /// Performance: Targets <30ms for 384×74×384 (Whisper encoder attention)
@@ -1218,49 +1218,57 @@ impl Matrix<f32> {
         other: &Matrix<f32>,
         result: &mut Matrix<f32>,
     ) -> Result<(), TruenoError> {
-        const TILE_SIZE: usize = 8;
-
         let m = self.rows;
         let k = self.cols;
         let n = other.cols;
 
-        // Process tiles
-        for i0 in (0..m).step_by(TILE_SIZE) {
-            let i_end = (i0 + TILE_SIZE).min(m);
+        // For each row of A
+        for i in 0..m {
+            let a_row_start = i * k;
+            let result_row_start = i * n;
 
-            for j0 in (0..n).step_by(TILE_SIZE) {
-                let j_end = (j0 + TILE_SIZE).min(n);
+            // For each column of B, compute dot product A[i,:] · B[:,j]
+            // BUT: B[:,j] is not contiguous. Instead, iterate over k and accumulate.
+            //
+            // C[i,j] = Σ_k A[i,k] * B[k,j]
+            //
+            // For efficiency, broadcast A[i,k] and multiply with B[k, j0:j0+width]
+            // This uses SIMD on the contiguous B row segment.
 
-                // Accumulator tile (8×8 max, on stack)
-                let mut acc = [[0.0f32; TILE_SIZE]; TILE_SIZE];
+            // Process output columns in SIMD-width chunks
+            let simd_width = 8; // AVX2 processes 8 f32s
+            let n_simd = (n / simd_width) * simd_width;
 
-                // Compute C[i0:i_end, j0:j_end] += A[i0:i_end, :] × B[:, j0:j_end]
-                for k0 in (0..k).step_by(TILE_SIZE) {
-                    let k_end = (k0 + TILE_SIZE).min(k);
+            // SIMD portion: columns 0..n_simd
+            // Note: Explicit indexing is intentional for LLVM auto-vectorization.
+            // Iterator patterns prevent the compiler from recognizing the SIMD pattern.
+            #[allow(clippy::needless_range_loop)]
+            for j0 in (0..n_simd).step_by(simd_width) {
+                let mut acc = [0.0f32; 8];
 
-                    // Inner tile multiply-accumulate
-                    for i in 0..(i_end - i0) {
-                        let a_row_base = (i0 + i) * k;
+                for kk in 0..k {
+                    let a_val = self.data[a_row_start + kk];
+                    let b_row_start = kk * n + j0;
 
-                        for kk in 0..(k_end - k0) {
-                            let a_val = self.data[a_row_base + k0 + kk];
-
-                            // Unroll j loop for register reuse of a_val
-                            for j in 0..(j_end - j0) {
-                                let b_val = other.data[(k0 + kk) * n + j0 + j];
-                                acc[i][j] += a_val * b_val;
-                            }
-                        }
+                    // Multiply a_val with B[kk, j0:j0+8]
+                    for jj in 0..simd_width {
+                        acc[jj] += a_val * other.data[b_row_start + jj];
                     }
                 }
 
-                // Write accumulator to result
-                for i in 0..(i_end - i0) {
-                    let result_row_base = (i0 + i) * n;
-                    for j in 0..(j_end - j0) {
-                        result.data[result_row_base + j0 + j] = acc[i][j];
-                    }
+                // Write accumulated results
+                for jj in 0..simd_width {
+                    result.data[result_row_start + j0 + jj] = acc[jj];
                 }
+            }
+
+            // Remainder columns (non-SIMD)
+            for j in n_simd..n {
+                let mut sum = 0.0f32;
+                for kk in 0..k {
+                    sum += self.data[a_row_start + kk] * other.data[kk * n + j];
+                }
+                result.data[result_row_start + j] = sum;
             }
         }
 
