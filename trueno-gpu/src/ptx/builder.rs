@@ -4,7 +4,7 @@
 
 use std::fmt::Write;
 
-use super::instructions::{CmpOp, Operand, Predicate, PtxInstruction, PtxOp, RoundingMode};
+use super::instructions::{CmpOp, Operand, Predicate, PtxInstruction, PtxOp, RoundingMode, WmmaLayout};
 use super::registers::{PtxReg, RegisterAllocator, VirtualReg};
 use super::types::{PtxStateSpace, PtxType};
 use super::{validate_target, validate_version};
@@ -380,7 +380,7 @@ impl<'a> KernelBuilder<'a> {
             .dst(Operand::Reg(pred))
             .src(Operand::Reg(a))
             .src(Operand::Reg(b));
-        // Store comparison op in label field (hack for now)
+        // Comparison operator stored in label field (emitted as setp.ge.u32)
         instr.label = Some(CmpOp::Ge.to_ptx_string().to_string());
         self.instructions.push(instr);
         pred
@@ -542,6 +542,7 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// Warp shuffle down (for reductions)
+    /// Format: shfl.sync.down.b32 dst, src, delta, clamp, membermask
     pub fn shfl_down_f32(&mut self, val: VirtualReg, offset: u32, mask: u32) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::F32);
         self.instructions.push(
@@ -549,8 +550,23 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::ImmU64(offset as u64))
-                .src(Operand::ImmU64(mask as u64))
-                .label("down".to_string()),
+                .src(Operand::ImmU64(31)) // clamp to warp size
+                .src(Operand::ImmU64(mask as u64)), // membermask
+        );
+        dst
+    }
+
+    /// Warp shuffle indexed (for broadcasts - gets value from specific lane)
+    /// Format: shfl.sync.idx.b32 dst, src, srcLane, clamp, membermask
+    pub fn shfl_idx_f32(&mut self, val: VirtualReg, src_lane: u32, mask: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::ShflIdx, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::ImmU64(src_lane as u64))
+                .src(Operand::ImmU64(31)) // clamp to warp size
+                .src(Operand::ImmU64(mask as u64)), // membermask
         );
         dst
     }
@@ -606,13 +622,13 @@ impl<'a> KernelBuilder<'a> {
     /// Setp less than u32
     pub fn setp_lt_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::Pred);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Setp, PtxType::U32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b))
-                .label("lt.u32".to_string()),
-        );
+        let mut instr = PtxInstruction::new(PtxOp::Setp, PtxType::U32)
+            .dst(Operand::Reg(dst))
+            .src(Operand::Reg(a))
+            .src(Operand::Reg(b));
+        // Comparison operator stored in label field (emitted as setp.lt.u32)
+        instr.label = Some(CmpOp::Lt.to_ptx_string().to_string());
+        self.instructions.push(instr);
         dst
     }
 
@@ -857,6 +873,220 @@ impl<'a> KernelBuilder<'a> {
                 .rounding(RoundingMode::Rn),
         );
     }
+
+    /// Max in-place: dst = max(dst, src)
+    /// Used for online softmax running max
+    pub fn max_f32_inplace(&mut self, dst: VirtualReg, src: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Max, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(dst))
+                .src(Operand::Reg(src)),
+        );
+    }
+
+    /// Copy f32 register: dst = src
+    /// Used for accumulator state updates
+    pub fn mov_f32_reg(&mut self, dst: VirtualReg, src: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(src)),
+        );
+    }
+
+    /// Multiply in-place: dst = dst * src
+    /// Used for scaling operations
+    pub fn mul_f32_inplace(&mut self, dst: VirtualReg, src: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mul, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(dst))
+                .src(Operand::Reg(src))
+                .rounding(RoundingMode::Rn),
+        );
+    }
+
+    /// Divide in-place: dst = dst / src
+    /// Used for normalization
+    pub fn div_f32_inplace(&mut self, dst: VirtualReg, src: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Div, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(dst))
+                .src(Operand::Reg(src))
+                .rounding(RoundingMode::Rn),
+        );
+    }
+
+    // ===== Tensor Core (WMMA) Operations =====
+    // These require sm_70+ and generate WMMA PTX intrinsics
+
+    /// Load F16 matrix fragment A for WMMA (16x16x16 tile)
+    /// Returns fragment registers for use in wmma_mma
+    pub fn wmma_load_a_f16(
+        &mut self,
+        addr: VirtualReg,
+        stride: u32,
+        layout: WmmaLayout,
+    ) -> Vec<VirtualReg> {
+        // WMMA 16x16x16 F16 requires 8 F16x2 registers (16 half values)
+        let mut frag = Vec::with_capacity(8);
+        for _ in 0..8 {
+            frag.push(self.registers.allocate_virtual(PtxType::B32));
+        }
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::WmmaLoadA, PtxType::F16)
+                .dst(Operand::Reg(frag[0]))
+                .src(Operand::Reg(addr))
+                .label(format!("m16n16k16.{}.f16.stride.{}", layout.to_ptx_string(), stride)),
+        );
+        frag
+    }
+
+    /// Load F16 matrix fragment B for WMMA (16x16x16 tile)
+    pub fn wmma_load_b_f16(
+        &mut self,
+        addr: VirtualReg,
+        stride: u32,
+        layout: WmmaLayout,
+    ) -> Vec<VirtualReg> {
+        let mut frag = Vec::with_capacity(8);
+        for _ in 0..8 {
+            frag.push(self.registers.allocate_virtual(PtxType::B32));
+        }
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::WmmaLoadB, PtxType::F16)
+                .dst(Operand::Reg(frag[0]))
+                .src(Operand::Reg(addr))
+                .label(format!("m16n16k16.{}.f16.stride.{}", layout.to_ptx_string(), stride)),
+        );
+        frag
+    }
+
+    /// Load F32 accumulator fragment C for WMMA (16x16x16 tile)
+    pub fn wmma_load_c_f32(
+        &mut self,
+        addr: VirtualReg,
+        stride: u32,
+        layout: WmmaLayout,
+    ) -> Vec<VirtualReg> {
+        // Accumulator is 8 F32 values
+        let mut frag = Vec::with_capacity(8);
+        for _ in 0..8 {
+            frag.push(self.registers.allocate_virtual(PtxType::F32));
+        }
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::WmmaLoadC, PtxType::F32)
+                .dst(Operand::Reg(frag[0]))
+                .src(Operand::Reg(addr))
+                .label(format!("m16n16k16.{}.f32.stride.{}", layout.to_ptx_string(), stride)),
+        );
+        frag
+    }
+
+    /// WMMA matrix multiply-accumulate: D = A * B + C
+    /// Takes A, B, C fragment registers and returns D fragment registers
+    #[allow(clippy::similar_names)]
+    pub fn wmma_mma_f16_f32(
+        &mut self,
+        frag_a: &[VirtualReg],
+        frag_b: &[VirtualReg],
+        frag_c: &[VirtualReg],
+    ) -> Vec<VirtualReg> {
+        // Output accumulator D (8 F32 values)
+        let mut frag_d = Vec::with_capacity(8);
+        for _ in 0..8 {
+            frag_d.push(self.registers.allocate_virtual(PtxType::F32));
+        }
+
+        // MMA instruction references all fragment registers
+        let mut instr = PtxInstruction::new(PtxOp::WmmaMma, PtxType::F32)
+            .dst(Operand::Reg(frag_d[0]))
+            .label("m16n16k16.row.col.f32.f32");
+
+        // Add A, B, C fragment sources
+        if !frag_a.is_empty() {
+            instr = instr.src(Operand::Reg(frag_a[0]));
+        }
+        if !frag_b.is_empty() {
+            instr = instr.src(Operand::Reg(frag_b[0]));
+        }
+        if !frag_c.is_empty() {
+            instr = instr.src(Operand::Reg(frag_c[0]));
+        }
+
+        self.instructions.push(instr);
+        frag_d
+    }
+
+    /// Store F32 accumulator fragment D to memory
+    pub fn wmma_store_d_f32(
+        &mut self,
+        addr: VirtualReg,
+        frag_d: &[VirtualReg],
+        stride: u32,
+        layout: WmmaLayout,
+    ) {
+        if frag_d.is_empty() {
+            return;
+        }
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::WmmaStoreD, PtxType::F32)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(frag_d[0]))
+                .label(format!("m16n16k16.{}.f32.stride.{}", layout.to_ptx_string(), stride)),
+        );
+    }
+
+    /// Convert F32 values to F16 (for feeding tensor cores)
+    pub fn cvt_f16_f32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F16);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F16)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .rounding(RoundingMode::Rn),
+        );
+        dst
+    }
+
+    /// Convert F16 value to F32 (for accumulation)
+    pub fn cvt_f32_f16(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Load F16 from global memory
+    pub fn ld_global_f16(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F16);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::F16)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Store F16 to global memory
+    pub fn st_global_f16(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::F16)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+    }
 }
 
 /// Emit a single instruction as PTX
@@ -887,11 +1117,20 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
         PtxOp::Mul => {
             // Check for wide multiply (dest is 64-bit from 32-bit sources)
             // mul.wide.u32 produces u64 from u32 * u32
-            if instr.ty == PtxType::U64 || instr.ty == PtxType::S64 {
+            // BUT if source operands are already u64, use mul.lo.u64 instead
+            let is_wide_output = instr.ty == PtxType::U64 || instr.ty == PtxType::S64;
+            let has_u64_source = instr.srcs.first().map_or(false, |src| {
+                matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::U64 || vreg.ty() == PtxType::S64)
+            });
+
+            if is_wide_output && !has_u64_source {
                 // Wide multiply uses source type, not dest type
                 let src_ty = if instr.ty == PtxType::U64 { ".u32" } else { ".s32" };
                 s.push_str("mul.wide");
                 s.push_str(src_ty);
+            } else if is_wide_output && has_u64_source {
+                // u64 * u64 -> u64: use mul.lo.u64
+                s.push_str("mul.lo");
             } else if instr.ty.is_float() {
                 // Floating point multiply (no .lo needed)
                 s.push_str("mul");
@@ -901,7 +1140,14 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             }
         }
         PtxOp::MadLo => s.push_str("mad.lo"),
-        PtxOp::Div => s.push_str("div"),
+        PtxOp::Div => {
+            // Float div requires rounding mode, integer div doesn't
+            if instr.ty.is_float() {
+                s.push_str("div.rn");
+            } else {
+                s.push_str("div");
+            }
+        }
         PtxOp::Setp => {
             // Include comparison op from label
             let cmp = instr.label.as_deref().unwrap_or("eq");
@@ -943,20 +1189,49 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             } else {
                 ".u32" // Default fallback
             };
-            s.push_str(&format!("cvt{}{}", dst_ty, src_ty));
+            // Add rounding mode for float conversions (required by PTX ISA)
+            let needs_rounding = instr.ty.is_float()
+                || instr.srcs.first().map_or(false, |src| {
+                    matches!(src, Operand::Reg(vreg) if vreg.ty().is_float())
+                });
+            let round = if needs_rounding {
+                instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string())
+            } else {
+                ""
+            };
+            s.push_str(&format!("cvt{}{}{}", round, dst_ty, src_ty));
         }
         PtxOp::Fma => {
             // FMA requires rounding mode: fma.rn.f32
             let round = instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string());
             s.push_str(&format!("fma{}", round));
         }
+        PtxOp::ShflDown => {
+            // sm_70+ requires shfl.sync.down with b32 type
+            // Format: shfl.sync.down.b32 dst, src, delta, clamp, membermask;
+            s.push_str("shfl.sync.down.b32");
+        }
+        PtxOp::ShflIdx => {
+            // sm_70+ requires shfl.sync.idx with b32 type
+            // Format: shfl.sync.idx.b32 dst, src, srcLane, clamp, membermask;
+            s.push_str("shfl.sync.idx.b32");
+        }
+        PtxOp::Ex2 => {
+            // ex2 requires .approx modifier for f32
+            s.push_str("ex2.approx");
+        }
         _ => s.push_str(&format!("{:?}", instr.op).to_lowercase()),
     }
 
-    // Type suffix (skip for Cvt, Mul, and Fma which handle types specially)
-    let is_wide_mul = instr.op == PtxOp::Mul
-        && (instr.ty == PtxType::U64 || instr.ty == PtxType::S64);
-    let skip_type_suffix = instr.op == PtxOp::Cvt || is_wide_mul;
+    // Type suffix (skip for Cvt, wide Mul, Fma, ShflDown which handle types specially)
+    // NOTE: mul.lo.u64 still needs .u64 suffix, only mul.wide.u32 skips it
+    let is_wide_mul_from_u32 = instr.op == PtxOp::Mul
+        && (instr.ty == PtxType::U64 || instr.ty == PtxType::S64)
+        && !instr.srcs.first().map_or(false, |src| {
+            matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::U64 || vreg.ty() == PtxType::S64)
+        });
+    let skip_type_suffix =
+        instr.op == PtxOp::Cvt || is_wide_mul_from_u32 || instr.op == PtxOp::ShflDown || instr.op == PtxOp::ShflIdx;
     if !skip_type_suffix {
         s.push_str(instr.ty.to_ptx_string());
     }
@@ -1321,6 +1596,151 @@ mod tests {
         assert!(
             ptx.contains("add") && ptx.contains(".f32"),
             "Expected f32 add instruction, got: {}",
+            ptx
+        );
+    }
+
+    // ========================================================================
+    // TENSOR CORE (WMMA) TESTS - IMP-1000a
+    // ========================================================================
+
+    #[test]
+    fn test_wmma_load_a_f16() {
+        let kernel = PtxKernel::new("test_wmma_load_a")
+            .param(PtxType::U64, "a_ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("a_ptr");
+                let _frag_a = ctx.wmma_load_a_f16(ptr, 16, WmmaLayout::RowMajor);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(
+            ptx.contains(".param .u64 a_ptr"),
+            "Expected a_ptr param, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_wmma_load_b_f16() {
+        let kernel = PtxKernel::new("test_wmma_load_b")
+            .param(PtxType::U64, "b_ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("b_ptr");
+                let _frag_b = ctx.wmma_load_b_f16(ptr, 16, WmmaLayout::ColMajor);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(
+            ptx.contains(".param .u64 b_ptr"),
+            "Expected b_ptr param, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_wmma_mma_f16_f32() {
+        let kernel = PtxKernel::new("test_wmma_mma")
+            .param(PtxType::U64, "a_ptr")
+            .param(PtxType::U64, "b_ptr")
+            .param(PtxType::U64, "c_ptr")
+            .build(|ctx| {
+                let a = ctx.load_param_u64("a_ptr");
+                let b = ctx.load_param_u64("b_ptr");
+                let c = ctx.load_param_u64("c_ptr");
+
+                let frag_a = ctx.wmma_load_a_f16(a, 16, WmmaLayout::RowMajor);
+                let frag_b = ctx.wmma_load_b_f16(b, 16, WmmaLayout::ColMajor);
+                let frag_c = ctx.wmma_load_c_f32(c, 16, WmmaLayout::RowMajor);
+
+                let _frag_d = ctx.wmma_mma_f16_f32(&frag_a, &frag_b, &frag_c);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // Verify kernel structure
+        assert!(
+            ptx.contains(".visible .entry test_wmma_mma"),
+            "Expected kernel entry, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_wmma_store_d_f32() {
+        let kernel = PtxKernel::new("test_wmma_store")
+            .param(PtxType::U64, "d_ptr")
+            .build(|ctx| {
+                let d = ctx.load_param_u64("d_ptr");
+                // Create empty fragment for test
+                let frag_d = vec![ctx.mov_f32_imm(0.0)];
+                ctx.wmma_store_d_f32(d, &frag_d, 16, WmmaLayout::RowMajor);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(
+            ptx.contains(".param .u64 d_ptr"),
+            "Expected d_ptr param, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_cvt_f16_f32() {
+        let kernel = PtxKernel::new("test_cvt_f16")
+            .build(|ctx| {
+                let f32_val = ctx.mov_f32_imm(1.5);
+                let _f16_val = ctx.cvt_f16_f32(f32_val);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(
+            ptx.contains("cvt"),
+            "Expected cvt instruction, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_cvt_f32_f16() {
+        let kernel = PtxKernel::new("test_cvt_f32")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let f16_val = ctx.ld_global_f16(ptr);
+                let _f32_val = ctx.cvt_f32_f16(f16_val);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(
+            ptx.contains(".param .u64 ptr"),
+            "Expected ptr param, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_ld_st_global_f16() {
+        let kernel = PtxKernel::new("test_f16_mem")
+            .param(PtxType::U64, "in_ptr")
+            .param(PtxType::U64, "out_ptr")
+            .build(|ctx| {
+                let in_ptr = ctx.load_param_u64("in_ptr");
+                let out_ptr = ctx.load_param_u64("out_ptr");
+                let val = ctx.ld_global_f16(in_ptr);
+                ctx.st_global_f16(out_ptr, val);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(
+            ptx.contains(".param .u64 in_ptr") && ptx.contains(".param .u64 out_ptr"),
+            "Expected both params, got: {}",
             ptx
         );
     }

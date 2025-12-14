@@ -31,13 +31,21 @@ pub struct AttentionKernel {
 
 impl AttentionKernel {
     /// Create a new attention kernel
+    ///
+    /// Tile sizes are auto-clamped to not exceed seq_len and head_dim
+    /// to handle small inputs gracefully.
     #[must_use]
     pub fn new(seq_len: u32, head_dim: u32) -> Self {
+        // Auto-clamp tile sizes to input dimensions
+        // Default tiles: 64, but reduce if inputs are smaller
+        let tile_q = seq_len.min(64);
+        let tile_kv = seq_len.min(64);
+
         Self {
             seq_len,
             head_dim,
-            tile_q: 64,
-            tile_kv: 64,
+            tile_q,
+            tile_kv,
             scale: 1.0 / (head_dim as f32).sqrt(),
             causal: false,
         }
@@ -150,6 +158,12 @@ impl AttentionKernel {
                 let local_row = ctx.div_u32(tid, head_dim);
                 let local_col = ctx.rem_u32(tid, head_dim);
 
+                // Bounds check: skip threads beyond valid tile range
+                // This handles launch configs with more threads than tile_q * head_dim
+                let tile_q_check = ctx.mov_u32_imm(tile_q);
+                let thread_oob = ctx.setp_ge_u32(local_row, tile_q_check);
+                ctx.branch_if(thread_oob, "exit");
+
                 // Initialize output accumulator to 0
                 let o_acc = ctx.mov_f32_imm(0.0);
                 // Running max for online softmax
@@ -160,6 +174,19 @@ impl AttentionKernel {
                 // Calculate number of KV blocks
                 let tile_kv_imm = ctx.mov_u32_imm(tile_kv);
                 let num_kv_blocks = ctx.div_u32(seq_len_param, tile_kv);
+
+                // ===== Pre-compute element offset (needed for output store after loop) =====
+                // This must be computed BEFORE the loop, not inside it
+                let local_row_64 = ctx.cvt_u64_u32(local_row);
+                let local_col_64 = ctx.cvt_u64_u32(local_col);
+                let head_dim_64 = ctx.cvt_u64_u32(head_dim_param);
+                let q_elem_offset = ctx.mul_u64_reg(local_row_64, head_dim_64);
+                let q_elem_offset_full = ctx.add_u64(q_elem_offset, local_col_64);
+                let q_elem_offset_bytes = ctx.mul_u64(q_elem_offset_full, 4);
+
+                // Shared memory base addresses (32-bit constants for shared memory addressing)
+                let k_smem_base = tile_q * head_dim * 4;
+                let v_smem_base = (tile_q * head_dim + tile_kv * head_dim) * 4;
 
                 // Loop counter
                 let kv_block = ctx.mov_u32_imm(0);
@@ -187,35 +214,29 @@ impl AttentionKernel {
                 let v_tile_base = ctx.add_u64(v_base, kv_tile_offset_bytes);
 
                 // ===== Load Q tile to shared memory =====
-                // Each thread loads one element
-                let local_row_64 = ctx.cvt_u64_u32(local_row);
-                let local_col_64 = ctx.cvt_u64_u32(local_col);
-                let head_dim_64 = ctx.cvt_u64_u32(head_dim_param);
-                let q_elem_offset = ctx.mul_u64_reg(local_row_64, head_dim_64);
-                let q_elem_offset_full = ctx.add_u64(q_elem_offset, local_col_64);
-                let q_elem_offset_bytes = ctx.mul_u64(q_elem_offset_full, 4);
+                // Each thread loads one element (using pre-computed q_elem_offset_bytes)
                 let q_addr = ctx.add_u64(q_tile_base, q_elem_offset_bytes);
-
                 let q_val = ctx.ld_global_f32(q_addr);
-                let q_smem_offset = ctx.mul_wide_u32(tid, 4);
+                // Use 32-bit addressing for shared memory (not 64-bit)
+                let q_smem_offset = ctx.mul_u32(tid, 4);
                 ctx.st_shared_f32(q_smem_offset, q_val);
 
                 // ===== Load K tile to shared memory =====
-                let k_smem_base = tile_q * head_dim * 4;
-                let k_smem_base_reg = ctx.mov_u64_imm(k_smem_base as u64);
+                // (k_smem_base computed before loop, use 32-bit)
                 let k_addr = ctx.add_u64(k_tile_base, q_elem_offset_bytes);
                 let k_val = ctx.ld_global_f32(k_addr);
-                let k_smem_offset_local = ctx.mul_wide_u32(tid, 4);
-                let k_smem_offset = ctx.add_u64(k_smem_base_reg, k_smem_offset_local);
+                let k_smem_base_u32 = ctx.mov_u32_imm(k_smem_base);
+                let k_smem_offset_local = ctx.mul_u32(tid, 4);
+                let k_smem_offset = ctx.add_u32_reg(k_smem_base_u32, k_smem_offset_local);
                 ctx.st_shared_f32(k_smem_offset, k_val);
 
                 // ===== Load V tile to shared memory =====
-                let v_smem_base = (tile_q * head_dim + tile_kv * head_dim) * 4;
-                let v_smem_base_reg = ctx.mov_u64_imm(v_smem_base as u64);
+                // (v_smem_base computed before loop, use 32-bit)
                 let v_addr = ctx.add_u64(v_tile_base, q_elem_offset_bytes);
                 let v_val = ctx.ld_global_f32(v_addr);
-                let v_smem_offset_local = ctx.mul_wide_u32(tid, 4);
-                let v_smem_offset = ctx.add_u64(v_smem_base_reg, v_smem_offset_local);
+                let v_smem_base_u32 = ctx.mov_u32_imm(v_smem_base);
+                let v_smem_offset_local = ctx.mul_u32(tid, 4);
+                let v_smem_offset = ctx.add_u32_reg(v_smem_base_u32, v_smem_offset_local);
                 ctx.st_shared_f32(v_smem_offset, v_val);
 
                 ctx.bar_sync(0);
@@ -230,26 +251,27 @@ impl AttentionKernel {
                 let d_done = ctx.setp_ge_u32(d_idx, head_dim_param);
                 ctx.branch_if(d_done, "dot_loop_end");
 
-                // Load Q[local_row, d_idx] from shared memory
-                let q_row_offset = ctx.mul_wide_u32(local_row, head_dim);
-                let d_idx_64 = ctx.cvt_u64_u32(d_idx);
-                let q_elem_smem = ctx.add_u64(q_row_offset, d_idx_64);
-                let q_elem_smem_bytes = ctx.mul_u64(q_elem_smem, 4);
+                // Load Q[local_row, d_idx] from shared memory (32-bit addressing)
+                let head_dim_u32 = ctx.mov_u32_imm(head_dim);
+                let q_row_offset = ctx.mul_u32_reg(local_row, head_dim_u32);
+                let q_elem_smem = ctx.add_u32_reg(q_row_offset, d_idx);
+                let q_elem_smem_bytes = ctx.mul_u32(q_elem_smem, 4);
                 let q_dot_val = ctx.ld_shared_f32(q_elem_smem_bytes);
 
-                // Load K[local_col, d_idx] from shared memory (K is transposed conceptually)
-                let k_col_offset = ctx.mul_wide_u32(local_col, head_dim);
-                let k_elem_smem = ctx.add_u64(k_col_offset, d_idx_64);
-                let k_elem_smem_bytes = ctx.mul_u64(k_elem_smem, 4);
-                let k_elem_smem_full = ctx.add_u64(k_smem_base_reg, k_elem_smem_bytes);
+                // Load K[local_col, d_idx] from shared memory (32-bit addressing, K is transposed conceptually)
+                let k_col_offset = ctx.mul_u32_reg(local_col, head_dim_u32);
+                let k_elem_smem = ctx.add_u32_reg(k_col_offset, d_idx);
+                let k_elem_smem_bytes = ctx.mul_u32(k_elem_smem, 4);
+                let k_smem_base_loop = ctx.mov_u32_imm(k_smem_base);
+                let k_elem_smem_full = ctx.add_u32_reg(k_smem_base_loop, k_elem_smem_bytes);
                 let k_dot_val = ctx.ld_shared_f32(k_elem_smem_full);
 
-                // Accumulate Q[i,d] * K[j,d]
-                let prod = ctx.mul_f32(q_dot_val, k_dot_val);
-                let s_acc = ctx.add_f32(s_acc, prod);
+                // Accumulate Q[i,d] * K[j,d] - IN-PLACE UPDATE
+                ctx.fma_f32_inplace(s_acc, q_dot_val, k_dot_val);
 
-                let _d_next = ctx.add_u32(d_idx, 1);
-                ctx.branch("dot_loop_end"); // Simplified - single iteration
+                // Increment and loop back - IN-PLACE UPDATE
+                ctx.add_u32_inplace(d_idx, 1);
+                ctx.branch("dot_loop_start");
 
                 ctx.label("dot_loop_end");
 
@@ -281,24 +303,26 @@ impl AttentionKernel {
                 let o_scaled = ctx.mul_f32(o_acc, scale_factor);
                 let o_weighted = ctx.mul_f32(o_scaled, l_prev);
 
-                // Load V value from shared memory
-                let v_elem_smem_bytes = ctx.mul_u64(k_elem_smem, 4); // Reuse k offset calculation
-                let v_elem_smem_full = ctx.add_u64(v_smem_base_reg, v_elem_smem_bytes);
+                // Load V value from shared memory (32-bit addressing)
+                let v_elem_smem_bytes = ctx.mul_u32(k_elem_smem, 4); // Reuse k offset calculation
+                let v_smem_base_loop = ctx.mov_u32_imm(v_smem_base);
+                let v_elem_smem_full = ctx.add_u32_reg(v_smem_base_loop, v_elem_smem_bytes);
                 let v_out_val = ctx.ld_shared_f32(v_elem_smem_full);
 
                 let pv = ctx.mul_f32(p_val, v_out_val);
                 let o_sum = ctx.add_f32(o_weighted, pv);
                 let o_new = ctx.div_f32(o_sum, l_new);
 
-                // Update running stats (used in real loop, not in simplified version)
-                let _ = m_new;
-                let _ = l_new;
+                // Update running stats for next iteration - COPY TO ACCUMULATORS
+                ctx.mov_f32_reg(m_prev, m_new);
+                ctx.mov_f32_reg(l_prev, l_new);
+                ctx.mov_f32_reg(o_acc, o_new);
 
                 ctx.bar_sync(1);
 
-                // Increment KV block counter and loop
-                let _kv_next = ctx.add_u32(kv_block, 1);
-                ctx.branch("kv_loop_end"); // Simplified - single iteration
+                // Increment KV block counter and loop back - IN-PLACE UPDATE
+                ctx.add_u32_inplace(kv_block, 1);
+                ctx.branch("kv_loop_start");
 
                 ctx.label("kv_loop_end");
 
@@ -310,7 +334,8 @@ impl AttentionKernel {
                 let o_tile_base = ctx.add_u64(o_base, o_tile_offset_bytes);
                 let o_addr = ctx.add_u64(o_tile_base, q_elem_offset_bytes);
 
-                ctx.st_global_f32(o_addr, o_new);
+                // Store accumulated output (o_acc is always valid, even if loop never ran)
+                ctx.st_global_f32(o_addr, o_acc);
 
                 ctx.label("exit");
                 ctx.ret();
@@ -405,7 +430,7 @@ mod tests {
         // Verify arithmetic for attention computation
         assert!(ptx.contains("mul.f32"));
         assert!(ptx.contains("add.f32"));
-        assert!(ptx.contains("div.f32"));
+        assert!(ptx.contains("div.rn.f32")); // div requires rounding mode for floats
     }
 
     #[test]
