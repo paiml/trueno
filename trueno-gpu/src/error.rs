@@ -2,6 +2,8 @@
 //!
 //! Provides comprehensive error handling for PTX generation, CUDA driver operations,
 //! and memory management.
+//!
+//! Design: Toyota Principle #7 (Visual Control) - Clear error messages with GPU state context
 
 use thiserror::Error;
 
@@ -9,11 +11,19 @@ use thiserror::Error;
 pub type Result<T> = std::result::Result<T, GpuError>;
 
 /// Errors that can occur during GPU operations
-#[derive(Error, Debug, Clone, PartialEq)]
+#[derive(Error, Debug)]
 pub enum GpuError {
     /// PTX generation error
     #[error("PTX generation error: {0}")]
     PtxGeneration(String),
+
+    /// I/O error (file operations)
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// Invalid parameter
+    #[error("Invalid parameter: {0}")]
+    InvalidParameter(String),
 
     /// Invalid PTX version
     #[error("Invalid PTX version: {major}.{minor} (requires >= 7.0)")]
@@ -51,6 +61,51 @@ pub enum GpuError {
     /// Bank conflict detected (debugging)
     #[error("Bank conflict detected in shared memory access")]
     BankConflict,
+
+    // =========================================================================
+    // CUDA Runtime Errors (CRT-001 to CRT-006)
+    // =========================================================================
+
+    /// CUDA device initialization failed
+    #[error("CUDA device initialization failed: {0}")]
+    DeviceInit(String),
+
+    /// CUDA device not found
+    #[error("CUDA device {0} not found (available: {1})")]
+    DeviceNotFound(i32, usize),
+
+    /// CUDA module/PTX loading failed
+    #[error("CUDA module loading failed: {0}")]
+    ModuleLoad(String),
+
+    /// CUDA function not found in module
+    #[error("CUDA function '{0}' not found in module")]
+    FunctionNotFound(String),
+
+    /// CUDA stream creation failed
+    #[error("CUDA stream creation failed: {0}")]
+    StreamCreate(String),
+
+    /// CUDA stream synchronization failed
+    #[error("CUDA stream synchronization failed: {0}")]
+    StreamSync(String),
+
+    /// CUDA memory transfer (H2D/D2H) failed
+    #[error("CUDA memory transfer failed: {0}")]
+    Transfer(String),
+
+    /// Out of GPU memory
+    #[error("Out of GPU memory: requested {requested} bytes, available {available} bytes")]
+    OutOfMemory {
+        /// Bytes requested
+        requested: usize,
+        /// Bytes available
+        available: usize,
+    },
+
+    /// CUDA not available (no driver or no GPU)
+    #[error("CUDA not available: {0}")]
+    CudaNotAvailable(String),
 }
 
 #[cfg(test)]
@@ -98,16 +153,94 @@ mod tests {
     }
 
     #[test]
-    fn test_error_equality() {
-        let err1 = GpuError::BankConflict;
-        let err2 = GpuError::BankConflict;
-        assert_eq!(err1, err2);
+    fn test_error_debug() {
+        let err = GpuError::BankConflict;
+        // Just verify Debug is implemented
+        let _ = format!("{:?}", err);
     }
 
     #[test]
-    fn test_error_clone() {
+    fn test_error_display() {
         let err = GpuError::PtxGeneration("test".to_string());
-        let cloned = err.clone();
-        assert_eq!(err, cloned);
+        assert!(err.to_string().contains("test"));
+    }
+
+    #[test]
+    fn test_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err: GpuError = io_err.into();
+        assert!(err.to_string().contains("I/O error"));
+    }
+
+    #[test]
+    fn test_invalid_parameter() {
+        let err = GpuError::InvalidParameter("bad value".to_string());
+        assert!(err.to_string().contains("Invalid parameter"));
+        assert!(err.to_string().contains("bad value"));
+    }
+
+    // =========================================================================
+    // CUDA Runtime Error Tests (CRT-001 to CRT-006)
+    // =========================================================================
+
+    #[test]
+    fn test_device_init_error() {
+        let err = GpuError::DeviceInit("no CUDA driver".to_string());
+        assert!(err.to_string().contains("initialization failed"));
+        assert!(err.to_string().contains("no CUDA driver"));
+    }
+
+    #[test]
+    fn test_device_not_found_error() {
+        let err = GpuError::DeviceNotFound(5, 2);
+        assert!(err.to_string().contains("device 5"));
+        assert!(err.to_string().contains("available: 2"));
+    }
+
+    #[test]
+    fn test_module_load_error() {
+        let err = GpuError::ModuleLoad("invalid PTX".to_string());
+        assert!(err.to_string().contains("module loading failed"));
+    }
+
+    #[test]
+    fn test_function_not_found_error() {
+        let err = GpuError::FunctionNotFound("my_kernel".to_string());
+        assert!(err.to_string().contains("my_kernel"));
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_stream_create_error() {
+        let err = GpuError::StreamCreate("resource exhausted".to_string());
+        assert!(err.to_string().contains("stream creation"));
+    }
+
+    #[test]
+    fn test_stream_sync_error() {
+        let err = GpuError::StreamSync("timeout".to_string());
+        assert!(err.to_string().contains("synchronization"));
+    }
+
+    #[test]
+    fn test_transfer_error() {
+        let err = GpuError::Transfer("DMA error".to_string());
+        assert!(err.to_string().contains("transfer failed"));
+    }
+
+    #[test]
+    fn test_out_of_memory_error() {
+        let err = GpuError::OutOfMemory {
+            requested: 1_000_000_000,
+            available: 500_000_000,
+        };
+        assert!(err.to_string().contains("1000000000"));
+        assert!(err.to_string().contains("500000000"));
+    }
+
+    #[test]
+    fn test_cuda_not_available_error() {
+        let err = GpuError::CudaNotAvailable("no GPU detected".to_string());
+        assert!(err.to_string().contains("not available"));
     }
 }
