@@ -172,7 +172,7 @@ fn bench_deep_chain(c: &mut Criterion) {
     for size in [10_000, 100_000, 1_000_000] {
         let input = vec![1.0f32; size];
 
-        // Async API (sync would be too slow)
+        // Benchmarks async batched GPU operations (amortizes kernel launch overhead)
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, &_size| {
             b.iter(|| {
                 let input_data = black_box(&input);

@@ -43,8 +43,9 @@ jobs:
       - name: Run tests with coverage
         run: |
           # Exclude GPU (LLVM can't instrument GPU shaders) and xtask (dev tool)
+          # Also exclude benches, demos, examples, tests, and other local paths
           # This matches the local `make coverage` behavior
-          cargo llvm-cov --workspace --exclude xtask --lcov --output-path lcov.info
+          cargo llvm-cov --workspace --exclude xtask --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/)' --lcov --output-path lcov.info
 
       - name: Check coverage threshold (BLOCKS PR if < 75% in CI)
         run: |

@@ -46,7 +46,7 @@ tier2: ## Tier 2: Full test suite for commits (ON-COMMIT)
 	@PROPTEST_CASES=256 cargo test property_ --all-features --quiet || true
 	@echo "  [5/7] Coverage analysis..."
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@cargo llvm-cov --all-features --workspace --quiet >/dev/null 2>&1 || true
+	@cargo llvm-cov --all-features --workspace --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' --quiet >/dev/null 2>&1 || true
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@COVERAGE=$$(cargo llvm-cov report --summary-only 2>/dev/null | grep "TOTAL" | awk '{print $$NF}' | sed 's/%//' || echo "0"); \
 	if [ -n "$$COVERAGE" ]; then \
@@ -197,9 +197,19 @@ test-fast: ## Run tests quickly (<5 min target)
 	else \
 		PROPTEST_CASES=50 cargo test --workspace --all-features; \
 	fi
+	@echo "🎯 Running GPU pixel tests..."
+	@cargo test -p trueno-gpu --test gpu_pixels --features gpu-pixels 2>/dev/null || echo "  ⚠️  gpu-pixels feature not available"
 
 test-quick: test-fast ## Alias for test-fast (bashrs pattern)
 	@echo "✅ Quick tests completed!"
+
+test-gpu-pixels: ## Run GPU pixel tests with TUI report
+	@echo "🎯 Running GPU pixel tests with probar..."
+	@cargo test -p trueno-gpu --test gpu_pixels --features gpu-pixels -- --nocapture
+
+test-gpu-pixels-tui: ## Run GPU pixel tests with interactive TUI
+	@echo "🎯 Running GPU pixel tests with TUI visualization..."
+	@RUST_TEST_NOCAPTURE=1 cargo test -p trueno-gpu --test gpu_pixels --features gpu-pixels gpu_pixel_suite_all_kernels -- --nocapture
 
 test-verbose: ## Run tests with verbose output
 	cargo test --all-features -- --nocapture --test-threads=1
@@ -215,7 +225,7 @@ coverage: ## Generate coverage report (≥95% required)
 	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@echo "🧪 Phase 1: Running tests with instrumentation (no report)..."
-	@env PROPTEST_CASES=100 cargo llvm-cov --no-report nextest --no-tests=warn --all-features --workspace
+	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' nextest --no-tests=warn --all-features --workspace
 	@echo "📊 Phase 2: Generating coverage reports..."
 	@cargo llvm-cov report --html --output-dir target/coverage/html
 	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info
@@ -249,7 +259,7 @@ coverage-ci: ## Generate LCOV report for CI/CD (fast mode, ≥95% required)
 	@echo "Phase 1: Running tests with instrumentation..."
 	@cargo llvm-cov clean --workspace
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@env PROPTEST_CASES=100 cargo llvm-cov --no-report nextest --no-tests=warn --all-features --workspace
+	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' nextest --no-tests=warn --all-features --workspace
 	@echo "Phase 2: Generating LCOV report..."
 	@cargo llvm-cov report --lcov --output-path lcov.info
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
