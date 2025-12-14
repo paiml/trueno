@@ -287,7 +287,29 @@ impl Matrix<f32> {
             || self.cols >= SIMD_THRESHOLD
             || other.cols >= SIMD_THRESHOLD
         {
-            self.matmul_simd(other, &mut result)?;
+            // Tiled approach threshold: below this size, tiling beats transpose
+            // Based on WASM optimization spec benchmarks
+            const TILED_THRESHOLD: usize = 512;
+
+            let max_dim = self.rows.max(self.cols).max(other.cols);
+
+            if max_dim < TILED_THRESHOLD {
+                // Medium matrices: use tiled approach (no transpose overhead)
+                // Works well for both WASM and native for matrices up to ~512
+                self.matmul_wasm_tiled(other, &mut result)?;
+            } else {
+                // Large matrices: platform-specific optimized paths
+                #[cfg(target_arch = "wasm32")]
+                {
+                    // WASM: tiled is always better (no SIMD microkernel advantage)
+                    self.matmul_wasm_tiled(other, &mut result)?;
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    // Native: use AVX2/NEON SIMD with cache blocking
+                    self.matmul_simd(other, &mut result)?;
+                }
+            }
         } else {
             self.matmul_naive(other, &mut result)?;
         }
@@ -1176,6 +1198,69 @@ impl Matrix<f32> {
                 };
 
                 result.data[i * result.cols + j] = dot_result;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// WASM-optimized tiled matrix multiplication
+    ///
+    /// Key optimizations for WASM linear memory:
+    /// 1. NO transpose - avoids O(n²) memory allocation and copy
+    /// 2. 8×8 tiled blocking - fits in WASM's limited register file
+    /// 3. Row-major traversal of A, column-major traversal of B tiles
+    /// 4. Register accumulation to minimize memory traffic
+    ///
+    /// Performance: Targets <30ms for 384×74×384 (Whisper encoder attention)
+    fn matmul_wasm_tiled(
+        &self,
+        other: &Matrix<f32>,
+        result: &mut Matrix<f32>,
+    ) -> Result<(), TruenoError> {
+        const TILE_SIZE: usize = 8;
+
+        let m = self.rows;
+        let k = self.cols;
+        let n = other.cols;
+
+        // Process tiles
+        for i0 in (0..m).step_by(TILE_SIZE) {
+            let i_end = (i0 + TILE_SIZE).min(m);
+
+            for j0 in (0..n).step_by(TILE_SIZE) {
+                let j_end = (j0 + TILE_SIZE).min(n);
+
+                // Accumulator tile (8×8 max, on stack)
+                let mut acc = [[0.0f32; TILE_SIZE]; TILE_SIZE];
+
+                // Compute C[i0:i_end, j0:j_end] += A[i0:i_end, :] × B[:, j0:j_end]
+                for k0 in (0..k).step_by(TILE_SIZE) {
+                    let k_end = (k0 + TILE_SIZE).min(k);
+
+                    // Inner tile multiply-accumulate
+                    for i in 0..(i_end - i0) {
+                        let a_row_base = (i0 + i) * k;
+
+                        for kk in 0..(k_end - k0) {
+                            let a_val = self.data[a_row_base + k0 + kk];
+
+                            // Unroll j loop for register reuse of a_val
+                            for j in 0..(j_end - j0) {
+                                let b_val = other.data[(k0 + kk) * n + j0 + j];
+                                acc[i][j] += a_val * b_val;
+                            }
+                        }
+                    }
+                }
+
+                // Write accumulator to result
+                for i in 0..(i_end - i0) {
+                    let result_row_base = (i0 + i) * n;
+                    for j in 0..(j_end - j0) {
+                        result.data[result_row_base + j0 + j] = acc[i][j];
+                    }
+                }
             }
         }
 

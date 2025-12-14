@@ -104,14 +104,25 @@ impl PtxType {
     }
 
     /// Get the register prefix for this type
+    ///
+    /// PTX register conventions:
+    /// - %p: predicates
+    /// - %r: 32-bit integer (u32, s32)
+    /// - %rd: 64-bit integer (u64, s64)
+    /// - %h: 16-bit half/bfloat
+    /// - %f: 32-bit float
+    /// - %fd: 64-bit double
     #[must_use]
     pub const fn register_prefix(self) -> &'static str {
         match self {
             Self::Pred => "%p",
+            Self::U8 | Self::S8 | Self::B8 => "%rs",    // 8-bit short
+            Self::U16 | Self::S16 | Self::B16 => "%rh", // 16-bit short
+            Self::U32 | Self::S32 | Self::B32 => "%r",  // 32-bit
+            Self::U64 | Self::S64 | Self::B64 => "%rd", // 64-bit
             Self::F16 | Self::BF16 => "%h",
             Self::F32 => "%f",
             Self::F64 => "%fd",
-            _ => "%r",
         }
     }
 }
@@ -263,7 +274,11 @@ mod tests {
         assert_eq!(PtxType::F32.register_prefix(), "%f");
         assert_eq!(PtxType::F64.register_prefix(), "%fd");
         assert_eq!(PtxType::U32.register_prefix(), "%r");
-        assert_eq!(PtxType::S64.register_prefix(), "%r");
+        assert_eq!(PtxType::S32.register_prefix(), "%r");
+        assert_eq!(PtxType::U64.register_prefix(), "%rd");
+        assert_eq!(PtxType::S64.register_prefix(), "%rd");
+        assert_eq!(PtxType::U8.register_prefix(), "%rs");
+        assert_eq!(PtxType::U16.register_prefix(), "%rh");
     }
 
     #[test]

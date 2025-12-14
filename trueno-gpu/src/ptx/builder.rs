@@ -816,9 +816,51 @@ impl<'a> KernelBuilder<'a> {
         );
         dst
     }
+
+    // ===== In-Place Updates (for loops) =====
+
+    /// Add u32 immediate in-place: dst = dst + imm
+    /// Used for loop counter updates where SSA would allocate a new register
+    pub fn add_u32_inplace(&mut self, dst: VirtualReg, imm: u32) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Add, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(dst))
+                .src(Operand::ImmU64(imm as u64)),
+        );
+    }
+
+    /// Add f32 register in-place: dst = dst + src
+    /// Used for accumulator updates in reduction loops
+    pub fn add_f32_inplace(&mut self, dst: VirtualReg, src: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Add, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(dst))
+                .src(Operand::Reg(src))
+                .rounding(RoundingMode::Rn),
+        );
+    }
+
+    /// Fused multiply-add in-place: dst = a * b + dst
+    /// Used for GEMM accumulation
+    pub fn fma_f32_inplace(&mut self, dst: VirtualReg, a: VirtualReg, b: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Fma, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .src(Operand::Reg(dst))
+                .rounding(RoundingMode::Rn),
+        );
+    }
 }
 
 /// Emit a single instruction as PTX
+#[allow(clippy::too_many_lines)]
 fn emit_instruction(instr: &PtxInstruction) -> String {
     let mut s = String::new();
 
@@ -843,11 +885,19 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
         PtxOp::Add => s.push_str("add"),
         PtxOp::Sub => s.push_str("sub"),
         PtxOp::Mul => {
-            // Check for wide multiply
-            if instr.ty == PtxType::U64 {
+            // Check for wide multiply (dest is 64-bit from 32-bit sources)
+            // mul.wide.u32 produces u64 from u32 * u32
+            if instr.ty == PtxType::U64 || instr.ty == PtxType::S64 {
+                // Wide multiply uses source type, not dest type
+                let src_ty = if instr.ty == PtxType::U64 { ".u32" } else { ".s32" };
                 s.push_str("mul.wide");
-            } else {
+                s.push_str(src_ty);
+            } else if instr.ty.is_float() {
+                // Floating point multiply (no .lo needed)
                 s.push_str("mul");
+            } else {
+                // Integer multiply needs .lo to get low bits
+                s.push_str("mul.lo");
             }
         }
         PtxOp::MadLo => s.push_str("mad.lo"),
@@ -879,19 +929,36 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             s.push_str("bra");
         }
         PtxOp::Ret => return format!("{}ret;\n", s),
+        PtxOp::Bar => {
+            // bar.sync instruction needs barrier ID from label
+            let barrier_id = instr.label.as_deref().unwrap_or("sync 0");
+            return format!("{}bar.{};\n", s, barrier_id);
+        }
+        PtxOp::Cvt => {
+            // cvt needs both destination and source types
+            // The source type is determined from the source operand
+            let dst_ty = instr.ty.to_ptx_string();
+            let src_ty = if let Some(Operand::Reg(vreg)) = instr.srcs.first() {
+                vreg.ty().to_ptx_string()
+            } else {
+                ".u32" // Default fallback
+            };
+            s.push_str(&format!("cvt{}{}", dst_ty, src_ty));
+        }
+        PtxOp::Fma => {
+            // FMA requires rounding mode: fma.rn.f32
+            let round = instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string());
+            s.push_str(&format!("fma{}", round));
+        }
         _ => s.push_str(&format!("{:?}", instr.op).to_lowercase()),
     }
 
-    // Type suffix
-    s.push_str(instr.ty.to_ptx_string());
-
-    // Rounding mode (for FP ops)
-    if let Some(round) = &instr.rounding {
-        // Already in opcode for some
-        if !s.contains(".rn") && !s.contains(".rz") {
-            // s.push_str(round.to_ptx_string());
-            let _ = round; // Silence warning
-        }
+    // Type suffix (skip for Cvt, Mul, and Fma which handle types specially)
+    let is_wide_mul = instr.op == PtxOp::Mul
+        && (instr.ty == PtxType::U64 || instr.ty == PtxType::S64);
+    let skip_type_suffix = instr.op == PtxOp::Cvt || is_wide_mul;
+    if !skip_type_suffix {
+        s.push_str(instr.ty.to_ptx_string());
     }
 
     s.push(' ');
@@ -904,9 +971,25 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
         }
     }
 
-    // Sources
+    // Sources - handle memory addressing specially for Ld/St
+    let is_memory_op = matches!(instr.op, PtxOp::Ld | PtxOp::St);
+    let is_shared_mem = instr.state_space == Some(PtxStateSpace::Shared);
+    let is_global_mem = instr.state_space == Some(PtxStateSpace::Global)
+        || (is_memory_op && instr.state_space.is_none());
+
     for (i, src) in instr.srcs.iter().enumerate() {
-        s.push_str(&emit_operand(src));
+        // For memory ops, first source (address) needs bracket format
+        if i == 0 && is_memory_op {
+            if is_shared_mem {
+                s.push_str(&emit_shared_mem_operand(src));
+            } else if is_global_mem {
+                s.push_str(&emit_global_mem_operand(src));
+            } else {
+                s.push_str(&emit_operand(src));
+            }
+        } else {
+            s.push_str(&emit_operand(src));
+        }
         if i < instr.srcs.len() - 1 {
             s.push_str(", ");
         }
@@ -916,6 +999,37 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
     s
 }
 
+/// Emit shared memory operand with proper addressing syntax
+/// For shared memory, we use direct address register (caller computes smem base + offset)
+fn emit_shared_mem_operand(op: &Operand) -> String {
+    match op {
+        Operand::Reg(vreg) => format!("[{}]", vreg.to_ptx_string()),
+        Operand::Addr { base, offset } => {
+            if *offset == 0 {
+                format!("[{}]", base.to_ptx_string())
+            } else {
+                format!("[{}+{}]", base.to_ptx_string(), offset)
+            }
+        }
+        _ => emit_operand(op),
+    }
+}
+
+/// Emit global memory operand with proper [addr] syntax
+fn emit_global_mem_operand(op: &Operand) -> String {
+    match op {
+        Operand::Reg(vreg) => format!("[{}]", vreg.to_ptx_string()),
+        Operand::Addr { base, offset } => {
+            if *offset == 0 {
+                format!("[{}]", base.to_ptx_string())
+            } else {
+                format!("[{}+{}]", base.to_ptx_string(), offset)
+            }
+        }
+        _ => emit_operand(op),
+    }
+}
+
 /// Emit an operand
 fn emit_operand(op: &Operand) -> String {
     match op {
@@ -923,8 +1037,8 @@ fn emit_operand(op: &Operand) -> String {
         Operand::SpecialReg(sreg) => sreg.to_ptx_string().to_string(),
         Operand::ImmI64(v) => v.to_string(),
         Operand::ImmU64(v) => v.to_string(),
-        Operand::ImmF32(v) => format!("{:e}", v),
-        Operand::ImmF64(v) => format!("{:e}", v),
+        Operand::ImmF32(v) => emit_f32_literal(*v),
+        Operand::ImmF64(v) => emit_f64_literal(*v),
         Operand::Param(name) => format!("[{}]", name),
         Operand::Addr { base, offset } => {
             if *offset == 0 {
@@ -935,6 +1049,18 @@ fn emit_operand(op: &Operand) -> String {
         }
         Operand::Label(name) => name.clone(),
     }
+}
+
+/// Emit f32 literal in PTX hex format (0Fxxxxxxxx)
+fn emit_f32_literal(v: f32) -> String {
+    let bits = v.to_bits();
+    format!("0F{:08X}", bits)
+}
+
+/// Emit f64 literal in PTX hex format (0Dxxxxxxxxxxxxxxxx)
+fn emit_f64_literal(v: f64) -> String {
+    let bits = v.to_bits();
+    format!("0D{:016X}", bits)
 }
 
 #[cfg(test)]
@@ -996,5 +1122,206 @@ mod tests {
         assert!(ptx.contains(".visible .entry vector_add"));
         assert!(ptx.contains(".param .u64 a"));
         assert!(ptx.contains(".param .u64 b"));
+    }
+
+    // ========================================================================
+    // BUG FIX TESTS - EXTREME TDD
+    // ========================================================================
+
+    #[test]
+    fn test_bar_sync_emission() {
+        // BUG: bar.sync was being emitted as "bar.b32 ;" instead of "bar.sync 0;"
+        let kernel = PtxKernel::new("test_barrier")
+            .build(|ctx| {
+                ctx.bar_sync(0);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // Must contain proper bar.sync instruction
+        assert!(
+            ptx.contains("bar.sync 0"),
+            "Expected 'bar.sync 0' but got: {}",
+            ptx
+        );
+        // Must NOT contain the buggy output
+        assert!(
+            !ptx.contains("bar.b32"),
+            "Found buggy 'bar.b32' in: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_cvt_u64_u32_emission() {
+        // BUG: cvt was being emitted as "cvt.u64 %r, %r" instead of "cvt.u64.u32 %r, %r"
+        let kernel = PtxKernel::new("test_cvt")
+            .build(|ctx| {
+                let val = ctx.mov_u32_imm(42);
+                let _wide = ctx.cvt_u64_u32(val);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // Must contain proper cvt with both types
+        assert!(
+            ptx.contains("cvt.u64.u32"),
+            "Expected 'cvt.u64.u32' but got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_shared_memory_addressing() {
+        // Shared memory access uses register-based addressing
+        let kernel = PtxKernel::new("test_shared")
+            .shared_memory(1024)
+            .build(|ctx| {
+                let val = ctx.mov_f32_imm(1.0);
+                let offset = ctx.mov_u32_imm(0);
+                let offset_64 = ctx.cvt_u64_u32(offset);
+                ctx.st_shared_f32(offset_64, val);
+                let _loaded = ctx.ld_shared_f32(offset_64);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // Must contain proper shared memory operations
+        assert!(
+            ptx.contains("st.shared.f32") && ptx.contains("ld.shared.f32"),
+            "Expected shared memory operations, got: {}",
+            ptx
+        );
+        // Must contain brackets for addressing
+        assert!(
+            ptx.contains("[%rd"),
+            "Expected bracketed register address, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_bar_sync_with_different_barriers() {
+        // Test barrier with different IDs
+        let kernel = PtxKernel::new("test_barriers")
+            .build(|ctx| {
+                ctx.bar_sync(0);
+                ctx.bar_sync(1);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(
+            ptx.contains("bar.sync 0"),
+            "Expected 'bar.sync 0' in: {}",
+            ptx
+        );
+        assert!(
+            ptx.contains("bar.sync 1"),
+            "Expected 'bar.sync 1' in: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_global_memory_addressing() {
+        // BUG: global memory access was "ld.global.f32 %f, %r" instead of "ld.global.f32 %f, [%r]"
+        let kernel = PtxKernel::new("test_global")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let val = ctx.ld_global_f32(ptr);
+                ctx.st_global_f32(ptr, val);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // Load must use brackets for address
+        assert!(
+            ptx.contains("ld.global.f32") && ptx.contains("[%rd"),
+            "Expected ld.global.f32 with [%rd] address, got: {}",
+            ptx
+        );
+        // Store must use brackets for address
+        assert!(
+            ptx.contains("st.global.f32 ["),
+            "Expected st.global.f32 with [%rd] address, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_f32_literal_format() {
+        // BUG: float literals were emitted as "0e0" instead of PTX hex format "0F00000000"
+        let kernel = PtxKernel::new("test_float")
+            .build(|ctx| {
+                let _zero = ctx.mov_f32_imm(0.0);
+                let _one = ctx.mov_f32_imm(1.0);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // PTX float literals must be in hex format
+        assert!(
+            ptx.contains("0F00000000"), // 0.0f in hex
+            "Expected 0F00000000 for 0.0f, got: {}",
+            ptx
+        );
+        assert!(
+            ptx.contains("0F3F800000"), // 1.0f in hex
+            "Expected 0F3F800000 for 1.0f, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_loop_counter_update_in_place() {
+        // BUG: Loop counters were never updated due to SSA - computed values discarded
+        // PTX loops need in-place register updates: add.u32 %r0, %r0, 1
+        let kernel = PtxKernel::new("test_loop")
+            .param(PtxType::U32, "n")
+            .build(|ctx| {
+                let n = ctx.load_param_u32("n");
+                let i = ctx.mov_u32_imm(0);
+                ctx.label("loop");
+                let done = ctx.setp_ge_u32(i, n);
+                ctx.branch_if(done, "exit");
+                // In-place increment: i = i + 1
+                ctx.add_u32_inplace(i, 1);
+                ctx.branch("loop");
+                ctx.label("exit");
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // The loop counter must be updated in-place (same src and dst register)
+        // Look for pattern like: add.u32 %r1, %r1, 1
+        assert!(
+            ptx.contains("add") && ptx.contains("%r") && ptx.contains(", 1"),
+            "Expected in-place add instruction, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_accumulator_update_in_place() {
+        // BUG: Accumulators in inner loops were never updated
+        // Need in-place: add.f32 %f0, %f0, %f1
+        let kernel = PtxKernel::new("test_acc")
+            .build(|ctx| {
+                let acc = ctx.mov_f32_imm(0.0);
+                let val = ctx.mov_f32_imm(1.0);
+                // In-place accumulate: acc = acc + val
+                ctx.add_f32_inplace(acc, val);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // Must have in-place add
+        assert!(
+            ptx.contains("add") && ptx.contains(".f32"),
+            "Expected f32 add instruction, got: {}",
+            ptx
+        );
     }
 }

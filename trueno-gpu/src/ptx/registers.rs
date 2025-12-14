@@ -154,10 +154,10 @@ pub struct RegisterPressure {
 /// Per Xiao et al. [47] - prevents register spills
 #[derive(Debug, Clone)]
 pub struct RegisterAllocator {
-    /// Next virtual register ID
-    next_id: u32,
-    /// Live ranges for each virtual register
-    live_ranges: HashMap<u32, LiveRange>,
+    /// Per-type register counters (PTX requires each type to have its own namespace)
+    type_counters: HashMap<PtxType, u32>,
+    /// Live ranges for each virtual register (key is (type, id))
+    live_ranges: HashMap<(PtxType, u32), LiveRange>,
     /// Allocated virtual registers by type
     allocated: Vec<VirtualReg>,
     /// Current instruction index
@@ -171,7 +171,7 @@ impl RegisterAllocator {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            next_id: 0,
+            type_counters: HashMap::new(),
             live_ranges: HashMap::new(),
             allocated: Vec::new(),
             current_instruction: 0,
@@ -179,17 +179,18 @@ impl RegisterAllocator {
         }
     }
 
-    /// Allocate a new virtual register
+    /// Allocate a new virtual register with per-type ID
     pub fn allocate_virtual(&mut self, ty: PtxType) -> VirtualReg {
-        let id = self.next_id;
-        self.next_id += 1;
+        // Get next ID for this type (starting from 0)
+        let id = *self.type_counters.get(&ty).unwrap_or(&0);
+        self.type_counters.insert(ty, id + 1);
 
         let vreg = VirtualReg::new(id, ty);
         self.allocated.push(vreg);
 
         // Start live range at current instruction
         self.live_ranges.insert(
-            id,
+            (ty, id),
             LiveRange::new(self.current_instruction, self.current_instruction + 1),
         );
 
@@ -198,7 +199,7 @@ impl RegisterAllocator {
 
     /// Extend the live range of a register to current instruction
     pub fn extend_live_range(&mut self, vreg: VirtualReg) {
-        if let Some(range) = self.live_ranges.get_mut(&vreg.id()) {
+        if let Some(range) = self.live_ranges.get_mut(&(vreg.ty(), vreg.id())) {
             range.end = self.current_instruction + 1;
         }
     }
@@ -309,13 +310,18 @@ mod tests {
     fn test_register_allocator() {
         let mut alloc = RegisterAllocator::new();
 
+        // Per-type IDs: each type starts from 0
         let r1 = alloc.allocate_virtual(PtxType::F32);
         let r2 = alloc.allocate_virtual(PtxType::F32);
         let r3 = alloc.allocate_virtual(PtxType::U32);
 
-        assert_eq!(r1.id(), 0);
-        assert_eq!(r2.id(), 1);
-        assert_eq!(r3.id(), 2);
+        assert_eq!(r1.id(), 0); // First F32
+        assert_eq!(r2.id(), 1); // Second F32
+        assert_eq!(r3.id(), 0); // First U32 (different type, starts at 0)
+
+        // Verify types are correct
+        assert_eq!(r1.ty(), PtxType::F32);
+        assert_eq!(r3.ty(), PtxType::U32);
     }
 
     #[test]

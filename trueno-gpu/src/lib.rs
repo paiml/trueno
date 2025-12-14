@@ -74,6 +74,13 @@ pub mod backend;
 /// Error types for trueno-gpu operations
 pub mod error;
 
+/// E2E visual testing framework for GPU kernels
+pub mod testing;
+
+/// WASM visual testing bindings (requires viz feature)
+#[cfg(feature = "viz")]
+pub mod wasm;
+
 pub use error::{GpuError, Result};
 
 #[cfg(test)]

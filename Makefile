@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -198,31 +198,83 @@ test-fast: ## Run tests quickly (<5 min target)
 		PROPTEST_CASES=50 cargo test --workspace --all-features; \
 	fi
 
+test-quick: test-fast ## Alias for test-fast (bashrs pattern)
+	@echo "✅ Quick tests completed!"
+
 test-verbose: ## Run tests with verbose output
 	cargo test --all-features -- --nocapture --test-threads=1
 
-coverage: ## Generate coverage report (>90% required, excludes GPU due to LLVM instrumentation limits)
-	@echo "📊 Generating coverage report (target: ≥90%, GPU excluded)..."
-	@echo "    Note: GPU backend excluded (LLVM coverage cannot instrument GPU shaders)"
-	@# Temporarily disable mold linker (breaks LLVM coverage)
+coverage: ## Generate coverage report (≥95% required)
+	@echo "📊 Running comprehensive test coverage analysis (target: <10 min)..."
+	@echo "🔍 Checking for cargo-llvm-cov and cargo-nextest..."
+	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
+	@which cargo-nextest > /dev/null 2>&1 || (echo "📦 Installing cargo-nextest..." && cargo install cargo-nextest --locked)
+	@echo "🧹 Cleaning old coverage data..."
+	@cargo llvm-cov clean --workspace
+	@mkdir -p target/coverage
+	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@cargo llvm-cov --workspace --exclude xtask --lcov --output-path lcov.info
+	@echo "🧪 Phase 1: Running tests with instrumentation (no report)..."
+	@env PROPTEST_CASES=100 cargo llvm-cov --no-report nextest --no-tests=warn --all-features --workspace
+	@echo "📊 Phase 2: Generating coverage reports..."
 	@cargo llvm-cov report --html --output-dir target/coverage/html
-	@# Restore mold linker
+	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info
+	@echo "⚙️  Restoring global cargo config..."
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
-	@echo "✅ Coverage report: target/coverage/html/index.html"
 	@echo ""
-	@echo "📊 Coverage by Component:"
-	@cargo llvm-cov report | python3 -c "import sys; lines = list(sys.stdin); trueno = [l for l in lines if '.rs' in l and 'xtask' not in l and not l.startswith('TOTAL') and not l.startswith('-')]; xtask = [l for l in lines if 'xtask' in l and '.rs' in l]; t_total = sum(int(l.split()[7]) for l in trueno) if trueno else 0; t_uncov = sum(int(l.split()[8]) for l in trueno) if trueno else 0; t_cov = 100*(t_total-t_uncov)/t_total if t_total > 0 else 0; x_total = sum(int(l.split()[7]) for l in xtask) if xtask else 0; x_uncov = sum(int(l.split()[8]) for l in xtask) if xtask else 0; x_cov = 100*(x_total-x_uncov)/x_total if x_total > 0 else 0; print(f'   Trueno library: {t_cov:.2f}% ({t_total-t_uncov:,}/{t_total:,} lines)'); print(f'   xtask:          {x_cov:.2f}% ({x_total-x_uncov:,}/{x_total:,} lines) [dev tool, not required]'); all_total = t_total + x_total; all_cov = t_total - t_uncov + x_total - x_uncov; all_pct = 100*all_cov/all_total if all_total > 0 else 0; print(f'   Overall:        {all_pct:.2f}% ({all_cov:,}/{all_total:,} lines) [informational]'); print(''); print(f'   ✅ Coverage threshold met (≥90%)' if t_cov >= 90 else f'   ✗ FAIL: Trueno library ({t_cov:.2f}%) below 90%')"
+	@echo "📊 Coverage Summary:"
+	@echo "=================="
+	@cargo llvm-cov report --summary-only
+	@echo ""
+	@echo "💡 COVERAGE INSIGHTS:"
+	@echo "- HTML report: target/coverage/html/index.html"
+	@echo "- LCOV file: target/coverage/lcov.info"
+	@echo "- Open HTML: make coverage-open"
+	@echo ""
 
-coverage-check: ## Enforce 90% coverage threshold (BLOCKS on failure, GPU excluded, xtask excluded)
-	@echo "🔒 Enforcing 90% coverage threshold (GPU excluded, xtask excluded)..."
-	@# Temporarily disable mold linker (breaks LLVM coverage)
+coverage-summary: ## Show coverage summary
+	@cargo llvm-cov report --summary-only 2>/dev/null || echo "Run 'make coverage' first"
+
+coverage-open: ## Open HTML coverage report in browser
+	@if [ -f target/coverage/html/index.html ]; then \
+		xdg-open target/coverage/html/index.html 2>/dev/null || \
+		open target/coverage/html/index.html 2>/dev/null || \
+		echo "Please open: target/coverage/html/index.html"; \
+	else \
+		echo "❌ Run 'make coverage' first to generate the HTML report"; \
+	fi
+
+coverage-ci: ## Generate LCOV report for CI/CD (fast mode, ≥95% required)
+	@echo "=== Code Coverage for CI/CD (≥95% required) ==="
+	@echo "Phase 1: Running tests with instrumentation..."
+	@cargo llvm-cov clean --workspace
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@cargo llvm-cov --workspace --exclude xtask --lcov --output-path lcov.info > /dev/null 2>&1
-	@# Restore mold linker
+	@env PROPTEST_CASES=100 cargo llvm-cov --no-report nextest --no-tests=warn --all-features --workspace
+	@echo "Phase 2: Generating LCOV report..."
+	@cargo llvm-cov report --lcov --output-path lcov.info
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
-	@cargo llvm-cov report | python3 -c "import sys; lines = list(sys.stdin); trueno = [l for l in lines if '.rs' in l and 'xtask' not in l and not l.startswith('TOTAL') and not l.startswith('-')]; t_total = sum(int(l.split()[7]) for l in trueno) if trueno else 0; t_uncov = sum(int(l.split()[8]) for l in trueno) if trueno else 0; t_cov = 100*(t_total-t_uncov)/t_total if t_total > 0 else 0; print(f'Trueno library coverage: {t_cov:.2f}%'); exit_code = 1 if t_cov < 90 else 0; print(f'✅ Coverage threshold met (≥90%)' if exit_code == 0 else f'❌ FAIL: Coverage below 90% threshold'); sys.exit(exit_code)"
+	@echo "✓ Coverage report generated: lcov.info"
+
+coverage-clean: ## Clean coverage artifacts
+	@cargo llvm-cov clean --workspace
+	@rm -f lcov.info coverage.xml target/coverage/lcov.info
+	@rm -rf target/llvm-cov target/coverage
+	@find . -name "*.profraw" -delete
+	@echo "✓ Coverage artifacts cleaned"
+
+clean-coverage: coverage-clean ## Alias for coverage-clean (bashrs pattern)
+	@echo "✓ Fresh coverage ready (run 'make coverage' to regenerate)"
+
+coverage-check: ## Enforce 95% coverage threshold (BLOCKS on failure)
+	@echo "🔒 Enforcing 95% coverage threshold..."
+	@COVERAGE=$$(cargo llvm-cov report --summary-only 2>/dev/null | grep "TOTAL" | awk '{print $$NF}' | sed 's/%//'); \
+	if [ -z "$$COVERAGE" ]; then echo "❌ No coverage data. Run 'make coverage' first."; exit 1; fi; \
+	echo "Coverage: $${COVERAGE}%"; \
+	if [ $$(echo "$$COVERAGE < 95" | bc -l 2>/dev/null || echo 1) -eq 1 ]; then \
+		echo "❌ FAIL: Coverage below 95% threshold"; exit 1; \
+	else \
+		echo "✅ Coverage threshold met (≥95%)"; \
+	fi
 
 lint: ## Run clippy (zero warnings allowed)
 	@echo "🔍 Running clippy (zero warnings policy)..."

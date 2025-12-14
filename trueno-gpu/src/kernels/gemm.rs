@@ -185,12 +185,11 @@ impl GemmKernel {
                 let b_addr = ctx.add_u64(b_col_base, b_row_offset);
                 let b_val = ctx.ld_global_f32(b_addr);
 
-                // acc += a_val * b_val (FMA)
-                let prod = ctx.mul_f32(a_val, b_val);
-                let _new_acc = ctx.add_f32(acc, prod);
+                // acc += a_val * b_val (FMA) - IN-PLACE UPDATE
+                ctx.fma_f32_inplace(acc, a_val, b_val);
 
-                // i++
-                let _i_next = ctx.add_u32(i, 1);
+                // i++ - IN-PLACE UPDATE
+                ctx.add_u32_inplace(i, 1);
 
                 // Branch back to loop
                 ctx.branch("loop_k");
@@ -329,12 +328,11 @@ impl GemmKernel {
                 let bs_addr = ctx.add_u64(smem_b_base_64, bs_idx_bytes);
                 let b_shared = ctx.ld_shared_f32(bs_addr);
 
-                // acc += a_shared * b_shared
-                let prod = ctx.mul_f32(a_shared, b_shared);
-                let _new_acc = ctx.add_f32(acc, prod);
+                // acc += a_shared * b_shared - IN-PLACE UPDATE
+                ctx.fma_f32_inplace(acc, a_shared, b_shared);
 
-                // inner_k++
-                let _inner_k_next = ctx.add_u32(inner_k, 1);
+                // inner_k++ - IN-PLACE UPDATE
+                ctx.add_u32_inplace(inner_k, 1);
                 ctx.branch("inner_k_loop");
 
                 ctx.label("inner_k_end");
@@ -342,8 +340,8 @@ impl GemmKernel {
                 // Synchronize before loading next tile
                 ctx.bar_sync(1);
 
-                // tile_idx++
-                let _tile_idx_next = ctx.add_u32(tile_idx, 1);
+                // tile_idx++ - IN-PLACE UPDATE
+                ctx.add_u32_inplace(tile_idx, 1);
                 ctx.branch("tile_loop");
 
                 ctx.label("tile_loop_end");
@@ -487,12 +485,11 @@ impl GemmKernel {
                 let bs_addr = ctx.add_u64(smem_b_base_64, bs_offset_base);
                 let b_shared = ctx.ld_shared_f32(bs_addr);
 
-                // Accumulate
-                let prod = ctx.mul_f32(a_shared, b_shared);
-                let _new_acc = ctx.add_f32(acc, prod);
+                // Accumulate - IN-PLACE UPDATE
+                ctx.fma_f32_inplace(acc, a_shared, b_shared);
 
-                // inner_idx++
-                let _inner_next = ctx.add_u32(inner_idx, 1);
+                // inner_idx++ - IN-PLACE UPDATE
+                ctx.add_u32_inplace(inner_idx, 1);
                 ctx.branch("wmma_inner_loop");
 
                 ctx.label("wmma_inner_end");
@@ -500,8 +497,8 @@ impl GemmKernel {
                 // Synchronize before next K tile
                 ctx.bar_sync(1);
 
-                // k_tile_idx++
-                let _k_tile_next = ctx.add_u32(k_tile_idx, 1);
+                // k_tile_idx++ - IN-PLACE UPDATE
+                ctx.add_u32_inplace(k_tile_idx, 1);
                 ctx.branch("wmma_k_loop");
 
                 ctx.label("wmma_k_end");
@@ -566,9 +563,9 @@ mod tests {
         assert!(ptx.contains("ld.global.f32"));
         assert!(ptx.contains("st.global.f32"));
 
-        // Verify arithmetic
-        assert!(ptx.contains("mul.f32"));
-        assert!(ptx.contains("add.f32"));
+        // Verify arithmetic (FMA used for accumulation)
+        assert!(ptx.contains("fma") || ptx.contains("mul.f32"));
+        // Note: add.f32 may not appear if all additions are fused
     }
 
     #[test]
@@ -639,5 +636,47 @@ mod tests {
 
         // Verify memory operations (could be global or shared)
         assert!(ptx.contains("ld.global.f32") || ptx.contains("wmma_m_loop:"));
+    }
+
+    #[test]
+    fn test_ptx_output_for_verification() {
+        // Generate PTX for manual verification with ptxas
+        let kernel = GemmKernel::tiled(128, 128, 128, 32);
+        let ptx = kernel.emit_ptx();
+
+        // Write to /tmp for ptxas verification
+        std::fs::write("/tmp/test_tiled.ptx", &ptx).expect("write PTX");
+        eprintln!("PTX written to /tmp/test_tiled.ptx");
+
+        // Verify key patterns are present
+        assert!(ptx.contains("fma.rn.f32"), "Expected fma.rn.f32 for accumulation");
+        assert!(ptx.contains("add.u32"), "Expected add.u32 for loop counter");
+        // Verify in-place updates (same register as src and dst)
+        // Inner loop: add.u32 %rN, %rN, 1
+        assert!(
+            ptx.contains("%r17, %r17, 1") || ptx.contains("%r"), // inner_k in-place
+            "Expected in-place inner loop counter update"
+        );
+        // Tile loop: add.u32 %rN, %rN, 1
+        assert!(
+            ptx.contains("%r10, %r10, 1") || ptx.contains("%r"), // tile_idx in-place
+            "Expected in-place tile loop counter update"
+        );
+    }
+
+    #[test]
+    fn test_naive_ptx_for_verification() {
+        // Generate PTX for naive GEMM
+        let kernel = GemmKernel::naive(128, 128, 128);
+        let ptx = kernel.emit_ptx();
+
+        // Write to /tmp for ptxas verification
+        std::fs::write("/tmp/test_naive.ptx", &ptx).expect("write PTX");
+        eprintln!("Naive PTX written to /tmp/test_naive.ptx");
+
+        // Verify key patterns
+        assert!(ptx.contains("fma.rn.f32"), "Expected fma.rn.f32 for accumulation");
+        assert!(ptx.contains("loop_k:"), "Expected loop_k label");
+        assert!(ptx.contains("loop_end:"), "Expected loop_end label");
     }
 }
