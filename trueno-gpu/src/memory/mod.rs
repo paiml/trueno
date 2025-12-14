@@ -60,14 +60,20 @@ impl<T> GpuBuffer<T> {
 }
 
 /// Copy data from host to device
+///
+/// Note: For CUDA operations, use `driver::GpuBuffer::copy_from_host()` directly.
+/// This function is a no-op placeholder for the abstract memory API.
 pub fn copy_h2d<T: Copy>(_dst: &mut GpuBuffer<T>, _src: &[T]) -> Result<()> {
-    // TODO: Implement with CUDA feature
+    // Abstract API - actual transfer via driver::GpuBuffer when CUDA enabled
     Ok(())
 }
 
 /// Copy data from device to host
+///
+/// Note: For CUDA operations, use `driver::GpuBuffer::copy_to_host()` directly.
+/// This function is a no-op placeholder for the abstract memory API.
 pub fn copy_d2h<T: Copy>(_src: &GpuBuffer<T>, _dst: &mut [T]) -> Result<()> {
-    // TODO: Implement with CUDA feature
+    // Abstract API - actual transfer via driver::GpuBuffer when CUDA enabled
     Ok(())
 }
 

@@ -131,7 +131,10 @@ impl TuiState {
             .iter()
             .map(|&t| {
                 let normalized = (t as f64 - min) / range;
-                (normalized * 7.0).round() as u8
+                // normalized is in [0, 1], so result is in [0, 7]
+                #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+                let level = (normalized * 7.0).round() as u8;
+                level
             })
             .collect()
     }
@@ -220,6 +223,8 @@ pub fn progress_bar(current: u32, total: u32, width: usize) -> String {
     }
 
     let progress = (current as f64 / total as f64).min(1.0);
+    // progress is in [0, 1], so filled is in [0, width]
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
     let filled = (progress * width as f64).round() as usize;
     let empty = width - filled;
 

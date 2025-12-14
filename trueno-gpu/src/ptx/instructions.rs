@@ -131,6 +131,18 @@ pub enum PtxOp {
     AtomExch,
     /// Atomic compare-and-swap
     AtomCas,
+
+    // ===== Tensor Core (WMMA) =====
+    /// WMMA load matrix A fragment
+    WmmaLoadA,
+    /// WMMA load matrix B fragment
+    WmmaLoadB,
+    /// WMMA load accumulator fragment
+    WmmaLoadC,
+    /// WMMA matrix multiply-accumulate
+    WmmaMma,
+    /// WMMA store accumulator
+    WmmaStoreD,
 }
 
 /// Comparison operators for setp
@@ -174,6 +186,53 @@ impl CmpOp {
             Self::Hi => "hi",
             Self::Hs => "hs",
         }
+    }
+}
+
+/// WMMA matrix layout
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WmmaLayout {
+    /// Row-major layout
+    #[default]
+    RowMajor,
+    /// Column-major layout
+    ColMajor,
+}
+
+impl WmmaLayout {
+    /// Convert to PTX string
+    #[must_use]
+    pub const fn to_ptx_string(self) -> &'static str {
+        match self {
+            Self::RowMajor => "row",
+            Self::ColMajor => "col",
+        }
+    }
+}
+
+/// WMMA shape configuration (M x N x K tile size)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WmmaShape {
+    /// M dimension (rows of A, rows of C/D)
+    pub m: u32,
+    /// N dimension (cols of B, cols of C/D)
+    pub n: u32,
+    /// K dimension (cols of A, rows of B)
+    pub k: u32,
+}
+
+impl WmmaShape {
+    /// Standard 16x16x16 tensor core tile
+    pub const M16N16K16: Self = Self { m: 16, n: 16, k: 16 };
+    /// 8x32x16 tile for different aspect ratios
+    pub const M8N32K16: Self = Self { m: 8, n: 32, k: 16 };
+    /// 32x8x16 tile for different aspect ratios
+    pub const M32N8K16: Self = Self { m: 32, n: 8, k: 16 };
+
+    /// Convert to PTX shape string
+    #[must_use]
+    pub fn to_ptx_string(self) -> String {
+        format!("m{}n{}k{}", self.m, self.n, self.k)
     }
 }
 
@@ -373,5 +432,36 @@ mod tests {
             .space(PtxStateSpace::Global);
 
         assert_eq!(instr.state_space, Some(PtxStateSpace::Global));
+    }
+
+    #[test]
+    fn test_wmma_layout_strings() {
+        assert_eq!(WmmaLayout::RowMajor.to_ptx_string(), "row");
+        assert_eq!(WmmaLayout::ColMajor.to_ptx_string(), "col");
+    }
+
+    #[test]
+    fn test_wmma_shape_strings() {
+        assert_eq!(WmmaShape::M16N16K16.to_ptx_string(), "m16n16k16");
+        assert_eq!(WmmaShape::M8N32K16.to_ptx_string(), "m8n32k16");
+        assert_eq!(WmmaShape::M32N8K16.to_ptx_string(), "m32n8k16");
+    }
+
+    #[test]
+    fn test_wmma_shape_values() {
+        let shape = WmmaShape::M16N16K16;
+        assert_eq!(shape.m, 16);
+        assert_eq!(shape.n, 16);
+        assert_eq!(shape.k, 16);
+    }
+
+    #[test]
+    fn test_wmma_ops_exist() {
+        // Verify WMMA ops are in the enum
+        let _load_a = PtxOp::WmmaLoadA;
+        let _load_b = PtxOp::WmmaLoadB;
+        let _load_c = PtxOp::WmmaLoadC;
+        let _mma = PtxOp::WmmaMma;
+        let _store = PtxOp::WmmaStoreD;
     }
 }

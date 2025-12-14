@@ -1119,7 +1119,7 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             // mul.wide.u32 produces u64 from u32 * u32
             // BUT if source operands are already u64, use mul.lo.u64 instead
             let is_wide_output = instr.ty == PtxType::U64 || instr.ty == PtxType::S64;
-            let has_u64_source = instr.srcs.first().map_or(false, |src| {
+            let has_u64_source = instr.srcs.first().is_some_and(|src| {
                 matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::U64 || vreg.ty() == PtxType::S64)
             });
 
@@ -1191,7 +1191,7 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             };
             // Add rounding mode for float conversions (required by PTX ISA)
             let needs_rounding = instr.ty.is_float()
-                || instr.srcs.first().map_or(false, |src| {
+                || instr.srcs.first().is_some_and(|src| {
                     matches!(src, Operand::Reg(vreg) if vreg.ty().is_float())
                 });
             let round = if needs_rounding {
@@ -1227,7 +1227,7 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
     // NOTE: mul.lo.u64 still needs .u64 suffix, only mul.wide.u32 skips it
     let is_wide_mul_from_u32 = instr.op == PtxOp::Mul
         && (instr.ty == PtxType::U64 || instr.ty == PtxType::S64)
-        && !instr.srcs.first().map_or(false, |src| {
+        && !instr.srcs.first().is_some_and(|src| {
             matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::U64 || vreg.ty() == PtxType::S64)
         });
     let skip_type_suffix =

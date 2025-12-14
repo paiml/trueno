@@ -421,7 +421,7 @@ mod tests {
         assert!(ptx.contains("shfl") || ptx.contains("shfl.down"));
 
         // Verify division for mean/variance
-        assert!(ptx.contains("div.f32"));
+        assert!(ptx.contains("div.rn.f32")); // div requires rounding mode for floats
 
         // Verify rsqrt for normalization
         assert!(ptx.contains("rsqrt.f32") || ptx.contains("rsqrt"));
@@ -445,7 +445,7 @@ mod tests {
 
         // Verify rsqrt and division
         assert!(ptx.contains("rsqrt.f32") || ptx.contains("rsqrt"));
-        assert!(ptx.contains("div.f32"));
+        assert!(ptx.contains("div.rn.f32")); // div requires rounding mode for floats
     }
 
     #[test]
