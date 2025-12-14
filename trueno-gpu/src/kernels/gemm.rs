@@ -275,11 +275,11 @@ impl GemmKernel {
 
                 // Calculate shared memory address for this thread's position
                 // As[tid_y][tid_x] and Bs[tid_y][tid_x]
+                // Note: Shared memory uses 32-bit addressing, not 64-bit!
                 let smem_idx = ctx.mad_lo_u32(tid_y, tile_size_reg, tid_x);
-                let smem_a_offset = ctx.mul_wide_u32(smem_idx, 4);
+                let smem_a_offset = ctx.mul_u32(smem_idx, 4); // u32 for shared memory
                 let smem_b_base = ctx.mov_u32_imm(tile_size * tile_size * 4);
-                let smem_b_base_64 = ctx.cvt_u64_u32(smem_b_base);
-                let smem_b_offset = ctx.add_u64(smem_b_base_64, smem_a_offset);
+                let smem_b_offset = ctx.add_u32_reg(smem_b_base, smem_a_offset); // u32 addition
 
                 // Load A[row, tile_idx * TILE + tid_x] into shared memory As[tid_y][tid_x]
                 // A address = a_ptr + row * K + (tile_idx * TILE + tid_x)
@@ -318,14 +318,15 @@ impl GemmKernel {
                 ctx.branch_if(inner_done, "inner_k_end");
 
                 // Load As[tid_y][inner_k] = smem[tid_y * TILE + inner_k]
+                // Shared memory uses 32-bit addressing
                 let as_idx = ctx.mad_lo_u32(tid_y, tile_size_reg, inner_k);
-                let as_addr = ctx.mul_wide_u32(as_idx, 4);
+                let as_addr = ctx.mul_u32(as_idx, 4); // u32 for shared memory
                 let a_shared = ctx.ld_shared_f32(as_addr);
 
                 // Load Bs[inner_k][tid_x] = smem[TILE*TILE + inner_k * TILE + tid_x]
                 let bs_idx = ctx.mad_lo_u32(inner_k, tile_size_reg, tid_x);
-                let bs_idx_bytes = ctx.mul_wide_u32(bs_idx, 4);
-                let bs_addr = ctx.add_u64(smem_b_base_64, bs_idx_bytes);
+                let bs_idx_bytes = ctx.mul_u32(bs_idx, 4); // u32 for shared memory
+                let bs_addr = ctx.add_u32_reg(smem_b_base, bs_idx_bytes); // u32 addition
                 let b_shared = ctx.ld_shared_f32(bs_addr);
 
                 // acc += a_shared * b_shared - IN-PLACE UPDATE
@@ -443,8 +444,8 @@ impl GemmKernel {
                 let a_addr = ctx.add_u64(a_base, k_col_offset);
                 let a_val = ctx.ld_global_f32(a_addr);
 
-                // Store to shared memory A tile
-                let tid_offset = ctx.mul_wide_u32(tid_x, 4);
+                // Store to shared memory A tile (32-bit addressing for shared memory)
+                let tid_offset = ctx.mul_u32(tid_x, 4);
                 ctx.st_shared_f32(tid_offset, a_val);
 
                 // Load B tile: B[k_offset:k_offset+16, warp_col:warp_col+16]
@@ -455,10 +456,9 @@ impl GemmKernel {
                 let b_addr = ctx.add_u64(b_base, b_col_offset);
                 let b_val = ctx.ld_global_f32(b_addr);
 
-                // Store to shared memory B tile (offset by A tile size)
+                // Store to shared memory B tile (offset by A tile size, 32-bit addressing)
                 let smem_b_base = ctx.mov_u32_imm(wmma_tile * wmma_tile * 4);
-                let smem_b_base_64 = ctx.cvt_u64_u32(smem_b_base);
-                let b_smem_addr = ctx.add_u64(smem_b_base_64, tid_offset);
+                let b_smem_addr = ctx.add_u32_reg(smem_b_base, tid_offset);
                 ctx.st_shared_f32(b_smem_addr, b_val);
 
                 // Synchronize before WMMA operation
@@ -474,15 +474,15 @@ impl GemmKernel {
                 let inner_done = ctx.setp_ge_u32(inner_idx, wmma_tile_reg);
                 ctx.branch_if(inner_done, "wmma_inner_end");
 
-                // Load from shared A[tid_x, inner_idx]
+                // Load from shared A[tid_x, inner_idx] (32-bit addressing)
                 let as_idx = ctx.mad_lo_u32(tid_x, wmma_tile_reg, inner_idx);
-                let as_offset = ctx.mul_wide_u32(as_idx, 4);
+                let as_offset = ctx.mul_u32(as_idx, 4);
                 let a_shared = ctx.ld_shared_f32(as_offset);
 
-                // Load from shared B[inner_idx, tid_x % 16]
+                // Load from shared B[inner_idx, tid_x % 16] (32-bit addressing)
                 let bs_idx = ctx.mad_lo_u32(inner_idx, wmma_tile_reg, tid_x);
-                let bs_offset_base = ctx.mul_wide_u32(bs_idx, 4);
-                let bs_addr = ctx.add_u64(smem_b_base_64, bs_offset_base);
+                let bs_offset_base = ctx.mul_u32(bs_idx, 4);
+                let bs_addr = ctx.add_u32_reg(smem_b_base, bs_offset_base);
                 let b_shared = ctx.ld_shared_f32(bs_addr);
 
                 // Accumulate - IN-PLACE UPDATE

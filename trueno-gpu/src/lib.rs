@@ -70,6 +70,7 @@ pub mod driver;
 pub mod kernels;
 pub mod memory;
 pub mod backend;
+pub mod monitor;
 
 /// Error types for trueno-gpu operations
 pub mod error;
@@ -82,6 +83,7 @@ pub mod testing;
 pub mod wasm;
 
 pub use error::{GpuError, Result};
+pub use monitor::{cuda_device_count, cuda_monitoring_available, CudaDeviceInfo, CudaMemoryInfo};
 
 #[cfg(test)]
 mod tests {

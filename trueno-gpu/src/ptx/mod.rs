@@ -30,7 +30,7 @@ mod registers;
 
 pub use builder::{PtxModule, PtxKernel, KernelBuilder};
 pub use types::{PtxType, PtxStateSpace};
-pub use instructions::{PtxInstruction, PtxOp};
+pub use instructions::{PtxInstruction, PtxOp, WmmaLayout, WmmaShape};
 pub use registers::{PtxReg, VirtualReg, PhysicalReg, RegisterAllocator, LiveRange};
 
 use crate::error::{GpuError, Result};

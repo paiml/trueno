@@ -95,8 +95,8 @@ impl SoftmaxKernel {
                 let shuffled_1 = ctx.shfl_down_f32(max_val_4, 1, 0xFFFF_FFFF);
                 let warp_max = ctx.max_f32(max_val_4, shuffled_1);
 
-                // Broadcast max to all lanes (shuffle from lane 0)
-                let broadcast_max = ctx.shfl_down_f32(warp_max, 0, 0xFFFF_FFFF);
+                // Broadcast max to all lanes (get value from lane 0)
+                let broadcast_max = ctx.shfl_idx_f32(warp_max, 0, 0xFFFF_FFFF);
 
                 // ===== Step 2: Compute exp(val - max) =====
                 let shifted = ctx.sub_f32(val, broadcast_max);
@@ -124,8 +124,8 @@ impl SoftmaxKernel {
                 let sum_shuffled_1 = ctx.shfl_down_f32(sum_val_4, 1, 0xFFFF_FFFF);
                 let warp_sum = ctx.add_f32(sum_val_4, sum_shuffled_1);
 
-                // Broadcast sum to all lanes
-                let broadcast_sum = ctx.shfl_down_f32(warp_sum, 0, 0xFFFF_FFFF);
+                // Broadcast sum to all lanes (get value from lane 0)
+                let broadcast_sum = ctx.shfl_idx_f32(warp_sum, 0, 0xFFFF_FFFF);
 
                 // ===== Step 4: Divide exp(val - max) by sum =====
                 let softmax_result = ctx.div_f32(exp_val, broadcast_sum);
@@ -301,7 +301,7 @@ mod tests {
         assert!(ptx.contains("ex2.f32") || ptx.contains("ex2"));
 
         // Verify division
-        assert!(ptx.contains("div.f32"));
+        assert!(ptx.contains("div.rn.f32")); // div requires rounding mode for floats
 
         // Verify memory operations
         assert!(ptx.contains("ld.global.f32"));
@@ -322,7 +322,7 @@ mod tests {
 
         // Verify exp and divide
         assert!(ptx.contains("ex2.f32") || ptx.contains("ex2"));
-        assert!(ptx.contains("div.f32"));
+        assert!(ptx.contains("div.rn.f32")); // div requires rounding mode for floats
     }
 
     #[test]

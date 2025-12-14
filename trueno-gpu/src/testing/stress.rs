@@ -233,7 +233,7 @@ impl StressRng {
     pub fn next_u32(&mut self) -> u32 {
         let old_state = self.state;
         self.state = old_state
-            .wrapping_mul(6364136223846793005)
+            .wrapping_mul(6_364_136_223_846_793_005)
             .wrapping_add(self.inc);
         let xorshifted = (((old_state >> 18) ^ old_state) >> 27) as u32;
         let rot = (old_state >> 59) as u32;
@@ -382,8 +382,8 @@ impl StressTestRunner {
             self.run_cycle(cycle, &mut test_fn);
 
             let elapsed = start.elapsed();
-            if elapsed < interval {
-                std::thread::sleep(interval - elapsed);
+            if let Some(remaining) = interval.checked_sub(elapsed) {
+                std::thread::sleep(remaining);
             }
         }
 

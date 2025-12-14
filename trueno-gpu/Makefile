@@ -55,7 +55,7 @@ coverage: ## Generate coverage report (≥95% required)
 	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@echo "🧪 Phase 1: Running tests with instrumentation (no report)..."
-	@env PROPTEST_CASES=100 cargo llvm-cov --no-report nextest --no-tests=warn -p trueno-gpu --all-features
+	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/)' nextest --no-tests=warn -p trueno-gpu --all-features
 	@echo "📊 Phase 2: Generating coverage reports..."
 	@cargo llvm-cov report --html --output-dir target/coverage/html
 	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info
@@ -76,7 +76,7 @@ coverage-ci: ## Generate LCOV report for CI/CD (≥95% required)
 	@echo "=== Code Coverage for CI/CD (≥95% required) ==="
 	@cargo llvm-cov clean --workspace
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@env PROPTEST_CASES=100 cargo llvm-cov --no-report nextest --no-tests=warn -p trueno-gpu --all-features
+	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/)' nextest --no-tests=warn -p trueno-gpu --all-features
 	@cargo llvm-cov report --lcov --output-path lcov.info
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo "✓ Coverage report generated: lcov.info"
@@ -84,7 +84,7 @@ coverage-ci: ## Generate LCOV report for CI/CD (≥95% required)
 coverage-check: ## Enforce 95% coverage threshold (BLOCKS on failure)
 	@echo "🔒 Enforcing 95% coverage threshold for trueno-gpu..."
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@cargo llvm-cov -p trueno-gpu --all-features --lcov --output-path lcov.info > /dev/null 2>&1
+	@cargo llvm-cov -p trueno-gpu --all-features --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/)' --lcov --output-path lcov.info > /dev/null 2>&1
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@COVERAGE=$$(cargo llvm-cov report --summary-only 2>/dev/null | grep "TOTAL" | awk '{print $$NF}' | sed 's/%//'); \
 	echo "trueno-gpu coverage: $${COVERAGE}%"; \

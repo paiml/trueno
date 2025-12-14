@@ -1,6 +1,6 @@
 [package]
 name = "trueno-gpu"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
@@ -34,6 +34,10 @@ criterion = "0.7"
 simular = "0.2.0"
 renacer = "0.7.0"
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# GPU pixel testing with TUI visualization (Sovereign Stack)
+jugar-probar = { version = "0.3.3", optional = true }
+
 [features]
 default = []
 # Enable CUDA driver FFI for actual GPU execution (requires NVIDIA driver)
@@ -47,6 +51,8 @@ viz = ["dep:trueno-viz"]
 stress-test = ["dep:simular", "dep:renacer"]
 # TUI monitoring mode for stress tests
 tui-monitor = ["stress-test", "dep:ratatui", "dep:crossterm"]
+# GPU pixel testing with probar TUI visualization
+gpu-pixels = ["dep:jugar-probar", "dep:ratatui", "dep:crossterm"]
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
@@ -71,3 +77,8 @@ path = "examples/ptx_quickstart.rs"
 [[example]]
 name = "gemm_kernel"
 path = "examples/gemm_kernel.rs"
+
+[[example]]
+name = "cuda_monitor"
+path = "examples/cuda_monitor.rs"
+required-features = ["cuda"]
