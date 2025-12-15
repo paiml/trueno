@@ -107,6 +107,7 @@
 - [Initial Three-Target Spec](./specifications/three-target-spec.md)
 - [PyTorch/NumPy Replacement](./specifications/pytorch-numpy-spec.md)
 - [Ruchy Language Support](./specifications/ruchy-support.md)
+- [Quality Gates (TRUENO-SPEC-013)](./specifications/solidify-quality-spec.md)
 - [Academic Foundations](./specifications/academic-foundations.md)
 
 # Appendix
