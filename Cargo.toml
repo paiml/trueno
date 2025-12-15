@@ -70,7 +70,7 @@ tokio = { version = "1", features = ["macros", "rt"] }
 serde_json = "1.0"
 nalgebra = "0.34"  # For eigendecomposition benchmark comparison
 # Simulation testing framework (TRUENO-SPEC-012)
-simular = { path = "../simular" }
+simular = "0.2.0"
 regex = "1.11"  # For PTX/WGSL pattern validation in falsification tests
 
 [features]

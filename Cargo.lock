@@ -4366,31 +4366,6 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 [[package]]
 name = "simular"
 version = "0.2.0"
-dependencies = [
- "bincode",
- "bitflags 2.10.0",
- "blake3",
- "crossbeam-deque",
- "getrandom 0.2.16",
- "indexmap",
- "jsonschema",
- "memmap2",
- "num-traits",
- "rand 0.8.5",
- "rand_pcg",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.17",
- "toml",
- "uom",
- "validator",
- "zstd",
-]
-
-[[package]]
-name = "simular"
-version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ba51fc9fddefa39e67c77a9d9fe113503a6769fbec7d424a6da2d1419f4fb70"
 dependencies = [
@@ -4981,7 +4956,7 @@ dependencies = [
  "rayon",
  "regex",
  "serde_json",
- "simular 0.2.0",
+ "simular",
  "thiserror 2.0.17",
  "tokio",
  "tracing",
@@ -5032,7 +5007,7 @@ dependencies = [
  "proptest",
  "ratatui",
  "renacer",
- "simular 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "simular",
  "thiserror 2.0.17",
  "trueno-viz",
  "wasm-bindgen",

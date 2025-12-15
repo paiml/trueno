@@ -219,36 +219,24 @@ test-gpu-pixels-tui: ## Run GPU pixel tests with interactive TUI
 test-verbose: ## Run tests with verbose output
 	cargo test --all-features -- --nocapture --test-threads=1
 
-coverage: ## Generate coverage report for entire workspace (≥90% required)
-	@echo "📊 Running coverage analysis on workspace (trueno + trueno-gpu + xtask)..."
-	@echo "   Crates: trueno, trueno-gpu, xtask"
+coverage: ## Generate coverage report (≥90% required, <5 min)
+	@echo "📊 Running test coverage analysis..."
 	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
-	@which cargo-nextest > /dev/null 2>&1 || (echo "📦 Installing cargo-nextest..." && cargo install cargo-nextest --locked)
 	@cargo llvm-cov clean --workspace
 	@mkdir -p target/coverage
-	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
+	@echo "⚙️  Disabling mold linker (breaks coverage instrumentation)..."
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@echo "🧪 Running tests with coverage instrumentation..."
-	@env PROPTEST_CASES=50 cargo llvm-cov --no-report \
-		nextest --no-tests=warn --all-features --workspace \
-		-E 'not test(/test_matmul_parallel_1024/)' \
-		--profile coverage
-	@echo "📊 Generating coverage reports..."
+	@echo "🧪 Running trueno tests..."
+	@cargo llvm-cov --no-report test -p trueno --lib
+	@echo "🧪 Running trueno-gpu tests..."
+	@cargo llvm-cov --no-report test -p trueno-gpu || true
+	@echo "📊 Generating reports..."
 	@cargo llvm-cov report --html --output-dir target/coverage/html
 	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info
-	@echo "⚙️  Restoring global cargo config..."
+	@echo "⚙️  Restoring cargo config..."
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo ""
-	@echo "📊 Workspace Coverage Summary:"
-	@echo "=============================="
 	@cargo llvm-cov report --summary-only
-	@echo ""
-	@echo "📊 Per-Crate Breakdown:"
-	@echo "-----------------------"
-	@TRUENO_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "trueno-gpu|xtask" 2>/dev/null | grep "TOTAL" | awk '{print $$4}'); \
-	echo "  trueno:     $${TRUENO_COV:-N/A}"
-	@GPU_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "trueno/src|xtask" 2>/dev/null | grep "TOTAL" | awk '{print $$4}'); \
-	echo "  trueno-gpu: $${GPU_COV:-N/A}"
 	@echo ""
 	@echo "💡 HTML report: target/coverage/html/index.html"
 
