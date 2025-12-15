@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast lint-all fmt fmt-check clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast lint-all fmt fmt-check clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story release profile-analyze profile-compare profile-otlp-export smoke pixel-scalar-fkr pixel-simd-fkr pixel-wgpu-fkr pixel-ptx-fkr pixel-fkr-all quality-spec-013 coverage-cuda coverage-95
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -540,8 +540,8 @@ profile-otlp-export: ## Export OTLP traces to JSON for CI/CD (TAG=commit-sha)
 	@sleep 2
 	@echo "Exporting traces..."
 	@TAG=$${TAG:-$$(git rev-parse --short HEAD)} && \
-	curl -s "http://localhost:16686/api/traces?service=trueno-ci&limit=1000" \
-		> target/profiling/traces-$$TAG.json && \
+	curl -sf "http://localhost:16686/api/traces?service=trueno-ci&limit=1000" \
+		> target/profiling/traces-$$TAG.json || { echo "❌ Failed to export traces"; exit 1; } && \
 	echo "✅ Exported to: target/profiling/traces-$$TAG.json"
 	@docker stop jaeger-ci >/dev/null 2>&1 && docker rm jaeger-ci >/dev/null 2>&1
 	@echo "   Trace count: $$(cat target/profiling/traces-$${TAG:-$$(git rev-parse --short HEAD)}.json | python3 -c 'import sys,json; print(len(json.load(sys.stdin)[\"data\"]))' 2>/dev/null || echo 'N/A')"
@@ -549,66 +549,17 @@ profile-otlp-export: ## Export OTLP traces to JSON for CI/CD (TAG=commit-sha)
 profile-analyze: ## Analyze exported traces (FILE=target/profiling/traces-abc123.json)
 	@echo "📊 Analyzing trace data..."
 	@test -f "$(FILE)" || { echo "❌ File not found: $(FILE)"; exit 1; }
-	@python3 -c '\
-import sys, json; \
-from collections import defaultdict; \
-data = json.load(open("$(FILE)")); \
-syscalls = defaultdict(lambda: {"count": 0, "total_us": 0, "max_us": 0}); \
-for trace in data["data"]: \
-    for span in trace["spans"]: \
-        op = span["operationName"]; \
-        duration = next((t["value"] for t in span.get("tags", []) if t["key"] == "syscall.duration_us"), 0); \
-        if op.startswith("syscall:"): \
-            name = op.split(": ")[1]; \
-            syscalls[name]["count"] += 1; \
-            syscalls[name]["total_us"] += duration; \
-            syscalls[name]["max_us"] = max(syscalls[name]["max_us"], duration); \
-print(f"Traces: {len(data[\"data\"])}"); \
-print(f"Total syscalls: {sum(s[\"count\"] for s in syscalls.values())}"); \
-print(f"Total time: {sum(s[\"total_us\"] for s in syscalls.values())}μs\n"); \
-print("Top syscalls by time:"); \
-for name, stats in sorted(syscalls.items(), key=lambda x: x[1]["total_us"], reverse=True)[:10]: \
-    avg = stats["total_us"] / stats["count"] if stats["count"] > 0 else 0; \
-    print(f"  {name:20s} {stats[\"count\"]:5d} calls  {stats[\"total_us\"]:8d}μs  avg: {avg:6.1f}μs"); \
-'
+	@python3 scripts/analyze_traces.py "$(FILE)"
 
 profile-compare: ## Compare traces between commits (BASELINE=v0.4.0 CURRENT=main)
 	@echo "🔍 Comparing traces: $(BASELINE) vs $(CURRENT)"
 	@test -f "target/profiling/traces-$(BASELINE).json" || { echo "❌ Baseline not found. Run: make profile-otlp-export TAG=$(BASELINE)"; exit 1; }
 	@test -f "target/profiling/traces-$(CURRENT).json" || { echo "❌ Current not found. Run: make profile-otlp-export TAG=$(CURRENT)"; exit 1; }
-	@python3 -c '\
-import sys, json; \
-from collections import defaultdict; \
-def analyze(file): \
-    data = json.load(open(file)); \
-    syscalls = defaultdict(lambda: {"count": 0, "total_us": 0}); \
-    for trace in data["data"]: \
-        for span in trace["spans"]: \
-            op = span["operationName"]; \
-            duration = next((t["value"] for t in span.get("tags", []) if t["key"] == "syscall.duration_us"), 0); \
-            if op.startswith("syscall:"): \
-                name = op.split(": ")[1]; \
-                syscalls[name]["count"] += 1; \
-                syscalls[name]["total_us"] += duration; \
-    return syscalls; \
-baseline = analyze("target/profiling/traces-$(BASELINE).json"); \
-current = analyze("target/profiling/traces-$(CURRENT).json"); \
-all_syscalls = set(baseline.keys()) | set(current.keys()); \
-print("# Performance Comparison: $(BASELINE) → $(CURRENT)\n"); \
-print("| Syscall | $(BASELINE) Calls | $(CURRENT) Calls | Δ Calls | $(BASELINE) Time (μs) | $(CURRENT) Time (μs) | Δ Time |"); \
-print("|---------|-----------|----------|---------|------------|----------|--------|"); \
-for name in sorted(all_syscalls): \
-    b_count = baseline.get(name, {}).get("count", 0); \
-    c_count = current.get(name, {}).get("count", 0); \
-    b_time = baseline.get(name, {}).get("total_us", 0); \
-    c_time = current.get(name, {}).get("total_us", 0); \
-    delta_count = c_count - b_count; \
-    delta_time = c_time - b_time; \
-    delta_count_str = f"+{delta_count}" if delta_count > 0 else str(delta_count); \
-    delta_time_str = f"+{delta_time}" if delta_time > 0 else str(delta_time); \
-    if b_count > 0 or c_count > 0: \
-        print(f"| {name:15s} | {b_count:9d} | {c_count:9d} | {delta_count_str:7s} | {b_time:10d} | {c_time:10d} | {delta_time_str:6s} |"); \
-' | tee target/profiling/comparison-$(BASELINE)-vs-$(CURRENT).md
+	@python3 scripts/compare_traces.py \
+		"target/profiling/traces-$(BASELINE).json" \
+		"target/profiling/traces-$(CURRENT).json" \
+		"$(BASELINE)" "$(CURRENT)" \
+		| tee "target/profiling/comparison-$(BASELINE)-vs-$(CURRENT).md"
 	@echo ""
 	@echo "✅ Report saved to: target/profiling/comparison-$(BASELINE)-vs-$(CURRENT).md"
 
@@ -785,7 +736,7 @@ bashrs-all: bashrs-lint-makefile bashrs-lint-scripts bashrs-audit ## Run all bas
 coverage-cuda: ## Generate coverage with CUDA tests (requires NVIDIA GPU)
 	@echo "📊 Running coverage with CUDA tests (TRUENO-SPEC-013)..."
 	@nvidia-smi > /dev/null 2>&1 || { echo "❌ NVIDIA GPU required for CUDA coverage"; exit 1; }
-	@which cargo-llvm-cov > /dev/null 2>&1 || cargo install cargo-llvm-cov --locked
+	@which cargo-llvm-cov > /dev/null 2>&1 || (cargo install cargo-llvm-cov --locked || exit 1)
 	@cargo llvm-cov clean --workspace
 	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
 	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
