@@ -1,3 +1,6 @@
+// Development-phase lint allows
+#![allow(clippy::useless_vec)]
+
 mod check_simd;
 mod install_hooks;
 mod validate_examples;

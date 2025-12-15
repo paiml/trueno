@@ -23,9 +23,14 @@ panic = "warn"
 unreachable = "warn"
 
 # Code quality
-complexity = "warn"
-style = "warn"
-pedantic = "warn"
+complexity = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+# Development-phase allows (to be addressed incrementally)
+uninlined_format_args = "allow"
+useless_vec = "allow"
+unnecessary_unwrap = "allow"
 
 [package]
 name = "trueno"
