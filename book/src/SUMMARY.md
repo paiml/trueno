@@ -79,6 +79,7 @@
 - [Benchmarking](./development/benchmarking.md)
 - [Quality Gates](./development/quality-gates.md)
 - [SATD Remediation](./development/satd-remediation.md)
+- [PTX Best Practices](./development/ptx-best-practices.md)
 - [Code Review Checklist](./development/code-review.md)
 
 # Advanced Topics
