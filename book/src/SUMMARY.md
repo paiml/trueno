@@ -22,6 +22,7 @@
   - [WASM SIMD128](./architecture/wasm-backend.md)
 - [GPU Backend](./architecture/gpu-backend.md)
 - [PTX Code Generation](./architecture/ptx-generation.md)
+- [PTX Register Allocation](./architecture/ptx-register-allocation.md)
 - [Runtime Detection](./architecture/runtime-detection.md)
 
 # API Reference
