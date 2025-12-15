@@ -31,21 +31,21 @@ mod shaders;
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 pub mod runtime;
 
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 pub use batch::{BufferId, GpuCommandBatch};
 
 // Export GpuDevice for both native and WASM GPU features
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 pub use device::GpuDevice;
 
-/// GPU backend for compute operations
-#[cfg(feature = "gpu")]
+/// GPU backend for compute operations (native only, uses sync wrappers)
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 #[derive(Clone)]
 pub struct GpuBackend {
     device: Option<GpuDevice>,
 }
 
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 impl GpuBackend {
     /// Create a new GPU backend
     pub fn new() -> Self {
@@ -454,19 +454,19 @@ impl GpuBackend {
     }
 }
 
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 impl Default for GpuBackend {
     fn default() -> Self {
         Self::new()
     }
 }
 
-// Stub implementation when GPU feature is disabled
-#[cfg(not(feature = "gpu"))]
+// Stub implementation when GPU feature is disabled or on WASM
+#[cfg(any(not(feature = "gpu"), target_arch = "wasm32"))]
 #[derive(Clone)]
 pub struct GpuBackend;
 
-#[cfg(not(feature = "gpu"))]
+#[cfg(any(not(feature = "gpu"), target_arch = "wasm32"))]
 impl GpuBackend {
     pub fn new() -> Self {
         Self
@@ -477,7 +477,7 @@ impl GpuBackend {
     }
 }
 
-#[cfg(not(feature = "gpu"))]
+#[cfg(any(not(feature = "gpu"), target_arch = "wasm32"))]
 impl Default for GpuBackend {
     fn default() -> Self {
         Self

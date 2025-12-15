@@ -284,3 +284,210 @@ pub fn run_all_tests() -> Vec<WasmTestResult> {
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
+
+// ============================================================================
+// Unit Tests (run without viz feature)
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -------------------------------------------------------------------------
+    // SimpleRng tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_simple_rng_deterministic() {
+        let mut rng1 = SimpleRng::new(42);
+        let mut rng2 = SimpleRng::new(42);
+
+        // Same seed should produce same sequence
+        for _ in 0..100 {
+            assert_eq!(rng1.next_u32(), rng2.next_u32());
+        }
+    }
+
+    #[test]
+    fn test_simple_rng_different_seeds() {
+        let mut rng1 = SimpleRng::new(1);
+        let mut rng2 = SimpleRng::new(2);
+
+        // Different seeds should produce different sequences
+        let seq1: Vec<u32> = (0..10).map(|_| rng1.next_u32()).collect();
+        let seq2: Vec<u32> = (0..10).map(|_| rng2.next_u32()).collect();
+        assert_ne!(seq1, seq2);
+    }
+
+    #[test]
+    fn test_simple_rng_gen_f32_range() {
+        let mut rng = SimpleRng::new(12345);
+
+        // gen_f32 should return values in [0, 1]
+        for _ in 0..1000 {
+            let val = rng.gen_f32();
+            assert!(val >= 0.0, "gen_f32 returned negative: {}", val);
+            assert!(val <= 1.0, "gen_f32 returned >1: {}", val);
+        }
+    }
+
+    #[test]
+    fn test_simple_rng_distribution() {
+        let mut rng = SimpleRng::new(999);
+
+        // Check that values are reasonably distributed (not all zeros or ones)
+        let values: Vec<f32> = (0..1000).map(|_| rng.gen_f32()).collect();
+        let sum: f32 = values.iter().sum();
+        let mean = sum / 1000.0;
+
+        // Mean should be roughly 0.5 for uniform distribution
+        assert!(mean > 0.4, "Mean too low: {}", mean);
+        assert!(mean < 0.6, "Mean too high: {}", mean);
+    }
+
+    #[test]
+    fn test_simple_rng_edge_seeds() {
+        // Test edge case seeds
+        let mut rng_zero = SimpleRng::new(0);
+        let mut rng_max = SimpleRng::new(u64::MAX);
+
+        // Should not panic and should produce different values
+        let v0 = rng_zero.next_u32();
+        let v_max = rng_max.next_u32();
+        assert_ne!(v0, v_max);
+    }
+
+    // -------------------------------------------------------------------------
+    // WasmTestResult tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_wasm_test_result_getters() {
+        let result = WasmTestResult {
+            name: "Test".to_string(),
+            passed: true,
+            diff_pixels: 10,
+            total_pixels: 100,
+            diff_percent: 10.0,
+            png_data: vec![1, 2, 3],
+        };
+
+        assert_eq!(result.name(), "Test");
+        assert!(result.passed());
+        assert_eq!(result.diff_pixels(), 10);
+        assert_eq!(result.total_pixels(), 100);
+        assert!((result.diff_percent() - 10.0).abs() < f64::EPSILON);
+        assert_eq!(result.png_data(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_wasm_test_result_failed() {
+        let result = WasmTestResult {
+            name: "FailedTest".to_string(),
+            passed: false,
+            diff_pixels: 50,
+            total_pixels: 100,
+            diff_percent: 50.0,
+            png_data: vec![],
+        };
+
+        assert!(!result.passed());
+        assert_eq!(result.diff_percent(), 50.0);
+    }
+
+    #[test]
+    fn test_wasm_test_result_clone() {
+        let result = WasmTestResult {
+            name: "CloneTest".to_string(),
+            passed: true,
+            diff_pixels: 0,
+            total_pixels: 256,
+            diff_percent: 0.0,
+            png_data: vec![0xFF; 100],
+        };
+
+        let cloned = result.clone();
+        assert_eq!(result.name(), cloned.name());
+        assert_eq!(result.passed(), cloned.passed());
+        assert_eq!(result.png_data(), cloned.png_data());
+    }
+
+    // -------------------------------------------------------------------------
+    // GEMM simulation tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_simulate_gemm_size_1() {
+        let result = simulate_gemm(1);
+        assert_eq!(result.len(), 1);
+        // 0 * 0 = 0
+        assert_eq!(result[0], 0.0);
+    }
+
+    #[test]
+    fn test_simulate_gemm_size_2() {
+        let result = simulate_gemm(2);
+        assert_eq!(result.len(), 4);
+        // For 2x2 identity-like multiplication pattern
+        // This is actually computing C[i,j] = sum(i*2+k * k*2+j for k in 0..2)
+    }
+
+    #[test]
+    fn test_simulate_gemm_size_4() {
+        let result = simulate_gemm(4);
+        assert_eq!(result.len(), 16);
+
+        // Verify output is deterministic
+        let result2 = simulate_gemm(4);
+        assert_eq!(result, result2);
+    }
+
+    #[test]
+    fn test_simulate_gemm_buggy_differs() {
+        let correct = simulate_gemm(4);
+        let buggy = simulate_gemm_buggy(4);
+
+        // Buggy version should differ from correct version
+        assert_ne!(correct, buggy);
+    }
+
+    #[test]
+    fn test_simulate_gemm_buggy_pattern() {
+        let buggy = simulate_gemm_buggy(4);
+
+        // Even rows have garbage=1000 added, odd rows have garbage=0
+        // First row (i=0, even) should have 1000 added to accumulator
+        // Second row (i=1, odd) should match correct
+        let correct = simulate_gemm(4);
+
+        // Row 1 (index 4-7) should be same since i=1 is odd
+        assert_eq!(buggy[4], correct[4]);
+        assert_eq!(buggy[5], correct[5]);
+        assert_eq!(buggy[6], correct[6]);
+        assert_eq!(buggy[7], correct[7]);
+    }
+
+    #[test]
+    fn test_simulate_gemm_buggy_even_rows_have_garbage() {
+        let correct = simulate_gemm(4);
+        let buggy = simulate_gemm_buggy(4);
+
+        // Even rows (0, 2) have 1000 added
+        // Row 0: indices 0-3
+        assert!((buggy[0] - correct[0] - 1000.0).abs() < 0.01);
+        // Row 2: indices 8-11
+        assert!((buggy[8] - correct[8] - 1000.0).abs() < 0.01);
+    }
+
+    // -------------------------------------------------------------------------
+    // Version test
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_version_not_empty() {
+        let ver = version();
+        assert!(!ver.is_empty());
+        // Should be a valid semver-ish string
+        assert!(ver.contains('.'), "Version should contain dots: {}", ver);
+    }
+}

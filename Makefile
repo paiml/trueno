@@ -328,16 +328,16 @@ coverage-clean: ## Clean coverage artifacts
 clean-coverage: coverage-clean ## Alias for coverage-clean (bashrs pattern)
 	@echo "✓ Fresh coverage ready (run 'make coverage' to regenerate)"
 
-coverage-check: ## Enforce 85% coverage threshold for trueno (BLOCKS on failure)
-	@echo "🔒 Enforcing 85% coverage threshold (trueno only, excludes simular)..."
-	@COVERAGE=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "simular" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
+coverage-check: ## Enforce 90% coverage threshold for trueno (BLOCKS on failure)
+	@echo "🔒 Enforcing 90% coverage threshold (trueno only, excludes simular/trueno-gpu/xtask)..."
+	@COVERAGE=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "simular|trueno-gpu|xtask" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
 	if [ -z "$$COVERAGE" ]; then echo "❌ No coverage data. Run 'make coverage' first."; exit 1; fi; \
 	echo "Coverage: $${COVERAGE}%"; \
-	RESULT=$$(echo "$$COVERAGE >= 85" | bc -l 2>/dev/null || echo 0); \
+	RESULT=$$(echo "$$COVERAGE >= 90" | bc -l 2>/dev/null || echo 0); \
 	if [ "$$RESULT" = "1" ]; then \
-		echo "✅ Coverage threshold met (≥85%)"; \
+		echo "✅ Coverage threshold met (≥90%)"; \
 	else \
-		echo "❌ FAIL: Coverage $${COVERAGE}% is below 85% threshold"; exit 1; \
+		echo "❌ FAIL: Coverage $${COVERAGE}% is below 90% threshold"; exit 1; \
 	fi
 
 lint: ## Run clippy (zero warnings allowed)
@@ -609,7 +609,7 @@ quality-gates: lint fmt-check test-fast coverage ## Run all quality gates (pre-c
 	@echo "  ✅ Linting: cargo clippy (zero warnings)"
 	@echo "  ✅ Formatting: cargo fmt"
 	@echo "  ✅ Tests: cargo test (all passing)"
-	@echo "  ✅ Coverage: >85% (see report above)"
+	@echo "  ✅ Coverage: ≥90% (see report above)"
 	@echo ""
 	@echo "Ready to commit!"
 
