@@ -29,7 +29,7 @@ pedantic = "warn"
 
 [package]
 name = "trueno"
-version = "0.8.4"
+version = "0.8.5"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
@@ -51,6 +51,8 @@ wasm-bindgen-futures = { version = "0.4", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 # Native CUDA monitoring via trueno-gpu (TRUENO-SPEC-010)
 trueno-gpu = { version = "0.2.1", optional = true }
+# Tracing/profiling support (renacer integration)
+tracing = { version = "0.1", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Web-sys for WebGPU (auto-enabled when gpu-wasm feature is on)
@@ -62,6 +64,9 @@ criterion = "0.7"
 tokio = { version = "1", features = ["macros", "rt"] }
 serde_json = "1.0"
 nalgebra = "0.34"  # For eigendecomposition benchmark comparison
+# Simulation testing framework (TRUENO-SPEC-012)
+simular = { path = "../simular" }
+regex = "1.11"  # For PTX/WGSL pattern validation in falsification tests
 
 [features]
 default = []
@@ -77,6 +82,8 @@ chaos-basic = []
 chaos-network = ["chaos-basic"]
 chaos-byzantine = ["chaos-basic"]
 chaos-full = ["chaos-network", "chaos-byzantine"]
+# Tracing/profiling (renacer integration)
+tracing = ["dep:tracing"]
 
 [profile.release]
 opt-level = 3

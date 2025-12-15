@@ -107,7 +107,6 @@ impl GemmKernel {
                 k,
                 tile_size: 16, // WMMA uses 16x16x16 tiles
                 use_tensor_cores: true,
-                ..Default::default()
             },
             variant: GemmVariant::WmmaFp16,
         }
@@ -381,6 +380,7 @@ impl GemmKernel {
             })
     }
 
+    #[allow(clippy::too_many_lines)]
     fn build_tensor_core(&self) -> PtxKernel {
         // Tensor Core GEMM using 16x16 tiles
         // This kernel uses 16 threads per block (one thread per output row)
@@ -750,6 +750,7 @@ impl GemmKernel {
     /// Build WMMA FP16 GEMM kernel using true Tensor Core PTX intrinsics
     /// This kernel uses wmma.load, wmma.mma, wmma.store for hardware Tensor Core acceleration
     /// Launch config: grid_2d((m+15)/16, (n+15)/16, 32, 1) - one warp per 16x16 output tile
+    #[allow(clippy::too_many_lines)]
     fn build_wmma_fp16(&self) -> PtxKernel {
         use crate::ptx::WmmaLayout;
 
