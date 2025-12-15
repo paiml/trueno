@@ -124,7 +124,7 @@ impl SymmetricEigen {
         let backend = Backend::select_best();
 
         // Dispatch to appropriate implementation based on matrix size and GPU availability
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             let n = matrix.rows();
             if n >= GPU_THRESHOLD && crate::backends::gpu::GpuBackend::is_available() {
@@ -305,7 +305,7 @@ impl SymmetricEigen {
     }
 
     /// GPU implementation for large matrices
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     fn compute_gpu(matrix: &Matrix<f32>) -> Result<Self, TruenoError> {
         use crate::backends::gpu::GpuBackend;
 

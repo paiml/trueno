@@ -234,32 +234,38 @@ impl GpuDeviceInfo {
         self
     }
 
-    /// Query device info via wgpu (cross-platform)
+    /// Query device info via wgpu (cross-platform, native only)
+    ///
+    /// On WASM, use async methods with `wasm_bindgen_futures`.
     ///
     /// # Errors
     ///
     /// Returns error if no GPU is available or query fails.
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn query() -> Result<Self, MonitorError> {
         query_wgpu_device_info(0)
     }
 
-    /// Query device info via wgpu for a specific device index
+    /// Query device info via wgpu for a specific device index (native only)
+    ///
+    /// On WASM, use async methods with `wasm_bindgen_futures`.
     ///
     /// # Errors
     ///
     /// Returns error if device index is invalid or query fails.
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn query_device(index: u32) -> Result<Self, MonitorError> {
         query_wgpu_device_info(index)
     }
 
-    /// Enumerate all available GPU devices
+    /// Enumerate all available GPU devices (native only)
+    ///
+    /// On WASM, use async methods with `wasm_bindgen_futures`.
     ///
     /// # Errors
     ///
     /// Returns error if enumeration fails.
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn enumerate() -> Result<Vec<Self>, MonitorError> {
         enumerate_wgpu_devices()
     }
@@ -599,7 +605,7 @@ impl std::error::Error for MonitorError {}
 // ============================================================================
 
 /// Query device info from wgpu adapter
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 fn query_wgpu_device_info(device_index: u32) -> Result<GpuDeviceInfo, MonitorError> {
     use crate::backends::gpu::runtime;
 
@@ -644,7 +650,7 @@ fn query_wgpu_device_info(device_index: u32) -> Result<GpuDeviceInfo, MonitorErr
 }
 
 /// Enumerate all wgpu devices
-#[cfg(feature = "gpu")]
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 fn enumerate_wgpu_devices() -> Result<Vec<GpuDeviceInfo>, MonitorError> {
     use crate::backends::gpu::runtime;
 
@@ -810,7 +816,7 @@ impl GpuMonitor {
     /// # Errors
     ///
     /// Returns error if device is not found or initialization fails.
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn new(device_index: u32, config: MonitorConfig) -> Result<Self, MonitorError> {
         let device_info = GpuDeviceInfo::query_device(device_index)?;
         let history = Arc::new(RwLock::new(VecDeque::with_capacity(config.history_size)));

@@ -304,12 +304,12 @@ impl Matrix<f32> {
         // 2. SIMD for medium-large matrices (>64×64) - 2-8x speedup
         // 3. Naive for small matrices - lowest overhead
 
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = 500; // Empirical: 2x at 500×500, 9.6x at 1000×1000
         const SIMD_THRESHOLD: usize = 64;
 
         // Try GPU first for very large matrices
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.rows >= GPU_THRESHOLD
                 && self.cols >= GPU_THRESHOLD
@@ -1358,7 +1358,7 @@ impl Matrix<f32> {
     }
 
     /// GPU-accelerated matrix multiplication (very large matrices only)
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     fn matmul_gpu(&self, other: &Matrix<f32>) -> Result<Matrix<f32>, TruenoError> {
         use crate::backends::gpu::GpuBackend;
 
@@ -1708,11 +1708,11 @@ impl Matrix<f32> {
         // GPU for large images (output > 10K elements)
         // Scalar for smaller images
 
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = 10_000;
 
         // Try GPU first for large convolutions
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if output_rows * output_cols >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuBackend;
@@ -1754,7 +1754,7 @@ impl Matrix<f32> {
     }
 
     /// GPU-accelerated 2D convolution helper
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     fn convolve2d_gpu(
         &self,
         kernel: &Matrix<f32>,
@@ -2854,7 +2854,7 @@ mod tests {
     // ===== GPU Tests =====
 
     #[test]
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     fn test_gpu_availability() {
         use crate::backends::gpu::GpuBackend;
         // Just test that we can check GPU availability without crashing
@@ -2863,7 +2863,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "gpu")]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     #[ignore] // Ignore by default since CI may not have GPU
     fn test_gpu_matmul_basic() {
         use crate::backends::gpu::GpuBackend;

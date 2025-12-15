@@ -1454,11 +1454,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Low - GPU threshold: >100K elements
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
@@ -1519,11 +1519,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Medium - GPU threshold: >10K elements (multi-pass overhead)
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 4-368x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
@@ -1584,11 +1584,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Medium - GPU threshold: >10K elements (multi-pass overhead)
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 4-368x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
@@ -1673,11 +1673,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Low - GPU threshold: >100K elements
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
@@ -1857,11 +1857,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Low - GPU threshold: >100K elements
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
@@ -1991,11 +1991,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Low - GPU threshold: >100K elements
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
@@ -2096,11 +2096,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Low - GPU threshold: >100K elements
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
@@ -2182,11 +2182,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Low - GPU threshold: >100K elements
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
@@ -2296,11 +2296,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Low - GPU threshold: >100K elements
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
@@ -3953,11 +3953,11 @@ impl Vector<f32> {
         }
 
         // OpComplexity::Low - GPU threshold: >100K elements
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         const GPU_THRESHOLD: usize = usize::MAX; // GPU DISABLED - 2-800x slower, see docs/performance-analysis.md
 
         // Try GPU first for large vectors
-        #[cfg(feature = "gpu")]
+        #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
         {
             if self.data.len() >= GPU_THRESHOLD {
                 use crate::backends::gpu::GpuDevice;
