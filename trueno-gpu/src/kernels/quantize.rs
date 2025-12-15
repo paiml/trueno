@@ -180,11 +180,22 @@ impl QuantizeKernel {
                 let global_row = ctx.add_u32_reg(out_row, local_row);
                 let global_col = ctx.add_u32_reg(out_col, local_col);
 
-                // Bounds check
+                // Bounds check - compute predicates for later store
                 let row_oob = ctx.setp_ge_u32(global_row, m_param);
                 let col_oob = ctx.setp_ge_u32(global_col, n_param);
 
-                // Initialize accumulator
+                // Clamp global_row and global_col to valid range [0, m-1] and [0, n-1]
+                // This ensures all memory accesses are valid even for out-of-bounds threads.
+                // Out-of-bounds threads will compute redundant values but won't store them.
+                // This is necessary because all threads in a warp must participate in
+                // warp shuffle reductions (shfl.sync with mask 0xFFFFFFFF).
+                let one = ctx.mov_u32_imm(1);
+                let m_minus_1 = ctx.sub_u32_reg(m_param, one);
+                let n_minus_1 = ctx.sub_u32_reg(n_param, one);
+                let clamped_row = ctx.min_u32(global_row, m_minus_1);
+                let clamped_col = ctx.min_u32(global_col, n_minus_1);
+
+                // Initialize accumulator (all threads)
                 let acc = ctx.mov_f32_imm(0.0);
 
                 // Calculate number of blocks in K dimension
@@ -201,26 +212,21 @@ impl QuantizeKernel {
                 // ===== Load and dequantize weight block =====
                 // Weight layout: each row has (K/32) Q4_K blocks
 
-                // Calculate block address for weight[global_col][k_block]
-                // Block address = b_quant_ptr + global_col * (K/32) * 18 + k_block * 18
+                // Calculate block address for weight[clamped_col][k_block]
+                // Use clamped_col to ensure valid memory access for all threads
+                // Block address = b_quant_ptr + clamped_col * (K/32) * 18 + k_block * 18
                 let blocks_per_row = num_k_blocks;
                 let block_bytes = ctx.mov_u32_imm(Q4K_BLOCK_BYTES);
-                let row_offset = ctx.mul_u32_reg(global_col, blocks_per_row);
+                let row_offset = ctx.mul_u32_reg(clamped_col, blocks_per_row);
                 let block_offset = ctx.add_u32_reg(row_offset, k_block);
                 let byte_offset = ctx.mul_wide_u32_reg(block_offset, block_bytes);
                 let block_addr = ctx.add_u64(b_quant_ptr, byte_offset);
 
-                // Load scale and min from block header
-                // Scale is at offset 0 (f16), min at offset 2 (f16)
-                // Simplified: treat as f32 for this implementation
+                // Load scale from block header (f16 at offset 0)
+                // Simplified Q4K format: 2-byte f16 scale + 16 bytes data = 18 bytes
                 let scale_addr = block_addr;
-                let scale_raw = ctx.ld_global_u32(scale_addr);
-                let scale = ctx.cvt_f32_u32(scale_raw); // Simplified conversion
-
-                let two = ctx.mov_u64_imm(2);
-                let min_addr = ctx.add_u64(block_addr, two);
-                let min_raw = ctx.ld_global_u32(min_addr);
-                let min_val = ctx.cvt_f32_u32(min_raw); // Simplified conversion
+                let scale_f16 = ctx.ld_global_f16(scale_addr);
+                let scale = ctx.cvt_f32_f16(scale_f16);
 
                 // Load packed 4-bit values
                 // Thread i loads values at position (i % 32) within block
@@ -228,7 +234,8 @@ impl QuantizeKernel {
                 let byte_idx = ctx.div_u32(lane, 2);
                 let nibble_idx = ctx.rem_u32(lane, 2);
 
-                let header_size = ctx.mov_u64_imm(4); // 4 bytes header
+                // Data starts at offset 2 (after 2-byte f16 scale)
+                let header_size = ctx.mov_u64_imm(2);
                 let data_addr = ctx.add_u64(block_addr, header_size);
                 let byte_idx_64 = ctx.cvt_u64_u32(byte_idx);
                 let packed_addr = ctx.add_u64(data_addr, byte_idx_64);
@@ -242,18 +249,19 @@ impl QuantizeKernel {
                 let shifted = ctx.shr_u32(packed_32, shift);
                 let quant = ctx.and_u32(shifted, fifteen);
 
-                // Fused dequantization: val = scale * quant + min
+                // Fused dequantization: val = scale * quant
+                // (simplified format has no min/bias term)
                 let quant_f32 = ctx.cvt_f32_u32(quant);
-                let scaled = ctx.mul_f32(scale, quant_f32);
-                let dequant = ctx.add_f32(scaled, min_val);
+                let dequant = ctx.mul_f32(scale, quant_f32);
 
                 // ===== Load activation value =====
-                // A[global_row][k_block * 32 + lane]
+                // A[clamped_row][k_block * 32 + lane]
+                // Use clamped_row to ensure valid memory access for all threads
                 let k_offset_base = ctx.mul_u32_reg(k_block, block_size_reg);
                 let k_offset = ctx.add_u32_reg(k_offset_base, lane);
 
-                // A address = a_ptr + global_row * K + k_offset
-                let a_row_offset = ctx.mul_wide_u32_reg(global_row, k_param);
+                // A address = a_ptr + clamped_row * K + k_offset
+                let a_row_offset = ctx.mul_wide_u32_reg(clamped_row, k_param);
                 let k_offset_64 = ctx.cvt_u64_u32(k_offset);
                 let a_elem_offset = ctx.add_u64(a_row_offset, k_offset_64);
                 let a_elem_offset_bytes = ctx.mul_u64(a_elem_offset, 4);
@@ -365,11 +373,22 @@ impl QuantizeKernel {
                 let global_row = ctx.add_u32_reg(out_row, local_row);
                 let global_col = ctx.add_u32_reg(out_col, local_col);
 
-                // Bounds check
+                // Bounds check - compute predicates for later store
                 let row_oob = ctx.setp_ge_u32(global_row, m_param);
                 let col_oob = ctx.setp_ge_u32(global_col, n_param);
 
-                // Initialize accumulator
+                // Clamp global_row and global_col to valid range [0, m-1] and [0, n-1]
+                // This ensures all memory accesses are valid even for out-of-bounds threads.
+                // Out-of-bounds threads will compute redundant values but won't store them.
+                // This is necessary because all threads in a warp must participate in
+                // warp shuffle reductions (shfl.sync with mask 0xFFFFFFFF).
+                let one = ctx.mov_u32_imm(1);
+                let m_minus_1 = ctx.sub_u32_reg(m_param, one);
+                let n_minus_1 = ctx.sub_u32_reg(n_param, one);
+                let clamped_row = ctx.min_u32(global_row, m_minus_1);
+                let clamped_col = ctx.min_u32(global_col, n_minus_1);
+
+                // Initialize accumulator (all threads, including out-of-bounds)
                 let acc = ctx.mov_f32_imm(0.0);
 
                 // Calculate number of super-blocks in K dimension (K / 256)
@@ -383,9 +402,10 @@ impl QuantizeKernel {
                 ctx.branch_if(sb_done, "sb_loop_done");
 
                 // ===== Load Q4_K super-block header =====
-                // Super-block address = b_quant_ptr + global_col * (K/256) * 144 + sb_idx * 144
+                // Super-block address = b_quant_ptr + clamped_col * (K/256) * 144 + sb_idx * 144
+                // Use clamped_col to ensure valid memory access for all threads
                 let sb_per_row = num_k_super_blocks;
-                let row_sb_offset = ctx.mul_u32_reg(global_col, sb_per_row);
+                let row_sb_offset = ctx.mul_u32_reg(clamped_col, sb_per_row);
                 let total_sb_offset = ctx.add_u32_reg(row_sb_offset, sb_idx);
                 let byte_offset = ctx.mul_wide_u32(total_sb_offset, Q4K_SUPER_BLOCK_BYTES);
                 let sb_addr = ctx.add_u64(b_quant_ptr, byte_offset);
@@ -482,14 +502,15 @@ impl QuantizeKernel {
                 let dequant = ctx.sub_f32(scaled, dmin_min);
 
                 // ===== Load activation and accumulate =====
-                // A[global_row][sb_idx * 256 + sub_block_idx * 32 + lane]
+                // A[clamped_row][sb_idx * 256 + sub_block_idx * 32 + lane]
+                // Use clamped_row to ensure valid memory access for all threads
                 let two_fifty_six = ctx.mov_u32_imm(256);
                 let sb_k_offset = ctx.mul_u32_reg(sb_idx, two_fifty_six);
                 let sub_k_offset = ctx.mul_u32_reg(sub_block_idx, thirty_two);
                 let k_offset = ctx.add_u32_reg(sb_k_offset, sub_k_offset);
                 let k_offset_full = ctx.add_u32_reg(k_offset, lane);
 
-                let a_row_offset = ctx.mul_wide_u32_reg(global_row, k_param);
+                let a_row_offset = ctx.mul_wide_u32_reg(clamped_row, k_param);
                 let k_offset_64 = ctx.cvt_u64_u32(k_offset_full);
                 let a_elem_offset = ctx.add_u64(a_row_offset, k_offset_64);
                 let a_elem_bytes = ctx.mul_u64(a_elem_offset, 4);

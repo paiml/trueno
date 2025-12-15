@@ -567,7 +567,12 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// Warp shuffle indexed (for broadcasts - gets value from specific lane)
-    /// Format: shfl.sync.idx.b32 dst, src, srcLane, clamp, membermask
+    ///
+    /// Format: shfl.sync.idx.b32 dst, src, srcLane, width, membermask
+    ///
+    /// IMPORTANT: For shfl.idx, the third parameter is WIDTH (not clamp!)
+    /// Width must be a power of 2: 1, 2, 4, 8, 16, or 32.
+    /// Use 32 for full-warp broadcasts.
     pub fn shfl_idx_f32(&mut self, val: VirtualReg, src_lane: u32, mask: u32) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::F32);
         self.instructions.push(
@@ -575,7 +580,7 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::ImmU64(src_lane as u64))
-                .src(Operand::ImmU64(31)) // clamp to warp size
+                .src(Operand::ImmU64(32)) // Width for shfl.idx (must be power of 2!)
                 .src(Operand::ImmU64(mask as u64)), // membermask
         );
         dst
@@ -586,6 +591,30 @@ impl<'a> KernelBuilder<'a> {
         let dst = self.registers.allocate_virtual(PtxType::F32);
         self.instructions.push(
             PtxInstruction::new(PtxOp::Max, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Min u32 of two values
+    pub fn min_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Min, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Subtract u32 registers
+    pub fn sub_u32_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Sub, PtxType::U32)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(a))
                 .src(Operand::Reg(b)),
@@ -797,8 +826,14 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// Load u8 from global memory
+    ///
+    /// NOTE: PTX does not support .u8 register types (minimum is 16-bit).
+    /// We allocate a U16 register and use ld.global.u8 which zero-extends
+    /// the loaded byte into the 16-bit register.
     pub fn ld_global_u8(&mut self, addr: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U8);
+        // CRITICAL: PTX requires registers to be at least 16-bit
+        // ld.global.u8 zero-extends the byte into the U16 register
+        let dst = self.registers.allocate_virtual(PtxType::U16);
         self.instructions.push(
             PtxInstruction::new(PtxOp::Ld, PtxType::U8)
                 .dst(Operand::Reg(dst))
@@ -844,10 +879,13 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// Bitwise AND u32 (register AND register)
+    ///
+    /// NOTE: PTX requires .b32 (bitwise) type for and/or/xor, not .u32
     pub fn and_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
-            PtxInstruction::new(PtxOp::And, PtxType::U32)
+            // PTX requires .b32 for bitwise ops, not .u32
+            PtxInstruction::new(PtxOp::And, PtxType::B32)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(a))
                 .src(Operand::Reg(b)),
@@ -856,10 +894,13 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// Bitwise OR u32 (register OR register)
+    ///
+    /// NOTE: PTX requires .b32 (bitwise) type for and/or/xor, not .u32
     pub fn or_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
-            PtxInstruction::new(PtxOp::Or, PtxType::U32)
+            // PTX requires .b32 for bitwise ops, not .u32
+            PtxInstruction::new(PtxOp::Or, PtxType::B32)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(a))
                 .src(Operand::Reg(b)),
@@ -1125,10 +1166,15 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// Load F16 from global memory
+    ///
+    /// NOTE: PTX uses `.b16` (binary 16-bit) for half-precision loads,
+    /// not `.f16`. The loaded value is still interpreted as f16 for
+    /// subsequent operations.
     pub fn ld_global_f16(&mut self, addr: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::F16);
         self.instructions.push(
-            PtxInstruction::new(PtxOp::Ld, PtxType::F16)
+            // PTX requires ld.global.b16, not ld.global.f16
+            PtxInstruction::new(PtxOp::Ld, PtxType::B16)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(addr))
                 .space(PtxStateSpace::Global),
@@ -1248,10 +1294,18 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
                 ".u32" // Default fallback
             };
             // Add rounding mode for float conversions (required by PTX ISA)
-            let needs_rounding = instr.ty.is_float()
-                || instr.srcs.first().is_some_and(|src| {
-                    matches!(src, Operand::Reg(vreg) if vreg.ty().is_float())
-                });
+            // EXCEPTION: f16→f32 is exact and does NOT require rounding
+            let src_is_f16 = instr.srcs.first().is_some_and(|src| {
+                matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::F16)
+            });
+            let dst_is_f32 = instr.ty == PtxType::F32;
+            let is_f16_to_f32 = src_is_f16 && dst_is_f32;
+
+            let needs_rounding = !is_f16_to_f32
+                && (instr.ty.is_float()
+                    || instr.srcs.first().is_some_and(|src| {
+                        matches!(src, Operand::Reg(vreg) if vreg.ty().is_float())
+                    }));
             let round = if needs_rounding {
                 instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string())
             } else {
@@ -1271,7 +1325,8 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
         }
         PtxOp::ShflIdx => {
             // sm_70+ requires shfl.sync.idx with b32 type
-            // Format: shfl.sync.idx.b32 dst, src, srcLane, clamp, membermask;
+            // Format: shfl.sync.idx.b32 dst, src, srcLane, width, membermask;
+            // NOTE: width must be power of 2 (1, 2, 4, 8, 16, or 32)
             s.push_str("shfl.sync.idx.b32");
         }
         PtxOp::Ex2 => {
