@@ -14,3 +14,7 @@ bashrs = "6.35"
 [dev-dependencies]
 tempfile = "3.8"
 serial_test = "3.0"
+
+# Inherit workspace lints
+[lints]
+workspace = true

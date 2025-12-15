@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast fmt clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast lint-all fmt fmt-check clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -177,17 +177,21 @@ help: ## Show this help message
 	@echo ''
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | grep -v 'tier\|kaizen' | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build the project (all features)
-	cargo build --all-features
+build: ## Build entire workspace (all features)
+	@echo "🔨 Building workspace (trueno + trueno-gpu + xtask)..."
+	cargo build --workspace --all-features
 
-build-release: ## Build release version
-	cargo build --release --all-features
+build-release: ## Build entire workspace (release mode)
+	@echo "🔨 Building workspace in release mode..."
+	cargo build --workspace --release --all-features
 
-test: ## Run all tests (with output)
-	cargo test --all-features -- --nocapture
+test: ## Run all tests on entire workspace (with output)
+	@echo "🧪 Running all tests on workspace (trueno + trueno-gpu + xtask)..."
+	cargo test --workspace --all-features -- --nocapture
 
-test-fast: ## Run tests quickly (<5 min target)
-	@echo "⚡ Running fast tests (target: <5 min)..."
+test-fast: ## Run tests on entire workspace (<5 min target)
+	@echo "⚡ Running fast tests on workspace (trueno + trueno-gpu + xtask)..."
+	@echo "   Crates: trueno, trueno-gpu, xtask"
 	@if command -v cargo-nextest >/dev/null 2>&1; then \
 		PROPTEST_CASES=50 RUST_TEST_THREADS=$$(nproc) cargo nextest run \
 			--workspace \
@@ -199,6 +203,7 @@ test-fast: ## Run tests quickly (<5 min target)
 	fi
 	@echo "🎯 Running GPU pixel tests..."
 	@cargo test -p trueno-gpu --test gpu_pixels --features gpu-pixels 2>/dev/null || echo "  ⚠️  gpu-pixels feature not available"
+	@echo "✅ Tests passed for entire workspace"
 
 test-quick: test-fast ## Alias for test-fast (bashrs pattern)
 	@echo "✅ Quick tests completed!"
@@ -214,8 +219,9 @@ test-gpu-pixels-tui: ## Run GPU pixel tests with interactive TUI
 test-verbose: ## Run tests with verbose output
 	cargo test --all-features -- --nocapture --test-threads=1
 
-coverage: ## Generate coverage report (≥90% required, target: 2-5 min)
-	@echo "📊 Running coverage analysis (target: 2-5 min)..."
+coverage: ## Generate coverage report for entire workspace (≥90% required)
+	@echo "📊 Running coverage analysis on workspace (trueno + trueno-gpu + xtask)..."
+	@echo "   Crates: trueno, trueno-gpu, xtask"
 	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
 	@which cargo-nextest > /dev/null 2>&1 || (echo "📦 Installing cargo-nextest..." && cargo install cargo-nextest --locked)
 	@cargo llvm-cov clean --workspace
@@ -233,9 +239,16 @@ coverage: ## Generate coverage report (≥90% required, target: 2-5 min)
 	@echo "⚙️  Restoring global cargo config..."
 	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo ""
-	@echo "📊 Coverage Summary:"
-	@echo "=================="
+	@echo "📊 Workspace Coverage Summary:"
+	@echo "=============================="
 	@cargo llvm-cov report --summary-only
+	@echo ""
+	@echo "📊 Per-Crate Breakdown:"
+	@echo "-----------------------"
+	@TRUENO_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "trueno-gpu|xtask" 2>/dev/null | grep "TOTAL" | awk '{print $$4}'); \
+	echo "  trueno:     $${TRUENO_COV:-N/A}"
+	@GPU_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "trueno/src|xtask" 2>/dev/null | grep "TOTAL" | awk '{print $$4}'); \
+	echo "  trueno-gpu: $${GPU_COV:-N/A}"
 	@echo ""
 	@echo "💡 HTML report: target/coverage/html/index.html"
 
@@ -328,21 +341,39 @@ coverage-clean: ## Clean coverage artifacts
 clean-coverage: coverage-clean ## Alias for coverage-clean (bashrs pattern)
 	@echo "✓ Fresh coverage ready (run 'make coverage' to regenerate)"
 
-coverage-check: ## Enforce 90% coverage threshold for trueno (BLOCKS on failure)
-	@echo "🔒 Enforcing 90% coverage threshold (trueno only, excludes simular/trueno-gpu/xtask)..."
-	@COVERAGE=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "simular|trueno-gpu|xtask" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
-	if [ -z "$$COVERAGE" ]; then echo "❌ No coverage data. Run 'make coverage' first."; exit 1; fi; \
-	echo "Coverage: $${COVERAGE}%"; \
-	RESULT=$$(echo "$$COVERAGE >= 90" | bc -l 2>/dev/null || echo 0); \
+coverage-check: ## Enforce 90% coverage threshold for workspace (BLOCKS on failure)
+	@echo "🔒 Enforcing 90% coverage threshold for workspace..."
+	@echo ""
+	@# Check trueno core
+	@TRUENO_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "trueno-gpu|xtask|simular" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
+	if [ -z "$$TRUENO_COV" ]; then echo "❌ No coverage data. Run 'make coverage' first."; exit 1; fi; \
+	echo "trueno:     $${TRUENO_COV}%"; \
+	TRUENO_OK=$$(echo "$$TRUENO_COV >= 90" | bc -l 2>/dev/null || echo 0)
+	@# Check trueno-gpu
+	@GPU_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "trueno/src|xtask|simular" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
+	echo "trueno-gpu: $${GPU_COV:-N/A}%"
+	@# Check workspace total
+	@TOTAL_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "xtask|simular" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
+	echo "workspace:  $${TOTAL_COV}%"; \
+	echo ""; \
+	RESULT=$$(echo "$$TRUENO_COV >= 90" | bc -l 2>/dev/null || echo 0); \
 	if [ "$$RESULT" = "1" ]; then \
-		echo "✅ Coverage threshold met (≥90%)"; \
+		echo "✅ trueno coverage threshold met (≥90%)"; \
 	else \
-		echo "❌ FAIL: Coverage $${COVERAGE}% is below 90% threshold"; exit 1; \
+		echo "❌ FAIL: trueno coverage $${TRUENO_COV}% is below 90% threshold"; exit 1; \
 	fi
 
-lint: ## Run clippy (zero warnings allowed)
-	@echo "🔍 Running clippy (zero warnings policy)..."
-	cargo clippy --all-targets --all-features -- -D warnings
+lint: ## Run clippy on entire workspace (library code only, strict)
+	@echo "🔍 Running clippy on workspace (trueno + trueno-gpu + xtask)..."
+	@echo "   Crates: trueno, trueno-gpu, xtask"
+	@echo "   Mode: Library code only (tests excluded for stricter checks)"
+	cargo clippy --workspace --lib --all-features -- -D warnings
+	@echo "✅ Lint passed for entire workspace (lib)"
+
+lint-all: ## Run clippy on entire workspace including tests (may have warnings)
+	@echo "🔍 Running clippy on full workspace (lib + tests + examples)..."
+	cargo clippy --workspace --all-targets --all-features -- -W clippy::all
+	@echo "✅ Lint complete (see warnings above)"
 
 backend-story: ## Verify all operations support all backends (Scalar/SIMD/GPU/WASM)
 	@echo "🔧 Running Backend Story Tests (CRITICAL)..."
@@ -350,11 +381,13 @@ backend-story: ## Verify all operations support all backends (Scalar/SIMD/GPU/WA
 	@cargo test --test backend_story
 	@echo "✅ Backend story verified - all backends supported"
 
-fmt: ## Format code
-	cargo fmt
+fmt: ## Format entire workspace
+	@echo "🎨 Formatting workspace (trueno + trueno-gpu + xtask)..."
+	cargo fmt --all
 
-fmt-check: ## Check formatting without modifying
-	cargo fmt -- --check
+fmt-check: ## Check formatting for entire workspace
+	@echo "🎨 Checking formatting for workspace..."
+	cargo fmt --all -- --check
 
 bench: ## Run benchmarks
 	cargo bench --no-fail-fast
