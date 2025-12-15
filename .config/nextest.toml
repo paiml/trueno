@@ -1,0 +1,25 @@
+# Nextest configuration for trueno
+# Optimized for fast CI/coverage runs (target: 2-5 minutes)
+
+[profile.default]
+# Default timeout per test - fail fast on hung tests
+slow-timeout = { period = "30s", terminate-after = 2 }
+# Run tests in parallel
+test-threads = "num-cpus"
+
+[profile.default.junit]
+path = "target/nextest/default/junit.xml"
+
+# CI profile - excludes slow GPU tests for fast feedback
+[profile.ci]
+slow-timeout = { period = "10s", terminate-after = 2 }
+# Filter out slow GPU batch tests
+default-filter = "not test(/batch::tests::/)"
+
+# Coverage profile - async GPU tests are too slow under coverage instrumentation
+# (wgpu + llvm-cov interaction causes 40+ second execution times per test)
+[profile.coverage]
+slow-timeout = { period = "20s", terminate-after = 2 }
+# Exclude async GPU batch tests (too slow under coverage) and slow matmul test
+# These tests still run in regular `cargo test` without coverage
+default-filter = "not test(/test_matmul_parallel_1024/) and not test(/batch::tests::test_all_batch_operations/)"

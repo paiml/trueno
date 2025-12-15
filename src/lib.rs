@@ -35,6 +35,7 @@ pub mod error;
 pub mod hash;
 pub mod matrix;
 pub mod monitor;
+pub mod simulation;
 pub mod vector;
 
 pub use eigen::SymmetricEigen;

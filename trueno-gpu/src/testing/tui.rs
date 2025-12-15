@@ -237,6 +237,7 @@ pub mod interactive {
     //!
     //! Only available with `tui-monitor` feature.
 
+    #[allow(clippy::wildcard_imports)]
     use super::*;
 
     /// Run interactive TUI (requires tui-monitor feature)

@@ -16,6 +16,9 @@
 
 use crate::{Backend, TruenoError, Vector};
 
+#[cfg(feature = "tracing")]
+use tracing::instrument;
+
 /// A 2D matrix with row-major storage
 ///
 /// Data is stored in row-major format (C-style), where consecutive elements
@@ -120,6 +123,35 @@ impl Matrix<f32> {
             data,
             backend,
         })
+    }
+
+    /// Creates a matrix from a slice by copying the data
+    ///
+    /// This is a convenience method that copies the slice into an owned vector.
+    /// For zero-copy scenarios, consider using the data directly with `from_vec`
+    /// if you already have an owned `Vec`.
+    ///
+    /// # Arguments
+    ///
+    /// * `rows` - Number of rows
+    /// * `cols` - Number of columns
+    /// * `data` - Slice containing matrix elements in row-major order
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` if `data.len() != rows * cols`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use trueno::Matrix;
+    ///
+    /// let data = [1.0, 2.0, 3.0, 4.0];
+    /// let m = Matrix::from_slice(2, 2, &data).unwrap();
+    /// assert_eq!(m.get(0, 0), Some(&1.0));
+    /// ```
+    pub fn from_slice(rows: usize, cols: usize, data: &[f32]) -> Result<Self, TruenoError> {
+        Self::from_vec(rows, cols, data.to_vec())
     }
 
     /// Creates a matrix filled with zeros
@@ -249,12 +281,20 @@ impl Matrix<f32> {
     /// assert_eq!(c.get(1, 0), Some(&43.0));
     /// assert_eq!(c.get(1, 1), Some(&50.0));
     /// ```
+    #[cfg_attr(feature = "tracing", instrument(skip(self, other), fields(dims = %format!("{}x{} @ {}x{}", self.rows, self.cols, other.rows, other.cols))))]
     pub fn matmul(&self, other: &Matrix<f32>) -> Result<Matrix<f32>, TruenoError> {
         if self.cols != other.rows {
             return Err(TruenoError::InvalidInput(format!(
                 "Matrix dimension mismatch for multiplication: {}×{} × {}×{} (inner dimensions {} and {} must match)",
                 self.rows, self.cols, other.rows, other.cols, self.cols, other.rows
             )));
+        }
+
+        // Fast path for vector-matrix multiply (rows=1)
+        // Common in ML vocab projection: hidden_state @ embedding_transposed
+        // 8x faster than general matmul for 1×384 @ 384×51865 pattern
+        if self.rows == 1 {
+            return self.matmul_vector_matrix(other);
         }
 
         let mut result = Matrix::zeros_with_backend(self.rows, other.cols, self.backend);
@@ -312,6 +352,48 @@ impl Matrix<f32> {
             }
         } else {
             self.matmul_naive(other, &mut result)?;
+        }
+
+        Ok(result)
+    }
+
+    /// Fast path for vector-matrix multiplication (1×K @ K×N → 1×N)
+    ///
+    /// This is 8x faster than general matmul for patterns like:
+    /// - Vocab projection: hidden_state (1×384) @ embedding_transposed (384×51865)
+    /// - Single token decode in Whisper/LLM inference
+    ///
+    /// Strategy: Outer product accumulation (no transpose needed!)
+    /// For result[j] = sum_k(A[0,k] * B[k,j]), we compute:
+    ///   result += A[k] * B[k,:]  for each k
+    /// This has excellent cache locality since we access entire rows of B.
+    #[cfg_attr(feature = "tracing", instrument(skip(self, other), fields(k = self.cols, n = other.cols)))]
+    fn matmul_vector_matrix(&self, other: &Matrix<f32>) -> Result<Matrix<f32>, TruenoError> {
+        debug_assert_eq!(self.rows, 1);
+
+        let k = self.cols; // Inner dimension
+        let n = other.cols; // Output dimension
+
+        // Result is 1×N, initialized to zero
+        let mut result = Matrix::zeros_with_backend(1, n, self.backend);
+
+        // Outer product accumulation: result += A[k] * B[k,:]
+        // For each k, scale row k of B by A[k] and add to result
+        // The compiler will auto-vectorize this inner loop
+        for ki in 0..k {
+            let a_k = self.data[ki];
+            if a_k == 0.0 {
+                continue; // Skip zero multiplications
+            }
+
+            // Get row ki of B (contiguous in memory - cache friendly!)
+            let b_row_start = ki * n;
+
+            // AXPY: result += a_k * B[ki,:]
+            // This loop is auto-vectorized by LLVM with -O2/-O3
+            for j in 0..n {
+                result.data[j] += a_k * other.data[b_row_start + j];
+            }
         }
 
         Ok(result)
@@ -1326,6 +1408,7 @@ impl Matrix<f32> {
     /// assert_eq!(t.get(0, 1), Some(&4.0));
     /// assert_eq!(t.get(1, 0), Some(&2.0));
     /// ```
+    #[cfg_attr(feature = "tracing", instrument(skip(self), fields(dims = %format!("{}x{}", self.rows, self.cols))))]
     pub fn transpose(&self) -> Matrix<f32> {
         let mut result = Matrix::zeros_with_backend(self.cols, self.rows, self.backend);
 

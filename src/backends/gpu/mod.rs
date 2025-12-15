@@ -40,6 +40,7 @@ pub use device::GpuDevice;
 
 /// GPU backend for compute operations
 #[cfg(feature = "gpu")]
+#[derive(Clone)]
 pub struct GpuBackend {
     device: Option<GpuDevice>,
 }
@@ -462,6 +463,7 @@ impl Default for GpuBackend {
 
 // Stub implementation when GPU feature is disabled
 #[cfg(not(feature = "gpu"))]
+#[derive(Clone)]
 pub struct GpuBackend;
 
 #[cfg(not(feature = "gpu"))]
@@ -488,15 +490,30 @@ impl Default for GpuBackend {
 #[cfg(feature = "gpu")]
 mod tests {
     use super::*;
+    use std::sync::OnceLock;
+
+    /// Shared GPU backend for fast test execution (initialized once)
+    static SHARED_GPU: OnceLock<Option<GpuBackend>> = OnceLock::new();
+
+    /// Get shared GPU backend (fast) or None if unavailable
+    fn get_shared_gpu() -> Option<GpuBackend> {
+        SHARED_GPU
+            .get_or_init(|| {
+                if GpuBackend::is_available() {
+                    Some(GpuBackend::new())
+                } else {
+                    None
+                }
+            })
+            .clone()
+    }
 
     #[test]
     fn test_gpu_vec_add_basic() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let a = vec![1.0, 2.0, 3.0, 4.0];
         let b = vec![5.0, 6.0, 7.0, 8.0];
 
@@ -515,12 +532,10 @@ mod tests {
 
     #[test]
     fn test_gpu_vec_add_large() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let size = 10000;
         let a: Vec<f32> = (0..size).map(|i| i as f32).collect();
         let b: Vec<f32> = (0..size).map(|i| (i * 2) as f32).collect();
@@ -540,12 +555,10 @@ mod tests {
 
     #[test]
     fn test_gpu_vec_add_length_mismatch() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![4.0, 5.0]; // Different length
 
@@ -555,12 +568,10 @@ mod tests {
 
     #[test]
     fn test_gpu_dot_basic() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let a = vec![1.0, 2.0, 3.0, 4.0];
         let b = vec![5.0, 6.0, 7.0, 8.0];
 
@@ -576,12 +587,10 @@ mod tests {
 
     #[test]
     fn test_gpu_dot_large() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let size = 10000;
         let a: Vec<f32> = (0..size).map(|i| i as f32).collect();
         let b: Vec<f32> = (0..size).map(|_| 1.0).collect();
@@ -599,12 +608,10 @@ mod tests {
 
     #[test]
     fn test_gpu_dot_length_mismatch() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![4.0, 5.0]; // Different length
 
@@ -680,12 +687,10 @@ mod tests {
 
     #[test]
     fn test_gpu_vec_add_empty() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let a: Vec<f32> = vec![];
         let b: Vec<f32> = vec![];
 
@@ -873,12 +878,10 @@ mod tests {
 
     #[test]
     fn test_gpu_leaky_relu_basic() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let input = vec![-3.0, -1.0, 0.0, 1.0, 3.0];
         let negative_slope = 0.01;
 
@@ -902,12 +905,10 @@ mod tests {
 
     #[test]
     fn test_gpu_elu_basic() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let input = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
         let alpha = 1.0;
 
@@ -932,12 +933,10 @@ mod tests {
 
     #[test]
     fn test_gpu_tanh_basic() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let input = vec![-2.0, -1.0, 0.0, 1.0, 2.0];
 
         let result = gpu.tanh(&input);
@@ -960,12 +959,10 @@ mod tests {
     #[test]
     fn test_gpu_tanh_not_hardcoded() {
         // EXTREME TDD: Kill mutant that replaces return with Ok(vec![-1.0])
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let input = vec![1.0, 2.0, 3.0];
 
         let result = gpu.tanh(&input).expect("GPU tanh should succeed");
@@ -992,12 +989,10 @@ mod tests {
 
     #[test]
     fn test_gpu_softmax_basic() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let input = vec![1.0, 2.0, 3.0, 4.0];
 
         let result = gpu.softmax(&input);
@@ -1030,12 +1025,10 @@ mod tests {
 
     #[test]
     fn test_gpu_log_softmax_basic() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
         let input = vec![1.0, 2.0, 3.0, 4.0];
 
         let result = gpu.log_softmax(&input);
@@ -1060,12 +1053,10 @@ mod tests {
 
     #[test]
     fn test_gpu_matmul_basic() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
 
         // Simple 2x2 matrix multiplication
         // A = [[1, 2], [3, 4]]
@@ -1104,12 +1095,10 @@ mod tests {
 
     #[test]
     fn test_gpu_matmul_identity() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
 
         // Multiply by identity matrix
         // A = [[1, 2], [3, 4]]
@@ -1136,12 +1125,10 @@ mod tests {
 
     #[test]
     fn test_gpu_matmul_non_square() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
 
         // 2x3 matrix * 3x2 matrix = 2x2 matrix
         // A = [[1, 2, 3], [4, 5, 6]]
@@ -1180,12 +1167,10 @@ mod tests {
 
     #[test]
     fn test_gpu_convolve2d_basic() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
 
         // 3x3 input, 2x2 kernel -> 2x2 output
         let input = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
@@ -1208,12 +1193,10 @@ mod tests {
 
     #[test]
     fn test_gpu_convolve2d_identity() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
 
         // 3x3 input with center-only kernel should extract center values
         let input = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
@@ -1236,12 +1219,10 @@ mod tests {
 
     #[test]
     fn test_gpu_convolve2d_averaging() {
-        if !GpuBackend::is_available() {
+        let Some(mut gpu) = get_shared_gpu() else {
             eprintln!("GPU not available, skipping test");
             return;
-        }
-
-        let mut gpu = GpuBackend::new();
+        };
 
         // 4x4 input with 2x2 averaging kernel
         let input = vec![

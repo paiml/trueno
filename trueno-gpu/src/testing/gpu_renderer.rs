@@ -140,6 +140,7 @@ impl GpuPixelRenderer {
     /// # Panics
     /// Panics if buffer length doesn't match width * height
     #[must_use]
+    #[allow(clippy::expect_used)]
     pub fn render_to_png(&self, buffer: &[f32], width: u32, height: u32) -> Vec<u8> {
         assert_eq!(buffer.len(), (width * height) as usize);
 
@@ -256,10 +257,19 @@ pub fn compare_png_bytes(a: &[u8], b: &[u8], tolerance: u8) -> PixelDiffResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::OnceLock;
+
+    /// Shared GPU pixel renderer for fast test execution (initialized once)
+    static SHARED_RENDERER: OnceLock<GpuPixelRenderer> = OnceLock::new();
+
+    /// Get shared renderer (fast) - always succeeds since GpuPixelRenderer is CPU-based
+    fn get_shared_renderer() -> &'static GpuPixelRenderer {
+        SHARED_RENDERER.get_or_init(GpuPixelRenderer::new)
+    }
 
     #[test]
     fn test_render_produces_valid_png() {
-        let renderer = GpuPixelRenderer::new();
+        let renderer = get_shared_renderer();
         let buffer: Vec<f32> = (0..64).map(|i| i as f32 / 64.0).collect();
         let png = renderer.render_to_png(&buffer, 8, 8);
 
@@ -269,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_special_values() {
-        let renderer = GpuPixelRenderer::new();
+        let renderer = get_shared_renderer();
         let buffer = vec![f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.5];
         let png = renderer.render_to_png(&buffer, 2, 2);
         assert!(!png.is_empty());
@@ -279,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_compare_identical() {
-        let renderer = GpuPixelRenderer::new();
+        let renderer = get_shared_renderer();
         let buffer: Vec<f32> = (0..16).map(|i| i as f32 / 16.0).collect();
         let png = renderer.render_to_png(&buffer, 4, 4);
 
@@ -290,7 +300,7 @@ mod tests {
 
     #[test]
     fn test_compare_different() {
-        let renderer = GpuPixelRenderer::new();
+        let renderer = get_shared_renderer();
         let buffer_a: Vec<f32> = (0..16).map(|i| i as f32 / 16.0).collect();
         let buffer_b: Vec<f32> = (0..16).map(|i| 1.0 - i as f32 / 16.0).collect();
 

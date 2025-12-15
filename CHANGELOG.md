@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5] - 2025-12-15
+
+### Added
+
+- **Simulation Testing Framework** (`simulation` module) - TRUENO-SPEC-012
+  - `SimRng`: Deterministic PCG-based RNG for reproducible testing
+  - `BackendSelector`: Intelligent backend selection with configurable thresholds
+  - `JidokaGuard`: Toyota-style stop-on-defect quality checks (NaN/Inf detection)
+  - `HeijunkaScheduler`: Load-leveled test scheduling across backends
+  - `BufferRenderer`: RGBA buffer rendering for visual regression testing
+  - `ColorPalette`: Viridis and grayscale palettes for heatmap visualization
+  - `GoldenBaseline`: Golden file comparison for deterministic validation
+  - `StressTestConfig/Result`: Stress testing infrastructure with anomaly detection
+  - `BackendTolerance`: Cross-backend comparison tolerance configuration
+
+- **100 Falsifiable Claims** - Comprehensive test suite validating:
+  - Backend selection logic (Claims 1-15)
+  - Determinism guarantees (Claims 16-30)
+  - SIMD operation correctness (Claims 31-50)
+  - PTX kernel patterns (Claims 51-65)
+  - WGPU shader correctness (Claims 66-80)
+  - Visual regression framework (Claims 81-90)
+  - Stress testing infrastructure (Claims 91-100)
+
+### Fixed
+
+- `make coverage-check` now correctly parses coverage percentage
+- Coverage excludes external `simular` dependency for accurate metrics
+
 ## [trueno-gpu 0.1.0] - 2025-12-10
 
 ### Added

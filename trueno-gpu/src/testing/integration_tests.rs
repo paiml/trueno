@@ -6,6 +6,15 @@ use super::*;
 use simular::engine::rng::SimRng;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::OnceLock;
+
+/// Shared GPU pixel renderer for fast test execution (initialized once)
+static SHARED_RENDERER: OnceLock<GpuPixelRenderer> = OnceLock::new();
+
+/// Get shared renderer (fast) - always succeeds since GpuPixelRenderer is CPU-based
+fn get_shared_renderer() -> &'static GpuPixelRenderer {
+    SHARED_RENDERER.get_or_init(GpuPixelRenderer::new)
+}
 
 fn test_dir(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("trueno_sovereign_{}_{}", name, std::process::id()))
@@ -52,7 +61,7 @@ fn simulate_gemm_buggy(size: usize) -> Vec<f32> {
 
 #[test]
 fn test_sovereign_determinism() {
-    let renderer = GpuPixelRenderer::new();
+    let renderer = get_shared_renderer();
     let size = 8;
     let output = simulate_gemm(size);
 
@@ -66,7 +75,7 @@ fn test_sovereign_determinism() {
 
 #[test]
 fn test_sovereign_detects_bug() {
-    let renderer = GpuPixelRenderer::new();
+    let renderer = get_shared_renderer();
     let size = 8;
 
     let correct = simulate_gemm(size);
@@ -88,7 +97,7 @@ fn test_sovereign_detects_bug() {
 
 #[test]
 fn test_sovereign_special_values() {
-    let renderer = GpuPixelRenderer::new();
+    let renderer = get_shared_renderer();
     let buffer = vec![f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 0.5];
 
     let png = renderer.render_to_png(&buffer, 2, 2);
@@ -100,7 +109,7 @@ fn test_sovereign_special_values() {
 
 #[test]
 fn test_sovereign_threshold() {
-    let renderer = GpuPixelRenderer::new();
+    let renderer = get_shared_renderer();
     let size = 8;
 
     let output1 = simulate_gemm(size);
@@ -135,7 +144,7 @@ fn test_sovereign_deterministic_rng() {
 
     assert_eq!(input1, input2, "Same seed should produce same sequence");
 
-    let renderer = GpuPixelRenderer::new();
+    let renderer = get_shared_renderer();
     let png1 = renderer.render_to_png(&input1, 8, 8);
     let png2 = renderer.render_to_png(&input2, 8, 8);
 
@@ -155,7 +164,7 @@ fn test_demo_sovereign_stack() {
     println!("║   Dependencies: trueno-viz, simular (path only)              ║");
     println!("╚══════════════════════════════════════════════════════════════╝\n");
 
-    let renderer = GpuPixelRenderer::new();
+    let renderer = get_shared_renderer();
     let size = 8;
 
     // Test 1: Determinism
@@ -257,7 +266,7 @@ fn test_visual_report_sovereign() {
     println!("Report directory: {}", report_dir.display());
     println!();
 
-    let renderer = GpuPixelRenderer::new();
+    let renderer = get_shared_renderer();
 
     // TEST CASE 1: Identity Matrix
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -481,7 +490,7 @@ fn test_stress_runner_visual() {
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
 
-    let renderer = GpuPixelRenderer::new();
+    let renderer = get_shared_renderer();
 
     // Configure stress test
     let config = StressConfig {
