@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/paiml/trueno/actions"><img src="https://github.com/paiml/trueno/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/paiml/trueno"><img src="https://img.shields.io/badge/coverage-100%25-brightgreen" alt="Coverage"></a>
+  <a href="https://github.com/paiml/trueno"><img src="https://img.shields.io/badge/coverage-93%25-brightgreen" alt="Coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License"></a>
   <a href="https://crates.io/crates/trueno"><img src="https://img.shields.io/crates/v/trueno.svg" alt="Crates.io"></a>
 </p>
@@ -611,7 +611,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-trueno = "0.1"
+trueno = "0.8"
 ```
 
 ### GPU Acceleration (Optional)
@@ -620,7 +620,7 @@ Enable GPU support for very large matrices:
 
 ```toml
 [dependencies]
-trueno = { version = "0.1", features = ["gpu"] }
+trueno = { version = "0.8", features = ["gpu"] }
 ```
 
 **Requirements**:
@@ -836,12 +836,12 @@ make quality-gates
 make lint       # Zero warnings policy
 make fmt-check  # Format verification
 make test-fast  # All tests (<5 min)
-make coverage   # >85% required (<10 min)
+make coverage   # ≥90% required (<5 min)
 make mutate     # Mutation testing (>80% kill rate)
 ```
 
 **Quality Metrics**:
-- ✅ **Test Coverage**: 100% (target >85%)
+- ✅ **Test Coverage**: 93% (target ≥90%)
 - ✅ **PMAT TDG Score**: 96.1/100 (A+)
 - ✅ **Clippy Warnings**: 0
 - ✅ **Property Tests**: 10 tests × 100 cases each
@@ -1047,26 +1047,45 @@ rm -f /tmp/uv-install.sh
 
 ## Examples
 
-Trueno includes several runnable examples demonstrating real-world use cases:
+Trueno includes 18 runnable examples demonstrating real-world use cases:
 
 ```bash
+# ⭐ Quick Start - All core features in one file
+cargo run --release --example quickstart
+
 # Machine Learning: Cosine similarity, L2 normalization, k-NN
 cargo run --release --example ml_similarity
 
-# Performance: Compare Scalar vs SSE2 backends
+# Neural Networks: Activation functions (ReLU, Sigmoid, GELU, Softmax)
+cargo run --release --example activation_functions
+
+# Matrix Operations: Multiplication, transpose, matvec
+cargo run --release --example matrix_operations
+
+# Eigendecomposition: PCA, spectral analysis
+cargo run --release --example symmetric_eigen
+
+# Performance: Compare Scalar vs SIMD backends
 cargo run --release --example performance_demo
 
 # Backend Detection: Runtime CPU feature detection
 cargo run --release --example backend_detection
+
+# Hash Functions: SIMD-optimized hashing
+cargo run --release --example hash_demo
+
+# GPU Operations (requires --features gpu)
+cargo run --release --features gpu --example gpu_batch_demo
+cargo run --release --features gpu --example gpu_monitor_demo
 ```
 
-**ML Example Features**:
-- Document similarity for recommendation systems
-- Feature normalization for neural networks
-- k-Nearest Neighbors classification
-- Demonstrates 340% speedup for dot products
+**Example Highlights**:
+- **18 Rust examples** covering vectors, matrices, ML, GPU
+- **3 Python comparison scripts** for NumPy/PyTorch benchmarks
+- **Interactive TUI** for performance visualization (`perf_tui`)
+- Demonstrates **3-17x SIMD speedups** for compute-bound operations
 
-See `examples/` directory for complete code.
+See `examples/README.md` for complete documentation.
 
 ## Project Structure
 
@@ -1185,7 +1204,7 @@ We welcome contributions! Please follow these guidelines:
    - Zero clippy warnings
    - 100% formatted code
    - All tests passing
-   - Coverage >85%
+   - Coverage ≥90%
 
 2. **Testing**: Include tests for new features
    - Unit tests for basic functionality
