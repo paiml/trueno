@@ -2,9 +2,7 @@
 
 Pure Rust PTX generation for NVIDIA CUDA - no LLVM, no nvcc, no external dependencies.
 
-[![Crates.io](https://img.shields.io/crates/v/trueno-gpu.svg)](https://crates.io/crates/trueno-gpu)
-[![Documentation](https://docs.rs/trueno-gpu/badge.svg)](https://docs.rs/trueno-gpu)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/paiml/trueno/actions/workflows/ci.yml/badge.svg)](https://github.com/paiml/trueno/actions)
 
 ## Philosophy
 

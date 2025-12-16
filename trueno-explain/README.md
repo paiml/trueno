@@ -2,8 +2,7 @@
 
 PTX/SIMD/wgpu visualization and tracing CLI for Trueno.
 
-[![Crates.io](https://img.shields.io/crates/v/trueno-explain.svg)](https://crates.io/crates/trueno-explain)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/paiml/trueno/actions/workflows/ci.yml/badge.svg)](https://github.com/paiml/trueno/actions)
 
 ## Features
 
