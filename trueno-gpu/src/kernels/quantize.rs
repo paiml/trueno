@@ -1718,6 +1718,24 @@ mod tests {
             prop_assert_eq!(kernel.num_super_blocks_per_row(), k_factor);
         }
 
+        /// Matvec case (n=1) used by realizar for GGUF inference
+        #[test]
+        fn prop_q5k_q6k_matvec_n1(m in 32u32..512, k_factor in 1u32..8) {
+            let k = k_factor * 256;
+
+            // Q5K matvec
+            let q5k = Q5KKernel::new(m, 1, k);
+            let ptx_q5k = q5k.emit_ptx();
+            prop_assert!(ptx_q5k.contains("q5k_gemm_ggml"));
+            prop_assert!(ptx_q5k.contains(".entry"));
+
+            // Q6K matvec
+            let q6k = Q6KKernel::new(m, 1, k);
+            let ptx_q6k = q6k.emit_ptx();
+            prop_assert!(ptx_q6k.contains("q6k_gemm_ggml"));
+            prop_assert!(ptx_q6k.contains(".entry"));
+        }
+
         #[test]
         fn prop_all_quant_kernels_distinct(
             m in 64u32..256,
