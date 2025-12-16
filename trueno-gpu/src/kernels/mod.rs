@@ -33,10 +33,11 @@ pub trait Kernel {
     fn build_ptx(&self) -> PtxKernel;
 
     /// Get PTX module containing this kernel
+    /// Uses sm_89 for RTX 4090 (Ada Lovelace) compatibility
     fn as_module(&self) -> PtxModule {
         PtxModule::new()
             .version(8, 0)
-            .target("sm_70")
+            .target("sm_89")
             .address_size(64)
             .add_kernel(self.build_ptx())
     }
@@ -157,7 +158,7 @@ mod property_tests {
 
             // Verify consistent structure regardless of dimensions
             prop_assert!(ptx.contains(".version 8.0"), "Must have version 8.0");
-            prop_assert!(ptx.contains(".target sm_70"), "Must target sm_70");
+            prop_assert!(ptx.contains(".target sm_89"), "Must target sm_89 for RTX 4090");
             prop_assert!(ptx.contains(".address_size 64"), "Must use 64-bit addresses");
             prop_assert!(ptx.contains("ret;"), "Must have return statement");
         }

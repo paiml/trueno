@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [trueno-explain 0.2.0] - 2025-12-16
+
+### Added
+
+- **PTX Bug Detection** - Static analysis for PTX to catch common bugs
+  - 12 bug classes across 3 severity levels (P0 Critical, P1 High, P2 Medium)
+  - `PtxBugAnalyzer` with default, strict, and whitelist modes
+  - Detects: shared memory addressing bugs, missing barriers, register pressure, placeholder code, dead code, empty loops, missing bounds checks
+  - `with_quantized_whitelist()` for Q4K/Q5K/Q6K/Q8K kernels
+  - Coverage tracking with `PtxCoverageTracker`
+
+- **Examples**
+  - `deep_bug_hunt` - Analyze all trueno-gpu kernels (30 kernels)
+  - `analyze_realizar` - Analyze external hand-rolled PTX
+  - `ptx_inspector` - Deep dive into specific kernel PTX
+
+### Documentation
+
+- New chapter: [PTX Bug Detection](../development/ptx-bug-detection.md)
+- 190 new tests for bug detection
+
+## [trueno-gpu 0.2.2] - 2025-12-16
+
+### Changed
+
+- **Internal**: Reduced predicate pressure in tiled GEMM by using two branches instead of `and_pred`
+- No API changes
+
 ## [0.7.3] - 2025-11-25
 
 ### Added ✨

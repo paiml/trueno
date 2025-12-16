@@ -671,6 +671,19 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// AND two predicates: dst = a AND b
+    /// Used for combining bounds checks (PARITY-114)
+    pub fn and_pred(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::Pred);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::And, PtxType::Pred)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
     /// Multiply u32
     pub fn mul_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);

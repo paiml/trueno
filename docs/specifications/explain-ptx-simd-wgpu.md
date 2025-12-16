@@ -422,3 +422,203 @@ Rich terminal interface for exploration.
 - [ ] All 100 falsification tests pass
 - [ ] `cargo clippy` clean
 - [ ] TUI tested on 80x24 and 4k terminals
+
+---
+
+## 11. PTX Bug Hunting (Probar-Style Static Analysis)
+
+**Inspired by**: bashrs parser bug hunting methodology that found 25 bugs through rigorous edge case testing.
+
+### 11.1 Motivation
+
+PTX assembly is "scary" - invisible bugs cause silent correctness failures or 100x performance regressions. Unlike CPU code where bugs crash, GPU bugs often produce wrong results silently. We apply bashrs's proven bug hunting methodology to catch PTX bugs at generation time.
+
+### 11.2 PTX Bug Classification
+
+| Severity | Category | Examples | Impact |
+|----------|----------|----------|--------|
+| **P0 Critical** | Correctness | Missing barrier sync, wrong addressing | Silent wrong results |
+| **P1 High** | Performance | Uncoalesced access, register spills | 10-100x slowdown |
+| **P2 Medium** | Suboptimal | Missed optimizations, redundant ops | 2-10x slowdown |
+| **False Positive** | Error handling | Malformed PTX accepted | Security/stability |
+
+### 11.3 Bug Detection Patterns (from probar)
+
+```rust
+/// PTX bug classification
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PtxBugClass {
+    /// P0: Shared memory accessed with 64-bit register (should be 32-bit)
+    SharedMemU64Addressing,
+    /// P0: Loop branches to END label instead of START
+    LoopBranchToEnd,
+    /// P0: Missing barrier sync between shared memory write and read (PARITY-114)
+    MissingBarrierSync,
+    /// P1: Accumulator not updated in-place in loop
+    NonInPlaceLoopAccumulator,
+    /// P2: Redundant register moves
+    RedundantMoves,
+    /// P2: Unoptimized memory access pattern
+    UnoptimizedMemoryPattern,
+    /// False Positive: Invalid PTX syntax accepted
+    InvalidSyntaxAccepted,
+    /// False Positive: Missing entry point not detected
+    MissingEntryPoint,
+}
+```
+
+### 11.4 Bug Hunting Test Categories
+
+Following bashrs's `parser_bug_hunting.rs` methodology:
+
+| Category | Test Pattern | Example PTX |
+|----------|--------------|-------------|
+| **Nested Structures** | Deep control flow nesting | `@%p1 bra; @%p2 bra; ...` |
+| **Memory Addressing** | 32-bit vs 64-bit shared mem | `st.shared [%rd0]` vs `[%r0]` |
+| **Barrier Sync** | Shared mem without barriers | `st.shared; ld.shared` (missing `bar.sync`) |
+| **Loop Patterns** | Branch direction correctness | `bra loop_end` vs `bra loop_start` |
+| **Register Allocation** | Spill detection | `.local` usage patterns |
+| **Malformed Input** | Error rejection | Unclosed blocks, missing `ret` |
+
+### 11.5 Bug Hunt Test Suite Structure
+
+```rust
+/// PTX Bug Hunting - Rigorous Edge Case Testing
+/// (mirrors bashrs/rash/tests/parser_bug_hunting.rs)
+
+#[test]
+fn test_generate_ptx_bug_report() {
+    let mut bugs_found = Vec::new();
+
+    let edge_cases = vec![
+        // (ptx, description, should_be_valid, expected_bug)
+        (SHARED_MEM_U64_PTX, "Shared mem 64-bit addressing", false, Some(PtxBugClass::SharedMemU64Addressing)),
+        (MISSING_BARRIER_PTX, "Missing barrier after st.shared", false, Some(PtxBugClass::MissingBarrierSync)),
+        (LOOP_BRANCH_END_PTX, "Loop branches to end", false, Some(PtxBugClass::LoopBranchToEnd)),
+        // ... 50+ edge cases
+    ];
+
+    for (ptx, desc, should_valid, expected) in edge_cases {
+        let result = PtxBugAnalyzer::strict().analyze(ptx);
+        // Assert bug detected or valid as expected
+    }
+
+    generate_bug_report(&bugs_found);
+}
+```
+
+### 11.6 Probar-Style Coverage Tracking
+
+```rust
+/// Track PTX feature coverage (mirrors bashrs gui_coverage! macro)
+#[test]
+fn test_ptx_comprehensive_coverage() {
+    let mut coverage = PtxCoverageTracker::new()
+        .feature("barrier_sync")
+        .feature("shared_memory")
+        .feature("global_memory")
+        .feature("register_allocation")
+        .feature("loop_patterns")
+        .feature("control_flow")
+        .build();
+
+    // Run all PTX test cases
+    for kernel in all_kernels() {
+        let ptx = kernel.emit_ptx();
+        coverage.analyze(&ptx);
+    }
+
+    let report = coverage.generate_report();
+    assert!(report.coverage >= 0.90, "PTX coverage must be ≥90%");
+}
+```
+
+### 11.7 Determinism Verification
+
+```rust
+/// Verify PTX analysis is deterministic (mirrors bashrs test_parser_determinism)
+#[test]
+fn test_ptx_analysis_determinism() {
+    let kernels = [
+        GemmKernel::naive(64, 64, 64),
+        GemmKernel::tiled(64, 64, 64, 16),
+        SoftmaxKernel::new(1024),
+        Q5KKernel::new(64, 64, 256),
+    ];
+
+    for kernel in &kernels {
+        let ptx = kernel.emit_ptx();
+        let result1 = PtxAnalyzer::new().analyze(&ptx);
+        let result2 = PtxAnalyzer::new().analyze(&ptx);
+        let result3 = PtxAnalyzer::new().analyze(&ptx);
+
+        assert_eq!(result1, result2);
+        assert_eq!(result2, result3);
+    }
+}
+```
+
+### 11.8 Implementation Sprint: TRUENO-EXPLAIN-003 (Bug Hunting)
+
+| ID | Task | Effort | Acceptance Criteria |
+|----|------|--------|---------------------|
+| TE-020 | Add `PtxBugClass` enum | 0.5 day | All 8 bug classes defined |
+| TE-021 | Implement `MissingBarrierSync` detection | 1 day | Catches PARITY-114 pattern |
+| TE-022 | Implement `SharedMemU64Addressing` detection | 0.5 day | Detects `[%rd*]` in shared ops |
+| TE-023 | Implement `LoopBranchToEnd` detection | 0.5 day | Detects wrong branch targets |
+| TE-024 | Create `ptx_bug_hunting.rs` test suite | 2 days | 50+ edge cases tested |
+| TE-025 | Add coverage tracking | 1 day | Reports feature coverage |
+| TE-026 | Add determinism verification | 0.5 day | All kernels verified |
+| TE-027 | Integration with TUI | 1 day | Bugs shown in TUI dashboard |
+
+### 11.9 Bug Hunting Falsification Tests
+
+| ID | Test | Expected Result | Pass/Fail |
+|----|------|-----------------|-----------|
+| F101 | Detect `st.shared [%rd0]` | `SharedMemU64Addressing` bug reported | |
+| F102 | Detect missing `bar.sync` | `MissingBarrierSync` bug reported | |
+| F103 | Detect `bra loop_end` in loop | `LoopBranchToEnd` bug reported | |
+| F104 | Valid PTX passes | No bugs reported | |
+| F105 | Unclosed block rejected | `InvalidSyntax` error | |
+| F106 | Missing `.entry` detected | `MissingEntryPoint` bug reported | |
+| F107 | Coverage ≥90% | Coverage report shows ≥90% | |
+| F108 | Determinism verified | 3 runs produce identical results | |
+
+### 11.10 Bug Report Format
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         PTX BUG HUNTING REPORT                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Kernel: gemm_tiled (M=64, N=64, K=64, tile=16)
+PTX Lines Analyzed: 847
+
+P0 CRITICAL BUGS: 1
+──────────────────
+  BUG-001: Missing barrier synchronization
+    Line 234: st.shared.f32 [%r5], %f0
+    Line 238: ld.shared.f32 %f1, [%r6]   ← No bar.sync between!
+    Impact: Race condition, silent wrong results
+    Fix: Add `bar.sync 0;` between st.shared and ld.shared
+
+P1 HIGH BUGS: 0
+P2 MEDIUM BUGS: 2
+─────────────────
+  BUG-002: Suboptimal register usage
+    58 registers used, 100% occupancy possible
+
+  BUG-003: Uncoalesced global load pattern
+    Line 45: ld.global.f32 %f0, [%rd0 + %r1*512]
+    Impact: 32x bandwidth reduction
+    Fix: Transpose access pattern
+
+FALSE POSITIVES DETECTED: 0
+
+SUMMARY
+═══════
+  Total Bugs: 3
+  P0 Critical: 1 ← BLOCKS RELEASE
+  P1 High: 0
+  P2 Medium: 2
+```

@@ -55,7 +55,10 @@ pub use compare::{compare_analyses, format_comparison_json, format_comparison_te
 pub use diff::{compare_reports, format_diff_json, format_diff_text, DiffReport, DiffThresholds};
 pub use error::{ExplainError, Result};
 pub use output::{format_json, format_text, OutputFormat};
-pub use ptx::PtxAnalyzer;
+pub use ptx::{
+    BugSeverity, PtxAnalyzer, PtxBug, PtxBugAnalyzer, PtxBugClass, PtxBugReport,
+    PtxCoverageReport, PtxCoverageTracker, PtxCoverageTrackerBuilder, PtxFeature,
+};
 pub use simd::{SimdAnalyzer, SimdArch, SimdInstructionCounts};
 pub use tui::{run_tui, TuiApp};
 pub use wgpu::{WgpuAnalyzer, WorkgroupSize};

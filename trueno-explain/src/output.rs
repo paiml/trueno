@@ -59,10 +59,11 @@ pub fn format_text(report: &AnalysisReport) -> String {
         report.registers.b64_regs,
         report.registers.b64_regs as f32 / 255.0 * 100.0
     ));
+    // PTX has 8 predicate registers (p0-p7)
     output.push_str(&format!(
-        "  ├── .reg .pred: {} / 7 ({:.1}%)\n",
+        "  ├── .reg .pred: {} / 8 ({:.1}%)\n",
         report.registers.pred_regs,
-        report.registers.pred_regs as f32 / 7.0 * 100.0
+        report.registers.pred_regs as f32 / 8.0 * 100.0
     ));
     output.push_str(&format!(
         "  └── {}: {} registers → {:.0}% occupancy possible\n",

@@ -77,14 +77,46 @@ impl PtxAnalyzer {
         pattern.shared_stores = shared_store.find_iter(ptx).count() as u32;
 
         // Estimate coalescing based on access patterns
-        // Look for tid-based indexing which indicates coalesced access
-        let coalesced_pattern = Regex::new(r"%tid\.x|%ntid\.x").unwrap();
-        let tid_refs = coalesced_pattern.find_iter(ptx).count();
+        // Coalesced access indicators:
+        // 1. tid/ctaid references (thread and block IDs - used for index computation)
+        // 2. mad.lo with tid (computing linear index from thread/block IDs)
+        // 3. mul.wide with small constant (stride-1 access)
+        // 4. shfl instructions (warp shuffle - implicit coalescing)
+        // Note: Include both x and y dimensions since 2D kernels use both
+        let tid_pattern = Regex::new(r"%tid\.[xy]|%ntid\.[xy]|%ctaid\.[xy]").unwrap();
+        let tid_refs = tid_pattern.find_iter(ptx).count();
+
+        // mad.lo often computes coalesced indices: mad.lo %r, %ctaid, %ntid, %tid
+        let mad_pattern = Regex::new(r"mad\.lo").unwrap();
+        let mad_refs = mad_pattern.find_iter(ptx).count();
+
+        // mul.lo also used for index computation
+        let mul_lo_pattern = Regex::new(r"mul\.lo").unwrap();
+        let mul_lo_refs = mul_lo_pattern.find_iter(ptx).count();
+
+        // mul.wide with small constants indicates stride-based access
+        let stride_pattern = Regex::new(r"mul\.wide\.[us]32").unwrap();
+        let stride_refs = stride_pattern.find_iter(ptx).count();
+
+        // Warp shuffles indicate warp-level data sharing (inherently coalesced)
+        let shfl_pattern = Regex::new(r"shfl\.(down|up|bfly|idx)").unwrap();
+        let shfl_refs = shfl_pattern.find_iter(ptx).count();
+
+        // rem/div operations often used for lane computation in coalesced patterns
+        let lane_pattern = Regex::new(r"rem\.u32|div\.u32").unwrap();
+        let lane_refs = lane_pattern.find_iter(ptx).count();
 
         let total_accesses = pattern.global_loads + pattern.global_stores;
         if total_accesses > 0 {
-            // Heuristic: more tid references relative to accesses = better coalescing
-            pattern.coalesced_ratio = (tid_refs as f32 / total_accesses as f32).min(1.0);
+            // Improved heuristic: weight different indicators
+            // Each indicator suggests thread-based indexing which implies coalescing potential
+            let coalescing_score = tid_refs as f32
+                + (mad_refs as f32 * 0.6)  // mad.lo strongly indicates index computation
+                + (mul_lo_refs as f32 * 0.4) // mul.lo also used for indices
+                + (stride_refs as f32 * 0.3) // stride patterns
+                + (shfl_refs as f32 * 0.3)  // warp shuffles
+                + (lane_refs as f32 * 0.2); // lane computation
+            pattern.coalesced_ratio = (coalescing_score / total_accesses as f32).min(1.0);
         } else {
             pattern.coalesced_ratio = 1.0;
         }
