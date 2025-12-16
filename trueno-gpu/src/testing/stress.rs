@@ -594,4 +594,65 @@ mod tests {
         assert!(!report.anomalies.is_empty());
         assert_eq!(report.anomalies[0].kind, AnomalyKind::SlowFrame);
     }
+
+    // ========================================================================
+    // EDGE CASE COVERAGE TESTS - TRUENO-SPEC-014
+    // ========================================================================
+
+    #[test]
+    fn test_stress_report_empty_frames() {
+        // Coverage for line 54: when frames is empty
+        let report = StressReport::default();
+        assert_eq!(report.mean_frame_time_ms(), 0.0);
+        assert_eq!(report.max_frame_time_ms(), 0);
+    }
+
+    #[test]
+    fn test_stress_report_single_frame_variance() {
+        // Coverage for timing_variance with < 2 frames
+        let mut report = StressReport::default();
+        report.add_frame(FrameProfile {
+            cycle: 0,
+            duration_ms: 100,
+            tests_passed: 1,
+            tests_failed: 0,
+            ..Default::default()
+        });
+        assert_eq!(report.timing_variance(), 0.0);
+    }
+
+    #[test]
+    fn test_stress_report_zero_mean_variance() {
+        // Coverage for line 68: when mean is 0.0
+        let mut report = StressReport::default();
+        report.add_frame(FrameProfile {
+            cycle: 0,
+            duration_ms: 0, // Zero duration
+            tests_passed: 1,
+            tests_failed: 0,
+            ..Default::default()
+        });
+        report.add_frame(FrameProfile {
+            cycle: 1,
+            duration_ms: 0, // Zero duration
+            tests_passed: 1,
+            tests_failed: 0,
+            ..Default::default()
+        });
+        assert_eq!(report.timing_variance(), 0.0);
+    }
+
+    #[test]
+    fn test_stress_report_pass_rate_no_tests() {
+        // Coverage for line 90: when total is 0
+        let mut report = StressReport::default();
+        report.add_frame(FrameProfile {
+            cycle: 0,
+            duration_ms: 100,
+            tests_passed: 0, // No tests
+            tests_failed: 0, // No tests
+            ..Default::default()
+        });
+        assert_eq!(report.pass_rate(), 1.0);
+    }
 }

@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Trueno** (Spanish: "thunder") is a Rust library providing unified, high-performance compute primitives across three execution targets:
+**Trueno** (Spanish: "thunder") is a Rust library providing unified, high-performance compute primitives across multiple execution targets:
 
 1. **CPU SIMD** - x86 (SSE2/AVX/AVX2/AVX-512), ARM (NEON), WASM (SIMD128)
-2. **GPU** - Vulkan/Metal/DX12/WebGPU via `wgpu`
-3. **WebAssembly** - Portable SIMD128 for browser/edge deployment
+2. **NVIDIA CUDA** - Native PTX generation via `trueno-gpu` (no nvcc/LLVM required)
+3. **Cross-Platform GPU** - Vulkan/Metal/DX12/WebGPU via `wgpu`
+4. **WebAssembly** - Portable SIMD128 for browser/edge deployment
 
 **Core Principles**:
 - Write once, optimize everywhere: Single algorithm, multiple backends
@@ -344,58 +345,78 @@ cargo mutants --timeout 120 --minimum-pass-rate 80
 │  compute(), map(), reduce(), transform()        │
 └─────────────────────────────────────────────────┘
                       │
-        ┌─────────────┼─────────────┐
-        ▼             ▼             ▼
-   ┌────────┐   ┌─────────┐   ┌──────────┐
-   │  SIMD  │   │   GPU   │   │   WASM   │
-   │ Backend│   │ Backend │   │  Backend │
-   └────────┘   └─────────┘   └──────────┘
-        │             │             │
-   ┌────┴────┐   ┌────┴────┐   ┌───┴─────┐
-   │ Runtime │   │  wgpu   │   │ SIMD128 │
-   │ Detect  │   │ Compute │   │ Portable│
-   └─────────┘   └─────────┘   └─────────┘
-   │  │  │  │
-   SSE2 AVX  NEON AVX512
+        ┌─────────────┼─────────────┬─────────────┐
+        ▼             ▼             ▼             ▼
+   ┌────────┐   ┌─────────┐   ┌──────────┐   ┌──────────┐
+   │  SIMD  │   │  CUDA   │   │   wgpu   │   │   WASM   │
+   │ Backend│   │ Backend │   │  Backend │   │  Backend │
+   └────────┘   └─────────┘   └──────────┘   └──────────┘
+        │             │             │             │
+   ┌────┴────┐   ┌────┴────┐   ┌───┴─────┐   ┌───┴─────┐
+   │ Runtime │   │ Pure PTX│   │ Vulkan/ │   │ SIMD128 │
+   │ Detect  │   │ Gen(Rust)│  │ Metal   │   │ Portable│
+   └─────────┘   └─────────┘   └─────────┘   └─────────┘
+   │  │  │  │         │
+   SSE2 AVX NEON   trueno-gpu
+        AVX512     (no nvcc!)
 ```
 
 ### Backend Selection Priority
 
-1. GPU (if available + workload size > 100,000 elements)
-2. AVX-512 (if CPU supports)
-3. AVX2 (if CPU supports)
-4. AVX (if CPU supports)
-5. SSE2 (baseline x86_64)
-6. NEON (ARM64)
-7. SIMD128 (WASM)
-8. Scalar fallback
+1. **CUDA** (if NVIDIA GPU available + workload benefits from parallelism)
+2. **wgpu** (if cross-platform GPU available + workload size > 100,000 elements)
+3. **AVX-512** (if CPU supports, for compute-bound operations)
+4. **AVX2** (preferred for most operations - best balance)
+5. **AVX** (if CPU supports)
+6. **SSE2** (baseline x86_64)
+7. **NEON** (ARM64)
+8. **SIMD128** (WASM)
+9. **Scalar** fallback (always available)
 
 ### Project Structure
 
 ```
-src/
-├── lib.rs                  # Public API exports
-├── error.rs                # TruenoError types
-├── vector.rs               # Vector<T> type and VectorOps trait
-├── backend/
-│   ├── mod.rs              # Backend enum and dispatch logic
-│   ├── scalar.rs           # Scalar fallback (baseline correctness)
-│   ├── simd/
-│   │   ├── mod.rs          # SIMD backend selection
+trueno/                     # Main crate (CPU SIMD + wgpu)
+├── src/
+│   ├── lib.rs              # Public API exports
+│   ├── error.rs            # TruenoError types
+│   ├── vector.rs           # Vector<T> type and VectorOps trait
+│   ├── matrix.rs           # Matrix operations (matmul, transpose)
+│   ├── backends/
+│   │   ├── mod.rs          # Backend enum and dispatch logic
+│   │   ├── scalar.rs       # Scalar fallback (baseline correctness)
 │   │   ├── sse2.rs         # x86_64 baseline (guaranteed available)
-│   │   ├── avx.rs          # 256-bit operations
-│   │   ├── avx2.rs         # 256-bit with FMA
+│   │   ├── avx2.rs         # 256-bit with FMA (preferred)
 │   │   ├── avx512.rs       # 512-bit (Zen4/Sapphire Rapids+)
 │   │   ├── neon.rs         # ARM64 SIMD
 │   │   └── wasm.rs         # WASM SIMD128
-│   └── gpu/
+│   └── backends/gpu/       # wgpu integration
 │       ├── mod.rs          # GPU device management
-│       ├── device.rs       # wgpu integration
-│       └── shaders/
-│           └── vector_add.wgsl  # Compute shaders
-└── utils/
-    ├── mod.rs
-    └── cpu_detect.rs       # Runtime CPU feature detection
+│       └── shaders/        # WGSL compute shaders
+│
+trueno-gpu/                 # CUDA sub-crate (Pure Rust PTX generation)
+├── src/
+│   ├── lib.rs              # Public API
+│   ├── ptx/                # PTX code generation (no nvcc!)
+│   │   ├── mod.rs          # PTX module builder
+│   │   ├── builder.rs      # Fluent PTX kernel API
+│   │   ├── instructions.rs # PTX ISA instruction emission
+│   │   ├── registers.rs    # Register allocation with liveness
+│   │   └── types.rs        # PTX types (f32, f16, u32, etc.)
+│   ├── kernels/            # Pre-built optimized kernels
+│   │   ├── gemm.rs         # Matrix multiplication (naive, tiled, tensor core)
+│   │   ├── softmax.rs      # Numerically stable softmax
+│   │   ├── layernorm.rs    # Fused layer normalization
+│   │   ├── attention.rs    # FlashAttention-style tiled attention
+│   │   └── quantize.rs     # Q4_K dequantization
+│   ├── driver/             # CUDA driver FFI (minimal)
+│   │   ├── mod.rs          # CudaContext, CudaModule
+│   │   └── types.rs        # CUresult, CUdevice, etc.
+│   └── memory/             # GPU memory management
+│       ├── mod.rs          # DeviceBuffer, HostBuffer
+│       └── pool.rs         # Memory pool with fragmentation tracking
+└── tests/
+    └── pixel_fkr.rs        # PTX visual regression tests
 ```
 
 ### Key Implementation Patterns
@@ -422,7 +443,20 @@ unsafe fn add_f32_avx2(a: &[f32], b: &[f32], out: &mut [f32]) {
 }
 ```
 
-**GPU Dispatch Pattern**:
+**CUDA PTX Generation Pattern** (trueno-gpu):
+```rust
+use trueno_gpu::kernels::{GemmKernel, Kernel};
+
+// Generate PTX at compile-time or runtime - NO nvcc required!
+let kernel = GemmKernel::tiled(m, n, k, tile_size);
+let ptx: String = kernel.emit_ptx();
+
+// PTX is pure Rust string generation
+assert!(ptx.contains(".version 8.0"));
+assert!(ptx.contains(".entry gemm_tiled"));
+```
+
+**wgpu GPU Dispatch Pattern**:
 ```rust
 pub struct GpuBackend {
     device: wgpu::Device,
@@ -559,7 +593,8 @@ Every operation in trueno MUST work on ALL backends:
 - ✅ **AVX-512** - x86_64 512-bit SIMD
 - ✅ **NEON** - ARM64 SIMD
 - ✅ **WASM SIMD128** - WebAssembly portable SIMD
-- ✅ **GPU** - wgpu compute shaders
+- ✅ **CUDA** - NVIDIA GPU via trueno-gpu (pure Rust PTX)
+- ✅ **wgpu** - Cross-platform GPU compute shaders
 
 ### Enforcement
 
@@ -617,9 +652,9 @@ When adding a new operation (e.g., `frobulate()`), you MUST:
 ❌ COMMIT BLOCKED: Backend Story Violation
 
 The following operations are missing backend implementations:
-- frobulate: Missing GPU implementation
+- frobulate: Missing CUDA kernel implementation
 
-All operations MUST work on: Scalar, SSE2, AVX2, AVX512, NEON, WASM, GPU
+All operations MUST work on: Scalar, SSE2, AVX2, AVX512, NEON, WASM, CUDA, wgpu
 
 Fix: Implement missing backends before committing.
 See: CLAUDE.md "Backend Story Policy"
@@ -678,18 +713,72 @@ pub fn add_f32(a: &[f32], b: &[f32]) -> Result<Vec<f32>> {
 }
 ```
 
+## trueno-gpu: Pure Rust CUDA Support
+
+**Philosophy**: Own the Stack - build everything from first principles.
+
+### What trueno-gpu Provides
+
+- **Pure Rust PTX Generation** - No nvcc, no LLVM, no external toolchains
+- **Fluent Kernel Builder API** - `PtxModule`, `PtxKernel`, `KernelBuilder`
+- **Pre-built Optimized Kernels** - GEMM (naive/tiled/tensor core), Softmax, LayerNorm, Attention
+- **Register Allocation** - With liveness tracking
+- **Memory Pool** - Fragmentation tracking for GPU memory
+
+### Available Kernels
+
+| Kernel | Description | Variants |
+|--------|-------------|----------|
+| `GemmKernel` | Matrix multiplication | naive, tiled, tensor_core |
+| `SoftmaxKernel` | Numerically stable softmax | warp shuffle reduction |
+| `LayerNormKernel` | Fused layer normalization | with gamma/beta |
+| `AttentionKernel` | FlashAttention-style | standard, causal |
+| `QuantizeKernel` | Q4_K dequantization | fused with matmul |
+
+### Usage Example
+
+```rust
+use trueno_gpu::kernels::{GemmKernel, Kernel};
+
+// Create tiled GEMM kernel for 1024×1024×1024
+let kernel = GemmKernel::tiled(1024, 1024, 1024, 32);
+
+// Generate PTX source code (no external tools!)
+let ptx: String = kernel.emit_ptx();
+
+// PTX is valid and loadable by CUDA driver
+assert!(ptx.contains(".version 8.0"));
+assert!(ptx.contains(".target sm_70"));
+assert!(ptx.contains(".entry gemm_tiled"));
+```
+
+### Testing with CUDA Hardware
+
+```bash
+# Run CUDA-specific tests (requires NVIDIA GPU)
+cargo test -p trueno-gpu --features cuda
+
+# Run PTX pixel regression tests
+cargo test -p trueno-gpu --test pixel_fkr --features "cuda gpu-pixels"
+
+# Validate PTX generation without hardware
+cargo test -p trueno-gpu property_tests
+```
+
 ## Performance Targets
 
 ### Expected Speedups (vs Scalar Baseline)
 
-| Operation | Size | SSE2 | AVX2 | AVX-512 | GPU | WASM SIMD |
-|-----------|------|------|------|---------|-----|-----------|
-| add_f32 | 1K | 2x | 4x | 8x | - | 2x |
-| add_f32 | 100K | 2x | 4x | 8x | 3x | 2x |
-| add_f32 | 1M | 2x | 4x | 8x | 10x | 2x |
-| add_f32 | 10M | 2x | 4x | 8x | 50x | - |
-| dot_product | 1K | 3x | 6x | 12x | - | 3x |
-| dot_product | 1M | 3x | 6x | 12x | 20x | 3x |
+| Operation | Size | SSE2 | AVX2 | AVX-512 | CUDA | wgpu | WASM |
+|-----------|------|------|------|---------|------|------|------|
+| add_f32 | 1K | 2x | 4x | 8x | - | - | 2x |
+| add_f32 | 100K | 2x | 4x | 8x | 5x | 3x | 2x |
+| add_f32 | 1M | 2x | 4x | 8x | 20x | 10x | 2x |
+| add_f32 | 10M | 2x | 4x | 8x | 100x | 50x | - |
+| dot_product | 1K | 3x | 6x | 12x | - | - | 3x |
+| dot_product | 1M | 3x | 6x | 12x | 30x | 20x | 3x |
+| matmul | 256×256 | 2x | 6x | - | 50x | 20x | - |
+| matmul | 1024×1024 | 2x | 6x | - | 200x | 80x | - |
 
 ### Benchmark Validation
 - Minimum 100 iterations per benchmark
