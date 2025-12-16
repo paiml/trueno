@@ -430,6 +430,38 @@ exit:
         );
     }
 
+    /// F030 (Memory): Identifies coalesced pattern (tid*4 detected)
+    #[test]
+    fn f030_memory_identifies_coalesced_pattern() {
+        let analyzer = PtxAnalyzer::new();
+
+        // PTX with tid-based indexing (coalesced pattern)
+        let coalesced_ptx = r#"
+            .entry coalesced_kernel()
+            {
+                .reg .f32 %f<4>;
+                .reg .b32 %r<4>;
+                .reg .b64 %rd<4>;
+                // tid.x-based indexing indicates coalesced access
+                mov.u32 %r0, %tid.x;
+                mul.wide.u32 %rd0, %r0, 4;
+                ld.global.f32 %f0, [%rd0];
+                st.global.f32 [%rd0], %f0;
+                ret;
+            }
+        "#;
+
+        let memory = analyzer.parse_memory_ops(coalesced_ptx);
+
+        // Should detect tid references indicating coalesced access
+        assert!(
+            memory.coalesced_ratio > 0.0,
+            "Should detect tid-based coalesced pattern"
+        );
+        assert!(memory.global_loads > 0, "Should detect global loads");
+        assert!(memory.global_stores > 0, "Should detect global stores");
+    }
+
     /// F034: Warns on <80% coalescing ratio
     #[test]
     fn f034_warn_low_coalescing() {
