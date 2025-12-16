@@ -8,7 +8,7 @@
 //! - **Softmax**: Numerically stable softmax with warp shuffle
 //! - **LayerNorm**: Fused layer normalization
 //! - **Attention**: FlashAttention-style tiled attention
-//! - **Quantize**: Q4_K dequantization fused with matmul
+//! - **Quantize**: Q4_K/Q5_K/Q6_K dequantization fused with matmul (PARITY-115/116/117)
 
 mod attention;
 mod gemm;
@@ -19,7 +19,7 @@ mod softmax;
 pub use attention::AttentionKernel;
 pub use gemm::{GemmConfig, GemmKernel};
 pub use layernorm::LayerNormKernel;
-pub use quantize::QuantizeKernel;
+pub use quantize::{Q5KKernel, Q6KKernel, QuantizeKernel};
 pub use softmax::SoftmaxKernel;
 
 use crate::ptx::{PtxKernel, PtxModule};

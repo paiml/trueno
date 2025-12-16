@@ -769,6 +769,26 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_symmetric_eigen_backend() {
+        // Test that the backend() method returns the expected value
+        let m = Matrix::from_vec(2, 2, vec![4.0, 1.0, 1.0, 3.0]).expect("valid matrix");
+        let eigen = SymmetricEigen::new(&m).expect("eigendecomposition should succeed");
+
+        // backend() should return the current backend
+        let backend = eigen.backend();
+        // On this machine, it should be AVX2
+        #[cfg(target_arch = "x86_64")]
+        {
+            use crate::Backend;
+            assert!(
+                matches!(backend, Backend::AVX2 | Backend::Scalar | Backend::SSE2),
+                "expected valid backend, got {:?}",
+                backend
+            );
+        }
+    }
+
     // =========================================================================
     // Property-based tests (proptest)
     // =========================================================================

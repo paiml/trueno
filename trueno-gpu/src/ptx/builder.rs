@@ -1947,4 +1947,68 @@ mod tests {
         let module = PtxModule::new().version(8, 0).target("sm_30");
         assert!(module.validate().is_err());
     }
+
+    #[test]
+    fn test_ptx_module_default() {
+        let module = PtxModule::default();
+        // Default version is (8, 0)
+        assert_eq!(module.version, (8, 0));
+    }
+
+    #[test]
+    fn test_fma_f32() {
+        let kernel = PtxKernel::new("test_fma")
+            .build(|ctx| {
+                let a = ctx.mov_f32_imm(2.0);
+                let b = ctx.mov_f32_imm(3.0);
+                let c = ctx.mov_f32_imm(4.0);
+                let _result = ctx.fma_f32(a, b, c);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(ptx.contains("fma"), "Expected fma instruction, got: {}", ptx);
+    }
+
+    #[test]
+    fn test_ld_global_u32() {
+        let kernel = PtxKernel::new("test_ld_u32")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let _val = ctx.ld_global_u32(ptr);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(ptx.contains("ld.global"), "Expected ld.global instruction, got: {}", ptx);
+    }
+
+    #[test]
+    fn test_ld_global_u8() {
+        let kernel = PtxKernel::new("test_ld_u8")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let _val = ctx.ld_global_u8(ptr);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(ptx.contains("ld.global"), "Expected ld.global instruction, got: {}", ptx);
+    }
+
+    #[test]
+    fn test_ld_global_u16() {
+        let kernel = PtxKernel::new("test_ld_u16")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let _val = ctx.ld_global_u16(ptr);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(ptx.contains("ld.global"), "Expected ld.global instruction, got: {}", ptx);
+    }
 }

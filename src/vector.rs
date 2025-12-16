@@ -8912,6 +8912,115 @@ mod tests {
             );
         }
     }
+
+    // AVX512 SIMD path tests (need 16+ elements to trigger SIMD loops)
+    // These tests ensure the SIMD implementations are exercised
+
+    #[test]
+    fn test_norm_l1_avx512_path() {
+        // 32 elements to ensure AVX512 loop runs twice (32 / 16 = 2)
+        let data: Vec<f32> = (0..32).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let v = Vector::from_slice(&data);
+        let result = v.norm_l1().unwrap();
+        // Sum of |0| + |1| + |2| + ... + |31| = 0 + 1 + 2 + ... + 31 = 31*32/2 = 496
+        assert!((result - 496.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_norm_linf_avx512_path() {
+        // 32 elements to ensure AVX512 loop runs twice
+        let mut data: Vec<f32> = (0..32).map(|i| i as f32).collect();
+        data[17] = -100.0; // Make element 17 the max absolute value
+        let v = Vector::from_slice(&data);
+        let result = v.norm_linf().unwrap();
+        assert!((result - 100.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_scale_avx512_path() {
+        // 64 elements to ensure multiple AVX512 iterations
+        let data: Vec<f32> = (0..64).map(|i| i as f32).collect();
+        let v = Vector::from_slice(&data);
+        let result = v.scale(2.0).unwrap();
+        for i in 0..64 {
+            assert!((result.as_slice()[i] - (i as f32 * 2.0)).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_abs_avx512_path() {
+        // 48 elements to ensure AVX512 loop runs 3 times (48 / 16 = 3)
+        let data: Vec<f32> = (0..48).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let v = Vector::from_slice(&data);
+        let result = v.abs().unwrap();
+        for i in 0..48 {
+            assert!((result.as_slice()[i] - (i as f32)).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_clamp_avx512_path() {
+        // 32 elements with values spanning the clamp range
+        let data: Vec<f32> = (0..32).map(|i| (i as f32) - 10.0).collect();
+        let v = Vector::from_slice(&data);
+        let result = v.clamp(0.0, 15.0).unwrap();
+        for i in 0..32 {
+            let expected = ((i as f32) - 10.0).clamp(0.0, 15.0);
+            assert!((result.as_slice()[i] - expected).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_lerp_avx512_path() {
+        // 32 elements
+        let a: Vec<f32> = (0..32).map(|i| i as f32).collect();
+        let b: Vec<f32> = (0..32).map(|i| (i as f32) * 2.0).collect();
+        let va = Vector::from_slice(&a);
+        let vb = Vector::from_slice(&b);
+        let result = va.lerp(&vb, 0.5).unwrap();
+        // lerp(a, b, 0.5) = a + 0.5 * (b - a) = 0.5*a + 0.5*b = (a + b) / 2
+        for i in 0..32 {
+            let expected = (i as f32 + i as f32 * 2.0) / 2.0;
+            assert!((result.as_slice()[i] - expected).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_fma_avx512_path() {
+        // 32 elements: a*b + c
+        let a: Vec<f32> = (0..32).map(|i| i as f32).collect();
+        let b: Vec<f32> = (0..32).map(|_| 2.0).collect();
+        let c: Vec<f32> = (0..32).map(|i| i as f32).collect();
+        let va = Vector::from_slice(&a);
+        let vb = Vector::from_slice(&b);
+        let vc = Vector::from_slice(&c);
+        let result = va.fma(&vb, &vc).unwrap();
+        // a*b + c = i*2 + i = 3*i
+        for i in 0..32 {
+            let expected = 3.0 * (i as f32);
+            assert!((result.as_slice()[i] - expected).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_argmax_avx512_path() {
+        // 32 elements with max at position 25
+        let mut data: Vec<f32> = (0..32).map(|i| i as f32).collect();
+        data[25] = 1000.0;
+        let v = Vector::from_slice(&data);
+        let result = v.argmax().unwrap();
+        assert_eq!(result, 25);
+    }
+
+    #[test]
+    fn test_argmin_avx512_path() {
+        // 32 elements with min at position 18
+        let mut data: Vec<f32> = (0..32).map(|i| i as f32).collect();
+        data[18] = -500.0;
+        let v = Vector::from_slice(&data);
+        let result = v.argmin().unwrap();
+        assert_eq!(result, 18);
+    }
 }
 
 #[cfg(test)]

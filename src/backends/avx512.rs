@@ -3672,4 +3672,303 @@ mod tests {
             );
         }
     }
+
+    // ===== AVX512 SIMD Path Tests (32+ elements) =====
+    // These tests exercise the SIMD loops which require >= 16 elements
+
+    #[test]
+    fn test_avx512_norm_l1_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 64 elements to ensure AVX512 loop runs 4 times (64 / 16 = 4)
+        let a: Vec<f32> = (0..64).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let avx512_result = unsafe { Avx512Backend::norm_l1(&a) };
+        let scalar_result = unsafe { ScalarBackend::norm_l1(&a) };
+
+        assert!(
+            (avx512_result - scalar_result).abs() < 1e-3,
+            "norm_l1 SIMD mismatch: avx512={}, scalar={}",
+            avx512_result,
+            scalar_result
+        );
+    }
+
+    #[test]
+    fn test_avx512_norm_linf_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 64 elements with max absolute value at various positions
+        let mut a: Vec<f32> = (0..64).map(|i| i as f32).collect();
+        a[47] = -200.0; // Max absolute at position 47
+        let avx512_result = unsafe { Avx512Backend::norm_linf(&a) };
+        let scalar_result = unsafe { ScalarBackend::norm_linf(&a) };
+
+        assert!(
+            (avx512_result - scalar_result).abs() < 1e-5,
+            "norm_linf SIMD mismatch: avx512={}, scalar={}",
+            avx512_result,
+            scalar_result
+        );
+    }
+
+    #[test]
+    fn test_avx512_scale_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 64 elements to exercise SIMD loop
+        let a: Vec<f32> = (0..64).map(|i| i as f32).collect();
+        let scalar = 3.5;
+        let mut avx512_result = vec![0.0; 64];
+        let mut scalar_result = vec![0.0; 64];
+
+        unsafe {
+            Avx512Backend::scale(&a, scalar, &mut avx512_result);
+            ScalarBackend::scale(&a, scalar, &mut scalar_result);
+        }
+
+        for i in 0..64 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                "scale SIMD mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_abs_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 64 elements with mixed positive/negative
+        let a: Vec<f32> = (0..64).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let mut avx512_result = vec![0.0; 64];
+        let mut scalar_result = vec![0.0; 64];
+
+        unsafe {
+            Avx512Backend::abs(&a, &mut avx512_result);
+            ScalarBackend::abs(&a, &mut scalar_result);
+        }
+
+        for i in 0..64 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                "abs SIMD mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_clamp_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 64 elements spanning the clamp range
+        let a: Vec<f32> = (0..64).map(|i| (i as f32) - 20.0).collect();
+        let min_val = 0.0;
+        let max_val = 30.0;
+        let mut avx512_result = vec![0.0; 64];
+        let mut scalar_result = vec![0.0; 64];
+
+        unsafe {
+            Avx512Backend::clamp(&a, min_val, max_val, &mut avx512_result);
+            ScalarBackend::clamp(&a, min_val, max_val, &mut scalar_result);
+        }
+
+        for i in 0..64 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                "clamp SIMD mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_lerp_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 64 elements
+        let a: Vec<f32> = (0..64).map(|i| i as f32).collect();
+        let b: Vec<f32> = (0..64).map(|i| (i as f32) * 2.0 + 10.0).collect();
+        let t = 0.3;
+        let mut avx512_result = vec![0.0; 64];
+        let mut scalar_result = vec![0.0; 64];
+
+        unsafe {
+            Avx512Backend::lerp(&a, &b, t, &mut avx512_result);
+            ScalarBackend::lerp(&a, &b, t, &mut scalar_result);
+        }
+
+        for i in 0..64 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                "lerp SIMD mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_fma_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 64 elements: a*b + c
+        let a: Vec<f32> = (0..64).map(|i| i as f32).collect();
+        let b: Vec<f32> = (0..64).map(|i| (i as f32) * 0.5 + 1.0).collect();
+        let c: Vec<f32> = (0..64).map(|i| (i as f32) * 0.25).collect();
+        let mut avx512_result = vec![0.0; 64];
+        let mut scalar_result = vec![0.0; 64];
+
+        unsafe {
+            Avx512Backend::fma(&a, &b, &c, &mut avx512_result);
+            ScalarBackend::fma(&a, &b, &c, &mut scalar_result);
+        }
+
+        for i in 0..64 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-3,
+                "fma SIMD mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_argmax_empty() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        let a: Vec<f32> = vec![];
+        let result = unsafe { Avx512Backend::argmax(&a) };
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_avx512_argmin_empty() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        let a: Vec<f32> = vec![];
+        let result = unsafe { Avx512Backend::argmin(&a) };
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_avx512_argmax_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 64 elements with max at position 35
+        let mut a: Vec<f32> = (0..64).map(|i| i as f32).collect();
+        a[35] = 1000.0;
+        let avx512_result = unsafe { Avx512Backend::argmax(&a) };
+        let scalar_result = unsafe { ScalarBackend::argmax(&a) };
+
+        assert_eq!(
+            avx512_result, scalar_result,
+            "argmax SIMD mismatch: avx512={}, scalar={}",
+            avx512_result, scalar_result
+        );
+    }
+
+    #[test]
+    fn test_avx512_argmin_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 64 elements with min at position 42
+        let mut a: Vec<f32> = (0..64).map(|i| i as f32).collect();
+        a[42] = -500.0;
+        let avx512_result = unsafe { Avx512Backend::argmin(&a) };
+        let scalar_result = unsafe { ScalarBackend::argmin(&a) };
+
+        assert_eq!(
+            avx512_result, scalar_result,
+            "argmin SIMD mismatch: avx512={}, scalar={}",
+            avx512_result, scalar_result
+        );
+    }
+
+    #[test]
+    fn test_avx512_scale_remainder() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 47 elements (47 % 16 = 15 remainder)
+        let a: Vec<f32> = (0..47).map(|i| i as f32).collect();
+        let scalar = 2.0;
+        let mut avx512_result = vec![0.0; 47];
+        let mut scalar_result = vec![0.0; 47];
+
+        unsafe {
+            Avx512Backend::scale(&a, scalar, &mut avx512_result);
+            ScalarBackend::scale(&a, scalar, &mut scalar_result);
+        }
+
+        for i in 0..47 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                "scale remainder mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_abs_remainder() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 35 elements (35 % 16 = 3 remainder)
+        let a: Vec<f32> = (0..35).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let mut avx512_result = vec![0.0; 35];
+        let mut scalar_result = vec![0.0; 35];
+
+        unsafe {
+            Avx512Backend::abs(&a, &mut avx512_result);
+            ScalarBackend::abs(&a, &mut scalar_result);
+        }
+
+        for i in 0..35 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-5,
+                "abs remainder mismatch at {}: avx512={}, scalar={}",
+                i,
+                avx512_result[i],
+                scalar_result[i]
+            );
+        }
+    }
 }

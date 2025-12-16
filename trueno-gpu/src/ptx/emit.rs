@@ -139,4 +139,76 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err()[0].contains("braces"));
     }
+
+    #[test]
+    fn test_emit_ptx_with_config() {
+        use crate::ptx::PtxModule;
+
+        let module = PtxModule::new()
+            .version(8, 0)
+            .target("sm_70")
+            .address_size(64);
+
+        let config = EmitConfig::new();
+        let ptx = emit_ptx(&module, &config);
+
+        assert!(ptx.contains(".version 8.0"));
+        assert!(ptx.contains(".target sm_70"));
+        assert!(ptx.contains(".address_size 64"));
+    }
+
+    #[test]
+    fn test_validate_ptx_missing_target() {
+        let ptx = r#"
+.version 8.0
+.address_size 64
+"#;
+        let result = validate_ptx(ptx);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("target")));
+    }
+
+    #[test]
+    fn test_validate_ptx_missing_address_size() {
+        let ptx = r#"
+.version 8.0
+.target sm_70
+"#;
+        let result = validate_ptx(ptx);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("address_size")));
+    }
+
+    #[test]
+    fn test_validate_ptx_multiple_errors() {
+        let ptx = "// empty PTX";
+        let result = validate_ptx(ptx);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        // Should have 3 errors: missing version, target, address_size
+        assert_eq!(errors.len(), 3);
+    }
+
+    #[test]
+    fn test_validate_ptx_balanced_braces() {
+        let ptx = r#"
+.version 8.0
+.target sm_70
+.address_size 64
+
+.visible .entry kernel1() {
+    ret;
+}
+
+.visible .entry kernel2() {
+    {
+        // nested block
+    }
+    ret;
+}
+"#;
+        assert!(validate_ptx(ptx).is_ok());
+    }
 }
