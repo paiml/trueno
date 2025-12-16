@@ -5,9 +5,6 @@
 **Multi-Target High-Performance Compute Library**
 
 [![CI](https://github.com/paiml/trueno/actions/workflows/ci.yml/badge.svg)](https://github.com/paiml/trueno/actions)
-[![Coverage](https://img.shields.io/badge/coverage-93%25-brightgreen)](https://github.com/paiml/trueno)
-[![Crates.io](https://img.shields.io/crates/v/trueno.svg)](https://crates.io/crates/trueno)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 </div>
 
