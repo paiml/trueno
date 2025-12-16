@@ -17,6 +17,18 @@ This directory contains examples demonstrating Trueno's high-performance compute
 | `symmetric_eigen.rs` | Eigendecomposition for PCA/spectral analysis | `cargo run --release --example symmetric_eigen` |
 | `hash_demo.rs` | SIMD-optimized hashing for KV stores | `cargo run --release --example hash_demo` |
 | `gpu_batch_demo.rs` | GPU batch operations (requires `gpu` feature) | `cargo run --release --features gpu --example gpu_batch_demo` |
+| `gpu_monitor_demo.rs` | GPU monitoring and metrics | `cargo run --release --features gpu --example gpu_monitor_demo` |
+| `perf_tui.rs` | Interactive TUI performance dashboard | `cargo run --release --example perf_tui` |
+| `regression_test.rs` | Numerical regression testing | `cargo run --release --example regression_test` |
+
+#### Benchmark Examples
+
+| Example | Description | Command |
+|---------|-------------|---------|
+| `benchmark_matrix_suite.rs` | Matrix operation benchmarks | `cargo run --release --example benchmark_matrix_suite` |
+| `benchmark_matvec.rs` | Matrix-vector multiplication | `cargo run --release --example benchmark_matvec` |
+| `benchmark_matvec_parallel.rs` | Parallel matrix-vector ops | `cargo run --release --example benchmark_matvec_parallel` |
+| `benchmark_parallel.rs` | Parallel computation benchmarks | `cargo run --release --example benchmark_parallel` |
 
 ### Python Examples (NumPy/PyTorch Comparison)
 
@@ -165,6 +177,6 @@ See `CLAUDE.md` for development guidelines.
 
 ---
 
-**Last Updated**: 2025-12-08
-**Version**: v0.8.1
+**Last Updated**: 2025-12-16
+**Version**: v0.8.6
 **Contact**: [GitHub Issues](https://github.com/paiml/trueno/issues)
