@@ -106,7 +106,7 @@ mod ptx_analysis {
         );
 
         assert!(
-            !result.has_bug(&PtxBugClass::MissingBarrier),
+            !result.has_bug(&PtxBugClass::MissingBarrierSync),
             "GEMM tiled kernel missing barrier synchronization"
         );
 
