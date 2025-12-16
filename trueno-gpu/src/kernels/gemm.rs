@@ -266,15 +266,15 @@ impl GemmKernel {
                 let row = ctx.mad_lo_u32(ctaid_y, tile_size_reg, tid_y);
                 let col = ctx.mad_lo_u32(ctaid_x, tile_size_reg, tid_x);
 
-                // Bounds check
+                // Load parameters (but DON'T exit early - all threads must participate in barriers)
+                // PARITY-114 FIX: Bounds check moved to after tile_loop_end
                 let m_param = ctx.load_param_u32("m");
                 let n_param = ctx.load_param_u32("n");
-                let _k_param = ctx.load_param_u32("k");
+                let k_param = ctx.load_param_u32("k");
 
-                let pred_m = ctx.setp_ge_u32(row, m_param);
-                ctx.branch_if(pred_m, "exit");
-                let pred_n = ctx.setp_ge_u32(col, n_param);
-                ctx.branch_if(pred_n, "exit");
+                // Compute predicates for valid row/col (used for predicated loads)
+                let row_valid = ctx.setp_lt_u32(row, m_param);
+                let col_valid = ctx.setp_lt_u32(col, n_param);
 
                 // Load base pointers
                 let a_ptr = ctx.load_param_u64("a_ptr");
@@ -302,30 +302,51 @@ impl GemmKernel {
                 let smem_b_base = ctx.mov_u32_imm(tile_size * tile_size * 4);
                 let smem_b_offset = ctx.add_u32_reg(smem_b_base, smem_a_offset); // u32 addition
 
+                // PARITY-114 FIX: All threads must load something to shared memory
+                // Strategy: Store 0.0 first, then conditionally overwrite with real value
+
                 // Load A[row, tile_idx * TILE + tid_x] into shared memory As[tid_y][tid_x]
-                // A address = a_ptr + row * K + (tile_idx * TILE + tid_x)
                 let tile_k_offset = ctx.mul_u32(tile_idx, tile_size);
                 let a_col = ctx.add_u32_reg(tile_k_offset, tid_x);
+
+                // Check if A load is in bounds: row < m AND a_col < k
+                let a_col_valid = ctx.setp_lt_u32(a_col, k_param);
+                let a_valid = ctx.and_pred(row_valid, a_col_valid);
+
+                // Store 0.0 to shared memory first (default for out-of-bounds)
+                let zero_a = ctx.mov_f32_imm(0.0);
+                ctx.st_shared_f32(smem_a_offset, zero_a);
+
+                // If in bounds, load from global and overwrite shared memory
+                ctx.branch_if_not(a_valid, "skip_a_load");
                 let row_offset_a = ctx.mul_wide_u32(row, self.config.k * 4);
                 let col_offset_a = ctx.mul_wide_u32(a_col, 4);
                 let a_row_base = ctx.add_u64(a_ptr, row_offset_a);
                 let a_addr = ctx.add_u64(a_row_base, col_offset_a);
                 let a_val = ctx.ld_global_f32(a_addr);
-
-                // Store to shared memory (using smem_a_offset as base)
                 ctx.st_shared_f32(smem_a_offset, a_val);
+                ctx.label("skip_a_load");
 
                 // Load B[tile_idx * TILE + tid_y, col] into shared memory Bs[tid_y][tid_x]
-                // B address = b_ptr + (tile_idx * TILE + tid_y) * N + col
                 let b_row = ctx.add_u32_reg(tile_k_offset, tid_y);
+
+                // Check if B load is in bounds: b_row < k AND col < n
+                let b_row_valid = ctx.setp_lt_u32(b_row, k_param);
+                let b_valid = ctx.and_pred(b_row_valid, col_valid);
+
+                // Store 0.0 to shared memory first (default for out-of-bounds)
+                let zero_b = ctx.mov_f32_imm(0.0);
+                ctx.st_shared_f32(smem_b_offset, zero_b);
+
+                // If in bounds, load from global and overwrite shared memory
+                ctx.branch_if_not(b_valid, "skip_b_load");
                 let row_offset_b = ctx.mul_wide_u32(b_row, self.config.n * 4);
                 let col_offset_b = ctx.mul_wide_u32(col, 4);
                 let b_row_base = ctx.add_u64(b_ptr, row_offset_b);
                 let b_addr = ctx.add_u64(b_row_base, col_offset_b);
                 let b_val = ctx.ld_global_f32(b_addr);
-
-                // Store to shared memory B tile
                 ctx.st_shared_f32(smem_b_offset, b_val);
+                ctx.label("skip_b_load");
 
                 // Synchronize threads after loading tile
                 ctx.bar_sync(0);
@@ -367,6 +388,11 @@ impl GemmKernel {
                 ctx.branch("tile_loop");
 
                 ctx.label("tile_loop_end");
+
+                // PARITY-114 FIX: Bounds check HERE (after all threads finished tile loop)
+                // Only threads with valid output coordinates store to C
+                let out_valid = ctx.and_pred(row_valid, col_valid);
+                ctx.branch_if_not(out_valid, "exit");
 
                 // Store result: C[row, col] = c_ptr + row * N + col
                 let c_row_offset = ctx.mul_wide_u32(row, self.config.n * 4);
@@ -1172,5 +1198,83 @@ mod tests {
         let kernel = GemmKernel::naive(128, 128, 128);
         let cloned = kernel.clone();
         assert_eq!(kernel.name(), cloned.name());
+    }
+
+    /// PARITY-114: Verify tiled GEMM doesn't have early exit before barriers
+    ///
+    /// Bug: Threads with row >= m or col >= n exit before bar.sync, causing:
+    /// 1. Barrier deadlock/undefined behavior (not all threads reach bar.sync)
+    /// 2. Incomplete shared memory loading (only valid threads load data)
+    /// 3. Wrong results for small matrices (m < tile_size or n < tile_size)
+    ///
+    /// Fix: Move bounds check to AFTER tile_loop_end, only guard output store
+    #[test]
+    fn test_parity_114_tiled_gemm_no_early_exit_before_barrier() {
+        // Test with small matrix where m < tile_size and n < tile_size
+        // This exposes the bug because most threads would exit early
+        let kernel = GemmKernel::tiled(4, 8, 64, 32); // m=4, n=8, tile_size=32
+        let ptx = kernel.emit_ptx();
+
+        // Find the position of key elements in the PTX
+        let bar_sync_pos = ptx.find("bar.sync").expect("PTX should have bar.sync");
+        let tile_loop_end_pos = ptx.find("tile_loop_end:").expect("PTX should have tile_loop_end");
+
+        // Find all early exit branches (branches to exit before tile_loop)
+        // Pattern: "@%pN bra exit;" where this appears BEFORE bar.sync
+        let mut early_exit_found = false;
+        let mut line_num = 0;
+        for line in ptx.lines() {
+            line_num += 1;
+            // Check if this line is a conditional branch to exit
+            if line.contains("@%p") && line.contains("bra exit") {
+                // Calculate position of this line in the PTX
+                let line_start = ptx[..ptx.find(line).unwrap_or(0)].len();
+
+                // If this exit branch is BEFORE tile_loop_end, it's the bug
+                if line_start < tile_loop_end_pos {
+                    early_exit_found = true;
+                    eprintln!(
+                        "PARITY-114 BUG: Early exit at line {}: {}",
+                        line_num,
+                        line.trim()
+                    );
+                }
+            }
+        }
+
+        // FAIL if early exit found before tile_loop_end
+        // After fix, this assertion should pass
+        assert!(
+            !early_exit_found,
+            "PARITY-114: Tiled GEMM has early exit before bar.sync. \
+             All threads must participate in barriers. \
+             Move bounds check to after tile_loop_end."
+        );
+
+        // Additional check: bar.sync should be BEFORE tile_loop_end (inside the loop)
+        assert!(
+            bar_sync_pos < tile_loop_end_pos,
+            "bar.sync should be inside tile_loop (before tile_loop_end)"
+        );
+    }
+
+    /// PARITY-114: Verify n_tiles is correctly computed for small k
+    #[test]
+    fn test_parity_114_ntiles_computation() {
+        // k=64, tile_size=32 -> n_tiles should be 2
+        let kernel = GemmKernel::tiled(4, 8, 64, 32);
+        let ptx = kernel.emit_ptx();
+
+        // The PTX should have mov.u32 %rXX, 2; for n_tiles
+        assert!(
+            ptx.contains(", 2;"),
+            "PTX should have n_tiles=2 for k=64, tile_size=32"
+        );
+
+        // And tile_size=32
+        assert!(
+            ptx.contains(", 32;"),
+            "PTX should have tile_size=32"
+        );
     }
 }

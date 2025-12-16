@@ -2,8 +2,64 @@
 //!
 //! Tests the analyzer against real trueno-gpu kernels
 
+use std::process::Command;
 use trueno_explain::{Analyzer, PtxAnalyzer};
 use trueno_gpu::kernels::{GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel};
+
+/// Helper to run the trueno-explain binary
+fn run_explain(args: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_trueno-explain"))
+        .args(args)
+        .output()
+        .expect("Failed to run trueno-explain")
+}
+
+/// F001: `trueno-explain --help` shows all subcommands
+#[test]
+fn f001_help_shows_subcommands() {
+    let output = run_explain(&["--help"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "Help should succeed");
+    assert!(stdout.contains("ptx"), "Should show ptx subcommand");
+    assert!(stdout.contains("simd"), "Should show simd subcommand");
+    assert!(stdout.contains("wgpu"), "Should show wgpu subcommand");
+    assert!(stdout.contains("tui"), "Should show tui subcommand");
+    assert!(stdout.contains("compare"), "Should show compare subcommand");
+    assert!(stdout.contains("diff"), "Should show diff subcommand");
+}
+
+/// F002: `trueno-explain tui --help` shows TUI options
+#[test]
+fn f002_tui_help_shows_options() {
+    let output = run_explain(&["tui", "--help"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "TUI help should succeed");
+    assert!(stdout.contains("--kernel"), "Should show --kernel option");
+    assert!(stdout.contains("--rows"), "Should show --rows option");
+    assert!(stdout.contains("--cols"), "Should show --cols option");
+    assert!(stdout.contains("--inner"), "Should show --inner option");
+}
+
+/// F008: --json flag produces valid JSON
+#[test]
+fn f008_json_flag_valid_json() {
+    let output = run_explain(&["ptx", "--kernel", "gemm_naive", "--json"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "PTX analysis should succeed");
+
+    // Verify it's valid JSON by parsing
+    let parsed: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
+    assert!(parsed.is_ok(), "Output should be valid JSON: {}", stdout);
+
+    // Verify expected fields
+    let json = parsed.unwrap();
+    assert!(json.get("name").is_some(), "JSON should have 'name' field");
+    assert!(json.get("target").is_some(), "JSON should have 'target' field");
+    assert!(json.get("registers").is_some(), "JSON should have 'registers' field");
+}
 
 /// F011: Analyze vector_add reports <20 registers for f32
 #[test]
