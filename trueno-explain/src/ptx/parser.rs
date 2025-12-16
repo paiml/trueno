@@ -429,6 +429,43 @@ exit:
             "Vector add should be memory-bound"
         );
     }
+
+    /// F034: Warns on <80% coalescing ratio
+    #[test]
+    fn f034_warn_low_coalescing() {
+        let analyzer = PtxAnalyzer::new();
+
+        // PTX with many global loads but no tid references (uncoalesced pattern)
+        let uncoalesced_ptx = r#"
+            .entry uncoalesced_kernel()
+            {
+                .reg .f32 %f<4>;
+                .reg .b64 %rd<4>;
+                // Many loads without tid-based indexing
+                ld.global.f32 %f0, [%rd0];
+                ld.global.f32 %f1, [%rd1];
+                ld.global.f32 %f2, [%rd2];
+                ld.global.f32 %f3, [%rd3];
+                st.global.f32 [%rd0], %f0;
+                st.global.f32 [%rd1], %f1;
+                st.global.f32 [%rd2], %f2;
+                st.global.f32 [%rd3], %f3;
+                ret;
+            }
+        "#;
+
+        let warnings = analyzer.detect_muda(uncoalesced_ptx);
+        let coalescing_warnings: Vec<_> = warnings
+            .iter()
+            .filter(|w| matches!(w.muda_type, MudaType::Waiting))
+            .filter(|w| w.description.contains("coalescing"))
+            .collect();
+
+        assert!(
+            !coalescing_warnings.is_empty(),
+            "Should warn on <80% coalescing ratio"
+        );
+    }
 }
 
 #[cfg(test)]

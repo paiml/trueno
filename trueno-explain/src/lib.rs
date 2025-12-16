@@ -41,17 +41,21 @@
 #![allow(clippy::unnecessary_literal_bound)] // Trait signature constraint
 
 pub mod analyzer;
+pub mod compare;
 pub mod diff;
 pub mod error;
 pub mod output;
 pub mod ptx;
 pub mod simd;
 pub mod tui;
+pub mod wgpu;
 
 pub use analyzer::{AnalysisReport, Analyzer, MudaWarning, RegisterUsage};
+pub use compare::{compare_analyses, format_comparison_json, format_comparison_text};
 pub use diff::{compare_reports, format_diff_json, format_diff_text, DiffReport, DiffThresholds};
 pub use error::{ExplainError, Result};
 pub use output::{format_json, format_text, OutputFormat};
 pub use ptx::PtxAnalyzer;
 pub use simd::{SimdAnalyzer, SimdArch, SimdInstructionCounts};
 pub use tui::{run_tui, TuiApp};
+pub use wgpu::{WgpuAnalyzer, WorkgroupSize};

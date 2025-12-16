@@ -7,8 +7,9 @@
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
 use trueno_explain::{
-    compare_reports, format_diff_json, format_diff_text, output, run_tui, Analyzer, DiffThresholds,
-    OutputFormat, PtxAnalyzer, SimdAnalyzer, SimdArch,
+    compare_analyses, compare_reports, format_comparison_json, format_comparison_text,
+    format_diff_json, format_diff_text, output, run_tui, Analyzer, DiffThresholds, OutputFormat,
+    PtxAnalyzer, SimdAnalyzer, SimdArch, WgpuAnalyzer,
 };
 use trueno_gpu::kernels::{GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel};
 
@@ -34,7 +35,7 @@ enum Commands {
     /// Analyze PTX code generation
     Ptx {
         /// Kernel to analyze (see --help for list)
-        #[arg(short, long, value_name = "NAME")]
+        #[arg(short = 'K', long, value_name = "NAME")]
         kernel: String,
 
         /// Matrix M dimension (rows)
@@ -65,7 +66,7 @@ enum Commands {
     /// Interactive TUI mode (Genchi Genbutsu)
     Tui {
         /// Kernel to explore
-        #[arg(short, long, value_name = "NAME")]
+        #[arg(short = 'K', long, value_name = "NAME")]
         kernel: String,
 
         /// Matrix M dimension (rows)
@@ -107,11 +108,15 @@ enum Commands {
         json: bool,
     },
 
-    /// Compare backends
+    /// Compare two kernel configurations
     Compare {
-        /// Kernel to compare
-        #[arg(short, long)]
-        kernel: String,
+        /// First kernel to compare
+        #[arg(short = 'a', long)]
+        kernel_a: String,
+
+        /// Second kernel to compare
+        #[arg(short = 'b', long)]
+        kernel_b: String,
 
         /// Output as JSON
         #[arg(long)]
@@ -121,7 +126,7 @@ enum Commands {
     /// Compare two analyses (git diff integration)
     Diff {
         /// Kernel to analyze for comparison
-        #[arg(short, long)]
+        #[arg(short = 'K', long)]
         kernel: String,
 
         /// Baseline analysis JSON file
@@ -150,6 +155,7 @@ fn main() -> ExitCode {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Commands::Ptx {
@@ -220,16 +226,42 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Commands::Wgpu { shader, json } => {
-            eprintln!("wgpu/WGSL analysis for {} - coming in Sprint 3", shader);
-            if json {
-                println!("{{\"status\": \"not_implemented\", \"shader\": \"{}\"}}", shader);
-            }
+            // Read WGSL shader file
+            let wgsl = std::fs::read_to_string(&shader)
+                .map_err(|e| format!("Failed to read shader file '{}': {}", shader, e))?;
+
+            let analyzer = WgpuAnalyzer::new();
+            let report = analyzer.analyze(&wgsl)?;
+
+            let format = if json {
+                OutputFormat::Json
+            } else {
+                OutputFormat::Text
+            };
+            output::write_report(&report, format)?;
         }
 
-        Commands::Compare { kernel, json } => {
-            eprintln!("Backend comparison for {} - coming soon", kernel);
+        Commands::Compare {
+            kernel_a,
+            kernel_b,
+            json,
+        } => {
+            // Analyze both kernels
+            let ptx_a = generate_kernel_ptx(&kernel_a, 1024, 1024, 1024)?;
+            let ptx_b = generate_kernel_ptx(&kernel_b, 1024, 1024, 1024)?;
+
+            let analyzer = PtxAnalyzer::new();
+            let report_a = analyzer.analyze(&ptx_a)?;
+            let report_b = analyzer.analyze(&ptx_b)?;
+
+            // Compare
+            let comparison = compare_analyses(&report_a, &report_b);
+
+            // Output
             if json {
-                println!("{{\"status\": \"not_implemented\", \"kernel\": \"{}\"}}", kernel);
+                println!("{}", format_comparison_json(&comparison));
+            } else {
+                print!("{}", format_comparison_text(&comparison));
             }
         }
 
