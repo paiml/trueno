@@ -1,7 +1,7 @@
 # Trueno GPU: Pure Rust First-Principles GPU Compute Specification
 
-**Version**: 1.1
-**Date**: 2025-12-10
+**Version**: 1.2
+**Date**: 2025-12-16
 **Status**: SPECIFICATION - Ready for Implementation
 **Priority**: P1 - Performance Critical Path
 **Crate**: `trueno-gpu` (sub-crate of trueno ecosystem)
@@ -16,6 +16,7 @@
 |---------|------|--------|---------|
 | 1.0 | 2025-12-10 | Batuta Team | Initial specification with 25 peer-reviewed citations |
 | 1.1 | 2025-12-10 | Batuta Team | Toyota Way review: +Poka-Yoke, +Bank conflicts, +ILP, +10 citations [46-55] |
+| 1.2 | 2025-12-16 | Batuta Team | Added Q5_K (PARITY-116) and Q6_K (PARITY-117) kernel specifications |
 
 ---
 
@@ -658,6 +659,79 @@ Q4_K vs FP32 Memory Traffic:
 │ Speedup potential: 8x (memory-bound) [21]              │
 └────────────────────────────────────────────────────────┘
 ```
+
+### 5.3 Q5_K Fused GEMM Kernel (PARITY-116)
+
+Q5_K provides 5-bit quantization with improved accuracy over Q4_K:
+
+```
+Q5_K Super-block Layout (176 bytes for 256 values):
+┌────────────────────────────────────────────────────────┐
+│ Offset 0-1:   d (f16 super-block scale)                │
+│ Offset 2-3:   dmin (f16 super-block min)               │
+│ Offset 4-15:  scales (12 bytes, packed 6-bit × 8)      │
+│ Offset 16-143: qs (128 bytes, 256 × 4-bit low values)  │
+│ Offset 144-175: qh (32 bytes, 256 × 1-bit high values) │
+├────────────────────────────────────────────────────────┤
+│ Dequantization: val = d × scale_b × (ql + 16×qh) - dmin × min_b │
+│ Where ql is 4-bit (0-15), qh is 1-bit (0 or 1)         │
+│ Combined 5-bit range: 0-31                             │
+└────────────────────────────────────────────────────────┘
+```
+
+```rust
+/// Q5_K quantized GEMM kernel
+/// Per PARITY-116 specification
+use trueno_gpu::kernels::{Q5KKernel, Kernel};
+
+let kernel = Q5KKernel::new(1024, 1024, 4096);
+let ptx = kernel.emit_ptx();
+
+// Key features:
+// - Nested super-block and sub-block loops
+// - Loads both ql (4-bit) and qh (1-bit high) values
+// - Fused dequantization with scale/min extraction
+```
+
+### 5.4 Q6_K Fused GEMM Kernel (PARITY-117)
+
+Q6_K provides 6-bit quantization for highest accuracy among K-quant formats:
+
+```
+Q6_K Super-block Layout (210 bytes for 256 values):
+┌────────────────────────────────────────────────────────┐
+│ Offset 0-127:   ql (128 bytes, 256 × 4-bit low values) │
+│ Offset 128-191: qh (64 bytes, 256 × 2-bit high values) │
+│ Offset 192-207: scales (16 bytes, 16 × 8-bit scales)   │
+│ Offset 208-209: d (f16 super-block scale)              │
+├────────────────────────────────────────────────────────┤
+│ Dequantization: val = d × scale_b × (ql + 4×qh - 32)   │
+│ Where ql is 4-bit (0-15), qh is 2-bit (0-3)            │
+│ Combined 6-bit signed range: -32 to 31                 │
+└────────────────────────────────────────────────────────┘
+```
+
+```rust
+/// Q6_K quantized GEMM kernel
+/// Per PARITY-117 specification
+use trueno_gpu::kernels::{Q6KKernel, Kernel};
+
+let kernel = Q6KKernel::new(1024, 1024, 4096);
+let ptx = kernel.emit_ptx();
+
+// Key features:
+// - 16 sub-blocks of 16 values (vs Q4/Q5's 8 sub-blocks of 32)
+// - 2-bit high value extraction (vs Q5's 1-bit)
+// - Signed offset (-32) for symmetric quantization
+```
+
+### 5.5 Quantization Format Comparison
+
+| Format | Bits | Block Size | Bytes/256 | Accuracy | Use Case |
+|--------|------|------------|-----------|----------|----------|
+| Q4_K | 4 | 256 | 144 | Good | Default inference |
+| Q5_K | 5 | 256 | 176 | Better | Quality-sensitive |
+| Q6_K | 6 | 256 | 210 | Best | Maximum accuracy |
 
 ---
 
