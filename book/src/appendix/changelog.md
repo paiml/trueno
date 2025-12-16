@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.7] - 2025-12-16
+
+### Changed
+
+- **Dependencies**: Updated trueno-gpu to 0.2.2
+
 ## [trueno-explain 0.2.0] - 2025-12-16
 
 ### Added
