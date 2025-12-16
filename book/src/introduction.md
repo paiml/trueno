@@ -40,7 +40,7 @@ Trueno runs on **three execution targets** with a unified API:
 | Target | Backends | Use Cases |
 |--------|----------|-----------|
 | **CPU SIMD** | SSE2, AVX, AVX2, AVX-512 (x86)<br>NEON (ARM)<br>SIMD128 (WASM) | General-purpose compute, small to medium workloads |
-| **GPU** | Vulkan, Metal, DX12, WebGPU via `wgpu` | Large workloads (100K+ elements), parallel operations |
+| **GPU** | CUDA (NVIDIA via trueno-gpu)<br>Vulkan, Metal, DX12, WebGPU via `wgpu` | Large workloads (100K+ elements), parallel operations |
 | **WebAssembly** | SIMD128 portable | Browser/edge deployment, serverless functions |
 
 ### 2. Runtime Backend Selection
@@ -61,11 +61,12 @@ Trueno automatically selects the best available backend at runtime:
    └────────┘   └─────────┘   └──────────┘
         │             │             │
    ┌────┴────┐   ┌────┴────┐   ┌───┴─────┐
-   │ Runtime │   │  wgpu   │   │ SIMD128 │
+   │ Runtime │   │CUDA/wgpu│   │ SIMD128 │
    │ Detect  │   │ Compute │   │ Portable│
    └─────────┘   └─────────┘   └─────────┘
-   │  │  │  │
-   SSE2 AVX  NEON AVX512
+   │  │  │  │       │
+   SSE2 AVX NEON   PTX
+      AVX512     (trueno-gpu)
 ```
 
 **Backend Selection Priority:**

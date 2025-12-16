@@ -1,10 +1,61 @@
 # GPU Backend
 
-Trueno provides GPU compute acceleration via [wgpu](https://wgpu.rs/), a cross-platform WebGPU implementation supporting Vulkan, Metal, DX12, and WebGPU.
+Trueno provides two GPU acceleration options:
+
+1. **wgpu (Cross-platform)** - Vulkan, Metal, DX12, WebGPU via [wgpu](https://wgpu.rs/)
+2. **CUDA (NVIDIA)** - Native PTX code generation via [trueno-gpu](../architecture/ptx-generation.md)
+
+## CUDA Support (trueno-gpu)
+
+For NVIDIA GPUs, trueno-gpu provides **pure Rust PTX code generation** without requiring LLVM, nvcc, or external toolchains.
+
+### Quick Start with CUDA
+
+```rust
+use trueno_gpu::ptx::{PtxModule, PtxKernel, PtxType};
+use trueno_gpu::kernels::{GemmKernel, Kernel};
+
+// Generate optimized GEMM kernel
+let kernel = GemmKernel::tiled(1024, 1024, 1024, 32);
+let ptx = kernel.emit_ptx();
+
+// PTX can be loaded via CUDA driver API
+println!("{}", ptx);
+```
+
+### Running CUDA Examples
+
+```bash
+# PTX code generation (no GPU required)
+cargo run -p trueno-gpu --example ptx_quickstart
+cargo run -p trueno-gpu --example gemm_kernel
+
+# CUDA runtime examples (requires NVIDIA GPU)
+cargo run -p trueno-gpu --example cuda_monitor
+cargo run -p trueno-gpu --example flash_attention_cuda
+```
+
+### Pre-built CUDA Kernels
+
+| Kernel | Description | Example |
+|--------|-------------|---------|
+| GEMM | Matrix multiplication (naive/tiled/tensor core) | `gemm_kernel` |
+| Softmax | Numerically stable softmax | `ptx_quickstart` |
+| LayerNorm | Layer normalization | `simple_attention_cuda` |
+| Attention | Multi-head attention | `flash_attention_cuda` |
+| Quantize | Q4_K/Q5_K/Q6_K quantization | `q4k_gemm` |
+
+See [PTX Code Generation](./ptx-generation.md) for detailed documentation.
+
+---
+
+## wgpu Support (Cross-Platform)
+
+For cross-platform GPU compute, Trueno uses [wgpu](https://wgpu.rs/), supporting Vulkan, Metal, DX12, and WebGPU.
 
 ## Overview
 
-The GPU backend enables massive parallelism for compute-heavy operations like matrix multiplication. It supports both native platforms (Linux, macOS, Windows) and WebAssembly (via WebGPU in browsers).
+The wgpu backend enables massive parallelism for compute-heavy operations like matrix multiplication. It supports both native platforms (Linux, macOS, Windows) and WebAssembly (via WebGPU in browsers).
 
 ### Key Features
 
