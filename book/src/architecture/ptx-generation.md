@@ -145,6 +145,42 @@ let kernel = SoftmaxKernel::new(1024);  // Vector length
 let ptx = kernel.emit_ptx();
 ```
 
+### Bias + Activation (Epilogue Kernel)
+
+Fused bias addition with optional activation function, commonly used as an epilogue after GEMM:
+
+```rust
+use trueno_gpu::kernels::{BiasActivationKernel, Activation, Kernel};
+
+// Bias only (no activation)
+let kernel = BiasActivationKernel::new(4096, 256);  // n=4096, bias_size=256
+
+// Bias + ReLU
+let kernel = BiasActivationKernel::new(4096, 256).with_relu();
+
+// Bias + GELU (Transformer default)
+let kernel = BiasActivationKernel::new(4096, 256).with_gelu();
+
+// Custom activation via builder
+let kernel = BiasActivationKernel::new(4096, 256)
+    .with_activation(Activation::GELU);
+
+let ptx = kernel.emit_ptx();
+```
+
+| Activation | Formula | Use Case |
+|------------|---------|----------|
+| None | `x + bias` | Linear layer epilogue |
+| ReLU | `max(0, x + bias)` | CNN layers |
+| GELU | `(x + bias) * sigmoid(1.702 * (x + bias))` | Transformers |
+
+**Note:** The `bias_size` is baked into the kernel at generation time for efficiency. The kernel computes `output[i] += bias[i % bias_size]`.
+
+```bash
+# Run the example
+cargo run -p trueno-gpu --example bias_activation
+```
+
 ### Quantized GEMM (Q4_K, Q5_K, Q6_K)
 
 Optimized kernels for quantized inference with GGML-compatible formats:

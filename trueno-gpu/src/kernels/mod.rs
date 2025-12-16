@@ -9,14 +9,17 @@
 //! - **LayerNorm**: Fused layer normalization
 //! - **Attention**: FlashAttention-style tiled attention
 //! - **Quantize**: Q4_K/Q5_K/Q6_K dequantization fused with matmul (PARITY-115/116/117)
+//! - **BiasActivation**: Fused bias + activation epilogue (ReLU, GELU)
 
 mod attention;
+mod bias_activation;
 mod gemm;
 mod layernorm;
 mod quantize;
 mod softmax;
 
 pub use attention::AttentionKernel;
+pub use bias_activation::{Activation, BiasActivationKernel};
 pub use gemm::{GemmConfig, GemmKernel};
 pub use layernorm::LayerNormKernel;
 pub use quantize::{Q5KKernel, Q6KKernel, QuantizeKernel};
