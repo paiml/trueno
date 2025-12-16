@@ -30,6 +30,23 @@ This directory contains examples demonstrating Trueno's high-performance compute
 | `benchmark_matvec_parallel.rs` | Parallel matrix-vector ops | `cargo run --release --example benchmark_matvec_parallel` |
 | `benchmark_parallel.rs` | Parallel computation benchmarks | `cargo run --release --example benchmark_parallel` |
 
+### CUDA/PTX Examples (trueno-gpu)
+
+| Example | Description | Command |
+|---------|-------------|---------|
+| `ptx_quickstart` | **⭐ Start here!** Basic PTX code generation | `cargo run -p trueno-gpu --example ptx_quickstart` |
+| `gemm_kernel` | GEMM kernel generation (naive/tiled) | `cargo run -p trueno-gpu --example gemm_kernel` |
+| `cuda_monitor` | GPU monitoring and metrics | `cargo run -p trueno-gpu --example cuda_monitor` |
+| `flash_attention_cuda` | Flash Attention implementation | `cargo run -p trueno-gpu --example flash_attention_cuda` |
+| `simple_attention_cuda` | Basic multi-head attention | `cargo run -p trueno-gpu --example simple_attention_cuda` |
+| `q4k_gemm` | Quantized GEMM (Q4_K format) | `cargo run -p trueno-gpu --example q4k_gemm` |
+| `register_allocation` | PTX register allocation demo | `cargo run -p trueno-gpu --example register_allocation` |
+| `gpu_pixels_render` | GPU pixel rendering | `cargo run -p trueno-gpu --example gpu_pixels_render` |
+| `dump_ptx` | Dump raw PTX output | `cargo run -p trueno-gpu --example dump_ptx` |
+| `satd_kernels` | SATD (video codec) kernels | `cargo run -p trueno-gpu --example satd_kernels` |
+
+**Note**: PTX generation examples work without a GPU. Runtime examples (cuda_monitor, flash_attention_cuda) require an NVIDIA GPU with CUDA drivers.
+
 ### Python Examples (NumPy/PyTorch Comparison)
 
 | Example | Description | Command |
