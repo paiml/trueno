@@ -595,4 +595,30 @@ mod tests {
         let span = highlight_ptx_line("    ret;");
         assert_eq!(span.style.fg, Some(Color::Red));
     }
+
+    /// F028: Scroll source pane - ASM pane scrolls in sync
+    /// In split-pane mode, both panes share the same scroll position
+    #[test]
+    fn f028_sync_scroll_source_asm() {
+        let ptx = (0..100).map(|i| format!("    add.f32 %f{}, %f{}, %f{}", i, i, i + 1)).collect::<Vec<_>>().join("\n");
+        let report = sample_report();
+        let mut app = TuiApp::new(ptx, report);
+
+        // Initial scroll position
+        assert_eq!(app.source_scroll, 0);
+
+        // Scroll down multiple times
+        for i in 1..=10 {
+            app.handle_key(KeyCode::Down);
+            assert_eq!(app.source_scroll, i, "Scroll position should update");
+        }
+
+        // The source_scroll controls both panes in the split view
+        // (no separate asm_scroll - they're synced by design)
+        assert_eq!(app.source_scroll, 10, "Source/ASM should be at position 10");
+
+        // Scroll back up
+        app.handle_key(KeyCode::PageUp);
+        assert_eq!(app.source_scroll, 0, "Should scroll back to top");
+    }
 }
