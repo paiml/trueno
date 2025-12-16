@@ -97,8 +97,34 @@ mod tests {
 
     #[test]
     fn test_bug_class_descriptions() {
-        assert!(!BugClass::RaceCondition.description().is_empty());
-        assert!(!BugClass::Unknown.suggested_fix().is_empty());
+        // Test all variants have non-empty descriptions
+        let variants = [
+            BugClass::RaceCondition,
+            BugClass::FloatingPointDrift,
+            BugClass::AccumulatorInit,
+            BugClass::LoopCounter,
+            BugClass::MemoryAddressing,
+            BugClass::ThreadSync,
+            BugClass::Unknown,
+        ];
+
+        for variant in variants {
+            assert!(!variant.description().is_empty(), "{variant:?} has empty description");
+            assert!(!variant.suggested_fix().is_empty(), "{variant:?} has empty fix");
+        }
+    }
+
+    #[test]
+    fn test_bug_class_equality() {
+        assert_eq!(BugClass::RaceCondition, BugClass::RaceCondition);
+        assert_ne!(BugClass::RaceCondition, BugClass::Unknown);
+    }
+
+    #[test]
+    fn test_bug_class_clone() {
+        let original = BugClass::FloatingPointDrift;
+        let cloned = original;
+        assert_eq!(original, cloned);
     }
 }
 

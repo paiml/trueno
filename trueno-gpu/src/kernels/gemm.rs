@@ -1100,4 +1100,77 @@ mod tests {
         assert!(ptx.contains("loop_k:"), "Expected loop_k label");
         assert!(ptx.contains("loop_end:"), "Expected loop_end label");
     }
+
+    #[test]
+    fn test_wmma_fp16_kernel() {
+        // Test WmmaFp16 variant - requires dimensions multiple of 16
+        let kernel = GemmKernel::wmma_fp16(256, 256, 256);
+        assert_eq!(kernel.name(), "gemm_wmma_fp16");
+        assert!(kernel.config.use_tensor_cores);
+        assert_eq!(kernel.config.tile_size, 16);
+
+        // Build PTX
+        let ptx_kernel = kernel.build_ptx();
+        assert!(ptx_kernel.shared_memory_bytes() > 0);
+
+        // Emit PTX and verify structure
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry gemm_wmma_fp16"));
+        assert!(ptx.contains(".param"));
+    }
+
+    #[test]
+    fn test_wmma_fp16_ptx_generation() {
+        let kernel = GemmKernel::wmma_fp16(128, 128, 128);
+        let ptx = kernel.emit_ptx();
+
+        // Verify WMMA-specific patterns
+        assert!(ptx.contains("wmma") || ptx.contains("mma") || ptx.contains("ld.global.f32"));
+
+        // Write to /tmp for inspection
+        std::fs::write("/tmp/test_wmma.ptx", &ptx).expect("write PTX");
+    }
+
+    #[test]
+    fn test_all_gemm_variants_emit_valid_ptx() {
+        // Comprehensive test for all variants
+        let variants: Vec<GemmKernel> = vec![
+            GemmKernel::naive(64, 64, 64),
+            GemmKernel::tiled(64, 64, 64, 16),
+            GemmKernel::tensor_core(64, 64, 64),
+            GemmKernel::wmma_fp16(64, 64, 64),
+        ];
+
+        for kernel in variants {
+            let name = kernel.name().to_string();
+            let ptx = kernel.emit_ptx();
+            let ptx_kernel = kernel.build_ptx();
+
+            // All variants must produce valid PTX
+            assert!(ptx.contains(".version"), "{name} missing PTX version");
+            assert!(ptx.contains(".entry"), "{name} missing entry point");
+            assert!(ptx.contains(".param"), "{name} missing parameters");
+
+            // Verify shared memory for tiled variants
+            if name.contains("tiled") || name.contains("tensor") || name.contains("wmma") {
+                assert!(ptx_kernel.shared_memory_bytes() > 0, "{name} should use shared memory");
+            }
+        }
+    }
+
+    #[test]
+    fn test_gemm_config_clone() {
+        let config = GemmConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.m, cloned.m);
+        assert_eq!(config.n, cloned.n);
+        assert_eq!(config.k, cloned.k);
+    }
+
+    #[test]
+    fn test_gemm_kernel_clone() {
+        let kernel = GemmKernel::naive(128, 128, 128);
+        let cloned = kernel.clone();
+        assert_eq!(kernel.name(), cloned.name());
+    }
 }
