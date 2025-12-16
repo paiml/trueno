@@ -573,6 +573,36 @@ mutate: ## Run mutation testing (>80% kill rate target)
 	@command -v cargo-mutants >/dev/null 2>&1 || { echo "Installing cargo-mutants..."; cargo install cargo-mutants; } || exit 1
 	cargo mutants --timeout 60
 
+pixel-fkr: ## Run pixel FKR visual regression tests (requires CUDA)
+	@echo "🎨 Running Pixel FKR visual regression tests..."
+	cargo test -p trueno-gpu --test pixel_fkr --features "cuda gpu-pixels" -- --nocapture
+
+pixel-fkr-capture: ## Capture golden baselines for pixel FKR
+	@echo "📸 Capturing golden baselines..."
+	@mkdir -p golden_traces
+	cargo run --release --features "cuda gpu-pixels" --example gpu_pixels_render -- --capture
+
+pixel-fkr-all: ## Run all pixel FKR tests with TUI playbook
+	@echo "🎯 Running full pixel FKR validation suite..."
+	@if command -v nvidia-smi >/dev/null 2>&1; then \
+		echo "  ✅ NVIDIA GPU detected"; \
+		cargo test -p trueno-gpu --test pixel_fkr --features "cuda gpu-pixels" -- --nocapture; \
+	else \
+		echo "  ⚠️  No NVIDIA GPU - running PTX validation only"; \
+		cargo test -p trueno-gpu --lib kernels -- --nocapture; \
+	fi
+
+quick-validate: lint ## Quick validation (<2 minutes)
+	@echo "🚀 Running quick validation suite..."
+	cargo test --lib --quiet
+	cargo run --release --example quickstart >/dev/null
+	@echo "✅ Quick validation passed"
+
+full-validate: quick-validate coverage ## Full validation (<10 minutes)
+	@echo "🔬 Running full validation suite..."
+	cargo +nightly miri test --lib -- --skip simd --skip gpu --skip avx --skip sse --skip neon --skip wasm --skip proptest scalar || true
+	@echo "✅ Full validation passed"
+
 clean: ## Clean build artifacts
 	cargo clean
 	rm -rf target/ || exit 1

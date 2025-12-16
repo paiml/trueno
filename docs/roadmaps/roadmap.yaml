@@ -5,15 +5,15 @@ roadmap:
 - id: pmat-integration-complete
   github_issue: null
   item_type: task
-  title: "PMAT v2.200.0 Integration - COMPLETE"
+  title: PMAT v2.200.0 Integration - COMPLETE
   status: completed
   priority: critical
   assigned_to: claude
-  created: "2025-11-21T16:50:00Z"
-  updated: "2025-11-21T16:57:00Z"
+  created: 2025-11-21T16:50:00Z
+  updated: 2025-11-21T16:57:00Z
   spec: |
     ✅ COMPLETED: Full PMAT v2.200.0 integration with EXTREME TDD standards
-    
+
     Deliverables (13 files, commit 90321c6):
     - pmat.toml (comprehensive v2.200.0 config)
     - .pmat-gates.toml (90% coverage, Sprint 84 complexity)
@@ -22,34 +22,33 @@ roadmap:
     - .github/workflows/pmat-quality.yml (9 CI jobs)
     - PMAT-INTEGRATION.md (complete documentation)
     - Fixed all .unwrap() calls in examples/
-    
+
     Results:
     - TDG: 71.1 (B-) → 85.5 (A-) [+14.4 points]
     - A+ files: 23.5% → 38.2% [+62%]
     - Critical defects: 3 → 0 [100% fixed]
     - Grade F files: 14.7% → 0% [eliminated]
-    
+
     Zero excuses. Zero defects. EXTREME TDD. ✨
   acceptance_criteria: []
   phases: []
   subtasks: []
-  estimated_effort: "4 hours"
+  estimated_effort: 4 hours
   labels:
-    - pmat
-    - quality
-    - extreme-tdd
-    - v2.200.0
-
+  - pmat
+  - quality
+  - extreme-tdd
+  - v2.200.0
+  notes: null
 - id: matmul-performance-optimization
   github_issue: 10
   item_type: task
-  title: "Matrix Multiplication Performance Optimization - CLOSED"
+  title: Matrix Multiplication Performance Optimization - CLOSED
   status: completed
   priority: high
   assigned_to: claude
-  created: "2025-11-21T18:38:00Z"
-  updated: "2025-11-21T19:05:00Z"
-  closed: "2025-11-21T19:05:00Z"
+  created: 2025-11-21T18:38:00Z
+  updated: 2025-11-21T19:05:00Z
   spec: |
     ✅ COMPLETED: Achieved 2.79× faster than NumPy at 128×128 matrices
 
@@ -92,23 +91,22 @@ roadmap:
   acceptance_criteria: []
   phases: []
   subtasks: []
-  estimated_effort: "3-4 days"
+  estimated_effort: 3-4 days
   labels:
-    - performance
-    - simd
-    - optimization
-    - extreme-tdd
-
+  - performance
+  - simd
+  - optimization
+  - extreme-tdd
+  notes: null
 - id: refactor-complexity-a-plus
   github_issue: 4
   item_type: task
-  title: "Refactor to reduce complexity: A (92.27) → A+ (93+) - WON'T FIX"
+  title: 'Refactor to reduce complexity: A (92.27) → A+ (93+) - WON''T FIX'
   status: cancelled
   priority: high
   assigned_to: claude
-  created: "2025-11-21T18:51:00Z"
-  updated: "2025-11-21T21:30:00Z"
-  closed: "2025-11-21T21:30:00Z"
+  created: 2025-11-21T18:51:00Z
+  updated: 2025-11-21T21:30:00Z
   spec: |
     ❌ CLOSED: Won't Fix - Architectural Trade-off
 
@@ -146,23 +144,22 @@ roadmap:
   acceptance_criteria: []
   phases: []
   subtasks: []
-  estimated_effort: "1-2 days"
+  estimated_effort: 1-2 days
   labels:
-    - refactoring
-    - quality
-    - tdg
-    - extreme-tdd
-
+  - refactoring
+  - quality
+  - tdg
+  - extreme-tdd
+  notes: null
 - id: matmul-phase2-large-matrices
   github_issue: null
   item_type: task
-  title: "Phase 2: Pure Rust Micro-kernel Matrix Multiplication - GOAL ACHIEVED!"
+  title: 'Phase 2: Pure Rust Micro-kernel Matrix Multiplication - GOAL ACHIEVED!'
   status: completed
   priority: high
   assigned_to: claude
-  created: "2025-11-21T21:45:00Z"
-  updated: "2025-11-21T23:15:00Z"
-  closed: "2025-11-21T23:15:00Z"
+  created: 2025-11-21T21:45:00Z
+  updated: 2025-11-21T23:15:00Z
   spec: |
     ✅ COMPLETED: Pure Rust micro-kernel MATCHES NumPy BLAS performance!
 
@@ -244,28 +241,65 @@ roadmap:
     - ✅ Safe public API maintained
     - ✅ Pure Rust (no external dependencies)
     - ⏳ Coverage ≥90% (TBD - likely maintained)
-
   acceptance_criteria: []
   phases: []
   subtasks: []
-  estimated_effort: "1-2 weeks"
+  estimated_effort: 1-2 weeks
   labels:
-    - performance
-    - simd
-    - optimization
-    - phase-2
-    - pure-rust
-    - extreme-tdd
-
-- id: TRUENO-GPU-001
+  - performance
+  - simd
+  - optimization
+  - phase-2
+  - pure-rust
+  - extreme-tdd
+  notes: null
+- id: TRUENO-SPEC-014
   github_issue: null
   item_type: task
-  title: "trueno-gpu: Pure Rust PTX Generation Sub-crate"
+  title: Quality Updates and APR Runner Support
   status: inprogress
   priority: high
   assigned_to: claude
-  created: "2025-12-10T21:00:00Z"
-  updated: "2025-12-10T21:30:00Z"
+  created: 2025-12-16T14:00:00Z
+  updated: 2025-12-16T14:04:41.440178325+00:00
+  spec: |
+    PTX/SIMD Kernel Validation with EXTREME TDD and PROBAR methodology.
+
+    Phase 5 Tasks:
+    - TASK-011: PTX Kernel Property Testing (proptest)
+    - TASK-012: Mutation Testing for Kernels (cargo-mutants)
+    - TASK-013: Probar TUI Visual Regression (pixel-fkr)
+    - TASK-014: Miri Provability Testing
+    - TASK-015: Example Validation (all 18 examples)
+    - TASK-016: Fuzz Testing for PTX Generation
+
+    QA Checklist: 100 base + 20 bonus points
+    Target: A++ (110-120 points)
+  acceptance_criteria:
+  - Property tests for all kernel builders
+  - Mutation kill rate ≥80%
+  - Golden baselines for visual regression
+  - Miri passes on scalar backend
+  - All examples run without errors
+  - Fuzz testing finds no crashes
+  phases: []
+  subtasks: []
+  estimated_effort: 10.5 hours
+  labels:
+  - quality
+  - extreme-tdd
+  - probar
+  - kernel-validation
+  notes: null
+- id: TRUENO-GPU-001
+  github_issue: null
+  item_type: task
+  title: 'trueno-gpu: Pure Rust PTX Generation Sub-crate'
+  status: inprogress
+  priority: high
+  assigned_to: claude
+  created: 2025-12-10T21:00:00Z
+  updated: 2025-12-10T21:30:00Z
   spec: |
     Pure Rust PTX generation for NVIDIA CUDA - no LLVM, no nvcc.
 
@@ -287,15 +321,16 @@ roadmap:
     - Multi-backend abstraction
     - EXTREME TDD: 79 tests + 2 doc tests
   acceptance_criteria:
-    - PTX generation without external dependencies
-    - Zero clippy warnings
-    - 80%+ test coverage
-    - GEMM kernel produces valid PTX
+  - PTX generation without external dependencies
+  - Zero clippy warnings
+  - 80%+ test coverage
+  - GEMM kernel produces valid PTX
   phases: []
   subtasks: []
-  estimated_effort: "1-2 weeks"
+  estimated_effort: 1-2 weeks
   labels:
-    - gpu
-    - ptx
-    - cuda
-    - extreme-tdd
+  - gpu
+  - ptx
+  - cuda
+  - extreme-tdd
+  notes: null
