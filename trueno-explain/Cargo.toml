@@ -1,0 +1,27 @@
+[package]
+name = "trueno-explain"
+version = "0.1.0"
+edition = "2021"
+description = "PTX/SIMD/wgpu visualization and tracing CLI for Trueno"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/paiml/trueno"
+keywords = ["ptx", "simd", "gpu", "analysis", "visualization"]
+categories = ["development-tools", "command-line-utilities"]
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+colored = "2.0"
+regex = "1.10"
+
+# Internal dependency for PTX generation
+trueno-gpu = { path = "../trueno-gpu" }
+
+[dev-dependencies]
+proptest = "1.4"
+pretty_assertions = "1.4"
+
+[lints]
+workspace = true
