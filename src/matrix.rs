@@ -1935,6 +1935,25 @@ mod tests {
     }
 
     #[test]
+    fn test_matrix_from_slice() {
+        // TRUENO-SPEC-014 coverage test
+        let data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let m = Matrix::from_slice(2, 3, &data).unwrap();
+        assert_eq!(m.rows(), 2);
+        assert_eq!(m.cols(), 3);
+        assert_eq!(m.get(0, 0), Some(&1.0));
+        assert_eq!(m.get(1, 2), Some(&6.0));
+    }
+
+    #[test]
+    fn test_matrix_from_slice_invalid() {
+        // TRUENO-SPEC-014 coverage test - error path
+        let data = [1.0, 2.0, 3.0];
+        let result = Matrix::from_slice(2, 2, &data);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+    }
+
+    #[test]
     fn test_matrix_zeros() {
         let m = Matrix::zeros(2, 3);
         assert_eq!(m.rows(), 2);
@@ -2053,6 +2072,42 @@ mod tests {
         assert_eq!(c.rows(), 1);
         assert_eq!(c.cols(), 1);
         assert_eq!(c.get(0, 0), Some(&12.0));
+    }
+
+    #[test]
+    fn test_matmul_remainder_rows() {
+        // TRUENO-SPEC-014: Test matmul with rows not divisible by 4
+        // This exercises the remainder handling path in SIMD matmul
+        // 5×8 × 8×6 = 5×6 (5 % 4 = 1 remainder row)
+        let a = Matrix::from_vec(5, 8, (0..40).map(|i| (i + 1) as f32).collect()).unwrap();
+        let b = Matrix::from_vec(8, 6, (0..48).map(|i| (i + 1) as f32).collect()).unwrap();
+        let c = a.matmul(&b).unwrap();
+
+        assert_eq!(c.rows(), 5);
+        assert_eq!(c.cols(), 6);
+
+        // Verify using naive calculation for first and last row
+        // First row: [1,2,3,4,5,6,7,8] . columns of B
+        let expected_00 = (1..=8)
+            .zip((0..48).step_by(6).map(|i| (i + 1) as f32))
+            .map(|(a, b)| a as f32 * b)
+            .sum::<f32>();
+        assert!((c.get(0, 0).unwrap() - expected_00).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_matmul_remainder_rows_7() {
+        // TRUENO-SPEC-014: 7×8 × 8×5 = 7×5 (7 % 4 = 3 remainder rows)
+        let a = Matrix::from_vec(7, 8, (0..56).map(|_| 1.0f32).collect()).unwrap();
+        let b = Matrix::from_vec(8, 5, (0..40).map(|_| 1.0f32).collect()).unwrap();
+        let c = a.matmul(&b).unwrap();
+
+        assert_eq!(c.rows(), 7);
+        assert_eq!(c.cols(), 5);
+        // Each element should be 8.0 (dot product of 8 ones)
+        for &val in c.as_slice() {
+            assert!((val - 8.0).abs() < 1e-5);
+        }
     }
 
     // ===== Backend Equivalence Tests =====

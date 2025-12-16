@@ -1904,4 +1904,47 @@ mod tests {
             ptx
         );
     }
+
+    // ========================================================================
+    // COVERAGE IMPROVEMENT TESTS - TRUENO-SPEC-014
+    // ========================================================================
+
+    #[test]
+    fn test_validate_valid_module() {
+        // Test that a valid module passes validation
+        let module = PtxModule::new()
+            .version(8, 0)
+            .target("sm_70")
+            .address_size(64);
+
+        assert!(module.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_minimum_version() {
+        // PTX version 7.0 should be valid (minimum supported)
+        let module = PtxModule::new().version(7, 0).target("sm_70");
+        assert!(module.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_invalid_version() {
+        // PTX version below 7.0 should fail
+        let module = PtxModule::new().version(6, 5).target("sm_70");
+        assert!(module.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_invalid_target() {
+        // Invalid compute capability should fail
+        let module = PtxModule::new().version(8, 0).target("sm_invalid");
+        assert!(module.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_sm_30_too_old() {
+        // sm_30 is too old (below sm_50)
+        let module = PtxModule::new().version(8, 0).target("sm_30");
+        assert!(module.validate().is_err());
+    }
 }
