@@ -310,15 +310,16 @@ impl GemmKernel {
                 let a_col = ctx.add_u32_reg(tile_k_offset, tid_x);
 
                 // Check if A load is in bounds: row < m AND a_col < k
+                // Use two branches instead of and_pred to reduce predicate pressure
                 let a_col_valid = ctx.setp_lt_u32(a_col, k_param);
-                let a_valid = ctx.and_pred(row_valid, a_col_valid);
 
                 // Store 0.0 to shared memory first (default for out-of-bounds)
                 let zero_a = ctx.mov_f32_imm(0.0);
                 ctx.st_shared_f32(smem_a_offset, zero_a);
 
-                // If in bounds, load from global and overwrite shared memory
-                ctx.branch_if_not(a_valid, "skip_a_load");
+                // If out of bounds, skip load (check both conditions with separate branches)
+                ctx.branch_if_not(row_valid, "skip_a_load");
+                ctx.branch_if_not(a_col_valid, "skip_a_load");
                 let row_offset_a = ctx.mul_wide_u32(row, self.config.k * 4);
                 let col_offset_a = ctx.mul_wide_u32(a_col, 4);
                 let a_row_base = ctx.add_u64(a_ptr, row_offset_a);
@@ -331,15 +332,16 @@ impl GemmKernel {
                 let b_row = ctx.add_u32_reg(tile_k_offset, tid_y);
 
                 // Check if B load is in bounds: b_row < k AND col < n
+                // Use two branches instead of and_pred to reduce predicate pressure
                 let b_row_valid = ctx.setp_lt_u32(b_row, k_param);
-                let b_valid = ctx.and_pred(b_row_valid, col_valid);
 
                 // Store 0.0 to shared memory first (default for out-of-bounds)
                 let zero_b = ctx.mov_f32_imm(0.0);
                 ctx.st_shared_f32(smem_b_offset, zero_b);
 
-                // If in bounds, load from global and overwrite shared memory
-                ctx.branch_if_not(b_valid, "skip_b_load");
+                // If out of bounds, skip load (check both conditions with separate branches)
+                ctx.branch_if_not(b_row_valid, "skip_b_load");
+                ctx.branch_if_not(col_valid, "skip_b_load");
                 let row_offset_b = ctx.mul_wide_u32(b_row, self.config.n * 4);
                 let col_offset_b = ctx.mul_wide_u32(col, 4);
                 let b_row_base = ctx.add_u64(b_ptr, row_offset_b);
@@ -391,8 +393,10 @@ impl GemmKernel {
 
                 // PARITY-114 FIX: Bounds check HERE (after all threads finished tile loop)
                 // Only threads with valid output coordinates store to C
-                let out_valid = ctx.and_pred(row_valid, col_valid);
-                ctx.branch_if_not(out_valid, "exit");
+                // Note: Use two branches instead of and_pred to reduce predicate register pressure
+                // (PTX only has 8 predicate registers p0-p7)
+                ctx.branch_if_not(row_valid, "exit");
+                ctx.branch_if_not(col_valid, "exit");
 
                 // Store result: C[row, col] = c_ptr + row * N + col
                 let c_row_offset = ctx.mul_wide_u32(row, self.config.n * 4);

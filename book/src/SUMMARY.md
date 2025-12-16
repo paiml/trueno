@@ -80,6 +80,7 @@
 - [Quality Gates](./development/quality-gates.md)
 - [SATD Remediation](./development/satd-remediation.md)
 - [PTX Best Practices](./development/ptx-best-practices.md)
+- [PTX Bug Detection](./development/ptx-bug-detection.md)
 - [Code Review Checklist](./development/code-review.md)
 
 # Advanced Topics

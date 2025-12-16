@@ -8,8 +8,8 @@ use clap::{Parser, Subcommand};
 use std::process::ExitCode;
 use trueno_explain::{
     compare_analyses, compare_reports, format_comparison_json, format_comparison_text,
-    format_diff_json, format_diff_text, output, run_tui, Analyzer, DiffThresholds, OutputFormat,
-    PtxAnalyzer, SimdAnalyzer, SimdArch, WgpuAnalyzer,
+    format_diff_json, format_diff_text, output, run_tui, Analyzer, BugSeverity, DiffThresholds,
+    OutputFormat, PtxAnalyzer, PtxBugAnalyzer, SimdAnalyzer, SimdArch, WgpuAnalyzer,
 };
 use trueno_gpu::kernels::{GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel};
 
@@ -136,6 +136,37 @@ enum Commands {
         /// Fail with exit code 1 if regression detected
         #[arg(long)]
         fail_on_regression: bool,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Hunt for PTX bugs (probar-style static analysis)
+    Bugs {
+        /// Kernel to analyze for bugs
+        #[arg(short = 'K', long, value_name = "NAME")]
+        kernel: String,
+
+        /// Matrix M dimension (rows)
+        #[arg(short = 'm', long, default_value = "64")]
+        rows: u32,
+
+        /// Matrix N dimension (columns)
+        #[arg(short = 'n', long, default_value = "64")]
+        cols: u32,
+
+        /// Matrix K dimension (inner)
+        #[arg(short = 'k', long, default_value = "256")]
+        inner: u32,
+
+        /// Enable strict mode (catches more bugs like PARITY-114)
+        #[arg(long)]
+        strict: bool,
+
+        /// Fail with exit code 1 if critical bugs found
+        #[arg(long)]
+        fail_on_bugs: bool,
 
         /// Output as JSON
         #[arg(long)]
@@ -297,6 +328,40 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             // Exit with error if regression detected and --fail-on-regression is set
             if fail_on_regression && diff_report.has_regression {
                 return Err("Regression detected".into());
+            }
+        }
+
+        Commands::Bugs {
+            kernel,
+            rows,
+            cols,
+            inner,
+            strict,
+            fail_on_bugs,
+            json,
+        } => {
+            let ptx = generate_kernel_ptx(&kernel, rows, cols, inner)?;
+
+            let analyzer = if strict {
+                PtxBugAnalyzer::strict()
+            } else {
+                PtxBugAnalyzer::new()
+            };
+
+            let bug_report = analyzer.analyze(&ptx);
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&bug_report)?);
+            } else {
+                print!("{}", bug_report.format_report());
+            }
+
+            // Exit with error if critical bugs found and --fail-on-bugs is set
+            if fail_on_bugs {
+                let critical_count = bug_report.count_by_severity(BugSeverity::Critical);
+                if critical_count > 0 {
+                    return Err(format!("{} critical bug(s) found", critical_count).into());
+                }
             }
         }
     }

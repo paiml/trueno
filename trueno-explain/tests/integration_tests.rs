@@ -27,6 +27,7 @@ fn f001_help_shows_subcommands() {
     assert!(stdout.contains("tui"), "Should show tui subcommand");
     assert!(stdout.contains("compare"), "Should show compare subcommand");
     assert!(stdout.contains("diff"), "Should show diff subcommand");
+    assert!(stdout.contains("bugs"), "Should show bugs subcommand");
 }
 
 /// F002: `trueno-explain tui --help` shows TUI options
@@ -240,5 +241,86 @@ fn test_all_kernels_analyzable() {
     for (name, ptx) in kernels {
         let result = analyzer.analyze(&ptx);
         assert!(result.is_ok(), "Failed to analyze {}: {:?}", name, result);
+    }
+}
+
+// ============================================================================
+// BUG HUNTING CLI TESTS
+// ============================================================================
+
+/// F003: `trueno-explain bugs --help` shows bug hunting options
+#[test]
+fn f003_bugs_help_shows_options() {
+    let output = run_explain(&["bugs", "--help"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "Bugs help should succeed");
+    assert!(stdout.contains("--kernel"), "Should show --kernel option");
+    assert!(stdout.contains("--strict"), "Should show --strict option");
+    assert!(stdout.contains("--fail-on-bugs"), "Should show --fail-on-bugs option");
+    assert!(stdout.contains("--json"), "Should show --json option");
+}
+
+/// F009: `trueno-explain bugs --json` produces valid JSON
+#[test]
+fn f009_bugs_json_valid() {
+    let output = run_explain(&["bugs", "-K", "gemm_naive", "--json"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "Bug analysis should succeed");
+
+    // Verify it's valid JSON
+    let parsed: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
+    assert!(parsed.is_ok(), "Output should be valid JSON: {}", stdout);
+
+    // Verify expected fields
+    let json = parsed.unwrap();
+    assert!(json.get("bugs").is_some(), "JSON should have 'bugs' field");
+    assert!(json.get("lines_analyzed").is_some(), "JSON should have 'lines_analyzed' field");
+}
+
+/// F010: Bug report shows kernel name and summary
+#[test]
+fn f010_bug_report_format() {
+    let output = run_explain(&["bugs", "-K", "gemm_naive"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "Bug analysis should succeed");
+    assert!(stdout.contains("PTX BUG HUNTING REPORT"), "Should show report header");
+    assert!(stdout.contains("Kernel:"), "Should show kernel name");
+    assert!(stdout.contains("SUMMARY"), "Should show summary section");
+    assert!(stdout.contains("P0 Critical:"), "Should show P0 count");
+}
+
+/// F101 CLI: Bugs command detects issues in strict mode
+#[test]
+fn f101_cli_bugs_strict_mode() {
+    let output = run_explain(&["bugs", "-K", "gemm_tiled", "--strict"]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "Strict bug analysis should succeed");
+    assert!(stdout.contains("PTX BUG HUNTING REPORT"), "Should show report");
+}
+
+/// F102 CLI: --fail-on-bugs exits with error on critical bugs
+#[test]
+fn f102_cli_fail_on_bugs_success() {
+    // gemm_naive should have no critical bugs
+    let output = run_explain(&["bugs", "-K", "gemm_naive", "--fail-on-bugs"]);
+    assert!(output.status.success(), "Should succeed with no critical bugs");
+}
+
+/// Test all kernels pass bug hunting in normal mode
+#[test]
+fn test_all_kernels_no_critical_bugs() {
+    let kernels = ["gemm_naive", "gemm_tiled", "softmax", "q4k", "q5k", "q6k"];
+
+    for kernel in kernels {
+        let output = run_explain(&["bugs", "-K", kernel, "--fail-on-bugs"]);
+        assert!(
+            output.status.success(),
+            "Kernel {} should have no critical bugs",
+            kernel
+        );
     }
 }
