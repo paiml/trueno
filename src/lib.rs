@@ -314,53 +314,7 @@ pub fn select_backend_for_operation(op_type: OperationType) -> Backend {
 
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     {
-        use std::arch::is_x86_feature_detected;
-
-        match op_type {
-            OperationType::MemoryBound => {
-                // Prefer AVX2 over AVX-512 for memory-bound operations
-                // AVX-512 causes 10-33% slowdown due to memory bandwidth bottleneck
-                if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-                    return Backend::AVX2;
-                }
-                if is_x86_feature_detected!("avx") {
-                    return Backend::AVX;
-                }
-                if is_x86_feature_detected!("sse2") {
-                    return Backend::SSE2;
-                }
-                // Explicitly avoid AVX-512 for memory-bound operations
-            }
-            OperationType::ComputeBound => {
-                // Use AVX-512 for compute-bound operations where it excels
-                if is_x86_feature_detected!("avx512f") {
-                    return Backend::AVX512;
-                }
-                if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-                    return Backend::AVX2;
-                }
-                if is_x86_feature_detected!("avx") {
-                    return Backend::AVX;
-                }
-                if is_x86_feature_detected!("sse2") {
-                    return Backend::SSE2;
-                }
-            }
-            OperationType::Mixed => {
-                // Default to AVX2 for mixed operations (safer than AVX-512)
-                // Future: could use size-based heuristics (AVX-512 for <1K elements)
-                if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-                    return Backend::AVX2;
-                }
-                if is_x86_feature_detected!("avx") {
-                    return Backend::AVX;
-                }
-                if is_x86_feature_detected!("sse2") {
-                    return Backend::SSE2;
-                }
-            }
-        }
-        Backend::Scalar
+        select_x86_backend_for_operation(op_type)
     }
 
     #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
@@ -383,6 +337,35 @@ pub fn select_backend_for_operation(op_type: OperationType) -> Backend {
     {
         Backend::Scalar
     }
+}
+
+/// Select the best x86 backend based on operation type and available features.
+///
+/// Separated from `select_backend_for_operation` to reduce cyclomatic complexity.
+#[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+fn select_x86_backend_for_operation(op_type: OperationType) -> Backend {
+    use std::arch::is_x86_feature_detected;
+
+    // Check for AVX-512 (only for compute-bound operations)
+    let use_avx512 = op_type == OperationType::ComputeBound && is_x86_feature_detected!("avx512f");
+    if use_avx512 {
+        return Backend::AVX512;
+    }
+
+    // AVX2 with FMA is preferred for most operations
+    if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+        return Backend::AVX2;
+    }
+
+    // Fallback chain: AVX -> SSE2 -> Scalar
+    if is_x86_feature_detected!("avx") {
+        return Backend::AVX;
+    }
+    if is_x86_feature_detected!("sse2") {
+        return Backend::SSE2;
+    }
+
+    Backend::Scalar
 }
 
 #[cfg(test)]

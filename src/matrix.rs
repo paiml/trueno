@@ -406,13 +406,22 @@ impl Matrix<f32> {
         result: &mut Matrix<f32>,
     ) -> Result<(), TruenoError> {
         // C[i,j] = Σ A[i,k] × B[k,j]
+        // SAFETY: Loop bounds are validated by dimension checks in matmul()
         for i in 0..self.rows {
             for j in 0..other.cols {
                 let mut sum = 0.0;
                 for k in 0..self.cols {
-                    sum += self.get(i, k).unwrap() * other.get(k, j).unwrap();
+                    // Bounds guaranteed: i < self.rows, k < self.cols, j < other.cols
+                    sum += self
+                        .get(i, k)
+                        .expect("matmul_naive: A[i,k] bounds validated by loop")
+                        * other
+                            .get(k, j)
+                            .expect("matmul_naive: B[k,j] bounds validated by loop");
                 }
-                *result.get_mut(i, j).unwrap() = sum;
+                *result
+                    .get_mut(i, j)
+                    .expect("matmul_naive: C[i,j] bounds validated by loop") = sum;
             }
         }
         Ok(())
@@ -1729,6 +1738,7 @@ impl Matrix<f32> {
         }
 
         // Scalar baseline implementation
+        // Bounds: output_rows = self.rows - kernel.rows + 1, output_cols = self.cols - kernel.cols + 1
         for out_row in 0..output_rows {
             for out_col in 0..output_cols {
                 let mut sum = 0.0;
@@ -1739,14 +1749,21 @@ impl Matrix<f32> {
                         let in_row = out_row + k_row;
                         let in_col = out_col + k_col;
 
-                        let input_val = self.get(in_row, in_col).unwrap();
-                        let kernel_val = kernel.get(k_row, k_col).unwrap();
+                        // Bounds guaranteed: in_row < self.rows, in_col < self.cols
+                        let input_val = self
+                            .get(in_row, in_col)
+                            .expect("convolve2d: input bounds validated by output dimensions");
+                        let kernel_val = kernel
+                            .get(k_row, k_col)
+                            .expect("convolve2d: kernel bounds validated by loop");
 
                         sum += input_val * kernel_val;
                     }
                 }
 
-                *result.get_mut(out_row, out_col).unwrap() = sum;
+                *result
+                    .get_mut(out_row, out_col)
+                    .expect("convolve2d: output bounds validated by allocation") = sum;
             }
         }
 
