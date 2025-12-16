@@ -6,7 +6,10 @@
 
 use clap::{Parser, Subcommand};
 use std::process::ExitCode;
-use trueno_explain::{output, Analyzer, OutputFormat, PtxAnalyzer};
+use trueno_explain::{
+    compare_reports, format_diff_json, format_diff_text, output, run_tui, Analyzer, DiffThresholds,
+    OutputFormat, PtxAnalyzer, SimdAnalyzer, SimdArch,
+};
 use trueno_gpu::kernels::{GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel};
 
 #[derive(Parser)]
@@ -59,6 +62,25 @@ enum Commands {
         json: bool,
     },
 
+    /// Interactive TUI mode (Genchi Genbutsu)
+    Tui {
+        /// Kernel to explore
+        #[arg(short, long, value_name = "NAME")]
+        kernel: String,
+
+        /// Matrix M dimension (rows)
+        #[arg(short = 'm', long, default_value = "64")]
+        rows: u32,
+
+        /// Matrix N dimension (columns)
+        #[arg(short = 'n', long, default_value = "64")]
+        cols: u32,
+
+        /// Matrix K dimension (inner)
+        #[arg(short = 'k', long, default_value = "256")]
+        inner: u32,
+    },
+
     /// Analyze SIMD vectorization (coming soon)
     Simd {
         /// Function to analyze
@@ -98,7 +120,11 @@ enum Commands {
 
     /// Compare two analyses (git diff integration)
     Diff {
-        /// Baseline analysis file or git ref
+        /// Kernel to analyze for comparison
+        #[arg(short, long)]
+        kernel: String,
+
+        /// Baseline analysis JSON file
         #[arg(long)]
         baseline: String,
 
@@ -146,14 +172,51 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             output::write_report(&report, format)?;
         }
 
+        Commands::Tui {
+            kernel,
+            rows,
+            cols,
+            inner,
+        } => {
+            let ptx = generate_kernel_ptx(&kernel, rows, cols, inner)?;
+            let analyzer = PtxAnalyzer::new();
+            let report = analyzer.analyze(&ptx)?;
+            run_tui(ptx, report)?;
+        }
+
         Commands::Simd { function, arch, json } => {
-            eprintln!(
-                "SIMD analysis for {} ({}) - coming in Sprint 2",
-                function, arch
+            let simd_arch = match arch.to_lowercase().as_str() {
+                "sse2" => SimdArch::Sse2,
+                "avx" | "avx2" => SimdArch::Avx2,
+                "avx512" | "avx-512" => SimdArch::Avx512,
+                "neon" => SimdArch::Neon,
+                _ => {
+                    return Err(format!(
+                        "Unknown SIMD architecture: {}. Available: sse2, avx2, avx512, neon",
+                        arch
+                    )
+                    .into());
+                }
+            };
+
+            // For now, analyze sample assembly or placeholder
+            // In future, will integrate with objdump/llvm-objdump for real binaries
+            let sample_asm = format!(
+                "; Sample x86-64 assembly for function: {}\n\
+                 ; Target architecture: {:?}\n\
+                 ; Use --asm-file to analyze actual disassembly\n",
+                function, simd_arch
             );
-            if json {
-                println!("{{\"status\": \"not_implemented\", \"function\": \"{}\", \"arch\": \"{}\"}}", function, arch);
-            }
+
+            let analyzer = SimdAnalyzer::new(simd_arch);
+            let report = analyzer.analyze(&sample_asm)?;
+
+            let format = if json {
+                OutputFormat::Json
+            } else {
+                OutputFormat::Text
+            };
+            output::write_report(&report, format)?;
         }
 
         Commands::Wgpu { shader, json } => {
@@ -171,16 +234,37 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Commands::Diff {
+            kernel,
             baseline,
             fail_on_regression,
             json,
         } => {
-            eprintln!(
-                "Diff analysis against {} - coming soon (fail_on_regression: {})",
-                baseline, fail_on_regression
-            );
+            // Load baseline from JSON file
+            let baseline_json = std::fs::read_to_string(&baseline)
+                .map_err(|e| format!("Failed to read baseline file '{}': {}", baseline, e))?;
+            let baseline_report: trueno_explain::AnalysisReport =
+                serde_json::from_str(&baseline_json)
+                    .map_err(|e| format!("Failed to parse baseline JSON: {}", e))?;
+
+            // Analyze current kernel
+            let ptx = generate_kernel_ptx(&kernel, 1024, 1024, 1024)?;
+            let analyzer = PtxAnalyzer::new();
+            let current_report = analyzer.analyze(&ptx)?;
+
+            // Compare reports
+            let thresholds = DiffThresholds::default();
+            let diff_report = compare_reports(&baseline_report, &current_report, &thresholds);
+
+            // Output results
             if json {
-                println!("{{\"status\": \"not_implemented\", \"baseline\": \"{}\"}}", baseline);
+                println!("{}", format_diff_json(&diff_report));
+            } else {
+                print!("{}", format_diff_text(&diff_report));
+            }
+
+            // Exit with error if regression detected and --fail-on-regression is set
+            if fail_on_regression && diff_report.has_regression {
+                return Err("Regression detected".into());
             }
         }
     }
