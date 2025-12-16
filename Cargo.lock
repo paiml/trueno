@@ -5018,8 +5018,10 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "colored",
+ "crossterm",
  "pretty_assertions",
  "proptest",
+ "ratatui",
  "regex",
  "serde",
  "serde_json",
