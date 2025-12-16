@@ -145,6 +145,31 @@ let kernel = SoftmaxKernel::new(1024);  // Vector length
 let ptx = kernel.emit_ptx();
 ```
 
+### Quantized GEMM (Q4_K, Q5_K, Q6_K)
+
+Optimized kernels for quantized inference with GGML-compatible formats:
+
+```rust
+use trueno_gpu::kernels::{QuantizeKernel, Q5KKernel, Q6KKernel, Kernel};
+
+// Q4_K: 4-bit quantization (144 bytes per 256 values)
+let q4k = QuantizeKernel::ggml(1024, 1024, 4096);
+
+// Q5_K: 5-bit quantization (176 bytes per 256 values) - PARITY-116
+let q5k = Q5KKernel::new(1024, 1024, 4096);
+
+// Q6_K: 6-bit quantization (210 bytes per 256 values) - PARITY-117
+let q6k = Q6KKernel::new(1024, 1024, 4096);
+
+let ptx = q5k.emit_ptx();
+```
+
+| Format | Bits | Bytes/256 | Accuracy | Use Case |
+|--------|------|-----------|----------|----------|
+| Q4_K | 4 | 144 | Good | Default inference |
+| Q5_K | 5 | 176 | Better | Quality-sensitive |
+| Q6_K | 6 | 210 | Best | Maximum accuracy |
+
 ## Memory Management
 
 ```rust
@@ -176,6 +201,9 @@ cargo run -p trueno-gpu --example ptx_quickstart
 
 # GEMM kernel generation
 cargo run -p trueno-gpu --example gemm_kernel
+
+# Quantized GEMM (Q5_K/Q6_K)
+cargo run -p trueno-gpu --example q5k_q6k_gemm
 ```
 
 ## PTX Type System
