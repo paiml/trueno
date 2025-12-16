@@ -40,6 +40,7 @@ This directory contains examples demonstrating Trueno's high-performance compute
 | `flash_attention_cuda` | Flash Attention implementation | `cargo run -p trueno-gpu --example flash_attention_cuda` |
 | `simple_attention_cuda` | Basic multi-head attention | `cargo run -p trueno-gpu --example simple_attention_cuda` |
 | `q4k_gemm` | Quantized GEMM (Q4_K format) | `cargo run -p trueno-gpu --example q4k_gemm` |
+| `q5k_q6k_gemm` | Q5_K/Q6_K quantized GEMM (PARITY-116/117) | `cargo run -p trueno-gpu --example q5k_q6k_gemm` |
 | `register_allocation` | PTX register allocation demo | `cargo run -p trueno-gpu --example register_allocation` |
 | `gpu_pixels_render` | GPU pixel rendering | `cargo run -p trueno-gpu --example gpu_pixels_render` |
 | `dump_ptx` | Dump raw PTX output | `cargo run -p trueno-gpu --example dump_ptx` |

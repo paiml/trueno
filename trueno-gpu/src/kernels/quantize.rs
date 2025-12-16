@@ -1653,4 +1653,89 @@ mod tests {
         assert_ne!(ptx_q4k, ptx_q6k, "Q4_K and Q6_K should produce different PTX");
         assert_ne!(ptx_q5k, ptx_q6k, "Q5_K and Q6_K should produce different PTX");
     }
+
+    // =========================================================================
+    // Property-Based Tests (PARITY-116, PARITY-117)
+    // =========================================================================
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(32))]
+
+        #[test]
+        fn prop_q5k_valid_ptx_for_any_size(
+            m in 32u32..512,
+            n in 32u32..512,
+            // K must be divisible by 256 for super-blocks
+            k_factor in 1u32..8
+        ) {
+            let k = k_factor * 256;
+            let kernel = Q5KKernel::new(m, n, k);
+            let ptx = kernel.emit_ptx();
+
+            // PTX must be valid (non-empty, contains kernel)
+            prop_assert!(!ptx.is_empty());
+            prop_assert!(ptx.contains("q5k_gemm_ggml"));
+            prop_assert!(ptx.contains(".entry"));
+            prop_assert!(ptx.contains("ret;"));
+
+            // Must have nested loops
+            prop_assert!(ptx.contains("sb_loop"));
+            prop_assert!(ptx.contains("sub_block_loop"));
+        }
+
+        #[test]
+        fn prop_q6k_valid_ptx_for_any_size(
+            m in 32u32..512,
+            n in 32u32..512,
+            k_factor in 1u32..8
+        ) {
+            let k = k_factor * 256;
+            let kernel = Q6KKernel::new(m, n, k);
+            let ptx = kernel.emit_ptx();
+
+            prop_assert!(!ptx.is_empty());
+            prop_assert!(ptx.contains("q6k_gemm_ggml"));
+            prop_assert!(ptx.contains(".entry"));
+            prop_assert!(ptx.contains("ret;"));
+
+            // Q6_K-specific: signed offset subtraction
+            prop_assert!(ptx.contains("sub.f32") || ptx.contains("sub.rn.f32"));
+        }
+
+        #[test]
+        fn prop_q5k_super_blocks_correct(k_factor in 1u32..16) {
+            let k = k_factor * 256;
+            let kernel = Q5KKernel::new(64, 64, k);
+            prop_assert_eq!(kernel.num_super_blocks_per_row(), k_factor);
+        }
+
+        #[test]
+        fn prop_q6k_super_blocks_correct(k_factor in 1u32..16) {
+            let k = k_factor * 256;
+            let kernel = Q6KKernel::new(64, 64, k);
+            prop_assert_eq!(kernel.num_super_blocks_per_row(), k_factor);
+        }
+
+        #[test]
+        fn prop_all_quant_kernels_distinct(
+            m in 64u32..256,
+            n in 64u32..256,
+            k_factor in 1u32..4
+        ) {
+            let k = k_factor * 256;
+            let q4k = QuantizeKernel::ggml(m, n, k);
+            let q5k = Q5KKernel::new(m, n, k);
+            let q6k = Q6KKernel::new(m, n, k);
+
+            let ptx_q4k = q4k.emit_ptx();
+            let ptx_q5k = q5k.emit_ptx();
+            let ptx_q6k = q6k.emit_ptx();
+
+            prop_assert!(ptx_q4k != ptx_q5k);
+            prop_assert!(ptx_q4k != ptx_q6k);
+            prop_assert!(ptx_q5k != ptx_q6k);
+        }
+    }
 }
