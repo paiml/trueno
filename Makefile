@@ -577,6 +577,7 @@ clean: ## Clean build artifacts
 	cargo clean
 	rm -rf target/ || exit 1
 	rm -f lcov.info || exit 1
+	rm -rf book/book/ || true  # Remove mdbook generated output (causes SATD false positives)
 
 quality-gates: lint fmt-check test-fast coverage ## Run all quality gates (pre-commit)
 	@echo ""
