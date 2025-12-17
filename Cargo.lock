@@ -4961,7 +4961,7 @@ dependencies = [
 
 [[package]]
 name = "trueno"
-version = "0.8.7"
+version = "0.8.8"
 dependencies = [
  "bytemuck",
  "criterion",
