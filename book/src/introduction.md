@@ -156,7 +156,7 @@ Trueno is built with **EXTREME TDD** methodology:
 
 Trueno is designed for:
 
-1. **ML/AI Engineers** - Replace PyTorch/NumPy with safe, fast Rust
+1. **ML/AI Engineers** - NumPy-like compute primitives for Rust (use with aprender for training)
 2. **Systems Programmers** - Eliminate unsafe SIMD intrinsics
 3. **Game Developers** - Fast vector math for physics/graphics
 4. **Scientific Computing** - High-performance numerical operations
@@ -190,10 +190,10 @@ Trueno is under active development at **Pragmatic AI Labs**:
 - **Repository**: [github.com/paiml/trueno](https://github.com/paiml/trueno)
 - **Issues**: [github.com/paiml/trueno/issues](https://github.com/paiml/trueno/issues)
 
-**Roadmap:**
-- **Phase 1 (Current)**: Vector operations (add, mul, dot, reduce)
-- **Phase 2**: Matrix operations (matmul, transpose, reshape)
-- **Phase 3**: Neural network primitives (conv2d, pooling, activation functions)
-- **Phase 4**: Full PyTorch/NumPy API compatibility
+**Scope:**
+- **Trueno**: Compute primitives (vectors, matrices, SIMD, GPU) - NumPy equivalent
+- **Aprender**: ML framework with autograd and training - PyTorch equivalent
+
+Trueno is the compute backend for higher-level ML libraries. For neural networks and training, see [aprender](https://github.com/paiml/aprender).
 
 Join us in building the future of safe, high-performance compute!

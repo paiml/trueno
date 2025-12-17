@@ -5,16 +5,16 @@
 //!
 //! Run with: `cargo run -p trueno-gpu --example ptx_quickstart`
 
-use trueno_gpu::ptx::{PtxModule, PtxKernel, PtxType};
+use trueno_gpu::ptx::{PtxKernel, PtxModule, PtxType};
 
 fn main() {
     println!("=== trueno-gpu: Pure Rust PTX Generation ===\n");
 
     // Create a PTX module
     let module = PtxModule::new()
-        .version(8, 0)      // PTX ISA 8.0
-        .target("sm_70")    // Volta+
-        .address_size(64);  // 64-bit addressing
+        .version(8, 0) // PTX ISA 8.0
+        .target("sm_70") // Volta+
+        .address_size(64); // 64-bit addressing
 
     // Build a vector addition kernel
     let kernel = PtxKernel::new("vector_add")

@@ -8,16 +8,20 @@
 #![cfg(feature = "gpu-pixels")]
 
 use jugar_probar::gpu_pixels::{
-    validate_ptx, run_kernel_pixels, KernelPixelConfig,
-    GpuRegressionSuite, RegressionConfig, PtxBugClass,
+    run_kernel_pixels, validate_ptx, GpuRegressionSuite, KernelPixelConfig, PtxBugClass,
+    RegressionConfig,
 };
-use trueno_gpu::kernels::{
-    AttentionKernel, GemmKernel, SoftmaxKernel, LayerNormKernel, Kernel,
-};
+use trueno_gpu::kernels::{AttentionKernel, GemmKernel, Kernel, LayerNormKernel, SoftmaxKernel};
 
 /// TUI Reporter for GPU Pixel Tests
 #[cfg(feature = "gpu-pixels")]
 mod tui_report {
+    use crossterm::{
+        event::{self, Event, KeyCode},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    };
+    use jugar_probar::gpu_pixels::GpuPixelTestSuite;
     use ratatui::{
         backend::CrosstermBackend,
         layout::{Constraint, Direction, Layout},
@@ -26,13 +30,7 @@ mod tui_report {
         widgets::{Block, Borders, List, ListItem, Paragraph},
         Frame, Terminal,
     };
-    use crossterm::{
-        event::{self, Event, KeyCode},
-        execute,
-        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    };
     use std::io;
-    use jugar_probar::gpu_pixels::GpuPixelTestSuite;
 
     pub struct GpuPixelTuiReport {
         pub suites: Vec<GpuPixelTestSuite>,
@@ -106,37 +104,55 @@ mod tui_report {
                 "GPU Pixel Tests: {}/{} passed ({:.1}%)",
                 total_passed, total_tests, pass_rate
             ))
-            .style(Style::default().fg(if pass_rate == 100.0 { Color::Green } else { Color::Yellow }))
+            .style(Style::default().fg(if pass_rate == 100.0 {
+                Color::Green
+            } else {
+                Color::Yellow
+            }))
             .block(Block::default().borders(Borders::ALL).title("Summary"));
             f.render_widget(header, chunks[0]);
 
             // Kernel results
-            let items: Vec<ListItem<'_>> = self.suites.iter().map(|suite| {
-                let status = if suite.all_passed() { "✓" } else { "✗" };
-                let color = if suite.all_passed() { Color::Green } else { Color::Red };
-                ListItem::new(Line::from(vec![
-                    Span::styled(format!("[{}] ", status), Style::default().fg(color)),
-                    Span::raw(&suite.kernel_name),
-                    Span::styled(
-                        format!(" ({}/{})", suite.passed_count(), suite.results.len()),
-                        Style::default().fg(Color::Gray),
-                    ),
-                ]))
-            }).collect();
+            let items: Vec<ListItem<'_>> = self
+                .suites
+                .iter()
+                .map(|suite| {
+                    let status = if suite.all_passed() { "✓" } else { "✗" };
+                    let color = if suite.all_passed() {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    };
+                    ListItem::new(Line::from(vec![
+                        Span::styled(format!("[{}] ", status), Style::default().fg(color)),
+                        Span::raw(&suite.kernel_name),
+                        Span::styled(
+                            format!(" ({}/{})", suite.passed_count(), suite.results.len()),
+                            Style::default().fg(Color::Gray),
+                        ),
+                    ]))
+                })
+                .collect();
 
-            let list = List::new(items)
-                .block(Block::default().borders(Borders::ALL).title("Kernels"));
+            let list =
+                List::new(items).block(Block::default().borders(Borders::ALL).title("Kernels"));
             f.render_widget(list, chunks[1]);
 
             // Bug class legend
             let legend = Paragraph::new(vec![
                 Line::from("Bug Classes Detected:"),
-                Line::from("  shared_mem_u64 - Shared memory uses 64-bit addressing (should be 32-bit)"),
+                Line::from(
+                    "  shared_mem_u64 - Shared memory uses 64-bit addressing (should be 32-bit)",
+                ),
                 Line::from("  loop_branch_end - Loop branches to END instead of START"),
                 Line::from("  missing_barrier - No bar.sync with shared memory"),
             ])
             .style(Style::default().fg(Color::Cyan))
-            .block(Block::default().borders(Borders::ALL).title("Legend (press 'q' to exit)"));
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Legend (press 'q' to exit)"),
+            );
             f.render_widget(legend, chunks[2]);
         }
 
@@ -162,8 +178,10 @@ mod tui_report {
             let filled = (pass_rate / 100.0 * bar_width as f64) as usize;
             let bar: String = "█".repeat(filled) + &"░".repeat(bar_width - filled);
             let status_color = if all_pass { "\x1b[32m" } else { "\x1b[33m" };
-            println!("│  Tests: {}{:>3}/{:<3}\x1b[0m ({:>5.1}%)  [{}]  │",
-                status_color, total_passed, total_tests, pass_rate, bar);
+            println!(
+                "│  Tests: {}{:>3}/{:<3}\x1b[0m ({:>5.1}%)  [{}]  │",
+                status_color, total_passed, total_tests, pass_rate, bar
+            );
             println!("├─────────────────────────────────────────────────────────────────────┤");
             println!("│  KERNELS                                                            │");
             println!("├─────────────────────────────────────────────────────────────────────┤");
@@ -179,16 +197,23 @@ mod tui_report {
                 // Mini progress bar
                 let mini_bar_width = 10;
                 let mini_filled = (passed as f64 / total as f64 * mini_bar_width as f64) as usize;
-                let mini_bar: String = "▓".repeat(mini_filled) + &"░".repeat(mini_bar_width - mini_filled);
+                let mini_bar: String =
+                    "▓".repeat(mini_filled) + &"░".repeat(mini_bar_width - mini_filled);
 
-                println!("│  {}[{}]\x1b[0m {:<32} {:>2}/{:<2} [{}] │",
-                    color, status, suite.kernel_name, passed, total, mini_bar);
+                println!(
+                    "│  {}[{}]\x1b[0m {:<32} {:>2}/{:<2} [{}] │",
+                    color, status, suite.kernel_name, passed, total, mini_bar
+                );
 
                 // Show failures with details
                 for result in suite.failures() {
                     println!("│      └─ \x1b[31m{:<55}\x1b[0m │", result.name);
                     if let Some(err) = &result.error {
-                        let truncated = if err.len() > 50 { &err[..50] } else { err.as_str() };
+                        let truncated = if err.len() > 50 {
+                            &err[..50]
+                        } else {
+                            err.as_str()
+                        };
                         println!("│         └─ {:52} │", truncated);
                     }
                 }
@@ -207,9 +232,18 @@ mod tui_report {
             println!("├─────────────────────────────────────────────────────────────────────┤");
             println!("│  STATISTICS                                                         │");
             println!("├─────────────────────────────────────────────────────────────────────┤");
-            println!("│  Kernels Tested:  {:>3}                                               │", self.suites.len());
-            println!("│  Pixel Tests:     {:>3}                                               │", total_tests);
-            println!("│  Bugs Found:      {:>3}                                               │", total_tests - total_passed);
+            println!(
+                "│  Kernels Tested:  {:>3}                                               │",
+                self.suites.len()
+            );
+            println!(
+                "│  Pixel Tests:     {:>3}                                               │",
+                total_tests
+            );
+            println!(
+                "│  Bugs Found:      {:>3}                                               │",
+                total_tests - total_passed
+            );
 
             // Footer
             println!("├─────────────────────────────────────────────────────────────────────┤");
@@ -344,11 +378,23 @@ fn gpu_pixel_suite_all_kernels() {
 
     // Test all kernel types
     let kernels: Vec<(&str, String)> = vec![
-        ("gemm_tiled_32x32x64", GemmKernel::tiled(32, 32, 64, 32).emit_ptx()),
-        ("gemm_tiled_64x64x128", GemmKernel::tiled(64, 64, 128, 32).emit_ptx()),
-        ("gemm_tensor_core", GemmKernel::tensor_core(32, 32, 64).emit_ptx()),
+        (
+            "gemm_tiled_32x32x64",
+            GemmKernel::tiled(32, 32, 64, 32).emit_ptx(),
+        ),
+        (
+            "gemm_tiled_64x64x128",
+            GemmKernel::tiled(64, 64, 128, 32).emit_ptx(),
+        ),
+        (
+            "gemm_tensor_core",
+            GemmKernel::tensor_core(32, 32, 64).emit_ptx(),
+        ),
         ("attention_64x64", AttentionKernel::new(64, 64).emit_ptx()),
-        ("attention_causal", AttentionKernel::new(64, 64).with_causal().emit_ptx()),
+        (
+            "attention_causal",
+            AttentionKernel::new(64, 64).with_causal().emit_ptx(),
+        ),
         ("softmax_128", SoftmaxKernel::new(128).emit_ptx()),
         ("layernorm_256", LayerNormKernel::new(256).emit_ptx()),
     ];
@@ -370,8 +416,12 @@ fn gpu_pixel_suite_all_kernels() {
     }
 
     // Assert all passed
-    assert!(report.all_passed(), "Not all GPU pixel tests passed: {}/{}",
-        report.total_passed(), report.total_tests());
+    assert!(
+        report.all_passed(),
+        "Not all GPU pixel tests passed: {}/{}",
+        report.total_passed(),
+        report.total_tests()
+    );
 }
 
 // ============================================================================

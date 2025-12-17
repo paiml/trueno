@@ -224,12 +224,7 @@ impl<T: Copy> GpuBuffer<T> {
 
         // SAFETY: data is valid for size bytes, caller ensures data outlives stream ops
         let result = unsafe {
-            (driver.cuMemcpyHtoDAsync)(
-                self.ptr,
-                data.as_ptr() as *const c_void,
-                size,
-                stream.raw(),
-            )
+            (driver.cuMemcpyHtoDAsync)(self.ptr, data.as_ptr() as *const c_void, size, stream.raw())
         };
         CudaDriver::check(result).map_err(|e| GpuError::Transfer(e.to_string()))
     }

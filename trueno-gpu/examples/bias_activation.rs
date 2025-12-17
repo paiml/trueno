@@ -55,8 +55,7 @@ fn main() {
 
     // Demonstrate builder pattern
     println!("\n--- Builder Pattern Demo ---");
-    let custom = BiasActivationKernel::new(8192, 512)
-        .with_activation(Activation::GELU);
+    let custom = BiasActivationKernel::new(8192, 512).with_activation(Activation::GELU);
     println!("Custom kernel: n=8192, bias_size=512, activation=GELU");
     println!("Kernel name: {}", custom.name());
 }

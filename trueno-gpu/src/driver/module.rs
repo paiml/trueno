@@ -68,9 +68,8 @@ impl CudaModule {
 
         // SAFETY: ptx_cstring is valid null-terminated string
         let mut module: CUmodule = ptr::null_mut();
-        let result = unsafe {
-            (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _)
-        };
+        let result =
+            unsafe { (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _) };
         CudaDriver::check(result).map_err(|e| GpuError::ModuleLoad(e.to_string()))?;
 
         Ok(Self {
@@ -102,9 +101,8 @@ impl CudaModule {
 
         // SAFETY: module is valid, name_cstring is null-terminated
         let mut func: CUfunction = ptr::null_mut();
-        let result = unsafe {
-            (driver.cuModuleGetFunction)(&mut func, self.module, name_cstring.as_ptr())
-        };
+        let result =
+            unsafe { (driver.cuModuleGetFunction)(&mut func, self.module, name_cstring.as_ptr()) };
         CudaDriver::check(result).map_err(|_| GpuError::FunctionNotFound(name.to_string()))?;
 
         // Cache for future lookups

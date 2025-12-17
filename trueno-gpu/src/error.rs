@@ -65,7 +65,6 @@ pub enum GpuError {
     // =========================================================================
     // CUDA Runtime Errors (CRT-001 to CRT-006)
     // =========================================================================
-
     /// CUDA device initialization failed
     #[error("CUDA device initialization failed: {0}")]
     DeviceInit(String),

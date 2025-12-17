@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [trueno-gpu 0.3.0] - 2025-12-17
+
+### Added
+
+- **BiasActivationKernel**: Fused bias + activation epilogue kernel for GEMM operations
+  - Three activation variants: None (bias only), ReLU, GELU
+  - Builder pattern API: `BiasActivationKernel::new(n, bias_size).with_relu()`
+  - GELU uses fast `ex2.approx` for exponential approximation
+  - `bias_size` baked into kernel at generation time for efficiency
+  - 22 tests including property-based and falsification tests
+  - 100% mutation coverage (2 caught by tests, 4 by type system)
+
+- **GemvKernel**: Matrix-vector multiply optimized for M=1 matmuls
+  - One warp (32 threads) per output element
+  - Warp shuffle reduction for efficient dot products
+  - Critical path for LLM token generation
+
+### Documentation
+
+- Added Examples section to README with run commands
+- Updated Available Kernels table with BiasActivation, GEMV, Q5_K/Q6_K
+- Book documentation for BiasActivationKernel with testing commands
+
 ## [0.8.5] - 2025-12-15
 
 ### Added

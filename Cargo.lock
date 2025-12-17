@@ -4976,7 +4976,7 @@ dependencies = [
  "thiserror 2.0.17",
  "tokio",
  "tracing",
- "trueno-gpu 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trueno-gpu",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -5026,12 +5026,12 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.17",
- "trueno-gpu 0.2.2",
+ "trueno-gpu",
 ]
 
 [[package]]
 name = "trueno-gpu"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "crossterm",
@@ -5044,16 +5044,6 @@ dependencies = [
  "thiserror 2.0.17",
  "trueno-viz",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "trueno-gpu"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71e28e77db6a8211f6032f01d906a6e877926d1651e54f1a2481887f4c4a4d3a"
-dependencies = [
- "libloading",
- "thiserror 2.0.17",
 ]
 
 [[package]]

@@ -158,12 +158,12 @@ impl QuantizeKernel {
         let smem_size = tile_size * tile_size * 4;
 
         PtxKernel::new("q4k_gemm_fused")
-            .param(PtxType::U64, "a_ptr")           // Input activations (f32)
-            .param(PtxType::U64, "b_quant_ptr")     // Quantized weights (Q4_K)
-            .param(PtxType::U64, "c_ptr")           // Output (f32)
-            .param(PtxType::U32, "m")               // Output rows
-            .param(PtxType::U32, "n")               // Output columns
-            .param(PtxType::U32, "k")               // Inner dimension
+            .param(PtxType::U64, "a_ptr") // Input activations (f32)
+            .param(PtxType::U64, "b_quant_ptr") // Quantized weights (Q4_K)
+            .param(PtxType::U64, "c_ptr") // Output (f32)
+            .param(PtxType::U32, "m") // Output rows
+            .param(PtxType::U32, "n") // Output columns
+            .param(PtxType::U32, "k") // Inner dimension
             .shared_memory(smem_size as usize)
             .build(|ctx| {
                 // Thread and block indices
@@ -351,12 +351,12 @@ impl QuantizeKernel {
         let smem_size = Q4K_SUPER_BLOCK_SIZE * 4; // 256 f32 values
 
         PtxKernel::new("q4k_gemm_ggml")
-            .param(PtxType::U64, "a_ptr")           // Input activations (f32)
-            .param(PtxType::U64, "b_quant_ptr")     // Quantized weights (Q4_K GGML)
-            .param(PtxType::U64, "c_ptr")           // Output (f32)
-            .param(PtxType::U32, "m")               // Output rows
-            .param(PtxType::U32, "n")               // Output columns
-            .param(PtxType::U32, "k")               // Inner dimension
+            .param(PtxType::U64, "a_ptr") // Input activations (f32)
+            .param(PtxType::U64, "b_quant_ptr") // Quantized weights (Q4_K GGML)
+            .param(PtxType::U64, "c_ptr") // Output (f32)
+            .param(PtxType::U32, "m") // Output rows
+            .param(PtxType::U32, "n") // Output columns
+            .param(PtxType::U32, "k") // Inner dimension
             .shared_memory(smem_size as usize)
             .build(|ctx| {
                 // Thread and block indices
@@ -1284,7 +1284,8 @@ mod tests {
         // done label should appear exactly once (the label definition)
         // If bra k_block_done appears twice, the loop exits incorrectly
         assert_eq!(
-            done_count, 2, // label + conditional branch
+            done_count,
+            2, // label + conditional branch
             "FALSIFIED: k_block_done appears {} times. \
              Expected 2 (label + conditional exit). \
              Extra branches to k_block_done indicate premature loop exit.",
@@ -1360,8 +1361,14 @@ mod tests {
     #[test]
     fn test_ggml_super_block_constants() {
         // Verify GGML Q4_K super-block constants
-        assert_eq!(Q4K_SUPER_BLOCK_SIZE, 256, "Super-block should have 256 values");
-        assert_eq!(Q4K_SUPER_BLOCK_BYTES, 144, "Super-block should be 144 bytes (2+2+12+128)");
+        assert_eq!(
+            Q4K_SUPER_BLOCK_SIZE, 256,
+            "Super-block should have 256 values"
+        );
+        assert_eq!(
+            Q4K_SUPER_BLOCK_BYTES, 144,
+            "Super-block should be 144 bytes (2+2+12+128)"
+        );
     }
 
     #[test]
@@ -1376,7 +1383,10 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         // Verify kernel name
-        assert!(ptx.contains("q4k_gemm_ggml"), "Should contain GGML kernel name");
+        assert!(
+            ptx.contains("q4k_gemm_ggml"),
+            "Should contain GGML kernel name"
+        );
 
         // Verify parameters
         assert!(ptx.contains(".param .u64 a_ptr"));
@@ -1393,10 +1403,14 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         // GGML Q4_K has f16 scale (d) and min (dmin) at super-block header
-        assert!(ptx.contains("ld.global.f16") || ptx.contains("ld.global.b16"),
-            "Should load f16 values for d and dmin");
-        assert!(ptx.contains("cvt") && ptx.contains("f32"),
-            "Should convert f16 to f32 for computation");
+        assert!(
+            ptx.contains("ld.global.f16") || ptx.contains("ld.global.b16"),
+            "Should load f16 values for d and dmin"
+        );
+        assert!(
+            ptx.contains("cvt") && ptx.contains("f32"),
+            "Should convert f16 to f32 for computation"
+        );
     }
 
     #[test]
@@ -1406,7 +1420,10 @@ mod tests {
 
         // GGML kernel has nested loops: super-block loop and sub-block loop
         assert!(ptx.contains("sb_loop"), "Should have super-block loop");
-        assert!(ptx.contains("sub_block_loop"), "Should have sub-block loop for 8 sub-blocks");
+        assert!(
+            ptx.contains("sub_block_loop"),
+            "Should have sub-block loop for 8 sub-blocks"
+        );
     }
 
     #[test]
@@ -1415,10 +1432,14 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         // Scale extraction involves bit manipulation (12-bit packed entries)
-        assert!(ptx.contains("shr") || ptx.contains("shl"),
-            "Should have shift operations for scale extraction");
-        assert!(ptx.contains("and"),
-            "Should have AND operations for 6-bit masking");
+        assert!(
+            ptx.contains("shr") || ptx.contains("shl"),
+            "Should have shift operations for scale extraction"
+        );
+        assert!(
+            ptx.contains("and"),
+            "Should have AND operations for 6-bit masking"
+        );
     }
 
     #[test]
@@ -1427,8 +1448,10 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         // Warp shuffle reduction for dot product
-        assert!(ptx.contains("shfl"),
-            "Should have warp shuffle for reduction");
+        assert!(
+            ptx.contains("shfl"),
+            "Should have warp shuffle for reduction"
+        );
     }
 
     #[test]
@@ -1441,10 +1464,16 @@ mod tests {
         let sub_block_loop_count = ptx.matches("sub_block_loop").count();
 
         // Each loop should have: label definition + branch back = 2 references
-        assert!(sb_loop_count >= 2,
-            "sb_loop should appear at least twice (label + branch back), found {}", sb_loop_count);
-        assert!(sub_block_loop_count >= 2,
-            "sub_block_loop should appear at least twice (label + branch back), found {}", sub_block_loop_count);
+        assert!(
+            sb_loop_count >= 2,
+            "sb_loop should appear at least twice (label + branch back), found {}",
+            sb_loop_count
+        );
+        assert!(
+            sub_block_loop_count >= 2,
+            "sub_block_loop should appear at least twice (label + branch back), found {}",
+            sub_block_loop_count
+        );
     }
 
     #[test]
@@ -1456,8 +1485,10 @@ mod tests {
         let ptx_simplified = simplified.emit_ptx();
         let ptx_ggml = ggml.emit_ptx();
 
-        assert_ne!(ptx_simplified, ptx_ggml,
-            "Simplified and GGML kernels should produce different PTX");
+        assert_ne!(
+            ptx_simplified, ptx_ggml,
+            "Simplified and GGML kernels should produce different PTX"
+        );
         assert!(ptx_simplified.contains("q4k_gemm_fused"));
         assert!(ptx_ggml.contains("q4k_gemm_ggml"));
     }
@@ -1483,8 +1514,14 @@ mod tests {
 
     #[test]
     fn test_q5k_super_block_constants() {
-        assert_eq!(Q5K_SUPER_BLOCK_SIZE, 256, "Q5_K super-block should have 256 values");
-        assert_eq!(Q5K_SUPER_BLOCK_BYTES, 176, "Q5_K super-block should be 176 bytes (2+2+12+128+32)");
+        assert_eq!(
+            Q5K_SUPER_BLOCK_SIZE, 256,
+            "Q5_K super-block should have 256 values"
+        );
+        assert_eq!(
+            Q5K_SUPER_BLOCK_BYTES, 176,
+            "Q5_K super-block should be 176 bytes (2+2+12+128+32)"
+        );
     }
 
     #[test]
@@ -1499,7 +1536,10 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         // Verify kernel name
-        assert!(ptx.contains("q5k_gemm_ggml"), "Should contain Q5_K kernel name");
+        assert!(
+            ptx.contains("q5k_gemm_ggml"),
+            "Should contain Q5_K kernel name"
+        );
 
         // Verify parameters
         assert!(ptx.contains(".param .u64 a_ptr"));
@@ -1528,8 +1568,11 @@ mod tests {
         // Q5_K has 1-bit high values packed in qh array
         // The kernel should have multiple ld.global.u8 for ql and qh
         let load_count = ptx.matches("ld.global.u8").count();
-        assert!(load_count >= 4, // At least scales (2) + ql + qh
-            "Q5_K should have multiple u8 loads for scales, ql, and qh. Found {}", load_count);
+        assert!(
+            load_count >= 4, // At least scales (2) + ql + qh
+            "Q5_K should have multiple u8 loads for scales, ql, and qh. Found {}",
+            load_count
+        );
     }
 
     #[test]
@@ -1540,10 +1583,16 @@ mod tests {
         let sb_loop_count = ptx.matches("sb_loop").count();
         let sub_block_loop_count = ptx.matches("sub_block_loop").count();
 
-        assert!(sb_loop_count >= 2,
-            "sb_loop should appear at least twice (label + branch back), found {}", sb_loop_count);
-        assert!(sub_block_loop_count >= 2,
-            "sub_block_loop should appear at least twice (label + branch back), found {}", sub_block_loop_count);
+        assert!(
+            sb_loop_count >= 2,
+            "sb_loop should appear at least twice (label + branch back), found {}",
+            sb_loop_count
+        );
+        assert!(
+            sub_block_loop_count >= 2,
+            "sub_block_loop should appear at least twice (label + branch back), found {}",
+            sub_block_loop_count
+        );
     }
 
     // =========================================================================
@@ -1567,8 +1616,14 @@ mod tests {
 
     #[test]
     fn test_q6k_super_block_constants() {
-        assert_eq!(Q6K_SUPER_BLOCK_SIZE, 256, "Q6_K super-block should have 256 values");
-        assert_eq!(Q6K_SUPER_BLOCK_BYTES, 210, "Q6_K super-block should be 210 bytes (128+64+16+2)");
+        assert_eq!(
+            Q6K_SUPER_BLOCK_SIZE, 256,
+            "Q6_K super-block should have 256 values"
+        );
+        assert_eq!(
+            Q6K_SUPER_BLOCK_BYTES, 210,
+            "Q6_K super-block should be 210 bytes (128+64+16+2)"
+        );
     }
 
     #[test]
@@ -1583,7 +1638,10 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         // Verify kernel name
-        assert!(ptx.contains("q6k_gemm_ggml"), "Should contain Q6_K kernel name");
+        assert!(
+            ptx.contains("q6k_gemm_ggml"),
+            "Should contain Q6_K kernel name"
+        );
 
         // Verify parameters
         assert!(ptx.contains(".param .u64 a_ptr"));
@@ -1620,8 +1678,10 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         // Q6_K: quant = ql + 4*qh - 32 (signed range -32 to 31)
-        assert!(ptx.contains("sub.f32") || ptx.contains("sub.rn.f32"),
-            "Should have subtraction for signed offset");
+        assert!(
+            ptx.contains("sub.f32") || ptx.contains("sub.rn.f32"),
+            "Should have subtraction for signed offset"
+        );
     }
 
     #[test]
@@ -1632,10 +1692,16 @@ mod tests {
         let sb_loop_count = ptx.matches("sb_loop").count();
         let sub_block_loop_count = ptx.matches("sub_block_loop").count();
 
-        assert!(sb_loop_count >= 2,
-            "sb_loop should appear at least twice (label + branch back), found {}", sb_loop_count);
-        assert!(sub_block_loop_count >= 2,
-            "sub_block_loop should appear at least twice (label + branch back), found {}", sub_block_loop_count);
+        assert!(
+            sb_loop_count >= 2,
+            "sb_loop should appear at least twice (label + branch back), found {}",
+            sb_loop_count
+        );
+        assert!(
+            sub_block_loop_count >= 2,
+            "sub_block_loop should appear at least twice (label + branch back), found {}",
+            sub_block_loop_count
+        );
     }
 
     #[test]
@@ -1649,9 +1715,18 @@ mod tests {
         let ptx_q5k = q5k.emit_ptx();
         let ptx_q6k = q6k.emit_ptx();
 
-        assert_ne!(ptx_q4k, ptx_q5k, "Q4_K and Q5_K should produce different PTX");
-        assert_ne!(ptx_q4k, ptx_q6k, "Q4_K and Q6_K should produce different PTX");
-        assert_ne!(ptx_q5k, ptx_q6k, "Q5_K and Q6_K should produce different PTX");
+        assert_ne!(
+            ptx_q4k, ptx_q5k,
+            "Q4_K and Q5_K should produce different PTX"
+        );
+        assert_ne!(
+            ptx_q4k, ptx_q6k,
+            "Q4_K and Q6_K should produce different PTX"
+        );
+        assert_ne!(
+            ptx_q5k, ptx_q6k,
+            "Q5_K and Q6_K should produce different PTX"
+        );
     }
 
     // =========================================================================

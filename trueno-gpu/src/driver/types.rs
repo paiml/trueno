@@ -107,12 +107,7 @@ impl LaunchConfig {
 
     /// Create a 2D launch configuration
     #[must_use]
-    pub const fn grid_2d(
-        grid_x: u32,
-        grid_y: u32,
-        block_x: u32,
-        block_y: u32,
-    ) -> Self {
+    pub const fn grid_2d(grid_x: u32, grid_y: u32, block_x: u32, block_y: u32) -> Self {
         Self {
             grid: (grid_x, grid_y, 1),
             block: (block_x, block_y, 1),

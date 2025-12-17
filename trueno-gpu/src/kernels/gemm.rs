@@ -1100,7 +1100,10 @@ mod tests {
         eprintln!("PTX written to /tmp/test_tiled.ptx");
 
         // Verify key patterns are present
-        assert!(ptx.contains("fma.rn.f32"), "Expected fma.rn.f32 for accumulation");
+        assert!(
+            ptx.contains("fma.rn.f32"),
+            "Expected fma.rn.f32 for accumulation"
+        );
         assert!(ptx.contains("add.u32"), "Expected add.u32 for loop counter");
         // Verify in-place updates (same register as src and dst)
         // Inner loop: add.u32 %rN, %rN, 1
@@ -1126,7 +1129,10 @@ mod tests {
         eprintln!("Naive PTX written to /tmp/test_naive.ptx");
 
         // Verify key patterns
-        assert!(ptx.contains("fma.rn.f32"), "Expected fma.rn.f32 for accumulation");
+        assert!(
+            ptx.contains("fma.rn.f32"),
+            "Expected fma.rn.f32 for accumulation"
+        );
         assert!(ptx.contains("loop_k:"), "Expected loop_k label");
         assert!(ptx.contains("loop_end:"), "Expected loop_end label");
     }
@@ -1183,7 +1189,10 @@ mod tests {
 
             // Verify shared memory for tiled variants
             if name.contains("tiled") || name.contains("tensor") || name.contains("wmma") {
-                assert!(ptx_kernel.shared_memory_bytes() > 0, "{name} should use shared memory");
+                assert!(
+                    ptx_kernel.shared_memory_bytes() > 0,
+                    "{name} should use shared memory"
+                );
             }
         }
     }
@@ -1221,7 +1230,9 @@ mod tests {
 
         // Find the position of key elements in the PTX
         let bar_sync_pos = ptx.find("bar.sync").expect("PTX should have bar.sync");
-        let tile_loop_end_pos = ptx.find("tile_loop_end:").expect("PTX should have tile_loop_end");
+        let tile_loop_end_pos = ptx
+            .find("tile_loop_end:")
+            .expect("PTX should have tile_loop_end");
 
         // Find all early exit branches (branches to exit before tile_loop)
         // Pattern: "@%pN bra exit;" where this appears BEFORE bar.sync
@@ -1276,9 +1287,6 @@ mod tests {
         );
 
         // And tile_size=32
-        assert!(
-            ptx.contains(", 32;"),
-            "PTX should have tile_size=32"
-        );
+        assert!(ptx.contains(", 32;"), "PTX should have tile_size=32");
     }
 }

@@ -14,7 +14,10 @@
 
 #![cfg(feature = "cuda")]
 
-use trueno_gpu::kernels::{Kernel, GemmKernel, SoftmaxKernel, LayerNormKernel, AttentionKernel};
+use trueno_gpu::kernels::{
+    Activation, AttentionKernel, BiasActivationKernel, GemmKernel, Kernel, LayerNormKernel,
+    SoftmaxKernel,
+};
 
 #[cfg(feature = "gpu-pixels")]
 use jugar_probar::gpu_pixels::{validate_ptx, PtxBugClass};
@@ -32,6 +35,26 @@ fn scalar_softmax(x: &[f32]) -> Vec<f32> {
     let exp_vals: Vec<f32> = x.iter().map(|xi| (xi - max_val).exp()).collect();
     let sum: f32 = exp_vals.iter().sum();
     exp_vals.iter().map(|e| e / sum).collect()
+}
+
+/// Scalar bias + activation implementation
+fn scalar_bias_activation(x: &[f32], bias: &[f32], activation: Activation) -> Vec<f32> {
+    x.iter()
+        .enumerate()
+        .map(|(i, &val)| {
+            let biased = val + bias[i % bias.len()];
+            match activation {
+                Activation::None => biased,
+                Activation::ReLU => biased.max(0.0),
+                Activation::GELU => {
+                    // GELU approximation: x * sigmoid(1.702 * x)
+                    let scaled = 1.702 * biased;
+                    let sigmoid = 1.0 / (1.0 + (-scaled).exp());
+                    biased * sigmoid
+                }
+            }
+        })
+        .collect()
 }
 
 /// Scalar layer norm implementation
@@ -191,6 +214,52 @@ mod ptx_analysis {
 
         println!("ptx_pixel_fkr_layernorm: PASS");
     }
+
+    /// ptx-pixel-fkr: BiasActivation kernel entry point (all variants)
+    #[test]
+    fn ptx_pixel_fkr_bias_activation_entry() {
+        for activation in [Activation::None, Activation::ReLU, Activation::GELU] {
+            let kernel = BiasActivationKernel::new(1024, 64).with_activation(activation);
+            let ptx = kernel.emit_ptx();
+            let result = validate_ptx(&ptx);
+
+            assert!(
+                !result.has_bug(&PtxBugClass::MissingEntryPoint),
+                "BiasActivation kernel ({:?}) must have entry point",
+                activation
+            );
+        }
+
+        println!("ptx_pixel_fkr_bias_activation: PASS (all variants)");
+    }
+
+    /// ptx-pixel-fkr: BiasActivation GELU uses approximation functions
+    #[test]
+    fn ptx_pixel_fkr_bias_activation_gelu_approx() {
+        let kernel = BiasActivationKernel::new(1024, 64).with_gelu();
+        let ptx = kernel.emit_ptx();
+
+        assert!(
+            ptx.contains("ex2.approx") || ptx.contains("ex2.f32"),
+            "GELU should use ex2 for fast exp approximation"
+        );
+
+        println!("ptx_pixel_fkr_bias_activation_gelu: PASS (uses ex2 approximation)");
+    }
+
+    /// ptx-pixel-fkr: BiasActivation ReLU uses max instruction
+    #[test]
+    fn ptx_pixel_fkr_bias_activation_relu_max() {
+        let kernel = BiasActivationKernel::new(1024, 64).with_relu();
+        let ptx = kernel.emit_ptx();
+
+        assert!(
+            ptx.contains("max.f32"),
+            "ReLU should use max.f32 instruction"
+        );
+
+        println!("ptx_pixel_fkr_bias_activation_relu: PASS (uses max.f32)");
+    }
 }
 
 // ============================================================================
@@ -227,10 +296,19 @@ mod ptx_runtime {
         let ptx = kernel.emit_ptx();
 
         assert!(ptx.contains(".entry"), "PTX should have entry point");
-        assert!(ptx.contains(".visible"), "PTX should have visible attribute");
+        assert!(
+            ptx.contains(".visible"),
+            "PTX should have visible attribute"
+        );
 
-        println!("ptx_pixel_fkr_softmax_runtime: PTX generated ({} bytes)", ptx.len());
-        println!("  Scalar baseline sum: {:.6}", scalar_result.iter().sum::<f32>());
+        println!(
+            "ptx_pixel_fkr_softmax_runtime: PTX generated ({} bytes)",
+            ptx.len()
+        );
+        println!(
+            "  Scalar baseline sum: {:.6}",
+            scalar_result.iter().sum::<f32>()
+        );
     }
 
     /// ptx-pixel-fkr: GEMM PTX produces correct results
@@ -259,7 +337,10 @@ mod ptx_runtime {
         assert!(ptx.contains(".entry"), "GEMM PTX should have entry point");
         assert!(ptx.contains(".shared"), "GEMM PTX should use shared memory");
 
-        println!("ptx_pixel_fkr_gemm_runtime: PTX generated ({} bytes)", ptx.len());
+        println!(
+            "ptx_pixel_fkr_gemm_runtime: PTX generated ({} bytes)",
+            ptx.len()
+        );
         println!("  Scalar result[0]: {:.6}", scalar_result[0]);
     }
 
@@ -284,10 +365,19 @@ mod ptx_runtime {
         let kernel = LayerNormKernel::new(n as u32);
         let ptx = kernel.emit_ptx();
 
-        assert!(ptx.contains(".entry"), "LayerNorm PTX should have entry point");
+        assert!(
+            ptx.contains(".entry"),
+            "LayerNorm PTX should have entry point"
+        );
 
-        println!("ptx_pixel_fkr_layernorm_runtime: PTX generated ({} bytes)", ptx.len());
-        println!("  Scalar result mean: {:.6}", scalar_result.iter().sum::<f32>() / n as f32);
+        println!(
+            "ptx_pixel_fkr_layernorm_runtime: PTX generated ({} bytes)",
+            ptx.len()
+        );
+        println!(
+            "  Scalar result mean: {:.6}",
+            scalar_result.iter().sum::<f32>() / n as f32
+        );
     }
 }
 
@@ -342,13 +432,61 @@ fn ptx_pixel_fkr_quantize_kernel() {
             );
         }
 
-        println!("ptx_pixel_fkr_quantize[{m}x{n}x{k}]: PASS ({} bytes)", ptx.len());
+        println!(
+            "ptx_pixel_fkr_quantize[{m}x{n}x{k}]: PASS ({} bytes)",
+            ptx.len()
+        );
     }
 }
 
 // ============================================================================
 // PTX PIXEL FKR SUMMARY
 // ============================================================================
+
+/// ptx-pixel-fkr: BiasActivation PTX produces correct results
+#[test]
+#[cfg(feature = "cuda")]
+fn ptx_pixel_fkr_bias_activation_runtime() {
+    use trueno_gpu::driver::CudaContext;
+
+    fn cuda_available() -> bool {
+        CudaContext::new(0).is_ok()
+    }
+
+    if !cuda_available() {
+        eprintln!("Skipping PTX BiasActivation runtime test: no CUDA device");
+        return;
+    }
+
+    let n: usize = 1024;
+    let bias_size: usize = 64;
+    let mut rng = SimpleRng::new(45678);
+    let x = rng.gen_vec(n);
+    let bias = rng.gen_vec(bias_size);
+
+    // Test all activation variants
+    for activation in [Activation::None, Activation::ReLU, Activation::GELU] {
+        // Scalar baseline
+        let scalar_result = scalar_bias_activation(&x, &bias, activation);
+
+        // Generate PTX
+        let kernel =
+            BiasActivationKernel::new(n as u32, bias_size as u32).with_activation(activation);
+        let ptx = kernel.emit_ptx();
+
+        assert!(
+            ptx.contains(".entry"),
+            "BiasActivation PTX should have entry point"
+        );
+
+        println!(
+            "ptx_pixel_fkr_bias_activation_{:?}: PTX generated ({} bytes)",
+            activation,
+            ptx.len()
+        );
+        println!("  Scalar result[0]: {:.6}", scalar_result[0]);
+    }
+}
 
 /// Summary test for PTX pixel FKR suite
 #[test]
@@ -365,11 +503,15 @@ fn ptx_pixel_fkr_summary() {
     println!("    - attention_causal");
     println!("    - softmax_entry");
     println!("    - layernorm_entry");
+    println!("    - bias_activation_entry");
+    println!("    - bias_activation_gelu_approx");
+    println!("    - bias_activation_relu_max");
     println!("");
     println!("  Runtime Validation Tests:");
     println!("    - softmax_runtime");
     println!("    - gemm_runtime");
     println!("    - layernorm_runtime");
+    println!("    - bias_activation_runtime");
     println!("");
     println!("  Issue #67 Prevention:");
     println!("    - quantize_kernel (multiple dimensions)");

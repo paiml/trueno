@@ -17,9 +17,18 @@ fn main() {
     let tensor_gemm = GemmKernel::tensor_core(1024, 1024, 1024);
 
     println!("Available GEMM variants:");
-    println!("  1. {} - Simple implementation for correctness testing", naive_gemm.name());
-    println!("  2. {} - Shared memory tiling for performance", tiled_gemm.name());
-    println!("  3. {} - Tensor Core acceleration (SM 7.0+)", tensor_gemm.name());
+    println!(
+        "  1. {} - Simple implementation for correctness testing",
+        naive_gemm.name()
+    );
+    println!(
+        "  2. {} - Shared memory tiling for performance",
+        tiled_gemm.name()
+    );
+    println!(
+        "  3. {} - Tensor Core acceleration (SM 7.0+)",
+        tensor_gemm.name()
+    );
 
     println!("\n--- Naive GEMM PTX Generation ---\n");
 

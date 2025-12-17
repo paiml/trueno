@@ -19,8 +19,8 @@ fn main() {
     println!("=== Q4_K Quantized GEMM Kernel ===\n");
 
     // Create a small kernel for demonstration
-    let m = 64;  // Output rows
-    let n = 64;  // Output columns
+    let m = 64; // Output rows
+    let n = 64; // Output columns
     let k = 128; // Inner dimension (must be divisible by 32)
 
     // Create simplified Q4_K kernel (32 values per block, 18 bytes per block)
@@ -47,11 +47,11 @@ fn main() {
         ptx.contains(".param .u64 b_quant_ptr"),
         "Missing quantized weights pointer"
     );
+    assert!(ptx.contains(".param .u64 c_ptr"), "Missing output pointer");
     assert!(
-        ptx.contains(".param .u64 c_ptr"),
-        "Missing output pointer"
+        ptx.contains("ld.global.b16"),
+        "Missing f16 load (b16 format)"
     );
-    assert!(ptx.contains("ld.global.b16"), "Missing f16 load (b16 format)");
     assert!(ptx.contains("cvt.f32.f16"), "Missing f16→f32 conversion");
     assert!(ptx.contains("shfl.sync"), "Missing warp shuffle reduction");
     assert!(ptx.contains("min.u32"), "Missing address clamping");
@@ -61,7 +61,10 @@ fn main() {
     println!("\n=== GGML Q4_K Super-block Format ===");
     let ggml_kernel = QuantizeKernel::ggml(m, n, 256); // K must be divisible by 256
     println!("Kernel name: {}", ggml_kernel.name());
-    println!("Super-blocks per row: {}", ggml_kernel.num_super_blocks_per_row());
+    println!(
+        "Super-blocks per row: {}",
+        ggml_kernel.num_super_blocks_per_row()
+    );
 
     let ggml_ptx = ggml_kernel.emit_ptx();
     assert!(ggml_ptx.contains("sb_loop"), "Missing super-block loop");

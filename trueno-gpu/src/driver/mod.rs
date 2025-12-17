@@ -50,21 +50,26 @@
 // FFI layer - uses FFI-specific patterns that trigger clippy lints
 // (borrow_as_ptr, ptr_as_ptr, cast_sign_loss, wildcard_imports are normal for CUDA bindings)
 #[cfg(feature = "cuda")]
-#[allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr, clippy::cast_sign_loss, clippy::wildcard_imports)]
+#[allow(
+    clippy::borrow_as_ptr,
+    clippy::ptr_as_ptr,
+    clippy::cast_sign_loss,
+    clippy::wildcard_imports
+)]
 pub mod sys;
 
 #[cfg(feature = "cuda")]
 #[allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr, clippy::cast_sign_loss)]
 mod context;
 #[cfg(feature = "cuda")]
+#[allow(clippy::ptr_as_ptr, clippy::borrow_as_ptr)]
+mod memory;
+#[cfg(feature = "cuda")]
 #[allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr)]
 mod module;
 #[cfg(feature = "cuda")]
 #[allow(clippy::borrow_as_ptr)]
 mod stream;
-#[cfg(feature = "cuda")]
-#[allow(clippy::ptr_as_ptr, clippy::borrow_as_ptr)]
-mod memory;
 
 // Re-export for use without cuda feature (types only)
 mod types;

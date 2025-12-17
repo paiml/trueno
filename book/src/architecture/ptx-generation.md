@@ -179,7 +179,19 @@ let ptx = kernel.emit_ptx();
 ```bash
 # Run the example
 cargo run -p trueno-gpu --example bias_activation
+
+# Run property tests and falsification tests
+cargo test -p trueno-gpu bias_activation
+
+# Run deep bug hunt (includes BiasActivation)
+cargo run -p trueno-explain --example deep_bug_hunt
 ```
+
+**Testing:** BiasActivationKernel includes 22 tests covering:
+- Unit tests for configuration and PTX structure
+- Property-based tests (proptest) for randomized validation
+- Falsification tests verifying bounds checks, bias modulo, and activation correctness
+- Mutation testing: 100% coverage (2 caught by tests, 4 caught by type system)
 
 ### Quantized GEMM (Q4_K, Q5_K, Q6_K)
 
@@ -237,6 +249,9 @@ cargo run -p trueno-gpu --example ptx_quickstart
 
 # GEMM kernel generation
 cargo run -p trueno-gpu --example gemm_kernel
+
+# Bias + Activation epilogue kernel
+cargo run -p trueno-gpu --example bias_activation
 
 # Quantized GEMM (Q5_K/Q6_K)
 cargo run -p trueno-gpu --example q5k_q6k_gemm

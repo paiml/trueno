@@ -67,12 +67,15 @@ impl StressReport {
         if mean == 0.0 {
             return 0.0;
         }
-        let variance: f64 = self.frames.iter()
+        let variance: f64 = self
+            .frames
+            .iter()
             .map(|f| {
                 let diff = f.duration_ms as f64 - mean;
                 diff * diff
             })
-            .sum::<f64>() / self.frames.len() as f64;
+            .sum::<f64>()
+            / self.frames.len() as f64;
         variance.sqrt() / mean
     }
 
@@ -143,10 +146,10 @@ pub struct PerformanceThresholds {
 impl Default for PerformanceThresholds {
     fn default() -> Self {
         Self {
-            max_frame_time_ms: 100,           // 10 FPS minimum
+            max_frame_time_ms: 100,             // 10 FPS minimum
             max_memory_bytes: 64 * 1024 * 1024, // 64MB max
-            max_timing_variance: 0.2,         // 20% max variance
-            max_failure_rate: 0.01,           // 1% max failures
+            max_timing_variance: 0.2,           // 20% max variance
+            max_failure_rate: 0.01,             // 1% max failures
         }
     }
 }
@@ -170,7 +173,10 @@ pub struct PerformanceResult {
 
 /// Verify performance against thresholds
 #[must_use]
-pub fn verify_performance(report: &StressReport, thresholds: &PerformanceThresholds) -> PerformanceResult {
+pub fn verify_performance(
+    report: &StressReport,
+    thresholds: &PerformanceThresholds,
+) -> PerformanceResult {
     let max_frame = report.max_frame_time_ms();
     let mean_frame = report.mean_frame_time_ms();
     let variance = report.timing_variance();
@@ -222,7 +228,10 @@ impl StressRng {
     /// Create new RNG with seed
     #[must_use]
     pub fn new(seed: u64) -> Self {
-        let mut rng = Self { state: 0, inc: (seed << 1) | 1 };
+        let mut rng = Self {
+            state: 0,
+            inc: (seed << 1) | 1,
+        };
         rng.next_u32();
         rng.state = rng.state.wrapping_add(seed);
         rng.next_u32();

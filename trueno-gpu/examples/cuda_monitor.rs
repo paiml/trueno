@@ -36,8 +36,10 @@ fn main() {
 
 #[cfg(feature = "cuda")]
 fn run_cuda_demo() {
-    use trueno_gpu::monitor::{cuda_device_count, cuda_monitoring_available, CudaDeviceInfo, CudaMemoryInfo};
     use trueno_gpu::driver::CudaContext;
+    use trueno_gpu::monitor::{
+        cuda_device_count, cuda_monitoring_available, CudaDeviceInfo, CudaMemoryInfo,
+    };
 
     // Phase 1: Check CUDA availability
     println!("Phase 1: CUDA Availability Check");
@@ -72,7 +74,11 @@ fn run_cuda_demo() {
         Ok(devices) => {
             for dev in &devices {
                 println!("  [{}] {}", dev.index, dev.name);
-                println!("      Total Memory: {:.2} GB ({} bytes)", dev.total_memory_gb(), dev.total_memory);
+                println!(
+                    "      Total Memory: {:.2} GB ({} bytes)",
+                    dev.total_memory_gb(),
+                    dev.total_memory
+                );
                 println!("      Memory (MB):  {} MB", dev.total_memory_mb());
             }
             if devices.is_empty() {
@@ -105,20 +111,18 @@ fn run_cuda_demo() {
     println!("------------------------------");
 
     match CudaContext::new(0) {
-        Ok(ctx) => {
-            match CudaMemoryInfo::query(&ctx) {
-                Ok(mem) => {
-                    println!("  Total:  {} MB", mem.total_mb());
-                    println!("  Free:   {} MB", mem.free_mb());
-                    println!("  Used:   {} MB", mem.used_mb());
-                    println!("  Usage:  {:.1}%", mem.usage_percent());
-                    println!("\n  Display format: {}", mem);
-                }
-                Err(e) => {
-                    println!("  [ERROR] Memory query failed: {}", e);
-                }
+        Ok(ctx) => match CudaMemoryInfo::query(&ctx) {
+            Ok(mem) => {
+                println!("  Total:  {} MB", mem.total_mb());
+                println!("  Free:   {} MB", mem.free_mb());
+                println!("  Used:   {} MB", mem.used_mb());
+                println!("  Usage:  {:.1}%", mem.usage_percent());
+                println!("\n  Display format: {}", mem);
             }
-        }
+            Err(e) => {
+                println!("  [ERROR] Memory query failed: {}", e);
+            }
+        },
         Err(e) => {
             println!("  [ERROR] Context creation failed: {}", e);
         }
@@ -134,8 +138,12 @@ fn run_cuda_demo() {
             for i in 0..5 {
                 match CudaMemoryInfo::query(&ctx) {
                     Ok(mem) => {
-                        println!("    Sample {}: {} MB free ({:.1}% used)",
-                            i + 1, mem.free_mb(), mem.usage_percent());
+                        println!(
+                            "    Sample {}: {} MB free ({:.1}% used)",
+                            i + 1,
+                            mem.free_mb(),
+                            mem.usage_percent()
+                        );
                     }
                     Err(e) => {
                         println!("    Sample {}: Error - {}", i + 1, e);

@@ -69,7 +69,10 @@ fn test_sovereign_determinism() {
     let png2 = renderer.render_to_png(&output, size as u32, size as u32);
 
     let result = compare_png_bytes(&png1, &png2, 0);
-    assert!(result.matches(0.0), "Same input should produce identical output");
+    assert!(
+        result.matches(0.0),
+        "Same input should produce identical output"
+    );
     assert_eq!(result.different_pixels, 0, "Should be pixel-perfect match");
 }
 
@@ -136,11 +139,15 @@ fn test_sovereign_deterministic_rng() {
     // Use simular for deterministic RNG
     let mut rng = SimRng::new(42);
 
-    let input1: Vec<f32> = (0..64).map(|_| rng.gen_range_f64(0.0, 1.0) as f32).collect();
+    let input1: Vec<f32> = (0..64)
+        .map(|_| rng.gen_range_f64(0.0, 1.0) as f32)
+        .collect();
 
     // Reset RNG with same seed
     let mut rng2 = SimRng::new(42);
-    let input2: Vec<f32> = (0..64).map(|_| rng2.gen_range_f64(0.0, 1.0) as f32).collect();
+    let input2: Vec<f32> = (0..64)
+        .map(|_| rng2.gen_range_f64(0.0, 1.0) as f32)
+        .collect();
 
     assert_eq!(input1, input2, "Same seed should produce same sequence");
 
@@ -232,7 +239,9 @@ fn test_demo_sovereign_stack() {
     // Test 4: Deterministic RNG (simular)
     println!("┌─ TEST 4: Deterministic RNG (simular) ─────────────────────────┐");
     let mut rng = SimRng::new(42);
-    let random_input: Vec<f32> = (0..64).map(|_| rng.gen_range_f64(0.0, 1.0) as f32).collect();
+    let random_input: Vec<f32> = (0..64)
+        .map(|_| rng.gen_range_f64(0.0, 1.0) as f32)
+        .collect();
     let png_random = renderer.render_to_png(&random_input, 8, 8);
     println!("│ Seed: 42");
     println!("│ Generated: {} random f32 values", random_input.len());
@@ -352,13 +361,19 @@ fn test_visual_report_sovereign() {
     println!("  ┌─────────────────────────────────────────────────────────┐");
     println!("  │ DIFF ANALYSIS                                           │");
     println!("  ├─────────────────────────────────────────────────────────┤");
-    println!("  │ Total pixels:     {:>6}                                │", result.total_pixels);
+    println!(
+        "  │ Total pixels:     {:>6}                                │",
+        result.total_pixels
+    );
     println!(
         "  │ Diff pixels:      {:>6} ({:>5.1}%)                      │",
         result.different_pixels,
         result.diff_percentage()
     );
-    println!("  │ Max diff:         {:>6}                                │", result.max_diff);
+    println!(
+        "  │ Max diff:         {:>6}                                │",
+        result.max_diff
+    );
     println!("  ├─────────────────────────────────────────────────────────┤");
     println!("  │ Bug Class: AccumulatorInit                              │");
     println!("  │ Description: Accumulator not initialized to zero        │");
@@ -427,7 +442,9 @@ fn test_visual_report_sovereign() {
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     let mut rng = SimRng::new(12345);
-    let random_data: Vec<f32> = (0..256).map(|_| rng.gen_range_f64(0.0, 1.0) as f32).collect();
+    let random_data: Vec<f32> = (0..256)
+        .map(|_| rng.gen_range_f64(0.0, 1.0) as f32)
+        .collect();
     let png_random = renderer.render_to_png(&random_data, 16, 16);
     let random_path = report_dir.join("05_deterministic_random.png");
     fs::write(&random_path, &png_random).unwrap();
@@ -480,8 +497,8 @@ fn test_visual_report_sovereign() {
 /// Stress test with randomized inputs per frame
 #[test]
 fn test_stress_runner_visual() {
-    use super::stress::{StressConfig, StressTestRunner, PerformanceThresholds};
-    use super::tui::{TuiState, render_to_string};
+    use super::stress::{PerformanceThresholds, StressConfig, StressTestRunner};
+    use super::tui::{render_to_string, TuiState};
 
     println!("\n");
     println!("╔══════════════════════════════════════════════════════════════╗");
@@ -509,7 +526,10 @@ fn test_stress_runner_visual() {
     println!("Configuration:");
     println!("  Cycles: {}", config.cycles);
     println!("  Seed: {}", config.seed);
-    println!("  Input size: {}-{}", config.min_input_size, config.max_input_size);
+    println!(
+        "  Input size: {}-{}",
+        config.min_input_size, config.max_input_size
+    );
     println!();
 
     let mut runner = StressTestRunner::new(config.clone());
@@ -583,7 +603,10 @@ fn test_stress_runner_visual() {
         println!("ANOMALIES:");
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         for anomaly in &report.anomalies {
-            println!("  [Cycle {}] {:?}: {}", anomaly.cycle, anomaly.kind, anomaly.description);
+            println!(
+                "  [Cycle {}] {:?}: {}",
+                anomaly.cycle, anomaly.kind, anomaly.description
+            );
         }
         println!();
     }
@@ -595,7 +618,10 @@ fn test_stress_runner_visual() {
 
     // Assertions
     assert_eq!(report.cycles_completed, config.cycles);
-    assert!(report.total_passed > 0, "Should have at least some passing tests");
+    assert!(
+        report.total_passed > 0,
+        "Should have at least some passing tests"
+    );
     // Note: We don't assert perf.passed because timing can vary in CI
 }
 
@@ -635,7 +661,10 @@ fn test_stress_determinism() {
         .collect();
 
     // Should be identical
-    assert_eq!(inputs1, inputs2, "Same seed should produce identical inputs");
+    assert_eq!(
+        inputs1, inputs2,
+        "Same seed should produce identical inputs"
+    );
 
     println!("  ✓ Deterministic: Same seed produces identical inputs");
     println!("  Inputs generated: {:?}", inputs1);

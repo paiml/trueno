@@ -282,11 +282,18 @@ fn main() {
     };
 
     let device_name = ctx.device_name().unwrap_or_else(|_| "Unknown".to_string());
-    println!("       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m", device_name);
+    println!(
+        "       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m",
+        device_name
+    );
 
     println!("\x1b[33m[2/7]\x1b[0m Generating PTX...");
     let ptx = attention_kernel_ptx();
-    println!("       PTX: {} bytes ({} lines)", ptx.len(), ptx.lines().count());
+    println!(
+        "       PTX: {} bytes ({} lines)",
+        ptx.len(),
+        ptx.lines().count()
+    );
 
     println!("\x1b[33m[3/7]\x1b[0m JIT compiling...");
     let mut module = match CudaModule::from_ptx(&ctx, &ptx) {
@@ -305,7 +312,10 @@ fn main() {
     println!("\x1b[33m[4/7]\x1b[0m Generating test data...");
     let (q_host, k_host, v_host) = generate_test_data(SEQ_LEN, HEAD_DIM);
     let total_elements = SEQ_LEN * HEAD_DIM;
-    println!("       Q/K/V: {}x{} = {}", SEQ_LEN, HEAD_DIM, total_elements);
+    println!(
+        "       Q/K/V: {}x{} = {}",
+        SEQ_LEN, HEAD_DIM, total_elements
+    );
 
     println!("\x1b[33m[5/7]\x1b[0m Allocating and transferring...");
     let mut q_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total_elements).expect("Q alloc");
@@ -386,7 +396,10 @@ fn main() {
     println!("│ Head dimension     │ {:>20} │", HEAD_DIM);
     println!("│ GPU execution      │ {:>17?} │", elapsed);
     println!("│ Max difference     │ {:>18.6e} │", max_diff);
-    println!("│ Status             │ {:>20} │", if passed { "✓ PASS" } else { "✗ FAIL" });
+    println!(
+        "│ Status             │ {:>20} │",
+        if passed { "✓ PASS" } else { "✗ FAIL" }
+    );
     println!("└────────────────────┴──────────────────────┘");
 
     if !passed {
@@ -395,5 +408,8 @@ fn main() {
         std::process::exit(1);
     }
 
-    println!("\n\x1b[32m✓ Simple Attention CUDA verified on {}!\x1b[0m\n", device_name);
+    println!(
+        "\n\x1b[32m✓ Simple Attention CUDA verified on {}!\x1b[0m\n",
+        device_name
+    );
 }
