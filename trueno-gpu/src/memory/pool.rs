@@ -19,7 +19,7 @@ impl Default for PoolConfig {
     fn default() -> Self {
         Self {
             total_bytes: 1024 * 1024 * 1024, // 1GB default
-            page_size: 256 * 1024,            // 256KB pages
+            page_size: 256 * 1024,           // 256KB pages
         }
     }
 }

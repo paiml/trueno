@@ -95,12 +95,12 @@
 // Allow useless_vec in tests - clearer intent
 #![allow(clippy::useless_vec)]
 
-pub mod ptx;
+pub mod backend;
 pub mod driver;
 pub mod kernels;
 pub mod memory;
-pub mod backend;
 pub mod monitor;
+pub mod ptx;
 
 /// Error types for trueno-gpu operations
 pub mod error;

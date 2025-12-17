@@ -252,7 +252,6 @@ mod tests {
 
         assert!(ptx.contains("setp.ge.u32"), "Should have bounds check");
     }
-
 }
 
 #[cfg(test)]
@@ -262,6 +261,8 @@ mod property_tests {
     use proptest::prelude::*;
 
     proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
         #[test]
         fn bias_activation_always_valid(n in 64u32..8192, bias_size in 16u32..512) {
             let kernel = BiasActivationKernel::new(n, bias_size);
@@ -283,5 +284,178 @@ mod property_tests {
                 prop_assert!(ptx.contains("bias_activation"), "Missing kernel name for {:?}", activation);
             }
         }
+
+        /// Fast test: Power-of-2 sizes (common in ML)
+        #[test]
+        fn power_of_two_sizes_valid(exp_n in 6u32..14, exp_bias in 4u32..10) {
+            let n = 1u32 << exp_n;  // 64 to 8192
+            let bias_size = 1u32 << exp_bias;  // 16 to 512
+            let kernel = BiasActivationKernel::new(n, bias_size);
+            let ptx = kernel.emit_ptx();
+
+            prop_assert!(ptx.contains(".entry"), "Power-of-2 size {} failed", n);
+            prop_assert!(ptx.contains("rem.u32"), "Must have modulo for bias indexing");
+        }
+
+        /// Fast test: Non-aligned sizes (edge cases)
+        #[test]
+        fn non_aligned_sizes_valid(n in 1u32..1000, bias_size in 1u32..100) {
+            // Skip n=0 which would be invalid
+            let n = n.max(1);
+            let bias_size = bias_size.max(1);
+            let kernel = BiasActivationKernel::new(n, bias_size);
+            let ptx = kernel.emit_ptx();
+
+            prop_assert!(ptx.contains(".version"), "Non-aligned size n={} failed", n);
+        }
+
+        /// Fast test: PTX generation produces consistent instructions
+        /// Note: Register declaration order may vary, but instructions must be identical
+        #[test]
+        fn ptx_generation_consistent(n in 64u32..1024, bias_size in 16u32..128) {
+            let kernel1 = BiasActivationKernel::new(n, bias_size).with_gelu();
+            let kernel2 = BiasActivationKernel::new(n, bias_size).with_gelu();
+
+            let ptx1 = kernel1.emit_ptx();
+            let ptx2 = kernel2.emit_ptx();
+
+            // Extract instruction lines (skip register declarations which may vary in order)
+            fn extract_instructions(ptx: &str) -> Vec<String> {
+                ptx.lines()
+                    .filter(|line| {
+                        let trimmed = line.trim();
+                        !trimmed.is_empty()
+                            && !trimmed.starts_with("//")
+                            && !trimmed.starts_with(".reg")
+                    })
+                    .map(|s| s.to_string())
+                    .collect()
+            }
+
+            let instructions1 = extract_instructions(&ptx1);
+            let instructions2 = extract_instructions(&ptx2);
+
+            prop_assert_eq!(
+                instructions1, instructions2,
+                "PTX instructions must be consistent (excluding register declarations)"
+            );
+        }
+
+        /// Fast test: ReLU always produces max instruction
+        #[test]
+        fn relu_always_has_max(n in 64u32..4096, bias_size in 16u32..256) {
+            let kernel = BiasActivationKernel::new(n, bias_size).with_relu();
+            let ptx = kernel.emit_ptx();
+
+            prop_assert!(ptx.contains("max.f32"), "ReLU must use max.f32 instruction");
+        }
+
+        /// Fast test: GELU always uses exponential approximation
+        #[test]
+        fn gelu_always_has_exp(n in 64u32..4096, bias_size in 16u32..256) {
+            let kernel = BiasActivationKernel::new(n, bias_size).with_gelu();
+            let ptx = kernel.emit_ptx();
+
+            prop_assert!(
+                ptx.contains("ex2.approx") || ptx.contains("ex2.f32"),
+                "GELU must use ex2 for exponential"
+            );
+        }
+    }
+}
+
+/// Falsification tests - verify specific invariants hold
+#[cfg(test)]
+mod falsification_tests {
+    use super::*;
+    use crate::kernels::Kernel;
+
+    /// FALSIFY: PTX without bounds check would access out-of-bounds memory
+    #[test]
+    fn falsify_bounds_check_present() {
+        // If bounds check is missing, kernel would crash on n < grid_size
+        let kernel = BiasActivationKernel::new(1, 1);
+        let ptx = kernel.emit_ptx();
+
+        assert!(
+            ptx.contains("setp.ge.u32") && ptx.contains("bra"),
+            "FALSIFIED: Missing bounds check - kernel would crash on small inputs"
+        );
+    }
+
+    /// FALSIFY: PTX without bias modulo would read wrong bias values
+    #[test]
+    fn falsify_bias_modulo_present() {
+        // If rem.u32 is missing, bias indexing would be wrong when n > bias_size
+        let kernel = BiasActivationKernel::new(1024, 64);
+        let ptx = kernel.emit_ptx();
+
+        assert!(
+            ptx.contains("rem.u32"),
+            "FALSIFIED: Missing rem.u32 - bias indexing would be incorrect"
+        );
+    }
+
+    /// FALSIFY: ReLU without max would not clamp negative values
+    #[test]
+    fn falsify_relu_has_max() {
+        let kernel = BiasActivationKernel::new(1024, 64).with_relu();
+        let ptx = kernel.emit_ptx();
+
+        assert!(
+            ptx.contains("max.f32"),
+            "FALSIFIED: ReLU without max.f32 - negative values would pass through"
+        );
+    }
+
+    /// FALSIFY: GELU without sigmoid would not approximate correctly
+    #[test]
+    fn falsify_gelu_has_sigmoid_components() {
+        let kernel = BiasActivationKernel::new(1024, 64).with_gelu();
+        let ptx = kernel.emit_ptx();
+
+        // GELU needs: exp (via ex2), division (for 1/(1+exp)), multiply
+        assert!(ptx.contains("ex2"), "FALSIFIED: GELU missing exp component");
+        assert!(
+            ptx.contains("div"),
+            "FALSIFIED: GELU missing division for sigmoid"
+        );
+    }
+
+    /// FALSIFY: None activation should not have ReLU or GELU instructions
+    #[test]
+    fn falsify_none_activation_minimal() {
+        let kernel = BiasActivationKernel::new(1024, 64); // Default is None
+        let ptx = kernel.emit_ptx();
+
+        // None activation should not have max (ReLU) or ex2 (GELU)
+        // It should only have add for bias
+        assert!(
+            !ptx.contains("max.f32"),
+            "FALSIFIED: None activation has ReLU max instruction"
+        );
+        // Note: We can't assert no ex2 since the PTX builder might use it elsewhere
+        // But we verify the essential add is present
+        assert!(
+            ptx.contains("add.f32"),
+            "FALSIFIED: None activation missing bias addition"
+        );
+    }
+
+    /// FALSIFY: Kernel without proper parameters would fail at runtime
+    #[test]
+    fn falsify_all_params_present() {
+        let kernel = BiasActivationKernel::new(1024, 64);
+        let ptx = kernel.emit_ptx();
+
+        assert!(
+            ptx.contains(".param .u64 output"),
+            "Missing output pointer param"
+        );
+        assert!(
+            ptx.contains(".param .u64 bias"),
+            "Missing bias pointer param"
+        );
+        assert!(ptx.contains(".param .u32 n"), "Missing n param");
     }
 }

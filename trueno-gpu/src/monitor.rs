@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn h0_cuda_mon_12_memory_info_usage_percent() {
         let mem = CudaMemoryInfo {
-            free: 12 * 1024 * 1024 * 1024, // 12 GB free
+            free: 12 * 1024 * 1024 * 1024,  // 12 GB free
             total: 24 * 1024 * 1024 * 1024, // 24 GB total
         };
 

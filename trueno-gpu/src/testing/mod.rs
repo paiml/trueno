@@ -29,18 +29,14 @@ pub mod stress;
 pub mod tui;
 
 #[cfg(feature = "viz")]
-pub use gpu_renderer::{
-    compare_png_bytes, ColorPalette, GpuPixelRenderer, PixelDiffResult, Rgb,
-};
+pub use gpu_renderer::{compare_png_bytes, ColorPalette, GpuPixelRenderer, PixelDiffResult, Rgb};
 
 pub use stress::{
-    Anomaly, AnomalyKind, FrameProfile, PerformanceResult, PerformanceThresholds,
-    StressConfig, StressReport, StressRng, StressTestRunner, verify_performance,
+    verify_performance, Anomaly, AnomalyKind, FrameProfile, PerformanceResult,
+    PerformanceThresholds, StressConfig, StressReport, StressRng, StressTestRunner,
 };
 
-pub use tui::{
-    progress_bar, render_to_string, TuiConfig, TuiState,
-};
+pub use tui::{progress_bar, render_to_string, TuiConfig, TuiState};
 
 /// GPU-specific bug classification based on diff patterns
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,8 +105,14 @@ mod tests {
         ];
 
         for variant in variants {
-            assert!(!variant.description().is_empty(), "{variant:?} has empty description");
-            assert!(!variant.suggested_fix().is_empty(), "{variant:?} has empty fix");
+            assert!(
+                !variant.description().is_empty(),
+                "{variant:?} has empty description"
+            );
+            assert!(
+                !variant.suggested_fix().is_empty(),
+                "{variant:?} has empty fix"
+            );
         }
     }
 

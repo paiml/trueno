@@ -54,7 +54,7 @@ book/src/
    - Complete original specification (64KB)
 
 4. **`docs/specifications/pytorch-numpy-replacement-spec.md`** → **`specifications/pytorch-numpy-spec.md`**
-   - PyTorch/NumPy replacement design (75KB)
+   - Ecosystem positioning spec (NumPy-like compute primitives) - **UPDATED 2025-12-16**
 
 5. **`docs/specifications/ruchy-support-spec.md`** → **`specifications/ruchy-support.md`**
    - Ruchy language integration spec (29KB)

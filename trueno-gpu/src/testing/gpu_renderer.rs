@@ -165,7 +165,11 @@ impl GpuPixelRenderer {
             let color = if value.is_nan() {
                 Rgb::NAN_COLOR
             } else if value.is_infinite() {
-                if value > 0.0 { Rgb::INF_COLOR } else { Rgb::NEG_INF_COLOR }
+                if value > 0.0 {
+                    Rgb::INF_COLOR
+                } else {
+                    Rgb::NEG_INF_COLOR
+                }
             } else {
                 let t = (value - min_val) / (max_val - min_val);
                 self.palette.interpolate(t)
@@ -274,7 +278,10 @@ mod tests {
         let png = renderer.render_to_png(&buffer, 8, 8);
 
         // PNG magic bytes
-        assert_eq!(&png[0..8], &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+        assert_eq!(
+            &png[0..8],
+            &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
+        );
     }
 
     #[test]
@@ -284,7 +291,10 @@ mod tests {
         let png = renderer.render_to_png(&buffer, 2, 2);
         assert!(!png.is_empty());
         // Verify PNG header
-        assert_eq!(&png[0..8], &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+        assert_eq!(
+            &png[0..8],
+            &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
+        );
     }
 
     #[test]

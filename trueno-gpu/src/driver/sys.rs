@@ -261,28 +261,45 @@ mod loading {
                 type FnInit = unsafe extern "C" fn(c_uint) -> CUresult;
                 type FnDeviceGetCount = unsafe extern "C" fn(*mut c_int) -> CUresult;
                 type FnDeviceGet = unsafe extern "C" fn(*mut CUdevice, c_int) -> CUresult;
-                type FnDeviceGetName = unsafe extern "C" fn(*mut c_char, c_int, CUdevice) -> CUresult;
+                type FnDeviceGetName =
+                    unsafe extern "C" fn(*mut c_char, c_int, CUdevice) -> CUresult;
                 type FnDeviceTotalMem = unsafe extern "C" fn(*mut usize, CUdevice) -> CUresult;
-                type FnPrimaryCtxRetain = unsafe extern "C" fn(*mut CUcontext, CUdevice) -> CUresult;
+                type FnPrimaryCtxRetain =
+                    unsafe extern "C" fn(*mut CUcontext, CUdevice) -> CUresult;
                 type FnPrimaryCtxRelease = unsafe extern "C" fn(CUdevice) -> CUresult;
                 type FnCtxSetCurrent = unsafe extern "C" fn(CUcontext) -> CUresult;
                 type FnCtxSync = unsafe extern "C" fn() -> CUresult;
-                type FnModuleLoadData = unsafe extern "C" fn(*mut CUmodule, *const c_void) -> CUresult;
+                type FnModuleLoadData =
+                    unsafe extern "C" fn(*mut CUmodule, *const c_void) -> CUresult;
                 type FnModuleUnload = unsafe extern "C" fn(CUmodule) -> CUresult;
-                type FnModuleGetFunction = unsafe extern "C" fn(*mut CUfunction, CUmodule, *const c_char) -> CUresult;
+                type FnModuleGetFunction =
+                    unsafe extern "C" fn(*mut CUfunction, CUmodule, *const c_char) -> CUresult;
                 type FnMemAlloc = unsafe extern "C" fn(*mut CUdeviceptr, usize) -> CUresult;
                 type FnMemFree = unsafe extern "C" fn(CUdeviceptr) -> CUresult;
-                type FnMemcpyHtoD = unsafe extern "C" fn(CUdeviceptr, *const c_void, usize) -> CUresult;
-                type FnMemcpyDtoH = unsafe extern "C" fn(*mut c_void, CUdeviceptr, usize) -> CUresult;
-                type FnMemcpyHtoDAsync = unsafe extern "C" fn(CUdeviceptr, *const c_void, usize, CUstream) -> CUresult;
-                type FnMemcpyDtoHAsync = unsafe extern "C" fn(*mut c_void, CUdeviceptr, usize, CUstream) -> CUresult;
+                type FnMemcpyHtoD =
+                    unsafe extern "C" fn(CUdeviceptr, *const c_void, usize) -> CUresult;
+                type FnMemcpyDtoH =
+                    unsafe extern "C" fn(*mut c_void, CUdeviceptr, usize) -> CUresult;
+                type FnMemcpyHtoDAsync =
+                    unsafe extern "C" fn(CUdeviceptr, *const c_void, usize, CUstream) -> CUresult;
+                type FnMemcpyDtoHAsync =
+                    unsafe extern "C" fn(*mut c_void, CUdeviceptr, usize, CUstream) -> CUresult;
                 type FnMemGetInfo = unsafe extern "C" fn(*mut usize, *mut usize) -> CUresult;
                 type FnStreamCreate = unsafe extern "C" fn(*mut CUstream, c_uint) -> CUresult;
                 type FnStreamDestroy = unsafe extern "C" fn(CUstream) -> CUresult;
                 type FnStreamSync = unsafe extern "C" fn(CUstream) -> CUresult;
                 type FnLaunchKernel = unsafe extern "C" fn(
-                    CUfunction, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint,
-                    c_uint, CUstream, *mut *mut c_void, *mut *mut c_void
+                    CUfunction,
+                    c_uint,
+                    c_uint,
+                    c_uint,
+                    c_uint,
+                    c_uint,
+                    c_uint,
+                    c_uint,
+                    CUstream,
+                    *mut *mut c_void,
+                    *mut *mut c_void,
                 ) -> CUresult;
 
                 Some(CudaDriver {
@@ -291,8 +308,14 @@ mod loading {
                     cuDeviceGet: load_sym!(cuDeviceGet, FnDeviceGet),
                     cuDeviceGetName: load_sym!(cuDeviceGetName, FnDeviceGetName),
                     cuDeviceTotalMem: load_sym!(cuDeviceTotalMem_v2, FnDeviceTotalMem),
-                    cuDevicePrimaryCtxRetain: load_sym!(cuDevicePrimaryCtxRetain, FnPrimaryCtxRetain),
-                    cuDevicePrimaryCtxRelease: load_sym!(cuDevicePrimaryCtxRelease_v2, FnPrimaryCtxRelease),
+                    cuDevicePrimaryCtxRetain: load_sym!(
+                        cuDevicePrimaryCtxRetain,
+                        FnPrimaryCtxRetain
+                    ),
+                    cuDevicePrimaryCtxRelease: load_sym!(
+                        cuDevicePrimaryCtxRelease_v2,
+                        FnPrimaryCtxRelease
+                    ),
                     cuCtxSetCurrent: load_sym!(cuCtxSetCurrent, FnCtxSetCurrent),
                     cuCtxSynchronize: load_sym!(cuCtxSynchronize, FnCtxSync),
                     cuModuleLoadData: load_sym!(cuModuleLoadData, FnModuleLoadData),
@@ -428,11 +451,26 @@ mod tests {
     #[test]
     fn test_all_error_strings() {
         // Test all known error codes have proper strings
-        assert_eq!(cuda_error_string(CUDA_ERROR_INVALID_VALUE), "CUDA_ERROR_INVALID_VALUE");
-        assert_eq!(cuda_error_string(CUDA_ERROR_NOT_INITIALIZED), "CUDA_ERROR_NOT_INITIALIZED");
-        assert_eq!(cuda_error_string(CUDA_ERROR_DEINITIALIZED), "CUDA_ERROR_DEINITIALIZED");
-        assert_eq!(cuda_error_string(CUDA_ERROR_INVALID_DEVICE), "CUDA_ERROR_INVALID_DEVICE");
-        assert_eq!(cuda_error_string(CUDA_ERROR_NOT_FOUND), "CUDA_ERROR_NOT_FOUND");
+        assert_eq!(
+            cuda_error_string(CUDA_ERROR_INVALID_VALUE),
+            "CUDA_ERROR_INVALID_VALUE"
+        );
+        assert_eq!(
+            cuda_error_string(CUDA_ERROR_NOT_INITIALIZED),
+            "CUDA_ERROR_NOT_INITIALIZED"
+        );
+        assert_eq!(
+            cuda_error_string(CUDA_ERROR_DEINITIALIZED),
+            "CUDA_ERROR_DEINITIALIZED"
+        );
+        assert_eq!(
+            cuda_error_string(CUDA_ERROR_INVALID_DEVICE),
+            "CUDA_ERROR_INVALID_DEVICE"
+        );
+        assert_eq!(
+            cuda_error_string(CUDA_ERROR_NOT_FOUND),
+            "CUDA_ERROR_NOT_FOUND"
+        );
     }
 
     #[test]
@@ -451,7 +489,11 @@ mod tests {
         ];
         for i in 0..codes.len() {
             for j in (i + 1)..codes.len() {
-                assert_ne!(codes[i], codes[j], "Error codes at {} and {} are equal", i, j);
+                assert_ne!(
+                    codes[i], codes[j],
+                    "Error codes at {} and {} are equal",
+                    i, j
+                );
             }
         }
     }
@@ -461,12 +503,27 @@ mod tests {
         // Verify FFI types have expected sizes
         assert_eq!(std::mem::size_of::<CUresult>(), std::mem::size_of::<i32>());
         assert_eq!(std::mem::size_of::<CUdevice>(), std::mem::size_of::<i32>());
-        assert_eq!(std::mem::size_of::<CUdeviceptr>(), std::mem::size_of::<u64>());
+        assert_eq!(
+            std::mem::size_of::<CUdeviceptr>(),
+            std::mem::size_of::<u64>()
+        );
         // Opaque pointers are pointer-sized
-        assert_eq!(std::mem::size_of::<CUcontext>(), std::mem::size_of::<*mut ()>());
-        assert_eq!(std::mem::size_of::<CUmodule>(), std::mem::size_of::<*mut ()>());
-        assert_eq!(std::mem::size_of::<CUfunction>(), std::mem::size_of::<*mut ()>());
-        assert_eq!(std::mem::size_of::<CUstream>(), std::mem::size_of::<*mut ()>());
+        assert_eq!(
+            std::mem::size_of::<CUcontext>(),
+            std::mem::size_of::<*mut ()>()
+        );
+        assert_eq!(
+            std::mem::size_of::<CUmodule>(),
+            std::mem::size_of::<*mut ()>()
+        );
+        assert_eq!(
+            std::mem::size_of::<CUfunction>(),
+            std::mem::size_of::<*mut ()>()
+        );
+        assert_eq!(
+            std::mem::size_of::<CUstream>(),
+            std::mem::size_of::<*mut ()>()
+        );
     }
 
     #[test]

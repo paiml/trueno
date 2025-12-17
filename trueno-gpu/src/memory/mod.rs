@@ -10,7 +10,7 @@
 
 mod pool;
 
-pub use pool::{MemoryPool, PoolConfig, AllocationInfo};
+pub use pool::{AllocationInfo, MemoryPool, PoolConfig};
 
 use crate::driver::DevicePtr;
 use crate::error::Result;

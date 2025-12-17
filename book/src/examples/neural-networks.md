@@ -162,6 +162,28 @@ For large batch sizes, use GPU:
 cargo run --release --features gpu --example activation_functions
 ```
 
+### Fused Bias + Activation (GPU PTX)
+
+For GPU inference, `trueno-gpu` provides a fused bias+activation kernel that combines bias addition with activation in a single kernel pass:
+
+```rust
+use trueno_gpu::kernels::{BiasActivationKernel, Kernel};
+
+// Bias + GELU (common in Transformers)
+let kernel = BiasActivationKernel::new(4096, 256).with_gelu();
+
+// Bias + ReLU (common in CNNs)
+let kernel = BiasActivationKernel::new(4096, 256).with_relu();
+
+let ptx = kernel.emit_ptx();
+```
+
+This is typically used as an epilogue after GEMM operations, reducing memory bandwidth by avoiding intermediate writes.
+
+```bash
+cargo run -p trueno-gpu --example bias_activation
+```
+
 ## See Also
 
 - [Activation Functions Example](https://github.com/paiml/trueno/blob/main/examples/activation_functions.rs) - Full source

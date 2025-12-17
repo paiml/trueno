@@ -25,9 +25,7 @@ fn bench_module_emit(c: &mut Criterion) {
         .address_size(64)
         .add_kernel(kernel);
 
-    c.bench_function("ptx_module_emit", |b| {
-        b.iter(|| black_box(module.emit()))
-    });
+    c.bench_function("ptx_module_emit", |b| b.iter(|| black_box(module.emit())));
 }
 
 fn bench_kernel_builder(c: &mut Criterion) {

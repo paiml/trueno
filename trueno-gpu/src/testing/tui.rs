@@ -152,7 +152,11 @@ impl TuiState {
 
 /// Render TUI state to string (for non-interactive output)
 #[must_use]
-pub fn render_to_string(state: &TuiState, report: &StressReport, perf: &PerformanceResult) -> String {
+pub fn render_to_string(
+    state: &TuiState,
+    report: &StressReport,
+    perf: &PerformanceResult,
+) -> String {
     let mut output = String::new();
 
     // Header
@@ -173,18 +177,13 @@ pub fn render_to_string(state: &TuiState, report: &StressReport, perf: &Performa
     // Sparkline
     let sparkline = state.sparkline_string();
     if !sparkline.is_empty() {
-        output.push_str(&format!(
-            "║  Frame Times (ms):  {:<40} ║\n",
-            sparkline
-        ));
+        output.push_str(&format!("║  Frame Times (ms):  {:<40} ║\n", sparkline));
     }
 
     // Stats
     output.push_str(&format!(
         "║  Mean: {:.0}ms  Max: {}ms  Variance: {:.2}                     ║\n",
-        perf.mean_frame_ms,
-        perf.max_frame_ms,
-        perf.variance
+        perf.mean_frame_ms, perf.max_frame_ms, perf.variance
     ));
     output.push_str("║                                                               ║\n");
 
@@ -202,9 +201,7 @@ pub fn render_to_string(state: &TuiState, report: &StressReport, perf: &Performa
     let status = if perf.passed { "PASS" } else { "FAIL" };
     output.push_str(&format!(
         "║  Anomalies: {}    Regressions: {}    Status: {:<4}            ║\n",
-        state.anomaly_count,
-        state.regression_count,
-        status
+        state.anomaly_count, state.regression_count, status
     ));
 
     // Footer
@@ -245,7 +242,10 @@ pub mod interactive {
     /// # Errors
     ///
     /// Returns error if terminal initialization fails
-    pub fn run_interactive(_config: TuiConfig, _state: &mut TuiState) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn run_interactive(
+        _config: TuiConfig,
+        _state: &mut TuiState,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Full implementation requires ratatui/crossterm
         // This is a placeholder for the feature-gated implementation
         Err("Interactive TUI requires tui-monitor feature with ratatui".into())

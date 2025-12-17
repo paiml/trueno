@@ -24,14 +24,14 @@
 
 mod builder;
 mod emit;
-mod types;
 mod instructions;
 mod registers;
+mod types;
 
-pub use builder::{PtxModule, PtxKernel, KernelBuilder};
-pub use types::{PtxType, PtxStateSpace};
+pub use builder::{KernelBuilder, PtxKernel, PtxModule};
 pub use instructions::{PtxInstruction, PtxOp, WmmaLayout, WmmaShape};
-pub use registers::{PtxReg, VirtualReg, PhysicalReg, RegisterAllocator, LiveRange};
+pub use registers::{LiveRange, PhysicalReg, PtxReg, RegisterAllocator, VirtualReg};
+pub use types::{PtxStateSpace, PtxType};
 
 use crate::error::{GpuError, Result};
 
@@ -169,8 +169,7 @@ mod tests {
 
     #[test]
     fn test_kernel_with_shared_memory() {
-        let kernel = PtxKernel::new("gemm_tiled")
-            .shared_memory(4096); // 4KB shared memory
+        let kernel = PtxKernel::new("gemm_tiled").shared_memory(4096); // 4KB shared memory
 
         assert_eq!(kernel.shared_memory_bytes(), 4096);
     }

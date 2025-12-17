@@ -7,8 +7,8 @@
 use std::collections::HashMap;
 use trueno_explain::{BugSeverity, PtxBugAnalyzer};
 use trueno_gpu::kernels::{
-    AttentionKernel, GemmKernel, Kernel, LayerNormKernel, Q5KKernel, Q6KKernel, QuantizeKernel,
-    SoftmaxKernel,
+    Activation, AttentionKernel, BiasActivationKernel, GemmKernel, Kernel, LayerNormKernel,
+    Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel,
 };
 
 fn main() {
@@ -62,6 +62,31 @@ fn main() {
         ("q6k_32", Q6KKernel::new(32, 32, 256).emit_ptx()),
         ("q6k_64", Q6KKernel::new(64, 64, 256).emit_ptx()),
         ("q6k_128", Q6KKernel::new(128, 128, 256).emit_ptx()),
+        // BiasActivation variants (epilogue kernels)
+        (
+            "bias_activation_none_1024",
+            BiasActivationKernel::new(1024, 64).emit_ptx(),
+        ),
+        (
+            "bias_activation_relu_1024",
+            BiasActivationKernel::new(1024, 64).with_relu().emit_ptx(),
+        ),
+        (
+            "bias_activation_gelu_1024",
+            BiasActivationKernel::new(1024, 64).with_gelu().emit_ptx(),
+        ),
+        (
+            "bias_activation_none_4096",
+            BiasActivationKernel::new(4096, 256).emit_ptx(),
+        ),
+        (
+            "bias_activation_relu_4096",
+            BiasActivationKernel::new(4096, 256).with_relu().emit_ptx(),
+        ),
+        (
+            "bias_activation_gelu_4096",
+            BiasActivationKernel::new(4096, 256).with_gelu().emit_ptx(),
+        ),
     ];
 
     let mut total_bugs = 0;

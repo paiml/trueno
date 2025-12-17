@@ -15,7 +15,7 @@ const HEIGHT: usize = 30;
 /// Build the gradient kernel
 fn build_gradient_kernel() -> trueno_gpu::ptx::PtxKernel {
     PtxKernel::new("gradient_pixel")
-        .param(PtxType::U64, "output")     // Output buffer (f32 per pixel)
+        .param(PtxType::U64, "output") // Output buffer (f32 per pixel)
         .param(PtxType::U32, "width")
         .param(PtxType::U32, "height")
         .build(|ctx| {
@@ -88,8 +88,11 @@ fn render_to_terminal(pixels: &[f32], width: usize, height: usize) {
 
     // Header
     println!("\n\x1b[1;36m┌{}┐\x1b[0m", "─".repeat(width));
-    println!("\x1b[1;36m│\x1b[0m\x1b[1;33m{:^width$}\x1b[0m\x1b[1;36m│\x1b[0m",
-             "GPU RENDERED GRADIENT", width = width);
+    println!(
+        "\x1b[1;36m│\x1b[0m\x1b[1;33m{:^width$}\x1b[0m\x1b[1;36m│\x1b[0m",
+        "GPU RENDERED GRADIENT",
+        width = width
+    );
     println!("\x1b[1;36m├{}┤\x1b[0m", "─".repeat(width));
 
     // Render pixels
@@ -129,15 +132,24 @@ fn main() {
 
     let device_name = ctx.device_name().unwrap_or_else(|_| "Unknown".to_string());
     let (free, total) = ctx.memory_info().unwrap_or((0, 0));
-    println!("       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m", device_name);
-    println!("       Memory: {} MB free / {} MB total",
-             free / 1024 / 1024, total / 1024 / 1024);
+    println!(
+        "       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m",
+        device_name
+    );
+    println!(
+        "       Memory: {} MB free / {} MB total",
+        free / 1024 / 1024,
+        total / 1024 / 1024
+    );
 
     // Step 2: Generate PTX
     println!("\x1b[33m[2/6]\x1b[0m Generating gradient kernel PTX...");
     let ptx = gradient_kernel_ptx();
-    println!("       PTX size: {} bytes ({} lines)",
-             ptx.len(), ptx.lines().count());
+    println!(
+        "       PTX size: {} bytes ({} lines)",
+        ptx.len(),
+        ptx.lines().count()
+    );
 
     // Step 3: Load and JIT compile module
     println!("\x1b[33m[3/6]\x1b[0m JIT compiling PTX to SASS...");
@@ -157,10 +169,14 @@ fn main() {
     // Step 4: Allocate GPU memory
     println!("\x1b[33m[4/6]\x1b[0m Allocating GPU memory...");
     let num_pixels = WIDTH * HEIGHT;
-    let output_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, num_pixels)
-        .expect("Failed to allocate GPU buffer");
-    println!("       Allocated {} bytes for {}x{} pixels",
-             num_pixels * 4, WIDTH, HEIGHT);
+    let output_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, num_pixels).expect("Failed to allocate GPU buffer");
+    println!(
+        "       Allocated {} bytes for {}x{} pixels",
+        num_pixels * 4,
+        WIDTH,
+        HEIGHT
+    );
 
     // Step 5: Launch kernel
     println!("\x1b[33m[5/6]\x1b[0m Launching kernel on GPU...");
@@ -189,13 +205,19 @@ fn main() {
         shared_mem: 0,
     };
 
-    println!("       Grid: {}x{}, Block: {}x{}, Threads: {}",
-             grid_x, grid_y, block_x, block_y,
-             grid_x * grid_y * block_x * block_y);
+    println!(
+        "       Grid: {}x{}, Block: {}x{}, Threads: {}",
+        grid_x,
+        grid_y,
+        block_x,
+        block_y,
+        grid_x * grid_y * block_x * block_y
+    );
 
     let start = std::time::Instant::now();
     unsafe {
-        stream.launch_kernel(&mut module, "gradient_pixel", &config, &mut args)
+        stream
+            .launch_kernel(&mut module, "gradient_pixel", &config, &mut args)
             .expect("Kernel launch failed");
     }
     stream.synchronize().expect("Stream sync failed");
@@ -206,7 +228,9 @@ fn main() {
     // Step 6: Copy results back
     println!("\x1b[33m[6/6]\x1b[0m Copying results from GPU...");
     let mut host_pixels = vec![0.0f32; num_pixels];
-    output_buf.copy_to_host(&mut host_pixels).expect("D2H copy failed");
+    output_buf
+        .copy_to_host(&mut host_pixels)
+        .expect("D2H copy failed");
     println!("       \x1b[32m✓\x1b[0m Copied {} bytes\n", num_pixels * 4);
 
     // Render to terminal
@@ -218,10 +242,14 @@ fn main() {
     println!("┌────────────────────┬──────────────────────┐");
     println!("│ Pixels computed    │ {:>20} │", num_pixels);
     println!("│ GPU execution time │ {:>17?} │", elapsed);
-    println!("│ Throughput         │ {:>14.2} Mpx/s │",
-             num_pixels as f64 / elapsed.as_secs_f64() / 1_000_000.0);
-    println!("│ Device             │ {:>20} │",
-             &device_name[..device_name.len().min(20)]);
+    println!(
+        "│ Throughput         │ {:>14.2} Mpx/s │",
+        num_pixels as f64 / elapsed.as_secs_f64() / 1_000_000.0
+    );
+    println!(
+        "│ Device             │ {:>20} │",
+        &device_name[..device_name.len().min(20)]
+    );
     println!("└────────────────────┴──────────────────────┘");
     println!("\n\x1b[32m✓ GPU pixel rendering complete!\x1b[0m\n");
 }

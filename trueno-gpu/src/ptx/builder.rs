@@ -4,7 +4,9 @@
 
 use std::fmt::Write;
 
-use super::instructions::{CmpOp, Operand, Predicate, PtxInstruction, PtxOp, RoundingMode, WmmaLayout};
+use super::instructions::{
+    CmpOp, Operand, Predicate, PtxInstruction, PtxOp, RoundingMode, WmmaLayout,
+};
 use super::registers::{PtxReg, RegisterAllocator, VirtualReg};
 use super::types::{PtxStateSpace, PtxType};
 use super::{validate_target, validate_version};
@@ -410,6 +412,29 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
+    /// Load 4 consecutive f32 values from global memory (vectorized, 16-byte load)
+    ///
+    /// Returns 4 registers containing the loaded values.
+    /// Address must be 16-byte aligned for optimal performance.
+    ///
+    /// PTX: ld.global.v4.f32 {%f1, %f2, %f3, %f4}, [addr];
+    pub fn ld_global_f32_v4(&mut self, addr: VirtualReg) -> [VirtualReg; 4] {
+        let r0 = self.registers.allocate_virtual(PtxType::F32);
+        let r1 = self.registers.allocate_virtual(PtxType::F32);
+        let r2 = self.registers.allocate_virtual(PtxType::F32);
+        let r3 = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::V4F32)
+                .space(PtxStateSpace::Global)
+                .dst(Operand::Reg(r0))
+                .dst(Operand::Reg(r1))
+                .dst(Operand::Reg(r2))
+                .dst(Operand::Reg(r3))
+                .src(Operand::Reg(addr)),
+        );
+        [r0, r1, r2, r3]
+    }
+
     // ===== Control Flow =====
 
     /// Branch if predicate is true
@@ -442,9 +467,8 @@ impl<'a> KernelBuilder<'a> {
 
     /// Unconditional branch
     pub fn branch(&mut self, label: &str) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Bra, PtxType::B32).label(label),
-        );
+        self.instructions
+            .push(PtxInstruction::new(PtxOp::Bra, PtxType::B32).label(label));
     }
 
     // ===== Immediate Moves =====
@@ -1055,7 +1079,11 @@ impl<'a> KernelBuilder<'a> {
             PtxInstruction::new(PtxOp::WmmaLoadA, PtxType::F16)
                 .dst(Operand::Reg(frag[0]))
                 .src(Operand::Reg(addr))
-                .label(format!("m16n16k16.{}.f16.stride.{}", layout.to_ptx_string(), stride)),
+                .label(format!(
+                    "m16n16k16.{}.f16.stride.{}",
+                    layout.to_ptx_string(),
+                    stride
+                )),
         );
         frag
     }
@@ -1075,7 +1103,11 @@ impl<'a> KernelBuilder<'a> {
             PtxInstruction::new(PtxOp::WmmaLoadB, PtxType::F16)
                 .dst(Operand::Reg(frag[0]))
                 .src(Operand::Reg(addr))
-                .label(format!("m16n16k16.{}.f16.stride.{}", layout.to_ptx_string(), stride)),
+                .label(format!(
+                    "m16n16k16.{}.f16.stride.{}",
+                    layout.to_ptx_string(),
+                    stride
+                )),
         );
         frag
     }
@@ -1096,7 +1128,11 @@ impl<'a> KernelBuilder<'a> {
             PtxInstruction::new(PtxOp::WmmaLoadC, PtxType::F32)
                 .dst(Operand::Reg(frag[0]))
                 .src(Operand::Reg(addr))
-                .label(format!("m16n16k16.{}.f32.stride.{}", layout.to_ptx_string(), stride)),
+                .label(format!(
+                    "m16n16k16.{}.f32.stride.{}",
+                    layout.to_ptx_string(),
+                    stride
+                )),
         );
         frag
     }
@@ -1151,7 +1187,11 @@ impl<'a> KernelBuilder<'a> {
             PtxInstruction::new(PtxOp::WmmaStoreD, PtxType::F32)
                 .src(Operand::Reg(addr))
                 .src(Operand::Reg(frag_d[0]))
-                .label(format!("m16n16k16.{}.f32.stride.{}", layout.to_ptx_string(), stride)),
+                .label(format!(
+                    "m16n16k16.{}.f32.stride.{}",
+                    layout.to_ptx_string(),
+                    stride
+                )),
         );
     }
 
@@ -1204,6 +1244,95 @@ impl<'a> KernelBuilder<'a> {
                 .space(PtxStateSpace::Global),
         );
     }
+
+    // =========================================================================
+    // COALESCED GEMV SUPPORT - DECODER THROUGHPUT SPEC §5.3
+    // =========================================================================
+
+    /// Multiply low u32 (register * register -> u32)
+    ///
+    /// Unlike mul_wide, this keeps only the low 32 bits of the result.
+    /// Used for computing block offsets: col_base = block_id * block_size
+    pub fn mul_lo_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mul, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Get base address of shared memory array 'smem'
+    ///
+    /// Returns a u64 pointer to the beginning of the shared memory region
+    /// declared by `.shared .align 16 .b8 smem[N]`.
+    ///
+    /// Used for computing shared memory addresses:
+    /// ```text
+    /// smem_addr = shared_base_addr() + offset
+    /// ```
+    pub fn shared_base_addr(&mut self) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U64);
+        // Use cvta.shared.u64 to get generic address from shared memory label
+        // This is the correct way to get shared memory base address in PTX
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Label("smem".to_string())),
+        );
+        dst
+    }
+
+    /// Predicated load f32 from global memory with default value
+    ///
+    /// If predicate is true: loads value from addr
+    /// If predicate is false: returns default_val (no memory access)
+    ///
+    /// Implementation:
+    /// ```ptx
+    /// mov.f32 %dst, default_val;     // Initialize with default
+    /// @pred ld.global.f32 %dst, [addr];  // Conditional load
+    /// ```
+    ///
+    /// Used for bounds-checked loads in GEMV:
+    /// ```text
+    /// let valid = setp_lt_u32(idx, n);
+    /// let val = ld_global_f32_predicated(addr, valid, 0.0);
+    /// ```
+    pub fn ld_global_f32_predicated(
+        &mut self,
+        addr: VirtualReg,
+        pred: VirtualReg,
+        default_val: f32,
+    ) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+
+        // 1. Initialize with default value
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmF32(default_val)),
+        );
+
+        // 2. Predicated load - only executes if pred is true
+        // If pred is false, dst keeps the default value
+        let predicate = Predicate {
+            reg: pred,
+            negated: false,
+        };
+
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::F32)
+                .space(PtxStateSpace::Global)
+                .predicated(predicate)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+        );
+
+        dst
+    }
 }
 
 /// Emit a single instruction as PTX
@@ -1242,7 +1371,11 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
 
             if is_wide_output && !has_u64_source {
                 // Wide multiply uses source type, not dest type
-                let src_ty = if instr.ty == PtxType::U64 { ".u32" } else { ".s32" };
+                let src_ty = if instr.ty == PtxType::U64 {
+                    ".u32"
+                } else {
+                    ".s32"
+                };
                 s.push_str("mul.wide");
                 s.push_str(src_ty);
             } else if is_wide_output && has_u64_source {
@@ -1308,17 +1441,18 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             };
             // Add rounding mode for float conversions (required by PTX ISA)
             // EXCEPTION: f16→f32 is exact and does NOT require rounding
-            let src_is_f16 = instr.srcs.first().is_some_and(|src| {
-                matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::F16)
-            });
+            let src_is_f16 = instr
+                .srcs
+                .first()
+                .is_some_and(|src| matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::F16));
             let dst_is_f32 = instr.ty == PtxType::F32;
             let is_f16_to_f32 = src_is_f16 && dst_is_f32;
 
             let needs_rounding = !is_f16_to_f32
                 && (instr.ty.is_float()
-                    || instr.srcs.first().is_some_and(|src| {
-                        matches!(src, Operand::Reg(vreg) if vreg.ty().is_float())
-                    }));
+                    || instr.srcs.first().is_some_and(
+                        |src| matches!(src, Operand::Reg(vreg) if vreg.ty().is_float()),
+                    ));
             let round = if needs_rounding {
                 instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string())
             } else {
@@ -1411,8 +1545,21 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
 
     s.push(' ');
 
-    // Destination
-    if let Some(dst) = &instr.dst {
+    // Destination(s) - handle vector destinations specially
+    if !instr.dsts.is_empty() {
+        // Vector destination: {%f1, %f2, %f3, %f4}
+        s.push('{');
+        for (i, dst) in instr.dsts.iter().enumerate() {
+            s.push_str(&emit_operand(dst));
+            if i < instr.dsts.len() - 1 {
+                s.push_str(", ");
+            }
+        }
+        s.push('}');
+        if !instr.srcs.is_empty() {
+            s.push_str(", ");
+        }
+    } else if let Some(dst) = &instr.dst {
         s.push_str(&emit_operand(dst));
         if !instr.srcs.is_empty() {
             s.push_str(", ");
@@ -1579,11 +1726,10 @@ mod tests {
     #[test]
     fn test_bar_sync_emission() {
         // BUG: bar.sync was being emitted as "bar.b32 ;" instead of "bar.sync 0;"
-        let kernel = PtxKernel::new("test_barrier")
-            .build(|ctx| {
-                ctx.bar_sync(0);
-                ctx.ret();
-            });
+        let kernel = PtxKernel::new("test_barrier").build(|ctx| {
+            ctx.bar_sync(0);
+            ctx.ret();
+        });
 
         let ptx = kernel.emit();
         // Must contain proper bar.sync instruction
@@ -1603,12 +1749,11 @@ mod tests {
     #[test]
     fn test_cvt_u64_u32_emission() {
         // BUG: cvt was being emitted as "cvt.u64 %r, %r" instead of "cvt.u64.u32 %r, %r"
-        let kernel = PtxKernel::new("test_cvt")
-            .build(|ctx| {
-                let val = ctx.mov_u32_imm(42);
-                let _wide = ctx.cvt_u64_u32(val);
-                ctx.ret();
-            });
+        let kernel = PtxKernel::new("test_cvt").build(|ctx| {
+            let val = ctx.mov_u32_imm(42);
+            let _wide = ctx.cvt_u64_u32(val);
+            ctx.ret();
+        });
 
         let ptx = kernel.emit();
         // Must contain proper cvt with both types
@@ -1651,12 +1796,11 @@ mod tests {
     #[test]
     fn test_bar_sync_with_different_barriers() {
         // Test barrier with different IDs
-        let kernel = PtxKernel::new("test_barriers")
-            .build(|ctx| {
-                ctx.bar_sync(0);
-                ctx.bar_sync(1);
-                ctx.ret();
-            });
+        let kernel = PtxKernel::new("test_barriers").build(|ctx| {
+            ctx.bar_sync(0);
+            ctx.bar_sync(1);
+            ctx.ret();
+        });
 
         let ptx = kernel.emit();
         assert!(
@@ -1701,12 +1845,11 @@ mod tests {
     #[test]
     fn test_f32_literal_format() {
         // BUG: float literals were emitted as "0e0" instead of PTX hex format "0F00000000"
-        let kernel = PtxKernel::new("test_float")
-            .build(|ctx| {
-                let _zero = ctx.mov_f32_imm(0.0);
-                let _one = ctx.mov_f32_imm(1.0);
-                ctx.ret();
-            });
+        let kernel = PtxKernel::new("test_float").build(|ctx| {
+            let _zero = ctx.mov_f32_imm(0.0);
+            let _one = ctx.mov_f32_imm(1.0);
+            ctx.ret();
+        });
 
         let ptx = kernel.emit();
         // PTX float literals must be in hex format
@@ -1755,14 +1898,13 @@ mod tests {
     fn test_accumulator_update_in_place() {
         // BUG: Accumulators in inner loops were never updated
         // Need in-place: add.f32 %f0, %f0, %f1
-        let kernel = PtxKernel::new("test_acc")
-            .build(|ctx| {
-                let acc = ctx.mov_f32_imm(0.0);
-                let val = ctx.mov_f32_imm(1.0);
-                // In-place accumulate: acc = acc + val
-                ctx.add_f32_inplace(acc, val);
-                ctx.ret();
-            });
+        let kernel = PtxKernel::new("test_acc").build(|ctx| {
+            let acc = ctx.mov_f32_imm(0.0);
+            let val = ctx.mov_f32_imm(1.0);
+            // In-place accumulate: acc = acc + val
+            ctx.add_f32_inplace(acc, val);
+            ctx.ret();
+        });
 
         let ptx = kernel.emit();
         // Must have in-place add
@@ -1863,12 +2005,11 @@ mod tests {
 
     #[test]
     fn test_cvt_f16_f32() {
-        let kernel = PtxKernel::new("test_cvt_f16")
-            .build(|ctx| {
-                let f32_val = ctx.mov_f32_imm(1.5);
-                let _f16_val = ctx.cvt_f16_f32(f32_val);
-                ctx.ret();
-            });
+        let kernel = PtxKernel::new("test_cvt_f16").build(|ctx| {
+            let f32_val = ctx.mov_f32_imm(1.5);
+            let _f16_val = ctx.cvt_f16_f32(f32_val);
+            ctx.ret();
+        });
 
         let ptx = kernel.emit();
         assert!(
@@ -1970,17 +2111,20 @@ mod tests {
 
     #[test]
     fn test_fma_f32() {
-        let kernel = PtxKernel::new("test_fma")
-            .build(|ctx| {
-                let a = ctx.mov_f32_imm(2.0);
-                let b = ctx.mov_f32_imm(3.0);
-                let c = ctx.mov_f32_imm(4.0);
-                let _result = ctx.fma_f32(a, b, c);
-                ctx.ret();
-            });
+        let kernel = PtxKernel::new("test_fma").build(|ctx| {
+            let a = ctx.mov_f32_imm(2.0);
+            let b = ctx.mov_f32_imm(3.0);
+            let c = ctx.mov_f32_imm(4.0);
+            let _result = ctx.fma_f32(a, b, c);
+            ctx.ret();
+        });
 
         let ptx = kernel.emit();
-        assert!(ptx.contains("fma"), "Expected fma instruction, got: {}", ptx);
+        assert!(
+            ptx.contains("fma"),
+            "Expected fma instruction, got: {}",
+            ptx
+        );
     }
 
     #[test]
@@ -1994,7 +2138,11 @@ mod tests {
             });
 
         let ptx = kernel.emit();
-        assert!(ptx.contains("ld.global"), "Expected ld.global instruction, got: {}", ptx);
+        assert!(
+            ptx.contains("ld.global"),
+            "Expected ld.global instruction, got: {}",
+            ptx
+        );
     }
 
     #[test]
@@ -2008,7 +2156,11 @@ mod tests {
             });
 
         let ptx = kernel.emit();
-        assert!(ptx.contains("ld.global"), "Expected ld.global instruction, got: {}", ptx);
+        assert!(
+            ptx.contains("ld.global"),
+            "Expected ld.global instruction, got: {}",
+            ptx
+        );
     }
 
     #[test]
@@ -2022,6 +2174,148 @@ mod tests {
             });
 
         let ptx = kernel.emit();
-        assert!(ptx.contains("ld.global"), "Expected ld.global instruction, got: {}", ptx);
+        assert!(
+            ptx.contains("ld.global"),
+            "Expected ld.global instruction, got: {}",
+            ptx
+        );
+    }
+
+    // ========================================================================
+    // COALESCED GEMV TESTS - DECODER THROUGHPUT SPEC §5.3
+    // ========================================================================
+
+    #[test]
+    fn test_mul_lo_u32() {
+        // mul_lo_u32: u32 * u32 -> u32 (low bits only)
+        let kernel = PtxKernel::new("test_mul_lo").build(|ctx| {
+            let a = ctx.mov_u32_imm(256);
+            let b = ctx.mov_u32_imm(16);
+            let _result = ctx.mul_lo_u32(a, b);
+            ctx.ret();
+        });
+
+        let ptx = kernel.emit();
+        assert!(
+            ptx.contains("mul.lo.u32"),
+            "Expected 'mul.lo.u32' instruction, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_shared_base_addr() {
+        // shared_base_addr: Get pointer to 'smem' shared memory array
+        let kernel = PtxKernel::new("test_smem_addr")
+            .shared_memory(1024)
+            .build(|ctx| {
+                let smem_ptr = ctx.shared_base_addr();
+                let val = ctx.mov_f32_imm(1.0);
+                ctx.st_shared_f32(smem_ptr, val);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // Must declare shared memory
+        assert!(
+            ptx.contains(".shared"),
+            "Expected shared memory declaration, got: {}",
+            ptx
+        );
+        // Must reference 'smem' label
+        assert!(
+            ptx.contains("smem"),
+            "Expected 'smem' reference, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_ld_global_f32_predicated() {
+        // ld_global_f32_predicated: Load with predicate guard and default value
+        let kernel = PtxKernel::new("test_pred_load")
+            .param(PtxType::U64, "ptr")
+            .param(PtxType::U32, "n")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let n = ctx.load_param_u32("n");
+                let idx = ctx.mov_u32_imm(5);
+                let valid = ctx.setp_lt_u32(idx, n);
+                let _val = ctx.ld_global_f32_predicated(ptr, valid, 0.0);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        // Must contain predicated load (@p ld.global.f32)
+        assert!(
+            ptx.contains("@%p") && ptx.contains("ld.global.f32"),
+            "Expected predicated ld.global.f32, got: {}",
+            ptx
+        );
+        // Must initialize with default value first
+        assert!(
+            ptx.contains("mov.f32") && ptx.contains("0F00000000"),
+            "Expected mov.f32 with 0.0 default, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_coalesced_gemv_kernel_structure() {
+        // Integration test: verify CoalescedGemv kernel PTX structure
+        let kernel = PtxKernel::new("gemv_coalesced")
+            .param(PtxType::U64, "y_ptr")
+            .param(PtxType::U64, "a_ptr")
+            .param(PtxType::U64, "x_ptr")
+            .param(PtxType::U32, "k_dim")
+            .param(PtxType::U32, "n_dim")
+            .shared_memory(4096 * 4) // Cache x vector
+            .build(|ctx| {
+                // Minimal structure test
+                let block_id = ctx.special_reg(PtxReg::CtaIdX);
+                let thread_id = ctx.special_reg(PtxReg::TidX);
+                let block_size = ctx.mov_u32_imm(256);
+                let col_base = ctx.mul_lo_u32(block_id, block_size);
+                let col = ctx.add_u32_reg(col_base, thread_id);
+
+                let n_dim = ctx.load_param_u32("n_dim");
+                let oob = ctx.setp_ge_u32(col, n_dim);
+                ctx.branch_if(oob, "exit");
+
+                let sum = ctx.mov_f32_imm(0.0);
+                let smem = ctx.shared_base_addr();
+
+                // Load x into shared memory with predicate
+                let x_ptr = ctx.load_param_u64("x_ptr");
+                let k_dim = ctx.load_param_u32("k_dim");
+                let valid = ctx.setp_lt_u32(thread_id, k_dim);
+                let x_offset = ctx.mul_wide_u32(thread_id, 4);
+                let x_addr = ctx.add_u64(x_ptr, x_offset);
+                let x_val = ctx.ld_global_f32_predicated(x_addr, valid, 0.0);
+
+                let smem_offset = ctx.mul_u32(thread_id, 4);
+                let smem_offset_64 = ctx.cvt_u64_u32(smem_offset);
+                let smem_addr = ctx.add_u64(smem, smem_offset_64);
+                ctx.st_shared_f32(smem_addr, x_val);
+                ctx.bar_sync(0);
+
+                // Store result
+                let y_ptr = ctx.load_param_u64("y_ptr");
+                let y_offset = ctx.mul_wide_u32(col, 4);
+                let y_addr = ctx.add_u64(y_ptr, y_offset);
+                ctx.st_global_f32(y_addr, sum);
+
+                ctx.label("exit");
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+
+        // Verify all critical components
+        assert!(ptx.contains(".entry gemv_coalesced"), "Missing entry point");
+        assert!(ptx.contains(".shared"), "Missing shared memory");
+        assert!(ptx.contains("bar.sync"), "Missing barrier");
+        assert!(ptx.contains("mul.lo.u32"), "Missing mul.lo.u32");
+        assert!(ptx.contains("@%p"), "Missing predicated instruction");
     }
 }

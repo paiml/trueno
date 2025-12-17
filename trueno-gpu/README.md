@@ -35,10 +35,12 @@ assert!(ptx_source.contains(".version 8.0"));
 | Kernel | Description |
 |--------|-------------|
 | **GEMM** | Matrix multiplication (naive, tiled, tensor core) |
+| **GEMV** | Matrix-vector multiply with warp shuffle reduction |
 | **Softmax** | Numerically stable softmax with warp shuffle |
 | **LayerNorm** | Fused layer normalization |
 | **Attention** | FlashAttention-style tiled attention |
-| **Quantize** | Q4_K dequantization fused with matmul |
+| **BiasActivation** | Fused bias + activation epilogue (None/ReLU/GELU) |
+| **Quantize** | Q4_K/Q5_K/Q6_K dequantization fused with matmul |
 
 ## Usage
 
@@ -51,6 +53,28 @@ let ptx = kernel.emit_ptx();
 
 // The PTX can be loaded by CUDA driver API
 println!("{}", ptx);
+```
+
+## Examples
+
+```bash
+# PTX quickstart - basic vector addition
+cargo run -p trueno-gpu --example ptx_quickstart
+
+# GEMM kernel variants (naive, tiled, tensor core)
+cargo run -p trueno-gpu --example gemm_kernel
+
+# Bias + Activation epilogue kernel (ReLU, GELU)
+cargo run -p trueno-gpu --example bias_activation
+
+# Quantized GEMM (Q5_K, Q6_K formats)
+cargo run -p trueno-gpu --example q5k_q6k_gemm
+
+# FlashAttention (requires CUDA)
+cargo run -p trueno-gpu --example flash_attention_cuda --features cuda
+
+# Register allocation visualization
+cargo run -p trueno-gpu --example register_allocation
 ```
 
 ## Modules

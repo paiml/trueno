@@ -41,6 +41,10 @@ pub enum PtxType {
     B32,
     /// 64-bit untyped
     B64,
+    /// Vector of 2 x f32 (for vectorized loads)
+    V2F32,
+    /// Vector of 4 x f32 (for vectorized loads)
+    V4F32,
 }
 
 impl PtxType {
@@ -51,7 +55,8 @@ impl PtxType {
             Self::Pred | Self::U8 | Self::S8 | Self::B8 => 1,
             Self::U16 | Self::S16 | Self::F16 | Self::BF16 | Self::B16 => 2,
             Self::U32 | Self::S32 | Self::F32 | Self::B32 => 4,
-            Self::U64 | Self::S64 | Self::F64 | Self::B64 => 8,
+            Self::U64 | Self::S64 | Self::F64 | Self::B64 | Self::V2F32 => 8,
+            Self::V4F32 => 16,
         }
     }
 
@@ -82,13 +87,18 @@ impl PtxType {
             Self::B16 => ".b16",
             Self::B32 => ".b32",
             Self::B64 => ".b64",
+            Self::V2F32 => ".v2.f32",
+            Self::V4F32 => ".v4.f32",
         }
     }
 
     /// Check if this is a floating point type
     #[must_use]
     pub const fn is_float(self) -> bool {
-        matches!(self, Self::F16 | Self::BF16 | Self::F32 | Self::F64)
+        matches!(
+            self,
+            Self::F16 | Self::BF16 | Self::F32 | Self::F64 | Self::V2F32 | Self::V4F32
+        )
     }
 
     /// Check if this is a signed integer type
@@ -116,12 +126,12 @@ impl PtxType {
     pub const fn register_prefix(self) -> &'static str {
         match self {
             Self::Pred => "%p",
-            Self::U8 | Self::S8 | Self::B8 => "%rs",    // 8-bit short
+            Self::U8 | Self::S8 | Self::B8 => "%rs", // 8-bit short
             Self::U16 | Self::S16 | Self::B16 => "%rh", // 16-bit short
-            Self::U32 | Self::S32 | Self::B32 => "%r",  // 32-bit
+            Self::U32 | Self::S32 | Self::B32 => "%r", // 32-bit
             Self::U64 | Self::S64 | Self::B64 => "%rd", // 64-bit
             Self::F16 | Self::BF16 => "%h",
-            Self::F32 => "%f",
+            Self::F32 | Self::V2F32 | Self::V4F32 => "%f", // f32 and vector f32 use %f registers
             Self::F64 => "%fd",
         }
     }

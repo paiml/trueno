@@ -32,7 +32,14 @@ fn attention_kernel_ptx(causal: bool) -> String {
 }
 
 /// CPU reference implementation for verification
-fn cpu_attention(q: &[f32], k: &[f32], v: &[f32], seq_len: usize, head_dim: usize, causal: bool) -> Vec<f32> {
+fn cpu_attention(
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    seq_len: usize,
+    head_dim: usize,
+    causal: bool,
+) -> Vec<f32> {
     let scale = 1.0 / (head_dim as f32).sqrt();
     let mut output = vec![0.0f32; seq_len * head_dim];
 
@@ -113,7 +120,10 @@ fn main() {
 
     let device_name = ctx.device_name().unwrap_or_else(|_| "Unknown".to_string());
     let (free, total) = ctx.memory_info().unwrap_or((0, 0));
-    println!("       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m", device_name);
+    println!(
+        "       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m",
+        device_name
+    );
     println!(
         "       Memory: {} MB free / {} MB total",
         free / 1024 / 1024,
@@ -155,9 +165,12 @@ fn main() {
 
     // Step 5: Allocate GPU buffers
     println!("\x1b[33m[5/8]\x1b[0m Allocating GPU memory...");
-    let mut q_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total_elements).expect("Failed to allocate Q");
-    let mut k_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total_elements).expect("Failed to allocate K");
-    let mut v_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total_elements).expect("Failed to allocate V");
+    let mut q_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, total_elements).expect("Failed to allocate Q");
+    let mut k_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, total_elements).expect("Failed to allocate K");
+    let mut v_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, total_elements).expect("Failed to allocate V");
     let o_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total_elements).expect("Failed to allocate O");
     println!(
         "       Allocated {} KB total ({} KB per buffer)",
@@ -203,7 +216,7 @@ fn main() {
     let config = LaunchConfig {
         grid: (num_q_blocks, NUM_HEADS as u32, 1),
         block: (threads_per_block.min(1024), 1, 1), // Cap at 1024 threads
-        shared_mem: 0, // Shared mem declared in PTX
+        shared_mem: 0,                              // Shared mem declared in PTX
     };
 
     println!(
@@ -247,7 +260,10 @@ fn main() {
     let passed = max_diff < tolerance;
 
     if passed {
-        println!("       \x1b[32m✓\x1b[0m Output matches CPU within {:.0e}", tolerance);
+        println!(
+            "       \x1b[32m✓\x1b[0m Output matches CPU within {:.0e}",
+            tolerance
+        );
     } else {
         println!(
             "       \x1b[31m✗\x1b[0m Output differs from CPU (max diff: {:.6})",
@@ -269,7 +285,10 @@ fn main() {
         "│ Verification       │ {:>20} │",
         if passed { "✓ PASS" } else { "✗ FAIL" }
     );
-    println!("│ Device             │ {:>20} │", &device_name[..device_name.len().min(20)]);
+    println!(
+        "│ Device             │ {:>20} │",
+        &device_name[..device_name.len().min(20)]
+    );
     println!("└────────────────────┴──────────────────────┘");
 
     if passed {
