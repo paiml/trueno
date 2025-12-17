@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.8] - 2025-12-17
+
+### Changed
+
+- Updated `trueno-gpu` dependency to v0.3.0
+  - BiasActivationKernel: Fused bias + activation epilogue (None/ReLU/GELU)
+  - GemvKernel: Matrix-vector multiply for M=1 matmuls in LLM inference
+
+### Documentation
+
+- Book updates for BiasActivationKernel examples and PTX generation
+
 ## [trueno-gpu 0.3.0] - 2025-12-17
 
 ### Added
