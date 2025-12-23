@@ -47,6 +47,12 @@ let m = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
 let product = m.matmul(&m).unwrap();    // Matrix multiplication
 let transposed = m.transpose();          // Transpose
 
+// Batched matmul for transformers (Q @ K^T pattern)
+let batch = 2; let heads = 4; let seq = 8; let dim = 64;
+let q: Vec<f32> = vec![0.1; batch * heads * seq * dim];
+let kt: Vec<f32> = vec![0.1; batch * heads * dim * seq];
+let attn = Matrix::batched_matmul_4d(&q, &kt, batch, heads, seq, dim, seq).unwrap();
+
 // Eigendecomposition (PCA, spectral analysis)
 let cov = Matrix::from_vec(2, 2, vec![3.0, 1.0, 1.0, 3.0]).unwrap();
 let eigen = SymmetricEigen::new(&cov).unwrap();
@@ -70,7 +76,7 @@ let eigenvalues = eigen.eigenvalues();  // [4.0, 2.0]
 
 **Activations**: relu, leaky_relu, elu, sigmoid, tanh, gelu, swish, softmax, log_softmax
 
-**Matrix**: matmul, transpose, matvec, convolve2d
+**Matrix**: matmul, batched_matmul, batched_matmul_4d, transpose, matvec, convolve2d
 
 **Statistics**: mean, variance, stddev, covariance, correlation, zscore
 
