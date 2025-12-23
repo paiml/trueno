@@ -99,6 +99,58 @@ let tokens: Vec<usize> = vec![42, 7, 256, 13];
 let token_embeddings = embeddings.embedding_lookup(&tokens)?;
 ```
 
+## Batched Matrix Multiplication (3D Tensors)
+
+For batch processing of independent matrix multiplications:
+
+```rust
+// Shape: [batch, m, k] @ [batch, k, n] -> [batch, m, n]
+let batch = 4;
+let m = 32;
+let k = 64;
+let n = 32;
+
+// Flattened input tensors
+let a_data: Vec<f32> = vec![0.0; batch * m * k];
+let b_data: Vec<f32> = vec![0.0; batch * k * n];
+
+let result = Matrix::batched_matmul(&a_data, &b_data, batch, m, k, n)?;
+// Result: Vec<f32> with shape [batch, m, n]
+```
+
+## Batched 4D Matrix Multiplication (Attention Pattern)
+
+For multi-head attention in transformers:
+
+```rust
+// Shape: [batch, heads, m, k] @ [batch, heads, k, n] -> [batch, heads, m, n]
+// This is the exact pattern for Q @ K^T and attn @ V in attention
+
+let batch = 1;
+let heads = 12;  // Number of attention heads
+let seq_len = 512;
+let head_dim = 64;
+
+// Q: [batch, heads, seq_len, head_dim]
+let q_data: Vec<f32> = vec![0.0; batch * heads * seq_len * head_dim];
+// K^T: [batch, heads, head_dim, seq_len] (already transposed)
+let kt_data: Vec<f32> = vec![0.0; batch * heads * head_dim * seq_len];
+
+// Compute attention scores: Q @ K^T
+let attn_scores = Matrix::batched_matmul_4d(
+    &q_data,
+    &kt_data,
+    batch,
+    heads,
+    seq_len,   // m
+    head_dim,  // k
+    seq_len,   // n
+)?;
+// Result: [batch, heads, seq_len, seq_len] attention scores
+```
+
+This is critical for transformer performance - each (batch, head) pair is processed independently using SIMD matmul.
+
 ## GPU Acceleration
 
 For large matrices, use the GPU backend.

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.9] - 2025-12-23
+
+### Added
+
+- **Batched Matrix Multiplication** for 3D and 4D tensors (Refs #71)
+  - `Matrix::batched_matmul`: Shape `[batch, m, k] @ [batch, k, n] -> [batch, m, n]`
+  - `Matrix::batched_matmul_4d`: Attention pattern `[batch, heads, m, k] @ [batch, heads, k, n]`
+  - SIMD-accelerated using trueno's matmul backend
+  - Critical for transformer multi-head attention (Q @ K^T, attn @ V)
+  - 8 unit tests for correctness and error handling
+
+### Documentation
+
+- Updated `examples/matrix_operations.rs` with batched matmul demos
+- Book updates for batched matmul API reference and examples
+- Created GitHub issue #71 for BatchedGemmKernel GPU support
+
 ## [0.8.8] - 2025-12-17
 
 ### Changed
