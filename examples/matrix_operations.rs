@@ -192,6 +192,75 @@ fn main() {
     }
 
     // ========================================================================
+    // Batched Matrix Multiplication (3D Tensors)
+    // ========================================================================
+    println!("\n🔢 Batched Matrix Multiplication (3D Tensors)");
+    println!("-----------------------------------------------\n");
+
+    // Simulate batch of 2 matrix multiplications: [2, 3, 4] @ [2, 4, 2] -> [2, 3, 2]
+    let batch = 2;
+    let m = 3;
+    let k = 4;
+    let n = 2;
+
+    // Batch 0: 3×4 matrix, Batch 1: 3×4 matrix
+    let a_data: Vec<f32> = (0..batch * m * k).map(|i| i as f32 * 0.1).collect();
+    // Batch 0: 4×2 matrix, Batch 1: 4×2 matrix
+    let b_data: Vec<f32> = (0..batch * k * n).map(|i| (i as f32 + 1.0) * 0.1).collect();
+
+    println!("Shape: [batch={}, m={}, k={}] @ [batch={}, k={}, n={}]", batch, m, k, batch, k, n);
+    println!("A data (flattened): {:?}", &a_data[..8]);
+    println!("B data (flattened): {:?}", &b_data[..8]);
+
+    let result = Matrix::batched_matmul(&a_data, &b_data, batch, m, k, n)
+        .expect("Batched matmul should succeed");
+
+    println!("Output shape: [batch={}, m={}, n={}]", batch, m, n);
+    println!("Result (flattened): {:?}", &result[..6]);
+    println!("  → Each batch processed independently using SIMD matmul");
+
+    // ========================================================================
+    // Batched Matrix Multiplication (4D Tensors - Attention Pattern)
+    // ========================================================================
+    println!("\n🧠 Batched 4D Matrix Multiplication (Attention Pattern)");
+    println!("--------------------------------------------------------\n");
+
+    // Simulate multi-head attention: Q @ K^T
+    // Shape: [batch=1, heads=2, seq=4, head_dim=8] @ [batch=1, heads=2, head_dim=8, seq=4]
+    let batch = 1;
+    let heads = 2;
+    let seq_len = 4;
+    let head_dim = 8;
+
+    // Q: [1, 2, 4, 8] - 64 elements
+    let q_data: Vec<f32> = (0..batch * heads * seq_len * head_dim)
+        .map(|i| (i as f32 * 0.01).sin())
+        .collect();
+    // K^T: [1, 2, 8, 4] - 64 elements
+    let kt_data: Vec<f32> = (0..batch * heads * head_dim * seq_len)
+        .map(|i| (i as f32 * 0.02).cos())
+        .collect();
+
+    println!("Multi-head attention pattern: Q @ K^T");
+    println!("  Q shape: [batch={}, heads={}, seq={}, head_dim={}]", batch, heads, seq_len, head_dim);
+    println!("  K^T shape: [batch={}, heads={}, head_dim={}, seq={}]", batch, heads, head_dim, seq_len);
+
+    let attn_scores = Matrix::batched_matmul_4d(
+        &q_data,
+        &kt_data,
+        batch,
+        heads,
+        seq_len,   // m
+        head_dim,  // k
+        seq_len,   // n
+    )
+    .expect("4D batched matmul should succeed");
+
+    println!("  Output shape: [batch={}, heads={}, seq={}, seq={}]", batch, heads, seq_len, seq_len);
+    println!("  Attention scores (first 8): {:?}", &attn_scores[..8]);
+    println!("  → Used for transformer attention: softmax(Q @ K^T / sqrt(d)) @ V");
+
+    // ========================================================================
     // Mathematical Properties
     // ========================================================================
     println!("\n✅ Verified Mathematical Properties");

@@ -117,6 +117,56 @@ let result = weights.matvec(&zeros)?;
 // All elements should be 0
 ```
 
+## Batched Matrix Multiplication
+
+### 3D Tensors (Batch Processing)
+
+Process multiple matrix multiplications in a single call:
+
+```rust
+use trueno::Matrix;
+
+// Shape: [batch, m, k] @ [batch, k, n] -> [batch, m, n]
+let batch = 4;
+let m = 32;
+let k = 64;
+let n = 32;
+
+let a_data: Vec<f32> = vec![0.1; batch * m * k];
+let b_data: Vec<f32> = vec![0.2; batch * k * n];
+
+let result = Matrix::batched_matmul(&a_data, &b_data, batch, m, k, n)?;
+```
+
+### 4D Tensors (Multi-Head Attention)
+
+The exact pattern used in transformer attention (`Q @ K^T` and `attn @ V`):
+
+```rust
+// Simulate multi-head attention: Q @ K^T
+// Shape: [batch, heads, seq, head_dim] @ [batch, heads, head_dim, seq]
+let batch = 1;
+let heads = 12;
+let seq_len = 512;
+let head_dim = 64;
+
+let q_data: Vec<f32> = vec![0.0; batch * heads * seq_len * head_dim];
+let kt_data: Vec<f32> = vec![0.0; batch * heads * head_dim * seq_len];
+
+let attn_scores = Matrix::batched_matmul_4d(
+    &q_data,
+    &kt_data,
+    batch,
+    heads,
+    seq_len,   // m
+    head_dim,  // k
+    seq_len,   // n
+)?;
+// Output: [batch, heads, seq_len, seq_len] attention scores
+```
+
+This is critical for transformer inference performance - each (batch, head) pair is processed independently using SIMD matmul, achieving ~50 GFLOPS vs ~0.1 GFLOPS for naive implementation.
+
 ## Performance Considerations
 
 ### Blocking for Cache Efficiency
