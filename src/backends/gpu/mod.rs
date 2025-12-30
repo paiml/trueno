@@ -18,6 +18,13 @@
 //! - Compute shaders written in WGSL
 //! - Asynchronous execution with pollster for blocking
 //! - Automatic fallback to CPU if GPU unavailable
+//!
+//! # Memory Hierarchy Abstractions
+//!
+//! - [`TensorView`] - Structured view into GPU memory with shape/stride metadata
+//! - [`PartitionView`] - Tiling strategy for efficient GPU work distribution
+//!
+//! Based on cuda-tile-behavior.md Section 3.2.
 
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 mod batch;
@@ -30,6 +37,18 @@ mod shaders;
 
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 pub mod runtime;
+
+// Memory hierarchy abstractions (always available, no GPU feature required)
+mod partition_view;
+mod tensor_view;
+mod tiled_reduction;
+
+pub use partition_view::{PartitionView, TileInfo};
+pub use tensor_view::{MemoryLayout, TensorView};
+pub use tiled_reduction::{
+    tiled_max_2d, tiled_min_2d, tiled_reduce_2d, tiled_reduce_partial, tiled_sum_2d, MaxOp, MinOp,
+    ReduceOp, SumOp, TILE_SIZE,
+};
 
 #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 pub use batch::{BufferId, GpuCommandBatch};

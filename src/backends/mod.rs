@@ -31,7 +31,8 @@ pub mod neon;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 
-#[cfg(feature = "gpu")]
+// GPU module - always available for TensorView/PartitionView abstractions
+// Actual GPU compute requires "gpu" feature
 pub mod gpu;
 
 #[cfg(target_arch = "x86_64")]

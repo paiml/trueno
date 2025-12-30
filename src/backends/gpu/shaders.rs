@@ -718,6 +718,159 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 "#;
 
+/// 2D Tiled Sum Reduction compute shader (WGSL)
+///
+/// Computes sum reduction using 16×16 workgroups for optimal memory coalescing.
+/// Phase 1: Each workgroup reduces a tile to partial sums
+/// Phase 2: Combine partial sums (can be done on CPU for small number of workgroups)
+///
+/// This is more efficient than 1D reduction for 2D data (images, matrices)
+/// as it exploits 2D spatial locality in GPU memory hierarchies.
+pub const TILED_SUM_REDUCTION_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;
+
+struct Dimensions {
+    width: u32,   // Input width (columns)
+    height: u32,  // Input height (rows)
+}
+
+@group(0) @binding(2) var<uniform> dims: Dimensions;
+
+// 16×16 workgroup shared memory tile
+var<workgroup> tile: array<array<f32, 16>, 16>;
+
+@compute @workgroup_size(16, 16)
+fn main(
+    @builtin(global_invocation_id) global_id: vec3<u32>,
+    @builtin(local_invocation_id) local_id: vec3<u32>,
+    @builtin(workgroup_id) workgroup_id: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>,
+) {
+    let lx = local_id.x;
+    let ly = local_id.y;
+    let gx = global_id.x;
+    let gy = global_id.y;
+
+    // Load to shared memory (bounds-checked)
+    var val: f32 = 0.0;
+    if (gx < dims.width && gy < dims.height) {
+        let idx = gy * dims.width + gx;
+        val = input[idx];
+    }
+    tile[ly][lx] = val;
+
+    workgroupBarrier();
+
+    // Row reduction (horizontal): 16 -> 8 -> 4 -> 2 -> 1
+    if (lx < 8u) { tile[ly][lx] = tile[ly][lx] + tile[ly][lx + 8u]; }
+    workgroupBarrier();
+    if (lx < 4u) { tile[ly][lx] = tile[ly][lx] + tile[ly][lx + 4u]; }
+    workgroupBarrier();
+    if (lx < 2u) { tile[ly][lx] = tile[ly][lx] + tile[ly][lx + 2u]; }
+    workgroupBarrier();
+    if (lx < 1u) { tile[ly][lx] = tile[ly][lx] + tile[ly][lx + 1u]; }
+    workgroupBarrier();
+
+    // Column reduction (vertical): first column only, 16 -> 8 -> 4 -> 2 -> 1
+    if (lx == 0u) {
+        if (ly < 8u) { tile[ly][0] = tile[ly][0] + tile[ly + 8u][0]; }
+    }
+    workgroupBarrier();
+    if (lx == 0u) {
+        if (ly < 4u) { tile[ly][0] = tile[ly][0] + tile[ly + 4u][0]; }
+    }
+    workgroupBarrier();
+    if (lx == 0u) {
+        if (ly < 2u) { tile[ly][0] = tile[ly][0] + tile[ly + 2u][0]; }
+    }
+    workgroupBarrier();
+    if (lx == 0u) {
+        if (ly < 1u) { tile[ly][0] = tile[ly][0] + tile[ly + 1u][0]; }
+    }
+
+    // First thread writes workgroup result
+    if (lx == 0u && ly == 0u) {
+        let wg_idx = workgroup_id.y * num_workgroups.x + workgroup_id.x;
+        partial_results[wg_idx] = tile[0][0];
+    }
+}
+"#;
+
+/// 2D Tiled Max Reduction compute shader (WGSL)
+///
+/// Computes max reduction using 16×16 workgroups for optimal memory coalescing.
+/// Same algorithm as tiled sum reduction but with max operation.
+pub const TILED_MAX_REDUCTION_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;
+
+struct Dimensions {
+    width: u32,
+    height: u32,
+}
+
+@group(0) @binding(2) var<uniform> dims: Dimensions;
+
+var<workgroup> tile: array<array<f32, 16>, 16>;
+
+@compute @workgroup_size(16, 16)
+fn main(
+    @builtin(global_invocation_id) global_id: vec3<u32>,
+    @builtin(local_invocation_id) local_id: vec3<u32>,
+    @builtin(workgroup_id) workgroup_id: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>,
+) {
+    let lx = local_id.x;
+    let ly = local_id.y;
+    let gx = global_id.x;
+    let gy = global_id.y;
+
+    // Load to shared memory (use -inf for out-of-bounds)
+    var val: f32 = -3.402823466e+38; // -FLT_MAX
+    if (gx < dims.width && gy < dims.height) {
+        let idx = gy * dims.width + gx;
+        val = input[idx];
+    }
+    tile[ly][lx] = val;
+
+    workgroupBarrier();
+
+    // Row reduction with max
+    if (lx < 8u) { tile[ly][lx] = max(tile[ly][lx], tile[ly][lx + 8u]); }
+    workgroupBarrier();
+    if (lx < 4u) { tile[ly][lx] = max(tile[ly][lx], tile[ly][lx + 4u]); }
+    workgroupBarrier();
+    if (lx < 2u) { tile[ly][lx] = max(tile[ly][lx], tile[ly][lx + 2u]); }
+    workgroupBarrier();
+    if (lx < 1u) { tile[ly][lx] = max(tile[ly][lx], tile[ly][lx + 1u]); }
+    workgroupBarrier();
+
+    // Column reduction with max
+    if (lx == 0u) {
+        if (ly < 8u) { tile[ly][0] = max(tile[ly][0], tile[ly + 8u][0]); }
+    }
+    workgroupBarrier();
+    if (lx == 0u) {
+        if (ly < 4u) { tile[ly][0] = max(tile[ly][0], tile[ly + 4u][0]); }
+    }
+    workgroupBarrier();
+    if (lx == 0u) {
+        if (ly < 2u) { tile[ly][0] = max(tile[ly][0], tile[ly + 2u][0]); }
+    }
+    workgroupBarrier();
+    if (lx == 0u) {
+        if (ly < 1u) { tile[ly][0] = max(tile[ly][0], tile[ly + 1u][0]); }
+    }
+
+    // First thread writes workgroup result
+    if (lx == 0u && ly == 0u) {
+        let wg_idx = workgroup_id.y * num_workgroups.x + workgroup_id.x;
+        partial_results[wg_idx] = tile[0][0];
+    }
+}
+"#;
+
 /// Find max off-diagonal element shader (WGSL) - parallel reduction
 ///
 /// Finds the largest absolute off-diagonal element for Jacobi pivot selection.
