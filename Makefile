@@ -757,12 +757,20 @@ test-avx512-sde: ## Run AVX-512 tests under Intel SDE emulation
 		echo "  ❌ Intel SDE not found. Run 'make install-sde' first."; \
 		exit 1; \
 	fi
-	@echo "  Building release binary..."
-	@cargo build --release --all-features
-	@echo "  Running tests under SDE (-skx = Skylake-X with AVX-512)..."
-	@$(SDE_BIN) -skx -- cargo test --release --all-features -- avx512 2>&1 | tee /tmp/sde-avx512-test.log
-	@echo ""
-	@echo "  📊 Test results saved to /tmp/sde-avx512-test.log"
+	@echo "  [1/3] Building test binary (native)..."
+	@cargo test --release --all-features --no-run 2>&1 | tail -5
+	@echo "  [2/3] Finding test binary..."
+	@TEST_BIN=$$(cargo test --release --all-features --no-run 2>&1 | grep -oP 'target/release/deps/trueno-[a-f0-9]+' | head -1); \
+	if [ -z "$$TEST_BIN" ]; then \
+		echo "  ❌ Could not find test binary"; \
+		exit 1; \
+	fi; \
+	echo "  Found: $$TEST_BIN"; \
+	echo "  [3/3] Running under SDE (-skx = Skylake-X with AVX-512)..."; \
+	echo "  ⚠️  This will be slow (~10-50x) - emulating AVX-512 instructions"; \
+	$(SDE_BIN) -skx -- ./$$TEST_BIN avx512 --test-threads=1 2>&1 | tee /tmp/sde-avx512-test.log; \
+	echo ""; \
+	echo "  📊 Test results saved to /tmp/sde-avx512-test.log"
 
 bench-avx512-sde: ## Run AVX-512 benchmarks under Intel SDE emulation
 	@echo "📊 Running AVX-512 benchmarks under Intel SDE..."
