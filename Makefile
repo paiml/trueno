@@ -793,17 +793,32 @@ coverage-avx512-sde: ## Run AVX-512 coverage under Intel SDE emulation
 		exit 1; \
 	fi
 	@echo "  ⚠️  Note: Coverage under SDE is slow but provides accurate AVX-512 coverage."
-	@echo "  Building instrumented binary..."
+	@echo "  [1/4] Cleaning previous coverage data..."
 	@cargo llvm-cov clean --workspace
-	@echo "  Running coverage under SDE (-skx = Skylake-X with AVX-512)..."
-	@$(SDE_BIN) -skx -- cargo llvm-cov --all-features --workspace \
-		--ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' \
-		2>&1 | tee /tmp/sde-avx512-coverage.log
+	@echo "  [2/4] Building instrumented test binary (native)..."
+	@RUSTFLAGS="-C instrument-coverage" cargo test --all-features --no-run 2>&1 | tail -5
+	@echo "  [3/4] Finding instrumented test binary..."
+	@TEST_BIN=$$(RUSTFLAGS="-C instrument-coverage" cargo test --all-features --no-run 2>&1 | grep -oP 'target/debug/deps/trueno-[a-f0-9]+' | head -1); \
+	if [ -z "$$TEST_BIN" ]; then \
+		echo "  ❌ Could not find instrumented test binary"; \
+		exit 1; \
+	fi; \
+	echo "  Found: $$TEST_BIN"; \
+	echo "  [4/4] Running AVX-512 tests under SDE..."; \
+	echo "  ⚠️  This will be slow (~10-50x) - emulating AVX-512 instructions"; \
+	mkdir -p target/sde-coverage; \
+	LLVM_PROFILE_FILE="target/sde-coverage/trueno-%p-%m.profraw" \
+		$(SDE_BIN) -skx -- ./$$TEST_BIN avx512 --test-threads=1 2>&1 | tee /tmp/sde-avx512-coverage.log
 	@echo ""
-	@cargo llvm-cov report --summary-only | grep -E "(TOTAL|avx512)"
+	@echo "  📊 Test results saved to /tmp/sde-avx512-coverage.log"
 	@echo ""
-	@echo "  📊 Coverage report saved to /tmp/sde-avx512-coverage.log"
-	@echo "  💡 HTML report: target/llvm-cov/html/index.html"
+	@echo "  Merging coverage data..."
+	@if command -v llvm-profdata >/dev/null 2>&1; then \
+		llvm-profdata merge -sparse target/sde-coverage/*.profraw -o target/sde-coverage/merged.profdata 2>/dev/null && \
+		echo "  ✅ Coverage data merged to target/sde-coverage/merged.profdata"; \
+	else \
+		echo "  ⚠️  llvm-profdata not found - install llvm tools for coverage report"; \
+	fi
 
 # Documentation quality gates
 validate-examples: ## Validate book examples meet EXTREME TDD quality
