@@ -4023,12 +4023,16 @@ mod tests {
             let avx512_result = unsafe { Avx512Backend::dot(&a, &b) };
             let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
 
+            // Use relative tolerance for large results (2x unrolling changes operation order)
+            let tolerance = (1e-5 * scalar_result.abs()).max(1e-4);
             assert!(
-                (avx512_result - scalar_result).abs() < 1e-3,
-                "dot mismatch at size {}: avx512={}, scalar={}",
+                (avx512_result - scalar_result).abs() < tolerance,
+                "dot mismatch at size {}: avx512={}, scalar={}, diff={}, tolerance={}",
                 size,
                 avx512_result,
-                scalar_result
+                scalar_result,
+                (avx512_result - scalar_result).abs(),
+                tolerance
             );
         }
     }
