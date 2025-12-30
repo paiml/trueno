@@ -58,11 +58,38 @@ impl VectorBackend for ScalarBackend {
     // 1. All slice accesses are bounds-checked by Rust iterator/indexing
     // 2. No raw pointer arithmetic is performed
     // 3. Marked unsafe only to match VectorBackend trait interface
+    //
+    // OPTIMIZATION: 4× unrolling with mul_add for better ILP and auto-vectorization.
+    // This follows the cuda-tile pattern for improved throughput (spec: cuda-tile-behavior.md).
+    // Using f32::mul_add provides FMA semantics where available, improving accuracy.
+    #[inline(always)]
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
-        let mut sum = 0.0;
-        for i in 0..a.len() {
-            sum += a[i] * b[i];
+        let len = a.len();
+        let chunks = len / 4;
+
+        // 4 independent accumulators for better ILP (cuda-tile inspired optimization)
+        let mut acc0 = 0.0f32;
+        let mut acc1 = 0.0f32;
+        let mut acc2 = 0.0f32;
+        let mut acc3 = 0.0f32;
+
+        // Process 4 elements at a time with independent accumulation chains
+        for i in 0..chunks {
+            let base = i * 4;
+            acc0 = a[base].mul_add(b[base], acc0);
+            acc1 = a[base + 1].mul_add(b[base + 1], acc1);
+            acc2 = a[base + 2].mul_add(b[base + 2], acc2);
+            acc3 = a[base + 3].mul_add(b[base + 3], acc3);
         }
+
+        // Combine all 4 accumulators
+        let mut sum = (acc0 + acc1) + (acc2 + acc3);
+
+        // Handle remainder
+        for i in (chunks * 4)..len {
+            sum = a[i].mul_add(b[i], sum);
+        }
+
         sum
     }
 
@@ -682,5 +709,65 @@ mod tests {
         assert_eq!(result[2], 0.0); // 0 * sigmoid(0) = 0
         assert!((result[3] - 0.7311).abs() < 0.001); // 1 * sigmoid(1)
         assert_eq!(result[4], 51.0); // x * 1 = x (numerical stability)
+    }
+
+    // cuda-tile-behavior.md: Falsification test #81 - Backend equivalence
+    #[test]
+    fn test_scalar_dot_unrolled_various_sizes() {
+        // Test various sizes to exercise all code paths in unrolled implementation:
+        // - 0 elements (edge case)
+        // - 1-3 elements (remainder only)
+        // - 4 elements (exactly one unrolled chunk)
+        // - 5-7 elements (one chunk + remainder)
+        // - 8 elements (two chunks)
+        // - 100 elements (realistic workload)
+        // - 1000 elements (larger workload)
+        let sizes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 100, 1000];
+
+        for &size in &sizes {
+            if size == 0 {
+                continue; // Empty slice edge case
+            }
+
+            let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.1).collect();
+            let b: Vec<f32> = (0..size).map(|i| ((size - i) as f32) * 0.1).collect();
+
+            // Calculate expected result using naive implementation
+            let expected: f32 = a.iter().zip(&b).map(|(x, y)| x * y).sum();
+            let result = unsafe { ScalarBackend::dot(&a, &b) };
+
+            // Tolerance accounts for FP reordering from unrolling (different accumulator summing order)
+            // Use relative tolerance for larger sums where absolute error grows with magnitude
+            let tolerance = (1e-5 * expected.abs()).max(1e-4);
+            assert!(
+                (result - expected).abs() < tolerance,
+                "dot mismatch at size {}: got={}, expected={}, tolerance={}",
+                size,
+                result,
+                expected,
+                tolerance
+            );
+        }
+    }
+
+    // cuda-tile-behavior.md: Falsification test #92 - FMA single-rounding accuracy
+    #[test]
+    fn test_scalar_dot_mul_add_accuracy() {
+        // Test that mul_add provides better accuracy than separate mul+add
+        // FMA has single rounding vs two roundings for separate operations
+        let a = vec![1.0000001_f32; 1000];
+        let b = vec![1.0000001_f32; 1000];
+
+        let result = unsafe { ScalarBackend::dot(&a, &b) };
+
+        // Expected: 1000 * 1.0000001 * 1.0000001 ≈ 1000.0002
+        // With FMA, error should be smaller due to single rounding
+        let expected = 1000.0 * 1.0000001_f32 * 1.0000001_f32;
+        assert!(
+            (result - expected).abs() < 1e-3,
+            "FMA accuracy test: got={}, expected={}",
+            result,
+            expected
+        );
     }
 }

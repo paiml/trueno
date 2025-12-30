@@ -25,6 +25,7 @@
 mod builder;
 mod emit;
 mod instructions;
+pub mod optimize;
 mod registers;
 mod types;
 

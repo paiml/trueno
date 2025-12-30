@@ -150,27 +150,46 @@ impl VectorBackend for NeonBackend {
     #[inline]
     #[target_feature(enable = "neon")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
-    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=4 for NEON)
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=8 for unrolled, 4 for remainder)
     // 2. All pointers derived from valid slice references with sufficient backing storage
     // 3. NEON intrinsics marked with #[target_feature(enable = "neon")]
     // 4. Unaligned loads/stores used (vld1q_f32/vst1q_f32) - handle unaligned data
+    //
+    // OPTIMIZATION: 2-accumulator unrolling for better ILP (Instruction Level Parallelism)
+    // FMA has ~3-4 cycle latency on ARM cores - 2 independent accumulators help hide latency.
+    // This follows the cuda-tile pattern for improved throughput (spec: cuda-tile-behavior.md).
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
 
-        // Accumulator for 4-way parallel accumulation
-        let mut acc = vdupq_n_f32(0.0);
+        // 2 independent accumulators for better ILP (cuda-tile inspired optimization)
+        let mut acc0 = vdupq_n_f32(0.0);
+        let mut acc1 = vdupq_n_f32(0.0);
 
-        // Process 4 elements at a time
+        // Process 8 elements at a time (2 × 4) with 2 independent FMA chains
+        while i + 8 <= len {
+            let va0 = vld1q_f32(a.as_ptr().add(i));
+            let vb0 = vld1q_f32(b.as_ptr().add(i));
+            let va1 = vld1q_f32(a.as_ptr().add(i + 4));
+            let vb1 = vld1q_f32(b.as_ptr().add(i + 4));
+
+            // 2 independent FMA operations - no dependency chain between them
+            acc0 = vmlaq_f32(acc0, va0, vb0);
+            acc1 = vmlaq_f32(acc1, va1, vb1);
+
+            i += 8;
+        }
+
+        // Handle 4-element chunks that don't fit in 8-element blocks
         while i + 4 <= len {
             let va = vld1q_f32(a.as_ptr().add(i));
             let vb = vld1q_f32(b.as_ptr().add(i));
-
-            // Multiply and accumulate
-            acc = vmlaq_f32(acc, va, vb);
-
+            acc0 = vmlaq_f32(acc0, va, vb);
             i += 4;
         }
+
+        // Combine both accumulators
+        let acc = vaddq_f32(acc0, acc1);
 
         // Horizontal sum: reduce 4 lanes to single value
         // Use pairwise addition to sum all lanes
@@ -1800,6 +1819,79 @@ mod tests {
                 "tanh mismatch: neon={}, scalar={}",
                 n,
                 s
+            );
+        }
+    }
+
+    // cuda-tile-behavior.md: Falsification test #81 - All backends produce equivalent results
+    #[test]
+    fn test_neon_dot_2x_unroll_various_sizes() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        // Test various sizes to exercise all code paths:
+        // - Empty (edge case)
+        // - 1 element (scalar only)
+        // - 4 elements (one NEON chunk)
+        // - 7 elements (one chunk + remainder)
+        // - 8 elements (exactly two chunks for unrolled path)
+        // - 9 elements (two chunks + remainder)
+        // - 16 elements (multiple unrolled iterations)
+        // - 100 elements (realistic workload)
+        // - 1000 elements (larger workload)
+        let sizes = [0, 1, 4, 7, 8, 9, 16, 100, 1000];
+
+        for &size in &sizes {
+            if size == 0 {
+                continue; // Empty slice handled separately
+            }
+
+            let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.1).collect();
+            let b: Vec<f32> = (0..size).map(|i| ((size - i) as f32) * 0.1).collect();
+
+            let neon_result = unsafe { NeonBackend::dot(&a, &b) };
+            let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
+
+            assert!(
+                (neon_result - scalar_result).abs() < 1e-3,
+                "dot mismatch at size {}: neon={}, scalar={}",
+                size,
+                neon_result,
+                scalar_result
+            );
+        }
+    }
+
+    // cuda-tile-behavior.md: Falsification test #83 - SIMD remainder handling
+    #[test]
+    fn test_neon_dot_remainder_handling() {
+        #[cfg(target_arch = "aarch64")]
+        if !std::arch::is_aarch64_feature_detected!("neon") {
+            eprintln!("Skipping NEON test: CPU does not support NEON");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        // Test sizes that exercise remainder paths: n % 8 != 0 and n % 4 != 0
+        for size in 1..20 {
+            let a: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
+            let b: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
+
+            let neon_result = unsafe { NeonBackend::dot(&a, &b) };
+            let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
+
+            assert!(
+                (neon_result - scalar_result).abs() < 1e-4,
+                "remainder handling failed at size {}: neon={}, scalar={}",
+                size,
+                neon_result,
+                scalar_result
             );
         }
     }
