@@ -726,6 +726,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 ///
 /// This is more efficient than 1D reduction for 2D data (images, matrices)
 /// as it exploits 2D spatial locality in GPU memory hierarchies.
+///
+/// Note: Not yet integrated into GpuDevice - see GitHub issue #76 for GPU validation.
+#[allow(dead_code)]
 pub const TILED_SUM_REDUCTION_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;
@@ -801,6 +804,9 @@ fn main(
 ///
 /// Computes max reduction using 16×16 workgroups for optimal memory coalescing.
 /// Same algorithm as tiled sum reduction but with max operation.
+///
+/// Note: Not yet integrated into GpuDevice - see GitHub issue #76 for GPU validation.
+#[allow(dead_code)]
 pub const TILED_MAX_REDUCTION_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;

@@ -47,6 +47,7 @@ use super::super::types::PtxType;
 /// - Falsification test #16: FMA reduces instruction count by ~33%
 /// - Falsification test #17: FMA improves numerical accuracy
 /// - Falsification test #18: Single-use detection prevents incorrect fusion
+#[must_use]
 pub fn pass(instructions: Vec<PtxInstruction>) -> Vec<PtxInstruction> {
     if instructions.is_empty() {
         return instructions;
@@ -210,8 +211,7 @@ fn try_fuse_mul_add(
 /// - One is None and the other is Rn (default)
 fn rounding_modes_compatible(a: Option<&RoundingMode>, b: Option<&RoundingMode>) -> bool {
     match (a, b) {
-        (None, None) => true,
-        (Some(RoundingMode::Rn), None) | (None, Some(RoundingMode::Rn)) => true,
+        (None | Some(RoundingMode::Rn), None) | (None, Some(RoundingMode::Rn)) => true,
         (Some(a), Some(b)) => a == b,
         _ => false,
     }

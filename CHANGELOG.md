@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2025-12-30
+
+### Added
+
+- **CUDA-Tile Behavior GPU Optimizations** (cuda-tile-behavior.md spec)
+  - `TensorView<T>`: Structured memory view with shape/stride metadata for GPU buffers
+  - `PartitionView<T>`: Tiling strategy for 16x16 GPU workgroup distribution
+  - Tiled reduction algorithms: `tiled_sum_2d`, `tiled_max_2d`, `tiled_min_2d`
+  - `ReduceOp` trait for custom reduction operations (SumOp, MaxOp, MinOp)
+  - WGSL tiled reduction shaders for GPU compute (pending integration)
+
+- **Intel SDE Support for AVX-512 Testing** (Makefile targets)
+  - `make install-sde`: Download and install Intel Software Development Emulator
+  - `make test-avx512-sde`: Run AVX-512 tests under Skylake-X emulation
+  - `make bench-avx512-sde`: Run AVX-512 benchmarks under emulation
+  - `make coverage-avx512-sde`: Run AVX-512 coverage under emulation
+  - Enables AVX-512 testing on CPUs without native support (e.g., Intel Meteor Lake)
+
+- **PTX Optimization Passes** (trueno-gpu)
+  - FMA fusion pass: Automatically fuse mul+add into fma instructions
+  - Tile validation: Compile-time validation of tile constraints
+  - ~33% instruction reduction for FMA-eligible code
+
+### Documentation
+
+- New example: `tiled_reduction_demo` demonstrating GPU memory abstractions
+- Updated book chapter: GPU Compute Shaders with tiled reduction algorithms
+- GitHub issues #72-#76 filed for CUDA-specific integration work
+
+### Fixed
+
+- AVX-512 dot product test tolerance using relative error for large results
+- Clippy warnings for match arms, must_use, and div_ceil
+
 ## [0.8.9] - 2025-12-23
 
 ### Added
