@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast lint-all fmt fmt-check clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story release profile-analyze profile-compare profile-otlp-export smoke pixel-scalar-fkr pixel-simd-fkr pixel-wgpu-fkr pixel-ptx-fkr pixel-fkr-all quality-spec-013 coverage-cuda coverage-95
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast lint-all fmt fmt-check clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools install-sde test-avx512-sde bench-avx512-sde coverage-avx512-sde profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story release profile-analyze profile-compare profile-otlp-export smoke pixel-scalar-fkr pixel-simd-fkr pixel-wgpu-fkr pixel-ptx-fkr pixel-fkr-all quality-spec-013 coverage-cuda coverage-95
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -720,6 +720,82 @@ install-tools: ## Install required development tools
 	cargo install criterion || exit 1
 	cargo install renacer || exit 1
 	cargo install mdbook || exit 1
+
+# ============================================================================
+# INTEL SDE: AVX-512 Emulation for CPUs without hardware support
+# ============================================================================
+# Intel SDE (Software Development Emulator) allows testing AVX-512 code on
+# CPUs that don't have AVX-512 support (e.g., Intel Alder Lake+, older AMD).
+#
+# Download: https://www.intel.com/content/www/us/en/developer/articles/tool/software-development-emulator.html
+# Performance: ~10-50x slower than native, but accurate instruction emulation.
+
+SDE_VERSION := 9.33.0-2024-01-07
+SDE_DIR := $(HOME)/.local/share/intel-sde
+SDE_BIN := $(SDE_DIR)/sde64
+
+install-sde: ## Install Intel SDE for AVX-512 emulation
+	@echo "📦 Installing Intel SDE $(SDE_VERSION)..."
+	@if [ -f "$(SDE_BIN)" ]; then \
+		echo "  ✅ Intel SDE already installed at $(SDE_BIN)"; \
+		$(SDE_BIN) --version 2>/dev/null | head -1 || true; \
+	else \
+		echo "  ⬇️  Downloading Intel SDE..."; \
+		mkdir -p $(SDE_DIR); \
+		cd /tmp && \
+		curl -L -o sde.tar.xz "https://downloadmirror.intel.com/813591/sde-external-$(SDE_VERSION)-lin.tar.xz" && \
+		tar xf sde.tar.xz && \
+		cp -r sde-external-$(SDE_VERSION)-lin/* $(SDE_DIR)/ && \
+		rm -rf sde.tar.xz sde-external-$(SDE_VERSION)-lin && \
+		echo "  ✅ Intel SDE installed to $(SDE_DIR)"; \
+		echo "  💡 Add to PATH: export PATH=\"$(SDE_DIR):\$$PATH\""; \
+	fi
+
+test-avx512-sde: ## Run AVX-512 tests under Intel SDE emulation
+	@echo "🔬 Running AVX-512 tests under Intel SDE (Skylake-X emulation)..."
+	@if [ ! -f "$(SDE_BIN)" ]; then \
+		echo "  ❌ Intel SDE not found. Run 'make install-sde' first."; \
+		exit 1; \
+	fi
+	@echo "  Building release binary..."
+	@cargo build --release --all-features
+	@echo "  Running tests under SDE (-skx = Skylake-X with AVX-512)..."
+	@$(SDE_BIN) -skx -- cargo test --release --all-features -- avx512 2>&1 | tee /tmp/sde-avx512-test.log
+	@echo ""
+	@echo "  📊 Test results saved to /tmp/sde-avx512-test.log"
+
+bench-avx512-sde: ## Run AVX-512 benchmarks under Intel SDE emulation
+	@echo "📊 Running AVX-512 benchmarks under Intel SDE..."
+	@if [ ! -f "$(SDE_BIN)" ]; then \
+		echo "  ❌ Intel SDE not found. Run 'make install-sde' first."; \
+		exit 1; \
+	fi
+	@echo "  ⚠️  Note: SDE benchmarks are ~10-50x slower than native."
+	@echo "  Building release binary..."
+	@cargo build --release --all-features
+	@echo "  Running benchmarks under SDE (-skx = Skylake-X with AVX-512)..."
+	@$(SDE_BIN) -skx -- cargo bench --all-features -- avx512 2>&1 | tee /tmp/sde-avx512-bench.log
+	@echo ""
+	@echo "  📊 Benchmark results saved to /tmp/sde-avx512-bench.log"
+
+coverage-avx512-sde: ## Run AVX-512 coverage under Intel SDE emulation
+	@echo "📈 Running AVX-512 coverage under Intel SDE..."
+	@if [ ! -f "$(SDE_BIN)" ]; then \
+		echo "  ❌ Intel SDE not found. Run 'make install-sde' first."; \
+		exit 1; \
+	fi
+	@echo "  ⚠️  Note: Coverage under SDE is slow but provides accurate AVX-512 coverage."
+	@echo "  Building instrumented binary..."
+	@cargo llvm-cov clean --workspace
+	@echo "  Running coverage under SDE (-skx = Skylake-X with AVX-512)..."
+	@$(SDE_BIN) -skx -- cargo llvm-cov --all-features --workspace \
+		--ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' \
+		2>&1 | tee /tmp/sde-avx512-coverage.log
+	@echo ""
+	@cargo llvm-cov report --summary-only | grep -E "(TOTAL|avx512)"
+	@echo ""
+	@echo "  📊 Coverage report saved to /tmp/sde-avx512-coverage.log"
+	@echo "  💡 HTML report: target/llvm-cov/html/index.html"
 
 # Documentation quality gates
 validate-examples: ## Validate book examples meet EXTREME TDD quality
