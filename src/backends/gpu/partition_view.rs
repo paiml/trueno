@@ -131,10 +131,10 @@ impl<T> PartitionView<T> {
     pub fn tile_count(&self) -> [usize; 4] {
         let tensor_shape = self.tensor.shape();
         [
-            Self::div_ceil(tensor_shape[0], self.tile_shape[0]),
-            Self::div_ceil(tensor_shape[1], self.tile_shape[1]),
-            Self::div_ceil(tensor_shape[2], self.tile_shape[2]),
-            Self::div_ceil(tensor_shape[3], self.tile_shape[3]),
+            tensor_shape[0].div_ceil(self.tile_shape[0]),
+            tensor_shape[1].div_ceil(self.tile_shape[1]),
+            tensor_shape[2].div_ceil(self.tile_shape[2]),
+            tensor_shape[3].div_ceil(self.tile_shape[3]),
         ]
     }
 
@@ -263,10 +263,6 @@ impl<T> PartitionView<T> {
         }
     }
 
-    /// Ceiling division helper.
-    fn div_ceil(a: usize, b: usize) -> usize {
-        (a + b - 1) / b
-    }
 }
 
 impl<T> Clone for PartitionView<T> {

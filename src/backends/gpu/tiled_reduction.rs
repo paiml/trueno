@@ -133,11 +133,17 @@ fn reduce_tile<Op: ReduceOp>(
     let start_y = tile_y * TILE_SIZE;
     let start_x = tile_x * TILE_SIZE;
 
+    // Index-based loops are intentional here - we need indices for:
+    // - Calculating global positions (gy, gx)
+    // - Early exit on bounds check
+    // - Accessing both data array and tile array
+    #[allow(clippy::needless_range_loop)]
     for ly in 0..TILE_SIZE {
         let gy = start_y + ly;
         if gy >= height {
             break;
         }
+        #[allow(clippy::needless_range_loop)]
         for lx in 0..TILE_SIZE {
             let gx = start_x + lx;
             if gx >= width {
@@ -149,6 +155,8 @@ fn reduce_tile<Op: ReduceOp>(
     }
 
     // Row reduction (horizontal): 16 -> 8 -> 4 -> 2 -> 1
+    // Index-based loops mirror GPU shader structure for validation
+    #[allow(clippy::needless_range_loop)]
     for ly in 0..TILE_SIZE {
         // Step 1: 16 -> 8
         for lx in 0..8 {
@@ -216,8 +224,8 @@ pub fn tiled_reduce_partial<Op: ReduceOp>(
         return vec![];
     }
 
-    let tiles_y = (height + TILE_SIZE - 1) / TILE_SIZE;
-    let tiles_x = (width + TILE_SIZE - 1) / TILE_SIZE;
+    let tiles_y = height.div_ceil(TILE_SIZE);
+    let tiles_x = width.div_ceil(TILE_SIZE);
 
     let mut partial_results = Vec::with_capacity(tiles_y * tiles_x);
 

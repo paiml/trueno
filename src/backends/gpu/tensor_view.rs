@@ -341,6 +341,8 @@ impl<T> TensorView<T> {
         let mut new_strides = [1usize; 4];
 
         // Copy dimensions before the insertion point
+        // Using manual loop since we're copying from two separate arrays to two separate arrays
+        #[allow(clippy::manual_memcpy)]
         for i in 0..dim {
             new_shape[i] = self.shape[i];
             new_strides[i] = self.strides[i];
@@ -354,7 +356,8 @@ impl<T> TensorView<T> {
             1
         };
 
-        // Copy remaining dimensions
+        // Copy remaining dimensions (offset by 1 for insertion)
+        #[allow(clippy::manual_memcpy)]
         for i in dim..self.ndim {
             new_shape[i + 1] = self.shape[i];
             new_strides[i + 1] = self.strides[i];
