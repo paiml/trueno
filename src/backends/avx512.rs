@@ -139,29 +139,47 @@ impl VectorBackend for Avx512Backend {
     #[inline]
     #[target_feature(enable = "avx512f")]
     // SAFETY: Pointer arithmetic and SIMD intrinsics are safe because:
-    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=16 for AVX-512)
+    // 1. Loop bounds ensure `i + N <= len` before calling `.add(i)` (N=32 for unrolled, 16 for remainder)
     // 2. All pointers derived from valid slice references with sufficient backing storage
     // 3. AVX-512 intrinsics marked with #[target_feature(enable = "avx512f")]
     // 4. Unaligned loads used (_mm512_loadu_ps) - no alignment requirement
     // 5. FMA intrinsic (_mm512_fmadd_ps) provides better performance and numerical accuracy
+    //
+    // OPTIMIZATION: 2-accumulator unrolling for better ILP (Instruction Level Parallelism)
+    // FMA has ~4 cycle latency on modern CPUs - 2 independent accumulators help hide latency.
+    // This follows the cuda-tile pattern for improved throughput (spec: cuda-tile-behavior.md).
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
 
-        // Accumulator for 16-way parallel accumulation
-        let mut acc = _mm512_setzero_ps();
+        // 2 independent accumulators for better ILP (cuda-tile inspired optimization)
+        let mut acc0 = _mm512_setzero_ps();
+        let mut acc1 = _mm512_setzero_ps();
 
-        // Process 16 elements at a time with FMA
+        // Process 32 elements at a time (2 × 16) with 2 independent FMA chains
+        while i + 32 <= len {
+            let va0 = _mm512_loadu_ps(a.as_ptr().add(i));
+            let vb0 = _mm512_loadu_ps(b.as_ptr().add(i));
+            let va1 = _mm512_loadu_ps(a.as_ptr().add(i + 16));
+            let vb1 = _mm512_loadu_ps(b.as_ptr().add(i + 16));
+
+            // 2 independent FMA operations - no dependency chain between them
+            acc0 = _mm512_fmadd_ps(va0, vb0, acc0);
+            acc1 = _mm512_fmadd_ps(va1, vb1, acc1);
+
+            i += 32;
+        }
+
+        // Handle 16-element chunks that don't fit in 32-element blocks
         while i + 16 <= len {
             let va = _mm512_loadu_ps(a.as_ptr().add(i));
             let vb = _mm512_loadu_ps(b.as_ptr().add(i));
-
-            // Fused multiply-add: acc = acc + (va * vb)
-            // This is a single instruction on AVX-512 hardware
-            acc = _mm512_fmadd_ps(va, vb, acc);
-
+            acc0 = _mm512_fmadd_ps(va, vb, acc0);
             i += 16;
         }
+
+        // Combine both accumulators
+        let acc = _mm512_add_ps(acc0, acc1);
 
         // Horizontal sum: reduce 16 lanes to single value
         // AVX-512 provides a convenient intrinsic for this
@@ -3968,6 +3986,77 @@ mod tests {
                 i,
                 avx512_result[i],
                 scalar_result[i]
+            );
+        }
+    }
+
+    // cuda-tile-behavior.md: Falsification test #81 - All backends produce equivalent results
+    #[test]
+    fn test_avx512_dot_2x_unroll_various_sizes() {
+        if !is_x86_feature_detected!("avx512f") {
+            eprintln!("Skipping AVX-512 test: CPU does not support AVX-512F");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        // Test various sizes to exercise all code paths:
+        // - Empty (edge case)
+        // - 1 element (scalar only)
+        // - 16 elements (one AVX-512 chunk)
+        // - 31 elements (one chunk + remainder)
+        // - 32 elements (exactly two chunks for unrolled path)
+        // - 33 elements (two chunks + remainder)
+        // - 64 elements (multiple unrolled iterations)
+        // - 100 elements (realistic workload)
+        // - 1000 elements (larger workload)
+        let sizes = [0, 1, 16, 31, 32, 33, 64, 100, 1000];
+
+        for &size in &sizes {
+            if size == 0 {
+                continue; // Empty slice handled separately
+            }
+
+            let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.1).collect();
+            let b: Vec<f32> = (0..size).map(|i| ((size - i) as f32) * 0.1).collect();
+
+            let avx512_result = unsafe { Avx512Backend::dot(&a, &b) };
+            let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
+
+            assert!(
+                (avx512_result - scalar_result).abs() < 1e-3,
+                "dot mismatch at size {}: avx512={}, scalar={}",
+                size,
+                avx512_result,
+                scalar_result
+            );
+        }
+    }
+
+    // cuda-tile-behavior.md: Falsification test #83 - SIMD remainder handling
+    #[test]
+    fn test_avx512_dot_remainder_handling() {
+        if !is_x86_feature_detected!("avx512f") {
+            eprintln!("Skipping AVX-512 test: CPU does not support AVX-512F");
+            return;
+        }
+
+        use super::super::scalar::ScalarBackend;
+
+        // Test sizes that exercise remainder paths: n % 32 != 0 and n % 16 != 0
+        for size in 1..50 {
+            let a: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
+            let b: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
+
+            let avx512_result = unsafe { Avx512Backend::dot(&a, &b) };
+            let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
+
+            assert!(
+                (avx512_result - scalar_result).abs() < 1e-4,
+                "remainder handling failed at size {}: avx512={}, scalar={}",
+                size,
+                avx512_result,
+                scalar_result
             );
         }
     }
