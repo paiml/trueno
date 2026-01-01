@@ -79,6 +79,9 @@ pub enum PtxOp {
     LdParam,
     /// Convert type
     Cvt,
+    /// Convert address between state spaces (cvta)
+    /// Used to convert shared/global addresses to generic pointers for WMMA
+    Cvta,
     /// Select based on predicate
     Selp,
 
@@ -353,6 +356,14 @@ impl PtxInstruction {
         } else {
             self.dst = Some(dst);
         }
+        self
+    }
+
+    /// Push a destination operand to the vector destination list
+    /// Used for WMMA instructions that always have multiple destinations
+    #[must_use]
+    pub fn push_dst(mut self, dst: Operand) -> Self {
+        self.dsts.push(dst);
         self
     }
 

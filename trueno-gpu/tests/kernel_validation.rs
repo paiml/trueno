@@ -7,7 +7,7 @@
 //! cargo test -p trueno-gpu --test kernel_validation
 //! ```
 
-use trueno_gpu::kernels::{Activation, BiasActivationKernel, GemvKernel, Kernel};
+use trueno_gpu::kernels::{Activation, AttentionKernel, BiasActivationKernel, GemvKernel, Kernel};
 
 // ============================================================================
 // SCALAR BASELINE IMPLEMENTATIONS
@@ -273,4 +273,96 @@ fn kernel_names_correct() {
         "bias_activation"
     );
     assert_eq!(GemvKernel::new(4096, 4096).name(), "gemv_warp_reduce");
+}
+
+// ============================================================================
+// TENSOR CORE ATTENTION TESTS
+// ============================================================================
+
+#[test]
+fn tensor_core_attention_ptx_structure() {
+    let kernel = AttentionKernel::tensor_core(512, 64);
+    let ptx = kernel.emit_ptx();
+
+    // Must have proper PTX structure
+    assert!(ptx.contains(".version 8.0"));
+    assert!(ptx.contains(".target sm_"));
+    assert!(ptx.contains(".visible .entry flash_attention_tensor_core"));
+
+    // Must have required parameters
+    assert!(ptx.contains(".param .u64 q_ptr"));
+    assert!(ptx.contains(".param .u64 k_ptr"));
+    assert!(ptx.contains(".param .u64 v_ptr"));
+    assert!(ptx.contains(".param .u64 o_ptr"));
+
+    // Must have shared memory
+    assert!(ptx.contains(".shared"));
+
+    // Must have WMMA instructions
+    assert!(
+        ptx.contains("wmma.load.a"),
+        "Tensor Core kernel should have wmma.load.a"
+    );
+    assert!(
+        ptx.contains("wmma.load.b"),
+        "Tensor Core kernel should have wmma.load.b"
+    );
+    assert!(
+        ptx.contains("wmma.mma"),
+        "Tensor Core kernel should have wmma.mma"
+    );
+    assert!(
+        ptx.contains("wmma.store"),
+        "Tensor Core kernel should have wmma.store"
+    );
+
+    // Must have cvta.shared for generic address conversion (required for WMMA)
+    // Note: cvta.shared (without .to) converts shared→generic
+    assert!(
+        ptx.contains("cvta.shared.u64"),
+        "Tensor Core kernel must use cvta.shared.u64 for WMMA address conversion"
+    );
+}
+
+#[test]
+fn tensor_core_attention_ptx_validate_with_ptxas() {
+    // Skip if ptxas is not available
+    if std::process::Command::new("ptxas")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        println!("Skipping ptxas validation - ptxas not found");
+        return;
+    }
+
+    let kernel = AttentionKernel::tensor_core(512, 64);
+    let ptx = kernel.emit_ptx();
+
+    // Write to temp file
+    let temp_dir = std::env::temp_dir();
+    let ptx_path = temp_dir.join("test_tensor_core_attention.ptx");
+    std::fs::write(&ptx_path, &ptx).expect("Failed to write PTX");
+
+    // Validate with ptxas
+    let output = std::process::Command::new("ptxas")
+        .arg("--gpu-name")
+        .arg("sm_89")
+        .arg(&ptx_path)
+        .arg("-o")
+        .arg("/dev/null")
+        .output()
+        .expect("Failed to run ptxas");
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("ptxas validation failed:\n{}", stderr);
+        eprintln!("\nPTX content:\n{}", ptx);
+        panic!("PTX validation failed: {}", stderr);
+    }
+
+    println!("✓ Tensor Core attention PTX validated with ptxas");
+
+    // Cleanup
+    let _ = std::fs::remove_file(&ptx_path);
 }

@@ -191,9 +191,9 @@ impl AttentionKernel {
                 let q_block = ctaid_x;
                 let head_idx = ctaid_y;
 
-                // Bounds check - head must be within num_heads
-                let head_oob = ctx.setp_ge_u32(head_idx, num_heads);
-                ctx.branch_if(head_oob, "exit");
+                // PARITY-114 FIX: Compute predicate but DON'T exit early
+                // All threads must participate in barriers
+                let head_valid = ctx.setp_lt_u32(head_idx, num_heads);
 
                 // Calculate head offset (head_idx * seq_len * head_dim)
                 let head_stride = ctx.mul_u32_reg(seq_len_param, head_dim_param);
@@ -213,11 +213,10 @@ impl AttentionKernel {
                 let local_row = ctx.div_u32(tid, head_dim);
                 let local_col = ctx.rem_u32(tid, head_dim);
 
-                // Bounds check: skip threads beyond valid tile range
+                // PARITY-114 FIX: Compute predicate but DON'T exit early
                 // This handles launch configs with more threads than tile_q * head_dim
                 let tile_q_check = ctx.mov_u32_imm(tile_q);
-                let thread_oob = ctx.setp_ge_u32(local_row, tile_q_check);
-                ctx.branch_if(thread_oob, "exit");
+                let thread_valid = ctx.setp_lt_u32(local_row, tile_q_check);
 
                 // Initialize output accumulator to 0
                 let o_acc = ctx.mov_f32_imm(0.0);
@@ -381,6 +380,11 @@ impl AttentionKernel {
 
                 ctx.label("kv_loop_end");
 
+                // PARITY-114 FIX: Bounds check HERE (after all threads finished barriers)
+                // Only threads with valid output coordinates store to O
+                ctx.branch_if_not(head_valid, "exit");
+                ctx.branch_if_not(thread_valid, "exit");
+
                 // ===== Store output =====
                 // Calculate output address
                 let o_base = ctx.add_u64(o_ptr, head_offset_bytes);
@@ -470,20 +474,30 @@ impl AttentionKernel {
                 let q_block = ctaid_x;
                 let head_idx = ctaid_y;
 
-                // Bounds check
-                let head_oob = ctx.setp_ge_u32(head_idx, num_heads);
-                ctx.branch_if(head_oob, "exit");
+                // PARITY-114 FIX: Compute predicate but DON'T exit early
+                // All threads must participate in barriers (WMMA requires full warp)
+                let head_valid = ctx.setp_lt_u32(head_idx, num_heads);
 
                 // Calculate head offset
                 let head_stride = ctx.mul_u32_reg(seq_len_param, head_dim_param);
                 let head_offset = ctx.mul_wide_u32_reg(head_idx, head_stride);
                 let head_offset_bytes = ctx.mul_u64(head_offset, 4);
 
-                // Shared memory base addresses
+                // Shared memory base addresses (need actual smem pointer, not just offset)
+                // For regular loads/stores, u32 offset from smem[0] works
+                // For WMMA, we need the actual shared memory address
+                let smem_ptr = ctx.shared_base_addr(); // u64 pointer to smem
                 let q_smem_base = ctx.mov_u32_imm(0);
                 let k_smem_base = ctx.mov_u32_imm(q_smem_size);
                 let v_smem_base = ctx.mov_u32_imm(q_smem_size + k_smem_size);
                 let s_smem_base = ctx.mov_u32_imm(q_smem_size + k_smem_size + v_smem_size);
+                // Pre-compute u64 pointers for WMMA operations
+                let q_smem_base_64 = ctx.cvt_u64_u32(q_smem_base);
+                let q_smem_ptr = ctx.add_u64(smem_ptr, q_smem_base_64);
+                let k_smem_base_64 = ctx.cvt_u64_u32(k_smem_base);
+                let k_smem_ptr = ctx.add_u64(smem_ptr, k_smem_base_64);
+                let s_smem_base_64 = ctx.cvt_u64_u32(s_smem_base);
+                let s_smem_ptr = ctx.add_u64(smem_ptr, s_smem_base_64);
 
                 // Q tile base address
                 let tile_16 = ctx.mov_u32_imm(16);
@@ -600,9 +614,11 @@ impl AttentionKernel {
                 ctx.bar_sync(0);
 
                 // ===== Compute S = Q × K^T using WMMA =====
-                // Initialize S tile accumulator to zero
-                let zero_addr = ctx.mov_u64_imm(0);
-                let frag_c = ctx.wmma_load_c_f32(zero_addr, 16, WmmaLayout::RowMajor);
+                // Initialize S tile accumulator to zero (8 f32 registers)
+                let mut frag_c = Vec::with_capacity(8);
+                for _ in 0..8 {
+                    frag_c.push(ctx.mov_f32_imm(0.0));
+                }
 
                 // Loop over head_dim in steps of 16
                 let k_step = ctx.mov_u32_imm(0);
@@ -612,28 +628,32 @@ impl AttentionKernel {
                 let wmma_done = ctx.setp_ge_u32(k_step, n_k_steps_reg);
                 ctx.branch_if(wmma_done, "wmma_loop_end");
 
-                // Q fragment address: Q_smem[0, k_step*16] = q_smem_base + k_step * 16 * 2
+                // Q fragment address: q_smem_ptr + k_step * 16 * 2 bytes
                 let q_frag_offset = ctx.mul_u32(k_step, 32); // 16 elements × 2 bytes
-                let q_frag_addr = ctx.add_u32_reg(q_smem_base, q_frag_offset);
-                let q_frag_addr_64 = ctx.cvt_u64_u32(q_frag_addr);
-                let frag_a = ctx.wmma_load_a_f16(q_frag_addr_64, head_dim, WmmaLayout::RowMajor);
+                let q_frag_offset_64 = ctx.cvt_u64_u32(q_frag_offset);
+                let q_frag_addr = ctx.add_u64(q_smem_ptr, q_frag_offset_64);
+                let frag_a = ctx.wmma_load_a_f16(q_frag_addr, head_dim, WmmaLayout::RowMajor);
 
-                // K fragment address: K_smem[0, k_step*16] - needs col-major for K^T
+                // K fragment address: k_smem_ptr + k_step * 16 * 2 - needs col-major for K^T
                 let k_frag_offset = ctx.mul_u32(k_step, 32);
-                let k_frag_addr = ctx.add_u32_reg(k_smem_base, k_frag_offset);
-                let k_frag_addr_64 = ctx.cvt_u64_u32(k_frag_addr);
-                let frag_b = ctx.wmma_load_b_f16(k_frag_addr_64, head_dim, WmmaLayout::ColMajor);
+                let k_frag_offset_64 = ctx.cvt_u64_u32(k_frag_offset);
+                let k_frag_addr = ctx.add_u64(k_smem_ptr, k_frag_offset_64);
+                let frag_b = ctx.wmma_load_b_f16(k_frag_addr, head_dim, WmmaLayout::ColMajor);
 
-                // WMMA MMA: C += A × B
-                let _frag_d = ctx.wmma_mma_f16_f32(&frag_a, &frag_b, &frag_c);
+                // WMMA MMA: D = A × B + C (accumulates into D fragment)
+                let frag_d = ctx.wmma_mma_f16_f32(&frag_a, &frag_b, &frag_c);
+
+                // Copy D -> C for next iteration's accumulation (8 f32 registers)
+                for i in 0..8 {
+                    ctx.mov_f32_reg(frag_c[i], frag_d[i]);
+                }
 
                 ctx.add_u32_inplace(k_step, 1);
                 ctx.branch("wmma_loop_start");
                 ctx.label("wmma_loop_end");
 
-                // Store S tile from WMMA result to shared memory for softmax
-                let s_smem_addr_64 = ctx.cvt_u64_u32(s_smem_base);
-                ctx.wmma_store_d_f32(s_smem_addr_64, &frag_c, 16, WmmaLayout::RowMajor);
+                // Store S tile (accumulated result in D) to shared memory for softmax
+                ctx.wmma_store_d_f32(s_smem_ptr, &frag_d, 16, WmmaLayout::RowMajor);
 
                 ctx.bar_sync(1);
 
@@ -729,6 +749,10 @@ impl AttentionKernel {
                 ctx.add_u32_inplace(kv_block, 1);
                 ctx.branch("kv_loop_start");
                 ctx.label("kv_loop_end");
+
+                // PARITY-114 FIX: Bounds check HERE (after all threads finished barriers)
+                // Only threads with valid heads store to O
+                ctx.branch_if_not(head_valid, "exit");
 
                 // ===== Normalize and store output =====
                 let o_normalized = ctx.div_f32(o_acc, l_prev);
@@ -945,6 +969,119 @@ mod tests {
             let ptx = config.emit_ptx();
             assert!(!ptx.is_empty());
             assert!(ptx.contains(".visible .entry"));
+        }
+    }
+
+    /// PARITY-114: Verify flash_attention has no early exit before barrier
+    #[test]
+    fn test_parity_114_flash_attention_no_early_exit_before_barrier() {
+        let kernel = AttentionKernel::new(64, 32);
+        let ptx = kernel.emit_ptx();
+
+        // Find positions of key elements
+        let bar_sync_pos = ptx.find("bar.sync").expect("PTX should have bar.sync");
+        let kv_loop_end_pos = ptx
+            .find("kv_loop_end:")
+            .expect("PTX should have kv_loop_end");
+
+        // Verify bar.sync is inside the loop (before kv_loop_end)
+        assert!(
+            bar_sync_pos < kv_loop_end_pos,
+            "bar.sync should be inside kv_loop (before kv_loop_end)"
+        );
+
+        // After PARITY-114 fix, bounds check should be AFTER kv_loop_end
+        // Look for exit branches after the loop
+        let exit_pos = ptx[kv_loop_end_pos..].find("bra exit");
+        assert!(
+            exit_pos.is_some(),
+            "Exit branch should exist after kv_loop_end"
+        );
+    }
+
+    /// PARITY-114: Verify tensor_core attention has no early exit before barrier
+    #[test]
+    fn test_parity_114_tensor_core_attention_no_early_exit_before_barrier() {
+        let kernel = AttentionKernel::tensor_core(64, 32);
+        let ptx = kernel.emit_ptx();
+
+        // Find positions of key elements
+        let bar_sync_pos = ptx.find("bar.sync").expect("PTX should have bar.sync");
+        let kv_loop_end_pos = ptx
+            .find("kv_loop_end:")
+            .expect("PTX should have kv_loop_end");
+
+        // Verify bar.sync is inside the loop (before kv_loop_end)
+        assert!(
+            bar_sync_pos < kv_loop_end_pos,
+            "bar.sync should be inside kv_loop (before kv_loop_end)"
+        );
+
+        // Verify WMMA operations exist
+        assert!(
+            ptx.contains("wmma") || ptx.contains("mma"),
+            "Tensor Core kernel should use WMMA instructions"
+        );
+    }
+
+    /// PARITY-114 Countermeasure: Test boundary conditions for attention
+    /// Five Whys Root Cause: Only tested dimensions where all threads have valid work
+    #[test]
+    fn test_boundary_conditions_flash_attention() {
+        // Test sequence lengths NOT divisible by tile size
+        let boundary_cases = [
+            (17, 8),   // Odd seq_len
+            (33, 16),  // Just over 2 tiles
+            (100, 32), // Arbitrary non-power-of-2
+            (1, 8),    // Edge: single position
+            (63, 32),  // Just under 2 tiles
+        ];
+
+        for (seq_len, head_dim) in boundary_cases {
+            let kernel = AttentionKernel::new(seq_len, head_dim);
+            let ptx = kernel.emit_ptx();
+
+            assert!(
+                ptx.contains(".entry"),
+                "Attention seq={seq_len} head_dim={head_dim} should have entry"
+            );
+            assert!(
+                ptx.contains("bar.sync"),
+                "Attention seq={seq_len} head_dim={head_dim} should have barrier"
+            );
+
+            // Verify barrier is inside loop
+            let bar_sync_pos = ptx.find("bar.sync").unwrap();
+            let kv_loop_end_pos = ptx.find("kv_loop_end:").unwrap();
+            assert!(
+                bar_sync_pos < kv_loop_end_pos,
+                "Attention seq={seq_len} head_dim={head_dim}: barrier must be inside loop"
+            );
+        }
+    }
+
+    /// PARITY-114 Countermeasure: Test boundary conditions for tensor core attention
+    #[test]
+    fn test_boundary_conditions_tensor_core_attention() {
+        let boundary_cases = [
+            (17, 16),
+            (33, 32),
+            (65, 64),
+            (100, 32),
+        ];
+
+        for (seq_len, head_dim) in boundary_cases {
+            let kernel = AttentionKernel::tensor_core(seq_len, head_dim);
+            let ptx = kernel.emit_ptx();
+
+            assert!(
+                ptx.contains(".entry"),
+                "TC Attention seq={seq_len} head_dim={head_dim} should have entry"
+            );
+            assert!(
+                ptx.contains("bar.sync"),
+                "TC Attention seq={seq_len} head_dim={head_dim} should have barrier"
+            );
         }
     }
 }

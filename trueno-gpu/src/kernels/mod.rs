@@ -11,6 +11,11 @@
 //! - **Quantize**: Q4_K/Q5_K/Q6_K dequantization fused with matmul (PARITY-115/116/117)
 //! - **BiasActivation**: Fused bias + activation epilogue (ReLU, GELU)
 //! - **GEMV**: Matrix-vector multiply for M=1 decode throughput (CoalescedGemvKernel)
+//!
+//! ## Barrier Safety (PARITY-114)
+//!
+//! All kernels are validated for barrier safety to prevent thread divergence bugs.
+//! Use `emit_ptx_validated()` for production to ensure no early-exit-before-barrier patterns.
 
 mod attention;
 mod bias_activation;
@@ -28,6 +33,7 @@ pub use layernorm::LayerNormKernel;
 pub use quantize::{Q5KKernel, Q6KKernel, QuantizeKernel};
 pub use softmax::SoftmaxKernel;
 
+use crate::ptx::optimize::barrier_safety::{self, BarrierSafetyResult};
 use crate::ptx::{PtxKernel, PtxModule};
 
 /// Kernel trait for GPU kernels
@@ -52,6 +58,40 @@ pub trait Kernel {
     fn emit_ptx(&self) -> String {
         self.as_module().emit()
     }
+
+    /// Analyze PTX for barrier safety (PARITY-114 prevention)
+    ///
+    /// Returns detailed analysis of barrier safety, including any violations found.
+    fn analyze_barrier_safety(&self) -> BarrierSafetyResult {
+        let ptx = self.emit_ptx();
+        barrier_safety::analyze(&ptx)
+    }
+
+    /// Validate PTX is barrier-safe (PARITY-114 prevention)
+    ///
+    /// Returns `Ok(())` if safe, `Err` with violation details if not.
+    fn validate_barrier_safety(&self) -> Result<(), String> {
+        let ptx = self.emit_ptx();
+        barrier_safety::validate(&ptx)
+    }
+
+    /// Emit PTX with barrier safety validation (recommended for production)
+    ///
+    /// # Panics
+    ///
+    /// Panics if the PTX contains barrier safety violations (PARITY-114).
+    /// Use this in production to catch bugs at compile time rather than runtime.
+    fn emit_ptx_validated(&self) -> String {
+        let ptx = self.emit_ptx();
+        if let Err(e) = barrier_safety::validate(&ptx) {
+            panic!(
+                "PARITY-114: Barrier safety violation in kernel '{}': {}",
+                self.name(),
+                e
+            );
+        }
+        ptx
+    }
 }
 
 #[cfg(test)]
@@ -72,6 +112,145 @@ mod tests {
         let ptx = kernel.emit_ptx();
         assert!(ptx.contains(".visible .entry"));
         assert!(ptx.contains("softmax"));
+    }
+
+    // =========================================================================
+    // PARITY-114 Barrier Safety Tests - All Kernels
+    // =========================================================================
+
+    /// PARITY-114: GEMM naive kernel is barrier-safe
+    #[test]
+    fn test_barrier_safety_gemm_naive() {
+        let kernel = GemmKernel::naive(64, 64, 64);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "GEMM naive should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// PARITY-114: GEMM tiled kernel is barrier-safe
+    #[test]
+    fn test_barrier_safety_gemm_tiled() {
+        let kernel = GemmKernel::tiled(64, 64, 64, 16);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "GEMM tiled should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// PARITY-114: GEMM tensor core kernel is barrier-safe
+    #[test]
+    fn test_barrier_safety_gemm_tensor_core() {
+        let kernel = GemmKernel::tensor_core(64, 64, 64);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "GEMM tensor core should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// PARITY-114: GEMM WMMA FP16 kernel is barrier-safe
+    #[test]
+    fn test_barrier_safety_gemm_wmma() {
+        let kernel = GemmKernel::wmma_fp16(64, 64, 64);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "GEMM WMMA should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// PARITY-114: Attention kernel is barrier-safe
+    #[test]
+    fn test_barrier_safety_attention() {
+        let kernel = AttentionKernel::new(64, 32);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "Attention should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// PARITY-114: Tensor Core attention kernel is barrier-safe
+    #[test]
+    fn test_barrier_safety_attention_tensor_core() {
+        let kernel = AttentionKernel::tensor_core(64, 32);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "TC Attention should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// PARITY-114: Softmax kernel is barrier-safe
+    #[test]
+    fn test_barrier_safety_softmax() {
+        let kernel = SoftmaxKernel::new(1024);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "Softmax should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// PARITY-114: LayerNorm kernel is barrier-safe
+    #[test]
+    fn test_barrier_safety_layernorm() {
+        let kernel = LayerNormKernel::new(512);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "LayerNorm should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// PARITY-114: validate_barrier_safety returns Ok for safe kernels
+    #[test]
+    fn test_validate_barrier_safety_ok() {
+        let kernel = GemmKernel::naive(32, 32, 32);
+        assert!(
+            kernel.validate_barrier_safety().is_ok(),
+            "Safe kernel should pass validation"
+        );
+    }
+
+    /// PARITY-114: emit_ptx_validated works for safe kernels
+    #[test]
+    fn test_emit_ptx_validated_works() {
+        let kernel = GemmKernel::naive(32, 32, 32);
+        let ptx = kernel.emit_ptx_validated(); // Should not panic
+        assert!(ptx.contains(".entry"));
+    }
+
+    /// PARITY-114: Boundary condition - non-divisible dimensions are barrier-safe
+    #[test]
+    fn test_barrier_safety_boundary_conditions() {
+        // Test dimensions not divisible by tile size
+        let test_cases = [
+            GemmKernel::tensor_core(17, 17, 17),
+            GemmKernel::tensor_core(33, 33, 33),
+            GemmKernel::tensor_core(100, 100, 100),
+        ];
+
+        for kernel in test_cases {
+            let result = kernel.analyze_barrier_safety();
+            assert!(
+                result.is_safe,
+                "Boundary case {} should be barrier-safe: {:?}",
+                kernel.name(),
+                result.violations
+            );
+        }
     }
 }
 

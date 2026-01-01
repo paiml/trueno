@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt;
 
+// Import barrier safety analyzer from trueno-gpu for PARITY-114 detection
+use trueno_gpu::ptx::optimize::barrier_safety;
+
 /// PTX bug severity classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BugSeverity {
@@ -45,8 +48,10 @@ pub enum PtxBugClass {
     SharedMemU64Addressing,
     /// P0: Loop branches to END label instead of START
     LoopBranchToEnd,
-    /// P0: Missing barrier sync between shared memory write and read (PARITY-114)
+    /// P0: Missing barrier sync between shared memory write and read
     MissingBarrierSync,
+    /// P0: Early thread exit before barrier in loop - causes CUDA error 700 (PARITY-114)
+    EarlyExitBeforeBarrier,
     /// P1: Accumulator not updated in-place in loop
     NonInPlaceLoopAccumulator,
     /// P1: Register spills to local memory
@@ -80,7 +85,8 @@ impl PtxBugClass {
         match self {
             Self::SharedMemU64Addressing
             | Self::LoopBranchToEnd
-            | Self::MissingBarrierSync => BugSeverity::Critical,
+            | Self::MissingBarrierSync
+            | Self::EarlyExitBeforeBarrier => BugSeverity::Critical,
 
             Self::NonInPlaceLoopAccumulator
             | Self::RegisterSpills
@@ -103,6 +109,7 @@ impl PtxBugClass {
             Self::SharedMemU64Addressing => "SHARED_U64",
             Self::LoopBranchToEnd => "LOOP_BRANCH_END",
             Self::MissingBarrierSync => "MISSING_BARRIER",
+            Self::EarlyExitBeforeBarrier => "EARLY_EXIT_BARRIER",
             Self::NonInPlaceLoopAccumulator => "NON_INPLACE_ACCUM",
             Self::RegisterSpills => "REG_SPILLS",
             Self::HighRegisterPressure => "HIGH_REG_PRESSURE",
@@ -322,6 +329,44 @@ impl PtxBugAnalyzer {
                 "Quantized kernels require high registers for dequantization")
     }
 
+    /// Create analyzer with comprehensive whitelist for all high-performance kernels
+    ///
+    /// This whitelist covers expected register pressure and predicate usage in:
+    /// - Tensor Core kernels (WMMA requires many registers for matrix fragments)
+    /// - Attention kernels (`FlashAttention` needs registers for tiling state)
+    /// - Quantized kernels (dequantization requires intermediate values)
+    ///
+    /// These are documented performance tradeoffs, not bugs.
+    #[must_use]
+    pub fn with_performance_whitelist() -> Self {
+        Self::new()
+            // Tensor Core / WMMA kernels - high register usage is expected
+            // WMMA m16n16k16 requires 8 registers per fragment × 3 fragments = 24+ registers
+            // Plus accumulator, addresses, loop counters, etc.
+            .with_whitelist("gemm_tensor_core*", PtxBugClass::HighRegisterPressure,
+                "Tensor Core WMMA requires many registers for matrix fragments")
+            .with_whitelist("gemm_tensor_core*", PtxBugClass::PredicateOverflow,
+                "Tensor Core kernels use predicates for bounds checking and masking")
+            .with_whitelist("gemm_wmma*", PtxBugClass::HighRegisterPressure,
+                "WMMA FP16 requires registers for A/B/C/D matrix fragments")
+            .with_whitelist("gemm_wmma*", PtxBugClass::PredicateOverflow,
+                "WMMA kernels use predicates for tile boundary handling")
+            // Attention kernels - FlashAttention tiling requires state
+            .with_whitelist("flash_attention*", PtxBugClass::HighRegisterPressure,
+                "FlashAttention tiling requires registers for Q/K/V/O tiles and softmax state")
+            .with_whitelist("attention*", PtxBugClass::HighRegisterPressure,
+                "Attention kernels require registers for Q/K/V tiles and reduction")
+            // Quantized kernels - dequantization math
+            .with_whitelist("q4k*", PtxBugClass::HighRegisterPressure,
+                "Q4_K dequantization requires registers for scale/min extraction")
+            .with_whitelist("q5k*", PtxBugClass::HighRegisterPressure,
+                "Q5_K dequantization requires registers for 5-bit value reconstruction")
+            .with_whitelist("q6k*", PtxBugClass::HighRegisterPressure,
+                "Q6_K dequantization requires registers for 6-bit value reconstruction")
+            .with_whitelist("q8k*", PtxBugClass::HighRegisterPressure,
+                "Q8_K dequantization requires registers for scale application")
+    }
+
     /// Check if a bug should be suppressed by whitelist
     fn is_whitelisted(&self, kernel_name: Option<&String>, bug_class: &PtxBugClass) -> bool {
         let Some(kernel) = kernel_name else {
@@ -358,6 +403,7 @@ impl PtxBugAnalyzer {
         bugs.extend(self.detect_shared_mem_u64(ptx, &lines));
         bugs.extend(self.detect_loop_branch_to_end(ptx, &lines));
         bugs.extend(self.detect_missing_barrier_sync(ptx, &lines));
+        bugs.extend(self.detect_early_exit_before_barrier(ptx));
         bugs.extend(self.detect_register_spills(ptx, &lines));
         bugs.extend(self.detect_missing_entry_point(ptx, &lines));
         bugs.extend(self.detect_redundant_moves(ptx, &lines));
@@ -512,6 +558,56 @@ impl PtxBugAnalyzer {
                     });
                 }
             }
+        }
+
+        bugs
+    }
+
+    /// Detect early thread exit before barrier in loop (PARITY-114)
+    ///
+    /// This is the root cause of CUDA error 700 (illegal instruction) when
+    /// some threads in a warp exit early via `bra exit` before reaching a
+    /// `bar.sync` instruction. The remaining threads hang waiting at the barrier.
+    ///
+    /// Uses trueno-gpu's `barrier_safety` analyzer for consistent detection.
+    fn detect_early_exit_before_barrier(&self, ptx: &str) -> Vec<PtxBug> {
+        let mut bugs = Vec::new();
+
+        // Only check in strict mode (matches MissingBarrierSync behavior)
+        if !self.strict {
+            return bugs;
+        }
+
+        // Use the authoritative barrier_safety analyzer from trueno-gpu
+        let result = barrier_safety::analyze(ptx);
+
+        for violation in result.violations {
+            let kind = match violation.kind {
+                barrier_safety::ViolationKind::EarlyExitBeforeBarrier => {
+                    "Unconditional early exit before barrier"
+                }
+                barrier_safety::ViolationKind::ConditionalExitBeforeBarrier => {
+                    "Conditional early exit may cause thread divergence at barrier"
+                }
+                barrier_safety::ViolationKind::MissingBarrierAfterSharedAccess => {
+                    continue; // Already handled by detect_missing_barrier_sync
+                }
+            };
+
+            bugs.push(PtxBug {
+                class: PtxBugClass::EarlyExitBeforeBarrier,
+                line: violation.line,
+                instruction: violation.instruction,
+                message: format!(
+                    "PARITY-114: {} - causes CUDA error 700. {}",
+                    kind, violation.context
+                ),
+                fix: Some(
+                    "Move bounds check AFTER loop body. Use predicated loads (store 0 first) \
+                     so all threads participate in bar.sync regardless of bounds."
+                        .to_string(),
+                ),
+            });
         }
 
         bugs
@@ -1645,6 +1741,45 @@ test_loop_end:
         assert!(result.has_bug(&PtxBugClass::HighRegisterPressure));
     }
 
+    /// Test performance whitelist covers Tensor Core kernels
+    #[test]
+    fn test_performance_whitelist_tensor_core() {
+        let ptx = r#"
+.visible .entry gemm_tensor_core() {
+    .reg .b32 %r<64>;
+    .reg .b64 %rd<32>;
+    .reg .f32 %f<64>;
+    .reg .pred %p<12>;
+    ret;
+}
+"#;
+        // Without whitelist: should flag both issues
+        let result_no_whitelist = PtxBugAnalyzer::new().analyze(ptx);
+        assert!(result_no_whitelist.has_bug(&PtxBugClass::HighRegisterPressure));
+        assert!(result_no_whitelist.has_bug(&PtxBugClass::PredicateOverflow));
+
+        // With performance whitelist: both should be suppressed
+        let result_with_whitelist = PtxBugAnalyzer::with_performance_whitelist().analyze(ptx);
+        assert!(!result_with_whitelist.has_bug(&PtxBugClass::HighRegisterPressure));
+        assert!(!result_with_whitelist.has_bug(&PtxBugClass::PredicateOverflow));
+    }
+
+    /// Test performance whitelist covers attention kernels
+    #[test]
+    fn test_performance_whitelist_attention() {
+        let ptx = r#"
+.visible .entry flash_attention_tensor_core() {
+    .reg .b32 %r<64>;
+    .reg .b64 %rd<32>;
+    .reg .f32 %f<48>;
+    ret;
+}
+"#;
+        // With performance whitelist: register pressure should be suppressed
+        let result = PtxBugAnalyzer::with_performance_whitelist().analyze(ptx);
+        assert!(!result.has_bug(&PtxBugClass::HighRegisterPressure));
+    }
+
     // ========================================================================
     // EMPTY LOOP BODY TESTS
     // ========================================================================
@@ -1851,5 +1986,152 @@ middle:
         assert_eq!(PtxBugClass::EmptyLoopBody.code(), "EMPTY_LOOP");
         assert_eq!(PtxBugClass::MissingBoundsCheck.code(), "NO_BOUNDS_CHECK");
         assert_eq!(PtxBugClass::DeadCode.code(), "DEAD_CODE");
+    }
+
+    // ========================================================================
+    // PARITY-114: EARLY EXIT BEFORE BARRIER TESTS
+    // ========================================================================
+
+    /// PARITY-114: Detect conditional early exit before barrier
+    #[test]
+    fn test_parity114_conditional_exit_before_barrier() {
+        let ptx = r#"
+.visible .entry kernel() {
+    mov.u32 %r0, %tid.x;
+    setp.lt.u32 %p0, %r0, 32;
+
+loop_start:
+    @!%p0 bra exit;
+    ld.shared.f32 %f0, [%r0];
+    bar.sync 0;
+    st.shared.f32 [%r0], %f0;
+    bra loop_start;
+
+loop_start_end:
+done:
+    ret;
+}
+"#;
+        let result = PtxBugAnalyzer::strict().analyze(ptx);
+        assert!(result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
+        // Verify it's P0 Critical
+        assert_eq!(PtxBugClass::EarlyExitBeforeBarrier.severity(), BugSeverity::Critical);
+    }
+
+    /// PARITY-114: Detect unconditional early exit before barrier
+    #[test]
+    fn test_parity114_unconditional_exit_before_barrier() {
+        let ptx = r#"
+.visible .entry kernel() {
+loop_start:
+    bra exit;
+    bar.sync 0;
+    bra loop_start;
+
+loop_start_end:
+done:
+    ret;
+}
+"#;
+        let result = PtxBugAnalyzer::strict().analyze(ptx);
+        assert!(result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
+    }
+
+    /// PARITY-114: Safe kernel with barrier before any possible exit
+    #[test]
+    fn test_parity114_safe_barrier_first() {
+        let ptx = r#"
+.visible .entry kernel() {
+    mov.u32 %r0, %tid.x;
+    setp.lt.u32 %p0, %r0, 32;
+
+loop_start:
+    ld.shared.f32 %f0, [%r0];
+    bar.sync 0;
+    st.shared.f32 [%r0], %f0;
+    bra loop_start;
+
+loop_start_end:
+    @!%p0 bra exit;
+    st.global.f32 [%r1], %f0;
+exit:
+    ret;
+}
+"#;
+        let result = PtxBugAnalyzer::strict().analyze(ptx);
+        assert!(!result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
+    }
+
+    /// PARITY-114: Exit after loop end is safe
+    #[test]
+    fn test_parity114_exit_after_loop_is_safe() {
+        let ptx = r#"
+.visible .entry kernel() {
+k_tile_loop:
+    bar.sync 0;
+    ld.shared.f32 %f0, [%r0];
+    bra k_tile_loop;
+
+k_tile_end:
+    @!%p0 bra exit;
+    st.global.f32 [%r1], %f0;
+done:
+    ret;
+}
+"#;
+        let result = PtxBugAnalyzer::strict().analyze(ptx);
+        assert!(!result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
+    }
+
+    /// PARITY-114: Non-strict mode does not flag barrier issues
+    #[test]
+    fn test_parity114_non_strict_mode() {
+        let ptx = r#"
+.visible .entry kernel() {
+loop_start:
+    @!%p0 bra exit;
+    bar.sync 0;
+    bra loop_start;
+
+loop_start_end:
+done:
+    ret;
+}
+"#;
+        // Non-strict mode should NOT flag this
+        let result = PtxBugAnalyzer::new().analyze(ptx);
+        assert!(!result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
+
+        // Strict mode SHOULD flag this
+        let strict_result = PtxBugAnalyzer::strict().analyze(ptx);
+        assert!(strict_result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
+    }
+
+    /// PARITY-114: Bug class properties
+    #[test]
+    fn test_parity114_bug_class_properties() {
+        assert_eq!(PtxBugClass::EarlyExitBeforeBarrier.code(), "EARLY_EXIT_BARRIER");
+        assert_eq!(PtxBugClass::EarlyExitBeforeBarrier.severity(), BugSeverity::Critical);
+    }
+
+    /// PARITY-114: kv_loop pattern (attention kernels) - safe after fix
+    #[test]
+    fn test_parity114_attention_kv_loop_safe() {
+        let ptx = r#"
+.visible .entry flash_attention() {
+kv_loop:
+    bar.sync 0;
+    wmma.mma.sync.aligned.row.col.m16n16k16.f32.f16.f16.f32;
+    bra kv_loop;
+
+kv_loop_end:
+    @!%p_valid bra exit;
+    st.global.f32 [%out], %f0;
+done:
+    ret;
+}
+"#;
+        let result = PtxBugAnalyzer::strict().analyze(ptx);
+        assert!(!result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
     }
 }

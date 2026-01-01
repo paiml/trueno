@@ -359,7 +359,11 @@ mod tests {
         ];
 
         let result = pass(instructions);
-        assert_eq!(result.len(), 2, "Non-fusible instructions should be preserved");
+        assert_eq!(
+            result.len(),
+            2,
+            "Non-fusible instructions should be preserved"
+        );
     }
 
     #[test]

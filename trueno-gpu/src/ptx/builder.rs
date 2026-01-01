@@ -210,7 +210,9 @@ impl PtxKernel {
     #[must_use]
     pub fn emit(&self) -> String {
         use std::fmt::Write;
-        let mut ptx = String::new();
+        // Pre-allocate with estimated size: ~100 bytes per instruction + header overhead
+        let estimated_size = 512 + self.instructions.len() * 100;
+        let mut ptx = String::with_capacity(estimated_size);
 
         // Kernel entry point
         let _ = writeln!(ptx, ".visible .entry {}(", self.name);
@@ -243,9 +245,9 @@ impl PtxKernel {
 
         ptx.push('\n');
 
-        // Instructions
+        // Instructions - write directly to ptx buffer to avoid allocations
         for instr in &self.instructions {
-            ptx.push_str(&emit_instruction(instr));
+            write_instruction(instr, &mut ptx);
         }
 
         ptx.push_str("}\n");
@@ -565,10 +567,11 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
-    /// Store F16 to shared memory
+    /// Store F16 to shared memory (uses B16 type for memory ops)
     pub fn st_shared_f16(&mut self, addr: VirtualReg, val: VirtualReg) {
+        // Use B16 for shared memory stores (F16 not directly supported for memory ops)
         self.instructions.push(
-            PtxInstruction::new(PtxOp::St, PtxType::F16)
+            PtxInstruction::new(PtxOp::St, PtxType::B16)
                 .src(Operand::Reg(addr))
                 .src(Operand::Reg(val))
                 .space(PtxStateSpace::Shared),
@@ -1075,16 +1078,21 @@ impl<'a> KernelBuilder<'a> {
         for _ in 0..8 {
             frag.push(self.registers.allocate_virtual(PtxType::B32));
         }
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::WmmaLoadA, PtxType::F16)
-                .dst(Operand::Reg(frag[0]))
-                .src(Operand::Reg(addr))
-                .label(format!(
-                    "m16n16k16.{}.f16.stride.{}",
-                    layout.to_ptx_string(),
-                    stride
-                )),
-        );
+        // Build instruction with all 8 destination registers
+        let mut instr = PtxInstruction::new(PtxOp::WmmaLoadA, PtxType::F16)
+            .label(format!(
+                "m16n16k16.{}.f16.stride.{}",
+                layout.to_ptx_string(),
+                stride
+            ));
+        // Add all fragment registers as destinations (use push_dst for vector dests)
+        for reg in &frag {
+            instr = instr.push_dst(Operand::Reg(*reg));
+        }
+        // Source is address and stride immediate
+        instr = instr.src(Operand::Reg(addr));
+        instr = instr.src(Operand::ImmI64(i64::from(stride)));
+        self.instructions.push(instr);
         frag
     }
 
@@ -1099,16 +1107,19 @@ impl<'a> KernelBuilder<'a> {
         for _ in 0..8 {
             frag.push(self.registers.allocate_virtual(PtxType::B32));
         }
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::WmmaLoadB, PtxType::F16)
-                .dst(Operand::Reg(frag[0]))
-                .src(Operand::Reg(addr))
-                .label(format!(
-                    "m16n16k16.{}.f16.stride.{}",
-                    layout.to_ptx_string(),
-                    stride
-                )),
-        );
+        // Build instruction with all 8 destination registers
+        let mut instr = PtxInstruction::new(PtxOp::WmmaLoadB, PtxType::F16)
+            .label(format!(
+                "m16n16k16.{}.f16.stride.{}",
+                layout.to_ptx_string(),
+                stride
+            ));
+        for reg in &frag {
+            instr = instr.push_dst(Operand::Reg(*reg));
+        }
+        instr = instr.src(Operand::Reg(addr));
+        instr = instr.src(Operand::ImmI64(i64::from(stride)));
+        self.instructions.push(instr);
         frag
     }
 
@@ -1124,16 +1135,19 @@ impl<'a> KernelBuilder<'a> {
         for _ in 0..8 {
             frag.push(self.registers.allocate_virtual(PtxType::F32));
         }
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::WmmaLoadC, PtxType::F32)
-                .dst(Operand::Reg(frag[0]))
-                .src(Operand::Reg(addr))
-                .label(format!(
-                    "m16n16k16.{}.f32.stride.{}",
-                    layout.to_ptx_string(),
-                    stride
-                )),
-        );
+        // Build instruction with all 8 destination registers
+        let mut instr = PtxInstruction::new(PtxOp::WmmaLoadC, PtxType::F32)
+            .label(format!(
+                "m16n16k16.{}.f32.stride.{}",
+                layout.to_ptx_string(),
+                stride
+            ));
+        for reg in &frag {
+            instr = instr.push_dst(Operand::Reg(*reg));
+        }
+        instr = instr.src(Operand::Reg(addr));
+        instr = instr.src(Operand::ImmI64(i64::from(stride)));
+        self.instructions.push(instr);
         frag
     }
 
@@ -1152,20 +1166,25 @@ impl<'a> KernelBuilder<'a> {
             frag_d.push(self.registers.allocate_virtual(PtxType::F32));
         }
 
-        // MMA instruction references all fragment registers
+        // MMA instruction with all fragment registers
+        // Format: wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32 {d0-d7}, {a0-a7}, {b0-b7}, {c0-c7}
         let mut instr = PtxInstruction::new(PtxOp::WmmaMma, PtxType::F32)
-            .dst(Operand::Reg(frag_d[0]))
             .label("m16n16k16.row.col.f32.f32");
 
-        // Add A, B, C fragment sources
-        if !frag_a.is_empty() {
-            instr = instr.src(Operand::Reg(frag_a[0]));
+        // Add all D registers as destinations (use push_dst for vector dests)
+        for reg in &frag_d {
+            instr = instr.push_dst(Operand::Reg(*reg));
         }
-        if !frag_b.is_empty() {
-            instr = instr.src(Operand::Reg(frag_b[0]));
+
+        // Add all A, B, C fragment registers as sources (in order)
+        for reg in frag_a {
+            instr = instr.src(Operand::Reg(*reg));
         }
-        if !frag_c.is_empty() {
-            instr = instr.src(Operand::Reg(frag_c[0]));
+        for reg in frag_b {
+            instr = instr.src(Operand::Reg(*reg));
+        }
+        for reg in frag_c {
+            instr = instr.src(Operand::Reg(*reg));
         }
 
         self.instructions.push(instr);
@@ -1183,16 +1202,22 @@ impl<'a> KernelBuilder<'a> {
         if frag_d.is_empty() {
             return;
         }
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::WmmaStoreD, PtxType::F32)
-                .src(Operand::Reg(addr))
-                .src(Operand::Reg(frag_d[0]))
-                .label(format!(
-                    "m16n16k16.{}.f32.stride.{}",
-                    layout.to_ptx_string(),
-                    stride
-                )),
-        );
+        // Format: wmma.store.d.sync.aligned.m16n16k16.row.f32 [addr], {d0-d7}, stride
+        let mut instr = PtxInstruction::new(PtxOp::WmmaStoreD, PtxType::F32)
+            .label(format!(
+                "m16n16k16.{}.f32.stride.{}",
+                layout.to_ptx_string(),
+                stride
+            ));
+        // Address is first source
+        instr = instr.src(Operand::Reg(addr));
+        // All fragment registers
+        for reg in frag_d {
+            instr = instr.src(Operand::Reg(*reg));
+        }
+        // Stride
+        instr = instr.src(Operand::ImmI64(i64::from(stride)));
+        self.instructions.push(instr);
     }
 
     /// Convert F32 values to F16 (for feeding tensor cores)
@@ -1275,12 +1300,14 @@ impl<'a> KernelBuilder<'a> {
     /// ```
     pub fn shared_base_addr(&mut self) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U64);
-        // Use cvta.shared.u64 to get generic address from shared memory label
-        // This is the correct way to get shared memory base address in PTX
+        // Use cvta.to.shared.u64 to get generic address from shared memory label
+        // This is REQUIRED for WMMA operations which need generic pointers
+        // Generates: cvta.to.shared.u64 %rd, smem;
         self.instructions.push(
-            PtxInstruction::new(PtxOp::Mov, PtxType::U64)
+            PtxInstruction::new(PtxOp::Cvta, PtxType::U64)
                 .dst(Operand::Reg(dst))
-                .src(Operand::Label("smem".to_string())),
+                .src(Operand::Label("smem".to_string()))
+                .space(PtxStateSpace::Shared),
         );
         dst
     }
@@ -1460,6 +1487,18 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             };
             s.push_str(&format!("cvt{}{}{}", round, dst_ty, src_ty));
         }
+        PtxOp::Cvta => {
+            // cvta.{space}.{size} - convert state space address to generic
+            // NOTE: cvta.to.space converts generic→state_space (opposite direction)
+            // cvta.space (without .to) converts state_space→generic (what we need for WMMA)
+            // Used to get generic pointer from shared memory for WMMA operations
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".shared");
+            let ty = instr.ty.to_ptx_string();
+            s.push_str(&format!("cvta{}{}", space, ty));
+        }
         PtxOp::Fma => {
             // FMA requires rounding mode: fma.rn.f32
             let round = instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string());
@@ -1482,40 +1521,25 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
         }
         PtxOp::WmmaLoadA => {
             // WMMA load A fragment: wmma.load.a.sync.aligned.{shape}.{layout}.{type} {dst...}, [ptr], stride
-            // Label format: "m16n16k16.row.f16.stride.16"
-            if let Some(label) = &instr.label {
-                return format!("{}wmma.load.a.sync.aligned.{};\n", s, label);
-            }
-            s.push_str("wmma.load.a.sync.aligned.m16n16k16.row.f16");
+            // Label contains: "m16n16k16.{layout}.f16.stride.{stride}"
+            // We need to extract shape/layout/type from label and format properly
+            return emit_wmma_load(s, instr, "a");
         }
         PtxOp::WmmaLoadB => {
-            // WMMA load B fragment: wmma.load.b.sync.aligned.{shape}.{layout}.{type} {dst...}, [ptr], stride
-            if let Some(label) = &instr.label {
-                return format!("{}wmma.load.b.sync.aligned.{};\n", s, label);
-            }
-            s.push_str("wmma.load.b.sync.aligned.m16n16k16.col.f16");
+            // WMMA load B fragment
+            return emit_wmma_load(s, instr, "b");
         }
         PtxOp::WmmaLoadC => {
-            // WMMA load C fragment: wmma.load.c.sync.aligned.{shape}.{layout}.{type} {dst...}, [ptr], stride
-            if let Some(label) = &instr.label {
-                return format!("{}wmma.load.c.sync.aligned.{};\n", s, label);
-            }
-            s.push_str("wmma.load.c.sync.aligned.m16n16k16.row.f32");
+            // WMMA load C fragment
+            return emit_wmma_load(s, instr, "c");
         }
         PtxOp::WmmaMma => {
-            // WMMA MMA: wmma.mma.sync.aligned.{shape}.{alayout}.{blayout}.{dtype}.{atype} {dst...}, {a...}, {b...}, {c...}
-            // Label format: "m16n16k16.row.col.f32.f32"
-            if let Some(label) = &instr.label {
-                return format!("{}wmma.mma.sync.aligned.{};\n", s, label);
-            }
-            s.push_str("wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32");
+            // WMMA MMA: wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32 {d...}, {a...}, {b...}, {c...}
+            return emit_wmma_mma(s, instr);
         }
         PtxOp::WmmaStoreD => {
-            // WMMA store D: wmma.store.d.sync.aligned.{shape}.{layout}.{type} [ptr], {src...}, stride
-            if let Some(label) = &instr.label {
-                return format!("{}wmma.store.d.sync.aligned.{};\n", s, label);
-            }
-            s.push_str("wmma.store.d.sync.aligned.m16n16k16.row.f32");
+            // WMMA store D: wmma.store.d.sync.aligned.m16n16k16.row.f32 [ptr], {src...}, stride
+            return emit_wmma_store(s, instr);
         }
         _ => s.push_str(&format!("{:?}", instr.op).to_lowercase()),
     }
@@ -1528,6 +1552,7 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::U64 || vreg.ty() == PtxType::S64)
         });
     let skip_type_suffix = instr.op == PtxOp::Cvt
+        || instr.op == PtxOp::Cvta
         || is_wide_mul_from_u32
         || instr.op == PtxOp::ShflDown
         || instr.op == PtxOp::ShflIdx
@@ -1610,6 +1635,164 @@ fn emit_shared_mem_operand(op: &Operand) -> String {
     }
 }
 
+/// Emit WMMA load instruction with proper register list format
+/// Format: wmma.load.{a|b|c}.sync.aligned.m16n16k16.{layout}.{type} {regs}, [ptr], stride
+fn emit_wmma_load(mut s: String, instr: &PtxInstruction, matrix: &str) -> String {
+    // Parse label to get layout, type, stride
+    // Label format: "m16n16k16.{layout}.{type}.stride.{stride}"
+    let label = instr.label.as_deref().unwrap_or("m16n16k16.row.f16.stride.16");
+    let parts: Vec<&str> = label.split('.').collect();
+
+    // Build instruction opcode
+    s.push_str(&format!("wmma.load.{}.sync.aligned", matrix));
+
+    // Add shape, layout, type from label (e.g., "m16n16k16.row.f16")
+    if parts.len() >= 3 {
+        s.push('.');
+        s.push_str(parts[0]); // m16n16k16
+        s.push('.');
+        s.push_str(parts[1]); // row/col
+        s.push('.');
+        s.push_str(parts[2]); // f16/f32
+    } else {
+        s.push_str(".m16n16k16.row.f16");
+    }
+
+    s.push(' ');
+
+    // Destination registers: {%r0, %r1, ..., %r7}
+    s.push('{');
+    for (i, dst) in instr.dsts.iter().enumerate() {
+        s.push_str(&emit_operand(dst));
+        if i < instr.dsts.len() - 1 {
+            s.push_str(", ");
+        }
+    }
+    s.push_str("}, ");
+
+    // Source: [ptr]
+    if let Some(src) = instr.srcs.first() {
+        s.push('[');
+        s.push_str(&emit_operand(src));
+        s.push_str("], ");
+    }
+
+    // Stride
+    if let Some(stride) = instr.srcs.get(1) {
+        s.push_str(&emit_operand(stride));
+    } else {
+        // Extract stride from label (last part after "stride.")
+        if let Some(stride_pos) = label.find("stride.") {
+            s.push_str(&label[stride_pos + 7..]);
+        } else {
+            s.push_str("16");
+        }
+    }
+
+    s.push_str(";\n");
+    s
+}
+
+/// Emit WMMA MMA instruction with proper register list format
+/// Format: wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32 {d}, {a}, {b}, {c}
+fn emit_wmma_mma(mut s: String, instr: &PtxInstruction) -> String {
+    // Label format: "m16n16k16.row.col.f32.f32"
+    let label = instr.label.as_deref().unwrap_or("m16n16k16.row.col.f32.f32");
+
+    s.push_str("wmma.mma.sync.aligned.");
+    s.push_str(label);
+    s.push(' ');
+
+    // D registers (first 8 of dsts)
+    s.push('{');
+    for (i, dst) in instr.dsts.iter().enumerate() {
+        s.push_str(&emit_operand(dst));
+        if i < instr.dsts.len() - 1 {
+            s.push_str(", ");
+        }
+    }
+    s.push_str("}, ");
+
+    // A, B, C registers (each 8 registers from srcs)
+    // Total srcs = 24 (8 A + 8 B + 8 C)
+    let groups = [
+        (0, 8),   // A
+        (8, 16),  // B
+        (16, 24), // C
+    ];
+
+    for (start, end) in groups {
+        s.push('{');
+        for i in start..end.min(instr.srcs.len()) {
+            s.push_str(&emit_operand(&instr.srcs[i]));
+            if i < end.min(instr.srcs.len()) - 1 {
+                s.push_str(", ");
+            }
+        }
+        s.push('}');
+        if end < 24 && end <= instr.srcs.len() {
+            s.push_str(", ");
+        }
+    }
+
+    s.push_str(";\n");
+    s
+}
+
+/// Emit WMMA store instruction with proper format
+/// Format: wmma.store.d.sync.aligned.m16n16k16.{layout}.{type} [ptr], {regs}, stride
+fn emit_wmma_store(mut s: String, instr: &PtxInstruction) -> String {
+    // Label format: "m16n16k16.{layout}.{type}.stride.{stride}"
+    let label = instr.label.as_deref().unwrap_or("m16n16k16.row.f32.stride.16");
+    let parts: Vec<&str> = label.split('.').collect();
+
+    s.push_str("wmma.store.d.sync.aligned");
+
+    // Add shape, layout, type from label
+    if parts.len() >= 3 {
+        s.push('.');
+        s.push_str(parts[0]); // m16n16k16
+        s.push('.');
+        s.push_str(parts[1]); // row
+        s.push('.');
+        s.push_str(parts[2]); // f32
+    } else {
+        s.push_str(".m16n16k16.row.f32");
+    }
+
+    s.push(' ');
+
+    // [ptr]
+    if let Some(src) = instr.srcs.first() {
+        s.push('[');
+        s.push_str(&emit_operand(src));
+        s.push_str("], ");
+    }
+
+    // {regs} - D fragment (srcs 1-8)
+    s.push('{');
+    let frag_end = instr.srcs.len().saturating_sub(1).min(9);
+    for i in 1..frag_end {
+        s.push_str(&emit_operand(&instr.srcs[i]));
+        if i < frag_end - 1 {
+            s.push_str(", ");
+        }
+    }
+    s.push_str("}, ");
+
+    // Stride (last src)
+    if let Some(stride) = instr.srcs.last() {
+        s.push_str(&emit_operand(stride));
+    } else if let Some(stride_pos) = label.find("stride.") {
+        s.push_str(&label[stride_pos + 7..]);
+    } else {
+        s.push_str("16");
+    }
+
+    s.push_str(";\n");
+    s
+}
+
 /// Emit global memory operand with proper [addr] syntax
 fn emit_global_mem_operand(op: &Operand) -> String {
     match op {
@@ -1656,6 +1839,287 @@ fn emit_f32_literal(v: f32) -> String {
 fn emit_f64_literal(v: f64) -> String {
     let bits = v.to_bits();
     format!("0D{:016X}", bits)
+}
+
+/// Write a single instruction directly to a String buffer (zero intermediate allocations)
+///
+/// This is more efficient than `emit_instruction()` for building large PTX output
+/// as it avoids allocating a new String for each instruction.
+#[allow(clippy::too_many_lines)]
+fn write_instruction(instr: &PtxInstruction, out: &mut String) {
+    use std::fmt::Write;
+
+    // Handle labels
+    if let Some(label) = &instr.label {
+        if label.ends_with(':') {
+            let _ = writeln!(out, "{}:", &label[..label.len() - 1]);
+            return;
+        }
+    }
+
+    // Predicate
+    if let Some(pred) = &instr.predicate {
+        let neg = if pred.negated { "!" } else { "" };
+        let _ = write!(out, "    @{}{} ", neg, pred.reg);
+    } else {
+        out.push_str("    ");
+    }
+
+    // Opcode
+    match instr.op {
+        PtxOp::Mov => out.push_str("mov"),
+        PtxOp::Add => out.push_str("add"),
+        PtxOp::Sub => out.push_str("sub"),
+        PtxOp::Mul => {
+            let is_wide_output = instr.ty == PtxType::U64 || instr.ty == PtxType::S64;
+            let has_u64_source = instr.srcs.first().is_some_and(|src| {
+                matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::U64 || vreg.ty() == PtxType::S64)
+            });
+
+            if is_wide_output && !has_u64_source {
+                let src_ty = if instr.ty == PtxType::U64 {
+                    ".u32"
+                } else {
+                    ".s32"
+                };
+                out.push_str("mul.wide");
+                out.push_str(src_ty);
+            } else if is_wide_output && has_u64_source {
+                out.push_str("mul.lo");
+            } else if instr.ty.is_float() {
+                out.push_str("mul");
+            } else {
+                out.push_str("mul.lo");
+            }
+        }
+        PtxOp::MadLo => out.push_str("mad.lo"),
+        PtxOp::Div => {
+            if instr.ty.is_float() {
+                out.push_str("div.rn");
+            } else {
+                out.push_str("div");
+            }
+        }
+        PtxOp::Setp => {
+            let cmp = instr.label.as_deref().unwrap_or("eq");
+            let _ = write!(out, "setp.{}", cmp);
+        }
+        PtxOp::Ld => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            out.push_str("ld");
+            out.push_str(space);
+        }
+        PtxOp::LdParam => out.push_str("ld.param"),
+        PtxOp::St => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            out.push_str("st");
+            out.push_str(space);
+        }
+        PtxOp::Bra => {
+            if let Some(label) = &instr.label {
+                let _ = writeln!(out, "bra {};", label);
+                return;
+            }
+            out.push_str("bra");
+        }
+        PtxOp::Ret => {
+            out.push_str("ret;\n");
+            return;
+        }
+        PtxOp::Bar => {
+            let barrier_id = instr.label.as_deref().unwrap_or("sync 0");
+            let _ = writeln!(out, "bar.{};", barrier_id);
+            return;
+        }
+        PtxOp::Cvt => {
+            let dst_ty = instr.ty.to_ptx_string();
+            let src_ty = if let Some(Operand::Reg(vreg)) = instr.srcs.first() {
+                vreg.ty().to_ptx_string()
+            } else {
+                ".u32"
+            };
+            let src_is_f16 = instr
+                .srcs
+                .first()
+                .is_some_and(|src| matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::F16));
+            let dst_is_f32 = instr.ty == PtxType::F32;
+            let is_f16_to_f32 = src_is_f16 && dst_is_f32;
+
+            let needs_rounding = !is_f16_to_f32
+                && (instr.ty.is_float()
+                    || instr.srcs.first().is_some_and(
+                        |src| matches!(src, Operand::Reg(vreg) if vreg.ty().is_float()),
+                    ));
+            let round = if needs_rounding {
+                instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string())
+            } else {
+                ""
+            };
+            out.push_str("cvt");
+            out.push_str(round);
+            out.push_str(dst_ty);
+            out.push_str(src_ty);
+        }
+        PtxOp::Cvta => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".shared");
+            let ty = instr.ty.to_ptx_string();
+            out.push_str("cvta");
+            out.push_str(space);
+            out.push_str(ty);
+        }
+        PtxOp::Fma => {
+            let round = instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string());
+            out.push_str("fma");
+            out.push_str(round);
+        }
+        PtxOp::ShflDown => out.push_str("shfl.sync.down.b32"),
+        PtxOp::ShflIdx => out.push_str("shfl.sync.idx.b32"),
+        PtxOp::Ex2 => out.push_str("ex2.approx"),
+        // WMMA ops use the existing emit functions for now (complex formatting)
+        PtxOp::WmmaLoadA | PtxOp::WmmaLoadB | PtxOp::WmmaLoadC | PtxOp::WmmaMma | PtxOp::WmmaStoreD => {
+            // Fall back to emit_instruction for complex WMMA ops
+            out.push_str(&emit_instruction(instr));
+            return;
+        }
+        _ => {
+            let _ = write!(out, "{:?}", instr.op);
+            // Convert to lowercase in-place would require unsafe, just use format
+            let op_str = format!("{:?}", instr.op).to_lowercase();
+            out.truncate(out.len() - format!("{:?}", instr.op).len());
+            out.push_str(&op_str);
+        }
+    }
+
+    // Type suffix
+    let is_wide_mul_from_u32 = instr.op == PtxOp::Mul
+        && (instr.ty == PtxType::U64 || instr.ty == PtxType::S64)
+        && !instr.srcs.first().is_some_and(|src| {
+            matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::U64 || vreg.ty() == PtxType::S64)
+        });
+    let skip_type_suffix = instr.op == PtxOp::Cvt
+        || instr.op == PtxOp::Cvta
+        || is_wide_mul_from_u32
+        || instr.op == PtxOp::ShflDown
+        || instr.op == PtxOp::ShflIdx
+        || matches!(
+            instr.op,
+            PtxOp::WmmaLoadA
+                | PtxOp::WmmaLoadB
+                | PtxOp::WmmaLoadC
+                | PtxOp::WmmaMma
+                | PtxOp::WmmaStoreD
+        );
+    if !skip_type_suffix {
+        out.push_str(instr.ty.to_ptx_string());
+    }
+
+    out.push(' ');
+
+    // Destination(s)
+    if !instr.dsts.is_empty() {
+        out.push('{');
+        for (i, dst) in instr.dsts.iter().enumerate() {
+            write_operand(dst, out);
+            if i < instr.dsts.len() - 1 {
+                out.push_str(", ");
+            }
+        }
+        out.push('}');
+        if !instr.srcs.is_empty() {
+            out.push_str(", ");
+        }
+    } else if let Some(dst) = &instr.dst {
+        write_operand(dst, out);
+        if !instr.srcs.is_empty() {
+            out.push_str(", ");
+        }
+    }
+
+    // Sources
+    let is_memory_op = matches!(instr.op, PtxOp::Ld | PtxOp::St);
+    let is_shared_mem = instr.state_space == Some(PtxStateSpace::Shared);
+    let is_global_mem = instr.state_space == Some(PtxStateSpace::Global)
+        || (is_memory_op && instr.state_space.is_none());
+
+    for (i, src) in instr.srcs.iter().enumerate() {
+        if i == 0 && is_memory_op {
+            if is_shared_mem || is_global_mem {
+                write_mem_operand(src, out);
+            } else {
+                write_operand(src, out);
+            }
+        } else {
+            write_operand(src, out);
+        }
+        if i < instr.srcs.len() - 1 {
+            out.push_str(", ");
+        }
+    }
+
+    out.push_str(";\n");
+}
+
+/// Write operand directly to buffer (zero allocation)
+#[inline]
+fn write_operand(op: &Operand, out: &mut String) {
+    use std::fmt::Write;
+    match op {
+        Operand::Reg(vreg) => {
+            let _ = write!(out, "{}", vreg);
+        }
+        Operand::SpecialReg(sreg) => out.push_str(sreg.to_ptx_string()),
+        Operand::ImmI64(v) => {
+            let _ = write!(out, "{}", v);
+        }
+        Operand::ImmU64(v) => {
+            let _ = write!(out, "{}", v);
+        }
+        Operand::ImmF32(v) => {
+            let _ = write!(out, "0F{:08X}", v.to_bits());
+        }
+        Operand::ImmF64(v) => {
+            let _ = write!(out, "0D{:016X}", v.to_bits());
+        }
+        Operand::Param(name) => {
+            let _ = write!(out, "[{}]", name);
+        }
+        Operand::Addr { base, offset } => {
+            if *offset == 0 {
+                let _ = write!(out, "[{}]", base);
+            } else {
+                let _ = write!(out, "[{}+{}]", base, offset);
+            }
+        }
+        Operand::Label(name) => out.push_str(name),
+    }
+}
+
+/// Write memory operand with bracket syntax directly to buffer
+#[inline]
+fn write_mem_operand(op: &Operand, out: &mut String) {
+    use std::fmt::Write;
+    match op {
+        Operand::Reg(vreg) => {
+            let _ = write!(out, "[{}]", vreg);
+        }
+        Operand::Addr { base, offset } => {
+            if *offset == 0 {
+                let _ = write!(out, "[{}]", base);
+            } else {
+                let _ = write!(out, "[{}+{}]", base, offset);
+            }
+        }
+        _ => write_operand(op, out),
+    }
 }
 
 #[cfg(test)]

@@ -43,3 +43,4 @@ perf.data
 .pmat/baseline.json
 .pmat-metrics/
 deep_context.md
+*.o

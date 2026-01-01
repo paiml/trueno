@@ -30,7 +30,7 @@ mod registers;
 mod types;
 
 pub use builder::{KernelBuilder, PtxKernel, PtxModule};
-pub use instructions::{PtxInstruction, PtxOp, WmmaLayout, WmmaShape};
+pub use instructions::{CmpOp, Operand, PtxInstruction, PtxOp, WmmaLayout, WmmaShape};
 pub use registers::{LiveRange, PhysicalReg, PtxReg, RegisterAllocator, VirtualReg};
 pub use types::{PtxStateSpace, PtxType};
 

@@ -7,8 +7,8 @@
 use std::collections::HashMap;
 use trueno_explain::{BugSeverity, PtxBugAnalyzer};
 use trueno_gpu::kernels::{
-    Activation, AttentionKernel, BiasActivationKernel, GemmKernel, Kernel, LayerNormKernel,
-    Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel,
+    AttentionKernel, BiasActivationKernel, GemmKernel, Kernel, LayerNormKernel, Q5KKernel,
+    Q6KKernel, QuantizeKernel, SoftmaxKernel,
 };
 
 fn main() {
@@ -173,5 +173,80 @@ fn main() {
             "\n⚠️  CRITICAL: {} P0 bugs found - these need immediate attention!",
             p0_bugs
         );
+    }
+
+    // =========================================================================
+    // PRODUCTION MODE - With Performance Whitelist
+    // =========================================================================
+    println!(
+        "\n╔══════════════════════════════════════════════════════════════════════════════╗"
+    );
+    println!(
+        "║                    PRODUCTION MODE (WITH PERFORMANCE WHITELIST)              ║"
+    );
+    println!(
+        "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+    );
+
+    let prod_analyzer = PtxBugAnalyzer::strict().with_whitelist(
+        "gemm_tensor_core*", trueno_explain::PtxBugClass::HighRegisterPressure,
+        "Tensor Core WMMA requires many registers for matrix fragments"
+    ).with_whitelist(
+        "gemm_tensor_core*", trueno_explain::PtxBugClass::PredicateOverflow,
+        "Tensor Core kernels use predicates for bounds checking"
+    ).with_whitelist(
+        "gemm_wmma*", trueno_explain::PtxBugClass::HighRegisterPressure,
+        "WMMA FP16 requires registers for matrix fragments"
+    ).with_whitelist(
+        "gemm_wmma*", trueno_explain::PtxBugClass::PredicateOverflow,
+        "WMMA kernels use predicates for tile handling"
+    ).with_whitelist(
+        "flash_attention*", trueno_explain::PtxBugClass::HighRegisterPressure,
+        "FlashAttention tiling requires registers for Q/K/V/O"
+    ).with_whitelist(
+        "attention*", trueno_explain::PtxBugClass::HighRegisterPressure,
+        "Attention kernels require registers for tiling"
+    ).with_whitelist(
+        "q4k*", trueno_explain::PtxBugClass::HighRegisterPressure,
+        "Q4_K dequantization requires registers"
+    ).with_whitelist(
+        "q5k*", trueno_explain::PtxBugClass::HighRegisterPressure,
+        "Q5_K dequantization requires registers"
+    ).with_whitelist(
+        "q6k*", trueno_explain::PtxBugClass::HighRegisterPressure,
+        "Q6_K dequantization requires registers"
+    );
+
+    let mut prod_bugs = 0;
+    let mut prod_p0 = 0;
+
+    for (name, ptx) in &kernels {
+        let result = prod_analyzer.analyze(ptx);
+        let p0 = result.count_by_severity(BugSeverity::Critical);
+        prod_bugs += result.bugs.len();
+        prod_p0 += p0;
+
+        if result.has_bugs() {
+            let icon = if p0 > 0 { "🔴" } else { "🟡" };
+            println!("{} {} - {} bugs remaining", icon, name, result.bugs.len());
+        } else {
+            println!("✅ {} - CLEAN", name);
+        }
+    }
+
+    println!(
+        "\n══════════════════════════════════════════════════════════════════════════════"
+    );
+    println!("PRODUCTION SUMMARY");
+    println!(
+        "══════════════════════════════════════════════════════════════════════════════"
+    );
+    println!("  Bugs after whitelist: {}", prod_bugs);
+    println!("  🔴 P0 Critical: {}", prod_p0);
+
+    if prod_p0 == 0 && prod_bugs == 0 {
+        println!("\n✅ ALL KERNELS PASS PRODUCTION QUALITY GATE");
+    } else if prod_p0 == 0 {
+        println!("\n✅ No critical bugs - {} advisory warnings remain", prod_bugs);
     }
 }

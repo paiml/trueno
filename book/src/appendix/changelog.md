@@ -7,6 +7,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [trueno-gpu 0.4.3] - 2026-01-01
+
+### Performance
+
+- **PTX Emission Optimization** - 20.9% improvement in PTX code generation
+  - Pre-allocated String capacity based on instruction count
+  - Zero-allocation `write_instruction()` writes directly to buffer
+  - Zero-allocation `write_operand()` and `write_mem_operand()` helpers
+  - Added `Display` impl for `VirtualReg` enabling `write!()` formatting
+  - Throughput: 68,316 kernels/sec
+
+### Added
+
+- **Kernel Generation Benchmark** - New example `bench_kernel_gen`
+  - Benchmarks all kernel types: GEMM, Softmax, LayerNorm, Attention, Quantize
+  - Measures generation time, PTX size, and throughput
+
+- **Performance Whitelist** - `PtxBugAnalyzer::with_performance_whitelist()`
+  - Documents expected register pressure in high-performance kernels
+  - Whitelists Tensor Core, Attention, and Quantized kernel patterns
+  - Separates "expected performance tradeoffs" from actual bugs
+
+### Fixed
+
+- **Barrier Safety Analyzer** - Fixed false positives in quantized kernels
+  - Now recognizes `*_done` suffix labels as loop ends (not just `*_end`)
+  - Added explicit patterns: `sb_loop_done`, `sub_block_done`, `k_block_done`
+  - All 22 barrier safety tests pass
+
+## [trueno-gpu 0.4.2] - 2026-01-01
+
+### Fixed
+
+- **PARITY-114: Barrier Safety Bug** - Fixed thread divergence causing CUDA error 700
+  - Root cause: Threads exiting early before `bar.sync` barriers caused remaining threads to hang
+  - Fixed 4 kernels: `gemm_tensor_core`, `gemm_wmma_fp16`, `flash_attention`, `flash_attention_tensor_core`
+  - Fix pattern: Predicated loads (store 0 first), bounds check AFTER loop, all threads participate in barriers
+
+### Added
+
+- **Barrier Safety Analyzer** - Static PTX analysis (PARITY-114 prevention)
+  - `barrier_safety.rs` - Detects early-exit-before-barrier patterns
+  - `Kernel::analyze_barrier_safety()` - Analyze any kernel for violations
+  - `Kernel::emit_ptx_validated()` - Production-ready PTX with safety check
+  - 19 barrier safety tests (9 analyzer + 10 kernel validation)
+
+- **Boundary Condition Tests** - Test dimensions not divisible by tile size
+  - GEMM: 17×17, 33×33, 100×100, single row/column
+  - Attention: seq_len=17, 33, 100
+  - Prevents future PARITY-114 regressions
+
+- **CI Target** - `make barrier-safety` for automated validation
+
+### Changed
+
+- Specification updated to v1.5.0 with 15 new falsification tests (§5.8)
+- Overall test count: 452 tests (up from 441)
+
+## [trueno-gpu 0.4.1] - 2026-01-01
+
+### Added
+
+- **PTX Optimization Passes** - NVIDIA CUDA Tile IR aligned (v1.4.0 spec)
+  - `loop_split.rs` - Loop splitting with profitability analysis (99.80% coverage)
+  - `tko.rs` - Token-Based Ordering for memory dependencies (94.29% coverage)
+  - Exported `CmpOp` and `Operand` in public API
+  - New example: `ptx_optimize` demonstrating all optimization passes
+
+- **Book Chapter** - [PTX Optimization Passes](../architecture/ptx-optimization.md)
+  - FMA Fusion, Loop Splitting, TKO, Tile Validation documentation
+  - Academic references and NVIDIA CUDA Tile IR alignment
+
+### Changed
+
+- Overall test coverage: 94.28% (57 optimize module tests)
+
+## [trueno-gpu 0.4.0] - 2026-01-01
+
+### Fixed
+
+- **WMMA Tensor Core Attention** - Fixed four PTX bugs enabling Tensor Core attention on RTX 4090
+  - Register prefix conflict: B32 registers now use `%rb` prefix instead of `%r`
+  - Zero initialization: Use `mov.f32` instead of loading from NULL pointer
+  - FP16 shared memory store: Use B16 type for 16-bit stores
+  - Address conversion: Added `cvta.shared.u64` for WMMA generic pointer requirement
+  - Added `Cvta` operation to PtxOp enum for address space conversion
+
+### Added
+
+- **Tensor Core Validation Tests** - New kernel validation tests
+  - `tensor_core_attention_ptx_structure` - Verifies WMMA instructions and cvta.shared.u64
+  - `tensor_core_attention_ptx_validate_with_ptxas` - Validates PTX with NVIDIA ptxas
+
+### Performance
+
+- Tensor Core attention benchmarked on RTX 4090:
+  - 64x64: 8.7 GFLOPS (1.01x vs FP32)
+  - 256x64: 80.0 GFLOPS (1.06x vs FP32)
+  - 512x64: 202.5 GFLOPS (1.03x vs FP32)
+
+## [0.9.0] - 2025-12-31
+
+### Added
+
+- **CUDA Tile GPU Optimizations** - Major performance improvements for GPU kernels
+- **TensorView and PartitionView** - New abstractions for tiled reduction
+
 ## [0.8.7] - 2025-12-16
 
 ### Changed

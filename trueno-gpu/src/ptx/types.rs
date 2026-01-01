@@ -128,7 +128,8 @@ impl PtxType {
             Self::Pred => "%p",
             Self::U8 | Self::S8 | Self::B8 => "%rs", // 8-bit short
             Self::U16 | Self::S16 | Self::B16 => "%rh", // 16-bit short
-            Self::U32 | Self::S32 | Self::B32 => "%r", // 32-bit
+            Self::U32 | Self::S32 => "%r", // 32-bit integer
+            Self::B32 => "%rb",                       // 32-bit bitfield (WMMA fragments)
             Self::U64 | Self::S64 | Self::B64 => "%rd", // 64-bit
             Self::F16 | Self::BF16 => "%h",
             Self::F32 | Self::V2F32 | Self::V4F32 => "%f", // f32 and vector f32 use %f registers

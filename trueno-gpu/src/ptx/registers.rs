@@ -4,6 +4,7 @@
 
 use super::types::PtxType;
 use std::collections::HashMap;
+use std::fmt;
 
 /// Special PTX registers (read-only hardware registers)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -109,6 +110,21 @@ impl VirtualReg {
     #[must_use]
     pub fn to_ptx_string(self) -> String {
         format!("{}{}", self.ty.register_prefix(), self.id)
+    }
+
+    /// Write PTX string representation to a buffer (zero-allocation)
+    ///
+    /// This is more efficient than `to_ptx_string()` when building large PTX
+    /// output as it avoids intermediate String allocations.
+    #[inline]
+    pub fn write_to<W: fmt::Write>(self, w: &mut W) -> fmt::Result {
+        write!(w, "{}{}", self.ty.register_prefix(), self.id)
+    }
+}
+
+impl fmt::Display for VirtualReg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.ty.register_prefix(), self.id)
     }
 }
 
