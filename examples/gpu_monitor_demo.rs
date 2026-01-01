@@ -24,10 +24,9 @@
 //! - TRUENO-SPEC-010: GPU Monitoring, Tracing, and Visualization
 //! - Nickolls et al. (2008): GPU parallel computing model
 
-use std::time::Duration;
 use trueno::monitor::{
-    cuda_monitor_available, GpuBackend, GpuDeviceInfo, GpuMemoryMetrics, GpuMonitor,
-    GpuVendor, MonitorConfig, MonitorError,
+    GpuBackend, GpuDeviceInfo, GpuMemoryMetrics,
+    GpuVendor,
 };
 
 fn main() {
@@ -195,6 +194,7 @@ fn main() {
     println!("=================================================");
 }
 
+#[allow(dead_code)]
 fn print_device_info(dev: &GpuDeviceInfo, indent: &str) {
     println!("{}[{}] {} ({})", indent, dev.index, dev.name, dev.backend);
     println!("{}    Vendor: {}", indent, dev.vendor);
@@ -210,6 +210,7 @@ fn print_device_info(dev: &GpuDeviceInfo, indent: &str) {
     }
 }
 
+#[allow(dead_code)]
 fn print_memory_metrics(mem: &GpuMemoryMetrics, indent: &str) {
     println!("{}Total: {} MB", indent, mem.total / (1024 * 1024));
     println!("{}Used:  {} MB", indent, mem.used / (1024 * 1024));
