@@ -396,7 +396,7 @@ roadmap:
     github_issue: null
     title: Optimize attention kernel (79ms/token bottleneck)
     status: inprogress
-    completion: 75
+    completion: 90
     notes: |
       Current: 79.59ms attention + 6.53ms FFN = 86ms/token (11.6 tok/s)
       Target: <2ms/token (500+ tok/s)
@@ -408,8 +408,12 @@ roadmap:
       - FP32 accumulator (wmma_mma_f16_f32)
       - ~40x expected speedup (FP16 Tensor Cores vs FP32 serial)
 
+      INTEGRATED (2026-01-01):
+      - KernelType::AttentionTensorCore added to realizar
+      - presets::tensor_core_attention() added
+      - presets::llama_tensor_core_attention() added
+
       Remaining:
-      - Integrate into realizar attention executor
       - Benchmark to validate performance
   - id: REALIZAR-PARITY-001.4
     github_issue: null
