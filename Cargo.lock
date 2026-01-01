@@ -4961,7 +4961,7 @@ dependencies = [
 
 [[package]]
 name = "trueno"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "bytemuck",
  "criterion",
@@ -5014,7 +5014,7 @@ dependencies = [
 
 [[package]]
 name = "trueno-explain"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "colored",
