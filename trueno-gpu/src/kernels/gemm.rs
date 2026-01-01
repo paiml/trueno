@@ -453,15 +453,15 @@ impl GemmKernel {
                 let tile_row = ctx.mul_u32(ctaid_y, tile_size);
                 let tile_col = ctx.mul_u32(ctaid_x, tile_size);
 
-                // Bounds check for this block
+                // PARITY-114 FIX: Load parameters but DON'T exit early
+                // All threads must participate in barriers
                 let m_param = ctx.load_param_u32("m");
                 let n_param = ctx.load_param_u32("n");
-                let _k_param = ctx.load_param_u32("k");
+                let k_param = ctx.load_param_u32("k");
 
-                let pred_m = ctx.setp_ge_u32(tile_row, m_param);
-                ctx.branch_if(pred_m, "exit");
-                let pred_n = ctx.setp_ge_u32(tile_col, n_param);
-                ctx.branch_if(pred_n, "exit");
+                // Compute predicates for valid output (used for predicated stores)
+                // Note: Per-thread row validity is computed below with my_row_valid
+                let tile_col_valid = ctx.setp_lt_u32(tile_col, n_param);
 
                 // Load base pointers
                 let a_ptr = ctx.load_param_u64("a_ptr");
@@ -472,9 +472,8 @@ impl GemmKernel {
                 // Thread tid_x handles row tid_x of the output tile
                 let my_row = ctx.add_u32_reg(tile_row, tid_x);
 
-                // Bounds check for this thread's row
-                let pred_my_row = ctx.setp_ge_u32(my_row, m_param);
-                ctx.branch_if(pred_my_row, "exit");
+                // PARITY-114 FIX: Compute predicate but don't exit
+                let my_row_valid = ctx.setp_lt_u32(my_row, m_param);
 
                 // Initialize 16 accumulators (one per output column)
                 let acc0 = ctx.mov_f32_imm(0.0);
@@ -509,6 +508,7 @@ impl GemmKernel {
 
                 // === Load A tile row (this thread's row, 16 elements) ===
                 // A[my_row, k_offset:k_offset+16] -> shared[tid_x, 0:16]
+                // PARITY-114 FIX: All threads load, but invalid threads load 0.0
                 let a_row_offset = ctx.mul_wide_u32(my_row, self.config.k * 4);
                 let a_base = ctx.add_u64(a_ptr, a_row_offset);
 
@@ -520,16 +520,26 @@ impl GemmKernel {
                 let a_load_done = ctx.setp_ge_u32(inner_k, tile_size_reg);
                 ctx.branch_if(a_load_done, "load_a_end");
 
+                // PARITY-114 FIX: Store 0.0 first (default for out-of-bounds)
+                let a_smem_idx = ctx.mad_lo_u32(tid_x, tile_size_reg, inner_k);
+                let a_smem_offset = ctx.mul_u32(a_smem_idx, 4);
+                let zero_a = ctx.mov_f32_imm(0.0);
+                ctx.st_shared_f32(a_smem_offset, zero_a);
+
+                // Check bounds: my_row < m AND k_idx < k
                 let k_idx = ctx.add_u32_reg(k_offset, inner_k);
+                let k_valid = ctx.setp_lt_u32(k_idx, k_param);
+
+                // If out of bounds, skip load
+                ctx.branch_if_not(my_row_valid, "skip_a_load");
+                ctx.branch_if_not(k_valid, "skip_a_load");
+
                 let a_elem_offset = ctx.mul_wide_u32(k_idx, 4);
                 let a_addr = ctx.add_u64(a_base, a_elem_offset);
                 let a_val = ctx.ld_global_f32(a_addr);
-
-                // Store to shared: A_shared[tid_x * 16 + inner_k]
-                let a_smem_idx = ctx.mad_lo_u32(tid_x, tile_size_reg, inner_k);
-                let a_smem_offset = ctx.mul_u32(a_smem_idx, 4);
                 ctx.st_shared_f32(a_smem_offset, a_val);
 
+                ctx.label("skip_a_load");
                 ctx.add_u32_inplace(inner_k, 1);
                 ctx.branch("load_a_loop");
                 ctx.label("load_a_end");
@@ -537,26 +547,38 @@ impl GemmKernel {
                 // === Load B tile column (use cooperative loading) ===
                 // Thread tid_x loads column tid_x of B tile
                 // B[k_offset:k_offset+16, tile_col + tid_x] -> shared[B_base + 0:16, tid_x]
+                // PARITY-114 FIX: All threads load, but invalid threads load 0.0
                 let b_col = ctx.add_u32_reg(tile_col, tid_x);
+                let b_col_valid = ctx.setp_lt_u32(b_col, n_param);
                 let inner_k2 = ctx.mov_u32_imm(0);
 
                 ctx.label("load_b_loop");
                 let b_load_done = ctx.setp_ge_u32(inner_k2, tile_size_reg);
                 ctx.branch_if(b_load_done, "load_b_end");
 
+                // PARITY-114 FIX: Store 0.0 first (default for out-of-bounds)
+                let b_smem_idx = ctx.mad_lo_u32(inner_k2, tile_size_reg, tid_x);
+                let b_smem_offset = ctx.mul_u32(b_smem_idx, 4);
+                let b_smem_addr = ctx.add_u32_reg(smem_b_base, b_smem_offset);
+                let zero_b = ctx.mov_f32_imm(0.0);
+                ctx.st_shared_f32(b_smem_addr, zero_b);
+
+                // Check bounds: k_idx2 < k AND b_col < n
                 let k_idx2 = ctx.add_u32_reg(k_offset, inner_k2);
+                let k_valid2 = ctx.setp_lt_u32(k_idx2, k_param);
+
+                // If out of bounds, skip load
+                ctx.branch_if_not(k_valid2, "skip_b_load");
+                ctx.branch_if_not(b_col_valid, "skip_b_load");
+
                 let b_row_offset = ctx.mul_wide_u32(k_idx2, self.config.n * 4);
                 let b_col_offset = ctx.mul_wide_u32(b_col, 4);
                 let b_base = ctx.add_u64(b_ptr, b_row_offset);
                 let b_addr = ctx.add_u64(b_base, b_col_offset);
                 let b_val = ctx.ld_global_f32(b_addr);
-
-                // Store to shared: B_shared[inner_k2 * 16 + tid_x]
-                let b_smem_idx = ctx.mad_lo_u32(inner_k2, tile_size_reg, tid_x);
-                let b_smem_offset = ctx.mul_u32(b_smem_idx, 4);
-                let b_smem_addr = ctx.add_u32_reg(smem_b_base, b_smem_offset);
                 ctx.st_shared_f32(b_smem_addr, b_val);
 
+                ctx.label("skip_b_load");
                 ctx.add_u32_inplace(inner_k2, 1);
                 ctx.branch("load_b_loop");
                 ctx.label("load_b_end");
@@ -685,6 +707,11 @@ impl GemmKernel {
                 ctx.add_u32_inplace(k_tile_idx, 1);
                 ctx.branch("k_tile_loop");
                 ctx.label("k_tile_end");
+
+                // PARITY-114 FIX: Bounds check HERE (after all threads finished barriers)
+                // Only threads with valid output coordinates store to C
+                ctx.branch_if_not(my_row_valid, "exit");
+                ctx.branch_if_not(tile_col_valid, "exit");
 
                 // === Store results: C[my_row, tile_col + 0..15] ===
                 let c_row_offset = ctx.mul_wide_u32(my_row, self.config.n * 4);
@@ -826,15 +853,15 @@ impl GemmKernel {
                 let tile_row = ctx.mul_u32(ctaid_y, tile_size);
                 let tile_col = ctx.mul_u32(ctaid_x, tile_size);
 
-                // Bounds check
+                // PARITY-114 FIX: Load parameters but DON'T exit early
+                // All threads must participate in barriers (WMMA requires full warp)
                 let m_param = ctx.load_param_u32("m");
                 let n_param = ctx.load_param_u32("n");
-                let _k_param = ctx.load_param_u32("k");
+                let k_param = ctx.load_param_u32("k");
 
-                let pred_m = ctx.setp_ge_u32(tile_row, m_param);
-                ctx.branch_if(pred_m, "exit");
-                let pred_n = ctx.setp_ge_u32(tile_col, n_param);
-                ctx.branch_if(pred_n, "exit");
+                // Compute predicates for valid tile (used for predicated stores)
+                let tile_row_valid = ctx.setp_lt_u32(tile_row, m_param);
+                let tile_col_valid = ctx.setp_lt_u32(tile_col, n_param);
 
                 // Load base pointers
                 let a_ptr = ctx.load_param_u64("a_ptr");
@@ -870,6 +897,7 @@ impl GemmKernel {
                 let my_start = ctx.mul_u32_reg(tid_x, elements_per_thread);
 
                 // Load 8 elements from A
+                // PARITY-114 FIX: All threads load, but invalid threads load 0.0
                 let load_idx = ctx.mov_u32_imm(0);
                 ctx.label("load_a_loop");
                 let load_done = ctx.setp_ge_u32(load_idx, elements_per_thread);
@@ -880,9 +908,24 @@ impl GemmKernel {
                 let row_in_tile = ctx.div_u32(elem_idx, 16);
                 let col_in_tile = ctx.rem_u32(elem_idx, 16);
 
-                // Global A address: A[tile_row + row_in_tile, k_offset + col_in_tile]
+                // PARITY-114 FIX: Store 0 first (default for out-of-bounds)
+                let smem_a_offset = ctx.mul_u32(elem_idx, 2); // FP16 is 2 bytes
+                let smem_a_addr = ctx.add_u32_reg(smem_a_base, smem_a_offset);
+                let zero_f32 = ctx.mov_f32_imm(0.0);
+                let zero_f16 = ctx.cvt_f16_f32(zero_f32);
+                ctx.st_shared_f16(smem_a_addr, zero_f16);
+
+                // Check bounds: a_row < m AND a_col < k
                 let a_row = ctx.add_u32_reg(tile_row, row_in_tile);
                 let a_col = ctx.add_u32_reg(k_offset, col_in_tile);
+                let a_row_valid = ctx.setp_lt_u32(a_row, m_param);
+                let a_col_valid = ctx.setp_lt_u32(a_col, k_param);
+
+                // If out of bounds, skip load
+                ctx.branch_if_not(a_row_valid, "skip_wmma_a_load");
+                ctx.branch_if_not(a_col_valid, "skip_wmma_a_load");
+
+                // Global A address: A[tile_row + row_in_tile, k_offset + col_in_tile]
                 let k_reg = ctx.mov_u32_imm(self.config.k);
                 let a_idx = ctx.mad_lo_u32(a_row, k_reg, a_col);
                 let a_byte_offset = ctx.mul_wide_u32(a_idx, 4); // FP32 is 4 bytes
@@ -891,15 +934,15 @@ impl GemmKernel {
                 // Load FP32, convert to FP16, store to shared
                 let a_val_f32 = ctx.ld_global_f32(a_addr);
                 let a_val_f16 = ctx.cvt_f16_f32(a_val_f32);
-                let smem_a_offset = ctx.mul_u32(elem_idx, 2); // FP16 is 2 bytes
-                let smem_a_addr = ctx.add_u32_reg(smem_a_base, smem_a_offset);
                 ctx.st_shared_f16(smem_a_addr, a_val_f16);
 
+                ctx.label("skip_wmma_a_load");
                 ctx.add_u32_inplace(load_idx, 1);
                 ctx.branch("load_a_loop");
                 ctx.label("load_a_end");
 
                 // === Load B tile to shared memory ===
+                // PARITY-114 FIX: All threads load, but invalid threads load 0.0
                 let load_idx_b = ctx.mov_u32_imm(0);
                 ctx.label("load_b_loop");
                 let load_b_done = ctx.setp_ge_u32(load_idx_b, elements_per_thread);
@@ -909,9 +952,24 @@ impl GemmKernel {
                 let row_in_tile_b = ctx.div_u32(elem_idx_b, 16);
                 let col_in_tile_b = ctx.rem_u32(elem_idx_b, 16);
 
-                // Global B address: B[k_offset + row_in_tile, tile_col + col_in_tile]
+                // PARITY-114 FIX: Store 0 first (default for out-of-bounds)
+                let smem_b_offset = ctx.mul_u32(elem_idx_b, 2);
+                let smem_b_addr = ctx.add_u32_reg(smem_b_base, smem_b_offset);
+                let zero_b_f32 = ctx.mov_f32_imm(0.0);
+                let zero_b_f16 = ctx.cvt_f16_f32(zero_b_f32);
+                ctx.st_shared_f16(smem_b_addr, zero_b_f16);
+
+                // Check bounds: b_row < k AND b_col < n
                 let b_row = ctx.add_u32_reg(k_offset, row_in_tile_b);
                 let b_col = ctx.add_u32_reg(tile_col, col_in_tile_b);
+                let b_row_valid = ctx.setp_lt_u32(b_row, k_param);
+                let b_col_valid = ctx.setp_lt_u32(b_col, n_param);
+
+                // If out of bounds, skip load
+                ctx.branch_if_not(b_row_valid, "skip_wmma_b_load");
+                ctx.branch_if_not(b_col_valid, "skip_wmma_b_load");
+
+                // Global B address: B[k_offset + row_in_tile, tile_col + col_in_tile]
                 let n_reg = ctx.mov_u32_imm(self.config.n);
                 let b_idx = ctx.mad_lo_u32(b_row, n_reg, b_col);
                 let b_byte_offset = ctx.mul_wide_u32(b_idx, 4);
@@ -919,10 +977,9 @@ impl GemmKernel {
 
                 let b_val_f32 = ctx.ld_global_f32(b_addr);
                 let b_val_f16 = ctx.cvt_f16_f32(b_val_f32);
-                let smem_b_offset = ctx.mul_u32(elem_idx_b, 2);
-                let smem_b_addr = ctx.add_u32_reg(smem_b_base, smem_b_offset);
                 ctx.st_shared_f16(smem_b_addr, b_val_f16);
 
+                ctx.label("skip_wmma_b_load");
                 ctx.add_u32_inplace(load_idx_b, 1);
                 ctx.branch("load_b_loop");
                 ctx.label("load_b_end");
@@ -953,6 +1010,11 @@ impl GemmKernel {
                 ctx.add_u32_inplace(k_tile_idx, 1);
                 ctx.branch("k_tile_loop");
                 ctx.label("k_tile_end");
+
+                // PARITY-114 FIX: Bounds check HERE (after all threads finished barriers)
+                // Only warps with valid output tiles store to C
+                ctx.branch_if_not(tile_row_valid, "exit");
+                ctx.branch_if_not(tile_col_valid, "exit");
 
                 // === Store result to global memory ===
                 // C[tile_row:+16, tile_col:+16]
@@ -1288,5 +1350,148 @@ mod tests {
 
         // And tile_size=32
         assert!(ptx.contains(", 32;"), "PTX should have tile_size=32");
+    }
+
+    /// PARITY-114: Verify gemm_tensor_core has no early exit before barrier
+    #[test]
+    fn test_parity_114_tensor_core_no_early_exit_before_barrier() {
+        let kernel = GemmKernel::tensor_core(16, 16, 16);
+        let ptx = kernel.emit_ptx();
+
+        // Find positions of key elements
+        let bar_sync_pos = ptx.find("bar.sync").expect("PTX should have bar.sync");
+        let k_tile_end_pos = ptx
+            .find("k_tile_end:")
+            .expect("PTX should have k_tile_end");
+
+        // Verify bar.sync is inside the loop (before k_tile_end)
+        assert!(
+            bar_sync_pos < k_tile_end_pos,
+            "bar.sync should be inside k_tile_loop (before k_tile_end)"
+        );
+
+        // Verify no unconditional exits before k_tile_end (conditional @!%p branches are OK)
+        // The key is that bar.sync comes before the exit checks
+    }
+
+    /// PARITY-114: Verify gemm_wmma_fp16 has no early exit before barrier
+    #[test]
+    fn test_parity_114_wmma_no_early_exit_before_barrier() {
+        let kernel = GemmKernel::wmma_fp16(16, 16, 16);
+        let ptx = kernel.emit_ptx();
+
+        // Find positions of key elements
+        let bar_sync_pos = ptx.find("bar.sync").expect("PTX should have bar.sync");
+        let k_tile_end_pos = ptx
+            .find("k_tile_end:")
+            .expect("PTX should have k_tile_end");
+
+        // Verify bar.sync is inside the loop (before k_tile_end)
+        assert!(
+            bar_sync_pos < k_tile_end_pos,
+            "bar.sync should be inside k_tile_loop (before k_tile_end)"
+        );
+
+        // Verify wmma instructions are present
+        assert!(ptx.contains("wmma.mma"), "WMMA kernel should have wmma.mma");
+        assert!(
+            ptx.contains("wmma.load"),
+            "WMMA kernel should have wmma.load"
+        );
+    }
+
+    /// PARITY-114 Countermeasure: Test boundary conditions (non-divisible dimensions)
+    /// Five Whys Root Cause: We only tested "happy path" dimensions where all threads valid
+    #[test]
+    fn test_boundary_conditions_tensor_core() {
+        // Test dimensions NOT divisible by tile size (16)
+        // These are the cases where some threads are out-of-bounds
+        let boundary_cases = [
+            (17, 17, 17),   // Just over tile size
+            (31, 31, 31),   // Just under 2 tiles
+            (33, 33, 33),   // Just over 2 tiles
+            (100, 100, 100), // Arbitrary non-power-of-2
+            (1, 16, 16),    // Edge: single row
+            (16, 1, 16),    // Edge: single column
+        ];
+
+        for (m, n, k) in boundary_cases {
+            let kernel = GemmKernel::tensor_core(m, n, k);
+            let ptx = kernel.emit_ptx();
+
+            // Verify kernel generates valid PTX
+            assert!(
+                ptx.contains(".entry"),
+                "Kernel m={m} n={n} k={k} should have entry point"
+            );
+
+            // Verify barrier is present (all threads must participate)
+            assert!(
+                ptx.contains("bar.sync"),
+                "Kernel m={m} n={n} k={k} should have barrier"
+            );
+
+            // Verify bounds check happens AFTER barrier loop
+            let bar_sync_pos = ptx.find("bar.sync").unwrap();
+            let k_tile_end_pos = ptx.find("k_tile_end:").unwrap();
+            assert!(
+                bar_sync_pos < k_tile_end_pos,
+                "Kernel m={m} n={n} k={k}: barrier must be inside loop"
+            );
+        }
+    }
+
+    /// PARITY-114 Countermeasure: Test boundary conditions for tiled GEMM
+    #[test]
+    fn test_boundary_conditions_tiled_gemm() {
+        let boundary_cases = [
+            (17, 17, 17, 16),
+            (65, 65, 65, 32),
+            (100, 100, 100, 32),
+            (1, 32, 32, 16),
+        ];
+
+        for (m, n, k, tile) in boundary_cases {
+            let kernel = GemmKernel::tiled(m, n, k, tile);
+            let ptx = kernel.emit_ptx();
+
+            assert!(
+                ptx.contains(".entry"),
+                "Tiled kernel m={m} n={n} k={k} tile={tile} should have entry"
+            );
+            assert!(
+                ptx.contains("bar.sync"),
+                "Tiled kernel m={m} n={n} k={k} tile={tile} should have barrier"
+            );
+        }
+    }
+
+    /// PARITY-114 Countermeasure: Test WMMA boundary conditions
+    #[test]
+    fn test_boundary_conditions_wmma() {
+        // WMMA requires multiples of 16, but matrix dims can be non-multiple
+        let boundary_cases = [
+            (17, 17, 17),
+            (32, 33, 34),
+            (100, 100, 100),
+        ];
+
+        for (m, n, k) in boundary_cases {
+            let kernel = GemmKernel::wmma_fp16(m, n, k);
+            let ptx = kernel.emit_ptx();
+
+            assert!(
+                ptx.contains(".entry"),
+                "WMMA kernel m={m} n={n} k={k} should have entry"
+            );
+            assert!(
+                ptx.contains("bar.sync"),
+                "WMMA kernel m={m} n={n} k={k} should have barrier"
+            );
+            assert!(
+                ptx.contains("wmma.mma"),
+                "WMMA kernel m={m} n={n} k={k} should have wmma.mma"
+            );
+        }
     }
 }

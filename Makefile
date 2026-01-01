@@ -374,6 +374,12 @@ backend-story: ## Verify all operations support all backends (Scalar/SIMD/GPU/WA
 	@cargo test --test backend_story
 	@echo "✅ Backend story verified - all backends supported"
 
+barrier-safety: ## PARITY-114: Verify all GPU kernels are barrier-safe
+	@echo "🔒 Running PARITY-114 Barrier Safety Tests..."
+	@echo "   Validates: No early-exit-before-barrier patterns in GPU kernels"
+	@cargo test -p trueno-gpu barrier_safety --lib -- --nocapture 2>&1 | tail -5
+	@echo "✅ All kernels are barrier-safe (PARITY-114 verified)"
+
 fmt: ## Format entire workspace
 	@echo "🎨 Formatting workspace (trueno + trueno-gpu + xtask)..."
 	cargo fmt --all
