@@ -396,17 +396,33 @@ roadmap:
     github_issue: null
     title: Optimize attention kernel (79ms/token bottleneck)
     status: inprogress
-    completion: 0
+    completion: 75
     notes: |
       Current: 79.59ms attention + 6.53ms FFN = 86ms/token (11.6 tok/s)
       Target: <2ms/token (500+ tok/s)
       Root cause: FP32 attention, 32 serial layer launches
+
+      IMPLEMENTED (2026-01-01):
+      - TensorCoreAttentionKernel using WMMA for Q×K^T
+      - FP16 WMMA loads (wmma_load_a_f16, wmma_load_b_f16)
+      - FP32 accumulator (wmma_mma_f16_f32)
+      - ~40x expected speedup (FP16 Tensor Cores vs FP32 serial)
+
+      Remaining:
+      - Integrate into realizar attention executor
+      - Benchmark to validate performance
   - id: REALIZAR-PARITY-001.4
     github_issue: null
     title: Add FP16 Tensor Core support
-    status: planned
-    completion: 0
-    notes: Required for 10x attention speedup
+    status: completed
+    completion: 100
+    notes: |
+      IMPLEMENTED (2026-01-01):
+      - AttentionKernel::tensor_core() constructor
+      - with_tensor_cores() builder method
+      - WMMA 16×16×16 tiles for Q×K^T computation
+      - FP32→FP16 conversion in shared memory loading
+      - Tests added and passing
   - id: REALIZAR-PARITY-001.5
     github_issue: null
     title: Benchmark and validate parity
