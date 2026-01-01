@@ -727,8 +727,6 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// This is more efficient than 1D reduction for 2D data (images, matrices)
 /// as it exploits 2D spatial locality in GPU memory hierarchies.
 ///
-/// Note: Not yet integrated into GpuDevice - see GitHub issue #76 for GPU validation.
-#[allow(dead_code)]
 pub const TILED_SUM_REDUCTION_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;
@@ -804,9 +802,6 @@ fn main(
 ///
 /// Computes max reduction using 16×16 workgroups for optimal memory coalescing.
 /// Same algorithm as tiled sum reduction but with max operation.
-///
-/// Note: Not yet integrated into GpuDevice - see GitHub issue #76 for GPU validation.
-#[allow(dead_code)]
 pub const TILED_MAX_REDUCTION_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;
@@ -867,6 +862,80 @@ fn main(
     workgroupBarrier();
     if (lx == 0u) {
         if (ly < 1u) { tile[ly][0] = max(tile[ly][0], tile[ly + 1u][0]); }
+    }
+
+    // First thread writes workgroup result
+    if (lx == 0u && ly == 0u) {
+        let wg_idx = workgroup_id.y * num_workgroups.x + workgroup_id.x;
+        partial_results[wg_idx] = tile[0][0];
+    }
+}
+"#;
+
+/// 2D Tiled Min Reduction compute shader (WGSL)
+///
+/// Computes min reduction using 16×16 workgroups for optimal memory coalescing.
+/// Same algorithm as tiled sum reduction but with min operation.
+pub const TILED_MIN_REDUCTION_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;
+@group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;
+
+struct Dimensions {
+    width: u32,
+    height: u32,
+}
+
+@group(0) @binding(2) var<uniform> dims: Dimensions;
+
+var<workgroup> tile: array<array<f32, 16>, 16>;
+
+@compute @workgroup_size(16, 16)
+fn main(
+    @builtin(global_invocation_id) global_id: vec3<u32>,
+    @builtin(local_invocation_id) local_id: vec3<u32>,
+    @builtin(workgroup_id) workgroup_id: vec3<u32>,
+    @builtin(num_workgroups) num_workgroups: vec3<u32>,
+) {
+    let lx = local_id.x;
+    let ly = local_id.y;
+    let gx = global_id.x;
+    let gy = global_id.y;
+
+    // Load to shared memory (use +inf for out-of-bounds)
+    var val: f32 = 3.402823466e+38; // +FLT_MAX
+    if (gx < dims.width && gy < dims.height) {
+        let idx = gy * dims.width + gx;
+        val = input[idx];
+    }
+    tile[ly][lx] = val;
+
+    workgroupBarrier();
+
+    // Row reduction with min
+    if (lx < 8u) { tile[ly][lx] = min(tile[ly][lx], tile[ly][lx + 8u]); }
+    workgroupBarrier();
+    if (lx < 4u) { tile[ly][lx] = min(tile[ly][lx], tile[ly][lx + 4u]); }
+    workgroupBarrier();
+    if (lx < 2u) { tile[ly][lx] = min(tile[ly][lx], tile[ly][lx + 2u]); }
+    workgroupBarrier();
+    if (lx < 1u) { tile[ly][lx] = min(tile[ly][lx], tile[ly][lx + 1u]); }
+    workgroupBarrier();
+
+    // Column reduction with min
+    if (lx == 0u) {
+        if (ly < 8u) { tile[ly][0] = min(tile[ly][0], tile[ly + 8u][0]); }
+    }
+    workgroupBarrier();
+    if (lx == 0u) {
+        if (ly < 4u) { tile[ly][0] = min(tile[ly][0], tile[ly + 4u][0]); }
+    }
+    workgroupBarrier();
+    if (lx == 0u) {
+        if (ly < 2u) { tile[ly][0] = min(tile[ly][0], tile[ly + 2u][0]); }
+    }
+    workgroupBarrier();
+    if (lx == 0u) {
+        if (ly < 1u) { tile[ly][0] = min(tile[ly][0], tile[ly + 1u][0]); }
     }
 
     // First thread writes workgroup result
