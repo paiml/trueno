@@ -296,11 +296,11 @@ roadmap:
   github_issue: null
   item_type: task
   title: 'trueno-gpu: Pure Rust PTX Generation Sub-crate'
-  status: inprogress
+  status: completed
   priority: high
   assigned_to: claude
   created: 2025-12-10T21:00:00Z
-  updated: 2025-12-10T21:30:00Z
+  updated: 2026-01-01T01:12:32.551187710+00:00
   spec: |
     Pure Rust PTX generation for NVIDIA CUDA - no LLVM, no nvcc.
 
@@ -334,4 +334,83 @@ roadmap:
   - ptx
   - cuda
   - extreme-tdd
+  notes: null
+- id: REALIZAR-PARITY-001
+  github_issue: null
+  item_type: epic
+  title: 'realizar CUDA Integration: Achieve llama.cpp Performance Parity'
+  status: inprogress
+  priority: critical
+  assigned_to: claude
+  created: 2026-01-01T12:00:00Z
+  updated: 2026-01-01T12:00:00Z
+  spec: |
+    Integrate trueno-gpu CUDA kernels into realizar to achieve llama.cpp performance parity.
+
+    Current State:
+    - realizar → trueno (wgpu) → Vulkan: ~13 tok/s
+    - llama.cpp → CUDA: ~555 tok/s (42x faster)
+    - Root cause: Generic WGSL shaders, CPU dequant, no FlashAttention
+
+    Target State:
+    - realizar → trueno-gpu (cuda) → PTX → NVIDIA Driver
+    - Target: 150-400 tok/s (10-30x improvement)
+
+    trueno-gpu Already Provides:
+    - QuantizeKernel::ggml() - Fused Q4_K dequant+GEMM
+    - AttentionKernel - FlashAttention with causal masking
+    - GemvKernel - M=1 decode (cuBLAS parity target)
+    - CudaContext, CudaModule, GpuBuffer - CUDA driver FFI
+
+    Integration Tasks:
+    1. Add trueno-gpu dependency to realizar (cuda feature)
+    2. Replace wgpu GEMM with QuantizeKernel for Q4_K weights
+    3. Add FlashAttention using AttentionKernel
+    4. Use GemvKernel for M=1 decode throughput
+    5. Benchmark and iterate
+
+    Performance Targets:
+    - Q4_K GEMM: 10x gain (fused dequant)
+    - Attention: 4x gain (FlashAttention)
+    - M=1 Decode: 3x gain (GEMV warp-reduce)
+  acceptance_criteria:
+  - realizar tok/s >= 150 on RTX 4090
+  - Q4_K models run without CPU dequant
+  - FlashAttention enabled for context > 512
+  - GEMV used for decode (M=1)
+  phases: []
+  subtasks:
+  - id: REALIZAR-PARITY-001.1
+    github_issue: null
+    title: Add trueno-gpu cuda dependency
+    status: planned
+    completion: 0
+  - id: REALIZAR-PARITY-001.2
+    github_issue: null
+    title: Replace wgpu GEMM with QuantizeKernel
+    status: planned
+    completion: 0
+  - id: REALIZAR-PARITY-001.3
+    github_issue: null
+    title: Integrate AttentionKernel (FlashAttention)
+    status: planned
+    completion: 0
+  - id: REALIZAR-PARITY-001.4
+    github_issue: null
+    title: Add GemvKernel for M=1 decode
+    status: planned
+    completion: 0
+  - id: REALIZAR-PARITY-001.5
+    github_issue: null
+    title: Benchmark and validate parity
+    status: planned
+    completion: 0
+  estimated_effort: 2-3 weeks
+  labels:
+  - gpu
+  - cuda
+  - performance
+  - realizar
+  - llm-inference
+  - parity
   notes: null
