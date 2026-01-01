@@ -426,8 +426,15 @@ roadmap:
   - id: REALIZAR-PARITY-001.5
     github_issue: null
     title: Benchmark and validate parity
-    status: planned
-    completion: 0
+    status: inprogress
+    completion: 25
+    notes: |
+      PTX validation complete:
+      - Standard FP32: 3928 bytes, 146 lines
+      - Tensor Core FP16: 5627 bytes, 208 lines (+43%)
+      - WMMA instructions present: ✅
+
+      Next: JIT compile and benchmark on RTX 4090
   estimated_effort: 2-3 weeks
   labels:
   - gpu
