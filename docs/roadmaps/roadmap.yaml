@@ -431,14 +431,20 @@ roadmap:
     github_issue: null
     title: Benchmark and validate parity
     status: inprogress
-    completion: 25
+    completion: 50
     notes: |
-      PTX validation complete:
-      - Standard FP32: 3928 bytes, 146 lines
-      - Tensor Core FP16: 5627 bytes, 208 lines (+43%)
+      PTX validation complete (2026-01-01):
+      - Standard FP32: 3996 bytes, 148 lines
+      - Tensor Core FP16: 5702 bytes, 210 lines (+43%)
       - WMMA instructions present: ✅
+      - All presets working: llama_tensor_core_attention, tensor_core_attention
 
-      Next: JIT compile and benchmark on RTX 4090
+      Integration validated:
+      - realizar KernelType::AttentionTensorCore generates valid PTX
+      - Kernel name: flash_attention_tensor_core_causal
+      - presets work correctly
+
+      Next: JIT compile and run latency benchmark on RTX 4090
   estimated_effort: 2-3 weeks
   labels:
   - gpu
