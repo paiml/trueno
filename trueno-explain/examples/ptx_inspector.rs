@@ -68,18 +68,15 @@ fn inspect_ptx(name: &str, ptx: &str) {
 }
 
 fn main() {
-    println!(
-        "╔══════════════════════════════════════════════════════════════════════════════╗"
-    );
-    println!(
-        "║                          PTX INSPECTOR - DEEP DIVE                           ║"
-    );
-    println!(
-        "╚══════════════════════════════════════════════════════════════════════════════╝"
-    );
+    println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║                          PTX INSPECTOR - DEEP DIVE                           ║");
+    println!("╚══════════════════════════════════════════════════════════════════════════════╝");
 
     // Inspect kernels that use shared memory
-    inspect_ptx("gemm_tiled_64", &GemmKernel::tiled(64, 64, 64, 16).emit_ptx());
+    inspect_ptx(
+        "gemm_tiled_64",
+        &GemmKernel::tiled(64, 64, 64, 16).emit_ptx(),
+    );
     inspect_ptx(
         "gemm_tensor_core",
         &GemmKernel::tensor_core(64, 64, 64).emit_ptx(),
@@ -90,10 +87,7 @@ fn main() {
     );
     inspect_ptx("softmax_1024", &SoftmaxKernel::new(1024).emit_ptx());
     inspect_ptx("layernorm_256", &LayerNormKernel::new(256).emit_ptx());
-    inspect_ptx(
-        "attention_64_32",
-        &AttentionKernel::new(64, 32).emit_ptx(),
-    );
+    inspect_ptx("attention_64_32", &AttentionKernel::new(64, 32).emit_ptx());
 
     // Summary
     println!("\n{}", "=".repeat(80));

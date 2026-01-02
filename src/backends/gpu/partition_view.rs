@@ -262,7 +262,6 @@ impl<T> PartitionView<T> {
             (size as u32, 1, 1)
         }
     }
-
 }
 
 impl<T> Clone for PartitionView<T> {

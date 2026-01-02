@@ -8,10 +8,12 @@
 #![allow(clippy::unwrap_used)]
 
 use trueno_explain::{
-    Analyzer, BugSeverity, PtxAnalyzer, PtxBugAnalyzer, PtxBugClass,
-    PtxCoverageTracker, PtxCoverageTrackerBuilder,
+    Analyzer, BugSeverity, PtxAnalyzer, PtxBugAnalyzer, PtxBugClass, PtxCoverageTracker,
+    PtxCoverageTrackerBuilder,
 };
-use trueno_gpu::kernels::{GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel};
+use trueno_gpu::kernels::{
+    GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel,
+};
 
 // ============================================================================
 // EDGE CASE: Shared Memory Addressing
@@ -291,13 +293,19 @@ fn test_entry_without_visible() {
 #[test]
 fn test_empty_ptx() {
     let result = PtxBugAnalyzer::new().analyze("");
-    assert!(!result.has_bug(&PtxBugClass::MissingEntryPoint), "Empty PTX should not flag missing entry");
+    assert!(
+        !result.has_bug(&PtxBugClass::MissingEntryPoint),
+        "Empty PTX should not flag missing entry"
+    );
 }
 
 #[test]
 fn test_whitespace_only_ptx() {
     let result = PtxBugAnalyzer::new().analyze("   \n\t\n   ");
-    assert!(!result.has_bug(&PtxBugClass::MissingEntryPoint), "Whitespace-only PTX should not flag");
+    assert!(
+        !result.has_bug(&PtxBugClass::MissingEntryPoint),
+        "Whitespace-only PTX should not flag"
+    );
 }
 
 // ============================================================================
@@ -310,7 +318,10 @@ fn test_gemm_naive_no_critical_bugs() {
     let ptx = kernel.emit_ptx();
 
     let result = PtxBugAnalyzer::new().analyze(&ptx);
-    assert!(result.is_valid(), "GEMM naive should not have critical bugs");
+    assert!(
+        result.is_valid(),
+        "GEMM naive should not have critical bugs"
+    );
 }
 
 #[test]
@@ -497,7 +508,11 @@ fn test_generate_ptx_bug_report() {
         };
 
         if !test_passed {
-            bugs_found.push((desc.to_string(), ptx.to_string(), format!("{:?}", result.bugs)));
+            bugs_found.push((
+                desc.to_string(),
+                ptx.to_string(),
+                format!("{:?}", result.bugs),
+            ));
         }
     }
 
@@ -524,20 +539,38 @@ fn test_generate_ptx_bug_report() {
 #[test]
 fn test_bug_severity_correct() {
     // P0 Critical
-    assert_eq!(PtxBugClass::MissingBarrierSync.severity(), BugSeverity::Critical);
-    assert_eq!(PtxBugClass::SharedMemU64Addressing.severity(), BugSeverity::Critical);
-    assert_eq!(PtxBugClass::LoopBranchToEnd.severity(), BugSeverity::Critical);
+    assert_eq!(
+        PtxBugClass::MissingBarrierSync.severity(),
+        BugSeverity::Critical
+    );
+    assert_eq!(
+        PtxBugClass::SharedMemU64Addressing.severity(),
+        BugSeverity::Critical
+    );
+    assert_eq!(
+        PtxBugClass::LoopBranchToEnd.severity(),
+        BugSeverity::Critical
+    );
 
     // P1 High
     assert_eq!(PtxBugClass::RegisterSpills.severity(), BugSeverity::High);
-    assert_eq!(PtxBugClass::NonInPlaceLoopAccumulator.severity(), BugSeverity::High);
+    assert_eq!(
+        PtxBugClass::NonInPlaceLoopAccumulator.severity(),
+        BugSeverity::High
+    );
 
     // P2 Medium
     assert_eq!(PtxBugClass::RedundantMoves.severity(), BugSeverity::Medium);
-    assert_eq!(PtxBugClass::UnoptimizedMemoryPattern.severity(), BugSeverity::Medium);
+    assert_eq!(
+        PtxBugClass::UnoptimizedMemoryPattern.severity(),
+        BugSeverity::Medium
+    );
 
     // False Positive
-    assert_eq!(PtxBugClass::MissingEntryPoint.severity(), BugSeverity::FalsePositive);
+    assert_eq!(
+        PtxBugClass::MissingEntryPoint.severity(),
+        BugSeverity::FalsePositive
+    );
 }
 
 #[test]
@@ -655,7 +688,10 @@ fn test_coverage_tracker_basic() {
     let report = coverage.generate_report();
 
     assert_eq!(report.total_features, 2);
-    assert!(report.coverage >= 0.5, "Should cover at least entry_point and register_allocation");
+    assert!(
+        report.coverage >= 0.5,
+        "Should cover at least entry_point and register_allocation"
+    );
 }
 
 /// Test default coverage tracker
@@ -667,7 +703,10 @@ fn test_coverage_tracker_default() {
     coverage.analyze(&ptx);
 
     let report = coverage.generate_report();
-    assert!(report.total_features >= 6, "Default tracker should have 6+ features");
+    assert!(
+        report.total_features >= 6,
+        "Default tracker should have 6+ features"
+    );
 }
 
 // ============================================================================
@@ -745,11 +784,26 @@ fn test_extended_bug_hunt_all_kernels() {
     // Generate all kernels
     let kernels: Vec<(&str, String)> = vec![
         ("gemm_naive_64", GemmKernel::naive(64, 64, 64).emit_ptx()),
-        ("gemm_naive_128", GemmKernel::naive(128, 128, 128).emit_ptx()),
-        ("gemm_tiled_64", GemmKernel::tiled(64, 64, 64, 16).emit_ptx()),
-        ("gemm_tiled_128", GemmKernel::tiled(128, 128, 128, 32).emit_ptx()),
-        ("gemm_tensor_core", GemmKernel::tensor_core(64, 64, 64).emit_ptx()),
-        ("gemm_wmma_fp16", GemmKernel::wmma_fp16(64, 64, 64).emit_ptx()),
+        (
+            "gemm_naive_128",
+            GemmKernel::naive(128, 128, 128).emit_ptx(),
+        ),
+        (
+            "gemm_tiled_64",
+            GemmKernel::tiled(64, 64, 64, 16).emit_ptx(),
+        ),
+        (
+            "gemm_tiled_128",
+            GemmKernel::tiled(128, 128, 128, 32).emit_ptx(),
+        ),
+        (
+            "gemm_tensor_core",
+            GemmKernel::tensor_core(64, 64, 64).emit_ptx(),
+        ),
+        (
+            "gemm_wmma_fp16",
+            GemmKernel::wmma_fp16(64, 64, 64).emit_ptx(),
+        ),
         ("softmax_1024", SoftmaxKernel::new(1024).emit_ptx()),
         ("softmax_4096", SoftmaxKernel::new(4096).emit_ptx()),
         ("layernorm_256", LayerNormKernel::new(256).emit_ptx()),
@@ -782,7 +836,14 @@ fn test_extended_bug_hunt_all_kernels() {
         p2_bugs += p2;
 
         if result.has_bugs() {
-            println!("❌ {} - {} bugs ({} P0, {} P1, {} P2)", name, result.bugs.len(), p0, p1, p2);
+            println!(
+                "❌ {} - {} bugs ({} P0, {} P1, {} P2)",
+                name,
+                result.bugs.len(),
+                p0,
+                p1,
+                p2
+            );
             for bug in &result.bugs {
                 println!("   └─ {}: {}", bug.class.code(), bug.message);
             }
@@ -799,7 +860,10 @@ fn test_extended_bug_hunt_all_kernels() {
     println!("  P2 Medium: {}", p2_bugs);
 
     // All trueno kernels should pass (no P0 critical bugs)
-    assert_eq!(p0_bugs, 0, "CRITICAL: No P0 bugs allowed in trueno kernels!");
+    assert_eq!(
+        p0_bugs, 0,
+        "CRITICAL: No P0 bugs allowed in trueno kernels!"
+    );
 }
 
 /// Test: New detectors don't produce false positives on clean kernels
@@ -849,10 +913,22 @@ DONE:
     let result = PtxBugAnalyzer::new().analyze(clean_ptx);
 
     // Should not have false positives
-    assert!(!result.has_bug(&PtxBugClass::EmptyLoopBody), "Clean kernel should not have EmptyLoopBody");
-    assert!(!result.has_bug(&PtxBugClass::MissingBoundsCheck), "Clean kernel has bounds check");
-    assert!(!result.has_bug(&PtxBugClass::DeadCode), "Clean kernel has no dead code");
-    assert!(!result.has_bug(&PtxBugClass::PlaceholderCode), "Clean kernel has no placeholder comments");
+    assert!(
+        !result.has_bug(&PtxBugClass::EmptyLoopBody),
+        "Clean kernel should not have EmptyLoopBody"
+    );
+    assert!(
+        !result.has_bug(&PtxBugClass::MissingBoundsCheck),
+        "Clean kernel has bounds check"
+    );
+    assert!(
+        !result.has_bug(&PtxBugClass::DeadCode),
+        "Clean kernel has no dead code"
+    );
+    assert!(
+        !result.has_bug(&PtxBugClass::PlaceholderCode),
+        "Clean kernel has no placeholder comments"
+    );
     assert!(result.is_valid(), "Clean kernel should be valid");
 }
 
@@ -928,9 +1004,15 @@ fn test_dead_code_detection() {
 #[test]
 fn test_extended_bug_severities() {
     assert_eq!(PtxBugClass::EmptyLoopBody.severity(), BugSeverity::High);
-    assert_eq!(PtxBugClass::MissingBoundsCheck.severity(), BugSeverity::High);
+    assert_eq!(
+        PtxBugClass::MissingBoundsCheck.severity(),
+        BugSeverity::High
+    );
     assert_eq!(PtxBugClass::DeadCode.severity(), BugSeverity::Medium);
-    assert_eq!(PtxBugClass::HighRegisterPressure.severity(), BugSeverity::High);
+    assert_eq!(
+        PtxBugClass::HighRegisterPressure.severity(),
+        BugSeverity::High
+    );
     assert_eq!(PtxBugClass::PredicateOverflow.severity(), BugSeverity::High);
     assert_eq!(PtxBugClass::PlaceholderCode.severity(), BugSeverity::High);
 }

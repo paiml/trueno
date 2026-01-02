@@ -215,11 +215,7 @@ pub fn tiled_min_2d(data: &[f32], width: usize, height: usize) -> f32 {
 ///
 /// Returns the partial reduction result for each tile, which can be
 /// compared against GPU partial results buffer for validation.
-pub fn tiled_reduce_partial<Op: ReduceOp>(
-    data: &[f32],
-    width: usize,
-    height: usize,
-) -> Vec<f32> {
+pub fn tiled_reduce_partial<Op: ReduceOp>(data: &[f32], width: usize, height: usize) -> Vec<f32> {
     if data.is_empty() || width == 0 || height == 0 {
         return vec![];
     }
@@ -249,7 +245,10 @@ mod tests {
         let data: Vec<f32> = (1..=16).map(|x| x as f32).collect();
         let sum = tiled_sum_2d(&data, 4, 4);
         let expected: f32 = (1..=16).sum::<i32>() as f32;
-        assert!((sum - expected).abs() < 1e-5, "sum={sum}, expected={expected}");
+        assert!(
+            (sum - expected).abs() < 1e-5,
+            "sum={sum}, expected={expected}"
+        );
     }
 
     #[test]
@@ -258,7 +257,10 @@ mod tests {
         let data: Vec<f32> = (1..=256).map(|x| x as f32).collect();
         let sum = tiled_sum_2d(&data, 16, 16);
         let expected: f32 = (1..=256).sum::<i32>() as f32;
-        assert!((sum - expected).abs() < 1e-3, "sum={sum}, expected={expected}");
+        assert!(
+            (sum - expected).abs() < 1e-3,
+            "sum={sum}, expected={expected}"
+        );
     }
 
     #[test]

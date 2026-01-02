@@ -10,7 +10,9 @@
 //! Tests are named with their claim ID for traceability.
 
 use trueno::simulation::{BackendCategory, BackendSelector, BackendTolerance, JidokaGuard};
-use trueno::{select_backend_for_operation, select_best_available_backend, Backend, OperationType, Vector};
+use trueno::{
+    select_backend_for_operation, select_best_available_backend, Backend, OperationType, Vector,
+};
 
 #[cfg(test)]
 use simular::engine::rng::SimRng;
@@ -59,7 +61,12 @@ fn test_a002_backend_consistent_add() {
     let result2 = a.add(&b).expect("add failed");
 
     // Compare element-by-element (should be exact)
-    for (i, (r1, r2)) in result1.as_slice().iter().zip(result2.as_slice().iter()).enumerate() {
+    for (i, (r1, r2)) in result1
+        .as_slice()
+        .iter()
+        .zip(result2.as_slice().iter())
+        .enumerate()
+    {
         assert_eq!(
             r1.to_bits(),
             r2.to_bits(),
@@ -226,7 +233,12 @@ fn test_a003_avx512_matches_scalar() {
 
     // Test add
     let result_add = va.add(&vb).expect("add failed");
-    for (i, (r, (&x, &y))) in result_add.as_slice().iter().zip(a.iter().zip(b.iter())).enumerate() {
+    for (i, (r, (&x, &y))) in result_add
+        .as_slice()
+        .iter()
+        .zip(a.iter().zip(b.iter()))
+        .enumerate()
+    {
         let expected = x + y;
         assert!(
             (*r - expected).abs() < f32::EPSILON,
@@ -238,7 +250,12 @@ fn test_a003_avx512_matches_scalar() {
 
     // Test mul
     let result_mul = va.mul(&vb).expect("mul failed");
-    for (i, (r, (&x, &y))) in result_mul.as_slice().iter().zip(a.iter().zip(b.iter())).enumerate() {
+    for (i, (r, (&x, &y))) in result_mul
+        .as_slice()
+        .iter()
+        .zip(a.iter().zip(b.iter()))
+        .enumerate()
+    {
         let expected = x * y;
         assert!(
             (*r - expected).abs() < f32::EPSILON,
@@ -334,7 +351,12 @@ fn test_a014_wasm_simd_speedup() {
     let result = va.add(&vb).expect("WASM SIMD add failed");
 
     // Verify correctness
-    for (i, (r, (&x, &y))) in result.as_slice().iter().zip(a.iter().zip(b.iter())).enumerate() {
+    for (i, (r, (&x, &y))) in result
+        .as_slice()
+        .iter()
+        .zip(a.iter().zip(b.iter()))
+        .enumerate()
+    {
         let expected = x + y;
         assert!(
             (*r - expected).abs() < f32::EPSILON,
@@ -408,7 +430,12 @@ fn test_b017_deterministic_output() {
         let result2 = a2.add(&b_vec).expect("add failed");
 
         // Verify bitwise equality
-        for (i, (r1, r2)) in result.as_slice().iter().zip(result2.as_slice().iter()).enumerate() {
+        for (i, (r1, r2)) in result
+            .as_slice()
+            .iter()
+            .zip(result2.as_slice().iter())
+            .enumerate()
+        {
             assert_eq!(
                 r1.to_bits(),
                 r2.to_bits(),
@@ -743,8 +770,12 @@ fn test_b030_thread_local_isolation() {
 #[test]
 fn test_c031_add_commutativity() {
     let mut rng = SimRng::new(31);
-    let a: Vec<f32> = (0..1000).map(|_| rng.gen_f64() as f32 * 200.0 - 100.0).collect();
-    let b: Vec<f32> = (0..1000).map(|_| rng.gen_f64() as f32 * 200.0 - 100.0).collect();
+    let a: Vec<f32> = (0..1000)
+        .map(|_| rng.gen_f64() as f32 * 200.0 - 100.0)
+        .collect();
+    let b: Vec<f32> = (0..1000)
+        .map(|_| rng.gen_f64() as f32 * 200.0 - 100.0)
+        .collect();
 
     let vec_a = Vector::from_slice(&a);
     let vec_b = Vector::from_slice(&b);
@@ -800,8 +831,12 @@ fn test_c032_add_associativity() {
 #[test]
 fn test_c033_mul_commutativity() {
     let mut rng = SimRng::new(33);
-    let a: Vec<f32> = (0..1000).map(|_| rng.gen_f64() as f32 * 20.0 - 10.0).collect();
-    let b: Vec<f32> = (0..1000).map(|_| rng.gen_f64() as f32 * 20.0 - 10.0).collect();
+    let a: Vec<f32> = (0..1000)
+        .map(|_| rng.gen_f64() as f32 * 20.0 - 10.0)
+        .collect();
+    let b: Vec<f32> = (0..1000)
+        .map(|_| rng.gen_f64() as f32 * 20.0 - 10.0)
+        .collect();
 
     let vec_a = Vector::from_slice(&a);
     let vec_b = Vector::from_slice(&b);
@@ -869,7 +904,8 @@ fn test_c036_relu_definition() {
 
     for (i, (r, e)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
         assert_eq!(
-            *r, *e,
+            *r,
+            *e,
             "C-036 FALSIFIED: relu({}) = {}, expected {}",
             input.as_slice()[i],
             r,
@@ -1113,7 +1149,8 @@ fn test_c046_avx2_register_width() {
     for i in 0..size {
         let expected = (i + i + 1) as f32;
         assert_eq!(
-            result.as_slice()[i], expected,
+            result.as_slice()[i],
+            expected,
             "C-046 FALSIFIED: AVX2 256-bit operation incorrect at index {i}"
         );
     }
@@ -1136,7 +1173,8 @@ fn test_c047_avx512_register_width() {
     for i in 0..size {
         let expected = (i + i + 1) as f32;
         assert_eq!(
-            result.as_slice()[i], expected,
+            result.as_slice()[i],
+            expected,
             "C-047 FALSIFIED: AVX-512 512-bit operation incorrect at index {i}"
         );
     }
@@ -1159,7 +1197,8 @@ fn test_c048_neon_register_width() {
     for i in 0..size {
         let expected = (i + i + 1) as f32;
         assert_eq!(
-            result.as_slice()[i], expected,
+            result.as_slice()[i],
+            expected,
             "C-048 FALSIFIED: NEON 128-bit operation incorrect at index {i}"
         );
     }
@@ -1242,7 +1281,10 @@ fn test_backend_tolerance_for_backends() {
     let tolerance = BackendTolerance::default();
 
     // Scalar vs Scalar
-    assert_eq!(tolerance.for_backends(Backend::Scalar, Backend::Scalar), 0.0);
+    assert_eq!(
+        tolerance.for_backends(Backend::Scalar, Backend::Scalar),
+        0.0
+    );
 
     // Scalar vs SIMD (should be exact)
     assert_eq!(tolerance.for_backends(Backend::Scalar, Backend::AVX2), 0.0);
@@ -1470,11 +1512,11 @@ fn test_d062_grid_block_dimensions() {
     const MAX_THREADS_PER_BLOCK: u32 = 1024;
 
     let test_configs = vec![
-        (256, 1, 1),    // 1D block
-        (16, 16, 1),    // 2D block
-        (8, 8, 4),      // 3D block
-        (32, 32, 1),    // Large 2D
-        (1024, 1, 1),   // Max 1D
+        (256, 1, 1),  // 1D block
+        (16, 16, 1),  // 2D block
+        (8, 8, 4),    // 3D block
+        (32, 32, 1),  // Large 2D
+        (1024, 1, 1), // Max 1D
     ];
 
     for (x, y, z) in test_configs {
@@ -1512,11 +1554,11 @@ fn test_d063_shared_memory_limit() {
     const MAX_SHARED_MEMORY: usize = 48 * 1024;
 
     let test_allocations = vec![
-        1024,           // 1KB
-        4096,           // 4KB
-        16384,          // 16KB
-        32768,          // 32KB
-        48 * 1024 - 1,  // Just under limit
+        1024,          // 1KB
+        4096,          // 4KB
+        16384,         // 16KB
+        32768,         // 32KB
+        48 * 1024 - 1, // Just under limit
     ];
 
     for alloc in test_allocations {
@@ -1551,7 +1593,11 @@ fn test_d065_ptx_vs_cpu_reference() {
     let simulated_gpu_result = [1.0f32, 2.0, 3.0, 4.0];
 
     let tolerance = 1e-5;
-    for (i, (cpu, gpu)) in cpu_result.iter().zip(simulated_gpu_result.iter()).enumerate() {
+    for (i, (cpu, gpu)) in cpu_result
+        .iter()
+        .zip(simulated_gpu_result.iter())
+        .enumerate()
+    {
         let diff = (cpu - gpu).abs();
         assert!(
             diff <= tolerance,
@@ -1800,7 +1846,10 @@ fn test_e079_error_messages() {
     let err_msg = format!("{:?}", result.err().unwrap());
     // Error message should mention the sizes
     assert!(
-        err_msg.contains("3") || err_msg.contains("2") || err_msg.contains("mismatch") || err_msg.contains("Mismatch"),
+        err_msg.contains("3")
+            || err_msg.contains("2")
+            || err_msg.contains("mismatch")
+            || err_msg.contains("Mismatch"),
         "E-079 FALSIFIED: Error message not actionable: {}",
         err_msg
     );
@@ -1924,11 +1973,19 @@ fn test_f085_color_palette_mapping() {
 
     // 0.0 should map to start color
     let at_0 = palette.interpolate(0.0);
-    assert_eq!(at_0, Rgb::new(68, 1, 84), "F-085: 0.0 should map to viridis start");
+    assert_eq!(
+        at_0,
+        Rgb::new(68, 1, 84),
+        "F-085: 0.0 should map to viridis start"
+    );
 
     // 1.0 should map to end color
     let at_1 = palette.interpolate(1.0);
-    assert_eq!(at_1, Rgb::new(253, 231, 37), "F-085: 1.0 should map to viridis end");
+    assert_eq!(
+        at_1,
+        Rgb::new(253, 231, 37),
+        "F-085: 1.0 should map to viridis end"
+    );
 }
 
 /// F-086: Auto-normalize handles constant inputs
@@ -1985,8 +2042,7 @@ fn test_f088_single_pixel_detection() {
 /// F-089: Visual diff threshold application
 #[test]
 fn test_f089_threshold_application() {
-    let config = VisualRegressionConfig::default()
-        .with_max_diff_pct(5.0); // Allow 5% different pixels
+    let config = VisualRegressionConfig::default().with_max_diff_pct(5.0); // Allow 5% different pixels
 
     let result = PixelDiffResult {
         different_pixels: 5,
@@ -2179,7 +2235,10 @@ fn test_g097_report_schema() {
     // max_op_time_ms should not exceed mean (which is 1.0ms in this test)
     // Verify the value is sensible - max should be >= mean for timing data
     let max_as_f64 = result.max_op_time_ms as f64;
-    assert!(max_as_f64 >= result.mean_op_time_ms, "G-097 FALSIFIED: max_op_time should be >= mean");
+    assert!(
+        max_as_f64 >= result.mean_op_time_ms,
+        "G-097 FALSIFIED: max_op_time should be >= mean"
+    );
     assert!(result.timing_variance >= 0.0);
 }
 

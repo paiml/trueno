@@ -7,7 +7,7 @@
 //! - **GEMM**: Matrix multiplication (naive, tiled, Tensor Core)
 //! - **Softmax**: Numerically stable softmax with warp shuffle
 //! - **LayerNorm**: Fused layer normalization
-//! - **Attention**: FlashAttention-style tiled attention
+//! - **Attention**: FlashAttention-style tiled attention + incremental (PAR-020)
 //! - **Quantize**: Q4_K/Q5_K/Q6_K dequantization fused with matmul (PARITY-115/116/117)
 //! - **BiasActivation**: Fused bias + activation epilogue (ReLU, GELU)
 //! - **GEMV**: Matrix-vector multiply for M=1 decode throughput (CoalescedGemvKernel)
@@ -19,18 +19,25 @@
 
 mod attention;
 mod bias_activation;
+mod elementwise;
 mod gemm;
 mod gemv;
 mod layernorm;
 mod quantize;
 mod softmax;
 
-pub use attention::AttentionKernel;
+pub use attention::{AttentionKernel, IncrementalAttentionKernel};
 pub use bias_activation::{Activation, BiasActivationKernel};
+pub use elementwise::{
+    ElementwiseMulKernel, FusedResidualRmsNormKernel, FusedSwigluKernel, GeluKernel,
+    ResidualAddKernel, SiluKernel,
+};
 pub use gemm::{GemmConfig, GemmKernel};
 pub use gemv::{CoalescedGemvKernel, GemvKernel};
-pub use layernorm::LayerNormKernel;
-pub use quantize::{Q5KKernel, Q6KKernel, QuantizeKernel};
+pub use layernorm::{LayerNormKernel, RmsNormKernel};
+pub use quantize::{
+    Q4KGemvKernel, Q5KGemvKernel, Q5KKernel, Q6KGemvKernel, Q6KKernel, QuantizeKernel,
+};
 pub use softmax::SoftmaxKernel;
 
 use crate::ptx::optimize::barrier_safety::{self, BarrierSafetyResult};

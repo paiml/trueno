@@ -52,7 +52,10 @@ fn main() {
     let non_aligned: TensorView<f32> = TensorView::new([100, 100, 1, 1]);
     let partition2: PartitionView<f32> = PartitionView::new(non_aligned, [16, 16, 1, 1]);
     println!("\n   Non-aligned tensor: [100, 100]");
-    println!("   Tile count: {:?} (ceil division)", partition2.tile_count());
+    println!(
+        "   Tile count: {:?} (ceil division)",
+        partition2.tile_count()
+    );
     println!("   Total tiles: {}", partition2.total_tiles());
 
     // Get tile info for edge tiles
@@ -116,7 +119,8 @@ fn main() {
     println!("   ───────────────────────");
 
     let row_major: TensorView<f32> = TensorView::new([4, 4, 1, 1]);
-    let col_major: TensorView<f32> = TensorView::new([4, 4, 1, 1]).with_layout(MemoryLayout::ColumnMajor);
+    let col_major: TensorView<f32> =
+        TensorView::new([4, 4, 1, 1]).with_layout(MemoryLayout::ColumnMajor);
 
     println!("   Row-major strides: {:?}", row_major.strides());
     println!("   Col-major strides: {:?}", col_major.strides());

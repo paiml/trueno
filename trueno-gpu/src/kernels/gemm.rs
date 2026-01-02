@@ -1360,9 +1360,7 @@ mod tests {
 
         // Find positions of key elements
         let bar_sync_pos = ptx.find("bar.sync").expect("PTX should have bar.sync");
-        let k_tile_end_pos = ptx
-            .find("k_tile_end:")
-            .expect("PTX should have k_tile_end");
+        let k_tile_end_pos = ptx.find("k_tile_end:").expect("PTX should have k_tile_end");
 
         // Verify bar.sync is inside the loop (before k_tile_end)
         assert!(
@@ -1382,9 +1380,7 @@ mod tests {
 
         // Find positions of key elements
         let bar_sync_pos = ptx.find("bar.sync").expect("PTX should have bar.sync");
-        let k_tile_end_pos = ptx
-            .find("k_tile_end:")
-            .expect("PTX should have k_tile_end");
+        let k_tile_end_pos = ptx.find("k_tile_end:").expect("PTX should have k_tile_end");
 
         // Verify bar.sync is inside the loop (before k_tile_end)
         assert!(
@@ -1407,12 +1403,12 @@ mod tests {
         // Test dimensions NOT divisible by tile size (16)
         // These are the cases where some threads are out-of-bounds
         let boundary_cases = [
-            (17, 17, 17),   // Just over tile size
-            (31, 31, 31),   // Just under 2 tiles
-            (33, 33, 33),   // Just over 2 tiles
+            (17, 17, 17),    // Just over tile size
+            (31, 31, 31),    // Just under 2 tiles
+            (33, 33, 33),    // Just over 2 tiles
             (100, 100, 100), // Arbitrary non-power-of-2
-            (1, 16, 16),    // Edge: single row
-            (16, 1, 16),    // Edge: single column
+            (1, 16, 16),     // Edge: single row
+            (16, 1, 16),     // Edge: single column
         ];
 
         for (m, n, k) in boundary_cases {
@@ -1470,11 +1466,7 @@ mod tests {
     #[test]
     fn test_boundary_conditions_wmma() {
         // WMMA requires multiples of 16, but matrix dims can be non-multiple
-        let boundary_cases = [
-            (17, 17, 17),
-            (32, 33, 34),
-            (100, 100, 100),
-        ];
+        let boundary_cases = [(17, 17, 17), (32, 33, 34), (100, 100, 100)];
 
         for (m, n, k) in boundary_cases {
             let kernel = GemmKernel::wmma_fp16(m, n, k);

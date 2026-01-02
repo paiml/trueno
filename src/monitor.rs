@@ -193,7 +193,12 @@ pub struct GpuDeviceInfo {
 impl GpuDeviceInfo {
     /// Create a new device info with required fields
     #[must_use]
-    pub fn new(index: u32, name: impl Into<String>, vendor: GpuVendor, backend: GpuBackend) -> Self {
+    pub fn new(
+        index: u32,
+        name: impl Into<String>,
+        vendor: GpuVendor,
+        backend: GpuBackend,
+    ) -> Self {
         Self {
             index,
             name: name.into(),
@@ -1008,7 +1013,10 @@ mod tests {
     fn h0_mon_06_vendor_display() {
         assert_eq!(format!("{}", GpuVendor::Nvidia), "NVIDIA");
         assert_eq!(format!("{}", GpuVendor::Amd), "AMD");
-        assert_eq!(format!("{}", GpuVendor::Unknown(0x1234)), "Unknown (0x1234)");
+        assert_eq!(
+            format!("{}", GpuVendor::Unknown(0x1234)),
+            "Unknown (0x1234)"
+        );
     }
 
     // =========================================================================
@@ -1270,7 +1278,10 @@ mod tests {
 
     #[test]
     fn h0_mon_80_error_display() {
-        assert_eq!(format!("{}", MonitorError::NoDevice), "No GPU device available");
+        assert_eq!(
+            format!("{}", MonitorError::NoDevice),
+            "No GPU device available"
+        );
         assert_eq!(
             format!("{}", MonitorError::InvalidDevice(5)),
             "Invalid device index: 5"

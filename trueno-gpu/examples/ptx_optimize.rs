@@ -217,7 +217,11 @@ fn demo_tile_validation() {
     println!("\nWMMA (Tensor Core) shapes:");
     let wmma_16x16x16 = WmmaShape::M16N16K16;
     let wmma_8x32x16 = WmmaShape::M8N32K16;
-    let wmma_invalid = WmmaShape { m: 24, n: 24, k: 16 };
+    let wmma_invalid = WmmaShape {
+        m: 24,
+        n: 24,
+        k: 16,
+    };
 
     match tile_validation::validate_wmma_shape(&wmma_16x16x16) {
         Ok(()) => println!("  m16n16k16 OK (standard)"),

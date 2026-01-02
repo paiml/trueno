@@ -12,31 +12,40 @@ use trueno_gpu::kernels::{
 };
 
 fn main() {
-    println!(
-        "\n╔══════════════════════════════════════════════════════════════════════════════╗"
-    );
-    println!(
-        "║                    DEEP PTX BUG HUNT (STRICT MODE, NO WHITELIST)              ║"
-    );
-    println!(
-        "╚══════════════════════════════════════════════════════════════════════════════╝\n"
-    );
+    println!("\n╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║                    DEEP PTX BUG HUNT (STRICT MODE, NO WHITELIST)              ║");
+    println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
 
     // Generate ALL kernel variants
     let kernels: Vec<(&str, String)> = vec![
         // GEMM variants
         ("gemm_naive_32", GemmKernel::naive(32, 32, 32).emit_ptx()),
         ("gemm_naive_64", GemmKernel::naive(64, 64, 64).emit_ptx()),
-        ("gemm_naive_128", GemmKernel::naive(128, 128, 128).emit_ptx()),
-        ("gemm_naive_256", GemmKernel::naive(256, 256, 256).emit_ptx()),
+        (
+            "gemm_naive_128",
+            GemmKernel::naive(128, 128, 128).emit_ptx(),
+        ),
+        (
+            "gemm_naive_256",
+            GemmKernel::naive(256, 256, 256).emit_ptx(),
+        ),
         ("gemm_tiled_32", GemmKernel::tiled(32, 32, 32, 8).emit_ptx()),
-        ("gemm_tiled_64", GemmKernel::tiled(64, 64, 64, 16).emit_ptx()),
-        ("gemm_tiled_128", GemmKernel::tiled(128, 128, 128, 32).emit_ptx()),
+        (
+            "gemm_tiled_64",
+            GemmKernel::tiled(64, 64, 64, 16).emit_ptx(),
+        ),
+        (
+            "gemm_tiled_128",
+            GemmKernel::tiled(128, 128, 128, 32).emit_ptx(),
+        ),
         (
             "gemm_tensor_core",
             GemmKernel::tensor_core(64, 64, 64).emit_ptx(),
         ),
-        ("gemm_wmma_fp16", GemmKernel::wmma_fp16(64, 64, 64).emit_ptx()),
+        (
+            "gemm_wmma_fp16",
+            GemmKernel::wmma_fp16(64, 64, 64).emit_ptx(),
+        ),
         // Softmax variants
         ("softmax_256", SoftmaxKernel::new(256).emit_ptx()),
         ("softmax_1024", SoftmaxKernel::new(1024).emit_ptx()),
@@ -149,13 +158,9 @@ fn main() {
         }
     }
 
-    println!(
-        "\n══════════════════════════════════════════════════════════════════════════════"
-    );
+    println!("\n══════════════════════════════════════════════════════════════════════════════");
     println!("SUMMARY: {} kernels analyzed", kernels.len());
-    println!(
-        "══════════════════════════════════════════════════════════════════════════════"
-    );
+    println!("══════════════════════════════════════════════════════════════════════════════");
     println!("  Total bugs: {}", total_bugs);
     println!("  🔴 P0 Critical: {}", p0_bugs);
     println!("  🟡 P1 High: {}", p1_bugs);
@@ -178,44 +183,56 @@ fn main() {
     // =========================================================================
     // PRODUCTION MODE - With Performance Whitelist
     // =========================================================================
-    println!(
-        "\n╔══════════════════════════════════════════════════════════════════════════════╗"
-    );
-    println!(
-        "║                    PRODUCTION MODE (WITH PERFORMANCE WHITELIST)              ║"
-    );
-    println!(
-        "╚══════════════════════════════════════════════════════════════════════════════╝\n"
-    );
+    println!("\n╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║                    PRODUCTION MODE (WITH PERFORMANCE WHITELIST)              ║");
+    println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
 
-    let prod_analyzer = PtxBugAnalyzer::strict().with_whitelist(
-        "gemm_tensor_core*", trueno_explain::PtxBugClass::HighRegisterPressure,
-        "Tensor Core WMMA requires many registers for matrix fragments"
-    ).with_whitelist(
-        "gemm_tensor_core*", trueno_explain::PtxBugClass::PredicateOverflow,
-        "Tensor Core kernels use predicates for bounds checking"
-    ).with_whitelist(
-        "gemm_wmma*", trueno_explain::PtxBugClass::HighRegisterPressure,
-        "WMMA FP16 requires registers for matrix fragments"
-    ).with_whitelist(
-        "gemm_wmma*", trueno_explain::PtxBugClass::PredicateOverflow,
-        "WMMA kernels use predicates for tile handling"
-    ).with_whitelist(
-        "flash_attention*", trueno_explain::PtxBugClass::HighRegisterPressure,
-        "FlashAttention tiling requires registers for Q/K/V/O"
-    ).with_whitelist(
-        "attention*", trueno_explain::PtxBugClass::HighRegisterPressure,
-        "Attention kernels require registers for tiling"
-    ).with_whitelist(
-        "q4k*", trueno_explain::PtxBugClass::HighRegisterPressure,
-        "Q4_K dequantization requires registers"
-    ).with_whitelist(
-        "q5k*", trueno_explain::PtxBugClass::HighRegisterPressure,
-        "Q5_K dequantization requires registers"
-    ).with_whitelist(
-        "q6k*", trueno_explain::PtxBugClass::HighRegisterPressure,
-        "Q6_K dequantization requires registers"
-    );
+    let prod_analyzer = PtxBugAnalyzer::strict()
+        .with_whitelist(
+            "gemm_tensor_core*",
+            trueno_explain::PtxBugClass::HighRegisterPressure,
+            "Tensor Core WMMA requires many registers for matrix fragments",
+        )
+        .with_whitelist(
+            "gemm_tensor_core*",
+            trueno_explain::PtxBugClass::PredicateOverflow,
+            "Tensor Core kernels use predicates for bounds checking",
+        )
+        .with_whitelist(
+            "gemm_wmma*",
+            trueno_explain::PtxBugClass::HighRegisterPressure,
+            "WMMA FP16 requires registers for matrix fragments",
+        )
+        .with_whitelist(
+            "gemm_wmma*",
+            trueno_explain::PtxBugClass::PredicateOverflow,
+            "WMMA kernels use predicates for tile handling",
+        )
+        .with_whitelist(
+            "flash_attention*",
+            trueno_explain::PtxBugClass::HighRegisterPressure,
+            "FlashAttention tiling requires registers for Q/K/V/O",
+        )
+        .with_whitelist(
+            "attention*",
+            trueno_explain::PtxBugClass::HighRegisterPressure,
+            "Attention kernels require registers for tiling",
+        )
+        .with_whitelist(
+            "q4k*",
+            trueno_explain::PtxBugClass::HighRegisterPressure,
+            "Q4_K dequantization requires registers",
+        )
+        .with_whitelist(
+            "q5k*",
+            trueno_explain::PtxBugClass::HighRegisterPressure,
+            "Q5_K dequantization requires registers",
+        )
+        .with_whitelist(
+            "q6k*",
+            trueno_explain::PtxBugClass::HighRegisterPressure,
+            "Q6_K dequantization requires registers",
+        );
 
     let mut prod_bugs = 0;
     let mut prod_p0 = 0;
@@ -234,19 +251,18 @@ fn main() {
         }
     }
 
-    println!(
-        "\n══════════════════════════════════════════════════════════════════════════════"
-    );
+    println!("\n══════════════════════════════════════════════════════════════════════════════");
     println!("PRODUCTION SUMMARY");
-    println!(
-        "══════════════════════════════════════════════════════════════════════════════"
-    );
+    println!("══════════════════════════════════════════════════════════════════════════════");
     println!("  Bugs after whitelist: {}", prod_bugs);
     println!("  🔴 P0 Critical: {}", prod_p0);
 
     if prod_p0 == 0 && prod_bugs == 0 {
         println!("\n✅ ALL KERNELS PASS PRODUCTION QUALITY GATE");
     } else if prod_p0 == 0 {
-        println!("\n✅ No critical bugs - {} advisory warnings remain", prod_bugs);
+        println!(
+            "\n✅ No critical bugs - {} advisory warnings remain",
+            prod_bugs
+        );
     }
 }

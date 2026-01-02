@@ -78,5 +78,8 @@ fn main() {
     }
     let elapsed = start.elapsed();
     let kernels_per_sec = heavy_iterations as f64 / elapsed.as_secs_f64();
-    println!("Throughput: {:.0} kernels/sec (gemm_tiled_64)", kernels_per_sec);
+    println!(
+        "Throughput: {:.0} kernels/sec (gemm_tiled_64)",
+        kernels_per_sec
+    );
 }

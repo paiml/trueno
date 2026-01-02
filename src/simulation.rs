@@ -276,7 +276,11 @@ impl BufferRenderer {
             let color = if value.is_nan() {
                 Rgb::NAN_COLOR
             } else if value.is_infinite() {
-                if value > 0.0 { Rgb::INF_COLOR } else { Rgb::NEG_INF_COLOR }
+                if value > 0.0 {
+                    Rgb::INF_COLOR
+                } else {
+                    Rgb::NEG_INF_COLOR
+                }
             } else {
                 let t = (value - min_val) / (max_val - min_val);
                 self.palette.interpolate(t)
@@ -456,10 +460,10 @@ pub struct StressThresholds {
 impl Default for StressThresholds {
     fn default() -> Self {
         Self {
-            max_op_time_ms: 1000,              // 1s max per op
+            max_op_time_ms: 1000,                // 1s max per op
             max_memory_bytes: 256 * 1024 * 1024, // 256MB max
-            max_timing_variance: 0.5,          // 50% max variance
-            max_failure_rate: 0.0,             // Zero failures allowed
+            max_timing_variance: 0.5,            // 50% max variance
+            max_failure_rate: 0.0,               // Zero failures allowed
         }
     }
 }
@@ -800,7 +804,10 @@ impl std::fmt::Display for JidokaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NanDetected { context, indices } => {
-                write!(f, "Jidoka: NaN detected at {context} (indices: {indices:?})")
+                write!(
+                    f,
+                    "Jidoka: NaN detected at {context} (indices: {indices:?})"
+                )
             }
             Self::InfDetected { context, indices } => {
                 write!(
@@ -860,7 +867,11 @@ pub struct JidokaGuard {
 impl JidokaGuard {
     /// Create a new Jidoka guard
     #[must_use]
-    pub fn new(condition: JidokaCondition, action: JidokaAction, context: impl Into<String>) -> Self {
+    pub fn new(
+        condition: JidokaCondition,
+        action: JidokaAction,
+        context: impl Into<String>,
+    ) -> Self {
         Self {
             condition,
             action,
@@ -1237,7 +1248,10 @@ mod tests {
         let seq1: Vec<f64> = (0..100).map(|_| rng1.gen_f64()).collect();
         let seq2: Vec<f64> = (0..100).map(|_| rng2.gen_f64()).collect();
 
-        assert_ne!(seq1, seq2, "Different seeds must produce different sequences");
+        assert_ne!(
+            seq1, seq2,
+            "Different seeds must produce different sequences"
+        );
     }
 
     #[test]
@@ -1331,7 +1345,10 @@ mod tests {
         // N >= 100,000 should use GPU (if available)
         let selector = BackendSelector::default();
 
-        assert_eq!(selector.select_for_size(100_000, true), BackendCategory::Gpu);
+        assert_eq!(
+            selector.select_for_size(100_000, true),
+            BackendCategory::Gpu
+        );
         assert_eq!(
             selector.select_for_size(1_000_000, true),
             BackendCategory::Gpu
@@ -1393,7 +1410,10 @@ mod tests {
         let tolerance = BackendTolerance::default();
 
         // Scalar vs Scalar
-        assert_eq!(tolerance.for_backends(Backend::Scalar, Backend::Scalar), 0.0);
+        assert_eq!(
+            tolerance.for_backends(Backend::Scalar, Backend::Scalar),
+            0.0
+        );
 
         // Scalar vs SIMD (should be exact)
         assert_eq!(tolerance.for_backends(Backend::Scalar, Backend::AVX2), 0.0);
@@ -1608,7 +1628,10 @@ mod tests {
         let t1 = scheduler1.next_test().unwrap();
         let t2 = scheduler2.next_test().unwrap();
 
-        assert_ne!(t1.seed, t2.seed, "Different master seeds must produce different test seeds");
+        assert_ne!(
+            t1.seed, t2.seed,
+            "Different master seeds must produce different test seeds"
+        );
     }
 
     // =========================================================================
@@ -1887,7 +1910,7 @@ mod tests {
 
         // Second pixel should be NAN_COLOR (magenta: 255, 0, 255)
         assert_eq!(rgba[4], 255); // R
-        assert_eq!(rgba[5], 0);   // G
+        assert_eq!(rgba[5], 0); // G
         assert_eq!(rgba[6], 255); // B
         assert_eq!(rgba[7], 255); // A
     }
@@ -1950,8 +1973,7 @@ mod tests {
 
     #[test]
     fn test_golden_baseline_paths() {
-        let config = VisualRegressionConfig::new("/test/golden")
-            .with_output_dir("/test/output");
+        let config = VisualRegressionConfig::new("/test/golden").with_output_dir("/test/output");
         let baseline = GoldenBaseline::new(config);
 
         assert_eq!(
@@ -2098,8 +2120,14 @@ mod tests {
 
     #[test]
     fn test_stress_anomaly_kinds() {
-        assert_eq!(StressAnomalyKind::SlowOperation, StressAnomalyKind::SlowOperation);
-        assert_ne!(StressAnomalyKind::SlowOperation, StressAnomalyKind::TestFailure);
+        assert_eq!(
+            StressAnomalyKind::SlowOperation,
+            StressAnomalyKind::SlowOperation
+        );
+        assert_ne!(
+            StressAnomalyKind::SlowOperation,
+            StressAnomalyKind::TestFailure
+        );
 
         // Test all variants exist
         let _slow = StressAnomalyKind::SlowOperation;

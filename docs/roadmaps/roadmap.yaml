@@ -640,3 +640,39 @@ roadmap:
   - nvidia
   - extreme-tdd
   notes: null
+- id: TRUENO-METAL-001
+  github_issue: null
+  item_type: task
+  title: 'Metal Backend: AMD GPU Validation via Intel Mac'
+  status: pending
+  priority: medium
+  assigned_to: null
+  created: 2026-01-02T12:00:00+00:00
+  updated: 2026-01-02T12:00:00+00:00
+  spec: null
+  acceptance_criteria:
+  - 'Metal shader compilation works via lambda-lab-rust-development intel_mac module'
+  - 'SIMD GEMM kernel compiles to .metallib on Intel Mac'
+  - 'AMD GPU compute validation passes on Radeon Pro W5700X'
+  - 'Cross-platform tensor ops verified (CUDA vs Metal parity)'
+  - 'Benchmark results within 20% of CUDA performance'
+  - 'All 100-point falsification tests pass (Section C, D from Intel Mac spec)'
+  phases: []
+  subtasks:
+  - Create src/backends/metal/ module
+  - Implement Metal shader generator from SIMD ops
+  - Add SSH-based remote compilation via intel_mac
+  - Cross-validate tensor operations
+  - Performance benchmarks vs CUDA
+  estimated_effort: 1 week
+  labels:
+  - metal
+  - amd-gpu
+  - cross-platform
+  - intel-mac
+  notes: |
+    Uses lambda-lab-rust-development Intel Mac integration:
+    - Host: mac (Intel Mac Pro with AMD Radeon Pro W5700X)
+    - RAM Disk: 32GB at /Volumes/RAMDisk
+    - Metal 3 support verified
+    - Run: cargo run --example metal_compile (from lambda-lab-rust-development)

@@ -19,7 +19,9 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{
+        Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+    },
     Frame, Terminal,
 };
 use std::io::{self, Stdout};
@@ -216,13 +218,33 @@ fn render_source_pane(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
 
     // Status bar
     let status = Line::from(vec![
-        Span::styled(" q", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            " q",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(":Quit "),
-        Span::styled("s", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "s",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(":Sidebar "),
-        Span::styled("↑↓", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "↑↓",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(":Scroll "),
-        Span::styled("PgUp/Dn", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "PgUp/Dn",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(":Page "),
     ]);
 
@@ -239,11 +261,11 @@ fn render_sidebar(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(8),  // Registers
-            Constraint::Length(6),  // Memory
-            Constraint::Length(5),  // Roofline
-            Constraint::Length(6),  // Bug hunting
-            Constraint::Min(4),     // Warnings
+            Constraint::Length(8), // Registers
+            Constraint::Length(6), // Memory
+            Constraint::Length(5), // Roofline
+            Constraint::Length(6), // Bug hunting
+            Constraint::Min(4),    // Warnings
         ])
         .split(area);
 
@@ -280,12 +302,14 @@ fn render_register_widget(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
         ListItem::new(format!(".f32: {:3} / 255", regs.f32_regs)),
         ListItem::new(format!(".b32: {:3} / 255", regs.b32_regs)),
         ListItem::new(format!(".b64: {:3} / 255", regs.b64_regs)),
-        ListItem::new(format!(".pred: {:2} / 8", regs.pred_regs)),  // PTX has p0-p7
+        ListItem::new(format!(".pred: {:2} / 8", regs.pred_regs)), // PTX has p0-p7
         ListItem::new(Line::from(vec![
             Span::raw(format!("Total: {} → ", total)),
             Span::styled(
                 format!("{:.0}% occ", occupancy * 100.0),
-                Style::default().fg(status_color).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(status_color)
+                    .add_modifier(Modifier::BOLD),
             ),
         ])),
     ];
@@ -318,7 +342,9 @@ fn render_memory_widget(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
             Span::raw("Coalesced: "),
             Span::styled(
                 format!("{:.1}%", coal_pct),
-                Style::default().fg(status_color).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(status_color)
+                    .add_modifier(Modifier::BOLD),
             ),
         ])),
     ];
@@ -376,24 +402,30 @@ fn render_bugs_widget(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
         ]))]
     } else {
         vec![
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!("P0 Critical: {}", critical),
-                    Style::default().fg(if critical > 0 { Color::Red } else { Color::Green }),
-                ),
-            ])),
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!("P1 High: {}", high),
-                    Style::default().fg(if high > 0 { Color::Yellow } else { Color::Green }),
-                ),
-            ])),
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    format!("P2 Medium: {}", medium),
-                    Style::default().fg(if medium > 0 { Color::Blue } else { Color::Green }),
-                ),
-            ])),
+            ListItem::new(Line::from(vec![Span::styled(
+                format!("P0 Critical: {}", critical),
+                Style::default().fg(if critical > 0 {
+                    Color::Red
+                } else {
+                    Color::Green
+                }),
+            )])),
+            ListItem::new(Line::from(vec![Span::styled(
+                format!("P1 High: {}", high),
+                Style::default().fg(if high > 0 {
+                    Color::Yellow
+                } else {
+                    Color::Green
+                }),
+            )])),
+            ListItem::new(Line::from(vec![Span::styled(
+                format!("P2 Medium: {}", medium),
+                Style::default().fg(if medium > 0 {
+                    Color::Blue
+                } else {
+                    Color::Green
+                }),
+            )])),
         ]
     };
 
@@ -481,8 +513,7 @@ fn highlight_ptx_line(line: &str) -> Span<'static> {
             return Span::styled(line, Style::default().fg(Color::Green));
         }
         // Control flow
-        if trimmed.starts_with("bra") || trimmed.starts_with("ret") || trimmed.starts_with("setp")
-        {
+        if trimmed.starts_with("bra") || trimmed.starts_with("ret") || trimmed.starts_with("setp") {
             return Span::styled(line, Style::default().fg(Color::Red));
         }
     }
@@ -536,7 +567,10 @@ mod tests {
     /// Verifies that state remains valid after simulated resize
     #[test]
     fn f027_resize_terminal() {
-        let ptx = (0..50).map(|i| format!("    add.f32 %f{}, %f{}, %f{}", i, i, i + 1)).collect::<Vec<_>>().join("\n");
+        let ptx = (0..50)
+            .map(|i| format!("    add.f32 %f{}, %f{}, %f{}", i, i, i + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
         let report = sample_report();
         let mut app = TuiApp::new(ptx, report);
 
@@ -630,7 +664,10 @@ mod tests {
 
     #[test]
     fn test_page_navigation() {
-        let ptx = (0..100).map(|i| format!("line{}", i)).collect::<Vec<_>>().join("\n");
+        let ptx = (0..100)
+            .map(|i| format!("line{}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let report = sample_report();
         let mut app = TuiApp::new(ptx, report);
 
@@ -643,7 +680,10 @@ mod tests {
 
     #[test]
     fn test_home_end() {
-        let ptx = (0..50).map(|i| format!("line{}", i)).collect::<Vec<_>>().join("\n");
+        let ptx = (0..50)
+            .map(|i| format!("line{}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let report = sample_report();
         let mut app = TuiApp::new(ptx, report);
 
@@ -688,7 +728,10 @@ mod tests {
     /// In split-pane mode, both panes share the same scroll position
     #[test]
     fn f028_sync_scroll_source_asm() {
-        let ptx = (0..100).map(|i| format!("    add.f32 %f{}, %f{}, %f{}", i, i, i + 1)).collect::<Vec<_>>().join("\n");
+        let ptx = (0..100)
+            .map(|i| format!("    add.f32 %f{}, %f{}, %f{}", i, i, i + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
         let report = sample_report();
         let mut app = TuiApp::new(ptx, report);
 

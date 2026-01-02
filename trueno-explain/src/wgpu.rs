@@ -77,7 +77,9 @@ impl WgpuAnalyzer {
     /// Parse workgroup size from WGSL
     fn parse_workgroup_size(&self, wgsl: &str) -> WorkgroupSize {
         // Match @workgroup_size(x), @workgroup_size(x, y), or @workgroup_size(x, y, z)
-        let pattern = Regex::new(r"@workgroup_size\s*\(\s*(\d+)(?:\s*,\s*(\d+))?(?:\s*,\s*(\d+))?\s*\)").unwrap();
+        let pattern =
+            Regex::new(r"@workgroup_size\s*\(\s*(\d+)(?:\s*,\s*(\d+))?(?:\s*,\s*(\d+))?\s*\)")
+                .unwrap();
 
         if let Some(caps) = pattern.captures(wgsl) {
             let x = caps.get(1).map_or(1, |m| m.as_str().parse().unwrap_or(1));
@@ -105,9 +107,12 @@ impl WgpuAnalyzer {
     /// Count operations in WGSL
     fn count_operations(&self, wgsl: &str) -> (u32, u32) {
         // Arithmetic: +, -, *, /, dot, cross, etc.
-        let arith_pattern = Regex::new(r"(\+|-|\*|/|dot|cross|normalize|length|sqrt|pow|exp|log|sin|cos|tan)").unwrap();
+        let arith_pattern =
+            Regex::new(r"(\+|-|\*|/|dot|cross|normalize|length|sqrt|pow|exp|log|sin|cos|tan)")
+                .unwrap();
         // Memory: load, store, array access
-        let mem_pattern = Regex::new(r"(\[[\w\s+\-*/]+\]|textureLoad|textureSample|textureStore)").unwrap();
+        let mem_pattern =
+            Regex::new(r"(\[[\w\s+\-*/]+\]|textureLoad|textureSample|textureStore)").unwrap();
 
         let arith = arith_pattern.find_iter(wgsl).count() as u32;
         let mem = mem_pattern.find_iter(wgsl).count() as u32;
@@ -319,7 +324,9 @@ mod tests {
         let warnings = analyzer.detect_muda(wgsl);
 
         assert!(!warnings.is_empty(), "Should warn on small workgroup");
-        assert!(warnings.iter().any(|w| w.description.contains("Small workgroup")));
+        assert!(warnings
+            .iter()
+            .any(|w| w.description.contains("Small workgroup")));
     }
 
     #[test]
@@ -328,7 +335,9 @@ mod tests {
         let analyzer = WgpuAnalyzer::new();
         let warnings = analyzer.detect_muda(wgsl);
 
-        assert!(warnings.iter().any(|w| w.description.contains("not a multiple of 32")));
+        assert!(warnings
+            .iter()
+            .any(|w| w.description.contains("not a multiple of 32")));
     }
 
     #[test]
@@ -338,7 +347,10 @@ mod tests {
         let warnings = analyzer.detect_muda(wgsl);
 
         // 256 is warp-aligned and within bounds
-        assert!(warnings.is_empty(), "Optimal workgroup should have no warnings");
+        assert!(
+            warnings.is_empty(),
+            "Optimal workgroup should have no warnings"
+        );
     }
 
     /// F067: Detects workgroup size
@@ -390,6 +402,9 @@ mod tests {
         let report = analyzer.analyze(wgsl).unwrap();
 
         assert_eq!(report.target, "WGSL (wgpu)");
-        assert!(report.warnings.is_empty(), "Valid WGSL should have no warnings");
+        assert!(
+            report.warnings.is_empty(),
+            "Valid WGSL should have no warnings"
+        );
     }
 }

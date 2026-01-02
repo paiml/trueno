@@ -155,7 +155,9 @@ impl PtxAnalyzer {
                 description: format!("{} potential register spills detected", spill_count),
                 impact: "High latency local memory access".to_string(),
                 line: None,
-                suggestion: Some("Reduce live variables or increase register allocation".to_string()),
+                suggestion: Some(
+                    "Reduce live variables or increase register allocation".to_string(),
+                ),
             })
         } else {
             None
@@ -195,7 +197,9 @@ impl PtxAnalyzer {
                 ),
                 impact: "Reduced occupancy, fewer concurrent warps".to_string(),
                 line: None,
-                suggestion: Some("Consider loop tiling or reducing intermediate values".to_string()),
+                suggestion: Some(
+                    "Consider loop tiling or reducing intermediate values".to_string(),
+                ),
             })
         } else {
             None

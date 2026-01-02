@@ -3701,7 +3701,9 @@ mod tests {
         }
 
         // 64 elements to ensure AVX512 loop runs 4 times (64 / 16 = 4)
-        let a: Vec<f32> = (0..64).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let a: Vec<f32> = (0..64)
+            .map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) })
+            .collect();
         let avx512_result = unsafe { Avx512Backend::norm_l1(&a) };
         let scalar_result = unsafe { ScalarBackend::norm_l1(&a) };
 
@@ -3768,7 +3770,9 @@ mod tests {
         }
 
         // 64 elements with mixed positive/negative
-        let a: Vec<f32> = (0..64).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let a: Vec<f32> = (0..64)
+            .map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) })
+            .collect();
         let mut avx512_result = vec![0.0; 64];
         let mut scalar_result = vec![0.0; 64];
 
@@ -3970,7 +3974,9 @@ mod tests {
         }
 
         // 35 elements (35 % 16 = 3 remainder)
-        let a: Vec<f32> = (0..35).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let a: Vec<f32> = (0..35)
+            .map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) })
+            .collect();
         let mut avx512_result = vec![0.0; 35];
         let mut scalar_result = vec![0.0; 35];
 

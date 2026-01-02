@@ -907,10 +907,13 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// Shift right u32 (logical shift)
+    ///
+    /// NOTE: PTX requires .b32 (bitwise) type for shift ops, not .u32
     pub fn shr_u32(&mut self, val: VirtualReg, shift: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
-            PtxInstruction::new(PtxOp::Shr, PtxType::U32)
+            // PTX requires .b32 for shift ops, not .u32
+            PtxInstruction::new(PtxOp::Shr, PtxType::B32)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::Reg(shift)),
@@ -949,10 +952,13 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// Shift left u32 (register << register)
+    ///
+    /// NOTE: PTX requires .b32 (bitwise) type for shift ops, not .u32
     pub fn shl_u32(&mut self, val: VirtualReg, shift: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
-            PtxInstruction::new(PtxOp::Shl, PtxType::U32)
+            // PTX requires .b32 for shift ops, not .u32
+            PtxInstruction::new(PtxOp::Shl, PtxType::B32)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::Reg(shift)),
@@ -989,10 +995,13 @@ impl<'a> KernelBuilder<'a> {
 
     /// Shift right u32 in-place by immediate: dst = dst >> imm
     /// Used for stride halving in reduction loops
+    ///
+    /// NOTE: PTX requires .b32 (bitwise) type for shift ops, not .u32
     pub fn shr_u32_inplace(&mut self, dst: VirtualReg, imm: u32) {
         self.registers.extend_live_range(dst);
         self.instructions.push(
-            PtxInstruction::new(PtxOp::Shr, PtxType::U32)
+            // PTX requires .b32 for shift ops, not .u32
+            PtxInstruction::new(PtxOp::Shr, PtxType::B32)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(dst))
                 .src(Operand::ImmU64(imm as u64)),
@@ -1079,12 +1088,11 @@ impl<'a> KernelBuilder<'a> {
             frag.push(self.registers.allocate_virtual(PtxType::B32));
         }
         // Build instruction with all 8 destination registers
-        let mut instr = PtxInstruction::new(PtxOp::WmmaLoadA, PtxType::F16)
-            .label(format!(
-                "m16n16k16.{}.f16.stride.{}",
-                layout.to_ptx_string(),
-                stride
-            ));
+        let mut instr = PtxInstruction::new(PtxOp::WmmaLoadA, PtxType::F16).label(format!(
+            "m16n16k16.{}.f16.stride.{}",
+            layout.to_ptx_string(),
+            stride
+        ));
         // Add all fragment registers as destinations (use push_dst for vector dests)
         for reg in &frag {
             instr = instr.push_dst(Operand::Reg(*reg));
@@ -1108,12 +1116,11 @@ impl<'a> KernelBuilder<'a> {
             frag.push(self.registers.allocate_virtual(PtxType::B32));
         }
         // Build instruction with all 8 destination registers
-        let mut instr = PtxInstruction::new(PtxOp::WmmaLoadB, PtxType::F16)
-            .label(format!(
-                "m16n16k16.{}.f16.stride.{}",
-                layout.to_ptx_string(),
-                stride
-            ));
+        let mut instr = PtxInstruction::new(PtxOp::WmmaLoadB, PtxType::F16).label(format!(
+            "m16n16k16.{}.f16.stride.{}",
+            layout.to_ptx_string(),
+            stride
+        ));
         for reg in &frag {
             instr = instr.push_dst(Operand::Reg(*reg));
         }
@@ -1136,12 +1143,11 @@ impl<'a> KernelBuilder<'a> {
             frag.push(self.registers.allocate_virtual(PtxType::F32));
         }
         // Build instruction with all 8 destination registers
-        let mut instr = PtxInstruction::new(PtxOp::WmmaLoadC, PtxType::F32)
-            .label(format!(
-                "m16n16k16.{}.f32.stride.{}",
-                layout.to_ptx_string(),
-                stride
-            ));
+        let mut instr = PtxInstruction::new(PtxOp::WmmaLoadC, PtxType::F32).label(format!(
+            "m16n16k16.{}.f32.stride.{}",
+            layout.to_ptx_string(),
+            stride
+        ));
         for reg in &frag {
             instr = instr.push_dst(Operand::Reg(*reg));
         }
@@ -1168,8 +1174,8 @@ impl<'a> KernelBuilder<'a> {
 
         // MMA instruction with all fragment registers
         // Format: wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32 {d0-d7}, {a0-a7}, {b0-b7}, {c0-c7}
-        let mut instr = PtxInstruction::new(PtxOp::WmmaMma, PtxType::F32)
-            .label("m16n16k16.row.col.f32.f32");
+        let mut instr =
+            PtxInstruction::new(PtxOp::WmmaMma, PtxType::F32).label("m16n16k16.row.col.f32.f32");
 
         // Add all D registers as destinations (use push_dst for vector dests)
         for reg in &frag_d {
@@ -1203,12 +1209,11 @@ impl<'a> KernelBuilder<'a> {
             return;
         }
         // Format: wmma.store.d.sync.aligned.m16n16k16.row.f32 [addr], {d0-d7}, stride
-        let mut instr = PtxInstruction::new(PtxOp::WmmaStoreD, PtxType::F32)
-            .label(format!(
-                "m16n16k16.{}.f32.stride.{}",
-                layout.to_ptx_string(),
-                stride
-            ));
+        let mut instr = PtxInstruction::new(PtxOp::WmmaStoreD, PtxType::F32).label(format!(
+            "m16n16k16.{}.f32.stride.{}",
+            layout.to_ptx_string(),
+            stride
+        ));
         // Address is first source
         instr = instr.src(Operand::Reg(addr));
         // All fragment registers
@@ -1519,6 +1524,11 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             // ex2 requires .approx modifier for f32
             s.push_str("ex2.approx");
         }
+        PtxOp::Rsqrt => {
+            // rsqrt requires .approx modifier for f32
+            // PTX format: rsqrt.approx.f32 dst, src
+            s.push_str("rsqrt.approx");
+        }
         PtxOp::WmmaLoadA => {
             // WMMA load A fragment: wmma.load.a.sync.aligned.{shape}.{layout}.{type} {dst...}, [ptr], stride
             // Label contains: "m16n16k16.{layout}.f16.stride.{stride}"
@@ -1640,7 +1650,10 @@ fn emit_shared_mem_operand(op: &Operand) -> String {
 fn emit_wmma_load(mut s: String, instr: &PtxInstruction, matrix: &str) -> String {
     // Parse label to get layout, type, stride
     // Label format: "m16n16k16.{layout}.{type}.stride.{stride}"
-    let label = instr.label.as_deref().unwrap_or("m16n16k16.row.f16.stride.16");
+    let label = instr
+        .label
+        .as_deref()
+        .unwrap_or("m16n16k16.row.f16.stride.16");
     let parts: Vec<&str> = label.split('.').collect();
 
     // Build instruction opcode
@@ -1697,7 +1710,10 @@ fn emit_wmma_load(mut s: String, instr: &PtxInstruction, matrix: &str) -> String
 /// Format: wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32 {d}, {a}, {b}, {c}
 fn emit_wmma_mma(mut s: String, instr: &PtxInstruction) -> String {
     // Label format: "m16n16k16.row.col.f32.f32"
-    let label = instr.label.as_deref().unwrap_or("m16n16k16.row.col.f32.f32");
+    let label = instr
+        .label
+        .as_deref()
+        .unwrap_or("m16n16k16.row.col.f32.f32");
 
     s.push_str("wmma.mma.sync.aligned.");
     s.push_str(label);
@@ -1743,7 +1759,10 @@ fn emit_wmma_mma(mut s: String, instr: &PtxInstruction) -> String {
 /// Format: wmma.store.d.sync.aligned.m16n16k16.{layout}.{type} [ptr], {regs}, stride
 fn emit_wmma_store(mut s: String, instr: &PtxInstruction) -> String {
     // Label format: "m16n16k16.{layout}.{type}.stride.{stride}"
-    let label = instr.label.as_deref().unwrap_or("m16n16k16.row.f32.stride.16");
+    let label = instr
+        .label
+        .as_deref()
+        .unwrap_or("m16n16k16.row.f32.stride.16");
     let parts: Vec<&str> = label.split('.').collect();
 
     s.push_str("wmma.store.d.sync.aligned");
@@ -1984,8 +2003,13 @@ fn write_instruction(instr: &PtxInstruction, out: &mut String) {
         PtxOp::ShflDown => out.push_str("shfl.sync.down.b32"),
         PtxOp::ShflIdx => out.push_str("shfl.sync.idx.b32"),
         PtxOp::Ex2 => out.push_str("ex2.approx"),
+        PtxOp::Rsqrt => out.push_str("rsqrt.approx"),
         // WMMA ops use the existing emit functions for now (complex formatting)
-        PtxOp::WmmaLoadA | PtxOp::WmmaLoadB | PtxOp::WmmaLoadC | PtxOp::WmmaMma | PtxOp::WmmaStoreD => {
+        PtxOp::WmmaLoadA
+        | PtxOp::WmmaLoadB
+        | PtxOp::WmmaLoadC
+        | PtxOp::WmmaMma
+        | PtxOp::WmmaStoreD => {
             // Fall back to emit_instruction for complex WMMA ops
             out.push_str(&emit_instruction(instr));
             return;

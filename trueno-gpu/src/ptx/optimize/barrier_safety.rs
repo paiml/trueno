@@ -348,7 +348,11 @@ done:
 }
 "#;
         let result = analyze(ptx);
-        assert!(result.is_safe, "Exit after loop should be OK: {:?}", result.violations);
+        assert!(
+            result.is_safe,
+            "Exit after loop should be OK: {:?}",
+            result.violations
+        );
     }
 
     /// Test kv_loop pattern (attention kernels)

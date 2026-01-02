@@ -376,7 +376,10 @@ impl Matrix<f32> {
     /// # Performance
     /// Uses SIMD matmul for each batch slice, achieving ~50 GFLOPS vs ~0.1 GFLOPS naive.
     /// See Williams et al., 2009 (Roofline model) for theoretical analysis.
-    #[cfg_attr(feature = "tracing", instrument(skip(a_data, b_data), fields(batch, m, k, n)))]
+    #[cfg_attr(
+        feature = "tracing",
+        instrument(skip(a_data, b_data), fields(batch, m, k, n))
+    )]
     pub fn batched_matmul(
         a_data: &[f32],
         b_data: &[f32],
@@ -393,13 +396,21 @@ impl Matrix<f32> {
         if a_data.len() != batch * a_stride {
             return Err(TruenoError::InvalidInput(format!(
                 "A data size mismatch: expected {} ({}×{}×{}), got {}",
-                batch * a_stride, batch, m, k, a_data.len()
+                batch * a_stride,
+                batch,
+                m,
+                k,
+                a_data.len()
             )));
         }
         if b_data.len() != batch * b_stride {
             return Err(TruenoError::InvalidInput(format!(
                 "B data size mismatch: expected {} ({}×{}×{}), got {}",
-                batch * b_stride, batch, k, n, b_data.len()
+                batch * b_stride,
+                batch,
+                k,
+                n,
+                b_data.len()
             )));
         }
 
@@ -446,7 +457,10 @@ impl Matrix<f32> {
     /// # Performance
     /// Processes batch×heads independent matmuls using SIMD.
     /// For Qwen2-0.5B: batch=1, heads=14, m=seq, k=64, n=seq
-    #[cfg_attr(feature = "tracing", instrument(skip(a_data, b_data), fields(batch, heads, m, k, n)))]
+    #[cfg_attr(
+        feature = "tracing",
+        instrument(skip(a_data, b_data), fields(batch, heads, m, k, n))
+    )]
     pub fn batched_matmul_4d(
         a_data: &[f32],
         b_data: &[f32],
@@ -467,13 +481,23 @@ impl Matrix<f32> {
         if a_data.len() != expected_a {
             return Err(TruenoError::InvalidInput(format!(
                 "A data size mismatch: expected {} ({}×{}×{}×{}), got {}",
-                expected_a, batch, heads, m, k, a_data.len()
+                expected_a,
+                batch,
+                heads,
+                m,
+                k,
+                a_data.len()
             )));
         }
         if b_data.len() != expected_b {
             return Err(TruenoError::InvalidInput(format!(
                 "B data size mismatch: expected {} ({}×{}×{}×{}), got {}",
-                expected_b, batch, heads, k, n, b_data.len()
+                expected_b,
+                batch,
+                heads,
+                k,
+                n,
+                b_data.len()
             )));
         }
 
@@ -3896,7 +3920,10 @@ mod property_tests {
 
         let result = Matrix::batched_matmul(&a_data, &b_data, batch, m, k, n);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("A data size mismatch"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("A data size mismatch"));
     }
 
     #[test]
@@ -3911,7 +3938,10 @@ mod property_tests {
 
         let result = Matrix::batched_matmul(&a_data, &b_data, batch, m, k, n);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("B data size mismatch"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("B data size mismatch"));
     }
 
     #[test]
@@ -3966,16 +3996,9 @@ mod property_tests {
             .map(|i| (i as f32) * 0.01)
             .collect();
 
-        let result = Matrix::batched_matmul_4d(
-            &q_data,
-            &kt_data,
-            batch,
-            heads,
-            seq_len,
-            head_dim,
-            seq_len,
-        )
-        .unwrap();
+        let result =
+            Matrix::batched_matmul_4d(&q_data, &kt_data, batch, heads, seq_len, head_dim, seq_len)
+                .unwrap();
 
         // Output should be [batch, heads, seq, seq] = 1 * 2 * 4 * 4 = 32 elements
         assert_eq!(result.len(), batch * heads * seq_len * seq_len);
@@ -3994,7 +4017,10 @@ mod property_tests {
 
         let result = Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("A data size mismatch"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("A data size mismatch"));
     }
 
     #[test]
@@ -4010,7 +4036,10 @@ mod property_tests {
 
         let result = Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("B data size mismatch"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("B data size mismatch"));
     }
 
     // ===== Property-Based Tests for Convolution =====

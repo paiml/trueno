@@ -10,7 +10,7 @@ mod bugs;
 mod parser;
 
 pub use bugs::{
-    BugSeverity, PtxBug, PtxBugAnalyzer, PtxBugClass, PtxBugReport,
-    PtxCoverageReport, PtxCoverageTracker, PtxCoverageTrackerBuilder, PtxFeature,
+    BugSeverity, PtxBug, PtxBugAnalyzer, PtxBugClass, PtxBugReport, PtxCoverageReport,
+    PtxCoverageTracker, PtxCoverageTrackerBuilder, PtxFeature,
 };
 pub use parser::PtxAnalyzer;

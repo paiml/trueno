@@ -24,10 +24,7 @@
 //! - TRUENO-SPEC-010: GPU Monitoring, Tracing, and Visualization
 //! - Nickolls et al. (2008): GPU parallel computing model
 
-use trueno::monitor::{
-    GpuBackend, GpuDeviceInfo, GpuMemoryMetrics,
-    GpuVendor,
-};
+use trueno::monitor::{GpuBackend, GpuDeviceInfo, GpuMemoryMetrics, GpuVendor};
 
 fn main() {
     println!("=================================================");
@@ -133,7 +130,8 @@ fn main() {
         match GpuMonitor::new(0, MonitorConfig::default()) {
             Ok(monitor) => {
                 println!("  Monitor created for: {}", monitor.device_info().name);
-                println!("  Config: poll_interval={:?}, history_size={}",
+                println!(
+                    "  Config: poll_interval={:?}, history_size={}",
                     monitor.config().poll_interval,
                     monitor.config().history_size
                 );
@@ -143,7 +141,8 @@ fn main() {
                 for i in 0..5 {
                     match monitor.collect() {
                         Ok(metrics) => {
-                            println!("    Sample {}: memory={} bytes, age={:?}",
+                            println!(
+                                "    Sample {}: memory={} bytes, age={:?}",
                                 i + 1,
                                 metrics.memory.total,
                                 metrics.age()
@@ -198,7 +197,12 @@ fn main() {
 fn print_device_info(dev: &GpuDeviceInfo, indent: &str) {
     println!("{}[{}] {} ({})", indent, dev.index, dev.name, dev.backend);
     println!("{}    Vendor: {}", indent, dev.vendor);
-    println!("{}    VRAM: {:.2} GB ({} bytes)", indent, dev.vram_gb(), dev.vram_total);
+    println!(
+        "{}    VRAM: {:.2} GB ({} bytes)",
+        indent,
+        dev.vram_gb(),
+        dev.vram_total
+    );
     if let Some((major, minor)) = dev.compute_capability {
         println!("{}    Compute Capability: {}.{}", indent, major, minor);
     }
@@ -230,7 +234,12 @@ fn demonstrate_vendor_identification() {
     println!("  PCI Vendor ID Mapping:");
     for (id, _expected) in vendors {
         let vendor = GpuVendor::from_vendor_id(id);
-        println!("    0x{:04x} -> {} (is_nvidia={})", id, vendor, vendor.is_nvidia());
+        println!(
+            "    0x{:04x} -> {} (is_nvidia={})",
+            id,
+            vendor,
+            vendor.is_nvidia()
+        );
     }
 }
 

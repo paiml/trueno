@@ -101,16 +101,21 @@ impl SimdAnalyzer {
         counts.avx512 = avx512_pattern.find_iter(asm).count() as u32;
 
         // AVX/AVX2 patterns (ymm registers, 256-bit ops, v-prefix)
-        let avx_pattern = Regex::new(r"(?i)(v\w+.*ymm|vp\w+.*ymm|vmovaps|vmovups|vmulps|vaddps|vsubps|vdivps|vfmadd|vfmsub)").unwrap();
+        let avx_pattern = Regex::new(
+            r"(?i)(v\w+.*ymm|vp\w+.*ymm|vmovaps|vmovups|vmulps|vaddps|vsubps|vdivps|vfmadd|vfmsub)",
+        )
+        .unwrap();
         counts.avx = avx_pattern.find_iter(asm).count() as u32;
 
         // SSE patterns (xmm registers without v-prefix)
         // Note: Rust regex doesn't support look-behind, so we match and filter
-        let sse_pattern = Regex::new(r"(?i)\b(movaps|movups|mulps|addps|subps|divps)\b.*xmm").unwrap();
+        let sse_pattern =
+            Regex::new(r"(?i)\b(movaps|movups|mulps|addps|subps|divps)\b.*xmm").unwrap();
         counts.sse = sse_pattern.find_iter(asm).count() as u32;
 
         // Scalar floating-point (ss = scalar single-precision)
-        let scalar_pattern = Regex::new(r"(?i)\b(movss|mulss|addss|subss|divss|cvtsi2ss|cvtss2si)\b").unwrap();
+        let scalar_pattern =
+            Regex::new(r"(?i)\b(movss|mulss|addss|subss|divss|cvtsi2ss|cvtss2si)\b").unwrap();
         counts.scalar = scalar_pattern.find_iter(asm).count() as u32;
 
         counts

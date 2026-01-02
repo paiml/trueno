@@ -11,7 +11,9 @@ use trueno_explain::{
     format_diff_json, format_diff_text, output, run_tui, Analyzer, BugSeverity, DiffThresholds,
     OutputFormat, PtxAnalyzer, PtxBugAnalyzer, SimdAnalyzer, SimdArch, WgpuAnalyzer,
 };
-use trueno_gpu::kernels::{GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel};
+use trueno_gpu::kernels::{
+    GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel,
+};
 
 #[derive(Parser)]
 #[command(name = "trueno-explain")]
@@ -221,7 +223,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             run_tui(ptx, report)?;
         }
 
-        Commands::Simd { function, arch, json } => {
+        Commands::Simd {
+            function,
+            arch,
+            json,
+        } => {
             let simd_arch = match arch.to_lowercase().as_str() {
                 "sse2" => SimdArch::Sse2,
                 "avx" | "avx2" => SimdArch::Avx2,
