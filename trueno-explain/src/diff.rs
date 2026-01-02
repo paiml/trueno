@@ -67,13 +67,13 @@ pub struct DiffThresholds {
 impl Default for DiffThresholds {
     fn default() -> Self {
         Self {
-            register_increase_warning: 10.0,    // 10% more registers = warning
-            register_increase_critical: 25.0,   // 25% more = critical
-            instruction_increase_warning: 15.0, // 15% more instructions = warning
-            instruction_increase_critical: 50.0,// 50% more = critical
-            occupancy_decrease_warning: 10.0,   // 10pp occupancy drop = warning
-            occupancy_decrease_critical: 25.0,  // 25pp = critical
-            warning_count_increase: 2,          // 2+ new warnings = concern
+            register_increase_warning: 10.0,     // 10% more registers = warning
+            register_increase_critical: 25.0,    // 25% more = critical
+            instruction_increase_warning: 15.0,  // 15% more instructions = warning
+            instruction_increase_critical: 50.0, // 50% more = critical
+            occupancy_decrease_warning: 10.0,    // 10pp occupancy drop = warning
+            occupancy_decrease_critical: 25.0,   // 25pp = critical
+            warning_count_increase: 2,           // 2+ new warnings = concern
         }
     }
 }
@@ -182,11 +182,20 @@ pub fn compare_reports(
     }
 
     // Generate summary
-    let critical_count = changes.iter().filter(|c| c.severity == Severity::Critical).count();
-    let warning_count = changes.iter().filter(|c| c.severity == Severity::Warning).count();
+    let critical_count = changes
+        .iter()
+        .filter(|c| c.severity == Severity::Critical)
+        .count();
+    let warning_count = changes
+        .iter()
+        .filter(|c| c.severity == Severity::Warning)
+        .count();
 
     let summary = if critical_count > 0 {
-        format!("{} critical regression(s), {} warning(s)", critical_count, warning_count)
+        format!(
+            "{} critical regression(s), {} warning(s)",
+            critical_count, warning_count
+        )
     } else if warning_count > 0 {
         format!("{} warning(s), no critical regressions", warning_count)
     } else if changes.is_empty() {
@@ -220,7 +229,11 @@ pub fn format_diff_text(report: &DiffReport) -> String {
                 Severity::Warning => "⚠️",
                 Severity::Info => "ℹ️",
             };
-            let direction = if change.percent_change > 0.0 { "↑" } else { "↓" };
+            let direction = if change.percent_change > 0.0 {
+                "↑"
+            } else {
+                "↓"
+            };
             output.push_str(&format!(
                 "{} {}: {} → {} ({}{:.1}%)\n",
                 icon,
@@ -300,7 +313,10 @@ mod tests {
         let report = compare_reports(&baseline, &current, &thresholds);
 
         assert!(!report.has_regression);
-        assert!(report.changes.iter().any(|c| c.metric == "register_count" && c.severity == Severity::Warning));
+        assert!(report
+            .changes
+            .iter()
+            .any(|c| c.metric == "register_count" && c.severity == Severity::Warning));
     }
 
     #[test]
@@ -312,7 +328,10 @@ mod tests {
         let report = compare_reports(&baseline, &current, &thresholds);
 
         assert!(report.has_regression);
-        assert!(report.changes.iter().any(|c| c.metric == "register_count" && c.severity == Severity::Critical));
+        assert!(report
+            .changes
+            .iter()
+            .any(|c| c.metric == "register_count" && c.severity == Severity::Critical));
     }
 
     #[test]
@@ -373,7 +392,10 @@ mod tests {
 
         assert!(report.has_regression, "Should detect register regression");
         assert!(
-            report.changes.iter().any(|c| c.metric == "register_count" && c.severity == Severity::Critical),
+            report
+                .changes
+                .iter()
+                .any(|c| c.metric == "register_count" && c.severity == Severity::Critical),
             "Register increase should be critical"
         );
     }

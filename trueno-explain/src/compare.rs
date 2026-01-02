@@ -242,7 +242,11 @@ mod tests {
         let comparison = compare_analyses(&report_a, &report_b);
 
         // A should win on all metrics
-        let a_wins = comparison.metrics.iter().filter(|m| m.winner == "A").count();
+        let a_wins = comparison
+            .metrics
+            .iter()
+            .filter(|m| m.winner == "A")
+            .count();
         assert!(a_wins >= 4, "Optimized should win most metrics");
         assert!(comparison.recommendation.contains("Optimized"));
     }
@@ -256,8 +260,16 @@ mod tests {
         let comparison = compare_analyses(&report_a, &report_b);
 
         // Should have mixed results
-        let a_wins = comparison.metrics.iter().filter(|m| m.winner == "A").count();
-        let b_wins = comparison.metrics.iter().filter(|m| m.winner == "B").count();
+        let a_wins = comparison
+            .metrics
+            .iter()
+            .filter(|m| m.winner == "A")
+            .count();
+        let b_wins = comparison
+            .metrics
+            .iter()
+            .filter(|m| m.winner == "B")
+            .count();
         assert!(a_wins > 0 && b_wins > 0, "Should have mixed winners");
     }
 

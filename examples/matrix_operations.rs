@@ -208,7 +208,10 @@ fn main() {
     // Batch 0: 4×2 matrix, Batch 1: 4×2 matrix
     let b_data: Vec<f32> = (0..batch * k * n).map(|i| (i as f32 + 1.0) * 0.1).collect();
 
-    println!("Shape: [batch={}, m={}, k={}] @ [batch={}, k={}, n={}]", batch, m, k, batch, k, n);
+    println!(
+        "Shape: [batch={}, m={}, k={}] @ [batch={}, k={}, n={}]",
+        batch, m, k, batch, k, n
+    );
     println!("A data (flattened): {:?}", &a_data[..8]);
     println!("B data (flattened): {:?}", &b_data[..8]);
 
@@ -242,21 +245,26 @@ fn main() {
         .collect();
 
     println!("Multi-head attention pattern: Q @ K^T");
-    println!("  Q shape: [batch={}, heads={}, seq={}, head_dim={}]", batch, heads, seq_len, head_dim);
-    println!("  K^T shape: [batch={}, heads={}, head_dim={}, seq={}]", batch, heads, head_dim, seq_len);
+    println!(
+        "  Q shape: [batch={}, heads={}, seq={}, head_dim={}]",
+        batch, heads, seq_len, head_dim
+    );
+    println!(
+        "  K^T shape: [batch={}, heads={}, head_dim={}, seq={}]",
+        batch, heads, head_dim, seq_len
+    );
 
     let attn_scores = Matrix::batched_matmul_4d(
-        &q_data,
-        &kt_data,
-        batch,
-        heads,
-        seq_len,   // m
-        head_dim,  // k
-        seq_len,   // n
+        &q_data, &kt_data, batch, heads, seq_len,  // m
+        head_dim, // k
+        seq_len,  // n
     )
     .expect("4D batched matmul should succeed");
 
-    println!("  Output shape: [batch={}, heads={}, seq={}, seq={}]", batch, heads, seq_len, seq_len);
+    println!(
+        "  Output shape: [batch={}, heads={}, seq={}, seq={}]",
+        batch, heads, seq_len, seq_len
+    );
     println!("  Attention scores (first 8): {:?}", &attn_scores[..8]);
     println!("  → Used for transformer attention: softmax(Q @ K^T / sqrt(d)) @ V");
 

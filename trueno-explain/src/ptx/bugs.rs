@@ -96,7 +96,9 @@ impl PtxBugClass {
             | Self::EmptyLoopBody
             | Self::MissingBoundsCheck => BugSeverity::High,
 
-            Self::RedundantMoves | Self::UnoptimizedMemoryPattern | Self::DeadCode => BugSeverity::Medium,
+            Self::RedundantMoves | Self::UnoptimizedMemoryPattern | Self::DeadCode => {
+                BugSeverity::Medium
+            }
 
             Self::InvalidSyntaxAccepted | Self::MissingEntryPoint => BugSeverity::FalsePositive,
         }
@@ -172,7 +174,10 @@ impl PtxBugReport {
     /// Check if PTX passed all validations (no critical bugs)
     #[must_use]
     pub fn is_valid(&self) -> bool {
-        !self.bugs.iter().any(|b| b.severity() == BugSeverity::Critical)
+        !self
+            .bugs
+            .iter()
+            .any(|b| b.severity() == BugSeverity::Critical)
     }
 
     /// Check if there are any bugs at all
@@ -184,7 +189,10 @@ impl PtxBugReport {
     /// Count bugs by severity
     #[must_use]
     pub fn count_by_severity(&self, severity: BugSeverity) -> usize {
-        self.bugs.iter().filter(|b| b.severity() == severity).count()
+        self.bugs
+            .iter()
+            .filter(|b| b.severity() == severity)
+            .count()
     }
 
     /// Check for specific bug class
@@ -204,9 +212,15 @@ impl PtxBugReport {
     pub fn format_report(&self) -> String {
         let mut output = String::new();
 
-        output.push_str("╔══════════════════════════════════════════════════════════════════════════════╗\n");
-        output.push_str("║                         PTX BUG HUNTING REPORT                                ║\n");
-        output.push_str("╚══════════════════════════════════════════════════════════════════════════════╝\n\n");
+        output.push_str(
+            "╔══════════════════════════════════════════════════════════════════════════════╗\n",
+        );
+        output.push_str(
+            "║                         PTX BUG HUNTING REPORT                                ║\n",
+        );
+        output.push_str(
+            "╚══════════════════════════════════════════════════════════════════════════════╝\n\n",
+        );
 
         if let Some(name) = &self.kernel_name {
             output.push_str(&format!("Kernel: {}\n", name));
@@ -222,7 +236,12 @@ impl PtxBugReport {
         output.push_str(&format!("P0 CRITICAL BUGS: {}\n", critical));
         if critical > 0 {
             output.push_str("──────────────────\n");
-            for (i, bug) in self.bugs.iter().filter(|b| b.severity() == BugSeverity::Critical).enumerate() {
+            for (i, bug) in self
+                .bugs
+                .iter()
+                .filter(|b| b.severity() == BugSeverity::Critical)
+                .enumerate()
+            {
                 output.push_str(&format!("  BUG-{:03}: {}\n", i + 1, bug.class));
                 if bug.line > 0 {
                     output.push_str(&format!("    Line {}: {}\n", bug.line, bug.instruction));
@@ -239,7 +258,11 @@ impl PtxBugReport {
         output.push_str(&format!("\nP1 HIGH BUGS: {}\n", high));
         if high > 0 {
             output.push_str("─────────────────\n");
-            for bug in self.bugs.iter().filter(|b| b.severity() == BugSeverity::High) {
+            for bug in self
+                .bugs
+                .iter()
+                .filter(|b| b.severity() == BugSeverity::High)
+            {
                 output.push_str(&format!("  {}: {}\n", bug.class, bug.message));
             }
         }
@@ -248,7 +271,11 @@ impl PtxBugReport {
         output.push_str(&format!("\nP2 MEDIUM BUGS: {}\n", medium));
         if medium > 0 {
             output.push_str("─────────────────\n");
-            for bug in self.bugs.iter().filter(|b| b.severity() == BugSeverity::Medium) {
+            for bug in self
+                .bugs
+                .iter()
+                .filter(|b| b.severity() == BugSeverity::Medium)
+            {
                 output.push_str(&format!("  {}: {}\n", bug.class, bug.message));
             }
         }
@@ -301,12 +328,20 @@ impl PtxBugAnalyzer {
     /// Create analyzer with strict mode enabled
     #[must_use]
     pub fn strict() -> Self {
-        Self { strict: true, whitelist: Vec::new() }
+        Self {
+            strict: true,
+            whitelist: Vec::new(),
+        }
     }
 
     /// Add a whitelist entry to suppress warnings
     #[must_use]
-    pub fn with_whitelist(mut self, kernel_pattern: &str, bug_class: PtxBugClass, reason: &str) -> Self {
+    pub fn with_whitelist(
+        mut self,
+        kernel_pattern: &str,
+        bug_class: PtxBugClass,
+        reason: &str,
+    ) -> Self {
         self.whitelist.push(WhitelistEntry {
             kernel_pattern: kernel_pattern.to_string(),
             bug_class,
@@ -319,14 +354,26 @@ impl PtxBugAnalyzer {
     #[must_use]
     pub fn with_quantized_whitelist() -> Self {
         Self::new()
-            .with_whitelist("q4k*", PtxBugClass::HighRegisterPressure,
-                "Quantized kernels require high registers for dequantization")
-            .with_whitelist("q5k*", PtxBugClass::HighRegisterPressure,
-                "Quantized kernels require high registers for dequantization")
-            .with_whitelist("q6k*", PtxBugClass::HighRegisterPressure,
-                "Quantized kernels require high registers for dequantization")
-            .with_whitelist("q8k*", PtxBugClass::HighRegisterPressure,
-                "Quantized kernels require high registers for dequantization")
+            .with_whitelist(
+                "q4k*",
+                PtxBugClass::HighRegisterPressure,
+                "Quantized kernels require high registers for dequantization",
+            )
+            .with_whitelist(
+                "q5k*",
+                PtxBugClass::HighRegisterPressure,
+                "Quantized kernels require high registers for dequantization",
+            )
+            .with_whitelist(
+                "q6k*",
+                PtxBugClass::HighRegisterPressure,
+                "Quantized kernels require high registers for dequantization",
+            )
+            .with_whitelist(
+                "q8k*",
+                PtxBugClass::HighRegisterPressure,
+                "Quantized kernels require high registers for dequantization",
+            )
     }
 
     /// Create analyzer with comprehensive whitelist for all high-performance kernels
@@ -343,28 +390,58 @@ impl PtxBugAnalyzer {
             // Tensor Core / WMMA kernels - high register usage is expected
             // WMMA m16n16k16 requires 8 registers per fragment × 3 fragments = 24+ registers
             // Plus accumulator, addresses, loop counters, etc.
-            .with_whitelist("gemm_tensor_core*", PtxBugClass::HighRegisterPressure,
-                "Tensor Core WMMA requires many registers for matrix fragments")
-            .with_whitelist("gemm_tensor_core*", PtxBugClass::PredicateOverflow,
-                "Tensor Core kernels use predicates for bounds checking and masking")
-            .with_whitelist("gemm_wmma*", PtxBugClass::HighRegisterPressure,
-                "WMMA FP16 requires registers for A/B/C/D matrix fragments")
-            .with_whitelist("gemm_wmma*", PtxBugClass::PredicateOverflow,
-                "WMMA kernels use predicates for tile boundary handling")
+            .with_whitelist(
+                "gemm_tensor_core*",
+                PtxBugClass::HighRegisterPressure,
+                "Tensor Core WMMA requires many registers for matrix fragments",
+            )
+            .with_whitelist(
+                "gemm_tensor_core*",
+                PtxBugClass::PredicateOverflow,
+                "Tensor Core kernels use predicates for bounds checking and masking",
+            )
+            .with_whitelist(
+                "gemm_wmma*",
+                PtxBugClass::HighRegisterPressure,
+                "WMMA FP16 requires registers for A/B/C/D matrix fragments",
+            )
+            .with_whitelist(
+                "gemm_wmma*",
+                PtxBugClass::PredicateOverflow,
+                "WMMA kernels use predicates for tile boundary handling",
+            )
             // Attention kernels - FlashAttention tiling requires state
-            .with_whitelist("flash_attention*", PtxBugClass::HighRegisterPressure,
-                "FlashAttention tiling requires registers for Q/K/V/O tiles and softmax state")
-            .with_whitelist("attention*", PtxBugClass::HighRegisterPressure,
-                "Attention kernels require registers for Q/K/V tiles and reduction")
+            .with_whitelist(
+                "flash_attention*",
+                PtxBugClass::HighRegisterPressure,
+                "FlashAttention tiling requires registers for Q/K/V/O tiles and softmax state",
+            )
+            .with_whitelist(
+                "attention*",
+                PtxBugClass::HighRegisterPressure,
+                "Attention kernels require registers for Q/K/V tiles and reduction",
+            )
             // Quantized kernels - dequantization math
-            .with_whitelist("q4k*", PtxBugClass::HighRegisterPressure,
-                "Q4_K dequantization requires registers for scale/min extraction")
-            .with_whitelist("q5k*", PtxBugClass::HighRegisterPressure,
-                "Q5_K dequantization requires registers for 5-bit value reconstruction")
-            .with_whitelist("q6k*", PtxBugClass::HighRegisterPressure,
-                "Q6_K dequantization requires registers for 6-bit value reconstruction")
-            .with_whitelist("q8k*", PtxBugClass::HighRegisterPressure,
-                "Q8_K dequantization requires registers for scale application")
+            .with_whitelist(
+                "q4k*",
+                PtxBugClass::HighRegisterPressure,
+                "Q4_K dequantization requires registers for scale/min extraction",
+            )
+            .with_whitelist(
+                "q5k*",
+                PtxBugClass::HighRegisterPressure,
+                "Q5_K dequantization requires registers for 5-bit value reconstruction",
+            )
+            .with_whitelist(
+                "q6k*",
+                PtxBugClass::HighRegisterPressure,
+                "Q6_K dequantization requires registers for 6-bit value reconstruction",
+            )
+            .with_whitelist(
+                "q8k*",
+                PtxBugClass::HighRegisterPressure,
+                "Q8_K dequantization requires registers for scale application",
+            )
     }
 
     /// Check if a bug should be suppressed by whitelist
@@ -448,7 +525,8 @@ impl PtxBugAnalyzer {
                     class: PtxBugClass::SharedMemU64Addressing,
                     line: line_num + 1,
                     instruction: trimmed.to_string(),
-                    message: "Shared memory accessed with 64-bit register. Use 32-bit addressing.".to_string(),
+                    message: "Shared memory accessed with 64-bit register. Use 32-bit addressing."
+                        .to_string(),
                     fix: Some("Replace %rd* with %r* for shared memory addressing".to_string()),
                 });
             }
@@ -477,7 +555,10 @@ impl PtxBugAnalyzer {
             let trimmed = line.trim();
             if let Some(caps) = loop_label.captures(trimmed) {
                 let label = caps.get(1).unwrap().as_str();
-                if label.contains("_start") || label.ends_with("_loop") || label.starts_with("loop_") {
+                if label.contains("_start")
+                    || label.ends_with("_loop")
+                    || label.starts_with("loop_")
+                {
                     loop_start_labels.insert(label.to_string());
                 } else if label.contains("_end") {
                     loop_end_labels.insert(label.to_string());
@@ -496,8 +577,14 @@ impl PtxBugAnalyzer {
                         class: PtxBugClass::LoopBranchToEnd,
                         line: line_num + 1,
                         instruction: trimmed.to_string(),
-                        message: format!("Unconditional branch to loop end '{}'. Should branch to start?", target),
-                        fix: Some(format!("Change target from {} to corresponding _start label", target)),
+                        message: format!(
+                            "Unconditional branch to loop end '{}'. Should branch to start?",
+                            target
+                        ),
+                        fix: Some(format!(
+                            "Change target from {} to corresponding _start label",
+                            target
+                        )),
                     });
                 }
             }
@@ -527,7 +614,8 @@ impl PtxBugAnalyzer {
                 class: PtxBugClass::MissingBarrierSync,
                 line: 0,
                 instruction: String::new(),
-                message: "Shared memory used but no bar.sync found. Race condition possible.".to_string(),
+                message: "Shared memory used but no bar.sync found. Race condition possible."
+                    .to_string(),
                 fix: Some("Add bar.sync 0; between st.shared and ld.shared operations".to_string()),
             });
         }
@@ -552,9 +640,18 @@ impl PtxBugAnalyzer {
                     bugs.push(PtxBug {
                         class: PtxBugClass::MissingBarrierSync,
                         line: line_num + 1,
-                        instruction: format!("st.shared at line {}, ld.shared at line {}", st_line + 1, line_num + 1),
-                        message: "ld.shared follows st.shared without barrier synchronization".to_string(),
-                        fix: Some(format!("Add bar.sync 0; between lines {} and {}", st_line + 1, line_num + 1)),
+                        instruction: format!(
+                            "st.shared at line {}, ld.shared at line {}",
+                            st_line + 1,
+                            line_num + 1
+                        ),
+                        message: "ld.shared follows st.shared without barrier synchronization"
+                            .to_string(),
+                        fix: Some(format!(
+                            "Add bar.sync 0; between lines {} and {}",
+                            st_line + 1,
+                            line_num + 1
+                        )),
                     });
                 }
             }
@@ -635,7 +732,10 @@ impl PtxBugAnalyzer {
                 class: PtxBugClass::RegisterSpills,
                 line: first_local_line,
                 instruction: format!("{} .local declarations", spill_count),
-                message: format!("{} potential register spills detected. High latency local memory access.", spill_count),
+                message: format!(
+                    "{} potential register spills detected. High latency local memory access.",
+                    spill_count
+                ),
                 fix: Some("Reduce live variables or increase register allocation".to_string()),
             });
         }
@@ -687,8 +787,15 @@ impl PtxBugAnalyzer {
                         bugs.push(PtxBug {
                             class: PtxBugClass::RedundantMoves,
                             line: line_num + 1,
-                            instruction: format!("mov chain at lines {} and {}", prev_line + 1, line_num + 1),
-                            message: format!("Redundant move: {} copied to {} then to another register", prev_dest, dest),
+                            instruction: format!(
+                                "mov chain at lines {} and {}",
+                                prev_line + 1,
+                                line_num + 1
+                            ),
+                            message: format!(
+                                "Redundant move: {} copied to {} then to another register",
+                                prev_dest, dest
+                            ),
                             fix: Some("Combine mov chain into single mov".to_string()),
                         });
                     }
@@ -723,8 +830,12 @@ impl PtxBugAnalyzer {
                 class: PtxBugClass::UnoptimizedMemoryPattern,
                 line: 0,
                 instruction: format!("{} single f32 loads, 0 vector loads", single_loads),
-                message: "Multiple single-element loads could potentially be vectorized".to_string(),
-                fix: Some("Consider using ld.global.v2.f32 or ld.global.v4.f32 for consecutive addresses".to_string()),
+                message: "Multiple single-element loads could potentially be vectorized"
+                    .to_string(),
+                fix: Some(
+                    "Consider using ld.global.v2.f32 or ld.global.v4.f32 for consecutive addresses"
+                        .to_string(),
+                ),
             });
         }
 
@@ -754,7 +865,8 @@ impl PtxBugAnalyzer {
                 class: PtxBugClass::UnoptimizedMemoryPattern,
                 line: suspicious_strides[0].0,
                 instruction: format!("Stride {} detected", suspicious_strides[0].1),
-                message: "Non-standard stride may indicate strided (non-coalesced) access".to_string(),
+                message: "Non-standard stride may indicate strided (non-coalesced) access"
+                    .to_string(),
                 fix: Some("Consider restructuring data layout for coalesced access".to_string()),
             });
         }
@@ -812,7 +924,10 @@ impl PtxBugAnalyzer {
                             "Predicate overflow: {} predicates declared (max 8 hardware registers)",
                             pred_count
                         ),
-                        fix: Some("Reduce predicate usage by combining conditions or using branches".to_string()),
+                        fix: Some(
+                            "Reduce predicate usage by combining conditions or using branches"
+                                .to_string(),
+                        ),
                     });
                 }
             }
@@ -849,7 +964,10 @@ impl PtxBugAnalyzer {
                             line: line_num + 1,
                             instruction: line.trim().to_string(),
                             message: format!("Placeholder code detected: contains '{}'", pattern),
-                            fix: Some("Implement complete kernel or use trueno-gpu generation".to_string()),
+                            fix: Some(
+                                "Implement complete kernel or use trueno-gpu generation"
+                                    .to_string(),
+                            ),
                         });
                         break; // Only report once per line
                     }
@@ -894,9 +1012,9 @@ impl PtxBugAnalyzer {
 
                     // Check if this line does computation
                     let compute_ops = [
-                        "add.", "sub.", "mul.", "div.", "fma.", "mad.", "ld.", "st.", "cvt.", "mov.",
-                        "setp.", "and.", "or.", "xor.", "shl.", "shr.", "min.", "max.", "abs.",
-                        "neg.", "rcp.", "sqrt.", "rsqrt.", "sin.", "cos.", "ex2.", "lg2.",
+                        "add.", "sub.", "mul.", "div.", "fma.", "mad.", "ld.", "st.", "cvt.",
+                        "mov.", "setp.", "and.", "or.", "xor.", "shl.", "shr.", "min.", "max.",
+                        "abs.", "neg.", "rcp.", "sqrt.", "rsqrt.", "sin.", "cos.", "ex2.", "lg2.",
                     ];
                     for op in &compute_ops {
                         if inner.contains(op) {
@@ -928,7 +1046,8 @@ impl PtxBugAnalyzer {
                         class: PtxBugClass::EmptyLoopBody,
                         line: i + 1,
                         instruction: format!("Loop '{}' at line {}", label, i + 1),
-                        message: "Loop body contains no computation - may be placeholder code".to_string(),
+                        message: "Loop body contains no computation - may be placeholder code"
+                            .to_string(),
                         fix: Some("Implement loop body or remove empty loop".to_string()),
                     });
                 }
@@ -961,7 +1080,8 @@ impl PtxBugAnalyzer {
                 class: PtxBugClass::MissingBoundsCheck,
                 line: 0,
                 instruction: "No setp.lt/ge with predicated branch found".to_string(),
-                message: "Kernel accesses global memory but may lack thread bounds checking".to_string(),
+                message: "Kernel accesses global memory but may lack thread bounds checking"
+                    .to_string(),
                 fix: Some("Add: setp.lt.u32 %p0, %tid, %size; @%p0 bra do_work;".to_string()),
             });
         }
@@ -1085,11 +1205,19 @@ impl PtxCoverageTracker {
         for feature in &mut self.features {
             let covered = match feature.name.as_str() {
                 "barrier_sync" => ptx.contains("bar.sync"),
-                "shared_memory" => ptx.contains(".shared") || ptx.contains("st.shared") || ptx.contains("ld.shared"),
+                "shared_memory" => {
+                    ptx.contains(".shared")
+                        || ptx.contains("st.shared")
+                        || ptx.contains("ld.shared")
+                }
                 "global_memory" => ptx.contains("ld.global") || ptx.contains("st.global"),
                 "register_allocation" => ptx.contains(".reg"),
-                "loop_patterns" => ptx.contains("bra") && (ptx.contains("_loop") || ptx.contains("loop_")),
-                "control_flow" => ptx.contains("@%p") || ptx.contains("bra") || ptx.contains("setp"),
+                "loop_patterns" => {
+                    ptx.contains("bra") && (ptx.contains("_loop") || ptx.contains("loop_"))
+                }
+                "control_flow" => {
+                    ptx.contains("@%p") || ptx.contains("bra") || ptx.contains("setp")
+                }
                 "local_memory" => ptx.contains(".local"),
                 "entry_point" => ptx.contains(".entry"),
                 "predicates" => ptx.contains(".pred") || ptx.contains("@%p"),
@@ -1147,7 +1275,9 @@ impl PtxCoverageTrackerBuilder {
     /// Create a new builder
     #[must_use]
     pub fn new() -> Self {
-        Self { features: Vec::new() }
+        Self {
+            features: Vec::new(),
+        }
     }
 
     /// Add a feature to track
@@ -1244,7 +1374,9 @@ mod tests {
         // Should not have the broad "no bar.sync" warning
         let missing_barrier_bugs: Vec<_> = result.bugs_of_class(&PtxBugClass::MissingBarrierSync);
         // The specific st/ld pattern should not trigger since bar.sync is present
-        assert!(missing_barrier_bugs.iter().all(|b| !b.message.contains("ld.shared follows st.shared")));
+        assert!(missing_barrier_bugs
+            .iter()
+            .all(|b| !b.message.contains("ld.shared follows st.shared")));
     }
 
     #[test]
@@ -1319,10 +1451,19 @@ loop_end:
 
     #[test]
     fn test_bug_severity_classification() {
-        assert_eq!(PtxBugClass::MissingBarrierSync.severity(), BugSeverity::Critical);
-        assert_eq!(PtxBugClass::SharedMemU64Addressing.severity(), BugSeverity::Critical);
+        assert_eq!(
+            PtxBugClass::MissingBarrierSync.severity(),
+            BugSeverity::Critical
+        );
+        assert_eq!(
+            PtxBugClass::SharedMemU64Addressing.severity(),
+            BugSeverity::Critical
+        );
         assert_eq!(PtxBugClass::RegisterSpills.severity(), BugSeverity::High);
-        assert_eq!(PtxBugClass::MissingEntryPoint.severity(), BugSeverity::FalsePositive);
+        assert_eq!(
+            PtxBugClass::MissingEntryPoint.severity(),
+            BugSeverity::FalsePositive
+        );
     }
 
     #[test]
@@ -1670,7 +1811,10 @@ test_loop_end:
     /// Test new bug class severities
     #[test]
     fn test_new_bug_severities() {
-        assert_eq!(PtxBugClass::HighRegisterPressure.severity(), BugSeverity::High);
+        assert_eq!(
+            PtxBugClass::HighRegisterPressure.severity(),
+            BugSeverity::High
+        );
         assert_eq!(PtxBugClass::PredicateOverflow.severity(), BugSeverity::High);
         assert_eq!(PtxBugClass::PlaceholderCode.severity(), BugSeverity::High);
     }
@@ -1678,7 +1822,10 @@ test_loop_end:
     /// Test new bug class codes
     #[test]
     fn test_new_bug_codes() {
-        assert_eq!(PtxBugClass::HighRegisterPressure.code(), "HIGH_REG_PRESSURE");
+        assert_eq!(
+            PtxBugClass::HighRegisterPressure.code(),
+            "HIGH_REG_PRESSURE"
+        );
         assert_eq!(PtxBugClass::PredicateOverflow.code(), "PRED_OVERFLOW");
         assert_eq!(PtxBugClass::PlaceholderCode.code(), "PLACEHOLDER_CODE");
     }
@@ -1719,8 +1866,11 @@ test_loop_end:
 }
 "#;
         // With exact match whitelist
-        let analyzer = PtxBugAnalyzer::new()
-            .with_whitelist("special_kernel", PtxBugClass::HighRegisterPressure, "Expected high regs");
+        let analyzer = PtxBugAnalyzer::new().with_whitelist(
+            "special_kernel",
+            PtxBugClass::HighRegisterPressure,
+            "Expected high regs",
+        );
         let result = analyzer.analyze(ptx);
         assert!(!result.has_bug(&PtxBugClass::HighRegisterPressure));
     }
@@ -1976,7 +2126,10 @@ middle:
     #[test]
     fn test_extended_bug_severities() {
         assert_eq!(PtxBugClass::EmptyLoopBody.severity(), BugSeverity::High);
-        assert_eq!(PtxBugClass::MissingBoundsCheck.severity(), BugSeverity::High);
+        assert_eq!(
+            PtxBugClass::MissingBoundsCheck.severity(),
+            BugSeverity::High
+        );
         assert_eq!(PtxBugClass::DeadCode.severity(), BugSeverity::Medium);
     }
 
@@ -2015,7 +2168,10 @@ done:
         let result = PtxBugAnalyzer::strict().analyze(ptx);
         assert!(result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
         // Verify it's P0 Critical
-        assert_eq!(PtxBugClass::EarlyExitBeforeBarrier.severity(), BugSeverity::Critical);
+        assert_eq!(
+            PtxBugClass::EarlyExitBeforeBarrier.severity(),
+            BugSeverity::Critical
+        );
     }
 
     /// PARITY-114: Detect unconditional early exit before barrier
@@ -2110,8 +2266,14 @@ done:
     /// PARITY-114: Bug class properties
     #[test]
     fn test_parity114_bug_class_properties() {
-        assert_eq!(PtxBugClass::EarlyExitBeforeBarrier.code(), "EARLY_EXIT_BARRIER");
-        assert_eq!(PtxBugClass::EarlyExitBeforeBarrier.severity(), BugSeverity::Critical);
+        assert_eq!(
+            PtxBugClass::EarlyExitBeforeBarrier.code(),
+            "EARLY_EXIT_BARRIER"
+        );
+        assert_eq!(
+            PtxBugClass::EarlyExitBeforeBarrier.severity(),
+            BugSeverity::Critical
+        );
     }
 
     /// PARITY-114: kv_loop pattern (attention kernels) - safe after fix

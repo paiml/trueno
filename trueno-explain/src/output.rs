@@ -105,10 +105,7 @@ pub fn format_text(report: &AnalysisReport) -> String {
     ));
 
     // Roofline
-    output.push_str(&format!(
-        "\n{}\n",
-        "Performance Estimate:".white().bold()
-    ));
+    output.push_str(&format!("\n{}\n", "Performance Estimate:".white().bold()));
     output.push_str(&format!(
         "  ├── Arithmetic Intensity: {:.2} FLOPs/Byte\n",
         report.roofline.arithmetic_intensity
@@ -124,24 +121,27 @@ pub fn format_text(report: &AnalysisReport) -> String {
 
     // Muda Warnings
     if report.warnings.is_empty() {
-        output.push_str(&format!(
-            "\n{} No Muda detected\n",
-            "✓".green()
-        ));
+        output.push_str(&format!("\n{} No Muda detected\n", "✓".green()));
     } else {
-        output.push_str(&format!(
-            "\n{}\n",
-            "Muda (Waste) Detection:".white().bold()
-        ));
+        output.push_str(&format!("\n{}\n", "Muda (Waste) Detection:".white().bold()));
         for warning in &report.warnings {
             let icon = match warning.muda_type {
                 MudaType::Transport => "⚠".yellow(),
                 MudaType::Waiting => "⏳".yellow(),
                 MudaType::Overprocessing => "🔄".yellow(),
             };
-            output.push_str(&format!("  {} {}: {}\n", icon, muda_name(&warning.muda_type), warning.description));
+            output.push_str(&format!(
+                "  {} {}: {}\n",
+                icon,
+                muda_name(&warning.muda_type),
+                warning.description
+            ));
             if let Some(ref suggestion) = warning.suggestion {
-                output.push_str(&format!("     └── {}: {}\n", "Suggestion".cyan(), suggestion));
+                output.push_str(&format!(
+                    "     └── {}: {}\n",
+                    "Suggestion".cyan(),
+                    suggestion
+                ));
             }
         }
     }

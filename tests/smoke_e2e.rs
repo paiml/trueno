@@ -213,7 +213,9 @@ mod wgpu_tests {
         // 256x256 matrix multiply (above GPU threshold)
         let n = 256;
         let a_data: Vec<f32> = (0..n * n).map(|i| (i as f32 * 0.001) % 1.0).collect();
-        let b_data: Vec<f32> = (0..n * n).map(|i| ((n * n - i) as f32 * 0.001) % 1.0).collect();
+        let b_data: Vec<f32> = (0..n * n)
+            .map(|i| ((n * n - i) as f32 * 0.001) % 1.0)
+            .collect();
 
         let a = Matrix::from_vec(n, n, a_data.clone()).expect("Matrix A creation failed");
         let b = Matrix::from_vec(n, n, b_data.clone()).expect("Matrix B creation failed");
@@ -293,7 +295,10 @@ fn smoke_single_element() {
     let single = vec![42.0f32];
     let v = Vector::from_slice(&single);
     let norm = v.norm_l2().expect("norm_l2 failed");
-    assert!((norm - 42.0).abs() < FP_TOLERANCE, "Single element norm: {norm}");
+    assert!(
+        (norm - 42.0).abs() < FP_TOLERANCE,
+        "Single element norm: {norm}"
+    );
 }
 
 /// Non-aligned sizes (test remainder handling)
@@ -337,7 +342,10 @@ fn smoke_infinity_handling() {
 
     let result = v.mul(&v).expect("Infinity mul failed");
 
-    assert!(result.as_slice()[1].is_infinite(), "Infinity should persist");
+    assert!(
+        result.as_slice()[1].is_infinite(),
+        "Infinity should persist"
+    );
 }
 
 // ============================================================================

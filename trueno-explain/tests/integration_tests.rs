@@ -4,7 +4,9 @@
 
 use std::process::Command;
 use trueno_explain::{Analyzer, PtxAnalyzer};
-use trueno_gpu::kernels::{GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel};
+use trueno_gpu::kernels::{
+    GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel,
+};
 
 /// Helper to run the trueno-explain binary
 fn run_explain(args: &[&str]) -> std::process::Output {
@@ -58,8 +60,14 @@ fn f008_json_flag_valid_json() {
     // Verify expected fields
     let json = parsed.unwrap();
     assert!(json.get("name").is_some(), "JSON should have 'name' field");
-    assert!(json.get("target").is_some(), "JSON should have 'target' field");
-    assert!(json.get("registers").is_some(), "JSON should have 'registers' field");
+    assert!(
+        json.get("target").is_some(),
+        "JSON should have 'target' field"
+    );
+    assert!(
+        json.get("registers").is_some(),
+        "JSON should have 'registers' field"
+    );
 }
 
 /// F011: Analyze vector_add reports <20 registers for f32
@@ -257,7 +265,10 @@ fn f003_bugs_help_shows_options() {
     assert!(output.status.success(), "Bugs help should succeed");
     assert!(stdout.contains("--kernel"), "Should show --kernel option");
     assert!(stdout.contains("--strict"), "Should show --strict option");
-    assert!(stdout.contains("--fail-on-bugs"), "Should show --fail-on-bugs option");
+    assert!(
+        stdout.contains("--fail-on-bugs"),
+        "Should show --fail-on-bugs option"
+    );
     assert!(stdout.contains("--json"), "Should show --json option");
 }
 
@@ -276,7 +287,10 @@ fn f009_bugs_json_valid() {
     // Verify expected fields
     let json = parsed.unwrap();
     assert!(json.get("bugs").is_some(), "JSON should have 'bugs' field");
-    assert!(json.get("lines_analyzed").is_some(), "JSON should have 'lines_analyzed' field");
+    assert!(
+        json.get("lines_analyzed").is_some(),
+        "JSON should have 'lines_analyzed' field"
+    );
 }
 
 /// F010: Bug report shows kernel name and summary
@@ -286,7 +300,10 @@ fn f010_bug_report_format() {
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(output.status.success(), "Bug analysis should succeed");
-    assert!(stdout.contains("PTX BUG HUNTING REPORT"), "Should show report header");
+    assert!(
+        stdout.contains("PTX BUG HUNTING REPORT"),
+        "Should show report header"
+    );
     assert!(stdout.contains("Kernel:"), "Should show kernel name");
     assert!(stdout.contains("SUMMARY"), "Should show summary section");
     assert!(stdout.contains("P0 Critical:"), "Should show P0 count");
@@ -298,8 +315,14 @@ fn f101_cli_bugs_strict_mode() {
     let output = run_explain(&["bugs", "-K", "gemm_tiled", "--strict"]);
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    assert!(output.status.success(), "Strict bug analysis should succeed");
-    assert!(stdout.contains("PTX BUG HUNTING REPORT"), "Should show report");
+    assert!(
+        output.status.success(),
+        "Strict bug analysis should succeed"
+    );
+    assert!(
+        stdout.contains("PTX BUG HUNTING REPORT"),
+        "Should show report"
+    );
 }
 
 /// F102 CLI: --fail-on-bugs exits with error on critical bugs
@@ -307,7 +330,10 @@ fn f101_cli_bugs_strict_mode() {
 fn f102_cli_fail_on_bugs_success() {
     // gemm_naive should have no critical bugs
     let output = run_explain(&["bugs", "-K", "gemm_naive", "--fail-on-bugs"]);
-    assert!(output.status.success(), "Should succeed with no critical bugs");
+    assert!(
+        output.status.success(),
+        "Should succeed with no critical bugs"
+    );
 }
 
 /// Test all kernels pass bug hunting in normal mode

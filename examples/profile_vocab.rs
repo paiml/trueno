@@ -32,5 +32,8 @@ fn main() {
     let elapsed = start.elapsed();
 
     println!("5 iterations: {:.1}ms", elapsed.as_secs_f64() * 1000.0);
-    println!("Per iteration: {:.1}ms", elapsed.as_secs_f64() * 1000.0 / 5.0);
+    println!(
+        "Per iteration: {:.1}ms",
+        elapsed.as_secs_f64() * 1000.0 / 5.0
+    );
 }

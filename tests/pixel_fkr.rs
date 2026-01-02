@@ -59,7 +59,9 @@ fn scalar_rmsnorm(x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
 
 /// SiLU activation (LLaMA FFN) - scalar implementation
 fn scalar_silu(x: &[f32]) -> Vec<f32> {
-    x.iter().map(|xi| xi * (1.0 / (1.0 + (-xi).exp()))).collect()
+    x.iter()
+        .map(|xi| xi * (1.0 / (1.0 + (-xi).exp())))
+        .collect()
 }
 
 /// Softmax - scalar implementation with numerical stability
@@ -165,11 +167,16 @@ fn scalar_pixel_fkr_rmsnorm() {
 
     // Verify output properties
     assert_eq!(result.len(), 4096);
-    assert!(result.iter().all(|v| v.is_finite()), "Non-finite value in RMS norm");
+    assert!(
+        result.iter().all(|v| v.is_finite()),
+        "Non-finite value in RMS norm"
+    );
 
-    println!("scalar_pixel_fkr_rmsnorm: {} elements, max={:.6}",
-             result.len(),
-             result.iter().cloned().fold(f32::NEG_INFINITY, f32::max));
+    println!(
+        "scalar_pixel_fkr_rmsnorm: {} elements, max={:.6}",
+        result.len(),
+        result.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
+    );
 }
 
 /// scalar-pixel-fkr test: SiLU
@@ -185,7 +192,10 @@ fn scalar_pixel_fkr_silu() {
     // SiLU(x) should be bounded for bounded input
     for (i, (xi, yi)) in x.iter().zip(result.iter()).enumerate() {
         if *xi > 0.0 {
-            assert!(*yi > 0.0, "SiLU should be positive for positive input at {i}");
+            assert!(
+                *yi > 0.0,
+                "SiLU should be positive for positive input at {i}"
+            );
         }
     }
 
@@ -212,7 +222,10 @@ fn scalar_pixel_fkr_softmax() {
 
     // All values should be in (0, 1)
     for (i, v) in result.iter().enumerate() {
-        assert!(*v > 0.0 && *v <= 1.0, "Softmax value at {i} out of range: {v}");
+        assert!(
+            *v > 0.0 && *v <= 1.0,
+            "Softmax value at {i} out of range: {v}"
+        );
     }
 
     println!("scalar_pixel_fkr_softmax: sum={:.6}", sum);
@@ -229,7 +242,10 @@ fn scalar_pixel_fkr_rope() {
 
     // Verify output dimensions
     assert_eq!(result.len(), 512);
-    assert!(result.iter().all(|v| v.is_finite()), "Non-finite in RoPE output");
+    assert!(
+        result.iter().all(|v| v.is_finite()),
+        "Non-finite in RoPE output"
+    );
 
     // RoPE should preserve norm approximately
     let input_norm: f32 = x.iter().map(|v| v * v).sum::<f32>().sqrt();
@@ -240,7 +256,10 @@ fn scalar_pixel_fkr_rope() {
         "RoPE norm ratio too far from 1.0: {norm_ratio}"
     );
 
-    println!("scalar_pixel_fkr_rope: input_norm={:.4}, output_norm={:.4}", input_norm, output_norm);
+    println!(
+        "scalar_pixel_fkr_rope: input_norm={:.4}, output_norm={:.4}",
+        input_norm, output_norm
+    );
 }
 
 /// scalar-pixel-fkr test: Causal Mask
@@ -275,7 +294,10 @@ fn scalar_pixel_fkr_causal_mask() {
         }
     }
 
-    println!("scalar_pixel_fkr_causal_mask: {}x{} verified", seq_len, seq_len);
+    println!(
+        "scalar_pixel_fkr_causal_mask: {}x{} verified",
+        seq_len, seq_len
+    );
 }
 
 /// scalar-pixel-fkr test: Q4_K dequantization
@@ -296,9 +318,15 @@ fn scalar_pixel_fkr_q4k_dequant() {
 
     // With 4-bit values [0,15], zero_point=8, scale=0.1
     // Range should be approximately (-8*0.1, (15-8)*0.1) = (-0.8, 0.7)
-    assert!(min_val >= -1.0 && max_val <= 1.0, "Dequant range: [{min_val}, {max_val}]");
+    assert!(
+        min_val >= -1.0 && max_val <= 1.0,
+        "Dequant range: [{min_val}, {max_val}]"
+    );
 
-    println!("scalar_pixel_fkr_q4k_dequant: range=[{:.3}, {:.3}]", min_val, max_val);
+    println!(
+        "scalar_pixel_fkr_q4k_dequant: range=[{:.3}, {:.3}]",
+        min_val, max_val
+    );
 }
 
 // ============================================================================
@@ -354,8 +382,18 @@ fn simd_pixel_fkr_vector_ops() {
     let simd_add = va.add(&vb).expect("SIMD add failed");
     let simd_mul = va.mul(&vb).expect("SIMD mul failed");
 
-    assert!(vectors_match(&scalar_add, simd_add.as_slice(), SIMD_TOLERANCE, "simd_add"));
-    assert!(vectors_match(&scalar_mul, simd_mul.as_slice(), SIMD_TOLERANCE, "simd_mul"));
+    assert!(vectors_match(
+        &scalar_add,
+        simd_add.as_slice(),
+        SIMD_TOLERANCE,
+        "simd_add"
+    ));
+    assert!(vectors_match(
+        &scalar_mul,
+        simd_mul.as_slice(),
+        SIMD_TOLERANCE,
+        "simd_mul"
+    ));
 }
 
 /// simd-pixel-fkr: Softmax matches scalar baseline
@@ -371,7 +409,12 @@ fn simd_pixel_fkr_softmax() {
     let v = Vector::from_slice(&x);
     let simd_result = v.softmax().expect("SIMD softmax failed");
 
-    assert!(vectors_match(&scalar_result, simd_result.as_slice(), SIMD_TOLERANCE, "simd_softmax"));
+    assert!(vectors_match(
+        &scalar_result,
+        simd_result.as_slice(),
+        SIMD_TOLERANCE,
+        "simd_softmax"
+    ));
 }
 
 /// simd-pixel-fkr: Unaligned input (17 elements - not divisible by SIMD width)
@@ -389,7 +432,12 @@ fn simd_pixel_fkr_unaligned_17() {
     let vb = Vector::from_slice(&b);
     let simd_add = va.add(&vb).expect("SIMD unaligned add failed");
 
-    assert!(vectors_match(&scalar_add, simd_add.as_slice(), SIMD_TOLERANCE, "simd_unaligned_17"));
+    assert!(vectors_match(
+        &scalar_add,
+        simd_add.as_slice(),
+        SIMD_TOLERANCE,
+        "simd_unaligned_17"
+    ));
 }
 
 /// simd-pixel-fkr: Remainder handling (255 elements)
@@ -407,7 +455,12 @@ fn simd_pixel_fkr_remainder_255() {
     let vb = Vector::from_slice(&b);
     let simd_mul = va.mul(&vb).expect("SIMD remainder mul failed");
 
-    assert!(vectors_match(&scalar_mul, simd_mul.as_slice(), SIMD_TOLERANCE, "simd_remainder_255"));
+    assert!(vectors_match(
+        &scalar_mul,
+        simd_mul.as_slice(),
+        SIMD_TOLERANCE,
+        "simd_remainder_255"
+    ));
 }
 
 /// simd-pixel-fkr: ReLU activation
@@ -423,7 +476,12 @@ fn simd_pixel_fkr_relu() {
     let v = Vector::from_slice(&x);
     let simd_relu = v.relu().expect("SIMD relu failed");
 
-    assert!(vectors_match(&scalar_relu, simd_relu.as_slice(), SIMD_TOLERANCE, "simd_relu"));
+    assert!(vectors_match(
+        &scalar_relu,
+        simd_relu.as_slice(),
+        SIMD_TOLERANCE,
+        "simd_relu"
+    ));
 }
 
 // ============================================================================
@@ -455,7 +513,12 @@ mod wgpu_fkr {
         let vb = Vector::from_slice(&b);
         let wgpu_add = va.add(&vb).expect("WGPU add failed");
 
-        assert!(vectors_match(&scalar_add, wgpu_add.as_slice(), GPU_TOLERANCE, "wgpu_large_vector"));
+        assert!(vectors_match(
+            &scalar_add,
+            wgpu_add.as_slice(),
+            GPU_TOLERANCE,
+            "wgpu_large_vector"
+        ));
     }
 
     /// wgpu-pixel-fkr: Matrix multiply (GPU stress test)
@@ -491,7 +554,12 @@ mod wgpu_fkr {
 
         // Matmul accumulates errors, so use larger tolerance
         let matmul_tolerance = GPU_TOLERANCE * n as f32;
-        assert!(vectors_match(&scalar_result, wgpu_result.as_slice(), matmul_tolerance, "wgpu_matmul_128x128"));
+        assert!(vectors_match(
+            &scalar_result,
+            wgpu_result.as_slice(),
+            matmul_tolerance,
+            "wgpu_matmul_128x128"
+        ));
     }
 
     /// wgpu-pixel-fkr: Softmax (numerical stability on GPU)
@@ -512,7 +580,12 @@ mod wgpu_fkr {
         let v = Vector::from_slice(&x);
         let wgpu_result = v.softmax().expect("WGPU softmax failed");
 
-        assert!(vectors_match(&scalar_result, wgpu_result.as_slice(), GPU_TOLERANCE, "wgpu_softmax"));
+        assert!(vectors_match(
+            &scalar_result,
+            wgpu_result.as_slice(),
+            GPU_TOLERANCE,
+            "wgpu_softmax"
+        ));
     }
 }
 

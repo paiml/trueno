@@ -8919,7 +8919,9 @@ mod tests {
     #[test]
     fn test_norm_l1_avx512_path() {
         // 32 elements to ensure AVX512 loop runs twice (32 / 16 = 2)
-        let data: Vec<f32> = (0..32).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let data: Vec<f32> = (0..32)
+            .map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) })
+            .collect();
         let v = Vector::from_slice(&data);
         let result = v.norm_l1().unwrap();
         // Sum of |0| + |1| + |2| + ... + |31| = 0 + 1 + 2 + ... + 31 = 31*32/2 = 496
@@ -8950,7 +8952,9 @@ mod tests {
     #[test]
     fn test_abs_avx512_path() {
         // 48 elements to ensure AVX512 loop runs 3 times (48 / 16 = 3)
-        let data: Vec<f32> = (0..48).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
+        let data: Vec<f32> = (0..48)
+            .map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) })
+            .collect();
         let v = Vector::from_slice(&data);
         let result = v.abs().unwrap();
         for i in 0..48 {

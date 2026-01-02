@@ -161,6 +161,16 @@ pub struct CudaDriver {
         size: usize,
         stream: CUstream,
     ) -> CUresult,
+    /// cuMemcpyDtoD - Sync copy from device to device (PAR-023)
+    pub cuMemcpyDtoD:
+        unsafe extern "C" fn(dst: CUdeviceptr, src: CUdeviceptr, size: usize) -> CUresult,
+    /// cuMemcpyDtoDAsync - Async copy from device to device (PAR-023)
+    pub cuMemcpyDtoDAsync: unsafe extern "C" fn(
+        dst: CUdeviceptr,
+        src: CUdeviceptr,
+        size: usize,
+        stream: CUstream,
+    ) -> CUresult,
     /// cuMemGetInfo - Get free and total memory
     pub cuMemGetInfo: unsafe extern "C" fn(free: *mut usize, total: *mut usize) -> CUresult,
 
@@ -284,6 +294,10 @@ mod loading {
                     unsafe extern "C" fn(CUdeviceptr, *const c_void, usize, CUstream) -> CUresult;
                 type FnMemcpyDtoHAsync =
                     unsafe extern "C" fn(*mut c_void, CUdeviceptr, usize, CUstream) -> CUresult;
+                type FnMemcpyDtoD =
+                    unsafe extern "C" fn(CUdeviceptr, CUdeviceptr, usize) -> CUresult;
+                type FnMemcpyDtoDAsync =
+                    unsafe extern "C" fn(CUdeviceptr, CUdeviceptr, usize, CUstream) -> CUresult;
                 type FnMemGetInfo = unsafe extern "C" fn(*mut usize, *mut usize) -> CUresult;
                 type FnStreamCreate = unsafe extern "C" fn(*mut CUstream, c_uint) -> CUresult;
                 type FnStreamDestroy = unsafe extern "C" fn(CUstream) -> CUresult;
@@ -327,6 +341,8 @@ mod loading {
                     cuMemcpyDtoH: load_sym!(cuMemcpyDtoH_v2, FnMemcpyDtoH),
                     cuMemcpyHtoDAsync: load_sym!(cuMemcpyHtoDAsync_v2, FnMemcpyHtoDAsync),
                     cuMemcpyDtoHAsync: load_sym!(cuMemcpyDtoHAsync_v2, FnMemcpyDtoHAsync),
+                    cuMemcpyDtoD: load_sym!(cuMemcpyDtoD_v2, FnMemcpyDtoD),
+                    cuMemcpyDtoDAsync: load_sym!(cuMemcpyDtoDAsync_v2, FnMemcpyDtoDAsync),
                     cuMemGetInfo: load_sym!(cuMemGetInfo_v2, FnMemGetInfo),
                     cuStreamCreate: load_sym!(cuStreamCreate, FnStreamCreate),
                     cuStreamDestroy: load_sym!(cuStreamDestroy_v2, FnStreamDestroy),

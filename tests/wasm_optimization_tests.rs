@@ -30,7 +30,15 @@ fn test_01_identity_matmul() {
             let expected = data[i * n + j];
             let actual = *result.get(i, j).unwrap();
             let diff = (expected - actual).abs();
-            assert!(diff < 1e-6, "Identity test failed at ({}, {}): expected {}, got {}, diff {}", i, j, expected, actual, diff);
+            assert!(
+                diff < 1e-6,
+                "Identity test failed at ({}, {}): expected {}, got {}, diff {}",
+                i,
+                j,
+                expected,
+                actual,
+                diff
+            );
         }
     }
 }
@@ -51,7 +59,13 @@ fn test_02_zero_matmul() {
     for i in 0..n {
         for j in 0..n {
             let val = *result.get(i, j).unwrap();
-            assert!(val == 0.0, "Zero test failed at ({}, {}): expected 0.0, got {}", i, j, val);
+            assert!(
+                val == 0.0,
+                "Zero test failed at ({}, {}): expected 0.0, got {}",
+                i,
+                j,
+                val
+            );
         }
     }
 }
@@ -84,7 +98,14 @@ fn test_03_transpose_property() {
             let v1 = *c.get(i, j).unwrap();
             let v2 = *c_prime.get(i, j).unwrap();
             let diff = (v1 - v2).abs();
-            assert!(diff < 1e-5, "Transpose test failed at ({}, {}): {} vs {}", i, j, v1, v2);
+            assert!(
+                diff < 1e-5,
+                "Transpose test failed at ({}, {}): {} vs {}",
+                i,
+                j,
+                v1,
+                v2
+            );
         }
     }
 }
@@ -95,9 +116,9 @@ fn test_03_transpose_property() {
 #[test]
 fn test_04_non_aligned_dimensions() {
     // Prime dimensions that don't align to 8x8 tiles
-    let m = 67;  // prime
-    let k = 89;  // prime
-    let n = 71;  // prime
+    let m = 67; // prime
+    let k = 89; // prime
+    let n = 71; // prime
 
     let a_data: Vec<f32> = (0..m * k).map(|i| ((i % 11) as f32) * 0.1).collect();
     let b_data: Vec<f32> = (0..k * n).map(|i| ((i % 7) as f32) * 0.1).collect();
@@ -113,15 +134,22 @@ fn test_04_non_aligned_dimensions() {
     assert_eq!(result.cols(), n);
 
     // Verify some values against naive computation
-    for i in [0, m/2, m-1] {
-        for j in [0, n/2, n-1] {
+    for i in [0, m / 2, m - 1] {
+        for j in [0, n / 2, n - 1] {
             let mut expected = 0.0f32;
             for kk in 0..k {
                 expected += a.get(i, kk).unwrap() * b.get(kk, j).unwrap();
             }
             let actual = *result.get(i, j).unwrap();
             let diff = (expected - actual).abs();
-            assert!(diff < 1e-3, "Non-aligned test failed at ({}, {}): expected {}, got {}", i, j, expected, actual);
+            assert!(
+                diff < 1e-3,
+                "Non-aligned test failed at ({}, {}): expected {}, got {}",
+                i,
+                j,
+                expected,
+                actual
+            );
         }
     }
 }
@@ -132,7 +160,7 @@ fn test_04_non_aligned_dimensions() {
 fn test_05_nan_propagation() {
     let n = 8;
     let mut a_data: Vec<f32> = vec![1.0; n * n];
-    a_data[n * 2 + 3] = f32::NAN;  // Insert NaN at position (2, 3)
+    a_data[n * 2 + 3] = f32::NAN; // Insert NaN at position (2, 3)
 
     let a = Matrix::from_vec(n, n, a_data).unwrap();
     let b = Matrix::from_vec(n, n, vec![1.0; n * n]).unwrap();
@@ -159,7 +187,11 @@ fn test_06_infinity_handling() {
 
     // Should overflow to infinity, not panic or produce garbage
     let val = *result.get(0, 0).unwrap();
-    assert!(val.is_infinite() || val.is_nan(), "Overflow should produce Inf or NaN, got {}", val);
+    assert!(
+        val.is_infinite() || val.is_nan(),
+        "Overflow should produce Inf or NaN, got {}",
+        val
+    );
 }
 
 /// Checklist #7: The Determinism Check
@@ -182,8 +214,15 @@ fn test_07_determinism() {
                 let r = *reference.get(i, j).unwrap();
                 let v = *result.get(i, j).unwrap();
                 // Bit-exact comparison
-                assert!(r.to_bits() == v.to_bits(),
-                    "Determinism failed at iter {}, ({}, {}): {} vs {}", iter, i, j, r, v);
+                assert!(
+                    r.to_bits() == v.to_bits(),
+                    "Determinism failed at iter {}, ({}, {}): {} vs {}",
+                    iter,
+                    i,
+                    j,
+                    r,
+                    v
+                );
             }
         }
     }
@@ -249,7 +288,10 @@ fn test_14_memory_ceiling() {
     // Calculate expected memory: 3 matrices × 384² × 4 bytes = ~1.7MB
     // This is well under the 256MB target
     let expected_bytes = 3 * n * n * 4;
-    assert!(expected_bytes < 256 * 1024 * 1024, "Memory calculation exceeded 256MB ceiling");
+    assert!(
+        expected_bytes < 256 * 1024 * 1024,
+        "Memory calculation exceeded 256MB ceiling"
+    );
 }
 
 /// Checklist #15: The Leak Check
@@ -306,10 +348,13 @@ fn test_30_headless_compatible() {
 fn test_34_graceful_error_handling() {
     // Test invalid dimensions
     let a = Matrix::zeros(10, 20);
-    let b = Matrix::zeros(30, 40);  // Incompatible: 20 != 30
+    let b = Matrix::zeros(30, 40); // Incompatible: 20 != 30
 
     let result = a.matmul(&b);
-    assert!(result.is_err(), "Should return error for dimension mismatch");
+    assert!(
+        result.is_err(),
+        "Should return error for dimension mismatch"
+    );
 }
 
 /// Checklist #38: The API Match
@@ -342,12 +387,14 @@ fn test_38_reference_match() {
 #[test]
 fn test_whisper_encoder_attention() {
     let m = 384;
-    let k = 74;  // Reduced mel frames
+    let k = 74; // Reduced mel frames
     let n = 384;
 
     // Simulate encoder weight shapes
     let q_proj: Vec<f32> = (0..m * k).map(|i| ((i % 19) as f32 - 9.0) * 0.02).collect();
-    let k_proj: Vec<f32> = (0..k * n).map(|i| ((i % 23) as f32 - 11.0) * 0.02).collect();
+    let k_proj: Vec<f32> = (0..k * n)
+        .map(|i| ((i % 23) as f32 - 11.0) * 0.02)
+        .collect();
 
     let q = Matrix::from_vec(m, k, q_proj).unwrap();
     let kt = Matrix::from_vec(k, n, k_proj).unwrap();

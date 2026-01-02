@@ -6,18 +6,17 @@ use std::fs;
 use trueno_explain::{BugSeverity, PtxBugAnalyzer};
 
 fn main() {
-    println!(
-        "╔══════════════════════════════════════════════════════════════════════════════╗"
-    );
-    println!(
-        "║                    REALIZAR PTX BUG ANALYSIS                                 ║"
-    );
-    println!(
-        "╚══════════════════════════════════════════════════════════════════════════════╝\n"
-    );
+    println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║                    REALIZAR PTX BUG ANALYSIS                                 ║");
+    println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
 
     let ptx_dir = "/tmp/realizar_ptx_analysis";
-    let files = ["bias_activation.ptx", "gemm_fp16_wmma.ptx", "fused_q4k_q8_dot.ptx", "multi_head_attention.ptx"];
+    let files = [
+        "bias_activation.ptx",
+        "gemm_fp16_wmma.ptx",
+        "fused_q4k_q8_dot.ptx",
+        "multi_head_attention.ptx",
+    ];
 
     let mut total_bugs = 0;
     let mut p0_total = 0;
@@ -57,10 +56,23 @@ fn main() {
             "✅"
         };
 
-        println!("{} {} - {} bugs ({} P0, {} P1, {} P2)", icon, file, result.bugs.len(), p0, p1, p2);
+        println!(
+            "{} {} - {} bugs ({} P0, {} P1, {} P2)",
+            icon,
+            file,
+            result.bugs.len(),
+            p0,
+            p1,
+            p2
+        );
 
         for bug in &result.bugs {
-            println!("   └─ [{}] {}: {}", bug.class.severity(), bug.class.code(), bug.message);
+            println!(
+                "   └─ [{}] {}: {}",
+                bug.class.severity(),
+                bug.class.code(),
+                bug.message
+            );
             if bug.line > 0 {
                 println!("      Line {}: {}", bug.line, bug.instruction);
             }

@@ -53,15 +53,27 @@ where
 }
 
 fn main() {
-    println!("\n{}{}═══════════════════════════════════════════════════════════════{}", BOLD, CYAN, RESET);
-    println!("{}{}                    TRUENO PERFORMANCE DASHBOARD                {}", BOLD, CYAN, RESET);
-    println!("{}{}═══════════════════════════════════════════════════════════════{}\n", BOLD, CYAN, RESET);
+    println!(
+        "\n{}{}═══════════════════════════════════════════════════════════════{}",
+        BOLD, CYAN, RESET
+    );
+    println!(
+        "{}{}                    TRUENO PERFORMANCE DASHBOARD                {}",
+        BOLD, CYAN, RESET
+    );
+    println!(
+        "{}{}═══════════════════════════════════════════════════════════════{}\n",
+        BOLD, CYAN, RESET
+    );
 
     // ═══════════════════════════════════════════════════════════════
     // VECTOR OPERATIONS
     // ═══════════════════════════════════════════════════════════════
     println!("{}{}▶ VECTOR OPERATIONS{}", BOLD, CYAN, RESET);
-    println!("{}─────────────────────────────────────────────────────────────────{}", DIM, RESET);
+    println!(
+        "{}─────────────────────────────────────────────────────────────────{}",
+        DIM, RESET
+    );
 
     let sizes = [1024, 4096, 16384, 65536, 262144];
     let expected_gflops = 15.0; // Expect ~15 GFLOPS for vector ops
@@ -79,15 +91,26 @@ fn main() {
         let color = color_for_gflops(gflops, expected_gflops);
         println!(
             "  dot({:>6}) {:>7.2}ms {:>6.1} GFLOPS {} {}{}",
-            size, time, gflops, bar(gflops, 30.0, 20), color, RESET
+            size,
+            time,
+            gflops,
+            bar(gflops, 30.0, 20),
+            color,
+            RESET
         );
     }
 
     // ═══════════════════════════════════════════════════════════════
     // MATRIX-VECTOR OPERATIONS (1×K @ K×N pattern)
     // ═══════════════════════════════════════════════════════════════
-    println!("\n{}{}▶ VECTOR-MATRIX MULTIPLY (ML inference pattern){}", BOLD, CYAN, RESET);
-    println!("{}─────────────────────────────────────────────────────────────────{}", DIM, RESET);
+    println!(
+        "\n{}{}▶ VECTOR-MATRIX MULTIPLY (ML inference pattern){}",
+        BOLD, CYAN, RESET
+    );
+    println!(
+        "{}─────────────────────────────────────────────────────────────────{}",
+        DIM, RESET
+    );
 
     let patterns = [
         (1, 384, 51865, "Whisper vocab projection"),
@@ -112,7 +135,15 @@ fn main() {
         let color = color_for_gflops(gflops, expected);
         println!(
             "  {}×{}×{} {:>20} {:>6.1}ms {:>5.1} GFLOPS {} {}{}",
-            m, k, n, desc, time, gflops, bar(gflops, 15.0, 15), color, RESET
+            m,
+            k,
+            n,
+            desc,
+            time,
+            gflops,
+            bar(gflops, 15.0, 15),
+            color,
+            RESET
         );
     }
 
@@ -120,9 +151,17 @@ fn main() {
     // GENERAL MATRIX MULTIPLY
     // ═══════════════════════════════════════════════════════════════
     println!("\n{}{}▶ GENERAL MATRIX MULTIPLY{}", BOLD, CYAN, RESET);
-    println!("{}─────────────────────────────────────────────────────────────────{}", DIM, RESET);
+    println!(
+        "{}─────────────────────────────────────────────────────────────────{}",
+        DIM, RESET
+    );
 
-    let sizes = [(64, 64, 64), (128, 128, 128), (256, 256, 256), (512, 512, 512)];
+    let sizes = [
+        (64, 64, 64),
+        (128, 128, 128),
+        (256, 256, 256),
+        (512, 512, 512),
+    ];
 
     for (m, k, n) in sizes {
         let ops = (m * k * n) as f64;
@@ -140,7 +179,14 @@ fn main() {
         let color = color_for_gflops(gflops, expected);
         println!(
             "  {}×{}×{} {:>8.1}ms {:>5.1} GFLOPS {} {}{}",
-            m, k, n, time, gflops, bar(gflops, 10.0, 20), color, RESET
+            m,
+            k,
+            n,
+            time,
+            gflops,
+            bar(gflops, 10.0, 20),
+            color,
+            RESET
         );
     }
 
@@ -148,7 +194,10 @@ fn main() {
     // TRANSPOSE OPERATIONS
     // ═══════════════════════════════════════════════════════════════
     println!("\n{}{}▶ TRANSPOSE OPERATIONS{}", BOLD, CYAN, RESET);
-    println!("{}─────────────────────────────────────────────────────────────────{}", DIM, RESET);
+    println!(
+        "{}─────────────────────────────────────────────────────────────────{}",
+        DIM, RESET
+    );
 
     let sizes = [(384, 51865), (768, 50257), (1024, 1024), (2048, 2048)];
 
@@ -164,18 +213,36 @@ fn main() {
         let time_ms = elapsed.as_secs_f64() * 1000.0 / 5.0;
         let gb_per_sec = (rows * cols * 4 * 2) as f64 / 1e9 / (time_ms / 1000.0);
 
-        let color = if gb_per_sec > 10.0 { GREEN } else if gb_per_sec > 5.0 { YELLOW } else { RED };
+        let color = if gb_per_sec > 10.0 {
+            GREEN
+        } else if gb_per_sec > 5.0 {
+            YELLOW
+        } else {
+            RED
+        };
         println!(
             "  {}×{} {:>8.1}ms {:>5.1} GB/s {} {}{}",
-            rows, cols, time_ms, gb_per_sec, bar(gb_per_sec, 20.0, 20), color, RESET
+            rows,
+            cols,
+            time_ms,
+            gb_per_sec,
+            bar(gb_per_sec, 20.0, 20),
+            color,
+            RESET
         );
     }
 
     // ═══════════════════════════════════════════════════════════════
     // ACTIVATION FUNCTIONS
     // ═══════════════════════════════════════════════════════════════
-    println!("\n{}{}▶ ACTIVATION FUNCTIONS (vector size: 65536){}", BOLD, CYAN, RESET);
-    println!("{}─────────────────────────────────────────────────────────────────{}", DIM, RESET);
+    println!(
+        "\n{}{}▶ ACTIVATION FUNCTIONS (vector size: 65536){}",
+        BOLD, CYAN, RESET
+    );
+    println!(
+        "{}─────────────────────────────────────────────────────────────────{}",
+        DIM, RESET
+    );
 
     let size = 65536;
     let data: Vec<f32> = (0..size).map(|i| ((i as f32) * 0.01).sin()).collect();
@@ -204,10 +271,21 @@ fn main() {
         let time_us = elapsed.as_secs_f64() * 1_000_000.0 / 50.0;
         let throughput = size as f64 / time_us; // elements per microsecond
 
-        let color = if throughput > 100.0 { GREEN } else if throughput > 50.0 { YELLOW } else { RED };
+        let color = if throughput > 100.0 {
+            GREEN
+        } else if throughput > 50.0 {
+            YELLOW
+        } else {
+            RED
+        };
         println!(
             "  {:>10} {:>8.1}μs {:>6.1}M elem/s {} {}{}",
-            name, time_us, throughput, bar(throughput, 200.0, 15), color, RESET
+            name,
+            time_us,
+            throughput,
+            bar(throughput, 200.0, 15),
+            color,
+            RESET
         );
     }
 
@@ -215,7 +293,10 @@ fn main() {
     // MEMORY ALLOCATION OVERHEAD
     // ═══════════════════════════════════════════════════════════════
     println!("\n{}{}▶ MEMORY ALLOCATION OVERHEAD{}", BOLD, CYAN, RESET);
-    println!("{}─────────────────────────────────────────────────────────────────{}", DIM, RESET);
+    println!(
+        "{}─────────────────────────────────────────────────────────────────{}",
+        DIM, RESET
+    );
 
     let sizes_mb = [1, 10, 50, 100];
 
@@ -231,17 +312,37 @@ fn main() {
         let time_ms = elapsed.as_secs_f64() * 1000.0 / 10.0;
         let gb_per_sec = (size_mb as f64) / 1000.0 / (time_ms / 1000.0);
 
-        let color = if time_ms < 5.0 { GREEN } else if time_ms < 20.0 { YELLOW } else { RED };
+        let color = if time_ms < 5.0 {
+            GREEN
+        } else if time_ms < 20.0 {
+            YELLOW
+        } else {
+            RED
+        };
         println!(
             "  {:>3}MB alloc {:>8.1}ms {:>5.1} GB/s {} {}{}",
-            size_mb, time_ms, gb_per_sec, bar(gb_per_sec, 50.0, 15), color, RESET
+            size_mb,
+            time_ms,
+            gb_per_sec,
+            bar(gb_per_sec, 50.0, 15),
+            color,
+            RESET
         );
     }
 
     // ═══════════════════════════════════════════════════════════════
     // SUMMARY
     // ═══════════════════════════════════════════════════════════════
-    println!("\n{}{}═══════════════════════════════════════════════════════════════{}", BOLD, CYAN, RESET);
-    println!("{}Legend: {}FAST{} {}OK{} {}SLOW{}", DIM, GREEN, RESET, YELLOW, RESET, RED, RESET);
-    println!("{}{}═══════════════════════════════════════════════════════════════{}\n", BOLD, CYAN, RESET);
+    println!(
+        "\n{}{}═══════════════════════════════════════════════════════════════{}",
+        BOLD, CYAN, RESET
+    );
+    println!(
+        "{}Legend: {}FAST{} {}OK{} {}SLOW{}",
+        DIM, GREEN, RESET, YELLOW, RESET, RED, RESET
+    );
+    println!(
+        "{}{}═══════════════════════════════════════════════════════════════{}\n",
+        BOLD, CYAN, RESET
+    );
 }
