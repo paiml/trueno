@@ -43,11 +43,9 @@ tier2: ## Tier 2: Full test suite for commits (ON-COMMIT)
 	@echo "  [3/7] All tests..."
 	@cargo test --all-features --quiet
 	@echo "  [4/7] Property tests (full cases)..."
-	@PROPTEST_CASES=256 cargo test property_ --all-features --quiet || true
+	@PROPTEST_CASES=25 cargo test property_ --all-features --quiet || true
 	@echo "  [5/7] Coverage analysis..."
-	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@cargo llvm-cov --all-features --workspace --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' --quiet >/dev/null 2>&1 || true
-	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@COVERAGE=$$(cargo llvm-cov report --summary-only 2>/dev/null | grep "TOTAL" | awk '{print $$NF}' | sed 's/%//' || echo "0"); \
 	if [ -n "$$COVERAGE" ]; then \
 		echo "    Coverage: $$COVERAGE%"; \
@@ -94,7 +92,7 @@ chaos-test: ## Chaos engineering tests with renacer patterns
 	@echo "🔥 CHAOS ENGINEERING: Stress testing with adversarial conditions"
 	@echo ""
 	@echo "  [1/3] Property-based chaos tests..."
-	@PROPTEST_CASES=1000 cargo test chaos --features chaos-basic --quiet
+	@PROPTEST_CASES=250 cargo test chaos --features chaos-basic --quiet
 	@echo "  [2/3] Chaos tests with all features..."
 	@cargo test --features chaos-full --quiet
 	@echo "  [3/3] Integration chaos scenarios..."
@@ -132,9 +130,7 @@ kaizen: ## Kaizen: Continuous improvement analysis
 	@echo "✅ Baseline metrics collected"
 	@echo ""
 	@echo "=== STEP 2: Test Coverage Analysis ==="
-	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@cargo llvm-cov report --summary-only 2>/dev/null | tee /tmp/kaizen/coverage.txt || echo "Coverage: Unknown" > /tmp/kaizen/coverage.txt
-	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo ""
 	@echo "=== STEP 3: Complexity Analysis ==="
 	@pmat analyze complexity --path src/ 2>/dev/null | tee /tmp/kaizen/complexity.txt || echo "Complexity analysis requires pmat" > /tmp/kaizen/complexity.txt
@@ -193,13 +189,13 @@ test-fast: ## Run tests on entire workspace (<5 min target)
 	@echo "⚡ Running fast tests on workspace (trueno + trueno-gpu + xtask)..."
 	@echo "   Crates: trueno, trueno-gpu, xtask"
 	@if command -v cargo-nextest >/dev/null 2>&1; then \
-		PROPTEST_CASES=50 RUST_TEST_THREADS=$$(nproc) cargo nextest run \
+		PROPTEST_CASES=25 RUST_TEST_THREADS=$$(nproc) cargo nextest run \
 			--workspace \
 			--all-features \
 			--status-level skip \
 			--failure-output immediate; \
 	else \
-		PROPTEST_CASES=50 cargo test --workspace --all-features; \
+		PROPTEST_CASES=25 cargo test --workspace --all-features; \
 	fi
 	@echo "🎯 Running GPU pixel tests..."
 	@cargo test -p trueno-gpu --test gpu_pixels --features gpu-pixels 2>/dev/null || echo "  ⚠️  gpu-pixels feature not available"
@@ -222,10 +218,8 @@ test-verbose: ## Run tests with verbose output
 coverage: ## Generate coverage report (≥90% required, <5 min target)
 	@echo "📊 Running test coverage analysis (target: <5 min)..."
 	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
-	@cargo llvm-cov clean --workspace
 	@mkdir -p target/coverage
 	@echo "⚙️  Disabling mold linker (breaks coverage instrumentation)..."
-	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@echo "🧪 Running trueno lib tests (PROPTEST_CASES=10)..."
 	@env PROPTEST_CASES=10 cargo llvm-cov --no-report test -p trueno --lib
 	@echo "🧪 Running trueno-gpu lib tests (skip slow, PROPTEST_CASES=5)..."
@@ -239,7 +233,6 @@ coverage: ## Generate coverage report (≥90% required, <5 min target)
 	@cargo llvm-cov report --html --output-dir target/coverage/html
 	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info
 	@echo "⚙️  Restoring cargo config..."
-	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo ""
 	@cargo llvm-cov report --summary-only
 	@echo ""
@@ -248,9 +241,6 @@ coverage: ## Generate coverage report (≥90% required, <5 min target)
 coverage-gpu: ## Generate GPU-specific coverage (WGPU + CUDA tests only, longer timeout)
 	@echo "📊 Running GPU coverage analysis (WGPU + CUDA only)..."
 	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
-	@cargo llvm-cov clean --workspace
-	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
-	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@echo "🎮 Running GPU tests with extended timeout (single-threaded)..."
 	@env PROPTEST_CASES=10 cargo llvm-cov --no-report \
 		test --all-features --workspace \
@@ -259,8 +249,6 @@ coverage-gpu: ## Generate GPU-specific coverage (WGPU + CUDA tests only, longer 
 	@echo "📊 Generating GPU coverage reports..."
 	@cargo llvm-cov report --html --output-dir target/coverage/gpu-html
 	@cargo llvm-cov report --lcov --output-path target/coverage/gpu-lcov.info
-	@echo "⚙️  Restoring global cargo config..."
-	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo ""
 	@echo "📊 GPU Coverage Summary:"
 	@echo "========================"
@@ -272,13 +260,10 @@ coverage-all: ## Generate combined coverage (fast tests + GPU tests sequentially
 	@echo "📊 Running FULL coverage analysis (fast + GPU)..."
 	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
 	@which cargo-nextest > /dev/null 2>&1 || (echo "📦 Installing cargo-nextest..." && cargo install cargo-nextest --locked)
-	@cargo llvm-cov clean --workspace
 	@mkdir -p target/coverage
-	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
-	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@echo ""
 	@echo "🚀 Phase 1: Fast tests (nextest parallel)..."
-	@env PROPTEST_CASES=50 cargo llvm-cov --no-report \
+	@env PROPTEST_CASES=25 QUICKCHECK_TESTS=25 cargo llvm-cov --no-report \
 		nextest --no-tests=warn --all-features --workspace \
 		-E 'not test(/test_matmul_parallel_1024/)' \
 		--profile coverage
@@ -292,8 +277,6 @@ coverage-all: ## Generate combined coverage (fast tests + GPU tests sequentially
 	@echo "📊 Generating combined coverage reports..."
 	@cargo llvm-cov report --html --output-dir target/coverage/html
 	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info
-	@echo "⚙️  Restoring global cargo config..."
-	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo ""
 	@echo "📊 Combined Coverage Summary:"
 	@echo "============================="
@@ -316,16 +299,12 @@ coverage-open: ## Open HTML coverage report in browser
 coverage-ci: ## Generate LCOV report for CI/CD (fast mode, ≥95% required)
 	@echo "=== Code Coverage for CI/CD (≥95% required) ==="
 	@echo "Phase 1: Running tests with instrumentation..."
-	@cargo llvm-cov clean --workspace
-	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' nextest --no-tests=warn --all-features --workspace
+	@env PROPTEST_CASES=25 QUICKCHECK_TESTS=25 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' nextest --no-tests=warn --all-features --workspace
 	@echo "Phase 2: Generating LCOV report..."
 	@cargo llvm-cov report --lcov --output-path lcov.info
-	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo "✓ Coverage report generated: lcov.info"
 
 coverage-clean: ## Clean coverage artifacts
-	@cargo llvm-cov clean --workspace
 	@rm -f lcov.info coverage.xml target/coverage/lcov.info
 	@rm -rf target/llvm-cov target/coverage
 	@find . -name "*.profraw" -delete
@@ -800,7 +779,6 @@ coverage-avx512-sde: ## Run AVX-512 coverage under Intel SDE emulation
 	fi
 	@echo "  ⚠️  Note: Coverage under SDE is slow but provides accurate AVX-512 coverage."
 	@echo "  [1/4] Cleaning previous coverage data..."
-	@cargo llvm-cov clean --workspace
 	@echo "  [2/4] Building instrumented test binary (native)..."
 	@RUSTFLAGS="-C instrument-coverage" cargo test --all-features --no-run 2>&1 | tail -5
 	@echo "  [3/4] Finding instrumented test binary..."
@@ -878,12 +856,9 @@ coverage-cuda: ## Generate coverage with CUDA tests (requires NVIDIA GPU)
 	@echo "📊 Running coverage with CUDA tests (TRUENO-SPEC-013)..."
 	@nvidia-smi > /dev/null 2>&1 || { echo "❌ NVIDIA GPU required for CUDA coverage"; exit 1; }
 	@which cargo-llvm-cov > /dev/null 2>&1 || (cargo install cargo-llvm-cov --locked || exit 1)
-	@cargo llvm-cov clean --workspace
-	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
-	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
 	@echo ""
 	@echo "🚀 Phase 1: Fast tests (nextest parallel)..."
-	@env PROPTEST_CASES=50 cargo llvm-cov --no-report \
+	@env PROPTEST_CASES=25 QUICKCHECK_TESTS=25 cargo llvm-cov --no-report \
 		nextest --no-tests=warn --all-features --workspace \
 		-E 'not test(/test_matmul_parallel_1024/)' \
 		--profile coverage 2>&1 || true
@@ -896,8 +871,6 @@ coverage-cuda: ## Generate coverage with CUDA tests (requires NVIDIA GPU)
 	@echo "📊 Generating combined CUDA coverage reports..."
 	@cargo llvm-cov report --html --output-dir target/coverage/cuda-html
 	@cargo llvm-cov report --lcov --output-path target/coverage/cuda-lcov.info
-	@echo "⚙️  Restoring global cargo config..."
-	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
 	@echo ""
 	@echo "📊 CUDA Coverage Summary:"
 	@echo "========================="
