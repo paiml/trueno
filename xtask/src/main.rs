@@ -1,3 +1,10 @@
+//! Trueno development task runner (xtask pattern)
+//!
+//! Provides development utilities:
+//! - `check-simd`: Validate SIMD backend detection
+//! - `install-hooks`: Install git hooks
+//! - `validate-examples`: Check example quality
+
 // Development-phase lint allows
 #![allow(clippy::useless_vec)]
 

@@ -105,6 +105,10 @@ pub enum GpuError {
     /// CUDA not available (no driver or no GPU)
     #[error("CUDA not available: {0}")]
     CudaNotAvailable(String),
+
+    /// Feature not supported on this device/platform
+    #[error("Not supported: {0}")]
+    NotSupported(String),
 }
 
 #[cfg(test)]
@@ -241,5 +245,12 @@ mod tests {
     fn test_cuda_not_available_error() {
         let err = GpuError::CudaNotAvailable("no GPU detected".to_string());
         assert!(err.to_string().contains("not available"));
+    }
+
+    #[test]
+    fn test_not_supported_error() {
+        let err = GpuError::NotSupported("CPU temperature monitoring".to_string());
+        assert!(err.to_string().contains("Not supported"));
+        assert!(err.to_string().contains("CPU temperature"));
     }
 }

@@ -964,7 +964,7 @@ impl Kernel for IncrementalAttentionKernel {
                 let sum_exp = ctx.mov_f32_imm(0.0);
 
                 // Log2(e) for exp approximation via ex2
-                let log2e = ctx.mov_f32_imm(1.442_695_0);
+                let log2e = ctx.mov_f32_imm(std::f32::consts::LOG2_E);
                 let scale_reg = ctx.mov_f32_imm(scale);
 
                 // Loop counter

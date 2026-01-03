@@ -6,6 +6,8 @@
 slow-timeout = { period = "30s", terminate-after = 2 }
 # Run tests in parallel
 test-threads = "num-cpus"
+# Exclude GPU batch test that hangs without real hardware
+default-filter = "not test(/batch::tests::test_all_batch_operations/)"
 
 [profile.default.junit]
 path = "target/nextest/default/junit.xml"

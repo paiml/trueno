@@ -426,13 +426,14 @@ mod tests {
         let kernel = SoftmaxKernel::new(256).without_warp_shuffle();
         let ptx = kernel.emit_ptx();
 
-        // Look for stride manipulation - should see shr.u32 or div.u32 by 2
-        let has_stride_update = ptx.contains("shr.u32") || ptx.contains("div.u32");
+        // Look for stride manipulation - should see shr.b32 (PTX requires .b32 for shifts) or div
+        let has_stride_update =
+            ptx.contains("shr.b32") || ptx.contains("shr.u32") || ptx.contains("div.u32");
 
         assert!(
             has_stride_update,
             "FALSIFIED: Max-reduce stride is not halved. \
-             Expected shr.u32 or div.u32 for stride = stride / 2. \
+             Expected shr.b32, shr.u32 or div.u32 for stride = stride / 2. \
              Without this, tree reduction cannot work correctly."
         );
     }

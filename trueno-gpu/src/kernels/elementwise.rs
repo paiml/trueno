@@ -10,6 +10,8 @@
 //!
 //! These kernels are designed for GPU-resident execution without sync.
 
+#![allow(clippy::similar_names)]
+
 use super::Kernel;
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
@@ -309,7 +311,7 @@ impl Kernel for SiluKernel {
                 let neg_x = ctx.sub_f32(zero, x);
                 // Step 2: exp_neg_x = exp(-x) using ex2 (base-2 exp)
                 // exp(x) = 2^(x * log2(e)) where log2(e) ≈ 1.4426950408889634
-                let log2_e = ctx.mov_f32_imm(1.442_695);
+                let log2_e = ctx.mov_f32_imm(std::f32::consts::LOG2_E);
                 let scaled = ctx.mul_f32(neg_x, log2_e);
                 let exp_neg_x = ctx.ex2_f32(scaled);
                 // Step 3: denom = 1 + exp(-x)
@@ -410,7 +412,7 @@ impl Kernel for GeluKernel {
                 let zero = ctx.mov_f32_imm(0.0);
                 let two_x = ctx.mul_f32(two, scaled);
                 let neg_two_x = ctx.sub_f32(zero, two_x);
-                let log2_e = ctx.mov_f32_imm(1.442_695);
+                let log2_e = ctx.mov_f32_imm(std::f32::consts::LOG2_E);
                 let scaled_exp = ctx.mul_f32(neg_two_x, log2_e);
                 let exp_neg = ctx.ex2_f32(scaled_exp);
                 let denom = ctx.add_f32(one, exp_neg);
@@ -573,7 +575,7 @@ impl Kernel for FusedSwigluKernel {
                 // Compute SiLU(gate): gate * sigmoid(gate)
                 let zero = ctx.mov_f32_imm(0.0);
                 let neg_gate = ctx.sub_f32(zero, gate);
-                let log2_e = ctx.mov_f32_imm(1.442_695);
+                let log2_e = ctx.mov_f32_imm(std::f32::consts::LOG2_E);
                 let scaled = ctx.mul_f32(neg_gate, log2_e);
                 let exp_neg = ctx.ex2_f32(scaled);
                 let one = ctx.mov_f32_imm(1.0);

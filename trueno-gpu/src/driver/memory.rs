@@ -400,7 +400,7 @@ impl<T: Copy> GpuBuffer<T> {
         }
 
         let driver = get_driver()?;
-        let size = data.len() * std::mem::size_of::<T>();
+        let size = std::mem::size_of_val(data);
         let dst_ptr = self.ptr + (offset * std::mem::size_of::<T>()) as u64;
 
         // SAFETY: bounds checked above, data and ptr are valid
@@ -434,7 +434,7 @@ impl<T: Copy> GpuBuffer<T> {
         }
 
         let driver = get_driver()?;
-        let size = data.len() * std::mem::size_of::<T>();
+        let size = std::mem::size_of_val(data);
         let src_ptr = self.ptr + (offset * std::mem::size_of::<T>()) as u64;
 
         // SAFETY: bounds checked above, data and ptr are valid
