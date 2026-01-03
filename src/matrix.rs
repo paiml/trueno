@@ -687,6 +687,102 @@ impl Matrix<f32> {
         _mm_cvtss_f32(sum32)
     }
 
+    /// AVX-512 micro-kernel: Compute 8 rows × 1 column using register blocking (Phase 3)
+    ///
+    /// This micro-kernel processes 8 rows of matrix A against 1 column of B_transposed
+    /// simultaneously, keeping intermediate results in AVX-512 registers for efficiency.
+    ///
+    /// # Performance Benefits
+    /// - Processes 16 f32 elements per iteration (vs 8 with AVX2) - 2× throughput
+    /// - Loads B-column once, reuses for 8 A-rows (8× reduction in memory bandwidth)
+    /// - Uses FMA instructions for fused multiply-add (3× throughput vs separate ops)
+    /// - Keeps accumulators in ZMM registers (no memory traffic for intermediate results)
+    ///
+    /// # Safety
+    /// - Caller must ensure all slices have the same length
+    /// - Must be called on x86_64 with AVX-512F support
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx512f")]
+    #[inline]
+    unsafe fn matmul_microkernel_8x1_avx512(
+        a_rows: [&[f32]; 8],
+        b_col: &[f32],
+        results: &mut [f32; 8],
+    ) {
+        use std::arch::x86_64::*;
+
+        let len = b_col.len();
+        let chunks = len / 16; // Process 16 f32 elements per iteration (AVX-512 = 512 bits)
+
+        // Accumulators for 8 output elements (kept in ZMM registers)
+        let mut acc0 = _mm512_setzero_ps();
+        let mut acc1 = _mm512_setzero_ps();
+        let mut acc2 = _mm512_setzero_ps();
+        let mut acc3 = _mm512_setzero_ps();
+        let mut acc4 = _mm512_setzero_ps();
+        let mut acc5 = _mm512_setzero_ps();
+        let mut acc6 = _mm512_setzero_ps();
+        let mut acc7 = _mm512_setzero_ps();
+
+        // Main loop: Process 16 elements at a time
+        for i in 0..chunks {
+            let offset = i * 16;
+
+            // Load B column (reused for all 8 A rows)
+            let b_vec = _mm512_loadu_ps(b_col.as_ptr().add(offset));
+
+            // Load A rows and FMA (Fused Multiply-Add)
+            let a0_vec = _mm512_loadu_ps(a_rows[0].as_ptr().add(offset));
+            acc0 = _mm512_fmadd_ps(a0_vec, b_vec, acc0);
+
+            let a1_vec = _mm512_loadu_ps(a_rows[1].as_ptr().add(offset));
+            acc1 = _mm512_fmadd_ps(a1_vec, b_vec, acc1);
+
+            let a2_vec = _mm512_loadu_ps(a_rows[2].as_ptr().add(offset));
+            acc2 = _mm512_fmadd_ps(a2_vec, b_vec, acc2);
+
+            let a3_vec = _mm512_loadu_ps(a_rows[3].as_ptr().add(offset));
+            acc3 = _mm512_fmadd_ps(a3_vec, b_vec, acc3);
+
+            let a4_vec = _mm512_loadu_ps(a_rows[4].as_ptr().add(offset));
+            acc4 = _mm512_fmadd_ps(a4_vec, b_vec, acc4);
+
+            let a5_vec = _mm512_loadu_ps(a_rows[5].as_ptr().add(offset));
+            acc5 = _mm512_fmadd_ps(a5_vec, b_vec, acc5);
+
+            let a6_vec = _mm512_loadu_ps(a_rows[6].as_ptr().add(offset));
+            acc6 = _mm512_fmadd_ps(a6_vec, b_vec, acc6);
+
+            let a7_vec = _mm512_loadu_ps(a_rows[7].as_ptr().add(offset));
+            acc7 = _mm512_fmadd_ps(a7_vec, b_vec, acc7);
+        }
+
+        // Horizontal sum of each accumulator (reduce 16 elements to 1)
+        results[0] = _mm512_reduce_add_ps(acc0);
+        results[1] = _mm512_reduce_add_ps(acc1);
+        results[2] = _mm512_reduce_add_ps(acc2);
+        results[3] = _mm512_reduce_add_ps(acc3);
+        results[4] = _mm512_reduce_add_ps(acc4);
+        results[5] = _mm512_reduce_add_ps(acc5);
+        results[6] = _mm512_reduce_add_ps(acc6);
+        results[7] = _mm512_reduce_add_ps(acc7);
+
+        // Handle remainder elements with scalar code
+        let remainder_start = chunks * 16;
+        if remainder_start < len {
+            for i in remainder_start..len {
+                results[0] += a_rows[0][i] * b_col[i];
+                results[1] += a_rows[1][i] * b_col[i];
+                results[2] += a_rows[2][i] * b_col[i];
+                results[3] += a_rows[3][i] * b_col[i];
+                results[4] += a_rows[4][i] * b_col[i];
+                results[5] += a_rows[5][i] * b_col[i];
+                results[6] += a_rows[6][i] * b_col[i];
+                results[7] += a_rows[7][i] * b_col[i];
+            }
+        }
+    }
+
     /// Cache-aware blocked matrix multiplication with SIMD optimization
     ///
     /// Uses 2-level cache blocking (L2/L1) to minimize cache misses:
@@ -1034,11 +1130,96 @@ impl Matrix<f32> {
 
                                     // Micro-kernel processing
                                     #[cfg(target_arch = "x86_64")]
-                                    let use_microkernel =
-                                        matches!(self.backend, Backend::AVX2 | Backend::AVX512);
+                                    let use_avx512 = matches!(self.backend, Backend::AVX512);
+                                    #[cfg(target_arch = "x86_64")]
+                                    let use_avx2 = matches!(self.backend, Backend::AVX2);
 
                                     #[cfg(target_arch = "x86_64")]
-                                    if use_microkernel {
+                                    if use_avx512 {
+                                        // AVX-512 8x1 micro-kernel (Phase 3)
+                                        let mut i = ii;
+
+                                        // Process 8 rows at a time with AVX-512 micro-kernel
+                                        while i + 8 <= i_end {
+                                            let a_rows = [
+                                                &self.data[i * self.cols + kk..(i * self.cols + kk) + block_size],
+                                                &self.data[(i + 1) * self.cols + kk..((i + 1) * self.cols + kk) + block_size],
+                                                &self.data[(i + 2) * self.cols + kk..((i + 2) * self.cols + kk) + block_size],
+                                                &self.data[(i + 3) * self.cols + kk..((i + 3) * self.cols + kk) + block_size],
+                                                &self.data[(i + 4) * self.cols + kk..((i + 4) * self.cols + kk) + block_size],
+                                                &self.data[(i + 5) * self.cols + kk..((i + 5) * self.cols + kk) + block_size],
+                                                &self.data[(i + 6) * self.cols + kk..((i + 6) * self.cols + kk) + block_size],
+                                                &self.data[(i + 7) * self.cols + kk..((i + 7) * self.cols + kk) + block_size],
+                                            ];
+
+                                            for j in jj..j_end {
+                                                let col_start = j * b_transposed.cols + kk;
+                                                let b_col = &b_transposed.data
+                                                    [col_start..col_start + block_size];
+
+                                                let mut partial_dots = [0.0f32; 8];
+                                                unsafe {
+                                                    Self::matmul_microkernel_8x1_avx512(
+                                                        a_rows,
+                                                        b_col,
+                                                        &mut partial_dots,
+                                                    );
+                                                }
+
+                                                result.data[i * result.cols + j] += partial_dots[0];
+                                                result.data[(i + 1) * result.cols + j] += partial_dots[1];
+                                                result.data[(i + 2) * result.cols + j] += partial_dots[2];
+                                                result.data[(i + 3) * result.cols + j] += partial_dots[3];
+                                                result.data[(i + 4) * result.cols + j] += partial_dots[4];
+                                                result.data[(i + 5) * result.cols + j] += partial_dots[5];
+                                                result.data[(i + 6) * result.cols + j] += partial_dots[6];
+                                                result.data[(i + 7) * result.cols + j] += partial_dots[7];
+                                            }
+
+                                            i += 8;
+                                        }
+
+                                        // Handle remaining rows with AVX2 4x1 kernel
+                                        while i + 4 <= i_end {
+                                            let a_rows = [
+                                                &self.data[i * self.cols + kk..(i * self.cols + kk) + block_size],
+                                                &self.data[(i + 1) * self.cols + kk..((i + 1) * self.cols + kk) + block_size],
+                                                &self.data[(i + 2) * self.cols + kk..((i + 2) * self.cols + kk) + block_size],
+                                                &self.data[(i + 3) * self.cols + kk..((i + 3) * self.cols + kk) + block_size],
+                                            ];
+
+                                            for j in jj..j_end {
+                                                let col_start = j * b_transposed.cols + kk;
+                                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+
+                                                let mut partial_dots = [0.0f32; 4];
+                                                unsafe {
+                                                    Self::matmul_microkernel_4x1_avx2(a_rows, b_col, &mut partial_dots);
+                                                }
+
+                                                result.data[i * result.cols + j] += partial_dots[0];
+                                                result.data[(i + 1) * result.cols + j] += partial_dots[1];
+                                                result.data[(i + 2) * result.cols + j] += partial_dots[2];
+                                                result.data[(i + 3) * result.cols + j] += partial_dots[3];
+                                            }
+                                            i += 4;
+                                        }
+
+                                        // Handle remaining rows (< 4)
+                                        for i in i..i_end {
+                                            let row_start = i * self.cols + kk;
+                                            let a_row = &self.data[row_start..row_start + block_size];
+
+                                            for j in jj..j_end {
+                                                let col_start = j * b_transposed.cols + kk;
+                                                let b_col = &b_transposed.data[col_start..col_start + block_size];
+
+                                                let partial_dot = unsafe { Avx2Backend::dot(a_row, b_col) };
+                                                result.data[i * result.cols + j] += partial_dot;
+                                            }
+                                        }
+                                    } else if use_avx2 {
+                                        // AVX2 4x1 micro-kernel
                                         let mut i = ii;
 
                                         // Process 4 rows at a time with micro-kernel
@@ -3087,6 +3268,111 @@ mod tests {
                     i,
                     expected[i],
                     results[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_matmul_microkernel_8x1_avx512() {
+        // Test the 8×1 AVX-512 micro-kernel for matrix multiplication (Phase 3)
+        if !is_x86_feature_detected!("avx512f") {
+            println!("Skipping AVX-512 micro-kernel test (CPU doesn't support AVX-512F)");
+            return;
+        }
+
+        // Test case 1: Simple dot products with 32 elements (2 AVX-512 iterations)
+        {
+            let row0: Vec<f32> = (1..=32).map(|x| x as f32).collect();
+            let row1: Vec<f32> = (33..=64).map(|x| x as f32).collect();
+            let row2: Vec<f32> = (65..=96).map(|x| x as f32).collect();
+            let row3: Vec<f32> = (97..=128).map(|x| x as f32).collect();
+            let row4: Vec<f32> = (129..=160).map(|x| x as f32).collect();
+            let row5: Vec<f32> = (161..=192).map(|x| x as f32).collect();
+            let row6: Vec<f32> = (193..=224).map(|x| x as f32).collect();
+            let row7: Vec<f32> = (225..=256).map(|x| x as f32).collect();
+            let b_col = vec![1.0f32; 32];
+
+            let a_rows = [
+                row0.as_slice(),
+                row1.as_slice(),
+                row2.as_slice(),
+                row3.as_slice(),
+                row4.as_slice(),
+                row5.as_slice(),
+                row6.as_slice(),
+                row7.as_slice(),
+            ];
+            let mut results = [0.0f32; 8];
+
+            unsafe {
+                Matrix::<f32>::matmul_microkernel_8x1_avx512(a_rows, &b_col, &mut results);
+            }
+
+            // Expected: sum of each row
+            let expected = [
+                (1..=32).sum::<i32>() as f32,
+                (33..=64).sum::<i32>() as f32,
+                (65..=96).sum::<i32>() as f32,
+                (97..=128).sum::<i32>() as f32,
+                (129..=160).sum::<i32>() as f32,
+                (161..=192).sum::<i32>() as f32,
+                (193..=224).sum::<i32>() as f32,
+                (225..=256).sum::<i32>() as f32,
+            ];
+
+            for i in 0..8 {
+                assert!(
+                    (results[i] - expected[i]).abs() < 1e-2,
+                    "Row {}: expected {}, got {}",
+                    i,
+                    expected[i],
+                    results[i]
+                );
+            }
+        }
+
+        // Test case 2: Scaled dot products
+        {
+            let row: Vec<f32> = (1..=32).map(|x| x as f32).collect();
+            let rows: [&[f32]; 8] = [&row, &row, &row, &row, &row, &row, &row, &row];
+            let b_col = vec![0.5f32; 32];
+            let mut results = [0.0f32; 8];
+
+            unsafe {
+                Matrix::<f32>::matmul_microkernel_8x1_avx512(rows, &b_col, &mut results);
+            }
+
+            let expected = 0.5 * (1..=32).sum::<i32>() as f32;
+            for (i, &result) in results.iter().enumerate() {
+                assert!(
+                    (result - expected).abs() < 1e-2,
+                    "Row {}: expected {}, got {}",
+                    i,
+                    expected,
+                    result
+                );
+            }
+        }
+
+        // Test case 3: Zero accumulation
+        {
+            let zeros = vec![0.0f32; 32];
+            let rows: [&[f32]; 8] = [&zeros, &zeros, &zeros, &zeros, &zeros, &zeros, &zeros, &zeros];
+            let b_col: Vec<f32> = (1..=32).map(|x| x as f32).collect();
+            let mut results = [0.0f32; 8];
+
+            unsafe {
+                Matrix::<f32>::matmul_microkernel_8x1_avx512(rows, &b_col, &mut results);
+            }
+
+            for (i, &result) in results.iter().enumerate() {
+                assert!(
+                    result.abs() < 1e-6,
+                    "Row {}: expected 0.0, got {}",
+                    i,
+                    result
                 );
             }
         }
