@@ -32,7 +32,10 @@ pub use elementwise::{
     ElementwiseMulKernel, FusedResidualRmsNormKernel, FusedSwigluKernel, GeluKernel,
     ResidualAddKernel, SiluKernel,
 };
-pub use gemm::{GemmConfig, GemmKernel};
+pub use gemm::{
+    Batched4DGemmConfig, Batched4DGemmKernel, BatchedGemmConfig, BatchedGemmKernel, GemmConfig,
+    GemmKernel,
+};
 pub use gemv::{CoalescedGemvKernel, GemvKernel};
 pub use layernorm::{LayerNormKernel, RmsNormKernel};
 pub use quantize::{
@@ -379,5 +382,81 @@ mod property_tests {
         let kernel = GemmKernel::naive(127, 255, 63);
         let ptx = kernel.emit_ptx();
         assert!(ptx.contains(".entry"), "Should handle non-power-of-two");
+    }
+
+    // =========================================================================
+    // Batched GEMM Property Tests (Issue #71)
+    // =========================================================================
+
+    proptest! {
+        /// All batched GEMM naive kernels produce valid PTX regardless of dimensions
+        #[test]
+        fn batched_gemm_naive_always_valid(
+            batch in 1u32..16,
+            m in 16u32..256,
+            n in 16u32..256,
+            k in 16u32..256
+        ) {
+            let kernel = BatchedGemmKernel::naive(batch, m, n, k);
+            let ptx = kernel.emit_ptx();
+
+            prop_assert!(ptx.contains(".version"), "Missing PTX version");
+            prop_assert!(ptx.contains(".entry"), "Missing entry point");
+            prop_assert!(ptx.contains(".param .u32 batch"), "Missing batch parameter");
+            prop_assert!(ptx.contains("%ctaid.z"), "Missing batch indexing via ctaid.z");
+        }
+
+        /// All batched GEMM tiled kernels produce valid PTX with shared memory
+        #[test]
+        fn batched_gemm_tiled_always_valid(
+            batch in 1u32..8,
+            m in 32u32..128,
+            n in 32u32..128,
+            k in 32u32..128,
+            tile in 8u32..17
+        ) {
+            let kernel = BatchedGemmKernel::tiled(batch, m, n, k, tile);
+            let ptx = kernel.emit_ptx();
+            let ptx_kernel = kernel.build_ptx();
+
+            prop_assert!(ptx.contains(".entry"), "Missing entry point");
+            prop_assert!(ptx.contains("bar.sync"), "Missing barrier synchronization");
+            prop_assert!(ptx_kernel.shared_memory_bytes() > 0, "Should use shared memory");
+        }
+
+        /// All 4D batched GEMM kernels produce valid PTX
+        #[test]
+        fn batched_4d_gemm_always_valid(
+            batch in 1u32..8,
+            heads in 1u32..16,
+            m in 32u32..128,
+            n in 32u32..128,
+            k in 16u32..64
+        ) {
+            let kernel = Batched4DGemmKernel::new(batch, heads, m, n, k);
+            let ptx = kernel.emit_ptx();
+
+            prop_assert!(ptx.contains(".version"), "Missing PTX version");
+            prop_assert!(ptx.contains(".entry"), "Missing entry point");
+            prop_assert!(ptx.contains(".param .u32 batch"), "Missing batch parameter");
+            prop_assert!(ptx.contains(".param .u32 heads"), "Missing heads parameter");
+            prop_assert!(ptx.contains("%ctaid.z"), "Missing batch*heads indexing");
+        }
+    }
+
+    #[test]
+    fn test_batched_gemm_minimum_batch() {
+        let kernel = BatchedGemmKernel::naive(1, 32, 32, 32);
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry"), "Should handle batch=1");
+    }
+
+    #[test]
+    fn test_batched_4d_gemm_attention_pattern() {
+        // Typical transformer attention: batch=2, heads=8, seq_len=512, head_dim=64
+        let kernel = Batched4DGemmKernel::new(2, 8, 512, 512, 64);
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry"), "Should handle attention pattern");
+        assert!(ptx.contains("bar.sync"), "Should have barriers for tiled compute");
     }
 }

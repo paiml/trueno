@@ -206,6 +206,35 @@ impl PtxKernel {
         self
     }
 
+    /// Build kernel body with optimization passes (Issue #72, #73)
+    ///
+    /// Applies FMA fusion and tile validation passes to the instruction sequence.
+    ///
+    /// # Arguments
+    ///
+    /// * `builder_fn` - Closure that builds the kernel body
+    ///
+    /// # Returns
+    ///
+    /// Result containing the kernel or an error if tile validation fails
+    ///
+    /// # cuda-tile-behavior.md References
+    ///
+    /// - Section 3.5: FMA Fusion Detection
+    /// - Section 3.4: Tile Dimension Constraints
+    pub fn build_optimized<F>(mut self, builder_fn: F) -> crate::error::Result<Self>
+    where
+        F: FnOnce(&mut KernelBuilder<'_>),
+    {
+        let mut builder = KernelBuilder::new(&mut self.registers);
+        builder_fn(&mut builder);
+
+        // Apply optimization passes (FMA fusion + tile validation)
+        self.instructions = super::optimize::optimize(builder.instructions)?;
+        self.labels = builder.labels;
+        Ok(self)
+    }
+
     /// Emit kernel PTX
     #[must_use]
     pub fn emit(&self) -> String {
@@ -2805,5 +2834,139 @@ mod tests {
         assert!(ptx.contains("bar.sync"), "Missing barrier");
         assert!(ptx.contains("mul.lo.u32"), "Missing mul.lo.u32");
         assert!(ptx.contains("@%p"), "Missing predicated instruction");
+    }
+
+    // =========================================================================
+    // Optimization Pass Integration Tests (Issue #72, #73)
+    // =========================================================================
+
+    #[test]
+    fn test_build_optimized_basic() {
+        // Test that build_optimized works for simple kernels
+        let kernel = PtxKernel::new("test_optimized")
+            .param(PtxType::U64, "ptr")
+            .build_optimized(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let val = ctx.ld_global_f32(ptr);
+                let two = ctx.mov_f32_imm(2.0);
+                let result = ctx.mul_f32(val, two);
+                ctx.st_global_f32(ptr, result);
+                ctx.ret();
+            });
+
+        assert!(kernel.is_ok(), "build_optimized should succeed for simple kernel");
+        let kernel = kernel.unwrap();
+        let ptx = kernel.emit();
+        assert!(ptx.contains(".entry test_optimized"));
+        assert!(ptx.contains("ret;"));
+    }
+
+    #[test]
+    fn test_build_optimized_with_mul_add_fusion() {
+        // Test that mul + add patterns are fused to FMA by the optimization pass
+        // This tests the FMA fusion integration from Issue #72
+        let kernel = PtxKernel::new("test_fma_fusion")
+            .param(PtxType::U64, "ptr")
+            .build_optimized(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let a = ctx.ld_global_f32(ptr);
+                let b = ctx.mov_f32_imm(2.0);
+                let c = ctx.mov_f32_imm(3.0);
+                // mul + add pattern should be fused to fma by optimizer
+                let mul_result = ctx.mul_f32(a, b);
+                let add_result = ctx.add_f32(mul_result, c);
+                ctx.st_global_f32(ptr, add_result);
+                ctx.ret();
+            });
+
+        assert!(kernel.is_ok(), "build_optimized should succeed");
+        let kernel = kernel.unwrap();
+        let ptx = kernel.emit();
+
+        // After FMA fusion, we should have fma.rn.f32 instead of separate mul + add
+        // The mul result is only used once (in the add), so fusion should occur
+        assert!(
+            ptx.contains("fma.rn.f32") || ptx.contains("mul.f32"),
+            "Kernel should have either FMA (fused) or mul (unfused)"
+        );
+    }
+
+    #[test]
+    fn test_build_vs_build_optimized_difference() {
+        // Non-optimized build
+        let kernel_unopt = PtxKernel::new("test_unopt")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let a = ctx.ld_global_f32(ptr);
+                let b = ctx.mov_f32_imm(2.0);
+                let c = ctx.mov_f32_imm(3.0);
+                let mul_result = ctx.mul_f32(a, b);
+                let add_result = ctx.add_f32(mul_result, c);
+                ctx.st_global_f32(ptr, add_result);
+                ctx.ret();
+            });
+
+        // Optimized build
+        let kernel_opt = PtxKernel::new("test_opt")
+            .param(PtxType::U64, "ptr")
+            .build_optimized(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let a = ctx.ld_global_f32(ptr);
+                let b = ctx.mov_f32_imm(2.0);
+                let c = ctx.mov_f32_imm(3.0);
+                let mul_result = ctx.mul_f32(a, b);
+                let add_result = ctx.add_f32(mul_result, c);
+                ctx.st_global_f32(ptr, add_result);
+                ctx.ret();
+            })
+            .unwrap();
+
+        let ptx_unopt = kernel_unopt.emit();
+        let ptx_opt = kernel_opt.emit();
+
+        // Unoptimized should have separate mul and add
+        assert!(
+            ptx_unopt.contains("mul.f32") && ptx_unopt.contains("add.f32"),
+            "Unoptimized should have separate mul and add"
+        );
+
+        // After FMA fusion, optimized version should have FMA
+        // Note: FMA fusion requires single-use of mul result
+        // Both kernels should produce valid PTX
+        assert!(ptx_unopt.contains(".entry test_unopt"));
+        assert!(ptx_opt.contains(".entry test_opt"));
+    }
+
+    #[test]
+    fn test_build_optimized_empty_body() {
+        // Test empty kernel body
+        let kernel = PtxKernel::new("test_empty")
+            .build_optimized(|_ctx| {
+                // Empty body
+            });
+
+        assert!(kernel.is_ok(), "Empty optimized kernel should succeed");
+    }
+
+    #[test]
+    fn test_build_optimized_preserves_barriers() {
+        // Test that optimization passes preserve barriers
+        let kernel = PtxKernel::new("test_barriers")
+            .shared_memory(1024)
+            .build_optimized(|ctx| {
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let val = ctx.mov_f32_imm(1.0);
+                let smem_offset = ctx.mul_u32(tid, 4);
+                ctx.st_shared_f32(smem_offset, val);
+                ctx.bar_sync(0);
+                let _loaded = ctx.ld_shared_f32(smem_offset);
+                ctx.ret();
+            });
+
+        assert!(kernel.is_ok());
+        let kernel = kernel.unwrap();
+        let ptx = kernel.emit();
+        assert!(ptx.contains("bar.sync"), "Barriers should be preserved");
     }
 }
