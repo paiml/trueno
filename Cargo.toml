@@ -114,6 +114,11 @@ harness = false
 required-features = ["gpu"]
 
 [[bench]]
+name = "gpu_reduction"
+harness = false
+required-features = ["gpu"]
+
+[[bench]]
 name = "async_gpu_ops"
 harness = false
 required-features = ["gpu"]
