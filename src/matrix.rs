@@ -4783,4 +4783,53 @@ mod property_tests {
             }
         }
     }
+
+    // =========================================================================
+    // Additional coverage tests for untested paths
+    // =========================================================================
+
+    #[test]
+    fn test_get_mut_valid() {
+        let mut m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        if let Some(val) = m.get_mut(0, 1) {
+            *val = 99.0;
+        }
+        assert_eq!(m.get(0, 1), Some(&99.0));
+    }
+
+    #[test]
+    fn test_get_mut_out_of_bounds() {
+        let mut m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        assert!(m.get_mut(5, 0).is_none());
+        assert!(m.get_mut(0, 10).is_none());
+        assert!(m.get_mut(10, 10).is_none());
+    }
+
+
+    #[test]
+    fn test_matrix_zeros_coverage() {
+        let m: Matrix<f32> = Matrix::zeros(3, 4);
+        assert_eq!(m.rows(), 3);
+        assert_eq!(m.cols(), 4);
+        for val in m.as_slice() {
+            assert_eq!(*val, 0.0);
+        }
+    }
+
+    #[test]
+    fn test_matrix_identity_coverage() {
+        let m: Matrix<f32> = Matrix::identity(3);
+        assert_eq!(m.get(0, 0), Some(&1.0));
+        assert_eq!(m.get(1, 1), Some(&1.0));
+        assert_eq!(m.get(2, 2), Some(&1.0));
+        assert_eq!(m.get(0, 1), Some(&0.0));
+        assert_eq!(m.get(1, 0), Some(&0.0));
+    }
+
+    #[test]
+    fn test_get_out_of_bounds_coverage() {
+        let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        assert!(m.get(5, 0).is_none());
+        assert!(m.get(0, 10).is_none());
+    }
 }

@@ -4070,4 +4070,138 @@ mod tests {
             );
         }
     }
+
+    // =========================================================================
+    // AVX-512 SIMD PATH COVERAGE TESTS
+    // These tests use 32+ elements to guarantee the SIMD loop (16 elements/iter)
+    // is executed, not just the scalar fallback.
+    // =========================================================================
+
+    #[test]
+    fn test_avx512_gelu_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+        use super::super::scalar::ScalarBackend;
+
+        // 32 elements = 2 full SIMD iterations
+        let a: Vec<f32> = (0..32).map(|i| (i as f32 - 16.0) * 0.25).collect();
+        let mut avx512_result = vec![0.0; 32];
+        let mut scalar_result = vec![0.0; 32];
+
+        unsafe {
+            Avx512Backend::gelu(&a, &mut avx512_result);
+            ScalarBackend::gelu(&a, &mut scalar_result);
+        }
+
+        for i in 0..32 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-4,
+                "gelu SIMD mismatch at {}: avx512={}, scalar={}",
+                i, avx512_result[i], scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_swish_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+        use super::super::scalar::ScalarBackend;
+
+        let a: Vec<f32> = (0..32).map(|i| (i as f32 - 16.0) * 0.5).collect();
+        let mut avx512_result = vec![0.0; 32];
+        let mut scalar_result = vec![0.0; 32];
+
+        unsafe {
+            Avx512Backend::swish(&a, &mut avx512_result);
+            ScalarBackend::swish(&a, &mut scalar_result);
+        }
+
+        for i in 0..32 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-4,
+                "swish SIMD mismatch at {}: avx512={}, scalar={}",
+                i, avx512_result[i], scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_tanh_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+        use super::super::scalar::ScalarBackend;
+
+        let a: Vec<f32> = (0..32).map(|i| (i as f32 - 16.0) * 0.2).collect();
+        let mut avx512_result = vec![0.0; 32];
+        let mut scalar_result = vec![0.0; 32];
+
+        unsafe {
+            Avx512Backend::tanh(&a, &mut avx512_result);
+            ScalarBackend::tanh(&a, &mut scalar_result);
+        }
+
+        for i in 0..32 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-4,
+                "tanh SIMD mismatch at {}: avx512={}, scalar={}",
+                i, avx512_result[i], scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_log2_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+        use super::super::scalar::ScalarBackend;
+
+        // Positive values only for log2
+        let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
+        let mut avx512_result = vec![0.0; 32];
+        let mut scalar_result = vec![0.0; 32];
+
+        unsafe {
+            Avx512Backend::log2(&a, &mut avx512_result);
+            ScalarBackend::log2(&a, &mut scalar_result);
+        }
+
+        for i in 0..32 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-4,
+                "log2 SIMD mismatch at {}: avx512={}, scalar={}",
+                i, avx512_result[i], scalar_result[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_avx512_log10_simd_path() {
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+        use super::super::scalar::ScalarBackend;
+
+        // Positive values only for log10
+        let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
+        let mut avx512_result = vec![0.0; 32];
+        let mut scalar_result = vec![0.0; 32];
+
+        unsafe {
+            Avx512Backend::log10(&a, &mut avx512_result);
+            ScalarBackend::log10(&a, &mut scalar_result);
+        }
+
+        for i in 0..32 {
+            assert!(
+                (avx512_result[i] - scalar_result[i]).abs() < 1e-4,
+                "log10 SIMD mismatch at {}: avx512={}, scalar={}",
+                i, avx512_result[i], scalar_result[i]
+            );
+        }
+    }
 }

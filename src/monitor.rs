@@ -1028,7 +1028,10 @@ mod tests {
         assert_eq!(GpuBackend::Vulkan.name(), "Vulkan");
         assert_eq!(GpuBackend::Metal.name(), "Metal");
         assert_eq!(GpuBackend::Dx12.name(), "DirectX 12");
+        assert_eq!(GpuBackend::Dx11.name(), "DirectX 11");
+        assert_eq!(GpuBackend::WebGpu.name(), "WebGPU");
         assert_eq!(GpuBackend::Cuda.name(), "CUDA");
+        assert_eq!(GpuBackend::OpenGl.name(), "OpenGL");
         assert_eq!(GpuBackend::Cpu.name(), "CPU");
     }
 
@@ -1036,7 +1039,11 @@ mod tests {
     fn h0_mon_11_backend_is_gpu() {
         assert!(GpuBackend::Vulkan.is_gpu());
         assert!(GpuBackend::Metal.is_gpu());
+        assert!(GpuBackend::Dx12.is_gpu());
+        assert!(GpuBackend::Dx11.is_gpu());
+        assert!(GpuBackend::WebGpu.is_gpu());
         assert!(GpuBackend::Cuda.is_gpu());
+        assert!(GpuBackend::OpenGl.is_gpu());
         assert!(!GpuBackend::Cpu.is_gpu());
     }
 
@@ -1044,9 +1051,12 @@ mod tests {
     fn h0_mon_12_backend_supports_compute() {
         assert!(GpuBackend::Vulkan.supports_compute());
         assert!(GpuBackend::Metal.supports_compute());
+        assert!(GpuBackend::Dx12.supports_compute());
+        assert!(GpuBackend::WebGpu.supports_compute());
         assert!(GpuBackend::Cuda.supports_compute());
-        assert!(!GpuBackend::Cpu.supports_compute());
+        assert!(!GpuBackend::Dx11.supports_compute()); // DX11 compute shaders limited
         assert!(!GpuBackend::OpenGl.supports_compute());
+        assert!(!GpuBackend::Cpu.supports_compute());
     }
 
     // =========================================================================
@@ -1559,3 +1569,52 @@ mod tests {
         }
     }
 }
+
+// ============================================================================
+// Unified Compute Device Abstraction (TRUENO-SPEC-020)
+// ============================================================================
+
+/// Device identification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DeviceId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceType {
+    Cpu,
+    NvidiaGpu,
+    AmdGpu,
+    IntelGpu,
+    AppleSilicon,
+    Hpu, // Hardware Processing Unit (e.g., Gaudi, TPU)
+}
+
+/// Unified compute device abstraction (TRUENO-SPEC-020)
+pub trait ComputeDevice: Send + Sync {
+    /// Device identification
+    fn device_id(&self) -> DeviceId;
+    fn device_name(&self) -> &str;
+    fn device_type(&self) -> DeviceType;
+
+    /// Compute metrics
+    fn compute_utilization(&self) -> anyhow::Result<f64>;      // 0.0-100.0%
+    fn compute_clock_mhz(&self) -> anyhow::Result<u32>;
+    fn compute_temperature_c(&self) -> anyhow::Result<f64>;
+    fn compute_power_watts(&self) -> anyhow::Result<f64>;
+    fn compute_power_limit_watts(&self) -> anyhow::Result<f64>;
+
+    /// Memory metrics
+    fn memory_used_bytes(&self) -> anyhow::Result<u64>;
+    fn memory_total_bytes(&self) -> anyhow::Result<u64>;
+    fn memory_bandwidth_gbps(&self) -> anyhow::Result<f64>;
+
+    /// Streaming multiprocessor / Compute Unit metrics
+    fn sm_count(&self) -> u32;
+    fn active_sm_count(&self) -> anyhow::Result<u32>;
+
+    /// PCIe / Interconnect metrics
+    fn pcie_tx_bytes_per_sec(&self) -> anyhow::Result<u64>;
+    fn pcie_rx_bytes_per_sec(&self) -> anyhow::Result<u64>;
+    fn pcie_generation(&self) -> u8;
+    fn pcie_width(&self) -> u8;
+}
+

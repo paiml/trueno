@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-01-03
+
+### Added
+
+- **TUI Logging** - File-based logging for trueno-monitor
+  - Logs to `~/.trueno/monitor.log` with daily rotation
+  - `RUST_LOG=debug` environment variable support
+  - Structured logging with tracing: startup, GPU detection, stress test results
+
+- **Real Stress Testing** - Uses trueno SIMD/CUDA compute paths
+  - CPU: 512×512 matrix multiply via AVX-512 (268M FLOPs/op)
+  - GPU: 4×256MB buffers saturating PCIe bandwidth (22.9 GB/s measured)
+  - Proper hardware utilization (was 10% CPU, now 100%)
+
+### Improved
+
+- **AVX-512 Coverage** - 83.9% → 93.6% line coverage
+  - Added SIMD path tests for: gelu, swish, tanh, log2, log10
+  - Tests use 32+ elements to exercise AVX-512 loops (16 elements/iter)
+
+- **Overall Coverage** - 91.8% → 94.0%
+
+### Fixed
+
+- Removed unused import in gpu_monitor_demo.rs
+- Added crate documentation to xtask (warning-free build)
+
 ## [trueno-gpu 0.4.3] - 2026-01-01
 
 ### Performance

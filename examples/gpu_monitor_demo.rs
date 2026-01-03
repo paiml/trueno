@@ -25,6 +25,10 @@
 //! - Nickolls et al. (2008): GPU parallel computing model
 
 use trueno::monitor::{GpuBackend, GpuDeviceInfo, GpuMemoryMetrics, GpuVendor};
+#[cfg(feature = "gpu")]
+use trueno::{GpuMonitor, MonitorConfig, MonitorError};
+#[cfg(feature = "cuda-monitor")]
+use trueno::cuda_monitor_available;
 
 fn main() {
     println!("=================================================");
