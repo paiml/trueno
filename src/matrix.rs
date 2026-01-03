@@ -1772,23 +1772,28 @@ impl Matrix<f32> {
         let mut result = Matrix::zeros_with_backend(self.cols, self.rows, self.backend);
 
         // Use block-wise transpose for better cache locality
-        // Block size of 64 fits well in L1 cache (64*64*4 = 16KB for f32)
-        const BLOCK_SIZE: usize = 64;
+        // Block size of 32 balances cache efficiency for both square and non-square matrices
+        const BLOCK_SIZE: usize = 32;
 
-        // Process matrix in BLOCK_SIZE x BLOCK_SIZE blocks
-        for i_block in (0..self.rows).step_by(BLOCK_SIZE) {
-            for j_block in (0..self.cols).step_by(BLOCK_SIZE) {
-                // Process elements within this block
+        // For non-square matrices, process output rows sequentially for write coalescing
+        // This ensures writes are sequential in memory regardless of input shape
+        // Fix for issue #65: non-square transpose was slow due to strided writes
+
+        // Process in blocks, iterating output rows first for sequential writes
+        for j_block in (0..self.cols).step_by(BLOCK_SIZE) {
+            let j_end = (j_block + BLOCK_SIZE).min(self.cols);
+
+            for i_block in (0..self.rows).step_by(BLOCK_SIZE) {
                 let i_end = (i_block + BLOCK_SIZE).min(self.rows);
-                let j_end = (j_block + BLOCK_SIZE).min(self.cols);
 
-                for i in i_block..i_end {
-                    // Direct slice access within row for better performance
-                    let src_row_start = i * self.cols;
-                    for j in j_block..j_end {
+                // Within block: iterate output rows (j) in outer loop for sequential writes
+                for j in j_block..j_end {
+                    let dst_row_start = j * result.cols;
+                    for i in i_block..i_end {
                         // result[j, i] = self[i, j]
-                        // Use direct indexing instead of get/get_mut for speed
-                        result.data[j * result.cols + i] = self.data[src_row_start + j];
+                        // Sequential write: dst_row_start + i increments by 1
+                        // Strided read: acceptable, CPU prefetch handles this
+                        result.data[dst_row_start + i] = self.data[i * self.cols + j];
                     }
                 }
             }
