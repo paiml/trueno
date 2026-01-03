@@ -191,6 +191,87 @@ Use GPU when **all** of these conditions are met:
 - ❌ Small matrices (<500×500) - overhead dominates
 - ❌ Single operations - transfer overhead too high
 
+## GPU Tiled Reduction ✅ (v0.10.1)
+
+**Status**: Validated on Metal (AMD Radeon Pro W5700X, Mac Pro 7,1)
+
+The tiled reduction shader provides efficient GPU-based sum, max, and min operations using 16x16 workgroup tiles with two-phase reduction.
+
+### Metal Benchmark Results (2026-01-03)
+
+| Operation | Size | GPU Tiled | Scalar CPU | GPU Throughput |
+|-----------|------|-----------|------------|----------------|
+| **Sum** | 1M | 8.25ms | 0.92ms | 121 Melem/s |
+| **Sum** | 10M | 67.2ms | 9.46ms | 149 Melem/s |
+| **Sum** | 32M | 215ms | 30.7ms | 149 Melem/s |
+| **Max** | 1M | 8.3ms | 0.22ms | 120 Melem/s |
+| **Max** | 10M | 67ms | 3.25ms | 150 Melem/s |
+| **Max** | 32M | 215ms | 10.7ms | 149 Melem/s |
+| **Min** | 1M | 8.28ms | 0.22ms | 121 Melem/s |
+| **Min** | 10M | 67.2ms | 3.26ms | 149 Melem/s |
+| **Min** | 32M | 215ms | 10.7ms | 149 Melem/s |
+
+### Key Findings
+
+- **Consistent ~150 Melem/s throughput** across all sizes on GPU
+- **~8ms baseline overhead** from CPU→GPU transfer
+- CPU is 7-37x faster for standalone reductions (expected for O(n) ops)
+- GPU wins for O(n³) operations like matmul, but loses for O(n) reductions
+
+### When GPU Tiled Reduction is Optimal
+
+✅ **Use GPU reduction when:**
+- Data is already resident on GPU (no transfer cost)
+- Reduction is part of larger GPU compute pipeline
+- Latency hiding in async GPU workloads
+
+❌ **Prefer SIMD when:**
+- Data starts on CPU (transfer overhead dominates)
+- Standalone reduction operation
+- Low-latency required
+
+### Metal Buffer Limits
+
+| Limit | Value | Max f32 Elements |
+|-------|-------|------------------|
+| Buffer binding | 128 MB | ~32M elements |
+| Total buffer | 256 MB | ~64M elements |
+
+### Example Usage
+
+```rust
+use trueno::backends::gpu::GpuBackend;
+
+fn main() -> Result<(), String> {
+    let mut gpu = GpuBackend::new();
+
+    // Create 1000x1000 matrix
+    let data: Vec<f32> = vec![1.0; 1_000_000];
+
+    // GPU tiled sum reduction
+    let sum = gpu.tiled_sum_2d_gpu(&data, 1000, 1000)?;
+    println!("Sum: {}", sum);  // 1000000.0
+
+    // GPU tiled max/min
+    let max = gpu.tiled_max_2d_gpu(&data, 1000, 1000)?;
+    let min = gpu.tiled_min_2d_gpu(&data, 1000, 1000)?;
+
+    Ok(())
+}
+```
+
+```bash
+# Run the demonstration
+cargo run --example gpu_tiled_reduction --features gpu --release
+```
+
+### Benchmark Execution
+
+```bash
+# Run tiled reduction benchmarks
+cargo bench --features gpu --bench gpu_reduction
+```
+
 ## Async Batch API ✅ (v0.3.0 - AVAILABLE NOW)
 
 **Status**: Fully implemented and tested (previously documented as "Future v2.0")

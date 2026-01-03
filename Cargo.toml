@@ -130,3 +130,7 @@ harness = false
 [[example]]
 name = "gpu_batch_demo"
 required-features = ["gpu"]
+
+[[example]]
+name = "gpu_tiled_reduction"
+required-features = ["gpu"]

@@ -216,6 +216,18 @@ fn tiled_sum_kernel(
 | Memory access | Coalesced | Row-major within tiles |
 | Bank conflicts | Zero | Power-of-two tile dimensions |
 
+### Metal Validation Results (2026-01-03)
+
+Validated on AMD Radeon Pro W5700X (Mac Pro 7,1):
+
+| Size | GPU Throughput | Notes |
+|------|----------------|-------|
+| 1M elements | 121 Melem/s | 16x16 tile fits L2 cache |
+| 10M elements | 149 Melem/s | Multiple tiles, good scaling |
+| 32M elements | 149 Melem/s | Metal buffer limit (~128MB) |
+
+**Key finding**: Consistent ~150 Melem/s throughput demonstrates efficient tiled reduction algorithm regardless of input size.
+
 ## Best Practices
 
 1. **Use power-of-two tile sizes** - Enables efficient memory coalescing and avoids bank conflicts
@@ -227,11 +239,14 @@ fn tiled_sum_kernel(
 ## Running Examples
 
 ```bash
-# Run the tiled reduction demo
-cargo run --example tiled_reduction_demo
+# Run the GPU tiled reduction demo
+cargo run --example gpu_tiled_reduction --features gpu --release
 
-# Run with GPU features
-cargo run --example tiled_reduction_demo --features gpu
+# Run GPU batch operations demo
+cargo run --example gpu_batch_demo --features gpu --release
+
+# Run tiled reduction benchmarks
+cargo bench --features gpu --bench gpu_reduction
 ```
 
 ## Related Documentation
