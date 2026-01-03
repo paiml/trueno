@@ -1031,6 +1031,651 @@ impl GemmKernel {
     }
 }
 
+// ============================================================================
+// Batched GEMM Kernels (Issue #71)
+// ============================================================================
+
+/// Batched GEMM configuration for 3D tensors
+/// Pattern: [batch, m, k] @ [batch, k, n] -> [batch, m, n]
+#[derive(Debug, Clone)]
+pub struct BatchedGemmConfig {
+    /// Batch size (number of independent matrix multiplications)
+    pub batch: u32,
+    /// M dimension (rows of A and C)
+    pub m: u32,
+    /// N dimension (cols of B and C)
+    pub n: u32,
+    /// K dimension (cols of A, rows of B)
+    pub k: u32,
+    /// Tile size for shared memory
+    pub tile_size: u32,
+}
+
+impl Default for BatchedGemmConfig {
+    fn default() -> Self {
+        Self {
+            batch: 1,
+            m: 1024,
+            n: 1024,
+            k: 1024,
+            tile_size: 16,
+        }
+    }
+}
+
+/// Batched GEMM kernel for 3D tensor matmul
+/// Each batch is processed by a separate thread block in the z-dimension
+#[derive(Debug, Clone)]
+pub struct BatchedGemmKernel {
+    config: BatchedGemmConfig,
+    variant: BatchedGemmVariant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BatchedGemmVariant {
+    Naive,
+    Tiled,
+}
+
+impl BatchedGemmKernel {
+    /// Create naive batched GEMM kernel (for correctness testing)
+    /// Pattern: [batch, m, k] @ [batch, k, n] -> [batch, m, n]
+    #[must_use]
+    pub fn naive(batch: u32, m: u32, n: u32, k: u32) -> Self {
+        Self {
+            config: BatchedGemmConfig {
+                batch,
+                m,
+                n,
+                k,
+                ..Default::default()
+            },
+            variant: BatchedGemmVariant::Naive,
+        }
+    }
+
+    /// Create tiled batched GEMM kernel (for performance)
+    /// Pattern: [batch, m, k] @ [batch, k, n] -> [batch, m, n]
+    #[must_use]
+    pub fn tiled(batch: u32, m: u32, n: u32, k: u32, tile_size: u32) -> Self {
+        Self {
+            config: BatchedGemmConfig {
+                batch,
+                m,
+                n,
+                k,
+                tile_size,
+            },
+            variant: BatchedGemmVariant::Tiled,
+        }
+    }
+
+    fn build_naive(&self) -> PtxKernel {
+        // Naive Batched GEMM: each thread computes one element of C[batch, row, col]
+        // Grid: (n, m, batch) - z-dimension indexes batch
+        let m_val = self.config.m;
+        let n_val = self.config.n;
+        let k_val = self.config.k;
+
+        PtxKernel::new("batched_gemm_naive")
+            .param(PtxType::U64, "a_ptr")
+            .param(PtxType::U64, "b_ptr")
+            .param(PtxType::U64, "c_ptr")
+            .param(PtxType::U32, "batch")
+            .param(PtxType::U32, "m")
+            .param(PtxType::U32, "n")
+            .param(PtxType::U32, "k")
+            .build(|ctx| {
+                // Get batch index from ctaid.z
+                let batch_idx = ctx.special_reg(crate::ptx::PtxReg::CtaIdZ);
+
+                // Calculate row and column from thread/block IDs
+                let ctaid_y = ctx.special_reg(crate::ptx::PtxReg::CtaIdY);
+                let ntid_y = ctx.special_reg(crate::ptx::PtxReg::NtidY);
+                let tid_y = ctx.special_reg(crate::ptx::PtxReg::TidY);
+                let ctaid_x = ctx.special_reg(crate::ptx::PtxReg::CtaIdX);
+                let ntid_x = ctx.special_reg(crate::ptx::PtxReg::NtidX);
+                let tid_x = ctx.special_reg(crate::ptx::PtxReg::TidX);
+
+                let row = ctx.mad_lo_u32(ctaid_y, ntid_y, tid_y);
+                let col = ctx.mad_lo_u32(ctaid_x, ntid_x, tid_x);
+
+                // Bounds check
+                let batch_param = ctx.load_param_u32("batch");
+                let m_param = ctx.load_param_u32("m");
+                let n_param = ctx.load_param_u32("n");
+                let k_param = ctx.load_param_u32("k");
+
+                let pred_batch = ctx.setp_ge_u32(batch_idx, batch_param);
+                ctx.branch_if(pred_batch, "exit");
+                let pred_m = ctx.setp_ge_u32(row, m_param);
+                ctx.branch_if(pred_m, "exit");
+                let pred_n = ctx.setp_ge_u32(col, n_param);
+                ctx.branch_if(pred_n, "exit");
+
+                // Load base pointers
+                let a_ptr = ctx.load_param_u64("a_ptr");
+                let b_ptr = ctx.load_param_u64("b_ptr");
+                let c_ptr = ctx.load_param_u64("c_ptr");
+
+                // Calculate batch offsets using immediate values
+                // A batch offset = batch_idx * m * k * 4
+                // B batch offset = batch_idx * k * n * 4
+                // C batch offset = batch_idx * m * n * 4
+                let a_batch_offset = ctx.mul_wide_u32(batch_idx, m_val * k_val * 4);
+                let b_batch_offset = ctx.mul_wide_u32(batch_idx, k_val * n_val * 4);
+                let c_batch_offset = ctx.mul_wide_u32(batch_idx, m_val * n_val * 4);
+
+                let a_batch_ptr = ctx.add_u64(a_ptr, a_batch_offset);
+                let b_batch_ptr = ctx.add_u64(b_ptr, b_batch_offset);
+                let c_batch_ptr = ctx.add_u64(c_ptr, c_batch_offset);
+
+                // Initialize accumulator
+                let acc = ctx.mov_f32_imm(0.0);
+
+                // Calculate base offset for A[row, 0]
+                let row_offset = ctx.mul_wide_u32(row, k_val * 4);
+                let a_row_ptr = ctx.add_u64(a_batch_ptr, row_offset);
+
+                // Calculate base offset for B[0, col]
+                let col_offset = ctx.mul_wide_u32(col, 4);
+                let b_col_base = ctx.add_u64(b_batch_ptr, col_offset);
+
+                // Loop over K dimension
+                let i = ctx.mov_u32_imm(0);
+
+                ctx.label("loop_k");
+
+                let pred_k = ctx.setp_ge_u32(i, k_param);
+                ctx.branch_if(pred_k, "loop_end");
+
+                // Load A[row, i]
+                let i_offset = ctx.mul_wide_u32(i, 4);
+                let a_addr = ctx.add_u64(a_row_ptr, i_offset);
+                let a_val = ctx.ld_global_f32(a_addr);
+
+                // Load B[i, col]
+                let b_row_offset = ctx.mul_wide_u32(i, n_val * 4);
+                let b_addr = ctx.add_u64(b_col_base, b_row_offset);
+                let b_val = ctx.ld_global_f32(b_addr);
+
+                // acc += a_val * b_val
+                ctx.fma_f32_inplace(acc, a_val, b_val);
+
+                ctx.add_u32_inplace(i, 1);
+                ctx.branch("loop_k");
+
+                ctx.label("loop_end");
+
+                // Store result: C[batch, row, col]
+                let c_row_offset = ctx.mul_wide_u32(row, n_val * 4);
+                let c_row_ptr = ctx.add_u64(c_batch_ptr, c_row_offset);
+                let c_col_offset = ctx.mul_wide_u32(col, 4);
+                let c_addr = ctx.add_u64(c_row_ptr, c_col_offset);
+                ctx.st_global_f32(c_addr, acc);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+
+    fn build_tiled(&self) -> PtxKernel {
+        let tile_size = self.config.tile_size;
+        let smem_size = tile_size * tile_size * 4 * 2; // A and B tiles
+        let n_tiles = (self.config.k + tile_size - 1) / tile_size;
+        let m_val = self.config.m;
+        let n_val = self.config.n;
+        let k_val = self.config.k;
+
+        PtxKernel::new("batched_gemm_tiled")
+            .param(PtxType::U64, "a_ptr")
+            .param(PtxType::U64, "b_ptr")
+            .param(PtxType::U64, "c_ptr")
+            .param(PtxType::U32, "batch")
+            .param(PtxType::U32, "m")
+            .param(PtxType::U32, "n")
+            .param(PtxType::U32, "k")
+            .shared_memory(smem_size as usize)
+            .build(|ctx| {
+                // Get batch index from ctaid.z
+                let batch_idx = ctx.special_reg(crate::ptx::PtxReg::CtaIdZ);
+
+                // Thread and block indices
+                let tid_x = ctx.special_reg(crate::ptx::PtxReg::TidX);
+                let tid_y = ctx.special_reg(crate::ptx::PtxReg::TidY);
+                let ctaid_x = ctx.special_reg(crate::ptx::PtxReg::CtaIdX);
+                let ctaid_y = ctx.special_reg(crate::ptx::PtxReg::CtaIdY);
+
+                let tile_size_reg = ctx.mov_u32_imm(tile_size);
+
+                // Global row and column
+                let row = ctx.mad_lo_u32(ctaid_y, tile_size_reg, tid_y);
+                let col = ctx.mad_lo_u32(ctaid_x, tile_size_reg, tid_x);
+
+                // Load parameters - DON'T exit early (PARITY-114)
+                let batch_param = ctx.load_param_u32("batch");
+                let m_param = ctx.load_param_u32("m");
+                let n_param = ctx.load_param_u32("n");
+                let k_param = ctx.load_param_u32("k");
+
+                // Compute predicates for valid output
+                let batch_valid = ctx.setp_lt_u32(batch_idx, batch_param);
+                let row_valid = ctx.setp_lt_u32(row, m_param);
+                let col_valid = ctx.setp_lt_u32(col, n_param);
+
+                // Load base pointers
+                let a_ptr = ctx.load_param_u64("a_ptr");
+                let b_ptr = ctx.load_param_u64("b_ptr");
+                let c_ptr = ctx.load_param_u64("c_ptr");
+
+                // Calculate batch offsets using immediate values
+                let a_batch_offset = ctx.mul_wide_u32(batch_idx, m_val * k_val * 4);
+                let b_batch_offset = ctx.mul_wide_u32(batch_idx, k_val * n_val * 4);
+                let c_batch_offset = ctx.mul_wide_u32(batch_idx, m_val * n_val * 4);
+
+                let a_batch_ptr = ctx.add_u64(a_ptr, a_batch_offset);
+                let b_batch_ptr = ctx.add_u64(b_ptr, b_batch_offset);
+                let c_batch_ptr = ctx.add_u64(c_ptr, c_batch_offset);
+
+                // Initialize accumulator
+                let acc = ctx.mov_f32_imm(0.0);
+
+                // Tile loop counter
+                let tile_idx = ctx.mov_u32_imm(0);
+                let n_tiles_reg = ctx.mov_u32_imm(n_tiles);
+
+                ctx.label("tile_loop");
+
+                let tile_done = ctx.setp_ge_u32(tile_idx, n_tiles_reg);
+                ctx.branch_if(tile_done, "tile_loop_end");
+
+                // Shared memory offsets
+                let smem_idx = ctx.mad_lo_u32(tid_y, tile_size_reg, tid_x);
+                let smem_a_offset = ctx.mul_u32(smem_idx, 4);
+                let smem_b_base = ctx.mov_u32_imm(tile_size * tile_size * 4);
+                let smem_b_offset = ctx.add_u32_reg(smem_b_base, smem_a_offset);
+
+                // Load A tile
+                let tile_k_offset = ctx.mul_u32(tile_idx, tile_size);
+                let a_col = ctx.add_u32_reg(tile_k_offset, tid_x);
+                let a_col_valid = ctx.setp_lt_u32(a_col, k_param);
+
+                let zero_a = ctx.mov_f32_imm(0.0);
+                ctx.st_shared_f32(smem_a_offset, zero_a);
+
+                ctx.branch_if_not(batch_valid, "skip_a_load");
+                ctx.branch_if_not(row_valid, "skip_a_load");
+                ctx.branch_if_not(a_col_valid, "skip_a_load");
+
+                let row_offset_a = ctx.mul_wide_u32(row, k_val * 4);
+                let col_offset_a = ctx.mul_wide_u32(a_col, 4);
+                let a_row_base = ctx.add_u64(a_batch_ptr, row_offset_a);
+                let a_addr = ctx.add_u64(a_row_base, col_offset_a);
+                let a_val = ctx.ld_global_f32(a_addr);
+                ctx.st_shared_f32(smem_a_offset, a_val);
+
+                ctx.label("skip_a_load");
+
+                // Load B tile
+                let b_row = ctx.add_u32_reg(tile_k_offset, tid_y);
+                let b_row_valid = ctx.setp_lt_u32(b_row, k_param);
+
+                let zero_b = ctx.mov_f32_imm(0.0);
+                ctx.st_shared_f32(smem_b_offset, zero_b);
+
+                ctx.branch_if_not(batch_valid, "skip_b_load");
+                ctx.branch_if_not(b_row_valid, "skip_b_load");
+                ctx.branch_if_not(col_valid, "skip_b_load");
+
+                let row_offset_b = ctx.mul_wide_u32(b_row, n_val * 4);
+                let col_offset_b = ctx.mul_wide_u32(col, 4);
+                let b_row_base = ctx.add_u64(b_batch_ptr, row_offset_b);
+                let b_addr = ctx.add_u64(b_row_base, col_offset_b);
+                let b_val = ctx.ld_global_f32(b_addr);
+                ctx.st_shared_f32(smem_b_offset, b_val);
+
+                ctx.label("skip_b_load");
+
+                ctx.bar_sync(0);
+
+                // Inner loop: accumulate from shared memory
+                let inner_k = ctx.mov_u32_imm(0);
+
+                ctx.label("inner_k_loop");
+
+                let inner_done = ctx.setp_ge_u32(inner_k, tile_size_reg);
+                ctx.branch_if(inner_done, "inner_k_end");
+
+                let as_idx = ctx.mad_lo_u32(tid_y, tile_size_reg, inner_k);
+                let as_addr = ctx.mul_u32(as_idx, 4);
+                let a_shared = ctx.ld_shared_f32(as_addr);
+
+                let bs_idx = ctx.mad_lo_u32(inner_k, tile_size_reg, tid_x);
+                let bs_idx_bytes = ctx.mul_u32(bs_idx, 4);
+                let bs_addr = ctx.add_u32_reg(smem_b_base, bs_idx_bytes);
+                let b_shared = ctx.ld_shared_f32(bs_addr);
+
+                ctx.fma_f32_inplace(acc, a_shared, b_shared);
+
+                ctx.add_u32_inplace(inner_k, 1);
+                ctx.branch("inner_k_loop");
+
+                ctx.label("inner_k_end");
+
+                ctx.bar_sync(1);
+
+                ctx.add_u32_inplace(tile_idx, 1);
+                ctx.branch("tile_loop");
+
+                ctx.label("tile_loop_end");
+
+                // PARITY-114: Bounds check after tile loop
+                ctx.branch_if_not(batch_valid, "exit");
+                ctx.branch_if_not(row_valid, "exit");
+                ctx.branch_if_not(col_valid, "exit");
+
+                // Store result
+                let c_row_offset = ctx.mul_wide_u32(row, n_val * 4);
+                let c_col_offset = ctx.mul_wide_u32(col, 4);
+                let c_row_base = ctx.add_u64(c_batch_ptr, c_row_offset);
+                let c_addr = ctx.add_u64(c_row_base, c_col_offset);
+                ctx.st_global_f32(c_addr, acc);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
+impl Kernel for BatchedGemmKernel {
+    fn name(&self) -> &str {
+        match self.variant {
+            BatchedGemmVariant::Naive => "batched_gemm_naive",
+            BatchedGemmVariant::Tiled => "batched_gemm_tiled",
+        }
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        match self.variant {
+            BatchedGemmVariant::Naive => self.build_naive(),
+            BatchedGemmVariant::Tiled => self.build_tiled(),
+        }
+    }
+}
+
+// ============================================================================
+// Batched 4D GEMM Kernel (Attention Pattern)
+// Pattern: [batch, heads, m, k] @ [batch, heads, k, n] -> [batch, heads, m, n]
+// ============================================================================
+
+/// Batched 4D GEMM configuration for attention patterns
+#[derive(Debug, Clone)]
+pub struct Batched4DGemmConfig {
+    /// Batch size
+    pub batch: u32,
+    /// Number of attention heads
+    pub heads: u32,
+    /// M dimension (rows of A and C, typically sequence length)
+    pub m: u32,
+    /// N dimension (cols of B and C, typically sequence length or head_dim)
+    pub n: u32,
+    /// K dimension (cols of A, rows of B, typically head_dim)
+    pub k: u32,
+    /// Tile size for shared memory
+    pub tile_size: u32,
+}
+
+impl Default for Batched4DGemmConfig {
+    fn default() -> Self {
+        Self {
+            batch: 1,
+            heads: 8,
+            m: 512,
+            n: 512,
+            k: 64,
+            tile_size: 16,
+        }
+    }
+}
+
+/// Batched 4D GEMM kernel for attention patterns (Q @ K^T, attn @ V)
+/// Grid: ((m+tile-1)/tile, (n+tile-1)/tile, batch * heads)
+#[derive(Debug, Clone)]
+pub struct Batched4DGemmKernel {
+    config: Batched4DGemmConfig,
+}
+
+impl Batched4DGemmKernel {
+    /// Create a new 4D batched GEMM kernel for attention
+    /// Pattern: [batch, heads, m, k] @ [batch, heads, k, n] -> [batch, heads, m, n]
+    #[must_use]
+    pub fn new(batch: u32, heads: u32, m: u32, n: u32, k: u32) -> Self {
+        Self {
+            config: Batched4DGemmConfig {
+                batch,
+                heads,
+                m,
+                n,
+                k,
+                ..Default::default()
+            },
+        }
+    }
+
+    /// Create with custom tile size
+    #[must_use]
+    pub fn with_tile_size(batch: u32, heads: u32, m: u32, n: u32, k: u32, tile_size: u32) -> Self {
+        Self {
+            config: Batched4DGemmConfig {
+                batch,
+                heads,
+                m,
+                n,
+                k,
+                tile_size,
+            },
+        }
+    }
+
+    fn build_kernel(&self) -> PtxKernel {
+        let tile_size = self.config.tile_size;
+        let smem_size = tile_size * tile_size * 4 * 2;
+        let n_tiles = (self.config.k + tile_size - 1) / tile_size;
+        let heads_val = self.config.heads;
+        let m_val = self.config.m;
+        let n_val = self.config.n;
+        let k_val = self.config.k;
+
+        PtxKernel::new("batched_4d_gemm")
+            .param(PtxType::U64, "a_ptr")
+            .param(PtxType::U64, "b_ptr")
+            .param(PtxType::U64, "c_ptr")
+            .param(PtxType::U32, "batch")
+            .param(PtxType::U32, "heads")
+            .param(PtxType::U32, "m")
+            .param(PtxType::U32, "n")
+            .param(PtxType::U32, "k")
+            .shared_memory(smem_size as usize)
+            .build(|ctx| {
+                // z-dimension encodes batch * heads
+                // batch_head_idx = ctaid.z
+                // batch_idx = batch_head_idx / heads
+                // head_idx = batch_head_idx % heads
+                let batch_head_idx = ctx.special_reg(crate::ptx::PtxReg::CtaIdZ);
+                let batch_idx = ctx.div_u32(batch_head_idx, heads_val);
+                let head_idx = ctx.rem_u32(batch_head_idx, heads_val);
+
+                // Thread and block indices
+                let tid_x = ctx.special_reg(crate::ptx::PtxReg::TidX);
+                let tid_y = ctx.special_reg(crate::ptx::PtxReg::TidY);
+                let ctaid_x = ctx.special_reg(crate::ptx::PtxReg::CtaIdX);
+                let ctaid_y = ctx.special_reg(crate::ptx::PtxReg::CtaIdY);
+
+                let tile_size_reg = ctx.mov_u32_imm(tile_size);
+
+                let row = ctx.mad_lo_u32(ctaid_y, tile_size_reg, tid_y);
+                let col = ctx.mad_lo_u32(ctaid_x, tile_size_reg, tid_x);
+
+                // Load parameters
+                let batch_param = ctx.load_param_u32("batch");
+                let heads_param = ctx.load_param_u32("heads");
+                let m_param = ctx.load_param_u32("m");
+                let n_param = ctx.load_param_u32("n");
+                let k_param = ctx.load_param_u32("k");
+
+                // Validity predicates
+                let batch_valid = ctx.setp_lt_u32(batch_idx, batch_param);
+                let head_valid = ctx.setp_lt_u32(head_idx, heads_param);
+                let row_valid = ctx.setp_lt_u32(row, m_param);
+                let col_valid = ctx.setp_lt_u32(col, n_param);
+
+                // Load base pointers
+                let a_ptr = ctx.load_param_u64("a_ptr");
+                let b_ptr = ctx.load_param_u64("b_ptr");
+                let c_ptr = ctx.load_param_u64("c_ptr");
+
+                // Calculate 4D offsets using immediate strides
+                // A: [batch, heads, m, k] -> stride: [heads*m*k, m*k, k, 1]
+                // B: [batch, heads, k, n] -> stride: [heads*k*n, k*n, n, 1]
+                // C: [batch, heads, m, n] -> stride: [heads*m*n, m*n, n, 1]
+                let a_batch_off = ctx.mul_wide_u32(batch_idx, heads_val * m_val * k_val * 4);
+                let a_head_off = ctx.mul_wide_u32(head_idx, m_val * k_val * 4);
+                let a_base = ctx.add_u64(a_ptr, a_batch_off);
+                let a_base = ctx.add_u64(a_base, a_head_off);
+
+                let b_batch_off = ctx.mul_wide_u32(batch_idx, heads_val * k_val * n_val * 4);
+                let b_head_off = ctx.mul_wide_u32(head_idx, k_val * n_val * 4);
+                let b_base = ctx.add_u64(b_ptr, b_batch_off);
+                let b_base = ctx.add_u64(b_base, b_head_off);
+
+                let c_batch_off = ctx.mul_wide_u32(batch_idx, heads_val * m_val * n_val * 4);
+                let c_head_off = ctx.mul_wide_u32(head_idx, m_val * n_val * 4);
+                let c_base = ctx.add_u64(c_ptr, c_batch_off);
+                let c_base = ctx.add_u64(c_base, c_head_off);
+
+                // Initialize accumulator
+                let acc = ctx.mov_f32_imm(0.0);
+
+                // Tile loop
+                let tile_idx = ctx.mov_u32_imm(0);
+                let n_tiles_reg = ctx.mov_u32_imm(n_tiles);
+
+                ctx.label("tile_loop");
+
+                let tile_done = ctx.setp_ge_u32(tile_idx, n_tiles_reg);
+                ctx.branch_if(tile_done, "tile_loop_end");
+
+                // Shared memory offsets
+                let smem_idx = ctx.mad_lo_u32(tid_y, tile_size_reg, tid_x);
+                let smem_a_offset = ctx.mul_u32(smem_idx, 4);
+                let smem_b_base = ctx.mov_u32_imm(tile_size * tile_size * 4);
+                let smem_b_offset = ctx.add_u32_reg(smem_b_base, smem_a_offset);
+
+                // Load A tile
+                let tile_k_offset = ctx.mul_u32(tile_idx, tile_size);
+                let a_col = ctx.add_u32_reg(tile_k_offset, tid_x);
+                let a_col_valid = ctx.setp_lt_u32(a_col, k_param);
+
+                let zero_a = ctx.mov_f32_imm(0.0);
+                ctx.st_shared_f32(smem_a_offset, zero_a);
+
+                ctx.branch_if_not(batch_valid, "skip_a_load");
+                ctx.branch_if_not(head_valid, "skip_a_load");
+                ctx.branch_if_not(row_valid, "skip_a_load");
+                ctx.branch_if_not(a_col_valid, "skip_a_load");
+
+                let row_offset_a = ctx.mul_wide_u32(row, k_val * 4);
+                let col_offset_a = ctx.mul_wide_u32(a_col, 4);
+                let a_row_ptr = ctx.add_u64(a_base, row_offset_a);
+                let a_addr = ctx.add_u64(a_row_ptr, col_offset_a);
+                let a_val = ctx.ld_global_f32(a_addr);
+                ctx.st_shared_f32(smem_a_offset, a_val);
+
+                ctx.label("skip_a_load");
+
+                // Load B tile
+                let b_row = ctx.add_u32_reg(tile_k_offset, tid_y);
+                let b_row_valid = ctx.setp_lt_u32(b_row, k_param);
+
+                let zero_b = ctx.mov_f32_imm(0.0);
+                ctx.st_shared_f32(smem_b_offset, zero_b);
+
+                ctx.branch_if_not(batch_valid, "skip_b_load");
+                ctx.branch_if_not(head_valid, "skip_b_load");
+                ctx.branch_if_not(b_row_valid, "skip_b_load");
+                ctx.branch_if_not(col_valid, "skip_b_load");
+
+                let row_offset_b = ctx.mul_wide_u32(b_row, n_val * 4);
+                let col_offset_b = ctx.mul_wide_u32(col, 4);
+                let b_row_ptr = ctx.add_u64(b_base, row_offset_b);
+                let b_addr = ctx.add_u64(b_row_ptr, col_offset_b);
+                let b_val = ctx.ld_global_f32(b_addr);
+                ctx.st_shared_f32(smem_b_offset, b_val);
+
+                ctx.label("skip_b_load");
+
+                ctx.bar_sync(0);
+
+                // Inner loop
+                let inner_k = ctx.mov_u32_imm(0);
+
+                ctx.label("inner_k_loop");
+
+                let inner_done = ctx.setp_ge_u32(inner_k, tile_size_reg);
+                ctx.branch_if(inner_done, "inner_k_end");
+
+                let as_idx = ctx.mad_lo_u32(tid_y, tile_size_reg, inner_k);
+                let as_addr = ctx.mul_u32(as_idx, 4);
+                let a_shared = ctx.ld_shared_f32(as_addr);
+
+                let bs_idx = ctx.mad_lo_u32(inner_k, tile_size_reg, tid_x);
+                let bs_idx_bytes = ctx.mul_u32(bs_idx, 4);
+                let bs_addr = ctx.add_u32_reg(smem_b_base, bs_idx_bytes);
+                let b_shared = ctx.ld_shared_f32(bs_addr);
+
+                ctx.fma_f32_inplace(acc, a_shared, b_shared);
+
+                ctx.add_u32_inplace(inner_k, 1);
+                ctx.branch("inner_k_loop");
+
+                ctx.label("inner_k_end");
+
+                ctx.bar_sync(1);
+
+                ctx.add_u32_inplace(tile_idx, 1);
+                ctx.branch("tile_loop");
+
+                ctx.label("tile_loop_end");
+
+                // PARITY-114: Bounds check after all barriers
+                ctx.branch_if_not(batch_valid, "exit");
+                ctx.branch_if_not(head_valid, "exit");
+                ctx.branch_if_not(row_valid, "exit");
+                ctx.branch_if_not(col_valid, "exit");
+
+                // Store result
+                let c_row_offset = ctx.mul_wide_u32(row, n_val * 4);
+                let c_col_offset = ctx.mul_wide_u32(col, 4);
+                let c_row_ptr = ctx.add_u64(c_base, c_row_offset);
+                let c_addr = ctx.add_u64(c_row_ptr, c_col_offset);
+                ctx.st_global_f32(c_addr, acc);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
+impl Kernel for Batched4DGemmKernel {
+    fn name(&self) -> &str {
+        "batched_4d_gemm"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        self.build_kernel()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1483,6 +2128,164 @@ mod tests {
             assert!(
                 ptx.contains("wmma.mma"),
                 "WMMA kernel m={m} n={n} k={k} should have wmma.mma"
+            );
+        }
+    }
+
+    // =========================================================================
+    // Batched GEMM Tests (Issue #71)
+    // =========================================================================
+
+    #[test]
+    fn test_batched_gemm_naive() {
+        let kernel = BatchedGemmKernel::naive(4, 64, 64, 64);
+        assert_eq!(kernel.name(), "batched_gemm_naive");
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry batched_gemm_naive"));
+        assert!(ptx.contains(".param .u32 batch"));
+    }
+
+    #[test]
+    fn test_batched_gemm_tiled() {
+        let kernel = BatchedGemmKernel::tiled(4, 64, 64, 64, 16);
+        assert_eq!(kernel.name(), "batched_gemm_tiled");
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry batched_gemm_tiled"));
+        assert!(ptx.contains("bar.sync"));
+    }
+
+    #[test]
+    fn test_batched_gemm_uses_z_dimension() {
+        let kernel = BatchedGemmKernel::naive(8, 32, 32, 32);
+        let ptx = kernel.emit_ptx();
+        // Should use ctaid.z for batch indexing
+        assert!(
+            ptx.contains("%ctaid.z"),
+            "Batched GEMM should use ctaid.z for batch"
+        );
+    }
+
+    #[test]
+    fn test_batched_gemm_config_default() {
+        let config = BatchedGemmConfig::default();
+        assert_eq!(config.batch, 1);
+        assert_eq!(config.m, 1024);
+        assert_eq!(config.n, 1024);
+        assert_eq!(config.k, 1024);
+        assert_eq!(config.tile_size, 16);
+    }
+
+    #[test]
+    fn test_batched_4d_gemm() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        assert_eq!(kernel.name(), "batched_4d_gemm");
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry batched_4d_gemm"));
+        assert!(ptx.contains(".param .u32 batch"));
+        assert!(ptx.contains(".param .u32 heads"));
+    }
+
+    #[test]
+    fn test_batched_4d_gemm_with_tile_size() {
+        let kernel = Batched4DGemmKernel::with_tile_size(2, 8, 64, 64, 32, 32);
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry batched_4d_gemm"));
+        assert!(ptx.contains("bar.sync"));
+    }
+
+    #[test]
+    fn test_batched_4d_gemm_config_default() {
+        let config = Batched4DGemmConfig::default();
+        assert_eq!(config.batch, 1);
+        assert_eq!(config.heads, 8);
+        assert_eq!(config.m, 512);
+        assert_eq!(config.n, 512);
+        assert_eq!(config.k, 64);
+        assert_eq!(config.tile_size, 16);
+    }
+
+    #[test]
+    fn test_batched_4d_gemm_uses_batch_head_indexing() {
+        let kernel = Batched4DGemmKernel::new(4, 12, 128, 128, 64);
+        let ptx = kernel.emit_ptx();
+        // Should use ctaid.z for batch*heads indexing
+        assert!(
+            ptx.contains("%ctaid.z"),
+            "4D GEMM should use ctaid.z for batch*heads"
+        );
+        // Should have div and rem for separating batch and head
+        assert!(
+            ptx.contains("div.") || ptx.contains("rem."),
+            "4D GEMM should extract batch and head from z index"
+        );
+    }
+
+    /// PARITY-114: Verify batched GEMM tiled is barrier-safe
+    #[test]
+    fn test_barrier_safety_batched_gemm_tiled() {
+        let kernel = BatchedGemmKernel::tiled(4, 64, 64, 64, 16);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "Batched GEMM tiled should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// PARITY-114: Verify batched 4D GEMM is barrier-safe
+    #[test]
+    fn test_barrier_safety_batched_4d_gemm() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "Batched 4D GEMM should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    /// Test batched GEMM boundary conditions
+    #[test]
+    fn test_batched_gemm_boundary_conditions() {
+        let boundary_cases = [
+            (1, 17, 17, 17, 16),  // Single batch, non-power-of-2
+            (8, 100, 100, 100, 16), // Multiple batches
+            (16, 1, 64, 64, 16),   // Single row
+        ];
+
+        for (batch, m, n, k, tile) in boundary_cases {
+            let kernel = BatchedGemmKernel::tiled(batch, m, n, k, tile);
+            let ptx = kernel.emit_ptx();
+            assert!(
+                ptx.contains(".entry"),
+                "Batched kernel should have entry"
+            );
+            assert!(
+                ptx.contains("bar.sync"),
+                "Batched kernel should have barrier"
+            );
+        }
+    }
+
+    /// Test 4D GEMM boundary conditions
+    #[test]
+    fn test_batched_4d_gemm_boundary_conditions() {
+        let boundary_cases = [
+            (1, 1, 64, 64, 32),    // Single batch, single head
+            (2, 12, 17, 17, 17),  // Non-power-of-2 dimensions
+            (4, 8, 128, 64, 32),  // Different M and N
+        ];
+
+        for (batch, heads, m, n, k) in boundary_cases {
+            let kernel = Batched4DGemmKernel::new(batch, heads, m, n, k);
+            let ptx = kernel.emit_ptx();
+            assert!(
+                ptx.contains(".entry"),
+                "4D GEMM should have entry"
+            );
+            assert!(
+                ptx.contains("bar.sync"),
+                "4D GEMM should have barrier"
             );
         }
     }
