@@ -2250,6 +2250,259 @@ impl Matrix<f32> {
 
         Ok((embeddings, unique))
     }
+
+    /// 2D Max Pooling operation for CNN downsampling
+    ///
+    /// Applies max pooling over a 2D input tensor with specified kernel size and stride.
+    /// Input shape: (height, width), Output shape: ((height - kh) / sh + 1, (width - kw) / sw + 1)
+    ///
+    /// # Arguments
+    /// * `kernel` - (kernel_height, kernel_width) pooling window size
+    /// * `stride` - (stride_height, stride_width) step size
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::matrix::Matrix;
+    /// let input = Matrix::from_vec(4, 4, vec![
+    ///     1.0, 2.0, 3.0, 4.0,
+    ///     5.0, 6.0, 7.0, 8.0,
+    ///     9.0, 10.0, 11.0, 12.0,
+    ///     13.0, 14.0, 15.0, 16.0,
+    /// ]).unwrap();
+    /// let pooled = input.max_pool2d((2, 2), (2, 2)).unwrap();
+    /// assert_eq!(pooled.shape(), (2, 2));
+    /// assert_eq!(pooled.get(0, 0), Some(&6.0));  // max of [1,2,5,6]
+    /// assert_eq!(pooled.get(1, 1), Some(&16.0)); // max of [11,12,15,16]
+    /// ```
+    pub fn max_pool2d(
+        &self,
+        kernel: (usize, usize),
+        stride: (usize, usize),
+    ) -> Result<Matrix<f32>, TruenoError> {
+        let (kh, kw) = kernel;
+        let (sh, sw) = stride;
+
+        if kh == 0 || kw == 0 || sh == 0 || sw == 0 {
+            return Err(TruenoError::InvalidInput(
+                "Kernel and stride dimensions must be positive".into(),
+            ));
+        }
+
+        if kh > self.rows || kw > self.cols {
+            return Err(TruenoError::InvalidInput(format!(
+                "Kernel size ({}, {}) larger than input ({}, {})",
+                kh, kw, self.rows, self.cols
+            )));
+        }
+
+        let out_h = (self.rows - kh) / sh + 1;
+        let out_w = (self.cols - kw) / sw + 1;
+        let mut result = Matrix::new(out_h, out_w);
+
+        for i in 0..out_h {
+            for j in 0..out_w {
+                let mut max_val = f32::NEG_INFINITY;
+                for ki in 0..kh {
+                    for kj in 0..kw {
+                        let val = self.data[(i * sh + ki) * self.cols + (j * sw + kj)];
+                        max_val = max_val.max(val);
+                    }
+                }
+                result.data[i * out_w + j] = max_val;
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// 2D Average Pooling operation for CNN downsampling
+    ///
+    /// Applies average pooling over a 2D input tensor with specified kernel size and stride.
+    /// Input shape: (height, width), Output shape: ((height - kh) / sh + 1, (width - kw) / sw + 1)
+    ///
+    /// # Arguments
+    /// * `kernel` - (kernel_height, kernel_width) pooling window size
+    /// * `stride` - (stride_height, stride_width) step size
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::matrix::Matrix;
+    /// let input = Matrix::from_vec(4, 4, vec![
+    ///     1.0, 2.0, 3.0, 4.0,
+    ///     5.0, 6.0, 7.0, 8.0,
+    ///     9.0, 10.0, 11.0, 12.0,
+    ///     13.0, 14.0, 15.0, 16.0,
+    /// ]).unwrap();
+    /// let pooled = input.avg_pool2d((2, 2), (2, 2)).unwrap();
+    /// assert_eq!(pooled.shape(), (2, 2));
+    /// assert!((pooled.get(0, 0).unwrap() - 3.5).abs() < 1e-5);  // avg of [1,2,5,6]
+    /// ```
+    pub fn avg_pool2d(
+        &self,
+        kernel: (usize, usize),
+        stride: (usize, usize),
+    ) -> Result<Matrix<f32>, TruenoError> {
+        let (kh, kw) = kernel;
+        let (sh, sw) = stride;
+
+        if kh == 0 || kw == 0 || sh == 0 || sw == 0 {
+            return Err(TruenoError::InvalidInput(
+                "Kernel and stride dimensions must be positive".into(),
+            ));
+        }
+
+        if kh > self.rows || kw > self.cols {
+            return Err(TruenoError::InvalidInput(format!(
+                "Kernel size ({}, {}) larger than input ({}, {})",
+                kh, kw, self.rows, self.cols
+            )));
+        }
+
+        let out_h = (self.rows - kh) / sh + 1;
+        let out_w = (self.cols - kw) / sw + 1;
+        let kernel_size = (kh * kw) as f32;
+        let mut result = Matrix::new(out_h, out_w);
+
+        for i in 0..out_h {
+            for j in 0..out_w {
+                let mut sum = 0.0;
+                for ki in 0..kh {
+                    for kj in 0..kw {
+                        sum += self.data[(i * sh + ki) * self.cols + (j * sw + kj)];
+                    }
+                }
+                result.data[i * out_w + j] = sum / kernel_size;
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Top-K selection: returns the k largest elements and their indices
+    ///
+    /// Useful for beam search, sampling, and ranking operations.
+    /// Searches row-major order and returns (values, indices) sorted descending.
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::matrix::Matrix;
+    /// let m = Matrix::from_vec(2, 3, vec![1.0, 5.0, 3.0, 2.0, 6.0, 4.0]).unwrap();
+    /// let (values, indices) = m.topk(2).unwrap();
+    /// assert_eq!(values, vec![6.0, 5.0]);
+    /// assert_eq!(indices, vec![4, 1]);  // flat indices
+    /// ```
+    pub fn topk(&self, k: usize) -> Result<(Vec<f32>, Vec<usize>), TruenoError> {
+        if k == 0 {
+            return Ok((vec![], vec![]));
+        }
+
+        let k = k.min(self.data.len());
+        let mut indexed: Vec<(usize, f32)> = self.data.iter().copied().enumerate().collect();
+
+        // Partial sort - only sort k elements
+        indexed.select_nth_unstable_by(k.saturating_sub(1), |a, b| {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        indexed.truncate(k);
+        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let values: Vec<f32> = indexed.iter().map(|(_, v)| *v).collect();
+        let indices: Vec<usize> = indexed.iter().map(|(i, _)| *i).collect();
+
+        Ok((values, indices))
+    }
+
+    /// Gather elements along axis using indices
+    ///
+    /// For 2D matrix with axis=0: output[i] = self[indices[i], :]
+    /// For 2D matrix with axis=1: output[:, i] = self[:, indices[i]]
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::matrix::Matrix;
+    /// let m = Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    /// let gathered = m.gather(&[2, 0], 0).unwrap();  // Select rows 2 and 0
+    /// assert_eq!(gathered.shape(), (2, 2));
+    /// assert_eq!(gathered.get(0, 0), Some(&5.0));  // Row 2
+    /// assert_eq!(gathered.get(1, 0), Some(&1.0));  // Row 0
+    /// ```
+    pub fn gather(&self, indices: &[usize], axis: usize) -> Result<Matrix<f32>, TruenoError> {
+        match axis {
+            0 => {
+                // Gather rows
+                let mut result = Matrix::new(indices.len(), self.cols);
+                for (out_i, &idx) in indices.iter().enumerate() {
+                    if idx >= self.rows {
+                        return Err(TruenoError::InvalidInput(format!(
+                            "Index {} out of bounds for axis 0 with size {}",
+                            idx, self.rows
+                        )));
+                    }
+                    for j in 0..self.cols {
+                        result.data[out_i * self.cols + j] = self.data[idx * self.cols + j];
+                    }
+                }
+                Ok(result)
+            }
+            1 => {
+                // Gather columns
+                let mut result = Matrix::new(self.rows, indices.len());
+                for i in 0..self.rows {
+                    for (out_j, &idx) in indices.iter().enumerate() {
+                        if idx >= self.cols {
+                            return Err(TruenoError::InvalidInput(format!(
+                                "Index {} out of bounds for axis 1 with size {}",
+                                idx, self.cols
+                            )));
+                        }
+                        result.data[i * indices.len() + out_j] = self.data[i * self.cols + idx];
+                    }
+                }
+                Ok(result)
+            }
+            _ => Err(TruenoError::InvalidInput(format!(
+                "Axis {} not supported for 2D matrix (use 0 or 1)",
+                axis
+            ))),
+        }
+    }
+
+    /// Pad matrix with a constant value
+    ///
+    /// # Arguments
+    /// * `padding` - ((top, bottom), (left, right)) padding amounts
+    /// * `value` - constant value to pad with (usually 0.0)
+    ///
+    /// # Examples
+    /// ```
+    /// use trueno::matrix::Matrix;
+    /// let m = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+    /// let padded = m.pad(((1, 1), (1, 1)), 0.0).unwrap();
+    /// assert_eq!(padded.shape(), (4, 4));
+    /// assert_eq!(padded.get(0, 0), Some(&0.0));  // top-left padding
+    /// assert_eq!(padded.get(1, 1), Some(&1.0));  // original (0,0)
+    /// ```
+    pub fn pad(
+        &self,
+        padding: ((usize, usize), (usize, usize)),
+        value: f32,
+    ) -> Result<Matrix<f32>, TruenoError> {
+        let ((top, bottom), (left, right)) = padding;
+        let new_rows = self.rows + top + bottom;
+        let new_cols = self.cols + left + right;
+
+        let mut result = Matrix::from_vec(new_rows, new_cols, vec![value; new_rows * new_cols])?;
+
+        // Copy original data
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                result.data[(i + top) * new_cols + (j + left)] = self.data[i * self.cols + j];
+            }
+        }
+
+        Ok(result)
+    }
 }
 
 #[cfg(test)]
@@ -3529,6 +3782,117 @@ mod tests {
                 assert_eq!(t.get(i, j), Some(&expected));
             }
         }
+    }
+
+    // ===== ML Primitives Tests =====
+
+    #[test]
+    fn test_max_pool2d() {
+        let input = Matrix::from_vec(
+            4,
+            4,
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+                16.0,
+            ],
+        )
+        .expect("valid input");
+
+        // 2x2 kernel, 2x2 stride
+        let pooled = input.max_pool2d((2, 2), (2, 2)).expect("valid pooling");
+        assert_eq!(pooled.shape(), (2, 2));
+        assert_eq!(pooled.get(0, 0), Some(&6.0)); // max of [1,2,5,6]
+        assert_eq!(pooled.get(0, 1), Some(&8.0)); // max of [3,4,7,8]
+        assert_eq!(pooled.get(1, 0), Some(&14.0)); // max of [9,10,13,14]
+        assert_eq!(pooled.get(1, 1), Some(&16.0)); // max of [11,12,15,16]
+    }
+
+    #[test]
+    fn test_max_pool2d_stride_1() {
+        let input = Matrix::from_vec(3, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+            .expect("valid input");
+
+        // 2x2 kernel, 1x1 stride (overlapping)
+        let pooled = input.max_pool2d((2, 2), (1, 1)).expect("valid pooling");
+        assert_eq!(pooled.shape(), (2, 2));
+        assert_eq!(pooled.get(0, 0), Some(&5.0)); // max of [1,2,4,5]
+        assert_eq!(pooled.get(0, 1), Some(&6.0)); // max of [2,3,5,6]
+    }
+
+    #[test]
+    fn test_avg_pool2d() {
+        let input = Matrix::from_vec(
+            4,
+            4,
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+                16.0,
+            ],
+        )
+        .expect("valid input");
+
+        let pooled = input.avg_pool2d((2, 2), (2, 2)).expect("valid pooling");
+        assert_eq!(pooled.shape(), (2, 2));
+        // avg of [1,2,5,6] = 14/4 = 3.5
+        assert!((pooled.get(0, 0).unwrap() - 3.5).abs() < 1e-5);
+        // avg of [3,4,7,8] = 22/4 = 5.5
+        assert!((pooled.get(0, 1).unwrap() - 5.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_topk() {
+        let m = Matrix::from_vec(2, 3, vec![1.0, 5.0, 3.0, 2.0, 6.0, 4.0]).expect("valid input");
+        let (values, indices) = m.topk(3).expect("valid topk");
+        assert_eq!(values, vec![6.0, 5.0, 4.0]);
+        assert_eq!(indices, vec![4, 1, 5]);
+    }
+
+    #[test]
+    fn test_topk_empty() {
+        let m = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).expect("valid input");
+        let (values, indices) = m.topk(0).expect("valid topk");
+        assert!(values.is_empty());
+        assert!(indices.is_empty());
+    }
+
+    #[test]
+    fn test_gather_rows() {
+        let m = Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("valid input");
+        let gathered = m.gather(&[2, 0], 0).expect("valid gather");
+        assert_eq!(gathered.shape(), (2, 2));
+        assert_eq!(gathered.get(0, 0), Some(&5.0)); // Row 2, col 0
+        assert_eq!(gathered.get(0, 1), Some(&6.0)); // Row 2, col 1
+        assert_eq!(gathered.get(1, 0), Some(&1.0)); // Row 0, col 0
+    }
+
+    #[test]
+    fn test_gather_cols() {
+        let m = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("valid input");
+        let gathered = m.gather(&[2, 0], 1).expect("valid gather");
+        assert_eq!(gathered.shape(), (2, 2));
+        assert_eq!(gathered.get(0, 0), Some(&3.0)); // Row 0, col 2
+        assert_eq!(gathered.get(0, 1), Some(&1.0)); // Row 0, col 0
+    }
+
+    #[test]
+    fn test_pad() {
+        let m = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).expect("valid input");
+        let padded = m.pad(((1, 1), (1, 1)), 0.0).expect("valid pad");
+        assert_eq!(padded.shape(), (4, 4));
+        assert_eq!(padded.get(0, 0), Some(&0.0)); // top-left padding
+        assert_eq!(padded.get(1, 1), Some(&1.0)); // original (0,0)
+        assert_eq!(padded.get(2, 2), Some(&4.0)); // original (1,1)
+        assert_eq!(padded.get(3, 3), Some(&0.0)); // bottom-right padding
+    }
+
+    #[test]
+    fn test_pad_asymmetric() {
+        let m = Matrix::from_vec(1, 2, vec![1.0, 2.0]).expect("valid input");
+        let padded = m.pad(((0, 1), (2, 0)), -1.0).expect("valid pad");
+        assert_eq!(padded.shape(), (2, 4));
+        assert_eq!(padded.get(0, 0), Some(&-1.0)); // left padding
+        assert_eq!(padded.get(0, 2), Some(&1.0)); // original
+        assert_eq!(padded.get(1, 0), Some(&-1.0)); // bottom padding
     }
 }
 
