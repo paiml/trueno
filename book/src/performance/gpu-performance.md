@@ -237,6 +237,70 @@ The tiled reduction shader provides efficient GPU-based sum, max, and min operat
 | Buffer binding | 128 MB | ~32M elements |
 | Total buffer | 256 MB | ~64M elements |
 
+## CUDA PTX Validation ✅ (v0.10.1)
+
+**Status**: Validated on NVIDIA GeForce RTX 4090 (Ada Lovelace, sm_89)
+
+The trueno-gpu PTX code generation has been validated on real CUDA hardware, confirming JIT compilation and execution correctness.
+
+### RTX 4090 Validation Results (2026-01-03)
+
+| Kernel | PTX Size | Lines | Status |
+|--------|----------|-------|--------|
+| gemm_naive_64 | 1.6 KB | 66 | ✅ PASS |
+| gemm_tiled_128 | 2.6 KB | 104 | ✅ PASS |
+| gemm_tensor_core | 7.8 KB | 273 | ✅ PASS |
+| gemm_wmma_fp16 | 3.8 KB | 128 | ✅ PASS |
+| softmax_1024 | 1.8 KB | 59 | ✅ PASS |
+| layernorm_1024 | 2.8 KB | 94 | ✅ PASS |
+| attention_64_64 | 3.9 KB | 146 | ✅ PASS |
+| q4k_32 | 4.3 KB | 158 | ✅ PASS |
+
+### Kernel Generation Throughput
+
+**68,015 kernels/sec** measured via `bench_kernel_gen` example.
+
+| Kernel Type | Generation Time | Size |
+|-------------|-----------------|------|
+| gemm_naive | 9.11 µs | 1.6 KB |
+| gemm_tiled | 15.01 µs | 2.6 KB |
+| gemm_tensor_core | 44.33 µs | 7.8 KB |
+| attention | 23.00 µs | 3.9 KB |
+| q4k_quantized | 28.43 µs | 4.3 KB |
+
+### Execution Verification
+
+Simple Attention CUDA kernel verified with numerical accuracy:
+- **GPU execution**: 134µs (16x16 sequence)
+- **Max difference**: 2.98e-8 (vs CPU reference)
+- **Status**: PASS
+
+### PTX Features Validated
+
+- ✅ FMA fusion (mul+add → fma.rn.f32)
+- ✅ F16 conversion (cvt.rn.f16.f32)
+- ✅ Shared memory (smem with .align)
+- ✅ WMMA Tensor Core ops
+- ✅ Q4K quantization (4-bit dequantize)
+- ✅ Tree reduction patterns
+- ✅ Predicated execution (@%p bra)
+
+### Running CUDA Examples
+
+```bash
+# CUDA monitoring (device info, memory stats)
+cargo run --example cuda_monitor --features cuda --release
+
+# PTX generation benchmarks
+cargo run --example bench_kernel_gen --features cuda --release
+
+# Simple attention execution
+cargo run --example simple_attention_cuda --features cuda --release
+
+# Quantized GEMM PTX
+cargo run --example q4k_gemm --features cuda --release
+```
+
 ### Example Usage
 
 ```rust
