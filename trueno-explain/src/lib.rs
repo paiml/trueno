@@ -26,7 +26,7 @@
 //! "#;
 //!
 //! let analyzer = PtxAnalyzer::new();
-//! let report = analyzer.analyze(ptx).unwrap();
+//! let report = analyzer.analyze(ptx).expect("PTX analysis should succeed");
 //! assert_eq!(report.registers.f32_regs, 16);
 //! ```
 
