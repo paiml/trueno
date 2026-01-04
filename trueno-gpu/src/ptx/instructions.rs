@@ -415,6 +415,18 @@ mod tests {
     }
 
     #[test]
+    fn test_cmp_op_all_variants() {
+        // Test all CmpOp variants for complete coverage
+        assert_eq!(CmpOp::Ne.to_ptx_string(), "ne");
+        assert_eq!(CmpOp::Le.to_ptx_string(), "le");
+        assert_eq!(CmpOp::Gt.to_ptx_string(), "gt");
+        assert_eq!(CmpOp::Lo.to_ptx_string(), "lo");
+        assert_eq!(CmpOp::Ls.to_ptx_string(), "ls");
+        assert_eq!(CmpOp::Hi.to_ptx_string(), "hi");
+        assert_eq!(CmpOp::Hs.to_ptx_string(), "hs");
+    }
+
+    #[test]
     fn test_rounding_mode_strings() {
         assert_eq!(RoundingMode::Rn.to_ptx_string(), ".rn");
         assert_eq!(RoundingMode::Rz.to_ptx_string(), ".rz");

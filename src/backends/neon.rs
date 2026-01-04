@@ -1012,6 +1012,10 @@ impl VectorBackend for NeonBackend {
         let half = vdupq_n_f32(0.5);
         let zero = vdupq_n_f32(0.0);
 
+        // Limits for overflow/underflow (same as AVX2)
+        let exp_hi = vdupq_n_f32(88.376_26);
+        let exp_lo = vdupq_n_f32(-87.336_55);
+
         // Taylor series coefficients
         let c1 = vdupq_n_f32(1.0);
         let c2 = vdupq_n_f32(0.5);
@@ -1024,10 +1028,13 @@ impl VectorBackend for NeonBackend {
             let x = vld1q_f32(a.as_ptr().add(i));
             let neg_x = vsubq_f32(zero, x);
 
+            // Clamp to avoid overflow/underflow
+            let neg_x_clamped = vmaxq_f32(vminq_f32(neg_x, exp_hi), exp_lo);
+
             // Range reduction: k = floor(x * log2(e) + 0.5)
-            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(neg_x, log2e), half));
+            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(neg_x_clamped, log2e), half));
             let k = vcvtq_s32_f32(kf);
-            let r = vsubq_f32(neg_x, vmulq_f32(kf, ln2));
+            let r = vsubq_f32(neg_x_clamped, vmulq_f32(kf, ln2));
 
             // Polynomial approximation using Horner's method
             let mut poly = vaddq_f32(c5, vmulq_f32(r, c6));
@@ -1102,6 +1109,11 @@ impl VectorBackend for NeonBackend {
         let half = vdupq_n_f32(0.5);
         let one = vdupq_n_f32(1.0);
         let two = vdupq_n_f32(2.0);
+        let neg_one = vdupq_n_f32(-1.0);
+
+        // Limits for overflow/underflow (same as AVX2)
+        let exp_hi = vdupq_n_f32(88.376_26);
+        let exp_lo = vdupq_n_f32(-87.336_55);
 
         // exp constants
         let log2e = vdupq_n_f32(std::f32::consts::LOG2_E);
@@ -1124,10 +1136,13 @@ impl VectorBackend for NeonBackend {
             // Compute exp(2 * inner) for tanh
             let z = vmulq_f32(two, inner);
 
+            // Clamp to avoid overflow/underflow
+            let z_clamped = vmaxq_f32(vminq_f32(z, exp_hi), exp_lo);
+
             // Range reduction
-            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(z, log2e), half));
+            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(z_clamped, log2e), half));
             let k = vcvtq_s32_f32(kf);
-            let r = vsubq_f32(z, vmulq_f32(kf, ln2));
+            let r = vsubq_f32(z_clamped, vmulq_f32(kf, ln2));
 
             // Polynomial
             let mut poly = vaddq_f32(c5, vmulq_f32(r, c6));
@@ -1144,8 +1159,11 @@ impl VectorBackend for NeonBackend {
             // tanh = (exp(2z) - 1) / (exp(2z) + 1)
             let tanh_val = vdivq_f32(vsubq_f32(exp_2z, one), vaddq_f32(exp_2z, one));
 
+            // Clamp tanh result to [-1, 1] for extreme values
+            let tanh_clamped = vmaxq_f32(vminq_f32(tanh_val, one), neg_one);
+
             // gelu = 0.5 * x * (1 + tanh)
-            let gelu_result = vmulq_f32(half, vmulq_f32(x, vaddq_f32(one, tanh_val)));
+            let gelu_result = vmulq_f32(half, vmulq_f32(x, vaddq_f32(one, tanh_clamped)));
 
             vst1q_f32(result.as_mut_ptr().add(i), gelu_result);
             i += 4;
@@ -1201,6 +1219,10 @@ impl VectorBackend for NeonBackend {
         let half = vdupq_n_f32(0.5);
         let zero = vdupq_n_f32(0.0);
 
+        // Limits for overflow/underflow (same as AVX2)
+        let exp_hi = vdupq_n_f32(88.376_26);
+        let exp_lo = vdupq_n_f32(-87.336_55);
+
         // Taylor series coefficients
         let c1 = vdupq_n_f32(1.0);
         let c2 = vdupq_n_f32(0.5);
@@ -1213,10 +1235,13 @@ impl VectorBackend for NeonBackend {
             let x = vld1q_f32(a.as_ptr().add(i));
             let neg_x = vsubq_f32(zero, x);
 
+            // Clamp to avoid overflow/underflow
+            let neg_x_clamped = vmaxq_f32(vminq_f32(neg_x, exp_hi), exp_lo);
+
             // Range reduction
-            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(neg_x, log2e), half));
+            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(neg_x_clamped, log2e), half));
             let k = vcvtq_s32_f32(kf);
-            let r = vsubq_f32(neg_x, vmulq_f32(kf, ln2));
+            let r = vsubq_f32(neg_x_clamped, vmulq_f32(kf, ln2));
 
             // Polynomial
             let mut poly = vaddq_f32(c5, vmulq_f32(r, c6));
@@ -1271,6 +1296,11 @@ impl VectorBackend for NeonBackend {
         let one = vdupq_n_f32(1.0);
         let two = vdupq_n_f32(2.0);
         let half = vdupq_n_f32(0.5);
+        let neg_one = vdupq_n_f32(-1.0);
+
+        // Limits for overflow/underflow (same as AVX2)
+        let exp_hi = vdupq_n_f32(88.376_26);
+        let exp_lo = vdupq_n_f32(-87.336_55);
 
         // Taylor series coefficients for exp(y)
         let c1 = vdupq_n_f32(1.0);
@@ -1286,10 +1316,13 @@ impl VectorBackend for NeonBackend {
             // Compute exp(2x) for tanh = (exp(2x) - 1) / (exp(2x) + 1)
             let z = vmulq_f32(two, x);
 
+            // Clamp to avoid overflow/underflow
+            let z_clamped = vmaxq_f32(vminq_f32(z, exp_hi), exp_lo);
+
             // Range reduction: k = floor(z * log2(e) + 0.5)
-            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(z, log2e), half));
+            let kf = vrndmq_f32(vaddq_f32(vmulq_f32(z_clamped, log2e), half));
             let k = vcvtq_s32_f32(kf);
-            let r = vsubq_f32(z, vmulq_f32(kf, ln2));
+            let r = vsubq_f32(z_clamped, vmulq_f32(kf, ln2));
 
             // Polynomial approximation using Horner's method
             let mut poly = vaddq_f32(c5, vmulq_f32(r, c6));
@@ -1306,7 +1339,10 @@ impl VectorBackend for NeonBackend {
             // tanh = (exp(2x) - 1) / (exp(2x) + 1)
             let tanh_result = vdivq_f32(vsubq_f32(exp_2x, one), vaddq_f32(exp_2x, one));
 
-            vst1q_f32(result.as_mut_ptr().add(i), tanh_result);
+            // Clamp result to [-1, 1] for extreme values
+            let tanh_clamped = vmaxq_f32(vminq_f32(tanh_result, one), neg_one);
+
+            vst1q_f32(result.as_mut_ptr().add(i), tanh_clamped);
             i += 4;
         }
 

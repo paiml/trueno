@@ -365,4 +365,100 @@ mod tests {
         assert!(decls.contains(".reg .f32"));
         assert!(decls.contains(".reg .u32") || decls.contains(".reg .s32"));
     }
+
+    #[test]
+    fn test_all_special_registers() {
+        // Test all PtxReg variants for 100% coverage
+        assert_eq!(PtxReg::TidY.to_ptx_string(), "%tid.y");
+        assert_eq!(PtxReg::TidZ.to_ptx_string(), "%tid.z");
+        assert_eq!(PtxReg::CtaIdY.to_ptx_string(), "%ctaid.y");
+        assert_eq!(PtxReg::CtaIdZ.to_ptx_string(), "%ctaid.z");
+        assert_eq!(PtxReg::NtidY.to_ptx_string(), "%ntid.y");
+        assert_eq!(PtxReg::NtidZ.to_ptx_string(), "%ntid.z");
+        assert_eq!(PtxReg::NctaIdX.to_ptx_string(), "%nctaid.x");
+        assert_eq!(PtxReg::NctaIdY.to_ptx_string(), "%nctaid.y");
+        assert_eq!(PtxReg::NctaIdZ.to_ptx_string(), "%nctaid.z");
+        assert_eq!(PtxReg::SmId.to_ptx_string(), "%smid");
+        assert_eq!(PtxReg::Clock.to_ptx_string(), "%clock");
+    }
+
+    #[test]
+    fn test_extend_live_range() {
+        let mut alloc = RegisterAllocator::new();
+        let vreg = alloc.allocate_virtual(PtxType::F32);
+
+        // Advance and extend
+        alloc.next_instruction();
+        alloc.next_instruction();
+        alloc.extend_live_range(vreg);
+
+        // The live range should now be [0, 3)
+        let report = alloc.pressure_report();
+        assert_eq!(report.max_live, 1);
+    }
+
+    #[test]
+    fn test_next_instruction() {
+        let mut alloc = RegisterAllocator::new();
+
+        // Initially at instruction 0
+        let _ = alloc.allocate_virtual(PtxType::F32);
+        alloc.next_instruction();
+        let _ = alloc.allocate_virtual(PtxType::F32);
+        alloc.next_instruction();
+        let _ = alloc.allocate_virtual(PtxType::F32);
+
+        // Three registers allocated
+        assert_eq!(alloc.pressure_report().max_live, 3);
+    }
+
+    #[test]
+    fn test_virtual_register_display() {
+        let vreg = VirtualReg::new(7, PtxType::F64);
+        let display_str = format!("{}", vreg);
+        assert_eq!(display_str, "%fd7");
+
+        let vreg_u64 = VirtualReg::new(2, PtxType::U64);
+        let display_str_u64 = format!("{}", vreg_u64);
+        assert_eq!(display_str_u64, "%rd2");
+    }
+
+    #[test]
+    fn test_virtual_register_write_to() {
+        let vreg = VirtualReg::new(3, PtxType::F32);
+        let mut buffer = String::new();
+        vreg.write_to(&mut buffer).unwrap();
+        assert_eq!(buffer, "%f3");
+    }
+
+    #[test]
+    fn test_register_allocator_default() {
+        let alloc = RegisterAllocator::default();
+        assert_eq!(alloc.pressure_report().max_live, 0);
+    }
+
+    #[test]
+    fn test_physical_reg() {
+        let preg = PhysicalReg(5);
+        assert_eq!(preg.0, 5);
+    }
+
+    #[test]
+    fn test_register_pressure_fields() {
+        let pressure = RegisterPressure {
+            max_live: 10,
+            spill_count: 0,
+            utilization: 0.039,
+        };
+        assert_eq!(pressure.max_live, 10);
+        assert_eq!(pressure.spill_count, 0);
+        assert!((pressure.utilization - 0.039).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_live_range_fields() {
+        let range = LiveRange::new(5, 15);
+        assert_eq!(range.start, 5);
+        assert_eq!(range.end, 15);
+    }
 }

@@ -553,6 +553,34 @@ impl Default for GpuBackend {
     }
 }
 
+// Tests for stub implementation (when GPU feature is NOT enabled)
+#[cfg(test)]
+#[cfg(not(feature = "gpu"))]
+mod stub_tests {
+    use super::*;
+
+    #[test]
+    fn test_gpu_backend_stub_new() {
+        let _backend = GpuBackend::new();
+    }
+
+    #[test]
+    fn test_gpu_backend_stub_is_available() {
+        assert!(!GpuBackend::is_available());
+    }
+
+    #[test]
+    fn test_gpu_backend_stub_default() {
+        let _backend = GpuBackend::default();
+    }
+
+    #[test]
+    fn test_gpu_backend_stub_clone() {
+        let backend = GpuBackend::new();
+        let _cloned = backend.clone();
+    }
+}
+
 // ===== GPU Tests =====
 
 #[cfg(test)]
