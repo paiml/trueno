@@ -5,6 +5,8 @@
 **Multi-Target High-Performance Compute Library**
 
 [![CI](https://github.com/paiml/trueno/actions/workflows/ci.yml/badge.svg)](https://github.com/paiml/trueno/actions)
+[![Coverage](https://img.shields.io/badge/coverage-94.4%25-brightgreen)](https://github.com/paiml/trueno)
+[![Crates.io](https://img.shields.io/crates/v/trueno.svg)](https://crates.io/crates/trueno)
 
 </div>
 
@@ -15,7 +17,8 @@
 ## Features
 
 - **CPU SIMD**: x86 (SSE2/AVX/AVX2/AVX-512), ARM (NEON), WASM (SIMD128)
-- **GPU**: Vulkan/Metal/DX12/WebGPU via `wgpu` (matrix multiply only)
+- **GPU**: Pure Rust PTX generation via `trueno-gpu` (no nvcc required)
+- **Cross-platform GPU**: Vulkan/Metal/DX12/WebGPU via `wgpu`
 - **Auto-dispatch**: Runtime selection of optimal backend
 - **Zero unsafe in public API**: Safety via type system
 
@@ -23,10 +26,13 @@
 
 ```toml
 [dependencies]
-trueno = "0.8"
+trueno = "0.11"
 
 # Optional: GPU support for large matrices
-trueno = { version = "0.8", features = ["gpu"] }
+trueno = { version = "0.11", features = ["gpu"] }
+
+# Optional: Pure Rust CUDA PTX generation
+trueno-gpu = "0.4"
 ```
 
 ## Quick Start
@@ -67,20 +73,51 @@ let eigenvalues = eigen.eigenvalues();  // [4.0, 2.0]
 | Matrix multiply | 2-10x | GPU for 500x500+ |
 | Reductions (sum, max, min) | 3-12x | AVX-512 optimal |
 | Element-wise (add, mul) | 1-2x | Memory-bound |
+| Convolution 2D | 5-8x | AVX2/AVX-512 optimized |
+
+### Benchmark Results (AMD Ryzen 9 7950X)
+
+| Benchmark | Throughput |
+|-----------|------------|
+| Vector recip (AVX-512, 10K) | 10.0 Gelem/s |
+| Vector recip (AVX2, 10K) | 9.7 Gelem/s |
+| PTX module emit | 3.1 µs |
+| PTX kernel build | 81 ns |
+| Launch config | 1.7 ns |
 
 **GPU Note**: GPU acceleration benefits matrix multiply only. Element-wise operations use CPU SIMD (GPU transfer overhead exceeds compute time).
 
+## trueno-gpu: Pure Rust CUDA
+
+Generate CUDA PTX kernels without nvcc, LLVM, or external toolchains:
+
+```rust
+use trueno_gpu::kernels::{GemmKernel, Kernel, SoftmaxKernel};
+
+// Generate optimized GEMM kernel
+let gemm = GemmKernel::tensor_core(1024, 1024, 1024);
+let ptx = gemm.emit_ptx();  // Pure Rust PTX generation
+
+// Generate softmax with warp shuffle reduction
+let softmax = SoftmaxKernel::new(4096);
+let ptx = softmax.emit_ptx();
+
+// Available kernels: GEMM, Softmax, LayerNorm, Attention, Quantize (Q4K/Q5K/Q6K)
+```
+
 ## Operations
 
-**Vector**: add, sub, mul, div, dot, sum, min, max, argmin, argmax, norm_l1, norm_l2, normalize
+**Vector**: add, sub, mul, div, dot, sum, min, max, argmin, argmax, norm_l1, norm_l2, normalize, recip, sqrt, abs, clamp
 
-**Activations**: relu, leaky_relu, elu, sigmoid, tanh, gelu, swish, softmax, log_softmax
+**Activations**: relu, leaky_relu, elu, sigmoid, tanh, gelu, swish, softmax, log_softmax, silu
 
-**Matrix**: matmul, batched_matmul, batched_matmul_4d, transpose, matvec, convolve2d
+**Matrix**: matmul, batched_matmul, batched_matmul_4d, transpose, matvec, convolve2d, pooling (max/avg), topk, gather, pad
 
 **Statistics**: mean, variance, stddev, covariance, correlation, zscore
 
 **Eigen**: symmetric eigendecomposition (Jacobi algorithm)
+
+**GPU Kernels**: GEMM (naive/tiled/tensor core), Softmax, LayerNorm, RMSNorm, Attention, GEMV, Quantization
 
 ## Development
 
@@ -88,12 +125,13 @@ let eigenvalues = eigen.eigenvalues();  // [4.0, 2.0]
 cargo test                  # Run tests
 cargo bench                 # Run benchmarks
 make coverage              # Coverage report (requires cargo-llvm-cov)
+cargo run --example backend_detection  # Check available backends
 ```
 
 ## Ecosystem
 
 Part of the Pragmatic AI Labs stack:
-- [trueno-gpu](https://crates.io/crates/trueno-gpu) - Pure Rust PTX generation
+- [trueno-gpu](https://crates.io/crates/trueno-gpu) - Pure Rust PTX generation (no nvcc)
 - [trueno-db](https://crates.io/crates/trueno-db) - GPU-first analytics database
 - [trueno-graph](https://crates.io/crates/trueno-graph) - Graph algorithms
 - [trueno-rag](https://crates.io/crates/trueno-rag) - RAG pipeline
