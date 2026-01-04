@@ -537,11 +537,13 @@ impl Kernel for Lz4WarpCompressKernel {
                 let lane_id = ctx.and_u32(thread_id, mask_31);
 
                 // Phase 2: Bounds check
+                // CRITICAL: Do NOT early-exit here! All threads must participate in barriers.
+                // Use predicated execution instead - out-of-bounds threads skip memory ops
+                // but still reach barriers to prevent deadlock.
                 let batch_param = ctx.load_param_u32("batch_size");
-                let oob_pred = ctx.setp_ge_u32(page_id_32, batch_param);
-                ctx.branch_if(oob_pred, "L_exit");
+                let in_bounds_pred = ctx.setp_lt_u32(page_id_32, batch_param);
 
-                // Phase 3: Calculate pointers
+                // Phase 3: Calculate pointers (safe even if out of bounds - we just won't use them)
                 let page_offset = ctx.mul_wide_u32(page_id_32, PAGE_SIZE);
                 let input_ptr = ctx.load_param_u64("input_batch");
                 let input_page_ptr = ctx.add_u64(input_ptr, page_offset);
@@ -550,8 +552,19 @@ impl Kernel for Lz4WarpCompressKernel {
 
                 // Phase 4: Cooperative load into shared memory
                 // Each thread loads 128 bytes (4 × 32-byte chunks)
+                //
+                // CRITICAL FIX: Partition shared memory by warp_id
+                // Each warp gets (PAGE_SIZE + LZ4_HASH_SIZE * 2) = 12KB
+                // Without this, multiple warps in a block overwrite each other's data
+                const WARP_SMEM_SIZE: u32 = PAGE_SIZE + LZ4_HASH_SIZE * 2; // 12288 bytes
+                let warp_smem_offset = ctx.mul_u32(warp_id, WARP_SMEM_SIZE);
+                let warp_smem_offset_64 = ctx.cvt_u64_u32(warp_smem_offset);
+                // Use shared_base_addr() to get generic address (via cvta.to.shared)
+                // Then use ld_generic/st_generic for memory operations
+                let raw_smem_base = ctx.shared_base_addr();
+                let smem_base = ctx.add_u64(raw_smem_base, warp_smem_offset_64);
+
                 let load_base = ctx.mul_u32(lane_id, 128);
-                let smem_base = ctx.shared_base_addr();
 
                 // Pre-compute offset immediates (avoid nested mutable borrows)
                 let imm4 = ctx.mov_u64_imm(4);
@@ -561,6 +574,9 @@ impl Kernel for Lz4WarpCompressKernel {
                 let imm20 = ctx.mov_u64_imm(20);
                 let imm24 = ctx.mov_u64_imm(24);
                 let imm28 = ctx.mov_u64_imm(28);
+
+                // Skip global loads if out of bounds (but still do shared mem to avoid uninitialized reads)
+                ctx.branch_if_not(in_bounds_pred, "L_skip_global_load");
 
                 // Load/store 128 bytes per thread (4 × 32-byte chunks)
                 for i in 0..4u32 {
@@ -587,23 +603,50 @@ impl Kernel for Lz4WarpCompressKernel {
 
                     // Store to shared memory
                     let smem_off = ctx.add_u64(smem_base, chunk_off_64);
-                    ctx.st_shared_u32(smem_off, d0);
+                    ctx.st_generic_u32(smem_off, d0);
                     let smem_4 = ctx.add_u64(smem_off, imm4);
-                    ctx.st_shared_u32(smem_4, d1);
+                    ctx.st_generic_u32(smem_4, d1);
                     let smem_8 = ctx.add_u64(smem_off, imm8);
-                    ctx.st_shared_u32(smem_8, d2);
+                    ctx.st_generic_u32(smem_8, d2);
                     let smem_12 = ctx.add_u64(smem_off, imm12);
-                    ctx.st_shared_u32(smem_12, d3);
+                    ctx.st_generic_u32(smem_12, d3);
                     let smem_16 = ctx.add_u64(smem_off, imm16);
-                    ctx.st_shared_u32(smem_16, d4);
+                    ctx.st_generic_u32(smem_16, d4);
                     let smem_20 = ctx.add_u64(smem_off, imm20);
-                    ctx.st_shared_u32(smem_20, d5);
+                    ctx.st_generic_u32(smem_20, d5);
                     let smem_24 = ctx.add_u64(smem_off, imm24);
-                    ctx.st_shared_u32(smem_24, d6);
+                    ctx.st_generic_u32(smem_24, d6);
                     let smem_28 = ctx.add_u64(smem_off, imm28);
-                    ctx.st_shared_u32(smem_28, d7);
+                    ctx.st_generic_u32(smem_28, d7);
+                }
+                ctx.branch("L_after_global_load");
+
+                ctx.label("L_skip_global_load");
+                // Initialize shared memory to zeros for out-of-bounds warps
+                // (so subsequent reads don't access uninitialized memory)
+                let zero_val = ctx.mov_u32_imm(0);
+                for i in 0..4u32 {
+                    let chunk_off = ctx.add_u32(load_base, i * 32);
+                    let chunk_off_64 = ctx.cvt_u64_u32(chunk_off);
+                    let smem_off = ctx.add_u64(smem_base, chunk_off_64);
+                    ctx.st_generic_u32(smem_off, zero_val);
+                    let smem_4 = ctx.add_u64(smem_off, imm4);
+                    ctx.st_generic_u32(smem_4, zero_val);
+                    let smem_8 = ctx.add_u64(smem_off, imm8);
+                    ctx.st_generic_u32(smem_8, zero_val);
+                    let smem_12 = ctx.add_u64(smem_off, imm12);
+                    ctx.st_generic_u32(smem_12, zero_val);
+                    let smem_16 = ctx.add_u64(smem_off, imm16);
+                    ctx.st_generic_u32(smem_16, zero_val);
+                    let smem_20 = ctx.add_u64(smem_off, imm20);
+                    ctx.st_generic_u32(smem_20, zero_val);
+                    let smem_24 = ctx.add_u64(smem_off, imm24);
+                    ctx.st_generic_u32(smem_24, zero_val);
+                    let smem_28 = ctx.add_u64(smem_off, imm28);
+                    ctx.st_generic_u32(smem_28, zero_val);
                 }
 
+                ctx.label("L_after_global_load");
                 // Barrier to ensure all data is loaded
                 ctx.bar_sync(0);
 
@@ -621,28 +664,28 @@ impl Kernel for Lz4WarpCompressKernel {
                     let smem_off = ctx.add_u64(smem_base, chunk_off_64);
 
                     // Load 8 u32s and OR them together
-                    let d0 = ctx.ld_shared_u32(smem_off);
+                    let d0 = ctx.ld_generic_u32(smem_off);
                     let chunk_val = ctx.or_u32(chunk_val, d0);
                     let off4 = ctx.add_u64(smem_off, imm4);
-                    let d1 = ctx.ld_shared_u32(off4);
+                    let d1 = ctx.ld_generic_u32(off4);
                     let chunk_val = ctx.or_u32(chunk_val, d1);
                     let off8 = ctx.add_u64(smem_off, imm8);
-                    let d2 = ctx.ld_shared_u32(off8);
+                    let d2 = ctx.ld_generic_u32(off8);
                     let chunk_val = ctx.or_u32(chunk_val, d2);
                     let off12 = ctx.add_u64(smem_off, imm12);
-                    let d3 = ctx.ld_shared_u32(off12);
+                    let d3 = ctx.ld_generic_u32(off12);
                     let chunk_val = ctx.or_u32(chunk_val, d3);
                     let off16 = ctx.add_u64(smem_off, imm16);
-                    let d4 = ctx.ld_shared_u32(off16);
+                    let d4 = ctx.ld_generic_u32(off16);
                     let chunk_val = ctx.or_u32(chunk_val, d4);
                     let off20 = ctx.add_u64(smem_off, imm20);
-                    let d5 = ctx.ld_shared_u32(off20);
+                    let d5 = ctx.ld_generic_u32(off20);
                     let chunk_val = ctx.or_u32(chunk_val, d5);
                     let off24 = ctx.add_u64(smem_off, imm24);
-                    let d6 = ctx.ld_shared_u32(off24);
+                    let d6 = ctx.ld_generic_u32(off24);
                     let chunk_val = ctx.or_u32(chunk_val, d6);
                     let off28 = ctx.add_u64(smem_off, imm28);
-                    let d7 = ctx.ld_shared_u32(off28);
+                    let d7 = ctx.ld_generic_u32(off28);
                     let _ = ctx.or_u32(chunk_val, d7);
                 }
 
@@ -652,16 +695,20 @@ impl Kernel for Lz4WarpCompressKernel {
                 // (For simplicity, we use shared memory reduction here)
 
                 // Store each thread's chunk result to shared memory for reduction
-                let reduction_off = ctx.add_u32(lane_id, PAGE_SIZE); // Use space after page data
+                // CRITICAL: lane_id * 4 for 4-byte alignment of u32 stores
+                let lane_off_bytes = ctx.mul_u32(lane_id, 4);
+                let reduction_off = ctx.add_u32(lane_off_bytes, PAGE_SIZE); // Use space after page data
                 let reduction_off_64 = ctx.cvt_u64_u32(reduction_off);
                 let reduction_addr = ctx.add_u64(smem_base, reduction_off_64);
-                ctx.st_shared_u32(reduction_addr, chunk_val);
+                ctx.st_generic_u32(reduction_addr, chunk_val);
                 ctx.bar_sync(0);
 
-                // Lane 0 reduces all 32 values
+                // Lane 0 reduces all 32 values (only if in bounds)
                 let zero = ctx.mov_u32_imm(0);
                 let is_leader = ctx.setp_eq_u32(lane_id, zero);
-                ctx.branch_if_not(is_leader, "L_not_leader");
+                // Combined check: must be leader AND in bounds to write size
+                let can_write_size = ctx.and_pred(is_leader, in_bounds_pred);
+                ctx.branch_if_not(can_write_size, "L_not_leader");
 
                 // Leader: Read and OR all 32 values
                 let page_or = ctx.mov_u32_imm(0);
@@ -669,7 +716,7 @@ impl Kernel for Lz4WarpCompressKernel {
                     let lane_off = ctx.mov_u32_imm(PAGE_SIZE + lane * 4);
                     let lane_off_64 = ctx.cvt_u64_u32(lane_off);
                     let lane_addr = ctx.add_u64(smem_base, lane_off_64);
-                    let lane_val = ctx.ld_shared_u32(lane_addr);
+                    let lane_val = ctx.ld_generic_u32(lane_addr);
                     let _ = ctx.or_u32(page_or, lane_val);
                 }
 
@@ -698,28 +745,30 @@ impl Kernel for Lz4WarpCompressKernel {
                 ctx.label("L_not_leader");
                 ctx.bar_sync(0);
 
-                // Phase 6: Cooperative store to output (reuse imm4-imm28 from Phase 4)
+                // Phase 6: Cooperative store to output (skip if out of bounds)
+                ctx.branch_if_not(in_bounds_pred, "L_exit");
+
                 for i in 0..4u32 {
                     let chunk_off = ctx.add_u32(load_base, i * 32);
                     let chunk_off_64 = ctx.cvt_u64_u32(chunk_off);
                     let smem_off = ctx.add_u64(smem_base, chunk_off_64);
 
                     // Load from shared memory
-                    let d0 = ctx.ld_shared_u32(smem_off);
+                    let d0 = ctx.ld_generic_u32(smem_off);
                     let ld_4 = ctx.add_u64(smem_off, imm4);
-                    let d1 = ctx.ld_shared_u32(ld_4);
+                    let d1 = ctx.ld_generic_u32(ld_4);
                     let ld_8 = ctx.add_u64(smem_off, imm8);
-                    let d2 = ctx.ld_shared_u32(ld_8);
+                    let d2 = ctx.ld_generic_u32(ld_8);
                     let ld_12 = ctx.add_u64(smem_off, imm12);
-                    let d3 = ctx.ld_shared_u32(ld_12);
+                    let d3 = ctx.ld_generic_u32(ld_12);
                     let ld_16 = ctx.add_u64(smem_off, imm16);
-                    let d4 = ctx.ld_shared_u32(ld_16);
+                    let d4 = ctx.ld_generic_u32(ld_16);
                     let ld_20 = ctx.add_u64(smem_off, imm20);
-                    let d5 = ctx.ld_shared_u32(ld_20);
+                    let d5 = ctx.ld_generic_u32(ld_20);
                     let ld_24 = ctx.add_u64(smem_off, imm24);
-                    let d6 = ctx.ld_shared_u32(ld_24);
+                    let d6 = ctx.ld_generic_u32(ld_24);
                     let ld_28 = ctx.add_u64(smem_off, imm28);
-                    let d7 = ctx.ld_shared_u32(ld_28);
+                    let d7 = ctx.ld_generic_u32(ld_28);
 
                     // Store to global output
                     let store_addr = ctx.add_u64(output_page_ptr, chunk_off_64);
@@ -1410,8 +1459,9 @@ mod tests {
         let kernel = Lz4WarpCompressKernel::new(100);
         let ptx = kernel.emit_ptx();
 
-        // Should have comparison and conditional branch for OOB check
-        assert!(ptx.contains("setp.ge"), "Missing bounds check comparison");
+        // Should have comparison instruction for bounds check
+        // Uses setp.lt for in-bounds predicate (threads participate in barriers even when OOB)
+        assert!(ptx.contains("setp.lt"), "Missing bounds check comparison (setp.lt)");
         assert!(ptx.contains("L_exit"), "Missing exit label for OOB pages");
     }
 
@@ -1480,9 +1530,14 @@ mod tests {
         let ptx = kernel.emit_ptx();
         let wgsl = kernel.emit_wgsl();
 
-        // PTX should store/load from shared for reduction
-        assert!(ptx.contains("st.shared"), "PTX missing shared store for reduction");
-        assert!(ptx.contains("ld.shared"), "PTX missing shared load for reduction");
+        // PTX uses generic addressing (after cvta.shared) for flexible warp offset handling
+        // Check for generic store/load (st.u32/ld.u32 without state space = generic)
+        assert!(ptx.contains("st.u32"), "PTX missing generic store for reduction");
+        assert!(ptx.contains("ld.u32"), "PTX missing generic load for reduction");
+        // Verify shared memory is declared and cvta is used to get generic address
+        // cvta.shared converts shared→generic; cvta.to.shared converts generic→shared
+        assert!(ptx.contains(".shared"), "PTX missing shared memory declaration");
+        assert!(ptx.contains("cvta.shared"), "PTX missing cvta for shared->generic");
 
         // WGSL should use smem for reduction
         assert!(wgsl.contains("smem[reduction_idx]"), "WGSL missing shared memory reduction");

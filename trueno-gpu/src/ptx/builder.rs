@@ -1378,15 +1378,16 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
-    /// Get base address of shared memory array 'smem'
+    /// Get base address of shared memory array 'smem' as generic address
     ///
     /// Returns a u64 pointer to the beginning of the shared memory region
     /// declared by `.shared .align 16 .b8 smem[N]`.
     ///
-    /// Used for computing shared memory addresses:
-    /// ```text
-    /// smem_addr = shared_base_addr() + offset
-    /// ```
+    /// NOTE: This returns a GENERIC address (via cvta.to.shared).
+    /// Use with ld/st WITHOUT state space (generic addressing).
+    /// For WMMA operations that require generic pointers.
+    ///
+    /// For shared-space ld.shared/st.shared, use `shared_base_addr_local()` instead.
     pub fn shared_base_addr(&mut self) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U64);
         // Use cvta.to.shared.u64 to get generic address from shared memory label
@@ -1399,6 +1400,34 @@ impl<'a> KernelBuilder<'a> {
                 .space(PtxStateSpace::Shared),
         );
         dst
+    }
+
+    /// Load u32 from generic address (unified address space)
+    ///
+    /// Use this after `shared_base_addr()` + offset computation for shared memory.
+    /// Generic addressing allows the hardware to resolve the actual memory space.
+    pub fn ld_generic_u32(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+            // No .space() means generic addressing
+        );
+        dst
+    }
+
+    /// Store u32 to generic address (unified address space)
+    ///
+    /// Use this after `shared_base_addr()` + offset computation for shared memory.
+    /// Generic addressing allows the hardware to resolve the actual memory space.
+    pub fn st_generic_u32(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U32)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val)),
+            // No .space() means generic addressing
+        );
     }
 
     /// Predicated load f32 from global memory with default value
@@ -1520,19 +1549,23 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             s.push_str(&format!("setp.{}", cmp));
         }
         PtxOp::Ld => {
-            let space = instr
-                .state_space
-                .map(|ss| ss.to_ptx_string())
-                .unwrap_or(".global");
-            s.push_str(&format!("ld{}", space));
+            // No state space = generic addressing (for cvta-derived pointers)
+            // With state space = specific space (.shared, .global, etc.)
+            if let Some(ss) = instr.state_space {
+                s.push_str(&format!("ld{}", ss.to_ptx_string()));
+            } else {
+                s.push_str("ld");
+            }
         }
         PtxOp::LdParam => s.push_str("ld.param"),
         PtxOp::St => {
-            let space = instr
-                .state_space
-                .map(|ss| ss.to_ptx_string())
-                .unwrap_or(".global");
-            s.push_str(&format!("st{}", space));
+            // No state space = generic addressing (for cvta-derived pointers)
+            // With state space = specific space (.shared, .global, etc.)
+            if let Some(ss) = instr.state_space {
+                s.push_str(&format!("st{}", ss.to_ptx_string()));
+            } else {
+                s.push_str("st");
+            }
         }
         PtxOp::Bra => {
             if let Some(label) = &instr.label {
@@ -1577,10 +1610,9 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             s.push_str(&format!("cvt{}{}{}", round, dst_ty, src_ty));
         }
         PtxOp::Cvta => {
-            // cvta.{space}.{size} - convert state space address to generic
-            // NOTE: cvta.to.space converts generic→state_space (opposite direction)
-            // cvta.space (without .to) converts state_space→generic (what we need for WMMA)
-            // Used to get generic pointer from shared memory for WMMA operations
+            // cvta.{space}.{size} d, a - convert state-space address a TO generic d
+            // Format: cvta.shared.u64 %rd, smem;  (smem is a shared memory label)
+            // PTX ISA: cvta.space converts space→generic, cvta.to.space converts generic→space
             let space = instr
                 .state_space
                 .map(|ss| ss.to_ptx_string())
@@ -2008,21 +2040,23 @@ fn write_instruction(instr: &PtxInstruction, out: &mut String) {
             let _ = write!(out, "setp.{}", cmp);
         }
         PtxOp::Ld => {
-            let space = instr
-                .state_space
-                .map(|ss| ss.to_ptx_string())
-                .unwrap_or(".global");
-            out.push_str("ld");
-            out.push_str(space);
+            // No state space = generic addressing (for cvta-derived pointers)
+            if let Some(ss) = instr.state_space {
+                out.push_str("ld");
+                out.push_str(ss.to_ptx_string());
+            } else {
+                out.push_str("ld");
+            }
         }
         PtxOp::LdParam => out.push_str("ld.param"),
         PtxOp::St => {
-            let space = instr
-                .state_space
-                .map(|ss| ss.to_ptx_string())
-                .unwrap_or(".global");
-            out.push_str("st");
-            out.push_str(space);
+            // No state space = generic addressing (for cvta-derived pointers)
+            if let Some(ss) = instr.state_space {
+                out.push_str("st");
+                out.push_str(ss.to_ptx_string());
+            } else {
+                out.push_str("st");
+            }
         }
         PtxOp::Bra => {
             if let Some(label) = &instr.label {
@@ -2070,6 +2104,8 @@ fn write_instruction(instr: &PtxInstruction, out: &mut String) {
             out.push_str(src_ty);
         }
         PtxOp::Cvta => {
+            // cvta.{space}.{size} d, a - convert state-space address a TO generic d
+            // PTX ISA: cvta.space converts space→generic, cvta.to.space converts generic→space
             let space = instr
                 .state_space
                 .map(|ss| ss.to_ptx_string())
