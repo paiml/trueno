@@ -441,8 +441,8 @@ impl App {
                 let data_a: Vec<f32> = (0..n*n).map(|i| ((i + worker_id) % 1000) as f32 * 0.001).collect();
                 let data_b: Vec<f32> = (0..n*n).map(|i| ((i * 7 + worker_id) % 1000) as f32 * 0.001).collect();
 
-                let a = Matrix::from_vec(n, n, data_a).unwrap();
-                let b = Matrix::from_vec(n, n, data_b).unwrap();
+                let a = Matrix::from_vec(n, n, data_a).expect("stress test matrix A creation");
+                let b = Matrix::from_vec(n, n, data_b).expect("stress test matrix B creation");
 
                 // Stress loop: continuous matmul using AVX-512
                 while r.load(Ordering::Relaxed) {
