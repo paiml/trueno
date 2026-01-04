@@ -49,6 +49,9 @@ This directory contains examples demonstrating Trueno's high-performance compute
 | `gpu_pixels_render` | GPU pixel rendering | `cargo run -p trueno-gpu --example gpu_pixels_render` |
 | `dump_ptx` | Dump raw PTX output | `cargo run -p trueno-gpu --example dump_ptx` |
 | `satd_kernels` | SATD (video codec) kernels | `cargo run -p trueno-gpu --example satd_kernels` |
+| `lz4_compression` | **🗜️ LZ4 compression kernel** | `cargo run -p trueno-gpu --example lz4_compression` |
+| `ptx_optimize` | PTX optimization passes demo | `cargo run -p trueno-gpu --example ptx_optimize` |
+| `bench_kernel_gen` | Kernel generation benchmarks | `cargo run -p trueno-gpu --example bench_kernel_gen` |
 
 **Note**: PTX generation examples work without a GPU. Runtime examples (cuda_monitor, flash_attention_cuda) require an NVIDIA GPU with CUDA drivers.
 

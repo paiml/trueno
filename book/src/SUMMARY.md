@@ -38,6 +38,7 @@
 - [Backend API](./api-reference/backend-api.md)
 - [GPU Monitoring](./api-reference/gpu-monitoring.md)
 - [Hash Functions](./api-reference/hash-functions.md)
+- [LZ4 Compression](./api-reference/lz4-compression.md)
 
 # Performance
 

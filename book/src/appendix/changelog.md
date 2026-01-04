@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **LZ4 Compression Kernel** - GPU-accelerated LZ4 compression
+  - `Lz4WarpCompressKernel`: Warp-per-page architecture (32 threads per 4KB page)
+  - `Lz4WarpDecompressKernel`: Corresponding decompression kernel
+  - CPU reference implementation for testing (`lz4_compress_block`, `lz4_decompress_block`)
+  - Dual backend: NVIDIA PTX + WebGPU WGSL generation
+  - Zero-page detection with parallel OR reduction
+  - 200:1 compression ratio for zero pages, 15-30:1 for typical data
+
+### Documentation
+
+- Added LZ4 compression example (`cargo run -p trueno-gpu --example lz4_compression`)
+- Added LZ4 compression chapter to book (`api-reference/lz4-compression.md`)
+
 ## [0.11.1] - 2026-01-04
 
 ### Improved
