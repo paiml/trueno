@@ -108,7 +108,7 @@ impl Backend for WgpuBackend {
 
     fn device_count(&self) -> usize {
         // TODO: Enumerate wgpu adapters
-        if self.is_available() { 1 } else { 0 }
+        usize::from(self.is_available())
     }
 }
 
