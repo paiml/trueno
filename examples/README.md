@@ -18,8 +18,12 @@ This directory contains examples demonstrating Trueno's high-performance compute
 | `hash_demo.rs` | SIMD-optimized hashing for KV stores | `cargo run --release --example hash_demo` |
 | `gpu_batch_demo.rs` | GPU batch operations (requires `gpu` feature) | `cargo run --release --features gpu --example gpu_batch_demo` |
 | `gpu_monitor_demo.rs` | GPU monitoring and metrics | `cargo run --release --features gpu --example gpu_monitor_demo` |
+| `gpu_tiled_reduction.rs` | GPU tiled reduction operations | `cargo run --release --features gpu --example gpu_tiled_reduction` |
+| `tiled_reduction_demo.rs` | TensorView and PartitionView demo | `cargo run --release --example tiled_reduction_demo` |
 | `perf_tui.rs` | Interactive TUI performance dashboard | `cargo run --release --example perf_tui` |
 | `regression_test.rs` | Numerical regression testing | `cargo run --release --example regression_test` |
+| `vocab_bench.rs` | Vocabulary processing benchmark | `cargo run --release --example vocab_bench` |
+| `profile_vocab.rs` | Vocabulary profiling | `cargo run --release --example profile_vocab` |
 
 #### Benchmark Examples
 
@@ -195,6 +199,6 @@ See `CLAUDE.md` for development guidelines.
 
 ---
 
-**Last Updated**: 2025-12-16
-**Version**: v0.8.6
+**Last Updated**: 2026-01-04
+**Version**: v0.11.1
 **Contact**: [GitHub Issues](https://github.com/paiml/trueno/issues)

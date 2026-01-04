@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-01-04
+
+### Improved
+
+- **Test Coverage** - 94.10% → 94.40% line coverage
+  - PTX builder.rs: 87.88% → 91.04% (+30 tests for warp shuffle, bitwise ops, WMMA)
+  - PTX registers.rs: 90.42% → 99.57% (all special registers, live range tests)
+  - PTX types.rs: 97.75% → 99.01% (vector types V2F32/V4F32, all variants)
+  - Matrix: Added AVX-512 L3 blocking tests (520×520, 512×513, 517×512)
+  - Vector: Added backend-specific SIMD tests (Scalar, AVX-512)
+
+### Added
+
+- **Matrix Index Trait** - `impl Index<(usize, usize)> for Matrix<f32>`
+  - Tuple-based element access: `matrix[(row, col)]`
+  - Enables more ergonomic matrix element access
+
+- **Property Testing** - 47 PTX kernel property tests all passing
+  - GEMM, Softmax, LayerNorm, Attention, Batched GEMM
+  - Validates PTX structure across various dimensions
+
+- **Mutation Testing** - Infrastructure for PTX mutation testing
+  - Identifies weak test areas in PTX builder
+  - 322 mutants analyzed
+
+### Documentation
+
+- Updated README with coverage badge (94.4%)
+- Added crates.io version badge
+- Added trueno-gpu Pure Rust PTX section with code examples
+- Added benchmark results table (AMD Ryzen 9 7950X)
+- Expanded operations list
+
 ## [0.11.0] - 2026-01-03
 
 ### Added
