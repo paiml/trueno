@@ -23,6 +23,7 @@ mod elementwise;
 mod gemm;
 mod gemv;
 mod layernorm;
+pub mod lz4;
 mod quantize;
 mod softmax;
 
@@ -42,6 +43,7 @@ pub use quantize::{
     Q4KGemvKernel, Q5KGemvKernel, Q5KKernel, Q6KGemvKernel, Q6KKernel, QuantizeKernel,
 };
 pub use softmax::SoftmaxKernel;
+pub use lz4::{Lz4WarpCompressKernel, Lz4WarpDecompressKernel};
 
 use crate::ptx::optimize::barrier_safety::{self, BarrierSafetyResult};
 use crate::ptx::{PtxKernel, PtxModule};

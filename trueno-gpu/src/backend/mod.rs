@@ -86,12 +86,49 @@ impl Backend for VulkanBackend {
     }
 }
 
+/// WGPU backend (WebGPU - cross-platform via wgpu crate)
+///
+/// Uses WGSL shading language, runs on:
+/// - Vulkan (Linux, Windows, Android)
+/// - Metal (macOS, iOS)
+/// - DX12 (Windows)
+/// - WebGPU (browsers via wasm)
+#[derive(Debug, Default)]
+pub struct WgpuBackend;
+
+impl Backend for WgpuBackend {
+    fn name(&self) -> &str {
+        "WGPU"
+    }
+
+    fn is_available(&self) -> bool {
+        // TODO: Check for wgpu feature and adapter availability
+        cfg!(feature = "wgpu")
+    }
+
+    fn device_count(&self) -> usize {
+        // TODO: Enumerate wgpu adapters
+        if self.is_available() { 1 } else { 0 }
+    }
+}
+
 /// Detect best available backend
+///
+/// Priority order:
+/// 1. CUDA (NVIDIA) - highest performance for NVIDIA GPUs
+/// 2. WGPU - cross-platform fallback (Vulkan/Metal/DX12)
+/// 3. Metal - Apple-specific (subset of WGPU)
+/// 4. Vulkan - direct Vulkan (subset of WGPU)
 #[must_use]
 pub fn detect_backend() -> Box<dyn Backend> {
     let cuda = CudaBackend;
     if cuda.is_available() {
         return Box::new(cuda);
+    }
+
+    let wgpu = WgpuBackend;
+    if wgpu.is_available() {
+        return Box::new(wgpu);
     }
 
     let metal = MetalBackend;
@@ -190,5 +227,25 @@ mod tests {
     fn test_vulkan_backend_default() {
         let backend = VulkanBackend::default();
         assert_eq!(backend.name(), "Vulkan");
+    }
+
+    #[test]
+    fn test_wgpu_backend_name() {
+        let backend = WgpuBackend;
+        assert_eq!(backend.name(), "WGPU");
+    }
+
+    #[test]
+    fn test_wgpu_backend_default() {
+        let backend = WgpuBackend::default();
+        assert_eq!(backend.name(), "WGPU");
+    }
+
+    #[test]
+    fn test_wgpu_backend_device_count() {
+        let backend = WgpuBackend;
+        // Without wgpu feature, should be 0
+        #[cfg(not(feature = "wgpu"))]
+        assert_eq!(backend.device_count(), 0);
     }
 }

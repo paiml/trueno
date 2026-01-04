@@ -419,6 +419,18 @@ impl<'a> KernelBuilder<'a> {
         pred
     }
 
+    /// Set predicate if a == b
+    pub fn setp_eq_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let pred = self.registers.allocate_virtual(PtxType::Pred);
+        let mut instr = PtxInstruction::new(PtxOp::Setp, PtxType::U32)
+            .dst(Operand::Reg(pred))
+            .src(Operand::Reg(a))
+            .src(Operand::Reg(b));
+        instr.label = Some(CmpOp::Eq.to_ptx_string().to_string());
+        self.instructions.push(instr);
+        pred
+    }
+
     // ===== Memory Operations =====
 
     /// Load f32 from global memory
@@ -607,6 +619,28 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
+    /// Load u32 from shared memory
+    pub fn ld_shared_u32(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Shared),
+        );
+        dst
+    }
+
+    /// Store u32 to shared memory
+    pub fn st_shared_u32(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U32)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Shared),
+        );
+    }
+
     /// Warp shuffle down (for reductions)
     /// Format: shfl.sync.down.b32 dst, src, delta, clamp, membermask
     pub fn shfl_down_f32(&mut self, val: VirtualReg, offset: u32, mask: u32) -> VirtualReg {
@@ -787,6 +821,17 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Convert u64 to u32 (truncate)
+    pub fn cvt_u32_u64(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
     /// Convert u32 to f32
     pub fn cvt_f32_u32(&mut self, val: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::F32);
@@ -892,6 +937,16 @@ impl<'a> KernelBuilder<'a> {
                 .space(PtxStateSpace::Global),
         );
         dst
+    }
+
+    /// Store u32 to global memory
+    pub fn st_global_u32(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U32)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
     }
 
     /// Load u8 from global memory
