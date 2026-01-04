@@ -1,7 +1,8 @@
 //! Multi-Backend Abstraction
 //!
 //! Provides a unified interface for different GPU backends:
-//! - CUDA (NVIDIA)
+//! - CUDA (NVIDIA) - Primary, uses PTX
+//! - WGPU (WebGPU) - Cross-platform, uses WGSL (Vulkan/Metal/DX12/WebGPU)
 //! - Metal (Apple, future)
 //! - Vulkan (cross-platform, future)
 

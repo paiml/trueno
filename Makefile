@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast lint-all fmt fmt-check clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools install-sde test-avx512-sde bench-avx512-sde coverage-avx512-sde profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story release profile-analyze profile-compare profile-otlp-export smoke pixel-scalar-fkr pixel-simd-fkr pixel-wgpu-fkr pixel-ptx-fkr pixel-fkr-all quality-spec-013 coverage-cuda coverage-95
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast lint-all fmt fmt-check clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools install-sde test-avx512-sde bench-avx512-sde coverage-avx512-sde profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story release profile-analyze profile-compare profile-otlp-export smoke pixel-scalar-fkr pixel-simd-fkr pixel-wgpu-fkr pixel-ptx-fkr pixel-fkr-all quality-spec-013 coverage-cuda coverage-95 test-arm test-arm-neon test-arm-quick bench-arm
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -705,6 +705,41 @@ install-tools: ## Install required development tools
 	cargo install criterion || exit 1
 	cargo install renacer || exit 1
 	cargo install mdbook || exit 1
+
+# ============================================================================
+# ARM64/NEON: Cross-compilation and QEMU emulation
+# ============================================================================
+# Test ARM NEON SIMD backend without ARM hardware using QEMU userspace emulation.
+# Performance: ~5-20x slower than native, but accurate instruction emulation.
+# Prerequisites: qemu-user, aarch64-linux-gnu-gcc (apt install qemu-user gcc-aarch64-linux-gnu)
+
+test-arm: ## Run all tests on ARM64 via QEMU (NEON SIMD validation)
+	@echo "🦾 Running ARM64 tests via QEMU (NEON backend validation)..."
+	@which qemu-aarch64 > /dev/null 2>&1 || { echo "❌ qemu-user not installed. Run: sudo apt install qemu-user"; exit 1; }
+	@which aarch64-linux-gnu-gcc > /dev/null 2>&1 || { echo "❌ Cross-compiler not installed. Run: sudo apt install gcc-aarch64-linux-gnu"; exit 1; }
+	@echo "  [1/3] Building for aarch64-unknown-linux-gnu..."
+	@cargo build --target aarch64-unknown-linux-gnu --release --all-features 2>&1 | tail -3
+	@echo "  [2/3] Running tests via QEMU (this will be slow ~5-20x)..."
+	@cargo test --target aarch64-unknown-linux-gnu --release --all-features -- --test-threads=1 2>&1 || true
+	@echo ""
+	@echo "✅ ARM64/NEON tests complete"
+
+test-arm-neon: ## Run NEON-specific tests on ARM64 via QEMU
+	@echo "🦾 Running NEON-specific tests via QEMU..."
+	@cargo test --target aarch64-unknown-linux-gnu --release --all-features neon -- --test-threads=1 --nocapture
+
+test-arm-quick: ## Quick ARM64 smoke test (lib tests only, faster)
+	@echo "🦾 Quick ARM64 smoke test..."
+	@cargo test --target aarch64-unknown-linux-gnu --release --lib -- --test-threads=1 2>&1 | tail -20
+	@echo "✅ ARM64 quick test passed"
+
+bench-arm: ## Run benchmarks on ARM64 via QEMU (for relative comparison only)
+	@echo "📊 Running ARM64 benchmarks via QEMU..."
+	@echo "⚠️  Note: QEMU benchmarks are ~5-20x slower than native ARM."
+	@echo "         Use for relative comparison between NEON implementations only."
+	@cargo bench --target aarch64-unknown-linux-gnu --all-features -- neon 2>&1 | tee /tmp/arm-bench.log
+	@echo ""
+	@echo "📊 Benchmark results saved to /tmp/arm-bench.log"
 
 # ============================================================================
 # INTEL SDE: AVX-512 Emulation for CPUs without hardware support

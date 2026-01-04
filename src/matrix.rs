@@ -53,6 +53,14 @@ pub struct Matrix<T> {
     backend: Backend,
 }
 
+impl std::ops::Index<(usize, usize)> for Matrix<f32> {
+    type Output = f32;
+
+    fn index(&self, (row, col): (usize, usize)) -> &Self::Output {
+        &self.data[row * self.cols + col]
+    }
+}
+
 impl Matrix<f32> {
     /// Creates a new matrix with uninitialized values
     ///
@@ -123,6 +131,31 @@ impl Matrix<f32> {
             data,
             backend,
         })
+    }
+
+    /// Creates a matrix from a vector with a specific backend
+    ///
+    /// This is useful for testing specific SIMD code paths.
+    pub fn from_vec_with_backend(
+        rows: usize,
+        cols: usize,
+        data: Vec<f32>,
+        backend: Backend,
+    ) -> Self {
+        assert_eq!(
+            data.len(),
+            rows * cols,
+            "Data length {} does not match matrix dimensions {}x{}",
+            data.len(),
+            rows,
+            cols
+        );
+        Matrix {
+            rows,
+            cols,
+            data,
+            backend,
+        }
     }
 
     /// Creates a matrix from a slice by copying the data
@@ -3633,6 +3666,273 @@ mod tests {
                     result
                 );
             }
+        }
+    }
+
+    // ===== AVX-512 Full Matmul Test =====
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_matmul_avx512_backend_large_matrix() {
+        // Test full matmul with AVX-512 backend on large matrices
+        // This exercises the AVX-512 code path in matmul_simd
+        if !is_x86_feature_detected!("avx512f") {
+            println!("Skipping AVX-512 matmul test (CPU doesn't support AVX-512F)");
+            return;
+        }
+
+        // Create large matrices that will trigger the SIMD optimization path
+        // Using 256x256 to exercise 3-level cache blocking
+        let size = 256;
+        let a_data: Vec<f32> = (0..size * size).map(|i| (i % 10) as f32).collect();
+        let b_data: Vec<f32> = (0..size * size).map(|i| ((i + 5) % 10) as f32).collect();
+
+        let a = Matrix::from_vec_with_backend(size, size, a_data, Backend::AVX512);
+        let b = Matrix::from_vec_with_backend(size, size, b_data, Backend::AVX512);
+
+        let result = a.matmul(&b).expect("matmul should succeed");
+
+        // Verify result dimensions
+        assert_eq!(result.rows, size);
+        assert_eq!(result.cols, size);
+
+        // Spot check a few values against scalar reference
+        let a_ref = Matrix::from_vec(
+            size,
+            size,
+            (0..size * size).map(|i| (i % 10) as f32).collect(),
+        )
+        .expect("valid data");
+        let b_ref = Matrix::from_vec(
+            size,
+            size,
+            (0..size * size).map(|i| ((i + 5) % 10) as f32).collect(),
+        )
+        .expect("valid data");
+        let expected = a_ref.matmul(&b_ref).expect("reference matmul should succeed");
+
+        // Check first few and last few elements
+        for i in 0..5 {
+            for j in 0..5 {
+                let diff = (result[(i, j)] - expected[(i, j)]).abs();
+                assert!(
+                    diff < 1e-3,
+                    "Mismatch at ({}, {}): AVX512={}, scalar={}",
+                    i,
+                    j,
+                    result[(i, j)],
+                    expected[(i, j)]
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_matmul_avx512_remainder_handling() {
+        // Test AVX-512 matmul with non-aligned matrix sizes to exercise remainder code
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // Size not divisible by 8 or 16 to exercise remainder handling
+        let size = 67;
+        let a_data: Vec<f32> = (0..size * size).map(|i| i as f32 * 0.01).collect();
+        let b_data: Vec<f32> = (0..size * size).map(|i| i as f32 * 0.01 + 0.5).collect();
+
+        let a = Matrix::from_vec_with_backend(size, size, a_data.clone(), Backend::AVX512);
+        let b = Matrix::from_vec_with_backend(size, size, b_data.clone(), Backend::AVX512);
+
+        let result = a.matmul(&b).expect("matmul should succeed");
+
+        // Compare with scalar
+        let a_scalar = Matrix::from_vec_with_backend(size, size, a_data, Backend::Scalar);
+        let b_scalar = Matrix::from_vec_with_backend(size, size, b_data, Backend::Scalar);
+        let expected = a_scalar
+            .matmul(&b_scalar)
+            .expect("scalar matmul should succeed");
+
+        for i in 0..size {
+            for j in 0..size {
+                let diff = (result[(i, j)] - expected[(i, j)]).abs();
+                let max_val = expected[(i, j)].abs().max(1.0);
+                assert!(
+                    diff / max_val < 1e-4,
+                    "Mismatch at ({}, {}): AVX512={}, scalar={}",
+                    i,
+                    j,
+                    result[(i, j)],
+                    expected[(i, j)]
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_matmul_avx512_l3_blocking() {
+        // Test AVX-512 matmul with L3 blocking (requires size ≥ 512)
+        // This exercises the L3 cache blocking path with AVX-512 8x1 micro-kernel
+        if !is_x86_feature_detected!("avx512f") {
+            println!("Skipping AVX-512 L3 blocking test (CPU doesn't support AVX-512F)");
+            return;
+        }
+
+        // Size must be ≥ 512 to trigger L3 blocking path
+        // Use 520 to also exercise remainder handling (520 = 512 + 8, 520 % 16 != 0)
+        let size = 520;
+        let a_data: Vec<f32> = (0..size * size).map(|i| (i % 7) as f32 * 0.1).collect();
+        let b_data: Vec<f32> = (0..size * size).map(|i| ((i + 3) % 11) as f32 * 0.1).collect();
+
+        let a = Matrix::from_vec_with_backend(size, size, a_data.clone(), Backend::AVX512);
+        let b = Matrix::from_vec_with_backend(size, size, b_data.clone(), Backend::AVX512);
+
+        let result = a.matmul(&b).expect("AVX-512 L3 blocking matmul should succeed");
+
+        // Verify dimensions
+        assert_eq!(result.rows, size);
+        assert_eq!(result.cols, size);
+
+        // Compare with scalar reference
+        let a_scalar = Matrix::from_vec_with_backend(size, size, a_data, Backend::Scalar);
+        let b_scalar = Matrix::from_vec_with_backend(size, size, b_data, Backend::Scalar);
+        let expected = a_scalar.matmul(&b_scalar).expect("scalar matmul should succeed");
+
+        // Check corners and some middle elements
+        let check_indices = [
+            (0, 0),
+            (0, size - 1),
+            (size - 1, 0),
+            (size - 1, size - 1),
+            (size / 2, size / 2),
+            (8, 8),   // Near 8x1 microkernel boundary
+            (15, 15), // Near 16 element boundary
+        ];
+        for &(i, j) in &check_indices {
+            let diff = (result[(i, j)] - expected[(i, j)]).abs();
+            let max_val = expected[(i, j)].abs().max(1.0);
+            assert!(
+                diff / max_val < 1e-3,
+                "Mismatch at ({}, {}): AVX512={}, scalar={}, diff={}",
+                i, j, result[(i, j)], expected[(i, j)], diff
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_matmul_avx512_l3_nonaligned_cols() {
+        // Test L3 blocking with column count that exercises remainder in 8x1 microkernel
+        // k-dimension (inner loop) not divisible by 16 triggers remainder handling
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // 513 columns: 513 = 32*16 + 1, exercises remainder handling
+        let rows = 512;
+        let cols = 513; // Not divisible by 16
+        let a_data: Vec<f32> = (0..rows * cols).map(|i| (i % 13) as f32 * 0.05).collect();
+        let b_data: Vec<f32> = (0..cols * rows).map(|i| (i % 17) as f32 * 0.05).collect();
+
+        let a = Matrix::from_vec_with_backend(rows, cols, a_data.clone(), Backend::AVX512);
+        let b = Matrix::from_vec_with_backend(cols, rows, b_data.clone(), Backend::AVX512);
+
+        let result = a.matmul(&b).expect("matmul should succeed");
+        assert_eq!(result.shape(), (rows, rows));
+
+        // Verify against scalar
+        let a_scalar = Matrix::from_vec_with_backend(rows, cols, a_data, Backend::Scalar);
+        let b_scalar = Matrix::from_vec_with_backend(cols, rows, b_data, Backend::Scalar);
+        let expected = a_scalar.matmul(&b_scalar).expect("scalar matmul");
+
+        // Spot check
+        for i in [0, 7, 8, 15, 16, 63, 64, 255, 256, rows - 1] {
+            for j in [0, 7, 8, 15, 16, 63, 64, 255, 256, rows - 1] {
+                let diff = (result[(i, j)] - expected[(i, j)]).abs();
+                assert!(
+                    diff < 0.1,
+                    "Mismatch at ({},{}): got={}, expected={}",
+                    i, j, result[(i, j)], expected[(i, j)]
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_matmul_avx512_l3_row_remainder() {
+        // Test AVX-512 L3 blocking with row count that triggers 4x1 AVX2 and scalar remainder
+        // 517 rows = 64*8 + 5 = L2_BLOCK*8 + 5, so remainder of 5 rows per L2 block
+        // This exercises lines 1216-1252 (AVX2 4x1 for 4 rows, scalar for 1 row)
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        let rows = 517; // Not divisible by 8 to trigger remainder handling
+        let cols = 512;
+        let a_data: Vec<f32> = (0..rows * cols).map(|i| (i % 11) as f32 * 0.03).collect();
+        let b_data: Vec<f32> = (0..cols * rows).map(|i| (i % 13) as f32 * 0.03).collect();
+
+        let a = Matrix::from_vec_with_backend(rows, cols, a_data.clone(), Backend::AVX512);
+        let b = Matrix::from_vec_with_backend(cols, rows, b_data.clone(), Backend::AVX512);
+
+        let result = a.matmul(&b).expect("matmul should succeed");
+        assert_eq!(result.shape(), (rows, rows));
+
+        // Verify against scalar reference
+        let a_scalar = Matrix::from_vec_with_backend(rows, cols, a_data, Backend::Scalar);
+        let b_scalar = Matrix::from_vec_with_backend(cols, rows, b_data, Backend::Scalar);
+        let expected = a_scalar.matmul(&b_scalar).expect("scalar matmul");
+
+        // Check scattered points
+        for i in [0, 5, 8, 63, 64, 256, 512, rows - 5, rows - 1] {
+            for j in [0, 5, 8, 63, 64, 256, 512, rows - 5, rows - 1] {
+                if i < rows && j < rows {
+                    let diff = (result[(i, j)] - expected[(i, j)]).abs();
+                    assert!(diff < 0.1, "Mismatch at ({},{})", i, j);
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(all(target_arch = "x86_64", feature = "parallel"))]
+    fn test_matmul_avx512_parallel_large() {
+        // Test parallel AVX-512 matmul with 1024x1024 to hit parallel L3 blocking path
+        // Requires: AVX-512F + parallel feature
+        if !is_x86_feature_detected!("avx512f") {
+            println!("Skipping: CPU doesn't support AVX-512F");
+            return;
+        }
+
+        let size = 1024; // Triggers parallel path (PARALLEL_THRESHOLD = 1024)
+        let a_data: Vec<f32> = (0..size * size)
+            .map(|i| ((i % 10) as f32) * 0.1)
+            .collect();
+        let b_data: Vec<f32> = (0..size * size)
+            .map(|i| (((i + 3) % 10) as f32) * 0.1)
+            .collect();
+
+        let a = Matrix::from_vec_with_backend(size, size, a_data.clone(), Backend::AVX512);
+        let b = Matrix::from_vec_with_backend(size, size, b_data.clone(), Backend::AVX512);
+
+        let result = a.matmul(&b).expect("parallel AVX-512 matmul should succeed");
+        assert_eq!(result.shape(), (size, size));
+
+        // Spot check against scalar reference
+        let a_scalar = Matrix::from_vec_with_backend(size, size, a_data, Backend::Scalar);
+        let b_scalar = Matrix::from_vec_with_backend(size, size, b_data, Backend::Scalar);
+        let expected = a_scalar.matmul(&b_scalar).expect("scalar matmul");
+
+        // Check corners
+        for (i, j) in [(0, 0), (0, size - 1), (size - 1, 0), (size - 1, size - 1)] {
+            let diff = (result[(i, j)] - expected[(i, j)]).abs();
+            let max_val = expected[(i, j)].abs().max(1.0);
+            assert!(
+                diff / max_val < 0.01,
+                "Mismatch at ({},{}): got={}, expected={}",
+                i, j, result[(i, j)], expected[(i, j)]
+            );
         }
     }
 

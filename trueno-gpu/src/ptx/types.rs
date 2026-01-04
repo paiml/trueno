@@ -330,4 +330,40 @@ mod tests {
         assert_eq!(PtxType::S8.size_bytes(), 1);
         assert_eq!(PtxType::S16.size_bytes(), 2);
     }
+
+    #[test]
+    fn test_vector_types() {
+        // V2F32: 2 x f32 = 8 bytes
+        assert_eq!(PtxType::V2F32.size_bytes(), 8);
+        assert_eq!(PtxType::V2F32.size_bits(), 64);
+        assert!(PtxType::V2F32.is_float());
+        assert!(!PtxType::V2F32.is_signed());
+        assert!(!PtxType::V2F32.is_unsigned());
+        assert_eq!(PtxType::V2F32.register_prefix(), "%f");
+        assert_eq!(PtxType::V2F32.to_ptx_string(), ".v2.f32");
+
+        // V4F32: 4 x f32 = 16 bytes
+        assert_eq!(PtxType::V4F32.size_bytes(), 16);
+        assert_eq!(PtxType::V4F32.size_bits(), 128);
+        assert!(PtxType::V4F32.is_float());
+        assert!(!PtxType::V4F32.is_signed());
+        assert!(!PtxType::V4F32.is_unsigned());
+        assert_eq!(PtxType::V4F32.register_prefix(), "%f");
+        assert_eq!(PtxType::V4F32.to_ptx_string(), ".v4.f32");
+    }
+
+    #[test]
+    fn test_b32_register_prefix() {
+        // B32 uses special %rb prefix for WMMA fragments
+        assert_eq!(PtxType::B32.register_prefix(), "%rb");
+    }
+
+    #[test]
+    fn test_type_display_all() {
+        // Test Display for all types
+        assert_eq!(format!("{}", PtxType::Pred), ".pred");
+        assert_eq!(format!("{}", PtxType::V2F32), ".v2.f32");
+        assert_eq!(format!("{}", PtxType::V4F32), ".v4.f32");
+        assert_eq!(format!("{}", PtxType::B32), ".b32");
+    }
 }

@@ -4438,6 +4438,95 @@ mod tests {
     }
 
     #[test]
+    fn test_scalar_backend_operations() {
+        // Test various operations with explicit Scalar backend to cover Backend::Scalar match arms
+        let v1 = Vector::from_slice_with_backend(&[1.0, 2.0, 3.0, 4.0], Backend::Scalar);
+        let v2 = Vector::from_slice_with_backend(&[4.0, 3.0, 2.0, 1.0], Backend::Scalar);
+
+        // Test dot product (covers line 599)
+        let dot = v1.dot(&v2).unwrap();
+        assert_eq!(dot, 1.0 * 4.0 + 2.0 * 3.0 + 3.0 * 2.0 + 4.0 * 1.0); // = 20.0
+
+        // Test sum (covers line 856)
+        let sum = v1.sum().unwrap();
+        assert_eq!(sum, 10.0);
+
+        // Test max (covers line 661)
+        let max = v1.max().unwrap();
+        assert_eq!(max, 4.0);
+
+        // Test min (covers line 709)
+        let min = v1.min().unwrap();
+        assert_eq!(min, 1.0);
+
+        // Test argmax (covers line 757)
+        let argmax = v1.argmax().unwrap();
+        assert_eq!(argmax, 3);
+
+        // Test argmin (covers line 805)
+        let argmin = v1.argmin().unwrap();
+        assert_eq!(argmin, 0);
+    }
+
+    #[test]
+    fn test_gpu_and_auto_backend_fallback() {
+        // Test operations with GPU/Auto backend which fallback to scalar
+        let v1 = Vector::from_slice_with_backend(&[1.0, 2.0, 3.0], Backend::GPU);
+        let v2 = Vector::from_slice_with_backend(&[3.0, 2.0, 1.0], Backend::GPU);
+
+        // These should all work (fallback to scalar)
+        let dot = v1.dot(&v2).unwrap();
+        assert_eq!(dot, 10.0);
+
+        let sum = v1.sum().unwrap();
+        assert_eq!(sum, 6.0);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_avx512_backend_vector_ops() {
+        // Test operations with explicit AVX-512 backend to cover Backend::AVX512 match arms
+        if !is_x86_feature_detected!("avx512f") {
+            return;
+        }
+
+        // Use large vectors to exercise SIMD paths
+        let data1: Vec<f32> = (0..1024).map(|i| i as f32).collect();
+        let data2: Vec<f32> = (0..1024).map(|i| (1024 - i) as f32).collect();
+
+        let v1 = Vector::from_slice_with_backend(&data1, Backend::AVX512);
+        let v2 = Vector::from_slice_with_backend(&data2, Backend::AVX512);
+
+        // Test dot product (covers line 605)
+        let dot = v1.dot(&v2).unwrap();
+        let expected_dot: f32 = data1.iter().zip(data2.iter()).map(|(a, b)| a * b).sum();
+        let dot_rel_err = (dot - expected_dot).abs() / expected_dot.abs().max(1.0);
+        assert!(dot_rel_err < 0.01, "dot mismatch: {} vs {}", dot, expected_dot);
+
+        // Test sum
+        let sum = v1.sum().unwrap();
+        let expected_sum: f32 = data1.iter().sum();
+        let sum_rel_err = (sum - expected_sum).abs() / expected_sum.abs().max(1.0);
+        assert!(sum_rel_err < 0.01, "sum mismatch: {} vs {}", sum, expected_sum);
+
+        // Test max
+        let max = v1.max().unwrap();
+        assert_eq!(max, 1023.0);
+
+        // Test min
+        let min = v1.min().unwrap();
+        assert_eq!(min, 0.0);
+
+        // Test argmax
+        let argmax = v1.argmax().unwrap();
+        assert_eq!(argmax, 1023);
+
+        // Test argmin
+        let argmin = v1.argmin().unwrap();
+        assert_eq!(argmin, 0);
+    }
+
+    #[test]
     fn test_auto_backend_resolution() {
         let v = Vector::from_slice_with_backend(&[1.0], Backend::Auto);
         // Auto should be resolved to best available backend

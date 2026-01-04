@@ -29,6 +29,7 @@ use trueno::monitor::{GpuBackend, GpuDeviceInfo, GpuMemoryMetrics, GpuVendor};
 use trueno::{GpuMonitor, MonitorConfig, MonitorError};
 #[cfg(feature = "cuda-monitor")]
 use trueno::cuda_monitor_available;
+use std::time::Duration;
 
 fn main() {
     println!("=================================================");
