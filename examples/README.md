@@ -50,6 +50,7 @@ This directory contains examples demonstrating Trueno's high-performance compute
 | `dump_ptx` | Dump raw PTX output | `cargo run -p trueno-gpu --example dump_ptx` |
 | `satd_kernels` | SATD (video codec) kernels | `cargo run -p trueno-gpu --example satd_kernels` |
 | `lz4_compression` | **🗜️ LZ4 compression kernel** | `cargo run -p trueno-gpu --example lz4_compression` |
+| `lz4_file_compress` | **📦 LZ4 file compression CLI** | `cargo run -p trueno-gpu --example lz4_file_compress -- bench` |
 | `ptx_optimize` | PTX optimization passes demo | `cargo run -p trueno-gpu --example ptx_optimize` |
 | `bench_kernel_gen` | Kernel generation benchmarks | `cargo run -p trueno-gpu --example bench_kernel_gen` |
 
