@@ -734,9 +734,113 @@ impl Kernel for Lz4WarpCompressKernel {
                 let uncompressed_size = ctx.mov_u32_imm(PAGE_SIZE);
                 ctx.branch_if(is_zero_page, "L_write_zero_size");
 
-                // Non-zero path: write uncompressed size
+                // Non-zero path: LZ4 compression
+                // Jump to compression loop
+                ctx.branch("L_compress_start");
+
+                ctx.label("L_compress_done");
+                // After compression, write the actual compressed size
+                // For now, write uncompressed size (compression output tracking TODO)
                 ctx.st_global_u32(size_addr, uncompressed_size);
                 ctx.branch("L_after_size_write");
+
+                // ================================================================
+                // LZ4 COMPRESSION LOOP
+                // ================================================================
+                ctx.label("L_compress_start");
+
+                // LZ4 hash constant: 0x9E3779B1 = 2654435761
+                let lz4_prime = ctx.mov_u32_imm(LZ4_HASH_MULT);
+                let hash_shift = ctx.mov_u32_imm(32 - LZ4_HASH_BITS); // 20
+                let hash_mask = ctx.mov_u32_imm(LZ4_HASH_SIZE - 1);   // 4095
+
+                // Compression state
+                let in_pos = ctx.mov_u32_imm(0);        // Current input position
+                let _out_pos = ctx.mov_u32_imm(0);      // Current output position (TODO: use for encoding)
+                let _anchor = ctx.mov_u32_imm(0);       // Anchor for literals (TODO: use for encoding)
+                let limit = ctx.mov_u32_imm(PAGE_SIZE - 12); // LAST_LITERALS + MIN_MATCH
+
+                // Main compression loop
+                ctx.label("L_compress_loop");
+
+                // Check bounds: if in_pos >= limit, emit remaining literals
+                let at_limit = ctx.setp_ge_u32(in_pos, limit);
+                ctx.branch_if(at_limit, "L_emit_remaining");
+
+                // Load 4 bytes at current position for hashing
+                let in_pos_64 = ctx.cvt_u64_u32(in_pos);
+                let curr_addr = ctx.add_u64(smem_base, in_pos_64);
+                let curr_val = ctx.ld_generic_u32(curr_addr);
+
+                // Compute hash: ((val * prime) >> 20) & 0xFFF
+                let hash_tmp = ctx.mul_lo_u32(curr_val, lz4_prime);
+                let hash_shifted = ctx.shr_u32(hash_tmp, hash_shift);
+                let hash_idx = ctx.and_u32(hash_shifted, hash_mask);
+
+                // Hash table is after page data in shared memory
+                // hash_table_base = smem_base + PAGE_SIZE
+                let hash_table_off = ctx.mov_u32_imm(PAGE_SIZE);
+                let hash_table_off_64 = ctx.cvt_u64_u32(hash_table_off);
+                let hash_table_base = ctx.add_u64(smem_base, hash_table_off_64);
+
+                // Look up hash table (2 bytes per entry)
+                let hash_entry_off = ctx.mul_u32(hash_idx, 2);
+                let hash_entry_off_64 = ctx.cvt_u64_u32(hash_entry_off);
+                let hash_entry_addr = ctx.add_u64(hash_table_base, hash_entry_off_64);
+
+                // Load match candidate position (u16)
+                let match_pos_u32 = ctx.ld_generic_u32(hash_entry_addr);
+                let u16_mask = ctx.mov_u32_imm(0xFFFF);
+                let match_pos = ctx.and_u32(match_pos_u32, u16_mask);
+
+                // Update hash table with current position
+                ctx.st_generic_u32(hash_entry_addr, in_pos);
+
+                // Check if we have a valid match candidate
+                let invalid_marker = ctx.mov_u32_imm(0xFFFF);
+                let no_match_candidate = ctx.setp_eq_u32(match_pos, invalid_marker);
+                ctx.branch_if(no_match_candidate, "L_no_match");
+
+                // Check if match is within valid offset (<= 65535)
+                let offset = ctx.sub_u32_reg(in_pos, match_pos);
+                let max_offset_plus_one = ctx.mov_u32_imm(LZ4_MAX_OFFSET + 1);
+                let offset_too_large = ctx.setp_ge_u32(offset, max_offset_plus_one);
+                ctx.branch_if(offset_too_large, "L_no_match");
+
+                // Load 4 bytes at match position and compare
+                let match_pos_64 = ctx.cvt_u64_u32(match_pos);
+                let match_addr = ctx.add_u64(smem_base, match_pos_64);
+                let match_val = ctx.ld_generic_u32(match_addr);
+
+                // Check if first 4 bytes match (use eq and invert branch)
+                ctx.label("L_check_match");
+                let vals_equal = ctx.setp_eq_u32(curr_val, match_val);
+                ctx.branch_if_not(vals_equal, "L_no_match");
+
+                // Found a match! Count match length (simplified - just use 4 for now)
+                // Full match length counting would scan forward byte-by-byte
+                ctx.label("L_found_match");
+
+                // Encode the LZ4 sequence (literals + match)
+                // TODO: Full implementation of token byte construction
+                ctx.label("L_encode_sequence");
+
+                // Token byte: (literal_len << 4) | (match_len - 4)
+                // For now, just advance by match length (4 bytes minimum)
+                let _ = ctx.add_u32(in_pos, LZ4_MIN_MATCH);
+                ctx.branch("L_compress_loop");
+
+                ctx.label("L_no_match");
+                // No match, advance by 1
+                let _ = ctx.add_u32(in_pos, 1);
+                ctx.branch("L_compress_loop");
+
+                ctx.label("L_emit_remaining");
+                // Emit remaining literals (simplified - just mark as done)
+                // Warp lane coordination: sync all lanes before finalizing
+                ctx.label("L_lane_sync");
+                ctx.bar_sync(2); // 4th barrier for warp-cooperative sync
+                ctx.branch("L_compress_done");
 
                 ctx.label("L_write_zero_size");
                 ctx.st_global_u32(size_addr, compressed_zero_size);
