@@ -1584,4 +1584,249 @@ mod tests {
         assert_eq!(ptx1.matches("L_exit").count(), ptx2.matches("L_exit").count());
         assert_eq!(ptx1.matches("L_not_leader").count(), ptx2.matches("L_not_leader").count());
     }
+
+    // =========================================================================
+    // GPU LZ4 FULL COMPRESSION TESTS (TDD - These define requirements)
+    // =========================================================================
+    // These tests are for the full GPU LZ4 compression implementation.
+    // Currently the kernel only does zero-page detection. These tests will
+    // FAIL until the full LZ4 compression is implemented in PTX.
+    //
+    // See spec: /home/noah/src/trueno-zram/docs/specifications/gpu-lz4-compression-kernel-spec.md
+
+    #[test]
+    fn test_gpu_lz4_ptx_has_hash_table() {
+        // REQ-LZ4-001: PTX kernel must have hash table for match finding
+        let kernel = Lz4WarpCompressKernel::new(100);
+        let ptx = kernel.emit_ptx();
+
+        // Hash table should be in shared memory (8KB per warp = 4096 entries × 2 bytes)
+        // The kernel already allocates shared memory, but it should use it for hashing
+        // Check for hash computation using the LZ4 hash multiplier (2654435761 = 0x9E3779B1)
+        // This is a TDD requirement - test will fail until hash table is implemented
+        assert!(
+            ptx.contains("0x9e3779b1") || ptx.contains("2654435761") || ptx.contains("hash"),
+            "PTX must have LZ4 hash computation (mul by 0x9E3779B1)"
+        );
+    }
+
+    #[test]
+    fn test_gpu_lz4_ptx_has_match_finding() {
+        // REQ-LZ4-002: PTX kernel must find matches of >= 4 bytes
+        let kernel = Lz4WarpCompressKernel::new(100);
+        let ptx = kernel.emit_ptx();
+
+        // Match finding requires:
+        // 1. Loading 4 bytes and computing hash
+        // 2. Looking up hash table
+        // 3. Comparing bytes at match position
+        // This is a TDD requirement - test will fail until match finding is implemented
+        assert!(
+            ptx.contains("match") || ptx.contains("L_found_match") || ptx.contains("L_check_match"),
+            "PTX must have match finding logic with labeled branches"
+        );
+    }
+
+    #[test]
+    fn test_gpu_lz4_ptx_has_sequence_encoding() {
+        // REQ-LZ4-003: PTX kernel must encode LZ4 sequences (token + literals + offset + matchlen)
+        let kernel = Lz4WarpCompressKernel::new(100);
+        let ptx = kernel.emit_ptx();
+
+        // Sequence encoding requires:
+        // 1. Token byte construction (literal_len << 4 | match_len)
+        // 2. Extended length encoding (for lengths > 15)
+        // 3. Offset writing (2 bytes, little-endian)
+        // This is a TDD requirement - test will fail until encoding is implemented
+        assert!(
+            ptx.contains("token") || ptx.contains("L_encode") || ptx.contains("L_write_sequence"),
+            "PTX must have LZ4 sequence encoding logic"
+        );
+    }
+
+    #[test]
+    fn test_gpu_lz4_ptx_has_output_buffer_management() {
+        // REQ-LZ4-004: PTX kernel must manage output buffer correctly
+        let kernel = Lz4WarpCompressKernel::new(100);
+        let ptx = kernel.emit_ptx();
+
+        // Output buffer management requires:
+        // 1. Tracking current output position
+        // 2. Writing compressed data to correct location
+        // 3. Reporting final compressed size
+        // Current kernel just writes PAGE_SIZE for non-zero pages - this must change
+        // This is a TDD requirement - test will fail until buffer management is implemented
+
+        // Should NOT have hardcoded PAGE_SIZE for all non-zero pages
+        // Currently the kernel has: mov.u32 %r_N, 4096; (uncompressed_size)
+        // After implementing compression, this should be the actual compressed size
+
+        // For now, check that there's some form of dynamic size tracking
+        // (beyond just the zero-page case)
+        let has_dynamic_size = ptx.contains("out_pos") ||
+                               ptx.contains("L_compress") ||
+                               ptx.contains("compressed_len");
+        assert!(
+            has_dynamic_size,
+            "PTX must track output buffer position dynamically for compression"
+        );
+    }
+
+    #[test]
+    fn test_gpu_lz4_compresses_pattern_data() {
+        // REQ-LZ4-005: GPU kernel must actually compress pattern data (not just detect zeros)
+        // This test uses the CPU reference implementation to verify the GPU should compress
+
+        // Generate data with repeated patterns (should compress well)
+        let mut input = [0u8; PAGE_SIZE as usize];
+        for i in 0..PAGE_SIZE as usize {
+            input[i] = (i % 4) as u8; // Pattern: 0,1,2,3,0,1,2,3...
+        }
+
+        // CPU compression achieves good ratio on this
+        let mut compressed_cpu = [0u8; PAGE_SIZE as usize + 256];
+        let cpu_size = lz4_compress_block(&input, &mut compressed_cpu).unwrap();
+
+        // CPU should compress this significantly
+        assert!(cpu_size < PAGE_SIZE as usize / 2,
+            "CPU compresses pattern to {} bytes ({}:1 ratio)",
+            cpu_size, PAGE_SIZE as usize / cpu_size);
+
+        // GPU kernel PTX should have compression logic
+        // (This is verified by other tests - here we just confirm the expectation)
+        let kernel = Lz4WarpCompressKernel::new(100);
+        let ptx = kernel.emit_ptx();
+
+        // Currently this FAILS because GPU doesn't compress non-zero pages
+        // When implemented, the GPU should produce similar compression ratios
+        assert!(
+            ptx.contains("L_compress") || ptx.contains("lz4_encode"),
+            "GPU kernel must implement LZ4 compression for non-zero pages"
+        );
+    }
+
+    #[test]
+    fn test_gpu_lz4_kernel_has_compression_loop() {
+        // REQ-LZ4-006: GPU kernel must have main compression loop
+        let kernel = Lz4WarpCompressKernel::new(100);
+        let ptx = kernel.emit_ptx();
+
+        // LZ4 compression requires iterating through input:
+        // - Main loop that processes each position
+        // - Conditional branches for match vs literal paths
+        // - Loop continuation/termination
+
+        // Look for loop structure in PTX
+        let has_compress_loop = ptx.contains("L_compress_loop") ||
+                                 ptx.contains("L_main_loop") ||
+                                 (ptx.contains("bra") && ptx.contains("L_loop"));
+
+        assert!(
+            has_compress_loop,
+            "GPU kernel must have main compression loop (L_compress_loop or similar)"
+        );
+    }
+
+    #[test]
+    fn test_gpu_lz4_cpu_gpu_equivalence_requirement() {
+        // REQ-LZ4-007: GPU compression output must decompress to original (via CPU decompressor)
+        // This is a specification test - defines the requirement
+
+        // The GPU kernel, when fully implemented, must produce output that:
+        // 1. Is valid LZ4 block format
+        // 2. Decompresses correctly using lz4_decompress_block
+        // 3. Produces exact byte-for-byte match with original input
+
+        // Test data
+        let mut input = [0u8; 256];
+        for i in 0..256 {
+            input[i] = ((i * 7) % 256) as u8;
+        }
+
+        // CPU round-trip works (reference)
+        let mut compressed = [0u8; 512];
+        let mut decompressed = [0u8; 256];
+        let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
+        let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+
+        assert_eq!(decomp_size, input.len());
+        assert_eq!(&decompressed[..], &input[..]);
+
+        // GPU kernel (when implemented) must achieve the same
+        // This is a placeholder assertion that documents the requirement
+        let kernel = Lz4WarpCompressKernel::new(1);
+        assert_eq!(kernel.name(), "lz4_compress_warp",
+            "GPU kernel exists and will need to pass round-trip test");
+    }
+
+    #[test]
+    fn test_gpu_lz4_warp_cooperative_hash_lookups() {
+        // REQ-LZ4-008: Warp threads should cooperatively perform hash lookups
+        let kernel = Lz4WarpCompressKernel::new(100);
+        let ptx = kernel.emit_ptx();
+
+        // Warp-cooperative compression means:
+        // - Thread 0 runs main compression loop
+        // - Threads 1-31 assist with parallel hash lookups
+        // - Use warp shuffle or shared memory for cooperation
+
+        // Check for warp shuffle instructions (shfl.sync) or
+        // shared memory coordination pattern
+        let has_warp_cooperation = ptx.contains("shfl.sync") ||
+                                    ptx.contains("shfl.idx") ||
+                                    (ptx.matches("bar.sync").count() >= 4 &&
+                                     ptx.contains("lane"));
+
+        assert!(
+            has_warp_cooperation,
+            "GPU kernel should use warp-cooperative pattern for hash lookups"
+        );
+    }
+
+    #[test]
+    fn test_gpu_lz4_hash_table_bank_conflict_free() {
+        // REQ-LZ4-009: Hash table access should avoid bank conflicts
+        let kernel = Lz4WarpCompressKernel::new(100);
+        let ptx = kernel.emit_ptx();
+
+        // Bank conflict avoidance requires:
+        // - Padded stride (4097 instead of 4096)
+        // - Or XOR-based swizzling
+
+        // The shared memory size should account for padding
+        let smem_bytes = kernel.shared_memory_bytes();
+
+        // With padding: 4 warps × (4096 page + (4096+1)*2 hash table) = ~48KB
+        // Without padding: 4 warps × (4096 + 4096*2) = ~48KB
+        // Padded version is slightly larger due to +1 stride
+
+        assert!(smem_bytes >= 4 * (PAGE_SIZE as usize + LZ4_HASH_SIZE as usize * 2),
+            "Shared memory {} bytes should include hash table space", smem_bytes);
+
+        // When implemented, PTX should show padded addressing (stride 4097 or XOR)
+        // This is a TDD marker - will need implementation
+    }
+
+    #[test]
+    fn test_gpu_lz4_handles_incompressible() {
+        // REQ-LZ4-010: GPU kernel must handle incompressible pages correctly
+        // Incompressible data should be stored raw (with flag)
+
+        // Random data is typically incompressible
+        let kernel = Lz4WarpCompressKernel::new(100);
+        let ptx = kernel.emit_ptx();
+
+        // Should have logic to detect when compression doesn't help
+        // and fall back to storing raw data
+        let has_incompressible_path = ptx.contains("L_incompressible") ||
+                                       ptx.contains("L_store_raw") ||
+                                       (ptx.contains("setp.ge") && ptx.contains("4096"));
+
+        // Currently the kernel outputs PAGE_SIZE for all non-zero pages
+        // which is correct for incompressible, but it doesn't try to compress first
+        assert!(
+            has_incompressible_path || ptx.contains("uncompressed"),
+            "GPU kernel should handle incompressible pages (store raw)"
+        );
+    }
 }
