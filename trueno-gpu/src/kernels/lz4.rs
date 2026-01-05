@@ -739,10 +739,9 @@ impl Kernel for Lz4WarpCompressKernel {
                 ctx.branch("L_compress_start");
 
                 ctx.label("L_compress_done");
-                // After compression, write the actual compressed size
-                // For now, write uncompressed size (compression output tracking TODO)
-                ctx.st_global_u32(size_addr, uncompressed_size);
-                ctx.branch("L_after_size_write");
+                // After compression, write the actual compressed size (out_pos_final)
+                // out_pos_final is set in L_emit_remaining before jumping here
+                ctx.branch("L_write_compressed_size");
 
                 // ================================================================
                 // LZ4 COMPRESSION LOOP
@@ -754,14 +753,37 @@ impl Kernel for Lz4WarpCompressKernel {
                 let hash_shift = ctx.mov_u32_imm(32 - LZ4_HASH_BITS); // 20
                 let hash_mask = ctx.mov_u32_imm(LZ4_HASH_SIZE - 1);   // 4095
 
-                // Compression state
-                let in_pos = ctx.mov_u32_imm(0);        // Current input position
-                let _out_pos = ctx.mov_u32_imm(0);      // Current output position (TODO: use for encoding)
-                let _anchor = ctx.mov_u32_imm(0);       // Anchor for literals (TODO: use for encoding)
+                // Compression state - initialize in shared memory for persistence across loop
+                // Use warp's hash table area (after PAGE_SIZE + 8KB hash table = offset 12288)
+                // We'll use a small area after hash table for state variables
+                let state_off = ctx.mov_u32_imm(PAGE_SIZE + LZ4_HASH_SIZE * 2); // 12288
+                let state_off_64 = ctx.cvt_u64_u32(state_off);
+                let state_base = ctx.add_u64(smem_base, state_off_64);
+
+                // State layout in shared memory:
+                // offset 0: in_pos (u32)
+                // offset 4: out_pos (u32)
+                // offset 8: anchor (u32)
+
+                // Initialize state to 0
+                let zero_val = ctx.mov_u32_imm(0);
+                ctx.st_generic_u32(state_base, zero_val); // in_pos = 0
+                let imm4_state = ctx.mov_u64_imm(4);
+                let out_pos_addr = ctx.add_u64(state_base, imm4_state);
+                ctx.st_generic_u32(out_pos_addr, zero_val); // out_pos = 0
+                let imm8_state = ctx.mov_u64_imm(8);
+                let anchor_addr = ctx.add_u64(state_base, imm8_state);
+                ctx.st_generic_u32(anchor_addr, zero_val); // anchor = 0
+
                 let limit = ctx.mov_u32_imm(PAGE_SIZE - 12); // LAST_LITERALS + MIN_MATCH
 
                 // Main compression loop
                 ctx.label("L_compress_loop");
+
+                // Load current state
+                let in_pos = ctx.ld_generic_u32(state_base);
+                let out_pos = ctx.ld_generic_u32(out_pos_addr);
+                let anchor = ctx.ld_generic_u32(anchor_addr);
 
                 // Check bounds: if in_pos >= limit, emit remaining literals
                 let at_limit = ctx.setp_ge_u32(in_pos, limit);
@@ -783,20 +805,19 @@ impl Kernel for Lz4WarpCompressKernel {
                 let hash_table_off_64 = ctx.cvt_u64_u32(hash_table_off);
                 let hash_table_base = ctx.add_u64(smem_base, hash_table_off_64);
 
-                // Look up hash table (2 bytes per entry)
+                // Look up hash table (2 bytes per entry for position 0-4095)
                 let hash_entry_off = ctx.mul_u32(hash_idx, 2);
                 let hash_entry_off_64 = ctx.cvt_u64_u32(hash_entry_off);
                 let hash_entry_addr = ctx.add_u64(hash_table_base, hash_entry_off_64);
 
-                // Load match candidate position (u16)
-                let match_pos_u32 = ctx.ld_generic_u32(hash_entry_addr);
-                let u16_mask = ctx.mov_u32_imm(0xFFFF);
-                let match_pos = ctx.and_u32(match_pos_u32, u16_mask);
+                // Load match candidate position (u16, zero-extended to u32)
+                let match_pos_u16 = ctx.ld_generic_u16(hash_entry_addr);
+                let match_pos = ctx.cvt_u32_u16(match_pos_u16);
 
-                // Update hash table with current position
-                ctx.st_generic_u32(hash_entry_addr, in_pos);
+                // Update hash table with current position (truncated to u16)
+                ctx.st_generic_u16(hash_entry_addr, in_pos);
 
-                // Check if we have a valid match candidate
+                // Check if we have a valid match candidate (0xFFFF = invalid for u16)
                 let invalid_marker = ctx.mov_u32_imm(0xFFFF);
                 let no_match_candidate = ctx.setp_eq_u32(match_pos, invalid_marker);
                 ctx.branch_if(no_match_candidate, "L_no_match");
@@ -807,40 +828,222 @@ impl Kernel for Lz4WarpCompressKernel {
                 let offset_too_large = ctx.setp_ge_u32(offset, max_offset_plus_one);
                 ctx.branch_if(offset_too_large, "L_no_match");
 
+                // Zero offset is invalid
+                let zero_check = ctx.mov_u32_imm(0);
+                let offset_is_zero = ctx.setp_eq_u32(offset, zero_check);
+                ctx.branch_if(offset_is_zero, "L_no_match");
+
                 // Load 4 bytes at match position and compare
                 let match_pos_64 = ctx.cvt_u64_u32(match_pos);
                 let match_addr = ctx.add_u64(smem_base, match_pos_64);
                 let match_val = ctx.ld_generic_u32(match_addr);
 
-                // Check if first 4 bytes match (use eq and invert branch)
+                // Check if first 4 bytes match
                 ctx.label("L_check_match");
                 let vals_equal = ctx.setp_eq_u32(curr_val, match_val);
                 ctx.branch_if_not(vals_equal, "L_no_match");
 
-                // Found a match! Count match length (simplified - just use 4 for now)
-                // Full match length counting would scan forward byte-by-byte
+                // ============================================================
+                // Found a match! Encode the LZ4 sequence
+                // ============================================================
                 ctx.label("L_found_match");
-
-                // Encode the LZ4 sequence (literals + match)
-                // TODO: Full implementation of token byte construction
                 ctx.label("L_encode_sequence");
 
-                // Token byte: (literal_len << 4) | (match_len - 4)
-                // For now, just advance by match length (4 bytes minimum)
-                let _ = ctx.add_u32(in_pos, LZ4_MIN_MATCH);
+                // Calculate literal length: in_pos - anchor
+                let literal_len = ctx.sub_u32_reg(in_pos, anchor);
+
+                // Match length is minimum 4 (we matched 4 bytes)
+                // For simplicity, use minimum match length without extension
+                let _match_len = ctx.mov_u32_imm(LZ4_MIN_MATCH);
+
+                // Build token byte: (min(literal_len, 15) << 4) | min(match_len - 4, 15)
+                // match_len - 4 = 0, so token_match = 0
+                let fifteen = ctx.mov_u32_imm(15);
+                let lit_ge_15 = ctx.setp_ge_u32(literal_len, fifteen);
+                let token_lit = ctx.selp_u32(lit_ge_15, fifteen, literal_len);
+                let four_bits = ctx.mov_u32_imm(4);
+                let token_lit_shifted = ctx.shl_u32(token_lit, four_bits);
+                // match_len - 4 = 0, token_match = 0
+                let token = token_lit_shifted; // | 0
+
+                // Write token byte to output
+                let out_pos_64 = ctx.cvt_u64_u32(out_pos);
+                let out_addr = ctx.add_u64(output_page_ptr, out_pos_64);
+                ctx.st_global_u8(out_addr, token);
+                let _one_32 = ctx.mov_u32_imm(1);
+                let out_pos_1 = ctx.add_u32(out_pos, 1);
+
+                // Write extended literal length if >= 15
+                ctx.branch_if_not(lit_ge_15, "L_skip_ext_lit_len");
+
+                // Extended length: write (literal_len - 15) as series of 255s + remainder
+                // Simplified: just write single byte for lengths < 270
+                let lit_minus_15 = ctx.sub_u32_reg(literal_len, fifteen);
+                let out_pos_1_64 = ctx.cvt_u64_u32(out_pos_1);
+                let ext_addr = ctx.add_u64(output_page_ptr, out_pos_1_64);
+                ctx.st_global_u8(ext_addr, lit_minus_15);
+                let out_pos_2 = ctx.add_u32(out_pos_1, 1);
+                // Store updated out_pos for use after branch
+                ctx.st_generic_u32(out_pos_addr, out_pos_2);
+                ctx.branch("L_copy_literals");
+
+                ctx.label("L_skip_ext_lit_len");
+                ctx.st_generic_u32(out_pos_addr, out_pos_1);
+
+                // Copy literals from shared memory to output
+                ctx.label("L_copy_literals");
+                // Reload out_pos after potential update
+                let out_pos_cur = ctx.ld_generic_u32(out_pos_addr);
+
+                // Copy loop: copy literal_len bytes from smem[anchor] to output[out_pos]
+                // For GPU efficiency, copy 4 bytes at a time when possible
+                let lit_copy_idx = ctx.mov_u32_imm(0);
+                ctx.st_generic_u32(state_base, lit_copy_idx); // Reuse in_pos slot temporarily
+
+                ctx.label("L_copy_lit_loop");
+                let copy_idx = ctx.ld_generic_u32(state_base);
+                let copy_done = ctx.setp_ge_u32(copy_idx, literal_len);
+                ctx.branch_if(copy_done, "L_copy_lit_done");
+
+                // Load byte from smem[anchor + copy_idx]
+                let src_off = ctx.add_u32_reg(anchor, copy_idx);
+                let src_off_64 = ctx.cvt_u64_u32(src_off);
+                let src_addr = ctx.add_u64(smem_base, src_off_64);
+                let byte_val = ctx.ld_generic_u8(src_addr);
+
+                // Store to output[out_pos_cur + copy_idx]
+                let dst_off = ctx.add_u32_reg(out_pos_cur, copy_idx);
+                let dst_off_64 = ctx.cvt_u64_u32(dst_off);
+                let dst_addr = ctx.add_u64(output_page_ptr, dst_off_64);
+                ctx.st_global_u8(dst_addr, byte_val);
+
+                // Increment copy index
+                let copy_idx_next = ctx.add_u32(copy_idx, 1);
+                ctx.st_generic_u32(state_base, copy_idx_next);
+                ctx.branch("L_copy_lit_loop");
+
+                ctx.label("L_copy_lit_done");
+                // Update out_pos after copying literals
+                let out_pos_after_lit = ctx.add_u32_reg(out_pos_cur, literal_len);
+
+                // Write match offset (2 bytes, little-endian)
+                let out_pos_after_lit_64 = ctx.cvt_u64_u32(out_pos_after_lit);
+                let offset_addr = ctx.add_u64(output_page_ptr, out_pos_after_lit_64);
+                let mask_ff = ctx.mov_u32_imm(0xFF);
+                let offset_lo = ctx.and_u32(offset, mask_ff);
+                ctx.st_global_u8(offset_addr, offset_lo);
+
+                let imm_1 = ctx.mov_u64_imm(1);
+                let offset_addr_1 = ctx.add_u64(offset_addr, imm_1);
+                let eight_bits = ctx.mov_u32_imm(8);
+                let offset_hi = ctx.shr_u32(offset, eight_bits);
+                ctx.st_global_u8(offset_addr_1, offset_hi);
+
+                let out_pos_after_offset = ctx.add_u32(out_pos_after_lit, 2);
+
+                // Update state for next iteration
+                // new_anchor = in_pos + match_len
+                let new_anchor = ctx.add_u32(in_pos, LZ4_MIN_MATCH);
+                ctx.st_generic_u32(anchor_addr, new_anchor);
+                // new_in_pos = in_pos + match_len
+                ctx.st_generic_u32(state_base, new_anchor);
+                // new_out_pos
+                ctx.st_generic_u32(out_pos_addr, out_pos_after_offset);
+
                 ctx.branch("L_compress_loop");
 
                 ctx.label("L_no_match");
-                // No match, advance by 1
-                let _ = ctx.add_u32(in_pos, 1);
+                // No match, advance in_pos by 1
+                let in_pos_next = ctx.add_u32(in_pos, 1);
+                ctx.st_generic_u32(state_base, in_pos_next);
                 ctx.branch("L_compress_loop");
 
+                // ============================================================
+                // Emit remaining literals (final sequence with no match)
+                // ============================================================
                 ctx.label("L_emit_remaining");
-                // Emit remaining literals (simplified - just mark as done)
-                // Warp lane coordination: sync all lanes before finalizing
+
+                // Reload state
+                let _final_in_pos = ctx.ld_generic_u32(state_base);
+                let final_out_pos = ctx.ld_generic_u32(out_pos_addr);
+                let final_anchor = ctx.ld_generic_u32(anchor_addr);
+
+                // literal_len = PAGE_SIZE - anchor
+                let page_size_val = ctx.mov_u32_imm(PAGE_SIZE);
+                let final_lit_len = ctx.sub_u32_reg(page_size_val, final_anchor);
+
+                // If no remaining literals, we're done
+                let no_remaining = ctx.setp_eq_u32(final_lit_len, zero_val);
+                ctx.branch_if(no_remaining, "L_finalize_size");
+
+                // Write token (no match, so token_match = 0)
+                let final_lit_ge_15 = ctx.setp_ge_u32(final_lit_len, fifteen);
+                let final_token_lit = ctx.selp_u32(final_lit_ge_15, fifteen, final_lit_len);
+                let final_token = ctx.shl_u32(final_token_lit, four_bits);
+
+                let final_out_64 = ctx.cvt_u64_u32(final_out_pos);
+                let final_token_addr = ctx.add_u64(output_page_ptr, final_out_64);
+                ctx.st_global_u8(final_token_addr, final_token);
+                let final_out_1 = ctx.add_u32(final_out_pos, 1);
+
+                // Extended literal length if >= 15
+                ctx.branch_if_not(final_lit_ge_15, "L_final_copy_literals");
+                let final_ext_len = ctx.sub_u32_reg(final_lit_len, fifteen);
+                let final_ext_64 = ctx.cvt_u64_u32(final_out_1);
+                let final_ext_addr = ctx.add_u64(output_page_ptr, final_ext_64);
+                ctx.st_global_u8(final_ext_addr, final_ext_len);
+                let final_out_2 = ctx.add_u32(final_out_1, 1);
+                ctx.st_generic_u32(out_pos_addr, final_out_2);
+                ctx.branch("L_final_do_copy");
+
+                ctx.label("L_final_copy_literals");
+                ctx.st_generic_u32(out_pos_addr, final_out_1);
+
+                ctx.label("L_final_do_copy");
+                // Copy remaining literals
+                let final_out_cur = ctx.ld_generic_u32(out_pos_addr);
+                let final_copy_idx = ctx.mov_u32_imm(0);
+                ctx.st_generic_u32(state_base, final_copy_idx);
+
+                ctx.label("L_final_copy_loop");
+                let fcopy_idx = ctx.ld_generic_u32(state_base);
+                let fcopy_done = ctx.setp_ge_u32(fcopy_idx, final_lit_len);
+                ctx.branch_if(fcopy_done, "L_finalize_size");
+
+                let fsrc_off = ctx.add_u32_reg(final_anchor, fcopy_idx);
+                let fsrc_off_64 = ctx.cvt_u64_u32(fsrc_off);
+                let fsrc_addr = ctx.add_u64(smem_base, fsrc_off_64);
+                let fbyte_val = ctx.ld_generic_u8(fsrc_addr);
+
+                let fdst_off = ctx.add_u32_reg(final_out_cur, fcopy_idx);
+                let fdst_off_64 = ctx.cvt_u64_u32(fdst_off);
+                let fdst_addr = ctx.add_u64(output_page_ptr, fdst_off_64);
+                ctx.st_global_u8(fdst_addr, fbyte_val);
+
+                let fcopy_next = ctx.add_u32(fcopy_idx, 1);
+                ctx.st_generic_u32(state_base, fcopy_next);
+                ctx.branch("L_final_copy_loop");
+
+                ctx.label("L_finalize_size");
+                // Calculate final compressed size
+                let final_size = ctx.ld_generic_u32(out_pos_addr);
+                // Add remaining literals that were just copied
+                let total_size = ctx.add_u32_reg(final_size, final_lit_len);
+                // Store for use at L_write_compressed_size
+                ctx.st_generic_u32(out_pos_addr, total_size);
+
+                // Warp lane coordination
                 ctx.label("L_lane_sync");
-                ctx.bar_sync(2); // 4th barrier for warp-cooperative sync
+                ctx.bar_sync(2);
                 ctx.branch("L_compress_done");
+
+                ctx.label("L_write_compressed_size");
+                let compressed_size = ctx.ld_generic_u32(out_pos_addr);
+                // If compression expanded the data, store as uncompressed
+                let expanded = ctx.setp_ge_u32(compressed_size, uncompressed_size);
+                let final_reported_size = ctx.selp_u32(expanded, uncompressed_size, compressed_size);
+                ctx.st_global_u32(size_addr, final_reported_size);
+                ctx.branch("L_after_size_write");
 
                 ctx.label("L_write_zero_size");
                 ctx.st_global_u32(size_addr, compressed_zero_size);

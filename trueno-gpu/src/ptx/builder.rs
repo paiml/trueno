@@ -967,6 +967,29 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Store u8 to global memory
+    ///
+    /// NOTE: PTX requires stores to come from at least a 16-bit register.
+    /// The low 8 bits of the source register are stored to the address.
+    pub fn st_global_u8(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U8)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+    }
+
+    /// Store u16 to global memory
+    pub fn st_global_u16(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U16)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+    }
+
     /// Load u16 from global memory (for f16 as raw bits)
     pub fn ld_global_u16(&mut self, addr: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U16);
@@ -981,6 +1004,17 @@ impl<'a> KernelBuilder<'a> {
 
     /// Convert u8 to u32 (zero extend)
     pub fn cvt_u32_u8(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Convert u16 to u32 (zero extend)
+    pub fn cvt_u32_u16(&mut self, val: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
             PtxInstruction::new(PtxOp::Cvt, PtxType::U32)
@@ -1046,6 +1080,27 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::Reg(shift)),
+        );
+        dst
+    }
+
+    /// Select based on predicate: dst = pred ? true_val : false_val
+    ///
+    /// PTX format: selp.u32 d, a, b, p
+    /// where d = destination, a = value if true, b = value if false, p = predicate
+    pub fn selp_u32(
+        &mut self,
+        pred: VirtualReg,
+        true_val: VirtualReg,
+        false_val: VirtualReg,
+    ) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Selp, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(true_val))
+                .src(Operand::Reg(false_val))
+                .src(Operand::Reg(pred)),
         );
         dst
     }
@@ -1424,6 +1479,60 @@ impl<'a> KernelBuilder<'a> {
     pub fn st_generic_u32(&mut self, addr: VirtualReg, val: VirtualReg) {
         self.instructions.push(
             PtxInstruction::new(PtxOp::St, PtxType::U32)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val)),
+            // No .space() means generic addressing
+        );
+    }
+
+    /// Load u8 from generic address (unified address space)
+    ///
+    /// Use this for byte-level operations on shared memory.
+    /// Returns value in a U16 register (PTX minimum register size).
+    pub fn ld_generic_u8(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U16);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U8)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+            // No .space() means generic addressing
+        );
+        dst
+    }
+
+    /// Store u8 to generic address (unified address space)
+    ///
+    /// Use this for byte-level writes to shared memory.
+    /// Source should be in a U16 or U32 register (low 8 bits stored).
+    pub fn st_generic_u8(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U8)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val)),
+            // No .space() means generic addressing
+        );
+    }
+
+    /// Load u16 from generic address (unified address space)
+    ///
+    /// Use this for 16-bit operations on shared memory (e.g., hash table entries).
+    pub fn ld_generic_u16(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U16);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U16)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+            // No .space() means generic addressing
+        );
+        dst
+    }
+
+    /// Store u16 to generic address (unified address space)
+    ///
+    /// Use this for 16-bit writes to shared memory (e.g., hash table entries).
+    pub fn st_generic_u16(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U16)
                 .src(Operand::Reg(addr))
                 .src(Operand::Reg(val)),
             // No .space() means generic addressing
