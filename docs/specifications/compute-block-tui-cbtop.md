@@ -50,7 +50,7 @@
 | [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **13 entries** |
 | [**26**](#26-implementation-commands) | **Implementation Commands** | - |
 | [**27**](#27-real-load-generation-architecture) | **Real Load Generation Architecture** | **MANDATORY** |
-| [**28**](#28-uiux-improvements-pmat-012) | **UI/UX Improvements (PMAT-012)** | **7/9 DONE** |
+| [**28**](#28-uiux-improvements-pmat-012) | **UI/UX Improvements (PMAT-012)** | **10/10 DONE** |
 | [A](#appendix-a-keyboard-controls-reference) | Keyboard Controls Reference | - |
 | [B](#appendix-b-configuration-file-format) | Configuration File Format | - |
 
