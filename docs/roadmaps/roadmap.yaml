@@ -1028,3 +1028,79 @@ roadmap:
     Spec update: docs/specifications/compute-block-tui-cbtop.md v2.1.0
     Added §27 "Real Load Generation Architecture"
     Total citations: 42 (36 original + 6 real load generation)
+- id: PMAT-012
+  github_issue: null
+  item_type: task
+  title: 'PMAT-012: UI/UX Improvements - presentar Visual Parity'
+  status: completed
+  priority: high
+  assigned_to: claude
+  created: 2026-01-10T17:00:00Z
+  updated: 2026-01-10T18:00:00Z
+  spec: |
+    UI/UX improvements for cbtop to achieve visual parity with presentar dashboard.
+
+    Reference: presentar/__pixel_baselines__/system_dashboard_before_fix.png
+
+    P0 (Critical):
+    - UI-01: Responsive width boxes (hardcoded 62 → width - 2)
+    - UI-02: Per-core CPU bars (aggregate → individual cores)
+    - UI-09: Sparkline truncation fix (width - 4 → width - 6)
+
+    P1 (Important):
+    - UI-03: Color gradients on all bars (green→yellow→red)
+    - UI-04: Braille graphs for sparklines (2x resolution)
+    - UI-05: Memory breakdown (Used/Cached/Swap)
+    - UI-07: GPU panel rendering when NVIDIA detected
+
+    P2 (Nice-to-have):
+    - UI-06: GFLOP/s in status bar
+    - UI-08: Network/Disk I/O panels
+    - UI-10: Panel navigation with tab bar
+
+    Citations:
+    - [Tufte 2001] "Visual Display of Quantitative Information" ISBN:978-0-9613921-4-7
+    - [Few 2012] "Show Me the Numbers" ISBN:978-0-9706019-7-4
+    - [Ware 2012] "Information Visualization" ISBN:978-0-12-381464-7
+  acceptance_criteria:
+  - UI-01 Responsive width implemented
+  - UI-02 Per-core CPU bars rendered
+  - UI-03 Color gradients on all progress bars
+  - UI-09 Sparkline truncation fixed
+  - F401-F405 falsification criteria pass
+  phases: []
+  subtasks:
+  - id: PMAT-012.1
+    github_issue: null
+    title: 'UI-01: Responsive width boxes'
+    status: completed
+    completion: 100
+  - id: PMAT-012.2
+    github_issue: null
+    title: 'UI-02: Per-core CPU bars'
+    status: completed
+    completion: 100
+  - id: PMAT-012.3
+    github_issue: null
+    title: 'UI-03: Color gradients'
+    status: completed
+    completion: 100
+  - id: PMAT-012.4
+    github_issue: null
+    title: 'UI-09: Sparkline fix'
+    status: completed
+    completion: 100
+  - id: PMAT-012.5
+    github_issue: null
+    title: 'UI-06: GFLOP/s in status bar'
+    status: completed
+    completion: 100
+  estimated_effort: 1 day
+  labels:
+  - cbtop
+  - ui-ux
+  - presentar
+  - visual-parity
+  notes: |
+    Spec: docs/specifications/compute-block-tui-cbtop.md §28
+    Reference: presentar/__pixel_baselines__/system_dashboard_before_fix.png
