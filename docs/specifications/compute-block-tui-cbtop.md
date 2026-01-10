@@ -51,7 +51,7 @@
 | [**26**](#26-implementation-commands) | **Implementation Commands** | - |
 | [**27**](#27-real-load-generation-architecture) | **Real Load Generation Architecture** | **MANDATORY** |
 | [**28**](#28-uiux-improvements-pmat-012) | **UI/UX Improvements (PMAT-012)** | **10/10 DONE** |
-| [**29**](#29-computebrick-scoring-framework) | **ComputeBrick Scoring Framework** | **0-100 SCORE** |
+| [**29**](#29-computebrick-scoring-framework) | **ComputeBrick Scoring Framework** | **✅ IMPLEMENTED** |
 | [A](#appendix-a-keyboard-controls-reference) | Keyboard Controls Reference | - |
 | [B](#appendix-b-configuration-file-format) | Configuration File Format | - |
 
@@ -6575,7 +6575,14 @@ canvas.draw_text(&bar, point, &TextStyle { color, ..Default::default() });
 | No outliers | Within 3σ | 4 pts |
 | Reproducible | Same result on re-run | 3 pts |
 
-### 29.6 ComputeBrick Score API
+### 29.6 ComputeBrick Score API ✅ IMPLEMENTED
+
+**Status**: Complete (2026-01-10)
+**Files**:
+- `crates/cbtop/src/brick.rs` - BrickScore, BrickGrade, Scorable trait
+- `crates/cbtop/src/bricks/generators/simd.rs` - Scorable impl for SimdLoadBrick
+
+**Test Coverage**: 12 unit tests (F501-F505 + helpers)
 
 ```rust
 /// ComputeBrick quality score (0-100)
@@ -6591,23 +6598,37 @@ impl BrickScore {
         self.performance + self.efficiency + self.correctness + self.stability
     }
 
-    pub fn grade(&self) -> &'static str {
+    pub fn grade(&self) -> BrickGrade {
         match self.total() {
-            90..=100 => "A (Excellent)",
-            80..=89 => "B (Good)",
-            70..=79 => "C (Acceptable)",
-            60..=69 => "D (Needs Improvement)",
-            _ => "F (Failing)",
+            90..=100 => BrickGrade::A,
+            80..=89 => BrickGrade::B,
+            70..=79 => BrickGrade::C,
+            60..=69 => BrickGrade::D,
+            _ => BrickGrade::F,
         }
     }
+
+    /// Calculate performance score from GFLOP/s vs theoretical peak
+    pub fn score_performance(actual_gflops: f64, theoretical_gflops: f64) -> u8;
+
+    /// Calculate performance score from speedup vs scalar baseline
+    pub fn score_speedup(speedup: f64) -> u8;
+
+    /// Calculate stability score from Coefficient of Variation
+    pub fn score_cv(cv_percent: f64) -> u8;
 }
+
+/// Letter grade for BrickScore (A > B > C > D > F ordering)
+pub enum BrickGrade { A, B, C, D, F }
 
 /// Trait extension for scoring ComputeBricks
 pub trait Scorable: Brick {
     fn score(&self) -> BrickScore;
-    fn score_report(&self) -> String;
+    fn score_report(&self) -> String;  // TUI-friendly formatted report
 }
 ```
+
+**Command**: `cargo test -p cbtop brick::tests::f50`
 
 ### 29.7 Example Score Report
 
@@ -6652,15 +6673,17 @@ The Load panel (key `7`) displays real-time ComputeBrick scores:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 29.9 Falsification Criteria for Scoring
+### 29.9 Falsification Criteria for Scoring ✅ ALL PASS
 
-| ID | Criterion | Falsification Method |
-|----|-----------|---------------------|
-| F501 | Performance score accurate | Compare GFLOP/s with Nsight profiler |
-| F502 | Efficiency score reflects backend | Verify AVX2 > SSE2 > Scalar scoring |
-| F503 | Correctness detects failures | Inject NaN, verify score drops |
-| F504 | Stability detects variance | Introduce random delay, verify CV increases |
-| F505 | Total score is sum of components | `total == perf + eff + corr + stab` |
+| ID | Criterion | Falsification Method | Status |
+|----|-----------|---------------------|--------|
+| F501 | Performance score accurate | Compare GFLOP/s with Nsight profiler | ✅ PASS |
+| F502 | Efficiency score reflects backend | Verify AVX2 > SSE2 > Scalar scoring | ✅ PASS |
+| F503 | Correctness detects failures | Inject NaN, verify score drops | ✅ PASS |
+| F504 | Stability detects variance | Introduce random delay, verify CV increases | ✅ PASS |
+| F505 | Total score is sum of components | `total == perf + eff + corr + stab` | ✅ PASS |
+
+**Test Command**: `cargo test -p cbtop brick::tests::f50`
 
 ### 29.10 References
 
