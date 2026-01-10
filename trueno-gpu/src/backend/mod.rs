@@ -50,7 +50,10 @@ impl Backend for CudaBackend {
     }
 }
 
-/// Metal backend (Apple GPUs) - placeholder
+/// Metal backend (Apple GPUs)
+///
+/// Uses manzana crate for safe Rust Metal bindings on macOS.
+/// Enable with `--features metal` on macOS.
 #[derive(Debug, Default)]
 pub struct MetalBackend;
 
@@ -59,14 +62,30 @@ impl Backend for MetalBackend {
         "Metal"
     }
 
+    #[cfg(all(target_os = "macos", feature = "metal"))]
     fn is_available(&self) -> bool {
-        false // Not implemented yet
+        manzana::metal::is_available()
     }
 
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
+    fn is_available(&self) -> bool {
+        false
+    }
+
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    fn device_count(&self) -> usize {
+        manzana::metal::MetalCompute::devices().len()
+    }
+
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     fn device_count(&self) -> usize {
         0
     }
 }
+
+/// Metal device information (re-exported from manzana when feature enabled)
+#[cfg(all(target_os = "macos", feature = "metal"))]
+pub use manzana::metal::{CompiledShader as MetalShader, MetalBuffer, MetalCompute, MetalDevice};
 
 /// Vulkan backend (cross-platform) - placeholder
 #[derive(Debug, Default)]
@@ -156,9 +175,19 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     fn test_metal_backend_unavailable() {
         let backend = MetalBackend;
         assert!(!backend.is_available());
+    }
+
+    #[test]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    fn test_metal_backend_available() {
+        let backend = MetalBackend;
+        // On macOS with metal feature, should detect GPUs
+        assert!(backend.is_available(), "Metal should be available on macOS");
+        assert!(backend.device_count() > 0, "Should have at least one Metal device");
     }
 
     #[test]
@@ -200,9 +229,18 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(all(target_os = "macos", feature = "metal")))]
     fn test_metal_backend_device_count() {
         let backend = MetalBackend;
         assert_eq!(backend.device_count(), 0);
+    }
+
+    #[test]
+    #[cfg(all(target_os = "macos", feature = "metal"))]
+    fn test_metal_backend_device_count_macos() {
+        let backend = MetalBackend;
+        // On macOS with metal feature, should have at least 1 GPU
+        assert!(backend.device_count() >= 1, "Should have at least one Metal device");
     }
 
     #[test]
