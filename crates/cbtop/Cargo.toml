@@ -45,6 +45,8 @@ libc = "0.2"
 
 [dev-dependencies]
 proptest = "1"
+# TUI pixel-level testing framework
+jugar-probar = { path = "../../../probar/crates/probar" }
 
 [features]
 default = []
