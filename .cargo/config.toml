@@ -1,4 +1,7 @@
-# Temporary coverage config - DO NOT COMMIT
-# Replaces project config during coverage runs
+# trueno cargo configuration
 [build]
-target-dir = "/mnt/zram/coverage/trueno"
+target-dir = "target"
+
+# Deny warnings on CI
+# [build]
+# rustflags = ["-D", "warnings"]
