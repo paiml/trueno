@@ -6183,7 +6183,74 @@ cargo test -p trueno-gpu --test rocm_backend_f111        # PMAT-007 / FKR-012 (R
 cargo test -p trueno-gpu --features cuda
 ```
 
-### 26.3 Falsification Protocol
+### 26.3 TUI Pixel-Level Testing (jugar-probar)
+
+cbtop uses `jugar-probar` for Playwright-style TUI acceptance testing with 100% pixel coverage.
+
+#### Test Commands
+
+```bash
+# Run TUI pixel tests (F301 suite)
+cargo test -p cbtop --test tui_pixel_f301
+
+# Run all cbtop tests including TUI
+cargo test -p cbtop
+
+# Run with verbose output
+cargo test -p cbtop --test tui_pixel_f301 -- --nocapture
+```
+
+#### Playbook Testing
+
+Playbooks define state machine tests for TUI interactions:
+
+```bash
+# Location: crates/cbtop/playbooks/cbtop_uat.yaml
+
+# Run playbook (requires probador CLI)
+probador run crates/cbtop/playbooks/cbtop_uat.yaml
+```
+
+#### F301 TUI Test Coverage
+
+| Test | Description | Status |
+|------|-------------|--------|
+| f301_title_bar_contains_hardware_info | Title bar shows cbtop, cores, RAM | ✅ |
+| f301_panel_navigation_tab_bar_visible | All 9 panel keys visible (1-9) | ✅ |
+| f301_cpu_usage_bar_rendered | CPU bar with █░ characters | ✅ |
+| f301_memory_breakdown_visible | Memory and Swap sections | ✅ |
+| f301_per_core_cpu_bars | Core 0, Core 1, etc. | ✅ |
+| f301_gpu_panel_metrics | Utilization, Temp, Power | ✅ |
+| f301_network_panel_tx_rx | TX/RX rates in MB/s | ✅ |
+| f301_disk_panel_mounts | Mount points with usage | ✅ |
+| f301_status_bar_gflops | GFLOP/s throughput | ✅ |
+| f301_color_gradient_bars | Unicode block characters | ✅ |
+| f301_responsive_box_drawing | Box drawing: ┌┐└┘│─ | ✅ |
+| f301_load_status_indicator | RUNNING/STOPPED status | ✅ |
+| f301_frame_dimensions_valid | Width >70, Height >=20 | ✅ |
+| f301_soft_assertions_collect_errors | Soft assertion mode | ✅ |
+
+**Total: 14/14 TUI pixel tests passing**
+
+#### Playbook Coverage Matrix
+
+```yaml
+coverage:
+  panels: [overview, cpu, gpu, pcie, memory, thermal, load, config, help]
+  features:
+    - title_bar
+    - tab_navigation
+    - cpu_bars
+    - memory_breakdown
+    - network_tx_rx
+    - disk_mounts
+    - gpu_metrics
+    - status_bar
+    - color_gradients
+    - braille_graphs
+```
+
+### 26.4 Falsification Protocol
 
 ```bash
 # Generate FKR report
