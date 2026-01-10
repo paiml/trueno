@@ -269,6 +269,62 @@ impl MemoryBreakdown {
     }
 }
 
+/// Network metrics (PMAT-012 UI-07 P2)
+#[derive(Debug, Clone, Default)]
+pub struct NetworkMetrics {
+    /// Total bytes received
+    pub rx_bytes: u64,
+    /// Total bytes transmitted
+    pub tx_bytes: u64,
+    /// Receive rate in bytes/sec
+    pub rx_rate: f64,
+    /// Transmit rate in bytes/sec
+    pub tx_rate: f64,
+}
+
+impl NetworkMetrics {
+    /// Format bytes as human-readable rate
+    pub fn format_rate(bytes_per_sec: f64) -> String {
+        if bytes_per_sec >= 1_073_741_824.0 {
+            format!("{:.1} GB/s", bytes_per_sec / 1_073_741_824.0)
+        } else if bytes_per_sec >= 1_048_576.0 {
+            format!("{:.1} MB/s", bytes_per_sec / 1_048_576.0)
+        } else if bytes_per_sec >= 1024.0 {
+            format!("{:.1} KB/s", bytes_per_sec / 1024.0)
+        } else {
+            format!("{:.0} B/s", bytes_per_sec)
+        }
+    }
+}
+
+/// Disk metrics (PMAT-012 UI-08 P2)
+#[derive(Debug, Clone, Default)]
+pub struct DiskMetrics {
+    /// Mount point
+    pub mount: String,
+    /// Total space in bytes
+    pub total_bytes: u64,
+    /// Used space in bytes
+    pub used_bytes: u64,
+    /// Usage percentage
+    pub usage_percent: f64,
+}
+
+impl DiskMetrics {
+    /// Format bytes as human-readable
+    pub fn format_bytes(bytes: u64) -> String {
+        if bytes >= 1_099_511_627_776 {
+            format!("{:.1}T", bytes as f64 / 1_099_511_627_776.0)
+        } else if bytes >= 1_073_741_824 {
+            format!("{:.1}G", bytes as f64 / 1_073_741_824.0)
+        } else if bytes >= 1_048_576 {
+            format!("{:.1}M", bytes as f64 / 1_048_576.0)
+        } else {
+            format!("{:.1}K", bytes as f64 / 1024.0)
+        }
+    }
+}
+
 /// Real-time load metrics
 #[derive(Debug, Clone, Default)]
 pub struct LoadMetrics {
@@ -288,6 +344,10 @@ pub struct LoadMetrics {
     pub bytes_per_second: f64,
     /// Memory breakdown (PMAT-012 UI-04)
     pub memory: MemoryBreakdown,
+    /// Network metrics (PMAT-012 UI-07 P2)
+    pub network: NetworkMetrics,
+    /// Disk metrics (PMAT-012 UI-08 P2)
+    pub disks: Vec<DiskMetrics>,
 }
 
 /// Application state
@@ -322,6 +382,8 @@ pub struct CbtopApp {
     frame_times: RingBuffer<f64>,
     /// Last CPU stat for delta calculation
     last_cpu_stat: Option<(u64, u64)>,
+    /// Last network stat for rate calculation (rx_bytes, tx_bytes, time)
+    last_network_stat: Option<(u64, u64, Instant)>,
 
     /// Panel Bricks
     overview_panel: OverviewPanelBrick,
@@ -376,6 +438,7 @@ impl CbtopApp {
             bricks_history: RingBuffer::new(120),
             frame_times: RingBuffer::new(60),
             last_cpu_stat: None,
+            last_network_stat: None,
             overview_panel: OverviewPanelBrick::new(),
             cpu_panel: CpuPanelBrick::new(),
             gpu_panel: GpuPanelBrick::new(),
@@ -487,6 +550,12 @@ impl CbtopApp {
         // Read memory breakdown from /proc/meminfo (PMAT-012 UI-04)
         self.load_metrics.memory = Self::read_memory();
 
+        // Read network metrics from /proc/net/dev (PMAT-012 UI-07 P2)
+        self.load_metrics.network = self.read_network();
+
+        // Read disk metrics from statvfs (PMAT-012 UI-08 P2)
+        self.load_metrics.disks = Self::read_disks();
+
         // Track frame time
         let now = Instant::now();
         let frame_ms = now.duration_since(self.last_frame).as_secs_f64() * 1000.0;
@@ -519,6 +588,123 @@ impl CbtopApp {
             }
         }
         MemoryBreakdown::default()
+    }
+
+    /// Read network metrics from /proc/net/dev (PMAT-012 UI-07 P2)
+    fn read_network(&mut self) -> NetworkMetrics {
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(contents) = std::fs::read_to_string("/proc/net/dev") {
+                let mut total_rx: u64 = 0;
+                let mut total_tx: u64 = 0;
+
+                for line in contents.lines().skip(2) {
+                    // Skip header lines
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 10 {
+                        let iface = parts[0].trim_end_matches(':');
+                        // Skip loopback
+                        if iface == "lo" {
+                            continue;
+                        }
+                        let rx: u64 = parts[1].parse().unwrap_or(0);
+                        let tx: u64 = parts[9].parse().unwrap_or(0);
+                        total_rx += rx;
+                        total_tx += tx;
+                    }
+                }
+
+                let now = Instant::now();
+                let (rx_rate, tx_rate) = if let Some((prev_rx, prev_tx, prev_time)) = self.last_network_stat {
+                    let elapsed = now.duration_since(prev_time).as_secs_f64();
+                    if elapsed > 0.0 {
+                        let rx_delta = total_rx.saturating_sub(prev_rx) as f64;
+                        let tx_delta = total_tx.saturating_sub(prev_tx) as f64;
+                        (rx_delta / elapsed, tx_delta / elapsed)
+                    } else {
+                        (0.0, 0.0)
+                    }
+                } else {
+                    (0.0, 0.0)
+                };
+
+                self.last_network_stat = Some((total_rx, total_tx, now));
+
+                return NetworkMetrics {
+                    rx_bytes: total_rx,
+                    tx_bytes: total_tx,
+                    rx_rate,
+                    tx_rate,
+                };
+            }
+        }
+        NetworkMetrics::default()
+    }
+
+    /// Read disk metrics using statvfs (PMAT-012 UI-08 P2)
+    fn read_disks() -> Vec<DiskMetrics> {
+        let mut disks = Vec::new();
+
+        #[cfg(target_os = "linux")]
+        {
+            // Read mounts from /proc/mounts and get stats for common ones
+            if let Ok(contents) = std::fs::read_to_string("/proc/mounts") {
+                for line in contents.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let mount = parts[1];
+                        let fstype = parts.get(2).unwrap_or(&"");
+
+                        // Only include real filesystems on common mounts
+                        if !matches!(*fstype, "ext4" | "xfs" | "btrfs" | "zfs" | "ntfs" | "vfat") {
+                            continue;
+                        }
+                        // Skip if not a standard mount
+                        if !mount.starts_with("/home") && mount != "/" && !mount.starts_with("/mnt") {
+                            continue;
+                        }
+
+                        // Use nix or libc statvfs
+                        #[cfg(unix)]
+                        {
+                            use std::ffi::CString;
+                            use std::mem::MaybeUninit;
+
+                            if let Ok(c_path) = CString::new(mount) {
+                                let mut stat = MaybeUninit::<libc::statvfs>::uninit();
+                                let result = unsafe { libc::statvfs(c_path.as_ptr(), stat.as_mut_ptr()) };
+                                if result == 0 {
+                                    let stat = unsafe { stat.assume_init() };
+                                    let block_size = stat.f_frsize as u64;
+                                    let total = stat.f_blocks * block_size;
+                                    let available = stat.f_bavail * block_size;
+                                    let used = total.saturating_sub(available);
+                                    let usage_pct = if total > 0 {
+                                        (used as f64 / total as f64) * 100.0
+                                    } else {
+                                        0.0
+                                    };
+
+                                    disks.push(DiskMetrics {
+                                        mount: mount.to_string(),
+                                        total_bytes: total,
+                                        used_bytes: used,
+                                        usage_percent: usage_pct,
+                                    });
+
+                                    // Limit to 3 disks for display
+                                    if disks.len() >= 3 {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        disks
     }
 
     /// Read real CPU usage from /proc/stat (aggregate and per-core)
@@ -968,6 +1154,54 @@ impl CbtopApp {
 
             let gpu_box_bottom = format!("└{}┘", "─".repeat(inner_width));
             canvas.draw_text(&gpu_box_bottom, Point::new(1.0, current_y), &dim_style);
+            current_y += 2.0;
+        }
+
+        // PMAT-012 UI-07 P2: Network TX/RX panel
+        if (metrics.network.rx_rate > 0.0 || metrics.network.tx_rate > 0.0) && current_y < height as f32 - 8.0 {
+            let net_box_top = format!("┌─ Network {}┐", "─".repeat(inner_width.saturating_sub(11)));
+            canvas.draw_text(&net_box_top, Point::new(1.0, current_y), &dim_style);
+            current_y += 1.0;
+
+            let rx_str = NetworkMetrics::format_rate(metrics.network.rx_rate);
+            let tx_str = NetworkMetrics::format_rate(metrics.network.tx_rate);
+            canvas.draw_text(&format!("│ ↓ RX: {:>12}  ↑ TX: {:>12} ", rx_str, tx_str),
+                Point::new(1.0, current_y), &dim_style);
+            canvas.draw_text("│", Point::new(box_width as f32, current_y), &dim_style);
+            current_y += 1.0;
+
+            let net_box_bottom = format!("└{}┘", "─".repeat(inner_width));
+            canvas.draw_text(&net_box_bottom, Point::new(1.0, current_y), &dim_style);
+            current_y += 2.0;
+        }
+
+        // PMAT-012 UI-08 P2: Disk per-mount panel
+        if !metrics.disks.is_empty() && current_y < height as f32 - 6.0 {
+            let disk_box_top = format!("┌─ Disks {}┐", "─".repeat(inner_width.saturating_sub(10)));
+            canvas.draw_text(&disk_box_top, Point::new(1.0, current_y), &dim_style);
+            current_y += 1.0;
+
+            for disk in metrics.disks.iter().take(3) {
+                let used_str = DiskMetrics::format_bytes(disk.used_bytes);
+                let total_str = DiskMetrics::format_bytes(disk.total_bytes);
+                let mount_short: String = disk.mount.chars().take(15).collect();
+                let disk_bar = Self::make_mini_bar(disk.usage_percent, 100.0, 10);
+
+                canvas.draw_text(&format!("│ {:15} ", mount_short), Point::new(1.0, current_y), &dim_style);
+                canvas.draw_text(&disk_bar, Point::new(18.0, current_y),
+                    &TextStyle { color: theme.memory_color(disk.usage_percent), ..Default::default() });
+                canvas.draw_text(&format!(" {:>6}/{:>6} ({:.0}%)", used_str, total_str, disk.usage_percent),
+                    Point::new(29.0, current_y), &dim_style);
+                canvas.draw_text("│", Point::new(box_width as f32, current_y), &dim_style);
+                current_y += 1.0;
+
+                if current_y > height as f32 - 5.0 {
+                    break;
+                }
+            }
+
+            let disk_box_bottom = format!("└{}┘", "─".repeat(inner_width));
+            canvas.draw_text(&disk_box_bottom, Point::new(1.0, current_y), &dim_style);
             current_y += 2.0;
         }
 
