@@ -1,6 +1,6 @@
 # Compute Block TUI Specification: cbtop
 
-**Version**: 2.0.0
+**Version**: 2.1.0
 **Status**: Approved
 **Author**: Trueno Engineering
 **Date**: 2026-01-10
@@ -49,6 +49,7 @@
 | [**24**](#24-pmat-tickets) | **PMAT Tickets** | **3/10** |
 | [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **12 entries** |
 | [**26**](#26-implementation-commands) | **Implementation Commands** | - |
+| [**27**](#27-real-load-generation-architecture) | **Real Load Generation Architecture** | **MANDATORY** |
 | [A](#appendix-a-keyboard-controls-reference) | Keyboard Controls Reference | - |
 | [B](#appendix-b-configuration-file-format) | Configuration File Format | - |
 
@@ -67,6 +68,7 @@
 | 1.5.0   | 2026-01-10 | Trueno Engineering | Architecture Lead | Approved | Added §16-21: Multi-GPU, Quantization, KV Cache, Batching, Config, Project Matrix; PMAT roadmap tracking (CBTOP-SPEC-001); batuta/wos/pepita integrations |
 | 1.6.0   | 2026-01-10 | Trueno Engineering | Architecture Lead | Approved | Added §21.6: trueno-zram integration with ComputeBricks, ByteBudget, ZRAM panel, F221-F240 falsification criteria |
 | 2.0.0   | 2026-01-10 | Trueno Engineering | Architecture Lead | Approved | Unified spec: §23 TDG Scoring, §24 Full PMAT Tickets (10), §25 FKR Registry (12), §26 Commands. 36 citations. |
+| 2.1.0   | 2026-01-10 | Trueno Engineering | Architecture Lead | Approved | §27 Real Load Generation Architecture. NO FAKE METRICS. 42 citations. [Gregg 2020], [Hennessy 2017], [Jain 1991], [Little 1961]. |
 
 ---
 
@@ -6115,5 +6117,173 @@ make coverage && pmat analyze coverage-fkr
 
 ---
 
+## 27. Real Load Generation Architecture
+
+### 27.1 Design Principle: No Simulated Metrics
+
+**CRITICAL REQUIREMENT**: cbtop MUST generate and measure REAL compute loads. Fake/simulated metrics are strictly prohibited.
+
+**Violations of this principle**:
+- Hardcoded CPU percentages (e.g., `cpu_usage = 45.2`)
+- Random noise generation instead of actual compute
+- Mock GPU utilization values
+- Simulated throughput without actual operations
+
+**Citations**:
+- [Gregg, 2020] **Gregg, B. (2020). "Systems Performance: Enterprise and the Cloud"** 2nd ed., Addison-Wesley. ISBN: 978-0-13-682015-4. Chapter 2 "Observability" establishes that performance tools must measure actual system state, not synthetic approximations.
+- [Hennessy & Patterson, 2017] **Hennessy, J.L. & Patterson, D.A. (2017). "Computer Architecture: A Quantitative Approach"** 6th ed., Morgan Kaufmann. ISBN: 978-0-12-811905-1. Section 1.8 "Measuring Performance" mandates real workloads for valid benchmarks.
+- [Jain, 1991] **Jain, R. (1991). "The Art of Computer Systems Performance Analysis"** Wiley. ISBN: 978-0-471-50336-1. Chapter 3 "Workload Characterization" requires representative, not synthetic, workloads.
+
+### 27.2 Hardware Detection Requirements
+
+Real hardware information MUST be detected and displayed at startup:
+
+```rust
+/// Hardware information detected at startup
+/// Citations: [Gregg 2020] "Systems Performance" §6.3.1
+pub struct HardwareInfo {
+    /// CPU model string from /proc/cpuinfo
+    pub cpu_model: String,
+    /// Physical CPU cores from sysfs/libc
+    pub cpu_cores: usize,
+    /// Detected SIMD capability (AVX-512/AVX2/AVX/SSE4.2/NEON)
+    pub simd_type: &'static str,
+    /// GPU name from NVML/Metal/ROCm (if available)
+    pub gpu_name: Option<String>,
+    /// Total system RAM in GB
+    pub memory_gb: f64,
+}
+```
+
+**Detection Methods** (per [Gregg 2020] "Systems Performance" observability stack):
+
+| Property | Linux Source | macOS Source | Citation |
+|----------|--------------|--------------|----------|
+| CPU Model | `/proc/cpuinfo` | `sysctl hw.model` | [Gregg 2020] §6.3.1 |
+| CPU Cores | `std::thread::available_parallelism()` | Same | [Hennessy 2017] §1.7 |
+| SIMD Type | `is_x86_feature_detected!()` | NEON always | [Intel 2023] SDM Vol.1 |
+| GPU Name | NVML `nvmlDeviceGetName` | Metal `device.name` | [NVIDIA 2023] NVML API |
+| Memory | `/proc/meminfo` | `sysctl hw.memsize` | [Gregg 2020] §7.3 |
+
+### 27.3 Real CPU Utilization Measurement
+
+CPU utilization MUST be measured from actual kernel counters, not estimated:
+
+```rust
+/// Read real CPU usage from /proc/stat
+/// Citation: [Gregg 2020] "Systems Performance" §6.5.1 "CPU Utilization"
+fn read_cpu_usage(&mut self) -> f64 {
+    // Parse /proc/stat for user, nice, system, idle, iowait, irq, softirq, steal
+    // Calculate delta between samples: (total_active_delta / total_delta) * 100
+}
+```
+
+**Formula** (per [Gregg 2020] §6.5.1):
+```
+CPU% = 100 × (Δuser + Δnice + Δsystem + Δirq + Δsoftirq + Δsteal) / Δtotal
+```
+
+Where `Δtotal = Δuser + Δnice + Δsystem + Δidle + Δiowait + Δirq + Δsoftirq + Δsteal`
+
+### 27.4 Real Compute Load Generation
+
+Load generators MUST execute actual compute operations:
+
+```rust
+/// Real SIMD load generation using trueno primitives
+/// Citation: [Hennessy 2017] "Computer Architecture" §4.3 "SIMD Extensions"
+impl SimdLoadBrick {
+    /// Execute one iteration of real compute work
+    pub fn run_iteration(&mut self) -> Duration {
+        let start = Instant::now();
+
+        // REAL compute: Vector operations using trueno SIMD backend
+        match self.workload {
+            WorkloadType::Gemm => {
+                // Actual matrix multiplication, not simulation
+                trueno::matmul(&self.input_a, &self.input_b, &mut self.output);
+            }
+            WorkloadType::Dot => {
+                // Actual dot product computation
+                self.output[0] = trueno::dot(&self.input_a, &self.input_b);
+            }
+            WorkloadType::Bandwidth => {
+                // Actual memory streaming (load + store)
+                self.output.copy_from_slice(&self.input_a);
+            }
+        }
+
+        start.elapsed()
+    }
+}
+```
+
+### 27.5 Bricks/Second Throughput Metric
+
+**Definition**: Bricks/Second measures the rate of completed `ComputeBrick` operations per second.
+
+```rust
+/// Real-time load metrics measured from actual compute
+/// Citation: [Little 1961] "A Proof for the Queuing Formula: L = λW"
+pub struct LoadMetrics {
+    /// Bricks completed per second (primary throughput metric)
+    pub bricks_per_second: f64,
+    /// Total bricks completed since start
+    pub total_bricks: u64,
+    /// Average brick latency in microseconds
+    pub avg_latency_us: f64,
+    /// Real CPU utilization from /proc/stat
+    pub cpu_usage: f64,
+    /// FLOPS achieved (computed from brick operations)
+    pub ops_per_second: f64,
+    /// Memory bandwidth (bytes processed per second)
+    pub bytes_per_second: f64,
+}
+```
+
+**Derivation** (per [Little 1961]):
+```
+Bricks/sec = Total_Bricks / Elapsed_Seconds
+Avg_Latency = Sum(brick_duration) / Total_Bricks
+Throughput = Bricks/sec × Ops_per_Brick
+```
+
+### 27.6 Display Requirements
+
+The TUI MUST fill available space and display actual hardware during load tests:
+
+| Panel | Required Information | Source |
+|-------|---------------------|--------|
+| Title Bar | CPU model, SIMD type | `HardwareInfo` |
+| CPU Panel | Real utilization %, sparkline history | `/proc/stat` |
+| GPU Panel | Real GPU %, memory usage | NVML/Metal |
+| Metrics Panel | Bricks/sec, Total Bricks, Latency | `LoadMetrics` |
+| Hardware Panel | Cores, RAM, GPU name | `HardwareInfo` |
+
+### 27.7 Falsification Criteria for Real Load Generation
+
+| ID | Criterion | Falsification Method |
+|----|-----------|---------------------|
+| F301 | CPU% matches /proc/stat | Compare cbtop vs `mpstat` |
+| F302 | Bricks/sec non-zero during load | Assert `bricks_per_second > 0` when running |
+| F303 | No hardcoded metric values | Static analysis for literal assignments |
+| F304 | Hardware detection succeeds | Assert `cpu_model` not empty |
+| F305 | SIMD type correctly detected | Compare with `cpuid` output |
+| F306 | Load generates measurable CPU usage | CPU% > 10% during heavy load |
+| F307 | Metrics update in real-time | Verify timestamps advance |
+
+### 27.8 Peer-Reviewed References (Real Load Generation)
+
+| ID | Citation | Relevance |
+|----|----------|-----------|
+| [1] | **Gregg, B. (2020). "Systems Performance"** Addison-Wesley. ISBN: 978-0-13-682015-4 | Canonical reference for observability and real measurement |
+| [2] | **Hennessy & Patterson (2017). "Computer Architecture"** 6th ed. ISBN: 978-0-12-811905-1 | Performance measurement methodology |
+| [3] | **Jain, R. (1991). "Art of Performance Analysis"** Wiley. ISBN: 978-0-471-50336-1 | Workload characterization requirements |
+| [4] | **Little, J.D.C. (1961). "A Proof for L = λW"** Operations Research 9(3):383-387. DOI:10.1287/opre.9.3.383 | Throughput-latency relationship |
+| [5] | **Intel (2023). "Software Developer's Manual Vol.1"** Ch. 13 "SIMD Instructions" | SIMD feature detection |
+| [6] | **NVIDIA (2023). "NVML Reference Manual"** developer.nvidia.com | GPU metrics collection |
+
+---
+
 *Generated by Trueno Engineering. PMAT tracked. Toyota Way institutionalized.*
-*Total Citations: 36 (3 per ticket × 10 tickets + 6 bonus)*
+*Total Citations: 42 (36 original + 6 real load generation)*
