@@ -765,48 +765,48 @@ roadmap:
   - id: CBTOP-SPEC-001.1
     github_issue: null
     title: Implement ComputeBrick in src/brick.rs
-    status: planned
-    completion: 0
+    status: completed
+    completion: 100
   - id: CBTOP-SPEC-001.2
     github_issue: null
     title: Create trueno-cupti sub-crate
-    status: planned
-    completion: 0
+    status: completed
+    completion: 100
   - id: CBTOP-SPEC-001.3
     github_issue: null
     title: Create cbtop binary scaffold
-    status: planned
-    completion: 0
+    status: completed
+    completion: 100
   - id: CBTOP-SPEC-001.4
     github_issue: null
     title: Implement GPU panel with nvidia-smi/CUPTI
-    status: planned
-    completion: 0
+    status: completed
+    completion: 100
   - id: CBTOP-SPEC-001.5
     github_issue: null
     title: Add batuta manifest entry
-    status: planned
-    completion: 0
+    status: completed
+    completion: 100
   - id: CBTOP-SPEC-001.6
     github_issue: null
     title: Integrate wos kernel metrics
-    status: planned
-    completion: 0
+    status: completed
+    completion: 100
   - id: CBTOP-SPEC-001.7
     github_issue: null
     title: Integrate pepita io_uring metrics
-    status: planned
-    completion: 0
+    status: completed
+    completion: 100
   - id: CBTOP-SPEC-001.8
     github_issue: null
     title: 200-point falsification validation
-    status: planned
-    completion: 0
+    status: completed
+    completion: 100
   - id: CBTOP-SPEC-001.9
     github_issue: null
     title: Integrate trueno-zram ZRAM panel and ComputeBricks
-    status: planned
-    completion: 0
+    status: completed
+    completion: 100
   estimated_effort: 2-3 weeks
   labels:
   - tui
