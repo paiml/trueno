@@ -6655,7 +6655,15 @@ Recommendations:
   ○ Consider GPU backend for problem_size > 100K
 ```
 
-### 29.8 Scoring Integration with cbtop
+### 29.8 Scoring Integration with cbtop ✅ IMPLEMENTED
+
+**Status**: Complete (2026-01-10)
+**File**: `crates/cbtop/src/bricks/panels/load.rs`
+
+**API**:
+- `LoadControlPanelBrick::update_score(score: BrickScore, gflops: f64)` - Update score from ComputeBrick
+- Score breakdown rendered with progress bars when score is set
+- Grade-colored display (Green: A/B, Yellow: C, Red: D/F)
 
 The Load panel (key `7`) displays real-time ComputeBrick scores:
 
