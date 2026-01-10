@@ -243,6 +243,8 @@ pub struct LoadMetrics {
     pub avg_latency_us: f64,
     /// Measured CPU usage from /proc/stat
     pub cpu_usage: f64,
+    /// Per-core CPU usage (PMAT-012 UI-02)
+    pub per_core_usage: Vec<f64>,
     /// Operations per second (FLOPS for GEMM)
     pub ops_per_second: f64,
     /// Bytes processed per second
@@ -451,33 +453,49 @@ impl CbtopApp {
         self.frame_count += 1;
     }
 
-    /// Read real CPU usage from /proc/stat
+    /// Read real CPU usage from /proc/stat (aggregate and per-core)
     fn read_cpu_usage(&mut self) -> f64 {
         #[cfg(target_os = "linux")]
         {
             if let Ok(contents) = std::fs::read_to_string("/proc/stat") {
-                if let Some(line) = contents.lines().next() {
-                    let parts: Vec<&str> = line.split_whitespace().collect();
-                    if parts.len() >= 5 {
-                        let user: u64 = parts[1].parse().unwrap_or(0);
-                        let nice: u64 = parts[2].parse().unwrap_or(0);
-                        let system: u64 = parts[3].parse().unwrap_or(0);
-                        let idle: u64 = parts[4].parse().unwrap_or(0);
+                let mut aggregate_usage = 0.0;
+                let mut per_core: Vec<f64> = Vec::new();
 
-                        let total = user + nice + system + idle;
-                        let active = user + nice + system;
+                for line in contents.lines() {
+                    if line.starts_with("cpu") {
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 5 {
+                            let user: u64 = parts[1].parse().unwrap_or(0);
+                            let nice: u64 = parts[2].parse().unwrap_or(0);
+                            let system: u64 = parts[3].parse().unwrap_or(0);
+                            let idle: u64 = parts[4].parse().unwrap_or(0);
 
-                        if let Some((prev_active, prev_total)) = self.last_cpu_stat {
-                            let delta_active = active.saturating_sub(prev_active);
-                            let delta_total = total.saturating_sub(prev_total);
-                            if delta_total > 0 {
+                            let total = user + nice + system + idle;
+                            let active = user + nice + system;
+
+                            if parts[0] == "cpu" {
+                                // Aggregate CPU line
+                                if let Some((prev_active, prev_total)) = self.last_cpu_stat {
+                                    let delta_active = active.saturating_sub(prev_active);
+                                    let delta_total = total.saturating_sub(prev_total);
+                                    if delta_total > 0 {
+                                        aggregate_usage = (delta_active as f64 / delta_total as f64) * 100.0;
+                                    }
+                                }
                                 self.last_cpu_stat = Some((active, total));
-                                return (delta_active as f64 / delta_total as f64) * 100.0;
+                            } else if parts[0].starts_with("cpu") {
+                                // Per-core CPU line (cpu0, cpu1, etc.)
+                                // Calculate instantaneous usage (simplified - no delta tracking per core)
+                                if total > 0 {
+                                    per_core.push((active as f64 / total as f64) * 100.0);
+                                }
                             }
                         }
-                        self.last_cpu_stat = Some((active, total));
                     }
                 }
+
+                self.load_metrics.per_core_usage = per_core;
+                return aggregate_usage;
             }
         }
         // Fallback for non-Linux or on error
@@ -572,7 +590,7 @@ impl CbtopApp {
         let backend = self.backend;
         let show_fps = self.config.show_fps;
         let problem_size = self.problem_size;
-        let frame_count = self.frame_count;
+        let _frame_count = self.frame_count;
         let cpu_data: Vec<f64> = self.cpu_history.iter().copied().collect();
         let bricks_data: Vec<f64> = self.bricks_history.iter().copied().collect();
         let cpu_avg = self.cpu_history.mean();
@@ -635,7 +653,7 @@ impl CbtopApp {
     fn render_title_bar(
         canvas: &mut DirectTerminalCanvas,
         _width: u16,
-        active_panel: ActivePanel,
+        _active_panel: ActivePanel,
         hardware: &HardwareInfo,
         theme: &Theme,
     ) {
@@ -668,6 +686,7 @@ impl CbtopApp {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_main_content(
         canvas: &mut DirectTerminalCanvas,
         width: u16,
@@ -685,6 +704,11 @@ impl CbtopApp {
         let bright_style = TextStyle { color: theme.foreground, ..Default::default() };
         let accent_style = TextStyle { color: theme.cpu.sample(0.3), ..Default::default() };
 
+        // PMAT-012 UI-01: Responsive width boxes
+        let box_width = (width as usize).saturating_sub(2).max(40);
+        let inner_width = box_width.saturating_sub(2);
+        let bar_width = inner_width.saturating_sub(22).max(10);
+
         // Header line 2: Load status
         let status = if is_running { "● RUNNING" } else { "○ STOPPED" };
         let status_color = if is_running { theme.cpu.sample(0.0) } else { theme.dim };
@@ -694,78 +718,171 @@ impl CbtopApp {
             &TextStyle { color: status_color, ..Default::default() },
         );
 
-        // Metrics box (lines 3-10)
-        canvas.draw_text("┌─ Real-Time Metrics ─────────────────────────────────────────┐", Point::new(1.0, 3.0), &dim_style);
+        // Metrics box with responsive width
+        let box_top = format!("┌─ Real-Time Metrics {}┐", "─".repeat(inner_width.saturating_sub(20)));
+        canvas.draw_text(&box_top, Point::new(1.0, 3.0), &dim_style);
 
-        // CPU Usage (REAL from /proc/stat)
-        let cpu_bar = Self::make_bar(cpu_avg, 100.0, 30);
+        // CPU Usage (REAL from /proc/stat) with color gradient
+        let cpu_bar = Self::make_bar(cpu_avg, 100.0, bar_width);
         canvas.draw_text("│ CPU Usage:     ", Point::new(1.0, 4.0), &dim_style);
         canvas.draw_text(&cpu_bar, Point::new(17.0, 4.0), &TextStyle { color: theme.cpu_color(cpu_avg), ..Default::default() });
-        canvas.draw_text(&format!(" {:5.1}%", cpu_avg), Point::new(48.0, 4.0), &bright_style);
-        canvas.draw_text(" │", Point::new(62.0, 4.0), &dim_style);
+        let cpu_val_x = 17.0 + bar_width as f32 + 1.0;
+        canvas.draw_text(&format!("{:5.1}%", cpu_avg), Point::new(cpu_val_x, 4.0), &bright_style);
+        canvas.draw_text(" │", Point::new(box_width as f32, 4.0), &dim_style);
 
-        // Bricks/Second (REAL measured)
+        // Bricks/Second with color gradient based on rate
         let bps = metrics.bricks_per_second;
-        let bps_bar = Self::make_bar(bps.min(10000.0), 10000.0, 30);
+        let bps_normalized = (bps / 10000.0).min(1.0) * 100.0;
+        let bps_bar = Self::make_bar(bps.min(10000.0), 10000.0, bar_width);
         canvas.draw_text("│ Bricks/sec:    ", Point::new(1.0, 5.0), &dim_style);
-        canvas.draw_text(&bps_bar, Point::new(17.0, 5.0), &accent_style);
-        canvas.draw_text(&format!(" {:>7.0}", bps), Point::new(48.0, 5.0), &bright_style);
-        canvas.draw_text(" │", Point::new(62.0, 5.0), &dim_style);
+        canvas.draw_text(&bps_bar, Point::new(17.0, 5.0), &TextStyle { color: theme.cpu_color(bps_normalized), ..Default::default() });
+        canvas.draw_text(&format!("{:>7.0}", bps), Point::new(cpu_val_x, 5.0), &bright_style);
+        canvas.draw_text(" │", Point::new(box_width as f32, 5.0), &dim_style);
 
         // Total Bricks executed
+        let total_str = format!("{:>width$}", Self::format_number(metrics.total_bricks), width = inner_width.saturating_sub(17));
         canvas.draw_text("│ Total Bricks:  ", Point::new(1.0, 6.0), &dim_style);
-        canvas.draw_text(&format!("{:>36}", Self::format_number(metrics.total_bricks)), Point::new(17.0, 6.0), &bright_style);
-        canvas.draw_text(" │", Point::new(62.0, 6.0), &dim_style);
+        canvas.draw_text(&total_str, Point::new(17.0, 6.0), &bright_style);
+        canvas.draw_text(" │", Point::new(box_width as f32, 6.0), &dim_style);
 
         // Avg Latency
+        let latency_str = format!("{:>width$.1} μs", metrics.avg_latency_us, width = inner_width.saturating_sub(20));
         canvas.draw_text("│ Avg Latency:   ", Point::new(1.0, 7.0), &dim_style);
-        canvas.draw_text(&format!("{:>33.1} μs", metrics.avg_latency_us), Point::new(17.0, 7.0), &bright_style);
-        canvas.draw_text(" │", Point::new(62.0, 7.0), &dim_style);
+        canvas.draw_text(&latency_str, Point::new(17.0, 7.0), &bright_style);
+        canvas.draw_text(" │", Point::new(box_width as f32, 7.0), &dim_style);
 
         // Problem size
+        let size_str = format!("{:>width$} elements", Self::format_number(problem_size as u64), width = inner_width.saturating_sub(26));
         canvas.draw_text("│ Problem Size:  ", Point::new(1.0, 8.0), &dim_style);
-        canvas.draw_text(&format!("{:>29} elements", Self::format_number(problem_size as u64)), Point::new(17.0, 8.0), &bright_style);
-        canvas.draw_text(" │", Point::new(62.0, 8.0), &dim_style);
+        canvas.draw_text(&size_str, Point::new(17.0, 8.0), &bright_style);
+        canvas.draw_text(" │", Point::new(box_width as f32, 8.0), &dim_style);
 
         // Throughput
         let gflops = metrics.ops_per_second / 1_000_000_000.0;
         let gbps = metrics.bytes_per_second / 1_073_741_824.0;
         canvas.draw_text("│ Throughput:    ", Point::new(1.0, 9.0), &dim_style);
         canvas.draw_text(&format!("{:>10.2} GFLOP/s │ {:>10.2} GB/s", gflops, gbps), Point::new(17.0, 9.0), &accent_style);
-        canvas.draw_text(" │", Point::new(62.0, 9.0), &dim_style);
+        canvas.draw_text(" │", Point::new(box_width as f32, 9.0), &dim_style);
 
-        canvas.draw_text("└─────────────────────────────────────────────────────────────┘", Point::new(1.0, 10.0), &dim_style);
+        let box_bottom = format!("└{}┘", "─".repeat(inner_width));
+        canvas.draw_text(&box_bottom, Point::new(1.0, 10.0), &dim_style);
 
-        // Hardware box (lines 12-17)
-        canvas.draw_text("┌─ Hardware ──────────────────────────────────────────────────┐", Point::new(1.0, 12.0), &dim_style);
-        canvas.draw_text(&format!("│ CPU:  {} ", hardware.cpu_model.chars().take(55).collect::<String>()), Point::new(1.0, 13.0), &dim_style);
-        canvas.draw_text(&format!("│ Cores: {} │ SIMD: {} ", hardware.cpu_cores, hardware.simd_type), Point::new(1.0, 14.0), &dim_style);
-        if let Some(ref gpu) = hardware.gpu_name {
-            canvas.draw_text(&format!("│ GPU:  {} ", gpu.chars().take(55).collect::<String>()), Point::new(1.0, 15.0), &dim_style);
+        // PMAT-012 UI-02: Per-core CPU bars
+        let mut current_y = 12.0_f32;
+        if !metrics.per_core_usage.is_empty() && height > 20 {
+            let core_box_top = format!("┌─ Per-Core CPU {}┐", "─".repeat(inner_width.saturating_sub(15)));
+            canvas.draw_text(&core_box_top, Point::new(1.0, current_y), &dim_style);
+            current_y += 1.0;
+
+            // Render cores in rows of 4 for compact display
+            let cores_per_row = 4.min(metrics.per_core_usage.len());
+            let mini_bar_width = (inner_width / cores_per_row).saturating_sub(10).max(5);
+
+            for (i, chunk) in metrics.per_core_usage.chunks(cores_per_row).enumerate() {
+                let mut row = String::from("│ ");
+                for (j, &usage) in chunk.iter().enumerate() {
+                    let core_num = i * cores_per_row + j;
+                    let mini_bar = Self::make_mini_bar(usage, 100.0, mini_bar_width);
+                    row.push_str(&format!("C{:02}:{} ", core_num, mini_bar));
+                }
+                // Pad to box width
+                while row.len() < box_width {
+                    row.push(' ');
+                }
+                row.push('│');
+
+                // Draw with per-core color gradient
+                canvas.draw_text(&row[..3], Point::new(1.0, current_y), &dim_style);
+                let mut x_pos = 4.0;
+                for &usage in chunk.iter() {
+                    let bar_str = Self::make_mini_bar(usage, 100.0, mini_bar_width);
+                    canvas.draw_text(&bar_str, Point::new(x_pos + 4.0, current_y), &TextStyle { color: theme.cpu_color(usage), ..Default::default() });
+                    x_pos += (mini_bar_width + 10) as f32;
+                }
+                canvas.draw_text("│", Point::new(box_width as f32, current_y), &dim_style);
+                current_y += 1.0;
+
+                if current_y > height as f32 - 10.0 {
+                    break; // Don't overflow screen
+                }
+            }
+
+            let core_box_bottom = format!("└{}┘", "─".repeat(inner_width));
+            canvas.draw_text(&core_box_bottom, Point::new(1.0, current_y), &dim_style);
+            current_y += 2.0;
         } else {
-            canvas.draw_text("│ GPU:  Not detected ", Point::new(1.0, 15.0), &dim_style);
-        }
-        canvas.draw_text(&format!("│ RAM:  {:.1} GB ", hardware.memory_gb), Point::new(1.0, 16.0), &dim_style);
-        canvas.draw_text("└─────────────────────────────────────────────────────────────┘", Point::new(1.0, 17.0), &dim_style);
+            // Hardware box (original position)
+            let hw_box_top = format!("┌─ Hardware {}┐", "─".repeat(inner_width.saturating_sub(12)));
+            canvas.draw_text(&hw_box_top, Point::new(1.0, current_y), &dim_style);
+            current_y += 1.0;
 
-        // Sparkline for CPU history (if we have data)
-        if !cpu_data.is_empty() && height > 20 {
-            canvas.draw_text("┌─ CPU History ───────────────────────────────────────────────┐", Point::new(1.0, 19.0), &dim_style);
-            let sparkline = Self::make_sparkline(cpu_data, (width - 4) as usize);
-            canvas.draw_text(&format!("│ {} │", sparkline), Point::new(1.0, 20.0), &TextStyle { color: theme.cpu.sample(0.3), ..Default::default() });
-            canvas.draw_text("└─────────────────────────────────────────────────────────────┘", Point::new(1.0, 21.0), &dim_style);
+            let cpu_info = format!("│ CPU:  {:width$} │",
+                hardware.cpu_model.chars().take(inner_width.saturating_sub(10)).collect::<String>(),
+                width = inner_width.saturating_sub(8));
+            canvas.draw_text(&cpu_info, Point::new(1.0, current_y), &dim_style);
+            current_y += 1.0;
+
+            canvas.draw_text(&format!("│ Cores: {} │ SIMD: {} ", hardware.cpu_cores, hardware.simd_type), Point::new(1.0, current_y), &dim_style);
+            canvas.draw_text("│", Point::new(box_width as f32, current_y), &dim_style);
+            current_y += 1.0;
+
+            if let Some(ref gpu) = hardware.gpu_name {
+                let gpu_str = format!("│ GPU:  {:width$} │",
+                    gpu.chars().take(inner_width.saturating_sub(10)).collect::<String>(),
+                    width = inner_width.saturating_sub(8));
+                canvas.draw_text(&gpu_str, Point::new(1.0, current_y), &dim_style);
+            } else {
+                canvas.draw_text("│ GPU:  Not detected ", Point::new(1.0, current_y), &dim_style);
+                canvas.draw_text("│", Point::new(box_width as f32, current_y), &dim_style);
+            }
+            current_y += 1.0;
+
+            canvas.draw_text(&format!("│ RAM:  {:.1} GB ", hardware.memory_gb), Point::new(1.0, current_y), &dim_style);
+            canvas.draw_text("│", Point::new(box_width as f32, current_y), &dim_style);
+            current_y += 1.0;
+
+            let hw_box_bottom = format!("└{}┘", "─".repeat(inner_width));
+            canvas.draw_text(&hw_box_bottom, Point::new(1.0, current_y), &dim_style);
+            current_y += 2.0;
         }
 
-        // Sparkline for Bricks/sec history
-        if !bricks_data.is_empty() && height > 24 {
-            canvas.draw_text("┌─ Bricks/sec History ────────────────────────────────────────┐", Point::new(1.0, 23.0), &dim_style);
-            let sparkline = Self::make_sparkline(bricks_data, (width - 4) as usize);
-            canvas.draw_text(&format!("│ {} │", sparkline), Point::new(1.0, 24.0), &accent_style);
-            canvas.draw_text("└─────────────────────────────────────────────────────────────┘", Point::new(1.0, 25.0), &dim_style);
+        // PMAT-012 UI-09: Sparkline with corrected width (width - 6 for box chars + padding)
+        let sparkline_width = (width as usize).saturating_sub(6).max(10);
+
+        if !cpu_data.is_empty() && current_y < height as f32 - 8.0 {
+            let spark_box_top = format!("┌─ CPU History {}┐", "─".repeat(inner_width.saturating_sub(15)));
+            canvas.draw_text(&spark_box_top, Point::new(1.0, current_y), &dim_style);
+            current_y += 1.0;
+
+            let sparkline = Self::make_sparkline(cpu_data, sparkline_width);
+            canvas.draw_text("│ ", Point::new(1.0, current_y), &dim_style);
+            canvas.draw_text(&sparkline, Point::new(3.0, current_y), &TextStyle { color: theme.cpu.sample(0.3), ..Default::default() });
+            canvas.draw_text(" │", Point::new(box_width as f32, current_y), &dim_style);
+            current_y += 1.0;
+
+            let spark_box_bottom = format!("└{}┘", "─".repeat(inner_width));
+            canvas.draw_text(&spark_box_bottom, Point::new(1.0, current_y), &dim_style);
+            current_y += 2.0;
+        }
+
+        // Bricks/sec sparkline
+        if !bricks_data.is_empty() && current_y < height as f32 - 5.0 {
+            let brick_box_top = format!("┌─ Bricks/sec History {}┐", "─".repeat(inner_width.saturating_sub(22)));
+            canvas.draw_text(&brick_box_top, Point::new(1.0, current_y), &dim_style);
+            current_y += 1.0;
+
+            let sparkline = Self::make_sparkline(bricks_data, sparkline_width);
+            canvas.draw_text("│ ", Point::new(1.0, current_y), &dim_style);
+            canvas.draw_text(&sparkline, Point::new(3.0, current_y), &accent_style);
+            canvas.draw_text(" │", Point::new(box_width as f32, current_y), &dim_style);
+            current_y += 1.0;
+
+            let brick_box_bottom = format!("└{}┘", "─".repeat(inner_width));
+            canvas.draw_text(&brick_box_bottom, Point::new(1.0, current_y), &dim_style);
         }
 
         // Controls reminder
-        if height > 27 {
+        if height > 10 {
             canvas.draw_text(
                 " [Space] Toggle load  [+/-] Intensity  [b] Backend  [w] Workload  [r] Reset  [q] Quit ",
                 Point::new(1.0, height as f32 - 3.0),
@@ -778,6 +895,13 @@ impl CbtopApp {
         let filled = ((value / max) * width as f64).round() as usize;
         let empty = width.saturating_sub(filled);
         format!("[{}{}]", "█".repeat(filled), "░".repeat(empty))
+    }
+
+    /// PMAT-012 UI-02: Mini bar for per-core CPU display (no brackets, compact)
+    fn make_mini_bar(value: f64, max: f64, width: usize) -> String {
+        let filled = ((value / max) * width as f64).round() as usize;
+        let empty = width.saturating_sub(filled);
+        format!("{}{}", "▓".repeat(filled), "░".repeat(empty))
     }
 
     fn make_sparkline(data: &[f64], width: usize) -> String {
@@ -853,6 +977,14 @@ impl CbtopApp {
             &format!("│ {:.0} brick/s │ {:.1}μs ", metrics.bricks_per_second, metrics.avg_latency_us),
             Point::new(28.0, y),
             &TextStyle { color: theme.foreground, ..Default::default() },
+        );
+
+        // PMAT-012 UI-06: GFLOP/s in status bar
+        let gflops = metrics.ops_per_second / 1_000_000_000.0;
+        canvas.draw_text(
+            &format!("│ {:.2} GFLOP/s ", gflops),
+            Point::new(55.0, y),
+            &TextStyle { color: theme.cpu.sample(0.3), ..Default::default() },
         );
 
         // FPS
