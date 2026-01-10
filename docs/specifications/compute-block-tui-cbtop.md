@@ -6404,6 +6404,7 @@ canvas.draw_text(&bar, point, &TextStyle { color, ..Default::default() });
 | Braille graphs | ✅ | ✅ | ✅ DONE |
 | GFLOP/s status bar | ✅ | ✅ | ✅ DONE |
 | GPU panel | ✅ | ✅ | ✅ DONE |
+| Panel navigation tab bar | ✅ | ✅ | ✅ DONE |
 
 ---
 
