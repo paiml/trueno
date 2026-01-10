@@ -5601,7 +5601,7 @@ registers + warp shuffle instead of shared memory state variables.
 Unified memory architecture eliminates explicit CPU-GPU transfers.
 
 **Implementation (2026-01-10)**:
-- Integrated manzana 0.1.0 crate for Metal bindings
+- Integrated manzana 0.2.0 crate for Metal bindings (published to crates.io)
 - Added `metal` feature flag to trueno-gpu
 - MetalBackend uses manzana::metal::MetalCompute for device detection
 - Created 13 MSL compute kernels in `backend/metal_shaders.rs`:
@@ -5611,10 +5611,7 @@ Unified memory architecture eliminates explicit CPU-GPU transfers.
   - Layers: softmax (stable), layernorm (fused gamma/beta)
   - Reduction: dot_product (SIMD group)
 - Tested on Mac Pro x86_64 with dual AMD Radeon Pro W5700X (Metal 3)
-- All 4 Metal shader tests pass
-
-**Note**: Device enumeration in manzana 0.1.0 returns fallback names.
-Correct multi-GPU enumeration requires manzana 0.2.0+ (local ~/src/manzana has fix).
+- All 10 Metal tests pass with correct GPU detection
 
 **Citations**:
 1. [Apple 2023] "Metal Best Practices Guide" developer.apple.com/metal
@@ -5987,10 +5984,11 @@ which uses registers + warp shuffle instead of shared memory state variables.
 3. [Aaftab et al. 2020] "Cross-Platform Deep Learning" ICLR Workshop
 
 **Implementation (2026-01-10)**:
-- Integrated manzana 0.1.0 for Metal bindings
+- Integrated manzana 0.2.0 for Metal bindings (real GPU detection via system_profiler)
 - MetalBackend in `trueno-gpu/src/backend/mod.rs`
 - 13 MSL compute kernels in `trueno-gpu/src/backend/metal_shaders.rs`
 - Tested on Mac Pro x86_64 with dual AMD Radeon Pro W5700X (Metal 3)
+- Published manzana 0.2.0 to crates.io with improved device enumeration
 
 **Results** (validated on Mac Pro x86_64, macOS 14 Sonoma, dual AMD Radeon Pro W5700X):
 
