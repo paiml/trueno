@@ -70,6 +70,36 @@ impl ActivePanel {
             Self::Help => "Help",
         }
     }
+
+    /// All panels for tab bar rendering (UI-10)
+    pub fn all() -> &'static [Self] {
+        &[
+            Self::Overview,
+            Self::Cpu,
+            Self::Gpu,
+            Self::Pcie,
+            Self::Memory,
+            Self::Thermal,
+            Self::Load,
+            Self::Config,
+            Self::Help,
+        ]
+    }
+
+    /// Key number for this panel (1-9)
+    pub fn key_number(&self) -> char {
+        match self {
+            Self::Overview => '1',
+            Self::Cpu => '2',
+            Self::Gpu => '3',
+            Self::Pcie => '4',
+            Self::Memory => '5',
+            Self::Thermal => '6',
+            Self::Load => '7',
+            Self::Config => '8',
+            Self::Help => '9',
+        }
+    }
 }
 
 /// Hardware information detected at startup
@@ -906,8 +936,8 @@ impl CbtopApp {
 
     fn render_title_bar(
         canvas: &mut DirectTerminalCanvas,
-        _width: u16,
-        _active_panel: ActivePanel,
+        width: u16,
+        active_panel: ActivePanel,
         hardware: &HardwareInfo,
         theme: &Theme,
     ) {
@@ -938,6 +968,64 @@ impl CbtopApp {
                 &gpu_style,
             );
         }
+
+        // PMAT-012 UI-10: Panel navigation tab bar
+        Self::render_tab_bar(canvas, width, active_panel, theme);
+    }
+
+    /// Render panel navigation tab bar (UI-10)
+    fn render_tab_bar(
+        canvas: &mut DirectTerminalCanvas,
+        width: u16,
+        active_panel: ActivePanel,
+        theme: &Theme,
+    ) {
+        let dim_style = TextStyle { color: theme.dim, ..Default::default() };
+        let active_style = TextStyle { color: theme.foreground, ..Default::default() };
+        let highlight_style = TextStyle { color: theme.cpu.sample(0.2), ..Default::default() };
+
+        // Build tab bar string with highlighting
+        let mut x: f32 = 1.0;
+        canvas.draw_text("│", Point::new(0.0, 1.0), &dim_style);
+
+        for panel in ActivePanel::all() {
+            let key = panel.key_number();
+            let title = panel.title();
+            let is_active = *panel == active_panel;
+
+            if is_active {
+                // Active panel: highlighted with brackets
+                canvas.draw_text("[", Point::new(x, 1.0), &highlight_style);
+                x += 1.0;
+                canvas.draw_text(&format!("{}", key), Point::new(x, 1.0), &highlight_style);
+                x += 1.0;
+                canvas.draw_text(":", Point::new(x, 1.0), &highlight_style);
+                x += 1.0;
+                canvas.draw_text(title, Point::new(x, 1.0), &active_style);
+                x += title.len() as f32;
+                canvas.draw_text("]", Point::new(x, 1.0), &highlight_style);
+                x += 1.0;
+            } else {
+                // Inactive panel: dimmed
+                canvas.draw_text(&format!(" {}:", key), Point::new(x, 1.0), &dim_style);
+                x += 3.0;
+                canvas.draw_text(title, Point::new(x, 1.0), &dim_style);
+                x += title.len() as f32;
+            }
+
+            // Separator between panels (except last)
+            if *panel != ActivePanel::Help {
+                canvas.draw_text(" ", Point::new(x, 1.0), &dim_style);
+                x += 1.0;
+            }
+        }
+
+        // Fill remaining width with spaces and close
+        let remaining = (width as f32 - x - 1.0).max(0.0) as usize;
+        if remaining > 0 {
+            canvas.draw_text(&" ".repeat(remaining), Point::new(x, 1.0), &dim_style);
+        }
+        canvas.draw_text("│", Point::new(width as f32 - 1.0, 1.0), &dim_style);
     }
 
     #[allow(clippy::too_many_arguments)]
