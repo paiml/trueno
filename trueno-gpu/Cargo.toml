@@ -38,6 +38,9 @@ manzana = { version = "0.1.0", optional = true }
 proptest = "1.9"
 criterion = "0.7"
 simular = "0.2.0"
+
+# renacer is Linux-only (uses ptrace syscalls)
+[target.'cfg(target_os = "linux")'.dev-dependencies]
 renacer = "0.7.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
