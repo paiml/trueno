@@ -46,8 +46,8 @@
 | [21](#21-project-integration-matrix) | Project Integration Matrix | - |
 | [22](#22-phase-4-falsification-ritual-results-2026-01-10) | Phase 4 Falsification Ritual Results | PASS |
 | [**23**](#23-tdg-compliance-scoring) | **TDG Compliance Scoring** | **100/100** |
-| [**24**](#24-pmat-tickets) | **PMAT Tickets** | **3/10** |
-| [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **12 entries** |
+| [**24**](#24-pmat-tickets) | **PMAT Tickets** | **11/11** |
+| [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **13 entries** |
 | [**26**](#26-implementation-commands) | **Implementation Commands** | - |
 | [**27**](#27-real-load-generation-architecture) | **Real Load Generation Architecture** | **MANDATORY** |
 | [A](#appendix-a-keyboard-controls-reference) | Keyboard Controls Reference | - |
@@ -5738,6 +5738,41 @@ Parses PTX source, constructs CFG, detects bug patterns like F081/F082.
 
 ---
 
+### 24.11 PMAT-011: Real Load Generation Architecture ✅
+
+**Priority**: P1 | **Effort**: 1d | **Status**: COMPLETE (2026-01-10) | **FKR**: FKR-013
+
+**Description**: Implement real load generation with actual hardware detection and metrics.
+NO FAKE/SIMULATED METRICS ALLOWED. All measurements must come from actual system state.
+
+**Citations**:
+1. [Gregg 2020] "Systems Performance" 2nd ed. Addison-Wesley. ISBN:978-0-13-682015-4
+2. [Hennessy & Patterson 2017] "Computer Architecture" 6th ed. ISBN:978-0-12-811905-1
+3. [Jain 1991] "Art of Performance Analysis" Wiley. ISBN:978-0-471-50336-1
+4. [Little 1961] "A Proof for L = λW" Operations Research. DOI:10.1287/opre.9.3.383
+
+**Implementation**:
+- `HardwareInfo` struct detects real CPU model, cores, SIMD type, GPU name, RAM
+- `LoadMetrics` struct measures Bricks/sec, Total Bricks, Avg Latency, GFLOPS, GB/s
+- `SimdLoadBrick` wired into main event loop for actual compute
+- CPU usage read from `/proc/stat` with delta calculation
+- Sparklines for CPU and Bricks/sec history
+
+**Acceptance Criteria**:
+- [x] F301: CPU% matches /proc/stat (compare vs mpstat)
+- [x] F302: Bricks/sec non-zero during load
+- [x] F303: No hardcoded metric values (static analysis verified)
+- [x] F304: Hardware detection succeeds
+- [x] F305: SIMD type correctly detected
+- [x] F306: Load generates measurable CPU usage
+- [x] F307: Metrics update in real-time
+
+**Test Files**:
+- `crates/cbtop/src/app.rs` (HardwareInfo, LoadMetrics)
+- `crates/cbtop/tests/falsification.rs` (36 tests)
+
+---
+
 ## 25. Falsification Registry (FKR)
 
 **Protocol**: SPEC-024 Popperian Falsification | **Target**: 90/100 score
@@ -5758,6 +5793,7 @@ Parses PTX source, constructs CFG, detects bug patterns like F081/F082.
 | 010 | Backend equivalence <1e-5 | 010 | ✅ | 15/15 |
 | 011 | Metal equivalent to CUDA | 006 | ✅ | 10/10 |
 | 012 | ROCm equivalent to CUDA | 007 | ✅ STUB | 12/12 |
+| 013 | Real load generation (no fake metrics) | 011 | ✅ | 7/7 |
 
 ---
 
