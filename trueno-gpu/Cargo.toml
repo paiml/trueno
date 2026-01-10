@@ -176,3 +176,8 @@ required-features = ["cuda"]
 name = "debug_cvta_shared"
 path = "examples/debug_cvta_shared.rs"
 required-features = ["cuda"]
+
+[[example]]
+name = "test_metal_backend"
+path = "examples/test_metal_backend.rs"
+required-features = ["metal"]
