@@ -385,97 +385,31 @@ roadmap:
     title: Add trueno-gpu cuda dependency
     status: completed
     completion: 100
-    notes: Already integrated - trueno-gpu 0.3.0 with cuda feature
   - id: REALIZAR-PARITY-001.2
     github_issue: null
     title: Verify CUDA benchmarks use CUDA path
     status: completed
     completion: 100
-    notes: Confirmed - Q4_K, GEMV, FlashAttention all run on CUDA
   - id: REALIZAR-PARITY-001.3
     github_issue: null
     title: Optimize attention kernel (79ms/token bottleneck)
     status: completed
     completion: 100
-    notes: |
-      COMPLETED (2026-01-01): Tensor Core attention working on RTX 4090!
-
-      PTX BUGS FIXED (trueno-gpu/src/ptx/builder.rs):
-      1. Register prefix conflict: B32 → %rb (was conflicting with %r)
-      2. Zero initialization: mov.f32 instead of loading from NULL pointer
-      3. F16 shared memory store: Use B16 type for 16-bit stores
-      4. Address conversion: cvta.shared.u64 for WMMA generic pointers
-
-      BENCHMARK RESULTS (RTX 4090):
-      | Config      | FP32 GFLOPS | TC GFLOPS | Speedup |
-      |-------------|-------------|-----------|---------|
-      | 64x64       | 8.6         | 8.7       | 1.01x   |
-      | 128x64      | 27.2        | 27.9      | 1.03x   |
-      | 256x64      | 75.6        | 80.0      | 1.06x   |
-      | 512x64      | 196.3       | 202.5     | 1.03x   |
-
-      Modest speedup indicates memory-bandwidth limited at current sizes.
-      Full TC advantage requires larger batches/sequences.
   - id: REALIZAR-PARITY-001.4
     github_issue: null
     title: Add FP16 Tensor Core support
     status: completed
     completion: 100
-    notes: |
-      IMPLEMENTED (2026-01-01):
-      - AttentionKernel::tensor_core() constructor
-      - with_tensor_cores() builder method
-      - WMMA 16×16×16 tiles for Q×K^T computation
-      - FP32→FP16 conversion in shared memory loading
-      - Tests added and passing
   - id: REALIZAR-PARITY-001.5
     github_issue: null
     title: Benchmark and validate parity
     status: completed
     completion: 100
-    notes: |
-      COMPLETED (2026-01-01): All PTX validation passing!
-
-      PTX validation:
-      - Standard FP32: 3996 bytes, 148 lines
-      - Tensor Core FP16: 5702 bytes, 210 lines (+43%)
-      - WMMA instructions present: ✅
-      - All presets working: llama_tensor_core_attention, tensor_core_attention
-      - ptxas --gpu-name sm_89 validation: PASS
-
-      GPU execution validated:
-      - test_tc_attention example: SUCCESS
-      - Output: [0.19999988, 0.19999988, 0.19999988, 0.19999988]
-      - No more CUDA_ERROR_UNKNOWN
-
-      Benchmark results (RTX 4090):
-      - Tensor Core: 8.7-202.5 GFLOPS (1.01-1.06x vs FP32)
-      - All latencies under 1ms
-      - Memory-bandwidth limited at current sizes
-
-      trueno-gpu tests: 369 lib + 11 kernel_validation = ALL PASS
   - id: REALIZAR-PARITY-001.6
     github_issue: null
     title: Fix WMMA PTX emission format
     status: completed
     completion: 100
-    notes: |
-      COMPLETED (2026-01-01): All WMMA PTX issues fixed!
-
-      Bugs fixed in trueno-gpu/src/ptx/builder.rs:
-      1. Register prefix conflict: B32 → %rb (was conflicting with %r)
-      2. Zero initialization: mov.f32 instead of loading from NULL pointer
-      3. F16 shared memory store: Use B16 type for 16-bit stores
-      4. Address conversion: cvta.shared.u64 for WMMA generic pointers
-         - Added Cvta operation to PtxOp enum in instructions.rs
-         - cvta.shared.u64 converts shared→generic (without .to)
-         - WMMA instructions require generic pointers, not shared addresses
-
-      Validation:
-      - ptxas --gpu-name sm_89: PASS
-      - test_tc_attention GPU execution: SUCCESS
-      - kernel_validation tests: 11/11 PASS
-      - lib tests: 369/369 PASS
   estimated_effort: 2-3 weeks
   labels:
   - gpu
@@ -488,7 +422,7 @@ roadmap:
 - id: TRUENO-RELEASE-010
   github_issue: null
   item_type: task
-  title: 'trueno v0.10.0 + trueno-gpu v0.4.0 Release'
+  title: trueno v0.10.0 + trueno-gpu v0.4.0 Release
   status: inprogress
   priority: high
   assigned_to: claude
@@ -518,27 +452,27 @@ roadmap:
   - id: TRUENO-RELEASE-010.1
     github_issue: null
     title: Verify 95% coverage
-    status: pending
+    status: planned
     completion: 0
   - id: TRUENO-RELEASE-010.2
     github_issue: null
     title: Run performance benchmarks
-    status: pending
+    status: planned
     completion: 0
   - id: TRUENO-RELEASE-010.3
     github_issue: null
     title: Test all examples
-    status: pending
+    status: planned
     completion: 0
   - id: TRUENO-RELEASE-010.4
     github_issue: null
     title: Update book documentation
-    status: pending
+    status: planned
     completion: 0
   - id: TRUENO-RELEASE-010.5
     github_issue: null
     title: Publish to crates.io
-    status: pending
+    status: planned
     completion: 0
   estimated_effort: 1 day
   labels:
@@ -549,7 +483,7 @@ roadmap:
 - id: TRUENO-CUDA-TILE-001
   github_issue: null
   item_type: epic
-  title: 'cuda-tile-behavior.md Full Implementation - VERIFIED'
+  title: cuda-tile-behavior.md Full Implementation - VERIFIED
   status: completed
   priority: high
   assigned_to: claude
@@ -587,52 +521,26 @@ roadmap:
     title: FMA Fusion - add mul+sub pattern
     status: completed
     completion: 100
-    notes: Already implemented - mul+add fusion working
   - id: TRUENO-CUDA-TILE-001.2
     github_issue: null
     title: Tile Validation - power-of-two and WMMA
     status: completed
     completion: 100
-    notes: Already implemented - validate_shape and validate_wmma_shape
   - id: TRUENO-CUDA-TILE-001.3
     github_issue: null
     title: Loop Splitting Pass
     status: completed
     completion: 100
-    notes: |
-      IMPLEMENTED: trueno-gpu/src/ptx/optimize/loop_split.rs
-      - LoopSplitConfig with threshold-based profitability
-      - is_split_profitable() aligned with NVIDIA LoopSplit.cpp
-      - Heavy ops detection: Ld, St, WmmaMma, WmmaLoad*, WmmaStoreD
-      - align_split_point() for non-unit step sizes
-      - SplittableCondition for analysis results
-      - Tests: #52, #59, #61, #64 from falsification checklist
   - id: TRUENO-CUDA-TILE-001.4
     github_issue: null
     title: Token-Based Ordering (TKO)
     status: completed
     completion: 100
-    notes: |
-      IMPLEMENTED: trueno-gpu/src/ptx/optimize/tko.rs
-      - Token with unique ID generation (atomic counter)
-      - join_tokens() for combining dependencies
-      - MemoryOrdering: Weak, Relaxed, Acquire, Release
-      - MemoryScope: Thread, Block, Cluster, Device, System
-      - TokenGraph for dependency tracking
-      - Cycle detection for deadlock prevention
-      - TkoAnalysis for barrier elimination
-      - Tests: #66, #67, #69, #75, #79 from falsification checklist
   - id: TRUENO-CUDA-TILE-001.5
     github_issue: null
     title: Falsification Tests (100 points)
     status: completed
     completion: 100
-    notes: |
-      VERIFIED: 57 tests covering falsification checklist
-      - FMA Fusion tests: #41-50 ✅
-      - Loop Splitting tests: #51-65 ✅
-      - TKO tests: #66-80 ✅
-      - Coverage: 94.28%
   estimated_effort: 3-4 days
   labels:
   - cuda-tile
@@ -644,19 +552,19 @@ roadmap:
   github_issue: null
   item_type: task
   title: 'Metal Backend: AMD GPU Validation via Intel Mac'
-  status: pending
+  status: planned
   priority: medium
   assigned_to: null
   created: 2026-01-02T12:00:00+00:00
   updated: 2026-01-02T12:00:00+00:00
   spec: null
   acceptance_criteria:
-  - 'Metal shader compilation works via lambda-lab-rust-development intel_mac module'
-  - 'SIMD GEMM kernel compiles to .metallib on Intel Mac'
-  - 'AMD GPU compute validation passes on Radeon Pro W5700X'
-  - 'Cross-platform tensor ops verified (CUDA vs Metal parity)'
-  - 'Benchmark results within 20% of CUDA performance'
-  - 'All 100-point falsification tests pass (Section C, D from Intel Mac spec)'
+  - Metal shader compilation works via lambda-lab-rust-development intel_mac module
+  - SIMD GEMM kernel compiles to .metallib on Intel Mac
+  - AMD GPU compute validation passes on Radeon Pro W5700X
+  - Cross-platform tensor ops verified (CUDA vs Metal parity)
+  - Benchmark results within 20% of CUDA performance
+  - All 100-point falsification tests pass (Section C, D from Intel Mac spec)
   phases: []
   subtasks:
   - id: TRUENO-METAL-001.1
@@ -664,31 +572,26 @@ roadmap:
     title: Create src/backends/metal/ module
     status: completed
     completion: 100
-    notes: Metal backend implemented via wgpu abstraction
   - id: TRUENO-METAL-001.2
     github_issue: null
     title: Implement Metal shader generator from SIMD ops
     status: completed
     completion: 100
-    notes: WGSL shaders work on Metal via wgpu
   - id: TRUENO-METAL-001.3
     github_issue: null
     title: Add SSH-based remote compilation via intel_mac
     status: completed
     completion: 100
-    notes: Tested via SSH to Mac Pro
   - id: TRUENO-METAL-001.4
     github_issue: null
     title: Cross-validate tensor operations
     status: completed
     completion: 100
-    notes: 99/100 GPU tests pass on Metal
   - id: TRUENO-METAL-001.5
     github_issue: null
     title: Performance benchmarks vs CUDA
     status: completed
     completion: 100
-    notes: ~150 Melem/s throughput validated
   estimated_effort: 1 week
   labels:
   - metal
@@ -701,3 +604,427 @@ roadmap:
     - RAM Disk: 32GB at /Volumes/RAMDisk
     - Metal 3 support verified
     - Run: cargo run --example metal_compile (from lambda-lab-rust-development)
+- id: gpu-lz4-kernel-implementation
+  github_issue: null
+  item_type: task
+  title: 'New task: gpu-lz4-kernel-implementation'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-05T08:41:06.169981088+00:00
+  updated: 2026-01-05T08:47:18.534692956+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: gpu-lz4-phase2
+  github_issue: null
+  item_type: task
+  title: 'New task: gpu-lz4-phase2'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-05T08:48:16.121931573+00:00
+  updated: 2026-01-05T09:06:57.361203231+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: gpu-lz4-phase3
+  github_issue: null
+  item_type: task
+  title: 'New task: gpu-lz4-phase3'
+  status: inprogress
+  priority: medium
+  assigned_to: null
+  created: 2026-01-05T09:08:17.227996956+00:00
+  updated: 2026-01-05T09:08:17.227996956+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: TRUENO-PTX-DEBUG-001
+  github_issue: null
+  item_type: task
+  title: 'trueno-ptx-debug: Pure Rust PTX Debugging Tool'
+  status: completed
+  priority: critical
+  assigned_to: claude
+  created: 2026-01-05T10:00:00Z
+  updated: 2026-01-05T12:00:00Z
+  spec: |
+    ✅ COMPLETED: Pure Rust PTX Static Analyzer & Debugger
+
+    Features:
+    - Zero CUDA SDK dependency (Pure Rust)
+    - Static Analysis: Type checks, Control flow, Data flow
+    - Bug Detection: LoadedValueBug (F081), ComputedAddrFromLoaded (F082)
+    - 100-Point Popperian Falsification Framework
+    - Safe Ring Buffer Debug Protocol
+
+    Deliverables:
+    - trueno-ptx-debug crate
+    - CLI tool (analyze, gen-fkr)
+    - 90+ falsification tests
+    - HTML report generator
+  acceptance_criteria:
+  - Crate compiles and passes all tests
+  - Detects F082 (ComputedAddr) in LZ4 kernel
+  - F081 (LoadedValue) marked as FALSIFIED/Warning
+  - Ring buffer protocol prevents OOB writes
+  - CLI generates HTML reports
+  phases: []
+  subtasks: []
+  estimated_effort: 1 day
+  labels:
+  - tooling
+  - ptx
+  - debug
+  - quality
+  - extreme-tdd
+  notes: Developed during LZ4 kernel debugging (Issue
+- id: CBTOP-SPEC-001
+  github_issue: null
+  item_type: epic
+  title: 'cbtop: Compute Block Top TUI + ComputeBrick Architecture'
+  status: completed
+  priority: high
+  assigned_to: claude
+  created: 2026-01-10T12:00:00Z
+  updated: 2026-01-10T12:15:43.368003459+00:00
+  spec: |
+    Compute Block Top (cbtop) - Real-time load testing and hardware monitoring TUI.
+
+    Spec: docs/specifications/compute-block-tui-cbtop.md (v1.3.0, 21 sections)
+
+    Core Concepts:
+    - ComputeBrick: Token-centric, self-verifying compute unit
+    - TokenBudget: Performance budget in µs/token or tokens/sec
+    - Five-Layer Architecture: Collectors → Analyzers → Panels → LoadGenerators
+    - 200-Point Popperian Falsification Protocol
+
+    New Projects:
+    - cbtop (binary) - TUI tool
+    - trueno-cupti (crate) - NVIDIA CUPTI bindings
+
+    Modified Projects:
+    - trueno - Add ComputeBrick, TokenBudget in src/brick.rs
+    - trueno-gpu - Integrate ComputeBrick, kernel metrics
+
+    Integration Projects (notify via batuta):
+    - batuta - Orchestrator (build order, release coordination)
+    - presentar - Widget framework (BrailleGraph, Meter, Table)
+    - probar - Brick trait, assertions
+    - renacer - Syscall tracing, OTLP export
+    - simular - Load test workloads
+    - whisper.apr - Whisper inference monitoring
+    - realizar - Qwen inference, KV cache, batching
+    - wos - Kernel-level metrics (sched, mm, blk, net)
+    - pepita - io_uring/ublk/blk-mq metrics
+    - trueno-zram - ZSTD/LZ4 ComputeBricks, ublk throughput, ZRAM panel
+
+    Spec Sections:
+    §1-15: Core architecture, Brick traits, panels, falsification
+    §16: Multi-GPU / Distributed (NVLink, TP/PP/DP/EP)
+    §17: Quantization Bricks (Q4_K, GGUF, dequant strategies)
+    §18: KV Cache Management (PagedAttention, eviction)
+    §19: Continuous Batching (scheduler, speculative decode)
+    §20: Configuration Persistence (TOML, profiles)
+    §21: Project Integration Matrix (13 projects, batuta orchestration)
+  acceptance_criteria:
+  - ComputeBrick trait implemented in trueno/src/brick.rs
+  - trueno-cupti crate created with CUPTI bindings
+  - cbtop binary renders all panels
+  - batuta manifest updated with cbtop entry
+  - wos integration for kernel metrics
+  - pepita integration for io_uring metrics
+  - 200-point falsification score >= 180
+  phases:
+  - name: Phase 1 - Core Architecture
+    status: inprogress
+    estimated_effort: null
+    completion: 0
+  - name: Phase 2 - TUI Implementation
+    status: planned
+    estimated_effort: null
+    completion: 0
+  - name: Phase 3 - Integrations
+    status: planned
+    estimated_effort: null
+    completion: 0
+  subtasks:
+  - id: CBTOP-SPEC-001.1
+    github_issue: null
+    title: Implement ComputeBrick in src/brick.rs
+    status: planned
+    completion: 0
+  - id: CBTOP-SPEC-001.2
+    github_issue: null
+    title: Create trueno-cupti sub-crate
+    status: planned
+    completion: 0
+  - id: CBTOP-SPEC-001.3
+    github_issue: null
+    title: Create cbtop binary scaffold
+    status: planned
+    completion: 0
+  - id: CBTOP-SPEC-001.4
+    github_issue: null
+    title: Implement GPU panel with nvidia-smi/CUPTI
+    status: planned
+    completion: 0
+  - id: CBTOP-SPEC-001.5
+    github_issue: null
+    title: Add batuta manifest entry
+    status: planned
+    completion: 0
+  - id: CBTOP-SPEC-001.6
+    github_issue: null
+    title: Integrate wos kernel metrics
+    status: planned
+    completion: 0
+  - id: CBTOP-SPEC-001.7
+    github_issue: null
+    title: Integrate pepita io_uring metrics
+    status: planned
+    completion: 0
+  - id: CBTOP-SPEC-001.8
+    github_issue: null
+    title: 200-point falsification validation
+    status: planned
+    completion: 0
+  - id: CBTOP-SPEC-001.9
+    github_issue: null
+    title: Integrate trueno-zram ZRAM panel and ComputeBricks
+    status: planned
+    completion: 0
+  estimated_effort: 2-3 weeks
+  labels:
+  - tui
+  - compute-brick
+  - monitoring
+  - cuda
+  - cupti
+  - extreme-tdd
+  - batuta
+  - wos
+  - pepita
+  - trueno-zram
+  notes: |-
+    Spec path: docs/specifications/compute-block-tui-cbtop.md
+    Notify batuta on API changes.
+    Integrates with wos (kernel) and pepita (io_uring) for full-stack visibility.
+- id: CBTOP-SPEC-001.1
+  github_issue: null
+  item_type: task
+  title: 'New task: CBTOP-SPEC-001.1'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-10T11:39:09.550843685+00:00
+  updated: 2026-01-10T11:53:03.637074115+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: CBTOP-SPEC-001.2
+  github_issue: null
+  item_type: task
+  title: 'New task: CBTOP-SPEC-001.2'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-10T11:53:15.799658867+00:00
+  updated: 2026-01-10T12:06:29.547005130+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: CBTOP-SPEC-001.3
+  github_issue: null
+  item_type: task
+  title: 'New task: CBTOP-SPEC-001.3'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-10T12:06:34.901452477+00:00
+  updated: 2026-01-10T12:06:53.432812341+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: CBTOP-SPEC-001.4
+  github_issue: null
+  item_type: task
+  title: 'New task: CBTOP-SPEC-001.4'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-10T12:06:59.153077953+00:00
+  updated: 2026-01-10T12:09:24.714886821+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: CBTOP-SPEC-001.5
+  github_issue: null
+  item_type: task
+  title: 'New task: CBTOP-SPEC-001.5'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-10T12:10:02.916245503+00:00
+  updated: 2026-01-10T12:10:43.015736573+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: CBTOP-SPEC-001.6
+  github_issue: null
+  item_type: task
+  title: 'New task: CBTOP-SPEC-001.6'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-10T12:10:59.946045225+00:00
+  updated: 2026-01-10T12:10:59.955721662+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: CBTOP-SPEC-001.7
+  github_issue: null
+  item_type: task
+  title: 'New task: CBTOP-SPEC-001.7'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-10T12:11:01.033495926+00:00
+  updated: 2026-01-10T12:11:01.044971245+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: CBTOP-SPEC-001.9
+  github_issue: null
+  item_type: task
+  title: 'New task: CBTOP-SPEC-001.9'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-10T12:11:08.155331637+00:00
+  updated: 2026-01-10T12:11:08.165846263+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: CBTOP-SPEC-001.8
+  github_issue: null
+  item_type: task
+  title: 'New task: CBTOP-SPEC-001.8'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-10T12:11:21.708965200+00:00
+  updated: 2026-01-10T12:15:32.753686067+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null
+- id: PMAT-011
+  github_issue: null
+  item_type: task
+  title: 'PMAT-011: Real Load Generation Architecture'
+  status: completed
+  priority: high
+  assigned_to: claude
+  created: 2026-01-10T16:00:00Z
+  updated: 2026-01-10T16:30:00Z
+  spec: |
+    ✅ COMPLETED: Real Load Generation Architecture for cbtop
+
+    Implementation per §27 "Real Load Generation Architecture":
+    - Added HardwareInfo struct for real CPU/GPU/SIMD detection
+    - Added LoadMetrics struct with Bricks/sec, Total Bricks, Avg Latency
+    - Wired SimdLoadBrick into main event loop for actual compute
+    - Read real CPU usage from /proc/stat using delta calculation
+    - Display hardware info (CPU model, cores, SIMD type, GPU name, RAM)
+    - Added sparklines for CPU and Bricks/sec history
+
+    Design Principle: NO FAKE METRICS
+    - Hardcoded CPU percentages prohibited
+    - Random noise generation prohibited
+    - Mock GPU utilization values prohibited
+    - Simulated throughput without actual operations prohibited
+
+    Citations:
+    - [Gregg 2020] "Systems Performance" Addison-Wesley. ISBN:978-0-13-682015-4
+    - [Hennessy & Patterson 2017] "Computer Architecture" 6th ed. ISBN:978-0-12-811905-1
+    - [Jain 1991] "Art of Performance Analysis" Wiley. ISBN:978-0-471-50336-1
+    - [Little 1961] "A Proof for L = λW" Operations Research. DOI:10.1287/opre.9.3.383
+    - [Intel 2023] SDM Vol.1 Ch.13 "SIMD Instructions"
+    - [NVIDIA 2023] "NVML Reference Manual" developer.nvidia.com
+
+    Falsification Criteria F301-F307:
+    - F301: CPU% matches /proc/stat (compare vs mpstat)
+    - F302: Bricks/sec non-zero during load
+    - F303: No hardcoded metric values
+    - F304: Hardware detection succeeds
+    - F305: SIMD type correctly detected
+    - F306: Load generates measurable CPU usage
+    - F307: Metrics update in real-time
+  acceptance_criteria:
+  - HardwareInfo detects real CPU/GPU/SIMD
+  - LoadMetrics measures actual compute throughput
+  - SimdLoadBrick wired into event loop
+  - CPU usage read from /proc/stat
+  - Bricks/sec displayed in TUI
+  - All F301-F307 falsification criteria met
+  phases: []
+  subtasks: []
+  estimated_effort: 1 day
+  labels:
+  - cbtop
+  - real-metrics
+  - load-generation
+  - extreme-tdd
+  notes: |
+    Spec update: docs/specifications/compute-block-tui-cbtop.md v2.1.0
+    Added §27 "Real Load Generation Architecture"
+    Total citations: 42 (36 original + 6 real load generation)
