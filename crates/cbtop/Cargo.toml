@@ -1,0 +1,52 @@
+[package]
+name = "cbtop"
+version = "0.1.0"
+edition = "2021"
+description = "Compute Block Top - Real-time load testing and hardware monitoring TUI"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/paiml/trueno"
+keywords = ["gpu", "cuda", "simd", "monitoring", "tui"]
+categories = ["command-line-utilities", "hardware-support", "visualization"]
+authors = ["Trueno Engineering"]
+
+[[bin]]
+name = "cbtop"
+path = "src/main.rs"
+
+[dependencies]
+# Canonical Brick/Widget framework - ALL WIDGETS FROM HERE
+# Provides: BrailleGraph, Meter, Table, TuiApp, DirectTerminalCanvas, ColorMode
+presentar-core = { path = "../../../presentar/crates/presentar-core" }
+presentar-terminal = { path = "../../../presentar/crates/presentar-terminal" }
+
+# Compute backends
+trueno = { path = "../.." }
+trueno-gpu = { path = "../../trueno-gpu", optional = true }
+
+# Terminal handling
+crossterm = "0.28"
+
+# Async runtime for wgpu
+pollster = "0.4"
+
+# CLI parsing
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Time handling
+chrono = "0.4"
+
+[dev-dependencies]
+proptest = "1"
+
+[features]
+default = []
+cuda = ["dep:trueno-gpu", "trueno-gpu/cuda"]
+wos-kernel = []
+full = ["cuda", "wos-kernel"]
+
+[lints.clippy]
+wildcard_enum_match_arm = "deny"
