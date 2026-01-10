@@ -39,6 +39,10 @@ thiserror = "1"
 # Time handling
 chrono = "0.4"
 
+# Unix statvfs for disk metrics
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 proptest = "1"
 

@@ -6397,8 +6397,8 @@ canvas.draw_text(&bar, point, &TextStyle { color, ..Default::default() });
 |---------|:------------------:|:------------:|:------:|
 | Per-core CPU bars | ✅ | ✅ | ✅ DONE |
 | Memory breakdown | ✅ | ✅ | ✅ DONE |
-| Network TX/RX | ✅ | ⚠️ P2 | PENDING |
-| Disk per-mount | ✅ | ⚠️ P2 | PENDING |
+| Network TX/RX | ✅ | ✅ | ✅ DONE |
+| Disk per-mount | ✅ | ✅ | ✅ DONE |
 | Color gradients | ✅ | ✅ | ✅ DONE |
 | Responsive layout | ✅ | ✅ | ✅ DONE |
 | Braille graphs | ✅ | ✅ | ✅ DONE |
