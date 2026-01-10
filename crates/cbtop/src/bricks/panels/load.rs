@@ -6,7 +6,7 @@
 use std::any::Any;
 use presentar_core::{Canvas, Color, Point, Rect, TextStyle, Widget};
 use presentar_terminal::{Meter, Theme};
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification, BrickScore, BrickGrade};
 
 /// Compute backend options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -126,6 +126,10 @@ pub struct LoadControlPanelBrick {
     pub selected_item: usize,
     /// Theme for rendering
     pub theme: Theme,
+    /// Current ComputeBrick quality score (§29.8)
+    pub brick_score: Option<BrickScore>,
+    /// Current GFLOP/s throughput
+    pub gflops: f64,
 }
 
 impl LoadControlPanelBrick {
@@ -141,6 +145,8 @@ impl LoadControlPanelBrick {
             error: None,
             selected_item: 0,
             theme: Theme::tokyo_night(),
+            brick_score: None,
+            gflops: 0.0,
         }
     }
 
@@ -200,6 +206,17 @@ impl LoadControlPanelBrick {
     /// Update statistics from load generator
     pub fn update_stats(&mut self, stats: LoadStats) {
         self.stats = stats;
+    }
+
+    /// Update ComputeBrick score (§29.8)
+    pub fn update_score(&mut self, score: BrickScore, gflops: f64) {
+        self.brick_score = Some(score);
+        self.gflops = gflops;
+    }
+
+    /// Render a score bar component
+    fn render_score_bar(value: u8, max: u8, width: usize) -> String {
+        BrickScore::render_bar(value, max, width)
     }
 
     /// Set error message
@@ -286,23 +303,62 @@ impl LoadControlPanelBrick {
             canvas.draw_text(err, Point::new(9.0, 11.0), &error_style);
         }
 
-        // Statistics section
-        canvas.draw_text("Statistics", Point::new(2.0, 13.0), &label_style);
+        // ComputeBrick Score section (§29.8)
+        if let Some(ref score) = self.brick_score {
+            let grade = score.grade();
+            let grade_color = match grade {
+                BrickGrade::A | BrickGrade::B => Color::new(0.3, 1.0, 0.5, 1.0), // Green
+                BrickGrade::C => Color::new(1.0, 0.8, 0.3, 1.0), // Yellow
+                _ => Color::new(1.0, 0.3, 0.3, 1.0), // Red
+            };
+            let grade_style = TextStyle { color: grade_color, ..Default::default() };
 
-        canvas.draw_text("Iterations:", Point::new(2.0, 14.0), &dim_style);
-        canvas.draw_text(&format!("{}", self.stats.iterations), Point::new(14.0, 14.0), &label_style);
+            canvas.draw_text("ComputeBrick Score", Point::new(2.0, 13.0), &label_style);
+            canvas.draw_text(&format!("{}/100 ({})", score.total(), grade.letter()),
+                Point::new(22.0, 13.0), &grade_style);
+            canvas.draw_text(&format!("{:.2} GFLOP/s", self.gflops),
+                Point::new(width - 18.0, 13.0), &label_style);
 
-        canvas.draw_text("Ops/sec:", Point::new(2.0, 15.0), &dim_style);
-        canvas.draw_text(&format!("{:.1}", self.stats.ops_per_sec), Point::new(14.0, 15.0), &label_style);
+            // Score breakdown bars
+            let bar_width = 20;
+            canvas.draw_text("Performance:", Point::new(2.0, 15.0), &dim_style);
+            canvas.draw_text(&Self::render_score_bar(score.performance, 40, bar_width),
+                Point::new(14.0, 15.0), &label_style);
+            canvas.draw_text(&format!("{}/40", score.performance), Point::new(36.0, 15.0), &dim_style);
 
-        canvas.draw_text("Throughput:", Point::new(2.0, 16.0), &dim_style);
-        canvas.draw_text(&format!("{:.2} GB/s", self.stats.throughput_gbs), Point::new(14.0, 16.0), &label_style);
+            canvas.draw_text("Efficiency:", Point::new(2.0, 16.0), &dim_style);
+            canvas.draw_text(&Self::render_score_bar(score.efficiency, 25, bar_width),
+                Point::new(14.0, 16.0), &label_style);
+            canvas.draw_text(&format!("{}/25", score.efficiency), Point::new(36.0, 16.0), &dim_style);
 
-        canvas.draw_text("Avg Latency:", Point::new(2.0, 17.0), &dim_style);
-        canvas.draw_text(&format!("{:.1} us", self.stats.avg_latency_us), Point::new(14.0, 17.0), &label_style);
+            canvas.draw_text("Correctness:", Point::new(2.0, 17.0), &dim_style);
+            canvas.draw_text(&Self::render_score_bar(score.correctness, 20, bar_width),
+                Point::new(14.0, 17.0), &label_style);
+            canvas.draw_text(&format!("{}/20", score.correctness), Point::new(36.0, 17.0), &dim_style);
 
-        canvas.draw_text("P99 Latency:", Point::new(2.0, 18.0), &dim_style);
-        canvas.draw_text(&format!("{:.1} us", self.stats.p99_latency_us), Point::new(14.0, 18.0), &label_style);
+            canvas.draw_text("Stability:", Point::new(2.0, 18.0), &dim_style);
+            canvas.draw_text(&Self::render_score_bar(score.stability, 15, bar_width),
+                Point::new(14.0, 18.0), &label_style);
+            canvas.draw_text(&format!("{}/15", score.stability), Point::new(36.0, 18.0), &dim_style);
+        } else {
+            // Statistics section (fallback when no score available)
+            canvas.draw_text("Statistics", Point::new(2.0, 13.0), &label_style);
+
+            canvas.draw_text("Iterations:", Point::new(2.0, 14.0), &dim_style);
+            canvas.draw_text(&format!("{}", self.stats.iterations), Point::new(14.0, 14.0), &label_style);
+
+            canvas.draw_text("Ops/sec:", Point::new(2.0, 15.0), &dim_style);
+            canvas.draw_text(&format!("{:.1}", self.stats.ops_per_sec), Point::new(14.0, 15.0), &label_style);
+
+            canvas.draw_text("Throughput:", Point::new(2.0, 16.0), &dim_style);
+            canvas.draw_text(&format!("{:.2} GB/s", self.stats.throughput_gbs), Point::new(14.0, 16.0), &label_style);
+
+            canvas.draw_text("Avg Latency:", Point::new(2.0, 17.0), &dim_style);
+            canvas.draw_text(&format!("{:.1} us", self.stats.avg_latency_us), Point::new(14.0, 17.0), &label_style);
+
+            canvas.draw_text("P99 Latency:", Point::new(2.0, 18.0), &dim_style);
+            canvas.draw_text(&format!("{:.1} us", self.stats.p99_latency_us), Point::new(14.0, 18.0), &label_style);
+        }
 
         // Help text
         canvas.draw_text("Use arrow keys to navigate, Enter to toggle", Point::new(2.0, 20.0), &dim_style);
@@ -553,5 +609,33 @@ mod tests {
     fn test_workload_names() {
         assert_eq!(WorkloadType::Gemm.name(), "GEMM (Matrix Multiply)");
         assert_eq!(WorkloadType::Gemm.short_name(), "GEMM");
+    }
+
+    #[test]
+    fn test_update_score() {
+        let mut panel = LoadControlPanelBrick::new();
+        assert!(panel.brick_score.is_none());
+        assert_eq!(panel.gflops, 0.0);
+
+        let score = BrickScore::new(38, 22, 20, 14);
+        panel.update_score(score, 27.92);
+
+        assert!(panel.brick_score.is_some());
+        assert_eq!(panel.brick_score.unwrap().total(), 94);
+        assert!((panel.gflops - 27.92).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_score_rendering() {
+        let bar = LoadControlPanelBrick::render_score_bar(20, 40, 10);
+        assert_eq!(bar.chars().filter(|c| *c == '█').count(), 5);
+        assert_eq!(bar.chars().filter(|c| *c == '░').count(), 5);
+    }
+
+    #[test]
+    fn test_new_panel_has_no_score() {
+        let panel = LoadControlPanelBrick::new();
+        assert!(panel.brick_score.is_none());
+        assert_eq!(panel.gflops, 0.0);
     }
 }
