@@ -57,6 +57,8 @@ pub mod error;
 
 // Core brick traits (cbtop-specific)
 pub use brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+// ComputeBrick Scoring Framework (§29)
+pub use brick::{BrickScore, BrickGrade, Scorable};
 
 // Application
 pub use app::CbtopApp;
