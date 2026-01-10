@@ -30,6 +30,10 @@ crossterm = { version = "0.28", optional = true }
 # WGPU for cross-platform WebGPU compute (Vulkan/Metal/DX12/WebGPU)
 wgpu = { version = "24", optional = true }
 
+# Apple Metal backend via manzana (macOS only)
+[target.'cfg(target_os = "macos")'.dependencies]
+manzana = { version = "0.1.0", optional = true }
+
 [dev-dependencies]
 proptest = "1.9"
 criterion = "0.7"
@@ -57,6 +61,8 @@ tui-monitor = ["stress-test", "dep:ratatui", "dep:crossterm"]
 gpu-pixels = ["dep:jugar-probar", "dep:ratatui", "dep:crossterm"]
 # WGPU backend for cross-platform GPU compute (WebGPU via wgpu crate)
 wgpu = ["dep:wgpu"]
+# Apple Metal backend via manzana (macOS only)
+metal = ["dep:manzana"]
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
@@ -104,4 +110,69 @@ path = "examples/satd_kernels.rs"
 [[example]]
 name = "gpu_pixels_render"
 path = "examples/gpu_pixels_render.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "test_q4k_cuda"
+path = "examples/test_q4k_cuda.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "test_tiled_q4k_cuda"
+path = "examples/test_tiled_q4k_cuda.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "test_tiled_q4k_correctness"
+path = "examples/test_tiled_q4k_correctness.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "lz4_compression"
+path = "examples/lz4_compression.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "lz4_file_compress"
+path = "examples/lz4_file_compress.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "test_gpu_simple"
+path = "examples/test_gpu_simple.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "test_hash_store"
+path = "examples/test_hash_store.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "test_hash_store_warp"
+path = "examples/test_hash_store_warp.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "test_lz4_hash_flow"
+path = "examples/test_lz4_hash_flow.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "test_decompress_ptx"
+path = "examples/test_decompress_ptx.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "test_single_page"
+path = "examples/test_single_page.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "debug_lz4_minimal"
+path = "examples/debug_lz4_minimal.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "debug_cvta_shared"
+path = "examples/debug_cvta_shared.rs"
 required-features = ["cuda"]
