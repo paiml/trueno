@@ -3,8 +3,11 @@
 //! Provides a unified interface for different GPU backends:
 //! - CUDA (NVIDIA) - Primary, uses PTX
 //! - WGPU (WebGPU) - Cross-platform, uses WGSL (Vulkan/Metal/DX12/WebGPU)
-//! - Metal (Apple, future)
+//! - Metal (Apple) - Native Apple GPU compute via manzana crate
 //! - Vulkan (cross-platform, future)
+
+#[cfg(all(target_os = "macos", feature = "metal"))]
+pub mod metal_shaders;
 
 /// Backend trait for GPU operations
 pub trait Backend: Send + Sync {
