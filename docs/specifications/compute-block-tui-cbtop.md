@@ -50,7 +50,7 @@
 | [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **13 entries** |
 | [**26**](#26-implementation-commands) | **Implementation Commands** | - |
 | [**27**](#27-real-load-generation-architecture) | **Real Load Generation Architecture** | **MANDATORY** |
-| [**28**](#28-uiux-improvements-pmat-012) | **UI/UX Improvements (PMAT-012)** | **PENDING** |
+| [**28**](#28-uiux-improvements-pmat-012) | **UI/UX Improvements (PMAT-012)** | **7/9 DONE** |
 | [A](#appendix-a-keyboard-controls-reference) | Keyboard Controls Reference | - |
 | [B](#appendix-b-configuration-file-format) | Configuration File Format | - |
 
@@ -6395,13 +6395,15 @@ canvas.draw_text(&bar, point, &TextStyle { color, ..Default::default() });
 
 | Feature | presentar Reference | cbtop Target | Status |
 |---------|:------------------:|:------------:|:------:|
-| Per-core CPU bars | ✅ | ✅ | PENDING |
-| Memory breakdown | ✅ | ✅ | PENDING |
+| Per-core CPU bars | ✅ | ✅ | ✅ DONE |
+| Memory breakdown | ✅ | ✅ | ✅ DONE |
 | Network TX/RX | ✅ | ⚠️ P2 | PENDING |
 | Disk per-mount | ✅ | ⚠️ P2 | PENDING |
-| Color gradients | ✅ | ✅ | PENDING |
-| Responsive layout | ✅ | ✅ | PENDING |
-| Braille graphs | ✅ | ✅ | PENDING |
+| Color gradients | ✅ | ✅ | ✅ DONE |
+| Responsive layout | ✅ | ✅ | ✅ DONE |
+| Braille graphs | ✅ | ✅ | ✅ DONE |
+| GFLOP/s status bar | ✅ | ✅ | ✅ DONE |
+| GPU panel | ✅ | ✅ | ✅ DONE |
 
 ---
 

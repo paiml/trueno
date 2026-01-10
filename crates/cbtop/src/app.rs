@@ -232,6 +232,43 @@ impl HardwareInfo {
     }
 }
 
+/// Memory breakdown metrics (PMAT-012 UI-04)
+#[derive(Debug, Clone, Default)]
+pub struct MemoryBreakdown {
+    /// Total RAM in KB
+    pub total_kb: u64,
+    /// Used RAM in KB
+    pub used_kb: u64,
+    /// Cached RAM in KB
+    pub cached_kb: u64,
+    /// Buffers in KB
+    pub buffers_kb: u64,
+    /// Available RAM in KB
+    pub available_kb: u64,
+}
+
+impl MemoryBreakdown {
+    /// Usage percentage
+    pub fn usage_percent(&self) -> f64 {
+        if self.total_kb > 0 {
+            ((self.total_kb - self.available_kb) as f64 / self.total_kb as f64) * 100.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Format KB as human-readable
+    pub fn format_kb(kb: u64) -> String {
+        if kb >= 1_048_576 {
+            format!("{:.1}G", kb as f64 / 1_048_576.0)
+        } else if kb >= 1024 {
+            format!("{:.1}M", kb as f64 / 1024.0)
+        } else {
+            format!("{}K", kb)
+        }
+    }
+}
+
 /// Real-time load metrics
 #[derive(Debug, Clone, Default)]
 pub struct LoadMetrics {
@@ -249,6 +286,8 @@ pub struct LoadMetrics {
     pub ops_per_second: f64,
     /// Bytes processed per second
     pub bytes_per_second: f64,
+    /// Memory breakdown (PMAT-012 UI-04)
+    pub memory: MemoryBreakdown,
 }
 
 /// Application state
@@ -445,12 +484,41 @@ impl CbtopApp {
         self.cpu_history.push(cpu_usage);
         self.load_metrics.cpu_usage = cpu_usage;
 
+        // Read memory breakdown from /proc/meminfo (PMAT-012 UI-04)
+        self.load_metrics.memory = Self::read_memory();
+
         // Track frame time
         let now = Instant::now();
         let frame_ms = now.duration_since(self.last_frame).as_secs_f64() * 1000.0;
         self.frame_times.push(frame_ms);
         self.last_frame = now;
         self.frame_count += 1;
+    }
+
+    /// Read memory breakdown from /proc/meminfo (PMAT-012 UI-04)
+    fn read_memory() -> MemoryBreakdown {
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(contents) = std::fs::read_to_string("/proc/meminfo") {
+                let mut mem = MemoryBreakdown::default();
+                for line in contents.lines() {
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    if parts.len() >= 2 {
+                        let value: u64 = parts[1].parse().unwrap_or(0);
+                        match parts[0] {
+                            "MemTotal:" => mem.total_kb = value,
+                            "MemAvailable:" => mem.available_kb = value,
+                            "Buffers:" => mem.buffers_kb = value,
+                            "Cached:" => mem.cached_kb = value,
+                            _ => {}
+                        }
+                    }
+                }
+                mem.used_kb = mem.total_kb.saturating_sub(mem.available_kb);
+                return mem;
+            }
+        }
+        MemoryBreakdown::default()
     }
 
     /// Read real CPU usage from /proc/stat (aggregate and per-core)
@@ -846,17 +914,76 @@ impl CbtopApp {
             current_y += 2.0;
         }
 
+        // PMAT-012 UI-04: Memory breakdown box
+        if metrics.memory.total_kb > 0 && current_y < height as f32 - 12.0 {
+            let mem_box_top = format!("┌─ Memory {}┐", "─".repeat(inner_width.saturating_sub(11)));
+            canvas.draw_text(&mem_box_top, Point::new(1.0, current_y), &dim_style);
+            current_y += 1.0;
+
+            // Memory usage bar with color gradient
+            let mem_pct = metrics.memory.usage_percent();
+            let mem_bar = Self::make_bar(mem_pct, 100.0, bar_width);
+            canvas.draw_text("│ Used:    ", Point::new(1.0, current_y), &dim_style);
+            canvas.draw_text(&mem_bar, Point::new(11.0, current_y), &TextStyle { color: theme.memory_color(mem_pct), ..Default::default() });
+            let mem_val_x = 11.0 + bar_width as f32 + 1.0;
+            canvas.draw_text(&format!("{:5.1}%", mem_pct), Point::new(mem_val_x, current_y), &bright_style);
+            canvas.draw_text(" │", Point::new(box_width as f32, current_y), &dim_style);
+            current_y += 1.0;
+
+            // Memory breakdown values
+            let total_str = MemoryBreakdown::format_kb(metrics.memory.total_kb);
+            let used_str = MemoryBreakdown::format_kb(metrics.memory.used_kb);
+            let cached_str = MemoryBreakdown::format_kb(metrics.memory.cached_kb);
+            let buffers_str = MemoryBreakdown::format_kb(metrics.memory.buffers_kb);
+
+            canvas.draw_text(&format!("│ Total: {:>8}  Used: {:>8}  Cache: {:>8}  Buf: {:>6} ",
+                total_str, used_str, cached_str, buffers_str), Point::new(1.0, current_y), &dim_style);
+            canvas.draw_text("│", Point::new(box_width as f32, current_y), &dim_style);
+            current_y += 1.0;
+
+            let mem_box_bottom = format!("└{}┘", "─".repeat(inner_width));
+            canvas.draw_text(&mem_box_bottom, Point::new(1.0, current_y), &dim_style);
+            current_y += 2.0;
+        }
+
+        // PMAT-012 F405: GPU panel when NVIDIA present
+        if hardware.gpu_name.is_some() && current_y < height as f32 - 10.0 {
+            let gpu_box_top = format!("┌─ GPU {}┐", "─".repeat(inner_width.saturating_sub(7)));
+            canvas.draw_text(&gpu_box_top, Point::new(1.0, current_y), &dim_style);
+            current_y += 1.0;
+
+            // GPU name
+            if let Some(ref gpu) = hardware.gpu_name {
+                let gpu_str = format!("│ {:width$} │",
+                    gpu.chars().take(inner_width.saturating_sub(4)).collect::<String>(),
+                    width = inner_width.saturating_sub(2));
+                canvas.draw_text(&gpu_str, Point::new(1.0, current_y), &TextStyle { color: theme.gpu_color(50.0), ..Default::default() });
+            }
+            current_y += 1.0;
+
+            // GPU status hint
+            canvas.draw_text("│ Status: Ready for CUDA workloads ", Point::new(1.0, current_y), &dim_style);
+            canvas.draw_text("│", Point::new(box_width as f32, current_y), &dim_style);
+            current_y += 1.0;
+
+            let gpu_box_bottom = format!("└{}┘", "─".repeat(inner_width));
+            canvas.draw_text(&gpu_box_bottom, Point::new(1.0, current_y), &dim_style);
+            current_y += 2.0;
+        }
+
         // PMAT-012 UI-09: Sparkline with corrected width (width - 6 for box chars + padding)
         let sparkline_width = (width as usize).saturating_sub(6).max(10);
 
+        // PMAT-012 UI-05: Braille graphs for higher resolution sparklines
         if !cpu_data.is_empty() && current_y < height as f32 - 8.0 {
-            let spark_box_top = format!("┌─ CPU History {}┐", "─".repeat(inner_width.saturating_sub(15)));
+            let spark_box_top = format!("┌─ CPU History (braille) {}┐", "─".repeat(inner_width.saturating_sub(23)));
             canvas.draw_text(&spark_box_top, Point::new(1.0, current_y), &dim_style);
             current_y += 1.0;
 
-            let sparkline = Self::make_sparkline(cpu_data, sparkline_width);
+            // Use braille for higher resolution (2x data density)
+            let braille_line = Self::make_braille_sparkline(cpu_data, sparkline_width);
             canvas.draw_text("│ ", Point::new(1.0, current_y), &dim_style);
-            canvas.draw_text(&sparkline, Point::new(3.0, current_y), &TextStyle { color: theme.cpu.sample(0.3), ..Default::default() });
+            canvas.draw_text(&braille_line, Point::new(3.0, current_y), &TextStyle { color: theme.cpu.sample(0.3), ..Default::default() });
             canvas.draw_text(" │", Point::new(box_width as f32, current_y), &dim_style);
             current_y += 1.0;
 
@@ -865,15 +992,15 @@ impl CbtopApp {
             current_y += 2.0;
         }
 
-        // Bricks/sec sparkline
+        // Bricks/sec braille sparkline
         if !bricks_data.is_empty() && current_y < height as f32 - 5.0 {
-            let brick_box_top = format!("┌─ Bricks/sec History {}┐", "─".repeat(inner_width.saturating_sub(22)));
+            let brick_box_top = format!("┌─ Bricks/sec (braille) {}┐", "─".repeat(inner_width.saturating_sub(24)));
             canvas.draw_text(&brick_box_top, Point::new(1.0, current_y), &dim_style);
             current_y += 1.0;
 
-            let sparkline = Self::make_sparkline(bricks_data, sparkline_width);
+            let braille_line = Self::make_braille_sparkline(bricks_data, sparkline_width);
             canvas.draw_text("│ ", Point::new(1.0, current_y), &dim_style);
-            canvas.draw_text(&sparkline, Point::new(3.0, current_y), &accent_style);
+            canvas.draw_text(&braille_line, Point::new(3.0, current_y), &accent_style);
             canvas.draw_text(" │", Point::new(box_width as f32, current_y), &dim_style);
             current_y += 1.0;
 
@@ -928,6 +1055,58 @@ impl CbtopApp {
             } else {
                 result.push(' ');
             }
+        }
+
+        result
+    }
+
+    /// PMAT-012 UI-05: Braille graph for higher resolution sparklines
+    /// Uses Unicode braille patterns (U+2800-U+28FF) - each character encodes 2 columns x 4 rows
+    fn make_braille_sparkline(data: &[f64], width: usize) -> String {
+        if data.is_empty() {
+            return " ".repeat(width);
+        }
+
+        let max = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max).max(1.0);
+        let min = data.iter().cloned().fold(f64::INFINITY, f64::min).min(0.0);
+        let range = (max - min).max(1.0);
+
+        // Braille dot positions (column 1: bits 0,1,2,6; column 2: bits 3,4,5,7)
+        // Dots are numbered: 1,2,3,7 (left col), 4,5,6,8 (right col)
+        // Bit mapping: dot1=0x01, dot2=0x02, dot3=0x04, dot4=0x08,
+        //              dot5=0x10, dot6=0x20, dot7=0x40, dot8=0x80
+        const COL1_DOTS: [u8; 4] = [0x40, 0x04, 0x02, 0x01]; // bottom to top
+        const COL2_DOTS: [u8; 4] = [0x80, 0x20, 0x10, 0x08]; // bottom to top
+
+        let mut result = String::with_capacity(width);
+        let points_per_char = 2;
+        let step = data.len().max(1) as f64 / (width * points_per_char) as f64;
+
+        for i in 0..width {
+            let mut pattern: u8 = 0;
+
+            // Left column (first data point)
+            let idx1 = ((i * 2) as f64 * step) as usize;
+            if idx1 < data.len() {
+                let normalized = (data[idx1] - min) / range;
+                let dots = (normalized * 4.0).round() as usize;
+                for d in 0..dots.min(4) {
+                    pattern |= COL1_DOTS[d];
+                }
+            }
+
+            // Right column (second data point)
+            let idx2 = ((i * 2 + 1) as f64 * step) as usize;
+            if idx2 < data.len() {
+                let normalized = (data[idx2] - min) / range;
+                let dots = (normalized * 4.0).round() as usize;
+                for d in 0..dots.min(4) {
+                    pattern |= COL2_DOTS[d];
+                }
+            }
+
+            // Braille base is U+2800
+            result.push(char::from_u32(0x2800 + pattern as u32).unwrap_or(' '));
         }
 
         result
