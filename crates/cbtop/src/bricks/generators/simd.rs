@@ -42,8 +42,8 @@ fn optimal_tile_size() -> usize {
 }
 
 /// Determine if tiling should be used based on problem size
-/// OPT-007: Only use tiling when data significantly exceeds L3 cache
-/// Tiling has allocation overhead, so we need a higher threshold
+/// OPT-016: Use tiling when data exceeds 100% of L3 cache
+/// This ensures tiling kicks in before L3 thrashing occurs at the 4M element boundary
 fn should_use_tiling(problem_size: usize) -> bool {
     let l3_cache = std::env::var("TRUENO_L3_CACHE_MB")
         .ok()
@@ -52,14 +52,15 @@ fn should_use_tiling(problem_size: usize) -> bool {
         .unwrap_or(DEFAULT_L3_CACHE_BYTES);
 
     // Data size for 3 arrays of f32 (2 inputs + 1 output)
-    // OPT-007: Account for output allocation in working set
     let data_size = problem_size * 3 * std::mem::size_of::<f32>();
 
-    // OPT-007: Use tiling only when data exceeds 150% of L3 cache
-    // This avoids the 4M element cliff where tiling allocation overhead
-    // dominates and the working set is right at L3 boundary causing thrashing.
-    // At 150% threshold, streaming becomes more efficient than tiled caching.
-    data_size > (l3_cache * 3) / 2
+    // OPT-016: Use tiling when data exceeds 100% of L3 cache
+    // Previous 150% threshold (48MB for 32MB L3) caused the 4M element cliff:
+    // - 4M elements = 48MB working set = exactly at threshold = no tiling
+    // - But 48MB > 32MB L3, so cache thrashing occurs
+    // - Result: 21.7 GFLOP/s (1.1% efficiency) vs 959.8 GFLOP/s at 1M
+    // Fix: Lower to 100% so 4M elements triggers tiling
+    data_size > l3_cache
 }
 
 pub struct SimdLoadBrick {
