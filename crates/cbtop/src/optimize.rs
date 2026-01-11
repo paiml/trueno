@@ -180,18 +180,22 @@ impl CpuCapabilities {
     }
 
     /// Calculate theoretical peak for a given size (cache vs memory bound)
-    pub fn theoretical_peak_for_size(&self, size: usize, bytes_per_element: usize, bytes_per_flop: f64) -> f64 {
-        let data_bytes = size * bytes_per_element;
+    /// Uses bytes_per_flop to estimate total working set (includes all arrays)
+    pub fn theoretical_peak_for_size(&self, size: usize, _bytes_per_element: usize, bytes_per_flop: f64) -> f64 {
+        // Calculate working set using bytes_per_flop which accounts for all arrays
+        // e.g., elementwise_mul: 12 bytes/FLOP = 3 arrays × 4 bytes
+        // This gives accurate cache behavior estimation
+        let working_set_bytes = (size as f64 * bytes_per_flop) as usize;
 
         // Determine which cache level (if any) the data fits in
         // Use 80% of cache as threshold to account for other data
-        let cache_bound = if data_bytes < (self.l1d_cache * 80 / 100) {
+        let cache_bound = if working_set_bytes < (self.l1d_cache * 80 / 100) {
             // L1 cache: effectively compute-bound
             self.compute_peak_gflops()
-        } else if data_bytes < (self.l2_cache * 80 / 100) {
+        } else if working_set_bytes < (self.l2_cache * 80 / 100) {
             // L2 cache: ~50% of compute peak
             self.compute_peak_gflops() * 0.5
-        } else if data_bytes < (self.l3_cache * 80 / 100) {
+        } else if working_set_bytes < (self.l3_cache * 80 / 100) {
             // L3 cache: ~25% of compute peak
             self.compute_peak_gflops() * 0.25
         } else {

@@ -42,7 +42,8 @@ fn optimal_tile_size() -> usize {
 }
 
 /// Determine if tiling should be used based on problem size
-/// Only use tiling when data exceeds L3 cache (tiling has overhead)
+/// OPT-007: Only use tiling when data significantly exceeds L3 cache
+/// Tiling has allocation overhead, so we need a higher threshold
 fn should_use_tiling(problem_size: usize) -> bool {
     let l3_cache = std::env::var("TRUENO_L3_CACHE_MB")
         .ok()
@@ -50,12 +51,15 @@ fn should_use_tiling(problem_size: usize) -> bool {
         .map(|mb| mb * 1024 * 1024)
         .unwrap_or(DEFAULT_L3_CACHE_BYTES);
 
-    // Data size for 2 arrays of f32
-    let data_size = problem_size * 2 * std::mem::size_of::<f32>();
+    // Data size for 3 arrays of f32 (2 inputs + 1 output)
+    // OPT-007: Account for output allocation in working set
+    let data_size = problem_size * 3 * std::mem::size_of::<f32>();
 
-    // Use tiling when data exceeds 50% of L3 cache
-    // (50% threshold to account for other data in cache)
-    data_size > l3_cache / 2
+    // OPT-007: Use tiling only when data exceeds 150% of L3 cache
+    // This avoids the 4M element cliff where tiling allocation overhead
+    // dominates and the working set is right at L3 boundary causing thrashing.
+    // At 150% threshold, streaming becomes more efficient than tiled caching.
+    data_size > (l3_cache * 3) / 2
 }
 
 pub struct SimdLoadBrick {
@@ -75,6 +79,8 @@ pub struct SimdLoadBrick {
     tile_size: usize,
     /// Pre-allocated tile vectors to avoid allocation in hot path (PERF-001)
     tile_vectors: Vec<(Vector<f32>, Vector<f32>)>,
+    /// OPT-006: Pre-allocated result vectors to avoid allocation in tiled ops
+    tile_results: Vec<Vec<f32>>,
     /// Last computed result (for verification)
     last_result: f64,
     /// FLOP counter for throughput calculation
@@ -108,6 +114,15 @@ impl SimdLoadBrick {
             })
             .collect();
 
+        // OPT-006: Pre-allocate result vectors for tiled elementwise operations
+        let tile_results: Vec<Vec<f32>> = (0..num_tiles)
+            .map(|i| {
+                let start = i * tile_size;
+                let end = (start + tile_size).min(problem_size);
+                vec![0.0f32; end - start]
+            })
+            .collect();
+
         Self {
             workload: WorkloadType::Gemm,
             intensity: 0.0,
@@ -119,6 +134,7 @@ impl SimdLoadBrick {
             data_b: input_b,
             tile_size,
             tile_vectors,
+            tile_results,
             last_result: 0.0,
             flop_count: 0,
             latency_history: RingBuffer::new(100),
