@@ -47,7 +47,7 @@ impl Default for Config {
 }
 
 /// Compute backend selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum ComputeBackend {
     /// CPU SIMD (SSE2/AVX2/AVX-512/NEON)
     Simd,
@@ -90,7 +90,7 @@ impl LoadProfile {
 }
 
 /// Workload type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum WorkloadType {
     /// Matrix multiplication
     #[default]

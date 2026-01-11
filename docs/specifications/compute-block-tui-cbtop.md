@@ -7072,6 +7072,15 @@ let speedup = match self.workload {
 
 ---
 
+### 31.5 References
+
+1. **[Williams et al., 2009]** "Roofline: An Insightful Visual Performance Model for Multicore Architectures." Communications of the ACM 52(4):65-76. DOI: 10.1145/1498765.1498785. [Memory bandwidth analysis]
+2. **[Georges et al., 2007]** "Statistically Rigorous Java Performance Evaluation." OOPSLA'07. DOI: 10.1145/1297027.1297033. [Benchmark statistics]
+3. **[Mytkowicz et al., 2009]** "Producing Wrong Data Without Doing Anything Obviously Wrong!" ASPLOS'09. DOI: 10.1145/1508244.1508275. [Measurement bias]
+4. **[Fog, 2023]** "Instruction Tables: Lists of instruction latencies, throughputs and micro-operation breakdowns." Technical University of Denmark. [SIMD performance characterization]
+
+---
+
 ## 32. Grammar of ComputeBlock
 
 **Status**: DESIGN | **Priority**: P1 | **Effort**: 10 days
@@ -7687,11 +7696,11 @@ cbtop optimize validate --workload gemm --size 1000000 --before v0.6.0 --after H
 
 | ID | Title | Priority | Effort | Status |
 |----|-------|----------|--------|--------|
-| OPT-001 | Implement OptimizationSuite baseline collection | P1 | 1 day | PENDING |
-| OPT-002 | Implement BottleneckAnalysis with recommendations | P1 | 1 day | PENDING |
-| OPT-003 | Implement RegressionDetector for CI/CD | P1 | 1 day | PENDING |
-| OPT-004 | Implement OptimizationValidator with t-test | P2 | 1 day | PENDING |
-| OPT-005 | Add CLI subcommands (optimize baseline/analyze/check) | P2 | 1 day | PENDING |
+| OPT-001 | Implement OptimizationSuite baseline collection | P1 | 1 day | **COMPLETE** |
+| OPT-002 | Implement BottleneckAnalysis with recommendations | P1 | 1 day | **COMPLETE** |
+| OPT-003 | Implement RegressionDetector for CI/CD | P1 | 1 day | **COMPLETE** |
+| OPT-004 | Implement OptimizationValidator with t-test | P2 | 1 day | **COMPLETE** |
+| OPT-005 | Add CLI subcommands (optimize baseline/analyze/check) | P2 | 1 day | **COMPLETE** |
 
 ### 33.6 Expected Outcomes
 
@@ -7707,15 +7716,6 @@ After implementing this plan:
 1. **[Georges et al., 2007]** "Statistically Rigorous Java Performance Evaluation." OOPSLA'07. [Statistical methodology]
 2. **[Kalibera & Jones, 2013]** "Rigorous Benchmarking in Reasonable Time." ISMM'13. DOI: 10.1145/2464157.2464160. [Sample size determination]
 3. **[Curtsinger & Berger, 2013]** "STABILIZER: Statistically Sound Performance Evaluation." ASPLOS'13. DOI: 10.1145/2451116.2451141. [Randomization for bias elimination]
-
----
-
-### 31.5 References
-
-1. **[Williams et al., 2009]** "Roofline: An Insightful Visual Performance Model for Multicore Architectures." Communications of the ACM 52(4):65-76. DOI: 10.1145/1498765.1498785. [Memory bandwidth analysis]
-2. **[Georges et al., 2007]** "Statistically Rigorous Java Performance Evaluation." OOPSLA'07. DOI: 10.1145/1297027.1297033. [Benchmark statistics]
-3. **[Mytkowicz et al., 2009]** "Producing Wrong Data Without Doing Anything Obviously Wrong!" ASPLOS'09. DOI: 10.1145/1508244.1508275. [Measurement bias]
-4. **[Fog, 2023]** "Instruction Tables: Lists of instruction latencies, throughputs and micro-operation breakdowns." Technical University of Denmark. [SIMD performance characterization]
 
 ---
 
