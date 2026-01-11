@@ -397,14 +397,26 @@ impl OptimizationSuite {
         let mut entries = Vec::new();
         let cpu = CpuCapabilities::detect();
 
+        let mut prev_working_set_mb: usize = 0;
+
         for workload in &self.workloads {
             for &size in &self.sizes {
                 for &backend in &self.backends {
-                    // OPT-010: Add cooldown between benchmarks to reduce thermal throttling
-                    // and memory allocator effects that cause high variance
+                    // OPT-011: Adaptive cooldown based on working set size
+                    // Scale cooldown: 100ms base + 10ms per MB of previous working set (max 500ms)
+                    // This allows memory subsystem to stabilize for large workloads
                     if !entries.is_empty() {
-                        std::thread::sleep(Duration::from_millis(100));
+                        let cooldown_ms = 100 + (prev_working_set_mb * 10).min(400);
+                        std::thread::sleep(Duration::from_millis(cooldown_ms as u64));
+
+                        // OPT-012: Memory barrier to ensure previous benchmark's
+                        // writes are visible and memory allocator state is stable
+                        std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
                     }
+
+                    // Calculate working set for this benchmark (used for next cooldown)
+                    // Working set = size * bytes_per_flop (accounts for all arrays)
+                    prev_working_set_mb = ((size as f64 * workload.bytes_per_flop) / (1024.0 * 1024.0)) as usize;
 
                     let result = Benchmark::builder()
                         .workload_type(workload.workload)

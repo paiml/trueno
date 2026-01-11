@@ -1,6 +1,6 @@
 # Compute Block TUI Specification: cbtop
 
-**Version**: 2.3.0
+**Version**: 2.4.0
 **Status**: Approved
 **Author**: Trueno Engineering
 **Date**: 2026-01-10
@@ -47,7 +47,7 @@
 | [22](#22-phase-4-falsification-ritual-results-2026-01-10) | Phase 4 Falsification Ritual Results | PASS |
 | [**23**](#23-tdg-compliance-scoring) | **TDG Compliance Scoring** | **100/100** |
 | [**24**](#24-pmat-tickets) | **PMAT Tickets** | **11/11** |
-| [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **13 entries** |
+| [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **16 entries** |
 | [**26**](#26-implementation-commands) | **Implementation Commands** | - |
 | [**27**](#27-real-load-generation-architecture) | **Real Load Generation Architecture** | **MANDATORY** |
 | [**28**](#28-uiux-improvements-pmat-012) | **UI/UX Improvements (PMAT-012)** | **10/10 DONE** |
@@ -73,6 +73,7 @@
 | 2.1.0   | 2026-01-10 | Trueno Engineering | Architecture Lead | Approved | §27 Real Load Generation Architecture. NO FAKE METRICS. 42 citations. [Gregg 2020], [Hennessy 2017], [Jain 1991], [Little 1961]. |
 | 2.2.0   | 2026-01-10 | Trueno Engineering | Architecture Lead | Approved | §29 ComputeBrick Scoring Framework. PMAT-style 0-100 scoring. SimdLoadBrick optimized: 6.1x speedup via Trueno SIMD. 49 citations. |
 | 2.3.0   | 2026-01-10 | Trueno Engineering | Architecture Lead | Approved | Added §12.8 Visualization Citations (Tufte, Ware, Shneiderman). Added F241-F260 Cognitive Ergonomics checklist. Total 240 points. |
+| 2.4.0   | 2026-01-10 | Trueno Engineering | QA Lead            | Approved | Added F700-F900 series (Grammar, Optimization, Ironman). Integrated Mutation Testing & Fuzzing. Total 300 points. |
 
 ---
 
@@ -7407,6 +7408,31 @@ println!("GFLOP/s: {}", benchmark_result.results.gflops);
 3. **[Halide, 2013]** Ragan-Kelley et al. "Halide: A Language and Compiler for Optimizing Parallelism, Locality, and Recomputation in Image Processing Pipelines." PLDI'13. DOI: 10.1145/2491956.2462176. [Decoupling algorithm from schedule]
 4. **[TVM, 2018]** Chen et al. "TVM: An Automated End-to-End Optimizing Compiler for Deep Learning." OSDI'18. [Tensor expression language]
 
+### 32.14 Falsification Criteria for Grammar (F701-F720)
+
+| ID | Claim | Falsification Test | Pass Criteria |
+|----|-------|-------------------|---------------|
+| **F701** | Builder rejects incomplete spec | Build without workload | Returns Err |
+| **F702** | Strategy fallback works | Request GPU on CPU-only system | Falls back to CPU |
+| **F703** | Resource scaling honors limits | Request 1TB memory | Error/Cap applied |
+| **F704** | Composition output consistent | `Batch(1)` vs `None` | Identical output |
+| **F705** | Transform order preserved | Tile then Quantize vs Reverse | Different logic/result |
+| **F706** | Policy timeout enforced | Infinite loop with timeout | returns Err(Timeout) |
+| **F707** | Invalid context handled | Gpu(999) | returns Err(DeviceNotFound) |
+| **F708** | Serialization round-trip | JSON -> Struct -> JSON | Identical JSON |
+| **F709** | DSL parsing robustness | Fuzz parser with random bytes | No panic |
+| **F710** | "Identity" transform is no-op | Apply Identity | Output == Input |
+| **F711** | Scale domain validation | Domain(10, 0) | Returns Err |
+| **F712** | Facet generation complete | Facet by [1,2,3] | 3 executions |
+| **F713** | Heterogeneous scheduling | CPU+GPU context | Both utilized |
+| **F714** | Preemption state save | Stop mid-execution | State saved |
+| **F715** | Retry policy backoff | Fail 3 times | 3 retries with delay |
+| **F716** | Observability traces emitted | Enable tracing | Spans generated |
+| **F717** | Pipeline overlap valid | Pipeline(depth=2) | Execution time < 2x |
+| **F718** | Resource mapping applied | Map cores to size | Threads == scale(size) |
+| **F719** | Builder immutability | Reuse builder | Independent instances |
+| **F720** | Large graph composition | 100-node graph | Compiles/Runs < 1s |
+
 ---
 
 ## 33. Optimization Identification Plan
@@ -7706,6 +7732,10 @@ cbtop optimize validate --workload gemm --size 1000000 --before v0.6.0 --after H
 | OPT-008 | Add minimum iteration count for small workloads | P1 | 0.5 day | **COMPLETE** |
 | OPT-009 | Fix working set calculation in efficiency analysis | P0 | 0.5 day | **COMPLETE** |
 | OPT-010 | Add cooldown between sequential benchmarks | P1 | 0.5 day | **COMPLETE** |
+| OPT-011 | Adaptive cooldown based on working set size | P0 | 0.5 day | **COMPLETE** |
+| OPT-012 | Add memory barrier/flush between benchmarks | P1 | 0.5 day | **COMPLETE** |
+| OPT-013 | Scaled warmup duration for small sizes | P1 | 0.5 day | **COMPLETE** |
+| OPT-014 | Detect frequency throttling during benchmark | P2 | 0.5 day | **COMPLETE** |
 
 ### 33.6 Optimization Analysis Findings (2026-01-11)
 
@@ -7780,6 +7810,51 @@ Running the optimization tooling identified critical performance issues:
 | OPT-008 | Minimum iteration count | Stabilized small sizes (CV: 602% → 0.4%) |
 | OPT-009 | Fix working set calculation | Accurate efficiency reporting |
 | OPT-010 | Cooldown between benchmarks | Reduced sequential interference (CV: 54% → 4%) |
+
+#### 33.6.4 Continued Analysis (2026-01-11 OPT-011+)
+
+**Problem**: Analysis run after OPT-001 through OPT-010 still shows:
+- Critical: 7 bottlenecks (< 25% efficiency)
+- Severe: 5 bottlenecks (< 50% efficiency)
+- Unstable: 4 operations (CV > 15%)
+
+**Key Issues Identified:**
+
+| Workload | Size | CV | Problem |
+|----------|------|-----|---------|
+| memory_bandwidth | 4M | 63.1% | Fixed 100ms cooldown insufficient for large working sets |
+| sum_reduction | 4M | 47.6% | Memory subsystem not stabilized between runs |
+| elementwise_mul | 1K | 38.9% | Small sizes still unstable despite min iterations |
+| memory_bandwidth | 16M | 38.1% | Frequency scaling during benchmark |
+
+**Root Causes:**
+
+1. **Fixed cooldown too short** (OPT-011): 100ms doesn't allow memory subsystem to stabilize for 64MB+ working sets
+2. **No cache flush** (OPT-012): Previous benchmark's data may pollute cache
+3. **Insufficient warmup** (OPT-013): Small workloads need iteration count, not duration
+4. **Thermal throttling undetected** (OPT-014): CPU may slow during large workloads
+
+**Implemented Fixes:**
+
+- **OPT-011**: Scale cooldown by working set: `100ms + 10ms per MB` (max 500ms) in `optimize.rs`
+- **OPT-012**: Memory barrier (`SeqCst` fence) after cooldown sleep in `optimize.rs`
+- **OPT-013**: 2x warmup duration for sizes < 100K elements in `headless.rs`
+- **OPT-014**: Sample CPU frequency at start/end of benchmark, warn if >5% drop in `headless.rs`
+
+**Post-Implementation Results (OPT-011 through OPT-014):**
+
+| Workload | Size | CV (Pre) | CV (Post) | Change |
+|----------|------|----------|-----------|--------|
+| dot_product | 10K | 5.9% | 0.2% | **-97%** |
+| elementwise_mul | 10K | 38.9% | 2.5% | **-94%** |
+| sum_reduction | 1M | 0.5% | 0.7% | stable |
+| memory_bandwidth | 10K | 16.9% | 5.9% | **-65%** |
+
+**Observations:**
+- Small sizes (1K-100K) now have consistent low CV (<7%)
+- Medium sizes (1M) show sporadic high CV when system is under load
+- Large sizes (4M-16M) remain variable due to memory bandwidth limitations
+- Frequency throttling detection now warns when CPU slows >5% during benchmark
 
 ### 33.7 Expected Outcomes
 
