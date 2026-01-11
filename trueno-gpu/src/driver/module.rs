@@ -70,7 +70,22 @@ impl CudaModule {
         let mut module: CUmodule = ptr::null_mut();
         let result =
             unsafe { (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _) };
-        CudaDriver::check(result).map_err(|e| GpuError::ModuleLoad(e.to_string()))?;
+
+        if let Err(e) = CudaDriver::check(result) {
+            // Dump failing PTX to file for debugging
+            let ptx_path = "/tmp/failing_ptx.txt";
+            if let Ok(()) = std::fs::write(ptx_path, ptx) {
+                eprintln!("[PTX-DEBUG] Failing PTX dumped to {}", ptx_path);
+            }
+            // Extract kernel name from PTX for better diagnostics
+            let kernel_name = ptx.lines()
+                .find(|l| l.contains(".entry"))
+                .map(|l| l.trim())
+                .unwrap_or("<unknown>");
+            eprintln!("[PTX-DEBUG] Failed kernel: {}", kernel_name);
+            eprintln!("[PTX-DEBUG] PTX length: {} bytes", ptx.len());
+            return Err(GpuError::ModuleLoad(e.to_string()));
+        }
 
         Ok(Self {
             module,
