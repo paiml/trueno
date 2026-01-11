@@ -29,6 +29,7 @@
 //! ```
 
 pub mod backends;
+pub mod brick;
 pub mod chaos;
 pub mod eigen;
 pub mod error;
@@ -50,6 +51,14 @@ pub use monitor::{
 #[cfg(feature = "cuda-monitor")]
 pub use monitor::{enumerate_cuda_devices, query_cuda_device_info, query_cuda_memory};
 pub use vector::Vector;
+
+// ComputeBrick exports
+pub use brick::{
+    AddOp, AssertionResult, BrickError, BrickLayer, BrickVerification, ByteBudget,
+    ComputeAssertion, ComputeBackend, ComputeBrick, ComputeOp, DotOp, FusedGateUpOp,
+    FusedGateUpWeights, FusedQKVOp, FusedQKVWeights, MatmulOp, SoftmaxOp, TokenBudget,
+    TokenResult,
+};
 
 /// Backend execution target
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -723,5 +732,79 @@ mod tests {
             #[cfg(target_feature = "simd128")]
             assert_eq!(memory, Backend::WasmSIMD);
         }
+    }
+
+    // ========================================================================
+    // Additional Coverage Tests
+    // ========================================================================
+
+    #[test]
+    fn test_operation_type_debug() {
+        let mem = OperationType::MemoryBound;
+        let debug_str = format!("{:?}", mem);
+        assert!(debug_str.contains("MemoryBound"));
+
+        let compute = OperationType::ComputeBound;
+        let debug_str = format!("{:?}", compute);
+        assert!(debug_str.contains("ComputeBound"));
+
+        let mixed = OperationType::Mixed;
+        let debug_str = format!("{:?}", mixed);
+        assert!(debug_str.contains("Mixed"));
+    }
+
+    #[test]
+    fn test_operation_type_clone() {
+        let op_type = OperationType::ComputeBound;
+        #[allow(clippy::clone_on_copy)]
+        let cloned = op_type.clone();
+        assert_eq!(op_type, cloned);
+    }
+
+    #[test]
+    fn test_operation_type_copy() {
+        let op_type = OperationType::Mixed;
+        let copied = op_type;
+        assert_eq!(op_type, copied);
+    }
+
+    #[test]
+    fn test_operation_type_equality() {
+        assert_eq!(OperationType::MemoryBound, OperationType::MemoryBound);
+        assert_eq!(OperationType::ComputeBound, OperationType::ComputeBound);
+        assert_eq!(OperationType::Mixed, OperationType::Mixed);
+    }
+
+    #[test]
+    fn test_backend_all_variants_debug() {
+        // Test Debug for all backend variants
+        assert!(format!("{:?}", Backend::Scalar).contains("Scalar"));
+        assert!(format!("{:?}", Backend::SSE2).contains("SSE2"));
+        assert!(format!("{:?}", Backend::AVX).contains("AVX"));
+        assert!(format!("{:?}", Backend::AVX512).contains("AVX512"));
+        assert!(format!("{:?}", Backend::NEON).contains("NEON"));
+        assert!(format!("{:?}", Backend::WasmSIMD).contains("WasmSIMD"));
+        assert!(format!("{:?}", Backend::GPU).contains("GPU"));
+    }
+
+    #[test]
+    fn test_symmetric_eigen_reexport() {
+        // Verify SymmetricEigen is re-exported correctly
+        // Just verify it's accessible
+        let _ = std::mem::size_of::<SymmetricEigen>();
+    }
+
+    #[test]
+    fn test_hash_reexport() {
+        // Verify hash functions are re-exported correctly
+        let result = hash_bytes(b"test");
+        assert_ne!(result, 0);
+
+        let key_hash = hash_key("test_key");
+        assert_ne!(key_hash, 0);
+
+        let keys = ["a", "b", "c", "d"];
+        let batch_result = hash_keys_batch(&keys);
+        assert_eq!(batch_result.len(), 4);
     }
 }
