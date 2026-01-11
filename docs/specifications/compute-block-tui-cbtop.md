@@ -7701,8 +7701,75 @@ cbtop optimize validate --workload gemm --size 1000000 --before v0.6.0 --after H
 | OPT-003 | Implement RegressionDetector for CI/CD | P1 | 1 day | **COMPLETE** |
 | OPT-004 | Implement OptimizationValidator with t-test | P2 | 1 day | **COMPLETE** |
 | OPT-005 | Add CLI subcommands (optimize baseline/analyze/check) | P2 | 1 day | **COMPLETE** |
+| OPT-006 | Pre-allocate result buffers for tiled operations | P0 | 0.5 day | **COMPLETE** |
+| OPT-007 | Increase tiling threshold to avoid 4M element cliff | P0 | 0.5 day | **COMPLETE** |
+| OPT-008 | Add minimum iteration count for small workloads | P1 | 0.5 day | PENDING |
+| OPT-009 | Fix working set calculation in efficiency analysis | P0 | 0.5 day | **COMPLETE** |
 
-### 33.6 Expected Outcomes
+### 33.6 Optimization Analysis Findings (2026-01-11)
+
+Running the optimization tooling identified critical performance issues:
+
+#### 33.6.1 The 4M Element Performance Cliff
+
+**Problem**: Performance drops dramatically at 4M elements (48MB working set):
+
+| Size | Data Size | Uses Tiling | Allocs/Iter | GFLOP/s | Efficiency |
+|------|-----------|-------------|-------------|---------|------------|
+| 1M | 8 MB | No | 1 | 125.7 | 6.1% |
+| **4M** | **32 MB** | **Yes** | **31** | **4.1** | **0.2%** |
+| 16M | 128 MB | Yes | 123 | 2.0 | 12.6% |
+
+**Root Cause**: At 4M elements:
+1. Tiling is enabled (data > 16MB threshold)
+2. 31 allocations per iteration (one per tile result)
+3. Total working set (48MB with result) exceeds L3 cache (32MB)
+4. Cache thrashing occurs - too large to cache, too small to stream efficiently
+
+**Fix (OPT-006)**: Pre-allocate result buffers for tiled operations to eliminate allocation overhead.
+
+**Fix (OPT-007)**: Increase tiling threshold to 80% of L3 (25.6MB) to avoid the cliff.
+
+#### 33.6.2 High Variance at Small Sizes
+
+**Problem**: Coefficient of variation exceeds 600% at small sizes:
+
+| Workload | Size | CV% | Issue |
+|----------|------|-----|-------|
+| dot_product | 10K | 602.2% | Benchmark too short |
+| memory_bandwidth | 10K | 57.4% | Benchmark too short |
+| sum_reduction | 10K | Varies | CPU frequency scaling |
+
+**Fix (OPT-008)**: Enforce minimum iteration count (1000+) for sizes < 100K elements.
+
+#### 33.6.3 Summary of Bottlenecks
+
+**Before Fixes (OPT-006, OPT-007, OPT-009):**
+
+| Severity | Count | Description |
+|----------|-------|-------------|
+| Critical | 11 | < 25% efficiency (primarily 4M element cliff) |
+| Severe | 3 | 25-50% efficiency (memory-bound large sizes) |
+| Unstable | 11 | CV > 15% (small sizes, frequency scaling) |
+
+**After Fixes:**
+
+| Severity | Count | Improvement |
+|----------|-------|-------------|
+| Critical | 8 | -27% (3 bottlenecks resolved) |
+| Severe | 3 | No change (memory-bound, expected) |
+| Moderate | 2 | New category (68% efficiency) |
+| Unstable | 1 | -91% (10 measurements stabilized) |
+
+**Key Improvements:**
+
+| Workload | Size | Before | After | Change |
+|----------|------|--------|-------|--------|
+| dot_product | 4M | 33.5 GFLOP/s | 99.6 GFLOP/s | **+197%** |
+| elementwise_mul | 4M | 4.1 GFLOP/s | 10.9 GFLOP/s | **+166%** |
+| Avg Efficiency | All | 49.5% | 60.9% | **+23%** |
+
+### 33.7 Expected Outcomes
 
 After implementing this plan:
 
