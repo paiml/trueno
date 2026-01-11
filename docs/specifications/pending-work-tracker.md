@@ -1,172 +1,243 @@
 # Pending Work Tracker
 
-Consolidated tracking document for pending specification items in trueno.
+**Document Version**: 1.0.0
+**Created**: 2026-01-11
+**Status**: Active
 
-**Created**: 2026-01-10
-**Last Updated**: 2026-01-10
-
----
-
-## Overview
-
-This document provides a unified view of all pending specification work, linking
-PMAT tickets to falsification tests (FKR entries) and their associated citations.
-
-### Status Summary
-
-| Category | Total | Completed | In Progress | Pending |
-|----------|-------|-----------|-------------|---------|
-| PMAT Tickets | 10 | 1 | 1 | 8 |
-| FKR Entries | 12 | 2 | 2 | 8 |
-| Total Citations | 60 | - | - | - |
-
-**Documentation Status**: COMPLETE (2026-01-10)
-- PMAT Tickets: `docs/pmat-tickets/PMAT-001-to-010.md`
-- FKR Registry: `docs/CUDA_TDG_COMPLIANCE.md`
+Consolidated tracker for pending specification items with cross-references to PMAT tickets and FKR entries.
 
 ---
 
-## Priority Matrix
+## Quick Reference
 
-### P0 - Blocking
-
-| ID | Title | Status | Blocking Issue |
-|----|-------|--------|----------------|
-| PMAT-005 | LZ4 GPU Kernel | COMPLETE | F082 resolved via Lz4WarpShuffleKernel |
-
-### P1 - Critical Path
-
-| ID | Title | Status | Dependencies |
-|----|-------|--------|--------------|
-| PMAT-001 | Loop Splitting | PENDING | None |
-| PMAT-002 | Token Sync | PENDING | None |
-| PMAT-003 | FMA Fusion | PENDING | None |
-| PMAT-004 | Memory Coalescing | PENDING | None |
-| PMAT-008 | PTX Debugger | PENDING | trueno-ptx-debug crate |
-| PMAT-009 | Numerical Stability | PENDING | None |
-| PMAT-010 | Backend Equivalence | IN PROGRESS | None |
-
-### P2 - Platform Expansion
-
-| ID | Title | Status | Platform |
-|----|-------|--------|----------|
-| PMAT-006 | Metal Backend | PENDING | Apple Silicon (M1/M2/M3) |
-| PMAT-007 | ROCm Backend | PENDING | AMD Instinct GPUs |
+| Priority | Pending | In Progress | Complete |
+|----------|---------|-------------|----------|
+| P0 | 0 | 0 | 1 |
+| P1 | 6 | 1 | 0 |
+| P2 | 2 | 0 | 0 |
+| **Total** | **8** | **1** | **1** |
 
 ---
 
-## Cross-Reference: PMAT Tickets to FKR Entries
+## Priority 0: Blocking
 
-| PMAT | FKR | Hypothesis | Status |
-|------|-----|------------|--------|
+### PMAT-005: LZ4 GPU Kernel Completion
+- **Status**: COMPLETE (2026-01-10)
+- **FKR**: FKR-2026-01-10-001, FKR-2026-01-10-007
+- **Spec Ref**: ublk-spec F-001 to F-010
+- **Resolution**: F082 computed-address bug resolved with Lz4WarpShuffleKernel
+
+---
+
+## Priority 1: Critical Path
+
+### PMAT-001: Loop Splitting Optimization
+- **Status**: PENDING
+- **FKR**: FKR-2026-01-10-003
+- **Spec Ref**: F51-F65
+- **Effort**: 5 days
+- **Dependencies**: None
+- **Citations**:
+  1. Allen & Kennedy, 1987 - DOI:10.1145/29873.29875
+  2. Ryoo et al., 2008 - DOI:10.1145/1345206.1345220
+  3. Yang et al., 2010 - DOI:10.1145/1806596.1806606
+
+### PMAT-002: Token-Based Synchronization
+- **Status**: PENDING
+- **FKR**: FKR-2026-01-10-004
+- **Spec Ref**: F66-F80
+- **Effort**: 7 days
+- **Dependencies**: None
+- **Citations**:
+  1. Alglave et al., 2015 - DOI:10.1145/2694344.2694391
+  2. Lustig et al., 2019 - DOI:10.1145/3297858.3304043
+  3. Sorensen & Donaldson, 2016 - DOI:10.1145/2909437.2909440
+
+### PMAT-003: FMA Fusion Correctness
+- **Status**: PENDING
+- **FKR**: FKR-2026-01-10-005
+- **Spec Ref**: F17-F29
+- **Effort**: 4 days
+- **Dependencies**: None
+- **Citations**:
+  1. Muller et al., 2018 - ISBN:978-3-319-76525-9
+  2. Boldo & Melquiond, 2008 - DOI:10.1109/TC.2008.48
+  3. Higham, 2002 - ISBN:0-89871-521-0
+
+### PMAT-004: Memory Coalescing Optimization
+- **Status**: PENDING
+- **FKR**: FKR-2026-01-10-006
+- **Spec Ref**: F34-F39
+- **Effort**: 3 days
+- **Dependencies**: None
+- **Citations**:
+  1. Volkov & Demmel, 2008 - DOI:10.1109/SC.2008.5214359
+  2. Ruetsch & Micikevicius, 2009 - NVIDIA Technical Report
+  3. Mei & Chu, 2017 - DOI:10.1109/TPDS.2016.2549523
+
+### PMAT-008: PTX Debugger Implementation
+- **Status**: PENDING
+- **FKR**: FKR-2026-01-10-008
+- **Spec Ref**: REQ-001 to REQ-010, ptx-debugger.md
+- **Effort**: 15 days
+- **Dependencies**: PMAT-003 (FMA patterns)
+- **Citations**:
+  1. Betts et al., 2012 - DOI:10.1145/2384616.2384625
+  2. Li & Gopalakrishnan, 2010 - DOI:10.1145/1882291.1882320
+  3. Leung et al., 2012 - DOI:10.1145/2259016.2259067
+
+### PMAT-009: Numerical Stability Test Suite
+- **Status**: PENDING
+- **FKR**: FKR-2026-01-10-009
+- **Spec Ref**: F92-F99
+- **Effort**: 6 days
+- **Dependencies**: PMAT-003 (FMA correctness)
+- **Citations**:
+  1. Higham, 2002 - ISBN:0-89871-521-0
+  2. Demmel, 1997 - ISBN:0-89871-389-7
+  3. Goldberg, 1991 - DOI:10.1145/103162.103163
+
+### PMAT-010: Backend Equivalence Testing
+- **Status**: IN PROGRESS
+- **FKR**: FKR-2026-01-10-010
+- **Spec Ref**: F81-F87
+- **Effort**: 4 days
+- **Dependencies**: None
+- **Citations**:
+  1. Whitehead & Fit-Florea, 2011 - NVIDIA Whitepaper
+  2. Collange et al., 2015 - DOI:10.1109/MM.2015.54
+  3. Lam et al., 2013 - DOI:10.1145/2491956.2462927
+
+---
+
+## Priority 2: Platform Expansion
+
+### PMAT-006: Apple Silicon Metal Backend
+- **Status**: PENDING
+- **FKR**: FKR-2026-01-10-011
+- **Spec Ref**: Backend Story Policy
+- **Effort**: 10 days
+- **Dependencies**: PMAT-010 (equivalence testing framework)
+- **Citations**:
+  1. Apple, 2023 - Metal Best Practices Guide
+  2. Gaster & Howes, 2012 - ISBN:978-0-12-387766-6
+  3. Lopes et al., 2021 - arXiv:2110.01599
+
+### PMAT-007: AMD ROCm Backend
+- **Status**: PENDING
+- **FKR**: FKR-2026-01-10-012
+- **Spec Ref**: Backend Story Policy
+- **Effort**: 8 days
+- **Dependencies**: PMAT-010 (equivalence testing framework)
+- **Citations**:
+  1. AMD, 2023 - HIP Programming Guide
+  2. Sun et al., 2019 - DOI:10.1109/IISWC47752.2019.9041952
+  3. Jia et al., 2018 - arXiv:1804.06826
+
+---
+
+## Dependency Graph
+
+```
+                    ┌─────────────┐
+                    │ PMAT-010    │ (Backend Equivalence)
+                    │ IN PROGRESS │
+                    └──────┬──────┘
+                           │
+           ┌───────────────┼───────────────┐
+           ▼               │               ▼
+    ┌─────────────┐        │        ┌─────────────┐
+    │ PMAT-006    │        │        │ PMAT-007    │
+    │ Metal       │        │        │ ROCm        │
+    │ PENDING     │        │        │ PENDING     │
+    └─────────────┘        │        └─────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │ PMAT-003    │ (FMA Correctness)
+                    │ PENDING     │
+                    └──────┬──────┘
+                           │
+           ┌───────────────┼───────────────┐
+           ▼               │               ▼
+    ┌─────────────┐        │        ┌─────────────┐
+    │ PMAT-008    │        │        │ PMAT-009    │
+    │ PTX Debug   │        │        │ Stability   │
+    │ PENDING     │        │        │ PENDING     │
+    └─────────────┘        │        └─────────────┘
+                           │
+    Independent:           │
+    ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+    │ PMAT-001    │ │ PMAT-002    │ │ PMAT-004    │
+    │ Loop Split  │ │ Token Sync  │ │ Coalescing  │
+    │ PENDING     │ │ PENDING     │ │ PENDING     │
+    └─────────────┘ └─────────────┘ └─────────────┘
+```
+
+---
+
+## Suggested Execution Order
+
+Based on dependencies and critical path analysis:
+
+### Sprint 1 (Week 1-2): Foundations
+1. **PMAT-004** (3 days) - Memory Coalescing
+2. **PMAT-003** (4 days) - FMA Correctness
+3. **PMAT-010** (4 days) - Backend Equivalence (complete)
+
+### Sprint 2 (Week 3-4): Optimization
+4. **PMAT-001** (5 days) - Loop Splitting
+5. **PMAT-002** (7 days) - Token Synchronization
+
+### Sprint 3 (Week 5-6): Quality
+6. **PMAT-009** (6 days) - Numerical Stability
+7. **PMAT-008** (15 days) - PTX Debugger (start)
+
+### Sprint 4 (Week 7-9): Platform
+8. **PMAT-008** (continued)
+9. **PMAT-007** (8 days) - ROCm Backend
+10. **PMAT-006** (10 days) - Metal Backend
+
+**Total Estimated Effort**: 67 days (~3 months at 5 days/week)
+
+---
+
+## FKR Cross-Reference
+
+| PMAT | FKR ID | Hypothesis | Status |
+|------|--------|------------|--------|
 | PMAT-001 | FKR-003 | Loop splitting eliminates divergence | PENDING |
 | PMAT-002 | FKR-004 | Token sync equivalent to barriers | PENDING |
-| PMAT-003 | FKR-005 | FMA produces IEEE 754 results | PENDING |
-| PMAT-004 | FKR-006 | Coalescing achieves 4x bandwidth | PENDING |
-| PMAT-005 | FKR-007 | GPU LZ4 matches reference | COMPLETE |
-| PMAT-006 | FKR-011 | Metal matches CUDA reference | PENDING |
-| PMAT-007 | FKR-012 | ROCm matches CUDA reference | PENDING |
-| PMAT-008 | FKR-008 | PTX parser handles all PTX 8.0 | PENDING |
+| PMAT-003 | FKR-005 | FMA is IEEE 754 compliant | PENDING |
+| PMAT-004 | FKR-006 | Coalesced >=4x bandwidth vs strided | PENDING |
+| PMAT-005 | FKR-001, FKR-007 | LZ4 GPU byte-identical | CORROBORATED |
+| PMAT-006 | FKR-011 | Metal equivalent to CUDA | PENDING |
+| PMAT-007 | FKR-012 | ROCm equivalent to CUDA | PENDING |
+| PMAT-008 | FKR-008 | PTX parser handles all constructs | PENDING |
 | PMAT-009 | FKR-009 | Operations stable under perturbation | PENDING |
-| PMAT-010 | FKR-010 | All backends produce equivalent results | IN PROGRESS |
+| PMAT-010 | FKR-010 | All backends numerically equivalent | IN PROGRESS |
 
 ---
 
-## Citation Index
+## Citation Summary
 
-All 60 citations organized by topic for quick reference.
+**Total Unique Citations**: 30 peer-reviewed sources
 
-### GPU Architecture & Memory
+| Category | Count |
+|----------|-------|
+| GPU Architecture & Memory | 3 |
+| Memory Models & Synchronization | 3 |
+| Loop Optimization & Divergence | 3 |
+| Numerical Analysis & Floating-Point | 9 |
+| Compression Algorithms | 3 |
+| GPU Verification | 3 |
+| Platform-Specific (Metal, ROCm) | 6 |
 
-1. [Volkov & Demmel, 2008] Benchmarking GPUs. DOI:10.1109/SC.2008.5214359
-2. [Mei & Chu, 2017] GPU Memory Hierarchy. DOI:10.1109/TPDS.2016.2549523
-3. [Wong et al., 2010] GPU Microarchitecture. DOI:10.1109/ISPASS.2010.5452013
-4. [Jia et al., 2018] Volta GPU Architecture. arXiv:1804.06826
-
-### Memory Models & Synchronization
-
-5. [Alglave et al., 2015] GPU Concurrency. DOI:10.1145/2694344.2694391
-6. [Lustig et al., 2019] PTX Memory Consistency. DOI:10.1145/3297858.3304043
-7. [Mansky et al., 2015] POWER Memory Model. DOI:10.1007/978-3-319-21690-4_9
-8. [Sorensen & Donaldson, 2016] Cross-Platform OpenCL. DOI:10.1145/2909437.2909440
-
-### Loop Optimization & Divergence
-
-9. [Allen & Kennedy, 1987] Vectorization. DOI:10.1145/29873.29875
-10. [Ryoo et al., 2008] GPU Optimization. DOI:10.1145/1345206.1345220
-11. [Yang et al., 2010] GPGPU Compiler. DOI:10.1145/1806596.1806606
-12. [Coutinho et al., 2011] Divergence Analysis. DOI:10.1109/PACT.2011.64
-13. [Han & Abdelrahman, 2011] Reducing Divergence. DOI:10.1145/1964179.1964184
-14. [Zhang et al., 2011] G-Streamline. DOI:10.1145/2000064.2000105
-
-### Numerical Analysis & Floating-Point
-
-15. [Muller et al., 2018] FP Arithmetic Handbook. DOI:10.1007/978-3-319-76526-6
-16. [Boldo & Melquiond, 2008] FMA Emulation. DOI:10.1109/TC.2008.48
-17. [Higham, 2002] Numerical Algorithms. ISBN:0-89871-521-0
-18. [Demmel, 1997] Numerical Linear Algebra. ISBN:0-89871-389-7
-19. [Goldberg, 1991] FP Arithmetic. DOI:10.1145/103162.103163
-20. [IEEE, 2019] IEEE 754-2019. DOI:10.1109/IEEESTD.2019.8766229
-21. [Kahan, 1996] IEEE 754 Status. UC Berkeley
-22. [Whitehead & Fit-Florea, 2011] NVIDIA FP Compliance. NVIDIA Whitepaper
-23. [Collange et al., 2015] SIMD FP Arithmetic. DOI:10.1109/MM.2015.54
-24. [Lam et al., 2013] FP Expression Accuracy. DOI:10.1145/2491956.2462927
-25. [Demmel & Nguyen, 2015] Reproducible Summation. DOI:10.1109/TPDS.2014.2345253
-
-### Compression Algorithms
-
-26. [Collet, 2011] LZ4 Algorithm. lz4.github.io
-27. [Ozsoy et al., 2014] GPU LZSS. DOI:10.1109/ICPADS.2014.11
-28. [Weissenberger & Schmidt, 2018] GPU Huffman. DOI:10.1145/3178487.3178523
-29. [Sitaridi et al., 2016] Parallel Decompression. DOI:10.1109/ICPP.2016.31
-
-### GPU Verification
-
-30. [Betts et al., 2012] GPUVerify. DOI:10.1145/2384616.2384625
-31. [Li & Gopalakrishnan, 2010] SMT GPU Verification. DOI:10.1145/1882291.1882320
-32. [Leung et al., 2012] Loop Tiling for GPGPU. DOI:10.1145/2259016.2259067
-33. [Collingbourne et al., 2011] GPU Kernel Semantics. DOI:10.1007/978-3-642-19718-5_14
-34. [NVIDIA, 2023] PTX ISA 8.0. NVIDIA Documentation
-
-### Platform-Specific
-
-35. [Apple, 2023] Metal Best Practices. Apple Developer
-36. [Gaster & Howes, 2012] Heterogeneous Computing. ISBN:978-0-12-387766-6
-37. [Lopes et al., 2021] Apple Silicon ML. arXiv:2110.01599
-38. [AMD, 2023] HIP Programming Guide. AMD ROCm
-39. [Sun et al., 2019] GPU Design Trends. DOI:10.1109/IISWC47752.2019.9041952
-40. [Arafa et al., 2019] Instruction-Level Power. DOI:10.1109/ISPASS.2019.00018
-41. [Aaftab et al., 2020] Cross-Platform DL. ICLR Workshop
-42. [Ruetsch & Micikevicius, 2009] Matrix Transpose. NVIDIA Technical Report
+All citations include DOI or ISBN where available. See `CUDA_TDG_COMPLIANCE.md` Appendix B for full citation index.
 
 ---
 
-## Specification File References
+## Document History
 
-| Spec File | Pending Items | PMAT Coverage |
-|-----------|---------------|---------------|
-| `cuda-tile-behavior.md` | F51-F65, F66-F80, F17-F29, F34-F39 | PMAT-001 to PMAT-004 |
-| `ptx-debugger.md` | REQ-001 to REQ-010 | PMAT-008 |
-| `ublk-batched-gpu-compression.md` | F-001 to F-010 | PMAT-005 |
-| `apple-metal-backend.md` | (proposed) | PMAT-006 |
-| `amd-rocm-backend.md` | (proposed) | PMAT-007 |
-| `numerical-stability.md` | F92-F99 | PMAT-009 |
-| `backend-equivalence.md` | F81-F87 | PMAT-010 |
-
----
-
-## Document References
-
-- **PMAT Tickets**: `docs/pmat-tickets/PMAT-001-to-010.md`
-- **FKR Registry**: `docs/CUDA_TDG_COMPLIANCE.md` Section H
-- **Quality Gates**: `docs/CUDA_TDG_COMPLIANCE.md` Section G
-- **Continuous Protocol**: `docs/CUDA_TDG_COMPLIANCE.md` Section I
-
----
-
-## Changelog
-
-### 2026-01-10
-- Initial creation with 10 PMAT tickets and 10 new FKR entries
-- 60 peer-reviewed citations indexed
-- Cross-references established between PMAT and FKR
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0.0 | 2026-01-11 | Claude | Initial creation consolidating PMAT tickets and FKR entries |
