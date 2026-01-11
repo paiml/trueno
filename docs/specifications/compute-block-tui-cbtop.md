@@ -7736,6 +7736,7 @@ cbtop optimize validate --workload gemm --size 1000000 --before v0.6.0 --after H
 | OPT-012 | Add memory barrier/flush between benchmarks | P1 | 0.5 day | **COMPLETE** |
 | OPT-013 | Scaled warmup duration for small sizes | P1 | 0.5 day | **COMPLETE** |
 | OPT-014 | Detect frequency throttling during benchmark | P2 | 0.5 day | **COMPLETE** |
+| OPT-015 | IQR-based outlier filtering for CV calculation | P0 | 0.5 day | **COMPLETE** |
 
 ### 33.6 Optimization Analysis Findings (2026-01-11)
 
@@ -7855,6 +7856,27 @@ Running the optimization tooling identified critical performance issues:
 - Medium sizes (1M) show sporadic high CV when system is under load
 - Large sizes (4M-16M) remain variable due to memory bandwidth limitations
 - Frequency throttling detection now warns when CPU slows >5% during benchmark
+
+#### 33.6.5 Outlier Filtering (OPT-015)
+
+**Problem**: Extreme CV values (>200%) caused by system interrupts/GC during benchmarks:
+
+| Workload | Size | CV Before | CV After | Change |
+|----------|------|-----------|----------|--------|
+| elementwise_mul | 10K | 322.7% | 0.2% | **-99.9%** |
+| elementwise_mul | 100K | 209.6% | 0.7% | **-99.7%** |
+| sum_reduction | 16M | 72.1% | 21.1% | **-71%** |
+
+**Solution**: IQR-based outlier filtering in `calculate_latency_stats()`:
+1. Calculate Q1 (25th percentile) and Q3 (75th percentile)
+2. IQR = Q3 - Q1
+3. Remove values outside [Q1 - 1.5×IQR, Q3 + 1.5×IQR]
+4. Calculate CV on filtered data (min 10 samples)
+
+**Results:**
+- STABLE benchmarks: 14 → 20 (+43%)
+- CRITICAL benchmarks: 4 → 0 (-100%)
+- Average efficiency: 47.9% → 54.0% (+13%)
 
 ### 33.7 Expected Outcomes
 

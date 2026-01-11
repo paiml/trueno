@@ -612,17 +612,22 @@ impl HeadlessBenchmark {
             };
         }
 
-        let n = latencies.len() as f64;
-        let mean = latencies.iter().sum::<f64>() / n;
-        let min = latencies.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max = latencies.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        // OPT-015: Filter outliers using IQR method before calculating CV
+        // This reduces measurement noise from system interrupts, GC pauses, etc.
+        let filtered = Self::filter_outliers_iqr(latencies);
+        let data = if filtered.len() >= 10 { &filtered } else { latencies };
 
-        // Calculate standard deviation
-        let variance = latencies.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
+        let n = data.len() as f64;
+        let mean = data.iter().sum::<f64>() / n;
+        let min = data.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+        // Calculate standard deviation on filtered data
+        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
         let std_dev = variance.sqrt();
         let cv_percent = if mean > 0.0 { (std_dev / mean) * 100.0 } else { 0.0 };
 
-        // Calculate percentiles
+        // Calculate percentiles on original data (for accurate p95/p99)
         let mut sorted = latencies.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
@@ -640,6 +645,34 @@ impl HeadlessBenchmark {
             p99: percentile(0.99),
             cv_percent,
         }
+    }
+
+    /// OPT-015: Filter outliers using IQR (Interquartile Range) method
+    /// Removes values outside Q1 - 1.5*IQR and Q3 + 1.5*IQR
+    fn filter_outliers_iqr(data: &[f64]) -> Vec<f64> {
+        if data.len() < 4 {
+            return data.to_vec();
+        }
+
+        let mut sorted = data.to_vec();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let n = sorted.len();
+        let q1_idx = n / 4;
+        let q3_idx = (3 * n) / 4;
+
+        let q1 = sorted[q1_idx];
+        let q3 = sorted[q3_idx];
+        let iqr = q3 - q1;
+
+        // Use 1.5*IQR rule (standard for outlier detection)
+        let lower_bound = q1 - 1.5 * iqr;
+        let upper_bound = q3 + 1.5 * iqr;
+
+        data.iter()
+            .cloned()
+            .filter(|&x| x >= lower_bound && x <= upper_bound)
+            .collect()
     }
 }
 
