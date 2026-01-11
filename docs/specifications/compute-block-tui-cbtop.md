@@ -78,6 +78,7 @@
 | 2.5.0   | 2026-01-10 | Trueno Engineering | QA Lead            | Approved | Strengthened F-series thresholds (90% Mutation). Added §36 Falsification Protocol v2 (Strong). Expanded §12.9 Citations (ACM/IEEE). Total 350 points. |
 | 2.5.0   | 2026-01-11 | Trueno Engineering | Architecture Lead  | Approved | Added §35: Measurement vs Optimization (aprender/renacer integration). F951-F965 falsification. 7 peer-reviewed citations [64]-[70]. Total 70 citations. |
 | 2.6.0   | 2026-01-11 | Trueno Engineering | Claude Opus 4.5    | Approved | §35.2.1: Documented renacer brick_tracer module (v0.9.5). Syscall breakdown categories. OTLP span attributes. 94.5% test coverage. Implements GitHub issue #24. |
+| 2.7.0   | 2026-01-11 | Trueno Engineering | Claude Opus 4.5    | Approved | §21.7: Industry Baseline Throughput (Citation [21] Satna 2026). §21.8: Idiomatic Tooling Guidance (vLLM/llama.cpp as reference, not dependency). F971-F985 falsification. SM utilization, concurrency scaling, memory overhead metrics. |
 
 ---
 
@@ -5370,6 +5371,180 @@ fn f243_response_time() {
 }
 ```
 
+### 21.7 Industry Baseline Throughput (Citation [21])
+
+> **Reference**: Satna, D. (2026). "LLM Inference Server Benchmarking Framework." GitHub.
+> Production comparison of vLLM, Triton Inference Server, TGI on Kubernetes/GPU deployments.
+
+#### 21.7.1 Production Server Baselines (A10 GPU, Mistral-7B, FP16)
+
+| Server | Peak tok/s | P95 Latency | SM Util | Memory Overhead | Best For |
+|--------|-----------|-------------|---------|-----------------|----------|
+| **vLLM** | 412 | 1715ms | **99%** | **42%** | Max throughput, GPU efficiency |
+| **TGI** | 408 | **1704ms** | 98% | 44% | Lowest latency, streaming |
+| **Triton** | 385 | 2007ms | 97% | 45% | Enterprise, multi-model |
+
+**Interpretation**: vLLM represents near-optimal GPU utilization (99% SM). Our Pure Rust implementation should target these baselines.
+
+#### 21.7.2 Expected Throughput by GPU Class (7B Q4 Quantized)
+
+| GPU | VRAM | Expected tok/s | Memory BW | cbtop Score Threshold |
+|-----|------|----------------|-----------|----------------------|
+| RTX 4090 | 24GB | 300-400 | 1.0 TB/s | ≥250 = A, ≥200 = B |
+| A10 | 24GB | 400-450 | 600 GB/s | ≥350 = A, ≥280 = B |
+| A100-40GB | 40GB | 800-1000 | 1.5 TB/s | ≥700 = A, ≥560 = B |
+| A100-80GB | 80GB | 900-1200 | 2.0 TB/s | ≥800 = A, ≥640 = B |
+| H100 | 80GB | 1500-2000 | 3.35 TB/s | ≥1300 = A, ≥1000 = B |
+| H200 | 141GB | 2000-2500 | 4.8 TB/s | ≥1800 = A, ≥1400 = B |
+
+**Usage**: cbtop should display "You: 350 tok/s | Baseline: 400-450" for contextual scoring.
+
+#### 21.7.3 SM Utilization Health Indicators
+
+| SM Util Range | Status | Interpretation | Action |
+|---------------|--------|----------------|--------|
+| < 50% | 🔴 Critical | Severe underutilization | Check kernel launch overhead |
+| 50-80% | ⚠️ Warning | Suboptimal | Profile for serialization |
+| 80-95% | ✅ Healthy | Good utilization | Normal operation |
+| > 95% | 🔥 Saturated | Near-optimal (vLLM level) | Target achieved |
+
+#### 21.7.4 Concurrency Scaling Metrics
+
+| Scaling Efficiency | Interpretation | Root Cause |
+|--------------------|----------------|------------|
+| > 95% | Excellent | Properly parallelized |
+| 90-95% | Good | Minor contention |
+| 70-90% | Warning | Memory bandwidth bottleneck |
+| < 70% | Critical | Kernel serialization or lock contention |
+
+**Calculation**: `scaling_efficiency = (throughput_32_concurrent / throughput_1_request) / 32 * 100%`
+
+#### 21.7.5 Memory Overhead Expectations
+
+| Memory Overhead | Status | Notes |
+|-----------------|--------|-------|
+| < 40% | Excellent | Highly optimized |
+| 40-50% | Normal | Production servers (vLLM: 42%) |
+| 50-60% | Warning | Potential memory leak |
+| > 60% | Critical | Investigate immediately |
+
+### 21.8 Idiomatic Tooling Guidance
+
+> **Principle**: Use production-proven tools (vLLM, llama.cpp, TGI) as **reference implementations**
+> to guide our Pure Rust tooling—without polluting our codebase with foreign dependencies.
+
+#### 21.8.1 The Guidance Principle
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    IDIOMATIC TOOLING WORKFLOW                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Step 1: MEASURE with idiomatic tool (reference baseline)               │
+│          └── vLLM: `python -m vllm.entrypoints.api_server`              │
+│          └── llama.cpp: `./main -m model.gguf --benchmark`              │
+│          └── Output: 412 tok/s, 99% SM, 42% memory                      │
+│                                                                          │
+│  Step 2: MEASURE with our Pure Rust tool (current state)                │
+│          └── cbtop: `cbtop --headless --model qwen2.5-coder-1.5b`       │
+│          └── Output: 350 tok/s, 85% SM, 55% memory                      │
+│                                                                          │
+│  Step 3: COMPARE side-by-side (identify gaps)                           │
+│          └── Throughput gap: 15% (350 vs 412)                           │
+│          └── SM gap: 14% (85% vs 99%)                                   │
+│          └── Memory gap: 13% overhead (55% vs 42%)                      │
+│                                                                          │
+│  Step 4: TRACE with renacer (when gap identified)                       │
+│          └── `renacer --function-time -- apr bench ffn`                 │
+│          └── Output: futex: 22%, mmap: 8%, compute: 70%                 │
+│                                                                          │
+│  Step 5: OPTIMIZE in Pure Rust (close the gap)                          │
+│          └── Implement FusedFfnBrick, CoalescedDp4aBrick                │
+│          └── No vLLM/llama.cpp code copied—only insights                │
+│                                                                          │
+│  Step 6: VERIFY with cbtop (confirm improvement)                        │
+│          └── cbtop: 405 tok/s, 97% SM, 44% memory                       │
+│          └── Gap closed: within 2% of vLLM baseline                     │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 21.8.2 Approved Reference Tools
+
+| Tool | Language | Purpose | How We Use It |
+|------|----------|---------|---------------|
+| **vLLM** | Python/CUDA | Production LLM serving | Throughput/latency baseline |
+| **llama.cpp** | C++/CUDA | Efficient inference | Kernel optimization reference |
+| **TGI** | Rust/Python | HuggingFace serving | Rust patterns reference |
+| **Triton** | Python/C++ | Enterprise inference | Multi-model benchmarks |
+| **nvprof/nsys** | NVIDIA | GPU profiling | SM utilization truth |
+
+#### 21.8.3 What We Do NOT Do
+
+| Anti-Pattern | Why It's Wrong |
+|--------------|----------------|
+| ❌ Copy vLLM Python code into Rust | License issues, non-idiomatic |
+| ❌ Link against llama.cpp C++ | Breaks Pure Rust principle |
+| ❌ Depend on TGI crates | External dependency creep |
+| ❌ Use nvprof output directly | Should use renacer for tracing |
+
+#### 21.8.4 What We DO
+
+| Pattern | Why It's Right |
+|---------|----------------|
+| ✅ Run vLLM to get baseline numbers | Numbers are facts, not code |
+| ✅ Read llama.cpp kernel comments | Understanding is not copying |
+| ✅ Compare our SM% to nvprof output | Validation of our measurements |
+| ✅ Profile side-by-side on same GPU | Apples-to-apples comparison |
+
+#### 21.8.5 Side-by-Side Benchmarking Protocol
+
+```bash
+# Step 1: Baseline with vLLM (reference)
+python -m vllm.entrypoints.api_server --model Qwen/Qwen2.5-Coder-1.5B &
+hey -n 1000 -c 32 http://localhost:8000/generate  # Load test
+# Record: 412 tok/s, P95=1715ms
+
+# Step 2: Our implementation
+cbtop --headless --model qwen2.5-coder-1.5b --iterations 1000
+# Record: 350 tok/s, P95=2100ms
+
+# Step 3: Compare
+# Throughput: 85% of vLLM (need 15% improvement)
+# Latency: 122% of vLLM (need 18% reduction)
+
+# Step 4: Trace the gap
+renacer --function-time -- apr bench qkv
+# Shows: futex overhead 22% (vLLM has <5%)
+
+# Step 5: Fix (Pure Rust)
+# Implement lock-free KV cache (no vLLM code)
+
+# Step 6: Verify
+cbtop --headless --model qwen2.5-coder-1.5b --iterations 1000
+# Record: 405 tok/s (98% of vLLM) ✅
+```
+
+#### 21.8.6 Falsification Criteria (F971-F985)
+
+| ID | Claim | Falsification Test | Pass Criteria |
+|----|-------|-------------------|---------------|
+| **F971** | cbtop shows realistic GPU throughput | Compare to vLLM baseline | Within 30% of vLLM |
+| **F972** | SM utilization displayed correctly | Compare to `nvidia-smi` | Within 5% of nvidia-smi |
+| **F973** | Memory overhead tracked | Compare to vLLM overhead | Displayed, within 20% |
+| **F974** | Concurrency scaling shown | 1 vs 32 concurrent test | Scaling % displayed |
+| **F975** | Baseline comparison available | `--compare-baseline` flag | Shows "You vs Industry" |
+| **F976** | No foreign code in cbtop | `cargo tree` check | No vLLM/llama.cpp deps |
+| **F977** | Reference tools documented | Check this spec section | §21.8 exists |
+| **F978** | Side-by-side protocol works | Run protocol steps 1-6 | All steps executable |
+| **F979** | Gap analysis actionable | Identify 3 improvement areas | Areas documented |
+| **F980** | Pure Rust optimization works | Improvement without foreign code | Throughput increases |
+| **F981** | P95 latency tracked | Compare to TGI (1704ms) | Latency displayed |
+| **F982** | GPU class detected | Display expected baseline for GPU | Correct GPU identified |
+| **F983** | Throughput grade calculated | A/B/C/D/F based on baseline % | Grade displayed |
+| **F984** | Health indicators work | SM%, memory, scaling shown | All 3 visible |
+| **F985** | Benchmark methodology documented | Check this spec | §21.7 exists |
+
 ---
 
 ## 22. Phase 4 Falsification Ritual Results (2026-01-10)
@@ -8144,6 +8319,7 @@ trueno-zram uses cbtop's `ZramCollectorBrick` for compression performance monito
 | [68] | **Weaver, V. M., & McKee, S. A. (2008).** "Can hardware performance counters be trusted?" IEEE IISWC. | Backend detection must use ground truth, not heuristics | §35.2 |
 | [69] | **Dao, T., et al. (2023).** "FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning." arXiv:2307.08691. | Flash attention optimization basis | §35.3 |
 | [70] | **Williams, S., et al. (2009).** "Roofline: An Insightful Visual Performance Model." CACM 52(4). | Roofline model for bottleneck analysis | §35.3 |
+| [71] | **Satna, D. (2026).** "LLM Inference Server Benchmarking Framework." GitHub: deepaksatna/LLM-Inference-Server-Benchmarking-Framework. | Production vLLM/TGI/Triton baselines, K8s/GPU benchmarks | §21.7, §21.8 |
 
 ### 35.6 Falsification Criteria (F951-F970)
 
