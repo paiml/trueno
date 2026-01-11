@@ -239,6 +239,85 @@ cargo test -p cbtop f301
 cargo test -p cbtop --all-features -- --ignored
 ```
 
+## PMAT Optimization Modules
+
+cbtop includes advanced optimization modules for production deployments:
+
+### Federated Metrics Aggregation (PMAT-048)
+
+CRDT-based multi-host metrics aggregation for distributed monitoring:
+
+```rust
+use cbtop::{MetricsFederation, FederationConfig, GCounter, LwwRegister, OrSet};
+
+let mut federation = MetricsFederation::new("host-1", FederationConfig::default());
+federation.add_host("host-2");
+federation.record("cpu_usage", 75.0).unwrap();
+
+// CRDT types for conflict-free replication
+let mut counter = GCounter::new();
+counter.increment("node-a", 5);
+counter.merge(&other_counter); // Automatic conflict resolution
+```
+
+### Adaptive ML Thresholds (PMAT-049)
+
+Workload-specific threshold learning with ML-based anomaly detection:
+
+```rust
+use cbtop::{AdaptiveThresholdMl, MlThresholdConfig, WorkloadClass};
+
+let mut ml = AdaptiveThresholdMl::new(MlThresholdConfig::default());
+ml.train(&samples, false).ok();
+
+// Per-workload learned thresholds
+let threshold = ml.get_threshold(WorkloadClass::Matmul);
+let result = ml.detect_anomaly(&new_samples).unwrap();
+```
+
+### Incremental Profile Snapshots (PMAT-050)
+
+Delta-compressed profile storage with keyframe intervals:
+
+```rust
+use cbtop::{IncrementalSnapshotStore, ProfileSnapshot, SnapshotConfig, SnapshotQuery};
+
+let mut store = IncrementalSnapshotStore::new(SnapshotConfig {
+    keyframe_interval: 5,
+    ..Default::default()
+});
+store.append(snapshot).unwrap();
+
+// Query by fingerprint or time range
+let results = store.query(&SnapshotQuery::new().fingerprint("workload_0")).unwrap();
+println!("Compression ratio: {:.1}%", store.compression_ratio() * 100.0);
+```
+
+### Predictive Scheduling Optimizer (PMAT-051)
+
+SLO-aware workload scheduling with cost optimization:
+
+```rust
+use cbtop::{PredictiveScheduler, HostProfile, InstanceType, SchedulerWorkloadSpec};
+
+let mut scheduler = PredictiveScheduler::new(PredictiveSchedulerConfig::default());
+scheduler.register_host(HostProfile::new("h100-1", InstanceType::OnDemand));
+
+let workload = SchedulerWorkloadSpec::new("inference", 1000);
+if let Some(decision) = scheduler.schedule(&workload) {
+    println!("Scheduled to: {}, cost: ${:.4}", decision.host_id, decision.predicted_cost);
+}
+```
+
+### Running the Examples
+
+```bash
+cargo run --example federated_metrics_demo -p cbtop
+cargo run --example adaptive_ml_demo -p cbtop
+cargo run --example incremental_snapshot_demo -p cbtop
+cargo run --example predictive_scheduler_demo -p cbtop
+```
+
 ## Specification
 
 See the full specification at:
