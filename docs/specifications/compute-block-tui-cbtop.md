@@ -46,7 +46,7 @@
 | [21](#21-project-integration-matrix) | Project Integration Matrix | - |
 | [22](#22-phase-4-falsification-ritual-results-2026-01-10) | Phase 4 Falsification Ritual Results | PASS |
 | [**23**](#23-tdg-compliance-scoring) | **TDG Compliance Scoring** | **100/100** |
-| [**24**](#24-pmat-tickets) | **PMAT Tickets** | **15 (11✅ + 4 PLANNED)** |
+| [**24**](#24-pmat-tickets) | **PMAT Tickets** | **15 (12✅ + 3 PLANNED)** |
 | [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **17 entries** |
 | [**26**](#26-implementation-commands) | **Implementation Commands** | - |
 | [**27**](#27-real-load-generation-architecture) | **Real Load Generation Architecture** | **MANDATORY** |
@@ -6059,9 +6059,9 @@ request preemption, multiple scheduling policies, and speculative decoding.
 
 ---
 
-### 24.15 PMAT-016: Industry Baseline Validation (F971-F985)
+### 24.15 PMAT-016: Industry Baseline Validation (F971-F985) ✅
 
-**Priority**: P2 | **Effort**: 4d | **Status**: PLANNED | **FKR**: FKR-017
+**Priority**: P2 | **Effort**: 4d | **Status**: COMPLETE (2026-01-11) | **FKR**: FKR-017
 
 **Description**: Implement industry baseline validation per §21.7 and §21.8.
 Compare throughput with vLLM/TGI/Triton baselines, detect GPU class, calculate throughput grade.
@@ -6116,7 +6116,7 @@ Compare throughput with vLLM/TGI/Triton baselines, detect GPU class, calculate t
 | 014 | QuantizedBrick Q4_K decodes correctly | 013 | PLANNED | 0/10 |
 | 015 | PagedKvCache manages blocks correctly | 014 | PLANNED | 0/10 |
 | 016 | ContinuousBatcher schedules batches | 015 | PLANNED | 0/10 |
-| 017 | Industry baselines validated | 016 | PLANNED | 0/15 |
+| 017 | Industry baselines validated | 016 | ✅ | 18/18 |
 
 ---
 
