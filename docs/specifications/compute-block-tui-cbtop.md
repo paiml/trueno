@@ -6712,13 +6712,13 @@ cbtop's TUI requires an interactive terminal (TTY), preventing use in:
 
 | ID | Requirement | Priority | Status |
 |----|-------------|----------|--------|
-| HL-001 | `--headless` flag disables TUI, runs benchmark | P0 | PENDING |
-| HL-002 | `--format json` outputs machine-readable results | P0 | PENDING |
-| HL-003 | `--duration <SEC>` controls benchmark runtime | P1 | PENDING |
-| HL-004 | `cbtop bench` subcommand for explicit benchmarking | P1 | PENDING |
-| HL-005 | `--baseline <FILE>` compares against previous run | P2 | PENDING |
-| HL-006 | Exit code reflects pass/fail (0=pass, 1=regression) | P1 | PENDING |
-| HL-007 | Library API for programmatic access | P2 | PENDING |
+| HL-001 | `--headless` flag disables TUI, runs benchmark | P0 | **COMPLETE** |
+| HL-002 | `--format json` outputs machine-readable results | P0 | **COMPLETE** |
+| HL-003 | `--duration <SEC>` controls benchmark runtime | P1 | **COMPLETE** |
+| HL-004 | `cbtop bench` subcommand for explicit benchmarking | P1 | **COMPLETE** |
+| HL-005 | `--baseline <FILE>` compares against previous run | P2 | **COMPLETE** |
+| HL-006 | Exit code reflects pass/fail (0=pass, 1=regression) | P1 | **COMPLETE** |
+| HL-007 | Library API for programmatic access | P2 | **COMPLETE** |
 
 ### 30.3 CLI Interface
 
@@ -6852,16 +6852,17 @@ cbtop bench --compare simd,cuda,wgpu --workload attention --size 10000000 --form
 # Agent updates code to use recommended backend
 ```
 
-#### 30.6.3 Library API (Future)
+#### 30.6.3 Library API (HL-007 - COMPLETE)
 
 ```rust
-use cbtop::{Benchmark, Backend, Workload, BenchmarkResult};
+use cbtop::{Benchmark, BenchmarkResult, ComputeBackend, WorkloadType, CbtopError};
+use std::time::Duration;
 
 /// Run benchmark programmatically
 pub fn run_benchmark() -> Result<BenchmarkResult, CbtopError> {
     Benchmark::builder()
-        .backend(Backend::Auto)
-        .workload(Workload::Gemm)
+        .backend(ComputeBackend::Simd)
+        .workload("gemm")  // or .workload_type(WorkloadType::Gemm)
         .size(1_000_000)
         .duration(Duration::from_secs(5))
         .build()?
@@ -7031,9 +7032,9 @@ Bandwidth    | 13/25            | 1.7x (mul/add)
 
 | ID | Title | Priority | Effort | Status |
 |----|-------|----------|--------|--------|
-| PERF-001 | Implement cache-aware tiling for large problem sizes | P1 | 3 days | PENDING |
+| PERF-001 | Implement cache-aware tiling for large problem sizes | P1 | 3 days | **COMPLETE** |
 | PERF-002 | Unify CV calculation between headless and brick | P2 | 1 day | **COMPLETE** |
-| PERF-003 | Add CPU frequency pinning for deterministic benchmarks | P2 | 1 day | PENDING |
+| PERF-003 | Add CPU frequency pinning for deterministic benchmarks | P2 | 1 day | **COMPLETE** |
 | PERF-004 | Update efficiency speedup constants with measured values | P3 | 0.5 day | **COMPLETE** |
 
 ### 31.4 Recommended Fixes

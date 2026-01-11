@@ -66,6 +66,15 @@ pub use app::CbtopApp;
 pub use config::Config;
 pub use error::CbtopError;
 
+// Headless benchmarking API (HL-007)
+pub use headless::{
+    Benchmark, BenchmarkBuilder, BenchmarkResult, BenchmarkConfig,
+    BenchmarkResults, LatencyStats, RegressionResult, ComparisonResult,
+    OutputFormat, SystemInfo, ScoreInfo,
+};
+// Re-export config types for benchmark builder
+pub use config::{ComputeBackend, WorkloadType};
+
 // Re-export presentar-terminal widgets and canvas for convenience
 // All widgets MUST come from presentar-terminal - DO NOT reimplement
 pub use presentar_terminal::{

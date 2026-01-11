@@ -587,6 +587,144 @@ impl HeadlessBenchmark {
     }
 }
 
+// ============================================================================
+// Library API for Programmatic Access (HL-007)
+// ============================================================================
+
+/// Builder for creating benchmarks programmatically
+///
+/// This provides an ergonomic API for running cbtop benchmarks from Rust code.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use cbtop::{Benchmark, BenchmarkResult};
+/// use std::time::Duration;
+///
+/// let result: BenchmarkResult = Benchmark::builder()
+///     .workload("gemm")
+///     .size(1_000_000)
+///     .duration(Duration::from_secs(5))
+///     .build()
+///     .unwrap()
+///     .run()
+///     .unwrap();
+///
+/// println!("GFLOP/s: {}", result.results.gflops);
+/// ```
+#[derive(Default)]
+pub struct BenchmarkBuilder {
+    backend: Option<ComputeBackend>,
+    workload: Option<WorkloadType>,
+    size: Option<usize>,
+    duration: Option<Duration>,
+}
+
+impl BenchmarkBuilder {
+    /// Create a new benchmark builder with defaults
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the compute backend (default: Auto/Simd)
+    pub fn backend(mut self, backend: ComputeBackend) -> Self {
+        self.backend = Some(backend);
+        self
+    }
+
+    /// Set the compute backend from string (e.g., "simd", "cuda", "auto")
+    pub fn backend_str(mut self, backend: &str) -> Self {
+        self.backend = Some(match backend.to_lowercase().as_str() {
+            "cuda" => ComputeBackend::Cuda,
+            "wgpu" => ComputeBackend::Wgpu,
+            "simd" => ComputeBackend::Simd,
+            _ => ComputeBackend::Simd, // Default to SIMD
+        });
+        self
+    }
+
+    /// Set the workload type (default: Gemm)
+    pub fn workload_type(mut self, workload: WorkloadType) -> Self {
+        self.workload = Some(workload);
+        self
+    }
+
+    /// Set the workload type from string (e.g., "gemm", "dot", "elementwise")
+    pub fn workload(mut self, workload: &str) -> Self {
+        self.workload = Some(match workload.to_lowercase().as_str() {
+            "dot" | "dotproduct" | "dot_product" => WorkloadType::Gemm,
+            "elementwise" | "element_wise" => WorkloadType::Elementwise,
+            "reduction" | "reduce" => WorkloadType::Reduction,
+            "bandwidth" | "memcpy" => WorkloadType::Bandwidth,
+            "conv2d" | "conv" | "convolution" => WorkloadType::Conv2d,
+            "attention" | "attn" => WorkloadType::Attention,
+            "all" => WorkloadType::All,
+            _ => WorkloadType::Gemm, // Default to GEMM
+        });
+        self
+    }
+
+    /// Set the problem size (default: 1_000_000)
+    pub fn size(mut self, size: usize) -> Self {
+        self.size = Some(size);
+        self
+    }
+
+    /// Set the benchmark duration (default: 5 seconds)
+    pub fn duration(mut self, duration: Duration) -> Self {
+        self.duration = Some(duration);
+        self
+    }
+
+    /// Set the benchmark duration in seconds
+    pub fn duration_secs(mut self, secs: u64) -> Self {
+        self.duration = Some(Duration::from_secs(secs));
+        self
+    }
+
+    /// Build the benchmark with the configured parameters
+    pub fn build(self) -> Result<Benchmark, CbtopError> {
+        Ok(Benchmark {
+            inner: HeadlessBenchmark::new(
+                self.backend.unwrap_or(ComputeBackend::Simd),
+                self.workload.unwrap_or(WorkloadType::Gemm),
+                self.size.unwrap_or(1_000_000),
+                self.duration.unwrap_or(Duration::from_secs(5)),
+            ),
+        })
+    }
+}
+
+/// Benchmark runner for programmatic access
+///
+/// Created via [`Benchmark::builder()`].
+pub struct Benchmark {
+    inner: HeadlessBenchmark,
+}
+
+impl Benchmark {
+    /// Create a new benchmark builder
+    pub fn builder() -> BenchmarkBuilder {
+        BenchmarkBuilder::new()
+    }
+
+    /// Run the benchmark and return results
+    pub fn run(&self) -> Result<BenchmarkResult, CbtopError> {
+        self.inner.run()
+    }
+
+    /// Run the benchmark and compare against a baseline
+    pub fn run_with_baseline(
+        &self,
+        baseline: &BenchmarkResult,
+        threshold: f64,
+    ) -> Result<(BenchmarkResult, RegressionResult), CbtopError> {
+        let result = self.inner.run()?;
+        let regression = result.check_regression(baseline, threshold);
+        Ok((result, regression))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -711,5 +849,54 @@ mod tests {
         let result = benchmark.run().unwrap();
         assert!(result.results.gflops > 0.0);
         assert!(result.benchmark.iterations > 0);
+    }
+
+    // HL-007: Library API tests
+    #[test]
+    fn test_benchmark_builder_defaults() {
+        let benchmark = Benchmark::builder()
+            .build()
+            .unwrap();
+
+        let result = benchmark.run().unwrap();
+        assert!(result.results.gflops > 0.0);
+        assert_eq!(result.benchmark.workload, "Gemm");
+        assert_eq!(result.benchmark.backend, "Simd");
+    }
+
+    #[test]
+    fn test_benchmark_builder_with_options() {
+        let benchmark = Benchmark::builder()
+            .workload("elementwise")
+            .size(10000)
+            .duration_secs(1)
+            .backend_str("simd")
+            .build()
+            .unwrap();
+
+        let result = benchmark.run().unwrap();
+        assert!(result.results.gflops > 0.0);
+        assert_eq!(result.benchmark.workload, "Elementwise");
+        assert_eq!(result.benchmark.size, 10000);
+    }
+
+    #[test]
+    fn test_benchmark_with_baseline() {
+        let benchmark = Benchmark::builder()
+            .workload("gemm")
+            .size(10000)
+            .duration(Duration::from_millis(100))
+            .build()
+            .unwrap();
+
+        // Run first benchmark as baseline
+        let baseline = benchmark.run().unwrap();
+
+        // Run with baseline comparison
+        let (result, regression) = benchmark.run_with_baseline(&baseline, 50.0).unwrap();
+
+        // With 50% threshold, small variations should pass
+        assert!(!regression.is_regression || regression.change_percent.abs() > 50.0);
+        assert!(result.results.gflops > 0.0);
     }
 }
