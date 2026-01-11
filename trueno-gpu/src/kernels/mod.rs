@@ -21,6 +21,7 @@ mod argmax;
 mod attention;
 mod bias_activation;
 mod elementwise;
+mod fused;
 mod gemm;
 mod gemv;
 mod layernorm;
@@ -35,6 +36,7 @@ mod softmax;
 pub use argmax::{ArgMaxFinalKernel, ArgMaxKernel};
 pub use attention::{AttentionKernel, IncrementalAttentionKernel};
 pub use bias_activation::{Activation, BiasActivationKernel};
+pub use fused::{FusedGateUpKernel, FusedQKVKernel};
 pub use elementwise::{
     ElementwiseMulKernel, Fp16FusedSwigluKernel, Fp16ResidualAddKernel,
     FusedResidualRmsNormKernel, FusedSwigluKernel, GeluKernel, KvCacheScatterIndirectKernel,
