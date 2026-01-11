@@ -1104,11 +1104,10 @@ roadmap:
   notes: |
     Spec: docs/specifications/compute-block-tui-cbtop.md §28
     Reference: presentar/__pixel_baselines__/system_dashboard_before_fix.png
-
 - id: CBTOP-HEADLESS-001
   github_issue: null
   item_type: feature
-  title: 'cbtop Headless Mode and AI Agent Integration'
+  title: cbtop Headless Mode and AI Agent Integration
   status: completed
   priority: high
   assigned_to: claude
@@ -1124,12 +1123,12 @@ roadmap:
     COMPLETED: All features implemented and verified via falsification protocol.
     See spec §30 and §31 for details.
   acceptance_criteria:
-  - HL-001: --headless runs without TTY [PASS]
-  - HL-002: JSON output with full schema [PASS]
-  - HL-003: --duration controls runtime [PASS]
-  - HL-004: cbtop bench subcommand works [PASS]
-  - HL-005: --baseline regression detection [PASS]
-  - HL-006: Correct exit codes [PASS]
+  - 'HL-001: --headless runs without TTY [PASS]'
+  - 'HL-002: JSON output with full schema [PASS]'
+  - 'HL-003: --duration controls runtime [PASS]'
+  - 'HL-004: cbtop bench subcommand works [PASS]'
+  - 'HL-005: --baseline regression detection [PASS]'
+  - 'HL-006: Correct exit codes [PASS]'
   phases:
   - name: Phase 1 - CLI and Core
     status: completed
@@ -1149,16 +1148,16 @@ roadmap:
   - headless
   - ai-agent
   - benchmarking
-
+  notes: null
 - id: CBTOP-PERF-001
   github_issue: null
   item_type: task
-  title: 'Cache-Aware Tiling for Large Problem Sizes'
-  status: pending
+  title: Cache-Aware Tiling for Large Problem Sizes
+  status: completed
   priority: high
   assigned_to: null
   created: 2026-01-11T11:00:00Z
-  updated: 2026-01-11T11:00:00Z
+  updated: 2026-01-11T10:17:16.563482264+00:00
   spec: |
     PERF-001: Memory Bandwidth Cliff at Large Problem Sizes
 
@@ -1192,11 +1191,11 @@ roadmap:
   - performance
   - cache-optimization
   - simd
-
+  notes: null
 - id: CBTOP-PERF-002
   github_issue: null
   item_type: bug
-  title: 'Unify CV Calculation Between Headless and Brick'
+  title: Unify CV Calculation Between Headless and Brick
   status: completed
   priority: medium
   assigned_to: null
@@ -1236,16 +1235,16 @@ roadmap:
   - bug
   - scoring
   - headless
-
+  notes: null
 - id: CBTOP-PERF-003
   github_issue: null
   item_type: task
-  title: 'Add CPU Frequency Pinning for Deterministic Benchmarks'
-  status: pending
+  title: Add CPU Frequency Pinning for Deterministic Benchmarks
+  status: completed
   priority: medium
   assigned_to: null
   created: 2026-01-11T11:00:00Z
-  updated: 2026-01-11T11:00:00Z
+  updated: 2026-01-11T10:20:31.895093315+00:00
   spec: |
     PERF-003: Inter-Run GFLOP/s Variance Exceeds Target
 
@@ -1282,11 +1281,11 @@ roadmap:
   - performance
   - determinism
   - benchmarking
-
+  notes: null
 - id: CBTOP-PERF-004
   github_issue: null
   item_type: task
-  title: 'Update Efficiency Speedup Constants with Measured Values'
+  title: Update Efficiency Speedup Constants with Measured Values
   status: completed
   priority: low
   assigned_to: null
@@ -1329,3 +1328,4 @@ roadmap:
   - simd
   - accuracy
   - json
+  notes: null
