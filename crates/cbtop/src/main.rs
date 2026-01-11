@@ -11,6 +11,7 @@ use clap::{Parser, Subcommand};
 use cbtop::{Config, CbtopApp, CbtopError};
 use cbtop::config::{ComputeBackend, LoadProfile, WorkloadType};
 use cbtop::headless::{HeadlessBenchmark, BenchmarkResult, OutputFormat};
+use cbtop::optimize::{OptimizationSuite, BaselineReport, RegressionDetector};
 
 /// Compute Block Top - Real-time load testing and hardware monitoring TUI
 #[derive(Parser, Debug)]
@@ -120,6 +121,64 @@ enum Commands {
         #[arg(long)]
         compare: Option<String>,
     },
+
+    /// Optimization identification and regression detection
+    Optimize {
+        #[command(subcommand)]
+        action: OptimizeAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum OptimizeAction {
+    /// Collect baseline measurements for all configurations
+    Baseline {
+        /// Output file for baseline JSON
+        #[arg(short, long, default_value = "benchmarks/baseline.json")]
+        output: std::path::PathBuf,
+
+        /// Use quick mode (fewer configurations, shorter duration)
+        #[arg(long)]
+        quick: bool,
+
+        /// Duration per benchmark in seconds
+        #[arg(short, long, default_value = "3")]
+        duration: u64,
+    },
+
+    /// Analyze baseline for performance bottlenecks
+    Analyze {
+        /// Baseline file to analyze
+        #[arg(short, long, default_value = "benchmarks/baseline.json")]
+        baseline: std::path::PathBuf,
+
+        /// Output format: text, json
+        #[arg(short, long, default_value = "text")]
+        format: String,
+
+        /// Output file (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<std::path::PathBuf>,
+    },
+
+    /// Check for performance regressions against baseline
+    Check {
+        /// Baseline file to compare against
+        #[arg(short, long, default_value = "benchmarks/baseline.json")]
+        baseline: std::path::PathBuf,
+
+        /// Regression threshold percentage
+        #[arg(short, long, default_value = "5.0")]
+        threshold: f64,
+
+        /// Use quick mode for current measurements
+        #[arg(long)]
+        quick: bool,
+
+        /// Output format: text, json
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
 }
 
 fn parse_backend(s: &str) -> ComputeBackend {
@@ -163,30 +222,35 @@ fn parse_output_format(s: &str) -> OutputFormat {
 fn main() -> Result<(), CbtopError> {
     let cli = Cli::parse();
 
-    // Handle bench subcommand
-    if let Some(Commands::Bench {
-        backend,
-        workload,
-        size,
-        duration,
-        format,
-        output,
-        baseline,
-        fail_on_regression,
-        compare,
-    }) = cli.command
-    {
-        return run_bench(
-            &backend,
-            &workload,
+    // Handle subcommands
+    match cli.command {
+        Some(Commands::Bench {
+            backend,
+            workload,
             size,
             duration,
-            &format,
+            format,
             output,
             baseline,
             fail_on_regression,
             compare,
-        );
+        }) => {
+            return run_bench(
+                &backend,
+                &workload,
+                size,
+                duration,
+                &format,
+                output,
+                baseline,
+                fail_on_regression,
+                compare,
+            );
+        }
+        Some(Commands::Optimize { action }) => {
+            return run_optimize(action);
+        }
+        None => {}
     }
 
     // Handle headless mode
@@ -341,4 +405,140 @@ fn run_bench(
     }
 
     Ok(())
+}
+
+/// Run optimization subcommands (OPT-005)
+fn run_optimize(action: OptimizeAction) -> Result<(), CbtopError> {
+    match action {
+        OptimizeAction::Baseline { output, quick, duration } => {
+            run_optimize_baseline(output, quick, duration)
+        }
+        OptimizeAction::Analyze { baseline, format, output } => {
+            run_optimize_analyze(baseline, &format, output)
+        }
+        OptimizeAction::Check { baseline, threshold, quick, format } => {
+            run_optimize_check(baseline, threshold, quick, &format)
+        }
+    }
+}
+
+fn run_optimize_baseline(
+    output: std::path::PathBuf,
+    quick: bool,
+    duration: u64,
+) -> Result<(), CbtopError> {
+    eprintln!("Collecting baseline measurements...");
+
+    let mut suite = if quick {
+        OptimizationSuite::quick()
+    } else {
+        OptimizationSuite::standard()
+    };
+    suite.duration = std::time::Duration::from_secs(duration);
+
+    let total_configs = suite.workloads.len() * suite.sizes.len() * suite.backends.len();
+    eprintln!(
+        "Running {} configurations ({} workloads x {} sizes x {} backends)",
+        total_configs,
+        suite.workloads.len(),
+        suite.sizes.len(),
+        suite.backends.len()
+    );
+
+    let baseline = suite.collect_baseline()?;
+
+    // Ensure output directory exists
+    if let Some(parent) = output.parent() {
+        if !parent.exists() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| CbtopError::Io(format!("Failed to create directory: {}", e)))?;
+        }
+    }
+
+    baseline.save(&output)?;
+    eprintln!("Baseline saved to: {}", output.display());
+
+    // Print summary
+    eprintln!("\nBaseline Summary:");
+    eprintln!("  Entries: {}", baseline.entries.len());
+
+    let avg_gflops: f64 = baseline.entries.iter().map(|e| e.gflops).sum::<f64>()
+        / baseline.entries.len() as f64;
+    eprintln!("  Average GFLOP/s: {:.2}", avg_gflops);
+
+    let avg_efficiency: f64 = baseline.entries.iter().map(|e| e.efficiency).sum::<f64>()
+        / baseline.entries.len() as f64;
+    eprintln!("  Average Efficiency: {:.1}%", avg_efficiency * 100.0);
+
+    Ok(())
+}
+
+fn run_optimize_analyze(
+    baseline_path: std::path::PathBuf,
+    format: &str,
+    output: Option<std::path::PathBuf>,
+) -> Result<(), CbtopError> {
+    let baseline = BaselineReport::load(&baseline_path)?;
+    let suite = OptimizationSuite::standard();
+    let analysis = suite.analyze_bottlenecks(&baseline);
+
+    let report = if format == "json" {
+        serde_json::to_string_pretty(&analysis)
+            .map_err(|e| CbtopError::Config(format!("JSON serialization failed: {}", e)))?
+    } else {
+        analysis.format_report()
+    };
+
+    if let Some(path) = output {
+        std::fs::write(&path, &report)
+            .map_err(|e| CbtopError::Io(e.to_string()))?;
+        eprintln!("Analysis saved to: {}", path.display());
+    } else {
+        println!("{}", report);
+    }
+
+    // Print summary to stderr
+    eprintln!("\nAnalysis Summary:");
+    eprintln!("  Critical: {}", analysis.summary.critical_count);
+    eprintln!("  Severe: {}", analysis.summary.severe_count);
+    eprintln!("  Moderate: {}", analysis.summary.moderate_count);
+    eprintln!("  Unstable: {}", analysis.summary.unstable_count);
+
+    Ok(())
+}
+
+fn run_optimize_check(
+    baseline_path: std::path::PathBuf,
+    threshold: f64,
+    quick: bool,
+    format: &str,
+) -> Result<(), CbtopError> {
+    eprintln!("Checking for regressions (threshold: {}%)...", threshold);
+
+    // Load baseline
+    let baseline = BaselineReport::load(&baseline_path)?;
+
+    // Collect current measurements
+    let suite = if quick {
+        OptimizationSuite::quick()
+    } else {
+        OptimizationSuite::standard()
+    };
+    let current = suite.collect_baseline()?;
+
+    // Check for regressions
+    let detector = RegressionDetector::new(baseline, threshold);
+    let report = detector.check(&current);
+
+    let output = if format == "json" {
+        serde_json::to_string_pretty(&report)
+            .map_err(|e| CbtopError::Config(format!("JSON serialization failed: {}", e)))?
+    } else {
+        report.format_report()
+    };
+
+    println!("{}", output);
+
+    // Exit with appropriate code
+    std::process::exit(report.exit_code());
 }

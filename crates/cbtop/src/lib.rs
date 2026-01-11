@@ -55,6 +55,7 @@ pub mod app;
 pub mod config;
 pub mod error;
 pub mod headless;
+pub mod optimize;
 
 // Core brick traits (cbtop-specific)
 pub use brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
@@ -74,6 +75,14 @@ pub use headless::{
 };
 // Re-export config types for benchmark builder
 pub use config::{ComputeBackend, WorkloadType};
+
+// Optimization tooling (OPT-001 to OPT-004)
+pub use optimize::{
+    OptimizationSuite, BaselineReport, BaselineEntry, WorkloadConfig,
+    BottleneckAnalysis, BottleneckEntry, BottleneckSeverity, AnalysisSummary,
+    RegressionDetector, RegressionReport, RegressionEntry,
+    OptimizationValidator, ValidationResult,
+};
 
 // Re-export presentar-terminal widgets and canvas for convenience
 // All widgets MUST come from presentar-terminal - DO NOT reimplement
