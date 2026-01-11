@@ -1,9 +1,9 @@
 # Compute Block TUI Specification: cbtop
 
-**Version**: 2.4.0
+**Version**: 2.5.0
 **Status**: Approved
 **Author**: Trueno Engineering
-**Date**: 2026-01-10
+**Date**: 2026-01-11
 **PMAT Roadmap ID**: `CBTOP-SPEC-001`
 **PMAT Tracking**: `pmat work continue CBTOP-SPEC-001`
 **Spec Path**: `docs/specifications/compute-block-tui-cbtop.md`
@@ -52,6 +52,7 @@
 | [**27**](#27-real-load-generation-architecture) | **Real Load Generation Architecture** | **MANDATORY** |
 | [**28**](#28-uiux-improvements-pmat-012) | **UI/UX Improvements (PMAT-012)** | **10/10 DONE** |
 | [**29**](#29-computebrick-scoring-framework) | **ComputeBrick Scoring Framework** | **✅ IMPLEMENTED** |
+| [**35**](#35-measurement-vs-optimization-aprender--renacer-integration) | **Measurement vs Optimization: aprender & renacer** | **NEW** |
 | [A](#appendix-a-keyboard-controls-reference) | Keyboard Controls Reference | - |
 | [B](#appendix-b-configuration-file-format) | Configuration File Format | - |
 
@@ -74,6 +75,7 @@
 | 2.2.0   | 2026-01-10 | Trueno Engineering | Architecture Lead | Approved | §29 ComputeBrick Scoring Framework. PMAT-style 0-100 scoring. SimdLoadBrick optimized: 6.1x speedup via Trueno SIMD. 49 citations. |
 | 2.3.0   | 2026-01-10 | Trueno Engineering | Architecture Lead | Approved | Added §12.8 Visualization Citations (Tufte, Ware, Shneiderman). Added F241-F260 Cognitive Ergonomics checklist. Total 240 points. |
 | 2.4.0   | 2026-01-10 | Trueno Engineering | QA Lead            | Approved | Added F700-F900 series (Grammar, Optimization, Ironman). Integrated Mutation Testing & Fuzzing. Total 300 points. |
+| 2.5.0   | 2026-01-11 | Trueno Engineering | Architecture Lead  | Approved | Added §35: Measurement vs Optimization (aprender/renacer integration). F951-F965 falsification. 7 peer-reviewed citations [64]-[70]. Total 70 citations. |
 
 ---
 
@@ -7947,5 +7949,218 @@ This suite defines the "Ironman" standard: code that is not just correct, but re
 
 ---
 
+## 35. Measurement vs Optimization: aprender & renacer Integration
+
+> **"You can't improve what you don't measure."** — Peter Drucker
+>
+> **"But measuring doesn't improve anything by itself."** — This specification
+
+### 35.1 The Critical Distinction
+
+cbtop is a **MEASUREMENT** tool. It provides visibility into ComputeBrick performance but does not, by itself, improve performance. This section clarifies the integration with downstream projects that consume cbtop metrics.
+
+| Category | Tool | Performance Impact | Purpose |
+|----------|------|-------------------|---------|
+| 📊 **Measure** | cbtop | 0% | Identify bottlenecks via Genchi Genbutsu |
+| 🔬 **Trace** | renacer | 0% | Deep syscall/function profiling when needed |
+| 🔧 **Optimize** | aprender/realizar | 2x+ | Implement fixes based on measurements |
+
+**Key Insight**: Measurement tools enable optimization but do not substitute for it.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    MEASUREMENT → OPTIMIZATION FLOW                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Step 1: MEASURE (cbtop)                                                │
+│          └── cbtop --headless --model qwen2.5-coder-1.5b                │
+│          └── Output: "FfnBrick 130% over budget, QkvBrick 142%"         │
+│          └── Impact: 0% (diagnosis only)                                │
+│                                                                          │
+│  Step 2: TRACE (renacer) — when cbtop shows anomalies                  │
+│          └── renacer --function-time -- apr bench ffn                   │
+│          └── Output: "futex: 45%, mmap: 12%, compute: 43%"              │
+│          └── Reveals: OS overhead dominates small operations            │
+│                                                                          │
+│  Step 3: OPTIMIZE (aprender/realizar)                                   │
+│          └── Implement FusedFfnBrick (1 kernel vs 3)                    │
+│          └── Impact: 3x speedup                                         │
+│                                                                          │
+│  Step 4: VERIFY (cbtop)                                                 │
+│          └── cbtop --headless --throughput 400                          │
+│          └── Confirms: FfnBrick now 80% of budget                       │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 35.2 When to Escalate to renacer Tracing
+
+renacer provides syscall-level and function-level tracing. Per Toyota Way (Genchi Genbutsu), use it only when cbtop reveals anomalies requiring deeper investigation.
+
+| cbtop Finding | Escalate to renacer? | renacer Command | Why |
+|---------------|---------------------|-----------------|-----|
+| CV > 15% (unstable) | **Yes** | `renacer --function-time` | Find OS noise sources (futex, scheduler) |
+| Efficiency < 25% | **Yes** | `renacer -T 1ms` | Trace slow syscalls (mmap, I/O) |
+| Memory cliff at threshold | **Yes** | `renacer --assert renacer.toml` | Regression detection |
+| GPU transfer overhead | **Yes** | `renacer --otlp-endpoint` | PCIe/CUDA driver tracing |
+| Normal operation | **No** | — | Tracing overhead would be 500x for µs ops |
+
+**Principle from renacer spec:**
+> *"Trace the problem, not the process."* — Trace only when slow or abnormal.
+
+### 35.3 Integration with aprender (LLM Inference)
+
+The aprender project (specifically `realizar` crate) consumes cbtop metrics to guide ComputeBrick optimizations for Qwen2.5-Coder inference.
+
+**aprender spec reference**: `../aprender/docs/specifications/qwen2.5-coder-showcase-demo.md`
+
+| cbtop Measurement | aprender Fix (§5) | Expected Gain |
+|-------------------|-------------------|---------------|
+| FfnBrick: 15.8µs (130%) | `FusedFfnBrick`: 1 launch vs 3 | 3x |
+| QkvBrick: 8.5µs (142%) | `CoalescedDp4aBrick`: coalesced 4-byte loads | 4x |
+| Attention: 12.3µs (123%) | `FlashAttentionBrick`: online softmax | 2x |
+| All bricks: 280 launches | `CudaGraphBrick`: 1 graph launch | 10x |
+
+**Integration Protocol**:
+
+```rust
+// aprender/realizar uses trueno::BrickScore from cbtop
+use trueno::brick::{BrickScore, Scorable};
+
+impl Scorable for FfnBrick {
+    fn score(&self) -> BrickScore {
+        // Performance from cbtop measurements
+        let perf = BrickScore::score_performance(self.gflops, THEORETICAL_PEAK);
+        // Efficiency from roofline analysis
+        let eff = BrickScore::score_speedup(self.speedup_vs_naive);
+        // Stability from CV measurements
+        let stab = BrickScore::score_cv(self.cv_percent);
+
+        BrickScore::new(perf, eff, 20, stab) // correctness assumed
+    }
+}
+```
+
+### 35.4 trueno-zram Integration
+
+trueno-zram uses cbtop's `ZramCollectorBrick` for compression performance monitoring:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  trueno-zram → cbtop Integration                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  trueno-zram (ublk daemon)                                      │
+│  ├── LZ4/ZSTD SIMD compression (25.3 GB/s AVX-512)             │
+│  └── Exports via: /sys/block/zram0/{orig_data_size,...}        │
+│                           │                                      │
+│                           ▼                                      │
+│  cbtop ZramCollectorBrick                                       │
+│  ├── Reads /sys/block/zram0/*                                   │
+│  ├── Calculates throughput_gbps, compression_ratio             │
+│  └── Displays in ZRAM panel with BrickScore                    │
+│                           │                                      │
+│                           ▼                                      │
+│  When CV > 15% or efficiency < 25%:                             │
+│  └── Escalate to renacer: renacer -- trueno-ublk benchmark     │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 35.5 Peer-Reviewed Citations
+
+| # | Citation | Application | Section |
+|---|----------|-------------|---------|
+| [64] | **Drucker, P. F. (1954).** "The Practice of Management." Harper & Row. | "You can't improve what you don't measure" | §35.1 |
+| [65] | **Sigelman, B. H., et al. (2010).** "Dapper, a Large-Scale Distributed Systems Tracing Infrastructure." Google Technical Report. | Adaptive sampling (1/1000) for high-frequency tracing | §35.2 |
+| [66] | **Mace, J., Roelke, R., & Fonseca, R. (2015).** "Pivot Tracing: Dynamic Causal Monitoring for Distributed Systems." ACM SOSP. | "Always-on tracing degrades throughput" | §35.2 |
+| [67] | **Kaldor, J., et al. (2017).** "Canopy: An End-to-End Performance Tracing and Analysis System." ACM SOSP (Facebook). | Block-level tracing vs micro-operation tracing | §35.2 |
+| [68] | **Weaver, V. M., & McKee, S. A. (2008).** "Can hardware performance counters be trusted?" IEEE IISWC. | Backend detection must use ground truth, not heuristics | §35.2 |
+| [69] | **Dao, T., et al. (2023).** "FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning." arXiv:2307.08691. | Flash attention optimization basis | §35.3 |
+| [70] | **Williams, S., et al. (2009).** "Roofline: An Insightful Visual Performance Model." CACM 52(4). | Roofline model for bottleneck analysis | §35.3 |
+
+### 35.6 Falsification Criteria (F951-F970)
+
+**Integration Falsification Points**:
+
+| ID | Claim | Falsification Test | Pass Criteria |
+|----|-------|-------------------|---------------|
+| **F951** | cbtop measurement does not improve performance | Measure same workload with/without cbtop | Difference < 1% (measurement overhead only) |
+| **F952** | renacer traces only when anomaly detected | Count traces in normal operation | Zero traces when CV < 15% and efficiency > 25% |
+| **F953** | BrickScore integrates with aprender | `realizar` compiles with `trueno::brick::Scorable` | Import succeeds |
+| **F954** | ZramCollectorBrick reads real metrics | Check `/sys/block/zram0/orig_data_size` | Value matches collector output |
+| **F955** | Escalation threshold is 15% CV | Trigger renacer at CV=14.9% vs 15.1% | 14.9% no trace, 15.1% traces |
+| **F956** | Escalation threshold is 25% efficiency | Trigger renacer at eff=24.9% vs 25.1% | 24.9% traces, 25.1% no trace |
+| **F957** | renacer overhead < 10% on traced ops | Profile with/without renacer | Overhead < 10% |
+| **F958** | cbtop --headless JSON valid | `jq . < output.json` | Exit code 0 |
+| **F959** | aprender consumes cbtop scores | `realizar bench --brick-score` | Scores displayed correctly |
+| **F960** | OTLP export reaches Jaeger | `curl localhost:16686/api/traces` | Traces present |
+
+**Negative Tests (Anti-Patterns)**:
+
+| ID | Anti-Pattern | Test | Fail Condition |
+|----|--------------|------|----------------|
+| **F961** | Measuring without acting | Run cbtop 10x without code change | Performance improves (would be false positive) |
+| **F962** | Tracing everything | Enable `--trace-compute-all` in production | Latency increases > 100x |
+| **F963** | Guessing backend | Report "AVX2" when running Scalar | Backend mismatch detected |
+| **F964** | Ignoring CV | Ship with CV > 50% | Release blocked |
+| **F965** | Micro-tracing | Trace `Vector::sum()` on 100 elements | Overhead > 500x |
+
+### 35.7 Workflow Decision Tree
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  DECISION: When to use each tool                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Is performance acceptable?                                      │
+│  ├── YES → No action needed                                     │
+│  └── NO → Run cbtop measurement                                 │
+│            │                                                     │
+│            ▼                                                     │
+│       cbtop shows bottleneck?                                   │
+│       ├── NO → Check hardware (thermal, memory pressure)       │
+│       └── YES → Is root cause clear?                           │
+│                 ├── YES → Implement fix in aprender/realizar   │
+│                 └── NO → Escalate to renacer                   │
+│                          │                                      │
+│                          ▼                                      │
+│                     renacer shows:                              │
+│                     ├── mmap/futex overhead → Pre-allocate     │
+│                     ├── I/O bottleneck → Async I/O             │
+│                     ├── Lock contention → Lock-free design     │
+│                     └── CUDA driver → Batch operations         │
+│                          │                                      │
+│                          ▼                                      │
+│                     Implement fix, verify with cbtop           │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 35.8 Example: OPT-014 Frequency Detection Investigation
+
+From cbtop optimization work (§33.6):
+
+```bash
+# Step 1: cbtop measured high CV (322.7%)
+cbtop optimize baseline -o baseline.json
+# Result: dot_product @ 4M: CV=322.7%, efficiency=1.6%
+
+# Step 2: Escalated to renacer
+renacer --function-time --source -- cargo bench vector_ops
+# Revealed: cpufreq_get() syscalls causing 22x overhead
+
+# Step 3: Implemented OPT-014 (frequency caching in trueno)
+# Result: CV reduced to 12.4%, efficiency stable
+
+# Step 4: Verified with cbtop
+cbtop optimize analyze -b baseline.json
+# Confirmed: STABLE benchmarks 14→23
+```
+
+**Key Insight**: cbtop identified the anomaly (CV=322.7%), renacer revealed the cause (cpufreq syscalls), optimization fixed it (frequency caching), cbtop verified the fix.
+
+---
+
 *Generated by Trueno Engineering. PMAT tracked. Toyota Way institutionalized.*
-*Total Citations: 63 (56 previous + 7 Grammar of ComputeBlock/Optimization)*
+*Total Citations: 70 (63 previous + 7 Measurement vs Optimization)*
