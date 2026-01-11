@@ -478,10 +478,15 @@ impl HeadlessBenchmark {
         brick.set_intensity(1.0); // Full intensity for benchmarking
         brick.start();
 
-        // Warmup phase (10% of duration, min 100ms)
-        let warmup_duration = Duration::from_millis(
-            (self.duration.as_millis() / 10).max(100) as u64
-        );
+        // OPT-013: Warmup phase with scaled duration
+        // Longer warmup for small sizes to ensure stable cache/branch predictor state
+        // Small sizes complete quickly, need more warmup time to reach steady state
+        let base_warmup_ms = (self.duration.as_millis() / 10).max(100) as u64;
+        let warmup_duration = if self.size < 100_000 {
+            Duration::from_millis(base_warmup_ms * 2) // 2x warmup for small sizes
+        } else {
+            Duration::from_millis(base_warmup_ms)
+        };
         let warmup_start = Instant::now();
         while warmup_start.elapsed() < warmup_duration {
             brick.run_iteration();
@@ -492,6 +497,9 @@ impl HeadlessBenchmark {
         brick.set_workload(self.workload);
         brick.set_intensity(1.0);
         brick.start();
+
+        // OPT-014: Sample CPU frequency at start of measurement
+        let start_freq_mhz = Self::sample_cpu_freq();
 
         // OPT-008: Calculate minimum iterations for statistical stability
         // Small workloads complete too quickly, causing high variance (CV > 600%)
@@ -524,6 +532,9 @@ impl HeadlessBenchmark {
         let total_duration = start_time.elapsed();
         brick.stop();
 
+        // OPT-014: Sample CPU frequency at end and detect throttling
+        let end_freq_mhz = Self::sample_cpu_freq();
+
         // Calculate statistics using brick's internal latency history (PERF-002)
         // This ensures CV calculation matches what score() uses
         let latencies = brick.latency_history_slice();
@@ -539,7 +550,21 @@ impl HeadlessBenchmark {
         let score = brick.score();
 
         // PERF-003: Check for benchmark environment warnings
-        let warnings = system.check_benchmark_readiness();
+        let mut warnings = system.check_benchmark_readiness();
+
+        // OPT-014: Detect frequency throttling during benchmark
+        if let (Some(start), Some(end)) = (start_freq_mhz, end_freq_mhz) {
+            if start > 0 {
+                let drop_percent = ((start as f64 - end as f64) / start as f64) * 100.0;
+                if drop_percent > 5.0 {
+                    warnings.push(format!(
+                        "CPU frequency dropped {}MHz -> {}MHz ({:.1}% drop) during benchmark. \
+                         Possible thermal throttling.",
+                        start, end, drop_percent
+                    ));
+                }
+            }
+        }
 
         Ok(BenchmarkResult {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -560,6 +585,18 @@ impl HeadlessBenchmark {
             score: score.into(),
             warnings,
         })
+    }
+
+    /// OPT-014: Sample current CPU frequency for throttling detection
+    fn sample_cpu_freq() -> Option<u32> {
+        #[cfg(target_os = "linux")]
+        {
+            let path = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq";
+            if let Ok(content) = std::fs::read_to_string(path) {
+                return content.trim().parse::<u32>().ok().map(|khz| khz / 1000);
+            }
+        }
+        None
     }
 
     fn calculate_latency_stats(latencies: &[f64]) -> LatencyStats {
