@@ -391,6 +391,44 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Add u64 into existing register (register reuse for low pressure)
+    pub fn add_u64_into(&mut self, dst: VirtualReg, a: VirtualReg, b: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Add, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+    }
+
+    /// Add u32 into existing register (register reuse for low pressure)
+    pub fn add_u32_into(&mut self, dst: VirtualReg, a: VirtualReg, b: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Add, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+    }
+
+    /// Move u64 immediate into existing register (register reuse)
+    pub fn mov_u64_into(&mut self, dst: VirtualReg, val: u64) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmU64(val)),
+        );
+    }
+
+    /// Move u32 immediate into existing register (register reuse)
+    pub fn mov_u32_into(&mut self, dst: VirtualReg, val: u32) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmI64(val as i64)),
+        );
+    }
+
     /// Add f32
     pub fn add_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::F32);
@@ -579,10 +617,101 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// PAR-063: Dot product of 4 x u8 vectors with accumulate
+    ///
+    /// Computes: d = dot4(a, b) + c
+    /// where a and b are u32 containing 4 x u8 values each
+    ///
+    /// This is the key SIMD instruction used by llama.cpp for Q4K inference.
+    /// Each dp4a computes 4 multiply-adds in one instruction.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let a = 0x01020304u32;  // bytes [4, 3, 2, 1]
+    /// let b = 0x05060708u32;  // bytes [8, 7, 6, 5]
+    /// let c = 0u32;           // accumulator
+    /// // d = 4*8 + 3*7 + 2*6 + 1*5 = 32 + 21 + 12 + 5 = 70
+    /// ```
+    pub fn dp4a_u32(&mut self, a: VirtualReg, b: VirtualReg, c: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Dp4a, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .src(Operand::Reg(c)),
+        );
+        dst
+    }
+
+    /// PAR-063: Dot product of 4 x u8 vectors with accumulate (in-place)
+    ///
+    /// Like `dp4a_u32` but accumulates into an existing register.
+    pub fn dp4a_u32_inplace(&mut self, acc: VirtualReg, a: VirtualReg, b: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Dp4a, PtxType::U32)
+                .dst(Operand::Reg(acc))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .src(Operand::Reg(acc)),
+        );
+    }
+
+    /// PAR-063-V3: Dot product with unsigned 'a' and signed 'b' (in-place)
+    ///
+    /// Computes: acc = dot4(a_u8, b_s8) + acc
+    /// where:
+    /// - a contains 4 x u8 values (Q4K weights, 0-15 range, expanded to bytes)
+    /// - b contains 4 x s8 values (quantized activations, -127 to +127)
+    ///
+    /// This is the key instruction for Q4_K × Q8 dot products (llama.cpp pattern).
+    pub fn dp4a_u32_s32_inplace(&mut self, acc: VirtualReg, a: VirtualReg, b: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Dp4aUS, PtxType::S32)
+                .dst(Operand::Reg(acc))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .src(Operand::Reg(acc)),
+        );
+    }
+
+    /// PAR-063-V3: Dot product with both operands signed (in-place)
+    ///
+    /// Computes: acc = dot4(a_s8, b_s8) + acc
+    pub fn dp4a_s32_inplace(&mut self, acc: VirtualReg, a: VirtualReg, b: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Dp4aS32, PtxType::S32)
+                .dst(Operand::Reg(acc))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .src(Operand::Reg(acc)),
+        );
+    }
+
     /// Barrier synchronization (all threads in block must reach this point)
     pub fn bar_sync(&mut self, barrier_id: u32) {
         self.instructions.push(
             PtxInstruction::new(PtxOp::Bar, PtxType::B32).label(format!("sync {}", barrier_id)),
+        );
+    }
+
+    /// Memory fence at CTA (thread block) level
+    ///
+    /// Ensures all prior memory operations are visible to other threads in the block.
+    /// PTX: membar.cta;
+    pub fn membar_cta(&mut self) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::MemBar, PtxType::B32).label("cta".to_string()),
+        );
+    }
+
+    /// Memory fence at GPU level
+    ///
+    /// Ensures all prior memory operations are visible to other threads on the GPU.
+    /// PTX: membar.gl;
+    pub fn membar_gl(&mut self) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::MemBar, PtxType::B32).label("gl".to_string()),
         );
     }
 
@@ -624,6 +753,25 @@ impl<'a> KernelBuilder<'a> {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
             PtxInstruction::new(PtxOp::Ld, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Shared),
+        );
+        dst
+    }
+
+    /// Volatile load u32 from shared memory (F082 fix)
+    ///
+    /// The .volatile qualifier prevents the compiler from optimizing
+    /// dependent loads. This breaks the "Computed Address From Loaded Value"
+    /// SASS optimization pattern that causes CUDA_ERROR_UNKNOWN (716).
+    ///
+    /// Use this when the loaded value will be used to compute an address
+    /// for another shared memory load.
+    pub fn ld_shared_u32_volatile(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::LdVolatile, PtxType::U32)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(addr))
                 .space(PtxStateSpace::Shared),
@@ -674,6 +822,125 @@ impl<'a> KernelBuilder<'a> {
                 .src(Operand::ImmU64(mask as u64)), // membermask
         );
         dst
+    }
+
+    /// Warp shuffle indexed for u32 values (broadcasts, lane selection)
+    ///
+    /// Format: shfl.sync.idx.b32 dst, src, srcLane, width, membermask
+    ///
+    /// IMPORTANT: For shfl.idx, the third parameter is WIDTH (not clamp!)
+    /// Width must be a power of 2: 1, 2, 4, 8, 16, or 32.
+    /// Use 32 for full-warp broadcasts.
+    ///
+    /// Used for KF-000A hypothesis test: Can shfl.sync values be stored without F081/F082 crash?
+    pub fn shfl_idx_u32(&mut self, val: VirtualReg, src_lane: u32, mask: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::ShflIdx, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::ImmU64(src_lane as u64))
+                .src(Operand::ImmU64(32)) // Width for shfl.idx (must be power of 2!)
+                .src(Operand::ImmU64(mask as u64)), // membermask
+        );
+        dst
+    }
+
+    /// Warp shuffle indexed with dynamic lane (from register)
+    ///
+    /// Format: shfl.sync.idx.b32 dst, src, srcLane, width, membermask
+    /// srcLane comes from a register instead of immediate.
+    pub fn shfl_idx_u32_reg(&mut self, val: VirtualReg, src_lane_reg: VirtualReg, mask: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::ShflIdx, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::Reg(src_lane_reg))
+                .src(Operand::ImmU64(32)) // Width
+                .src(Operand::ImmU64(mask as u64)), // membermask
+        );
+        dst
+    }
+
+    // ===== KF-002: Warp Vote and Bit Manipulation =====
+
+    /// Warp ballot - returns bitmask of lanes where predicate is true
+    ///
+    /// Format: vote.sync.ballot.b32 dst, pred, membermask;
+    ///
+    /// Returns a u32 where bit i is set if lane i has predicate true.
+    /// Used for finding which lanes have matching hash values in LZ4 compression.
+    pub fn ballot_sync(&mut self, pred: VirtualReg, mask: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::VoteBallot, PtxType::B32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(pred))
+                .src(Operand::ImmU64(mask as u64)),
+        );
+        dst
+    }
+
+    /// Population count - counts number of 1 bits in a u32
+    ///
+    /// Format: popc.b32 dst, src;
+    ///
+    /// Used for counting matches in ballot results.
+    pub fn popc_u32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Popc, PtxType::B32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Find first set bit (1-indexed, returns 0 if input is 0)
+    ///
+    /// Format: bfind.u32 dst, src;
+    ///
+    /// Returns position of most significant set bit (0 if src==0).
+    /// To get lane number from ballot: use bfind or clz+subtract.
+    pub fn bfind_u32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Bfind, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Count leading zeros
+    ///
+    /// Format: clz.b32 dst, src;
+    ///
+    /// Used with ballot to find first matching lane: lane = 31 - clz(ballot)
+    pub fn clz_u32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Clz, PtxType::B32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Store u16 to shared memory (for hash table positions)
+    ///
+    /// Format: st.shared.u16 [addr], val;
+    ///
+    /// Used for storing 16-bit positions in LZ4 hash table (2048 entries × 2 bytes).
+    /// IMPORTANT: This is WRITE-ONLY usage - no ld.shared.u16 needed, avoiding F081!
+    pub fn st_shared_u16(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U16)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Shared),
+        );
     }
 
     /// Max f32 of two values
@@ -821,6 +1088,15 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Convert u32 to u64 into existing register (register reuse)
+    pub fn cvt_u64_u32_into(&mut self, dst: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+    }
+
     /// Convert u64 to u32 (truncate)
     pub fn cvt_u32_u64(&mut self, val: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
@@ -844,11 +1120,80 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Convert signed int8 to signed int32: dst = sext(val)
+    /// Used for Q8_0 dequantization (int8 quantized values)
+    /// Note: Input is u8 (from ld.global.u8), we do manual sign extension
+    pub fn cvt_s32_s8(&mut self, val: VirtualReg) -> VirtualReg {
+        // First convert u8 -> u32 (zero extend)
+        let u32_val = self.cvt_u32_u8(val);
+        // For sign extension: if val >= 128, subtract 256
+        // signed = unsigned - ((unsigned >= 128) ? 256 : 0)
+        let const_128 = self.mov_u32_imm(128);
+        let is_negative = self.setp_ge_u32(u32_val, const_128);
+        let const_256 = self.mov_u32_imm(256);
+        let zero = self.mov_u32_imm(0);
+        // Select 256 if negative, else 0
+        let adjust = self.selp_u32(is_negative, const_256, zero);
+        // Compute signed value
+        self.sub_u32_reg(u32_val, adjust)
+    }
+
+    /// Convert signed int32 to f32: dst = (f32)val
+    /// Used for Q8_0 dequantization after s8->s32 conversion
+    /// Emits cvt.rn.f32.s32 which interprets the source bits as signed
+    pub fn cvt_f32_s32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .with_src_type(PtxType::S32)  // Force .s32 source type
+                .rounding(RoundingMode::Rn),
+        );
+        dst
+    }
+
     /// Reciprocal square root f32: dst = 1/sqrt(val)
     pub fn rsqrt_f32(&mut self, val: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::F32);
         self.instructions.push(
             PtxInstruction::new(PtxOp::Rsqrt, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Sine f32 (approximate): dst = sin(val)
+    /// PAR-060: Used for RoPE (Rotary Position Embedding) kernel
+    pub fn sin_f32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Sin, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Cosine f32 (approximate): dst = cos(val)
+    /// PAR-060: Used for RoPE (Rotary Position Embedding) kernel
+    pub fn cos_f32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cos, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Negate f32: dst = -val
+    /// PAR-060: Used for RoPE (Rotary Position Embedding) kernel
+    pub fn neg_f32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Neg, PtxType::F32)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val)),
         );
@@ -939,6 +1284,16 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Load u32 from global memory into existing register (register reuse)
+    pub fn ld_global_u32_into(&mut self, dst: VirtualReg, addr: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+    }
+
     /// Store u32 to global memory
     pub fn st_global_u32(&mut self, addr: VirtualReg, val: VirtualReg) {
         self.instructions.push(
@@ -990,6 +1345,144 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
+    // ========================================================================
+    // ATOMIC OPERATIONS - For debugging and synchronization
+    // ========================================================================
+
+    /// Atomic add to global memory, returns old value
+    ///
+    /// PTX: atom.global.add.u32 dst, [addr], val
+    /// Atomically: old = *addr; *addr = old + val; return old
+    pub fn atom_add_global_u32(&mut self, addr: VirtualReg, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::AtomAdd, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Atomic exchange on global memory, returns old value
+    ///
+    /// PTX: atom.global.exch.u32 dst, [addr], val
+    /// Atomically: old = *addr; *addr = val; return old
+    pub fn atom_exch_global_u32(&mut self, addr: VirtualReg, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::AtomExch, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Atomic min on global memory, returns old value
+    ///
+    /// PTX: atom.global.min.u32 dst, [addr], val
+    pub fn atom_min_global_u32(&mut self, addr: VirtualReg, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::AtomMin, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Atomic max on global memory, returns old value
+    ///
+    /// PTX: atom.global.max.u32 dst, [addr], val
+    pub fn atom_max_global_u32(&mut self, addr: VirtualReg, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::AtomMax, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Atomic exchange on shared memory, returns old value
+    ///
+    /// PTX: atom.shared.exch.u32 dst, [addr], val
+    /// Atomically: old = *addr; *addr = val; return old
+    ///
+    /// NOTE: This is a workaround for a ptxas bug where regular st.shared
+    /// with computed addresses crashes the JIT compiler.
+    pub fn atom_exch_shared_u32(&mut self, addr: VirtualReg, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::AtomExch, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Shared),
+        );
+        dst
+    }
+
+    // ========================================================================
+    // DEBUG HELPERS - Printf-style debugging for PTX kernels
+    // ========================================================================
+
+    /// Emit a debug marker to a debug buffer
+    ///
+    /// This atomically increments a counter at debug_buf[0] and writes
+    /// the marker value to debug_buf[old_counter + 1].
+    ///
+    /// Usage:
+    /// - Pass a debug buffer with at least (max_markers + 1) u32 elements
+    /// - debug_buf[0] = counter (starts at 0)
+    /// - debug_buf[1..] = marker values written by emit_debug_marker
+    ///
+    /// Returns the slot index where the marker was written (for chaining)
+    pub fn emit_debug_marker(&mut self, debug_buf_ptr: VirtualReg, marker: u32) -> VirtualReg {
+        // Atomically get next slot: slot = atomicAdd(debug_buf[0], 1)
+        let one = self.mov_u32_imm(1);
+        let slot = self.atom_add_global_u32(debug_buf_ptr, one);
+
+        // Compute address: addr = debug_buf_ptr + (slot + 1) * 4
+        let slot_plus_1 = self.add_u32(slot, 1);
+        let offset = self.mul_u32(slot_plus_1, 4);
+        let offset_64 = self.cvt_u64_u32(offset);
+        let addr = self.add_u64(debug_buf_ptr, offset_64);
+
+        // Write marker value
+        let marker_val = self.mov_u32_imm(marker);
+        self.st_global_u32(addr, marker_val);
+
+        slot
+    }
+
+    /// Emit a debug value to a debug buffer (for variables)
+    ///
+    /// Similar to emit_debug_marker but writes an arbitrary register value
+    pub fn emit_debug_value(&mut self, debug_buf_ptr: VirtualReg, value: VirtualReg) -> VirtualReg {
+        // Atomically get next slot
+        let one = self.mov_u32_imm(1);
+        let slot = self.atom_add_global_u32(debug_buf_ptr, one);
+
+        // Compute address
+        let slot_plus_1 = self.add_u32(slot, 1);
+        let offset = self.mul_u32(slot_plus_1, 4);
+        let offset_64 = self.cvt_u64_u32(offset);
+        let addr = self.add_u64(debug_buf_ptr, offset_64);
+
+        // Write value
+        self.st_global_u32(addr, value);
+
+        slot
+    }
+
     /// Load u16 from global memory (for f16 as raw bits)
     pub fn ld_global_u16(&mut self, addr: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U16);
@@ -1024,6 +1517,20 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Convert u32 to u16 (truncate)
+    ///
+    /// Takes the low 16 bits of the u32 value.
+    /// Use this before storing u32 values to u16 memory locations.
+    pub fn cvt_u16_u32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U16);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::U16)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
     /// Shift right u32 (logical shift)
     ///
     /// NOTE: PTX requires .b32 (bitwise) type for shift ops, not .u32
@@ -1035,6 +1542,22 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::Reg(shift)),
+        );
+        dst
+    }
+
+    /// Shift right u32 by immediate (logical shift)
+    ///
+    /// Uses an immediate value for the shift amount, avoiding register clobbering issues.
+    /// Use this in loops where the shift amount is constant to prevent SASS from
+    /// reusing the shift register.
+    pub fn shr_u32_imm(&mut self, val: VirtualReg, shift: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Shr, PtxType::B32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::ImmU64(shift as u64)),
         );
         dst
     }
@@ -1069,6 +1592,16 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Bitwise OR u32 into existing register (register reuse)
+    pub fn or_u32_into(&mut self, dst: VirtualReg, a: VirtualReg, b: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Or, PtxType::B32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+    }
+
     /// Shift left u32 (register << register)
     ///
     /// NOTE: PTX requires .b32 (bitwise) type for shift ops, not .u32
@@ -1080,6 +1613,18 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::Reg(shift)),
+        );
+        dst
+    }
+
+    /// Shift left u32 by immediate (register << immediate)
+    pub fn shl_u32_imm(&mut self, val: VirtualReg, shift: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Shl, PtxType::B32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::ImmU64(shift as u64)),
         );
         dst
     }
@@ -1105,6 +1650,89 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Select f32 based on predicate: dst = pred ? true_val : false_val
+    ///
+    /// PTX format: selp.f32 d, a, b, p
+    /// PAR-062: Used by ArgMax kernel for conditional max tracking
+    pub fn selp_f32(
+        &mut self,
+        pred: VirtualReg,
+        true_val: VirtualReg,
+        false_val: VirtualReg,
+    ) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Selp, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(true_val))
+                .src(Operand::Reg(false_val))
+                .src(Operand::Reg(pred)),
+        );
+        dst
+    }
+
+    /// Compare f32 greater than: pred = a > b
+    ///
+    /// PTX format: setp.gt.f32 p, a, b
+    /// PAR-062: Used by ArgMax kernel for max comparison
+    pub fn setp_gt_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let pred = self.registers.allocate_virtual(PtxType::Pred);
+        let mut instr = PtxInstruction::new(PtxOp::Setp, PtxType::F32)
+            .dst(Operand::Reg(pred))
+            .src(Operand::Reg(a))
+            .src(Operand::Reg(b));
+        instr.label = Some(CmpOp::Gt.to_ptx_string().to_string());
+        self.instructions.push(instr);
+        pred
+    }
+
+    /// Get shared memory base pointer
+    ///
+    /// PAR-062: Returns base address of shared memory for this block
+    pub fn shared_ptr(&mut self) -> VirtualReg {
+        self.shared_base_addr()
+    }
+
+    /// Warp shuffle down for u32: exchange with lane + offset
+    ///
+    /// PTX format: shfl.sync.down.b32 d, a, offset, clamp, mask
+    /// PAR-062: Used by ArgMax kernel for warp-level index reduction
+    pub fn shfl_down_u32(&mut self, val: VirtualReg, offset: u32, mask: u32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::ShflDown, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::ImmU64(offset as u64))
+                .src(Operand::ImmU64(31)) // clamp to warp size
+                .src(Operand::ImmU64(mask as u64)),
+        );
+        dst
+    }
+
+    /// Load f32 immediate constant
+    ///
+    /// PAR-062: Used for NEG_INFINITY initialization
+    pub fn const_f32(&mut self, val: f32) -> VirtualReg {
+        self.mov_f32_imm(val)
+    }
+
+    /// Load u32 immediate constant
+    ///
+    /// PAR-062: Used for index initialization
+    pub fn const_u32(&mut self, val: u32) -> VirtualReg {
+        self.mov_u32_imm(val)
+    }
+
+    /// Bitwise AND u32 with immediate
+    ///
+    /// PAR-062: Used for lane_id extraction (tid & 31)
+    pub fn and_u32_imm(&mut self, a: VirtualReg, imm: u32) -> VirtualReg {
+        let imm_reg = self.mov_u32_imm(imm);
+        self.and_u32(a, imm_reg)
+    }
+
+
     // ===== In-Place Updates (for loops) =====
 
     /// Add u32 immediate in-place: dst = dst + imm
@@ -1121,6 +1749,19 @@ impl<'a> KernelBuilder<'a> {
 
     /// Add f32 register in-place: dst = dst + src
     /// Used for accumulator updates in reduction loops
+    /// Add register to u32 register in place (dst += src)
+    pub fn add_u32_reg_inplace(&mut self, dst: VirtualReg, src: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        self.registers.extend_live_range(src);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Add, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(dst))
+                .src(Operand::Reg(src)),
+        );
+    }
+
+    /// Add f32 value in-place: dst = dst + src
     pub fn add_f32_inplace(&mut self, dst: VirtualReg, src: VirtualReg) {
         self.registers.extend_live_range(dst);
         self.instructions.push(
@@ -1179,6 +1820,27 @@ impl<'a> KernelBuilder<'a> {
         self.registers.extend_live_range(dst);
         self.instructions.push(
             PtxInstruction::new(PtxOp::Mov, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(src)),
+        );
+    }
+
+    /// Copy u32 register: dst = src
+    /// Used for loop counter updates
+    pub fn mov_u32_reg(&mut self, dst: VirtualReg, src: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(src)),
+        );
+    }
+
+    /// Copy u64 register: dst = src
+    pub fn mov_u64_reg(&mut self, dst: VirtualReg, src: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::U64)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(src)),
         );
@@ -1433,6 +2095,145 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    // =========================================================================
+    // PAR-063-V4: Additional ops for Q8 quantization kernels
+    // =========================================================================
+
+    /// Signed 32-bit multiply (low 32 bits of result)
+    pub fn mul_lo_s32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::S32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mul, PtxType::S32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Absolute value of f32
+    pub fn abs_f32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Abs, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Minimum of two signed 32-bit integers
+    pub fn min_s32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::S32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Min, PtxType::S32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Maximum of two signed 32-bit integers
+    pub fn max_s32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::S32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Max, PtxType::S32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b)),
+        );
+        dst
+    }
+
+    /// Convert f32 to s32 with round-to-nearest-integer
+    pub fn cvt_rni_s32_f32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::S32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::S32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .rounding(RoundingMode::Rni),
+        );
+        dst
+    }
+
+    /// Move immediate to s32 register
+    pub fn mov_s32_imm(&mut self, val: i32) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::S32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::S32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmI64(i64::from(val))),
+        );
+        dst
+    }
+
+    /// Reinterpret u32 bits as s32 (no instruction, just type change)
+    pub fn mov_s32_from_u32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::S32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::S32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Convert s32 to u8 (truncate to low 8 bits)
+    pub fn cvt_u8_s32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U8);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::U8)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Convert u8 to s32 with sign extension
+    pub fn cvt_s32_u8_sx(&mut self, val: VirtualReg) -> VirtualReg {
+        // For sign extension, we treat the u8 as s8 and extend to s32
+        let dst = self.registers.allocate_virtual(PtxType::S32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::S32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Convert u32 to s32 (reinterpret bits)
+    pub fn cvt_s32_u32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::S32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::S32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Reciprocal approximation (1/x)
+    pub fn rcp_f32(&mut self, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Rcp, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val)),
+        );
+        dst
+    }
+
+    /// Move u32 immediate into existing register
+    pub fn mov_u32_inplace(&mut self, dst: VirtualReg, val: u32) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmU64(u64::from(val))),
+        );
+    }
+
     /// Get base address of shared memory array 'smem' as generic address
     ///
     /// Returns a u64 pointer to the beginning of the shared memory region
@@ -1472,6 +2273,15 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Load u32 from generic address into existing register (register reuse)
+    pub fn ld_generic_u32_into(&mut self, dst: VirtualReg, addr: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+        );
+    }
+
     /// Store u32 to generic address (unified address space)
     ///
     /// Use this after `shared_base_addr()` + offset computation for shared memory.
@@ -1482,6 +2292,26 @@ impl<'a> KernelBuilder<'a> {
                 .src(Operand::Reg(addr))
                 .src(Operand::Reg(val)),
             // No .space() means generic addressing
+        );
+    }
+
+    /// Load u64 from generic address (unified address space)
+    pub fn ld_generic_u64(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+        );
+        dst
+    }
+
+    /// Store u64 to generic address (unified address space)
+    pub fn st_generic_u64(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U64)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val)),
         );
     }
 
@@ -1539,6 +2369,34 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
+    /// Load f32 from generic address (unified address space)
+    ///
+    /// Use this after `shared_base_addr()` + offset computation for shared memory.
+    /// Generic addressing allows the hardware to resolve the actual memory space.
+    pub fn ld_generic_f32(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+            // No .space() means generic addressing
+        );
+        dst
+    }
+
+    /// Store f32 to generic address (unified address space)
+    ///
+    /// Use this after `shared_base_addr()` + offset computation for shared memory.
+    /// Generic addressing allows the hardware to resolve the actual memory space.
+    pub fn st_generic_f32(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::F32)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val)),
+            // No .space() means generic addressing
+        );
+    }
+
     /// Predicated load f32 from global memory with default value
     ///
     /// If predicate is true: loads value from addr
@@ -1583,6 +2441,66 @@ impl<'a> KernelBuilder<'a> {
                 .predicated(predicate)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(addr)),
+        );
+
+        dst
+    }
+
+    /// PAR-028: Load F16 from global memory with predicate guard
+    ///
+    /// If predicate is true: loads from addr, converts to F32
+    /// If predicate is false: returns 0.0 (no memory access)
+    ///
+    /// Implementation:
+    /// ```ptx
+    /// mov.f32 %dst, 0.0;                // Initialize with default
+    /// @pred {
+    ///     ld.global.b16 %tmp, [addr];   // Conditional load F16
+    ///     cvt.f32.f16 %dst, %tmp;       // Convert to F32
+    /// }
+    /// ```
+    ///
+    /// Used for FP16 KV cache in attention kernels:
+    /// ```text
+    /// let valid = setp_lt_u32(idx, head_dim);
+    /// let k_val = ld_global_f16_to_f32_predicated(addr, valid);
+    /// ```
+    pub fn ld_global_f16_to_f32_predicated(
+        &mut self,
+        addr: VirtualReg,
+        pred: VirtualReg,
+    ) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        let tmp = self.registers.allocate_virtual(PtxType::F16);
+
+        // 1. Initialize with default value (0.0)
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmF32(0.0)),
+        );
+
+        // 2. Predicated F16 load - only executes if pred is true
+        let predicate = Predicate {
+            reg: pred,
+            negated: false,
+        };
+
+        // Load F16 (using .b16 as PTX requires)
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::B16)
+                .space(PtxStateSpace::Global)
+                .predicated(predicate.clone())
+                .dst(Operand::Reg(tmp))
+                .src(Operand::Reg(addr)),
+        );
+
+        // 3. Predicated convert F16 to F32
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F32)
+                .predicated(predicate)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(tmp)),
         );
 
         dst
@@ -1666,6 +2584,15 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
                 s.push_str("ld");
             }
         }
+        PtxOp::LdVolatile => {
+            // Volatile load - prevents compiler optimization of dependent loads
+            // Used for F082 fix to break "Computed Address From Loaded Value" SASS optimization
+            if let Some(ss) = instr.state_space {
+                s.push_str(&format!("ld.volatile{}", ss.to_ptx_string()));
+            } else {
+                s.push_str("ld.volatile");
+            }
+        }
         PtxOp::LdParam => s.push_str("ld.param"),
         PtxOp::St => {
             // No state space = generic addressing (for cvta-derived pointers)
@@ -1690,19 +2617,23 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
         }
         PtxOp::Cvt => {
             // cvt needs both destination and source types
-            // The source type is determined from the source operand
+            // Use explicit src_type if provided, otherwise infer from source operand
             let dst_ty = instr.ty.to_ptx_string();
-            let src_ty = if let Some(Operand::Reg(vreg)) = instr.srcs.first() {
+            let src_ty = if let Some(st) = instr.src_type {
+                st.to_ptx_string()
+            } else if let Some(Operand::Reg(vreg)) = instr.srcs.first() {
                 vreg.ty().to_ptx_string()
             } else {
                 ".u32" // Default fallback
             };
             // Add rounding mode for float conversions (required by PTX ISA)
             // EXCEPTION: f16→f32 is exact and does NOT require rounding
-            let src_is_f16 = instr
-                .srcs
-                .first()
-                .is_some_and(|src| matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::F16));
+            let actual_src_type = instr.src_type.unwrap_or_else(|| {
+                instr.srcs.first()
+                    .and_then(|src| if let Operand::Reg(vreg) = src { Some(vreg.ty()) } else { None })
+                    .unwrap_or(PtxType::U32)
+            });
+            let src_is_f16 = actual_src_type == PtxType::F16;
             let dst_is_f32 = instr.ty == PtxType::F32;
             let is_f16_to_f32 = src_is_f16 && dst_is_f32;
 
@@ -1733,6 +2664,21 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             // FMA requires rounding mode: fma.rn.f32
             let round = instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string());
             s.push_str(&format!("fma{}", round));
+        }
+        PtxOp::Dp4a => {
+            // PAR-063: Dot product of 4-element byte vectors with accumulate
+            // Format: dp4a.atype.btype d, a, b, c;
+            // Uses U32 for unsigned quantized values (Q4K weights are unsigned)
+            s.push_str("dp4a.u32.u32");
+        }
+        PtxOp::Dp4aUS => {
+            // PAR-063-V3: Mixed unsigned/signed DP4A
+            // For Q4K weights (unsigned 0-15) × quantized activations (signed)
+            s.push_str("dp4a.u32.s32");
+        }
+        PtxOp::Dp4aS32 => {
+            // PAR-063-V3: Fully signed DP4A
+            s.push_str("dp4a.s32.s32");
         }
         PtxOp::ShflDown => {
             // sm_70+ requires shfl.sync.down with b32 type
@@ -1775,6 +2721,42 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
         PtxOp::WmmaStoreD => {
             // WMMA store D: wmma.store.d.sync.aligned.m16n16k16.row.f32 [ptr], {src...}, stride
             return emit_wmma_store(s, instr);
+        }
+        PtxOp::AtomAdd => {
+            // Atomic add: atom.global.add.u32 dst, [addr], val
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            s.push_str(&format!("atom{}.add", space));
+        }
+        PtxOp::AtomMin => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            s.push_str(&format!("atom{}.min", space));
+        }
+        PtxOp::AtomMax => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            s.push_str(&format!("atom{}.max", space));
+        }
+        PtxOp::AtomExch => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            s.push_str(&format!("atom{}.exch", space));
+        }
+        PtxOp::AtomCas => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            s.push_str(&format!("atom{}.cas", space));
         }
         _ => s.push_str(&format!("{:?}", instr.op).to_lowercase()),
     }
@@ -1826,18 +2808,23 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
         }
     }
 
-    // Sources - handle memory addressing specially for Ld/St
-    let is_memory_op = matches!(instr.op, PtxOp::Ld | PtxOp::St);
+    // Sources - handle memory addressing specially for Ld/St and Atomic ops
+    let is_memory_op = matches!(instr.op, PtxOp::Ld | PtxOp::LdVolatile | PtxOp::St);
+    let is_atomic_op = matches!(
+        instr.op,
+        PtxOp::AtomAdd | PtxOp::AtomMin | PtxOp::AtomMax | PtxOp::AtomExch | PtxOp::AtomCas
+    );
     let is_shared_mem = instr.state_space == Some(PtxStateSpace::Shared);
     let is_global_mem = instr.state_space == Some(PtxStateSpace::Global)
         || (is_memory_op && instr.state_space.is_none());
 
     for (i, src) in instr.srcs.iter().enumerate() {
         // For memory ops, first source (address) needs bracket format
-        if i == 0 && is_memory_op {
+        // For atomic ops, first source (address) also needs bracket format
+        if i == 0 && (is_memory_op || is_atomic_op) {
             if is_shared_mem {
                 s.push_str(&emit_shared_mem_operand(src));
-            } else if is_global_mem {
+            } else if is_global_mem || is_atomic_op {
                 s.push_str(&emit_global_mem_operand(src));
             } else {
                 s.push_str(&emit_operand(src));
@@ -2157,6 +3144,15 @@ fn write_instruction(instr: &PtxInstruction, out: &mut String) {
                 out.push_str("ld");
             }
         }
+        PtxOp::LdVolatile => {
+            // Volatile load - prevents compiler optimization of dependent loads
+            if let Some(ss) = instr.state_space {
+                out.push_str("ld.volatile");
+                out.push_str(ss.to_ptx_string());
+            } else {
+                out.push_str("ld.volatile");
+            }
+        }
         PtxOp::LdParam => out.push_str("ld.param"),
         PtxOp::St => {
             // No state space = generic addressing (for cvta-derived pointers)
@@ -2183,17 +3179,27 @@ fn write_instruction(instr: &PtxInstruction, out: &mut String) {
             let _ = writeln!(out, "bar.{};", barrier_id);
             return;
         }
+        PtxOp::MemBar => {
+            // Memory fence: membar.{scope}; where scope is cta, gl, or sys
+            let scope = instr.label.as_deref().unwrap_or("cta");
+            let _ = writeln!(out, "membar.{};", scope);
+            return;
+        }
         PtxOp::Cvt => {
             let dst_ty = instr.ty.to_ptx_string();
-            let src_ty = if let Some(Operand::Reg(vreg)) = instr.srcs.first() {
+            let src_ty = if let Some(st) = instr.src_type {
+                st.to_ptx_string()
+            } else if let Some(Operand::Reg(vreg)) = instr.srcs.first() {
                 vreg.ty().to_ptx_string()
             } else {
                 ".u32"
             };
-            let src_is_f16 = instr
-                .srcs
-                .first()
-                .is_some_and(|src| matches!(src, Operand::Reg(vreg) if vreg.ty() == PtxType::F16));
+            let actual_src_type = instr.src_type.unwrap_or_else(|| {
+                instr.srcs.first()
+                    .and_then(|src| if let Operand::Reg(vreg) = src { Some(vreg.ty()) } else { None })
+                    .unwrap_or(PtxType::U32)
+            });
+            let src_is_f16 = actual_src_type == PtxType::F16;
             let dst_is_f32 = instr.ty == PtxType::F32;
             let is_f16_to_f32 = src_is_f16 && dst_is_f32;
 
@@ -2229,10 +3235,60 @@ fn write_instruction(instr: &PtxInstruction, out: &mut String) {
             out.push_str("fma");
             out.push_str(round);
         }
+        PtxOp::Dp4a => out.push_str("dp4a.u32.u32"),
+        PtxOp::Dp4aUS => out.push_str("dp4a.u32.s32"),
+        PtxOp::Dp4aS32 => out.push_str("dp4a.s32.s32"),
         PtxOp::ShflDown => out.push_str("shfl.sync.down.b32"),
         PtxOp::ShflIdx => out.push_str("shfl.sync.idx.b32"),
+        // KF-002: Warp vote and bit manipulation
+        PtxOp::VoteBallot | PtxOp::Vote => out.push_str("vote.sync.ballot.b32"),
+        PtxOp::Popc => out.push_str("popc"),
+        PtxOp::Bfind => out.push_str("bfind"),
+        PtxOp::Clz => out.push_str("clz"),
+        PtxOp::Bfe => out.push_str("bfe"),
+        PtxOp::Bfi => out.push_str("bfi"),
         PtxOp::Ex2 => out.push_str("ex2.approx"),
         PtxOp::Rsqrt => out.push_str("rsqrt.approx"),
+        // PAR-060: Sin/Cos for RoPE kernel
+        PtxOp::Sin => out.push_str("sin.approx"),
+        PtxOp::Cos => out.push_str("cos.approx"),
+        PtxOp::Neg => out.push_str("neg"),
+        // Atomic operations
+        PtxOp::AtomAdd => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            let _ = write!(out, "atom{}.add", space);
+        }
+        PtxOp::AtomMin => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            let _ = write!(out, "atom{}.min", space);
+        }
+        PtxOp::AtomMax => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            let _ = write!(out, "atom{}.max", space);
+        }
+        PtxOp::AtomExch => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            let _ = write!(out, "atom{}.exch", space);
+        }
+        PtxOp::AtomCas => {
+            let space = instr
+                .state_space
+                .map(|ss| ss.to_ptx_string())
+                .unwrap_or(".global");
+            let _ = write!(out, "atom{}.cas", space);
+        }
         // WMMA ops use the existing emit functions for now (complex formatting)
         PtxOp::WmmaLoadA
         | PtxOp::WmmaLoadB
@@ -2263,6 +3319,8 @@ fn write_instruction(instr: &PtxInstruction, out: &mut String) {
         || is_wide_mul_from_u32
         || instr.op == PtxOp::ShflDown
         || instr.op == PtxOp::ShflIdx
+        || instr.op == PtxOp::Vote  // vote.sync.ballot has .b32 built-in
+        || instr.op == PtxOp::VoteBallot
         || matches!(
             instr.op,
             PtxOp::WmmaLoadA
@@ -2298,14 +3356,19 @@ fn write_instruction(instr: &PtxInstruction, out: &mut String) {
     }
 
     // Sources
-    let is_memory_op = matches!(instr.op, PtxOp::Ld | PtxOp::St);
+    let is_memory_op = matches!(instr.op, PtxOp::Ld | PtxOp::LdVolatile | PtxOp::St);
+    let is_atomic_op = matches!(
+        instr.op,
+        PtxOp::AtomAdd | PtxOp::AtomMin | PtxOp::AtomMax | PtxOp::AtomExch | PtxOp::AtomCas
+    );
     let is_shared_mem = instr.state_space == Some(PtxStateSpace::Shared);
     let is_global_mem = instr.state_space == Some(PtxStateSpace::Global)
         || (is_memory_op && instr.state_space.is_none());
 
     for (i, src) in instr.srcs.iter().enumerate() {
-        if i == 0 && is_memory_op {
-            if is_shared_mem || is_global_mem {
+        // For memory and atomic ops, first source (address) needs bracket format
+        if i == 0 && (is_memory_op || is_atomic_op) {
+            if is_shared_mem || is_global_mem || is_atomic_op {
                 write_mem_operand(src, out);
             } else {
                 write_operand(src, out);
@@ -4268,5 +5331,604 @@ mod tests {
             "Expected mul.wide.s32 in: {}",
             ptx
         );
+    }
+
+    // ========================================================================
+    // ADDITIONAL COVERAGE TESTS
+    // ========================================================================
+
+    #[test]
+    fn test_dp4a_u32_instruction() {
+        let kernel = PtxKernel::new("test_dp4a").build(|ctx| {
+            let a = ctx.mov_u32_imm(0x01020304);
+            let b = ctx.mov_u32_imm(0x05060708);
+            let c = ctx.mov_u32_imm(0);
+            let _result = ctx.dp4a_u32(a, b, c);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("dp4a.u32.u32"), "Expected dp4a.u32.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_dp4a_u32_inplace_instruction() {
+        let kernel = PtxKernel::new("test_dp4a_inplace").build(|ctx| {
+            let acc = ctx.mov_u32_imm(0);
+            let a = ctx.mov_u32_imm(0x01020304);
+            let b = ctx.mov_u32_imm(0x05060708);
+            ctx.dp4a_u32_inplace(acc, a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("dp4a"), "Expected dp4a in: {}", ptx);
+    }
+
+    #[test]
+    fn test_dp4a_u32_s32_inplace_instruction() {
+        let kernel = PtxKernel::new("test_dp4a_us").build(|ctx| {
+            let acc = ctx.mov_u32_imm(0);
+            let a = ctx.mov_u32_imm(0x01020304);
+            let b = ctx.mov_u32_imm(0x05060708);
+            ctx.dp4a_u32_s32_inplace(acc, a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("dp4a"), "Expected dp4a in: {}", ptx);
+    }
+
+    #[test]
+    fn test_dp4a_s32_inplace_instruction() {
+        let kernel = PtxKernel::new("test_dp4a_s32").build(|ctx| {
+            let acc = ctx.mov_u32_imm(0);
+            let a = ctx.mov_u32_imm(0x01020304);
+            let b = ctx.mov_u32_imm(0x05060708);
+            ctx.dp4a_s32_inplace(acc, a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("dp4a"), "Expected dp4a in: {}", ptx);
+    }
+
+    #[test]
+    fn test_membar_cta_instruction() {
+        let kernel = PtxKernel::new("test_membar_cta").build(|ctx| {
+            ctx.membar_cta();
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("membar.cta"), "Expected membar.cta in: {}", ptx);
+    }
+
+    #[test]
+    fn test_membar_gl_instruction() {
+        let kernel = PtxKernel::new("test_membar_gl").build(|ctx| {
+            ctx.membar_gl();
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("membar.gl"), "Expected membar.gl in: {}", ptx);
+    }
+
+    #[test]
+    fn test_ld_shared_u32_volatile_instruction() {
+        let kernel = PtxKernel::new("test_ld_volatile")
+            .shared_memory(256)
+            .build(|ctx| {
+                let addr = ctx.mov_u64_imm(0);
+                let _val = ctx.ld_shared_u32_volatile(addr);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("ld.volatile.shared.u32"), "Expected ld.volatile.shared.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_ballot_sync_instruction() {
+        let kernel = PtxKernel::new("test_ballot").build(|ctx| {
+            let a = ctx.mov_u32_imm(1);
+            let b = ctx.mov_u32_imm(0);
+            let pred = ctx.setp_ge_u32(a, b);
+            let _ballot = ctx.ballot_sync(pred, 0xFFFFFFFF);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("vote") || ptx.contains("ballot"), "Expected ballot in: {}", ptx);
+    }
+
+    #[test]
+    fn test_popc_u32_instruction() {
+        let kernel = PtxKernel::new("test_popc").build(|ctx| {
+            let val = ctx.mov_u32_imm(0xFF);
+            let _count = ctx.popc_u32(val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("popc"), "Expected popc in: {}", ptx);
+    }
+
+    #[test]
+    fn test_bfind_u32_instruction() {
+        let kernel = PtxKernel::new("test_bfind").build(|ctx| {
+            let val = ctx.mov_u32_imm(0x80);
+            let _pos = ctx.bfind_u32(val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("bfind"), "Expected bfind in: {}", ptx);
+    }
+
+    #[test]
+    fn test_clz_u32_instruction() {
+        let kernel = PtxKernel::new("test_clz").build(|ctx| {
+            let val = ctx.mov_u32_imm(0x80);
+            let _lz = ctx.clz_u32(val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("clz"), "Expected clz in: {}", ptx);
+    }
+
+    #[test]
+    fn test_shfl_idx_u32_reg_instruction() {
+        let kernel = PtxKernel::new("test_shfl_reg").build(|ctx| {
+            let val = ctx.mov_u32_imm(42);
+            let lane = ctx.mov_u32_imm(0);
+            let _shuffled = ctx.shfl_idx_u32_reg(val, lane, 0xFFFFFFFF);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("shfl.sync.idx"), "Expected shfl.sync.idx in: {}", ptx);
+    }
+
+    #[test]
+    fn test_atom_add_global_u32_instruction() {
+        let kernel = PtxKernel::new("test_atom_add")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let val = ctx.mov_u32_imm(1);
+                let _old = ctx.atom_add_global_u32(ptr, val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("atom.global.add.u32"), "Expected atom.global.add.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_atom_exch_global_u32_instruction() {
+        let kernel = PtxKernel::new("test_atom_exch")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let val = ctx.mov_u32_imm(42);
+                let _old = ctx.atom_exch_global_u32(ptr, val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("atom.global.exch.u32"), "Expected atom.global.exch.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_atom_min_global_u32_instruction() {
+        let kernel = PtxKernel::new("test_atom_min")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let val = ctx.mov_u32_imm(10);
+                let _old = ctx.atom_min_global_u32(ptr, val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("atom.global.min.u32"), "Expected atom.global.min.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_atom_max_global_u32_instruction() {
+        let kernel = PtxKernel::new("test_atom_max")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let val = ctx.mov_u32_imm(100);
+                let _old = ctx.atom_max_global_u32(ptr, val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("atom.global.max.u32"), "Expected atom.global.max.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_atom_exch_shared_u32_instruction() {
+        let kernel = PtxKernel::new("test_atom_exch_shared")
+            .shared_memory(256)
+            .build(|ctx| {
+                let addr = ctx.mov_u64_imm(0);
+                let val = ctx.mov_u32_imm(42);
+                let _old = ctx.atom_exch_shared_u32(addr, val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("atom.shared.exch.u32"), "Expected atom.shared.exch.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_sin_f32_instruction() {
+        let kernel = PtxKernel::new("test_sin").build(|ctx| {
+            let val = ctx.mov_f32_imm(1.57);
+            let _result = ctx.sin_f32(val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("sin.approx.f32"), "Expected sin.approx.f32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_cos_f32_instruction() {
+        let kernel = PtxKernel::new("test_cos").build(|ctx| {
+            let val = ctx.mov_f32_imm(0.0);
+            let _result = ctx.cos_f32(val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("cos.approx.f32"), "Expected cos.approx.f32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_neg_f32_instruction() {
+        let kernel = PtxKernel::new("test_neg").build(|ctx| {
+            let val = ctx.mov_f32_imm(1.0);
+            let _result = ctx.neg_f32(val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("neg.f32"), "Expected neg.f32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_cvt_s32_s8_instruction() {
+        let kernel = PtxKernel::new("test_cvt_s8")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let val = ctx.ld_global_u8(ptr);
+                let _signed = ctx.cvt_s32_s8(val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        // cvt_s32_s8 uses setp_ge, mov, selp, sub to do sign extension
+        assert!(ptx.contains("setp"), "Expected setp for sign extension in: {}", ptx);
+    }
+
+    #[test]
+    fn test_cvt_f32_s32_instruction() {
+        let kernel = PtxKernel::new("test_cvt_f32_s32").build(|ctx| {
+            let val = ctx.mov_u32_imm(42);
+            let _float = ctx.cvt_f32_s32(val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("cvt.rn.f32.s32"), "Expected cvt.rn.f32.s32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_st_global_u8_instruction() {
+        let kernel = PtxKernel::new("test_st_u8")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let val = ctx.mov_u32_imm(0xFF);
+                ctx.st_global_u8(ptr, val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("st.global.u8"), "Expected st.global.u8 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_st_global_u16_instruction() {
+        let kernel = PtxKernel::new("test_st_u16")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let val = ctx.mov_u32_imm(0xFFFF);
+                ctx.st_global_u16(ptr, val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("st.global.u16"), "Expected st.global.u16 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_st_shared_u16_instruction() {
+        let kernel = PtxKernel::new("test_st_shared_u16")
+            .shared_memory(256)
+            .build(|ctx| {
+                let addr = ctx.mov_u64_imm(0);
+                let val = ctx.mov_u32_imm(0xFFFF);
+                ctx.st_shared_u16(addr, val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("st.shared.u16"), "Expected st.shared.u16 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_add_u64_into_instruction() {
+        let kernel = PtxKernel::new("test_add_u64_into").build(|ctx| {
+            let a = ctx.mov_u64_imm(100);
+            let b = ctx.mov_u64_imm(200);
+            let dst = ctx.mov_u64_imm(0);
+            ctx.add_u64_into(dst, a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("add.u64"), "Expected add.u64 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_add_u32_into_instruction() {
+        let kernel = PtxKernel::new("test_add_u32_into").build(|ctx| {
+            let a = ctx.mov_u32_imm(100);
+            let b = ctx.mov_u32_imm(200);
+            let dst = ctx.mov_u32_imm(0);
+            ctx.add_u32_into(dst, a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("add.u32"), "Expected add.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_mov_u64_into_instruction() {
+        let kernel = PtxKernel::new("test_mov_u64_into").build(|ctx| {
+            let dst = ctx.mov_u64_imm(0);
+            ctx.mov_u64_into(dst, 12345);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("mov.u64"), "Expected mov.u64 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_mov_u32_into_instruction() {
+        let kernel = PtxKernel::new("test_mov_u32_into").build(|ctx| {
+            let dst = ctx.mov_u32_imm(0);
+            ctx.mov_u32_into(dst, 12345);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("mov.u32"), "Expected mov.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_setp_eq_u32_instruction() {
+        let kernel = PtxKernel::new("test_setp_eq").build(|ctx| {
+            let a = ctx.mov_u32_imm(42);
+            let b = ctx.mov_u32_imm(42);
+            let _pred = ctx.setp_eq_u32(a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("setp.eq.u32"), "Expected setp.eq.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_mul_u32_reg_instruction() {
+        let kernel = PtxKernel::new("test_mul_u32_reg").build(|ctx| {
+            let a = ctx.mov_u32_imm(10);
+            let b = ctx.mov_u32_imm(20);
+            let _result = ctx.mul_u32_reg(a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("mul.lo.u32"), "Expected mul.lo.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_add_u32_reg_instruction() {
+        let kernel = PtxKernel::new("test_add_u32_reg").build(|ctx| {
+            let a = ctx.mov_u32_imm(10);
+            let b = ctx.mov_u32_imm(20);
+            let _result = ctx.add_u32_reg(a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("add.u32"), "Expected add.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_cvt_u64_u32_into_instruction() {
+        let kernel = PtxKernel::new("test_cvt_into").build(|ctx| {
+            let val = ctx.mov_u32_imm(42);
+            let dst = ctx.mov_u64_imm(0);
+            ctx.cvt_u64_u32_into(dst, val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("cvt.u64.u32"), "Expected cvt.u64.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_cvt_u32_u64_instruction() {
+        let kernel = PtxKernel::new("test_cvt_u32_u64").build(|ctx| {
+            let val = ctx.mov_u64_imm(1000);
+            let _truncated = ctx.cvt_u32_u64(val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("cvt.u32.u64"), "Expected cvt.u32.u64 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_cvt_f32_u32_instruction() {
+        let kernel = PtxKernel::new("test_cvt_f32_u32").build(|ctx| {
+            let val = ctx.mov_u32_imm(42);
+            let _float = ctx.cvt_f32_u32(val);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("cvt.rn.f32.u32"), "Expected cvt.rn.f32.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_mul_u64_instruction() {
+        let kernel = PtxKernel::new("test_mul_u64").build(|ctx| {
+            let a = ctx.mov_u64_imm(100);
+            let _result = ctx.mul_u64(a, 200);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("mul.lo.u64"), "Expected mul.lo.u64 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_mul_u64_reg_instruction() {
+        let kernel = PtxKernel::new("test_mul_u64_reg").build(|ctx| {
+            let a = ctx.mov_u64_imm(100);
+            let b = ctx.mov_u64_imm(200);
+            let _result = ctx.mul_u64_reg(a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("mul.lo.u64"), "Expected mul.lo.u64 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_ld_global_u32_into_instruction() {
+        let kernel = PtxKernel::new("test_ld_into")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let dst = ctx.mov_u32_imm(0);
+                ctx.ld_global_u32_into(dst, ptr);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("ld.global.u32"), "Expected ld.global.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_emit_debug_marker() {
+        let kernel = PtxKernel::new("test_debug")
+            .param(PtxType::U64, "debug_buf")
+            .build(|ctx| {
+                let debug_buf = ctx.load_param_u64("debug_buf");
+                let _slot = ctx.emit_debug_marker(debug_buf, 0xDEAD);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        // Debug marker uses atomicAdd and st.global
+        assert!(ptx.contains("atom.global.add.u32"), "Expected atomicAdd for debug marker in: {}", ptx);
+    }
+
+    #[test]
+    fn test_emit_debug_value() {
+        let kernel = PtxKernel::new("test_debug_val")
+            .param(PtxType::U64, "debug_buf")
+            .build(|ctx| {
+                let debug_buf = ctx.load_param_u64("debug_buf");
+                let val = ctx.mov_u32_imm(42);
+                let _slot = ctx.emit_debug_value(debug_buf, val);
+                ctx.ret();
+            });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("atom.global.add.u32"), "Expected atomicAdd for debug value in: {}", ptx);
+    }
+
+    #[test]
+    fn test_div_f32_instruction() {
+        let kernel = PtxKernel::new("test_div_f32").build(|ctx| {
+            let a = ctx.mov_f32_imm(10.0);
+            let b = ctx.mov_f32_imm(2.0);
+            let _result = ctx.div_f32(a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        // div.f32 emits as div.rn.f32 with rounding mode
+        assert!(ptx.contains("div.rn.f32") || ptx.contains("div.f32"), "Expected div.f32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_and_pred_instruction() {
+        let kernel = PtxKernel::new("test_and_pred").build(|ctx| {
+            let a = ctx.mov_u32_imm(10);
+            let b = ctx.mov_u32_imm(20);
+            let five = ctx.mov_u32_imm(5);
+            let thirty = ctx.mov_u32_imm(30);
+            let p1 = ctx.setp_ge_u32(a, five);
+            let p2 = ctx.setp_lt_u32(b, thirty);
+            let _combined = ctx.and_pred(p1, p2);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("and.pred"), "Expected and.pred in: {}", ptx);
+    }
+
+    #[test]
+    fn test_branch_instruction() {
+        let kernel = PtxKernel::new("test_branch").build(|ctx| {
+            ctx.branch("end");
+            ctx.label("end");
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("bra end"), "Expected bra end in: {}", ptx);
+    }
+
+    #[test]
+    fn test_branch_if_instruction() {
+        let kernel = PtxKernel::new("test_branch_if").build(|ctx| {
+            let a = ctx.mov_u32_imm(10);
+            let b = ctx.mov_u32_imm(5);
+            let pred = ctx.setp_ge_u32(a, b);
+            ctx.branch_if(pred, "taken");
+            ctx.label("taken");
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("@%p"), "Expected predicated branch @%p in: {}", ptx);
+    }
+
+    #[test]
+    fn test_shfl_idx_u32_instruction() {
+        let kernel = PtxKernel::new("test_shfl_u32").build(|ctx| {
+            let val = ctx.mov_u32_imm(42);
+            let _shuffled = ctx.shfl_idx_u32(val, 0, 0xFFFFFFFF);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("shfl.sync.idx"), "Expected shfl.sync.idx in: {}", ptx);
+    }
+
+    #[test]
+    fn test_special_reg_tid() {
+        let kernel = PtxKernel::new("test_tid").build(|ctx| {
+            let _tid = ctx.special_reg(PtxReg::TidX);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("%tid.x"), "Expected %tid.x in: {}", ptx);
+    }
+
+    #[test]
+    fn test_mul_u32_instruction() {
+        let kernel = PtxKernel::new("test_mul_u32").build(|ctx| {
+            let a = ctx.mov_u32_imm(10);
+            let _result = ctx.mul_u32(a, 20);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("mul.lo.u32"), "Expected mul.lo.u32 in: {}", ptx);
+    }
+
+    #[test]
+    fn test_sub_u32_reg_instruction() {
+        let kernel = PtxKernel::new("test_sub_u32").build(|ctx| {
+            let a = ctx.mov_u32_imm(100);
+            let b = ctx.mov_u32_imm(50);
+            let _result = ctx.sub_u32_reg(a, b);
+            ctx.ret();
+        });
+        let ptx = kernel.emit();
+        assert!(ptx.contains("sub.u32"), "Expected sub.u32 in: {}", ptx);
     }
 }

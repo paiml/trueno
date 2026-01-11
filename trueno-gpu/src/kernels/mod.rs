@@ -17,6 +17,7 @@
 //! All kernels are validated for barrier safety to prevent thread divergence bugs.
 //! Use `emit_ptx_validated()` for production to ensure no early-exit-before-barrier patterns.
 
+mod argmax;
 mod attention;
 mod bias_activation;
 mod elementwise;
@@ -24,26 +25,38 @@ mod gemm;
 mod gemv;
 mod layernorm;
 pub mod lz4;
+#[cfg(test)]
+mod lz4_hash_store_test;
+mod megakernel;
+mod persistent;
 mod quantize;
 mod softmax;
 
+pub use argmax::{ArgMaxFinalKernel, ArgMaxKernel};
 pub use attention::{AttentionKernel, IncrementalAttentionKernel};
 pub use bias_activation::{Activation, BiasActivationKernel};
 pub use elementwise::{
-    ElementwiseMulKernel, FusedResidualRmsNormKernel, FusedSwigluKernel, GeluKernel,
-    ResidualAddKernel, SiluKernel,
+    ElementwiseMulKernel, Fp16FusedSwigluKernel, Fp16ResidualAddKernel,
+    FusedResidualRmsNormKernel, FusedSwigluKernel, GeluKernel, KvCacheScatterIndirectKernel,
+    KvCacheScatterKernel, ResidualAddKernel, RopeIndirectKernel, RopeKernel, SiluKernel,
 };
 pub use gemm::{
     Batched4DGemmConfig, Batched4DGemmKernel, BatchedGemmConfig, BatchedGemmKernel, GemmConfig,
     GemmKernel,
 };
 pub use gemv::{CoalescedGemvKernel, GemvKernel};
-pub use layernorm::{LayerNormKernel, RmsNormKernel};
+pub use layernorm::{Fp16RmsNormKernel, LayerNormKernel, RmsNormKernel};
+pub use megakernel::TransformerBlockMegakernel;
+pub use persistent::PersistentDecoderKernel;
 pub use quantize::{
-    Q4KGemvKernel, Q5KGemvKernel, Q5KKernel, Q6KGemvKernel, Q6KKernel, QuantizeKernel,
+    ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel, Dp4aQ4KGemvKernel, Dp4aSIMDQ4KGemvKernel,
+    Fp16Q4KGemvKernel, FusedRmsNormQ4KGemvKernel, PackedDp4aQ4KQ8Kernel, Q4KGemvKernel,
+    Q4KQ8DotKernel, Q4_0GemvKernel, Q4_1GemvKernel, Q5KGemvKernel, Q5KKernel, Q5_0GemvKernel,
+    Q6KGemvKernel, Q6KKernel, Q8QuantizeKernel, Q8_0GemvKernel, QuantizeKernel,
+    TensorCoreQ4KGemmKernel, TiledQ4KGemvKernel, TrueDp4aQ4KGemvKernel,
 };
 pub use softmax::SoftmaxKernel;
-pub use lz4::{Lz4WarpCompressKernel, Lz4WarpDecompressKernel};
+pub use lz4::{Lz4DecompressKernel, Lz4WarpCompressKernel, Lz4WarpDecompressKernel, Lz4WarpShuffleKernel, ShflStoreTestKernel};
 
 use crate::ptx::optimize::barrier_safety::{self, BarrierSafetyResult};
 use crate::ptx::{PtxKernel, PtxModule};
