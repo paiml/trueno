@@ -2,6 +2,11 @@
 //!
 //! OPTIMIZED: Uses Trueno Vector SIMD operations for 3.5x+ speedup over scalar loops.
 //! Benchmark: Scalar 4.45 GFLOP/s → SIMD 27.76 GFLOP/s (dot product)
+//!
+//! PERF-001: Cache-aware tiling for large problem sizes
+//! - Uses sqrt(cache/3) heuristic from Volkov & Demmel 2008
+//! - Prevents L3 cache overflow at large problem sizes
+//! - Maintains performance at 4M+ elements
 
 use std::any::Any;
 use std::time::Duration;
@@ -9,6 +14,49 @@ use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification, BrickS
 use crate::config::WorkloadType;
 use crate::ring_buffer::RingBuffer;
 use trueno::Vector;
+
+/// Default L2 cache size per core assumption (1 MB for modern CPUs)
+/// Using L2 because it's faster and each core has dedicated L2
+const DEFAULT_L2_CACHE_BYTES: usize = 1024 * 1024;
+
+/// Default L3 cache size assumption (32 MB for modern desktop CPUs)
+const DEFAULT_L3_CACHE_BYTES: usize = 32 * 1024 * 1024;
+
+/// Calculate optimal tile size using Volkov & Demmel 2008 heuristic
+/// For dot product: tile_size = cache / (2 * sizeof(f32)) since we only need A and B
+/// We use L2 cache for lower latency
+fn optimal_tile_size() -> usize {
+    let cache_bytes = std::env::var("TRUENO_L2_CACHE_KB")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .map(|kb| kb * 1024)
+        .unwrap_or(DEFAULT_L2_CACHE_BYTES);
+
+    // Each f32 is 4 bytes, we need space for 2 arrays (A and B)
+    // For dot product, result is scalar so doesn't count
+    let tile_size = cache_bytes / (2 * std::mem::size_of::<f32>());
+
+    // Round to multiple of 8 for AVX2 alignment, minimum 8192 elements
+    // Larger minimum to reduce loop overhead
+    ((tile_size / 8) * 8).max(8192)
+}
+
+/// Determine if tiling should be used based on problem size
+/// Only use tiling when data exceeds L3 cache (tiling has overhead)
+fn should_use_tiling(problem_size: usize) -> bool {
+    let l3_cache = std::env::var("TRUENO_L3_CACHE_MB")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .map(|mb| mb * 1024 * 1024)
+        .unwrap_or(DEFAULT_L3_CACHE_BYTES);
+
+    // Data size for 2 arrays of f32
+    let data_size = problem_size * 2 * std::mem::size_of::<f32>();
+
+    // Use tiling when data exceeds 50% of L3 cache
+    // (50% threshold to account for other data in cache)
+    data_size > l3_cache / 2
+}
 
 pub struct SimdLoadBrick {
     workload: WorkloadType,
@@ -19,6 +67,14 @@ pub struct SimdLoadBrick {
     vec_a: Vector<f32>,
     /// Trueno SIMD vector B (pre-allocated)
     vec_b: Vector<f32>,
+    /// Raw data for tiled operations (PERF-001)
+    data_a: Vec<f32>,
+    /// Raw data for tiled operations (PERF-001)
+    data_b: Vec<f32>,
+    /// Optimal tile size for cache-aware processing (PERF-001)
+    tile_size: usize,
+    /// Pre-allocated tile vectors to avoid allocation in hot path (PERF-001)
+    tile_vectors: Vec<(Vector<f32>, Vector<f32>)>,
     /// Last computed result (for verification)
     last_result: f64,
     /// FLOP counter for throughput calculation
@@ -36,6 +92,22 @@ impl SimdLoadBrick {
             .map(|i| ((i + 500) % 1000) as f32 / 1000.0)
             .collect();
 
+        // PERF-001: Calculate optimal tile size for cache-aware processing
+        let tile_size = optimal_tile_size();
+
+        // PERF-001: Pre-allocate tile vectors to avoid allocation in hot path
+        let num_tiles = (problem_size + tile_size - 1) / tile_size;
+        let tile_vectors: Vec<(Vector<f32>, Vector<f32>)> = (0..num_tiles)
+            .map(|i| {
+                let start = i * tile_size;
+                let end = (start + tile_size).min(problem_size);
+                (
+                    Vector::from_slice(&input_a[start..end]),
+                    Vector::from_slice(&input_b[start..end]),
+                )
+            })
+            .collect();
+
         Self {
             workload: WorkloadType::Gemm,
             intensity: 0.0,
@@ -43,6 +115,10 @@ impl SimdLoadBrick {
             problem_size,
             vec_a: Vector::from_slice(&input_a),
             vec_b: Vector::from_slice(&input_b),
+            data_a: input_a,
+            data_b: input_b,
+            tile_size,
+            tile_vectors,
             last_result: 0.0,
             flop_count: 0,
             latency_history: RingBuffer::new(100),
@@ -76,6 +152,7 @@ impl SimdLoadBrick {
     }
 
     /// Run one iteration using REAL Trueno SIMD operations
+    /// PERF-001: Uses cache-aware tiling for large problem sizes
     pub fn run_iteration(&mut self) -> Duration {
         let start = std::time::Instant::now();
 
@@ -86,42 +163,69 @@ impl SimdLoadBrick {
         // Scale iterations by intensity (1-10 iterations based on 0.0-1.0)
         let iterations = (self.intensity * 10.0).max(1.0) as usize;
 
+        // PERF-001: Use tiled execution for large problem sizes that exceed L3 cache
+        let use_tiling = should_use_tiling(self.problem_size) && !self.tile_vectors.is_empty();
+
         // Execute REAL SIMD workload based on type
         match self.workload {
             WorkloadType::Gemm | WorkloadType::All => {
                 // Dot product: 2 FLOPs per element (mul + add)
                 for _ in 0..iterations {
-                    self.last_result = self.vec_a.dot(&self.vec_b).unwrap_or(0.0) as f64;
+                    if use_tiling {
+                        // PERF-001: Tiled dot product for cache efficiency
+                        self.last_result = self.tiled_dot_product();
+                    } else {
+                        self.last_result = self.vec_a.dot(&self.vec_b).unwrap_or(0.0) as f64;
+                    }
                 }
                 self.flop_count += (self.problem_size as u64 * 2) * iterations as u64;
             }
             WorkloadType::Elementwise => {
                 // Element-wise mul: 1 FLOP per element
                 for _ in 0..iterations {
-                    let result = self.vec_a.mul(&self.vec_b).unwrap();
-                    std::hint::black_box(&result);
+                    if use_tiling {
+                        // PERF-001: Tiled elementwise for cache efficiency
+                        self.tiled_elementwise_mul();
+                    } else {
+                        let result = self.vec_a.mul(&self.vec_b).unwrap();
+                        std::hint::black_box(&result);
+                    }
                 }
                 self.flop_count += (self.problem_size as u64) * iterations as u64;
             }
             WorkloadType::Reduction => {
                 // Sum reduction: 1 FLOP per element
                 for _ in 0..iterations {
-                    self.last_result = self.vec_a.sum().unwrap_or(0.0) as f64;
+                    if use_tiling {
+                        // PERF-001: Tiled reduction for cache efficiency
+                        self.last_result = self.tiled_sum();
+                    } else {
+                        self.last_result = self.vec_a.sum().unwrap_or(0.0) as f64;
+                    }
                 }
                 self.flop_count += (self.problem_size as u64) * iterations as u64;
             }
             WorkloadType::Bandwidth => {
                 // Memory bandwidth test: add operation
                 for _ in 0..iterations {
-                    let result = self.vec_a.add(&self.vec_b).unwrap();
-                    std::hint::black_box(&result);
+                    if use_tiling {
+                        // PERF-001: Tiled add for cache efficiency
+                        self.tiled_elementwise_add();
+                    } else {
+                        let result = self.vec_a.add(&self.vec_b).unwrap();
+                        std::hint::black_box(&result);
+                    }
                 }
                 self.flop_count += (self.problem_size as u64) * iterations as u64;
             }
             WorkloadType::Conv2d | WorkloadType::Attention => {
                 // Conv2d and Attention: Default to dot product (simplified)
                 for _ in 0..iterations {
-                    self.last_result = self.vec_a.dot(&self.vec_b).unwrap_or(0.0) as f64;
+                    if use_tiling {
+                        self.last_result = self.tiled_dot_product();
+                    } else {
+                        self.last_result = self.vec_a.dot(&self.vec_b).unwrap_or(0.0) as f64;
+                    }
                 }
                 self.flop_count += (self.problem_size as u64 * 2) * iterations as u64;
             }
@@ -130,6 +234,41 @@ impl SimdLoadBrick {
         let elapsed = start.elapsed();
         self.latency_history.push(elapsed.as_secs_f64() * 1000.0);
         elapsed
+    }
+
+    /// PERF-001: Tiled dot product for cache-aware processing
+    /// Uses pre-allocated tile vectors to avoid allocation overhead
+    fn tiled_dot_product(&self) -> f64 {
+        let mut total = 0.0f64;
+        for (tile_a, tile_b) in &self.tile_vectors {
+            total += tile_a.dot(tile_b).unwrap_or(0.0) as f64;
+        }
+        total
+    }
+
+    /// PERF-001: Tiled sum reduction for cache-aware processing
+    fn tiled_sum(&self) -> f64 {
+        let mut total = 0.0f64;
+        for (tile_a, _) in &self.tile_vectors {
+            total += tile_a.sum().unwrap_or(0.0) as f64;
+        }
+        total
+    }
+
+    /// PERF-001: Tiled elementwise mul for cache-aware processing
+    fn tiled_elementwise_mul(&self) {
+        for (tile_a, tile_b) in &self.tile_vectors {
+            let result = tile_a.mul(tile_b).unwrap();
+            std::hint::black_box(&result);
+        }
+    }
+
+    /// PERF-001: Tiled elementwise add for cache-aware processing
+    fn tiled_elementwise_add(&self) {
+        for (tile_a, tile_b) in &self.tile_vectors {
+            let result = tile_a.add(tile_b).unwrap();
+            std::hint::black_box(&result);
+        }
     }
 
     /// Get GFLOP/s throughput based on actual FLOPs computed

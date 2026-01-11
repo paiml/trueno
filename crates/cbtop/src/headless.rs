@@ -26,6 +26,17 @@ pub enum OutputFormat {
     Text,
 }
 
+/// CPU frequency governor status (PERF-003)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CpuGovernorInfo {
+    pub governor: String,
+    pub is_performance: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_freq_mhz: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_freq_mhz: Option<u32>,
+}
+
 /// System information for benchmark context
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemInfo {
@@ -34,6 +45,9 @@ pub struct SystemInfo {
     pub memory_gb: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu: Option<String>,
+    /// PERF-003: CPU governor status for deterministic benchmarks
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_governor: Option<CpuGovernorInfo>,
 }
 
 impl SystemInfo {
@@ -48,11 +62,15 @@ impl SystemInfo {
         // Get memory info
         let memory_gb = Self::detect_memory_gb();
 
+        // PERF-003: Detect CPU governor for deterministic benchmarks
+        let cpu_governor = Self::detect_cpu_governor();
+
         Self {
             cpu,
             cores,
             memory_gb,
             gpu: None, // GPU detection requires CUDA/wgpu initialization
+            cpu_governor,
         }
     }
 
@@ -88,6 +106,69 @@ impl SystemInfo {
             }
         }
         0
+    }
+
+    /// PERF-003: Detect CPU frequency governor for deterministic benchmarks
+    /// Warns if governor is not set to "performance" mode
+    fn detect_cpu_governor() -> Option<CpuGovernorInfo> {
+        #[cfg(target_os = "linux")]
+        {
+            // Read governor from first CPU core (cpu0)
+            let governor_path = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor";
+            let cur_freq_path = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq";
+            let max_freq_path = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq";
+
+            if let Ok(governor) = std::fs::read_to_string(governor_path) {
+                let governor = governor.trim().to_string();
+                let is_performance = governor == "performance";
+
+                let current_freq_mhz = std::fs::read_to_string(cur_freq_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u32>().ok())
+                    .map(|khz| khz / 1000);
+
+                let max_freq_mhz = std::fs::read_to_string(max_freq_path)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u32>().ok())
+                    .map(|khz| khz / 1000);
+
+                return Some(CpuGovernorInfo {
+                    governor,
+                    is_performance,
+                    current_freq_mhz,
+                    max_freq_mhz,
+                });
+            }
+        }
+
+        None
+    }
+
+    /// PERF-003: Check if CPU is in optimal state for benchmarking
+    pub fn check_benchmark_readiness(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+
+        if let Some(ref gov) = self.cpu_governor {
+            if !gov.is_performance {
+                warnings.push(format!(
+                    "CPU governor is '{}' (not 'performance'). For deterministic benchmarks, run: \
+                     sudo cpupower frequency-set -g performance",
+                    gov.governor
+                ));
+            }
+
+            if let (Some(cur), Some(max)) = (gov.current_freq_mhz, gov.max_freq_mhz) {
+                let ratio = cur as f64 / max as f64;
+                if ratio < 0.9 {
+                    warnings.push(format!(
+                        "CPU running at {}MHz ({:.0}% of max {}MHz). Thermal throttling may affect results.",
+                        cur, ratio * 100.0, max
+                    ));
+                }
+            }
+        }
+
+        warnings
     }
 }
 
@@ -146,6 +227,9 @@ pub struct BenchmarkResult {
     pub benchmark: BenchmarkConfig,
     pub results: BenchmarkResults,
     pub score: ScoreInfo,
+    /// PERF-003: Warnings about benchmark environment
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// Core benchmark results
@@ -199,6 +283,7 @@ Score: {}/100 (Grade: {})
   Efficiency:   {}/25
   Correctness:  {}/20
   Stability:    {}/15
+{}
 "#,
             self.system.cpu,
             self.system.cores,
@@ -221,6 +306,15 @@ Score: {}/100 (Grade: {})
             self.score.efficiency,
             self.score.correctness,
             self.score.stability,
+            // PERF-003: Show warnings if any
+            if self.warnings.is_empty() {
+                String::new()
+            } else {
+                format!("\nWarnings:\n{}", self.warnings.iter()
+                    .map(|w| format!("  - {}", w))
+                    .collect::<Vec<_>>()
+                    .join("\n"))
+            },
         )
     }
 
@@ -425,6 +519,9 @@ impl HeadlessBenchmark {
         // Get score
         let score = brick.score();
 
+        // PERF-003: Check for benchmark environment warnings
+        let warnings = system.check_benchmark_readiness();
+
         Ok(BenchmarkResult {
             version: env!("CARGO_PKG_VERSION").to_string(),
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -442,6 +539,7 @@ impl HeadlessBenchmark {
                 latency_ms: latency_stats,
             },
             score: score.into(),
+            warnings,
         })
     }
 
@@ -519,6 +617,7 @@ mod tests {
                 cores: 4,
                 memory_gb: 16,
                 gpu: None,
+                cpu_governor: None,
             },
             benchmark: BenchmarkConfig {
                 backend: "Simd".to_string(),
@@ -547,6 +646,7 @@ mod tests {
                 correctness: 20,
                 stability: 10,
             },
+            warnings: vec![],
         };
 
         let json = result.format(OutputFormat::Json);
@@ -565,6 +665,7 @@ mod tests {
                 cores: 4,
                 memory_gb: 16,
                 gpu: None,
+                cpu_governor: None,
             },
             benchmark: BenchmarkConfig {
                 backend: "Simd".to_string(),
@@ -586,6 +687,7 @@ mod tests {
                 performance: 35, efficiency: 20,
                 correctness: 20, stability: 10,
             },
+            warnings: vec![],
         };
 
         let mut current = baseline.clone();
