@@ -48,6 +48,7 @@
 //! cbtop does NOT implement its own widgets. If a widget is missing, it MUST
 //! be added to presentar-terminal FIRST, then used here.
 
+pub mod baseline;
 pub mod brick;
 pub mod bricks;
 pub mod ring_buffer;
@@ -83,6 +84,13 @@ pub use optimize::{
     BottleneckAnalysis, BottleneckEntry, BottleneckSeverity, AnalysisSummary,
     RegressionDetector, RegressionReport, RegressionEntry,
     OptimizationValidator, ValidationResult,
+};
+
+// Industry Baseline Validation (PMAT-016)
+pub use baseline::{
+    ServerBaseline, GpuClass, ThroughputGrade, SmHealth,
+    BaselineComparison, SingleComparison, BaselineValidator, ValidationSummary,
+    VLLM_BASELINE, TGI_BASELINE, TRITON_BASELINE, INDUSTRY_BASELINES,
 };
 
 // Re-export presentar-terminal widgets and canvas for convenience
