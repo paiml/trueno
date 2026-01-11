@@ -1329,3 +1329,302 @@ roadmap:
   - accuracy
   - json
   notes: null
+- id: PMAT-013
+  github_issue: null
+  item_type: task
+  title: 'PMAT-013: QuantizedBrick Implementation (Q4_K, GGUF)'
+  status: planned
+  priority: high
+  assigned_to: claude
+  created: 2026-01-11T15:30:00Z
+  updated: 2026-01-11T15:30:00Z
+  spec: |
+    Implement QuantizedBrick per §17 of cbtop spec.
+
+    Features:
+    - Q4_K, Q5_K, Q8_0 quantization formats
+    - GGUF file loading for llama.cpp compatibility
+    - Fused dequantization during matmul (GPU)
+    - Memory footprint tracking
+    - Perplexity delta measurement
+
+    Dependencies:
+    - trueno-gpu PTX dequantization kernels
+    - Q4KBlock packed format (§17.1)
+
+    Citations:
+    - [Dettmers et al. 2022] "LLM.int8(): 8-bit Matrix Multiplication for Transformers" NeurIPS
+    - [Frantar et al. 2023] "GPTQ: Accurate Post-Training Quantization" ICLR
+    - [Lin et al. 2023] "AWQ: Activation-aware Weight Quantization" MLSys
+
+    Falsification Criteria F401-F410:
+    - F401: Q4_K format decodes correctly vs reference
+    - F402: Memory footprint matches theoretical (4.5 bits/weight)
+    - F403: Perplexity delta < 1% vs F16 baseline
+    - F404: GGUF files load without error
+    - F405: TUI panel displays quantization stats
+    - F406: Fused dequant faster than separate dequant+matmul
+    - F407: All quantization formats tested
+    - F408: Backend equivalence (CPU vs GPU dequant)
+    - F409: Block alignment correct (256-byte)
+    - F410: Scale factors applied correctly
+  acceptance_criteria:
+  - Q4_K/Q5_K/Q8_0 formats implemented
+  - GGUF loading functional
+  - TUI panel displays quantization stats
+  - Perplexity within 1% of F16 baseline
+  - All F401-F410 falsification criteria met
+  phases:
+  - name: Phase 1 - Q4_K Format
+    status: planned
+    estimated_effort: 2 days
+    completion: 0
+  - name: Phase 2 - GGUF Loader
+    status: planned
+    estimated_effort: 2 days
+    completion: 0
+  - name: Phase 3 - PTX Dequant Kernels
+    status: planned
+    estimated_effort: 3 days
+    completion: 0
+  - name: Phase 4 - TUI Panel
+    status: planned
+    estimated_effort: 1 day
+    completion: 0
+  subtasks: []
+  estimated_effort: 8 days
+  labels:
+  - quantization
+  - gguf
+  - optimization
+  - cbtop
+  notes: |
+    Spec: docs/specifications/compute-block-tui-cbtop.md §17
+    FKR: FKR-014
+- id: PMAT-014
+  github_issue: null
+  item_type: task
+  title: 'PMAT-014: PagedKvCache Implementation (PagedAttention)'
+  status: planned
+  priority: high
+  assigned_to: claude
+  created: 2026-01-11T15:30:00Z
+  updated: 2026-01-11T15:30:00Z
+  spec: |
+    Implement PagedKvCache per §18 of cbtop spec.
+
+    Features:
+    - PagedAttention algorithm (vLLM-style)
+    - Block-based KV cache allocation
+    - Copy-on-write for beam search
+    - Eviction strategies (LRU, LFU, StreamingLLM)
+    - Memory utilization tracking
+
+    Dependencies:
+    - trueno-gpu DeviceBuffer management
+    - AtomicU32 reference counting
+
+    Citations:
+    - [Kwon et al. 2023] "Efficient Memory Management for LLM Serving with PagedAttention" SOSP
+    - [Xiao et al. 2023] "StreamingLLM: Efficient Streaming Language Models with Attention Sinks"
+    - [Yu et al. 2022] "ORCA: A Distributed Serving System for Transformer-Based Generative Models" OSDI
+
+    Falsification Criteria F411-F420:
+    - F411: Block allocation succeeds up to GPU memory limit
+    - F412: Copy-on-write fork works for beam search
+    - F413: Eviction triggers at memory threshold
+    - F414: LRU eviction correct (oldest access first)
+    - F415: Memory utilization reported accurately
+    - F416: TUI panel displays KV cache stats
+    - F417: No memory leaks on sequence free
+    - F418: Block fragmentation minimized
+    - F419: Reference counting correct
+    - F420: StreamingLLM eviction preserves sink tokens
+  acceptance_criteria:
+  - PagedKvCache functional
+  - Block allocation and eviction working
+  - Copy-on-write fork implemented
+  - TUI panel displays cache stats
+  - All F411-F420 falsification criteria met
+  phases:
+  - name: Phase 1 - Block Allocator
+    status: planned
+    estimated_effort: 2 days
+    completion: 0
+  - name: Phase 2 - Eviction Strategies
+    status: planned
+    estimated_effort: 2 days
+    completion: 0
+  - name: Phase 3 - Copy-on-Write
+    status: planned
+    estimated_effort: 2 days
+    completion: 0
+  - name: Phase 4 - TUI Panel
+    status: planned
+    estimated_effort: 1 day
+    completion: 0
+  subtasks: []
+  estimated_effort: 7 days
+  labels:
+  - kv-cache
+  - paged-attention
+  - memory
+  - cbtop
+  notes: |
+    Spec: docs/specifications/compute-block-tui-cbtop.md §18
+    FKR: FKR-015
+- id: PMAT-015
+  github_issue: null
+  item_type: task
+  title: 'PMAT-015: ContinuousBatcher Implementation'
+  status: planned
+  priority: high
+  assigned_to: claude
+  created: 2026-01-11T15:30:00Z
+  updated: 2026-01-11T15:30:00Z
+  spec: |
+    Implement ContinuousBatcher per §19 of cbtop spec.
+
+    Features:
+    - Dynamic batch scheduling
+    - Request preemption and swapping
+    - Multiple scheduling policies (FCFS, SJF, Priority, FairShare)
+    - Speculative decoding with draft model
+    - Throughput tracking
+
+    Dependencies:
+    - PagedKvCache (PMAT-014)
+    - trueno-gpu kernel launch infrastructure
+
+    Citations:
+    - [Yu et al. 2022] "ORCA: Continuous Batching for LLM Inference" OSDI
+    - [Leviathan et al. 2023] "Fast Inference from Transformers via Speculative Decoding" ICML
+    - [Chen et al. 2023] "Accelerating Large Language Model Decoding with Speculative Sampling" arXiv
+
+    Falsification Criteria F421-F430:
+    - F421: Batch scheduler produces valid batches
+    - F422: Preemption works under memory pressure
+    - F423: FCFS ordering correct
+    - F424: SJF prioritizes short sequences
+    - F425: Throughput measured accurately
+    - F426: TUI panel displays batch stats
+    - F427: Speculative decoding acceptance rate tracked
+    - F428: Draft model produces valid tokens
+    - F429: Target model verifies correctly
+    - F430: Speedup calculation accurate
+  acceptance_criteria:
+  - ContinuousBatcher functional
+  - Multiple scheduling policies working
+  - Speculative decoding implemented
+  - TUI panel displays batch stats
+  - All F421-F430 falsification criteria met
+  phases:
+  - name: Phase 1 - Batch Scheduler
+    status: planned
+    estimated_effort: 3 days
+    completion: 0
+  - name: Phase 2 - Scheduling Policies
+    status: planned
+    estimated_effort: 2 days
+    completion: 0
+  - name: Phase 3 - Speculative Decoding
+    status: planned
+    estimated_effort: 3 days
+    completion: 0
+  - name: Phase 4 - TUI Panel
+    status: planned
+    estimated_effort: 1 day
+    completion: 0
+  subtasks: []
+  estimated_effort: 9 days
+  labels:
+  - batching
+  - speculative-decoding
+  - scheduling
+  - cbtop
+  notes: |
+    Spec: docs/specifications/compute-block-tui-cbtop.md §19
+    FKR: FKR-016
+    Depends on: PMAT-014
+- id: PMAT-016
+  github_issue: null
+  item_type: task
+  title: 'PMAT-016: Industry Baseline Validation (F971-F985)'
+  status: planned
+  priority: medium
+  assigned_to: claude
+  created: 2026-01-11T15:30:00Z
+  updated: 2026-01-11T15:30:00Z
+  spec: |
+    Implement industry baseline validation per §21.7 and §21.8 of cbtop spec.
+
+    Features:
+    - Throughput comparison with vLLM/TGI/Triton baselines
+    - SM utilization validation against nvidia-smi
+    - GPU class detection and expected baseline display
+    - Throughput grade calculation (A/B/C/D/F)
+    - Side-by-side comparison protocol
+
+    Industry Baselines (Satna 2026):
+    - vLLM: 412 tok/s (A10), P95 1715ms
+    - TGI: 408 tok/s (A10), P95 1704ms
+    - Triton: 385 tok/s (A10), P95 2007ms
+
+    GPU Class Expectations:
+    - A10 (24GB): 350-450 tok/s
+    - A100 (40/80GB): 800-1200 tok/s
+    - H100 (80GB): 1800-2400 tok/s
+
+    Citations:
+    - [Satna 2026] "LLM Inference Benchmarking Framework" GitHub
+    - [vLLM 2023] "vLLM: Easy, Fast, Cheap LLM Serving" UCB
+
+    Falsification Criteria F971-F985:
+    - F971: Realistic GPU throughput (within 30% of vLLM)
+    - F972: SM utilization correct (within 5% of nvidia-smi)
+    - F973: Memory overhead tracked
+    - F974: Concurrency scaling shown
+    - F975: Baseline comparison available (--compare-baseline)
+    - F976: No foreign code dependency
+    - F977: Reference tools documented
+    - F978: Side-by-side protocol works
+    - F979: Gap analysis actionable
+    - F980: Pure Rust optimization measurable
+    - F981: P95 latency tracked
+    - F982: GPU class detected correctly
+    - F983: Throughput grade calculated
+    - F984: Health indicators displayed
+    - F985: Benchmark methodology documented
+  acceptance_criteria:
+  - Throughput comparison functional
+  - GPU class detection working
+  - Throughput grade displayed
+  - Side-by-side protocol documented
+  - All F971-F985 falsification criteria met
+  phases:
+  - name: Phase 1 - Baseline Data Structure
+    status: planned
+    estimated_effort: 1 day
+    completion: 0
+  - name: Phase 2 - GPU Class Detection
+    status: planned
+    estimated_effort: 1 day
+    completion: 0
+  - name: Phase 3 - Grade Calculation
+    status: planned
+    estimated_effort: 1 day
+    completion: 0
+  - name: Phase 4 - TUI Integration
+    status: planned
+    estimated_effort: 1 day
+    completion: 0
+  subtasks: []
+  estimated_effort: 4 days
+  labels:
+  - baseline
+  - validation
+  - comparison
+  - cbtop
+  notes: |
+    Spec: docs/specifications/compute-block-tui-cbtop.md §21.7, §21.8
+    FKR: FKR-017

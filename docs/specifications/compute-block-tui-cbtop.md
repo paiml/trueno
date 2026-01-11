@@ -1,9 +1,9 @@
 # Compute Block TUI Specification: cbtop
 
-**Version**: 2.5.0
+**Version**: 2.8.0
 **Status**: Approved
 **Author**: Trueno Engineering
-**Date**: 2026-01-10
+**Date**: 2026-01-11
 **PMAT Roadmap ID**: `CBTOP-SPEC-001`
 **PMAT Tracking**: `pmat work continue CBTOP-SPEC-001`
 **Spec Path**: `docs/specifications/compute-block-tui-cbtop.md`
@@ -46,8 +46,8 @@
 | [21](#21-project-integration-matrix) | Project Integration Matrix | - |
 | [22](#22-phase-4-falsification-ritual-results-2026-01-10) | Phase 4 Falsification Ritual Results | PASS |
 | [**23**](#23-tdg-compliance-scoring) | **TDG Compliance Scoring** | **100/100** |
-| [**24**](#24-pmat-tickets) | **PMAT Tickets** | **11/11** |
-| [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **16 entries** |
+| [**24**](#24-pmat-tickets) | **PMAT Tickets** | **15 (11✅ + 4 PLANNED)** |
+| [**25**](#25-falsification-registry-fkr) | **Falsification Registry (FKR)** | **17 entries** |
 | [**26**](#26-implementation-commands) | **Implementation Commands** | - |
 | [**27**](#27-real-load-generation-architecture) | **Real Load Generation Architecture** | **MANDATORY** |
 | [**28**](#28-uiux-improvements-pmat-012) | **UI/UX Improvements (PMAT-012)** | **10/10 DONE** |
@@ -79,6 +79,7 @@
 | 2.5.0   | 2026-01-11 | Trueno Engineering | Architecture Lead  | Approved | Added §35: Measurement vs Optimization (aprender/renacer integration). F951-F965 falsification. 7 peer-reviewed citations [64]-[70]. Total 70 citations. |
 | 2.6.0   | 2026-01-11 | Trueno Engineering | Claude Opus 4.5    | Approved | §35.2.1: Documented renacer brick_tracer module (v0.9.5). Syscall breakdown categories. OTLP span attributes. 94.5% test coverage. Implements GitHub issue #24. |
 | 2.7.0   | 2026-01-11 | Trueno Engineering | Claude Opus 4.5    | Approved | §21.7: Industry Baseline Throughput (Citation [21] Satna 2026). §21.8: Idiomatic Tooling Guidance (vLLM/llama.cpp as reference, not dependency). F971-F985 falsification. SM utilization, concurrency scaling, memory overhead metrics. |
+| 2.8.0   | 2026-01-11 | Trueno Engineering | Claude Opus 4.5    | Approved | §24.12-24.15: Added PMAT-013 (QuantizedBrick), PMAT-014 (PagedKvCache), PMAT-015 (ContinuousBatcher), PMAT-016 (Industry Baseline). FKR-014 through FKR-017 entries. F401-F430 falsification criteria. 12 new peer-reviewed citations. |
 
 ---
 
@@ -5972,6 +5973,125 @@ NO FAKE/SIMULATED METRICS ALLOWED. All measurements must come from actual system
 
 ---
 
+### 24.12 PMAT-013: QuantizedBrick Implementation (Q4_K, GGUF)
+
+**Priority**: P1 | **Effort**: 8d | **Status**: PLANNED | **FKR**: FKR-014
+
+**Description**: Implement QuantizedBrick per §17 with Q4_K, Q5_K, Q8_0 quantization formats
+and GGUF file loading for llama.cpp compatibility.
+
+**Citations**:
+1. [Dettmers et al. 2022] "LLM.int8(): 8-bit Matrix Multiplication for Transformers" NeurIPS
+2. [Frantar et al. 2023] "GPTQ: Accurate Post-Training Quantization for GPT" ICLR
+3. [Lin et al. 2023] "AWQ: Activation-aware Weight Quantization for LLMs" MLSys
+
+**Acceptance Criteria**:
+- [ ] F401: Q4_K format decodes correctly vs reference
+- [ ] F402: Memory footprint matches theoretical (4.5 bits/weight)
+- [ ] F403: Perplexity delta < 1% vs F16 baseline
+- [ ] F404: GGUF files load without error
+- [ ] F405: TUI panel displays quantization stats
+- [ ] F406: Fused dequant faster than separate dequant+matmul
+- [ ] F407: All quantization formats tested
+- [ ] F408: Backend equivalence (CPU vs GPU dequant)
+- [ ] F409: Block alignment correct (256-byte)
+- [ ] F410: Scale factors applied correctly
+
+**Test File**: `trueno-gpu/tests/quantized_brick_f401.rs`
+
+---
+
+### 24.13 PMAT-014: PagedKvCache Implementation (PagedAttention)
+
+**Priority**: P1 | **Effort**: 7d | **Status**: PLANNED | **FKR**: FKR-015
+
+**Description**: Implement PagedKvCache per §18 with PagedAttention algorithm (vLLM-style),
+block-based KV cache allocation, copy-on-write for beam search, and eviction strategies.
+
+**Citations**:
+1. [Kwon et al. 2023] "Efficient Memory Management for LLM Serving with PagedAttention" SOSP
+2. [Xiao et al. 2023] "StreamingLLM: Efficient Streaming with Attention Sinks" arXiv
+3. [Yu et al. 2022] "ORCA: A Distributed Serving System for Transformer-Based Models" OSDI
+
+**Acceptance Criteria**:
+- [ ] F411: Block allocation succeeds up to GPU memory limit
+- [ ] F412: Copy-on-write fork works for beam search
+- [ ] F413: Eviction triggers at memory threshold
+- [ ] F414: LRU eviction correct (oldest access first)
+- [ ] F415: Memory utilization reported accurately
+- [ ] F416: TUI panel displays KV cache stats
+- [ ] F417: No memory leaks on sequence free
+- [ ] F418: Block fragmentation minimized
+- [ ] F419: Reference counting correct
+- [ ] F420: StreamingLLM eviction preserves sink tokens
+
+**Test File**: `trueno-gpu/tests/paged_kv_cache_f411.rs`
+
+---
+
+### 24.14 PMAT-015: ContinuousBatcher Implementation
+
+**Priority**: P1 | **Effort**: 9d | **Status**: PLANNED | **FKR**: FKR-016
+
+**Description**: Implement ContinuousBatcher per §19 with dynamic batch scheduling,
+request preemption, multiple scheduling policies, and speculative decoding.
+
+**Dependencies**: PMAT-014 (PagedKvCache)
+
+**Citations**:
+1. [Yu et al. 2022] "ORCA: Continuous Batching for LLM Inference" OSDI
+2. [Leviathan et al. 2023] "Fast Inference from Transformers via Speculative Decoding" ICML
+3. [Chen et al. 2023] "Accelerating LLM Decoding with Speculative Sampling" arXiv
+
+**Acceptance Criteria**:
+- [ ] F421: Batch scheduler produces valid batches
+- [ ] F422: Preemption works under memory pressure
+- [ ] F423: FCFS ordering correct
+- [ ] F424: SJF prioritizes short sequences
+- [ ] F425: Throughput measured accurately
+- [ ] F426: TUI panel displays batch stats
+- [ ] F427: Speculative decoding acceptance rate tracked
+- [ ] F428: Draft model produces valid tokens
+- [ ] F429: Target model verifies correctly
+- [ ] F430: Speedup calculation accurate
+
+**Test File**: `trueno-gpu/tests/continuous_batcher_f421.rs`
+
+---
+
+### 24.15 PMAT-016: Industry Baseline Validation (F971-F985)
+
+**Priority**: P2 | **Effort**: 4d | **Status**: PLANNED | **FKR**: FKR-017
+
+**Description**: Implement industry baseline validation per §21.7 and §21.8.
+Compare throughput with vLLM/TGI/Triton baselines, detect GPU class, calculate throughput grade.
+
+**Industry Baselines** (Satna 2026):
+
+| Server | Peak tok/s | P95 Latency | SM Util | GPU |
+|--------|-----------|-------------|---------|-----|
+| vLLM | 412 | 1715ms | 99% | A10 |
+| TGI | 408 | 1704ms | 98% | A10 |
+| Triton | 385 | 2007ms | 97% | A10 |
+
+**GPU Class Expected Throughput**:
+
+| GPU | VRAM | Expected tok/s |
+|-----|------|----------------|
+| A10 | 24GB | 350-450 |
+| A100 | 40/80GB | 800-1200 |
+| H100 | 80GB | 1800-2400 |
+
+**Citations**:
+1. [Satna 2026] "LLM Inference Benchmarking Framework" GitHub
+2. [vLLM 2023] "vLLM: Easy, Fast, Cheap LLM Serving with PagedAttention" UCB
+
+**Acceptance Criteria**: All F971-F985 criteria met (see §21.8.6)
+
+**Test File**: `crates/cbtop/tests/baseline_validation_f971.rs`
+
+---
+
 ## 25. Falsification Registry (FKR)
 
 **Protocol**: SPEC-024 Popperian Falsification | **Target**: 90/100 score
@@ -5993,6 +6113,10 @@ NO FAKE/SIMULATED METRICS ALLOWED. All measurements must come from actual system
 | 011 | Metal equivalent to CUDA | 006 | ✅ | 10/10 |
 | 012 | ROCm equivalent to CUDA | 007 | ✅ | 12/12 |
 | 013 | Real load generation (no fake metrics) | 011 | ✅ | 7/7 |
+| 014 | QuantizedBrick Q4_K decodes correctly | 013 | PLANNED | 0/10 |
+| 015 | PagedKvCache manages blocks correctly | 014 | PLANNED | 0/10 |
+| 016 | ContinuousBatcher schedules batches | 015 | PLANNED | 0/10 |
+| 017 | Industry baselines validated | 016 | PLANNED | 0/15 |
 
 ---
 
