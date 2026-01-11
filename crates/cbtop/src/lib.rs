@@ -78,6 +78,7 @@ pub use config::{ComputeBackend, WorkloadType};
 
 // Optimization tooling (OPT-001 to OPT-004)
 pub use optimize::{
+    CpuCapabilities,
     OptimizationSuite, BaselineReport, BaselineEntry, WorkloadConfig,
     BottleneckAnalysis, BottleneckEntry, BottleneckSeverity, AnalysisSummary,
     RegressionDetector, RegressionReport, RegressionEntry,
