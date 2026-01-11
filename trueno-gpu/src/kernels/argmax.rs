@@ -106,6 +106,22 @@ impl Kernel for ArgMaxKernel {
                 // Thread 0: elements 0, 256, 512, 768
                 // Thread 1: elements 1, 257, 513, 769
                 // etc.
+                //
+                // NOTE: We store to shared memory BEFORE processing to ensure
+                // all threads have defined values. Then we conditionally update.
+                // This avoids SSA issues with undefined registers on skipped branches.
+
+                // First, store initial values to shared memory
+                let sh_val_offset = ctx.mul_wide_u32(tid, 4);
+                let sh_val_addr = ctx.add_u64(shared_base, sh_val_offset);
+                ctx.st_shared_f32(sh_val_addr, local_max);
+
+                let offset_1024 = ctx.mov_u64_imm(1024);
+                let idx_base = ctx.add_u64(shared_base, offset_1024);
+                let sh_idx_addr = ctx.add_u64(idx_base, sh_val_offset);
+                ctx.st_shared_u32(sh_idx_addr, local_idx);
+
+                // Process each element, updating shared memory as we go
                 for i in 0..4u32 {
                     let stride = ctx.mul_u32(block_dim, i);
                     let idx = ctx.add_u32_reg(thread_start, stride);
@@ -114,30 +130,26 @@ impl Kernel for ArgMaxKernel {
                     let in_bounds = ctx.setp_lt_u32(idx, length);
                     ctx.branch_if_not(in_bounds, &format!("skip_load_{}", i));
 
-                    // Load value
+                    // Load value from global memory
                     let byte_offset = ctx.mul_wide_u32(idx, 4);
                     let addr = ctx.add_u64(input_ptr, byte_offset);
                     let val = ctx.ld_global_f32(addr);
 
-                    // Update local max if this value is greater
-                    let is_greater = ctx.setp_gt_f32(val, local_max);
-                    local_max = ctx.selp_f32(is_greater, val, local_max);
-                    local_idx = ctx.selp_u32(is_greater, idx, local_idx);
+                    // Load current best from shared memory
+                    let cur_max = ctx.ld_shared_f32(sh_val_addr);
+                    let cur_idx = ctx.ld_shared_u32(sh_idx_addr);
+
+                    // Update if this value is greater
+                    let is_greater = ctx.setp_gt_f32(val, cur_max);
+                    let new_max = ctx.selp_f32(is_greater, val, cur_max);
+                    let new_idx = ctx.selp_u32(is_greater, idx, cur_idx);
+
+                    // Store updated values back to shared memory
+                    ctx.st_shared_f32(sh_val_addr, new_max);
+                    ctx.st_shared_u32(sh_idx_addr, new_idx);
 
                     ctx.label(&format!("skip_load_{}", i));
                 }
-
-                // Store to shared memory
-                // Offset for this thread: tid * 4 bytes
-                let sh_val_offset = ctx.mul_wide_u32(tid, 4);
-                let sh_val_addr = ctx.add_u64(shared_base, sh_val_offset);
-                ctx.st_shared_f32(sh_val_addr, local_max);
-
-                // Index array starts after 256 floats (1024 bytes)
-                let offset_1024 = ctx.mov_u64_imm(1024);
-                let idx_base = ctx.add_u64(shared_base, offset_1024);
-                let sh_idx_addr = ctx.add_u64(idx_base, sh_val_offset);
-                ctx.st_shared_u32(sh_idx_addr, local_idx);
 
                 // Synchronize before reduction
                 ctx.bar_sync(0);
@@ -201,12 +213,10 @@ impl Kernel for ArgMaxKernel {
                 let is_thread_0 = ctx.setp_eq_u32(tid, zero);
                 ctx.branch_if_not(is_thread_0, "exit");
 
-                // Load final result from shared memory
-                let zero_off = ctx.const_u32(0);
-                let final_val_addr = ctx.add_u64(shared_base, zero_off);
-                let final_val = ctx.ld_shared_f32(final_val_addr);
-                let final_idx_addr = ctx.add_u64(idx_base, zero_off);
-                let final_idx = ctx.ld_shared_u32(final_idx_addr);
+                // Load final result from shared memory (offset 0 = thread 0's result)
+                // Note: shared_base already points to the start of shared memory
+                let final_val = ctx.ld_shared_f32(shared_base);
+                let final_idx = ctx.ld_shared_u32(idx_base);
 
                 // Write to block output arrays
                 let bid_offset = ctx.mul_wide_u32(bid, 4);
@@ -262,38 +272,38 @@ impl Kernel for ArgMaxFinalKernel {
                 let final_offset_1024 = ctx.mov_u64_imm(1024);
                 let idx_base = ctx.add_u64(shared_base, final_offset_1024);
 
-                // Initialize
+                // Each thread processes one block result (max 256 blocks)
+                // For vocab_size=152064, we have ~149 blocks, well within 256 threads
                 let neg_inf = ctx.const_f32(f32::NEG_INFINITY);
-                let mut local_max = neg_inf;
-                let mut local_idx = ctx.const_u32(0);
+                let zero_idx = ctx.const_u32(0);
 
-                // Stride loop over block results
-                let mut idx = tid;
-                ctx.label("load_loop");
-                let in_bounds = ctx.setp_lt_u32(idx, num_blocks);
-                ctx.branch_if_not(in_bounds, "load_done");
+                // Check if this thread has work to do
+                let in_bounds = ctx.setp_lt_u32(tid, num_blocks);
 
-                let byte_off = ctx.mul_wide_u32(idx, 4);
-                let val_addr = ctx.add_u64(block_max_vals, byte_off);
-                let val = ctx.ld_global_f32(val_addr);
-                let idx_addr = ctx.add_u64(block_max_idxs, byte_off);
-                let block_idx = ctx.ld_global_u32(idx_addr);
-
-                let is_greater = ctx.setp_gt_f32(val, local_max);
-                local_max = ctx.selp_f32(is_greater, val, local_max);
-                local_idx = ctx.selp_u32(is_greater, block_idx, local_idx);
-
-                idx = ctx.add_u32(idx, 256);
-                ctx.branch("load_loop");
-
-                ctx.label("load_done");
-
-                // Store to shared
+                // Calculate shared memory addresses for this thread
                 let sh_off = ctx.mul_wide_u32(tid, 4);
                 let sh_val_addr = ctx.add_u64(shared_base, sh_off);
-                ctx.st_shared_f32(sh_val_addr, local_max);
                 let sh_idx_addr = ctx.add_u64(idx_base, sh_off);
-                ctx.st_shared_u32(sh_idx_addr, local_idx);
+
+                // First, all threads store defaults to shared memory
+                ctx.st_shared_f32(sh_val_addr, neg_inf);
+                ctx.st_shared_u32(sh_idx_addr, zero_idx);
+
+                // Only in-bounds threads load and update
+                ctx.branch_if_not(in_bounds, "skip_final_load");
+
+                // Calculate global addresses and load
+                let byte_off = ctx.mul_wide_u32(tid, 4);
+                let val_addr = ctx.add_u64(block_max_vals, byte_off);
+                let idx_addr = ctx.add_u64(block_max_idxs, byte_off);
+                let loaded_val = ctx.ld_global_f32(val_addr);
+                let loaded_idx = ctx.ld_global_u32(idx_addr);
+
+                // Store loaded values to shared
+                ctx.st_shared_f32(sh_val_addr, loaded_val);
+                ctx.st_shared_u32(sh_idx_addr, loaded_idx);
+
+                ctx.label("skip_final_load");
 
                 ctx.bar_sync(0);
 
@@ -329,9 +339,8 @@ impl Kernel for ArgMaxFinalKernel {
                 let is_zero = ctx.setp_eq_u32(tid, final_zero);
                 ctx.branch_if_not(is_zero, "final_exit");
 
-                let zero_off_64 = ctx.mov_u64_imm(0);
-                let result_addr = ctx.add_u64(idx_base, zero_off_64);
-                let result = ctx.ld_shared_u32(result_addr);
+                // Load result from shared memory index base (offset 0 = thread 0's result)
+                let result = ctx.ld_shared_u32(idx_base);
                 ctx.st_global_u32(output_idx, result);
 
                 ctx.label("final_exit");
