@@ -33,6 +33,177 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 // ============================================================================
+// CPU Detection for Accurate Theoretical Peak Calculation
+// ============================================================================
+
+/// Detected CPU capabilities for theoretical peak calculation
+#[derive(Debug, Clone)]
+pub struct CpuCapabilities {
+    /// Number of physical cores
+    pub cores: usize,
+    /// Max frequency in MHz
+    pub max_freq_mhz: u32,
+    /// AVX-512 support
+    pub has_avx512: bool,
+    /// AVX2 support
+    pub has_avx2: bool,
+    /// L1 data cache size in bytes
+    pub l1d_cache: usize,
+    /// L2 cache size in bytes
+    pub l2_cache: usize,
+    /// L3 cache size in bytes
+    pub l3_cache: usize,
+    /// Memory bandwidth estimate in GB/s
+    pub mem_bandwidth_gbs: f64,
+}
+
+impl Default for CpuCapabilities {
+    fn default() -> Self {
+        Self::detect()
+    }
+}
+
+impl CpuCapabilities {
+    /// Detect CPU capabilities at runtime
+    pub fn detect() -> Self {
+        let cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+
+        // Use CPUID to detect features
+        #[cfg(target_arch = "x86_64")]
+        let (has_avx512, has_avx2) = {
+            (
+                is_x86_feature_detected!("avx512f"),
+                is_x86_feature_detected!("avx2"),
+            )
+        };
+
+        #[cfg(not(target_arch = "x86_64"))]
+        let (has_avx512, has_avx2) = (false, false);
+
+        // Estimate max frequency (conservative default, can be improved with sysfs)
+        let max_freq_mhz = Self::detect_max_freq().unwrap_or(3500);
+
+        // Estimate cache sizes (conservative defaults for desktop CPUs)
+        // These could be read from /sys/devices/system/cpu/cpu0/cache on Linux
+        let (l1d_cache, l2_cache, l3_cache) = Self::detect_cache_sizes();
+
+        // Estimate memory bandwidth based on core count
+        // Conservative: ~4 GB/s per core for DDR4, ~6 GB/s for DDR5
+        let mem_bandwidth_gbs = (cores as f64) * 4.0;
+
+        Self {
+            cores,
+            max_freq_mhz,
+            has_avx512,
+            has_avx2,
+            l1d_cache,
+            l2_cache,
+            l3_cache,
+            mem_bandwidth_gbs,
+        }
+    }
+
+    /// Detect maximum CPU frequency from sysfs
+    fn detect_max_freq() -> Option<u32> {
+        #[cfg(target_os = "linux")]
+        {
+            if let Ok(content) = std::fs::read_to_string(
+                "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"
+            ) {
+                // cpuinfo_max_freq is in kHz
+                return content.trim().parse::<u32>().ok().map(|khz| khz / 1000);
+            }
+        }
+        None
+    }
+
+    /// Detect cache sizes from sysfs
+    fn detect_cache_sizes() -> (usize, usize, usize) {
+        #[cfg(target_os = "linux")]
+        {
+            let l1d = Self::read_cache_size(0, 0).unwrap_or(32 * 1024);  // 32 KB default
+            let l2 = Self::read_cache_size(0, 2).unwrap_or(512 * 1024);  // 512 KB default
+            let l3 = Self::read_cache_size(0, 3).unwrap_or(32 * 1024 * 1024); // 32 MB default
+            return (l1d, l2, l3);
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            (32 * 1024, 512 * 1024, 32 * 1024 * 1024)
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn read_cache_size(cpu: u32, index: u32) -> Option<usize> {
+        let path = format!(
+            "/sys/devices/system/cpu/cpu{}/cache/index{}/size",
+            cpu, index
+        );
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            let s = content.trim();
+            if let Some(kb_str) = s.strip_suffix('K') {
+                return kb_str.parse::<usize>().ok().map(|kb| kb * 1024);
+            } else if let Some(mb_str) = s.strip_suffix('M') {
+                return mb_str.parse::<usize>().ok().map(|mb| mb * 1024 * 1024);
+            }
+        }
+        None
+    }
+
+    /// Calculate theoretical peak GFLOP/s for compute-bound operations
+    pub fn compute_peak_gflops(&self) -> f64 {
+        let freq_ghz = self.max_freq_mhz as f64 / 1000.0;
+
+        // f32 FLOPs per cycle per core
+        let flops_per_cycle = if self.has_avx512 {
+            // AVX-512: 2 × 512-bit FMA units = 2 × 16 × 2 = 64 FLOPs/cycle (theoretical)
+            // Most CPUs have 2 AVX-512 units, but frequency drops, so use conservative 32
+            32.0
+        } else if self.has_avx2 {
+            // AVX2: 2 × 256-bit FMA units = 2 × 8 × 2 = 32 FLOPs/cycle (theoretical)
+            // Conservative: single FMA port = 16
+            16.0
+        } else {
+            // SSE: 4 FLOPs/cycle
+            4.0
+        };
+
+        self.cores as f64 * freq_ghz * flops_per_cycle
+    }
+
+    /// Calculate theoretical peak GFLOP/s for memory-bound operations
+    /// bytes_per_flop: number of bytes that must be transferred per FLOP
+    pub fn memory_peak_gflops(&self, bytes_per_flop: f64) -> f64 {
+        self.mem_bandwidth_gbs / bytes_per_flop
+    }
+
+    /// Calculate theoretical peak for a given size (cache vs memory bound)
+    pub fn theoretical_peak_for_size(&self, size: usize, bytes_per_element: usize, bytes_per_flop: f64) -> f64 {
+        let data_bytes = size * bytes_per_element;
+
+        // Determine which cache level (if any) the data fits in
+        // Use 80% of cache as threshold to account for other data
+        let cache_bound = if data_bytes < (self.l1d_cache * 80 / 100) {
+            // L1 cache: effectively compute-bound
+            self.compute_peak_gflops()
+        } else if data_bytes < (self.l2_cache * 80 / 100) {
+            // L2 cache: ~50% of compute peak
+            self.compute_peak_gflops() * 0.5
+        } else if data_bytes < (self.l3_cache * 80 / 100) {
+            // L3 cache: ~25% of compute peak
+            self.compute_peak_gflops() * 0.25
+        } else {
+            // Main memory: memory-bound
+            self.memory_peak_gflops(bytes_per_flop)
+        };
+
+        cache_bound
+    }
+}
+
+// ============================================================================
 // OPT-001: OptimizationSuite - Baseline Collection
 // ============================================================================
 
@@ -43,10 +214,29 @@ pub struct WorkloadConfig {
     pub workload: WorkloadType,
     /// Human-readable name
     pub name: String,
-    /// Theoretical peak GFLOP/s for this workload
+    /// Legacy: static theoretical peak GFLOP/s (deprecated, use bytes_per_flop instead)
     pub theoretical_peak_gflops: f64,
     /// Whether this workload is memory-bound
     pub memory_bound: bool,
+    /// Bytes transferred per FLOP (for memory-bound analysis)
+    /// - dot_product: read 2 floats (8 bytes) per 2 FLOPs (mul+add) = 4 bytes/FLOP
+    /// - elementwise: read 2, write 1 float (12 bytes) per 1 FLOP = 12 bytes/FLOP
+    /// - reduction: read 1 float (4 bytes) per 1 FLOP = 4 bytes/FLOP
+    #[serde(default = "default_bytes_per_flop")]
+    pub bytes_per_flop: f64,
+}
+
+fn default_bytes_per_flop() -> f64 {
+    8.0 // Conservative default
+}
+
+impl WorkloadConfig {
+    /// Calculate size-aware theoretical peak using detected CPU capabilities
+    pub fn theoretical_peak_for_size(&self, size: usize, cpu: &CpuCapabilities) -> f64 {
+        // Each element is 4 bytes (f32)
+        let bytes_per_element = 4;
+        cpu.theoretical_peak_for_size(size, bytes_per_element, self.bytes_per_flop)
+    }
 }
 
 /// Entry in the baseline report
@@ -128,36 +318,44 @@ impl OptimizationSuite {
                 WorkloadConfig {
                     workload: WorkloadType::Gemm,
                     name: "dot_product".to_string(),
-                    theoretical_peak_gflops: 100.0, // AVX2 FMA theoretical
+                    theoretical_peak_gflops: 100.0, // Legacy, use bytes_per_flop
                     memory_bound: false,
+                    // dot_product: read 2 floats per 2 FLOPs = 4 bytes/FLOP
+                    bytes_per_flop: 4.0,
                 },
                 WorkloadConfig {
                     workload: WorkloadType::Elementwise,
                     name: "elementwise_mul".to_string(),
-                    theoretical_peak_gflops: 50.0,
+                    theoretical_peak_gflops: 50.0, // Legacy
                     memory_bound: true,
+                    // elementwise: read 2, write 1 float per 1 FLOP = 12 bytes/FLOP
+                    bytes_per_flop: 12.0,
                 },
                 WorkloadConfig {
                     workload: WorkloadType::Reduction,
                     name: "sum_reduction".to_string(),
-                    theoretical_peak_gflops: 50.0,
+                    theoretical_peak_gflops: 50.0, // Legacy
                     memory_bound: true,
+                    // reduction: read 1 float per 1 FLOP = 4 bytes/FLOP
+                    bytes_per_flop: 4.0,
                 },
                 WorkloadConfig {
                     workload: WorkloadType::Bandwidth,
                     name: "memory_bandwidth".to_string(),
-                    theoretical_peak_gflops: 30.0,
+                    theoretical_peak_gflops: 30.0, // Legacy
                     memory_bound: true,
+                    // bandwidth: read + write = 8 bytes per "FLOP" (copy)
+                    bytes_per_flop: 8.0,
                 },
             ],
             backends: vec![ComputeBackend::Simd],
             sizes: vec![
-                1_000,      // L1 cache
-                10_000,     // L2 cache
-                100_000,    // L3 cache
-                1_000_000,  // Main memory
-                4_000_000,  // Large (tiling threshold)
-                16_000_000, // Very large
+                1_000,      // L1 cache (~4 KB for 1000 f32)
+                10_000,     // L2 cache (~40 KB)
+                100_000,    // L3 cache (~400 KB)
+                1_000_000,  // Main memory (~4 MB)
+                4_000_000,  // Large (tiling threshold, ~16 MB)
+                16_000_000, // Very large (~64 MB)
             ],
             duration: Duration::from_secs(3),
             baseline_file: PathBuf::from("benchmarks/baseline.json"),
@@ -173,12 +371,14 @@ impl OptimizationSuite {
                     name: "dot_product".to_string(),
                     theoretical_peak_gflops: 100.0,
                     memory_bound: false,
+                    bytes_per_flop: 4.0,
                 },
                 WorkloadConfig {
                     workload: WorkloadType::Elementwise,
                     name: "elementwise_mul".to_string(),
                     theoretical_peak_gflops: 50.0,
                     memory_bound: true,
+                    bytes_per_flop: 12.0,
                 },
             ],
             backends: vec![ComputeBackend::Simd],
@@ -191,6 +391,7 @@ impl OptimizationSuite {
     /// Collect baseline measurements for all configurations
     pub fn collect_baseline(&self) -> Result<BaselineReport, CbtopError> {
         let mut entries = Vec::new();
+        let cpu = CpuCapabilities::detect();
 
         for workload in &self.workloads {
             for &size in &self.sizes {
@@ -203,8 +404,12 @@ impl OptimizationSuite {
                         .build()?
                         .run()?;
 
-                    let efficiency = if workload.theoretical_peak_gflops > 0.0 {
-                        result.results.gflops / workload.theoretical_peak_gflops
+                    // Use size-aware theoretical peak
+                    let theoretical_peak = workload.theoretical_peak_for_size(size, &cpu);
+                    let efficiency = if theoretical_peak > 0.0 {
+                        // Cap efficiency at 1.0 (100%) - values > 100% indicate
+                        // measurement noise or overly conservative theoretical peak
+                        (result.results.gflops / theoretical_peak).min(1.0)
                     } else {
                         0.0
                     };
@@ -228,15 +433,20 @@ impl OptimizationSuite {
             version: env!("CARGO_PKG_VERSION").to_string(),
             timestamp,
             entries,
-            system: Self::get_system_info(),
+            system: Self::get_system_info(&cpu),
         })
     }
 
-    fn get_system_info() -> String {
-        let cores = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1);
-        format!("{} cores", cores)
+    fn get_system_info(cpu: &CpuCapabilities) -> String {
+        format!(
+            "{} cores @ {} MHz, AVX2={}, AVX512={}, L3={}MB, mem_bw={:.0} GB/s",
+            cpu.cores,
+            cpu.max_freq_mhz,
+            cpu.has_avx2,
+            cpu.has_avx512,
+            cpu.l3_cache / (1024 * 1024),
+            cpu.mem_bandwidth_gbs
+        )
     }
 }
 
