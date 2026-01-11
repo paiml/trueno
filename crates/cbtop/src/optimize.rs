@@ -400,6 +400,12 @@ impl OptimizationSuite {
         for workload in &self.workloads {
             for &size in &self.sizes {
                 for &backend in &self.backends {
+                    // OPT-010: Add cooldown between benchmarks to reduce thermal throttling
+                    // and memory allocator effects that cause high variance
+                    if !entries.is_empty() {
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+
                     let result = Benchmark::builder()
                         .workload_type(workload.workload)
                         .size(size)

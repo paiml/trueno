@@ -493,13 +493,32 @@ impl HeadlessBenchmark {
         brick.set_intensity(1.0);
         brick.start();
 
+        // OPT-008: Calculate minimum iterations for statistical stability
+        // Small workloads complete too quickly, causing high variance (CV > 600%)
+        // Require more iterations for smaller sizes to get stable measurements
+        let min_iterations: u64 = if self.size < 10_000 {
+            5000  // Very small: need many iterations
+        } else if self.size < 100_000 {
+            1000  // Small: need moderate iterations
+        } else if self.size < 1_000_000 {
+            100   // Medium: fewer iterations needed
+        } else {
+            10    // Large: minimal iterations (each takes significant time)
+        };
+
         // Measurement phase
         let mut iterations = 0u64;
         let measure_start = Instant::now();
 
-        while measure_start.elapsed() < self.duration {
+        // OPT-008: Run until both duration AND minimum iterations are satisfied
+        while measure_start.elapsed() < self.duration || iterations < min_iterations {
             brick.run_iteration();
             iterations += 1;
+
+            // Safety: cap at 100K iterations to prevent runaway benchmarks
+            if iterations >= 100_000 {
+                break;
+            }
         }
 
         let total_duration = start_time.elapsed();

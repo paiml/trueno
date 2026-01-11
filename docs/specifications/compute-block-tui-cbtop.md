@@ -7703,8 +7703,9 @@ cbtop optimize validate --workload gemm --size 1000000 --before v0.6.0 --after H
 | OPT-005 | Add CLI subcommands (optimize baseline/analyze/check) | P2 | 1 day | **COMPLETE** |
 | OPT-006 | Pre-allocate result buffers for tiled operations | P0 | 0.5 day | **COMPLETE** |
 | OPT-007 | Increase tiling threshold to avoid 4M element cliff | P0 | 0.5 day | **COMPLETE** |
-| OPT-008 | Add minimum iteration count for small workloads | P1 | 0.5 day | PENDING |
+| OPT-008 | Add minimum iteration count for small workloads | P1 | 0.5 day | **COMPLETE** |
 | OPT-009 | Fix working set calculation in efficiency analysis | P0 | 0.5 day | **COMPLETE** |
+| OPT-010 | Add cooldown between sequential benchmarks | P1 | 0.5 day | **COMPLETE** |
 
 ### 33.6 Optimization Analysis Findings (2026-01-11)
 
@@ -7752,22 +7753,33 @@ Running the optimization tooling identified critical performance issues:
 | Severe | 3 | 25-50% efficiency (memory-bound large sizes) |
 | Unstable | 11 | CV > 15% (small sizes, frequency scaling) |
 
-**After Fixes:**
+**After Fixes (OPT-006 through OPT-010):**
 
-| Severity | Count | Improvement |
-|----------|-------|-------------|
-| Critical | 8 | -27% (3 bottlenecks resolved) |
-| Severe | 3 | No change (memory-bound, expected) |
-| Moderate | 2 | New category (68% efficiency) |
-| Unstable | 1 | -91% (10 measurements stabilized) |
+| Severity | Count | Original | Improvement |
+|----------|-------|----------|-------------|
+| Critical | 8 | 11 | -27% (3 bottlenecks resolved) |
+| Severe | 4 | 3 | +1 (reclassified from critical) |
+| Moderate | 2 | 0 | New category (56-73% efficiency) |
+| Unstable | 2 | 11 | **-82%** (9 measurements stabilized) |
 
 **Key Improvements:**
 
 | Workload | Size | Before | After | Change |
 |----------|------|--------|-------|--------|
-| dot_product | 4M | 33.5 GFLOP/s | 99.6 GFLOP/s | **+197%** |
-| elementwise_mul | 4M | 4.1 GFLOP/s | 10.9 GFLOP/s | **+166%** |
-| Avg Efficiency | All | 49.5% | 60.9% | **+23%** |
+| dot_product | 4M | 33.5 GFLOP/s | 118.5 GFLOP/s | **+254%** |
+| elementwise_mul | 4M | 4.1 GFLOP/s | 6.9 GFLOP/s | **+68%** |
+| sum_reduction CV | 1M | 54.0% | 4.1% | **-92%** |
+| Avg Efficiency | All | 49.5% | 58.1% | **+17%** |
+
+**Optimization Summary:**
+
+| Item | Description | Impact |
+|------|-------------|--------|
+| OPT-006 | Pre-allocate result buffers | Reduced allocation overhead |
+| OPT-007 | Increase tiling threshold | Fixed 4M element cliff |
+| OPT-008 | Minimum iteration count | Stabilized small sizes (CV: 602% → 0.4%) |
+| OPT-009 | Fix working set calculation | Accurate efficiency reporting |
+| OPT-010 | Cooldown between benchmarks | Reduced sequential interference (CV: 54% → 4%) |
 
 ### 33.7 Expected Outcomes
 
