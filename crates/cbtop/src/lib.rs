@@ -54,6 +54,7 @@ pub mod ring_buffer;
 pub mod app;
 pub mod config;
 pub mod error;
+pub mod headless;
 
 // Core brick traits (cbtop-specific)
 pub use brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};

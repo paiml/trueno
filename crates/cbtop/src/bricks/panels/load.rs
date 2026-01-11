@@ -309,7 +309,7 @@ impl LoadControlPanelBrick {
             let grade_color = match grade {
                 BrickGrade::A | BrickGrade::B => Color::new(0.3, 1.0, 0.5, 1.0), // Green
                 BrickGrade::C => Color::new(1.0, 0.8, 0.3, 1.0), // Yellow
-                _ => Color::new(1.0, 0.3, 0.3, 1.0), // Red
+                BrickGrade::D | BrickGrade::F => Color::new(1.0, 0.3, 0.3, 1.0), // Red
             };
             let grade_style = TextStyle { color: grade_color, ..Default::default() };
 

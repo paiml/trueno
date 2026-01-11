@@ -705,7 +705,7 @@ impl CbtopApp {
                                 let result = unsafe { libc::statvfs(c_path.as_ptr(), stat.as_mut_ptr()) };
                                 if result == 0 {
                                     let stat = unsafe { stat.assume_init() };
-                                    let block_size = stat.f_frsize as u64;
+                                    let block_size = stat.f_frsize;
                                     let total = stat.f_blocks * block_size;
                                     let available = stat.f_bavail * block_size;
                                     let used = total.saturating_sub(available);

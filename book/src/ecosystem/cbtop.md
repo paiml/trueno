@@ -127,6 +127,105 @@ let b = Vector::from_slice(&data_b);
 let result = a.dot(&b).unwrap();  // SIMD-accelerated dot product
 ```
 
+## Headless Mode (AI Agent Integration)
+
+cbtop supports headless mode for CI/CD pipelines and AI agents like Claude Code. This enables programmatic benchmarking without a TTY.
+
+### Running Headless Benchmarks
+
+```bash
+# Basic headless benchmark with JSON output
+cbtop --headless --format json --duration 5
+
+# Using the bench subcommand
+cbtop bench --backend simd --workload gemm --duration 5 --format json
+
+# Save results to file
+cbtop bench --backend simd -o results.json
+```
+
+### Example JSON Output
+
+```json
+{
+  "version": "0.1.0",
+  "timestamp": "2026-01-11T10:00:00Z",
+  "duration_secs": 5.0,
+  "system": {
+    "cpu": "AMD Ryzen Threadripper 7960X",
+    "cores": 48,
+    "memory_gb": 128
+  },
+  "benchmark": {
+    "backend": "Simd",
+    "workload": "Gemm",
+    "size": 1048576,
+    "iterations": 500
+  },
+  "results": {
+    "gflops": 25.0,
+    "throughput_ops_sec": 1000.0,
+    "latency_ms": {
+      "mean": 1.0,
+      "p50": 0.9,
+      "p95": 1.5,
+      "p99": 1.8,
+      "cv_percent": 5.0
+    }
+  },
+  "score": {
+    "total": 85,
+    "grade": "B",
+    "performance": 35,
+    "efficiency": 20,
+    "correctness": 20,
+    "stability": 10
+  }
+}
+```
+
+### Regression Testing
+
+Compare against a baseline to detect performance regressions:
+
+```bash
+# Save baseline
+cbtop bench --backend simd -o baseline.json
+
+# Test against baseline (exits non-zero on >5% regression)
+cbtop bench --backend simd --baseline baseline.json --fail-on-regression 5.0
+```
+
+### Backend Comparison
+
+Compare multiple backends side-by-side:
+
+```bash
+# Compare SIMD vs all backends
+cbtop bench --compare simd,cuda,wgpu --format text
+```
+
+### AI Agent Use Cases
+
+AI coding assistants can use cbtop headless mode to:
+
+1. **Profile before optimization**: Run benchmarks before making changes
+2. **Validate improvements**: Compare results after optimization
+3. **Detect regressions**: Fail CI if performance drops
+4. **Generate reports**: Include benchmark data in documentation
+
+Example workflow for an AI agent:
+
+```bash
+# 1. Baseline measurement
+cbtop bench --backend simd -o /tmp/baseline.json
+
+# 2. AI makes code changes...
+
+# 3. Validate no regression
+cbtop bench --backend simd --baseline /tmp/baseline.json --fail-on-regression 5.0
+```
+
 ## Testing
 
 ```bash

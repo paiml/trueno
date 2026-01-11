@@ -19,6 +19,10 @@ pub enum CbtopError {
     #[error("Configuration error: {0}")]
     Config(String),
 
+    /// File I/O error (string message)
+    #[error("I/O error: {0}")]
+    Io(String),
+
     /// Brick verification failed
     #[error("Brick verification failed: {brick_name} - {reason}")]
     BrickVerification { brick_name: String, reason: String },
