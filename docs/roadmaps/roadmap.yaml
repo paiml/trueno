@@ -1104,3 +1104,46 @@ roadmap:
   notes: |
     Spec: docs/specifications/compute-block-tui-cbtop.md §28
     Reference: presentar/__pixel_baselines__/system_dashboard_before_fix.png
+
+- id: CBTOP-HEADLESS-001
+  github_issue: null
+  item_type: feature
+  title: 'cbtop Headless Mode and AI Agent Integration'
+  status: in_progress
+  priority: high
+  assigned_to: claude
+  created: 2026-01-11T10:30:00Z
+  updated: 2026-01-11T10:30:00Z
+  spec: |
+    Enable cbtop to run without TTY for CI/CD and AI agent integration.
+    - --headless flag for non-interactive mode
+    - --format json for machine-readable output
+    - cbtop bench subcommand for benchmarking
+    - Regression detection with --baseline
+  acceptance_criteria:
+  - HL-001: --headless runs without TTY
+  - HL-002: JSON output with full schema
+  - HL-003: --duration controls runtime
+  - HL-004: cbtop bench subcommand works
+  - HL-005: --baseline regression detection
+  - HL-006: Correct exit codes
+  phases:
+  - name: Phase 1 - CLI and Core
+    status: in_progress
+    estimated_effort: 2 days
+    completion: 0
+  - name: Phase 2 - Bench Subcommand
+    status: planned
+    estimated_effort: 1.5 days
+    completion: 0
+  - name: Phase 3 - Testing
+    status: planned
+    estimated_effort: 1 day
+    completion: 0
+  subtasks: []
+  estimated_effort: 4.5 days
+  labels:
+  - headless
+  - ai-agent
+  - benchmarking
+  - json

@@ -118,8 +118,8 @@ impl SimdLoadBrick {
                 }
                 self.flop_count += (self.problem_size as u64) * iterations as u64;
             }
-            _ => {
-                // Default to dot product
+            WorkloadType::Conv2d | WorkloadType::Attention => {
+                // Conv2d and Attention: Default to dot product (simplified)
                 for _ in 0..iterations {
                     self.last_result = self.vec_a.dot(&self.vec_b).unwrap_or(0.0) as f64;
                 }
@@ -235,7 +235,7 @@ impl Scorable for SimdLoadBrick {
         let speedup = match self.workload {
             WorkloadType::Gemm | WorkloadType::Reduction => 6.0,  // dot product
             WorkloadType::Elementwise | WorkloadType::Bandwidth => 1.7,  // mul/add
-            _ => 4.0,  // average
+            WorkloadType::Conv2d | WorkloadType::Attention | WorkloadType::All => 4.0,  // average
         };
         let speedup_score = BrickScore::score_speedup(speedup);
         // Backend efficiency: 10 pts for using SIMD, plus speedup score (max 25)
