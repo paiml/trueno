@@ -7070,6 +7070,646 @@ let speedup = match self.workload {
 };
 ```
 
+---
+
+## 32. Grammar of ComputeBlock
+
+**Status**: DESIGN | **Priority**: P1 | **Effort**: 10 days
+
+A declarative, composable framework for specifying compute workloads, inspired by Wilkinson's Grammar of Graphics (2005) as implemented in trueno-viz.
+
+### 32.1 Conceptual Foundation
+
+Just as the Grammar of Graphics decomposes visualization into orthogonal components:
+
+```
+Data + Aesthetics + Geometry + Statistics + Scales + Coordinates + Facets + Theme → Visualization
+```
+
+The Grammar of ComputeBlock decomposes computation into:
+
+```
+Workload + Resources + Strategy + Transform + Scales + Context + Composition + Policy → Execution
+```
+
+**Core Principle**: Declarative specification of *what* to compute, not *how* to execute.
+
+### 32.2 Component Mapping
+
+| Graphics Grammar | ComputeBlock Grammar | Purpose |
+|------------------|----------------------|---------|
+| **Data** (DataFrame) | **Workload** (WorkloadSpec) | Input specification |
+| **Aesthetics** (Aes) | **Resources** (ResourceMapping) | Property binding |
+| **Geometry** (Geom) | **Strategy** (ExecutionStrategy) | Semantic encoding |
+| **Statistics** (Stat) | **Transform** (DataTransform) | Preprocessing |
+| **Scales** (Scale) | **Scales** (ResourceScale) | Domain → Range mapping |
+| **Coordinates** (Coord) | **Context** (ExecutionContext) | Execution space |
+| **Facets** (Facet) | **Composition** (CompositionMode) | Small multiples |
+| **Theme** (Theme) | **Policy** (ExecutionPolicy) | Non-functional properties |
+
+### 32.3 Core Traits
+
+```rust
+/// Resource scaling trait (analogous to graphics Scale<D, R>)
+pub trait ResourceScale<D, R> {
+    fn scale(&self, request: D) -> R;
+    fn domain(&self) -> (D, D);
+    fn range(&self) -> (R, R);
+}
+
+/// Linear resource scaling (cores, memory, bandwidth)
+pub struct LinearResourceScale {
+    domain: (f64, f64),
+    range: (f64, f64),
+}
+
+impl ResourceScale<f64, f64> for LinearResourceScale {
+    fn scale(&self, request: f64) -> f64 {
+        let t = (request - self.domain.0) / (self.domain.1 - self.domain.0);
+        self.range.0 + t * (self.range.1 - self.range.0)
+    }
+}
+
+/// Logarithmic scaling for exponential resources (GPU memory tiers)
+pub struct LogResourceScale {
+    base: f64,
+    domain: (f64, f64),
+    range: (f64, f64),
+}
+```
+
+### 32.4 Workload Specification
+
+```rust
+/// Analogous to DataFrame - the input data
+pub struct WorkloadSpec {
+    /// Operation type (dot, matmul, conv2d, attention)
+    pub operation: Operation,
+    /// Problem dimensions
+    pub dimensions: Dimensions,
+    /// Data type (f32, f16, bf16, int8)
+    pub dtype: DataType,
+    /// Input sources
+    pub inputs: Vec<TensorSpec>,
+    /// Output destinations
+    pub outputs: Vec<TensorSpec>,
+}
+
+/// Analogous to Aes - property binding
+pub struct ResourceMapping {
+    /// Map problem size to cores
+    pub cores: Option<ScaleBinding>,
+    /// Map data volume to memory
+    pub memory: Option<ScaleBinding>,
+    /// Map throughput to bandwidth
+    pub bandwidth: Option<ScaleBinding>,
+    /// Map latency constraints
+    pub latency: Option<ScaleBinding>,
+    /// Fixed overrides (like aes.color_value)
+    pub cores_value: Option<usize>,
+    pub memory_value: Option<ByteSize>,
+}
+```
+
+### 32.5 Execution Strategy (Geometry Equivalent)
+
+```rust
+/// Analogous to GeomType - semantic execution encoding
+pub enum ExecutionStrategy {
+    /// Sequential execution (baseline)
+    Sequential,
+    /// SIMD vectorization
+    Simd { width: SimdWidth },
+    /// Multi-threaded parallel
+    Parallel { threads: usize, chunk_size: usize },
+    /// GPU acceleration
+    Gpu { device: GpuDevice, kernel: KernelSpec },
+    /// Distributed across nodes
+    Distributed { nodes: Vec<NodeSpec> },
+    /// Hybrid CPU+GPU
+    Hybrid { cpu_fraction: f64 },
+}
+
+/// Analogous to PointShape - strategy variants
+pub enum SimdWidth {
+    Auto,           // Runtime detection
+    Sse2,           // 128-bit
+    Avx2,           // 256-bit
+    Avx512,         // 512-bit
+    Neon,           // ARM 128-bit
+}
+```
+
+### 32.6 Data Transforms (Statistics Equivalent)
+
+```rust
+/// Analogous to Stat - preprocessing before execution
+pub enum DataTransform {
+    /// No transformation
+    Identity,
+    /// Quantize to lower precision
+    Quantize { bits: u8, scheme: QuantScheme },
+    /// Tile for cache efficiency
+    Tile { tile_size: usize },
+    /// Transpose for memory layout
+    Transpose { order: Vec<usize> },
+    /// Pad for alignment
+    Pad { alignment: usize },
+    /// Fuse multiple operations
+    Fuse { ops: Vec<Operation> },
+}
+```
+
+### 32.7 Execution Context (Coordinates Equivalent)
+
+```rust
+/// Analogous to Coord - the execution space
+pub enum ExecutionContext {
+    /// Local CPU execution
+    Cpu {
+        affinity: Option<CpuAffinity>,
+        numa_node: Option<usize>,
+    },
+    /// GPU execution
+    Gpu {
+        device_id: u32,
+        stream: Option<StreamId>,
+    },
+    /// Distributed execution
+    Distributed {
+        cluster: ClusterSpec,
+        placement: PlacementStrategy,
+    },
+    /// Heterogeneous (multiple contexts)
+    Heterogeneous {
+        contexts: Vec<Box<ExecutionContext>>,
+        scheduler: SchedulerSpec,
+    },
+}
+```
+
+### 32.8 Composition Mode (Facets Equivalent)
+
+```rust
+/// Analogous to Facet - small multiples for computation
+pub enum CompositionMode {
+    /// Single execution
+    None,
+    /// Data parallelism (same op, different data)
+    DataParallel { shards: usize },
+    /// Model parallelism (different ops, same data)
+    ModelParallel { stages: Vec<Stage> },
+    /// Pipeline parallelism
+    Pipeline { depth: usize, overlap: bool },
+    /// Batch processing
+    Batch { batch_size: usize, prefetch: usize },
+}
+```
+
+### 32.9 Execution Policy (Theme Equivalent)
+
+```rust
+/// Analogous to Theme - non-functional properties
+pub struct ExecutionPolicy {
+    /// Quality of Service level
+    pub qos: QosLevel,
+    /// Preemption allowed
+    pub preemptible: bool,
+    /// Timeout constraints
+    pub timeout: Option<Duration>,
+    /// Retry policy
+    pub retry: RetryPolicy,
+    /// Resource limits
+    pub limits: ResourceLimits,
+    /// Monitoring/tracing
+    pub observability: ObservabilityConfig,
+}
+
+/// Pre-built policies (like Theme::minimal(), Theme::classic())
+impl ExecutionPolicy {
+    pub fn realtime() -> Self { /* low latency, non-preemptible */ }
+    pub fn batch() -> Self { /* high throughput, preemptible */ }
+    pub fn interactive() -> Self { /* balanced */ }
+    pub fn debug() -> Self { /* full tracing, relaxed limits */ }
+}
+```
+
+### 32.10 The Orchestrator: ComputeBlock
+
+```rust
+/// Analogous to GGPlot - the main orchestrator
+pub struct ComputeBlock {
+    workload: WorkloadSpec,
+    resources: ResourceMapping,
+    strategies: Vec<StrategyLayer>,  // Multiple layers like GGPlot
+    transform: DataTransform,
+    context: ExecutionContext,
+    composition: CompositionMode,
+    policy: ExecutionPolicy,
+}
+
+/// Analogous to Layer - strategy with overrides
+pub struct StrategyLayer {
+    strategy: ExecutionStrategy,
+    workload: Option<WorkloadSpec>,  // Layer-specific override
+    resources: ResourceMapping,       // Layer-specific bindings
+}
+
+impl ComputeBlock {
+    /// Builder pattern (like GGPlot::new())
+    pub fn builder() -> ComputeBlockBuilder {
+        ComputeBlockBuilder::new()
+    }
+
+    /// Validate composition (like plot.build())
+    pub fn build(self) -> Result<BuiltComputeBlock, ValidationError> {
+        self.validate()?;
+        Ok(BuiltComputeBlock { inner: self })
+    }
+
+    /// Execute the block (like plot.to_framebuffer())
+    pub fn execute(&self) -> Result<ExecutionResult, ExecutionError> {
+        // Pipeline: workload → transform → scale → strategy → context → output
+    }
+}
+```
+
+### 32.11 Fluent Builder API
+
+```rust
+use cbtop::grammar::*;
+
+// Simple case - auto-detection
+let result = ComputeBlock::builder()
+    .workload(Workload::matmul(1024, 1024, 1024))
+    .build()?
+    .execute()?;
+
+// Full specification
+let result = ComputeBlock::builder()
+    .workload(Workload::attention(batch=32, seq=512, heads=8, dim=64))
+    .resources(|r| r
+        .cores("problem_size")      // Scale cores by problem size
+        .memory_value(ByteSize::gb(4))  // Fixed 4GB memory
+    )
+    .strategy(Strategy::gpu(GpuDevice::auto()))
+    .strategy(Strategy::simd(SimdWidth::Avx2))  // Fallback layer
+    .transform(Transform::tile(64))
+    .context(Context::gpu(0))
+    .composition(Composition::batch(32))
+    .policy(Policy::realtime())
+    .build()?
+    .execute()?;
+
+// Faceting for parameter sweep (small multiples)
+let results = ComputeBlock::builder()
+    .workload(Workload::gemm(m, n, k))
+    .facet_by("tile_size", vec![16, 32, 64, 128])
+    .build()?
+    .execute_all()?;  // Returns Vec<ExecutionResult>
+```
+
+### 32.12 Integration with cbtop Benchmarking
+
+The Grammar of ComputeBlock integrates with the HL-007 Library API:
+
+```rust
+use cbtop::{Benchmark, grammar::*};
+
+// Benchmark a ComputeBlock specification
+let block = ComputeBlock::builder()
+    .workload(Workload::dot(1_000_000))
+    .strategy(Strategy::simd(SimdWidth::Auto))
+    .build()?;
+
+let benchmark_result = Benchmark::builder()
+    .compute_block(block)
+    .duration_secs(5)
+    .build()?
+    .run()?;
+
+println!("GFLOP/s: {}", benchmark_result.results.gflops);
+```
+
+### 32.13 References
+
+1. **[Wilkinson, 2005]** "The Grammar of Graphics." Springer. ISBN: 978-0-387-24544-7. [Original GoG formulation]
+2. **[Wickham, 2010]** "A Layered Grammar of Graphics." Journal of Computational and Graphical Statistics 19(1):3-28. DOI: 10.1198/jcgs.2009.07098. [ggplot2 design]
+3. **[Halide, 2013]** Ragan-Kelley et al. "Halide: A Language and Compiler for Optimizing Parallelism, Locality, and Recomputation in Image Processing Pipelines." PLDI'13. DOI: 10.1145/2491956.2462176. [Decoupling algorithm from schedule]
+4. **[TVM, 2018]** Chen et al. "TVM: An Automated End-to-End Optimizing Compiler for Deep Learning." OSDI'18. [Tensor expression language]
+
+---
+
+## 33. Optimization Identification Plan
+
+**Status**: PLANNING | **Priority**: P1 | **Effort**: 5 days
+
+A systematic approach to using the cbtop Library API (HL-007) to identify optimization opportunities in trueno.
+
+### 33.1 Objectives
+
+1. **Baseline Establishment**: Create performance baselines for all trueno operations
+2. **Bottleneck Detection**: Identify operations with suboptimal performance
+3. **Regression Prevention**: Automated detection of performance regressions
+4. **Optimization Validation**: Prove optimizations achieve ≥10% improvement
+
+### 33.2 Benchmark Suite Design
+
+```rust
+use cbtop::{Benchmark, WorkloadType, ComputeBackend};
+use std::time::Duration;
+
+/// Comprehensive benchmark suite for optimization identification
+pub struct OptimizationSuite {
+    workloads: Vec<WorkloadConfig>,
+    backends: Vec<ComputeBackend>,
+    sizes: Vec<usize>,
+    baseline_file: PathBuf,
+}
+
+#[derive(Clone)]
+pub struct WorkloadConfig {
+    pub workload: WorkloadType,
+    pub name: &'static str,
+    pub theoretical_peak_gflops: f64,
+    pub memory_bound: bool,
+}
+
+impl OptimizationSuite {
+    pub fn standard() -> Self {
+        Self {
+            workloads: vec![
+                WorkloadConfig {
+                    workload: WorkloadType::Gemm,
+                    name: "dot_product",
+                    theoretical_peak_gflops: 100.0,  // AVX2 FMA
+                    memory_bound: false,
+                },
+                WorkloadConfig {
+                    workload: WorkloadType::Elementwise,
+                    name: "elementwise_mul",
+                    theoretical_peak_gflops: 50.0,
+                    memory_bound: true,
+                },
+                WorkloadConfig {
+                    workload: WorkloadType::Reduction,
+                    name: "sum_reduction",
+                    theoretical_peak_gflops: 50.0,
+                    memory_bound: true,
+                },
+                WorkloadConfig {
+                    workload: WorkloadType::Bandwidth,
+                    name: "memory_bandwidth",
+                    theoretical_peak_gflops: 30.0,
+                    memory_bound: true,
+                },
+            ],
+            backends: vec![ComputeBackend::Simd],
+            sizes: vec![
+                1_000,        // L1 cache
+                10_000,       // L2 cache
+                100_000,      // L3 cache
+                1_000_000,    // Main memory
+                4_000_000,    // Large (tiling threshold)
+                16_000_000,   // Very large
+            ],
+            baseline_file: PathBuf::from("benchmarks/baseline.json"),
+        }
+    }
+}
+```
+
+### 33.3 Execution Plan
+
+#### Phase 1: Baseline Collection (Day 1)
+
+```rust
+impl OptimizationSuite {
+    /// Collect baseline measurements for all configurations
+    pub fn collect_baseline(&self) -> Result<BaselineReport, CbtopError> {
+        let mut results = Vec::new();
+
+        for workload in &self.workloads {
+            for &size in &self.sizes {
+                for &backend in &self.backends {
+                    let result = Benchmark::builder()
+                        .workload_type(workload.workload)
+                        .size(size)
+                        .backend(backend)
+                        .duration_secs(5)
+                        .build()?
+                        .run()?;
+
+                    results.push(BaselineEntry {
+                        workload: workload.name,
+                        size,
+                        backend: format!("{:?}", backend),
+                        gflops: result.results.gflops,
+                        efficiency: result.results.gflops / workload.theoretical_peak_gflops,
+                        cv_percent: result.results.latency_ms.cv_percent,
+                        score: result.score.total,
+                    });
+                }
+            }
+        }
+
+        Ok(BaselineReport { entries: results, timestamp: Utc::now() })
+    }
+}
+```
+
+#### Phase 2: Bottleneck Analysis (Day 2)
+
+```rust
+/// Identify operations performing below expectations
+pub struct BottleneckAnalysis {
+    /// Operations below 50% of theoretical peak
+    pub severe: Vec<BottleneckEntry>,
+    /// Operations between 50-75% of theoretical peak
+    pub moderate: Vec<BottleneckEntry>,
+    /// Operations with high CV (>15%)
+    pub unstable: Vec<BottleneckEntry>,
+}
+
+impl OptimizationSuite {
+    pub fn analyze_bottlenecks(&self, baseline: &BaselineReport) -> BottleneckAnalysis {
+        let mut analysis = BottleneckAnalysis::default();
+
+        for entry in &baseline.entries {
+            let workload = self.workloads.iter()
+                .find(|w| w.name == entry.workload)
+                .unwrap();
+
+            let efficiency = entry.gflops / workload.theoretical_peak_gflops;
+
+            if efficiency < 0.50 {
+                analysis.severe.push(BottleneckEntry {
+                    workload: entry.workload.clone(),
+                    size: entry.size,
+                    efficiency,
+                    recommendation: self.recommend_optimization(workload, entry),
+                });
+            } else if efficiency < 0.75 {
+                analysis.moderate.push(/* ... */);
+            }
+
+            if entry.cv_percent > 15.0 {
+                analysis.unstable.push(/* ... */);
+            }
+        }
+
+        analysis
+    }
+
+    fn recommend_optimization(&self, workload: &WorkloadConfig, entry: &BaselineEntry) -> String {
+        if workload.memory_bound && entry.size > 1_000_000 {
+            "Consider cache-aware tiling (PERF-001 pattern)".to_string()
+        } else if entry.cv_percent > 10.0 {
+            "High variance - check CPU governor (PERF-003 pattern)".to_string()
+        } else if entry.gflops < 10.0 {
+            "Very low throughput - verify SIMD codegen".to_string()
+        } else {
+            "Profile with perf/renacer to identify hotspot".to_string()
+        }
+    }
+}
+```
+
+#### Phase 3: Regression Detection (Day 3)
+
+```rust
+/// Automated regression detection for CI/CD integration
+pub struct RegressionDetector {
+    baseline: BaselineReport,
+    threshold_percent: f64,
+}
+
+impl RegressionDetector {
+    pub fn check(&self, current: &BaselineReport) -> RegressionReport {
+        let mut regressions = Vec::new();
+        let mut improvements = Vec::new();
+
+        for current_entry in &current.entries {
+            if let Some(baseline_entry) = self.find_baseline(current_entry) {
+                let change = (current_entry.gflops - baseline_entry.gflops)
+                    / baseline_entry.gflops * 100.0;
+
+                if change < -self.threshold_percent {
+                    regressions.push(RegressionEntry {
+                        workload: current_entry.workload.clone(),
+                        size: current_entry.size,
+                        baseline_gflops: baseline_entry.gflops,
+                        current_gflops: current_entry.gflops,
+                        change_percent: change,
+                    });
+                } else if change > self.threshold_percent {
+                    improvements.push(/* ... */);
+                }
+            }
+        }
+
+        RegressionReport {
+            passed: regressions.is_empty(),
+            regressions,
+            improvements,
+        }
+    }
+}
+```
+
+#### Phase 4: Optimization Validation (Day 4-5)
+
+```rust
+/// Validate that an optimization achieves required improvement
+pub struct OptimizationValidator {
+    min_improvement_percent: f64,  // Default: 10%
+    min_samples: usize,            // Default: 5
+    max_cv_percent: f64,           // Default: 5%
+}
+
+impl OptimizationValidator {
+    /// A/B test an optimization
+    pub fn validate_optimization(
+        &self,
+        workload: WorkloadType,
+        size: usize,
+        before: impl Fn() -> f64,  // Returns GFLOP/s
+        after: impl Fn() -> f64,
+    ) -> ValidationResult {
+        // Collect samples
+        let before_samples: Vec<f64> = (0..self.min_samples)
+            .map(|_| before())
+            .collect();
+        let after_samples: Vec<f64> = (0..self.min_samples)
+            .map(|_| after())
+            .collect();
+
+        // Statistical analysis
+        let before_mean = mean(&before_samples);
+        let after_mean = mean(&after_samples);
+        let before_cv = cv(&before_samples);
+        let after_cv = cv(&after_samples);
+
+        let improvement = (after_mean - before_mean) / before_mean * 100.0;
+
+        ValidationResult {
+            passed: improvement >= self.min_improvement_percent
+                && before_cv <= self.max_cv_percent
+                && after_cv <= self.max_cv_percent,
+            improvement_percent: improvement,
+            before_gflops: before_mean,
+            after_gflops: after_mean,
+            before_cv: before_cv,
+            after_cv: after_cv,
+            statistical_significance: t_test(&before_samples, &after_samples),
+        }
+    }
+}
+```
+
+### 33.4 CLI Integration
+
+```bash
+# Collect baseline
+cbtop optimize baseline --output baseline.json
+
+# Analyze bottlenecks
+cbtop optimize analyze --baseline baseline.json
+
+# Check for regressions
+cbtop optimize check --baseline baseline.json --threshold 5
+
+# Validate specific optimization
+cbtop optimize validate --workload gemm --size 1000000 --before v0.6.0 --after HEAD
+```
+
+### 33.5 Work Items
+
+| ID | Title | Priority | Effort | Status |
+|----|-------|----------|--------|--------|
+| OPT-001 | Implement OptimizationSuite baseline collection | P1 | 1 day | PENDING |
+| OPT-002 | Implement BottleneckAnalysis with recommendations | P1 | 1 day | PENDING |
+| OPT-003 | Implement RegressionDetector for CI/CD | P1 | 1 day | PENDING |
+| OPT-004 | Implement OptimizationValidator with t-test | P2 | 1 day | PENDING |
+| OPT-005 | Add CLI subcommands (optimize baseline/analyze/check) | P2 | 1 day | PENDING |
+
+### 33.6 Expected Outcomes
+
+After implementing this plan:
+
+1. **Baseline Data**: Performance baselines for 24 configurations (4 workloads × 6 sizes)
+2. **Bottleneck Report**: Identified operations below 75% efficiency
+3. **CI Integration**: Automated regression detection on every commit
+4. **Validation Framework**: Statistical validation of optimizations
+
+### 33.7 References
+
+1. **[Georges et al., 2007]** "Statistically Rigorous Java Performance Evaluation." OOPSLA'07. [Statistical methodology]
+2. **[Kalibera & Jones, 2013]** "Rigorous Benchmarking in Reasonable Time." ISMM'13. DOI: 10.1145/2464157.2464160. [Sample size determination]
+3. **[Curtsinger & Berger, 2013]** "STABILIZER: Statistically Sound Performance Evaluation." ASPLOS'13. DOI: 10.1145/2451116.2451141. [Randomization for bias elimination]
+
+---
+
 ### 31.5 References
 
 1. **[Williams et al., 2009]** "Roofline: An Insightful Visual Performance Model for Multicore Architectures." Communications of the ACM 52(4):65-76. DOI: 10.1145/1498765.1498785. [Memory bandwidth analysis]
@@ -7080,4 +7720,4 @@ let speedup = match self.workload {
 ---
 
 *Generated by Trueno Engineering. PMAT tracked. Toyota Way institutionalized.*
-*Total Citations: 56 (52 previous + 4 Performance Issues)*
+*Total Citations: 63 (56 previous + 7 Grammar of ComputeBlock/Optimization)*
