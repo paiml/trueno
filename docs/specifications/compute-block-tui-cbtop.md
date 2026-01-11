@@ -1646,18 +1646,18 @@ A brick with no falsifiable assertions is **pseudo-science** and MUST be rejecte
 │  POPPERIAN SCORE CALCULATION                                    │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  Total Points: 240                                               │
+│  Total Points: 300                                               │
 │                                                                  │
 │  SCORE = (passed / total) × 100                                 │
 │                                                                  │
 │  GRADE:                                                          │
-│    A+  234-240  (97.5%+)   Production ready                     │
-│    A   228-233  (95%+)     Release candidate                    │
-│    B+  216-227  (90%+)     Beta quality                         │
-│    B   204-215  (85%+)     Alpha quality                        │
-│    C   180-203  (75%+)     Development                          │
-│    D   120-179  (50%+)     Prototype                            │
-│    F   0-119    (<50%)     Not viable                           │
+│    A+  292-300  (97.5%+)   Production ready                     │
+│    A   285-291  (95%+)     Release candidate                    │
+│    B+  270-284  (90%+)     Beta quality                         │
+│    B   255-269  (85%+)     Alpha quality                        │
+│    C   225-254  (75%+)     Development                          │
+│    D   150-224  (50%+)     Prototype                            │
+│    F   0-149    (<50%)     Not viable                           │
 │                                                                  │
 │  CRITICAL FAILURES (instant F):                                  │
 │    F041 (Scalar baseline wrong)                                  │
@@ -7737,6 +7737,7 @@ cbtop optimize validate --workload gemm --size 1000000 --before v0.6.0 --after H
 | OPT-013 | Scaled warmup duration for small sizes | P1 | 0.5 day | **COMPLETE** |
 | OPT-014 | Detect frequency throttling during benchmark | P2 | 0.5 day | **COMPLETE** |
 | OPT-015 | IQR-based outlier filtering for CV calculation | P0 | 0.5 day | **COMPLETE** |
+| OPT-016 | Lower tiling threshold to 100% L3 (fix 4M cliff) | P0 | 0.5 day | **COMPLETE** |
 
 ### 33.6 Optimization Analysis Findings (2026-01-11)
 
@@ -7878,6 +7879,26 @@ Running the optimization tooling identified critical performance issues:
 - CRITICAL benchmarks: 4 → 0 (-100%)
 - Average efficiency: 47.9% → 54.0% (+13%)
 
+#### 33.6.6 Tiling Threshold Fix (OPT-016)
+
+**Problem**: The 150% L3 threshold caused the 4M element cliff to persist:
+- 4M elements = 48MB working set = exactly at 150% threshold (48MB)
+- Tiling NOT triggered (48MB is not > 48MB)
+- But 48MB > 32MB L3 cache = cache thrashing
+
+**Solution**: Lower tiling threshold from 150% to 100% of L3 cache in `should_use_tiling()`.
+
+| Workload | Size | Before | After | Change |
+|----------|------|--------|-------|--------|
+| dot_product | 4M | 21.7 GFLOP/s (1.1%) | 33.8 GFLOP/s (1.6%) | **+55.8%** |
+| elementwise_mul | 4M | 1.1 GFLOP/s (6.6%) | 3.4 GFLOP/s (21.5%) | **+212.5%** |
+| memory_bandwidth | 4M | 2.2 GFLOP/s (9.0%) | 3.5 GFLOP/s (14.5%) | **+58.4%** |
+
+**Results:**
+- STABLE benchmarks: 20 → 22 (+10%)
+- UNSTABLE benchmarks: 4 → 2 (-50%)
+- Average efficiency: 49.2% → 50.9% (+3.5%)
+
 ### 33.7 Expected Outcomes
 
 After implementing this plan:
@@ -7892,6 +7913,37 @@ After implementing this plan:
 1. **[Georges et al., 2007]** "Statistically Rigorous Java Performance Evaluation." OOPSLA'07. [Statistical methodology]
 2. **[Kalibera & Jones, 2013]** "Rigorous Benchmarking in Reasonable Time." ISMM'13. DOI: 10.1145/2464157.2464160. [Sample size determination]
 3. **[Curtsinger & Berger, 2013]** "STABILIZER: Statistically Sound Performance Evaluation." ASPLOS'13. DOI: 10.1145/2451116.2451141. [Randomization for bias elimination]
+
+---
+
+## 34. The "Ironman" Falsification Suite (F901-F920)
+
+**Mandatory for v1.0.0 Release Candidate**
+
+This suite defines the "Ironman" standard: code that is not just correct, but resilient to active hostility (mutation, fuzzing) and strictly compliant with safety models (Miri).
+
+| ID | Claim | Falsification Test | Pass Criteria |
+|----|-------|-------------------|---------------|
+| **F901** | Mutation Resilience > 85% | `cargo mutants` score | Score > 85% |
+| **F902** | Fuzzing Coverage > 80% | `cargo fuzz` grammar | Coverage > 80% |
+| **F903** | Miri Undefined Behavior | `cargo miri test` | No UB detected |
+| **F904** | Loom Concurrency | `loom` model check | No race conditions |
+| **F905** | ThreadSanitizer Clean | `cargo test -Zsanitizer=thread` | No data races |
+| **F906** | AddressSanitizer Clean | `cargo test -Zsanitizer=address` | No memory errors |
+| **F907** | LeakSanitizer Clean | `cargo test -Zsanitizer=leak` | No leaks |
+| **F908** | Panic Freedom | Fuzzing inputs | No panics |
+| **F909** | Unsafe Audit | `cargo geiger` | 0 forbid/unsafe usage |
+| **F910** | Dependency Audit | `cargo audit` | 0 vulnerabilities |
+| **F911** | Dead Code | `cargo udeps` | 0 unused deps |
+| **F912** | Cognitive Complexity | `clippy::cognitive_complexity` | All fns < 25 |
+| **F913** | Documentation Coverage | `cargo doc --document-private-items` | 100% coverage |
+| **F914** | License Compliance | `cargo deny check licenses` | All approved |
+| **F915** | Binary Size | `strip` release binary | < 10MB |
+| **F916** | Startup Time | Cold start to TUI | < 50ms |
+| **F917** | Frame Latency | P99 render time | < 16ms |
+| **F918** | Battery Impact | `powertop` estimate | < 2W idle |
+| **F919** | Accessibility | Screen reader check | Text readable |
+| **F920** | Internationalization | Non-ASCII input | No crash/corruption |
 
 ---
 
