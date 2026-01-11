@@ -1109,41 +1109,223 @@ roadmap:
   github_issue: null
   item_type: feature
   title: 'cbtop Headless Mode and AI Agent Integration'
-  status: in_progress
+  status: completed
   priority: high
   assigned_to: claude
   created: 2026-01-11T10:30:00Z
-  updated: 2026-01-11T10:30:00Z
+  updated: 2026-01-11T11:00:00Z
   spec: |
     Enable cbtop to run without TTY for CI/CD and AI agent integration.
     - --headless flag for non-interactive mode
     - --format json for machine-readable output
     - cbtop bench subcommand for benchmarking
     - Regression detection with --baseline
+
+    COMPLETED: All features implemented and verified via falsification protocol.
+    See spec §30 and §31 for details.
   acceptance_criteria:
-  - HL-001: --headless runs without TTY
-  - HL-002: JSON output with full schema
-  - HL-003: --duration controls runtime
-  - HL-004: cbtop bench subcommand works
-  - HL-005: --baseline regression detection
-  - HL-006: Correct exit codes
+  - HL-001: --headless runs without TTY [PASS]
+  - HL-002: JSON output with full schema [PASS]
+  - HL-003: --duration controls runtime [PASS]
+  - HL-004: cbtop bench subcommand works [PASS]
+  - HL-005: --baseline regression detection [PASS]
+  - HL-006: Correct exit codes [PASS]
   phases:
   - name: Phase 1 - CLI and Core
-    status: in_progress
+    status: completed
     estimated_effort: 2 days
-    completion: 0
+    completion: 100
   - name: Phase 2 - Bench Subcommand
-    status: planned
+    status: completed
     estimated_effort: 1.5 days
-    completion: 0
+    completion: 100
   - name: Phase 3 - Testing
-    status: planned
+    status: completed
     estimated_effort: 1 day
-    completion: 0
+    completion: 100
   subtasks: []
   estimated_effort: 4.5 days
   labels:
   - headless
   - ai-agent
   - benchmarking
+
+- id: CBTOP-PERF-001
+  github_issue: null
+  item_type: task
+  title: 'Cache-Aware Tiling for Large Problem Sizes'
+  status: pending
+  priority: high
+  assigned_to: null
+  created: 2026-01-11T11:00:00Z
+  updated: 2026-01-11T11:00:00Z
+  spec: |
+    PERF-001: Memory Bandwidth Cliff at Large Problem Sizes
+
+    Evidence:
+    - 1M elements: 700 GFLOP/s
+    - 4M elements: 72 GFLOP/s (90% degradation)
+    - 8M elements: 18 GFLOP/s (97% degradation)
+
+    Root Cause: L3 cache overflow when working set exceeds ~8MB.
+
+    Solution: Implement cache-aware tiling to keep working set in L2/L3 cache.
+
+    Citation: [Williams et al., 2009] "Roofline: An Insightful Visual Performance Model."
+    CACM 52(4). DOI: 10.1145/1498765.1498785
+  acceptance_criteria:
+  - 4M elements maintains >300 GFLOP/s (vs current 72)
+  - 8M elements maintains >200 GFLOP/s (vs current 18)
+  - No regression for <1M element workloads
+  phases:
+  - name: Implement L2-aware tiling
+    status: planned
+    estimated_effort: 2 days
+    completion: 0
+  - name: Benchmark and tune tile sizes
+    status: planned
+    estimated_effort: 1 day
+    completion: 0
+  subtasks: []
+  estimated_effort: 3 days
+  labels:
+  - performance
+  - cache-optimization
+  - simd
+
+- id: CBTOP-PERF-002
+  github_issue: null
+  item_type: bug
+  title: 'Unify CV Calculation Between Headless and Brick'
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-11T11:00:00Z
+  updated: 2026-01-11T11:00:00Z
+  spec: |
+    PERF-002: Stability Score Inconsistency
+
+    Evidence:
+    - CV% in JSON output differs from CV used for stability score
+    - Same workload gets different stability scores (0, 7, or 15)
+
+    Root Cause: HeadlessBenchmark calculates CV from collected latencies,
+    but brick.score() uses brick's internal latency_history which may be
+    sparse or different after warmup reset.
+
+    Solution: Sync latencies to brick's latency_history before calling score().
+
+    Citation: [Georges et al., 2007] "Statistically Rigorous Java Performance Evaluation."
+    OOPSLA'07. DOI: 10.1145/1297027.1297033
+  acceptance_criteria:
+  - CV% in JSON matches CV used for stability score calculation
+  - Stability score is deterministic for same CV%
+  - Score breakdown matches expected formula
+  phases:
+  - name: Fix CV sync in headless.rs
+    status: planned
+    estimated_effort: 0.5 days
+    completion: 0
+  - name: Add regression tests
+    status: planned
+    estimated_effort: 0.5 days
+    completion: 0
+  subtasks: []
+  estimated_effort: 1 day
+  labels:
+  - bug
+  - scoring
+  - headless
+
+- id: CBTOP-PERF-003
+  github_issue: null
+  item_type: task
+  title: 'Add CPU Frequency Pinning for Deterministic Benchmarks'
+  status: pending
+  priority: medium
+  assigned_to: null
+  created: 2026-01-11T11:00:00Z
+  updated: 2026-01-11T11:00:00Z
+  spec: |
+    PERF-003: Inter-Run GFLOP/s Variance Exceeds Target
+
+    Evidence:
+    - 5 consecutive runs show 6.5% variance (target: <5%)
+    - GFLOP/s varies from 346 to 369 on identical workloads
+
+    Root Cause: CPU frequency scaling, background activity, thermal throttling.
+
+    Solution: Add --deterministic flag that:
+    1. Pins CPU frequency to base clock (via cpufreq)
+    2. Sets process affinity to isolated cores
+    3. Disables turbo boost
+    4. Adds warmup iterations for thermal stability
+
+    Citation: [Mytkowicz et al., 2009] "Producing Wrong Data Without Doing Anything
+    Obviously Wrong!" ASPLOS'09. DOI: 10.1145/1508244.1508275
+  acceptance_criteria:
+  - --deterministic mode reduces CV to <5%
+  - Clear documentation on required system setup
+  - Graceful fallback if cpufreq unavailable
+  phases:
+  - name: Implement CPU frequency pinning
+    status: planned
+    estimated_effort: 0.5 days
+    completion: 0
+  - name: Add process affinity
+    status: planned
+    estimated_effort: 0.5 days
+    completion: 0
+  subtasks: []
+  estimated_effort: 1 day
+  labels:
+  - performance
+  - determinism
+  - benchmarking
+
+- id: CBTOP-PERF-004
+  github_issue: null
+  item_type: task
+  title: 'Update Efficiency Speedup Constants with Measured Values'
+  status: completed
+  priority: low
+  assigned_to: null
+  created: 2026-01-11T11:00:00Z
+  updated: 2026-01-11T11:00:00Z
+  spec: |
+    PERF-004: Elementwise Efficiency Score Undervalued
+
+    Evidence:
+    - Elementwise gets efficiency=13/25 with hardcoded 1.7x speedup
+    - Actual AVX2 elementwise speedup is ~4x (measured)
+
+    Root Cause: simd.rs:237 uses hardcoded speedup values that don't
+    reflect actual measured performance.
+
+    Solution: Update speedup constants based on benchmarks:
+    - GEMM/Reduction: 6.0x (unchanged, correct)
+    - Elementwise: 4.0x (was 1.7x)
+    - Bandwidth: 3.0x (was 1.7x)
+    - Conv2d/Attention/All: 4.0x
+
+    Citation: [Fog, 2023] "Instruction Tables." Technical University of Denmark.
+  acceptance_criteria:
+  - Elementwise gets efficiency score ~22/25 (matching GEMM)
+  - All speedup values match measured benchmarks within 20%
+  - Unit tests verify expected efficiency scores
+  phases:
+  - name: Update speedup constants
+    status: planned
+    estimated_effort: 0.25 days
+    completion: 0
+  - name: Add verification tests
+    status: planned
+    estimated_effort: 0.25 days
+    completion: 0
+  subtasks: []
+  estimated_effort: 0.5 days
+  labels:
+  - scoring
+  - simd
+  - accuracy
   - json

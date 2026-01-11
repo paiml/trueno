@@ -400,22 +400,20 @@ impl HeadlessBenchmark {
         brick.start();
 
         // Measurement phase
-        let mut latencies: Vec<f64> = Vec::new();
         let mut iterations = 0u64;
         let measure_start = Instant::now();
 
         while measure_start.elapsed() < self.duration {
-            let iter_start = Instant::now();
             brick.run_iteration();
-            let elapsed = iter_start.elapsed();
-            latencies.push(elapsed.as_secs_f64() * 1000.0); // Convert to ms
             iterations += 1;
         }
 
         let total_duration = start_time.elapsed();
         brick.stop();
 
-        // Calculate statistics
+        // Calculate statistics using brick's internal latency history (PERF-002)
+        // This ensures CV calculation matches what score() uses
+        let latencies = brick.latency_history_slice();
         let latency_stats = Self::calculate_latency_stats(&latencies);
         let gflops = brick.gflops();
         let throughput = if latency_stats.mean > 0.0 {
