@@ -92,6 +92,22 @@
 #![allow(clippy::absurd_extreme_comparisons)]
 // Allow no_effect_underscore_binding - intentional in tests
 #![allow(clippy::no_effect_underscore_binding)]
+// Allow must_use_candidate - methods may return values not always needed
+#![allow(clippy::must_use_candidate)]
+// Allow manual_find - clearer intent in some cases
+#![allow(clippy::manual_find)]
+// Allow type_complexity - complex return types for tuples
+#![allow(clippy::type_complexity)]
+// Allow range_plus_one - clearer in some contexts
+#![allow(clippy::range_plus_one)]
+// Allow map_clone - clearer intent
+#![allow(clippy::map_clone)]
+// Allow manual_is_multiple_of - not yet stabilized
+#![allow(clippy::manual_is_multiple_of)]
+// Allow items_after_statements - const definitions in kernels
+#![allow(clippy::items_after_statements)]
+// Allow doc_lazy_continuation - doc formatting
+#![allow(clippy::doc_lazy_continuation)]
 // Allow useless_vec in tests - clearer intent
 #![allow(clippy::useless_vec)]
 
@@ -114,6 +130,11 @@ pub mod wasm;
 
 pub use error::{GpuError, Result};
 pub use monitor::{cuda_device_count, cuda_monitoring_available, CudaDeviceInfo, CudaMemoryInfo};
+
+// NOTE: ComputeBrick is available from the trueno crate, not trueno-gpu
+// This is because trueno optionally depends on trueno-gpu (not vice versa)
+// Usage: `use trueno::brick::{ComputeBrick, ComputeBackend, TokenBudget};`
+// See: trueno/src/brick.rs for the full brick architecture
 
 #[cfg(test)]
 mod tests {
