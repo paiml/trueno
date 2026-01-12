@@ -146,6 +146,34 @@ pub enum PtxOp {
     WmmaMma,
     /// WMMA store accumulator
     WmmaStoreD,
+
+    // ===== DP4A Integer Dot Product =====
+    /// DP4A unsigned dot product (4 u8 pairs to u32)
+    Dp4a,
+    /// DP4A unsigned-signed dot product
+    Dp4aUS,
+    /// DP4A signed dot product (4 s8 pairs to s32)
+    Dp4aS32,
+
+    // ===== Bit Manipulation =====
+    /// Population count (count set bits)
+    Popc,
+    /// Count leading zeros
+    Clz,
+    /// Find highest set bit position
+    Bfind,
+    /// Bit field extract
+    Bfe,
+    /// Bit field insert
+    Bfi,
+
+    // ===== Special Loads =====
+    /// Load volatile (bypass cache)
+    LdVolatile,
+
+    // ===== Warp Vote =====
+    /// Generic warp vote (ballot)
+    Vote,
 }
 
 /// Comparison operators for setp
@@ -255,6 +283,8 @@ pub enum RoundingMode {
     Rp,
     /// Round toward negative infinity
     Rm,
+    /// Round to nearest integer
+    Rni,
 }
 
 impl RoundingMode {
@@ -266,6 +296,7 @@ impl RoundingMode {
             Self::Rz => ".rz",
             Self::Rp => ".rp",
             Self::Rm => ".rm",
+            Self::Rni => ".rni",
         }
     }
 }
@@ -275,8 +306,10 @@ impl RoundingMode {
 pub struct PtxInstruction {
     /// Operation
     pub op: PtxOp,
-    /// Data type
+    /// Data type (destination type for cvt)
     pub ty: PtxType,
+    /// Source type (for cvt instructions with different src/dst types)
+    pub src_type: Option<PtxType>,
     /// Destination register (if any)
     pub dst: Option<Operand>,
     /// Multiple destination registers (for vector loads like ld.v4.f32)
@@ -337,6 +370,7 @@ impl PtxInstruction {
         Self {
             op,
             ty,
+            src_type: None,
             dst: None,
             dsts: Vec::new(),
             srcs: Vec::new(),
@@ -345,6 +379,13 @@ impl PtxInstruction {
             rounding: None,
             label: None,
         }
+    }
+
+    /// Set source type (for cvt instructions with different src/dst types)
+    #[must_use]
+    pub fn with_src_type(mut self, src_type: PtxType) -> Self {
+        self.src_type = Some(src_type);
+        self
     }
 
     /// Set destination

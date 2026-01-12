@@ -109,6 +109,25 @@ pub enum GpuError {
     /// Feature not supported on this device/platform
     #[error("Not supported: {0}")]
     NotSupported(String),
+
+    // =========================================================================
+    // CUDA Graph Errors (PAR-037)
+    // =========================================================================
+    /// CUDA graph creation failed
+    #[error("CUDA graph creation failed: {0}")]
+    GraphCreate(String),
+
+    /// CUDA graph capture failed
+    #[error("CUDA graph capture failed: {0}")]
+    GraphCapture(String),
+
+    /// CUDA graph instantiation failed
+    #[error("CUDA graph instantiation failed: {0}")]
+    GraphInstantiate(String),
+
+    /// CUDA graph launch failed
+    #[error("CUDA graph launch failed: {0}")]
+    GraphLaunch(String),
 }
 
 #[cfg(test)]

@@ -55,6 +55,12 @@ pub type CUstream = *mut c_void;
 /// CUDA device pointer (GPU memory address)
 pub type CUdeviceptr = u64;
 
+/// CUDA graph handle (opaque pointer)
+pub type CUgraph = *mut c_void;
+
+/// CUDA graph executable handle (opaque pointer)
+pub type CUgraphExec = *mut c_void;
+
 // ============================================================================
 // CUDA Error Codes (subset we handle)
 // ============================================================================
@@ -198,6 +204,23 @@ pub struct CudaDriver {
         kernel_params: *mut *mut c_void,
         extra: *mut *mut c_void,
     ) -> CUresult,
+
+    // Graph Management (PAR-037)
+    /// cuGraphCreate - Create an empty graph
+    pub cuGraphCreate: unsafe extern "C" fn(graph: *mut CUgraph, flags: c_uint) -> CUresult,
+    /// cuGraphDestroy - Destroy a graph
+    pub cuGraphDestroy: unsafe extern "C" fn(graph: CUgraph) -> CUresult,
+    /// cuGraphInstantiateWithFlags - Create executable from graph
+    pub cuGraphInstantiateWithFlags:
+        unsafe extern "C" fn(exec: *mut CUgraphExec, graph: CUgraph, flags: u64) -> CUresult,
+    /// cuGraphExecDestroy - Destroy graph executable
+    pub cuGraphExecDestroy: unsafe extern "C" fn(exec: CUgraphExec) -> CUresult,
+    /// cuGraphLaunch - Launch graph on stream
+    pub cuGraphLaunch: unsafe extern "C" fn(exec: CUgraphExec, stream: CUstream) -> CUresult,
+    /// cuStreamBeginCapture - Begin stream capture
+    pub cuStreamBeginCapture: unsafe extern "C" fn(stream: CUstream, mode: c_uint) -> CUresult,
+    /// cuStreamEndCapture - End stream capture and return graph
+    pub cuStreamEndCapture: unsafe extern "C" fn(stream: CUstream, graph: *mut CUgraph) -> CUresult,
 }
 
 // ============================================================================
@@ -315,6 +338,14 @@ mod loading {
                     *mut *mut c_void,
                     *mut *mut c_void,
                 ) -> CUresult;
+                // Graph types (PAR-037)
+                type FnGraphCreate = unsafe extern "C" fn(*mut CUgraph, c_uint) -> CUresult;
+                type FnGraphDestroy = unsafe extern "C" fn(CUgraph) -> CUresult;
+                type FnGraphInstantiate = unsafe extern "C" fn(*mut CUgraphExec, CUgraph, u64) -> CUresult;
+                type FnGraphExecDestroy = unsafe extern "C" fn(CUgraphExec) -> CUresult;
+                type FnGraphLaunch = unsafe extern "C" fn(CUgraphExec, CUstream) -> CUresult;
+                type FnStreamBeginCapture = unsafe extern "C" fn(CUstream, c_uint) -> CUresult;
+                type FnStreamEndCapture = unsafe extern "C" fn(CUstream, *mut CUgraph) -> CUresult;
 
                 Some(CudaDriver {
                     cuInit: load_sym!(cuInit, FnInit),
@@ -348,6 +379,14 @@ mod loading {
                     cuStreamDestroy: load_sym!(cuStreamDestroy_v2, FnStreamDestroy),
                     cuStreamSynchronize: load_sym!(cuStreamSynchronize, FnStreamSync),
                     cuLaunchKernel: load_sym!(cuLaunchKernel, FnLaunchKernel),
+                    // Graph functions (PAR-037)
+                    cuGraphCreate: load_sym!(cuGraphCreate, FnGraphCreate),
+                    cuGraphDestroy: load_sym!(cuGraphDestroy, FnGraphDestroy),
+                    cuGraphInstantiateWithFlags: load_sym!(cuGraphInstantiateWithFlags, FnGraphInstantiate),
+                    cuGraphExecDestroy: load_sym!(cuGraphExecDestroy, FnGraphExecDestroy),
+                    cuGraphLaunch: load_sym!(cuGraphLaunch, FnGraphLaunch),
+                    cuStreamBeginCapture: load_sym!(cuStreamBeginCapture, FnStreamBeginCapture),
+                    cuStreamEndCapture: load_sym!(cuStreamEndCapture, FnStreamEndCapture),
                 })
             }
         }

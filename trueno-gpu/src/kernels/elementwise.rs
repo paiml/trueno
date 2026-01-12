@@ -595,6 +595,388 @@ impl Kernel for FusedSwigluKernel {
     }
 }
 
+// ============================================================================
+// PAR-052: KV Cache Scatter Kernels
+// ============================================================================
+
+/// KV Cache Scatter Kernel: Scatter K/V vectors to strided KV cache positions
+///
+/// Used to update KV cache at specific positions without full D2D copies.
+/// Replaces 672+ D2D copies per token with two kernel launches.
+#[derive(Debug, Clone)]
+pub struct KvCacheScatterKernel {
+    /// Number of KV heads
+    pub num_kv_heads: u32,
+    /// Head dimension
+    pub head_dim: u32,
+    /// Maximum sequence length
+    pub max_len: u32,
+}
+
+impl KvCacheScatterKernel {
+    /// Create a new KV cache scatter kernel
+    #[must_use]
+    pub const fn new(num_kv_heads: u32, head_dim: u32, max_len: u32) -> Self {
+        Self { num_kv_heads, head_dim, max_len }
+    }
+}
+
+impl Kernel for KvCacheScatterKernel {
+    fn name(&self) -> &str {
+        "kv_cache_scatter"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        PtxKernel::new("kv_cache_scatter")
+            .param(PtxType::U64, "src_ptr")
+            .param(PtxType::U64, "cache_ptr")
+            .param(PtxType::U32, "pos")
+            .param(PtxType::U32, "head_dim")
+            .param(PtxType::U32, "max_len")
+            .build(|ctx| {
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let ctaid = ctx.special_reg(PtxReg::CtaIdX);
+                let src_ptr = ctx.load_param_u64("src_ptr");
+                let cache_ptr = ctx.load_param_u64("cache_ptr");
+                let pos = ctx.load_param_u32("pos");
+                let head_dim = ctx.load_param_u32("head_dim");
+                let max_len = ctx.load_param_u32("max_len");
+
+                // Each block handles one head, each thread one element
+                let head_idx = ctaid;
+                let elem_idx = tid;
+
+                // Bounds check
+                let in_bounds = ctx.setp_lt_u32(elem_idx, head_dim);
+                ctx.branch_if_not(in_bounds, "exit");
+
+                // Source offset: head_idx * head_dim + elem_idx
+                let src_head_offset = ctx.mul_lo_u32(head_idx, head_dim);
+                let src_offset = ctx.add_u32_reg(src_head_offset, elem_idx);
+                let four = ctx.mov_u32_imm(4);
+                let src_bytes = ctx.mul_lo_u32(src_offset, four);
+                let src_bytes_64 = ctx.cvt_u64_u32(src_bytes);
+                let src_addr = ctx.add_u64(src_ptr, src_bytes_64);
+
+                // Cache offset: (head_idx * max_len + pos) * head_dim + elem_idx
+                let cache_head_stride = ctx.mul_lo_u32(head_idx, max_len);
+                let cache_pos_offset = ctx.add_u32_reg(cache_head_stride, pos);
+                let cache_elem_stride = ctx.mul_lo_u32(cache_pos_offset, head_dim);
+                let cache_offset = ctx.add_u32_reg(cache_elem_stride, elem_idx);
+                let cache_bytes = ctx.mul_lo_u32(cache_offset, four);
+                let cache_bytes_64 = ctx.cvt_u64_u32(cache_bytes);
+                let cache_addr = ctx.add_u64(cache_ptr, cache_bytes_64);
+
+                // Load from source and store to cache
+                let val = ctx.ld_global_f32(src_addr);
+                ctx.st_global_f32(cache_addr, val);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
+/// KV Cache Scatter Indirect Kernel: CUDA Graph compatible version
+///
+/// Reads position from device memory instead of kernel parameter.
+#[derive(Debug, Clone)]
+pub struct KvCacheScatterIndirectKernel {
+    /// Number of KV heads
+    pub num_kv_heads: u32,
+    /// Head dimension
+    pub head_dim: u32,
+    /// Maximum sequence length
+    pub max_len: u32,
+}
+
+impl KvCacheScatterIndirectKernel {
+    /// Create a new indirect KV cache scatter kernel
+    #[must_use]
+    pub const fn new(num_kv_heads: u32, head_dim: u32, max_len: u32) -> Self {
+        Self { num_kv_heads, head_dim, max_len }
+    }
+}
+
+impl Kernel for KvCacheScatterIndirectKernel {
+    fn name(&self) -> &str {
+        "kv_cache_scatter_indirect"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        PtxKernel::new("kv_cache_scatter_indirect")
+            .param(PtxType::U64, "src_ptr")
+            .param(PtxType::U64, "cache_ptr")
+            .param(PtxType::U64, "pos_ptr")  // Indirect: read from device memory
+            .param(PtxType::U32, "head_dim")
+            .param(PtxType::U32, "max_len")
+            .build(|ctx| {
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let ctaid = ctx.special_reg(PtxReg::CtaIdX);
+                let src_ptr = ctx.load_param_u64("src_ptr");
+                let cache_ptr = ctx.load_param_u64("cache_ptr");
+                let pos_ptr = ctx.load_param_u64("pos_ptr");
+                let head_dim = ctx.load_param_u32("head_dim");
+                let max_len = ctx.load_param_u32("max_len");
+
+                // Read position from device memory (indirect)
+                let pos = ctx.ld_global_u32(pos_ptr);
+
+                let head_idx = ctaid;
+                let elem_idx = tid;
+
+                let in_bounds = ctx.setp_lt_u32(elem_idx, head_dim);
+                ctx.branch_if_not(in_bounds, "exit");
+
+                let src_head_offset = ctx.mul_lo_u32(head_idx, head_dim);
+                let src_offset = ctx.add_u32_reg(src_head_offset, elem_idx);
+                let four = ctx.mov_u32_imm(4);
+                let src_bytes = ctx.mul_lo_u32(src_offset, four);
+                let src_bytes_64 = ctx.cvt_u64_u32(src_bytes);
+                let src_addr = ctx.add_u64(src_ptr, src_bytes_64);
+
+                let cache_head_stride = ctx.mul_lo_u32(head_idx, max_len);
+                let cache_pos_offset = ctx.add_u32_reg(cache_head_stride, pos);
+                let cache_elem_stride = ctx.mul_lo_u32(cache_pos_offset, head_dim);
+                let cache_offset = ctx.add_u32_reg(cache_elem_stride, elem_idx);
+                let cache_bytes = ctx.mul_lo_u32(cache_offset, four);
+                let cache_bytes_64 = ctx.cvt_u64_u32(cache_bytes);
+                let cache_addr = ctx.add_u64(cache_ptr, cache_bytes_64);
+
+                let val = ctx.ld_global_f32(src_addr);
+                ctx.st_global_f32(cache_addr, val);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
+// ============================================================================
+// PAR-060: RoPE (Rotary Position Embedding) Kernels
+// ============================================================================
+
+/// RoPE Kernel: Apply rotary position embeddings to Q or K vectors
+#[derive(Debug, Clone)]
+pub struct RopeKernel {
+    /// Number of heads
+    pub num_heads: u32,
+    /// Head dimension
+    pub head_dim: u32,
+    /// Rope theta base (typically 10000.0)
+    pub theta: f32,
+}
+
+impl RopeKernel {
+    /// Create a new RoPE kernel
+    #[must_use]
+    pub fn new(num_heads: u32, head_dim: u32, theta: f32) -> Self {
+        Self { num_heads, head_dim, theta }
+    }
+}
+
+impl Kernel for RopeKernel {
+    fn name(&self) -> &str {
+        "rope"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        let head_dim = self.head_dim;
+        let theta = self.theta;
+        PtxKernel::new("rope")
+            .param(PtxType::U64, "x_ptr")       // Input/output Q or K vectors (in-place)
+            .param(PtxType::U64, "out_ptr")    // Output pointer (can be same as x_ptr)
+            .param(PtxType::U32, "pos")        // Position in sequence
+            .build(move |ctx| {
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let ctaid = ctx.special_reg(PtxReg::CtaIdX);
+                let x_ptr = ctx.load_param_u64("x_ptr");
+                let out_ptr = ctx.load_param_u64("out_ptr");
+                let pos = ctx.load_param_u32("pos");
+
+                // Each block handles one head, threads handle pairs
+                let head_idx = ctaid;
+                let pair_idx = tid;  // Process elements in pairs
+
+                let half_dim = ctx.mov_u32_imm(head_dim / 2);
+                let in_bounds = ctx.setp_lt_u32(pair_idx, half_dim);
+                ctx.branch_if_not(in_bounds, "exit");
+
+                // Calculate element indices for the pair
+                let two = ctx.mov_u32_imm(2);
+                let elem0 = ctx.mul_lo_u32(pair_idx, two);
+                let one = ctx.mov_u32_imm(1);
+                let elem1 = ctx.add_u32_reg(elem0, one);
+
+                // X offset: head_idx * head_dim + elem
+                let dim = ctx.mov_u32_imm(head_dim);
+                let head_offset = ctx.mul_lo_u32(head_idx, dim);
+                let offset0 = ctx.add_u32_reg(head_offset, elem0);
+                let offset1 = ctx.add_u32_reg(head_offset, elem1);
+
+                let four = ctx.mov_u32_imm(4);
+                let bytes0 = ctx.mul_lo_u32(offset0, four);
+                let bytes1 = ctx.mul_lo_u32(offset1, four);
+                let bytes0_64 = ctx.cvt_u64_u32(bytes0);
+                let bytes1_64 = ctx.cvt_u64_u32(bytes1);
+                let addr0 = ctx.add_u64(x_ptr, bytes0_64);
+                let addr1 = ctx.add_u64(x_ptr, bytes1_64);
+                let out_addr0 = ctx.add_u64(out_ptr, bytes0_64);
+                let out_addr1 = ctx.add_u64(out_ptr, bytes1_64);
+
+                // Load x values
+                let x0 = ctx.ld_global_f32(addr0);
+                let x1 = ctx.ld_global_f32(addr1);
+
+                // Compute frequency on-the-fly: freq = 1.0 / (theta^(2*pair_idx/head_dim))
+                // = theta^(-2*pair_idx/head_dim)
+                // exp(-2*pair_idx/head_dim * log(theta))
+                // Using: theta^x = 2^(x * log2(theta))
+                let pair_f32 = ctx.cvt_f32_u32(pair_idx);
+                let dim_f32 = ctx.mov_f32_imm(head_dim as f32);
+                let neg_two = ctx.mov_f32_imm(-2.0);
+                let exponent = ctx.mul_f32(pair_f32, neg_two);
+                let exponent_scaled = ctx.div_f32(exponent, dim_f32);
+                let log2_theta = ctx.mov_f32_imm(theta.log2());
+                let power = ctx.mul_f32(exponent_scaled, log2_theta);
+                let freq_base = ctx.ex2_f32(power);
+
+                // angle = position * freq_base
+                let pos_f32 = ctx.cvt_f32_u32(pos);
+                let angle = ctx.mul_f32(pos_f32, freq_base);
+
+                // Compute sin and cos using PTX approximations
+                let cos_val = ctx.cos_f32(angle);
+                let sin_val = ctx.sin_f32(angle);
+
+                // Apply rotation: (x0 * cos - x1 * sin, x0 * sin + x1 * cos)
+                let x0_cos = ctx.mul_f32(x0, cos_val);
+                let x1_sin = ctx.mul_f32(x1, sin_val);
+                let new_x0 = ctx.sub_f32(x0_cos, x1_sin);
+
+                let x0_sin = ctx.mul_f32(x0, sin_val);
+                let x1_cos = ctx.mul_f32(x1, cos_val);
+                let new_x1 = ctx.add_f32(x0_sin, x1_cos);
+
+                // Store results
+                ctx.st_global_f32(out_addr0, new_x0);
+                ctx.st_global_f32(out_addr1, new_x1);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
+/// RoPE Indirect Kernel: CUDA Graph compatible version
+#[derive(Debug, Clone)]
+pub struct RopeIndirectKernel {
+    /// Number of heads
+    pub num_heads: u32,
+    /// Head dimension
+    pub head_dim: u32,
+    /// Rope theta base (typically 10000.0)
+    pub theta: f32,
+}
+
+impl RopeIndirectKernel {
+    /// Create a new indirect RoPE kernel
+    #[must_use]
+    pub fn new(num_heads: u32, head_dim: u32, theta: f32) -> Self {
+        Self { num_heads, head_dim, theta }
+    }
+}
+
+impl Kernel for RopeIndirectKernel {
+    fn name(&self) -> &str {
+        "rope_indirect"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        let head_dim = self.head_dim;
+        let theta = self.theta;
+        PtxKernel::new("rope_indirect")
+            .param(PtxType::U64, "x_ptr")       // Input/output Q or K vectors (in-place)
+            .param(PtxType::U64, "out_ptr")    // Output pointer (can be same as x_ptr)
+            .param(PtxType::U64, "pos_ptr")    // Indirect: read position from device memory
+            .build(move |ctx| {
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let ctaid = ctx.special_reg(PtxReg::CtaIdX);
+                let x_ptr = ctx.load_param_u64("x_ptr");
+                let out_ptr = ctx.load_param_u64("out_ptr");
+                let pos_ptr = ctx.load_param_u64("pos_ptr");
+
+                // Read position from device memory (indirect - allows CUDA graph replay)
+                let pos = ctx.ld_global_u32(pos_ptr);
+
+                let head_idx = ctaid;
+                let pair_idx = tid;
+
+                let half_dim = ctx.mov_u32_imm(head_dim / 2);
+                let in_bounds = ctx.setp_lt_u32(pair_idx, half_dim);
+                ctx.branch_if_not(in_bounds, "exit");
+
+                let two = ctx.mov_u32_imm(2);
+                let elem0 = ctx.mul_lo_u32(pair_idx, two);
+                let one = ctx.mov_u32_imm(1);
+                let elem1 = ctx.add_u32_reg(elem0, one);
+
+                let dim = ctx.mov_u32_imm(head_dim);
+                let head_offset = ctx.mul_lo_u32(head_idx, dim);
+                let offset0 = ctx.add_u32_reg(head_offset, elem0);
+                let offset1 = ctx.add_u32_reg(head_offset, elem1);
+
+                let four = ctx.mov_u32_imm(4);
+                let bytes0 = ctx.mul_lo_u32(offset0, four);
+                let bytes1 = ctx.mul_lo_u32(offset1, four);
+                let bytes0_64 = ctx.cvt_u64_u32(bytes0);
+                let bytes1_64 = ctx.cvt_u64_u32(bytes1);
+                let addr0 = ctx.add_u64(x_ptr, bytes0_64);
+                let addr1 = ctx.add_u64(x_ptr, bytes1_64);
+                let out_addr0 = ctx.add_u64(out_ptr, bytes0_64);
+                let out_addr1 = ctx.add_u64(out_ptr, bytes1_64);
+
+                let x0 = ctx.ld_global_f32(addr0);
+                let x1 = ctx.ld_global_f32(addr1);
+
+                // Compute frequency on-the-fly: freq = 1.0 / (theta^(2*pair_idx/head_dim))
+                // = theta^(-2*pair_idx/head_dim)
+                // Using: theta^x = 2^(x * log2(theta))
+                let pair_f32 = ctx.cvt_f32_u32(pair_idx);
+                let dim_f32 = ctx.mov_f32_imm(head_dim as f32);
+                let neg_two = ctx.mov_f32_imm(-2.0);
+                let exponent = ctx.mul_f32(pair_f32, neg_two);
+                let exponent_scaled = ctx.div_f32(exponent, dim_f32);
+                let log2_theta = ctx.mov_f32_imm(theta.log2());
+                let power = ctx.mul_f32(exponent_scaled, log2_theta);
+                let freq_base = ctx.ex2_f32(power);
+
+                // angle = position * freq_base
+                let pos_f32 = ctx.cvt_f32_u32(pos);
+                let angle = ctx.mul_f32(pos_f32, freq_base);
+
+                // Compute sin and cos using PTX approximations
+                let cos_val = ctx.cos_f32(angle);
+                let sin_val = ctx.sin_f32(angle);
+
+                // Apply rotation: (x0 * cos - x1 * sin, x0 * sin + x1 * cos)
+                let x0_cos = ctx.mul_f32(x0, cos_val);
+                let x1_sin = ctx.mul_f32(x1, sin_val);
+                let new_x0 = ctx.sub_f32(x0_cos, x1_sin);
+
+                let x0_sin = ctx.mul_f32(x0, sin_val);
+                let x1_cos = ctx.mul_f32(x1, cos_val);
+                let new_x1 = ctx.add_f32(x0_sin, x1_cos);
+
+                ctx.st_global_f32(out_addr0, new_x0);
+                ctx.st_global_f32(out_addr1, new_x1);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
