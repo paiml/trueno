@@ -11,6 +11,9 @@ keywords = ["cuda", "ptx", "gpu", "simd", "nvidia"]
 categories = ["algorithms", "mathematics", "science"]
 
 [dependencies]
+# NOTE: trueno-gpu does NOT depend on trueno (would create cycle)
+# ComputeBrick is available from trueno crate directly
+# Users: `use trueno::brick::{ComputeBrick, ComputeBackend};`
 thiserror = "2.0"
 # Dynamic library loading for libcuda.so/nvcuda.dll
 # OWN THE STACK: We write our own CUDA FFI in driver/sys.rs (~400 lines)
