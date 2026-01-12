@@ -112,14 +112,17 @@ impl Kernel for ArgMaxKernel {
                 // This avoids SSA issues with undefined registers on skipped branches.
 
                 // First, store initial values to shared memory
+                // PAR-068-FIX: Use generic ld/st since shared_ptr() returns generic address
+                // (via cvta.to.shared). Using ld.shared/st.shared with generic addresses
+                // causes CUDA_ERROR_UNKNOWN.
                 let sh_val_offset = ctx.mul_wide_u32(tid, 4);
                 let sh_val_addr = ctx.add_u64(shared_base, sh_val_offset);
-                ctx.st_shared_f32(sh_val_addr, local_max);
+                ctx.st_generic_f32(sh_val_addr, local_max);
 
                 let offset_1024 = ctx.mov_u64_imm(1024);
                 let idx_base = ctx.add_u64(shared_base, offset_1024);
                 let sh_idx_addr = ctx.add_u64(idx_base, sh_val_offset);
-                ctx.st_shared_u32(sh_idx_addr, local_idx);
+                ctx.st_generic_u32(sh_idx_addr, local_idx);
 
                 // Process each element, updating shared memory as we go
                 for i in 0..4u32 {
@@ -135,18 +138,18 @@ impl Kernel for ArgMaxKernel {
                     let addr = ctx.add_u64(input_ptr, byte_offset);
                     let val = ctx.ld_global_f32(addr);
 
-                    // Load current best from shared memory
-                    let cur_max = ctx.ld_shared_f32(sh_val_addr);
-                    let cur_idx = ctx.ld_shared_u32(sh_idx_addr);
+                    // Load current best from shared memory (generic addressing)
+                    let cur_max = ctx.ld_generic_f32(sh_val_addr);
+                    let cur_idx = ctx.ld_generic_u32(sh_idx_addr);
 
                     // Update if this value is greater
                     let is_greater = ctx.setp_gt_f32(val, cur_max);
                     let new_max = ctx.selp_f32(is_greater, val, cur_max);
                     let new_idx = ctx.selp_u32(is_greater, idx, cur_idx);
 
-                    // Store updated values back to shared memory
-                    ctx.st_shared_f32(sh_val_addr, new_max);
-                    ctx.st_shared_u32(sh_idx_addr, new_idx);
+                    // Store updated values back to shared memory (generic addressing)
+                    ctx.st_generic_f32(sh_val_addr, new_max);
+                    ctx.st_generic_u32(sh_idx_addr, new_idx);
 
                     ctx.label(&format!("skip_load_{}", i));
                 }
@@ -160,28 +163,28 @@ impl Kernel for ArgMaxKernel {
                 let is_active_128 = ctx.setp_lt_u32(tid, stride_128);
                 ctx.branch_if_not(is_active_128, "skip_reduce_128");
                 {
-                    // Load other value from tid + 128
+                    // Load other value from tid + 128 (generic addressing)
                     let other_tid = ctx.add_u32_reg(tid, stride_128);
                     let other_off = ctx.mul_wide_u32(other_tid, 4);
                     let other_val_addr = ctx.add_u64(shared_base, other_off);
-                    let other_val = ctx.ld_shared_f32(other_val_addr);
+                    let other_val = ctx.ld_generic_f32(other_val_addr);
                     let other_idx_addr = ctx.add_u64(idx_base, other_off);
-                    let other_idx = ctx.ld_shared_u32(other_idx_addr);
+                    let other_idx = ctx.ld_generic_u32(other_idx_addr);
 
-                    let my_val = ctx.ld_shared_f32(sh_val_addr);
-                    let my_idx = ctx.ld_shared_u32(sh_idx_addr);
+                    let my_val = ctx.ld_generic_f32(sh_val_addr);
+                    let my_idx = ctx.ld_generic_u32(sh_idx_addr);
 
                     let is_greater = ctx.setp_gt_f32(other_val, my_val);
                     let new_val = ctx.selp_f32(is_greater, other_val, my_val);
                     let new_idx = ctx.selp_u32(is_greater, other_idx, my_idx);
 
-                    ctx.st_shared_f32(sh_val_addr, new_val);
-                    ctx.st_shared_u32(sh_idx_addr, new_idx);
+                    ctx.st_generic_f32(sh_val_addr, new_val);
+                    ctx.st_generic_u32(sh_idx_addr, new_idx);
                 }
                 ctx.label("skip_reduce_128");
                 ctx.bar_sync(0);
 
-                // Continue reduction for smaller strides
+                // Continue reduction for smaller strides (generic addressing)
                 for stride in [64u32, 32, 16, 8, 4, 2, 1] {
                     let stride_reg = ctx.const_u32(stride);
                     let is_active = ctx.setp_lt_u32(tid, stride_reg);
@@ -190,19 +193,19 @@ impl Kernel for ArgMaxKernel {
                         let other_tid = ctx.add_u32_reg(tid, stride_reg);
                         let other_off = ctx.mul_wide_u32(other_tid, 4);
                         let other_val_addr = ctx.add_u64(shared_base, other_off);
-                        let other_val = ctx.ld_shared_f32(other_val_addr);
+                        let other_val = ctx.ld_generic_f32(other_val_addr);
                         let other_idx_addr = ctx.add_u64(idx_base, other_off);
-                        let other_idx = ctx.ld_shared_u32(other_idx_addr);
+                        let other_idx = ctx.ld_generic_u32(other_idx_addr);
 
-                        let my_val = ctx.ld_shared_f32(sh_val_addr);
-                        let my_idx = ctx.ld_shared_u32(sh_idx_addr);
+                        let my_val = ctx.ld_generic_f32(sh_val_addr);
+                        let my_idx = ctx.ld_generic_u32(sh_idx_addr);
 
                         let is_greater = ctx.setp_gt_f32(other_val, my_val);
                         let new_val = ctx.selp_f32(is_greater, other_val, my_val);
                         let new_idx = ctx.selp_u32(is_greater, other_idx, my_idx);
 
-                        ctx.st_shared_f32(sh_val_addr, new_val);
-                        ctx.st_shared_u32(sh_idx_addr, new_idx);
+                        ctx.st_generic_f32(sh_val_addr, new_val);
+                        ctx.st_generic_u32(sh_idx_addr, new_idx);
                     }
                     ctx.label(&format!("skip_reduce_{}", stride));
                     ctx.bar_sync(0);
@@ -214,9 +217,9 @@ impl Kernel for ArgMaxKernel {
                 ctx.branch_if_not(is_thread_0, "exit");
 
                 // Load final result from shared memory (offset 0 = thread 0's result)
-                // Note: shared_base already points to the start of shared memory
-                let final_val = ctx.ld_shared_f32(shared_base);
-                let final_idx = ctx.ld_shared_u32(idx_base);
+                // Note: shared_base already points to the start of shared memory (generic address)
+                let final_val = ctx.ld_generic_f32(shared_base);
+                let final_idx = ctx.ld_generic_u32(idx_base);
 
                 // Write to block output arrays
                 let bid_offset = ctx.mul_wide_u32(bid, 4);
@@ -285,9 +288,10 @@ impl Kernel for ArgMaxFinalKernel {
                 let sh_val_addr = ctx.add_u64(shared_base, sh_off);
                 let sh_idx_addr = ctx.add_u64(idx_base, sh_off);
 
-                // First, all threads store defaults to shared memory
-                ctx.st_shared_f32(sh_val_addr, neg_inf);
-                ctx.st_shared_u32(sh_idx_addr, zero_idx);
+                // First, all threads store defaults to shared memory (generic addressing)
+                // PAR-068-FIX: Use generic ld/st since shared_ptr() returns generic address
+                ctx.st_generic_f32(sh_val_addr, neg_inf);
+                ctx.st_generic_u32(sh_idx_addr, zero_idx);
 
                 // Only in-bounds threads load and update
                 ctx.branch_if_not(in_bounds, "skip_final_load");
@@ -299,15 +303,15 @@ impl Kernel for ArgMaxFinalKernel {
                 let loaded_val = ctx.ld_global_f32(val_addr);
                 let loaded_idx = ctx.ld_global_u32(idx_addr);
 
-                // Store loaded values to shared
-                ctx.st_shared_f32(sh_val_addr, loaded_val);
-                ctx.st_shared_u32(sh_idx_addr, loaded_idx);
+                // Store loaded values to shared (generic addressing)
+                ctx.st_generic_f32(sh_val_addr, loaded_val);
+                ctx.st_generic_u32(sh_idx_addr, loaded_idx);
 
                 ctx.label("skip_final_load");
 
                 ctx.bar_sync(0);
 
-                // Tree reduction
+                // Tree reduction (generic addressing)
                 for stride in [128u32, 64, 32, 16, 8, 4, 2, 1] {
                     let stride_reg = ctx.const_u32(stride);
                     let is_active = ctx.setp_lt_u32(tid, stride_reg);
@@ -316,19 +320,19 @@ impl Kernel for ArgMaxFinalKernel {
                         let other_tid = ctx.add_u32_reg(tid, stride_reg);
                         let other_off = ctx.mul_wide_u32(other_tid, 4);
                         let other_val_addr = ctx.add_u64(shared_base, other_off);
-                        let other_val = ctx.ld_shared_f32(other_val_addr);
+                        let other_val = ctx.ld_generic_f32(other_val_addr);
                         let other_idx_addr = ctx.add_u64(idx_base, other_off);
-                        let other_idx = ctx.ld_shared_u32(other_idx_addr);
+                        let other_idx = ctx.ld_generic_u32(other_idx_addr);
 
-                        let my_val = ctx.ld_shared_f32(sh_val_addr);
-                        let my_idx = ctx.ld_shared_u32(sh_idx_addr);
+                        let my_val = ctx.ld_generic_f32(sh_val_addr);
+                        let my_idx = ctx.ld_generic_u32(sh_idx_addr);
 
                         let is_greater = ctx.setp_gt_f32(other_val, my_val);
                         let new_val = ctx.selp_f32(is_greater, other_val, my_val);
                         let new_idx = ctx.selp_u32(is_greater, other_idx, my_idx);
 
-                        ctx.st_shared_f32(sh_val_addr, new_val);
-                        ctx.st_shared_u32(sh_idx_addr, new_idx);
+                        ctx.st_generic_f32(sh_val_addr, new_val);
+                        ctx.st_generic_u32(sh_idx_addr, new_idx);
                     }
                     ctx.label(&format!("final_skip_{}", stride));
                     ctx.bar_sync(0);
@@ -340,7 +344,7 @@ impl Kernel for ArgMaxFinalKernel {
                 ctx.branch_if_not(is_zero, "final_exit");
 
                 // Load result from shared memory index base (offset 0 = thread 0's result)
-                let result = ctx.ld_shared_u32(idx_base);
+                let result = ctx.ld_generic_u32(idx_base);
                 ctx.st_global_u32(output_idx, result);
 
                 ctx.label("final_exit");
