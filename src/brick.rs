@@ -1107,6 +1107,300 @@ impl BrickLayer {
     }
 }
 
+// ============================================================================
+// BrickProfiler: FOUNDATIONAL Real-Time Per-Brick Timing (PAR-073)
+// ============================================================================
+
+/// Individual brick timing sample.
+/// Pure Rust timing using `std::time::Instant`.
+#[derive(Debug, Clone, Copy)]
+pub struct BrickSample {
+    /// Brick name hash (for fast lookup)
+    pub brick_id: u64,
+    /// Elapsed time in nanoseconds
+    pub elapsed_ns: u64,
+    /// Number of elements processed
+    pub elements: u64,
+}
+
+/// Accumulated per-brick statistics.
+#[derive(Debug, Clone, Default)]
+pub struct BrickStats {
+    /// Brick name
+    pub name: String,
+    /// Total samples collected
+    pub count: u64,
+    /// Total elapsed time (nanoseconds)
+    pub total_ns: u64,
+    /// Min elapsed time (nanoseconds)
+    pub min_ns: u64,
+    /// Max elapsed time (nanoseconds)
+    pub max_ns: u64,
+    /// Total elements processed
+    pub total_elements: u64,
+}
+
+impl BrickStats {
+    /// Create new stats for a brick.
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            count: 0,
+            total_ns: 0,
+            min_ns: u64::MAX,
+            max_ns: 0,
+            total_elements: 0,
+        }
+    }
+
+    /// Add a sample to statistics.
+    pub fn add_sample(&mut self, elapsed_ns: u64, elements: u64) {
+        self.count += 1;
+        self.total_ns += elapsed_ns;
+        self.min_ns = self.min_ns.min(elapsed_ns);
+        self.max_ns = self.max_ns.max(elapsed_ns);
+        self.total_elements += elements;
+    }
+
+    /// Average time in microseconds.
+    #[must_use]
+    pub fn avg_us(&self) -> f64 {
+        if self.count == 0 {
+            0.0
+        } else {
+            self.total_ns as f64 / self.count as f64 / 1000.0
+        }
+    }
+
+    /// Throughput in elements/second.
+    #[must_use]
+    pub fn throughput(&self) -> f64 {
+        if self.total_ns == 0 {
+            0.0
+        } else {
+            self.total_elements as f64 / (self.total_ns as f64 / 1_000_000_000.0)
+        }
+    }
+
+    /// Throughput in tokens/second (alias for throughput).
+    #[must_use]
+    pub fn tokens_per_sec(&self) -> f64 {
+        self.throughput()
+    }
+}
+
+/// Per-brick profiler using pure Rust timing.
+///
+/// # Design (PAR-073)
+///
+/// - Uses `std::time::Instant` for timing (no CUDA event FFI)
+/// - GPU operations require explicit sync before timing point
+/// - Thread-safe for multi-threaded profiling
+/// - Aggregates statistics per brick name
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// use trueno::brick::BrickProfiler;
+///
+/// let mut profiler = BrickProfiler::new();
+///
+/// // Start timing a brick
+/// let timer = profiler.start("RmsNorm");
+/// // ... do work ...
+/// // For GPU: cuda_stream.synchronize() HERE
+/// profiler.stop(timer, 1); // 1 token processed
+///
+/// // Get statistics
+/// let stats = profiler.stats("RmsNorm");
+/// println!("RmsNorm avg: {:.2}µs", stats.avg_us());
+/// ```
+#[derive(Debug, Default)]
+pub struct BrickProfiler {
+    /// Per-brick statistics
+    stats: std::collections::HashMap<String, BrickStats>,
+    /// Whether profiling is enabled
+    enabled: bool,
+    /// Total tokens processed
+    total_tokens: u64,
+    /// Total time (ns) across all bricks
+    total_ns: u64,
+}
+
+/// Timer handle returned by `start()`.
+#[derive(Debug)]
+pub struct BrickTimer {
+    /// Brick name
+    name: String,
+    /// Start time
+    start: Instant,
+}
+
+impl BrickProfiler {
+    /// Create a new profiler (disabled by default for zero overhead).
+    pub fn new() -> Self {
+        Self {
+            stats: std::collections::HashMap::new(),
+            enabled: false,
+            total_tokens: 0,
+            total_ns: 0,
+        }
+    }
+
+    /// Create an enabled profiler.
+    pub fn enabled() -> Self {
+        Self {
+            stats: std::collections::HashMap::new(),
+            enabled: true,
+            total_tokens: 0,
+            total_ns: 0,
+        }
+    }
+
+    /// Enable profiling.
+    pub fn enable(&mut self) {
+        self.enabled = true;
+    }
+
+    /// Disable profiling.
+    pub fn disable(&mut self) {
+        self.enabled = false;
+    }
+
+    /// Check if profiling is enabled.
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// Start timing a brick. Returns timer handle.
+    ///
+    /// IMPORTANT: For GPU operations, call sync AFTER the operation
+    /// completes but BEFORE calling stop().
+    #[must_use]
+    pub fn start(&self, name: &str) -> BrickTimer {
+        BrickTimer {
+            name: name.to_string(),
+            start: Instant::now(),
+        }
+    }
+
+    /// Stop timing and record the sample.
+    ///
+    /// # Arguments
+    /// - `timer`: Timer handle from `start()`
+    /// - `elements`: Number of elements (tokens) processed
+    pub fn stop(&mut self, timer: BrickTimer, elements: u64) {
+        if !self.enabled {
+            return;
+        }
+
+        let elapsed = timer.start.elapsed();
+        let elapsed_ns = elapsed.as_nanos() as u64;
+
+        // Update per-brick stats
+        let name = timer.name;
+        let stats = self.stats.entry(name.clone()).or_insert_with(|| {
+            BrickStats::new(&name)
+        });
+        stats.add_sample(elapsed_ns, elements);
+
+        // Update totals
+        self.total_tokens += elements;
+        self.total_ns += elapsed_ns;
+    }
+
+    /// Get statistics for a specific brick.
+    #[must_use]
+    pub fn stats(&self, name: &str) -> Option<&BrickStats> {
+        self.stats.get(name)
+    }
+
+    /// Get all brick statistics.
+    #[must_use]
+    pub fn all_stats(&self) -> &std::collections::HashMap<String, BrickStats> {
+        &self.stats
+    }
+
+    /// Get total throughput across all bricks.
+    #[must_use]
+    pub fn total_throughput(&self) -> f64 {
+        if self.total_ns == 0 {
+            0.0
+        } else {
+            self.total_tokens as f64 / (self.total_ns as f64 / 1_000_000_000.0)
+        }
+    }
+
+    /// Get total tokens processed.
+    #[must_use]
+    pub fn total_tokens(&self) -> u64 {
+        self.total_tokens
+    }
+
+    /// Reset all statistics.
+    pub fn reset(&mut self) {
+        self.stats.clear();
+        self.total_tokens = 0;
+        self.total_ns = 0;
+    }
+
+    /// Generate a summary report.
+    #[must_use]
+    pub fn summary(&self) -> String {
+        let mut report = String::new();
+        report.push_str("=== Brick Profiler Summary ===\n");
+        report.push_str(&format!(
+            "Total: {} tokens, {:.2}µs, {:.1} tok/s\n",
+            self.total_tokens,
+            self.total_ns as f64 / 1000.0,
+            self.total_throughput()
+        ));
+        report.push_str("\nPer-Brick Breakdown:\n");
+
+        // Sort by total time descending
+        let mut sorted: Vec<_> = self.stats.iter().collect();
+        sorted.sort_by(|a, b| b.1.total_ns.cmp(&a.1.total_ns));
+
+        for (name, stats) in sorted {
+            let pct = if self.total_ns > 0 {
+                100.0 * stats.total_ns as f64 / self.total_ns as f64
+            } else {
+                0.0
+            };
+            report.push_str(&format!(
+                "  {:20} {:8.2}µs avg ({:5.1}%) [{} samples]\n",
+                name,
+                stats.avg_us(),
+                pct,
+                stats.count
+            ));
+        }
+
+        report
+    }
+}
+
+/// Macro for convenient brick timing with automatic sync.
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// time_brick!(profiler, "RmsNorm", 1, {
+///     rmsnorm_kernel.launch();
+///     stream.synchronize(); // REQUIRED for GPU
+/// });
+/// ```
+#[macro_export]
+macro_rules! time_brick {
+    ($profiler:expr, $name:expr, $elements:expr, $body:block) => {{
+        let timer = $profiler.start($name);
+        let result = $body;
+        $profiler.stop(timer, $elements);
+        result
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1832,5 +2126,181 @@ mod tests {
         let debug_str = format!("{:?}", op);
         assert!(debug_str.contains("FusedGateUpOp"));
         assert!(debug_str.contains("1024"));
+    }
+
+    // ========================================================================
+    // BrickProfiler Tests (PAR-073)
+    // ========================================================================
+
+    #[test]
+    fn test_brick_profiler_disabled_by_default() {
+        let profiler = BrickProfiler::new();
+        assert!(!profiler.is_enabled());
+    }
+
+    #[test]
+    fn test_brick_profiler_enabled_constructor() {
+        let profiler = BrickProfiler::enabled();
+        assert!(profiler.is_enabled());
+    }
+
+    #[test]
+    fn test_brick_profiler_enable_disable() {
+        let mut profiler = BrickProfiler::new();
+        assert!(!profiler.is_enabled());
+        profiler.enable();
+        assert!(profiler.is_enabled());
+        profiler.disable();
+        assert!(!profiler.is_enabled());
+    }
+
+    #[test]
+    fn test_brick_profiler_timing() {
+        let mut profiler = BrickProfiler::enabled();
+
+        // Time a simple operation
+        let timer = profiler.start("TestBrick");
+        std::thread::sleep(std::time::Duration::from_micros(100));
+        profiler.stop(timer, 1);
+
+        // Verify stats were recorded
+        let stats = profiler.stats("TestBrick").expect("stats should exist");
+        assert_eq!(stats.count, 1);
+        assert!(stats.avg_us() >= 50.0); // Should be at least 50µs (sleep + overhead)
+        assert_eq!(stats.total_elements, 1);
+    }
+
+    #[test]
+    fn test_brick_profiler_multiple_samples() {
+        let mut profiler = BrickProfiler::enabled();
+
+        for _ in 0..10 {
+            let timer = profiler.start("MultiBrick");
+            // Small busy loop
+            let mut sum = 0u64;
+            for i in 0..1000 {
+                sum = sum.wrapping_add(i);
+            }
+            let _ = sum; // Prevent optimization
+            profiler.stop(timer, 1);
+        }
+
+        let stats = profiler.stats("MultiBrick").expect("stats should exist");
+        assert_eq!(stats.count, 10);
+        assert_eq!(stats.total_elements, 10);
+    }
+
+    #[test]
+    fn test_brick_profiler_multiple_bricks() {
+        let mut profiler = BrickProfiler::enabled();
+
+        let timer = profiler.start("BrickA");
+        profiler.stop(timer, 1);
+
+        let timer = profiler.start("BrickB");
+        profiler.stop(timer, 2);
+
+        assert!(profiler.stats("BrickA").is_some());
+        assert!(profiler.stats("BrickB").is_some());
+        assert_eq!(profiler.total_tokens(), 3);
+    }
+
+    #[test]
+    fn test_brick_profiler_disabled_no_record() {
+        let mut profiler = BrickProfiler::new(); // Disabled by default
+
+        let timer = profiler.start("DisabledBrick");
+        profiler.stop(timer, 1);
+
+        // Should not record anything when disabled
+        assert!(profiler.stats("DisabledBrick").is_none());
+        assert_eq!(profiler.total_tokens(), 0);
+    }
+
+    #[test]
+    fn test_brick_profiler_reset() {
+        let mut profiler = BrickProfiler::enabled();
+
+        let timer = profiler.start("ResetBrick");
+        profiler.stop(timer, 5);
+
+        assert_eq!(profiler.total_tokens(), 5);
+
+        profiler.reset();
+
+        assert_eq!(profiler.total_tokens(), 0);
+        assert!(profiler.stats("ResetBrick").is_none());
+    }
+
+    #[test]
+    fn test_brick_profiler_summary() {
+        let mut profiler = BrickProfiler::enabled();
+
+        let timer = profiler.start("SummaryBrick");
+        profiler.stop(timer, 10);
+
+        let summary = profiler.summary();
+        assert!(summary.contains("Brick Profiler Summary"));
+        assert!(summary.contains("SummaryBrick"));
+        assert!(summary.contains("10 tokens"));
+    }
+
+    #[test]
+    fn test_brick_stats_new() {
+        let stats = BrickStats::new("TestStats");
+        assert_eq!(stats.name, "TestStats");
+        assert_eq!(stats.count, 0);
+        assert_eq!(stats.total_ns, 0);
+        assert_eq!(stats.min_ns, u64::MAX);
+        assert_eq!(stats.max_ns, 0);
+    }
+
+    #[test]
+    fn test_brick_stats_add_sample() {
+        let mut stats = BrickStats::new("Test");
+        stats.add_sample(1000, 1); // 1µs
+        stats.add_sample(2000, 1); // 2µs
+        stats.add_sample(3000, 1); // 3µs
+
+        assert_eq!(stats.count, 3);
+        assert_eq!(stats.total_ns, 6000);
+        assert_eq!(stats.min_ns, 1000);
+        assert_eq!(stats.max_ns, 3000);
+        assert_eq!(stats.total_elements, 3);
+        assert!((stats.avg_us() - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_brick_stats_throughput() {
+        let mut stats = BrickStats::new("Throughput");
+        // 1000 elements in 1ms = 1,000,000 elements/sec
+        stats.add_sample(1_000_000, 1000); // 1ms, 1000 elements
+
+        let throughput = stats.throughput();
+        assert!((throughput - 1_000_000.0).abs() < 1000.0);
+    }
+
+    #[test]
+    fn test_brick_timer_debug() {
+        let timer = BrickTimer {
+            name: "DebugTimer".to_string(),
+            start: Instant::now(),
+        };
+        let debug_str = format!("{:?}", timer);
+        assert!(debug_str.contains("BrickTimer"));
+        assert!(debug_str.contains("DebugTimer"));
+    }
+
+    #[test]
+    fn test_brick_sample_clone() {
+        let sample = BrickSample {
+            brick_id: 42,
+            elapsed_ns: 1000,
+            elements: 5,
+        };
+        let cloned = sample;
+        assert_eq!(cloned.brick_id, 42);
+        assert_eq!(cloned.elapsed_ns, 1000);
+        assert_eq!(cloned.elements, 5);
     }
 }
