@@ -2117,173 +2117,153 @@ impl Kernel for CoalescedQ6KGemvKernel {
                 let d = ctx.cvt_f32_f16(d_f16);
 
                 // ========================================================
-                // PAR-066 OPTIMIZATION: Vectorized scale loading
-                // Load all 16 scales (bytes 192-207) as 4 x u32 via lane 0
+                // PAR-066 OPTIMIZATION: Byte-wise scale loading + warp shuffle
+                // Q6K super-blocks are 210 bytes (NOT 4-byte aligned!)
+                // So we use byte loads + warp shuffle to share scales
+                // Lanes 0-15 each load one scale byte, then broadcast via shuffle
                 // ========================================================
                 let scales_base_offset = ctx.mov_u64_imm(192);
                 let scales_base = ctx.add_u64(sb_addr, scales_base_offset);
 
-                // Only lane 0 loads scales
-                let one = ctx.mov_u32_imm(1);
-                let is_lane0 = ctx.setp_lt_u32(lane_id, one);
+                // Each of lanes 0-15 loads one scale byte
+                // Lanes 16-31 will get their values via warp shuffle
+                let lane_mod_16 = ctx.rem_u32(lane_id, 16);
+                let lane_offset = ctx.cvt_u64_u32(lane_mod_16);
+                let scale_addr = ctx.add_u64(scales_base, lane_offset);
 
-                // Initialize scale registers
-                let scales_0_3 = ctx.mov_u32_imm(0);
-                let scales_4_7 = ctx.mov_u32_imm(0);
-                let scales_8_11 = ctx.mov_u32_imm(0);
-                let scales_12_15 = ctx.mov_u32_imm(0);
-
-                ctx.branch_if_not(is_lane0, "skip_scale_load");
-
-                // Lane 0: Load 16 bytes as 4 x u32
-                ctx.ld_global_u32_into(scales_0_3, scales_base);
-                let four_64 = ctx.mov_u64_imm(4);
-                let scales_4_addr = ctx.add_u64(scales_base, four_64);
-                ctx.ld_global_u32_into(scales_4_7, scales_4_addr);
-                let eight_64 = ctx.mov_u64_imm(8);
-                let scales_8_addr = ctx.add_u64(scales_base, eight_64);
-                ctx.ld_global_u32_into(scales_8_11, scales_8_addr);
-                let twelve_64 = ctx.mov_u64_imm(12);
-                let scales_12_addr = ctx.add_u64(scales_base, twelve_64);
-                ctx.ld_global_u32_into(scales_12_15, scales_12_addr);
-
+                // Load scale byte for this lane (lanes 0-15) or 0 (lanes 16-31)
+                let my_scale_byte = ctx.mov_u32_imm(0);
+                let sixteen_const = ctx.mov_u32_imm(16);
+                let is_low_lane = ctx.setp_lt_u32(lane_id, sixteen_const);
+                ctx.branch_if_not(is_low_lane, "skip_scale_load");
+                let scale_u8 = ctx.ld_global_u8(scale_addr);
+                let scale_u32 = ctx.cvt_u32_u8(scale_u8);
+                ctx.mov_u32_reg(my_scale_byte, scale_u32);
                 ctx.label("skip_scale_load");
 
-                // Broadcast scales from lane 0 to all lanes
-                let scales_0_3_bcast = ctx.shfl_idx_u32(scales_0_3, 0, 0xFFFF_FFFF);
-                let scales_4_7_bcast = ctx.shfl_idx_u32(scales_4_7, 0, 0xFFFF_FFFF);
-                let scales_8_11_bcast = ctx.shfl_idx_u32(scales_8_11, 0, 0xFFFF_FFFF);
-                let scales_12_15_bcast = ctx.shfl_idx_u32(scales_12_15, 0, 0xFFFF_FFFF);
+                // Broadcast all 16 scales via warp shuffle
+                // Each lane gets scale[0..15] by shuffling from lanes 0..15
+                let s0_u32 = ctx.shfl_idx_u32(my_scale_byte, 0, 0xFFFF_FFFF);
+                let s1_u32 = ctx.shfl_idx_u32(my_scale_byte, 1, 0xFFFF_FFFF);
+                let s2_u32 = ctx.shfl_idx_u32(my_scale_byte, 2, 0xFFFF_FFFF);
+                let s3_u32 = ctx.shfl_idx_u32(my_scale_byte, 3, 0xFFFF_FFFF);
+                let s4_u32 = ctx.shfl_idx_u32(my_scale_byte, 4, 0xFFFF_FFFF);
+                let s5_u32 = ctx.shfl_idx_u32(my_scale_byte, 5, 0xFFFF_FFFF);
+                let s6_u32 = ctx.shfl_idx_u32(my_scale_byte, 6, 0xFFFF_FFFF);
+                let s7_u32 = ctx.shfl_idx_u32(my_scale_byte, 7, 0xFFFF_FFFF);
+                let s8_u32 = ctx.shfl_idx_u32(my_scale_byte, 8, 0xFFFF_FFFF);
+                let s9_u32 = ctx.shfl_idx_u32(my_scale_byte, 9, 0xFFFF_FFFF);
+                let s10_u32 = ctx.shfl_idx_u32(my_scale_byte, 10, 0xFFFF_FFFF);
+                let s11_u32 = ctx.shfl_idx_u32(my_scale_byte, 11, 0xFFFF_FFFF);
+                let s12_u32 = ctx.shfl_idx_u32(my_scale_byte, 12, 0xFFFF_FFFF);
+                let s13_u32 = ctx.shfl_idx_u32(my_scale_byte, 13, 0xFFFF_FFFF);
+                let s14_u32 = ctx.shfl_idx_u32(my_scale_byte, 14, 0xFFFF_FFFF);
+                let s15_u32 = ctx.shfl_idx_u32(my_scale_byte, 15, 0xFFFF_FFFF);
 
-                // Extract individual scale bytes and convert to signed f32
-                let mask_8bit = ctx.mov_u32_imm(0xFF);
-                let eight = ctx.mov_u32_imm(8);
-                let sixteen = ctx.mov_u32_imm(16);
-                let twenty_four = ctx.mov_u32_imm(24);
+                // For packing into u32, create combined values (for reference only)
+                let _scales_0_3_bcast = s0_u32; // placeholder for old code compatibility
+                let _scales_4_7_bcast = s4_u32;
+                let _scales_8_11_bcast = s8_u32;
+                let _scales_12_15_bcast = s12_u32;
+
+                // Convert individual scale bytes to signed f32
+                // Scale bytes are already in s0_u32..s15_u32 from warp shuffle above
+                // Convert u8 to signed i8 as f32: if >= 128, subtract 256
                 let seven = ctx.mov_u32_imm(7);
                 let twofiftysix_f32 = ctx.mov_f32_imm(256.0);
 
-                // Helper macro pattern: extract byte at position, convert u8 to signed i8 as f32
-                // i8 is stored as u8, reinterpret: if >= 128, subtract 256
-
-                // Extract s0-s3 from scales_0_3_bcast
-                let s0_u32 = ctx.and_u32(scales_0_3_bcast, mask_8bit);
+                // Helper: convert u8 to signed f32
+                // sign = (val >> 7), correction = sign * 256, result = val - correction
                 let s0_sign = ctx.shr_u32(s0_u32, seven);
                 let s0_f32_raw = ctx.cvt_f32_u32(s0_u32);
                 let s0_sign_f32 = ctx.cvt_f32_u32(s0_sign);
                 let s0_correction = ctx.mul_f32(s0_sign_f32, twofiftysix_f32);
                 let scale0 = ctx.sub_f32(s0_f32_raw, s0_correction);
 
-                let s1_shifted = ctx.shr_u32(scales_0_3_bcast, eight);
-                let s1_u32 = ctx.and_u32(s1_shifted, mask_8bit);
                 let s1_sign = ctx.shr_u32(s1_u32, seven);
                 let s1_f32_raw = ctx.cvt_f32_u32(s1_u32);
                 let s1_sign_f32 = ctx.cvt_f32_u32(s1_sign);
                 let s1_correction = ctx.mul_f32(s1_sign_f32, twofiftysix_f32);
                 let scale1 = ctx.sub_f32(s1_f32_raw, s1_correction);
 
-                let s2_shifted = ctx.shr_u32(scales_0_3_bcast, sixteen);
-                let s2_u32 = ctx.and_u32(s2_shifted, mask_8bit);
                 let s2_sign = ctx.shr_u32(s2_u32, seven);
                 let s2_f32_raw = ctx.cvt_f32_u32(s2_u32);
                 let s2_sign_f32 = ctx.cvt_f32_u32(s2_sign);
                 let s2_correction = ctx.mul_f32(s2_sign_f32, twofiftysix_f32);
                 let scale2 = ctx.sub_f32(s2_f32_raw, s2_correction);
 
-                let s3_u32 = ctx.shr_u32(scales_0_3_bcast, twenty_four);
                 let s3_sign = ctx.shr_u32(s3_u32, seven);
                 let s3_f32_raw = ctx.cvt_f32_u32(s3_u32);
                 let s3_sign_f32 = ctx.cvt_f32_u32(s3_sign);
                 let s3_correction = ctx.mul_f32(s3_sign_f32, twofiftysix_f32);
                 let scale3 = ctx.sub_f32(s3_f32_raw, s3_correction);
 
-                // Extract s4-s7 from scales_4_7_bcast
-                let s4_u32 = ctx.and_u32(scales_4_7_bcast, mask_8bit);
                 let s4_sign = ctx.shr_u32(s4_u32, seven);
                 let s4_f32_raw = ctx.cvt_f32_u32(s4_u32);
                 let s4_sign_f32 = ctx.cvt_f32_u32(s4_sign);
                 let s4_correction = ctx.mul_f32(s4_sign_f32, twofiftysix_f32);
                 let scale4 = ctx.sub_f32(s4_f32_raw, s4_correction);
 
-                let s5_shifted = ctx.shr_u32(scales_4_7_bcast, eight);
-                let s5_u32 = ctx.and_u32(s5_shifted, mask_8bit);
                 let s5_sign = ctx.shr_u32(s5_u32, seven);
                 let s5_f32_raw = ctx.cvt_f32_u32(s5_u32);
                 let s5_sign_f32 = ctx.cvt_f32_u32(s5_sign);
                 let s5_correction = ctx.mul_f32(s5_sign_f32, twofiftysix_f32);
                 let scale5 = ctx.sub_f32(s5_f32_raw, s5_correction);
 
-                let s6_shifted = ctx.shr_u32(scales_4_7_bcast, sixteen);
-                let s6_u32 = ctx.and_u32(s6_shifted, mask_8bit);
                 let s6_sign = ctx.shr_u32(s6_u32, seven);
                 let s6_f32_raw = ctx.cvt_f32_u32(s6_u32);
                 let s6_sign_f32 = ctx.cvt_f32_u32(s6_sign);
                 let s6_correction = ctx.mul_f32(s6_sign_f32, twofiftysix_f32);
                 let scale6 = ctx.sub_f32(s6_f32_raw, s6_correction);
 
-                let s7_u32 = ctx.shr_u32(scales_4_7_bcast, twenty_four);
                 let s7_sign = ctx.shr_u32(s7_u32, seven);
                 let s7_f32_raw = ctx.cvt_f32_u32(s7_u32);
                 let s7_sign_f32 = ctx.cvt_f32_u32(s7_sign);
                 let s7_correction = ctx.mul_f32(s7_sign_f32, twofiftysix_f32);
                 let scale7 = ctx.sub_f32(s7_f32_raw, s7_correction);
 
-                // Extract s8-s11 from scales_8_11_bcast
-                let s8_u32 = ctx.and_u32(scales_8_11_bcast, mask_8bit);
                 let s8_sign = ctx.shr_u32(s8_u32, seven);
                 let s8_f32_raw = ctx.cvt_f32_u32(s8_u32);
                 let s8_sign_f32 = ctx.cvt_f32_u32(s8_sign);
                 let s8_correction = ctx.mul_f32(s8_sign_f32, twofiftysix_f32);
                 let scale8 = ctx.sub_f32(s8_f32_raw, s8_correction);
 
-                let s9_shifted = ctx.shr_u32(scales_8_11_bcast, eight);
-                let s9_u32 = ctx.and_u32(s9_shifted, mask_8bit);
                 let s9_sign = ctx.shr_u32(s9_u32, seven);
                 let s9_f32_raw = ctx.cvt_f32_u32(s9_u32);
                 let s9_sign_f32 = ctx.cvt_f32_u32(s9_sign);
                 let s9_correction = ctx.mul_f32(s9_sign_f32, twofiftysix_f32);
                 let scale9 = ctx.sub_f32(s9_f32_raw, s9_correction);
 
-                let s10_shifted = ctx.shr_u32(scales_8_11_bcast, sixteen);
-                let s10_u32 = ctx.and_u32(s10_shifted, mask_8bit);
                 let s10_sign = ctx.shr_u32(s10_u32, seven);
                 let s10_f32_raw = ctx.cvt_f32_u32(s10_u32);
                 let s10_sign_f32 = ctx.cvt_f32_u32(s10_sign);
                 let s10_correction = ctx.mul_f32(s10_sign_f32, twofiftysix_f32);
                 let scale10 = ctx.sub_f32(s10_f32_raw, s10_correction);
 
-                let s11_u32 = ctx.shr_u32(scales_8_11_bcast, twenty_four);
                 let s11_sign = ctx.shr_u32(s11_u32, seven);
                 let s11_f32_raw = ctx.cvt_f32_u32(s11_u32);
                 let s11_sign_f32 = ctx.cvt_f32_u32(s11_sign);
                 let s11_correction = ctx.mul_f32(s11_sign_f32, twofiftysix_f32);
                 let scale11 = ctx.sub_f32(s11_f32_raw, s11_correction);
 
-                // Extract s12-s15 from scales_12_15_bcast
-                let s12_u32 = ctx.and_u32(scales_12_15_bcast, mask_8bit);
                 let s12_sign = ctx.shr_u32(s12_u32, seven);
                 let s12_f32_raw = ctx.cvt_f32_u32(s12_u32);
                 let s12_sign_f32 = ctx.cvt_f32_u32(s12_sign);
                 let s12_correction = ctx.mul_f32(s12_sign_f32, twofiftysix_f32);
                 let scale12 = ctx.sub_f32(s12_f32_raw, s12_correction);
 
-                let s13_shifted = ctx.shr_u32(scales_12_15_bcast, eight);
-                let s13_u32 = ctx.and_u32(s13_shifted, mask_8bit);
                 let s13_sign = ctx.shr_u32(s13_u32, seven);
                 let s13_f32_raw = ctx.cvt_f32_u32(s13_u32);
                 let s13_sign_f32 = ctx.cvt_f32_u32(s13_sign);
                 let s13_correction = ctx.mul_f32(s13_sign_f32, twofiftysix_f32);
                 let scale13 = ctx.sub_f32(s13_f32_raw, s13_correction);
 
-                let s14_shifted = ctx.shr_u32(scales_12_15_bcast, sixteen);
-                let s14_u32 = ctx.and_u32(s14_shifted, mask_8bit);
                 let s14_sign = ctx.shr_u32(s14_u32, seven);
                 let s14_f32_raw = ctx.cvt_f32_u32(s14_u32);
                 let s14_sign_f32 = ctx.cvt_f32_u32(s14_sign);
                 let s14_correction = ctx.mul_f32(s14_sign_f32, twofiftysix_f32);
                 let scale14 = ctx.sub_f32(s14_f32_raw, s14_correction);
 
-                let s15_u32 = ctx.shr_u32(scales_12_15_bcast, twenty_four);
                 let s15_sign = ctx.shr_u32(s15_u32, seven);
                 let s15_f32_raw = ctx.cvt_f32_u32(s15_u32);
                 let s15_sign_f32 = ctx.cvt_f32_u32(s15_sign);
