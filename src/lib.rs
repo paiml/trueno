@@ -54,10 +54,10 @@ pub use vector::Vector;
 
 // ComputeBrick exports
 pub use brick::{
-    AddOp, AssertionResult, BrickError, BrickLayer, BrickVerification, ByteBudget,
-    ComputeAssertion, ComputeBackend, ComputeBrick, ComputeOp, DotOp, FusedGateUpOp,
-    FusedGateUpWeights, FusedQKVOp, FusedQKVWeights, MatmulOp, SoftmaxOp, TokenBudget,
-    TokenResult,
+    AddOp, AssertionResult, BrickError, BrickLayer, BrickProfiler, BrickSample, BrickStats,
+    BrickTimer, BrickVerification, ByteBudget, ComputeAssertion, ComputeBackend, ComputeBrick,
+    ComputeOp, DotOp, FusedGateUpOp, FusedGateUpWeights, FusedQKVOp, FusedQKVWeights, MatmulOp,
+    SoftmaxOp, TokenBudget, TokenResult,
 };
 
 /// Backend execution target
