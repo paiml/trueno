@@ -816,6 +816,8 @@ pub struct IncrementalAttentionKernel {
     pub num_kv_heads: u32,
     /// Scaling factor for attention scores (1/sqrt(head_dim))
     pub scale: f32,
+    /// PAR-061: Read seq_len from device memory (for CUDA graph compatibility)
+    pub indirect_seq_len: bool,
 }
 
 impl IncrementalAttentionKernel {
@@ -847,7 +849,16 @@ impl IncrementalAttentionKernel {
             num_heads,
             num_kv_heads,
             scale: 1.0 / (head_dim as f32).sqrt(),
+            indirect_seq_len: false,
         }
+    }
+
+    /// PAR-061: Enable indirect seq_len mode (reads from device memory)
+    /// Required for CUDA graph compatibility
+    #[must_use]
+    pub fn with_indirect_seq_len(mut self, indirect: bool) -> Self {
+        self.indirect_seq_len = indirect;
+        self
     }
 
     /// Check if this kernel is configured for GQA
@@ -859,7 +870,12 @@ impl IncrementalAttentionKernel {
 
 impl Kernel for IncrementalAttentionKernel {
     fn name(&self) -> &str {
-        "incremental_attention"
+        // PAR-061: Different kernel name for indirect mode
+        if self.indirect_seq_len {
+            "incremental_attention_indirect"
+        } else {
+            "incremental_attention"
+        }
     }
 
     fn build_ptx(&self) -> PtxKernel {
@@ -868,6 +884,7 @@ impl Kernel for IncrementalAttentionKernel {
         let max_seq_len = self.max_seq_len;
         let num_heads = self.num_heads;
         let num_kv_heads = self.num_kv_heads;
+        let indirect = self.indirect_seq_len;
 
         // Kernel strategy (PAR-020 + PAR-021 GQA):
         // - Grid: (num_heads, 1, 1) - one block per Q head
@@ -893,20 +910,41 @@ impl Kernel for IncrementalAttentionKernel {
         // 5. Accumulate weighted V vectors
         // 6. Normalize and store output
 
-        PtxKernel::new("incremental_attention")
+        // PAR-061: Use different kernel name and parameter type for indirect mode
+        let kernel_name = if indirect {
+            "incremental_attention_indirect"
+        } else {
+            "incremental_attention"
+        };
+
+        let mut builder = PtxKernel::new(kernel_name)
             .param(PtxType::U64, "q_ptr")
             .param(PtxType::U64, "k_ptr")
             .param(PtxType::U64, "v_ptr")
-            .param(PtxType::U64, "out_ptr")
-            .param(PtxType::U32, "seq_len")
+            .param(PtxType::U64, "out_ptr");
+
+        // PAR-061: Indirect mode takes seq_len_ptr (U64), direct mode takes seq_len (U32)
+        builder = if indirect {
+            builder.param(PtxType::U64, "seq_len_ptr")
+        } else {
+            builder.param(PtxType::U32, "seq_len")
+        };
+
+        builder
             .shared_memory(0) // Register-only, warp shuffle for reduction
-            .build(|ctx| {
+            .build(move |ctx| {
                 // Get indices
                 let q_head_idx = ctx.special_reg(PtxReg::CtaIdX);
                 let lane_id = ctx.special_reg(PtxReg::TidX);
 
                 // Load parameters
-                let seq_len = ctx.load_param_u32("seq_len");
+                // PAR-061: In indirect mode, load seq_len from device memory
+                let seq_len = if indirect {
+                    let seq_len_ptr = ctx.load_param_u64("seq_len_ptr");
+                    ctx.ld_global_u32(seq_len_ptr)
+                } else {
+                    ctx.load_param_u32("seq_len")
+                };
                 let q_ptr = ctx.load_param_u64("q_ptr");
                 let k_ptr = ctx.load_param_u64("k_ptr");
                 let v_ptr = ctx.load_param_u64("v_ptr");
@@ -937,12 +975,13 @@ impl Kernel for IncrementalAttentionKernel {
                 let k_head_ptr = ctx.add_u64(k_ptr, kv_head_off_bytes);
                 let v_head_ptr = ctx.add_u64(v_ptr, kv_head_off_bytes);
 
-                // Each thread handles 2 elements (strided by 32) for head_dim=64
-                // Thread 0 handles [0,32], thread 1 handles [1,33], etc.
-                // Note: For head_dim > 64, we'd need more elements per thread
+                // CORRECTNESS-002: Each thread handles 4 elements (strided by 32) for head_dim up to 128
+                // Thread 0 handles [0,32,64,96], thread 1 handles [1,33,65,97], etc.
+                // Supports head_dim: 32, 64, 96, 128
 
                 // Load Q values into registers (persistent across seq loop)
                 // Using predicated loads for bounds checking
+                // CORRECTNESS-002: Support head_dim up to 128 (4 elements per thread)
                 let q0_off_bytes = ctx.mul_wide_u32_reg(lane_id, four);
                 let q0_addr = ctx.add_u64(q_head_ptr, q0_off_bytes);
                 let in_bounds0 = ctx.setp_lt_u32(lane_id, head_dim_u32);
@@ -955,9 +994,26 @@ impl Kernel for IncrementalAttentionKernel {
                 let in_bounds1 = ctx.setp_lt_u32(lane_plus_32, head_dim_u32);
                 let q1 = ctx.ld_global_f32_predicated(q1_addr, in_bounds1, 0.0);
 
+                // CORRECTNESS-002: Third element (if head_dim > 64)
+                let lane_plus_64 = ctx.add_u32(lane_id, 64);
+                let q2_off_bytes = ctx.mul_wide_u32_reg(lane_plus_64, four);
+                let q2_addr = ctx.add_u64(q_head_ptr, q2_off_bytes);
+                let in_bounds2 = ctx.setp_lt_u32(lane_plus_64, head_dim_u32);
+                let q2 = ctx.ld_global_f32_predicated(q2_addr, in_bounds2, 0.0);
+
+                // CORRECTNESS-002: Fourth element (if head_dim > 96)
+                let lane_plus_96 = ctx.add_u32(lane_id, 96);
+                let q3_off_bytes = ctx.mul_wide_u32_reg(lane_plus_96, four);
+                let q3_addr = ctx.add_u64(q_head_ptr, q3_off_bytes);
+                let in_bounds3 = ctx.setp_lt_u32(lane_plus_96, head_dim_u32);
+                let q3 = ctx.ld_global_f32_predicated(q3_addr, in_bounds3, 0.0);
+
                 // Initialize output accumulators
                 let out0 = ctx.mov_f32_imm(0.0);
                 let out1 = ctx.mov_f32_imm(0.0);
+                // CORRECTNESS-002: Additional accumulators for head_dim > 64
+                let out2 = ctx.mov_f32_imm(0.0);
+                let out3 = ctx.mov_f32_imm(0.0);
 
                 // Online softmax state
                 let max_score = ctx.mov_f32_imm(f32::NEG_INFINITY);
@@ -990,12 +1046,23 @@ impl Kernel for IncrementalAttentionKernel {
                 let k1_addr = ctx.add_u64(k_head_ptr, k1_off_bytes);
                 let k1 = ctx.ld_global_f32_predicated(k1_addr, in_bounds1, 0.0);
 
-                // Compute partial dot product: q0*k0 + q1*k1
+                // CORRECTNESS-002: Load K[pos, lane_id+64] and K[pos, lane_id+96]
+                let k2_elem_off = ctx.add_u32_reg(k_pos_off, lane_plus_64);
+                let k2_off_bytes = ctx.mul_wide_u32_reg(k2_elem_off, four);
+                let k2_addr = ctx.add_u64(k_head_ptr, k2_off_bytes);
+                let k2 = ctx.ld_global_f32_predicated(k2_addr, in_bounds2, 0.0);
+
+                let k3_elem_off = ctx.add_u32_reg(k_pos_off, lane_plus_96);
+                let k3_off_bytes = ctx.mul_wide_u32_reg(k3_elem_off, four);
+                let k3_addr = ctx.add_u64(k_head_ptr, k3_off_bytes);
+                let k3 = ctx.ld_global_f32_predicated(k3_addr, in_bounds3, 0.0);
+
+                // Compute partial dot product: q0*k0 + q1*k1 + q2*k2 + q3*k3
+                // CORRECTNESS-002: Now handles full head_dim=128
                 let dot_partial = ctx.mul_f32(q0, k0);
                 let dot_partial = ctx.fma_f32(q1, k1, dot_partial);
-
-                // Handle more elements if head_dim > 64
-                // (For TinyLlama head_dim=64, this is sufficient)
+                let dot_partial = ctx.fma_f32(q2, k2, dot_partial);
+                let dot_partial = ctx.fma_f32(q3, k3, dot_partial);
 
                 // Warp-reduce the dot product using shfl.down
                 // sum += shfl_down(sum, 16)
@@ -1049,6 +1116,17 @@ impl Kernel for IncrementalAttentionKernel {
                 let v1_addr = ctx.add_u64(v_head_ptr, v1_off_bytes);
                 let v1 = ctx.ld_global_f32_predicated(v1_addr, in_bounds1, 0.0);
 
+                // CORRECTNESS-002: Load V[pos, lane_id+64] and V[pos, lane_id+96]
+                let v2_elem_off = ctx.add_u32_reg(k_pos_off, lane_plus_64);
+                let v2_off_bytes = ctx.mul_wide_u32_reg(v2_elem_off, four);
+                let v2_addr = ctx.add_u64(v_head_ptr, v2_off_bytes);
+                let v2 = ctx.ld_global_f32_predicated(v2_addr, in_bounds2, 0.0);
+
+                let v3_elem_off = ctx.add_u32_reg(k_pos_off, lane_plus_96);
+                let v3_off_bytes = ctx.mul_wide_u32_reg(v3_elem_off, four);
+                let v3_addr = ctx.add_u64(v_head_ptr, v3_off_bytes);
+                let v3 = ctx.ld_global_f32_predicated(v3_addr, in_bounds3, 0.0);
+
                 // Update loop state using in-place operations
                 // Online softmax: max_score = max(max_score, score)
                 ctx.max_f32_inplace(max_score, score);
@@ -1062,6 +1140,11 @@ impl Kernel for IncrementalAttentionKernel {
                 ctx.fma_f32_inplace(out0, exp_score, v0);
                 ctx.mul_f32_inplace(out1, correction);
                 ctx.fma_f32_inplace(out1, exp_score, v1);
+                // CORRECTNESS-002: Update out2 and out3
+                ctx.mul_f32_inplace(out2, correction);
+                ctx.fma_f32_inplace(out2, exp_score, v2);
+                ctx.mul_f32_inplace(out3, correction);
+                ctx.fma_f32_inplace(out3, exp_score, v3);
 
                 // Increment position
                 ctx.add_u32_inplace(pos, 1);
@@ -1076,6 +1159,9 @@ impl Kernel for IncrementalAttentionKernel {
 
                 ctx.mul_f32_inplace(out0, inv_sum);
                 ctx.mul_f32_inplace(out1, inv_sum);
+                // CORRECTNESS-002: Normalize out2 and out3
+                ctx.mul_f32_inplace(out2, inv_sum);
+                ctx.mul_f32_inplace(out3, inv_sum);
 
                 // Store output (only for valid indices)
                 // Thread writes to output[head_idx, lane_id]
@@ -1088,6 +1174,17 @@ impl Kernel for IncrementalAttentionKernel {
                 ctx.branch_if_not(in_bounds1, "skip_store1");
                 ctx.st_global_f32(out1_addr, out1);
                 ctx.label("skip_store1");
+
+                // CORRECTNESS-002: Store out2 and out3
+                let out2_addr = ctx.add_u64(out_head_ptr, q2_off_bytes);
+                ctx.branch_if_not(in_bounds2, "skip_store2");
+                ctx.st_global_f32(out2_addr, out2);
+                ctx.label("skip_store2");
+
+                let out3_addr = ctx.add_u64(out_head_ptr, q3_off_bytes);
+                ctx.branch_if_not(in_bounds3, "skip_store3");
+                ctx.st_global_f32(out3_addr, out3);
+                ctx.label("skip_store3");
 
                 ctx.ret();
             })

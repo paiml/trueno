@@ -1,0 +1,2005 @@
+//! FKR-101-DEBUG: Instrumented Non-Zero Page Test
+//!
+//! This test instruments the LZ4 kernel with debug markers to find
+//! the exact crash location in the compression loop.
+//!
+//! Debug markers:
+//! 0x01000000 - Loop entry
+//! 0x02000000 - After state load
+//! 0x03000000 - After hash compute
+//! 0x04000000 - After hash table lookup
+//! 0x05000000 - At L_found_match
+//! 0x06000000 - At L_copy_lit_loop
+//! 0x07000000 - At L_no_match
+//! 0x08000000 - At L_emit_remaining
+
+#[cfg(feature = "cuda")]
+mod fkr_101_debug_tests {
+    use std::ffi::c_void;
+    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
+    use trueno_gpu::ptx::{PtxKernel, PtxModule, PtxReg, PtxType};
+    use trueno_gpu::kernels::lz4::{PAGE_SIZE, LZ4_HASH_SIZE};
+
+    fn cuda_available() -> bool {
+        CudaContext::new(0).is_ok()
+    }
+
+    /// FKR-101-MINIMAL: Absolute minimal debug buffer test
+    #[test]
+    fn fkr_101_minimal_debug_test() {
+        if !cuda_available() {
+            eprintln!("FKR-101 SKIPPED: No CUDA device available");
+            return;
+        }
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        // Build minimal kernel that just writes a debug marker
+        let kernel = PtxKernel::new("minimal_debug")
+            .param(PtxType::U64, "debug_buf")
+            .build(|ctx| {
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let zero = ctx.mov_u32_imm(0);
+                let is_t0 = ctx.setp_eq_u32(tid, zero);
+                ctx.branch_if_not(is_t0, "L_end");
+
+                // Write a marker
+                ctx.emit_debug_marker(debug_ptr, 0xCAFEBABE);
+
+                ctx.label("L_end");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== Minimal Debug PTX ===\n{}", ptx);
+
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (32, 1, 1),
+            shared_mem: 0,
+        };
+
+        let mut args: [*mut c_void; 1] = [debug_buf.as_kernel_arg()];
+
+        unsafe {
+            stream
+                .launch_kernel(&mut module, "minimal_debug", &config, &mut args)
+                .expect("Kernel launch");
+        }
+
+        stream.synchronize().expect("Sync");
+
+        let mut output = vec![0u32; 64];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        println!("Marker: 0x{:08X}", output[1]);
+
+        assert_eq!(output[0], 1, "Should have 1 marker");
+        assert_eq!(output[1], 0xCAFEBABE, "Marker should be 0xCAFEBABE");
+        println!("Minimal debug test PASSED!");
+    }
+
+    /// FKR-101-SMEM: Test debug with shared memory
+    #[test]
+    fn fkr_101_smem_debug_test() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        const SMEM_SIZE: usize = 12544 * 3; // Same as instrumented kernel
+
+        // Build kernel with shared memory
+        let kernel = PtxKernel::new("smem_debug")
+            .param(PtxType::U64, "debug_buf")
+            .shared_memory(SMEM_SIZE)
+            .build(|ctx| {
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let zero = ctx.mov_u32_imm(0);
+                let is_t0 = ctx.setp_eq_u32(tid, zero);
+                ctx.branch_if_not(is_t0, "L_end");
+
+                // Write marker 1
+                ctx.emit_debug_marker(debug_ptr, 0x11111111);
+
+                // Write to shared memory
+                let addr_0 = ctx.mov_u32_imm(0);
+                let val = ctx.mov_u32_imm(0xDEADBEEF);
+                ctx.st_shared_u32(addr_0, val);
+
+                // Write marker 2
+                ctx.emit_debug_marker(debug_ptr, 0x22222222);
+
+                // Read from shared memory
+                let addr_0_2 = ctx.mov_u32_imm(0);
+                let _read_val = ctx.ld_shared_u32(addr_0_2);
+
+                // Write marker 3
+                ctx.emit_debug_marker(debug_ptr, 0x33333333);
+
+                ctx.label("L_end");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== SMEM Debug PTX ===\n{}", ptx);
+
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1), // 3 warps, same as instrumented
+            shared_mem: 0, // Static shared, not dynamic
+        };
+
+        let mut args: [*mut c_void; 1] = [debug_buf.as_kernel_arg()];
+
+        println!("Launching kernel...");
+        unsafe {
+            stream
+                .launch_kernel(&mut module, "smem_debug", &config, &mut args)
+                .expect("Kernel launch");
+        }
+
+        let sync_result = stream.synchronize();
+
+        let mut output = vec![0u32; 64];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        for i in 0..output[0].min(10) as usize {
+            println!("  Marker {}: 0x{:08X}", i, output[i + 1]);
+        }
+
+        if let Err(e) = sync_result {
+            panic!("SMEM test crashed: {:?}", e);
+        }
+
+        assert_eq!(output[0], 3, "Should have 3 markers");
+        println!("SMEM debug test PASSED!");
+    }
+
+    /// FKR-101-GLOBAL: Test debug with global memory read
+    #[test]
+    fn fkr_101_global_debug_test() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        const SMEM_SIZE: usize = 12544 * 3;
+
+        // Build kernel with global memory access
+        let kernel = PtxKernel::new("global_debug")
+            .param(PtxType::U64, "input_buf")
+            .param(PtxType::U64, "debug_buf")
+            .shared_memory(SMEM_SIZE)
+            .build(|ctx| {
+                let input_ptr = ctx.load_param_u64("input_buf");
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let zero = ctx.mov_u32_imm(0);
+                let is_t0 = ctx.setp_eq_u32(tid, zero);
+                ctx.branch_if_not(is_t0, "L_end");
+
+                // Write marker 1
+                ctx.emit_debug_marker(debug_ptr, 0x11111111);
+
+                // Read from global memory
+                let val = ctx.ld_global_u32(input_ptr);
+
+                // Write marker 2
+                ctx.emit_debug_marker(debug_ptr, 0x22222222);
+
+                // Write to shared memory
+                let addr_0 = ctx.mov_u32_imm(0);
+                ctx.st_shared_u32(addr_0, val);
+
+                // Write marker 3
+                ctx.emit_debug_marker(debug_ptr, 0x33333333);
+
+                // Read back from shared memory
+                let addr_0_2 = ctx.mov_u32_imm(0);
+                let _read_val = ctx.ld_shared_u32(addr_0_2);
+
+                // Write marker 4
+                ctx.emit_debug_marker(debug_ptr, 0x44444444);
+
+                ctx.label("L_end");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== Global Debug PTX ===\n{}", ptx);
+
+        // Create input buffer with test data
+        let mut input_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1024).unwrap();
+        input_buf.copy_from_host(&vec![0x12345678u32; 1024]).unwrap();
+
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1),
+            shared_mem: 0,
+        };
+
+        let mut args: [*mut c_void; 2] = [
+            input_buf.as_kernel_arg(),
+            debug_buf.as_kernel_arg(),
+        ];
+
+        println!("Launching kernel...");
+        unsafe {
+            stream
+                .launch_kernel(&mut module, "global_debug", &config, &mut args)
+                .expect("Kernel launch");
+        }
+
+        let sync_result = stream.synchronize();
+
+        let mut output = vec![0u32; 64];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        for i in 0..output[0].min(10) as usize {
+            println!("  Marker {}: 0x{:08X}", i, output[i + 1]);
+        }
+
+        if let Err(e) = sync_result {
+            panic!("Global test crashed: {:?}", e);
+        }
+
+        assert_eq!(output[0], 4, "Should have 4 markers");
+        println!("Global debug test PASSED!");
+    }
+
+    /// FKR-101-5PARAM: Test debug with 5 parameters (same as instrumented)
+    #[test]
+    fn fkr_101_5param_debug_test() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        const SMEM_SIZE: usize = 12544 * 3;
+
+        // Build kernel with all 5 parameters
+        let kernel = PtxKernel::new("five_param_debug")
+            .param(PtxType::U64, "input_batch")
+            .param(PtxType::U64, "output_batch")
+            .param(PtxType::U64, "output_sizes")
+            .param(PtxType::U64, "debug_buf")
+            .param(PtxType::U32, "batch_size")
+            .shared_memory(SMEM_SIZE)
+            .build(|ctx| {
+                let _input_ptr = ctx.load_param_u64("input_batch");
+                let _output_ptr = ctx.load_param_u64("output_batch");
+                let _sizes_ptr = ctx.load_param_u64("output_sizes");
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let batch_size = ctx.load_param_u32("batch_size");
+
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let bid = ctx.special_reg(PtxReg::CtaIdX);
+                let warp_id = ctx.shr_u32_imm(tid, 5);
+                let lane_mask = ctx.mov_u32_imm(31);
+                let lane_id = ctx.and_u32(tid, lane_mask);
+
+                // Only lane 0 of each warp processes
+                let zero_check = ctx.mov_u32_imm(0);
+                let is_leader = ctx.setp_eq_u32(lane_id, zero_check);
+                ctx.branch_if_not(is_leader, "L_not_leader");
+
+                // Compute page index
+                let warps_per_block = ctx.mov_u32_imm(3);
+                let block_offset = ctx.mul_lo_u32(bid, warps_per_block);
+                let page_idx = ctx.add_u32_reg(block_offset, warp_id);
+
+                // Bounds check
+                let out_of_bounds = ctx.setp_ge_u32(page_idx, batch_size);
+                ctx.branch_if(out_of_bounds, "L_not_leader");
+
+                // FIRST marker - if we get here, bounds check passed
+                ctx.emit_debug_marker(debug_ptr, 0xAA000000);
+
+                // Compute warp offset
+                let warp_size = ctx.mov_u32_imm(12544);
+                let warp_off = ctx.mul_lo_u32(warp_id, warp_size);
+
+                // Second marker
+                ctx.emit_debug_marker(debug_ptr, 0xAA000001);
+
+                // Write to shared memory
+                let val = ctx.mov_u32_imm(0xDEADBEEF);
+                ctx.st_shared_u32(warp_off, val);
+
+                // Third marker
+                ctx.emit_debug_marker(debug_ptr, 0xAA000002);
+
+                ctx.label("L_not_leader");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== 5-Param Debug PTX ===\n{}", ptx);
+
+        // Allocate buffers
+        let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
+        input_buf.copy_from_host(&vec![0u8; 4096]).unwrap();
+
+        let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4352).unwrap();
+        let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1).unwrap();
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1),
+            shared_mem: 0,
+        };
+
+        let batch_size: u32 = 1; // Only process 1 page
+        let mut args: [*mut c_void; 5] = [
+            input_buf.as_kernel_arg(),
+            output_buf.as_kernel_arg(),
+            sizes_buf.as_kernel_arg(),
+            debug_buf.as_kernel_arg(),
+            &batch_size as *const u32 as *mut c_void,
+        ];
+
+        println!("Launching 5-param kernel with batch_size={}...", batch_size);
+        unsafe {
+            stream
+                .launch_kernel(&mut module, "five_param_debug", &config, &mut args)
+                .expect("Kernel launch");
+        }
+
+        let sync_result = stream.synchronize();
+
+        let mut output = vec![0u32; 64];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        for i in 0..output[0].min(10) as usize {
+            println!("  Marker {}: 0x{:08X}", i, output[i + 1]);
+        }
+
+        if let Err(e) = sync_result {
+            panic!("5-param test crashed: {:?}", e);
+        }
+
+        assert_eq!(output[0], 3, "Should have 3 markers (1 warp processed)");
+        println!("5-param debug test PASSED!");
+    }
+
+    /// FKR-101-LOADLOOP: Test debug with data loading loop
+    #[test]
+    fn fkr_101_loadloop_debug_test() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        const SMEM_SIZE: usize = 12544 * 3;
+        const PAGE_SIZE_VAL: u32 = 4096;
+
+        // Build kernel with load loop
+        let kernel = PtxKernel::new("loadloop_debug")
+            .param(PtxType::U64, "input_batch")
+            .param(PtxType::U64, "debug_buf")
+            .param(PtxType::U32, "batch_size")
+            .shared_memory(SMEM_SIZE)
+            .build(|ctx| {
+                let input_ptr = ctx.load_param_u64("input_batch");
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let batch_size = ctx.load_param_u32("batch_size");
+
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let bid = ctx.special_reg(PtxReg::CtaIdX);
+                let warp_id = ctx.shr_u32_imm(tid, 5);
+                let lane_mask = ctx.mov_u32_imm(31);
+                let lane_id = ctx.and_u32(tid, lane_mask);
+
+                // Only lane 0 of each warp processes
+                let zero_check = ctx.mov_u32_imm(0);
+                let is_leader = ctx.setp_eq_u32(lane_id, zero_check);
+                ctx.branch_if_not(is_leader, "L_not_leader");
+
+                // Compute page index
+                let warps_per_block = ctx.mov_u32_imm(3);
+                let block_offset = ctx.mul_lo_u32(bid, warps_per_block);
+                let page_idx = ctx.add_u32_reg(block_offset, warp_id);
+
+                // Bounds check
+                let out_of_bounds = ctx.setp_ge_u32(page_idx, batch_size);
+                ctx.branch_if(out_of_bounds, "L_not_leader");
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000000);
+
+                // Compute warp offset
+                let warp_size = ctx.mov_u32_imm(12544);
+                let warp_off = ctx.mul_lo_u32(warp_id, warp_size);
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000001);
+
+                // Compute input page pointer
+                let page_size_val = ctx.mov_u32_imm(PAGE_SIZE_VAL);
+                let page_offset = ctx.mul_lo_u32(page_idx, page_size_val);
+                let page_offset_64 = ctx.cvt_u64_u32(page_offset);
+                let input_page_ptr = ctx.add_u64(input_ptr, page_offset_64);
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000002);
+
+                // Initialize load index
+                let zero_val = ctx.mov_u32_imm(0);
+                ctx.st_shared_u32(warp_off, zero_val);
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000003);
+
+                // Load loop - limited to 10 iterations for debugging
+                ctx.label("L_load_loop");
+                ctx.emit_debug_marker(debug_ptr, 0xBB000000);
+
+                let idx = ctx.ld_shared_u32(warp_off);
+
+                // EARLY EXIT: Stop after 10 iterations
+                let ten = ctx.mov_u32_imm(40); // 10 u32s = 40 bytes
+                let early_exit = ctx.setp_ge_u32(idx, ten);
+                ctx.branch_if(early_exit, "L_load_done");
+
+                let load_done = ctx.setp_ge_u32(idx, page_size_val);
+                ctx.branch_if(load_done, "L_load_done");
+
+                ctx.emit_debug_marker(debug_ptr, 0xBB000001);
+
+                let idx_64 = ctx.cvt_u64_u32(idx);
+                let src_addr = ctx.add_u64(input_page_ptr, idx_64);
+                let val = ctx.ld_global_u32(src_addr);
+
+                ctx.emit_debug_marker(debug_ptr, 0xBB000002);
+
+                let dst_off = ctx.add_u32_reg(warp_off, idx);
+                ctx.st_shared_u32(dst_off, val);
+
+                ctx.emit_debug_marker(debug_ptr, 0xBB000003);
+
+                let four = ctx.mov_u32_imm(4);
+                let idx_next = ctx.add_u32_reg(idx, four);
+                ctx.st_shared_u32(warp_off, idx_next);
+
+                ctx.branch("L_load_loop");
+
+                ctx.label("L_load_done");
+                ctx.emit_debug_marker(debug_ptr, 0xCC000000);
+
+                ctx.label("L_not_leader");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== LoadLoop Debug PTX ===\n{}", ptx);
+
+        // Allocate buffers
+        let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
+        input_buf.copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>()).unwrap();
+
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 256).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 256]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1),
+            shared_mem: 0,
+        };
+
+        let batch_size: u32 = 1;
+        let mut args: [*mut c_void; 3] = [
+            input_buf.as_kernel_arg(),
+            debug_buf.as_kernel_arg(),
+            &batch_size as *const u32 as *mut c_void,
+        ];
+
+        println!("Launching loadloop kernel...");
+        unsafe {
+            stream
+                .launch_kernel(&mut module, "loadloop_debug", &config, &mut args)
+                .expect("Kernel launch");
+        }
+
+        let sync_result = stream.synchronize();
+
+        let mut output = vec![0u32; 256];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        for i in 0..output[0].min(50) as usize {
+            let m = output[i + 1];
+            let name = match m {
+                0xAA000000 => "BOUNDS_PASS",
+                0xAA000001 => "WARP_OFF",
+                0xAA000002 => "INPUT_PTR",
+                0xAA000003 => "INIT_IDX",
+                0xBB000000 => "LOOP_ITER",
+                0xBB000001 => "BEFORE_LOAD",
+                0xBB000002 => "AFTER_LOAD",
+                0xBB000003 => "AFTER_STORE",
+                0xCC000000 => "LOAD_DONE",
+                _ => "UNKNOWN",
+            };
+            println!("  [{:2}] 0x{:08X} ({})", i, m, name);
+        }
+
+        if let Err(e) = sync_result {
+            panic!("LoadLoop test crashed: {:?}", e);
+        }
+
+        assert!(output[0] >= 5, "Should have at least 5 markers");
+        println!("LoadLoop debug test PASSED!");
+    }
+
+    /// FKR-101-BAREBONES: Absolute minimum test matching failing kernel structure
+    #[test]
+    fn fkr_101_barebones_test() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        // Same SMEM size as failing kernel
+        const SMEM_SIZE: usize = 12544 * 3; // 37632
+
+        // Build kernel with EXACT same parameters as failing kernel
+        let kernel = PtxKernel::new("barebones")
+            .param(PtxType::U64, "input_batch")
+            .param(PtxType::U64, "output_batch")
+            .param(PtxType::U64, "output_sizes")
+            .param(PtxType::U64, "debug_buf")
+            .param(PtxType::U32, "batch_size")
+            .shared_memory(SMEM_SIZE)
+            .build(|ctx| {
+                let _input_ptr = ctx.load_param_u64("input_batch");
+                let _output_ptr = ctx.load_param_u64("output_batch");
+                let _sizes_ptr = ctx.load_param_u64("output_sizes");
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let batch_size = ctx.load_param_u32("batch_size");
+
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let bid = ctx.special_reg(PtxReg::CtaIdX);
+                let warp_id = ctx.shr_u32_imm(tid, 5);
+                let lane_mask = ctx.mov_u32_imm(31);
+                let lane_id = ctx.and_u32(tid, lane_mask);
+
+                let zero_check = ctx.mov_u32_imm(0);
+                let is_leader = ctx.setp_eq_u32(lane_id, zero_check);
+                ctx.branch_if_not(is_leader, "L_end");
+
+                let warps_per_block = ctx.mov_u32_imm(3);
+                let block_offset = ctx.mul_lo_u32(bid, warps_per_block);
+                let page_idx = ctx.add_u32_reg(block_offset, warp_id);
+
+                let out_of_bounds = ctx.setp_ge_u32(page_idx, batch_size);
+                ctx.branch_if(out_of_bounds, "L_end");
+
+                // Write one marker
+                ctx.emit_debug_marker(debug_ptr, 0xDEADBEEF);
+
+                ctx.label("L_end");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== Barebones PTX ===\n{}", ptx);
+
+        // Allocate SAME buffers as failing test
+        let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
+        let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4352).unwrap();
+        let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1).unwrap();
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1024).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 1024]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        // SAME config as failing test
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1),
+            shared_mem: 0,
+        };
+
+        let batch_size: u32 = 1;
+        let mut args: [*mut c_void; 5] = [
+            input_buf.as_kernel_arg(),
+            output_buf.as_kernel_arg(),
+            sizes_buf.as_kernel_arg(),
+            debug_buf.as_kernel_arg(),
+            &batch_size as *const u32 as *mut c_void,
+        ];
+
+        println!("Launching barebones kernel...");
+        unsafe {
+            stream.launch_kernel(&mut module, "barebones", &config, &mut args)
+                .expect("Kernel launch");
+        }
+
+        let sync_result = stream.synchronize();
+
+        let mut output = vec![0u32; 1024];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        if output[0] > 0 {
+            println!("First marker: 0x{:08X}", output[1]);
+        }
+
+        if let Err(e) = sync_result {
+            panic!("Barebones test crashed: {:?}", e);
+        }
+
+        assert_eq!(output[0], 1, "Should have exactly 1 marker");
+        assert_eq!(output[1], 0xDEADBEEF, "Marker should be 0xDEADBEEF");
+        println!("Barebones test PASSED!");
+    }
+
+    /// FKR-101-SETUP-ONLY: Test with exact same setup as failing kernel, but simple exit
+    /// This tests if the crash is in setup or in compression loop
+    #[test]
+    fn fkr_101_setup_only_test() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        const SMEM_SIZE: usize = 12544 * 3;
+        const PAGE_SIZE_VAL: u32 = 4096;
+        const HASH_TABLE_SIZE: u32 = 8192;
+        const STATE_OFF: u32 = PAGE_SIZE_VAL + 8192 + 128 + 4;
+        const HASH_TABLE_OFF: u32 = PAGE_SIZE_VAL;
+
+        let kernel = PtxKernel::new("setup_only")
+            .param(PtxType::U64, "input_batch")
+            .param(PtxType::U64, "output_batch")
+            .param(PtxType::U64, "output_sizes")
+            .param(PtxType::U64, "debug_buf")
+            .param(PtxType::U32, "batch_size")
+            .shared_memory(SMEM_SIZE)
+            .build(|ctx| {
+                // EXACT SAME SETUP as build_instrumented_compress_kernel()
+                let input_ptr = ctx.load_param_u64("input_batch");
+                let output_ptr = ctx.load_param_u64("output_batch");
+                let sizes_ptr = ctx.load_param_u64("output_sizes");
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let batch_size = ctx.load_param_u32("batch_size");
+
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let bid = ctx.special_reg(PtxReg::CtaIdX);
+                let warp_id = ctx.shr_u32_imm(tid, 5);
+                let lane_mask = ctx.mov_u32_imm(31);
+                let lane_id = ctx.and_u32(tid, lane_mask);
+
+                let zero_check = ctx.mov_u32_imm(0);
+                let is_leader = ctx.setp_eq_u32(lane_id, zero_check);
+                ctx.branch_if_not(is_leader, "L_end");
+
+                let warps_per_block = ctx.mov_u32_imm(3);
+                let block_offset = ctx.mul_lo_u32(bid, warps_per_block);
+                let page_idx = ctx.add_u32_reg(block_offset, warp_id);
+
+                let out_of_bounds = ctx.setp_ge_u32(page_idx, batch_size);
+                ctx.branch_if(out_of_bounds, "L_end");
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000000); // BOUNDS OK
+
+                // Use mul_u32 with immediate like failing kernel
+                let warp_smem_size = ctx.mov_u32_imm(12544);
+                let warp_off = ctx.mul_lo_u32(warp_id, warp_smem_size);
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000001); // WARP_OFF
+
+                // Load loop
+                let page_size_val = ctx.mov_u32_imm(PAGE_SIZE_VAL);
+                let page_offset = ctx.mul_lo_u32(page_idx, page_size_val);
+                let page_offset_64 = ctx.cvt_u64_u32(page_offset);
+                let input_page_ptr = ctx.add_u64(input_ptr, page_offset_64);
+
+                let zero_val = ctx.mov_u32_imm(0);
+                ctx.st_shared_u32(warp_off, zero_val);
+
+                ctx.label("L_load_loop");
+                let idx = ctx.ld_shared_u32(warp_off);
+                let load_done = ctx.setp_ge_u32(idx, page_size_val);
+                ctx.branch_if(load_done, "L_load_done");
+
+                let idx_64 = ctx.cvt_u64_u32(idx);
+                let src_addr = ctx.add_u64(input_page_ptr, idx_64);
+                let val = ctx.ld_global_u32(src_addr);
+                let dst_off = ctx.add_u32_reg(warp_off, idx);
+                ctx.st_shared_u32(dst_off, val);
+
+                let four = ctx.mov_u32_imm(4);
+                let idx_next = ctx.add_u32_reg(idx, four);
+                ctx.st_shared_u32(warp_off, idx_next);
+                ctx.branch("L_load_loop");
+
+                ctx.label("L_load_done");
+                ctx.emit_debug_marker(debug_ptr, 0xAA000002); // LOAD DONE
+
+                // Hash init loop
+                let hash_base_off_val = ctx.mov_u32_imm(HASH_TABLE_OFF);
+                let hash_base_off = ctx.add_u32_reg(warp_off, hash_base_off_val);
+                ctx.st_shared_u32(warp_off, zero_val);
+                let invalid_marker = ctx.mov_u32_imm(0xFFFFFFFF);
+                let hash_table_size = ctx.mov_u32_imm(HASH_TABLE_SIZE);
+
+                ctx.label("L_hash_init");
+                let h_idx = ctx.ld_shared_u32(warp_off);
+                let init_done = ctx.setp_ge_u32(h_idx, hash_table_size);
+                ctx.branch_if(init_done, "L_hash_done");
+
+                let hash_off = ctx.add_u32_reg(hash_base_off, h_idx);
+                ctx.st_shared_u32(hash_off, invalid_marker);
+
+                let h_next = ctx.add_u32_reg(h_idx, four);
+                ctx.st_shared_u32(warp_off, h_next);
+                ctx.branch("L_hash_init");
+
+                ctx.label("L_hash_done");
+                ctx.emit_debug_marker(debug_ptr, 0xAA000003); // HASH DONE
+
+                // State init (like failing kernel)
+                let state_off_val = ctx.mov_u32_imm(STATE_OFF);
+                let state_off = ctx.add_u32_reg(warp_off, state_off_val);
+                let four_imm = ctx.mov_u32_imm(4);
+                let eight_imm = ctx.mov_u32_imm(8);
+                let out_pos_state_off = ctx.add_u32_reg(state_off, four_imm);
+                let anchor_state_off = ctx.add_u32_reg(state_off, eight_imm);
+
+                ctx.st_shared_u32(state_off, zero_val);
+                ctx.st_shared_u32(out_pos_state_off, zero_val);
+                ctx.st_shared_u32(anchor_state_off, zero_val);
+
+                // Output setup (like failing kernel)
+                let output_size = ctx.mov_u32_imm(4352);
+                let output_offset = ctx.mul_lo_u32(page_idx, output_size);
+                let output_offset_64 = ctx.cvt_u64_u32(output_offset);
+                let _output_page_ptr = ctx.add_u64(output_ptr, output_offset_64);
+
+                // Initialize all the constants used in compress loop
+                let limit = ctx.mov_u32_imm(PAGE_SIZE_VAL - 12);
+                let lz4_prime = ctx.mov_u32_imm(0x9E3779B1);
+                let hash_shift = ctx.mov_u32_imm(21);
+                let hash_mask = ctx.mov_u32_imm(0x7FF);
+
+                // Just write final output and exit (no compress loop)
+                let final_pos = ctx.mov_u32_imm(0);
+                let page_idx_64 = ctx.cvt_u64_u32(page_idx);
+                let four_64 = ctx.mov_u64_imm(4);
+                let size_offset = ctx.mul_u64_reg(page_idx_64, four_64);
+                let size_addr = ctx.add_u64(sizes_ptr, size_offset);
+                ctx.st_global_u32(size_addr, final_pos);
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000004); // ALL DONE
+
+                // Suppress unused warnings by referencing
+                let _suppress = limit;
+                let _suppress2 = lz4_prime;
+                let _suppress3 = hash_shift;
+                let _suppress4 = hash_mask;
+                let _suppress5 = invalid_marker;
+
+                ctx.label("L_end");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== Setup-Only PTX ===");
+        for (i, line) in ptx.lines().take(50).enumerate() {
+            println!("{:4}: {}", i + 1, line);
+        }
+
+        let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
+        input_buf.copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>()).unwrap();
+
+        let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4352).unwrap();
+        let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1).unwrap();
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1),
+            shared_mem: 0,
+        };
+
+        let batch_size: u32 = 1;
+        let mut args: [*mut c_void; 5] = [
+            input_buf.as_kernel_arg(),
+            output_buf.as_kernel_arg(),
+            sizes_buf.as_kernel_arg(),
+            debug_buf.as_kernel_arg(),
+            &batch_size as *const u32 as *mut c_void,
+        ];
+
+        println!("Launching setup-only kernel...");
+        unsafe {
+            stream.launch_kernel(&mut module, "setup_only", &config, &mut args).expect("Launch");
+        }
+
+        let sync_result = stream.synchronize();
+
+        let mut output = vec![0u32; 64];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        for i in 0..output[0].min(10) as usize {
+            let m = output[i + 1];
+            let name = match m {
+                0xAA000000 => "BOUNDS_OK",
+                0xAA000001 => "WARP_OFF",
+                0xAA000002 => "LOAD_DONE",
+                0xAA000003 => "HASH_DONE",
+                0xAA000004 => "ALL_DONE",
+                _ => "UNKNOWN",
+            };
+            println!("  [{:2}] 0x{:08X} ({})", i, m, name);
+        }
+
+        if let Err(e) = sync_result {
+            panic!("Setup-only test crashed: {:?}", e);
+        }
+
+        assert_eq!(output[0], 5, "Should have 5 markers");
+        println!("Setup-only test PASSED!");
+    }
+
+    /// FKR-101-COMPRESS-MINIMAL: Setup + minimal compression loop (no match logic)
+    #[test]
+    fn fkr_101_compress_minimal_test() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        const SMEM_SIZE: usize = 12544 * 3;
+        const PAGE_SIZE_VAL: u32 = 4096;
+        const HASH_TABLE_SIZE: u32 = 8192;
+        const STATE_OFF: u32 = PAGE_SIZE_VAL + 8192 + 128 + 4;
+        const HASH_TABLE_OFF: u32 = PAGE_SIZE_VAL;
+
+        let kernel = PtxKernel::new("compress_minimal")
+            .param(PtxType::U64, "input_batch")
+            .param(PtxType::U64, "output_batch")
+            .param(PtxType::U64, "output_sizes")
+            .param(PtxType::U64, "debug_buf")
+            .param(PtxType::U32, "batch_size")
+            .shared_memory(SMEM_SIZE)
+            .build(|ctx| {
+                // Setup (same as setup_only)
+                let input_ptr = ctx.load_param_u64("input_batch");
+                let output_ptr = ctx.load_param_u64("output_batch");
+                let sizes_ptr = ctx.load_param_u64("output_sizes");
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let batch_size = ctx.load_param_u32("batch_size");
+
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let bid = ctx.special_reg(PtxReg::CtaIdX);
+                let warp_id = ctx.shr_u32_imm(tid, 5);
+                let lane_mask = ctx.mov_u32_imm(31);
+                let lane_id = ctx.and_u32(tid, lane_mask);
+
+                let zero_check = ctx.mov_u32_imm(0);
+                let is_leader = ctx.setp_eq_u32(lane_id, zero_check);
+                ctx.branch_if_not(is_leader, "L_end");
+
+                let warps_per_block = ctx.mov_u32_imm(3);
+                let block_offset = ctx.mul_lo_u32(bid, warps_per_block);
+                let page_idx = ctx.add_u32_reg(block_offset, warp_id);
+
+                let out_of_bounds = ctx.setp_ge_u32(page_idx, batch_size);
+                ctx.branch_if(out_of_bounds, "L_end");
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000000);
+
+                let warp_smem_size = ctx.mov_u32_imm(12544);
+                let warp_off = ctx.mul_lo_u32(warp_id, warp_smem_size);
+
+                // Load loop
+                let page_size_val = ctx.mov_u32_imm(PAGE_SIZE_VAL);
+                let page_offset = ctx.mul_lo_u32(page_idx, page_size_val);
+                let page_offset_64 = ctx.cvt_u64_u32(page_offset);
+                let input_page_ptr = ctx.add_u64(input_ptr, page_offset_64);
+
+                let zero_val = ctx.mov_u32_imm(0);
+                let four = ctx.mov_u32_imm(4);
+                ctx.st_shared_u32(warp_off, zero_val);
+
+                ctx.label("L_load_loop");
+                let idx = ctx.ld_shared_u32(warp_off);
+                let load_done = ctx.setp_ge_u32(idx, page_size_val);
+                ctx.branch_if(load_done, "L_load_done");
+
+                let idx_64 = ctx.cvt_u64_u32(idx);
+                let src_addr = ctx.add_u64(input_page_ptr, idx_64);
+                let val = ctx.ld_global_u32(src_addr);
+                let dst_off = ctx.add_u32_reg(warp_off, idx);
+                ctx.st_shared_u32(dst_off, val);
+
+                let idx_next = ctx.add_u32_reg(idx, four);
+                ctx.st_shared_u32(warp_off, idx_next);
+                ctx.branch("L_load_loop");
+
+                ctx.label("L_load_done");
+                ctx.emit_debug_marker(debug_ptr, 0xAA000001);
+
+                // Hash init
+                let hash_base_off_val = ctx.mov_u32_imm(HASH_TABLE_OFF);
+                let hash_base_off = ctx.add_u32_reg(warp_off, hash_base_off_val);
+                ctx.st_shared_u32(warp_off, zero_val);
+                let invalid_marker = ctx.mov_u32_imm(0xFFFFFFFF);
+                let hash_table_size = ctx.mov_u32_imm(HASH_TABLE_SIZE);
+
+                ctx.label("L_hash_init");
+                let h_idx = ctx.ld_shared_u32(warp_off);
+                let init_done = ctx.setp_ge_u32(h_idx, hash_table_size);
+                ctx.branch_if(init_done, "L_hash_done");
+
+                let hash_off = ctx.add_u32_reg(hash_base_off, h_idx);
+                ctx.st_shared_u32(hash_off, invalid_marker);
+
+                let h_next = ctx.add_u32_reg(h_idx, four);
+                ctx.st_shared_u32(warp_off, h_next);
+                ctx.branch("L_hash_init");
+
+                ctx.label("L_hash_done");
+                ctx.emit_debug_marker(debug_ptr, 0xAA000002);
+
+                // State init
+                let state_off_val = ctx.mov_u32_imm(STATE_OFF);
+                let state_off = ctx.add_u32_reg(warp_off, state_off_val);
+                let four_imm = ctx.mov_u32_imm(4);
+                let eight_imm = ctx.mov_u32_imm(8);
+                let out_pos_state_off = ctx.add_u32_reg(state_off, four_imm);
+                let anchor_state_off = ctx.add_u32_reg(state_off, eight_imm);
+
+                ctx.st_shared_u32(state_off, zero_val);
+                ctx.st_shared_u32(out_pos_state_off, zero_val);
+                ctx.st_shared_u32(anchor_state_off, zero_val);
+
+                // Compression constants
+                let limit = ctx.mov_u32_imm(PAGE_SIZE_VAL - 12);
+                let lz4_prime = ctx.mov_u32_imm(0x9E3779B1);
+                let hash_shift_val = ctx.mov_u32_imm(21);
+                let hash_mask = ctx.mov_u32_imm(0x7FF);
+                let max_iters = ctx.mov_u32_imm(10);
+                let twelve_imm = ctx.mov_u32_imm(12);
+                let iter_counter_off = ctx.add_u32_reg(state_off, twelve_imm);
+                ctx.st_shared_u32(iter_counter_off, zero_val);
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000003);
+
+                // Pre-compute smem base outside loop
+                let smem_base = ctx.shared_base_addr();  // cvta.to.shared.u64 smem
+
+                // MINIMAL compression loop - NO hash at all, just iterate
+                ctx.label("L_compress_loop");
+                ctx.emit_debug_marker(debug_ptr, 0xBB000000);
+
+                // Check iteration limit
+                let iters = ctx.ld_shared_u32(iter_counter_off);
+                let too_many = ctx.setp_ge_u32(iters, max_iters);
+                ctx.branch_if(too_many, "L_done");
+                let one = ctx.mov_u32_imm(1);
+                let iters_next = ctx.add_u32_reg(iters, one);
+                ctx.membar_cta();  // Before storing value computed from loaded
+                ctx.st_shared_u32(iter_counter_off, iters_next);
+
+                // Load state (just in_pos for now)
+                let in_pos = ctx.ld_shared_u32(state_off);
+
+                // Bounds check
+                let at_limit = ctx.setp_ge_u32(in_pos, limit);
+                ctx.branch_if(at_limit, "L_done");
+
+                // TEST: Use in_pos (loaded value) in address computation
+
+                // Compute address using in_pos (which is loaded from shared memory)
+                let computed_addr = ctx.add_u32_reg(warp_off, in_pos);  // warp_off + in_pos
+
+                // LVB-003: membar.cta BEFORE store to address computed from loaded value
+                ctx.membar_cta();
+
+                // Write constant to computed address
+                let test_constant = ctx.mov_u32_imm(0xCAFEBABE);
+                ctx.st_shared_u32(computed_addr, test_constant);
+
+                // Load from computed address (this works fine)
+                let _loaded_val = ctx.ld_shared_u32(computed_addr);
+
+                // Just emit a constant marker
+                ctx.emit_debug_marker(debug_ptr, 0xDD000000);
+
+                // Suppress unused
+                let _ = hash_mask;
+                let _ = hash_base_off;
+
+                ctx.emit_debug_marker(debug_ptr, 0xDD000001);
+
+                // Suppress unused
+                let _ = smem_base;
+
+                // Suppress unused
+                let _ = lz4_prime;
+                let _ = hash_shift_val;
+
+                // Just advance position
+                let in_pos_next = ctx.add_u32_reg(in_pos, one);
+                ctx.membar_cta();  // Before storing value computed from loaded
+                ctx.st_shared_u32(state_off, in_pos_next);
+                ctx.branch("L_compress_loop");
+
+                ctx.label("L_done");
+                ctx.emit_debug_marker(debug_ptr, 0xCC000000);
+
+                // Store output size
+                let final_out_pos = ctx.ld_shared_u32(out_pos_state_off);
+                let page_idx_64 = ctx.cvt_u64_u32(page_idx);
+                let four_64 = ctx.mov_u64_imm(4);
+                let size_offset = ctx.mul_u64_reg(page_idx_64, four_64);
+                let size_addr = ctx.add_u64(sizes_ptr, size_offset);
+                ctx.st_global_u32(size_addr, final_out_pos);
+
+                // Suppress unused warnings
+                let _ = output_ptr;
+                let _ = invalid_marker;
+
+                ctx.label("L_end");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== Compress-Minimal PTX ===");
+        for (i, line) in ptx.lines().enumerate() {
+            println!("{:4}: {}", i + 1, line);
+        }
+
+        let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
+        input_buf.copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>()).unwrap();
+
+        let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4352).unwrap();
+        let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1).unwrap();
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1),
+            shared_mem: 0,
+        };
+
+        let batch_size: u32 = 1;
+        let mut args: [*mut c_void; 5] = [
+            input_buf.as_kernel_arg(),
+            output_buf.as_kernel_arg(),
+            sizes_buf.as_kernel_arg(),
+            debug_buf.as_kernel_arg(),
+            &batch_size as *const u32 as *mut c_void,
+        ];
+
+        println!("Launching compress-minimal kernel...");
+        unsafe {
+            stream.launch_kernel(&mut module, "compress_minimal", &config, &mut args).expect("Launch");
+        }
+
+        let sync_result = stream.synchronize();
+
+        let mut output = vec![0u32; 64];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        for i in 0..output[0].min(20) as usize {
+            let m = output[i + 1];
+            let name = match m {
+                0xAA000000 => "BOUNDS_OK",
+                0xAA000001 => "LOAD_DONE",
+                0xAA000002 => "HASH_DONE",
+                0xAA000003 => "COMPRESS_START",
+                0xBB000000 => "LOOP_ITER",
+                0xCC000000 => "ALL_DONE",
+                _ => "UNKNOWN",
+            };
+            println!("  [{:2}] 0x{:08X} ({})", i, m, name);
+        }
+
+        if let Err(e) = sync_result {
+            panic!("Compress-minimal test crashed: {:?}", e);
+        }
+
+        // Expected: BOUNDS_OK, LOAD_DONE, HASH_DONE, COMPRESS_START, 10x LOOP_ITER, ALL_DONE = 14 markers
+        assert!(output[0] >= 14, "Should have at least 14 markers");
+        println!("Compress-minimal test PASSED!");
+    }
+
+    /// FKR-101-MEMBAR: Test membar.cta workaround for ComputedAddrFromLoaded bug (LVB-003)
+    ///
+    /// Tests if inserting membar.cta before/after the problematic store helps.
+    #[test]
+    fn fkr_101_membar_workaround_test() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        const SMEM_SIZE: usize = 12544 * 3;
+        const PAGE_SIZE_VAL: u32 = 4096;
+        const STATE_OFF: u32 = PAGE_SIZE_VAL + 8192 + 128 + 4;
+
+        let kernel = PtxKernel::new("membar_workaround")
+            .param(PtxType::U64, "debug_buf")
+            .param(PtxType::U32, "batch_size")
+            .shared_memory(SMEM_SIZE)
+            .build(|ctx| {
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let batch_size = ctx.load_param_u32("batch_size");
+
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let bid = ctx.special_reg(PtxReg::CtaIdX);
+                let warp_id = ctx.shr_u32_imm(tid, 5);
+                let lane_mask = ctx.mov_u32_imm(31);
+                let lane_id = ctx.and_u32(tid, lane_mask);
+
+                let zero_check = ctx.mov_u32_imm(0);
+                let is_leader = ctx.setp_eq_u32(lane_id, zero_check);
+                ctx.branch_if_not(is_leader, "L_end");
+
+                let warps_per_block = ctx.mov_u32_imm(3);
+                let block_offset = ctx.mul_lo_u32(bid, warps_per_block);
+                let page_idx = ctx.add_u32_reg(block_offset, warp_id);
+
+                let out_of_bounds = ctx.setp_ge_u32(page_idx, batch_size);
+                ctx.branch_if(out_of_bounds, "L_end");
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000000);
+
+                let warp_smem_size = ctx.mov_u32_imm(12544);
+                let warp_off = ctx.mul_lo_u32(warp_id, warp_smem_size);
+
+                // State offset
+                let state_off_val = ctx.mov_u32_imm(STATE_OFF);
+                let state_off = ctx.add_u32_reg(warp_off, state_off_val);
+
+                // Initialize state
+                let zero_val = ctx.mov_u32_imm(0);
+                ctx.st_shared_u32(state_off, zero_val);
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000001);
+
+                // Load in_pos from shared (this is the "loaded value")
+                let in_pos = ctx.ld_shared_u32(state_off);
+
+                ctx.emit_debug_marker(debug_ptr, 0xAA000002);
+
+                // Compute address using in_pos (loaded value)
+                let computed_addr = ctx.add_u32_reg(warp_off, in_pos);
+
+                // ====== LVB-003: Try membar.cta before store ======
+                ctx.membar_cta();
+
+                ctx.emit_debug_marker(debug_ptr, 0xBB000000);
+
+                // Store constant to computed address - THIS IS THE CRASH POINT
+                let test_constant = ctx.mov_u32_imm(0xCAFEBABE);
+                ctx.st_shared_u32(computed_addr, test_constant);
+
+                // ====== Try membar.cta after store ======
+                ctx.membar_cta();
+
+                ctx.emit_debug_marker(debug_ptr, 0xBB000001);
+
+                ctx.label("L_end");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== Membar Workaround PTX ===\n{}", ptx);
+
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1),
+            shared_mem: 0,
+        };
+
+        let batch_size: u32 = 1;
+        let mut args: [*mut c_void; 2] = [
+            debug_buf.as_kernel_arg(),
+            &batch_size as *const u32 as *mut c_void,
+        ];
+
+        println!("Launching membar workaround kernel...");
+        unsafe {
+            stream.launch_kernel(&mut module, "membar_workaround", &config, &mut args)
+                .expect("Kernel launch");
+        }
+
+        let sync_result = stream.synchronize();
+
+        let mut output = vec![0u32; 64];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        for i in 0..output[0].min(10) as usize {
+            let m = output[i + 1];
+            let name = match m {
+                0xAA000000 => "BOUNDS_OK",
+                0xAA000001 => "STATE_INIT",
+                0xAA000002 => "LOADED_IN_POS",
+                0xBB000000 => "BEFORE_STORE",
+                0xBB000001 => "AFTER_STORE",
+                _ => "UNKNOWN",
+            };
+            println!("  [{:2}] 0x{:08X} ({})", i, m, name);
+        }
+
+        if let Err(e) = sync_result {
+            println!("Membar workaround FAILED: {:?}", e);
+            println!("LVB-003: membar.cta does NOT fix the ComputedAddrFromLoaded bug");
+            panic!("Membar workaround crashed: {:?}", e);
+        }
+
+        assert_eq!(output[0], 5, "Should have 5 markers (membar workaround succeeded!)");
+        println!("LVB-003: membar.cta WORKS! Test PASSED!");
+    }
+
+    /// FKR-101-FULLLOAD: Test with full load loop but no compress loop
+    #[test]
+    fn fkr_101_fullload_test() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        const SMEM_SIZE: usize = 12544 * 3;
+        const PAGE_SIZE_VAL: u32 = 4096;
+        const HASH_TABLE_SIZE: u32 = 8192;
+
+        let kernel = PtxKernel::new("fullload")
+            .param(PtxType::U64, "input_batch")
+            .param(PtxType::U64, "debug_buf")
+            .param(PtxType::U32, "batch_size")
+            .shared_memory(SMEM_SIZE)
+            .build(|ctx| {
+                let input_ptr = ctx.load_param_u64("input_batch");
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let batch_size = ctx.load_param_u32("batch_size");
+
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let bid = ctx.special_reg(PtxReg::CtaIdX);
+                let warp_id = ctx.shr_u32_imm(tid, 5);
+                let lane_mask = ctx.mov_u32_imm(31);
+                let lane_id = ctx.and_u32(tid, lane_mask);
+
+                let zero_check = ctx.mov_u32_imm(0);
+                let is_leader = ctx.setp_eq_u32(lane_id, zero_check);
+                ctx.branch_if_not(is_leader, "L_end");
+
+                let warps_per_block = ctx.mov_u32_imm(3);
+                let block_offset = ctx.mul_lo_u32(bid, warps_per_block);
+                let page_idx = ctx.add_u32_reg(block_offset, warp_id);
+
+                let out_of_bounds = ctx.setp_ge_u32(page_idx, batch_size);
+                ctx.branch_if(out_of_bounds, "L_end");
+
+                ctx.emit_debug_marker(debug_ptr, 0x11111111); // START
+
+                let warp_size = ctx.mov_u32_imm(12544);
+                let warp_off = ctx.mul_lo_u32(warp_id, warp_size);
+
+                let page_size_val = ctx.mov_u32_imm(PAGE_SIZE_VAL);
+                let page_offset = ctx.mul_lo_u32(page_idx, page_size_val);
+                let page_offset_64 = ctx.cvt_u64_u32(page_offset);
+                let input_page_ptr = ctx.add_u64(input_ptr, page_offset_64);
+
+                // Full load loop (4096 bytes = 1024 iterations)
+                let zero_val = ctx.mov_u32_imm(0);
+                ctx.st_shared_u32(warp_off, zero_val);
+
+                ctx.label("L_load_loop");
+                let idx = ctx.ld_shared_u32(warp_off);
+                let load_done = ctx.setp_ge_u32(idx, page_size_val);
+                ctx.branch_if(load_done, "L_load_done");
+
+                let idx_64 = ctx.cvt_u64_u32(idx);
+                let src_addr = ctx.add_u64(input_page_ptr, idx_64);
+                let val = ctx.ld_global_u32(src_addr);
+                let dst_off = ctx.add_u32_reg(warp_off, idx);
+                ctx.st_shared_u32(dst_off, val);
+
+                let four = ctx.mov_u32_imm(4);
+                let idx_next = ctx.add_u32_reg(idx, four);
+                ctx.st_shared_u32(warp_off, idx_next);
+                ctx.branch("L_load_loop");
+
+                ctx.label("L_load_done");
+                ctx.emit_debug_marker(debug_ptr, 0x22222222); // LOAD DONE
+
+                // Full hash init loop (8192 bytes = 2048 iterations)
+                let hash_base_off = ctx.add_u32(warp_off, 4096);
+                ctx.st_shared_u32(warp_off, zero_val);
+                let invalid_marker = ctx.mov_u32_imm(0xFFFFFFFF);
+                let hash_size = ctx.mov_u32_imm(HASH_TABLE_SIZE);
+
+                ctx.label("L_hash_init");
+                let h_idx = ctx.ld_shared_u32(warp_off);
+                let init_done = ctx.setp_ge_u32(h_idx, hash_size);
+                ctx.branch_if(init_done, "L_hash_done");
+
+                let hash_off = ctx.add_u32_reg(hash_base_off, h_idx);
+                ctx.st_shared_u32(hash_off, invalid_marker);
+
+                let h_next = ctx.add_u32_reg(h_idx, four);
+                ctx.st_shared_u32(warp_off, h_next);
+                ctx.branch("L_hash_init");
+
+                ctx.label("L_hash_done");
+                ctx.emit_debug_marker(debug_ptr, 0x33333333); // HASH DONE
+
+                // Initialize compression state
+                let state_off = ctx.add_u32(warp_off, 12420); // STATE_OFFSET
+                let out_pos_state_off = ctx.add_u32(state_off, 4);
+                let anchor_state_off = ctx.add_u32(state_off, 8);
+
+                ctx.st_shared_u32(state_off, zero_val); // in_pos = 0
+                ctx.st_shared_u32(out_pos_state_off, zero_val); // out_pos = 0
+                ctx.st_shared_u32(anchor_state_off, zero_val); // anchor = 0
+
+                ctx.emit_debug_marker(debug_ptr, 0x44444444); // STATE INIT DONE
+
+                // Simplified compress loop (just 5 iterations)
+                let limit = ctx.mov_u32_imm(5);
+
+                ctx.label("L_compress_loop");
+                ctx.emit_debug_marker(debug_ptr, 0x55555555); // COMPRESS ITER
+
+                let in_pos = ctx.ld_shared_u32(state_off);
+                let at_limit = ctx.setp_ge_u32(in_pos, limit);
+                ctx.branch_if(at_limit, "L_done");
+
+                // Just increment in_pos
+                let one = ctx.mov_u32_imm(1);
+                let in_pos_next = ctx.add_u32_reg(in_pos, one);
+                ctx.st_shared_u32(state_off, in_pos_next);
+                ctx.branch("L_compress_loop");
+
+                ctx.label("L_done");
+                ctx.emit_debug_marker(debug_ptr, 0x66666666); // ALL DONE
+
+                ctx.label("L_end");
+                ctx.ret();
+            });
+
+        let ptx = PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit();
+
+        println!("=== FullLoad PTX (first 50 lines) ===");
+        for (i, line) in ptx.lines().take(50).enumerate() {
+            println!("{:4}: {}", i + 1, line);
+        }
+
+        let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
+        input_buf.copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>()).unwrap();
+
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1),
+            shared_mem: 0,
+        };
+
+        let batch_size: u32 = 1;
+        let mut args: [*mut c_void; 3] = [
+            input_buf.as_kernel_arg(),
+            debug_buf.as_kernel_arg(),
+            &batch_size as *const u32 as *mut c_void,
+        ];
+
+        println!("Launching fullload kernel...");
+        unsafe {
+            stream.launch_kernel(&mut module, "fullload", &config, &mut args).expect("Launch");
+        }
+
+        let sync_result = stream.synchronize();
+
+        let mut output = vec![0u32; 64];
+        debug_buf.copy_to_host(&mut output).unwrap();
+
+        println!("Counter: {}", output[0]);
+        for i in 0..output[0].min(20) as usize {
+            let m = output[i + 1];
+            let name = match m {
+                0x11111111 => "START",
+                0x22222222 => "LOAD_DONE",
+                0x33333333 => "HASH_DONE",
+                0x44444444 => "STATE_INIT",
+                0x55555555 => "COMPRESS_ITER",
+                0x66666666 => "ALL_DONE",
+                _ => "UNKNOWN",
+            };
+            println!("  [{:2}] 0x{:08X} ({})", i, m, name);
+        }
+
+        if let Err(e) = sync_result {
+            panic!("FullLoad test crashed: {:?}", e);
+        }
+
+        // Expected: START, LOAD_DONE, HASH_DONE, STATE_INIT, 6x COMPRESS_ITER, ALL_DONE = 10 markers
+        assert!(output[0] >= 9, "Should have at least 9 markers");
+        println!("FullLoad test PASSED!");
+    }
+
+    // Constants matching the LZ4 kernel
+    const WARP_SMEM_SIZE: u32 = PAGE_SIZE + LZ4_HASH_SIZE * 2 + 256; // 12544
+    const STATE_OFFSET: u32 = PAGE_SIZE + 8192 + 128 + 4; // 12420
+    const HASH_TABLE_OFFSET: u32 = PAGE_SIZE; // 4096
+    const LZ4_PRIME: u32 = 0x9E3779B1;
+    const LZ4_MAX_OFFSET: u32 = 65535;
+    const LZ4_MIN_MATCH: u32 = 4;
+
+    // Debug marker constants
+    const MARKER_LOOP_ENTRY: u32 = 0x01000000;
+    const MARKER_STATE_LOADED: u32 = 0x02000000;
+    const MARKER_HASH_COMPUTED: u32 = 0x03000000;
+    const MARKER_HASH_LOOKUP: u32 = 0x04000000;
+    const MARKER_FOUND_MATCH: u32 = 0x05000000;
+    const MARKER_COPY_LIT: u32 = 0x06000000;
+    const MARKER_NO_MATCH: u32 = 0x07000000;
+    const MARKER_EMIT_REMAIN: u32 = 0x08000000;
+
+    /// Build a minimal instrumented compression loop kernel
+    fn build_instrumented_compress_kernel() -> String {
+        let kernel = PtxKernel::new("instrumented_compress")
+            .param(PtxType::U64, "input_batch")
+            .param(PtxType::U64, "output_batch")
+            .param(PtxType::U64, "output_sizes")
+            .param(PtxType::U64, "debug_buf")
+            .param(PtxType::U32, "batch_size")
+            .shared_memory((WARP_SMEM_SIZE * 3) as usize) // 3 warps
+            .build(|ctx| {
+                // Load parameters
+                let input_ptr = ctx.load_param_u64("input_batch");
+                let output_ptr = ctx.load_param_u64("output_batch");
+                let sizes_ptr = ctx.load_param_u64("output_sizes");
+                let debug_ptr = ctx.load_param_u64("debug_buf");
+                let batch_size = ctx.load_param_u32("batch_size");
+
+                // Thread identification
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let bid = ctx.special_reg(PtxReg::CtaIdX);
+                let warp_id = ctx.shr_u32_imm(tid, 5);
+                let lane_mask = ctx.mov_u32_imm(31);
+                let lane_id = ctx.and_u32(tid, lane_mask);
+
+                // Only lane 0 of each warp processes
+                let zero_check = ctx.mov_u32_imm(0);
+                let is_leader = ctx.setp_eq_u32(lane_id, zero_check);
+                ctx.branch_if_not(is_leader, "L_not_leader");
+
+                // Compute page index = bid * warps_per_block + warp_id
+                let warps_per_block = ctx.mov_u32_imm(3);
+                let block_offset = ctx.mul_lo_u32(bid, warps_per_block);
+                let page_idx = ctx.add_u32_reg(block_offset, warp_id);
+
+                // Bounds check
+                let out_of_bounds = ctx.setp_ge_u32(page_idx, batch_size);
+                ctx.branch_if(out_of_bounds, "L_not_leader");
+
+                // DEBUG: After bounds check passed - VERY FIRST marker
+                ctx.emit_debug_marker(debug_ptr, 0xAA000000);
+
+                // Compute warp's shared memory offset
+                let warp_off = ctx.mul_u32(warp_id, WARP_SMEM_SIZE);
+
+                // DEBUG: After warp_off computed
+                ctx.emit_debug_marker(debug_ptr, 0xAA000001);
+
+                // Load page data from global to shared memory
+                let page_size_val = ctx.mov_u32_imm(PAGE_SIZE);
+                let page_offset = ctx.mul_lo_u32(page_idx, page_size_val);
+                let page_offset_64 = ctx.cvt_u64_u32(page_offset);
+                let input_page_ptr = ctx.add_u64(input_ptr, page_offset_64);
+
+                // Simple sequential load (leader thread loads all)
+                let load_idx = ctx.mov_u32_imm(0);
+                ctx.st_shared_u32(warp_off, load_idx);
+
+                ctx.label("L_load_loop");
+                // REMOVED: In-loop marker was causing buffer overflow (1024 iterations)
+                let idx = ctx.ld_shared_u32(warp_off);
+                let load_done = ctx.setp_ge_u32(idx, page_size_val);
+                ctx.branch_if(load_done, "L_load_done");
+
+                let idx_64 = ctx.cvt_u64_u32(idx);
+                let src_addr = ctx.add_u64(input_page_ptr, idx_64);
+                let val = ctx.ld_global_u32(src_addr);
+                let dst_off = ctx.add_u32_reg(warp_off, idx);
+                ctx.st_shared_u32(dst_off, val);
+
+                let idx_next = ctx.add_u32(idx, 4);
+                ctx.st_shared_u32(warp_off, idx_next);
+                ctx.branch("L_load_loop");
+
+                ctx.label("L_load_done");
+
+                // DEBUG: After data load complete
+                ctx.emit_debug_marker(debug_ptr, 0xAA000002);
+
+                // Initialize hash table (set all entries to 0xFFFFFFFF)
+                let hash_base_off = ctx.add_u32(warp_off, HASH_TABLE_OFFSET);
+                let init_idx = ctx.mov_u32_imm(0);
+                ctx.st_shared_u32(warp_off, init_idx);
+                let invalid_marker = ctx.mov_u32_imm(0xFFFFFFFF);
+                let hash_table_size = ctx.mov_u32_imm(8192);
+
+                ctx.label("L_hash_init_loop");
+                let h_idx = ctx.ld_shared_u32(warp_off);
+                let init_done = ctx.setp_ge_u32(h_idx, hash_table_size);
+                ctx.branch_if(init_done, "L_hash_init_done");
+
+                let hash_off = ctx.add_u32_reg(hash_base_off, h_idx);
+                ctx.st_shared_u32(hash_off, invalid_marker);
+
+                let h_idx_next = ctx.add_u32(h_idx, 4);
+                ctx.st_shared_u32(warp_off, h_idx_next);
+                ctx.branch("L_hash_init_loop");
+
+                ctx.label("L_hash_init_done");
+
+                // DEBUG: After hash init complete
+                ctx.emit_debug_marker(debug_ptr, 0xAA000003);
+
+                // Initialize compression state
+                let state_off = ctx.add_u32(warp_off, STATE_OFFSET);
+                let out_pos_state_off = ctx.add_u32(state_off, 4);
+                let anchor_state_off = ctx.add_u32(state_off, 8);
+
+                let zero_val = ctx.mov_u32_imm(0);
+                ctx.st_shared_u32(state_off, zero_val); // in_pos = 0
+                ctx.st_shared_u32(out_pos_state_off, zero_val); // out_pos = 0
+                ctx.st_shared_u32(anchor_state_off, zero_val); // anchor = 0
+
+                // Output page pointer
+                let output_size = ctx.mov_u32_imm(4352);
+                let output_offset = ctx.mul_lo_u32(page_idx, output_size);
+                let output_offset_64 = ctx.cvt_u64_u32(output_offset);
+                let output_page_ptr = ctx.add_u64(output_ptr, output_offset_64);
+
+                let limit = ctx.mov_u32_imm(PAGE_SIZE - 12);
+                let lz4_prime = ctx.mov_u32_imm(LZ4_PRIME);
+                let hash_shift = ctx.mov_u32_imm(21);
+                let hash_mask = ctx.mov_u32_imm(0x7FF);
+
+                // Limit iterations for debugging
+                let max_iters = ctx.mov_u32_imm(100);
+                let iter_counter_off = ctx.add_u32(state_off, 12);
+                ctx.st_shared_u32(iter_counter_off, zero_val);
+
+                // ============================================================
+                // Main compression loop with debug markers
+                // ============================================================
+                ctx.label("L_compress_loop");
+
+                // DEBUG: Mark loop entry (include page_idx for identification)
+                let marker = ctx.mov_u32_imm(MARKER_LOOP_ENTRY);
+                let marker_with_page = ctx.or_u32(marker, page_idx);
+                ctx.emit_debug_marker(debug_ptr, MARKER_LOOP_ENTRY);
+
+                // Check iteration limit
+                let iters = ctx.ld_shared_u32(iter_counter_off);
+                let too_many_iters = ctx.setp_ge_u32(iters, max_iters);
+                ctx.branch_if(too_many_iters, "L_emit_remaining");
+                let iters_next = ctx.add_u32(iters, 1);
+                ctx.st_shared_u32(iter_counter_off, iters_next);
+
+                // Recompute warp_off fresh each iteration
+                let fresh_tid = ctx.special_reg(PtxReg::TidX);
+                let fresh_warp_id = ctx.shr_u32_imm(fresh_tid, 5);
+                let fresh_warp_off = ctx.mul_u32(fresh_warp_id, WARP_SMEM_SIZE);
+
+                let fresh_state_off = ctx.add_u32(fresh_warp_off, STATE_OFFSET);
+                let fresh_out_pos_off = ctx.add_u32(fresh_state_off, 4);
+                let fresh_anchor_off = ctx.add_u32(fresh_state_off, 8);
+                let fresh_hash_base_off = ctx.add_u32(fresh_warp_off, HASH_TABLE_OFFSET);
+
+                // Load current state
+                let in_pos = ctx.ld_shared_u32(fresh_state_off);
+                let out_pos = ctx.ld_shared_u32(fresh_out_pos_off);
+                let anchor = ctx.ld_shared_u32(fresh_anchor_off);
+
+                // DEBUG: Mark state loaded
+                ctx.emit_debug_marker(debug_ptr, MARKER_STATE_LOADED);
+
+                // Check bounds
+                let at_limit = ctx.setp_ge_u32(in_pos, limit);
+                ctx.branch_if(at_limit, "L_emit_remaining");
+
+                // Load 4 bytes at current position
+                let page_data_off = ctx.add_u32_reg(fresh_warp_off, in_pos);
+                let curr_val = ctx.ld_shared_u32(page_data_off);
+
+                // Compute hash
+                let hash_tmp = ctx.mul_lo_u32(curr_val, lz4_prime);
+                let hash_shifted = ctx.shr_u32(hash_tmp, hash_shift);
+                let hash_idx = ctx.and_u32(hash_shifted, hash_mask);
+
+                // DEBUG: Mark hash computed
+                ctx.emit_debug_marker(debug_ptr, MARKER_HASH_COMPUTED);
+
+                // Look up hash table
+                let hash_entry_off = ctx.mul_u32(hash_idx, 4);
+                let hash_addr_off = ctx.add_u32_reg(fresh_hash_base_off, hash_entry_off);
+                let match_pos = ctx.ld_shared_u32(hash_addr_off);
+                ctx.st_shared_u32(hash_addr_off, in_pos);
+
+                // DEBUG: Mark hash lookup done
+                ctx.emit_debug_marker(debug_ptr, MARKER_HASH_LOOKUP);
+
+                // Check validity
+                let no_match_candidate = ctx.setp_eq_u32(match_pos, invalid_marker);
+                ctx.branch_if(no_match_candidate, "L_no_match");
+
+                let offset = ctx.sub_u32_reg(in_pos, match_pos);
+                let max_offset = ctx.mov_u32_imm(LZ4_MAX_OFFSET + 1);
+                let offset_too_large = ctx.setp_ge_u32(offset, max_offset);
+                ctx.branch_if(offset_too_large, "L_no_match");
+
+                let offset_is_zero = ctx.setp_eq_u32(offset, zero_val);
+                ctx.branch_if(offset_is_zero, "L_no_match");
+
+                // Bounds check match_pos
+                let max_match_pos = ctx.mov_u32_imm(PAGE_SIZE - 3);
+                let match_oob = ctx.setp_ge_u32(match_pos, max_match_pos);
+                ctx.branch_if(match_oob, "L_no_match");
+
+                // Load and compare
+                let match_data_off = ctx.add_u32_reg(fresh_warp_off, match_pos);
+                let match_val = ctx.ld_shared_u32(match_data_off);
+
+                let vals_equal = ctx.setp_eq_u32(curr_val, match_val);
+                ctx.branch_if_not(vals_equal, "L_no_match");
+
+                // ============================================================
+                // Found a match!
+                // ============================================================
+                ctx.label("L_found_match");
+                ctx.emit_debug_marker(debug_ptr, MARKER_FOUND_MATCH);
+
+                // Calculate literal length
+                let literal_len = ctx.sub_u32_reg(in_pos, anchor);
+
+                // Build token
+                let fifteen = ctx.mov_u32_imm(15);
+                let lit_ge_15 = ctx.setp_ge_u32(literal_len, fifteen);
+                let token_lit = ctx.selp_u32(lit_ge_15, fifteen, literal_len);
+                let four_bits = ctx.mov_u32_imm(4);
+                let token = ctx.shl_u32(token_lit, four_bits);
+
+                // Write token
+                let out_pos_64 = ctx.cvt_u64_u32(out_pos);
+                let out_addr = ctx.add_u64(output_page_ptr, out_pos_64);
+                ctx.st_global_u8(out_addr, token);
+                let out_pos_1 = ctx.add_u32(out_pos, 1);
+
+                // Handle extended literal length
+                ctx.branch_if_not(lit_ge_15, "L_skip_ext_lit");
+
+                let lit_minus_15 = ctx.sub_u32_reg(literal_len, fifteen);
+                let out_pos_1_64 = ctx.cvt_u64_u32(out_pos_1);
+                let ext_addr = ctx.add_u64(output_page_ptr, out_pos_1_64);
+                ctx.st_global_u8(ext_addr, lit_minus_15);
+                let out_pos_2 = ctx.add_u32(out_pos_1, 1);
+                ctx.st_shared_u32(fresh_out_pos_off, out_pos_2);
+                ctx.branch("L_copy_literals");
+
+                ctx.label("L_skip_ext_lit");
+                ctx.st_shared_u32(fresh_out_pos_off, out_pos_1);
+
+                // Copy literals
+                ctx.label("L_copy_literals");
+                ctx.emit_debug_marker(debug_ptr, MARKER_COPY_LIT);
+
+                let out_pos_cur = ctx.ld_shared_u32(fresh_out_pos_off);
+                let copy_idx = ctx.mov_u32_imm(0);
+                ctx.st_shared_u32(fresh_state_off, copy_idx);
+
+                ctx.label("L_copy_lit_loop");
+                let idx2 = ctx.ld_shared_u32(fresh_state_off);
+                let copy_done = ctx.setp_ge_u32(idx2, literal_len);
+                ctx.branch_if(copy_done, "L_copy_lit_done");
+
+                // Load byte (via u32 + extract)
+                let src_off = ctx.add_u32_reg(anchor, idx2);
+                let src_smem_off = ctx.add_u32_reg(fresh_warp_off, src_off);
+                let align_mask = ctx.mov_u32_imm(!3u32);
+                let aligned_off = ctx.and_u32(src_smem_off, align_mask);
+                let byte_mask = ctx.mov_u32_imm(3);
+                let byte_idx = ctx.and_u32(src_smem_off, byte_mask);
+                let word_val = ctx.ld_shared_u32(aligned_off);
+                let shift_amt = ctx.mul_u32(byte_idx, 8);
+                let shifted = ctx.shr_u32(word_val, shift_amt);
+                let byte_mask_ff = ctx.mov_u32_imm(0xFF);
+                let byte_val = ctx.and_u32(shifted, byte_mask_ff);
+
+                // Store byte
+                let dst_off = ctx.add_u32_reg(out_pos_cur, idx2);
+                let dst_off_64 = ctx.cvt_u64_u32(dst_off);
+                let dst_addr = ctx.add_u64(output_page_ptr, dst_off_64);
+                ctx.st_global_u8(dst_addr, byte_val);
+
+                let idx2_next = ctx.add_u32(idx2, 1);
+                ctx.st_shared_u32(fresh_state_off, idx2_next);
+                ctx.branch("L_copy_lit_loop");
+
+                ctx.label("L_copy_lit_done");
+
+                // Write match offset
+                let out_pos_after_lit = ctx.add_u32_reg(out_pos_cur, literal_len);
+                let out_pos_after_lit_64 = ctx.cvt_u64_u32(out_pos_after_lit);
+                let offset_addr = ctx.add_u64(output_page_ptr, out_pos_after_lit_64);
+                let mask_ff = ctx.mov_u32_imm(0xFF);
+                let offset_lo = ctx.and_u32(offset, mask_ff);
+                ctx.st_global_u8(offset_addr, offset_lo);
+
+                let one_64 = ctx.mov_u64_imm(1);
+                let offset_addr_1 = ctx.add_u64(offset_addr, one_64);
+                let eight = ctx.mov_u32_imm(8);
+                let offset_hi = ctx.shr_u32(offset, eight);
+                ctx.st_global_u8(offset_addr_1, offset_hi);
+
+                let out_pos_after_offset = ctx.add_u32(out_pos_after_lit, 2);
+
+                // Update state
+                let new_anchor = ctx.add_u32(in_pos, LZ4_MIN_MATCH);
+                ctx.st_shared_u32(fresh_anchor_off, new_anchor);
+                ctx.st_shared_u32(fresh_state_off, new_anchor);
+                ctx.st_shared_u32(fresh_out_pos_off, out_pos_after_offset);
+
+                ctx.branch("L_compress_loop");
+
+                // ============================================================
+                // No match - advance position
+                // ============================================================
+                ctx.label("L_no_match");
+                ctx.emit_debug_marker(debug_ptr, MARKER_NO_MATCH);
+
+                let in_pos_next = ctx.add_u32(in_pos, 1);
+                ctx.st_shared_u32(fresh_state_off, in_pos_next);
+                ctx.branch("L_compress_loop");
+
+                // ============================================================
+                // Emit remaining literals
+                // ============================================================
+                ctx.label("L_emit_remaining");
+                ctx.emit_debug_marker(debug_ptr, MARKER_EMIT_REMAIN);
+
+                // For this debug test, just store output size and exit
+                let final_out_pos = ctx.ld_shared_u32(fresh_out_pos_off);
+
+                // Store output size
+                let page_idx_64 = ctx.cvt_u64_u32(page_idx);
+                let four_64 = ctx.mov_u64_imm(4);
+                let size_offset = ctx.mul_u64_reg(page_idx_64, four_64);
+                let size_addr = ctx.add_u64(sizes_ptr, size_offset);
+                ctx.st_global_u32(size_addr, final_out_pos);
+
+                ctx.label("L_not_leader");
+                ctx.ret();
+            });
+
+        PtxModule::new()
+            .version(8, 0)
+            .target("sm_89")
+            .address_size(64)
+            .add_kernel(kernel)
+            .emit()
+    }
+
+    /// FKR-101-DEBUG: Run instrumented compression with debug buffer
+    /// NOTE: This test uses the buggy Lz4WarpCompressKernel which has F082 bug
+    #[test]
+    #[ignore = "Uses buggy Lz4WarpCompressKernel - F082 confirmed"]
+    fn fkr_101_debug_find_crash() {
+        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        let ctx = CudaContext::new(0).expect("CUDA context");
+        let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+        const NUM_PAGES: u32 = 1; // Single page for easier debugging
+
+        // Create non-zero sequential data
+        let mut input: Vec<u8> = Vec::with_capacity((NUM_PAGES * PAGE_SIZE) as usize);
+        for page_idx in 0..NUM_PAGES {
+            for byte_idx in 0..PAGE_SIZE {
+                input.push(((page_idx * 17 + byte_idx) % 256) as u8);
+            }
+        }
+
+        // Allocate GPU buffers
+        let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, input.len()).unwrap();
+        let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize).unwrap();
+        let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, NUM_PAGES as usize).unwrap();
+        let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1024).unwrap();
+
+        input_buf.copy_from_host(&input).unwrap();
+        debug_buf.copy_from_host(&vec![0u32; 1024]).unwrap();
+
+        // Build and load instrumented kernel
+        let ptx = build_instrumented_compress_kernel();
+        println!("=== Instrumented PTX (first 200 lines) ===");
+        for (i, line) in ptx.lines().take(200).enumerate() {
+            println!("{:4}: {}", i + 1, line);
+        }
+
+        let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
+
+        let config = LaunchConfig {
+            grid: (1, 1, 1),
+            block: (96, 1, 1), // 3 warps
+            shared_mem: 0,
+        };
+
+        let num_pages = NUM_PAGES;
+        let mut args: [*mut c_void; 5] = [
+            input_buf.as_kernel_arg(),
+            output_buf.as_kernel_arg(),
+            sizes_buf.as_kernel_arg(),
+            debug_buf.as_kernel_arg(),
+            &num_pages as *const u32 as *mut c_void,
+        ];
+
+        println!("\nLaunching instrumented kernel...");
+
+        unsafe {
+            stream
+                .launch_kernel(&mut module, "instrumented_compress", &config, &mut args)
+                .expect("Kernel launch");
+        }
+
+        // Try to sync - this is where crash happens
+        let sync_result = stream.synchronize();
+
+        // Read debug buffer regardless of crash
+        let mut debug_output = vec![0u32; 1024];
+        let _ = debug_buf.copy_to_host(&mut debug_output);
+
+        println!("\n=== Debug Buffer Contents ===");
+        println!("Counter (markers written): {}", debug_output[0]);
+
+        let marker_names = |m: u32| match m {
+            0xAA000000 => "BOUNDS_CHECK_PASSED",
+            0xAA000001 => "WARP_OFF_COMPUTED",
+            0xAA000002 => "DATA_LOAD_DONE",
+            0xAA000003 => "HASH_INIT_DONE",
+            0xBB000000 => "LOAD_ITER",
+            _ => match m & 0xFF000000 {
+                0x01000000 => "LOOP_ENTRY",
+                0x02000000 => "STATE_LOADED",
+                0x03000000 => "HASH_COMPUTED",
+                0x04000000 => "HASH_LOOKUP",
+                0x05000000 => "FOUND_MATCH",
+                0x06000000 => "COPY_LIT",
+                0x07000000 => "NO_MATCH",
+                0x08000000 => "EMIT_REMAIN",
+                _ => "UNKNOWN",
+            }
+        };
+
+        let count = (debug_output[0] as usize).min(100);
+        for i in 0..count {
+            let marker = debug_output[i + 1];
+            println!("  [{:3}] 0x{:08X} ({})", i, marker, marker_names(marker));
+        }
+
+        // Check sync result
+        if let Err(e) = sync_result {
+            println!("\n!!! SYNC FAILED: {:?}", e);
+            println!("Last marker before crash: 0x{:08X} ({})",
+                     debug_output[count], marker_names(debug_output[count]));
+
+            // This test is expected to crash - we want to see where
+            panic!("Crash detected after {} debug markers. Last: {}",
+                   count, marker_names(debug_output[count]));
+        }
+
+        println!("\nKernel completed successfully!");
+
+        let mut sizes = vec![0u32; NUM_PAGES as usize];
+        sizes_buf.copy_to_host(&mut sizes).unwrap();
+        println!("Output sizes: {:?}", sizes);
+    }
+}
+
+#[cfg(not(feature = "cuda"))]
+mod fkr_101_debug_tests {
+    #[test]
+    fn fkr_101_debug_skip_no_cuda() {
+        println!("FKR-101-DEBUG: Skipped - CUDA feature not enabled");
+    }
+}

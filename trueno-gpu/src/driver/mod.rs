@@ -70,6 +70,9 @@ mod module;
 #[cfg(feature = "cuda")]
 #[allow(clippy::borrow_as_ptr)]
 mod stream;
+#[cfg(feature = "cuda")]
+#[allow(clippy::borrow_as_ptr, clippy::not_unsafe_ptr_arg_deref)]
+mod graph;
 
 // Re-export for use without cuda feature (types only)
 mod types;
@@ -84,6 +87,8 @@ pub use memory::GpuBuffer;
 pub use module::CudaModule;
 #[cfg(feature = "cuda")]
 pub use stream::{CudaStream, DEFAULT_STREAM};
+#[cfg(feature = "cuda")]
+pub use graph::{CaptureMode, CudaGraph, CudaGraphExec};
 
 /// Check if CUDA is available at runtime
 ///

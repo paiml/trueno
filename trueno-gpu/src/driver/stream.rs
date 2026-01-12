@@ -18,6 +18,7 @@ use std::ffi::c_void;
 use std::ptr;
 
 use super::context::{get_driver, CudaContext};
+use super::graph::{CaptureMode, CudaGraph, CudaGraphExec};
 use super::module::CudaModule;
 use super::sys::{CUfunction, CUstream, CudaDriver, CU_STREAM_NON_BLOCKING};
 use super::types::LaunchConfig;
@@ -151,6 +152,56 @@ impl CudaStream {
         };
 
         CudaDriver::check(result).map_err(|e| GpuError::KernelLaunch(e.to_string()))
+    }
+
+    // ========================================================================
+    // PAR-037: CUDA Graph Capture
+    // ========================================================================
+
+    /// Begin stream capture (PAR-037)
+    ///
+    /// All subsequent operations on this stream will be recorded into a graph.
+    /// Call `end_capture()` to get the captured graph.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::GraphCapture)` if capture cannot be started.
+    pub fn begin_capture(&self, mode: CaptureMode) -> Result<(), GpuError> {
+        let driver = get_driver()?;
+        // SAFETY: stream is valid from constructor
+        let result = unsafe {
+            (driver.cuStreamBeginCapture)(self.stream, mode.to_cuda_mode())
+        };
+        CudaDriver::check(result).map_err(|e| GpuError::GraphCapture(e.to_string()))
+    }
+
+    /// End stream capture and return the captured graph (PAR-037)
+    ///
+    /// Returns the graph containing all operations recorded since `begin_capture()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::GraphCapture)` if capture cannot be ended.
+    pub fn end_capture(&self) -> Result<CudaGraph, GpuError> {
+        let driver = get_driver()?;
+        let mut graph = ptr::null_mut();
+        // SAFETY: stream is valid from constructor
+        let result = unsafe {
+            (driver.cuStreamEndCapture)(self.stream, &mut graph)
+        };
+        CudaDriver::check(result).map_err(|e| GpuError::GraphCapture(e.to_string()))?;
+        Ok(CudaGraph::from_raw(graph))
+    }
+
+    /// Launch a captured graph on this stream (PAR-037)
+    ///
+    /// Replays all operations in the graph with minimal launch overhead.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::GraphLaunch)` if launch fails.
+    pub fn launch_graph(&self, exec: &CudaGraphExec) -> Result<(), GpuError> {
+        exec.launch(self.stream)
     }
 }
 

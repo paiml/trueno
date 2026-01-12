@@ -2769,12 +2769,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "mach2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d640282b302c0bb0a2a8e0233ead9035e3bed871f0b7e81fe4a1ec829765db44"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "manzana"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b5eed7c777f2d9d8313bdbc671c19fae34769646b42e9ea2beeec9f5d872cb7"
+dependencies = [
+ "bitflags 2.10.0",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "mach2",
+ "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]
@@ -5305,10 +5328,13 @@ dependencies = [
 name = "trueno-gpu"
 version = "0.4.5"
 dependencies = [
+ "bytemuck",
  "criterion",
  "crossterm",
  "jugar-probar",
  "libloading",
+ "manzana",
+ "pollster",
  "proptest",
  "ratatui",
  "renacer",
