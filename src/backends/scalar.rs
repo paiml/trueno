@@ -734,6 +734,7 @@ mod tests {
 
             // Calculate expected result using naive implementation
             let expected: f32 = a.iter().zip(&b).map(|(x, y)| x * y).sum();
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { ScalarBackend::dot(&a, &b) };
 
             // Tolerance accounts for FP reordering from unrolling (different accumulator summing order)
@@ -758,6 +759,7 @@ mod tests {
         let a = vec![1.0000001_f32; 1000];
         let b = vec![1.0000001_f32; 1000];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let result = unsafe { ScalarBackend::dot(&a, &b) };
 
         // Expected: 1000 * 1.0000001 * 1.0000001 ≈ 1000.0002

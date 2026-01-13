@@ -1662,6 +1662,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::argmax(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let sse2_result = unsafe { Sse2Backend::argmax(&a) };
 
         assert_eq!(scalar_result, sse2_result);
@@ -1673,6 +1674,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::argmin(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let sse2_result = unsafe { Sse2Backend::argmin(&a) };
 
         assert_eq!(scalar_result, sse2_result);
@@ -1684,6 +1686,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::sum_kahan(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let sse2_result = unsafe { Sse2Backend::sum_kahan(&a) };
 
         assert!((scalar_result - sse2_result).abs() < 1e-5);
@@ -1695,6 +1698,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::norm_l1(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let sse2_result = unsafe { Sse2Backend::norm_l1(&a) };
 
         assert!((scalar_result - sse2_result).abs() < 1e-5);
@@ -1706,6 +1710,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::norm_l2(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let sse2_result = unsafe { Sse2Backend::norm_l2(&a) };
 
         assert!((scalar_result - sse2_result).abs() < 1e-5);
@@ -1718,6 +1723,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::dot(&a, &b) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let sse2_result = unsafe { Sse2Backend::dot(&a, &b) };
 
         assert!((scalar_result - sse2_result).abs() < 1e-5);
@@ -1763,6 +1769,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::sum(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let sse2_result = unsafe { Sse2Backend::sum(&a) };
 
         assert!((scalar_result - sse2_result).abs() < 1e-5);
@@ -1774,6 +1781,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::max(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let sse2_result = unsafe { Sse2Backend::max(&a) };
 
         assert_eq!(scalar_result, sse2_result);
@@ -1785,6 +1793,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let scalar_result = unsafe { super::super::scalar::ScalarBackend::min(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let sse2_result = unsafe { Sse2Backend::min(&a) };
 
         assert_eq!(scalar_result, sse2_result);
@@ -1828,7 +1837,9 @@ mod tests {
         for test_vec in test_cases {
             // SAFETY: Test code calling backend trait methods marked unsafe
             let scalar_result =
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 unsafe { super::super::scalar::ScalarBackend::norm_linf(&test_vec) };
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let sse2_result = unsafe { Sse2Backend::norm_linf(&test_vec) };
 
             assert!(

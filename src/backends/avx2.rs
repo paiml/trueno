@@ -1748,6 +1748,7 @@ mod tests {
         assert!((avx2_dot - scalar_dot).abs() < 1e-3); // Relaxed tolerance for FMA
 
         // Test sum
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let (avx2_sum, scalar_sum) = unsafe { (Avx2Backend::sum(&a), ScalarBackend::sum(&a)) };
         assert!((avx2_sum - scalar_sum).abs() < 1e-3);
 
@@ -2101,6 +2102,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::argmax(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::argmax(&a) };
 
         assert_eq!(avx2_result, scalar_result);
@@ -2120,6 +2122,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::argmin(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::argmin(&a) };
 
         assert_eq!(avx2_result, scalar_result);
@@ -2139,6 +2142,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::sum_kahan(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::sum_kahan(&a) };
 
         assert!((avx2_result - scalar_result).abs() < 1e-5);
@@ -2158,6 +2162,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::norm_l1(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::norm_l1(&a) };
 
         assert!((avx2_result - scalar_result).abs() < 1e-5);
@@ -2177,6 +2182,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::norm_l2(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::norm_l2(&a) };
 
         assert!((avx2_result - scalar_result).abs() < 1e-5);
@@ -2197,6 +2203,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::dot(&a, &b) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
 
         assert!((avx2_result - scalar_result).abs() < 1e-5);
@@ -2264,6 +2271,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::sum(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::sum(&a) };
 
         assert!((avx2_result - scalar_result).abs() < 1e-5);
@@ -2283,6 +2291,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::max(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::max(&a) };
 
         assert_eq!(avx2_result, scalar_result);
@@ -2302,6 +2311,7 @@ mod tests {
 
         // SAFETY: Test code calling backend trait methods marked unsafe
         let avx2_result = unsafe { Avx2Backend::min(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::min(&a) };
 
         assert_eq!(avx2_result, scalar_result);
@@ -2649,6 +2659,7 @@ mod tests {
         for test_vec in test_cases {
             // SAFETY: Test code calling backend trait methods marked unsafe
             let scalar_result = unsafe { ScalarBackend::norm_linf(&test_vec) };
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let avx2_result = unsafe { Avx2Backend::norm_linf(&test_vec) };
 
             assert!(

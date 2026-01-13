@@ -21,6 +21,7 @@ use crate::{Backend, Result, TruenoError};
 /// Macro to dispatch binary operations to appropriate backend
 macro_rules! dispatch_binary_op {
     ($backend:expr, $op:ident, $a:expr, $b:expr, $result:expr) => {
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             match $backend {
                 Backend::Scalar => ScalarBackend::$op($a, $b, $result),
@@ -51,6 +52,7 @@ macro_rules! dispatch_binary_op {
 /// Macro to dispatch reduction operations (return f32)
 macro_rules! dispatch_reduction {
     ($backend:expr, $op:ident, $data:expr) => {
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             match $backend {
                 Backend::Scalar => ScalarBackend::$op($data),
@@ -81,6 +83,7 @@ macro_rules! dispatch_reduction {
 /// Macro to dispatch unary operations (a -> result)
 macro_rules! dispatch_unary_op {
     ($backend:expr, $op:ident, $a:expr, $result:expr) => {
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             match $backend {
                 Backend::Scalar => ScalarBackend::$op($a, $result),

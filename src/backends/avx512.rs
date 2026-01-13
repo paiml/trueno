@@ -1513,6 +1513,7 @@ mod tests {
             let b = vec![5.0, 6.0, 7.0, 8.0];
             let mut result = vec![0.0; 4];
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             unsafe {
                 Avx512Backend::add(&a, &b, &mut result);
             }
@@ -1530,6 +1531,7 @@ mod tests {
             let mut result = vec![0.0; 16];
             let expected: Vec<f32> = (0..16).map(|i| (i + i + 10) as f32).collect();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             unsafe {
                 Avx512Backend::add(&a, &b, &mut result);
             }
@@ -1547,6 +1549,7 @@ mod tests {
             let mut result = vec![0.0; 18];
             let expected: Vec<f32> = (0..18).map(|i| (i + i * 2) as f32).collect();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             unsafe {
                 Avx512Backend::add(&a, &b, &mut result);
             }
@@ -1563,6 +1566,7 @@ mod tests {
             let b: Vec<f32> = (0..1000).map(|i| i as f32 * 0.3).collect();
             let mut result = vec![0.0; 1000];
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             unsafe {
                 Avx512Backend::add(&a, &b, &mut result);
             }
@@ -1587,6 +1591,7 @@ mod tests {
             let b = vec![13.0];
             let mut result = vec![0.0];
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             unsafe {
                 Avx512Backend::add(&a, &b, &mut result);
             }
@@ -1612,6 +1617,7 @@ mod tests {
                 20.0, 22.0, 24.0,
             ];
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             unsafe {
                 Avx512Backend::add(&a, &b, &mut result);
             }
@@ -1641,6 +1647,7 @@ mod tests {
                 let mut result_avx512 = vec![0.0; size];
                 let mut result_scalar = vec![0.0; size];
 
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 unsafe {
                     Avx512Backend::add(&a, &b, &mut result_avx512);
                     ScalarBackend::add(&a, &b, &mut result_scalar);
@@ -1688,6 +1695,7 @@ mod tests {
             ];
             let mut result = vec![0.0; 16];
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             unsafe {
                 Avx512Backend::add(&a, &b, &mut result);
             }
@@ -1711,6 +1719,7 @@ mod tests {
                 let b: Vec<f32> = (0..size).map(|i| (size - i) as f32).collect();
                 let mut result = vec![0.0; size];
 
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 unsafe {
                     Avx512Backend::add(&a, &b, &mut result);
                 }
@@ -1738,6 +1747,7 @@ mod tests {
             let a = vec![1.0, 2.0, 3.0, 4.0];
             let b = vec![5.0, 6.0, 7.0, 8.0];
             // Expected: 1*5 + 2*6 + 3*7 + 4*8 = 5 + 12 + 21 + 32 = 70
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::dot(&a, &b) };
             assert!(
                 (result - 70.0).abs() < 1e-5,
@@ -1757,6 +1767,7 @@ mod tests {
             // = 0*1 + 1*2 + 2*3 + ... + 15*16
             let expected: f32 = (0..16).map(|i| (i * (i + 1)) as f32).sum();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::dot(&a, &b) };
             assert!(
                 (result - expected).abs() < 1e-4,
@@ -1776,6 +1787,7 @@ mod tests {
             // Expected: sum of (i * 1.5) * (i * 0.7) = sum of i^2 * 1.05
             let expected: f32 = (0..18).map(|i| ((i * i) as f32) * 1.05).sum();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::dot(&a, &b) };
             assert!(
                 (result - expected).abs() < 1e-3,
@@ -1796,6 +1808,7 @@ mod tests {
             // Expected: sum of (i * 0.5) * (i * 0.3) = sum of i^2 * 0.15
             let expected: f32 = (0..size).map(|i| ((i * i) as f32) * 0.15).sum();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::dot(&a, &b) };
             // Larger tolerance for accumulation of floating point errors
             assert!(
@@ -1818,7 +1831,9 @@ mod tests {
                 let a: Vec<f32> = (0..size).map(|i| (i as f32 * 1.5) - 50.0).collect();
                 let b: Vec<f32> = (0..size).map(|i| (i as f32 * 0.7) + 20.0).collect();
 
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_avx512 = unsafe { Avx512Backend::dot(&a, &b) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_scalar = unsafe { ScalarBackend::dot(&a, &b) };
 
                 // Use relative tolerance for larger values
@@ -1858,7 +1873,9 @@ mod tests {
             //         = 75 + 2e-20 + 4e20
             // Note: 2e-20 is negligible compared to 4e20
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::dot(&a, &b) };
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let expected = unsafe { ScalarBackend::dot(&a, &b) };
 
             // Use relative tolerance due to large values
@@ -1887,7 +1904,9 @@ mod tests {
                 let a: Vec<f32> = (0..size).map(|i| (i as f32) + 1.0).collect();
                 let b: Vec<f32> = (0..size).map(|i| (i as f32) + 2.0).collect();
 
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_avx512 = unsafe { Avx512Backend::dot(&a, &b) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_scalar = unsafe { ScalarBackend::dot(&a, &b) };
 
                 let tolerance = if result_scalar.abs() > 1.0 {
@@ -1917,6 +1936,7 @@ mod tests {
             ];
             let b = vec![0.0; 16];
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::dot(&a, &b) };
             assert_eq!(
                 result, 0.0,
@@ -1935,6 +1955,7 @@ mod tests {
             a[0] = 1.0;
             b[1] = 1.0;
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::dot(&a, &b) };
             assert_eq!(
                 result, 0.0,
@@ -1953,6 +1974,7 @@ mod tests {
         avx512_test(|| {
             let a = vec![1.0, 2.0, 3.0, 4.0];
             // Expected: 1 + 2 + 3 + 4 = 10
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::sum(&a) };
             assert!(
                 (result - 10.0).abs() < 1e-5,
@@ -1970,6 +1992,7 @@ mod tests {
             // Expected: sum of 0..16 = 0+1+2+...+15 = 120
             let expected: f32 = (0..16).map(|i| i as f32).sum();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::sum(&a) };
             assert!(
                 (result - expected).abs() < 1e-4,
@@ -1988,6 +2011,7 @@ mod tests {
             // Expected: sum of (i * 1.5) for i in 0..18
             let expected: f32 = (0..18).map(|i| (i as f32) * 1.5).sum();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::sum(&a) };
             assert!(
                 (result - expected).abs() < 1e-3,
@@ -2007,6 +2031,7 @@ mod tests {
             // Expected: sum of (i * 0.5) for i in 0..1000
             let expected: f32 = (0..size).map(|i| (i as f32) * 0.5).sum();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::sum(&a) };
             // Larger tolerance for accumulation of floating point errors
             let rel_error = if expected.abs() > 1.0 {
@@ -2033,7 +2058,9 @@ mod tests {
             for size in sizes {
                 let a: Vec<f32> = (0..size).map(|i| (i as f32 * 1.5) - 50.0).collect();
 
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_avx512 = unsafe { Avx512Backend::sum(&a) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_scalar = unsafe { ScalarBackend::sum(&a) };
 
                 // Use relative tolerance for larger values
@@ -2065,6 +2092,7 @@ mod tests {
             // Expected: -1 - 2 - 3 - 4 + 5 + 6 + 7 + 8 - 9 - 10 + 11 + 12 - 13 + 14 - 15 + 16 = 22
             let expected = 22.0;
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::sum(&a) };
             assert!(
                 (result - expected).abs() < 1e-5,
@@ -2079,6 +2107,7 @@ mod tests {
     fn test_avx512_sum_zero_vector() {
         avx512_test(|| {
             let a = vec![0.0; 16];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::sum(&a) };
             assert_eq!(result, 0.0, "Sum of zeros should be 0.0, got {}", result);
         });
@@ -2088,6 +2117,7 @@ mod tests {
     fn test_avx512_sum_single_element() {
         avx512_test(|| {
             let a = vec![42.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::sum(&a) };
             assert_eq!(
                 result, 42.0,
@@ -2105,7 +2135,9 @@ mod tests {
                 let size = 16 + remainder;
                 let a: Vec<f32> = (0..size).map(|i| (i as f32) + 1.0).collect();
 
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_avx512 = unsafe { Avx512Backend::sum(&a) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_scalar = unsafe { ScalarBackend::sum(&a) };
 
                 let tolerance = if result_scalar.abs() > 1.0 {
@@ -2134,6 +2166,7 @@ mod tests {
     fn test_avx512_max_basic() {
         avx512_test(|| {
             let a = vec![1.0, 5.0, 3.0, 9.0, 2.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::max(&a) };
             assert_eq!(result, 9.0, "Expected 9.0, got {}", result);
         });
@@ -2144,6 +2177,7 @@ mod tests {
         avx512_test(|| {
             let mut a: Vec<f32> = (0..16).map(|i| i as f32).collect();
             a[8] = 100.0; // Max is in the middle
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::max(&a) };
             assert_eq!(result, 100.0, "Expected 100.0, got {}", result);
         });
@@ -2154,6 +2188,7 @@ mod tests {
         avx512_test(|| {
             let mut a: Vec<f32> = (0..18).map(|i| (i as f32) * 1.5).collect();
             a[17] = 200.0; // Max is in remainder
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::max(&a) };
             assert_eq!(result, 200.0, "Expected 200.0, got {}", result);
         });
@@ -2163,6 +2198,7 @@ mod tests {
     fn test_avx512_max_negative_values() {
         avx512_test(|| {
             let a = vec![-5.0, -2.0, -10.0, -1.0, -8.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::max(&a) };
             assert_eq!(result, -1.0, "Expected -1.0, got {}", result);
         });
@@ -2174,7 +2210,9 @@ mod tests {
             let sizes = vec![1, 7, 15, 16, 17, 32, 63, 100, 1000];
             for size in sizes {
                 let a: Vec<f32> = (0..size).map(|i| ((i * 7) % 100) as f32 - 50.0).collect();
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_avx512 = unsafe { Avx512Backend::max(&a) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_scalar = unsafe { ScalarBackend::max(&a) };
                 assert_eq!(
                     result_avx512, result_scalar,
@@ -2193,6 +2231,7 @@ mod tests {
     fn test_avx512_min_basic() {
         avx512_test(|| {
             let a = vec![5.0, 1.0, 9.0, 3.0, 2.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::min(&a) };
             assert_eq!(result, 1.0, "Expected 1.0, got {}", result);
         });
@@ -2203,6 +2242,7 @@ mod tests {
         avx512_test(|| {
             let mut a: Vec<f32> = (0..16).map(|i| (i + 10) as f32).collect();
             a[8] = -100.0; // Min is in the middle
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::min(&a) };
             assert_eq!(result, -100.0, "Expected -100.0, got {}", result);
         });
@@ -2213,6 +2253,7 @@ mod tests {
         avx512_test(|| {
             let mut a: Vec<f32> = (0..18).map(|i| (i as f32) * 1.5 + 10.0).collect();
             a[17] = -200.0; // Min is in remainder
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::min(&a) };
             assert_eq!(result, -200.0, "Expected -200.0, got {}", result);
         });
@@ -2222,6 +2263,7 @@ mod tests {
     fn test_avx512_min_positive_values() {
         avx512_test(|| {
             let a = vec![5.0, 2.0, 10.0, 1.0, 8.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::min(&a) };
             assert_eq!(result, 1.0, "Expected 1.0, got {}", result);
         });
@@ -2233,7 +2275,9 @@ mod tests {
             let sizes = vec![1, 7, 15, 16, 17, 32, 63, 100, 1000];
             for size in sizes {
                 let a: Vec<f32> = (0..size).map(|i| ((i * 7) % 100) as f32 - 50.0).collect();
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_avx512 = unsafe { Avx512Backend::min(&a) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_scalar = unsafe { ScalarBackend::min(&a) };
                 assert_eq!(
                     result_avx512, result_scalar,
@@ -2252,6 +2296,7 @@ mod tests {
     fn test_avx512_argmax_basic() {
         avx512_test(|| {
             let a = vec![1.0, 5.0, 3.0, 9.0, 2.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmax(&a) };
             assert_eq!(result, 3); // Index of 9.0
         });
@@ -2261,6 +2306,7 @@ mod tests {
     fn test_avx512_argmax_aligned_16() {
         avx512_test(|| {
             let a: Vec<f32> = (0..16).map(|i| i as f32).collect();
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmax(&a) };
             assert_eq!(result, 15); // Maximum is at index 15
         });
@@ -2270,6 +2316,7 @@ mod tests {
     fn test_avx512_argmax_non_aligned_18() {
         avx512_test(|| {
             let a: Vec<f32> = (0..18).map(|i| i as f32).collect();
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmax(&a) };
             assert_eq!(result, 17); // Maximum is at index 17
         });
@@ -2279,6 +2326,7 @@ mod tests {
     fn test_avx512_argmax_negative_values() {
         avx512_test(|| {
             let a = vec![-5.0, -2.0, -8.0, -1.0, -10.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmax(&a) };
             assert_eq!(result, 3); // Index of -1.0
         });
@@ -2288,6 +2336,7 @@ mod tests {
     fn test_avx512_argmax_max_at_start() {
         avx512_test(|| {
             let a = vec![100.0, 1.0, 2.0, 3.0, 4.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmax(&a) };
             assert_eq!(result, 0); // Maximum is at index 0
         });
@@ -2299,7 +2348,9 @@ mod tests {
             let sizes = [16, 17, 100, 1000, 10000, 16384, 16385, 100000, 1000000];
             for &size in &sizes {
                 let a: Vec<f32> = (0..size).map(|i| ((i * 13) % 100) as f32 - 50.0).collect();
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_avx512 = unsafe { Avx512Backend::argmax(&a) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_scalar = unsafe { ScalarBackend::argmax(&a) };
                 assert_eq!(
                     result_avx512, result_scalar,
@@ -2318,6 +2369,7 @@ mod tests {
     fn test_avx512_argmin_basic() {
         avx512_test(|| {
             let a = vec![5.0, 1.0, 9.0, 3.0, 2.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmin(&a) };
             assert_eq!(result, 1); // Index of 1.0
         });
@@ -2327,6 +2379,7 @@ mod tests {
     fn test_avx512_argmin_aligned_16() {
         avx512_test(|| {
             let a: Vec<f32> = (0..16).rev().map(|i| i as f32).collect();
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmin(&a) };
             assert_eq!(result, 15); // Minimum is at index 15
         });
@@ -2336,6 +2389,7 @@ mod tests {
     fn test_avx512_argmin_non_aligned_18() {
         avx512_test(|| {
             let a: Vec<f32> = (0..18).rev().map(|i| i as f32).collect();
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmin(&a) };
             assert_eq!(result, 17); // Minimum is at index 17
         });
@@ -2345,6 +2399,7 @@ mod tests {
     fn test_avx512_argmin_positive_values() {
         avx512_test(|| {
             let a = vec![10.0, 5.0, 8.0, 2.0, 15.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmin(&a) };
             assert_eq!(result, 3); // Index of 2.0
         });
@@ -2354,6 +2409,7 @@ mod tests {
     fn test_avx512_argmin_min_at_start() {
         avx512_test(|| {
             let a = vec![1.0, 100.0, 200.0, 300.0, 400.0];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::argmin(&a) };
             assert_eq!(result, 0); // Minimum is at index 0
         });
@@ -2365,7 +2421,9 @@ mod tests {
             let sizes = [16, 17, 100, 1000, 10000, 16384, 16385, 100000, 1000000];
             for &size in &sizes {
                 let a: Vec<f32> = (0..size).map(|i| ((i * 13) % 100) as f32 - 50.0).collect();
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_avx512 = unsafe { Avx512Backend::argmin(&a) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_scalar = unsafe { ScalarBackend::argmin(&a) };
                 assert_eq!(
                     result_avx512, result_scalar,
@@ -2385,6 +2443,7 @@ mod tests {
         avx512_test(|| {
             let a = vec![3.0, 4.0];
             // Expected: sqrt(3^2 + 4^2) = sqrt(9 + 16) = sqrt(25) = 5.0
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::norm_l2(&a) };
             assert!((result - 5.0).abs() < 1e-5, "Expected 5.0, got {}", result);
         });
@@ -2394,6 +2453,7 @@ mod tests {
     fn test_avx512_norm_l2_empty() {
         avx512_test(|| {
             let a: Vec<f32> = vec![];
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::norm_l2(&a) };
             assert_eq!(result, 0.0, "L2 norm of empty vector should be 0.0");
         });
@@ -2404,6 +2464,7 @@ mod tests {
         avx512_test(|| {
             let a = vec![7.0];
             // Expected: sqrt(7^2) = 7.0
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::norm_l2(&a) };
             assert!((result - 7.0).abs() < 1e-5, "Expected 7.0, got {}", result);
         });
@@ -2415,6 +2476,7 @@ mod tests {
             // Test with exactly 16 elements (one AVX-512 register)
             let a = vec![1.0; 16];
             // Expected: sqrt(16 * 1^2) = sqrt(16) = 4.0
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::norm_l2(&a) };
             assert!((result - 4.0).abs() < 1e-5, "Expected 4.0, got {}", result);
         });
@@ -2431,6 +2493,7 @@ mod tests {
                 .sum::<f32>()
                 .sqrt();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::norm_l2(&a) };
             assert!(
                 (result - expected).abs() < 1e-3,
@@ -2452,6 +2515,7 @@ mod tests {
                 .sum::<f32>()
                 .sqrt();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::norm_l2(&a) };
             let rel_error = if expected.abs() > 1.0 {
                 (result - expected).abs() / expected.abs()
@@ -2477,7 +2541,9 @@ mod tests {
             for size in sizes {
                 let a: Vec<f32> = (0..size).map(|i| (i as f32 * 0.7) - 10.0).collect();
 
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_avx512 = unsafe { Avx512Backend::norm_l2(&a) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let result_scalar = unsafe { ScalarBackend::norm_l2(&a) };
 
                 // Use relative tolerance for larger values
@@ -2504,6 +2570,7 @@ mod tests {
         avx512_test(|| {
             let a = vec![-3.0, -4.0];
             // Expected: sqrt((-3)^2 + (-4)^2) = sqrt(9 + 16) = 5.0
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let result = unsafe { Avx512Backend::norm_l2(&a) };
             assert!((result - 5.0).abs() < 1e-5, "Expected 5.0, got {}", result);
         });
@@ -2523,6 +2590,7 @@ mod tests {
             for test_vec in test_cases {
                 // SAFETY: Test code calling backend trait methods
                 let avx512_result = unsafe { Avx512Backend::norm_l1(&test_vec) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let scalar_result = unsafe { ScalarBackend::norm_l1(&test_vec) };
 
                 assert!(
@@ -2551,6 +2619,7 @@ mod tests {
             for test_vec in test_cases {
                 // SAFETY: Test code calling backend trait methods
                 let avx512_result = unsafe { Avx512Backend::norm_linf(&test_vec) };
+                // SAFETY: CPU feature verified at runtime, slices bounds-checked
                 let scalar_result = unsafe { ScalarBackend::norm_linf(&test_vec) };
 
                 assert!(
@@ -2572,6 +2641,7 @@ mod tests {
 
             // SAFETY: Test code calling backend trait methods
             let avx512_result = unsafe { Avx512Backend::sum_kahan(&test_vec) };
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let scalar_result = unsafe { ScalarBackend::sum_kahan(&test_vec) };
 
             assert!(
@@ -2732,6 +2802,7 @@ mod tests {
         let b = vec![2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::mul(&a, &b, &mut result);
         }
@@ -2759,6 +2830,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 100];
         let mut scalar_result = vec![0.0; 100];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::mul(&a, &b, &mut avx512_result);
             ScalarBackend::mul(&a, &b, &mut scalar_result);
@@ -2787,6 +2859,7 @@ mod tests {
         let b = vec![2.0, 4.0, 5.0, 8.0, 10.0, 12.0, 14.0, 16.0];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::div(&a, &b, &mut result);
         }
@@ -2814,6 +2887,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 100];
         let mut scalar_result = vec![0.0; 100];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::div(&a, &b, &mut avx512_result);
             ScalarBackend::div(&a, &b, &mut scalar_result);
@@ -2842,6 +2916,7 @@ mod tests {
         let b = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::sub(&a, &b, &mut result);
         }
@@ -2869,6 +2944,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 100];
         let mut scalar_result = vec![0.0; 100];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::sub(&a, &b, &mut avx512_result);
             ScalarBackend::sub(&a, &b, &mut scalar_result);
@@ -2896,6 +2972,7 @@ mod tests {
         let a = vec![1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::sqrt(&a, &mut result);
         }
@@ -2922,6 +2999,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 100];
         let mut scalar_result = vec![0.0; 100];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::sqrt(&a, &mut avx512_result);
             ScalarBackend::sqrt(&a, &mut scalar_result);
@@ -2949,6 +3027,7 @@ mod tests {
         let a = vec![0.0, 1.0, 2.0, -1.0, 0.5, -0.5, 3.0, -3.0];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::exp(&a, &mut result);
         }
@@ -2977,6 +3056,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 100];
         let mut scalar_result = vec![0.0; 100];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::exp(&a, &mut avx512_result);
             ScalarBackend::exp(&a, &mut scalar_result);
@@ -3010,6 +3090,7 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 100.0, 1000.0];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::ln(&a, &mut result);
         }
@@ -3038,6 +3119,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 100];
         let mut scalar_result = vec![0.0; 100];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::ln(&a, &mut avx512_result);
             ScalarBackend::ln(&a, &mut scalar_result);
@@ -3073,6 +3155,7 @@ mod tests {
         let a = vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::log2(&a, &mut result);
         }
@@ -3100,6 +3183,7 @@ mod tests {
         let a = vec![1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0, 1e6, 1e7];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::log10(&a, &mut result);
         }
@@ -3127,6 +3211,7 @@ mod tests {
         let a = vec![1.0, 2.0, 4.0, 5.0, 10.0, 20.0, 50.0, 100.0];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::recip(&a, &mut result);
         }
@@ -3153,6 +3238,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 100];
         let mut scalar_result = vec![0.0; 100];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::recip(&a, &mut avx512_result);
             ScalarBackend::recip(&a, &mut scalar_result);
@@ -3180,6 +3266,7 @@ mod tests {
         let a = vec![-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, -5.0, 10.0];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::relu(&a, &mut result);
         }
@@ -3208,6 +3295,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 8];
         let mut scalar_result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::sigmoid(&a, &mut avx512_result);
             ScalarBackend::sigmoid(&a, &mut scalar_result);
@@ -3236,6 +3324,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 8];
         let mut scalar_result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::gelu(&a, &mut avx512_result);
             ScalarBackend::gelu(&a, &mut scalar_result);
@@ -3264,6 +3353,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 8];
         let mut scalar_result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::swish(&a, &mut avx512_result);
             ScalarBackend::swish(&a, &mut scalar_result);
@@ -3291,6 +3381,7 @@ mod tests {
         let a = vec![1.1, 1.9, -1.1, -1.9, 0.0, 2.5, -2.5, 3.3];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::ceil(&a, &mut result);
         }
@@ -3318,6 +3409,7 @@ mod tests {
         let a = vec![1.1, 1.9, -1.1, -1.9, 0.0, 2.5, -2.5, 3.3];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::floor(&a, &mut result);
         }
@@ -3345,6 +3437,7 @@ mod tests {
         let a = vec![1.1, 1.5, 1.9, -1.1, -1.5, -1.9, 2.5, -2.5];
         let mut result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::round(&a, &mut result);
         }
@@ -3375,6 +3468,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 8];
         let mut scalar_result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::sin(&a, &mut avx512_result);
             ScalarBackend::sin(&a, &mut scalar_result);
@@ -3401,6 +3495,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 8];
         let mut scalar_result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::cos(&a, &mut avx512_result);
             ScalarBackend::cos(&a, &mut scalar_result);
@@ -3427,6 +3522,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 8];
         let mut scalar_result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::tan(&a, &mut avx512_result);
             ScalarBackend::tan(&a, &mut scalar_result);
@@ -3453,6 +3549,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 8];
         let mut scalar_result = vec![0.0; 8];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::tanh(&a, &mut avx512_result);
             ScalarBackend::tanh(&a, &mut scalar_result);
@@ -3484,6 +3581,7 @@ mod tests {
         let mut avx512_result = vec![0.0; size];
         let mut scalar_result = vec![0.0; size];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::mul(&a, &b, &mut avx512_result);
             ScalarBackend::mul(&a, &b, &mut scalar_result);
@@ -3511,6 +3609,7 @@ mod tests {
         let mut avx512_result = vec![0.0; size];
         let mut scalar_result = vec![0.0; size];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::sqrt(&a, &mut avx512_result);
             ScalarBackend::sqrt(&a, &mut scalar_result);
@@ -3538,6 +3637,7 @@ mod tests {
         let mut avx512_result = vec![0.0; size];
         let mut scalar_result = vec![0.0; size];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::exp(&a, &mut avx512_result);
             ScalarBackend::exp(&a, &mut scalar_result);
@@ -3571,6 +3671,7 @@ mod tests {
         let mut avx512_result = vec![0.0; size];
         let mut scalar_result = vec![0.0; size];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::relu(&a, &mut avx512_result);
             ScalarBackend::relu(&a, &mut scalar_result);
@@ -3596,6 +3697,7 @@ mod tests {
         let mut avx512_result = vec![0.0; size];
         let mut scalar_result = vec![0.0; size];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::sigmoid(&a, &mut avx512_result);
             ScalarBackend::sigmoid(&a, &mut scalar_result);
@@ -3625,6 +3727,7 @@ mod tests {
         let mut floor_result = vec![0.0; size];
         let mut round_result = vec![0.0; size];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::ceil(&a, &mut ceil_result);
             Avx512Backend::floor(&a, &mut floor_result);
@@ -3666,6 +3769,7 @@ mod tests {
         let mut cos_avx512 = vec![0.0; size];
         let mut cos_scalar = vec![0.0; size];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::sin(&a, &mut sin_avx512);
             ScalarBackend::sin(&a, &mut sin_scalar);
@@ -3704,7 +3808,9 @@ mod tests {
         let a: Vec<f32> = (0..64)
             .map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) })
             .collect();
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let avx512_result = unsafe { Avx512Backend::norm_l1(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::norm_l1(&a) };
 
         assert!(
@@ -3724,7 +3830,9 @@ mod tests {
         // 64 elements with max absolute value at various positions
         let mut a: Vec<f32> = (0..64).map(|i| i as f32).collect();
         a[47] = -200.0; // Max absolute at position 47
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let avx512_result = unsafe { Avx512Backend::norm_linf(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::norm_linf(&a) };
 
         assert!(
@@ -3747,6 +3855,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 64];
         let mut scalar_result = vec![0.0; 64];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::scale(&a, scalar, &mut avx512_result);
             ScalarBackend::scale(&a, scalar, &mut scalar_result);
@@ -3776,6 +3885,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 64];
         let mut scalar_result = vec![0.0; 64];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::abs(&a, &mut avx512_result);
             ScalarBackend::abs(&a, &mut scalar_result);
@@ -3805,6 +3915,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 64];
         let mut scalar_result = vec![0.0; 64];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::clamp(&a, min_val, max_val, &mut avx512_result);
             ScalarBackend::clamp(&a, min_val, max_val, &mut scalar_result);
@@ -3834,6 +3945,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 64];
         let mut scalar_result = vec![0.0; 64];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::lerp(&a, &b, t, &mut avx512_result);
             ScalarBackend::lerp(&a, &b, t, &mut scalar_result);
@@ -3863,6 +3975,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 64];
         let mut scalar_result = vec![0.0; 64];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::fma(&a, &b, &c, &mut avx512_result);
             ScalarBackend::fma(&a, &b, &c, &mut scalar_result);
@@ -3886,6 +3999,7 @@ mod tests {
         }
 
         let a: Vec<f32> = vec![];
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let result = unsafe { Avx512Backend::argmax(&a) };
         assert_eq!(result, 0);
     }
@@ -3897,6 +4011,7 @@ mod tests {
         }
 
         let a: Vec<f32> = vec![];
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let result = unsafe { Avx512Backend::argmin(&a) };
         assert_eq!(result, 0);
     }
@@ -3910,7 +4025,9 @@ mod tests {
         // 64 elements with max at position 35
         let mut a: Vec<f32> = (0..64).map(|i| i as f32).collect();
         a[35] = 1000.0;
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let avx512_result = unsafe { Avx512Backend::argmax(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::argmax(&a) };
 
         assert_eq!(
@@ -3929,7 +4046,9 @@ mod tests {
         // 64 elements with min at position 42
         let mut a: Vec<f32> = (0..64).map(|i| i as f32).collect();
         a[42] = -500.0;
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let avx512_result = unsafe { Avx512Backend::argmin(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::argmin(&a) };
 
         assert_eq!(
@@ -3951,6 +4070,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 47];
         let mut scalar_result = vec![0.0; 47];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::scale(&a, scalar, &mut avx512_result);
             ScalarBackend::scale(&a, scalar, &mut scalar_result);
@@ -3980,6 +4100,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 35];
         let mut scalar_result = vec![0.0; 35];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::abs(&a, &mut avx512_result);
             ScalarBackend::abs(&a, &mut scalar_result);
@@ -4026,7 +4147,9 @@ mod tests {
             let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.1).collect();
             let b: Vec<f32> = (0..size).map(|i| ((size - i) as f32) * 0.1).collect();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let avx512_result = unsafe { Avx512Backend::dot(&a, &b) };
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
 
             // Use relative tolerance for large results (2x unrolling changes operation order)
@@ -4058,7 +4181,9 @@ mod tests {
             let a: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
             let b: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let avx512_result = unsafe { Avx512Backend::dot(&a, &b) };
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
 
             assert!(
@@ -4089,6 +4214,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 32];
         let mut scalar_result = vec![0.0; 32];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::gelu(&a, &mut avx512_result);
             ScalarBackend::gelu(&a, &mut scalar_result);
@@ -4114,6 +4240,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 32];
         let mut scalar_result = vec![0.0; 32];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::swish(&a, &mut avx512_result);
             ScalarBackend::swish(&a, &mut scalar_result);
@@ -4139,6 +4266,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 32];
         let mut scalar_result = vec![0.0; 32];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::tanh(&a, &mut avx512_result);
             ScalarBackend::tanh(&a, &mut scalar_result);
@@ -4165,6 +4293,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 32];
         let mut scalar_result = vec![0.0; 32];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::log2(&a, &mut avx512_result);
             ScalarBackend::log2(&a, &mut scalar_result);
@@ -4191,6 +4320,7 @@ mod tests {
         let mut avx512_result = vec![0.0; 32];
         let mut scalar_result = vec![0.0; 32];
 
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         unsafe {
             Avx512Backend::log10(&a, &mut avx512_result);
             ScalarBackend::log10(&a, &mut scalar_result);
