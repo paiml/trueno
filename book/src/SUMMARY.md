@@ -12,6 +12,7 @@
 # Architecture
 
 - [Overview](./architecture/overview.md)
+- [ComputeBrick Architecture](./architecture/compute-brick.md)
 - [Backend Selection](./architecture/backend-selection.md)
 - [Multi-Backend Design](./architecture/multi-backend-design.md)
 - [SIMD Backends](./architecture/simd-backends.md)
