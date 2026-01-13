@@ -97,7 +97,9 @@ pub struct TokenBudget {
 
 /// Performance budget for byte-oriented operations (compression, I/O).
 /// Use this for trueno-zram, disk I/O, network throughput, etc.
-#[derive(Debug, Clone, Copy)]
+///
+/// PMAT-452: Serializable for hardware.toml export.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct ByteBudget {
     /// Latency budget per page (microseconds)
     pub us_per_page: f64,

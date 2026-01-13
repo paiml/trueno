@@ -123,6 +123,9 @@ pub struct HardwareCapability {
     pub gpu: Option<GpuCapability>,
     /// Roofline model parameters
     pub roofline: RooflineParams,
+    /// PMAT-452: Byte budget configuration for compression/I/O workloads
+    #[serde(default)]
+    pub byte_budget: Option<crate::brick::ByteBudget>,
 }
 
 /// Roofline model parameters
@@ -142,6 +145,8 @@ impl HardwareCapability {
 
         let cpu_ai = cpu.peak_gflops / cpu.memory_bw_gbps;
         let gpu_ai = gpu.as_ref().map(|g| g.peak_tflops_fp32 * 1000.0 / g.memory_bw_gbps);
+        // PMAT-452: Extract memory bandwidth before moving cpu
+        let byte_budget_throughput = cpu.memory_bw_gbps.min(25.0);
 
         HardwareCapability {
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -154,6 +159,8 @@ impl HardwareCapability {
                 cpu_arithmetic_intensity: cpu_ai,
                 gpu_arithmetic_intensity: gpu_ai,
             },
+            // PMAT-452: Default byte budget based on memory bandwidth
+            byte_budget: Some(crate::brick::ByteBudget::from_throughput(byte_budget_throughput)),
         }
     }
 
@@ -383,5 +390,51 @@ mod tests {
         let toml_str = toml::to_string_pretty(&cap).unwrap();
         let parsed: HardwareCapability = toml::from_str(&toml_str).unwrap();
         assert_eq!(cap.cpu.cores, parsed.cpu.cores);
+    }
+
+    #[test]
+    fn test_byte_budget_in_hardware_toml() {
+        let cap = HardwareCapability::detect();
+
+        // Should have byte_budget populated
+        assert!(cap.byte_budget.is_some());
+        let budget = cap.byte_budget.unwrap();
+        assert!(budget.gb_per_sec > 0.0);
+        assert!(budget.gb_per_sec <= 25.0); // Capped at zstd max
+
+        // Test TOML roundtrip preserves byte_budget
+        let toml_str = toml::to_string_pretty(&cap).unwrap();
+        assert!(toml_str.contains("[byte_budget]"));
+        assert!(toml_str.contains("gb_per_sec"));
+
+        let parsed: HardwareCapability = toml::from_str(&toml_str).unwrap();
+        assert!(parsed.byte_budget.is_some());
+        let parsed_budget = parsed.byte_budget.unwrap();
+        assert!((parsed_budget.gb_per_sec - budget.gb_per_sec).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_byte_budget_backward_compat() {
+        // Test that hardware.toml without byte_budget still parses
+        let toml_without_budget = r#"
+timestamp = "2026-01-13T18:00:00Z"
+hostname = "test"
+
+[cpu]
+vendor = "Intel"
+model = "Test CPU"
+cores = 4
+threads = 8
+simd = "Avx2"
+base_freq_ghz = 3.5
+peak_gflops = 112.0
+memory_bw_gbps = 80.0
+
+[roofline]
+cpu_arithmetic_intensity = 1.4
+"#;
+        let parsed: HardwareCapability = toml::from_str(toml_without_budget).unwrap();
+        // byte_budget should be None when not in TOML (backward compat)
+        assert!(parsed.byte_budget.is_none());
     }
 }
