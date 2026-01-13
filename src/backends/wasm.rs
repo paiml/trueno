@@ -1192,6 +1192,7 @@ mod tests {
         assert!((wasm_dot - scalar_dot).abs() < 1e-3);
 
         // Test sum
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let (wasm_sum, scalar_sum) = unsafe { (WasmBackend::sum(&a), ScalarBackend::sum(&a)) };
         assert!((wasm_sum - scalar_sum).abs() < 1e-3);
 
@@ -1256,6 +1257,7 @@ mod tests {
         let a = [5.0, 1.0, 3.0, 2.0];
         // SAFETY: Test code calling backend trait methods marked unsafe
         let wasm_result = unsafe { WasmBackend::min(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::min(&a) };
         assert_eq!(wasm_result, scalar_result);
     }
@@ -1267,6 +1269,7 @@ mod tests {
         let a = [1.0, 5.0, 3.0, 2.0];
         // SAFETY: Test code calling backend trait methods marked unsafe
         let wasm_result = unsafe { WasmBackend::argmax(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::argmax(&a) };
         assert_eq!(wasm_result, scalar_result);
     }
@@ -1278,6 +1281,7 @@ mod tests {
         let a = [5.0, 1.0, 3.0, 2.0];
         // SAFETY: Test code calling backend trait methods marked unsafe
         let wasm_result = unsafe { WasmBackend::argmin(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::argmin(&a) };
         assert_eq!(wasm_result, scalar_result);
     }

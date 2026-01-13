@@ -76,7 +76,7 @@ impl GpuBackend {
         if self.device.is_none() {
             self.device = Some(GpuDevice::new()?);
         }
-        Ok(self.device.as_ref().unwrap())
+        Ok(self.device.as_ref().expect("device initialized above"))
     }
 
     /// Check if GPU is available

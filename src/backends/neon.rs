@@ -1600,6 +1600,7 @@ mod tests {
         assert!((neon_dot - scalar_dot).abs() < 1e-3);
 
         // Test sum
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let (neon_sum, scalar_sum) = unsafe { (NeonBackend::sum(&a), ScalarBackend::sum(&a)) };
         assert!((neon_sum - scalar_sum).abs() < 1e-3);
 
@@ -1688,6 +1689,7 @@ mod tests {
         let a = [5.0, 1.0, 3.0, 2.0];
         // SAFETY: Test code calling backend trait methods marked unsafe
         let neon_result = unsafe { NeonBackend::min(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::min(&a) };
         assert_eq!(neon_result, scalar_result);
     }
@@ -1705,6 +1707,7 @@ mod tests {
         let a = [1.0, 5.0, 3.0, 2.0];
         // SAFETY: Test code calling backend trait methods marked unsafe
         let neon_result = unsafe { NeonBackend::argmax(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::argmax(&a) };
         assert_eq!(neon_result, scalar_result);
     }
@@ -1722,6 +1725,7 @@ mod tests {
         let a = [5.0, 1.0, 3.0, 2.0];
         // SAFETY: Test code calling backend trait methods marked unsafe
         let neon_result = unsafe { NeonBackend::argmin(&a) };
+        // SAFETY: CPU feature verified at runtime, slices bounds-checked
         let scalar_result = unsafe { ScalarBackend::argmin(&a) };
         assert_eq!(neon_result, scalar_result);
     }
@@ -1890,7 +1894,9 @@ mod tests {
             let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.1).collect();
             let b: Vec<f32> = (0..size).map(|i| ((size - i) as f32) * 0.1).collect();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let neon_result = unsafe { NeonBackend::dot(&a, &b) };
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
 
             assert!(
@@ -1919,7 +1925,9 @@ mod tests {
             let a: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
             let b: Vec<f32> = (0..size).map(|i| (i + 1) as f32).collect();
 
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let neon_result = unsafe { NeonBackend::dot(&a, &b) };
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
             let scalar_result = unsafe { ScalarBackend::dot(&a, &b) };
 
             assert!(
