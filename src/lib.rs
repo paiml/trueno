@@ -33,6 +33,7 @@ pub mod brick;
 pub mod chaos;
 pub mod eigen;
 pub mod error;
+pub mod hardware;
 pub mod hash;
 pub mod matrix;
 pub mod monitor;
@@ -58,6 +59,12 @@ pub use brick::{
     BrickTimer, BrickVerification, ByteBudget, ComputeAssertion, ComputeBackend, ComputeBrick,
     ComputeOp, DotOp, FusedGateUpOp, FusedGateUpWeights, FusedQKVOp, FusedQKVWeights, MatmulOp,
     SoftmaxOp, TokenBudget, TokenResult,
+};
+
+// Hardware capability exports (PMAT-447)
+pub use hardware::{
+    Bottleneck, CpuCapability, GpuCapability, HardwareCapability, RooflineParams, SimdWidth,
+    GpuBackend as HardwareGpuBackend, default_hardware_path,
 };
 
 /// Backend execution target
