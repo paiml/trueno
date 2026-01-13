@@ -1123,6 +1123,28 @@ pub struct BrickSample {
     pub elements: u64,
 }
 
+/// Bottleneck classification for roofline analysis (PMAT-451)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BrickBottleneck {
+    /// Not classified
+    #[default]
+    Unknown,
+    /// Limited by memory bandwidth
+    Memory,
+    /// Limited by compute throughput
+    Compute,
+}
+
+impl std::fmt::Display for BrickBottleneck {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BrickBottleneck::Unknown => write!(f, "unknown"),
+            BrickBottleneck::Memory => write!(f, "memory"),
+            BrickBottleneck::Compute => write!(f, "compute"),
+        }
+    }
+}
+
 /// Accumulated per-brick statistics.
 #[derive(Debug, Clone, Default)]
 pub struct BrickStats {
@@ -1138,6 +1160,12 @@ pub struct BrickStats {
     pub max_ns: u64,
     /// Total elements processed
     pub total_elements: u64,
+    /// PMAT-451: Total bytes processed (for throughput calculation)
+    pub total_bytes: u64,
+    /// PMAT-451: Total compressed bytes (for compression ratio)
+    pub total_compressed_bytes: u64,
+    /// PMAT-451: Bottleneck classification
+    pub bottleneck: BrickBottleneck,
 }
 
 impl BrickStats {
@@ -1150,6 +1178,9 @@ impl BrickStats {
             min_ns: u64::MAX,
             max_ns: 0,
             total_elements: 0,
+            total_bytes: 0,
+            total_compressed_bytes: 0,
+            bottleneck: BrickBottleneck::Unknown,
         }
     }
 
@@ -1160,6 +1191,59 @@ impl BrickStats {
         self.min_ns = self.min_ns.min(elapsed_ns);
         self.max_ns = self.max_ns.max(elapsed_ns);
         self.total_elements += elements;
+    }
+
+    /// PMAT-451: Add a sample with byte metrics for compression workloads.
+    ///
+    /// # Arguments
+    /// - `elapsed_ns`: Time taken in nanoseconds
+    /// - `elements`: Number of elements processed (e.g., pages)
+    /// - `input_bytes`: Original uncompressed size
+    /// - `output_bytes`: Compressed output size
+    pub fn add_sample_with_bytes(
+        &mut self,
+        elapsed_ns: u64,
+        elements: u64,
+        input_bytes: u64,
+        output_bytes: u64,
+    ) {
+        self.add_sample(elapsed_ns, elements);
+        self.total_bytes += input_bytes;
+        self.total_compressed_bytes += output_bytes;
+    }
+
+    /// PMAT-451: Calculate compression ratio (input_size / output_size).
+    /// Returns 1.0 if no compression data available.
+    #[must_use]
+    pub fn compression_ratio(&self) -> f64 {
+        if self.total_compressed_bytes == 0 {
+            1.0
+        } else {
+            self.total_bytes as f64 / self.total_compressed_bytes as f64
+        }
+    }
+
+    /// PMAT-451: Calculate throughput in GB/s.
+    /// Based on total input bytes processed.
+    #[must_use]
+    pub fn throughput_gbps(&self) -> f64 {
+        if self.total_ns == 0 {
+            0.0
+        } else {
+            let bytes_per_ns = self.total_bytes as f64 / self.total_ns as f64;
+            bytes_per_ns * 1e9 / 1e9 // Convert to GB/s (ns to sec, bytes to GB)
+        }
+    }
+
+    /// PMAT-451: Set bottleneck classification.
+    pub fn set_bottleneck(&mut self, bottleneck: BrickBottleneck) {
+        self.bottleneck = bottleneck;
+    }
+
+    /// PMAT-451: Get bottleneck classification.
+    #[must_use]
+    pub fn get_bottleneck(&self) -> BrickBottleneck {
+        self.bottleneck
     }
 
     /// Average time in microseconds.
@@ -1363,6 +1447,60 @@ impl BrickProfiler {
         self.total_ns += elapsed_ns;
     }
 
+    /// PMAT-451: Record elapsed time with byte metrics for compression workloads.
+    ///
+    /// # Arguments
+    /// - `name`: Brick name
+    /// - `elapsed`: Duration of the operation
+    /// - `elements`: Number of elements (pages) processed
+    /// - `input_bytes`: Original uncompressed size
+    /// - `output_bytes`: Compressed output size
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let start = std::time::Instant::now();
+    /// let compressed = zstd_compress(&page_data);
+    /// let elapsed = start.elapsed();
+    /// profiler.record_elapsed_with_bytes(
+    ///     "ZstdCompress",
+    ///     elapsed,
+    ///     1,
+    ///     page_data.len() as u64,
+    ///     compressed.len() as u64,
+    /// );
+    /// ```
+    pub fn record_elapsed_with_bytes(
+        &mut self,
+        name: &str,
+        elapsed: std::time::Duration,
+        elements: u64,
+        input_bytes: u64,
+        output_bytes: u64,
+    ) {
+        if !self.enabled {
+            return;
+        }
+
+        let elapsed_ns = elapsed.as_nanos() as u64;
+
+        // Update per-brick stats
+        let stats = self.stats.entry(name.to_string()).or_insert_with(|| {
+            BrickStats::new(name)
+        });
+        stats.add_sample_with_bytes(elapsed_ns, elements, input_bytes, output_bytes);
+
+        // Update totals
+        self.total_tokens += elements;
+        self.total_ns += elapsed_ns;
+    }
+
+    /// PMAT-451: Set bottleneck classification for a brick.
+    pub fn set_brick_bottleneck(&mut self, name: &str, bottleneck: BrickBottleneck) {
+        if let Some(stats) = self.stats.get_mut(name) {
+            stats.set_bottleneck(bottleneck);
+        }
+    }
+
     /// Get statistics for a specific brick.
     #[must_use]
     pub fn stats(&self, name: &str) -> Option<&BrickStats> {
@@ -1469,8 +1607,12 @@ impl BrickProfiler {
             } else {
                 0.0
             };
+            // PMAT-451: Include compression_ratio, throughput_gbps, and bottleneck
+            let compression = stats.compression_ratio();
+            let throughput_gbps = stats.throughput_gbps();
+            let bottleneck = stats.get_bottleneck();
             bricks.push(format!(
-                r#"{{"name":"{}","count":{},"total_ns":{},"avg_us":{:.2},"min_us":{:.2},"max_us":{:.2},"throughput":{:.1},"pct":{:.1}}}"#,
+                r#"{{"name":"{}","count":{},"total_ns":{},"avg_us":{:.2},"min_us":{:.2},"max_us":{:.2},"throughput":{:.1},"pct":{:.1},"total_bytes":{},"compression_ratio":{:.2},"throughput_gbps":{:.2},"bottleneck":"{}"}}"#,
                 name,
                 stats.count,
                 stats.total_ns,
@@ -1478,7 +1620,11 @@ impl BrickProfiler {
                 stats.min_us(),
                 stats.max_us(),
                 stats.throughput(),
-                pct
+                pct,
+                stats.total_bytes,
+                compression,
+                throughput_gbps,
+                bottleneck
             ));
         }
 
@@ -2421,5 +2567,138 @@ mod tests {
         assert_eq!(cloned.brick_id, 42);
         assert_eq!(cloned.elapsed_ns, 1000);
         assert_eq!(cloned.elements, 5);
+    }
+
+    // ========================================================================
+    // PMAT-451: Compression Ratio and Bottleneck Tests
+    // ========================================================================
+
+    #[test]
+    fn test_brick_bottleneck_display() {
+        assert_eq!(format!("{}", BrickBottleneck::Unknown), "unknown");
+        assert_eq!(format!("{}", BrickBottleneck::Memory), "memory");
+        assert_eq!(format!("{}", BrickBottleneck::Compute), "compute");
+    }
+
+    #[test]
+    fn test_brick_bottleneck_default() {
+        let bottleneck = BrickBottleneck::default();
+        assert_eq!(bottleneck, BrickBottleneck::Unknown);
+    }
+
+    #[test]
+    fn test_brick_stats_compression_ratio() {
+        let mut stats = BrickStats::new("Compress");
+        // 1000 bytes in, 250 bytes out = 4.0 compression ratio
+        stats.add_sample_with_bytes(1_000_000, 100, 1000, 250);
+
+        let ratio = stats.compression_ratio();
+        assert!((ratio - 4.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_brick_stats_compression_ratio_no_data() {
+        let stats = BrickStats::new("Empty");
+        // No compressed bytes = 1.0 ratio (no compression = 1:1)
+        assert_eq!(stats.compression_ratio(), 1.0);
+    }
+
+    #[test]
+    fn test_brick_stats_throughput_gbps() {
+        let mut stats = BrickStats::new("Throughput");
+        // 1 GB (1e9 bytes) in 1 second (1e9 ns) = 1.0 GB/s
+        stats.add_sample_with_bytes(1_000_000_000, 1000, 1_000_000_000, 0);
+
+        let throughput = stats.throughput_gbps();
+        assert!((throughput - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_brick_stats_throughput_gbps_zero_time() {
+        let stats = BrickStats::new("Empty");
+        // Zero time = 0.0 throughput (avoid division by zero)
+        assert_eq!(stats.throughput_gbps(), 0.0);
+    }
+
+    #[test]
+    fn test_brick_stats_add_sample_with_bytes() {
+        let mut stats = BrickStats::new("Bytes");
+
+        stats.add_sample_with_bytes(1000, 10, 100, 25);
+        assert_eq!(stats.count, 1);
+        assert_eq!(stats.total_ns, 1000);
+        assert_eq!(stats.total_elements, 10);
+        assert_eq!(stats.total_bytes, 100);
+        assert_eq!(stats.total_compressed_bytes, 25);
+        assert_eq!(stats.min_ns, 1000);
+        assert_eq!(stats.max_ns, 1000);
+
+        // Add second sample
+        stats.add_sample_with_bytes(500, 5, 50, 20);
+        assert_eq!(stats.count, 2);
+        assert_eq!(stats.total_ns, 1500);
+        assert_eq!(stats.total_elements, 15);
+        assert_eq!(stats.total_bytes, 150);
+        assert_eq!(stats.total_compressed_bytes, 45);
+        assert_eq!(stats.min_ns, 500);
+        assert_eq!(stats.max_ns, 1000);
+    }
+
+    #[test]
+    fn test_brick_stats_bottleneck() {
+        let mut stats = BrickStats::new("Test");
+        assert_eq!(stats.get_bottleneck(), BrickBottleneck::Unknown);
+
+        stats.set_bottleneck(BrickBottleneck::Memory);
+        assert_eq!(stats.get_bottleneck(), BrickBottleneck::Memory);
+
+        stats.set_bottleneck(BrickBottleneck::Compute);
+        assert_eq!(stats.get_bottleneck(), BrickBottleneck::Compute);
+    }
+
+    #[test]
+    fn test_brick_profiler_record_elapsed_with_bytes() {
+        use std::time::Duration;
+        let mut profiler = BrickProfiler::new();
+        profiler.enable(); // Profiler is disabled by default
+
+        profiler.record_elapsed_with_bytes("Compress", Duration::from_nanos(1000), 100, 1_000_000, 250_000);
+        profiler.record_elapsed_with_bytes("Compress", Duration::from_nanos(2000), 200, 2_000_000, 500_000);
+
+        let stats = profiler.stats("Compress").unwrap();
+        assert_eq!(stats.count, 2);
+        assert_eq!(stats.total_ns, 3000);
+        assert_eq!(stats.total_elements, 300);
+        assert_eq!(stats.total_bytes, 3_000_000);
+        assert_eq!(stats.total_compressed_bytes, 750_000);
+    }
+
+    #[test]
+    fn test_brick_profiler_set_bottleneck() {
+        use std::time::Duration;
+        let mut profiler = BrickProfiler::new();
+        profiler.enable(); // Profiler is disabled by default
+        profiler.record_elapsed("TestBrick", Duration::from_nanos(1000), 100);
+        profiler.set_brick_bottleneck("TestBrick", BrickBottleneck::Memory);
+
+        let stats = profiler.stats("TestBrick").unwrap();
+        assert_eq!(stats.get_bottleneck(), BrickBottleneck::Memory);
+    }
+
+    #[test]
+    fn test_brick_profiler_to_json_includes_pmat451_fields() {
+        use std::time::Duration;
+        let mut profiler = BrickProfiler::new();
+        profiler.enable(); // Profiler is disabled by default
+        profiler.record_elapsed_with_bytes("Compress", Duration::from_micros(1000), 100, 1_000_000, 250_000);
+        profiler.set_brick_bottleneck("Compress", BrickBottleneck::Memory);
+
+        let json = profiler.to_json();
+
+        // Verify new PMAT-451 fields are present
+        assert!(json.contains("\"total_bytes\":"));
+        assert!(json.contains("\"compression_ratio\":"));
+        assert!(json.contains("\"throughput_gbps\":"));
+        assert!(json.contains("\"bottleneck\":\"memory\""));
     }
 }
