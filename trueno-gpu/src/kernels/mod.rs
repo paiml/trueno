@@ -38,6 +38,7 @@ pub use attention::{AttentionKernel, IncrementalAttentionKernel, MultiWarpIncrem
 pub use bias_activation::{Activation, BiasActivationKernel};
 pub use fused::{FusedGateUpKernel, FusedQKVKernel};
 pub use elementwise::{
+    BatchedResidualAddKernel, BatchedRopeKernel, BatchedSwigluKernel,
     ElementwiseMulKernel, FusedResidualRmsNormKernel, FusedSwigluKernel,
     GeluKernel, KvCacheScatterIndirectKernel, KvCacheScatterKernel,
     ResidualAddKernel, RopeIndirectKernel, RopeKernel, SiluKernel,

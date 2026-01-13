@@ -99,6 +99,98 @@ impl Kernel for ResidualAddKernel {
     }
 }
 
+// ============================================================================
+// PAR-114: Batched Residual Add Kernel (processes M sequences in parallel)
+// ============================================================================
+
+/// Batched Residual Add: output[m] = input1[m] + input2[m] for m in 0..M
+///
+/// Processes M sequences in parallel using Grid.y for batch index.
+///
+/// # Parameters
+///
+/// - `input1_ptr`: First packed input [M × n]
+/// - `input2_ptr`: Second packed input [M × n]
+/// - `output_ptr`: Output [M × n]
+/// - `n`: Elements per sequence
+///
+/// # Grid Configuration
+///
+/// - Grid: (ceil(n/256), batch_size, 1)
+/// - Block: (256, 1, 1)
+#[derive(Debug, Clone)]
+pub struct BatchedResidualAddKernel {
+    /// Elements per sequence
+    pub n: u32,
+    /// Batch size (M)
+    pub batch_size: u32,
+}
+
+impl BatchedResidualAddKernel {
+    /// Create a new batched residual add kernel
+    #[must_use]
+    pub const fn new(n: u32, batch_size: u32) -> Self {
+        Self { n, batch_size }
+    }
+}
+
+impl Kernel for BatchedResidualAddKernel {
+    fn name(&self) -> &str {
+        "batched_residual_add"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        let n = self.n;
+
+        PtxKernel::new("batched_residual_add")
+            .param(PtxType::U64, "input1_ptr")
+            .param(PtxType::U64, "input2_ptr")
+            .param(PtxType::U64, "output_ptr")
+            .build(move |ctx| {
+                // Global thread ID within the sequence
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let ctaid_x = ctx.special_reg(PtxReg::CtaIdX);
+                let batch_idx = ctx.special_reg(PtxReg::CtaIdY); // Grid.y = sequence index
+                let ntid = ctx.special_reg(PtxReg::NtidX);
+                let local_gid = ctx.mad_lo_u32(ctaid_x, ntid, tid);
+
+                // Load parameters
+                let input1_ptr = ctx.load_param_u64("input1_ptr");
+                let input2_ptr = ctx.load_param_u64("input2_ptr");
+                let output_ptr = ctx.load_param_u64("output_ptr");
+
+                // Bounds check within sequence
+                let n_val = ctx.mov_u32_imm(n);
+                let in_bounds = ctx.setp_lt_u32(local_gid, n_val);
+                ctx.branch_if_not(in_bounds, "exit");
+
+                // Calculate global element index: batch_idx × n + local_gid
+                let batch_offset = ctx.mul_lo_u32(batch_idx, n_val);
+                let gid = ctx.add_u32_reg(batch_offset, local_gid);
+
+                // Calculate byte address (gid × 4 bytes)
+                let four = ctx.mov_u32_imm(4);
+                let offset = ctx.mul_wide_u32_reg(gid, four);
+                let addr1 = ctx.add_u64(input1_ptr, offset);
+                let addr2 = ctx.add_u64(input2_ptr, offset);
+                let out_addr = ctx.add_u64(output_ptr, offset);
+
+                // Load both values
+                let val1 = ctx.ld_global_f32(addr1);
+                let val2 = ctx.ld_global_f32(addr2);
+
+                // Add
+                let result = ctx.add_f32(val1, val2);
+
+                // Store
+                ctx.st_global_f32(out_addr, result);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
 /// Fused Residual Add + RMSNorm Kernel
 ///
 /// Combines residual addition and RMSNorm in a single kernel pass.
@@ -596,6 +688,108 @@ impl Kernel for FusedSwigluKernel {
 }
 
 // ============================================================================
+// PAR-114: Batched SwiGLU Kernel (processes M sequences in parallel)
+// ============================================================================
+
+/// Batched SwiGLU: output[m] = silu(gate[m]) * up[m] for m in 0..M
+///
+/// Processes M sequences in parallel using Grid.y for batch index.
+///
+/// # Parameters
+///
+/// - `gate_ptr`: Packed gate values [M × n]
+/// - `up_ptr`: Packed up values [M × n]
+/// - `output_ptr`: Output [M × n]
+///
+/// # Grid Configuration
+///
+/// - Grid: (ceil(n/256), batch_size, 1)
+/// - Block: (256, 1, 1)
+#[derive(Debug, Clone)]
+pub struct BatchedSwigluKernel {
+    /// Elements per sequence
+    pub n: u32,
+    /// Batch size (M)
+    pub batch_size: u32,
+}
+
+impl BatchedSwigluKernel {
+    /// Create a new batched SwiGLU kernel
+    #[must_use]
+    pub const fn new(n: u32, batch_size: u32) -> Self {
+        Self { n, batch_size }
+    }
+}
+
+impl Kernel for BatchedSwigluKernel {
+    fn name(&self) -> &str {
+        "batched_swiglu"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        let n = self.n;
+
+        PtxKernel::new("batched_swiglu")
+            .param(PtxType::U64, "gate_ptr")
+            .param(PtxType::U64, "up_ptr")
+            .param(PtxType::U64, "output_ptr")
+            .build(move |ctx| {
+                // Global thread ID within the sequence
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let ctaid_x = ctx.special_reg(PtxReg::CtaIdX);
+                let batch_idx = ctx.special_reg(PtxReg::CtaIdY); // Grid.y = sequence index
+                let ntid = ctx.special_reg(PtxReg::NtidX);
+                let local_gid = ctx.mad_lo_u32(ctaid_x, ntid, tid);
+
+                // Load parameters
+                let gate_ptr = ctx.load_param_u64("gate_ptr");
+                let up_ptr = ctx.load_param_u64("up_ptr");
+                let output_ptr = ctx.load_param_u64("output_ptr");
+
+                // Bounds check within sequence
+                let n_val = ctx.mov_u32_imm(n);
+                let in_bounds = ctx.setp_lt_u32(local_gid, n_val);
+                ctx.branch_if_not(in_bounds, "exit");
+
+                // Calculate global element index: batch_idx × n + local_gid
+                let batch_offset = ctx.mul_lo_u32(batch_idx, n_val);
+                let gid = ctx.add_u32_reg(batch_offset, local_gid);
+
+                // Calculate byte address (gid × 4 bytes)
+                let four = ctx.mov_u32_imm(4);
+                let offset = ctx.mul_wide_u32_reg(gid, four);
+                let gate_addr = ctx.add_u64(gate_ptr, offset);
+                let up_addr = ctx.add_u64(up_ptr, offset);
+                let out_addr = ctx.add_u64(output_ptr, offset);
+
+                // Load gate and up values
+                let gate = ctx.ld_global_f32(gate_addr);
+                let up = ctx.ld_global_f32(up_addr);
+
+                // Compute SiLU(gate): gate × sigmoid(gate)
+                let zero = ctx.mov_f32_imm(0.0);
+                let neg_gate = ctx.sub_f32(zero, gate);
+                let log2_e = ctx.mov_f32_imm(std::f32::consts::LOG2_E);
+                let scaled = ctx.mul_f32(neg_gate, log2_e);
+                let exp_neg = ctx.ex2_f32(scaled);
+                let one = ctx.mov_f32_imm(1.0);
+                let denom = ctx.add_f32(one, exp_neg);
+                let sigmoid = ctx.div_f32(one, denom);
+                let silu_gate = ctx.mul_f32(gate, sigmoid);
+
+                // Multiply: silu(gate) × up
+                let result = ctx.mul_f32(silu_gate, up);
+
+                // Store
+                ctx.st_global_f32(out_addr, result);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
+// ============================================================================
 // PAR-052: KV Cache Scatter Kernels
 // ============================================================================
 
@@ -968,6 +1162,157 @@ impl Kernel for RopeIndirectKernel {
                 let x1_cos = ctx.mul_f32(x1, cos_val);
                 let new_x1 = ctx.add_f32(x0_sin, x1_cos);
 
+                ctx.st_global_f32(out_addr0, new_x0);
+                ctx.st_global_f32(out_addr1, new_x1);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
+// ============================================================================
+// PAR-114: Batched RoPE Kernel (processes M sequences in parallel)
+// ============================================================================
+
+/// Batched RoPE Kernel: Apply rotary position embeddings to M sequences
+///
+/// Processes M sequences in parallel using Grid.y for batch index.
+/// Each sequence can have a different position.
+///
+/// # Parameters
+///
+/// - `x_ptr`: Packed input vectors [M × num_heads × head_dim]
+/// - `out_ptr`: Output vectors (can be same as x_ptr for in-place)
+/// - `positions_ptr`: Array of M positions (u32[M])
+///
+/// # Grid Configuration
+///
+/// - Grid: (num_heads, batch_size, 1)
+/// - Block: (head_dim / 2, 1, 1)
+/// - Each block processes one head of one sequence
+#[derive(Debug, Clone)]
+pub struct BatchedRopeKernel {
+    /// Number of heads
+    pub num_heads: u32,
+    /// Head dimension
+    pub head_dim: u32,
+    /// Batch size (M)
+    pub batch_size: u32,
+    /// Rope theta base (typically 10000.0)
+    pub theta: f32,
+}
+
+impl BatchedRopeKernel {
+    /// Create a new batched RoPE kernel
+    #[must_use]
+    pub fn new(num_heads: u32, head_dim: u32, batch_size: u32, theta: f32) -> Self {
+        Self { num_heads, head_dim, batch_size, theta }
+    }
+}
+
+impl Kernel for BatchedRopeKernel {
+    fn name(&self) -> &str {
+        "batched_rope"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        let head_dim = self.head_dim;
+        let num_heads = self.num_heads;
+        let theta = self.theta;
+
+        PtxKernel::new("batched_rope")
+            .param(PtxType::U64, "x_ptr")        // Packed input [M × num_heads × head_dim]
+            .param(PtxType::U64, "out_ptr")     // Output (can alias x_ptr)
+            .param(PtxType::U64, "positions_ptr") // Array of M positions
+            .build(move |ctx| {
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let head_idx = ctx.special_reg(PtxReg::CtaIdX);  // blockIdx.x = head
+                let batch_idx = ctx.special_reg(PtxReg::CtaIdY); // blockIdx.y = sequence
+
+                let x_ptr = ctx.load_param_u64("x_ptr");
+                let out_ptr = ctx.load_param_u64("out_ptr");
+                let positions_ptr = ctx.load_param_u64("positions_ptr");
+
+                let pair_idx = tid;
+
+                // Bounds check
+                let half_dim = ctx.mov_u32_imm(head_dim / 2);
+                let in_bounds = ctx.setp_lt_u32(pair_idx, half_dim);
+                ctx.branch_if_not(in_bounds, "exit");
+
+                // Read position for this sequence from positions_ptr[batch_idx]
+                let four = ctx.mov_u32_imm(4);
+                let pos_byte_offset = ctx.mul_lo_u32(batch_idx, four);
+                let pos_byte_offset_64 = ctx.cvt_u64_u32(pos_byte_offset);
+                let pos_addr = ctx.add_u64(positions_ptr, pos_byte_offset_64);
+                let pos = ctx.ld_global_u32(pos_addr);
+
+                // Calculate element indices for the pair
+                let two = ctx.mov_u32_imm(2);
+                let elem0 = ctx.mul_lo_u32(pair_idx, two);
+                let one = ctx.mov_u32_imm(1);
+                let elem1 = ctx.add_u32_reg(elem0, one);
+
+                // Batch offset: batch_idx × num_heads × head_dim
+                let heads_per_seq = ctx.mov_u32_imm(num_heads);
+                let dim = ctx.mov_u32_imm(head_dim);
+                let seq_stride = ctx.mul_lo_u32(heads_per_seq, dim);
+                let batch_offset = ctx.mul_lo_u32(batch_idx, seq_stride);
+
+                // Head offset within sequence: head_idx × head_dim
+                let head_offset = ctx.mul_lo_u32(head_idx, dim);
+
+                // Total offset: batch_offset + head_offset + element
+                let base_offset = ctx.add_u32_reg(batch_offset, head_offset);
+                let offset0 = ctx.add_u32_reg(base_offset, elem0);
+                let offset1 = ctx.add_u32_reg(base_offset, elem1);
+
+                // Convert to byte offsets
+                let bytes0 = ctx.mul_lo_u32(offset0, four);
+                let bytes1 = ctx.mul_lo_u32(offset1, four);
+                let bytes0_64 = ctx.cvt_u64_u32(bytes0);
+                let bytes1_64 = ctx.cvt_u64_u32(bytes1);
+
+                // Calculate addresses
+                let addr0 = ctx.add_u64(x_ptr, bytes0_64);
+                let addr1 = ctx.add_u64(x_ptr, bytes1_64);
+                let out_addr0 = ctx.add_u64(out_ptr, bytes0_64);
+                let out_addr1 = ctx.add_u64(out_ptr, bytes1_64);
+
+                // Load x values
+                let x0 = ctx.ld_global_f32(addr0);
+                let x1 = ctx.ld_global_f32(addr1);
+
+                // Compute frequency: freq = theta^(-2*pair_idx/head_dim)
+                // Using: theta^x = 2^(x * log2(theta))
+                let pair_f32 = ctx.cvt_f32_u32(pair_idx);
+                let dim_f32 = ctx.mov_f32_imm(head_dim as f32);
+                let neg_two = ctx.mov_f32_imm(-2.0);
+                let exponent = ctx.mul_f32(pair_f32, neg_two);
+                let exponent_scaled = ctx.div_f32(exponent, dim_f32);
+                let log2_theta = ctx.mov_f32_imm(theta.log2());
+                let power = ctx.mul_f32(exponent_scaled, log2_theta);
+                let freq_base = ctx.ex2_f32(power);
+
+                // angle = position × freq_base
+                let pos_f32 = ctx.cvt_f32_u32(pos);
+                let angle = ctx.mul_f32(pos_f32, freq_base);
+
+                // Compute sin and cos
+                let cos_val = ctx.cos_f32(angle);
+                let sin_val = ctx.sin_f32(angle);
+
+                // Apply rotation: (x0 × cos - x1 × sin, x0 × sin + x1 × cos)
+                let x0_cos = ctx.mul_f32(x0, cos_val);
+                let x1_sin = ctx.mul_f32(x1, sin_val);
+                let new_x0 = ctx.sub_f32(x0_cos, x1_sin);
+
+                let x0_sin = ctx.mul_f32(x0, sin_val);
+                let x1_cos = ctx.mul_f32(x1, cos_val);
+                let new_x1 = ctx.add_f32(x0_sin, x1_cos);
+
+                // Store results
                 ctx.st_global_f32(out_addr0, new_x0);
                 ctx.st_global_f32(out_addr1, new_x1);
 
