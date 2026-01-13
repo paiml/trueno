@@ -1932,9 +1932,9 @@ impl Kernel for BatchedIncrementalAttentionKernel {
                 ctx.fma_f32_inplace(dot, q2, k2);
                 ctx.fma_f32_inplace(dot, q3, k3);
 
-                // Warp reduce
+                // Warp reduce - use full warp mask for all 32 threads
                 for delta in [16, 8, 4, 2, 1] {
-                    let other = ctx.shfl_down_f32(dot, delta, 0x1f);
+                    let other = ctx.shfl_down_f32(dot, delta, 0xFFFFFFFF);
                     ctx.add_f32_inplace(dot, other);
                 }
 
