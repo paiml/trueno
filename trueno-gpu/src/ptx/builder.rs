@@ -1304,6 +1304,28 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
+    /// Load u64 from global memory (PAR-118: for pointer arrays in batched attention)
+    pub fn ld_global_u64(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Store u64 to global memory
+    pub fn st_global_u64(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U64)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+    }
+
     /// Load u8 from global memory
     ///
     /// NOTE: PTX does not support .u8 register types (minimum is 16-bit).
@@ -3921,6 +3943,25 @@ mod tests {
         assert!(
             ptx.contains("ld.global"),
             "Expected ld.global instruction, got: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_ld_global_u64() {
+        // PAR-118: Test u64 load for pointer arrays in batched attention
+        let kernel = PtxKernel::new("test_ld_u64")
+            .param(PtxType::U64, "ptr")
+            .build(|ctx| {
+                let ptr = ctx.load_param_u64("ptr");
+                let _val = ctx.ld_global_u64(ptr);
+                ctx.ret();
+            });
+
+        let ptx = kernel.emit();
+        assert!(
+            ptx.contains("ld.global.u64"),
+            "Expected ld.global.u64 instruction, got: {}",
             ptx
         );
     }
