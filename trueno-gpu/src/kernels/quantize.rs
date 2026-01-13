@@ -1669,53 +1669,51 @@ impl Kernel for BatchedQ4KGemvKernel {
                 let four_64 = ctx.mov_u64_imm(4);
                 let scales_base = ctx.add_u64(sb_addr, four_64);
 
-                // Load all 12 scale bytes into registers for reuse
-                let s0 = ctx.ld_global_u8(scales_base);
-                let s0_32 = ctx.cvt_u32_u8(s0);
-                let one_64 = ctx.mov_u64_imm(1);
-                let s1_addr = ctx.add_u64(scales_base, one_64);
-                let s1 = ctx.ld_global_u8(s1_addr);
-                let s1_32 = ctx.cvt_u32_u8(s1);
-                let two_64 = ctx.mov_u64_imm(2);
-                let s2_addr = ctx.add_u64(scales_base, two_64);
-                let s2 = ctx.ld_global_u8(s2_addr);
-                let s2_32 = ctx.cvt_u32_u8(s2);
-                let three_64 = ctx.mov_u64_imm(3);
-                let s3_addr = ctx.add_u64(scales_base, three_64);
-                let s3 = ctx.ld_global_u8(s3_addr);
-                let s3_32 = ctx.cvt_u32_u8(s3);
+                // ========================================================
+                // PAR-125 OPTIMIZATION: Vectorized scale loading
+                // Load 12 bytes as 3 x u32 instead of 12 x u8
+                // All threads load (L1 cache handles redundancy)
+                // Reduces instruction count and improves coalescing
+                // ========================================================
+
+                // Load scales as 3 x u32 (all threads, L1 cached)
+                let scales_0_3 = ctx.ld_global_u32(scales_base);
                 let four_64b = ctx.mov_u64_imm(4);
-                let s4_addr = ctx.add_u64(scales_base, four_64b);
-                let s4 = ctx.ld_global_u8(s4_addr);
-                let s4_32 = ctx.cvt_u32_u8(s4);
-                let five_64 = ctx.mov_u64_imm(5);
-                let s5_addr = ctx.add_u64(scales_base, five_64);
-                let s5 = ctx.ld_global_u8(s5_addr);
-                let s5_32 = ctx.cvt_u32_u8(s5);
-                let six_64 = ctx.mov_u64_imm(6);
-                let s6_addr = ctx.add_u64(scales_base, six_64);
-                let s6 = ctx.ld_global_u8(s6_addr);
-                let s6_32 = ctx.cvt_u32_u8(s6);
-                let seven_64 = ctx.mov_u64_imm(7);
-                let s7_addr = ctx.add_u64(scales_base, seven_64);
-                let s7 = ctx.ld_global_u8(s7_addr);
-                let s7_32 = ctx.cvt_u32_u8(s7);
+                let scales_4_addr = ctx.add_u64(scales_base, four_64b);
+                let scales_4_7 = ctx.ld_global_u32(scales_4_addr);
                 let eight_64 = ctx.mov_u64_imm(8);
-                let s8_addr = ctx.add_u64(scales_base, eight_64);
-                let s8 = ctx.ld_global_u8(s8_addr);
-                let s8_32 = ctx.cvt_u32_u8(s8);
-                let nine_64 = ctx.mov_u64_imm(9);
-                let s9_addr = ctx.add_u64(scales_base, nine_64);
-                let s9 = ctx.ld_global_u8(s9_addr);
-                let s9_32 = ctx.cvt_u32_u8(s9);
-                let ten_64 = ctx.mov_u64_imm(10);
-                let s10_addr = ctx.add_u64(scales_base, ten_64);
-                let s10 = ctx.ld_global_u8(s10_addr);
-                let s10_32 = ctx.cvt_u32_u8(s10);
-                let eleven_64 = ctx.mov_u64_imm(11);
-                let s11_addr = ctx.add_u64(scales_base, eleven_64);
-                let s11 = ctx.ld_global_u8(s11_addr);
-                let s11_32 = ctx.cvt_u32_u8(s11);
+                let scales_8_addr = ctx.add_u64(scales_base, eight_64);
+                let scales_8_11 = ctx.ld_global_u32(scales_8_addr);
+
+                // Extract individual scale bytes using bit operations
+                let mask_8bit = ctx.mov_u32_imm(0xFF);
+                let eight_const = ctx.mov_u32_imm(8);
+                let sixteen = ctx.mov_u32_imm(16);
+                let twenty_four = ctx.mov_u32_imm(24);
+
+                // s0-s3 from scales_0_3
+                let s0_32 = ctx.and_u32(scales_0_3, mask_8bit);
+                let s0_shifted = ctx.shr_u32(scales_0_3, eight_const);
+                let s1_32 = ctx.and_u32(s0_shifted, mask_8bit);
+                let s1_shifted = ctx.shr_u32(scales_0_3, sixteen);
+                let s2_32 = ctx.and_u32(s1_shifted, mask_8bit);
+                let s3_32 = ctx.shr_u32(scales_0_3, twenty_four);
+
+                // s4-s7 from scales_4_7
+                let s4_32 = ctx.and_u32(scales_4_7, mask_8bit);
+                let s4_shifted = ctx.shr_u32(scales_4_7, eight_const);
+                let s5_32 = ctx.and_u32(s4_shifted, mask_8bit);
+                let s5_shifted = ctx.shr_u32(scales_4_7, sixteen);
+                let s6_32 = ctx.and_u32(s5_shifted, mask_8bit);
+                let s7_32 = ctx.shr_u32(scales_4_7, twenty_four);
+
+                // s8-s11 from scales_8_11
+                let s8_32 = ctx.and_u32(scales_8_11, mask_8bit);
+                let s8_shifted = ctx.shr_u32(scales_8_11, eight_const);
+                let s9_32 = ctx.and_u32(s8_shifted, mask_8bit);
+                let s9_shifted = ctx.shr_u32(scales_8_11, sixteen);
+                let s10_32 = ctx.and_u32(s9_shifted, mask_8bit);
+                let s11_32 = ctx.shr_u32(scales_8_11, twenty_four);
 
                 // Constants
                 let mask_6bit = ctx.mov_u32_imm(0x3F);
