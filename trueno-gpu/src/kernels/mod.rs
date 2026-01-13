@@ -47,7 +47,7 @@ pub use gemm::{
     GemmKernel,
 };
 pub use gemv::{CoalescedGemvKernel, GemvKernel};
-pub use layernorm::{LayerNormKernel, RmsNormKernel};
+pub use layernorm::{LayerNormKernel, RmsNormKernel, VectorizedRmsNormKernel};
 pub use megakernel::TransformerBlockMegakernel;
 pub use persistent::PersistentDecoderKernel;
 pub use quantize::{
