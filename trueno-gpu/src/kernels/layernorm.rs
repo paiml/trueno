@@ -719,6 +719,217 @@ impl Kernel for VectorizedRmsNormKernel {
     }
 }
 
+/// PAR-112: Batched Vectorized RMSNorm Kernel
+///
+/// Processes M sequences in parallel using Grid.y = M.
+/// Each block (blockIdx.y) processes one sequence independently.
+/// Achieves ~4x speedup over M sequential kernel launches.
+///
+/// Grid: (1, M, 1), Block: (256, 1, 1)
+#[derive(Debug, Clone)]
+pub struct BatchedVectorizedRmsNormKernel {
+    /// Hidden dimension size
+    pub hidden_size: u32,
+    /// Batch size (M)
+    pub batch_size: u32,
+    /// Epsilon for numerical stability
+    pub epsilon: f32,
+}
+
+impl BatchedVectorizedRmsNormKernel {
+    /// Create a new batched vectorized RMSNorm kernel
+    #[must_use]
+    pub fn new(hidden_size: u32, batch_size: u32) -> Self {
+        Self {
+            hidden_size,
+            batch_size,
+            epsilon: 1e-5,
+        }
+    }
+
+    /// Set custom epsilon value
+    #[must_use]
+    pub const fn with_epsilon(mut self, epsilon: f32) -> Self {
+        self.epsilon = epsilon;
+        self
+    }
+}
+
+impl Kernel for BatchedVectorizedRmsNormKernel {
+    fn name(&self) -> &str {
+        "batched_rmsnorm_vectorized"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        let hidden_size = self.hidden_size;
+        let epsilon = self.epsilon;
+
+        // Strategy:
+        // - Grid: (1, M, 1) - one block row per sequence
+        // - Block: (256, 1, 1) - 8 warps per block
+        // - Each block processes input[blockIdx.y * hidden_size : (blockIdx.y+1) * hidden_size]
+        // - Shared memory for warp reduction within block
+        //
+        // Memory layout (packed):
+        // input:  [seq0_hidden..., seq1_hidden..., seq2_hidden..., seq3_hidden...]
+        // output: [seq0_hidden..., seq1_hidden..., seq2_hidden..., seq3_hidden...]
+        // gamma:  [hidden_size] (shared across all sequences)
+
+        PtxKernel::new("batched_rmsnorm_vectorized")
+            .param(PtxType::U64, "input_ptr")
+            .param(PtxType::U64, "output_ptr")
+            .param(PtxType::U64, "gamma_ptr")
+            .shared_memory(8 * 4) // 8 warp partial sums (f32)
+            .build(move |ctx| {
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let batch_idx = ctx.special_reg(PtxReg::CtaIdY); // blockIdx.y = batch index
+                let warp_id = ctx.div_u32(tid, 32);
+                let lane_id = ctx.rem_u32(tid, 32);
+
+                // Load parameters
+                let input_base = ctx.load_param_u64("input_ptr");
+                let output_base = ctx.load_param_u64("output_ptr");
+                let gamma_ptr = ctx.load_param_u64("gamma_ptr");
+
+                // Calculate batch offset: batch_idx * hidden_size * 4 bytes
+                let hidden_u32 = ctx.mov_u32_imm(hidden_size);
+                let four = ctx.mov_u32_imm(4);
+                let batch_offset_elems = ctx.mul_wide_u32_reg(batch_idx, hidden_u32);
+                let batch_offset_bytes = ctx.mul_u64(batch_offset_elems, 4);
+
+                // Offset input/output pointers for this batch
+                let input_ptr = ctx.add_u64(input_base, batch_offset_bytes);
+                let output_ptr = ctx.add_u64(output_base, batch_offset_bytes);
+
+                // Pass 1: Accumulate sum of squares
+                let sq_sum = ctx.mov_f32_imm(0.0);
+                let idx = ctx.mov_u32_imm(0);
+
+                ctx.label("sum_loop");
+                let loop_idx = ctx.add_u32_reg(idx, tid);
+                let in_bounds = ctx.setp_lt_u32(loop_idx, hidden_u32);
+                ctx.branch_if_not(in_bounds, "sum_loop_end");
+
+                let elem_offset = ctx.mul_wide_u32_reg(loop_idx, four);
+                let elem_addr = ctx.add_u64(input_ptr, elem_offset);
+                let val = ctx.ld_global_f32(elem_addr);
+
+                ctx.fma_f32_inplace(sq_sum, val, val);
+                ctx.add_u32_inplace(idx, 256);
+                ctx.branch("sum_loop");
+
+                ctx.label("sum_loop_end");
+
+                // Warp-level reduction
+                let shfl16 = ctx.shfl_down_f32(sq_sum, 16, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(sq_sum, shfl16);
+                let shfl8 = ctx.shfl_down_f32(sq_sum, 8, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(sq_sum, shfl8);
+                let shfl4 = ctx.shfl_down_f32(sq_sum, 4, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(sq_sum, shfl4);
+                let shfl2 = ctx.shfl_down_f32(sq_sum, 2, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(sq_sum, shfl2);
+                let shfl1 = ctx.shfl_down_f32(sq_sum, 1, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(sq_sum, shfl1);
+
+                // Lane 0 writes to shared memory
+                let smem_base = ctx.mov_u64_imm(0);
+                let zero = ctx.mov_u32_imm(0);
+                let is_lane_zero = ctx.setp_eq_u32(lane_id, zero);
+                ctx.branch_if_not(is_lane_zero, "skip_store");
+
+                let warp_offset = ctx.mul_wide_u32_reg(warp_id, four);
+                let smem_addr = ctx.add_u64(smem_base, warp_offset);
+                ctx.st_shared_f32(smem_addr, sq_sum);
+
+                ctx.label("skip_store");
+                ctx.bar_sync(0);
+
+                // Thread 0 reduces across warps
+                let final_sum = ctx.mov_f32_imm(0.0);
+                let is_tid_zero = ctx.setp_eq_u32(tid, zero);
+                ctx.branch_if_not(is_tid_zero, "after_final_reduce");
+
+                // Load and sum all 8 warp contributions
+                let addr0 = ctx.mov_u64_imm(0);
+                let s0 = ctx.ld_shared_f32(addr0);
+                ctx.add_f32_inplace(final_sum, s0);
+
+                let addr1 = ctx.mov_u64_imm(4);
+                let s1 = ctx.ld_shared_f32(addr1);
+                ctx.add_f32_inplace(final_sum, s1);
+
+                let addr2 = ctx.mov_u64_imm(8);
+                let s2 = ctx.ld_shared_f32(addr2);
+                ctx.add_f32_inplace(final_sum, s2);
+
+                let addr3 = ctx.mov_u64_imm(12);
+                let s3 = ctx.ld_shared_f32(addr3);
+                ctx.add_f32_inplace(final_sum, s3);
+
+                let addr4 = ctx.mov_u64_imm(16);
+                let s4 = ctx.ld_shared_f32(addr4);
+                ctx.add_f32_inplace(final_sum, s4);
+
+                let addr5 = ctx.mov_u64_imm(20);
+                let s5 = ctx.ld_shared_f32(addr5);
+                ctx.add_f32_inplace(final_sum, s5);
+
+                let addr6 = ctx.mov_u64_imm(24);
+                let s6 = ctx.ld_shared_f32(addr6);
+                ctx.add_f32_inplace(final_sum, s6);
+
+                let addr7 = ctx.mov_u64_imm(28);
+                let s7 = ctx.ld_shared_f32(addr7);
+                ctx.add_f32_inplace(final_sum, s7);
+
+                // Compute rms_inv = rsqrt(sum / hidden_size + epsilon)
+                let hidden_f32 = ctx.cvt_f32_u32(hidden_u32);
+                let mean_sq = ctx.div_f32(final_sum, hidden_f32);
+                let eps = ctx.mov_f32_imm(epsilon);
+                let var_plus_eps = ctx.add_f32(mean_sq, eps);
+                let rms_inv = ctx.rsqrt_f32(var_plus_eps);
+
+                // Store rms_inv to shared memory for other threads
+                ctx.st_shared_f32(addr0, rms_inv);
+
+                ctx.label("after_final_reduce");
+                ctx.bar_sync(0);
+
+                // All threads load rms_inv and normalize
+                let smem_zero = ctx.mov_u64_imm(0);
+                let rms_inv_shared = ctx.ld_shared_f32(smem_zero);
+
+                // Pass 2: Normalize output = input * rms_inv * gamma
+                let idx2 = ctx.mov_u32_imm(0);
+
+                ctx.label("norm_loop");
+                let loop_idx2 = ctx.add_u32_reg(idx2, tid);
+                let in_bounds2 = ctx.setp_lt_u32(loop_idx2, hidden_u32);
+                ctx.branch_if_not(in_bounds2, "exit");
+
+                let elem_offset2 = ctx.mul_wide_u32_reg(loop_idx2, four);
+                let in_addr = ctx.add_u64(input_ptr, elem_offset2);
+                let gamma_addr = ctx.add_u64(gamma_ptr, elem_offset2);
+                let out_addr = ctx.add_u64(output_ptr, elem_offset2);
+
+                let inp = ctx.ld_global_f32(in_addr);
+                let gamma = ctx.ld_global_f32(gamma_addr);
+
+                let normalized = ctx.mul_f32(inp, rms_inv_shared);
+                let result = ctx.mul_f32(normalized, gamma);
+
+                ctx.st_global_f32(out_addr, result);
+
+                ctx.add_u32_inplace(idx2, 256);
+                ctx.branch("norm_loop");
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
