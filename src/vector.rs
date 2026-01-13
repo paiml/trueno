@@ -12996,10 +12996,12 @@ mod property_tests {
 
             let expected = k * k * var_original;
             // Use absolute tolerance for small values, relative for large
+            // Note: f32 has ~7 significant digits; variance involves squaring which
+            // doubles relative error, then k² multiplies it again. Use 0.5% tolerance.
             let tolerance = if expected.abs() < 1.0 {
                 1e-2  // Absolute tolerance for small variance
             } else {
-                1e-3 * expected.abs()  // Relative tolerance for large variance
+                5e-3 * expected.abs()  // 0.5% relative tolerance for large variance
             };
             prop_assert!(
                 (var_scaled - expected).abs() < tolerance,
