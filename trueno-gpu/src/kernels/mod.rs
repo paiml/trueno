@@ -34,7 +34,10 @@ mod quantize;
 mod softmax;
 
 pub use argmax::{ArgMaxFinalKernel, ArgMaxKernel};
-pub use attention::{AttentionKernel, IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel};
+pub use attention::{
+    AttentionKernel, BatchedIncrementalAttentionKernel, IncrementalAttentionKernel,
+    MultiWarpIncrementalAttentionKernel,
+};
 pub use bias_activation::{Activation, BiasActivationKernel};
 pub use fused::{FusedGateUpKernel, FusedQKVKernel};
 pub use elementwise::{
