@@ -1187,6 +1187,22 @@ impl BrickStats {
     pub fn tokens_per_sec(&self) -> f64 {
         self.throughput()
     }
+
+    /// Minimum time in microseconds.
+    #[must_use]
+    pub fn min_us(&self) -> f64 {
+        if self.min_ns == u64::MAX {
+            0.0
+        } else {
+            self.min_ns as f64 / 1000.0
+        }
+    }
+
+    /// Maximum time in microseconds.
+    #[must_use]
+    pub fn max_us(&self) -> f64 {
+        self.max_ns as f64 / 1000.0
+    }
 }
 
 /// Per-brick profiler using pure Rust timing.
@@ -1415,6 +1431,72 @@ impl BrickProfiler {
         }
 
         report
+    }
+
+    /// Export profiling data as JSON for pmat metrics integration.
+    ///
+    /// Format compatible with `.pmat-metrics/trends/` structure:
+    /// ```json
+    /// {
+    ///   "total_tokens": 1000,
+    ///   "total_ns": 5000000,
+    ///   "total_throughput": 200000.0,
+    ///   "bricks": [
+    ///     {
+    ///       "name": "RmsNorm",
+    ///       "count": 10,
+    ///       "total_ns": 1000000,
+    ///       "avg_us": 100.0,
+    ///       "min_us": 90.0,
+    ///       "max_us": 120.0,
+    ///       "throughput": 10000.0,
+    ///       "pct": 20.0
+    ///     }
+    ///   ]
+    /// }
+    /// ```
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        let mut bricks = Vec::new();
+
+        // Sort by total time descending
+        let mut sorted: Vec<_> = self.stats.iter().collect();
+        sorted.sort_by(|a, b| b.1.total_ns.cmp(&a.1.total_ns));
+
+        for (name, stats) in sorted {
+            let pct = if self.total_ns > 0 {
+                100.0 * stats.total_ns as f64 / self.total_ns as f64
+            } else {
+                0.0
+            };
+            bricks.push(format!(
+                r#"{{"name":"{}","count":{},"total_ns":{},"avg_us":{:.2},"min_us":{:.2},"max_us":{:.2},"throughput":{:.1},"pct":{:.1}}}"#,
+                name,
+                stats.count,
+                stats.total_ns,
+                stats.avg_us(),
+                stats.min_us(),
+                stats.max_us(),
+                stats.throughput(),
+                pct
+            ));
+        }
+
+        format!(
+            r#"{{"total_tokens":{},"total_ns":{},"total_throughput":{:.1},"bricks":[{}]}}"#,
+            self.total_tokens,
+            self.total_ns,
+            self.total_throughput(),
+            bricks.join(",")
+        )
+    }
+
+    /// Write profiling data to a JSON file for pmat tracking.
+    ///
+    /// # Errors
+    /// Returns error if file cannot be written.
+    pub fn write_json(&self, path: &std::path::Path) -> std::io::Result<()> {
+        std::fs::write(path, self.to_json())
     }
 }
 
