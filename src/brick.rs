@@ -1310,6 +1310,43 @@ impl BrickProfiler {
         self.total_ns += elapsed_ns;
     }
 
+    /// Record a pre-measured duration for a brick.
+    ///
+    /// PAR-073: This method allows timing with raw `Instant` calls, avoiding
+    /// borrow conflicts when profiling CUDA operations that also need `&mut self`.
+    ///
+    /// # Arguments
+    /// - `name`: Brick name
+    /// - `elapsed`: Duration of the operation (from `Instant::elapsed()`)
+    /// - `elements`: Number of elements (tokens) processed
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let start = std::time::Instant::now();
+    /// cuda_stream.synchronize()?;
+    /// self.some_cuda_operation()?;
+    /// cuda_stream.synchronize()?;
+    /// let elapsed = start.elapsed();
+    /// self.profiler.record_elapsed("SomeBrick", elapsed, 1);
+    /// ```
+    pub fn record_elapsed(&mut self, name: &str, elapsed: std::time::Duration, elements: u64) {
+        if !self.enabled {
+            return;
+        }
+
+        let elapsed_ns = elapsed.as_nanos() as u64;
+
+        // Update per-brick stats
+        let stats = self.stats.entry(name.to_string()).or_insert_with(|| {
+            BrickStats::new(name)
+        });
+        stats.add_sample(elapsed_ns, elements);
+
+        // Update totals
+        self.total_tokens += elements;
+        self.total_ns += elapsed_ns;
+    }
+
     /// Get statistics for a specific brick.
     #[must_use]
     pub fn stats(&self, name: &str) -> Option<&BrickStats> {
