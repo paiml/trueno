@@ -1628,3 +1628,19 @@ roadmap:
   notes: |
     Spec: docs/specifications/compute-block-tui-cbtop.md §21.7, §21.8
     FKR: FKR-017
+- id: TUNER-SPEC-001
+  github_issue: null
+  item_type: task
+  title: 'New task: TUNER-SPEC-001'
+  status: inprogress
+  priority: medium
+  assigned_to: null
+  created: 2026-01-13T22:48:28.242419527+00:00
+  updated: 2026-01-13T22:48:28.242419527+00:00
+  spec: null
+  acceptance_criteria: []
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels: []
+  notes: null

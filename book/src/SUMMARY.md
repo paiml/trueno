@@ -48,6 +48,7 @@
 - [GPU Performance](./performance/gpu-performance.md)
 - [Optimization Guide](./performance/optimization-guide.md)
 - [Profiling](./performance/profiling.md)
+- [ML Tuner: Learned Kernel Selection](./performance/ml-tuner.md)
 - [Golden Trace Validation](./performance/golden-trace-validation.md)
 - [Performance Targets](./performance/targets.md)
 - [Comparing Backends](./performance/backend-comparison.md)
@@ -105,6 +106,7 @@
 - [Docker Benchmarking](./ecosystem/ruchy-docker.md)
 - [PMAT Quality Gates](./ecosystem/pmat.md)
 - [cbtop (Compute Block Top)](./ecosystem/cbtop.md)
+- [aprender (ML Integration)](./ecosystem/aprender.md)
 
 # Specifications
 

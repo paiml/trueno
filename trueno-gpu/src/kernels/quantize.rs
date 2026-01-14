@@ -7624,12 +7624,12 @@ impl Kernel for FusedGateUpQ4KGemvKernel {
                 ctx.label("skip_scale_load");
 
                 // Broadcast scales to all lanes (lane 0 broadcast)
-                let scales_gate_0_3_bcast = ctx.shfl_idx_u32(scales_gate_0_3, 0, 0xFFFF_FFFF);
-                let scales_gate_4_7_bcast = ctx.shfl_idx_u32(scales_gate_4_7, 0, 0xFFFF_FFFF);
-                let scales_gate_8_11_bcast = ctx.shfl_idx_u32(scales_gate_8_11, 0, 0xFFFF_FFFF);
-                let scales_up_0_3_bcast = ctx.shfl_idx_u32(scales_up_0_3, 0, 0xFFFF_FFFF);
-                let scales_up_4_7_bcast = ctx.shfl_idx_u32(scales_up_4_7, 0, 0xFFFF_FFFF);
-                let scales_up_8_11_bcast = ctx.shfl_idx_u32(scales_up_8_11, 0, 0xFFFF_FFFF);
+                let _scales_gate_0_3_bcast = ctx.shfl_idx_u32(scales_gate_0_3, 0, 0xFFFF_FFFF);
+                let _scales_gate_4_7_bcast = ctx.shfl_idx_u32(scales_gate_4_7, 0, 0xFFFF_FFFF);
+                let _scales_gate_8_11_bcast = ctx.shfl_idx_u32(scales_gate_8_11, 0, 0xFFFF_FFFF);
+                let _scales_up_0_3_bcast = ctx.shfl_idx_u32(scales_up_0_3, 0, 0xFFFF_FFFF);
+                let _scales_up_4_7_bcast = ctx.shfl_idx_u32(scales_up_4_7, 0, 0xFFFF_FFFF);
+                let _scales_up_8_11_bcast = ctx.shfl_idx_u32(scales_up_8_11, 0, 0xFFFF_FFFF);
 
                 // Quantized data starts at offset 16 (after d, dmin, 12 scales)
                 let quant_offset = ctx.mov_u64_imm(16);
@@ -7638,12 +7638,12 @@ impl Kernel for FusedGateUpQ4KGemvKernel {
 
                 // Each thread processes 8 values based on lane_id
                 let two_const = ctx.mov_u32_imm(2);
-                let block_idx = ctx.shr_u32(lane_id, two_const); // lane_id / 4 = sub-block index
+                let _block_idx = ctx.shr_u32(lane_id, two_const); // lane_id / 4 = sub-block index
 
                 // Extract scale bytes using constants (simplified approach)
                 // All 32 lanes use the simple d*scale formula
                 let mask_4bit = ctx.mov_u32_imm(0x0F);
-                let mask_8bit = ctx.mov_u32_imm(0xFF);
+                let _mask_8bit = ctx.mov_u32_imm(0xFF);
                 let eight_shift = ctx.mov_u32_imm(8);
                 let sixteen_shift = ctx.mov_u32_imm(16);
                 let twenty_four = ctx.mov_u32_imm(24);
