@@ -878,6 +878,7 @@ impl FusedQKVOp {
     }
 }
 
+#[allow(clippy::needless_range_loop)] // Matrix indexing is clearer with explicit loops
 impl ComputeOp for FusedQKVOp {
     type Input = (Vec<f32>, FusedQKVWeights);
     type Output = (Vec<f32>, Vec<f32>, Vec<f32>); // (Q, K, V)
@@ -1006,6 +1007,7 @@ impl FusedGateUpOp {
     }
 }
 
+#[allow(clippy::needless_range_loop)] // Matrix indexing is clearer with explicit loops
 impl ComputeOp for FusedGateUpOp {
     type Input = (Vec<f32>, FusedGateUpWeights);
     type Output = Vec<f32>; // SwiGLU output [intermediate_size]
@@ -1327,6 +1329,10 @@ pub struct BrickProfiler {
     total_tokens: u64,
     /// Total time (ns) across all bricks
     total_ns: u64,
+    /// L2 cache hit rate (0.0-1.0) - v1.1.0 OBSERVE phase
+    l2_cache_hit_rate: Option<f32>,
+    /// Whether zero-copy memory transfers are enabled - v1.1.0 OBSERVE phase
+    is_zero_copy: bool,
 }
 
 /// Timer handle returned by `start()`.
@@ -1346,6 +1352,8 @@ impl BrickProfiler {
             enabled: false,
             total_tokens: 0,
             total_ns: 0,
+            l2_cache_hit_rate: None,
+            is_zero_copy: false,
         }
     }
 
@@ -1356,7 +1364,29 @@ impl BrickProfiler {
             enabled: true,
             total_tokens: 0,
             total_ns: 0,
+            l2_cache_hit_rate: None,
+            is_zero_copy: false,
         }
+    }
+
+    /// Set L2 cache hit rate (v1.1.0 OBSERVE phase)
+    pub fn set_l2_cache_hit_rate(&mut self, rate: f32) {
+        self.l2_cache_hit_rate = Some(rate.clamp(0.0, 1.0));
+    }
+
+    /// Get L2 cache hit rate
+    pub fn l2_cache_hit_rate(&self) -> Option<f32> {
+        self.l2_cache_hit_rate
+    }
+
+    /// Set zero-copy mode (v1.1.0 OBSERVE phase)
+    pub fn set_zero_copy(&mut self, enabled: bool) {
+        self.is_zero_copy = enabled;
+    }
+
+    /// Check if zero-copy is enabled
+    pub fn is_zero_copy(&self) -> bool {
+        self.is_zero_copy
     }
 
     /// Enable profiling.
@@ -1529,6 +1559,18 @@ impl BrickProfiler {
     #[must_use]
     pub fn total_tokens(&self) -> u64 {
         self.total_tokens
+    }
+
+    /// Get total time in nanoseconds.
+    #[must_use]
+    pub fn total_ns(&self) -> u64 {
+        self.total_ns
+    }
+
+    /// Get all brick names.
+    #[must_use]
+    pub fn brick_names(&self) -> Vec<String> {
+        self.stats.keys().cloned().collect()
     }
 
     /// Reset all statistics.

@@ -24,6 +24,10 @@
 //! → FIX: Fuse Q/K/V into single kernel, reducing launches by 2/3
 //! ```
 
+// Allow similar names for related variables (wq/wk/wv, shfl_q/shfl_k/shfl_v, etc.)
+// Allow unused_assignments/unused_mut because PTX branch semantics aren't tracked by Rust
+#![allow(clippy::similar_names, unused_assignments, unused_mut)]
+
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 use super::Kernel;

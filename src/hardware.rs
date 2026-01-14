@@ -437,4 +437,143 @@ cpu_arithmetic_intensity = 1.4
         // byte_budget should be None when not in TOML (backward compat)
         assert!(parsed.byte_budget.is_none());
     }
+
+    // Additional coverage tests
+
+    #[test]
+    fn test_simd_width_bits() {
+        assert_eq!(SimdWidth::Scalar.bits(), 32);
+        assert_eq!(SimdWidth::Sse2.bits(), 128);
+        assert_eq!(SimdWidth::Neon128.bits(), 128);
+        assert_eq!(SimdWidth::WasmSimd128.bits(), 128);
+        assert_eq!(SimdWidth::Avx2.bits(), 256);
+        assert_eq!(SimdWidth::Avx512.bits(), 512);
+    }
+
+    #[test]
+    fn test_simd_width_compute_speedup() {
+        assert!((SimdWidth::Scalar.compute_speedup() - 1.0).abs() < 0.01);
+        assert!((SimdWidth::Sse2.compute_speedup() - 4.0).abs() < 0.01);
+        assert!((SimdWidth::Neon128.compute_speedup() - 4.0).abs() < 0.01);
+        assert!((SimdWidth::WasmSimd128.compute_speedup() - 4.0).abs() < 0.01);
+        assert!((SimdWidth::Avx2.compute_speedup() - 10.0).abs() < 0.01);
+        assert!((SimdWidth::Avx512.compute_speedup() - 12.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_best_backend() {
+        let cap = HardwareCapability::detect();
+        let backend = cap.best_backend();
+        // Should be a valid backend (even if None)
+        assert!(matches!(
+            backend,
+            GpuBackend::None | GpuBackend::Cuda | GpuBackend::Metal | GpuBackend::Vulkan | GpuBackend::Wgpu
+        ));
+    }
+
+    #[test]
+    fn test_load_or_detect_creates_new() {
+        use std::path::PathBuf;
+        let tmp_path = PathBuf::from("/tmp/trueno_test_nonexistent_12345.toml");
+        // Ensure it doesn't exist
+        let _ = std::fs::remove_file(&tmp_path);
+
+        let cap = HardwareCapability::load_or_detect(&tmp_path);
+        assert!(cap.cpu.cores > 0);
+
+        // Cleanup
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+
+    #[test]
+    fn test_save_and_load() {
+        use std::path::PathBuf;
+        let tmp_path = PathBuf::from("/tmp/trueno_test_save_load.toml");
+
+        let original = HardwareCapability::detect();
+        original.save(&tmp_path).expect("Failed to save");
+
+        let loaded = HardwareCapability::load_or_detect(&tmp_path);
+        assert_eq!(original.cpu.cores, loaded.cpu.cores);
+        assert_eq!(original.hostname, loaded.hostname);
+
+        // Cleanup
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+
+    #[test]
+    fn test_expected_throughput_with_gpu() {
+        // Create a capability with GPU
+        let cap = HardwareCapability::detect();
+
+        // Test GPU branch if available
+        if cap.gpu.is_some() {
+            let throughput_gpu = cap.expected_throughput_gflops(10.0, true);
+            let throughput_cpu = cap.expected_throughput_gflops(10.0, false);
+            // Both should be positive
+            assert!(throughput_gpu > 0.0);
+            assert!(throughput_cpu > 0.0);
+        }
+
+        // CPU path should always work
+        let cpu_throughput = cap.expected_throughput_gflops(10.0, false);
+        assert!(cpu_throughput > 0.0);
+    }
+
+    #[test]
+    fn test_expected_throughput_with_fake_gpu() {
+        // Create a capability with a fake GPU to test GPU branch
+        let mut cap = HardwareCapability::detect();
+        cap.gpu = Some(GpuCapability {
+            vendor: "Test".to_string(),
+            model: "Fake GPU".to_string(),
+            backend: GpuBackend::Cuda,
+            compute_capability: Some("8.9".to_string()),
+            peak_tflops_fp32: 100.0,
+            peak_tflops_tensor: Some(400.0),
+            memory_bw_gbps: 1000.0,
+            vram_gb: 24.0,
+        });
+
+        // This should exercise the GPU branch
+        let throughput_gpu = cap.expected_throughput_gflops(10.0, true);
+        let throughput_cpu = cap.expected_throughput_gflops(10.0, false);
+
+        // GPU with 1000 GB/s and AI=10: memory_bound = 10000 GFLOPS
+        // GPU compute = 100 TFLOPS = 100000 GFLOPS
+        // Result should be min(10000, 100000) = 10000
+        assert!((throughput_gpu - 10000.0).abs() < 1.0);
+        assert!(throughput_cpu > 0.0);
+    }
+
+    #[test]
+    fn test_load_invalid_toml() {
+        use std::path::PathBuf;
+        let tmp_path = PathBuf::from("/tmp/trueno_test_invalid.toml");
+
+        // Write invalid TOML
+        std::fs::write(&tmp_path, "this is not valid toml [[[").expect("Failed to write");
+
+        // Should fall back to detect
+        let cap = HardwareCapability::load_or_detect(&tmp_path);
+        assert!(cap.cpu.cores > 0);
+
+        // Cleanup
+        let _ = std::fs::remove_file(&tmp_path);
+    }
+
+    #[test]
+    fn test_expected_throughput_no_gpu_fallback() {
+        // Create a capability without GPU
+        let mut cap = HardwareCapability::detect();
+        cap.gpu = None;
+
+        // Request GPU but none available - should fallback to CPU
+        let throughput_gpu_request = cap.expected_throughput_gflops(10.0, true);
+        let throughput_cpu = cap.expected_throughput_gflops(10.0, false);
+
+        // Both should give the same result since there's no GPU
+        assert!((throughput_gpu_request - throughput_cpu).abs() < 0.001);
+        assert!(throughput_cpu > 0.0);
+    }
 }

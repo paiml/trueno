@@ -1796,7 +1796,7 @@ impl Kernel for BatchedIncrementalAttentionKernel {
         let max_seq_len = self.max_seq_len;
         let num_heads = self.num_heads;
         let num_kv_heads = self.num_kv_heads;
-        let batch_size = self.batch_size;
+        let _batch_size = self.batch_size;
 
         // Grid: (num_heads, batch_size, 1)
         // Block: (32, 1, 1) - one warp per block
@@ -1934,7 +1934,7 @@ impl Kernel for BatchedIncrementalAttentionKernel {
 
                 // Warp reduce - use full warp mask for all 32 threads
                 for delta in [16, 8, 4, 2, 1] {
-                    let other = ctx.shfl_down_f32(dot, delta, 0xFFFFFFFF);
+                    let other = ctx.shfl_down_f32(dot, delta, 0xFFFF_FFFF);
                     ctx.add_f32_inplace(dot, other);
                 }
 

@@ -99,8 +99,8 @@ impl Kernel for ArgMaxKernel {
 
                 // Initialize with negative infinity and index 0
                 let neg_inf = ctx.const_f32(f32::NEG_INFINITY);
-                let mut local_max = neg_inf;
-                let mut local_idx = ctx.const_u32(0);
+                let local_max = neg_inf;
+                let local_idx = ctx.const_u32(0);
 
                 // Stride loop: each thread processes elements at stride blockDim
                 // Thread 0: elements 0, 256, 512, 768

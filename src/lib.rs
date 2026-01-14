@@ -38,6 +38,7 @@ pub mod hash;
 pub mod matrix;
 pub mod monitor;
 pub mod simulation;
+pub mod tuner;
 pub mod vector;
 
 pub use eigen::SymmetricEigen;
@@ -65,6 +66,14 @@ pub use brick::{
 pub use hardware::{
     Bottleneck, CpuCapability, GpuCapability, HardwareCapability, RooflineParams, SimdWidth,
     GpuBackend as HardwareGpuBackend, default_hardware_path,
+};
+
+// ML Tuner exports (T-TUNER-003 through T-TUNER-007, GH#80-84)
+pub use tuner::{
+    BottleneckClass, BottleneckPrediction, BrickTuner, ConceptDriftStatus, ExperimentSuggestion,
+    FeatureExtractor, KernelClassifier, KernelRecommendation, KernelType, QuantType, RunConfig,
+    ThroughputPrediction, ThroughputRegressor, TrainingSample, TrainingStats, TunerDataCollector,
+    TunerError, TunerFeatures, TunerRecommendation, UserFeedback,
 };
 
 /// Backend execution target

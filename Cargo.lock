@@ -204,6 +204,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "aprender"
+version = "0.24.0"
+dependencies = [
+ "bincode",
+ "getrandom 0.2.16",
+ "memmap2",
+ "minijinja",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "trueno 0.11.0",
+]
+
+[[package]]
 name = "arbitrary"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2856,6 +2872,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "memo-map"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38d1115007560874e373613744c6fba374c17688327a71c1476d1a5954cc857b"
+
+[[package]]
 name = "metal"
 version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2883,6 +2905,17 @@ dependencies = [
  "log",
  "objc",
  "paste",
+]
+
+[[package]]
+name = "minijinja"
+version = "2.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12ea9ac0a51fb5112607099560fdf0f90366ab088a2a9e6e8ae176794e9806aa"
+dependencies = [
+ "memo-map",
+ "self_cell",
+ "serde",
 ]
 
 [[package]]
@@ -4400,6 +4433,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "490dcfcbfef26be6800d11870ff2df8774fa6e86d047e3e8c8a76b25655e41ca"
 
 [[package]]
+name = "self_cell"
+version = "1.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b12e76d157a900eb52e81bc6e9f3069344290341720e9178cde2407113ac8d89"
+
+[[package]]
 name = "semver"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5261,8 +5300,20 @@ dependencies = [
 [[package]]
 name = "trueno"
 version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a0756605a19a0b79f5dca9b61fba7e428c497abe9ebeac2ef91b39d90b6da91"
 dependencies = [
  "anyhow",
+ "num_cpus",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "trueno"
+version = "0.12.0"
+dependencies = [
+ "anyhow",
+ "aprender 0.24.0",
  "bytemuck",
  "chrono",
  "criterion",

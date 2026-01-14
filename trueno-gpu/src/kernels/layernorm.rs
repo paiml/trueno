@@ -587,7 +587,7 @@ impl Kernel for VectorizedRmsNormKernel {
                 // Constants
                 let hidden_u32 = ctx.mov_u32_imm(hidden_size);
                 let four = ctx.mov_u32_imm(4);
-                let thread_count = ctx.mov_u32_imm(256);
+                let _thread_count = ctx.mov_u32_imm(256);
 
                 // Pass 1: Accumulate sum of squares
                 // Each thread processes elements: tid, tid+256, tid+512, ...
@@ -653,7 +653,7 @@ impl Kernel for VectorizedRmsNormKernel {
                 ctx.branch_if_not(lane_valid, "skip_warp_load");
                 let loaded_val = ctx.ld_shared_f32(lane_smem_off);
                 // Use add with 0 to copy (no move_f32_inplace available)
-                let zero_f32 = ctx.mov_f32_imm(0.0);
+                let _zero_f32 = ctx.mov_f32_imm(0.0);
                 ctx.add_f32_inplace(warp_partial, loaded_val);
                 ctx.label("skip_warp_load");
 
