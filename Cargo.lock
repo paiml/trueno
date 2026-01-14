@@ -5392,7 +5392,7 @@ dependencies = [
 
 [[package]]
 name = "trueno-gpu"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "bytemuck",
  "criterion",
