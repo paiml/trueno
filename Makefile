@@ -370,6 +370,37 @@ fmt-check: ## Check formatting for entire workspace
 bench: ## Run benchmarks
 	cargo bench --no-fail-fast
 
+bench-check: ## Quick benchmark regression check (key operations only)
+	@echo "🔍 Running benchmark regression check..."
+	@echo ""
+	@echo "Testing key hot-path operations against saved baseline..."
+	@cargo bench convolve2d matmul matvec transpose -- --save-baseline current 2>&1 | tail -50
+	@echo ""
+	@if command -v critcmp >/dev/null 2>&1; then \
+		if [ -d "target/criterion/baseline" ]; then \
+			echo "Comparing against baseline..."; \
+			critcmp baseline current --threshold 15 2>/dev/null || true; \
+			if critcmp baseline current --threshold 15 2>/dev/null | grep -q "regressed"; then \
+				echo ""; \
+				echo "❌ REGRESSION DETECTED: Some benchmarks regressed >15%"; \
+				echo "   Run 'cargo bench' for full details"; \
+				exit 1; \
+			else \
+				echo ""; \
+				echo "✅ No significant regressions detected"; \
+			fi; \
+		else \
+			echo "💡 No baseline found. Run 'make bench-baseline' to create one."; \
+		fi; \
+	else \
+		echo "💡 Install critcmp for comparison: cargo install critcmp"; \
+	fi
+
+bench-baseline: ## Save current benchmarks as baseline for regression detection
+	@echo "📊 Saving current benchmarks as baseline..."
+	cargo bench convolve2d matmul matvec transpose -- --save-baseline baseline
+	@echo "✅ Baseline saved. Future 'make bench-check' runs will compare against this."
+
 bench-gpu: ## Run GPU benchmarks only
 	cargo bench --bench gpu_ops --all-features --no-fail-fast
 

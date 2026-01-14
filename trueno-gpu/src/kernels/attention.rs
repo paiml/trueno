@@ -2438,4 +2438,275 @@ mod tests {
         assert!(ptx.contains(".entry"));
         assert!(ptx.contains("ret;"));
     }
+
+    // ===== PAR-021: GQA (Grouped Query Attention) Tests =====
+
+    #[test]
+    fn test_incremental_attention_with_gqa() {
+        // Llama2 70B config: 64 query heads, 8 kv heads
+        let kernel = IncrementalAttentionKernel::with_gqa(4096, 128, 64, 8);
+        assert_eq!(kernel.max_seq_len, 4096);
+        assert_eq!(kernel.head_dim, 128);
+        assert_eq!(kernel.num_heads, 64);
+        assert_eq!(kernel.num_kv_heads, 8);
+        assert!(kernel.is_gqa());
+        // scale should be 1/sqrt(128)
+        assert!((kernel.scale - 0.088388).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_incremental_attention_is_gqa_false_for_mha() {
+        // MHA: num_heads == num_kv_heads
+        let kernel = IncrementalAttentionKernel::new(2048, 64, 32);
+        assert!(!kernel.is_gqa());
+        assert_eq!(kernel.num_heads, kernel.num_kv_heads);
+    }
+
+    #[test]
+    fn test_incremental_attention_is_gqa_true_for_gqa() {
+        let kernel = IncrementalAttentionKernel::with_gqa(2048, 64, 32, 4);
+        assert!(kernel.is_gqa());
+        assert_ne!(kernel.num_heads, kernel.num_kv_heads);
+    }
+
+    // ===== PAR-061: Indirect seq_len Tests =====
+
+    #[test]
+    fn test_incremental_attention_with_indirect_seq_len() {
+        let kernel = IncrementalAttentionKernel::new(2048, 64, 32).with_indirect_seq_len(true);
+        assert!(kernel.indirect_seq_len);
+        assert_eq!(kernel.name(), "incremental_attention_indirect");
+    }
+
+    #[test]
+    fn test_incremental_attention_indirect_ptx_generation() {
+        let kernel = IncrementalAttentionKernel::new(512, 64, 22).with_indirect_seq_len(true);
+        let ptx = kernel.emit_ptx();
+
+        // Verify indirect kernel entry point
+        assert!(
+            ptx.contains(".entry incremental_attention_indirect"),
+            "Should have incremental_attention_indirect entry"
+        );
+
+        // Verify seq_len_ptr parameter for device memory access
+        assert!(
+            ptx.contains(".param .u64 seq_len_ptr"),
+            "Should have seq_len_ptr param for indirect mode"
+        );
+    }
+
+    #[test]
+    fn test_incremental_attention_indirect_false() {
+        let kernel = IncrementalAttentionKernel::new(2048, 64, 32).with_indirect_seq_len(false);
+        assert!(!kernel.indirect_seq_len);
+        assert_eq!(kernel.name(), "incremental_attention");
+    }
+
+    // ===== MultiWarpIncrementalAttentionKernel Tests =====
+
+    #[test]
+    fn test_multi_warp_attention_kernel_new() {
+        let kernel = MultiWarpIncrementalAttentionKernel::new(2048, 64, 32, 8, 4);
+        assert_eq!(kernel.max_seq_len, 2048);
+        assert_eq!(kernel.head_dim, 64);
+        assert_eq!(kernel.num_heads, 32);
+        assert_eq!(kernel.num_kv_heads, 8);
+        assert_eq!(kernel.num_warps_per_head, 4);
+        assert!(!kernel.indirect_seq_len);
+        // scale should be 1/sqrt(64) = 0.125
+        assert!((kernel.scale - 0.125).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_multi_warp_attention_kernel_name() {
+        let kernel = MultiWarpIncrementalAttentionKernel::new(1024, 64, 22, 22, 4);
+        assert_eq!(kernel.name(), "multi_warp_attention");
+    }
+
+    #[test]
+    fn test_multi_warp_attention_indirect_name() {
+        let kernel =
+            MultiWarpIncrementalAttentionKernel::new(1024, 64, 22, 22, 4).with_indirect_seq_len(true);
+        assert!(kernel.indirect_seq_len);
+        assert_eq!(kernel.name(), "multi_warp_attention_indirect");
+    }
+
+    #[test]
+    fn test_multi_warp_attention_ptx_generation() {
+        let kernel = MultiWarpIncrementalAttentionKernel::new(512, 64, 22, 22, 4);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry multi_warp_attention"),
+            "Should have multi_warp_attention entry"
+        );
+
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 q_ptr"), "Should have q_ptr param");
+        assert!(ptx.contains(".param .u64 k_ptr"), "Should have k_ptr param");
+        assert!(ptx.contains(".param .u64 v_ptr"), "Should have v_ptr param");
+        assert!(
+            ptx.contains(".param .u64 out_ptr"),
+            "Should have out_ptr param"
+        );
+    }
+
+    #[test]
+    fn test_multi_warp_attention_shared_memory() {
+        let kernel = MultiWarpIncrementalAttentionKernel::new(1024, 64, 22, 22, 4);
+        let ptx_kernel = kernel.build_ptx();
+
+        // Multi-warp attention uses shared memory for inter-warp reduction
+        assert!(
+            ptx_kernel.shared_memory_bytes() > 0,
+            "Multi-warp attention should use shared memory"
+        );
+    }
+
+    #[test]
+    fn test_multi_warp_attention_contains_warp_reduction() {
+        let kernel = MultiWarpIncrementalAttentionKernel::new(512, 64, 22, 22, 4);
+        let ptx = kernel.emit_ptx();
+
+        // Verify warp shuffle operations
+        assert!(
+            ptx.contains("shfl.sync") || ptx.contains("shfl."),
+            "Should have shfl for warp operations"
+        );
+
+        // Verify barrier for inter-warp sync
+        assert!(
+            ptx.contains("bar.sync"),
+            "Should have barrier for warp synchronization"
+        );
+    }
+
+    #[test]
+    fn test_multi_warp_attention_indirect_ptx() {
+        let kernel =
+            MultiWarpIncrementalAttentionKernel::new(512, 64, 22, 22, 4).with_indirect_seq_len(true);
+        let ptx = kernel.emit_ptx();
+
+        // Verify indirect kernel entry point
+        assert!(
+            ptx.contains(".entry multi_warp_attention_indirect"),
+            "Should have indirect entry point"
+        );
+    }
+
+    #[test]
+    fn test_multi_warp_attention_gqa_config() {
+        // Test GQA config: 32 query heads, 4 kv heads
+        let kernel = MultiWarpIncrementalAttentionKernel::new(2048, 128, 32, 4, 8);
+        assert_eq!(kernel.num_heads, 32);
+        assert_eq!(kernel.num_kv_heads, 4);
+
+        let ptx = kernel.emit_ptx();
+        assert!(!ptx.is_empty());
+        assert!(ptx.contains(".entry"));
+    }
+
+    // ===== BatchedIncrementalAttentionKernel Tests =====
+
+    #[test]
+    fn test_batched_incremental_attention_kernel_new() {
+        let kernel = BatchedIncrementalAttentionKernel::new(2048, 64, 32, 8, 4);
+        assert_eq!(kernel.max_seq_len, 2048);
+        assert_eq!(kernel.head_dim, 64);
+        assert_eq!(kernel.num_heads, 32);
+        assert_eq!(kernel.num_kv_heads, 8);
+        assert_eq!(kernel.batch_size, 4);
+        // scale should be 1/sqrt(64) = 0.125
+        assert!((kernel.scale - 0.125).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_batched_incremental_attention_kernel_name() {
+        let kernel = BatchedIncrementalAttentionKernel::new(1024, 64, 22, 22, 8);
+        assert_eq!(kernel.name(), "batched_incremental_attention");
+    }
+
+    #[test]
+    fn test_batched_incremental_attention_ptx_generation() {
+        let kernel = BatchedIncrementalAttentionKernel::new(512, 64, 22, 22, 4);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry batched_incremental_attention"),
+            "Should have batched_incremental_attention entry"
+        );
+
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 q_ptr"), "Should have q_ptr param");
+        assert!(ptx.contains(".param .u64 k_ptr"), "Should have k_ptr param");
+        assert!(ptx.contains(".param .u64 v_ptr"), "Should have v_ptr param");
+        assert!(
+            ptx.contains(".param .u64 out_ptr"),
+            "Should have out_ptr param"
+        );
+    }
+
+    #[test]
+    fn test_batched_incremental_attention_batch_sizes() {
+        // Test various batch sizes
+        for batch_size in [1, 2, 4, 8, 16] {
+            let kernel = BatchedIncrementalAttentionKernel::new(1024, 64, 22, 22, batch_size);
+            assert_eq!(kernel.batch_size, batch_size);
+
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+            assert!(ptx.contains(".entry"));
+        }
+    }
+
+    #[test]
+    fn test_batched_incremental_attention_gqa_config() {
+        // GQA config: 32 query heads, 4 kv heads
+        let kernel = BatchedIncrementalAttentionKernel::new(2048, 128, 32, 4, 8);
+        assert_eq!(kernel.num_heads, 32);
+        assert_eq!(kernel.num_kv_heads, 4);
+
+        let ptx = kernel.emit_ptx();
+        assert!(!ptx.is_empty());
+        assert!(ptx.contains(".entry"));
+    }
+
+    #[test]
+    fn test_batched_incremental_attention_head_dims() {
+        // Test common head dimensions
+        for head_dim in [32, 64, 128] {
+            let kernel = BatchedIncrementalAttentionKernel::new(1024, head_dim, 22, 22, 4);
+            assert_eq!(kernel.head_dim, head_dim);
+            let expected_scale = 1.0 / (head_dim as f32).sqrt();
+            assert!((kernel.scale - expected_scale).abs() < 0.001);
+
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_batched_incremental_attention_warp_operations() {
+        let kernel = BatchedIncrementalAttentionKernel::new(512, 64, 22, 22, 4);
+        let ptx = kernel.emit_ptx();
+
+        // Verify warp shuffle operations for reduction
+        assert!(
+            ptx.contains("shfl.sync") || ptx.contains("shfl."),
+            "Should have shfl for warp operations"
+        );
+    }
+
+    #[test]
+    fn test_batched_incremental_attention_memory_ops() {
+        let kernel = BatchedIncrementalAttentionKernel::new(512, 64, 22, 22, 4);
+        let ptx = kernel.emit_ptx();
+
+        // Verify memory operations
+        assert!(ptx.contains("ld.global"), "Should have global loads");
+        assert!(ptx.contains("st.global"), "Should have global stores");
+    }
 }

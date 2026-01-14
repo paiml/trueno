@@ -314,6 +314,13 @@ impl Matrix<f32> {
     /// assert_eq!(c.get(1, 0), Some(&43.0));
     /// assert_eq!(c.get(1, 1), Some(&50.0));
     /// ```
+    // =========================================================================
+    // HOT PATH - PERFORMANCE CRITICAL
+    // =========================================================================
+    // Core matrix operation used in neural network forward passes.
+    // Changes to inner loops REQUIRE benchmark verification: make bench-check
+    // See convolve2d for prohibited patterns in hot loops.
+    // =========================================================================
     #[cfg_attr(feature = "tracing", instrument(skip(self, other), fields(dims = %format!("{}x{} @ {}x{}", self.rows, self.cols, other.rows, other.cols))))]
     pub fn matmul(&self, other: &Matrix<f32>) -> Result<Matrix<f32>, TruenoError> {
         if self.cols != other.rows {
@@ -2107,6 +2114,21 @@ impl Matrix<f32> {
     /// assert_eq!(result.rows(), 3); // 5 - 3 + 1
     /// assert_eq!(result.cols(), 3);
     /// ```
+    // =========================================================================
+    // HOT PATH - PERFORMANCE CRITICAL
+    // =========================================================================
+    // This function processes millions of elements for typical image sizes.
+    // Any changes to the inner loop REQUIRE benchmark verification:
+    //   1. Run: make bench-check
+    //   2. Verify no regression >10%
+    //
+    // PROHIBITED in inner loops:
+    //   - .get() / .get_mut() (bounds checking overhead)
+    //   - .expect() / .unwrap() (panic path overhead)
+    //   - Iterator adaptors (closure overhead)
+    //
+    // Use direct indexing with bounds proof documented above the loop.
+    // =========================================================================
     pub fn convolve2d(&self, kernel: &Matrix<f32>) -> Result<Matrix<f32>, TruenoError> {
         // Validate kernel size
         if kernel.rows > self.rows || kernel.cols > self.cols {
@@ -2148,33 +2170,40 @@ impl Matrix<f32> {
             }
         }
 
-        // Scalar baseline implementation
-        // Bounds: output_rows = self.rows - kernel.rows + 1, output_cols = self.cols - kernel.cols + 1
+        // Scalar baseline implementation - optimized with direct indexing
+        // SAFETY invariant proof:
+        // - output_rows = self.rows - kernel.rows + 1
+        // - output_cols = self.cols - kernel.cols + 1
+        // - For any out_row < output_rows and k_row < kernel.rows:
+        //   in_row = out_row + k_row < (self.rows - kernel.rows + 1) + kernel.rows - 1 = self.rows
+        // - Same logic applies to columns
+        // - All indices are provably within bounds, so we use direct indexing for performance
+
+        let input_data = self.as_slice();
+        let kernel_data = kernel.as_slice();
+        let result_data = result.data.as_mut_slice();
+        let input_cols = self.cols;
+        let kernel_cols = kernel.cols;
+        let result_cols = output_cols;
+
         for out_row in 0..output_rows {
             for out_col in 0..output_cols {
                 let mut sum = 0.0;
 
-                // Apply kernel
+                // Apply kernel - use direct indexing for performance
                 for k_row in 0..kernel.rows {
+                    let in_row = out_row + k_row;
+                    let input_row_offset = in_row * input_cols;
+                    let kernel_row_offset = k_row * kernel_cols;
+
                     for k_col in 0..kernel.cols {
-                        let in_row = out_row + k_row;
                         let in_col = out_col + k_col;
-
-                        // Bounds guaranteed: in_row < self.rows, in_col < self.cols
-                        let input_val = self
-                            .get(in_row, in_col)
-                            .expect("convolve2d: input bounds validated by output dimensions");
-                        let kernel_val = kernel
-                            .get(k_row, k_col)
-                            .expect("convolve2d: kernel bounds validated by loop");
-
-                        sum += input_val * kernel_val;
+                        sum += input_data[input_row_offset + in_col]
+                            * kernel_data[kernel_row_offset + k_col];
                     }
                 }
 
-                *result
-                    .get_mut(out_row, out_col)
-                    .expect("convolve2d: output bounds validated by allocation") = sum;
+                result_data[out_row * result_cols + out_col] = sum;
             }
         }
 

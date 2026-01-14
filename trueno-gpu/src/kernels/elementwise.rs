@@ -1552,4 +1552,342 @@ mod tests {
             result.violations
         );
     }
+
+    // ===== BatchedResidualAddKernel Tests =====
+
+    #[test]
+    fn test_batched_residual_add_kernel_new() {
+        let kernel = BatchedResidualAddKernel::new(2048, 8);
+        assert_eq!(kernel.n, 2048);
+        assert_eq!(kernel.batch_size, 8);
+    }
+
+    #[test]
+    fn test_batched_residual_add_kernel_name() {
+        let kernel = BatchedResidualAddKernel::new(1024, 4);
+        assert_eq!(kernel.name(), "batched_residual_add");
+    }
+
+    #[test]
+    fn test_batched_residual_add_ptx_generation() {
+        let kernel = BatchedResidualAddKernel::new(2048, 4);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry batched_residual_add"),
+            "Should have batched_residual_add entry"
+        );
+
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 input1_ptr"), "Should have input1_ptr");
+        assert!(ptx.contains(".param .u64 input2_ptr"), "Should have input2_ptr");
+        assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
+
+        // Verify arithmetic
+        assert!(ptx.contains("add.f32"), "Should have add operation");
+    }
+
+    #[test]
+    fn test_batched_residual_add_batch_sizes() {
+        for batch_size in [1, 2, 4, 8, 16] {
+            let kernel = BatchedResidualAddKernel::new(1024, batch_size);
+            assert_eq!(kernel.batch_size, batch_size);
+
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+            assert!(ptx.contains(".entry"));
+        }
+    }
+
+    // ===== BatchedSwigluKernel Tests =====
+
+    #[test]
+    fn test_batched_swiglu_kernel_new() {
+        let kernel = BatchedSwigluKernel::new(2048, 8);
+        assert_eq!(kernel.n, 2048);
+        assert_eq!(kernel.batch_size, 8);
+    }
+
+    #[test]
+    fn test_batched_swiglu_kernel_name() {
+        let kernel = BatchedSwigluKernel::new(1024, 4);
+        assert_eq!(kernel.name(), "batched_swiglu");
+    }
+
+    #[test]
+    fn test_batched_swiglu_ptx_generation() {
+        let kernel = BatchedSwigluKernel::new(2048, 4);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry batched_swiglu"),
+            "Should have batched_swiglu entry"
+        );
+
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 gate_ptr"), "Should have gate_ptr");
+        assert!(ptx.contains(".param .u64 up_ptr"), "Should have up_ptr");
+        assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
+
+        // Verify SiLU computation
+        assert!(ptx.contains("ex2.approx"), "Should have exp approximation");
+    }
+
+    #[test]
+    fn test_batched_swiglu_batch_sizes() {
+        for batch_size in [1, 2, 4, 8, 16] {
+            let kernel = BatchedSwigluKernel::new(1024, batch_size);
+            assert_eq!(kernel.batch_size, batch_size);
+
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+            assert!(ptx.contains(".entry"));
+        }
+    }
+
+    // ===== KvCacheScatterKernel Tests =====
+
+    #[test]
+    fn test_kv_cache_scatter_kernel_new() {
+        let kernel = KvCacheScatterKernel::new(4, 64, 2048);
+        assert_eq!(kernel.num_kv_heads, 4);
+        assert_eq!(kernel.head_dim, 64);
+        assert_eq!(kernel.max_len, 2048);
+    }
+
+    #[test]
+    fn test_kv_cache_scatter_kernel_name() {
+        let kernel = KvCacheScatterKernel::new(8, 128, 4096);
+        assert_eq!(kernel.name(), "kv_cache_scatter");
+    }
+
+    #[test]
+    fn test_kv_cache_scatter_ptx_generation() {
+        let kernel = KvCacheScatterKernel::new(4, 64, 2048);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry kv_cache_scatter"),
+            "Should have kv_cache_scatter entry"
+        );
+
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 src_ptr"), "Should have src_ptr");
+        assert!(ptx.contains(".param .u64 cache_ptr"), "Should have cache_ptr");
+        assert!(ptx.contains(".param .u32 pos"), "Should have pos");
+        assert!(ptx.contains(".param .u32 head_dim"), "Should have head_dim");
+        assert!(ptx.contains(".param .u32 max_len"), "Should have max_len");
+    }
+
+    #[test]
+    fn test_kv_cache_scatter_memory_ops() {
+        let kernel = KvCacheScatterKernel::new(4, 64, 2048);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains("ld.global"), "Should have global loads");
+        assert!(ptx.contains("st.global"), "Should have global stores");
+    }
+
+    // ===== KvCacheScatterIndirectKernel Tests =====
+
+    #[test]
+    fn test_kv_cache_scatter_indirect_kernel_new() {
+        let kernel = KvCacheScatterIndirectKernel::new(4, 64, 2048);
+        assert_eq!(kernel.num_kv_heads, 4);
+        assert_eq!(kernel.head_dim, 64);
+        assert_eq!(kernel.max_len, 2048);
+    }
+
+    #[test]
+    fn test_kv_cache_scatter_indirect_kernel_name() {
+        let kernel = KvCacheScatterIndirectKernel::new(8, 128, 4096);
+        assert_eq!(kernel.name(), "kv_cache_scatter_indirect");
+    }
+
+    #[test]
+    fn test_kv_cache_scatter_indirect_ptx_generation() {
+        let kernel = KvCacheScatterIndirectKernel::new(4, 64, 2048);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry kv_cache_scatter_indirect"),
+            "Should have kv_cache_scatter_indirect entry"
+        );
+
+        // Verify parameters - note pos_ptr for indirect mode
+        assert!(ptx.contains(".param .u64 src_ptr"), "Should have src_ptr");
+        assert!(ptx.contains(".param .u64 cache_ptr"), "Should have cache_ptr");
+        assert!(ptx.contains(".param .u64 pos_ptr"), "Should have pos_ptr for indirect");
+    }
+
+    #[test]
+    fn test_kv_cache_scatter_indirect_reads_pos() {
+        let kernel = KvCacheScatterIndirectKernel::new(4, 64, 2048);
+        let ptx = kernel.emit_ptx();
+
+        // Indirect mode reads position from device memory
+        assert!(ptx.contains("ld.global"), "Should load pos from device memory");
+    }
+
+    // ===== RopeKernel Tests =====
+
+    #[test]
+    fn test_rope_kernel_new() {
+        let kernel = RopeKernel::new(32, 128, 10000.0);
+        assert_eq!(kernel.num_heads, 32);
+        assert_eq!(kernel.head_dim, 128);
+        assert!((kernel.theta - 10000.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_rope_kernel_name() {
+        let kernel = RopeKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.name(), "rope");
+    }
+
+    #[test]
+    fn test_rope_ptx_generation() {
+        let kernel = RopeKernel::new(32, 128, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(ptx.contains(".entry rope"), "Should have rope entry");
+
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 x_ptr"), "Should have x_ptr");
+        assert!(ptx.contains(".param .u64 out_ptr"), "Should have out_ptr");
+        assert!(ptx.contains(".param .u32 pos"), "Should have pos");
+    }
+
+    #[test]
+    fn test_rope_trig_operations() {
+        let kernel = RopeKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        // RoPE uses sin/cos via ex2 approximation
+        assert!(ptx.contains("ex2") || ptx.contains("sin") || ptx.contains("cos"),
+            "Should have trigonometric operations");
+        assert!(ptx.contains("mul.f32"), "Should have multiplications");
+    }
+
+    #[test]
+    fn test_rope_various_head_dims() {
+        for head_dim in [32, 64, 128] {
+            let kernel = RopeKernel::new(22, head_dim, 10000.0);
+            assert_eq!(kernel.head_dim, head_dim);
+
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+            assert!(ptx.contains(".entry"));
+        }
+    }
+
+    // ===== RopeIndirectKernel Tests =====
+
+    #[test]
+    fn test_rope_indirect_kernel_new() {
+        let kernel = RopeIndirectKernel::new(32, 128, 10000.0);
+        assert_eq!(kernel.num_heads, 32);
+        assert_eq!(kernel.head_dim, 128);
+        assert!((kernel.theta - 10000.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_rope_indirect_kernel_name() {
+        let kernel = RopeIndirectKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.name(), "rope_indirect");
+    }
+
+    #[test]
+    fn test_rope_indirect_ptx_generation() {
+        let kernel = RopeIndirectKernel::new(32, 128, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry rope_indirect"),
+            "Should have rope_indirect entry"
+        );
+
+        // Verify parameters - note pos_ptr for indirect mode
+        assert!(ptx.contains(".param .u64 x_ptr"), "Should have x_ptr");
+        assert!(ptx.contains(".param .u64 out_ptr"), "Should have out_ptr");
+        assert!(ptx.contains(".param .u64 pos_ptr"), "Should have pos_ptr for indirect");
+    }
+
+    #[test]
+    fn test_rope_indirect_loads_position() {
+        let kernel = RopeIndirectKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        // Indirect mode reads position from device memory
+        assert!(ptx.contains("ld.global"), "Should load pos from device memory");
+    }
+
+    // ===== BatchedRopeKernel Tests =====
+
+    #[test]
+    fn test_batched_rope_kernel_new() {
+        let kernel = BatchedRopeKernel::new(32, 128, 8, 10000.0);
+        assert_eq!(kernel.num_heads, 32);
+        assert_eq!(kernel.head_dim, 128);
+        assert_eq!(kernel.batch_size, 8);
+        assert!((kernel.theta - 10000.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_batched_rope_kernel_name() {
+        let kernel = BatchedRopeKernel::new(22, 64, 4, 10000.0);
+        assert_eq!(kernel.name(), "batched_rope");
+    }
+
+    #[test]
+    fn test_batched_rope_ptx_generation() {
+        let kernel = BatchedRopeKernel::new(32, 128, 4, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry batched_rope"),
+            "Should have batched_rope entry"
+        );
+
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 x_ptr"), "Should have x_ptr");
+    }
+
+    #[test]
+    fn test_batched_rope_batch_sizes() {
+        for batch_size in [1, 2, 4, 8, 16] {
+            let kernel = BatchedRopeKernel::new(22, 64, batch_size, 10000.0);
+            assert_eq!(kernel.batch_size, batch_size);
+
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+            assert!(ptx.contains(".entry"));
+        }
+    }
+
+    #[test]
+    fn test_batched_rope_trig_operations() {
+        let kernel = BatchedRopeKernel::new(22, 64, 4, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        // RoPE uses sin/cos
+        assert!(ptx.contains("ex2") || ptx.contains("sin") || ptx.contains("cos"),
+            "Should have trigonometric operations");
+    }
+
+    #[test]
+    fn test_batched_rope_memory_ops() {
+        let kernel = BatchedRopeKernel::new(22, 64, 4, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains("ld.global"), "Should have global loads");
+        assert!(ptx.contains("st.global"), "Should have global stores");
+    }
 }
