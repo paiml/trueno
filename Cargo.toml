@@ -75,8 +75,8 @@ chrono = "0.4"
 hostname = "0.4"
 toml = "0.8"
 # ML tuner integration (SHOWCASE-BRICK-001, Section 12)
-# Note: Using path dep until aprender 0.4.0 publishes RandomForestRegressor
-aprender = { path = "../aprender", optional = true, default-features = false }
+# Path dep for local dev, version for publish (aprender 0.24.0 has RandomForest)
+aprender = { version = "0.24", path = "../aprender", optional = true, default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Web-sys for WebGPU (auto-enabled when gpu-wasm feature is on)
