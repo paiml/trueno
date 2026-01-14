@@ -1009,4 +1009,201 @@ mod tests {
         assert!((snapshot.power_watts - 150.0).abs() < 0.01);
         assert_eq!(snapshot.clock_mhz, 3000);
     }
+
+    // =========================================================================
+    // H013: CpuDevice Additional Coverage
+    // =========================================================================
+
+    #[test]
+    fn h013_cpu_device_refresh() {
+        let mut cpu = CpuDevice::new();
+        // Refresh should not panic
+        let _ = cpu.refresh();
+        // After refresh, metrics should still work
+        let _ = cpu.compute_utilization();
+        let _ = cpu.memory_used_bytes();
+    }
+
+    #[test]
+    fn h013_cpu_device_multiple_refreshes() {
+        let mut cpu = CpuDevice::new();
+        // Multiple refreshes should be idempotent
+        for _ in 0..3 {
+            let _ = cpu.refresh();
+        }
+    }
+
+    #[test]
+    fn h013_cpu_device_name_not_empty() {
+        let cpu = CpuDevice::new();
+        assert!(!cpu.device_name().is_empty());
+    }
+
+    #[test]
+    fn h013_cpu_device_core_count_positive() {
+        let cpu = CpuDevice::new();
+        assert!(cpu.compute_unit_count() > 0);
+    }
+
+    #[test]
+    fn h013_cpu_clock_speed() {
+        let cpu = CpuDevice::new();
+        // Clock speed should be positive (or error)
+        let clock = cpu.compute_clock_mhz();
+        if let Ok(mhz) = clock {
+            assert!(mhz > 0);
+        }
+    }
+
+    #[test]
+    fn h013_cpu_temperature() {
+        let cpu = CpuDevice::new();
+        // Temperature may not be available on all systems
+        let temp = cpu.compute_temperature_c();
+        if let Ok(t) = temp {
+            // Reasonable range 0-150 C
+            assert!(t >= 0.0 && t <= 150.0);
+        }
+    }
+
+    // =========================================================================
+    // H014: MockDevice Extended Coverage
+    // =========================================================================
+
+    #[test]
+    fn h014_mock_device_all_methods() {
+        let mock = MockDevice::new(1024, 2048, 10.0, 100.0, 30.0);
+
+        // Test all trait method implementations
+        assert_eq!(mock.device_id(), DeviceId::cpu());
+        assert_eq!(mock.device_name(), "Mock");
+        assert!(matches!(mock.device_type(), DeviceType::Cpu));
+        assert_eq!(mock.compute_unit_count(), 8);
+        assert_eq!(mock.memory_used_bytes().unwrap(), 1024);
+        assert_eq!(mock.memory_total_bytes().unwrap(), 2048);
+        assert!((mock.compute_utilization().unwrap() - 50.0).abs() < 0.01); // MockDevice always returns 50.0
+        assert!((mock.compute_temperature_c().unwrap() - 30.0).abs() < 0.01);
+        assert!((mock.compute_power_watts().unwrap() - 10.0).abs() < 0.01);
+        assert_eq!(mock.compute_clock_mhz().unwrap(), 3000);
+    }
+
+    #[test]
+    fn h014_mock_device_derived_metrics() {
+        let mock = MockDevice::new(1024, 2048, 10.0, 100.0, 30.0);
+
+        // Derived metrics
+        let usage_percent = mock.memory_usage_percent().unwrap();
+        assert!((usage_percent - 50.0).abs() < 0.01); // 1024/2048 = 50%
+
+        let available = mock.memory_available_bytes().unwrap();
+        assert_eq!(available, 1024); // 2048 - 1024
+    }
+
+    #[test]
+    fn h014_mock_device_mb_gb_helpers() {
+        let mock = MockDevice::new(1024 * 1024 * 1024, 2 * 1024 * 1024 * 1024, 10.0, 100.0, 30.0);
+
+        let used_mb = mock.memory_used_mb().unwrap();
+        assert_eq!(used_mb, 1024); // 1 GB = 1024 MB
+
+        let total_gb = mock.memory_total_gb().unwrap();
+        assert!((total_gb - 2.0).abs() < 0.1); // 2 GB
+    }
+
+    // =========================================================================
+    // H015: DeviceId Additional Coverage
+    // =========================================================================
+
+    #[test]
+    fn h015_device_id_display() {
+        assert_eq!(format!("{}", DeviceId::cpu()), "CPU");
+        assert_eq!(format!("{}", DeviceId::nvidia(0)), "NVIDIA:0");
+        assert_eq!(format!("{}", DeviceId::nvidia(1)), "NVIDIA:1");
+        assert_eq!(format!("{}", DeviceId::amd(0)), "AMD:0");
+    }
+
+    #[test]
+    fn h015_device_id_debug() {
+        let cpu_id = DeviceId::cpu();
+        let debug_str = format!("{:?}", cpu_id);
+        assert!(debug_str.contains("Cpu"));
+    }
+
+    #[test]
+    fn h015_device_id_clone() {
+        let id1 = DeviceId::nvidia(0);
+        let id2 = id1.clone();
+        assert_eq!(id1, id2);
+    }
+
+    // =========================================================================
+    // H016: DeviceSnapshot Additional Coverage
+    // =========================================================================
+
+    #[test]
+    fn h016_snapshot_debug() {
+        let mock = MockDevice::new(1024, 2048, 10.0, 100.0, 30.0);
+        let snapshot = DeviceSnapshot::capture(&mock).unwrap();
+        let debug_str = format!("{:?}", snapshot);
+        assert!(debug_str.contains("DeviceSnapshot"));
+    }
+
+    #[test]
+    fn h016_snapshot_clone() {
+        let mock = MockDevice::new(1024, 2048, 10.0, 100.0, 30.0);
+        let snapshot1 = DeviceSnapshot::capture(&mock).unwrap();
+        let snapshot2 = snapshot1.clone();
+        assert_eq!(snapshot1.device_id, snapshot2.device_id);
+        assert_eq!(snapshot1.memory_used_bytes, snapshot2.memory_used_bytes);
+    }
+
+    // =========================================================================
+    // H017: DeviceType Coverage
+    // =========================================================================
+
+    #[test]
+    fn h017_device_type_display() {
+        assert_eq!(format!("{}", DeviceType::Cpu), "CPU");
+        assert_eq!(format!("{}", DeviceType::NvidiaGpu), "NVIDIA GPU");
+        assert_eq!(format!("{}", DeviceType::AmdGpu), "AMD GPU");
+        assert_eq!(format!("{}", DeviceType::IntelGpu), "Intel GPU");
+    }
+
+    #[test]
+    fn h017_device_type_debug() {
+        let gpu = DeviceType::NvidiaGpu;
+        let debug_str = format!("{:?}", gpu);
+        assert!(debug_str.contains("NvidiaGpu"));
+    }
+
+    // =========================================================================
+    // H018: Error Path Coverage (Best Effort)
+    // =========================================================================
+
+    #[test]
+    fn h018_cpu_unsupported_pcie_metrics() {
+        let cpu = CpuDevice::new();
+
+        // PCIe metrics return NotSupported
+        let tx = cpu.pcie_tx_bytes_per_sec();
+        assert!(matches!(tx, Err(GpuError::NotSupported(_))));
+
+        let rx = cpu.pcie_rx_bytes_per_sec();
+        assert!(matches!(rx, Err(GpuError::NotSupported(_))));
+    }
+
+    #[test]
+    fn h018_cpu_power_metrics() {
+        let cpu = CpuDevice::new();
+
+        // Power metrics return NotSupported for CPU
+        let power = cpu.compute_power_watts();
+        assert!(matches!(power, Err(GpuError::NotSupported(_))));
+
+        let power_limit = cpu.compute_power_limit_watts();
+        assert!(matches!(power_limit, Err(GpuError::NotSupported(_))));
+
+        let bw = cpu.memory_bandwidth_gbps();
+        assert!(matches!(bw, Err(GpuError::NotSupported(_))));
+    }
 }

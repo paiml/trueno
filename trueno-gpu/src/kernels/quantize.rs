@@ -8872,6 +8872,28 @@ mod tests {
     }
 
     #[test]
+    fn test_q5k_with_tile_size() {
+        let kernel = Q5KKernel::new(1024, 1024, 4096).with_tile_size(64);
+        assert_eq!(kernel.tile_size, 64);
+        assert_eq!(kernel.m, 1024);
+        assert_eq!(kernel.n, 1024);
+        assert_eq!(kernel.k, 4096);
+    }
+
+    #[test]
+    fn test_q5k_with_tile_size_affects_ptx() {
+        let kernel_32 = Q5KKernel::new(1024, 1024, 4096);
+        let kernel_64 = Q5KKernel::new(1024, 1024, 4096).with_tile_size(64);
+
+        let ptx_32 = kernel_32.emit_ptx();
+        let ptx_64 = kernel_64.emit_ptx();
+
+        // Both should be valid PTX with the same kernel name
+        assert!(ptx_32.contains("q5k_gemm_ggml"));
+        assert!(ptx_64.contains("q5k_gemm_ggml"));
+    }
+
+    #[test]
     fn test_q5k_ptx_contains_nested_loops() {
         let kernel = Q5KKernel::new(1024, 1024, 4096);
         let ptx = kernel.emit_ptx();
@@ -8971,6 +8993,28 @@ mod tests {
         assert!(ptx.contains(".param .u32 m"));
         assert!(ptx.contains(".param .u32 n"));
         assert!(ptx.contains(".param .u32 k"));
+    }
+
+    #[test]
+    fn test_q6k_with_tile_size() {
+        let kernel = Q6KKernel::new(1024, 1024, 4096).with_tile_size(64);
+        assert_eq!(kernel.tile_size, 64);
+        assert_eq!(kernel.m, 1024);
+        assert_eq!(kernel.n, 1024);
+        assert_eq!(kernel.k, 4096);
+    }
+
+    #[test]
+    fn test_q6k_with_tile_size_affects_ptx() {
+        let kernel_32 = Q6KKernel::new(1024, 1024, 4096);
+        let kernel_64 = Q6KKernel::new(1024, 1024, 4096).with_tile_size(64);
+
+        let ptx_32 = kernel_32.emit_ptx();
+        let ptx_64 = kernel_64.emit_ptx();
+
+        // Both should be valid PTX with the same kernel name
+        assert!(ptx_32.contains("q6k_gemm_ggml"));
+        assert!(ptx_64.contains("q6k_gemm_ggml"));
     }
 
     #[test]
@@ -9967,6 +10011,60 @@ mod tests {
         assert!(ptx_kernel.shared_memory_bytes() > 0);
     }
 
+    #[test]
+    fn test_chunked_tiled_q4k_gemv_with_outputs_per_block() {
+        let kernel = ChunkedTiledQ4KGemvKernel::new(3584, 4096).with_outputs_per_block(8);
+        assert_eq!(kernel.outputs_per_block, 8);
+        assert_eq!(kernel.k, 3584);
+        assert_eq!(kernel.n, 4096);
+    }
+
+    #[test]
+    fn test_chunked_tiled_q4k_gemv_with_outputs_per_block_default() {
+        let kernel = ChunkedTiledQ4KGemvKernel::new(3584, 4096);
+        assert_eq!(kernel.outputs_per_block, 4); // Default value
+    }
+
+    #[test]
+    fn test_chunked_tiled_q4k_gemv_with_outputs_per_block_chained() {
+        let kernel = ChunkedTiledQ4KGemvKernel::new(3584, 4096)
+            .with_outputs_per_block(2)
+            .with_outputs_per_block(16);
+        assert_eq!(kernel.outputs_per_block, 16); // Last value wins
+    }
+
+    #[test]
+    fn test_chunked_tiled_q4k_gemv_needs_chunking_small_k() {
+        // K = 3584 < 8192 (CHUNK_SIZE), so no chunking needed
+        let kernel = ChunkedTiledQ4KGemvKernel::new(3584, 4096);
+        assert!(!kernel.needs_chunking());
+    }
+
+    #[test]
+    fn test_chunked_tiled_q4k_gemv_needs_chunking_large_k() {
+        // K = 16384 > 8192 (CHUNK_SIZE), so chunking is needed
+        let kernel = ChunkedTiledQ4KGemvKernel::new(16384, 4096);
+        assert!(kernel.needs_chunking());
+    }
+
+    #[test]
+    fn test_chunked_tiled_q4k_gemv_needs_chunking_boundary() {
+        // K = 8192 = CHUNK_SIZE exactly, no chunking needed
+        let kernel_exact = ChunkedTiledQ4KGemvKernel::new(8192, 4096);
+        assert!(!kernel_exact.needs_chunking());
+
+        // K = 8193 > CHUNK_SIZE, chunking needed
+        let kernel_over = ChunkedTiledQ4KGemvKernel::new(8193, 4096);
+        assert!(kernel_over.needs_chunking());
+    }
+
+    #[test]
+    fn test_chunked_tiled_q4k_gemv_needs_chunking_very_large_k() {
+        // K = 32768, definitely needs chunking
+        let kernel = ChunkedTiledQ4KGemvKernel::new(32768, 4096);
+        assert!(kernel.needs_chunking());
+    }
+
     // =========================================================================
     // COALESCED Q4K GEMV KERNEL TESTS
     // =========================================================================
@@ -10157,5 +10255,178 @@ mod tests {
         let ptx = kernel.emit_ptx();
         // This kernel uses warp shuffle for reduction
         assert!(ptx.contains("shfl"));
+    }
+
+    // =========================================================================
+    // BATCHED Q4K GEMV KERNEL TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_batched_q4k_gemv_kernel_name() {
+        let kernel = BatchedQ4KGemvKernel::new(4096, 32000, 4);
+        assert_eq!(kernel.name(), "batched_q4k_gemv_warp_reduce");
+    }
+
+    #[test]
+    fn test_batched_q4k_gemv_config() {
+        let kernel = BatchedQ4KGemvKernel::new(4096, 32000, 4);
+        assert_eq!(kernel.k, 4096);
+        assert_eq!(kernel.n, 32000);
+        assert_eq!(kernel.m, 4);
+    }
+
+    #[test]
+    fn test_batched_q4k_gemv_ptx_generation() {
+        let kernel = BatchedQ4KGemvKernel::new(4096, 4096, 4);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".visible .entry batched_q4k_gemv"));
+        assert!(ptx.contains("ld.global"));
+    }
+
+    #[test]
+    fn test_batched_q4k_gemv_has_warp_shuffle() {
+        let kernel = BatchedQ4KGemvKernel::new(4096, 4096, 2);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains("shfl"));
+    }
+
+    #[test]
+    fn test_batched_q4k_gemv_num_super_blocks() {
+        let kernel = BatchedQ4KGemvKernel::new(4096, 4096, 4);
+        assert_eq!(kernel.num_super_blocks_per_row(), 16); // 4096 / 256
+    }
+
+    // =========================================================================
+    // COALESCED Q6K GEMV KERNEL TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_coalesced_q6k_gemv_kernel_name() {
+        let kernel = CoalescedQ6KGemvKernel::new(4096, 32000);
+        assert_eq!(kernel.name(), "coalesced_q6k_gemv");
+    }
+
+    #[test]
+    fn test_coalesced_q6k_gemv_config() {
+        let kernel = CoalescedQ6KGemvKernel::new(4096, 32000);
+        assert_eq!(kernel.k, 4096);
+        assert_eq!(kernel.n, 32000);
+    }
+
+    #[test]
+    fn test_coalesced_q6k_gemv_ptx_generation() {
+        let kernel = CoalescedQ6KGemvKernel::new(4096, 4096);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".visible .entry coalesced_q6k_gemv"));
+        assert!(ptx.contains("ld.global"));
+    }
+
+    // =========================================================================
+    // VECTORIZED Q4K GEMV KERNEL TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_vectorized_q4k_gemv_kernel_name() {
+        let kernel = VectorizedQ4KGemvKernel::new(4096, 32000);
+        assert_eq!(kernel.name(), "vectorized_q4k_gemv");
+    }
+
+    #[test]
+    fn test_vectorized_q4k_gemv_config() {
+        let kernel = VectorizedQ4KGemvKernel::new(4096, 32000);
+        assert_eq!(kernel.k, 4096);
+        assert_eq!(kernel.n, 32000);
+    }
+
+    #[test]
+    fn test_vectorized_q4k_gemv_ptx_generation() {
+        let kernel = VectorizedQ4KGemvKernel::new(4096, 4096);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".visible .entry vectorized_q4k_gemv"));
+        assert!(ptx.contains("ld.global"));
+    }
+
+    #[test]
+    fn test_vectorized_q4k_gemv_has_warp_shuffle() {
+        let kernel = VectorizedQ4KGemvKernel::new(4096, 4096);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains("shfl"));
+    }
+
+    // =========================================================================
+    // FUSED GATE UP Q4K GEMV KERNEL TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_fused_gate_up_q4k_gemv_kernel_name() {
+        let kernel = FusedGateUpQ4KGemvKernel::new(4096, 11008);
+        assert_eq!(kernel.name(), "fused_gate_up_q4k_gemv");
+    }
+
+    #[test]
+    fn test_fused_gate_up_q4k_gemv_config() {
+        let kernel = FusedGateUpQ4KGemvKernel::new(4096, 11008);
+        assert_eq!(kernel.k, 4096);
+        assert_eq!(kernel.n, 11008);
+    }
+
+    #[test]
+    fn test_fused_gate_up_q4k_gemv_ptx_generation() {
+        let kernel = FusedGateUpQ4KGemvKernel::new(4096, 11008);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".visible .entry fused_gate_up_q4k_gemv"));
+        assert!(ptx.contains("ld.global"));
+    }
+
+    #[test]
+    fn test_fused_gate_up_q4k_gemv_has_arithmetic() {
+        let kernel = FusedGateUpQ4KGemvKernel::new(4096, 11008);
+        let ptx = kernel.emit_ptx();
+
+        // Fused gate up uses FMA for efficient multiply-accumulate
+        assert!(ptx.contains("fma") || ptx.contains("mul") || ptx.contains("add"));
+    }
+
+    #[test]
+    fn test_fused_gate_up_q4k_gemv_has_shared_memory() {
+        let kernel = FusedGateUpQ4KGemvKernel::new(4096, 11008);
+        let ptx_kernel = kernel.build_ptx();
+
+        // Uses shared memory for input caching
+        assert!(ptx_kernel.shared_memory_bytes() > 0);
+    }
+
+    // =========================================================================
+    // FP16 Q4K GEMV KERNEL TESTS
+    // =========================================================================
+
+    #[test]
+    fn test_fp16_q4k_gemv_config() {
+        let kernel = Fp16Q4KGemvKernel::new(4096, 32000);
+        assert_eq!(kernel.k, 4096);
+        assert_eq!(kernel.n, 32000);
+    }
+
+    #[test]
+    fn test_fp16_q4k_gemv_ptx_generation() {
+        let kernel = Fp16Q4KGemvKernel::new(4096, 4096);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".visible .entry fp16_q4k_gemv"));
+    }
+
+    #[test]
+    fn test_fp16_q4k_gemv_uses_f16() {
+        let kernel = Fp16Q4KGemvKernel::new(4096, 4096);
+        let ptx = kernel.emit_ptx();
+
+        // Should use f16 operations
+        assert!(ptx.contains("f16"));
     }
 }

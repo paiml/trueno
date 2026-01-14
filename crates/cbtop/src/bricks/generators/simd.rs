@@ -204,7 +204,9 @@ impl SimdLoadBrick {
                         // PERF-001: Tiled elementwise for cache efficiency
                         self.tiled_elementwise_mul();
                     } else {
-                        let result = self.vec_a.mul(&self.vec_b).unwrap();
+                        // SAFETY: vec_a and vec_b are pre-allocated with matching sizes in new()
+                        let result = self.vec_a.mul(&self.vec_b)
+                            .expect("pre-allocated vectors have matching sizes");
                         std::hint::black_box(&result);
                     }
                 }
@@ -229,7 +231,9 @@ impl SimdLoadBrick {
                         // PERF-001: Tiled add for cache efficiency
                         self.tiled_elementwise_add();
                     } else {
-                        let result = self.vec_a.add(&self.vec_b).unwrap();
+                        // SAFETY: vec_a and vec_b are pre-allocated with matching sizes in new()
+                        let result = self.vec_a.add(&self.vec_b)
+                            .expect("pre-allocated vectors have matching sizes");
                         std::hint::black_box(&result);
                     }
                 }
@@ -275,7 +279,9 @@ impl SimdLoadBrick {
     /// PERF-001: Tiled elementwise mul for cache-aware processing
     fn tiled_elementwise_mul(&self) {
         for (tile_a, tile_b) in &self.tile_vectors {
-            let result = tile_a.mul(tile_b).unwrap();
+            // SAFETY: tile vectors are pre-allocated with matching sizes in new()
+            let result = tile_a.mul(tile_b)
+                .expect("pre-allocated tile vectors have matching sizes");
             std::hint::black_box(&result);
         }
     }
@@ -283,7 +289,9 @@ impl SimdLoadBrick {
     /// PERF-001: Tiled elementwise add for cache-aware processing
     fn tiled_elementwise_add(&self) {
         for (tile_a, tile_b) in &self.tile_vectors {
-            let result = tile_a.add(tile_b).unwrap();
+            // SAFETY: tile vectors are pre-allocated with matching sizes in new()
+            let result = tile_a.add(tile_b)
+                .expect("pre-allocated tile vectors have matching sizes");
             std::hint::black_box(&result);
         }
     }
