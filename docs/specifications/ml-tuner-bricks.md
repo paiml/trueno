@@ -3780,6 +3780,146 @@ impl CudaExecutor {
 6. **Phase 13f**: Implement unified ModelTracer
 7. **Phase 13g**: Integration with realizar
 8. **Phase 13h**: Add F250-F270 falsification tests
+9. **Phase 14**: ML-Tuner Evolution (From Heuristic to Learned)
+
+### E.12 ML-Tuner Evolution (Phase 14)
+
+**Goal**: Transform ML-Tuner from a static heuristic engine into a **self-improving learning system** to maximize Qwen2.5-Coder performance (SHOWCASE-BRICK-001).
+
+**Status**: SPEC
+**Prior Art**: AutoTVM, FlashAttention, AlphaGo
+
+#### E.12.1 Strategic Implementation Roadmap
+
+We prioritize high-impact, low-risk strategies to deliver immediate value to the Qwen2.5 Showcase.
+
+| ID | Strategy | Priority | Complexity | Citation |
+|----|----------|----------|------------|----------|
+| MLT-10 | **Pre-trained Weights** | HIGH | Low | Silver et al. (2016) [35] |
+| MLT-11 | **First-Run Calibration** | HIGH | Medium | Chen et al. (2018) [1] |
+| MLT-12 | **Online Learning (SGD)** | MEDIUM | High | Parisi et al. (2019) [36] |
+| MLT-13 | **Bandit Kernel Selection** | MEDIUM | Medium | Li et al. (2010) [37] |
+| MLT-14 | **Telemetry Training** | LOW | High | McMahan et al. (2017) [38] |
+
+#### E.12.2 MLT-10: Pre-trained Weights (The "AlphaGo" Approach)
+
+**Concept**: Instead of starting from scratch (tabula rasa), ship the binary with a model pre-trained on CI benchmarks.
+
+**Implementation**:
+```rust
+/// Embedded Tuner Model trained on reference hardware (A100, RTX 4090, M2 Ultra).
+/// Ensures "out-of-the-box" optimality for common configurations.
+pub static PRETRAINED_MODEL: &[u8] = include_bytes!("../models/tuner_v1.safetensors");
+
+impl BrickTuner {
+    pub fn load_default() -> Self {
+        // Load pre-trained weights, falling back to heuristics only if deserialization fails
+        Self::from_bytes(PRETRAINED_MODEL).unwrap_or_else(Self::heuristic)
+    }
+}
+```
+**Citation**: Silver, D., et al. (2016). "Mastering the game of Go with deep neural networks and tree search." *Nature*. (Bootstrapping from supervised learning).
+
+#### E.12.3 MLT-11: First-Run Calibration (Auto-Tuning)
+
+**Concept**: Run a rapid 30-second micro-benchmark suite on first launch to fine-tune the cost model for the *specific* local hardware (e.g., specific memory timings, thermal constraints).
+
+**Implementation**:
+```rust
+// $ trueno calibrate
+pub fn run_calibration() -> CalibrationResult {
+    println!("Running 47 micro-benchmarks...");
+    let mut tuner = BrickTuner::load_default();
+    
+    // 1. Measure Peak Bandwidth (Roofline anchor)
+    let bw = measure_device_bandwidth();
+    
+    // 2. Measure Compute Peak
+    let flops = measure_device_flops();
+    
+    // 3. Run Kernel Micro-benchmarks
+    let samples = run_micro_benchmarks();
+    
+    // 4. Fine-tune model (Few-shot transfer learning)
+    tuner.fine_tune(&samples, learning_rate=0.01);
+    
+    tuner.save_local("~/.trueno/tuner_local.safetensors");
+}
+```
+**Citation**: Chen, T., et al. (2018). "TVM: An Automated End-to-End Optimizing Compiler for Deep Learning." *OSDI '18*. (Auto-tuning on target hardware).
+
+#### E.12.4 MLT-12: Online Learning (Continual Improvement)
+
+**Concept**: Treat every inference run as a training sample. The model improves as the user chats with Qwen2.5.
+
+**Implementation**:
+```rust
+// In Realizar::forward
+let prediction = tuner.predict(&features);
+let start = Instant::now();
+let result = execute_kernel();
+let actual_throughput = result.len() / start.elapsed();
+
+// Online Update (Stochastic Gradient Descent)
+// Only update if prediction error > threshold to avoid catastrophic forgetting
+if (prediction - actual_throughput).abs() > threshold {
+    tuner.observe(features, actual_throughput);
+    if tuner.pending_samples() > 100 {
+        std::thread::spawn(move || tuner.incremental_train());
+    }
+}
+```
+**Citation**: Parisi, G. I., et al. (2019). "Continual Lifelong Learning with Neural Networks: A Review." *Neural Networks*.
+
+#### E.12.5 MLT-13: Bandit-Based Kernel Selection
+
+**Concept**: Instead of deterministically picking the "best" kernel, use **Thompson Sampling** to explore alternative kernels (e.g., 5% of the time) to discover optima that the cost model missed.
+
+**Implementation**:
+```rust
+// Epsilon-Greedy / UCB Strategy
+let kernel = if rng.gen::<f32>() < 0.05 {
+    // Explore: Try a random valid kernel
+    tuner.explore_kernel(&features)
+} else {
+    // Exploit: Use the predicted best
+    tuner.exploit_kernel(&features)
+};
+```
+**Citation**: Li, L., et al. (2010). "A Contextual-Bandit Approach to Personalized News Article Recommendation." *WWW '10*.
+
+#### E.12.6 Falsification Criteria (F280-F300)
+
+**Goal**: Verify that ML mechanisms strictly improve performance over heuristics without regression.
+
+| ID | Criterion | Threshold | Method | Pattern |
+|----|-----------|-----------|--------|---------|
+| F280 | **Pre-trained Lift** | >10% vs Heuristic | CI Benchmark | MLT-10 |
+| F281 | **No Regression** | P(Model < Heuristic) < 1% | Safety Check | MLT-10 |
+| F282 | **Calibration Speed** | < 30 seconds | UX Timer | MLT-11 |
+| F283 | **Calibration Gain** | > 5% vs Pre-trained | Local Bench | MLT-11 |
+| F284 | **Online Convergence** | Error decreases over time | 1k step sim | MLT-12 |
+| F285 | **Forgetting Guard** | Old tasks degrade < 5% | Replay buffer | MLT-12 |
+| F286 | **Exploration Cost** | < 1% throughput hit | Regret bound | MLT-13 |
+| F287 | **Bandit Convergence** | Selects optimal K eventually | Synthetic env | MLT-13 |
+| F288 | **Serialization Size** | < 5MB | Binary size | All |
+| F289 | **Inference Latency** | < 10µs overhead | Hot path profile | All |
+| F290 | **Hardware Fingerprint** | Distinct ID per GPU | Hash check | MLT-11 |
+| F291 | **Transfer Learning** | Few-shot < 50 samples | Learn curve | MLT-11 |
+| F292 | **Cold Start Robustness** | Valid output with 0 samples | Fallback test | All |
+| F293 | **Telemetry Anonymity** | No PII/Prompts | Data audit | MLT-14 |
+| F294 | **Model Stability** | No oscillation | Control theory | MLT-12 |
+| F295 | **Qwen2.5 Target** | > 200 tok/s (RTX 4090) | Showcase Goal | All |
+
+### Appendix A.9 ML Evolution Citations
+
+[35] Silver, D., et al. (2016). "Mastering the game of Go with deep neural networks and tree search." *Nature*, 529(7587), 484-489.
+
+[36] Parisi, G. I., et al. (2019). "Continual Lifelong Learning with Neural Networks: A Review." *Neural Networks*, 113, 54-71.
+
+[37] Li, L., et al. (2010). "A Contextual-Bandit Approach to Personalized News Article Recommendation." *WWW '10*.
+
+[38] McMahan, B., et al. (2017). "Communication-Efficient Learning of Deep Networks from Decentralized Data." *AISTATS 2017*.
 
 ---
 
