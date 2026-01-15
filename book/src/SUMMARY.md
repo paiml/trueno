@@ -70,6 +70,7 @@
 - [Image Processing](./examples/image-processing.md)
 - [Signal Processing](./examples/signal-processing.md)
 - [Scientific Computing](./examples/scientific-computing.md)
+- [Execution Path Graph](./examples/execution-graph.md)
 
 # Development Guide
 

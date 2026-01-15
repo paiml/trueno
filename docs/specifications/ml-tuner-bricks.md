@@ -38,6 +38,7 @@
 | [A](#appendix-a-peer-reviewed-citations) | Peer-Reviewed Citations | 50+ |
 | [B](#appendix-b-historical-lessons) | Historical Lessons (Five-Whys Archive) | - |
 | [D](#appendix-d-documentation-integration-strategy) | Documentation Integration Strategy | - |
+| [E](#appendix-e-brickprofiler-v2-architecture) | BrickProfiler v2 Architecture | Draft |
 
 ---
 
@@ -1107,6 +1108,16 @@ stages:
 
 [30] Jung, R., et al. (2017). "RustBelt: Securing the Foundations of the Rust Programming Language." *POPL '17*.
 
+### A.8 Profiling and Graph Analysis
+
+[31] Graham, S. L., Kessler, P. B., & McKusick, M. K. (1982). "gprof: A Call Graph Execution Profiler." *SIGPLAN Notices*.
+
+[32] Ammons, G., Ball, T., & Larus, J. R. (1997). "Exploiting Hardware Performance Counters with Flow and Context Sensitive Profiling." *PLDI '97*.
+
+[33] Adhianto, L., et al. (2010). "HPCToolkit: Tools for Performance Analysis of Optimized Parallel Programs." *Concurrency and Computation: Practice and Experience*.
+
+[34] Yang, C., et al. (2020). "Analyze This! A Survey on Execution Graph Analysis for Performance Debugging." *arXiv*.
+
 ---
 
 ## Appendix B: Historical Lessons (Five-Whys Archive)
@@ -1169,6 +1180,1182 @@ Documentation generated for the web (e.g., via `mdbook`) MUST NOT rely on client
 - **Allowed**: Standard HTML/CSS, server-side rendering, WASM (compiled from Rust).
 - **Prohibited**: Inline `<script>`, external JS libraries (React, Vue, jQuery), analytics trackers.
 - **Verification**: `pmat check --zero-js` scans all generated HTML artifacts.
+
+---
+
+## Appendix E: BrickProfiler v2 Architecture
+
+**Version**: 2.0.0 (Proposed)
+**Status**: Draft
+**Prior Art**: llama.cpp, candle, PyTorch Profiler
+
+### E.1 Analysis of Existing Implementations
+
+| Implementation | Timing Method | Storage | GPU Events | Per-kernel |
+|---------------|---------------|---------|------------|------------|
+| **llama.cpp** | `clock_gettime(MONOTONIC)` | Flat struct | Sync only (`cudaEventDisableTiming`) | No |
+| **candle** | `js_sys::Date::now()` | `HashMap<String>` | N/A (WASM) | Yes |
+| **trueno v1** | `std::time::Instant` | `HashMap<String>` | Via forced sync | Yes |
+| **PyTorch** | CUPTI/Kineto | Ring buffer | `cudaEventElapsedTime` | Yes |
+
+**Key Insight from llama.cpp** (ggml-cuda.cu:893):
+```cpp
+CUDA_CHECK(cudaEventCreateWithFlags(&event, cudaEventDisableTiming));
+```
+
+llama.cpp uses `cudaEventDisableTiming` because **querying CUDA event elapsed time requires synchronization and is slower than host-side timing**. Events are only used for stream synchronization, not measurement.
+
+### E.2 BrickProfiler v2 Design
+
+#### E.2.1 BrickId Enum (Hot Path Optimization)
+
+Replace `HashMap<String, BrickStats>` with pre-allocated array indexed by enum:
+
+```rust
+/// Well-known brick types for O(1) lookup on hot path.
+/// PAR-200: Eliminates string allocation and HashMap hashing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum BrickId {
+    // Normalization
+    RmsNorm = 0,
+    LayerNorm = 1,
+
+    // Attention
+    QkvProjection = 2,
+    RopeEmbedding = 3,
+    AttentionScore = 4,
+    AttentionSoftmax = 5,
+    AttentionOutput = 6,
+    OutputProjection = 7,
+
+    // FFN
+    GateProjection = 8,
+    UpProjection = 9,
+    SiluActivation = 10,
+    DownProjection = 11,
+
+    // Other
+    Embedding = 12,
+    LmHead = 13,
+    Sampling = 14,
+
+    // Count marker (must be last)
+    _Count = 15,
+}
+
+impl BrickId {
+    pub const COUNT: usize = Self::_Count as usize;
+
+    /// Category for hierarchical aggregation.
+    pub fn category(self) -> BrickCategory {
+        match self {
+            Self::RmsNorm | Self::LayerNorm => BrickCategory::Norm,
+            Self::QkvProjection | Self::RopeEmbedding | Self::AttentionScore |
+            Self::AttentionSoftmax | Self::AttentionOutput | Self::OutputProjection
+                => BrickCategory::Attention,
+            Self::GateProjection | Self::UpProjection | Self::SiluActivation |
+            Self::DownProjection => BrickCategory::Ffn,
+            _ => BrickCategory::Other,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrickCategory {
+    Norm,
+    Attention,
+    Ffn,
+    Other,
+}
+```
+
+#### E.2.2 Deferred Sync Mode
+
+Avoid per-kernel sync by batching synchronization:
+
+```rust
+pub struct BrickProfilerV2 {
+    /// Fast path: pre-allocated array for known bricks
+    stats: [BrickStats; BrickId::COUNT],
+
+    /// Slow path: dynamic bricks (fallback)
+    dynamic_stats: HashMap<String, BrickStats>,
+
+    /// Pending measurements awaiting sync
+    pending: Vec<PendingMeasurement>,
+
+    /// Sync mode
+    sync_mode: SyncMode,
+
+    enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SyncMode {
+    /// Sync after each kernel (accurate but slow, ~200% overhead)
+    Immediate,
+    /// Sync once per layer (balanced, ~20% overhead)
+    PerLayer,
+    /// Sync once per forward pass (fast, ~5% overhead)
+    Deferred,
+    /// No sync, approximate timing (zero overhead, may be inaccurate)
+    None,
+}
+
+struct PendingMeasurement {
+    brick_id: BrickId,
+    start_ns: u64,
+    elements: u64,
+}
+
+impl BrickProfilerV2 {
+    /// Record measurement without sync (deferred mode).
+    /// Call `finalize()` after forward pass to apply all measurements.
+    #[inline]
+    pub fn record_deferred(&mut self, brick_id: BrickId, start_ns: u64, elements: u64) {
+        if !self.enabled {
+            return;
+        }
+        self.pending.push(PendingMeasurement { brick_id, start_ns, elements });
+    }
+
+    /// Finalize all pending measurements after GPU sync.
+    /// Must be called after `stream.synchronize()`.
+    pub fn finalize(&mut self, end_ns: u64) {
+        if self.pending.is_empty() {
+            return;
+        }
+
+        // Distribute total elapsed time proportionally across pending measurements
+        // (approximation when using deferred sync)
+        let total_pending = self.pending.len();
+        for (i, m) in self.pending.drain(..).enumerate() {
+            // Simple model: assume uniform distribution
+            // More sophisticated: use historical ratios
+            let elapsed_ns = (end_ns - m.start_ns) / (total_pending - i) as u64;
+            self.stats[m.brick_id as usize].add_sample(elapsed_ns, m.elements);
+        }
+    }
+
+    /// Get aggregated stats by category.
+    pub fn category_stats(&self) -> [CategoryStats; 4] {
+        let mut result = [CategoryStats::default(); 4];
+        for (i, stats) in self.stats.iter().enumerate() {
+            let brick_id = unsafe { std::mem::transmute::<u8, BrickId>(i as u8) };
+            let cat = brick_id.category() as usize;
+            result[cat].total_ns += stats.total_ns;
+            result[cat].total_elements += stats.total_elements;
+            result[cat].count += stats.count;
+        }
+        result
+    }
+}
+```
+
+### E.3 Integration with Realizar
+
+```rust
+// In realizar/src/cuda.rs
+
+impl CudaExecutor {
+    /// Forward pass with deferred profiling (recommended).
+    pub fn forward_with_profiling(
+        &mut self,
+        input: &[f32],
+        positions: &[u32],
+    ) -> Result<Vec<u32>, GpuError> {
+        let profiler = self.profiler_mut();
+        profiler.set_sync_mode(SyncMode::Deferred);
+
+        let start = std::time::Instant::now();
+
+        // ... forward pass (no per-kernel sync) ...
+
+        // Single sync at end
+        self.stream.synchronize()?;
+
+        let end_ns = start.elapsed().as_nanos() as u64;
+        profiler.finalize(end_ns);
+
+        Ok(output)
+    }
+}
+```
+
+### E.4 Performance Comparison
+
+| Mode | Overhead | Accuracy | Use Case |
+|------|----------|----------|----------|
+| `Immediate` | ~200% | Exact per-kernel | Debugging, optimization |
+| `PerLayer` | ~20% | Per-layer exact | Development |
+| `Deferred` | ~5% | Approximate | Production profiling |
+| `None` | 0% | N/A | Production (no profiling) |
+
+### E.5 Falsification Criteria (F101-F110)
+
+| ID | Criterion | Threshold | Method |
+|----|-----------|-----------|--------|
+| F101 | Deferred mode overhead < 10% | <10% | Benchmark vs no profiling |
+| F102 | Immediate mode matches v1 | ±5% | Cross-validation |
+| F103 | BrickId lookup O(1) | <10ns | Microbenchmark |
+| F104 | Category aggregation correct | Sum matches | Unit test |
+| F105 | Dynamic fallback works | No panic | Unknown brick test |
+| F106 | finalize() idempotent | Same result | Repeated call test |
+| F107 | Thread-safe | No race | Concurrent test |
+| F108 | Zero-alloc hot path | 0 allocs | Allocator tracking |
+| F109 | Compatible with v1 API | Compile | API surface test |
+| F110 | JSON export includes categories | Valid schema | Serialization test |
+
+### E.6 Migration Path
+
+1. **Phase 1**: Add `BrickId` enum alongside existing `HashMap` (backward compatible)
+2. **Phase 2**: Add `SyncMode` with `Immediate` as default (no behavior change)
+3. **Phase 3**: Add deferred mode, migrate realizar to use it
+4. **Phase 4**: Deprecate string-based API for known bricks
+
+### E.7 Execution Path Graph (PAR-201)
+
+**Status:** SPEC
+**Dependencies:** trueno-graph (0.1.x), aprender (0.24.x)
+
+#### E.7.1 Motivation
+
+BrickProfiler v2 captures **flat timing** but not **call relationships**. As established by Graham et al. with **gprof** [31], flat profiles often obscure the *context* of performance bottlenecks. Users need to answer:
+- "Which PTX kernel was involved in this brick?" (Context Sensitivity [32])
+- "What's the call path from `forward()` to `q4k_gemv`?"
+- "Show me all code paths that touch attention"
+
+#### E.7.2 Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    BrickProfiler v2 + Graph                     │
+├─────────────────────────────────────────────────────────────────┤
+│  ExecutionGraph                                                 │
+│  ├── nodes: Vec<ExecutionNode>                                  │
+│  │   ├── NodeType::Brick(BrickId)                              │
+│  │   ├── NodeType::Kernel(kernel_name, ptx_hash)               │
+│  │   ├── NodeType::Function(name, file, line)                  │
+│  │   └── NodeType::Layer(layer_idx)                            │
+│  ├── edges: Vec<(NodeId, NodeId, EdgeType)>                    │
+│  │   ├── EdgeType::Calls                                       │
+│  │   ├── EdgeType::Contains                                    │
+│  │   └── EdgeType::Launches                                    │
+│  └── export_to_csr() -> trueno_graph::CsrGraph                 │
+├─────────────────────────────────────────────────────────────────┤
+│  Integration Points                                             │
+│  ├── realizar: record_kernel_launch(brick_id, kernel, ptx)     │
+│  ├── trueno-gpu: PTX hash for kernel identity                  │
+│  └── aprender: ML pattern detection on execution graph         │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### E.7.3 Node Types
+
+```rust
+/// Execution graph node types
+#[derive(Debug, Clone)]
+pub enum ExecutionNode {
+    /// High-level brick (BrickId from v2)
+    Brick {
+        id: BrickId,
+        timing_ns: u64,
+        elements: u64,
+    },
+    /// GPU kernel launch
+    Kernel {
+        name: String,
+        ptx_hash: u64,      // FNV-1a hash of PTX source
+        grid: (u32, u32, u32),
+        block: (u32, u32, u32),
+        shared_mem: u32,
+    },
+    /// Rust function (from DWARF or manual annotation)
+    Function {
+        name: String,
+        file: Option<String>,
+        line: Option<u32>,
+    },
+    /// Transformer layer grouping
+    Layer {
+        index: u32,
+    },
+}
+
+/// Edge types in execution graph
+#[derive(Debug, Clone, Copy)]
+pub enum EdgeType {
+    /// Function calls function
+    Calls,
+    /// Brick contains sub-operations
+    Contains,
+    /// Function launches GPU kernel
+    Launches,
+    /// Temporal sequence (A happens before B)
+    Sequence,
+}
+```
+
+#### E.7.4 API Extension
+
+```rust
+use trueno::{BrickProfiler, BrickId, ExecutionGraph};
+use trueno_graph::CsrGraph;
+
+let mut profiler = BrickProfiler::new();
+profiler.enable();
+profiler.enable_graph();  // NEW: Enable execution graph tracking
+
+// Push scope for hierarchical tracking
+profiler.push_scope(ExecutionNode::Layer { index: 0 });
+
+  // Record brick with kernel association
+  let timer = profiler.start_brick(BrickId::QkvProjection);
+
+  // Record kernel launch (called from realizar)
+  profiler.record_kernel_launch(
+      "batched_q4k_gemv",
+      ptx_hash,
+      (num_blocks, 1, 1),
+      (256, 1, 1),
+      shared_mem,
+  );
+
+  profiler.stop_brick(timer, elements);
+
+profiler.pop_scope();
+
+// Export to trueno-graph for analysis
+let graph: CsrGraph = profiler.execution_graph().to_csr();
+
+// Query: "What kernels does QkvProjection launch?"
+let qkv_node = graph.find_node_by_name("QkvProjection")?;
+let kernels = graph.outgoing_neighbors(qkv_node)?;
+
+// Query: "What's the hot path?" (using trueno-graph PageRank)
+let hotness = trueno_graph::pagerank(&graph, 100, 0.001)?;
+```
+
+#### E.7.5 Realizar Integration
+
+```rust
+// In realizar/src/cuda.rs - CudaExecutor
+
+impl CudaExecutor {
+    /// Record kernel launch with PTX association
+    pub fn record_kernel_launch(
+        &mut self,
+        brick_id: BrickId,
+        kernel_name: &str,
+        ptx_source: &str,
+    ) {
+        if let Some(profiler) = &mut self.profiler {
+            let ptx_hash = trueno::hash::fnv1a_64(ptx_source.as_bytes());
+            profiler.record_kernel_launch(kernel_name, ptx_hash, self.grid, self.block, self.shared_mem);
+            profiler.add_edge(
+                ExecutionNode::Brick { id: brick_id, .. },
+                ExecutionNode::Kernel { name: kernel_name.into(), ptx_hash, .. },
+                EdgeType::Launches,
+            );
+        }
+    }
+}
+```
+
+#### E.7.6 PTX Hash Registry
+
+To correlate kernels across runs, maintain a PTX hash → source mapping:
+
+```rust
+/// PTX kernel registry for execution graph correlation
+pub struct PtxRegistry {
+    /// Hash → (kernel_name, ptx_source, file_path)
+    kernels: HashMap<u64, (String, String, PathBuf)>,
+}
+
+impl PtxRegistry {
+    /// Register PTX at compile time (trueno-gpu build.rs)
+    pub fn register(&mut self, name: &str, ptx: &str, path: &Path) {
+        let hash = trueno::hash::fnv1a_64(ptx.as_bytes());
+        self.kernels.insert(hash, (name.into(), ptx.into(), path.into()));
+    }
+
+    /// Lookup PTX source by hash
+    pub fn lookup(&self, hash: u64) -> Option<&str> {
+        self.kernels.get(&hash).map(|(_, ptx, _)| ptx.as_str())
+    }
+}
+```
+
+#### E.7.7 Query Examples
+
+```rust
+use trueno_graph::{CsrGraph, algorithms::*};
+
+let graph = profiler.execution_graph().to_csr();
+
+// Q1: "What code paths involve attention?"
+let attention_nodes = graph.find_nodes_by_prefix("Attention")?;
+for node in attention_nodes {
+    let callers = find_callers(&graph, node, 10)?;  // Up to 10 levels
+    println!("Attention called by: {:?}", callers);
+}
+
+// Q2: "Show PTX for slowest kernel"
+let (slowest_node, timing) = profiler.slowest_kernel()?;
+if let ExecutionNode::Kernel { ptx_hash, .. } = slowest_node {
+    let ptx = ptx_registry.lookup(ptx_hash)?;
+    println!("Slowest kernel PTX:\n{}", ptx);
+}
+
+// Q3: "Detect god-class bricks (>10 kernel launches)"
+let god_class = trueno_graph::algorithms::pattern::find_patterns(
+    &graph,
+    &Pattern::god_class(10),
+)?;
+
+// Q4: "Export to DOT for visualization"
+let dot = graph.to_dot()?;
+std::fs::write("execution_graph.dot", dot)?;
+// Then: dot -Tsvg execution_graph.dot -o graph.svg
+```
+
+#### E.7.8 Aprender Integration (Pattern Detection)
+
+Use aprender's ML algorithms to detect execution patterns:
+
+```rust
+use aprender::cluster::KMeans;
+use trueno_graph::CsrGraph;
+
+// Extract feature vectors from execution graph
+let features: Vec<[f32; 4]> = graph.nodes().map(|node| {
+    [
+        node.timing_ns as f32,
+        graph.out_degree(node) as f32,
+        graph.in_degree(node) as f32,
+        node.elements as f32,
+    ]
+}).collect();
+
+// Cluster to find anomalous execution patterns
+let kmeans = KMeans::new(3);  // 3 clusters: fast, normal, slow
+let labels = kmeans.fit_predict(&features)?;
+
+// Flag outliers in "slow" cluster
+for (node, label) in graph.nodes().zip(labels) {
+    if label == SLOW_CLUSTER && node.timing_ns > threshold {
+        println!("ANOMALY: {:?} took {}µs", node, node.timing_ns / 1000);
+    }
+}
+```
+
+#### E.7.9 Headless Visualization (CI/CD, Automation)
+
+Zero-dependency tree visualization for testing and automation:
+
+```rust
+// Headless ASCII tree (no feature flags required)
+let graph = profiler.execution_graph();
+let tree = graph.to_ascii_tree();
+println!("{}", tree);
+
+// Output:
+// Layer 0
+// ├── RmsNorm  50.0µs (4096 elem)
+// │   └── rmsnorm_kernel  <<<16,256,1>>> smem=1024B
+// └── QkvProjection  200.0µs (4096 elem)
+//     └── batched_q4k_gemv  <<<32,256,1>>> smem=4096B
+
+// Use for:
+// - Snapshot tests (deterministic output)
+// - CI/CD logs
+// - File export
+std::fs::write("execution_tree.txt", &tree)?;
+
+// Interactive TUI (requires presentar-tui feature)
+#[cfg(feature = "presentar-tui")]
+{
+    let tree_node = graph.to_tree_node();
+    let tree = presentar_terminal::Tree::new()
+        .with_root(tree_node)
+        .expand_all();
+    // Use HeadlessCanvas for automated testing
+    let mut canvas = presentar_terminal::HeadlessCanvas::new(120, 40)
+        .with_deterministic(true);
+    tree.paint(&mut canvas);
+    let snapshot = canvas.dump();
+}
+```
+
+#### E.7.10 Falsification Criteria (F111-F127)
+
+| ID | Criterion | Threshold | Method |
+|----|-----------|-----------|--------|
+| F111 | Graph export to CsrGraph correct | Node/edge count matches | Unit test |
+| F112 | PTX hash stable across runs | Same hash for same PTX | Determinism test |
+| F113 | Kernel launch recorded | All CUDA launches captured | Trace comparison |
+| F114 | Scope push/pop balanced | No orphan nodes | Stack validation |
+| F115 | Graph queries O(V+E) | <1ms for 1000 nodes | Benchmark |
+| F116 | DOT export valid | graphviz parses | External validation |
+| F117 | Edge types preserved | Correct EdgeType on export | Round-trip test |
+| F118 | PageRank on execution graph | Converges in <100 iter | Algorithm test |
+| F119 | Pattern detection finds god-class | Known bad pattern detected | Synthetic test |
+| F120 | Graph clear works | Nodes/edges/scope cleared | Unit test |
+| F121 | to_tree_node hierarchy correct | Layer→Brick→Kernel structure | Unit test |
+| F122 | Multiple roots wrapped | Synthetic root added | Unit test |
+| F123 | Empty graph handled | "Empty Graph" label | Unit test |
+| F124 | to_ascii_tree hierarchy | Correct indentation | Unit test |
+| F125 | ASCII multiple roots | Synthetic root added | Unit test |
+| F126 | ASCII empty graph | "(empty graph)" output | Unit test |
+| F127 | ASCII snapshot stable | Deterministic output | Snapshot test |
+
+#### E.7.11 Implementation Phases
+
+1. **Phase 1**: Add `ExecutionNode`, `EdgeType` enums to trueno::brick
+2. **Phase 2**: Add `ExecutionGraph` struct with node/edge storage
+3. **Phase 3**: Add `push_scope`/`pop_scope`/`record_kernel_launch` to BrickProfiler
+4. **Phase 4**: Implement `to_csr()` export to trueno-graph
+5. **Phase 5**: Add realizar integration (`record_kernel_launch` in CudaExecutor)
+6. **Phase 6**: Add PTX hash registry to trueno-gpu
+7. **Phase 7**: Add query helpers and DOT export
+8. **Phase 8**: Implement F111-F120 falsification tests
+9. **Phase 9**: Advanced Profiling (Completed - F128-F135 passed)
+10. **Phase 10**: CPU & Rayon Profiling (aprender support)
+
+#### E.7.14 CPU & Rayon Profiling Support (Phase 10)
+
+To address performance bottlenecks in `aprender` (CPU-bound training/inference), we are extending BrickProfiler to support fine-grained concurrency analysis and hardware counters.
+
+1.  **Thread-Aware Graph Architecture**
+    *   **Challenge**: `rayon` distributes work across a thread pool. A single global graph would require heavy locking, altering the performance profile (Heisenbug).
+    *   **Solution**: Use `thread_local!` storage for partial execution graphs.
+    *   **Merge Strategy**: Implement `BrickProfiler::merge_threads()` to stitch thread-local graphs together using `EdgeType::Fork` and `EdgeType::Join` at the boundaries of parallel regions (`par_iter`, `join`).
+
+2.  **Hardware Performance Counters (PMU)**
+    *   **Integration**: Use `perf_event_open` (Linux) via the `perfcnt` or `pmu` crate to capture micro-architectural metrics per `CpuTask`.
+    *   **Metrics**:
+        *   **IPC (Instructions Per Cycle)**: Low IPC (< 1.0) indicates stalls (memory/branch). High IPC (> 2.0) indicates compute bound.
+        *   **L1/L3 Cache Misses**: Diagnoses "false sharing" or poor spatial locality in `repartir` tensors.
+        *   **Branch Mispredictions**: Critical for complex control flow in decision trees.
+
+3.  **New Graph Types**
+    ```rust
+    enum ExecutionNode {
+        // ... existing ...
+        CpuTask {
+            name: String,
+            thread_id: u32,
+            core_id: u32,      // Physical core (sched_getcpu)
+            instructions: u64,
+            cycles: u64,
+            cache_misses: u64,
+        }
+    }
+
+    enum EdgeType {
+        // ... existing ...
+        Fork, // Parent thread spawns task
+        Join, // Task returns to parent
+    }
+    ```
+
+4.  **Falsification Criteria (F146-F149)**
+    *   **F146**: `thread_local` overhead < 50ns per span.
+    *   **F147**: `merge_threads` correctly reconstructs the DAG of a `rayon::join`.
+    *   **F148**: Detected IPC matches `perf stat` baseline ±5%.
+    *   **F149**: "Work Stealing" events visible (thread ID changes for same logical task).
+
+---
+
+The following features have been implemented in `trueno/src/brick.rs` to enable physics-based performance analysis:
+
+1.  **Critical Path Analysis (CPA)**
+    *   **Types**: `EdgeType::DependsOn` (CUDA events), `EdgeType::Sequence` (Program order).
+    *   **Methods**:
+        *   `critical_path()`: Implements DAG longest-path analysis (Graham et al. 1979).
+        *   `compute_slack()`: Calculates available slack for each node to identify parallelization opportunities.
+        *   `critical_path_summary()`: Formits the analysis for the `cbtop` TUI.
+
+2.  **Roofline-Integrated Metrics**
+    *   **Types**: Extended `ExecutionNode::Kernel` with `timing_ns`, `arithmetic_intensity`, and `achieved_tflops`.
+    *   **Methods**:
+        *   `record_kernel_launch_with_metrics()`: Captures roofline data at runtime.
+        *   `roofline_distance()`: Calculates distance from theoretical peak (Williams et al. 2009).
+
+3.  **Data Movement Topology**
+    *   **Types**: `EdgeType::Transfer { bytes, direction }`, `TransferDirection` (H2D, D2H, D2D), `ExecutionNode::Transfer`.
+    *   **Methods**:
+        *   `record_transfer()`: Tracks explicit memory movement.
+        *   `detect_ping_pong()`: Heuristic detection of wasteful H2D↔D2H patterns.
+
+#### E.7.13 Falsification Criteria (F128-F135)
+
+The following tests confirm the correctness of the Advanced Profiling implementation (Status: **PASS**).
+
+| ID | Criterion | Threshold | Method |
+|----|-----------|-----------|--------|
+| F128 | CPA Path Accuracy | Exact Match | `critical_path()` returns longest path in DAG |
+| F129 | Slack Precision | < 1ns | `compute_slack()` correctly identifies zero-slack nodes |
+| F130 | Roofline Distance Accuracy | < 5% | `roofline_distance()` matches theoretical model |
+| F131 | Ping-Pong Heuristic | 100% Recall | `detect_ping_pong()` flags alternating H2D/D2H |
+| F132 | Transfer Recording | Exact Bytes | `record_transfer()` matches actual bytes moved |
+| F133 | Dependency Sync Logic | Respected | `DependsOn` edges override temporal sequence |
+| F134 | TFLOPS Calculation | < 1% Error | `achieved_tflops` matches manual calculation |
+| F135 | Summary Determinism | Stable | `critical_path_summary()` output is deterministic |
+
+### E.8 Backend-Specific Profiling (CPU/SIMD/GPU)
+
+**Status**: SPEC
+**Dependencies**: realizar (0.5.x), trueno (0.11.x)
+
+#### E.8.1 Motivation
+
+Performance analysis showed a 35x throughput gap between GPU (115 tok/s) and CPU (3.3 tok/s) paths. Investigation revealed the CPU path uses a **legacy reference implementation without BrickProfiler instrumentation**, making it impossible to identify bottlenecks using the standard profiling infrastructure.
+
+#### E.8.2 Forward Function Instrumentation Matrix
+
+The following table documents the instrumentation status of different forward paths in realizar:
+
+| Function | Location | BrickProfiler | Notes |
+|----------|----------|---------------|-------|
+| `forward()` | apr.rs:685 | **NO** | Legacy CPU reference implementation |
+| `forward_profiled()` | apr.rs:912 | **YES** | Instrumented CPU path (unused in production) |
+| `forward_cuda()` | apr.rs:2089 | **YES** | Delegates to CudaExecutor with full instrumentation |
+| `CudaExecutor::forward()` | cuda.rs | **YES** | Full per-brick timing with deferred sync |
+
+**Key Insight**: The production CPU inference path (`forward()`) bypasses all profiling infrastructure, while an instrumented variant (`forward_profiled()`) exists but is not used. This explains why cbtop shows detailed GPU metrics but reports minimal CPU data.
+
+#### E.8.3 SIMD Backend Profiling
+
+trueno's SIMD backends (AVX2, AVX-512, NEON, SSE2) can be profiled at the brick level:
+
+```rust
+use trueno::{BrickProfiler, BrickId, Backend};
+
+let mut profiler = BrickProfiler::new();
+profiler.enable();
+
+// Record SIMD operation
+let timer = profiler.start_brick(BrickId::RmsNorm);
+
+// Execute on detected SIMD backend
+let backend = trueno::detect_backend();
+match backend {
+    Backend::Avx512 => avx512_rmsnorm(&input, &mut output),
+    Backend::Avx2 => avx2_rmsnorm(&input, &mut output),
+    Backend::Neon => neon_rmsnorm(&input, &mut output),
+    _ => scalar_rmsnorm(&input, &mut output),
+}
+
+profiler.stop_brick(timer, input.len() as u64);
+
+// Report includes backend-specific throughput
+println!("Backend: {:?}", backend);
+println!("{}", profiler.report());
+```
+
+#### E.8.4 CPU/SIMD Instrumentation Pattern
+
+To add profiling to CPU/SIMD forward paths, follow this pattern:
+
+```rust
+// In realizar/src/apr.rs - AprModel::forward() instrumentation
+
+impl AprModel {
+    /// CPU forward with optional BrickProfiler (recommended production path)
+    pub fn forward_instrumented(
+        &mut self,
+        tokens: &[u32],
+        profiler: Option<&mut BrickProfiler>,
+    ) -> Result<Vec<u32>, AprError> {
+        let hidden = self.embed(tokens)?;
+
+        for layer_idx in 0..self.config.n_layers {
+            // RmsNorm
+            let timer = profiler.as_mut().map(|p| p.start_brick(BrickId::RmsNorm));
+            let normed = self.rms_norm(&hidden, layer_idx)?;
+            if let (Some(p), Some(t)) = (profiler.as_mut(), timer) {
+                p.stop_brick(t, hidden.len() as u64);
+            }
+
+            // QKV Projection (SIMD-accelerated)
+            let timer = profiler.as_mut().map(|p| p.start_brick(BrickId::QkvProjection));
+            let qkv = self.qkv_projection(&normed, layer_idx)?;  // Uses trueno SIMD
+            if let (Some(p), Some(t)) = (profiler.as_mut(), timer) {
+                p.stop_brick(t, qkv.len() as u64);
+            }
+
+            // ... remaining bricks ...
+        }
+
+        Ok(self.sample(&hidden)?)
+    }
+}
+```
+
+#### E.8.5 Backend Comparison Benchmarking
+
+Use the profiler to compare backend performance:
+
+```rust
+use trueno::{BrickProfiler, BrickId};
+
+fn benchmark_backends(input: &[f32], iterations: usize) {
+    let mut profilers = vec![
+        ("AVX-512", BrickProfiler::new()),
+        ("AVX2", BrickProfiler::new()),
+        ("Scalar", BrickProfiler::new()),
+    ];
+
+    for (name, profiler) in &mut profilers {
+        profiler.enable();
+        for _ in 0..iterations {
+            let timer = profiler.start_brick(BrickId::RmsNorm);
+            // Force specific backend
+            match *name {
+                "AVX-512" => avx512_rmsnorm(input, &mut output),
+                "AVX2" => avx2_rmsnorm(input, &mut output),
+                _ => scalar_rmsnorm(input, &mut output),
+            }
+            profiler.stop_brick(timer, input.len() as u64);
+        }
+    }
+
+    // Compare throughput (elements/µs)
+    for (name, profiler) in &profilers {
+        let stats = profiler.stats_for(BrickId::RmsNorm);
+        let throughput = stats.total_elements as f64 / stats.total_ns as f64 * 1000.0;
+        println!("{}: {:.2} Melem/s", name, throughput);
+    }
+}
+```
+
+#### E.8.6 cbtop Backend Display
+
+cbtop displays backend-specific metrics when profiling is enabled:
+
+```
+┌─────────────────────────── cbtop v0.3.0 ───────────────────────────┐
+│ Backend: CUDA (RTX 4090)                                          │
+│ Throughput: 115.2 tok/s                                           │
+├────────────────────────────────────────────────────────────────────┤
+│ Brick            │  Time   │ Elements │ Throughput │  % Total     │
+├──────────────────┼─────────┼──────────┼────────────┼──────────────┤
+│ QkvProjection    │ 2.1ms   │ 4096     │  1.95M/s   │   28.3%      │
+│ GateProjection   │ 1.8ms   │ 4096     │  2.28M/s   │   24.2%      │
+│ AttentionScore   │ 1.2ms   │ 4096     │  3.41M/s   │   16.1%      │
+│ RmsNorm          │ 0.3ms   │ 4096     │ 13.65M/s   │    4.0%      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+For CPU/SIMD backends (when instrumented):
+
+```
+┌─────────────────────────── cbtop v0.3.0 ───────────────────────────┐
+│ Backend: AVX-512 (Intel Xeon)                                     │
+│ Throughput: 8.7 tok/s                                             │
+├────────────────────────────────────────────────────────────────────┤
+│ Brick            │  Time   │ Elements │ Throughput │  % Total     │
+├──────────────────┼─────────┼──────────┼────────────┼──────────────┤
+│ QkvProjection    │ 45.2ms  │ 4096     │  0.09M/s   │   39.2%      │
+│ GateProjection   │ 38.1ms  │ 4096     │  0.11M/s   │   33.0%      │
+│ AttentionScore   │ 18.5ms  │ 4096     │  0.22M/s   │   16.0%      │
+│ RmsNorm          │  2.1ms  │ 4096     │  1.95M/s   │    1.8%      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+#### E.8.7 Recommendations for CPU/SIMD Profiling Integration
+
+1. **Migrate `forward()` to `forward_instrumented()`**: Replace the legacy CPU reference implementation with an instrumented variant that accepts an optional `BrickProfiler`.
+
+2. **Add backend detection to profiler**: Store the active backend (`Backend::Avx512`, `Backend::Cuda`, etc.) in profiler context for accurate reporting.
+
+3. **Unified profiler interface**: Both GPU and CPU paths should use the same `BrickProfiler` API to enable apples-to-apples comparisons.
+
+4. **Backend-specific roofline**: CPU/SIMD roofline peaks differ from GPU:
+   - AVX-512: ~2 TFLOPS (FP32), ~100 GB/s memory bandwidth
+   - AVX2: ~0.5 TFLOPS (FP32), ~50 GB/s memory bandwidth
+   - GPU (RTX 4090): ~83 TFLOPS (FP32), ~1008 GB/s memory bandwidth
+
+```rust
+// Backend-aware roofline distance
+let distance = match backend {
+    Backend::Avx512 => graph.roofline_distance(2.0, 100.0),
+    Backend::Avx2 => graph.roofline_distance(0.5, 50.0),
+    Backend::Cuda => graph.roofline_distance(83.0, 1008.0),
+    _ => graph.roofline_distance(0.1, 25.0), // Scalar fallback
+};
+```
+
+#### E.8.8 Falsification Criteria (F141-F145)
+
+| ID | Criterion | Threshold | Method |
+|----|-----------|-----------|--------|
+| F141 | CPU forward instrumented | All bricks captured | Integration test |
+| F142 | SIMD backend detection | Correct backend reported | Unit test |
+| F143 | Backend-specific roofline | Correct peak values | Benchmark validation |
+| F144 | cbtop CPU display | Metrics rendered | TUI snapshot test |
+| F145 | CPU/GPU profiler parity | Same API, same output format | API surface test |
+
+### E.9 High-Performance Profiling Patterns (Phase 11)
+
+**Status**: IMPL
+**Prior Art**: llama.cpp (ggml), actix-web
+**References**: B4 CPU Performance Investigation
+
+#### E.9.1 Case Study: B4 CPU Performance Investigation
+
+**Problem**: 37x performance gap between GPU (115 tok/s) and CPU (0.4 tok/s) paths.
+
+**Root Causes Identified**:
+1. **Missing Instrumentation**: CPU path (`gguf.rs`) had NO `start_brick_timer()` calls while GPU path (`cuda.rs`) was fully instrumented.
+2. **Page Fault Storm**: 9.4M minor page faults during mmap copy → 2.5s overhead.
+
+**Results After Fix**:
+| Metric | Before | After |
+|--------|--------|-------|
+| First token latency | 2.5s | ~1.5s (load) + 0.9s (prefill) |
+| Subsequent tokens | N/A | 50-70ms (14-20 tok/s) |
+| Throughput | 0.4 tok/s | **15 tok/s** (37x improvement) |
+
+**Remaining Bottleneck**: 1.5s model copy from mmap to owned `Vec<u8>`.
+
+#### E.9.2 Pattern 1: CPU Cycle Counting (RDTSCP)
+
+**Source**: llama.cpp `test-quantize-perf.cpp:46-54`
+
+llama.cpp tracks **both** wall-clock time AND CPU cycles:
+
+```cpp
+#include <x86intrin.h>
+inline int64_t cpu_cycles() {
+    unsigned int dummy;
+    return __rdtscp(&dummy);  // Actual CPU cycles, not wall-clock
+}
+
+// Dual timing pattern
+const int64_t start_time = ggml_time_us();
+const int64_t start_cycles = cpu_cycles();
+func();
+const int64_t end_cycles = cpu_cycles();
+const int64_t end_time = ggml_time_us();
+```
+
+**Why This Matters**:
+- **IPC Calculation**: `instructions / cycles` — Low IPC (<1.0) = memory stalls, High IPC (>2.0) = compute bound
+- **Frequency Invariant**: Cycles are immune to CPU frequency scaling (turbo boost)
+- **Cache Miss Inference**: High cycles + low time = likely cache misses
+
+**trueno Implementation**:
+
+```rust
+/// CPU cycle counter using RDTSCP (x86_64) or CNTVCT_EL0 (ARM64)
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub fn cpu_cycles() -> u64 {
+    unsafe {
+        let mut aux: u32 = 0;
+        core::arch::x86_64::__rdtscp(&mut aux)
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+pub fn cpu_cycles() -> u64 {
+    let cycles: u64;
+    unsafe {
+        core::arch::asm!("mrs {}, cntvct_el0", out(reg) cycles);
+    }
+    cycles
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[inline]
+pub fn cpu_cycles() -> u64 { 0 }  // Fallback: no cycle counting
+```
+
+**Extended BrickStats**:
+
+```rust
+pub struct BrickStats {
+    // existing fields...
+    pub total_cycles: u64,     // NEW: accumulated CPU cycles
+    pub min_cycles: u64,       // NEW: minimum cycles observed
+    pub max_cycles: u64,       // NEW: maximum cycles observed
+}
+
+impl BrickStats {
+    /// Instructions Per Cycle estimate (requires PMU for accurate instructions)
+    pub fn estimated_ipc(&self) -> f64 {
+        // Approximation: ~1 instruction per element for simple ops
+        self.total_elements as f64 / self.total_cycles as f64
+    }
+
+    /// Cycles per element (frequency-invariant throughput)
+    pub fn cycles_per_element(&self) -> f64 {
+        self.total_cycles as f64 / self.total_elements as f64
+    }
+}
+```
+
+#### E.9.3 Pattern 2: Cached Time Service
+
+**Source**: actix-web `date.rs:44-74`
+
+actix-web avoids syscall overhead by caching time values:
+
+```rust
+pub(crate) struct DateService {
+    current: Rc<Cell<(Date, Instant)>>,  // Cached time
+    handle: JoinHandle<()>,
+}
+
+impl DateService {
+    pub(crate) fn new() -> Self {
+        let handle = actix_rt::spawn(async move {
+            let mut interval = interval(Duration::from_millis(500));
+            loop {
+                let now = interval.tick().await;
+                current_clone.set((date, now.into_std()));  // Update every 500ms
+            }
+        });
+        // ...
+    }
+
+    pub(crate) fn now(&self) -> Instant {
+        self.current.get().1  // Returns cached value, NO SYSCALL
+    }
+}
+```
+
+**Problem in Current BrickProfiler**:
+
+```rust
+// brick.rs:3012 - called thousands of times per second
+pub fn start_brick(&self, brick_id: BrickId) -> BrickIdTimer {
+    BrickIdTimer {
+        start: Instant::now(),  // SYSCALL every time! (~25ns on Linux)
+        brick_id,
+    }
+}
+```
+
+**trueno Implementation**:
+
+```rust
+use std::cell::Cell;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
+
+/// Global cached instant, updated by background thread
+static CACHED_NANOS: AtomicU64 = AtomicU64::new(0);
+static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+
+/// Initialize the cached time service (call once at startup)
+pub fn init_time_service() {
+    let epoch = *EPOCH.get_or_init(Instant::now);
+    CACHED_NANOS.store(0, Ordering::Relaxed);
+
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_micros(100)); // 100µs precision
+            let elapsed = epoch.elapsed().as_nanos() as u64;
+            CACHED_NANOS.store(elapsed, Ordering::Relaxed);
+        }
+    });
+}
+
+/// Get cached time in nanoseconds (NO SYSCALL, ~1ns)
+#[inline]
+pub fn cached_nanos() -> u64 {
+    CACHED_NANOS.load(Ordering::Relaxed)
+}
+
+/// Fast brick timer using cached time
+pub fn start_brick_fast(&self, brick_id: BrickId) -> BrickIdTimerFast {
+    BrickIdTimerFast {
+        start_ns: cached_nanos(),
+        start_cycles: cpu_cycles(),
+        brick_id,
+    }
+}
+```
+
+**Overhead Comparison**:
+| Method | Latency | Syscall |
+|--------|---------|---------|
+| `Instant::now()` | ~25ns | Yes (Linux vDSO) |
+| `cached_nanos()` | ~1ns | No (atomic load) |
+| `cpu_cycles()` | ~10ns | No (RDTSCP) |
+
+#### E.9.4 Pattern 3: Poll Count / Async Executor Efficiency
+
+**Source**: actix-web `h1/dispatcher.rs:110-111`
+
+actix-web tracks async executor efficiency:
+
+```rust
+pub(super) struct Dispatcher<T, S, B, X, U> {
+    #[cfg(test)]
+    pub(super) poll_count: u64,  // Tracks how many times poll() was called
+}
+```
+
+**Why This Matters for apr serve**:
+- **Unnecessary Wakeups**: Tokio polling when no progress possible
+- **Future Combinator Efficiency**: `select!`, `join!` overhead
+- **Spurious Notifications**: Channels waking tasks that yield immediately
+
+**trueno Implementation**:
+
+```rust
+/// Async task profiling node
+#[derive(Debug, Clone)]
+pub enum ExecutionNode {
+    // existing variants...
+
+    /// Async task metrics (for apr serve)
+    AsyncTask {
+        name: String,
+        poll_count: u64,        // Times polled before Ready
+        yield_count: u64,       // Times returned Pending
+        total_poll_ns: u64,     // Total time in poll()
+        wakeup_source: Option<String>,  // What triggered wakeup
+    },
+}
+
+/// Async task profiler wrapper
+pub struct AsyncTaskProfiler {
+    name: String,
+    poll_count: u64,
+    yield_count: u64,
+    total_poll_ns: u64,
+    last_poll_start: u64,
+}
+
+impl AsyncTaskProfiler {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            poll_count: 0,
+            yield_count: 0,
+            total_poll_ns: 0,
+            last_poll_start: 0,
+        }
+    }
+
+    #[inline]
+    pub fn on_poll_start(&mut self) {
+        self.poll_count += 1;
+        self.last_poll_start = cached_nanos();
+    }
+
+    #[inline]
+    pub fn on_poll_end(&mut self, is_ready: bool) {
+        self.total_poll_ns += cached_nanos() - self.last_poll_start;
+        if !is_ready {
+            self.yield_count += 1;
+        }
+    }
+
+    /// Efficiency ratio: 1.0 = perfect (ready on first poll), lower = more wakeups
+    pub fn efficiency(&self) -> f64 {
+        1.0 / self.poll_count as f64
+    }
+}
+```
+
+**Integration with apr serve**:
+
+```rust
+// In realizar/src/serve.rs
+use trueno::AsyncTaskProfiler;
+
+async fn handle_inference_request(req: Request) -> Response {
+    let mut profiler = AsyncTaskProfiler::new("inference_request");
+
+    // Wrap the future with profiling
+    let result = profiled_future(&mut profiler, async {
+        let tokens = tokenize(&req.prompt).await;
+        let output = model.forward(&tokens).await;
+        decode(&output).await
+    }).await;
+
+    // Log efficiency for diagnosis
+    tracing::debug!(
+        poll_count = profiler.poll_count,
+        yield_count = profiler.yield_count,
+        efficiency = %format!("{:.1}%", profiler.efficiency() * 100.0),
+        "request completed"
+    );
+
+    result
+}
+```
+
+#### E.9.5 Page Fault Detection
+
+**Discovered in B4 Investigation**: 9.4M minor page faults caused 2.5s overhead.
+
+```rust
+/// Page fault counter (Linux only)
+#[cfg(target_os = "linux")]
+pub fn get_page_faults() -> (u64, u64) {
+    use std::fs;
+    let stat = fs::read_to_string("/proc/self/stat").unwrap_or_default();
+    let fields: Vec<&str> = stat.split_whitespace().collect();
+    if fields.len() > 12 {
+        let minor = fields[9].parse().unwrap_or(0);
+        let major = fields[11].parse().unwrap_or(0);
+        (minor, major)
+    } else {
+        (0, 0)
+    }
+}
+
+/// Record page faults around an operation
+pub fn with_page_fault_tracking<T>(name: &str, f: impl FnOnce() -> T) -> T {
+    let (minor_before, major_before) = get_page_faults();
+    let result = f();
+    let (minor_after, major_after) = get_page_faults();
+
+    let minor_delta = minor_after - minor_before;
+    let major_delta = major_after - major_before;
+
+    if minor_delta > 1000 || major_delta > 0 {
+        tracing::warn!(
+            operation = name,
+            minor_faults = minor_delta,
+            major_faults = major_delta,
+            "High page fault count detected"
+        );
+    }
+
+    result
+}
+```
+
+#### E.9.6 Falsification Criteria (F150-F155)
+
+| ID | Criterion | Threshold | Method |
+|----|-----------|-----------|--------|
+| F150 | RDTSCP overhead | < 15ns | Microbenchmark |
+| F151 | Cycle count monotonic | Always increasing | Unit test |
+| F152 | Cached time precision | < 200µs drift | Comparison with Instant::now() |
+| F153 | Cached time overhead | < 2ns | Microbenchmark |
+| F154 | Poll count accuracy | Exact match | Synthetic async test |
+| F155 | Page fault detection | Matches /proc/self/stat | Integration test |
+
+#### E.9.7 Implementation Phases
+
+1. **Phase 11a**: Add `cpu_cycles()` function with x86_64/aarch64 support
+2. **Phase 11b**: Add `CachedTimeService` with background thread
+3. **Phase 11c**: Extend `BrickStats` with cycle tracking
+4. **Phase 11d**: Add `AsyncTaskProfiler` for apr serve
+5. **Phase 11e**: Add page fault detection helpers
+6. **Phase 11f**: Implement F150-F155 falsification tests
 
 ---
 

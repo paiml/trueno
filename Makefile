@@ -8,7 +8,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast lint-all fmt fmt-check clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools install-sde test-avx512-sde bench-avx512-sde coverage-avx512-sde profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story release profile-analyze profile-compare profile-otlp-export smoke pixel-scalar-fkr pixel-simd-fkr pixel-wgpu-fkr pixel-ptx-fkr pixel-fkr-all quality-spec-013 coverage-cuda coverage-95 test-arm test-arm-neon test-arm-quick bench-arm
+.PHONY: help tier1 tier2 tier3 chaos-test fuzz kaizen build test test-fast test-quick coverage coverage-gpu coverage-all coverage-summary coverage-open coverage-ci coverage-clean clean-coverage lint lint-fast lint-all fmt fmt-check clean all quality-gates bench bench-comprehensive bench-python bench-compare-frameworks dev mutate pmat-tdg pmat-analyze pmat-score pmat-rust-score pmat-rust-score-fast pmat-mutate pmat-semantic-search pmat-validate-docs pmat-work-init pmat-quality-gate pmat-context pmat-all install-tools install-sde test-avx512-sde bench-avx512-sde coverage-avx512-sde profile profile-flamegraph profile-bench profile-test profile-otlp-jaeger profile-otlp-tempo backend-story release profile-analyze profile-compare profile-otlp-export smoke pixel-scalar-fkr pixel-simd-fkr pixel-wgpu-fkr pixel-ptx-fkr pixel-fkr-all quality-spec-013 coverage-cuda coverage-95 test-arm test-arm-neon test-arm-quick bench-arm examples
 
 # ============================================================================
 # TIER 1: ON-SAVE (Sub-second feedback)
@@ -214,6 +214,16 @@ test-gpu-pixels-tui: ## Run GPU pixel tests with interactive TUI
 
 test-verbose: ## Run tests with verbose output
 	cargo test --all-features -- --nocapture --test-threads=1
+
+examples: ## List and run examples
+	@echo "📚 Available examples:"
+	@ls -1 examples/*.rs | xargs -I{} basename {} .rs | sed 's/^/  - /'
+	@echo ""
+	@echo "Run with: cargo run --example <name>"
+	@echo "Example:  cargo run --example brick_profiler_v2"
+
+example-%: ## Run specific example (e.g., make example-brick_profiler_v2)
+	cargo run --example $*
 
 coverage: ## Generate coverage report (≥90% required, <5 min target)
 	@echo "📊 Running test coverage analysis (target: <5 min)..."

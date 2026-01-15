@@ -100,6 +100,8 @@ pub mod predictive_scheduler;
 pub use brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 // ComputeBrick Scoring Framework (§29)
 pub use brick::{BrickScore, BrickGrade, Scorable};
+// CORRECTNESS-011: Per-kernel divergence detection
+pub use brick::{KernelTrace, DivergenceReport, fnv1a_f32, BrickProfiler};
 
 // Application
 pub use app::CbtopApp;

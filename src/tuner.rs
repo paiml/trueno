@@ -705,55 +705,35 @@ impl FeatureExtractor {
         Some((measured_tps / theoretical_tps).clamp(0.0, 1.0))
     }
 
-    /// Classify bottleneck from profiler brick breakdown
+    /// Classify bottleneck from profiler brick breakdown.
+    ///
+    /// PAR-200: Uses category_stats() for efficient aggregation.
     fn classify_bottleneck(&self, profiler: &BrickProfiler) -> BottleneckClass {
-        let stats = profiler.all_stats();
-        if stats.is_empty() {
-            return BottleneckClass::Unknown;
-        }
+        use crate::brick::BrickCategory;
 
-        // Calculate percentage breakdown
-        let total_ns: u64 = stats.values().map(|s| s.total_ns).sum();
+        let cats = profiler.category_stats();
+        let total_ns = profiler.total_ns();
+
         if total_ns == 0 {
             return BottleneckClass::Unknown;
         }
 
-        // Find attention percentage
-        let attention_ns: u64 = stats
-            .iter()
-            .filter(|(name, _)| name.to_lowercase().contains("attention"))
-            .map(|(_, s)| s.total_ns)
-            .sum();
-        let attention_pct = attention_ns as f32 / total_ns as f32;
-
-        // Find GEMV percentage (memory-bound indicator)
-        let gemv_ns: u64 = stats
-            .iter()
-            .filter(|(name, _)| {
-                let lower = name.to_lowercase();
-                lower.contains("gemv")
-                    || lower.contains("qkv")
-                    || lower.contains("ffn")
-                    || lower.contains("proj")
-            })
-            .map(|(_, s)| s.total_ns)
-            .sum();
-        let gemv_pct = gemv_ns as f32 / total_ns as f32;
+        // Get category percentages
+        let attention_pct = cats[BrickCategory::Attention as usize].percentage(total_ns) as f32 / 100.0;
+        let ffn_pct = cats[BrickCategory::Ffn as usize].percentage(total_ns) as f32 / 100.0;
+        let norm_pct = cats[BrickCategory::Norm as usize].percentage(total_ns) as f32 / 100.0;
 
         // Classify based on dominant component
         if attention_pct > 0.35 {
             BottleneckClass::AttentionBound
-        } else if gemv_pct > 0.50 {
+        } else if ffn_pct > 0.50 {
+            // FFN is memory-bound (large GEMV operations)
             BottleneckClass::MemoryBound
+        } else if norm_pct > 0.20 {
+            // High norm percentage indicates launch overhead
+            BottleneckClass::LaunchBound
         } else {
-            // Check for launch overhead (many small bricks)
-            let avg_brick_ns = total_ns / stats.len() as u64;
-            if avg_brick_ns < 10_000 {
-                // < 10µs average
-                BottleneckClass::LaunchBound
-            } else {
-                BottleneckClass::MemoryBound // Default for inference
-            }
+            BottleneckClass::MemoryBound // Default for inference
         }
     }
 }
