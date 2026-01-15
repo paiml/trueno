@@ -48,6 +48,7 @@
 - [GPU Performance](./performance/gpu-performance.md)
 - [Optimization Guide](./performance/optimization-guide.md)
 - [Profiling](./performance/profiling.md)
+- [Model-Level Inference Tracing](./performance/model-tracing.md)
 - [ML Tuner: Learned Kernel Selection](./performance/ml-tuner.md)
 - [Golden Trace Validation](./performance/golden-trace-validation.md)
 - [Performance Targets](./performance/targets.md)
