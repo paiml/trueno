@@ -70,6 +70,57 @@ pub enum BrickAssertion {
         name: &'static str,
         description: &'static str,
     },
+    /// CORRECTNESS-011: Checksum must match between backends (CPU vs GPU)
+    /// Five-Whys: Hours of manual debugging → No automated divergence detection
+    ChecksumMatch {
+        /// Expected checksum from reference backend (e.g., CPU Scalar)
+        expected: u64,
+        /// Actual checksum from test backend (e.g., CUDA)
+        actual: u64,
+        /// Kernel name where divergence occurred
+        kernel_name: String,
+        /// Position/layer where divergence occurred
+        position: u32,
+    },
+}
+
+/// CORRECTNESS-011: Per-kernel trace for divergence detection
+/// Captures input/output checksums for every kernel launch
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct KernelTrace {
+    /// Kernel name (e.g., "rope_neox_indirect_12_128")
+    pub kernel_name: String,
+    /// Layer index (0-27 for transformer layers)
+    pub layer_idx: usize,
+    /// Position in sequence (for RoPE, attention)
+    pub position: u32,
+    /// Input checksum (FNV-1a of first 64 floats)
+    pub input_checksum: u64,
+    /// Output checksum (FNV-1a of first 64 floats)
+    pub output_checksum: u64,
+    /// Kernel parameters as JSON
+    pub params: String,
+    /// Execution time in microseconds
+    pub time_us: f64,
+    /// Backend used (CPU, CUDA, etc.)
+    pub backend: String,
+}
+
+/// CORRECTNESS-011: Divergence report identifying first mismatch
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DivergenceReport {
+    /// Did CPU and GPU match?
+    pub matched: bool,
+    /// First kernel where divergence occurred (None if matched)
+    pub first_divergent_kernel: Option<KernelTrace>,
+    /// Expected trace from reference backend
+    pub expected_trace: Option<KernelTrace>,
+    /// Actual trace from test backend
+    pub actual_trace: Option<KernelTrace>,
+    /// Total kernels compared
+    pub kernels_compared: usize,
+    /// Human-readable diagnosis
+    pub diagnosis: String,
 }
 
 impl BrickAssertion {
@@ -85,6 +136,7 @@ impl BrickAssertion {
             Self::ValueInRange { .. } => "value_in_range",
             Self::DataNonEmpty => "data_non_empty",
             Self::Custom { name, .. } => name,
+            Self::ChecksumMatch { .. } => "checksum_match",
         }
     }
 
@@ -104,6 +156,120 @@ impl BrickAssertion {
     pub const fn max_latency_ms(ms: u32) -> Self {
         Self::MaxLatencyMs(ms)
     }
+
+    /// CORRECTNESS-011: Create checksum match assertion
+    pub fn checksum_match(expected: u64, actual: u64, kernel_name: &str, position: u32) -> Self {
+        Self::ChecksumMatch {
+            expected,
+            actual,
+            kernel_name: kernel_name.to_string(),
+            position,
+        }
+    }
+}
+
+impl KernelTrace {
+    /// Create a new kernel trace
+    pub fn new(
+        kernel_name: &str,
+        layer_idx: usize,
+        position: u32,
+        backend: &str,
+    ) -> Self {
+        Self {
+            kernel_name: kernel_name.to_string(),
+            layer_idx,
+            position,
+            input_checksum: 0,
+            output_checksum: 0,
+            params: String::new(),
+            time_us: 0.0,
+            backend: backend.to_string(),
+        }
+    }
+
+    /// Set input checksum from float slice (FNV-1a hash of first 64 elements)
+    pub fn with_input_checksum(mut self, data: &[f32]) -> Self {
+        self.input_checksum = fnv1a_f32(data);
+        self
+    }
+
+    /// Set output checksum from float slice
+    pub fn with_output_checksum(mut self, data: &[f32]) -> Self {
+        self.output_checksum = fnv1a_f32(data);
+        self
+    }
+
+    /// Set kernel parameters as JSON
+    pub fn with_params(mut self, params: &str) -> Self {
+        self.params = params.to_string();
+        self
+    }
+
+    /// Set execution time
+    pub fn with_time_us(mut self, time_us: f64) -> Self {
+        self.time_us = time_us;
+        self
+    }
+}
+
+impl DivergenceReport {
+    /// Create a report indicating no divergence
+    pub fn matched(kernels_compared: usize) -> Self {
+        Self {
+            matched: true,
+            first_divergent_kernel: None,
+            expected_trace: None,
+            actual_trace: None,
+            kernels_compared,
+            diagnosis: format!("All {} kernels matched between CPU and GPU", kernels_compared),
+        }
+    }
+
+    /// Create a report indicating divergence at specific kernel
+    pub fn diverged(
+        expected: KernelTrace,
+        actual: KernelTrace,
+        kernels_compared: usize,
+    ) -> Self {
+        let diagnosis = format!(
+            "DIVERGENCE at kernel '{}' (layer {}, position {}): \
+             CPU checksum 0x{:016X} != GPU checksum 0x{:016X}. \
+             Params: {}",
+            actual.kernel_name,
+            actual.layer_idx,
+            actual.position,
+            expected.output_checksum,
+            actual.output_checksum,
+            actual.params,
+        );
+        Self {
+            matched: false,
+            first_divergent_kernel: Some(actual.clone()),
+            expected_trace: Some(expected),
+            actual_trace: Some(actual),
+            kernels_compared,
+            diagnosis,
+        }
+    }
+}
+
+/// FNV-1a hash of f32 slice (first 64 elements for efficiency)
+/// Public for use in divergence detection across crates
+pub fn fnv1a_f32(data: &[f32]) -> u64 {
+    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+    const FNV_PRIME: u64 = 0x100000001b3;
+
+    let mut hash = FNV_OFFSET;
+    let len = data.len().min(64);
+    for &val in &data[..len] {
+        let bytes = val.to_le_bytes();
+        for byte in bytes {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+    }
+    hash
 }
 
 /// Performance budget per phase (Muda elimination)
@@ -933,5 +1099,240 @@ mod tests {
         let display = format!("{}", score);
         assert!(display.contains("94/100"));
         assert!(display.contains("Excellent"));
+    }
+
+    #[test]
+    fn test_kernel_trace_checksum() {
+        let data = [1.0f32, 2.0, 3.0, 4.0];
+        let trace = KernelTrace::new("test_kernel", 0, 0, "CPU")
+            .with_input_checksum(&data)
+            .with_output_checksum(&data);
+        assert_eq!(trace.input_checksum, trace.output_checksum);
+        assert_ne!(trace.input_checksum, 0);
+    }
+
+    #[test]
+    fn test_divergence_report_matched() {
+        let report = DivergenceReport::matched(10);
+        assert!(report.matched);
+        assert_eq!(report.kernels_compared, 10);
+        assert!(report.first_divergent_kernel.is_none());
+    }
+
+    #[test]
+    fn test_divergence_report_diverged() {
+        let cpu_trace = KernelTrace::new("rope_neox", 0, 1, "CPU")
+            .with_input_checksum(&[1.0, 2.0, 3.0])
+            .with_output_checksum(&[4.0, 5.0, 6.0]);
+        let gpu_trace = KernelTrace::new("rope_neox", 0, 1, "CUDA")
+            .with_input_checksum(&[1.0, 2.0, 3.0])
+            .with_output_checksum(&[7.0, 8.0, 9.0]); // Different output!
+
+        let report = DivergenceReport::diverged(cpu_trace, gpu_trace, 5);
+        assert!(!report.matched);
+        assert_eq!(report.kernels_compared, 5);
+        assert!(report.first_divergent_kernel.is_some());
+        assert!(report.diagnosis.contains("DIVERGENCE"));
+    }
+
+    #[test]
+    fn test_brick_profiler_basic() {
+        let mut profiler = BrickProfiler::new("test_run");
+
+        let trace = KernelTrace::new("matmul", 0, 0, "CPU")
+            .with_input_checksum(&[1.0, 2.0])
+            .with_output_checksum(&[3.0, 4.0]);
+        profiler.add_trace(trace);
+
+        assert_eq!(profiler.traces.len(), 1);
+        assert!(!profiler.is_diverged());
+    }
+
+    #[test]
+    fn test_brick_profiler_detect_divergence() {
+        let mut cpu_profiler = BrickProfiler::new("cpu_run");
+        let mut gpu_profiler = BrickProfiler::new("gpu_run");
+
+        // Same inputs, same outputs = match
+        cpu_profiler.add_trace(
+            KernelTrace::new("rope", 0, 1, "CPU")
+                .with_input_checksum(&[1.0, 2.0])
+                .with_output_checksum(&[3.0, 4.0])
+        );
+        gpu_profiler.add_trace(
+            KernelTrace::new("rope", 0, 1, "CUDA")
+                .with_input_checksum(&[1.0, 2.0])
+                .with_output_checksum(&[3.0, 4.0])
+        );
+
+        let report = cpu_profiler.compare(&gpu_profiler);
+        assert!(report.matched);
+
+        // Add divergent kernel
+        cpu_profiler.add_trace(
+            KernelTrace::new("rmsnorm", 1, 1, "CPU")
+                .with_output_checksum(&[5.0, 6.0])
+        );
+        gpu_profiler.add_trace(
+            KernelTrace::new("rmsnorm", 1, 1, "CUDA")
+                .with_output_checksum(&[7.0, 8.0]) // Different!
+        );
+
+        let report = cpu_profiler.compare(&gpu_profiler);
+        assert!(!report.matched);
+        assert!(report.diagnosis.contains("rmsnorm"));
+    }
+}
+
+// =============================================================================
+// CORRECTNESS-011: BrickProfiler for CPU/GPU Divergence Detection
+// =============================================================================
+
+/// BrickProfiler collects per-kernel traces for automated divergence detection.
+///
+/// Five-Whys Root Cause: Hours of manual "let me check X in Y" debugging
+/// → No automated tool identified which kernel diverged
+/// → BrickProfiler only captured timing, not checksums
+/// → Missing feature: per-kernel checksum capture
+/// → ROOT CAUSE: Brick Profiling lacked correctness instrumentation
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// use cbtop::{BrickProfiler, KernelTrace};
+///
+/// // CPU execution
+/// let mut cpu_profiler = BrickProfiler::new("cpu_baseline");
+/// cpu_profiler.add_trace(KernelTrace::new("rope_neox", 0, pos, "CPU")
+///     .with_input_checksum(&input)
+///     .with_output_checksum(&output));
+///
+/// // GPU execution
+/// let mut gpu_profiler = BrickProfiler::new("cuda_test");
+/// gpu_profiler.add_trace(KernelTrace::new("rope_neox", 0, pos, "CUDA")
+///     .with_input_checksum(&input)
+///     .with_output_checksum(&output));
+///
+/// // Automated divergence detection
+/// let report = cpu_profiler.compare(&gpu_profiler);
+/// if !report.matched {
+///     eprintln!("FIVE-WHYS ALERT: {}", report.diagnosis);
+/// }
+/// ```
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BrickProfiler {
+    /// Run identifier (e.g., "cpu_baseline", "cuda_test")
+    pub run_id: String,
+    /// Collected kernel traces
+    pub traces: Vec<KernelTrace>,
+    /// Total execution time in microseconds
+    pub total_time_us: f64,
+    /// Whether any divergence was detected
+    pub diverged: bool,
+    /// Divergence diagnosis (if any)
+    pub divergence_diagnosis: String,
+}
+
+impl BrickProfiler {
+    /// Create a new profiler for a run
+    pub fn new(run_id: &str) -> Self {
+        Self {
+            run_id: run_id.to_string(),
+            traces: Vec::new(),
+            total_time_us: 0.0,
+            diverged: false,
+            divergence_diagnosis: String::new(),
+        }
+    }
+
+    /// Add a kernel trace
+    pub fn add_trace(&mut self, trace: KernelTrace) {
+        self.total_time_us += trace.time_us;
+        self.traces.push(trace);
+    }
+
+    /// Check if divergence was detected
+    pub fn is_diverged(&self) -> bool {
+        self.diverged
+    }
+
+    /// Compare this profiler's traces against a reference (e.g., CPU vs GPU)
+    ///
+    /// Returns a DivergenceReport identifying the first divergent kernel.
+    /// Matching is done by (kernel_name, layer_idx, position) triple.
+    pub fn compare(&self, reference: &BrickProfiler) -> DivergenceReport {
+        // Build index from reference traces
+        let ref_index: std::collections::HashMap<(&str, usize, u32), &KernelTrace> = reference
+            .traces
+            .iter()
+            .map(|t| ((t.kernel_name.as_str(), t.layer_idx, t.position), t))
+            .collect();
+
+        let mut kernels_compared = 0;
+
+        for actual_trace in &self.traces {
+            let key = (
+                actual_trace.kernel_name.as_str(),
+                actual_trace.layer_idx,
+                actual_trace.position,
+            );
+
+            if let Some(expected_trace) = ref_index.get(&key) {
+                kernels_compared += 1;
+
+                // Compare output checksums
+                if actual_trace.output_checksum != expected_trace.output_checksum {
+                    return DivergenceReport::diverged(
+                        (*expected_trace).clone(),
+                        actual_trace.clone(),
+                        kernels_compared,
+                    );
+                }
+            }
+        }
+
+        DivergenceReport::matched(kernels_compared)
+    }
+
+    /// Compare and set internal divergence state
+    pub fn compare_and_mark(&mut self, reference: &BrickProfiler) -> DivergenceReport {
+        let report = self.compare(reference);
+        self.diverged = !report.matched;
+        self.divergence_diagnosis = report.diagnosis.clone();
+        report
+    }
+
+    /// Get traces for a specific kernel name
+    pub fn traces_for_kernel(&self, kernel_name: &str) -> Vec<&KernelTrace> {
+        self.traces
+            .iter()
+            .filter(|t| t.kernel_name == kernel_name)
+            .collect()
+    }
+
+    /// Get traces for a specific layer
+    pub fn traces_for_layer(&self, layer_idx: usize) -> Vec<&KernelTrace> {
+        self.traces
+            .iter()
+            .filter(|t| t.layer_idx == layer_idx)
+            .collect()
+    }
+
+    /// Clear all traces (for reuse)
+    pub fn clear(&mut self) {
+        self.traces.clear();
+        self.total_time_us = 0.0;
+        self.diverged = false;
+        self.divergence_diagnosis.clear();
+    }
+
+    /// Serialize to JSON for pmat brick-score consumption
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+
+    /// Deserialize from JSON
+    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json)
     }
 }

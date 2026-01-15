@@ -318,10 +318,92 @@ cargo run --example incremental_snapshot_demo -p cbtop
 cargo run --example predictive_scheduler_demo -p cbtop
 ```
 
+## BrickProfiler Integration
+
+cbtop integrates with trueno's BrickProfiler for detailed per-brick performance analysis across all backends (CPU/SIMD/GPU).
+
+### Backend-Specific Profiling
+
+When profiling is enabled, cbtop displays backend-specific metrics:
+
+```
+┌─────────────────────────── cbtop v0.3.0 ───────────────────────────┐
+│ Backend: AVX-512 (Intel Xeon)                                     │
+│ Throughput: 8.7 tok/s                                             │
+├────────────────────────────────────────────────────────────────────┤
+│ Brick            │  Time   │ Elements │ Throughput │  % Total     │
+├──────────────────┼─────────┼──────────┼────────────┼──────────────┤
+│ QkvProjection    │ 45.2ms  │ 4096     │  0.09M/s   │   39.2%      │
+│ GateProjection   │ 38.1ms  │ 4096     │  0.11M/s   │   33.0%      │
+│ AttentionScore   │ 18.5ms  │ 4096     │  0.22M/s   │   16.0%      │
+│ RmsNorm          │  2.1ms  │ 4096     │  1.95M/s   │    1.8%      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Instrumentation Status
+
+The profiler captures metrics differently based on the inference backend:
+
+| Backend | Path | BrickProfiler | Notes |
+|---------|------|---------------|-------|
+| CUDA | `CudaExecutor::forward()` | Full | Per-brick timing with deferred sync |
+| CPU | `forward()` | None | Legacy reference implementation |
+| CPU | `forward_profiled()` | Full | Instrumented path (recommended) |
+| SIMD | trueno ops | Per-op | Use `start_brick()`/`stop_brick()` |
+
+### Enabling CPU/SIMD Profiling
+
+To see CPU/SIMD metrics in cbtop, use an instrumented forward path:
+
+```rust
+use trueno::BrickProfiler;
+use realizar::AprModel;
+
+let mut profiler = BrickProfiler::new();
+profiler.enable();
+
+// Use instrumented forward instead of legacy forward()
+let result = model.forward_profiled(&tokens, &mut profiler)?;
+
+// Export for cbtop visualization
+let report = profiler.report();
+```
+
+### Backend-Specific Roofline
+
+Different backends have different theoretical peaks for roofline analysis:
+
+| Backend | Peak TFLOPS (FP32) | Memory BW (GB/s) |
+|---------|-------------------|------------------|
+| RTX 4090 | 83.0 | 1008 |
+| AVX-512 | ~2.0 | ~100 |
+| AVX2 | ~0.5 | ~50 |
+| Scalar | ~0.1 | ~25 |
+
+Use `--roofline` flag to see how close each brick is to theoretical peak:
+
+```bash
+cbtop bench --backend simd --roofline
+```
+
+### Critical Path Analysis
+
+cbtop can display the critical path through an execution graph:
+
+```bash
+# Show critical path summary
+cbtop --show-critical-path
+
+# Export execution graph for visualization
+cbtop bench --export-graph /tmp/graph.dot
+dot -Tsvg /tmp/graph.dot -o /tmp/graph.svg
+```
+
 ## Specification
 
 See the full specification at:
 - `docs/specifications/compute-block-tui-cbtop.md`
+- `docs/specifications/ml-tuner-bricks.md` (Appendix E.8: Backend-Specific Profiling)
 
 The specification includes:
 - 200-point falsification protocol

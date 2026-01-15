@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "xtask", "trueno-gpu", "trueno-explain"]
+members = [".", "xtask", "trueno-gpu", "trueno-explain", "crates/cbtop"]
 exclude = []
 
 # Workspace-level lints (PMAT best practices)
@@ -77,6 +77,10 @@ toml = "0.8"
 # ML tuner integration (SHOWCASE-BRICK-001, Section 12)
 # Path dep for local dev, version for publish (aprender 0.24.0 has RandomForest)
 aprender = { version = "0.24", path = "../aprender", optional = true, default-features = false }
+# Execution path graph (PAR-201, Section E.7)
+trueno-graph = { version = "0.1", path = "../trueno-graph", optional = true }
+# TUI visualization for execution graphs (PAR-201)
+presentar-terminal = { version = "0.3", path = "../presentar/crates/presentar-terminal", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Web-sys for WebGPU (auto-enabled when gpu-wasm feature is on)
@@ -117,6 +121,12 @@ cuda = ["trueno-gpu/cuda"]
 # ML-based kernel selection and throughput prediction (SHOWCASE-BRICK-001)
 # Uses aprender RandomForest for learned optimization
 ml-tuner = ["aprender"]
+# Execution path graph for profiling (PAR-201)
+# Tracks PTX→kernel→brick call relationships, exports to CsrGraph
+execution-graph = ["trueno-graph"]
+# TUI visualization for execution graphs (PAR-201)
+# Uses presentar-terminal Tree widget for hierarchical display
+presentar-tui = ["presentar-terminal"]
 
 [profile.release]
 opt-level = 3
