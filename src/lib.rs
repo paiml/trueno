@@ -67,6 +67,8 @@ pub use brick::{
     BrickId, BrickIdTimer, BrickCategory, BrickBottleneck, CategoryStats, SyncMode,
     // PAR-201: Execution path graph types
     ExecutionNodeId, ExecutionNode, EdgeType, ExecutionEdge, ExecutionGraph, PtxRegistry,
+    // TILING-SPEC-001: Tile-level profiling types
+    TileLevel, TileStats, TileTimer,
 };
 
 // Hardware capability exports (PMAT-447)
