@@ -6061,6 +6061,162 @@ impl BrickStats {
     }
 }
 
+// ============================================================================
+// TILING-SPEC-001: Tile-Level Profiling Support
+// ============================================================================
+
+/// Tile-level profiling statistics.
+///
+/// Tracks per-tile performance metrics for hierarchical cache-blocked operations.
+/// Used in conjunction with `TcbGeometry` and `TilingConfig` from the tiling module.
+///
+/// # Example
+///
+/// ```ignore
+/// let mut profiler = BrickProfiler::new();
+/// profiler.enable();
+///
+/// let tile_timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+/// // ... execute tile ...
+/// profiler.stop_tile(tile_timer, 1024 * 1024);
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct TileStats {
+    /// Tile level (Macro/Midi/Micro)
+    pub level: TileLevel,
+    /// Total samples collected
+    pub count: u64,
+    /// Total elapsed time (nanoseconds)
+    pub total_ns: u64,
+    /// Min elapsed time (nanoseconds)
+    pub min_ns: u64,
+    /// Max elapsed time (nanoseconds)
+    pub max_ns: u64,
+    /// Total elements processed
+    pub total_elements: u64,
+    /// Total cache misses (estimated)
+    pub cache_misses: u64,
+    /// Total arithmetic operations
+    pub total_flops: u64,
+}
+
+/// Tile hierarchy level for profiling.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TileLevel {
+    /// Macro-tile: L3 cache / GPU global memory
+    #[default]
+    Macro,
+    /// Midi-tile: L2 cache / GPU shared memory
+    Midi,
+    /// Micro-tile: Registers / SIMD lanes
+    Micro,
+}
+
+impl TileLevel {
+    /// Get the name of this tile level.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            TileLevel::Macro => "macro",
+            TileLevel::Midi => "midi",
+            TileLevel::Micro => "micro",
+        }
+    }
+}
+
+impl TileStats {
+    /// Create new tile stats for a given level.
+    pub fn new(level: TileLevel) -> Self {
+        Self {
+            level,
+            count: 0,
+            total_ns: 0,
+            min_ns: u64::MAX,
+            max_ns: 0,
+            total_elements: 0,
+            cache_misses: 0,
+            total_flops: 0,
+        }
+    }
+
+    /// Add a sample to statistics.
+    pub fn add_sample(&mut self, elapsed_ns: u64, elements: u64, flops: u64) {
+        self.count += 1;
+        self.total_ns += elapsed_ns;
+        self.min_ns = self.min_ns.min(elapsed_ns);
+        self.max_ns = self.max_ns.max(elapsed_ns);
+        self.total_elements += elements;
+        self.total_flops += flops;
+    }
+
+    /// Average time in microseconds.
+    #[must_use]
+    pub fn avg_us(&self) -> f64 {
+        if self.count == 0 {
+            0.0
+        } else {
+            self.total_ns as f64 / self.count as f64 / 1000.0
+        }
+    }
+
+    /// Throughput in elements/second.
+    #[must_use]
+    pub fn throughput(&self) -> f64 {
+        if self.total_ns == 0 {
+            0.0
+        } else {
+            self.total_elements as f64 / (self.total_ns as f64 / 1_000_000_000.0)
+        }
+    }
+
+    /// Compute throughput in GFLOP/s.
+    #[must_use]
+    pub fn gflops(&self) -> f64 {
+        if self.total_ns == 0 {
+            0.0
+        } else {
+            self.total_flops as f64 / (self.total_ns as f64 / 1_000_000_000.0) / 1e9
+        }
+    }
+
+    /// Arithmetic intensity (FLOP/byte) estimate.
+    ///
+    /// Assumes 4 bytes per element (f32).
+    #[must_use]
+    pub fn arithmetic_intensity(&self) -> f64 {
+        if self.total_elements == 0 {
+            0.0
+        } else {
+            self.total_flops as f64 / (self.total_elements as f64 * 4.0)
+        }
+    }
+
+    /// Estimated cache efficiency (0.0-1.0).
+    ///
+    /// Based on ratio of actual throughput vs theoretical peak.
+    #[must_use]
+    pub fn cache_efficiency(&self, peak_gflops: f64) -> f64 {
+        if peak_gflops <= 0.0 {
+            0.0
+        } else {
+            (self.gflops() / peak_gflops).min(1.0)
+        }
+    }
+}
+
+/// Timer handle for tile-level profiling.
+#[derive(Debug)]
+pub struct TileTimer {
+    /// Tile level
+    level: TileLevel,
+    /// Row index within parent tile (reserved for spatial analysis)
+    _row: u32,
+    /// Column index within parent tile (reserved for spatial analysis)
+    _col: u32,
+    /// Start time
+    start: Instant,
+}
+
 /// Pending measurement for deferred sync mode.
 #[derive(Debug, Clone)]
 struct PendingMeasurement {
@@ -6153,6 +6309,12 @@ pub struct BrickProfiler {
     graph_enabled: bool,
     /// Execution path graph for PTX→kernel→brick relationships
     execution_graph: ExecutionGraph,
+
+    // TILING-SPEC-001: Tile-level profiling
+    /// Per-level tile statistics (Macro, Midi, Micro)
+    tile_stats: [TileStats; 3],
+    /// Whether tile profiling is enabled
+    tile_profiling_enabled: bool,
 }
 
 /// Timer handle returned by `start()` (legacy string-based API).
@@ -6200,6 +6362,12 @@ impl BrickProfiler {
             kernel_checksums: Vec::new(),
             graph_enabled: false,
             execution_graph: ExecutionGraph::new(),
+            tile_stats: [
+                TileStats::new(TileLevel::Macro),
+                TileStats::new(TileLevel::Midi),
+                TileStats::new(TileLevel::Micro),
+            ],
+            tile_profiling_enabled: false,
         }
     }
 
@@ -7074,6 +7242,162 @@ impl BrickProfiler {
     /// Reset checksum tracking (call before new forward pass).
     pub fn reset_checksums(&mut self) {
         self.kernel_checksums.clear();
+    }
+
+    // ========================================================================
+    // TILING-SPEC-001: Tile-Level Profiling (Phase 15)
+    // ========================================================================
+
+    /// Enable tile-level profiling.
+    ///
+    /// When enabled, `start_tile()`/`stop_tile()` record per-tile statistics
+    /// for Macro/Midi/Micro tile hierarchy.
+    pub fn enable_tile_profiling(&mut self) {
+        self.tile_profiling_enabled = true;
+    }
+
+    /// Disable tile-level profiling.
+    pub fn disable_tile_profiling(&mut self) {
+        self.tile_profiling_enabled = false;
+    }
+
+    /// Check if tile profiling is enabled.
+    #[must_use]
+    pub fn is_tile_profiling_enabled(&self) -> bool {
+        self.tile_profiling_enabled
+    }
+
+    /// Start timing a tile execution.
+    ///
+    /// Returns a `TileTimer` that should be passed to `stop_tile()` after
+    /// the tile computation completes.
+    ///
+    /// # Arguments
+    /// - `level`: Tile hierarchy level (Macro/Midi/Micro)
+    /// - `row`: Row index within parent tile
+    /// - `col`: Column index within parent tile
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+    /// // ... execute tile computation ...
+    /// profiler.stop_tile(timer, 256 * 256, 2 * 256 * 256 * 256);
+    /// ```
+    #[must_use]
+    pub fn start_tile(&self, level: TileLevel, row: u32, col: u32) -> TileTimer {
+        TileTimer {
+            level,
+            _row: row,
+            _col: col,
+            start: Instant::now(),
+        }
+    }
+
+    /// Stop timing and record tile statistics.
+    ///
+    /// # Arguments
+    /// - `timer`: Timer handle from `start_tile()`
+    /// - `elements`: Number of elements processed by this tile
+    /// - `flops`: Number of floating-point operations performed
+    pub fn stop_tile(&mut self, timer: TileTimer, elements: u64, flops: u64) {
+        if !self.tile_profiling_enabled {
+            return;
+        }
+
+        let elapsed_ns = timer.start.elapsed().as_nanos() as u64;
+        let idx = timer.level as usize;
+        self.tile_stats[idx].add_sample(elapsed_ns, elements, flops);
+    }
+
+    /// Get tile statistics for a given level.
+    #[must_use]
+    pub fn tile_stats(&self, level: TileLevel) -> &TileStats {
+        &self.tile_stats[level as usize]
+    }
+
+    /// Get mutable tile statistics for a given level.
+    pub fn tile_stats_mut(&mut self, level: TileLevel) -> &mut TileStats {
+        &mut self.tile_stats[level as usize]
+    }
+
+    /// Get all tile statistics as a slice.
+    #[must_use]
+    pub fn all_tile_stats(&self) -> &[TileStats; 3] {
+        &self.tile_stats
+    }
+
+    /// Reset tile statistics for all levels.
+    pub fn reset_tile_stats(&mut self) {
+        self.tile_stats = [
+            TileStats::new(TileLevel::Macro),
+            TileStats::new(TileLevel::Midi),
+            TileStats::new(TileLevel::Micro),
+        ];
+    }
+
+    /// Generate tile profiling summary report.
+    ///
+    /// # Example Output
+    /// ```text
+    /// === Tile Profiling Summary (TILING-SPEC-001) ===
+    /// Level       Samples   Avg µs    GFLOP/s   AI      Elements
+    /// Macro           128    1234.5     12.34  0.50    1048576
+    /// Midi           2048      78.2     45.67  2.00      65536
+    /// Micro         32768       4.9     89.12  4.00       4096
+    /// ```
+    #[must_use]
+    pub fn tile_summary(&self) -> String {
+        let mut report = String::new();
+        report.push_str("=== Tile Profiling Summary (TILING-SPEC-001) ===\n");
+        report.push_str("Level       Samples   Avg µs    GFLOP/s   AI      Elements\n");
+
+        for stats in &self.tile_stats {
+            if stats.count > 0 {
+                report.push_str(&format!(
+                    "{:8}  {:9}  {:8.1}  {:8.2}  {:4.2}  {:10}\n",
+                    stats.level.name(),
+                    stats.count,
+                    stats.avg_us(),
+                    stats.gflops(),
+                    stats.arithmetic_intensity(),
+                    stats.total_elements / stats.count.max(1)
+                ));
+            }
+        }
+
+        report
+    }
+
+    /// Export tile statistics as JSON.
+    ///
+    /// Compatible with pmat metrics integration.
+    #[must_use]
+    pub fn tile_stats_to_json(&self) -> String {
+        let tiles: Vec<String> = self
+            .tile_stats
+            .iter()
+            .filter(|s| s.count > 0)
+            .map(|s| {
+                format!(
+                    r#"{{"level":"{}","count":{},"total_ns":{},"avg_us":{:.2},"min_us":{:.2},"max_us":{:.2},"gflops":{:.2},"arithmetic_intensity":{:.2},"total_elements":{},"total_flops":{}}}"#,
+                    s.level.name(),
+                    s.count,
+                    s.total_ns,
+                    s.avg_us(),
+                    s.min_ns as f64 / 1000.0,
+                    s.max_ns as f64 / 1000.0,
+                    s.gflops(),
+                    s.arithmetic_intensity(),
+                    s.total_elements,
+                    s.total_flops
+                )
+            })
+            .collect();
+
+        format!(r#"{{"tile_profiling_enabled":{},"tiles":[{}]}}"#,
+            self.tile_profiling_enabled,
+            tiles.join(",")
+        )
     }
 }
 
@@ -14856,5 +15180,240 @@ Layer 0
 
         // Verify node was added
         assert_eq!(async_task.0, 0);
+    }
+
+    // ========================================================================
+    // TILING-SPEC-001: Tile Profiling Tests (F356-F365)
+    // ========================================================================
+
+    /// F356: TileLevel enum coverage
+    #[test]
+    fn test_f356_tile_level_names() {
+        assert_eq!(TileLevel::Macro.name(), "macro");
+        assert_eq!(TileLevel::Midi.name(), "midi");
+        assert_eq!(TileLevel::Micro.name(), "micro");
+    }
+
+    /// F357: TileStats basic operations
+    #[test]
+    fn test_f357_tile_stats_basic() {
+        let mut stats = TileStats::new(TileLevel::Macro);
+        assert_eq!(stats.count, 0);
+        assert_eq!(stats.level, TileLevel::Macro);
+
+        // Add samples
+        stats.add_sample(1_000_000, 1024, 2048);
+        stats.add_sample(2_000_000, 2048, 4096);
+
+        assert_eq!(stats.count, 2);
+        assert_eq!(stats.total_ns, 3_000_000);
+        assert_eq!(stats.total_elements, 3072);
+        assert_eq!(stats.total_flops, 6144);
+        assert_eq!(stats.min_ns, 1_000_000);
+        assert_eq!(stats.max_ns, 2_000_000);
+    }
+
+    /// F358: TileStats avg_us calculation
+    #[test]
+    fn test_f358_tile_stats_avg_us() {
+        let mut stats = TileStats::new(TileLevel::Midi);
+        assert_eq!(stats.avg_us(), 0.0);
+
+        stats.add_sample(1_000_000, 100, 200); // 1ms
+        stats.add_sample(3_000_000, 100, 200); // 3ms
+
+        // Average should be 2ms = 2000µs
+        assert!((stats.avg_us() - 2000.0).abs() < 0.01);
+    }
+
+    /// F359: TileStats throughput calculation
+    #[test]
+    fn test_f359_tile_stats_throughput() {
+        let mut stats = TileStats::new(TileLevel::Micro);
+
+        // 1 second worth of samples, 1M elements
+        stats.add_sample(1_000_000_000, 1_000_000, 0);
+
+        // Throughput should be 1M elem/s
+        let throughput = stats.throughput();
+        assert!((throughput - 1_000_000.0).abs() < 10.0);
+    }
+
+    /// F360: TileStats GFLOP/s calculation
+    #[test]
+    fn test_f360_tile_stats_gflops() {
+        let mut stats = TileStats::new(TileLevel::Macro);
+
+        // 100ms, 1 GFLOP
+        stats.add_sample(100_000_000, 1000, 1_000_000_000);
+
+        // GFLOP/s should be 10
+        let gflops = stats.gflops();
+        assert!((gflops - 10.0).abs() < 0.1);
+    }
+
+    /// F361: TileStats arithmetic intensity
+    #[test]
+    fn test_f361_tile_stats_arithmetic_intensity() {
+        let mut stats = TileStats::new(TileLevel::Midi);
+
+        // 1000 elements (4000 bytes), 8000 FLOPs -> AI = 2.0
+        stats.add_sample(1_000_000, 1000, 8000);
+
+        let ai = stats.arithmetic_intensity();
+        assert!((ai - 2.0).abs() < 0.01);
+    }
+
+    /// F362: TileStats cache efficiency
+    #[test]
+    fn test_f362_tile_stats_cache_efficiency() {
+        let mut stats = TileStats::new(TileLevel::Micro);
+
+        // 100ms, 10 GFLOP -> 100 GFLOP/s
+        stats.add_sample(100_000_000, 1000, 10_000_000_000);
+
+        // Peak 200 GFLOP/s -> efficiency 0.5
+        let efficiency = stats.cache_efficiency(200.0);
+        assert!((efficiency - 0.5).abs() < 0.01);
+
+        // Zero peak -> efficiency 0.0
+        assert_eq!(stats.cache_efficiency(0.0), 0.0);
+    }
+
+    /// F363: BrickProfiler tile profiling enable/disable
+    #[test]
+    fn test_f363_brick_profiler_tile_enable() {
+        let mut profiler = BrickProfiler::new();
+
+        // Disabled by default
+        assert!(!profiler.is_tile_profiling_enabled());
+
+        // Enable
+        profiler.enable_tile_profiling();
+        assert!(profiler.is_tile_profiling_enabled());
+
+        // Disable
+        profiler.disable_tile_profiling();
+        assert!(!profiler.is_tile_profiling_enabled());
+    }
+
+    /// F364: BrickProfiler start_tile/stop_tile
+    #[test]
+    fn test_f364_brick_profiler_tile_timing() {
+        let mut profiler = BrickProfiler::new();
+        profiler.enable_tile_profiling();
+
+        // Time a macro tile
+        let timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+        std::thread::sleep(std::time::Duration::from_micros(100));
+        profiler.stop_tile(timer, 1024, 2048);
+
+        // Time a midi tile
+        let timer = profiler.start_tile(TileLevel::Midi, 1, 2);
+        std::thread::sleep(std::time::Duration::from_micros(50));
+        profiler.stop_tile(timer, 512, 1024);
+
+        // Verify stats
+        let macro_stats = profiler.tile_stats(TileLevel::Macro);
+        assert_eq!(macro_stats.count, 1);
+        assert!(macro_stats.total_ns > 0);
+        assert_eq!(macro_stats.total_elements, 1024);
+
+        let midi_stats = profiler.tile_stats(TileLevel::Midi);
+        assert_eq!(midi_stats.count, 1);
+        assert_eq!(midi_stats.total_elements, 512);
+    }
+
+    /// F365: BrickProfiler tile_summary report
+    #[test]
+    fn test_f365_brick_profiler_tile_summary() {
+        let mut profiler = BrickProfiler::new();
+        profiler.enable_tile_profiling();
+
+        // Add some tile samples
+        for i in 0..10 {
+            let timer = profiler.start_tile(TileLevel::Macro, i, 0);
+            profiler.stop_tile(timer, 65536, 2 * 65536);
+        }
+
+        for i in 0..100 {
+            let timer = profiler.start_tile(TileLevel::Midi, i, 0);
+            profiler.stop_tile(timer, 4096, 2 * 4096);
+        }
+
+        let summary = profiler.tile_summary();
+        assert!(summary.contains("TILING-SPEC-001"));
+        assert!(summary.contains("macro"));
+        assert!(summary.contains("midi"));
+    }
+
+    /// F366: BrickProfiler tile reset
+    #[test]
+    fn test_f366_brick_profiler_tile_reset() {
+        let mut profiler = BrickProfiler::new();
+        profiler.enable_tile_profiling();
+
+        // Add samples
+        let timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+        profiler.stop_tile(timer, 1024, 2048);
+
+        assert_eq!(profiler.tile_stats(TileLevel::Macro).count, 1);
+
+        // Reset
+        profiler.reset_tile_stats();
+
+        assert_eq!(profiler.tile_stats(TileLevel::Macro).count, 0);
+        assert_eq!(profiler.tile_stats(TileLevel::Midi).count, 0);
+        assert_eq!(profiler.tile_stats(TileLevel::Micro).count, 0);
+    }
+
+    /// F367: BrickProfiler tile_stats_to_json
+    #[test]
+    fn test_f367_tile_stats_json() {
+        let mut profiler = BrickProfiler::new();
+        profiler.enable_tile_profiling();
+
+        let timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+        profiler.stop_tile(timer, 1024, 2048);
+
+        let json = profiler.tile_stats_to_json();
+        assert!(json.contains("\"tile_profiling_enabled\":true"));
+        assert!(json.contains("\"level\":\"macro\""));
+        assert!(json.contains("\"count\":1"));
+    }
+
+    /// F368: all_tile_stats accessor
+    #[test]
+    fn test_f368_all_tile_stats() {
+        let profiler = BrickProfiler::new();
+        let all_stats = profiler.all_tile_stats();
+
+        assert_eq!(all_stats.len(), 3);
+        assert_eq!(all_stats[0].level, TileLevel::Macro);
+        assert_eq!(all_stats[1].level, TileLevel::Midi);
+        assert_eq!(all_stats[2].level, TileLevel::Micro);
+    }
+
+    /// F369: tile_stats_mut mutable access
+    #[test]
+    fn test_f369_tile_stats_mut() {
+        let mut profiler = BrickProfiler::new();
+
+        // Directly modify tile stats
+        profiler.tile_stats_mut(TileLevel::Macro).count = 42;
+        assert_eq!(profiler.tile_stats(TileLevel::Macro).count, 42);
+    }
+
+    /// F370: Disabled tile profiling skips recording
+    #[test]
+    fn test_f370_disabled_tile_profiling() {
+        let mut profiler = BrickProfiler::new();
+        // tile_profiling_enabled is false by default
+
+        let timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+        profiler.stop_tile(timer, 1024, 2048);
+
+        // Should not have recorded anything
+        assert_eq!(profiler.tile_stats(TileLevel::Macro).count, 0);
     }
 }
