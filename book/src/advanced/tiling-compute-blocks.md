@@ -224,7 +224,54 @@ let l3_dist = optimal_prefetch_distance(&micro_tile, TcbLevel::Macro);
 assert!(l3_dist >= l2_dist);
 ```
 
-## Running the Demo
+## Tile Profiling
+
+The `BrickProfiler` supports tile-level profiling to analyze performance at each level of the hierarchy:
+
+```rust
+use trueno::brick::{BrickProfiler, TileLevel};
+
+let mut profiler = BrickProfiler::new();
+profiler.enable_tile_profiling();
+
+// Profile a macro tile
+let timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+// ... execute tile computation ...
+let elements = 256 * 256;  // Elements processed
+let flops = 2 * 256 * 256 * 256;  // FMA operations
+profiler.stop_tile(timer, elements, flops);
+
+// Get statistics
+let stats = profiler.tile_stats(TileLevel::Macro);
+println!("GFLOP/s: {:.2}", stats.gflops());
+println!("Arithmetic Intensity: {:.2} FLOP/byte", stats.arithmetic_intensity());
+
+// Summary report
+println!("{}", profiler.tile_summary());
+
+// JSON export for pmat integration
+let json = profiler.tile_stats_to_json();
+```
+
+### TileStats Metrics
+
+| Metric | Formula | Description |
+|--------|---------|-------------|
+| `avg_us()` | total_ns / count / 1000 | Average tile time in µs |
+| `throughput()` | elements / seconds | Elements per second |
+| `gflops()` | flops / seconds / 1e9 | GFLOP/s throughput |
+| `arithmetic_intensity()` | flops / (elements * 4) | FLOP/byte (assuming f32) |
+| `cache_efficiency(peak)` | gflops / peak | Efficiency vs theoretical peak |
+
+### Running the Tile Profiling Demo
+
+```bash
+cargo run --example tile_profiler_demo
+```
+
+Output shows tile-level statistics, GFLOP/s measurements, and JSON export.
+
+## Running the Tiling Demo
 
 ```bash
 cargo run --example tiling_demo
