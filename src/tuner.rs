@@ -2334,7 +2334,7 @@ impl BrickTuner {
         // RTX 3090: ~936 GB/s → ~140 tok/s
         // A100: ~2000 GB/s → ~200 tok/s
         let mem_bw_factor = hw.gpu.as_ref()
-            .and_then(|g| Some(g.memory_bandwidth_gbps / 1000.0))
+            .map(|g| g.memory_bw_gbps / 1000.0)
             .unwrap_or(0.5);
 
         100.0 * mem_bw_factor as f32

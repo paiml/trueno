@@ -216,9 +216,129 @@ let brick = ComputeBrick::with_config(config)?;
 3. **RF inference scales with trees**: 100 trees ≈ 1ms inference
 4. **Train once, predict many**: Cache trained models for repeated use
 
+## Phase 14: ML-Tuner Evolution
+
+Phase 14 (E.12) adds deeper ML integration for production deployment:
+
+### MLT-10: Pre-trained Weights
+
+Ship with pre-trained weights from CI benchmark corpus:
+
+```rust
+use trueno::tuner::{BrickTuner, pretrained};
+
+// Use pre-trained weights (8.2% MAPE, 10,000+ samples)
+let tuner = BrickTuner::with_pretrained();
+println!("Version: {}", tuner.version()); // "1.0.0-pretrained"
+println!("MAPE: {:.1}%", tuner.throughput_mape() * 100.0);
+
+// Access feature importance for explainability
+for (idx, name, importance) in pretrained::FEATURE_IMPORTANCE.iter().take(5) {
+    println!("{}: {:.1}%", name, importance * 100.0);
+}
+// Output:
+//   batch_size: 28.0%
+//   gpu_mem_bw: 18.0%
+//   model_params_b: 14.0%
+```
+
+### MLT-11: First-Run Calibration
+
+Calibrate to local hardware (requires `hardware-detect` feature):
+
+```rust
+use trueno::tuner::BrickTuner;
+
+let mut tuner = BrickTuner::with_pretrained();
+
+#[cfg(feature = "hardware-detect")]
+{
+    let result = tuner.calibrate()?;
+    println!("Calibrated to: {}", result.hardware_id);
+    println!("Local MAPE: {:.1}%", result.local_mape * 100.0);
+    println!("Improvement: {:.1}%", result.improvement_pct);
+}
+```
+
+### MLT-12: Online Learning
+
+Continuously improve predictions during inference:
+
+```rust
+use trueno::tuner::{BrickTuner, TunerFeatures, QuantType};
+
+let tuner = BrickTuner::with_pretrained();
+let mut learner = tuner.online_learner();
+
+// During inference loop
+let features = TunerFeatures::builder()
+    .model_params_b(7.0)
+    .batch_size(4)
+    .quant_type(QuantType::Q4K)
+    .gpu_mem_bw_gbs(1000.0)
+    .build();
+
+for measured_tps in [150.0, 155.0, 152.0, 158.0] {
+    learner.observe(&features.to_vector(), measured_tps);
+}
+
+println!("Updates: {}", learner.num_updates());
+println!("EMA Loss: {:.4}", learner.ema_loss());
+println!("Converging: {}", learner.is_converging());
+
+// Apply learned weights back to tuner
+let mut updated_tuner = tuner.clone();
+updated_tuner.apply_online_updates(&learner);
+```
+
+### MLT-13: Bandit Kernel Selection
+
+Explore vs exploit kernel choices using UCB1 or Thompson Sampling:
+
+```rust
+use trueno::tuner::{BrickTuner, KernelBandit, TunerFeatures, QuantType};
+
+let tuner = BrickTuner::with_pretrained();
+let mut bandit = tuner.kernel_bandit(); // UCB1 by default
+// Or: let mut bandit = KernelBandit::with_thompson_sampling();
+
+let features = TunerFeatures::builder()
+    .model_params_b(7.0)
+    .batch_size(4)
+    .quant_type(QuantType::Q4K)
+    .build();
+
+// Production loop with exploration
+for _ in 0..100 {
+    let rec = tuner.recommend_kernel_with_exploration(&features, &bandit, 0.2);
+
+    // Use rec.top_kernel for inference...
+    let measured_tps = /* actual measurement */ 150.0;
+
+    // Update bandit with normalized reward
+    let reward = (measured_tps / 200.0).min(1.0);
+    bandit.update(rec.top_kernel, reward);
+}
+
+println!("Best kernel: {:?}", bandit.best_kernel());
+println!("Exploration rate: {:.2}", bandit.exploration_rate());
+println!("Cumulative regret: {:.2}", bandit.estimated_regret());
+```
+
+### Running the Evolution Demo
+
+```bash
+# Phase 14 demo (pre-trained + online learning + bandits)
+cargo run --example ml_tuner_evolution
+
+# With hardware calibration
+cargo run --example ml_tuner_evolution --features hardware-detect
+```
+
 ## Further Reading
 
 - [ComputeBrick Architecture](../architecture/compute-brick.md)
 - [Benchmarks Overview](./benchmarks.md)
 - [Optimization Guide](./optimization-guide.md)
 - [aprender RandomForest Documentation](https://docs.rs/aprender/latest/aprender/tree/)
+- [Model-Level Inference Tracing](./model-tracing.md)
