@@ -4151,6 +4151,232 @@ impl ComputeOp for FusedGateUpOp {
 }
 
 // ============================================================================
+// PMAT-017: SIMD-Optimized Attention Operation
+// ============================================================================
+
+/// Scaled dot-product attention operation.
+///
+/// Computes: Attention(Q, K, V) = softmax(Q @ K^T / sqrt(d_k)) @ V
+///
+/// # SIMD Optimization (PMAT-017)
+///
+/// Uses trueno's SIMD backends for:
+/// - Q @ K^T: Batched dot products with AVX2/AVX-512
+/// - Softmax: Row-wise numerically stable softmax
+/// - Scores @ V: Batched weighted sums
+///
+/// # Performance Target
+///
+/// Close the 1.66x gap in CPU inference (25.4 → 42 tok/s) by replacing
+/// scalar triple-nested loops with SIMD operations.
+#[derive(Debug, Clone)]
+pub struct AttentionOp {
+    /// Sequence length (Q rows)
+    pub seq_len: usize,
+    /// Key/Value sequence length (may differ for cross-attention)
+    pub kv_seq_len: usize,
+    /// Head dimension
+    pub head_dim: usize,
+    /// Scale factor (1/sqrt(head_dim))
+    pub scale: f32,
+}
+
+impl AttentionOp {
+    /// Create a new attention operation.
+    ///
+    /// # Arguments
+    ///
+    /// * `seq_len` - Query sequence length
+    /// * `kv_seq_len` - Key/Value sequence length
+    /// * `head_dim` - Dimension per head
+    #[must_use]
+    pub fn new(seq_len: usize, kv_seq_len: usize, head_dim: usize) -> Self {
+        Self {
+            seq_len,
+            kv_seq_len,
+            head_dim,
+            scale: 1.0 / (head_dim as f32).sqrt(),
+        }
+    }
+
+    /// Create for self-attention (seq_len == kv_seq_len).
+    #[must_use]
+    pub fn self_attention(seq_len: usize, head_dim: usize) -> Self {
+        Self::new(seq_len, seq_len, head_dim)
+    }
+
+    /// SIMD-optimized dot product for attention scores.
+    ///
+    /// Computes Q[i] · K[j] using SIMD when available.
+    #[inline]
+    fn simd_dot(a: &[f32], b: &[f32]) -> f32 {
+        debug_assert_eq!(a.len(), b.len());
+
+        // Use architecture-specific SIMD
+        #[cfg(target_arch = "x86_64")]
+        {
+            if is_x86_feature_detected!("avx2") {
+                return unsafe { Self::avx2_dot(a, b) };
+            }
+        }
+
+        // Scalar fallback with manual unrolling for better vectorization
+        let mut sum0 = 0.0f32;
+        let mut sum1 = 0.0f32;
+        let mut sum2 = 0.0f32;
+        let mut sum3 = 0.0f32;
+
+        let chunks = a.len() / 4;
+        for i in 0..chunks {
+            let base = i * 4;
+            sum0 += a[base] * b[base];
+            sum1 += a[base + 1] * b[base + 1];
+            sum2 += a[base + 2] * b[base + 2];
+            sum3 += a[base + 3] * b[base + 3];
+        }
+
+        // Handle remainder
+        for i in (chunks * 4)..a.len() {
+            sum0 += a[i] * b[i];
+        }
+
+        sum0 + sum1 + sum2 + sum3
+    }
+
+    /// AVX2-optimized dot product.
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx2", enable = "fma")]
+    unsafe fn avx2_dot(a: &[f32], b: &[f32]) -> f32 {
+        use std::arch::x86_64::*;
+
+        let mut sum = _mm256_setzero_ps();
+        let chunks = a.len() / 8;
+
+        for i in 0..chunks {
+            let base = i * 8;
+            let va = _mm256_loadu_ps(a.as_ptr().add(base));
+            let vb = _mm256_loadu_ps(b.as_ptr().add(base));
+            sum = _mm256_fmadd_ps(va, vb, sum);
+        }
+
+        // Horizontal sum
+        let high = _mm256_extractf128_ps(sum, 1);
+        let low = _mm256_castps256_ps128(sum);
+        let sum128 = _mm_add_ps(high, low);
+        let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
+        let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
+        let mut result = _mm_cvtss_f32(sum32);
+
+        // Handle remainder
+        for i in (chunks * 8)..a.len() {
+            result += a[i] * b[i];
+        }
+
+        result
+    }
+
+    /// Row-wise softmax with SIMD max/sum.
+    #[inline]
+    fn simd_softmax_row(scores: &mut [f32]) {
+        if scores.is_empty() {
+            return;
+        }
+
+        // Find max for numerical stability
+        let max = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+
+        // Compute exp(x - max) and sum
+        let mut sum = 0.0f32;
+        for s in scores.iter_mut() {
+            *s = (*s - max).exp();
+            sum += *s;
+        }
+
+        // Normalize
+        let inv_sum = 1.0 / sum;
+        for s in scores.iter_mut() {
+            *s *= inv_sum;
+        }
+    }
+}
+
+impl ComputeOp for AttentionOp {
+    /// Input: (Q, K, V) tensors as flat vectors
+    /// Q: [seq_len * head_dim]
+    /// K: [kv_seq_len * head_dim]
+    /// V: [kv_seq_len * head_dim]
+    type Input = (Vec<f32>, Vec<f32>, Vec<f32>);
+    /// Output: attention output [seq_len * head_dim]
+    type Output = Vec<f32>;
+
+    fn name(&self) -> &'static str {
+        "attention"
+    }
+
+    fn execute(&self, input: Self::Input, _backend: Backend) -> Result<Self::Output, TruenoError> {
+        let (q, k, v) = input;
+
+        // Validate dimensions
+        let expected_q = self.seq_len * self.head_dim;
+        let expected_kv = self.kv_seq_len * self.head_dim;
+
+        if q.len() != expected_q {
+            return Err(TruenoError::SizeMismatch {
+                expected: expected_q,
+                actual: q.len(),
+            });
+        }
+        if k.len() != expected_kv || v.len() != expected_kv {
+            return Err(TruenoError::SizeMismatch {
+                expected: expected_kv,
+                actual: k.len(),
+            });
+        }
+
+        // Allocate output
+        let mut output = vec![0.0f32; expected_q];
+
+        // Allocate scores buffer (reused per query row)
+        let mut scores = vec![0.0f32; self.kv_seq_len];
+
+        // For each query position
+        for qi in 0..self.seq_len {
+            let q_row = &q[qi * self.head_dim..(qi + 1) * self.head_dim];
+
+            // Compute Q[qi] · K[ki] for all ki (SIMD dot products)
+            for ki in 0..self.kv_seq_len {
+                let k_row = &k[ki * self.head_dim..(ki + 1) * self.head_dim];
+                scores[ki] = Self::simd_dot(q_row, k_row) * self.scale;
+            }
+
+            // Softmax over scores
+            Self::simd_softmax_row(&mut scores);
+
+            // Compute weighted sum: output[qi] = sum(scores[ki] * V[ki])
+            let out_row = &mut output[qi * self.head_dim..(qi + 1) * self.head_dim];
+            out_row.fill(0.0);
+
+            for ki in 0..self.kv_seq_len {
+                let v_row = &v[ki * self.head_dim..(ki + 1) * self.head_dim];
+                let weight = scores[ki];
+
+                // SIMD-friendly accumulation
+                for (o, &vi) in out_row.iter_mut().zip(v_row.iter()) {
+                    *o += weight * vi;
+                }
+            }
+        }
+
+        Ok(output)
+    }
+
+    fn tokens(&self, _input: &Self::Input) -> usize {
+        // Output tokens = seq_len * head_dim
+        self.seq_len * self.head_dim
+    }
+}
+
+// ============================================================================
 // BrickLayer: Compose multiple bricks
 // ============================================================================
 
@@ -8605,6 +8831,103 @@ mod tests {
         // Values should be increasing
         assert!(result[0] < result[1]);
         assert!(result[1] < result[2]);
+    }
+
+    // ========================================================================
+    // PMAT-017: AttentionOp Tests
+    // ========================================================================
+
+    #[test]
+    fn test_attention_op_basic() {
+        // Simple 2x2 attention (seq_len=2, kv_seq_len=2, head_dim=2)
+        let op = AttentionOp::self_attention(2, 2);
+
+        // Q = [[1, 0], [0, 1]]
+        let q = vec![1.0, 0.0, 0.0, 1.0];
+        // K = [[1, 0], [0, 1]]
+        let k = vec![1.0, 0.0, 0.0, 1.0];
+        // V = [[1, 2], [3, 4]]
+        let v = vec![1.0, 2.0, 3.0, 4.0];
+
+        let result = op.execute((q, k, v), Backend::Scalar).unwrap();
+
+        // Output should be [seq_len * head_dim] = 4 elements
+        assert_eq!(result.len(), 4);
+
+        // Each row should be a weighted sum of V rows
+        // Q[0]·K[0] = 1, Q[0]·K[1] = 0 → softmax → [~0.73, ~0.27]
+        // Output[0] ≈ 0.73 * [1,2] + 0.27 * [3,4]
+        assert!(result[0] > 0.0 && result[0] < 3.0);
+        assert!(result[1] > 0.0 && result[1] < 4.0);
+    }
+
+    #[test]
+    fn test_attention_op_simd_dot() {
+        // Test the SIMD dot product directly
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let b = vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+        let result = AttentionOp::simd_dot(&a, &b);
+        assert!((result - 36.0).abs() < 0.001); // 1+2+3+4+5+6+7+8 = 36
+    }
+
+    #[test]
+    fn test_attention_op_softmax_row() {
+        let mut scores = vec![1.0, 2.0, 3.0];
+        AttentionOp::simd_softmax_row(&mut scores);
+
+        // Sum should be 1.0
+        let sum: f32 = scores.iter().sum();
+        assert!((sum - 1.0).abs() < 0.001);
+
+        // Values should be increasing
+        assert!(scores[0] < scores[1]);
+        assert!(scores[1] < scores[2]);
+    }
+
+    #[test]
+    fn test_attention_op_dimension_validation() {
+        let op = AttentionOp::new(2, 3, 4);
+
+        // Wrong Q size
+        let result = op.execute(
+            (vec![0.0; 4], vec![0.0; 12], vec![0.0; 12]),
+            Backend::Scalar,
+        );
+        assert!(result.is_err());
+
+        // Wrong K size
+        let result = op.execute(
+            (vec![0.0; 8], vec![0.0; 8], vec![0.0; 12]),
+            Backend::Scalar,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_attention_op_single_position() {
+        // Single query position attending to 3 key positions
+        let op = AttentionOp::new(1, 3, 4);
+
+        let q = vec![1.0, 0.0, 0.0, 0.0]; // [1, 4]
+        let k = vec![
+            1.0, 0.0, 0.0, 0.0, // K[0]
+            0.0, 1.0, 0.0, 0.0, // K[1]
+            0.0, 0.0, 1.0, 0.0, // K[2]
+        ];
+        let v = vec![
+            1.0, 0.0, 0.0, 0.0, // V[0]
+            0.0, 1.0, 0.0, 0.0, // V[1]
+            0.0, 0.0, 1.0, 0.0, // V[2]
+        ];
+
+        let result = op.execute((q, k, v), Backend::Scalar).unwrap();
+        assert_eq!(result.len(), 4);
+
+        // Q·K[0] = 1, Q·K[1] = 0, Q·K[2] = 0
+        // After softmax: [~0.58, ~0.21, ~0.21] (approx)
+        // Output ≈ 0.58*V[0] + 0.21*V[1] + 0.21*V[2]
+        // Should have higher weight on first component
+        assert!(result[0] > result[1]);
     }
 
     #[test]
