@@ -93,6 +93,7 @@
 
 - [SIMD Intrinsics](./advanced/simd-intrinsics.md)
 - [Phase 2 Micro-Kernel](./advanced/phase2-microkernel.md)
+- [Phase 15 Fused Q4K Kernels](./advanced/phase15-fused-q4k.md)
 - [GPU Compute Shaders](./advanced/gpu-shaders.md)
 - [Memory Alignment](./advanced/memory-alignment.md)
 - [Vectorization Patterns](./advanced/vectorization-patterns.md)
