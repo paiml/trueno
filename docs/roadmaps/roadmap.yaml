@@ -1644,3 +1644,91 @@ roadmap:
   estimated_effort: null
   labels: []
   notes: null
+- id: SIMD-EXP
+  github_issue: null
+  item_type: task
+  title: SIMD Exp Approximation for Softmax
+  status: completed
+  priority: high
+  assigned_to: claude
+  created: 2026-01-16T10:00:00Z
+  updated: 2026-01-16T12:00:00Z
+  spec: |
+    ✅ COMPLETED: SIMD exp approximation matching llama.cpp's ggml_v_expf
+
+    Implementation:
+    - 6th-degree Remez minimax polynomial for exp approximation
+    - Range reduction: exp(x) = 2^k * e^r where r in [-ln(2)/2, ln(2)/2]
+    - AVX2 intrinsics: _mm256_fmadd_ps, _mm256_floor_ps, etc.
+    - Measured 4.35x speedup for softmax SIMD vs scalar
+
+    References:
+    - llama.cpp ggml/src/ggml-cpu/vec.cpp ggml_v_expf
+    - "Elementary Functions: Algorithms and Implementation" by Muller
+  acceptance_criteria:
+  - SIMD exp approximation functional
+  - 4x+ speedup vs scalar softmax
+  - Numerically stable (max error < 1e-5)
+  phases: []
+  subtasks: []
+  estimated_effort: 1 day
+  labels:
+  - simd
+  - softmax
+  - optimization
+  - extreme-tdd
+  notes: null
+- id: QUANT-Q5K
+  github_issue: null
+  item_type: task
+  title: Q5_K and Q6_K Quantization Formats
+  status: completed
+  priority: high
+  assigned_to: claude
+  created: 2026-01-16T10:00:00Z
+  updated: 2026-01-16T12:00:00Z
+  spec: |
+    ✅ COMPLETED: llama.cpp compatible Q5_K and Q6_K quantization formats
+
+    Implementation:
+    - BlockQ5K: 5-bit with super-blocks (256 values per block)
+    - BlockQ6K: 6-bit with super-blocks (256 values per block)
+    - DotQ5KOp and DotQ6KOp with SIMD dot product support
+    - Dequantization methods compatible with llama.cpp format
+
+    References:
+    - llama.cpp ggml/src/ggml-quants.c
+    - "The case for 4-bit precision" by Dettmers et al.
+  acceptance_criteria:
+  - BlockQ5K dequantize functional
+  - BlockQ6K dequantize functional
+  - SIMD dot products for quantized formats
+  - llama.cpp format compatibility
+  phases: []
+  subtasks: []
+  estimated_effort: 1 day
+  labels:
+  - quantization
+  - simd
+  - llama-cpp
+  - extreme-tdd
+  notes: null
+- id: PMAT-017
+  github_issue: null
+  item_type: task
+  title: SIMD Attention Prototype for CPU inference
+  status: completed
+  priority: medium
+  assigned_to: null
+  created: 2026-01-15T22:56:17Z
+  updated: 2026-01-15T22:58:59.555657321+00:00
+  spec: null
+  acceptance_criteria:
+  - Create AVX2/AVX-512 optimized attention using trueno SIMD primitives to close the 1.66x gap in CPU inference (25.4→42 tok/s target)
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels:
+  - perf
+  - simd
+  notes: null

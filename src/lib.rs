@@ -61,6 +61,8 @@ pub use brick::{
     BrickStats, BrickTimer, BrickVerification, ByteBudget, ComputeAssertion, ComputeBackend,
     ComputeBrick, ComputeOp, DotOp, FusedGateUpOp, FusedGateUpWeights, FusedQKVOp,
     FusedQKVWeights, MatmulOp, SoftmaxOp, TokenBudget, TokenResult,
+    // QUANT-Q5K: Q5_K and Q6_K quantization formats (llama.cpp compatible)
+    BlockQ5K, BlockQ6K, DotQ5KOp, DotQ6KOp,
     // CORRECTNESS-011: Divergence detection types
     KernelChecksum, DivergenceInfo, fnv1a_f32_checksum,
     // PAR-200: BrickProfiler v2 types
