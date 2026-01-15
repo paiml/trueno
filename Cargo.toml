@@ -165,6 +165,10 @@ required-features = ["gpu"]
 name = "eigen_ops"
 harness = false
 
+[[bench]]
+name = "tiling_ops"
+harness = false
+
 [[bin]]
 name = "trueno-monitor"
 path = "src/bin/trueno-monitor.rs"
