@@ -3094,6 +3094,259 @@ impl Kernel for CoalescedQ6KGemvKernel {
 }
 
 // =============================================================================
+// BATCHED Q6_K GEMV KERNEL (PAR-130)
+// =============================================================================
+//
+// Batched version of CoalescedQ6KGemvKernel for M>1 batch processing.
+// Eliminates 896 sequential kernel launches for M=32 batch decode.
+//
+// Strategy:
+// - One warp (32 threads) per output row
+// - Each thread processes 8 elements per super-block (256/32 = 8)
+// - All M batch elements processed within single kernel launch
+// - Weights loaded once, reused for all M inputs (L1 cache efficient)
+//
+// Memory: Q6K = 210 bytes per 256 values = 0.82 bytes/value
+
+/// Batched Q6_K GEMV kernel for batch decode throughput (PAR-130)
+///
+/// Processes M input vectors against the same weight matrix in one kernel launch.
+/// This eliminates M-1 kernel launches per layer, critical for batched decode.
+#[derive(Debug, Clone)]
+pub struct BatchedQ6KGemvKernel {
+    /// K dimension (input dimension, must be multiple of 256)
+    pub k: u32,
+    /// N dimension (output dimension)
+    pub n: u32,
+    /// M dimension (batch size)
+    pub m: u32,
+}
+
+impl BatchedQ6KGemvKernel {
+    /// Create a new batched Q6_K GEMV kernel
+    #[must_use]
+    pub fn new(k: u32, n: u32, m: u32) -> Self {
+        Self { k, n, m }
+    }
+
+    /// Get number of super-blocks per row
+    #[must_use]
+    pub const fn num_super_blocks_per_row(&self) -> u32 {
+        (self.k + Q6K_SUPER_BLOCK_SIZE - 1) / Q6K_SUPER_BLOCK_SIZE
+    }
+}
+
+impl Kernel for BatchedQ6KGemvKernel {
+    fn name(&self) -> &str {
+        "batched_q6k_gemv_warp_reduce"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        let m = self.m;
+        PtxKernel::new("batched_q6k_gemv_warp_reduce")
+            .param(PtxType::U64, "y_ptr") // Output matrix (M × N)
+            .param(PtxType::U64, "w_ptr") // Q6_K weights (N × K/256 super-blocks)
+            .param(PtxType::U64, "x_ptr") // Input matrix (M × K)
+            .param(PtxType::U32, "k_dim") // K dimension
+            .param(PtxType::U32, "n_dim") // N dimension
+            .param(PtxType::U32, "m_dim") // M dimension (batch size)
+            .build(move |ctx| {
+                // Block = 32 threads (one warp), grid = N blocks
+                // Each block computes one output row: y[:, block_id]
+
+                let block_id = ctx.special_reg(PtxReg::CtaIdX);
+                let lane_id = ctx.special_reg(PtxReg::TidX);
+
+                // Bounds check
+                let n_dim = ctx.load_param_u32("n_dim");
+                let oob = ctx.setp_ge_u32(block_id, n_dim);
+                ctx.branch_if(oob, "exit");
+
+                let k_dim = ctx.load_param_u32("k_dim");
+                let _m_dim = ctx.load_param_u32("m_dim");
+                let y_ptr = ctx.load_param_u64("y_ptr");
+                let w_ptr = ctx.load_param_u64("w_ptr");
+                let x_ptr = ctx.load_param_u64("x_ptr");
+
+                // Initialize M accumulators
+                let mut accs = Vec::with_capacity(m as usize);
+                for _ in 0..m {
+                    accs.push(ctx.mov_f32_imm(0.0));
+                }
+
+                // Calculate super-blocks per row
+                let k_rounded = ctx.add_u32(k_dim, Q6K_SUPER_BLOCK_SIZE - 1);
+                let num_super_blocks = ctx.div_u32(k_rounded, Q6K_SUPER_BLOCK_SIZE);
+
+                // Row base address for weights
+                let sb_bytes = ctx.mov_u32_imm(Q6K_SUPER_BLOCK_BYTES);
+                let row_bytes = ctx.mul_u32_reg(num_super_blocks, sb_bytes);
+                let row_offset = ctx.mul_wide_u32_reg(block_id, row_bytes);
+                let row_base = ctx.add_u64(w_ptr, row_offset);
+
+                let sb_idx = ctx.mov_u32_imm(0);
+
+                ctx.label("sb_loop");
+                let sb_done = ctx.setp_ge_u32(sb_idx, num_super_blocks);
+                ctx.branch_if(sb_done, "sb_loop_end");
+
+                let sb_offset = ctx.mul_wide_u32(sb_idx, Q6K_SUPER_BLOCK_BYTES);
+                let sb_addr = ctx.add_u64(row_base, sb_offset);
+
+                // Load d (f16 at offset 208)
+                let d_offset = ctx.mov_u64_imm(208);
+                let d_addr = ctx.add_u64(sb_addr, d_offset);
+                let d_f16 = ctx.ld_global_f16(d_addr);
+                let d = ctx.cvt_f32_f16(d_f16);
+
+                // Each thread processes 8 values (256/32)
+                // Thread lane processes values: lane*8, lane*8+1, ..., lane*8+7
+                let eight = ctx.mov_u32_imm(8);
+                let thread_base_val = ctx.mul_u32_reg(lane_id, eight);
+
+                // Initialize per-thread partial sums for all M batch elements
+                let mut thread_partials = Vec::with_capacity(m as usize);
+                for _ in 0..m {
+                    thread_partials.push(ctx.mov_f32_imm(0.0));
+                }
+
+                // Process 8 values per thread
+                let val_offset = ctx.mov_u32_imm(0);
+
+                ctx.label("val_loop");
+                let val_done = ctx.setp_ge_u32(val_offset, eight);
+                ctx.branch_if(val_done, "val_loop_end");
+
+                let val_idx = ctx.add_u32_reg(thread_base_val, val_offset);
+
+                // Determine which sub-block (16 values each, 16 sub-blocks total)
+                let sub_block_idx = ctx.div_u32(val_idx, 16);
+                let sub_val_idx = ctx.rem_u32(val_idx, 16);
+
+                // Load scale for this sub-block (offset 192 + sub_block_idx)
+                let scales_offset = ctx.mov_u64_imm(192);
+                let scales_base = ctx.add_u64(sb_addr, scales_offset);
+                let sub_block_idx_64 = ctx.cvt_u64_u32(sub_block_idx);
+                let scale_addr = ctx.add_u64(scales_base, sub_block_idx_64);
+                let scale_u8 = ctx.ld_global_u8(scale_addr);
+                let scale_u32 = ctx.cvt_u32_u8(scale_u8);
+
+                // Convert scale to signed: if >= 128, subtract 256
+                let seven = ctx.mov_u32_imm(7);
+                let scale_sign = ctx.shr_u32(scale_u32, seven);
+                let twofiftysix_f32 = ctx.mov_f32_imm(256.0);
+                let scale_f32_raw = ctx.cvt_f32_u32(scale_u32);
+                let scale_sign_f32 = ctx.cvt_f32_u32(scale_sign);
+                let scale_correction = ctx.mul_f32(scale_sign_f32, twofiftysix_f32);
+                let scale_f32 = ctx.sub_f32(scale_f32_raw, scale_correction);
+
+                // Load low 4-bit value from ql (offset 0 + val_idx / 2)
+                let ql_byte_idx = ctx.div_u32(val_idx, 2);
+                let ql_nibble_idx = ctx.rem_u32(val_idx, 2);
+                let ql_byte_idx_64 = ctx.cvt_u64_u32(ql_byte_idx);
+                let ql_addr = ctx.add_u64(sb_addr, ql_byte_idx_64);
+                let ql_packed = ctx.ld_global_u8(ql_addr);
+                let ql_packed_32 = ctx.cvt_u32_u8(ql_packed);
+                let four = ctx.mov_u32_imm(4);
+                let ql_shift = ctx.mul_u32_reg(ql_nibble_idx, four);
+                let ql_shifted = ctx.shr_u32(ql_packed_32, ql_shift);
+                let mask_4bit = ctx.mov_u32_imm(0xF);
+                let ql = ctx.and_u32(ql_shifted, mask_4bit);
+
+                // Load high 2-bit value from qh (offset 128 + val_idx / 4)
+                let qh_offset = ctx.mov_u64_imm(128);
+                let qh_base = ctx.add_u64(sb_addr, qh_offset);
+                let qh_byte_idx = ctx.div_u32(val_idx, 4);
+                let qh_bit_pos = ctx.rem_u32(val_idx, 4);
+                let qh_byte_idx_64 = ctx.cvt_u64_u32(qh_byte_idx);
+                let qh_addr = ctx.add_u64(qh_base, qh_byte_idx_64);
+                let qh_packed = ctx.ld_global_u8(qh_addr);
+                let qh_packed_32 = ctx.cvt_u32_u8(qh_packed);
+                let two = ctx.mov_u32_imm(2);
+                let qh_shift = ctx.mul_u32_reg(qh_bit_pos, two);
+                let qh_shifted = ctx.shr_u32(qh_packed_32, qh_shift);
+                let mask_2bit = ctx.mov_u32_imm(0x3);
+                let qh = ctx.and_u32(qh_shifted, mask_2bit);
+
+                // Combine: quant = ql + 4 * qh - 32 (6-bit signed)
+                let qh_scaled = ctx.mul_u32_reg(qh, four);
+                let ql_qh = ctx.add_u32_reg(ql, qh_scaled);
+                let ql_qh_f32 = ctx.cvt_f32_u32(ql_qh);
+                let thirty_two_f32 = ctx.mov_f32_imm(32.0);
+                let quant_signed = ctx.sub_f32(ql_qh_f32, thirty_two_f32);
+
+                // Dequantize: val = d × scale × quant
+                let ds = ctx.mul_f32(d, scale_f32);
+                let dequant = ctx.mul_f32(ds, quant_signed);
+
+                // Calculate K index
+                let sb_k_base = ctx.mul_u32(sb_idx, Q6K_SUPER_BLOCK_SIZE);
+                let k_idx = ctx.add_u32_reg(sb_k_base, val_idx);
+
+                // Accumulate for all M batch elements
+                for batch_idx in 0..m as usize {
+                    // Load x[batch_idx, k_idx]
+                    let batch_offset = ctx.mov_u32_imm((batch_idx as u32) * self.k);
+                    let x_offset = ctx.add_u32_reg(batch_offset, k_idx);
+                    let x_offset_64 = ctx.cvt_u64_u32(x_offset);
+                    let x_bytes = ctx.mul_u64(x_offset_64, 4);
+                    let x_addr = ctx.add_u64(x_ptr, x_bytes);
+                    let x_val = ctx.ld_global_f32(x_addr);
+
+                    ctx.fma_f32_inplace(thread_partials[batch_idx], x_val, dequant);
+                }
+
+                ctx.add_u32_inplace(val_offset, 1);
+                ctx.branch("val_loop");
+
+                ctx.label("val_loop_end");
+
+                // Accumulate thread partials into main accumulators
+                for batch_idx in 0..m as usize {
+                    ctx.add_f32_inplace(accs[batch_idx], thread_partials[batch_idx]);
+                }
+
+                ctx.add_u32_inplace(sb_idx, 1);
+                ctx.branch("sb_loop");
+
+                ctx.label("sb_loop_end");
+
+                // Warp reduce each accumulator and store
+                for batch_idx in 0..m as usize {
+                    let tmp16 = ctx.shfl_down_f32(accs[batch_idx], 16, 0xFFFF_FFFF);
+                    ctx.add_f32_inplace(accs[batch_idx], tmp16);
+                    let tmp8 = ctx.shfl_down_f32(accs[batch_idx], 8, 0xFFFF_FFFF);
+                    ctx.add_f32_inplace(accs[batch_idx], tmp8);
+                    let tmp4 = ctx.shfl_down_f32(accs[batch_idx], 4, 0xFFFF_FFFF);
+                    ctx.add_f32_inplace(accs[batch_idx], tmp4);
+                    let tmp2 = ctx.shfl_down_f32(accs[batch_idx], 2, 0xFFFF_FFFF);
+                    ctx.add_f32_inplace(accs[batch_idx], tmp2);
+                    let tmp1 = ctx.shfl_down_f32(accs[batch_idx], 1, 0xFFFF_FFFF);
+                    ctx.add_f32_inplace(accs[batch_idx], tmp1);
+                }
+
+                // Only lane 0 writes
+                let one_u32 = ctx.mov_u32_imm(1);
+                let is_lane0 = ctx.setp_lt_u32(lane_id, one_u32);
+                ctx.branch_if_not(is_lane0, "exit");
+
+                // Write M outputs: y[batch_idx, block_id]
+                for batch_idx in 0..m as usize {
+                    // y[batch_idx * n + block_id]
+                    let batch_row_offset = ctx.mov_u32_imm((batch_idx as u32) * self.n);
+                    let y_idx = ctx.add_u32_reg(batch_row_offset, block_id);
+                    let y_offset = ctx.mul_wide_u32(y_idx, 4);
+                    let y_addr = ctx.add_u64(y_ptr, y_offset);
+                    ctx.st_global_f32(y_addr, accs[batch_idx]);
+                }
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
+// =============================================================================
 // Q8_0 GEMV KERNEL
 // =============================================================================
 
