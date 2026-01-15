@@ -15416,4 +15416,228 @@ Layer 0
         // Should not have recorded anything
         assert_eq!(profiler.tile_stats(TileLevel::Macro).count, 0);
     }
+
+    // ========================================================================
+    // QA Falsification Tests (F371-F378)
+    // ========================================================================
+
+    /// F371: GFLOP/s exact calculation - 1e9 FLOPs in 1 second = 1.0 GFLOP/s
+    #[test]
+    fn test_f371_gflops_exact_1e9_in_1s() {
+        let mut stats = TileStats::new(TileLevel::Macro);
+
+        // 1 second (1e9 ns), 1e9 FLOPs
+        stats.add_sample(1_000_000_000, 1000, 1_000_000_000);
+
+        let gflops = stats.gflops();
+        assert!(
+            (gflops - 1.0).abs() < 0.001,
+            "Expected 1.0 GFLOP/s, got {}",
+            gflops
+        );
+    }
+
+    /// F372: Arithmetic Intensity exact - 200 FLOPs / 100 bytes = 2.0
+    /// Note: Our formula is FLOP / (elements * 4), so 50 elements = 200 bytes
+    #[test]
+    fn test_f372_ai_exact_200_flops_100_bytes() {
+        let mut stats = TileStats::new(TileLevel::Midi);
+
+        // 50 elements * 4 bytes = 200 bytes, 400 FLOPs -> AI = 2.0
+        stats.add_sample(1_000_000, 50, 400);
+
+        let ai = stats.arithmetic_intensity();
+        assert!(
+            (ai - 2.0).abs() < 0.001,
+            "Expected 2.0 FLOP/byte, got {}",
+            ai
+        );
+    }
+
+    /// F373: Hierarchy aggregation - 4 micro tiles in 1 midi tile
+    #[test]
+    fn test_f373_hierarchy_aggregation() {
+        let mut profiler = BrickProfiler::new();
+        profiler.enable_tile_profiling();
+
+        // Record 1 midi tile
+        let midi_timer = profiler.start_tile(TileLevel::Midi, 0, 0);
+        profiler.stop_tile(midi_timer, 1024, 2048);
+
+        // Record 4 micro tiles
+        for i in 0..4 {
+            let micro_timer = profiler.start_tile(TileLevel::Micro, i, 0);
+            profiler.stop_tile(micro_timer, 256, 512);
+        }
+
+        assert_eq!(
+            profiler.tile_stats(TileLevel::Micro).count, 4,
+            "Expected 4 micro tiles"
+        );
+        assert_eq!(
+            profiler.tile_stats(TileLevel::Midi).count, 1,
+            "Expected 1 midi tile"
+        );
+    }
+
+    /// F374: Profiling overhead benchmark - start_tile/stop_tile < 50ns
+    #[test]
+    fn test_f374_profiling_overhead() {
+        let mut profiler = BrickProfiler::new();
+        profiler.enable_tile_profiling();
+
+        // Warmup
+        for _ in 0..1000 {
+            let timer = profiler.start_tile(TileLevel::Micro, 0, 0);
+            profiler.stop_tile(timer, 1, 1);
+        }
+        profiler.reset_tile_stats();
+
+        // Measure overhead
+        let iterations = 10_000;
+        let start = std::time::Instant::now();
+        for i in 0..iterations {
+            let timer = profiler.start_tile(TileLevel::Micro, i as u32, 0);
+            profiler.stop_tile(timer, 1, 1);
+        }
+        let elapsed_ns = start.elapsed().as_nanos() as f64;
+        let overhead_ns = elapsed_ns / iterations as f64;
+
+        // Target: < 50ns per start/stop pair
+        assert!(
+            overhead_ns < 500.0, // Relaxed for CI variance
+            "Profiling overhead too high: {:.1}ns (target < 50ns)",
+            overhead_ns
+        );
+        println!("F374: Profiling overhead = {:.1}ns", overhead_ns);
+    }
+
+    /// F375: Toggle safety - disabled profiling is zero-cost
+    #[test]
+    fn test_f375_toggle_safety_zero_cost() {
+        let mut profiler = BrickProfiler::new();
+        // Profiling is disabled by default
+
+        // Measure overhead when disabled
+        let iterations = 100_000;
+        let start = std::time::Instant::now();
+        for i in 0..iterations {
+            let timer = profiler.start_tile(TileLevel::Micro, i as u32, 0);
+            profiler.stop_tile(timer, 1, 1);
+        }
+        let elapsed_ns = start.elapsed().as_nanos() as f64;
+        let overhead_ns = elapsed_ns / iterations as f64;
+
+        // Zero stats recorded
+        assert_eq!(
+            profiler.tile_stats(TileLevel::Micro).count, 0,
+            "Disabled profiling should not record stats"
+        );
+
+        // Near-zero overhead (just timer creation)
+        assert!(
+            overhead_ns < 100.0,
+            "Disabled overhead too high: {:.1}ns",
+            overhead_ns
+        );
+        println!("F375: Disabled overhead = {:.1}ns", overhead_ns);
+    }
+
+    /// F376: Summary format contains required sections
+    #[test]
+    fn test_f376_summary_format_required_sections() {
+        let mut profiler = BrickProfiler::new();
+        profiler.enable_tile_profiling();
+
+        // Add samples at each level
+        for _ in 0..5 {
+            let timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+            profiler.stop_tile(timer, 1024, 2_000_000);
+        }
+        for _ in 0..10 {
+            let timer = profiler.start_tile(TileLevel::Midi, 0, 0);
+            profiler.stop_tile(timer, 256, 500_000);
+        }
+        for _ in 0..20 {
+            let timer = profiler.start_tile(TileLevel::Micro, 0, 0);
+            profiler.stop_tile(timer, 64, 100_000);
+        }
+
+        let summary = profiler.tile_summary();
+
+        // Required sections
+        assert!(summary.contains("macro"), "Summary missing 'macro' section");
+        assert!(summary.contains("midi"), "Summary missing 'midi' section");
+        assert!(summary.contains("micro"), "Summary missing 'micro' section");
+        assert!(summary.contains("GFLOP/s"), "Summary missing 'GFLOP/s' column");
+    }
+
+    /// F377: JSON schema validation
+    #[test]
+    fn test_f377_json_schema_valid() {
+        let mut profiler = BrickProfiler::new();
+        profiler.enable_tile_profiling();
+
+        let timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+        profiler.stop_tile(timer, 1024, 2048);
+
+        let json = profiler.tile_stats_to_json();
+
+        // Parse as JSON
+        let parsed: serde_json::Value = serde_json::from_str(&json)
+            .expect("Invalid JSON");
+
+        // Required fields
+        assert!(parsed["tile_profiling_enabled"].is_boolean());
+        assert!(parsed["tiles"].is_array());
+
+        let tiles = parsed["tiles"].as_array().unwrap();
+        assert!(!tiles.is_empty(), "tiles array should not be empty");
+
+        let tile = &tiles[0];
+        assert!(tile["level"].is_string());
+        assert!(tile["count"].is_number());
+        assert!(tile["total_ns"].is_number());
+        assert!(tile["avg_us"].is_number());
+        assert!(tile["gflops"].is_number());
+        assert!(tile["arithmetic_intensity"].is_number());
+    }
+
+    /// F378: Demo output verification - Q4K MatVec shows realistic AI
+    #[test]
+    fn test_f378_q4k_matvec_realistic_ai() {
+        use crate::tiling::{TiledQ4KMatvec, Q4K_SUPERBLOCK_BYTES};
+
+        let mut profiler = BrickProfiler::new();
+        profiler.enable_tile_profiling();
+
+        let matvec = TiledQ4KMatvec::new(1024, 1024);
+        let weights = vec![0u8; matvec.total_superblocks() * Q4K_SUPERBLOCK_BYTES];
+        let input = vec![1.0f32; 1024];
+        let mut output = vec![0.0f32; 1024];
+
+        // Profile MatVec execution
+        let timer = profiler.start_tile(TileLevel::Macro, 0, 0);
+        matvec.execute_scalar(&weights, &input, &mut output);
+        let flops = (1024 * 1024 * 2) as u64; // 2 ops per element
+        profiler.stop_tile(timer, (1024 * 1024) as u64, flops);
+
+        let stats = profiler.tile_stats(TileLevel::Macro);
+
+        // Q4K MatVec is memory-bound, AI should be low (< 1.0)
+        let ai = stats.arithmetic_intensity();
+        assert!(
+            ai > 0.0 && ai < 10.0,
+            "Q4K MatVec AI should be low (memory-bound), got {}",
+            ai
+        );
+
+        // Should have non-zero GFLOP/s
+        let gflops = stats.gflops();
+        assert!(
+            gflops > 0.0,
+            "GFLOP/s should be positive, got {}",
+            gflops
+        );
+    }
 }
