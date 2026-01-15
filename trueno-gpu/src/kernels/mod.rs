@@ -57,12 +57,13 @@ pub use layernorm::{BatchedVectorizedRmsNormKernel, LayerNormKernel, RmsNormKern
 pub use megakernel::TransformerBlockMegakernel;
 pub use persistent::PersistentDecoderKernel;
 pub use quantize::{
-    BatchedQ4KGemvKernel, ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel, CoalescedQ6KGemvKernel,
-    Dp4aQ4KGemvKernel, Dp4aSIMDQ4KGemvKernel, Fp16Q4KGemvKernel, FusedGateUpQ4KGemvKernel,
-    FusedRmsNormQ4KGemvKernel, MultiWarpBatchedQ4KGemvKernel, PackedDp4aQ4KQ8Kernel, Q4KGemvKernel,
-    Q4KQ8DotKernel, Q4_0GemvKernel, Q4_1GemvKernel, Q5KGemvKernel, Q5KKernel, Q5_0GemvKernel,
-    Q6KGemvKernel, Q6KKernel, Q8QuantizeKernel, Q8_0GemvKernel, QuantizeKernel,
-    TensorCoreQ4KGemmKernel, TiledQ4KGemvKernel, TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel,
+    BatchedQ4KGemvKernel, BatchedQ6KGemvKernel, ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel,
+    CoalescedQ6KGemvKernel, Dp4aQ4KGemvKernel, Dp4aSIMDQ4KGemvKernel, Fp16Q4KGemvKernel,
+    FusedGateUpQ4KGemvKernel, FusedRmsNormQ4KGemvKernel, MultiWarpBatchedQ4KGemvKernel,
+    PackedDp4aQ4KQ8Kernel, Q4KGemvKernel, Q4KQ8DotKernel, Q4_0GemvKernel, Q4_1GemvKernel,
+    Q5KGemvKernel, Q5KKernel, Q5_0GemvKernel, Q6KGemvKernel, Q6KKernel, Q8QuantizeKernel,
+    Q8_0GemvKernel, QuantizeKernel, TensorCoreQ4KGemmKernel, TiledQ4KGemvKernel,
+    TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel,
 };
 pub use softmax::SoftmaxKernel;
 pub use lz4::{Lz4WarpCompressKernel, Lz4WarpDecompressKernel};
