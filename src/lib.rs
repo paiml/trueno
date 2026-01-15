@@ -38,6 +38,7 @@ pub mod hash;
 pub mod matrix;
 pub mod monitor;
 pub mod simulation;
+pub mod tiling;
 pub mod tuner;
 pub mod vector;
 
@@ -80,6 +81,14 @@ pub use tuner::{
     FeatureExtractor, KernelClassifier, KernelRecommendation, KernelType, QuantType, RunConfig,
     ThroughputPrediction, ThroughputRegressor, TrainingSample, TrainingStats, TunerDataCollector,
     TunerError, TunerFeatures, TunerRecommendation, UserFeedback,
+};
+
+// Tiling Compute Blocks exports (TILING-SPEC-001)
+pub use tiling::{
+    PackingLayout, PrefetchLocality, TcbGeometry, TcbIndexCalculator, TcbLevel, TilingBackend,
+    TilingConfig, TilingError, TilingStats, TiledQ4KMatvec,
+    Q4K_SUPERBLOCK_SIZE, Q4K_SUPERBLOCK_BYTES,
+    optimal_prefetch_distance, pack_a_index, pack_b_index, swizzle_index,
 };
 
 /// Backend execution target
