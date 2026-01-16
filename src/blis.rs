@@ -1068,7 +1068,7 @@ pub fn pack_a(
     let mut pack_idx = 0;
 
     // Process MR rows at a time
-    let full_panels = mc % /* ~ changed by cargo-mutants ~ */ MR;
+    let full_panels = mc / MR;
     let remainder = mc % MR;
 
     for panel in 0..full_panels {

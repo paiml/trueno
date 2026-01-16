@@ -92,6 +92,7 @@
 # Advanced Topics
 
 - [SIMD Intrinsics](./advanced/simd-intrinsics.md)
+- [BLIS-Style Matrix Multiplication](./advanced/blis-gemm.md)
 - [Phase 2 Micro-Kernel](./advanced/phase2-microkernel.md)
 - [Phase 15 Fused Q4K Kernels](./advanced/phase15-fused-q4k.md)
 - [Tiling Compute Blocks](./advanced/tiling-compute-blocks.md)
