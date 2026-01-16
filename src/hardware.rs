@@ -576,4 +576,101 @@ cpu_arithmetic_intensity = 1.4
         assert!((throughput_gpu_request - throughput_cpu).abs() < 0.001);
         assert!(throughput_cpu > 0.0);
     }
+
+    #[test]
+    fn test_bottleneck_with_gpu() {
+        // Create capability with fake GPU to test GPU bottleneck path
+        let mut cap = HardwareCapability::detect();
+        cap.gpu = Some(GpuCapability {
+            vendor: "Test".to_string(),
+            model: "Fake GPU".to_string(),
+            backend: GpuBackend::Cuda,
+            compute_capability: Some("8.9".to_string()),
+            peak_tflops_fp32: 100.0,
+            peak_tflops_tensor: Some(400.0),
+            memory_bw_gbps: 1000.0,
+            vram_gb: 24.0,
+        });
+        cap.roofline.gpu_arithmetic_intensity = Some(50.0);
+
+        // Low AI should be memory bound
+        assert_eq!(cap.bottleneck(10.0, true), Bottleneck::Memory);
+
+        // High AI should be compute bound
+        assert_eq!(cap.bottleneck(100.0, true), Bottleneck::Compute);
+
+        // Test edge case at threshold
+        assert_eq!(cap.bottleneck(50.0, true), Bottleneck::Compute);
+    }
+
+    #[test]
+    fn test_bottleneck_gpu_without_ai() {
+        // Create capability with GPU but no gpu_arithmetic_intensity
+        let mut cap = HardwareCapability::detect();
+        cap.gpu = Some(GpuCapability {
+            vendor: "Test".to_string(),
+            model: "Fake GPU".to_string(),
+            backend: GpuBackend::Cuda,
+            compute_capability: None,
+            peak_tflops_fp32: 50.0,
+            peak_tflops_tensor: None,
+            memory_bw_gbps: 500.0,
+            vram_gb: 8.0,
+        });
+        cap.roofline.gpu_arithmetic_intensity = None; // No GPU AI set
+
+        // When gpu_arithmetic_intensity is None, uses f64::MAX as threshold
+        // So any finite AI should be memory bound
+        assert_eq!(cap.bottleneck(1000.0, true), Bottleneck::Memory);
+    }
+
+    #[test]
+    fn test_simd_width_neon() {
+        // Test NEON SIMD width (4 lanes)
+        assert_eq!(SimdWidth::Neon128.lanes(), 4);
+    }
+
+    #[test]
+    fn test_simd_width_sse2() {
+        // Test SSE2 SIMD width (4 lanes)
+        assert_eq!(SimdWidth::Sse2.lanes(), 4);
+    }
+
+    #[test]
+    fn test_best_backend_without_gpu() {
+        let mut cap = HardwareCapability::detect();
+        cap.gpu = None;
+
+        // Should return None backend when no GPU
+        assert_eq!(cap.best_backend(), GpuBackend::None);
+    }
+
+    #[test]
+    fn test_best_backend_with_gpu() {
+        let mut cap = HardwareCapability::detect();
+        cap.gpu = Some(GpuCapability {
+            vendor: "NVIDIA".to_string(),
+            model: "RTX 4090".to_string(),
+            backend: GpuBackend::Cuda,
+            compute_capability: Some("8.9".to_string()),
+            peak_tflops_fp32: 82.58,
+            peak_tflops_tensor: Some(330.3),
+            memory_bw_gbps: 1008.0,
+            vram_gb: 24.0,
+        });
+
+        assert_eq!(cap.best_backend(), GpuBackend::Cuda);
+    }
+
+    #[test]
+    fn test_gpu_backend_variants() {
+        // Test all GPU backend variants
+        assert_ne!(GpuBackend::None, GpuBackend::Cuda);
+        assert_ne!(GpuBackend::Cuda, GpuBackend::Vulkan);
+        assert_ne!(GpuBackend::Vulkan, GpuBackend::Metal);
+
+        // Test debug formatting
+        let debug_str = format!("{:?}", GpuBackend::Cuda);
+        assert!(debug_str.contains("Cuda"));
+    }
 }
