@@ -89,7 +89,7 @@ With the `ml-tuner` feature, you can use aprender's RandomForest models for lear
 ```toml
 # Cargo.toml
 [dependencies]
-trueno = { version = "0.11", features = ["ml-tuner"] }
+trueno = { version = "0.13", features = ["ml-tuner"] }
 ```
 
 ### Training a Custom Regressor
