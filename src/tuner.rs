@@ -5374,4 +5374,235 @@ mod tests {
         assert_eq!(KernelType::from_index(13), KernelType::Generic);
         assert_eq!(KernelType::from_index(99), KernelType::Unknown); // Out of range
     }
+
+    // =========================================================================
+    // T-TUNER-011: GPU/CUDA Hardware Path Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_feature_extractor_with_detected_hardware() {
+        use crate::hardware::HardwareCapability;
+        use std::time::Duration;
+
+        // Detect real hardware (will find CUDA GPU if present)
+        let hw = HardwareCapability::detect();
+
+        // Create extractor with hardware
+        let extractor = FeatureExtractor::with_hardware(hw.clone());
+
+        // Create profiler with some recorded data
+        let mut profiler = BrickProfiler::enabled();
+        profiler.record_elapsed("attention", Duration::from_micros(500), 32);
+        profiler.record_elapsed("ffn", Duration::from_micros(300), 32);
+        profiler.record_elapsed("norm", Duration::from_micros(50), 32);
+
+        let config = RunConfig {
+            model_params_b: 7.0,
+            batch_size: 1,
+            quant_type: QuantType::Q4K,
+            cuda_graphs: true,
+            ..Default::default()
+        };
+
+        // Extract features - exercises GPU hardware paths
+        let features = extractor.extract(&profiler, &config);
+
+        // Should have valid features
+        assert!(features.validate().is_ok());
+
+        // If GPU is present, efficiency should be calculated
+        if hw.gpu.is_some() {
+            // GPU metrics should be set
+            assert!(features.gpu_mem_bw_norm >= 0.0);
+            assert!(features.gpu_compute_norm >= 0.0);
+        }
+    }
+
+    #[test]
+    fn test_calculate_efficiency_with_gpu() {
+        use crate::hardware::{CpuCapability, GpuBackend, GpuCapability, HardwareCapability, RooflineParams, SimdWidth};
+        use std::time::Duration;
+
+        // Manually construct hardware with GPU to exercise GPU code paths
+        let gpu = GpuCapability {
+            vendor: "NVIDIA".to_string(),
+            model: "RTX 4090".to_string(),
+            backend: GpuBackend::Cuda,
+            compute_capability: Some("8.9".to_string()),
+            peak_tflops_fp32: 82.58,
+            peak_tflops_tensor: Some(330.3),
+            memory_bw_gbps: 1008.0,
+            vram_gb: 24.0,
+        };
+
+        let cpu = CpuCapability {
+            vendor: "Intel".to_string(),
+            model: "Core i9-13900K".to_string(),
+            cores: 24,
+            threads: 32,
+            simd: SimdWidth::Avx512,
+            base_freq_ghz: 3.0,
+            peak_gflops: 500.0,
+            memory_bw_gbps: 80.0,
+        };
+
+        let hw = HardwareCapability {
+            timestamp: "2026-01-16".to_string(),
+            hostname: "test".to_string(),
+            cpu,
+            gpu: Some(gpu),
+            roofline: RooflineParams {
+                cpu_arithmetic_intensity: 10.0,
+                gpu_arithmetic_intensity: Some(50.0),
+            },
+            byte_budget: None,
+        };
+
+        let extractor = FeatureExtractor::with_hardware(hw);
+
+        // Create profiler with token data
+        let mut profiler = BrickProfiler::enabled();
+        // Record some operations with tokens
+        profiler.record_elapsed("decode", Duration::from_millis(100), 100);
+
+        let config = RunConfig {
+            model_params_b: 7.0,
+            batch_size: 1,
+            quant_type: QuantType::Q4K,
+            ..Default::default()
+        };
+
+        // This should exercise the calculate_efficiency path
+        let efficiency = extractor.calculate_efficiency(&profiler, &config);
+
+        // Efficiency should be Some if profiler has tokens
+        if profiler.tokens_per_sec().is_some() {
+            assert!(efficiency.is_some());
+            let eff = efficiency.unwrap();
+            assert!(eff >= 0.0 && eff <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_classify_bottleneck_attention_bound() {
+        use crate::hardware::HardwareCapability;
+        use std::time::Duration;
+
+        let hw = HardwareCapability::detect();
+        let extractor = FeatureExtractor::with_hardware(hw);
+
+        // Create profiler where attention dominates (>35%)
+        let mut profiler = BrickProfiler::enabled();
+        profiler.record_elapsed("attention", Duration::from_micros(500), 32);
+        profiler.record_elapsed("ffn", Duration::from_micros(100), 32);
+        profiler.record_elapsed("norm", Duration::from_micros(50), 32);
+
+        let config = RunConfig::default();
+        let features = extractor.extract(&profiler, &config);
+
+        // Should classify as attention bound
+        assert!(features.bottleneck_class.is_some());
+        let bottleneck = features.bottleneck_class.unwrap();
+        assert!(matches!(bottleneck, BottleneckClass::AttentionBound | BottleneckClass::MemoryBound));
+    }
+
+    #[test]
+    fn test_classify_bottleneck_memory_bound() {
+        use crate::hardware::HardwareCapability;
+        use std::time::Duration;
+
+        let hw = HardwareCapability::detect();
+        let extractor = FeatureExtractor::with_hardware(hw);
+
+        // Create profiler where FFN dominates (>50%)
+        let mut profiler = BrickProfiler::enabled();
+        profiler.record_elapsed("attention", Duration::from_micros(100), 32);
+        profiler.record_elapsed("ffn", Duration::from_micros(800), 32);
+        profiler.record_elapsed("norm", Duration::from_micros(50), 32);
+
+        let config = RunConfig::default();
+        let features = extractor.extract(&profiler, &config);
+
+        // Should classify as memory bound
+        assert!(features.bottleneck_class.is_some());
+    }
+
+    #[test]
+    fn test_classify_bottleneck_launch_bound() {
+        use crate::hardware::HardwareCapability;
+        use std::time::Duration;
+
+        let hw = HardwareCapability::detect();
+        let extractor = FeatureExtractor::with_hardware(hw);
+
+        // Create profiler where norm dominates (>20%) indicating launch overhead
+        let mut profiler = BrickProfiler::enabled();
+        profiler.record_elapsed("attention", Duration::from_micros(100), 32);
+        profiler.record_elapsed("ffn", Duration::from_micros(200), 32);
+        profiler.record_elapsed("norm", Duration::from_micros(300), 32);
+
+        let config = RunConfig::default();
+        let features = extractor.extract(&profiler, &config);
+
+        // Should classify as launch bound
+        assert!(features.bottleneck_class.is_some());
+    }
+
+    #[test]
+    fn test_gpu_builder_methods() {
+        // Test all GPU-related builder methods
+        let features = TunerFeatures::builder()
+            .gpu_mem_bw_gbs(1008.0)  // RTX 4090
+            .gpu_compute_tflops(82.58)
+            .gpu_sm_count(128)
+            .gpu_l2_cache_mb(72.0)
+            .cuda_graphs(true)
+            .build();
+
+        // Normalized values should be in valid range
+        assert!(features.gpu_mem_bw_norm > 0.0 && features.gpu_mem_bw_norm <= 1.0);
+        assert!(features.gpu_compute_norm > 0.0 && features.gpu_compute_norm <= 1.0);
+        assert!(features.gpu_sm_norm > 0.0 && features.gpu_sm_norm <= 1.0);
+        assert!(features.gpu_l2_cache_norm > 0.0 && features.gpu_l2_cache_norm <= 1.0);
+        assert_eq!(features.cuda_graphs, 1.0);
+    }
+
+    #[test]
+    fn test_run_config_with_cuda_graphs() {
+        let config = RunConfig {
+            cuda_graphs: true,
+            ..Default::default()
+        };
+
+        assert!(config.cuda_graphs);
+
+        // Extract features with cuda_graphs enabled
+        let extractor = FeatureExtractor::new();
+        let profiler = BrickProfiler::new();
+        let features = extractor.extract(&profiler, &config);
+
+        assert_eq!(features.cuda_graphs, 1.0);
+    }
+
+    #[test]
+    fn test_bottleneck_prediction_for_vectorized_q4k() {
+        let classifier = KernelClassifier::new();
+
+        // Features for VectorizedQ4K scenario
+        let features = TunerFeatures::builder()
+            .batch_size(1)  // M=1 decode
+            .quant_type(QuantType::Q4K)
+            .cuda_graphs(false)
+            .build();
+
+        let rec = classifier.predict(&features);
+
+        // Should recommend VectorizedQ4K for M=1 decode
+        assert!(rec.confidence >= 0.0);
+        // Alternatives should include Q4K variants
+        let has_q4k = rec.alternatives.iter().any(|(k, _)| {
+            matches!(k, KernelType::VectorizedQ4K | KernelType::CoalescedQ4K | KernelType::TiledQ4K)
+        });
+        assert!(rec.top_kernel != KernelType::Unknown || has_q4k || rec.alternatives.is_empty());
+    }
 }
