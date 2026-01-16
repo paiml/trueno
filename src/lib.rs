@@ -29,6 +29,7 @@
 //! ```
 
 pub mod backends;
+pub mod blis;
 pub mod brick;
 pub mod chaos;
 pub mod eigen;

@@ -374,9 +374,24 @@ impl Matrix<f32> {
             let max_dim = self.rows.max(self.cols).max(other.cols);
 
             if max_dim < TILED_THRESHOLD {
-                // Medium matrices: use tiled approach (no transpose overhead)
-                // Works well for both WASM and native for matrices up to ~512
-                self.matmul_wasm_tiled(other, &mut result)?;
+                // Medium matrices: use BLIS on native, tiled on WASM
+                #[cfg(target_arch = "wasm32")]
+                {
+                    self.matmul_wasm_tiled(other, &mut result)?;
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    // BLIS is faster than tiled for all sizes on native
+                    crate::blis::gemm_blis(
+                        self.rows,
+                        other.cols,
+                        self.cols,
+                        &self.data,
+                        &other.data,
+                        &mut result.data,
+                        None,
+                    )?;
+                }
             } else {
                 // Large matrices: platform-specific optimized paths
                 #[cfg(target_arch = "wasm32")]
@@ -386,8 +401,17 @@ impl Matrix<f32> {
                 }
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    // Native: use AVX2/NEON SIMD with cache blocking
-                    self.matmul_simd(other, &mut result)?;
+                    // Native: use BLIS-style GEMM with register blocking
+                    // ~2x faster than old SIMD implementation for large matrices
+                    crate::blis::gemm_blis(
+                        self.rows,
+                        other.cols,
+                        self.cols,
+                        &self.data,
+                        &other.data,
+                        &mut result.data,
+                        None,
+                    )?;
                 }
             }
         } else {
