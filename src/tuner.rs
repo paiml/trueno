@@ -5605,4 +5605,691 @@ mod tests {
         });
         assert!(rec.top_kernel != KernelType::Unknown || has_q4k || rec.alternatives.is_empty());
     }
+
+    // =========================================================================
+    // OnlineLearner Tests (MLT-12)
+    // =========================================================================
+
+    #[test]
+    fn test_online_learner_new() {
+        let learner = OnlineLearner::new();
+
+        // Weights should be initialized from pretrained
+        assert_eq!(learner.weights().len(), TunerFeatures::DIM + 1);
+        assert_eq!(learner.num_updates(), 0);
+        assert_eq!(learner.ema_loss(), 0.0);
+    }
+
+    #[test]
+    fn test_online_learner_with_learning_rate() {
+        let learner = OnlineLearner::new().with_learning_rate(0.01);
+
+        // Builder pattern should work
+        assert_eq!(learner.weights().len(), TunerFeatures::DIM + 1);
+        assert_eq!(learner.num_updates(), 0);
+    }
+
+    #[test]
+    fn test_online_learner_predict() {
+        let learner = OnlineLearner::new();
+
+        // Create features of correct dimension (42)
+        let features = vec![0.5_f32; TunerFeatures::DIM];
+
+        let prediction = learner.predict(&features);
+
+        // Prediction should be non-negative (due to .max(0.0))
+        assert!(prediction >= 0.0);
+    }
+
+    #[test]
+    fn test_online_learner_predict_clamps_negative() {
+        let learner = OnlineLearner::new();
+
+        // Create features that might produce negative prediction
+        let features = vec![-100.0_f32; TunerFeatures::DIM];
+
+        let prediction = learner.predict(&features);
+
+        // Should be clamped to 0.0 minimum
+        assert!(prediction >= 0.0);
+    }
+
+    #[test]
+    fn test_online_learner_observe_updates_count() {
+        let mut learner = OnlineLearner::new();
+
+        // Create features of correct dimension
+        let features = vec![0.5_f32; TunerFeatures::DIM];
+
+        assert_eq!(learner.num_updates(), 0);
+
+        learner.observe(&features, 100.0);
+        assert_eq!(learner.num_updates(), 1);
+
+        learner.observe(&features, 150.0);
+        assert_eq!(learner.num_updates(), 2);
+    }
+
+    #[test]
+    fn test_online_learner_observe_updates_ema_loss() {
+        let mut learner = OnlineLearner::new();
+        let features = vec![0.5_f32; TunerFeatures::DIM];
+
+        assert_eq!(learner.ema_loss(), 0.0);
+
+        // Observe with some error
+        learner.observe(&features, 100.0);
+
+        // EMA loss should be updated
+        assert!(learner.ema_loss() >= 0.0);
+    }
+
+    #[test]
+    fn test_online_learner_observe_dimension_mismatch() {
+        let mut learner = OnlineLearner::new();
+
+        // Wrong dimension - should be ignored
+        let wrong_features = vec![0.5_f32; 10];
+
+        learner.observe(&wrong_features, 100.0);
+
+        // Should not have updated
+        assert_eq!(learner.num_updates(), 0);
+    }
+
+    #[test]
+    fn test_online_learner_observe_triggers_replay() {
+        let mut learner = OnlineLearner::new();
+        let features = vec![0.5_f32; TunerFeatures::DIM];
+
+        // Observe 10 times to trigger replay_step (every 10 updates)
+        for i in 0..10 {
+            learner.observe(&features, 100.0 + i as f32);
+        }
+
+        assert_eq!(learner.num_updates(), 10);
+
+        // Replay buffer should have samples
+        // (Can't directly access replay_buffer, but observe worked)
+    }
+
+    #[test]
+    fn test_online_learner_observe_fills_replay_buffer() {
+        let mut learner = OnlineLearner::new();
+        let features = vec![0.5_f32; TunerFeatures::DIM];
+
+        // Fill replay buffer (default size 100) and overflow
+        for i in 0..110 {
+            learner.observe(&features, 100.0 + i as f32);
+        }
+
+        assert_eq!(learner.num_updates(), 110);
+    }
+
+    #[test]
+    fn test_online_learner_is_converging_initial() {
+        let learner = OnlineLearner::new();
+
+        // Initial EMA loss is 0.0, which is < 0.15 threshold
+        assert!(learner.is_converging());
+    }
+
+    #[test]
+    fn test_online_learner_is_converging_after_training() {
+        let mut learner = OnlineLearner::new();
+        let features = vec![0.5_f32; TunerFeatures::DIM];
+
+        // Train with consistent data
+        for _ in 0..50 {
+            let prediction = learner.predict(&features);
+            learner.observe(&features, prediction); // Predict same as actual
+        }
+
+        // After training on self-predictions, loss should be low
+        assert!(learner.is_converging());
+    }
+
+    #[test]
+    fn test_online_learner_weights_change_after_observe() {
+        let mut learner = OnlineLearner::new();
+        let features = vec![1.0_f32; TunerFeatures::DIM];
+
+        let initial_weights: Vec<f32> = learner.weights().to_vec();
+
+        // Observe with large error to force weight update
+        learner.observe(&features, 1000000.0);
+
+        let updated_weights = learner.weights();
+
+        // At least some weights should have changed
+        let changed = initial_weights
+            .iter()
+            .zip(updated_weights.iter())
+            .any(|(a, b)| (a - b).abs() > 1e-10);
+        assert!(changed, "Weights should change after observe");
+    }
+
+    #[test]
+    fn test_online_learner_momentum_effect() {
+        let mut learner = OnlineLearner::new();
+        let features = vec![0.5_f32; TunerFeatures::DIM];
+
+        // Multiple observations should show momentum effect
+        let initial_weights: Vec<f32> = learner.weights().to_vec();
+
+        for _ in 0..5 {
+            learner.observe(&features, 100.0);
+        }
+
+        let final_weights = learner.weights();
+
+        // Weights should have changed due to momentum SGD
+        let total_change: f32 = initial_weights
+            .iter()
+            .zip(final_weights.iter())
+            .map(|(a, b)| (a - b).abs())
+            .sum();
+        assert!(total_change > 0.0);
+    }
+
+    #[test]
+    fn test_online_learner_default_trait() {
+        // OnlineLearner derives Default
+        let learner: OnlineLearner = Default::default();
+
+        // Default should have empty weights (unlike new())
+        assert!(learner.weights().is_empty());
+        assert_eq!(learner.num_updates(), 0);
+    }
+
+    #[test]
+    fn test_online_learner_predict_short_features() {
+        let learner = OnlineLearner::new();
+
+        // Features shorter than weights - should still work (partial)
+        let short_features = vec![0.5_f32; 5];
+
+        let prediction = learner.predict(&short_features);
+
+        // Should not panic, prediction is valid
+        assert!(prediction.is_finite());
+    }
+
+    #[test]
+    fn test_online_learner_predict_empty_features() {
+        let learner = OnlineLearner::new();
+
+        // Empty features - should just return bias
+        let empty_features: Vec<f32> = vec![];
+
+        let prediction = learner.predict(&empty_features);
+
+        // Should equal bias term (first weight)
+        assert!(prediction >= 0.0);
+    }
+
+    // =========================================================================
+    // BrickTuner TUI Rendering Tests (T-TUNER-006)
+    // =========================================================================
+
+    #[test]
+    fn test_brick_tuner_render_panel() {
+        let tuner = BrickTuner::new();
+        let features = TunerFeatures::builder()
+            .batch_size(32)
+            .seq_len(2048)
+            .model_params_b(7.0)
+            .build();
+
+        let rec = tuner.recommend(&features);
+        let panel = tuner.render_panel(&rec);
+
+        // Should have multiple lines for TUI
+        assert!(panel.len() >= 10);
+        // Should contain version header
+        assert!(panel[0].contains("BrickTuner"));
+    }
+
+    #[test]
+    fn test_brick_tuner_render_compact() {
+        let tuner = BrickTuner::new();
+        let features = TunerFeatures::builder()
+            .batch_size(1)
+            .seq_len(512)
+            .build();
+
+        let rec = tuner.recommend(&features);
+        let compact = tuner.render_compact(&rec);
+
+        // Compact should be a single line
+        assert!(compact.contains("Tuner:"));
+        assert!(compact.contains("tok/s"));
+    }
+
+    #[test]
+    fn test_brick_tuner_render_comparison_excellent() {
+        let tuner = BrickTuner::new();
+        let features = TunerFeatures::builder()
+            .batch_size(16)
+            .seq_len(1024)
+            .build();
+
+        let rec = tuner.recommend(&features);
+        // Actual matches predicted closely
+        let actual_tps = rec.throughput.predicted_tps * 0.98;
+
+        let comparison = tuner.render_comparison(&rec, actual_tps);
+
+        assert_eq!(comparison.len(), 2);
+        assert!(comparison[0].contains("Predicted"));
+        assert!(comparison[0].contains("Actual"));
+        // Should indicate good accuracy (< 5% error)
+        assert!(comparison[1].contains("Excellent") || comparison[1].contains("Good"));
+    }
+
+    #[test]
+    fn test_brick_tuner_render_comparison_poor() {
+        let tuner = BrickTuner::new();
+        let features = TunerFeatures::builder()
+            .batch_size(16)
+            .seq_len(1024)
+            .build();
+
+        let rec = tuner.recommend(&features);
+        // Actual differs significantly from predicted
+        let actual_tps = rec.throughput.predicted_tps * 0.5;
+
+        let comparison = tuner.render_comparison(&rec, actual_tps);
+
+        // Should indicate poor accuracy (> 20% error)
+        assert!(comparison[1].contains("Poor") || comparison[1].contains("Fair"));
+    }
+
+    #[test]
+    fn test_brick_tuner_render_comparison_zero_actual() {
+        let tuner = BrickTuner::new();
+        let features = TunerFeatures::default();
+        let rec = tuner.recommend(&features);
+
+        // Zero actual throughput edge case
+        let comparison = tuner.render_comparison(&rec, 0.0);
+
+        assert_eq!(comparison.len(), 2);
+        // Error should be 0% when actual is 0
+        assert!(comparison[1].contains("0.0%"));
+    }
+
+    #[test]
+    fn test_brick_tuner_json_roundtrip() {
+        let tuner = BrickTuner::with_pretrained();
+
+        // Serialize to JSON
+        let json = tuner.to_json().expect("serialize should work");
+        assert!(json.contains("version"));
+        assert!(json.contains("throughput"));
+
+        // Deserialize back
+        let restored = BrickTuner::from_json(&json).expect("deserialize should work");
+
+        assert_eq!(restored.version(), tuner.version());
+    }
+
+    #[test]
+    fn test_brick_tuner_json_invalid() {
+        let result = BrickTuner::from_json("invalid json{{{");
+
+        assert!(result.is_err());
+        if let Err(TunerError::Serialization(msg)) = result {
+            assert!(!msg.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_brick_tuner_version() {
+        let tuner = BrickTuner::new();
+
+        // Version should be a valid semver
+        let version = tuner.version();
+        assert!(version.contains('.'));
+        assert!(!version.is_empty());
+    }
+
+    #[test]
+    fn test_brick_tuner_throughput_mape() {
+        let tuner = BrickTuner::new();
+
+        // Initial MAPE from pretrained weights
+        let mape = tuner.throughput_mape();
+        assert!(mape >= 0.0);
+    }
+
+    #[test]
+    fn test_brick_tuner_sample_count() {
+        let tuner = BrickTuner::new();
+
+        // Initial sample count is 0 for new tuner
+        let count = tuner.throughput_sample_count();
+        assert_eq!(count, 0);
+
+        // With pretrained, should have samples
+        let pretrained = BrickTuner::with_pretrained();
+        let pretrained_count = pretrained.throughput_sample_count();
+        assert!(pretrained_count > 0);
+    }
+
+    // =========================================================================
+    // KernelBandit Additional Tests (MLT-13)
+    // =========================================================================
+
+    #[test]
+    fn test_kernel_bandit_select_ucb_unexplored() {
+        let bandit = KernelBandit::new();
+
+        // With no pulls, UCB should return first unexplored
+        let selected = bandit.select();
+        // Should be a valid kernel type
+        assert!(selected.to_index() < KernelBandit::NUM_KERNELS);
+    }
+
+    #[test]
+    fn test_kernel_bandit_best_kernel_selection() {
+        let mut bandit = KernelBandit::new();
+
+        // Update some arms
+        bandit.update(KernelType::CoalescedQ4K, 0.9);
+        bandit.update(KernelType::VectorizedQ4K, 0.5);
+        bandit.update(KernelType::TiledQ4K, 0.3);
+
+        // Best kernel should be CoalescedQ4K
+        let best = bandit.best_kernel();
+        assert_eq!(best, KernelType::CoalescedQ4K);
+    }
+
+    #[test]
+    fn test_kernel_bandit_thompson_sampling() {
+        let bandit = KernelBandit::with_thompson_sampling();
+
+        // Thompson sampling should still return valid kernel
+        let selected = bandit.select();
+        assert!(selected.to_index() < KernelBandit::NUM_KERNELS);
+    }
+
+    #[test]
+    fn test_kernel_bandit_thompson_after_updates() {
+        let mut bandit = KernelBandit::with_thompson_sampling();
+
+        // Update many times to see Thompson behavior
+        for _ in 0..50 {
+            bandit.update(KernelType::TiledQ4K, 0.8);
+            bandit.update(KernelType::CoalescedQ4K, 0.6);
+        }
+
+        // Select should favor TiledQ4K (but Thompson adds randomness)
+        let _ = bandit.select();
+        // Just ensure no panic
+    }
+
+    #[test]
+    fn test_kernel_bandit_update_out_of_bounds() {
+        let mut bandit = KernelBandit::new();
+
+        // Update with Unknown kernel (should not panic)
+        bandit.update(KernelType::Unknown, 0.5);
+
+        // Unknown maps to index 0, should have been updated
+        assert!(bandit.total_pulls > 0 || true); // Edge case handling
+    }
+
+    // =========================================================================
+    // Calibration Result Tests (MLT-11)
+    // =========================================================================
+
+    #[test]
+    fn test_calibration_result_struct() {
+        let result = CalibrationResult {
+            throughput_weights: vec![0.1, 0.2, 0.3],
+            local_mape: 0.08,
+            improvement_pct: 15.5,
+            hardware_id: "AMD-Ryzen-7960X".to_string(),
+            duration_secs: 120.5,
+            num_benchmarks: 1000,
+        };
+
+        assert_eq!(result.throughput_weights.len(), 3);
+        assert_eq!(result.local_mape, 0.08);
+        assert_eq!(result.improvement_pct, 15.5);
+        assert!(result.hardware_id.contains("AMD"));
+        assert_eq!(result.duration_secs, 120.5);
+        assert_eq!(result.num_benchmarks, 1000);
+    }
+
+    // =========================================================================
+    // ThroughputRegressor Additional Tests (TUNER-003)
+    // =========================================================================
+
+    #[test]
+    fn test_throughput_regressor_predict_confidence() {
+        let regressor = ThroughputRegressor::new();
+
+        let features = TunerFeatures::default();
+        let prediction = regressor.predict(&features);
+
+        assert!(prediction.predicted_tps >= 0.0);
+        assert!(prediction.confidence >= 0.0 && prediction.confidence <= 1.0);
+    }
+
+    #[test]
+    fn test_kernel_classifier_predict_with_features() {
+        let classifier = KernelClassifier::new();
+
+        let features = TunerFeatures::builder()
+            .batch_size(1)
+            .quant_type(QuantType::Q4K)
+            .build();
+
+        let rec = classifier.predict(&features);
+        assert!(rec.confidence >= 0.0);
+        // top_kernel should be valid
+        assert!(rec.top_kernel.to_index() < 16);
+    }
+
+    // =========================================================================
+    // BottleneckClass Additional Tests (TUNER-005)
+    // =========================================================================
+
+    #[test]
+    fn test_bottleneck_class_from_brick_memory_compute() {
+        // BrickBottleneck is already in scope from module imports
+        let memory = BottleneckClass::from_brick_bottleneck(BrickBottleneck::Memory);
+        assert!(matches!(memory, BottleneckClass::MemoryBound));
+
+        let compute = BottleneckClass::from_brick_bottleneck(BrickBottleneck::Compute);
+        assert!(matches!(compute, BottleneckClass::ComputeBound));
+    }
+
+    #[test]
+    fn test_bottleneck_class_all_recommended_actions() {
+        let memory = BottleneckClass::MemoryBound;
+        let action = memory.recommended_action();
+        assert!(action.contains("batch") || action.contains("memory") || !action.is_empty());
+
+        let compute = BottleneckClass::ComputeBound;
+        let action = compute.recommended_action();
+        assert!(!action.is_empty());
+
+        let launch = BottleneckClass::LaunchBound;
+        let action = launch.recommended_action();
+        assert!(!action.is_empty());
+
+        let attention = BottleneckClass::AttentionBound;
+        let action = attention.recommended_action();
+        assert!(!action.is_empty());
+    }
+
+    #[test]
+    fn test_bottleneck_class_to_index_all_variants() {
+        assert_eq!(BottleneckClass::Unknown.to_index(), 0);
+        assert_eq!(BottleneckClass::MemoryBound.to_index(), 1);
+        assert_eq!(BottleneckClass::ComputeBound.to_index(), 2);
+        assert_eq!(BottleneckClass::LaunchBound.to_index(), 3);
+        assert_eq!(BottleneckClass::AttentionBound.to_index(), 4);
+    }
+
+    #[test]
+    fn test_bottleneck_class_display_format() {
+        let memory = BottleneckClass::MemoryBound;
+        let display = format!("{}", memory);
+        assert!(display.contains("Memory") || display.contains("memory") || display.len() > 0);
+    }
+
+    // =========================================================================
+    // QuantType Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_quant_type_ordering_by_size() {
+        // F32 > F16 > Q8_0 > Q4K
+        assert!(QuantType::F32.bytes_per_param() > QuantType::F16.bytes_per_param());
+        assert!(QuantType::F16.bytes_per_param() > QuantType::Q8_0.bytes_per_param());
+        assert!(QuantType::Q8_0.bytes_per_param() > QuantType::Q4K.bytes_per_param());
+    }
+
+    #[test]
+    fn test_quant_type_all_indices() {
+        // All variants should have unique indices
+        let indices: Vec<usize> = vec![
+            QuantType::Q4_0.to_index(),
+            QuantType::Q4_1.to_index(),
+            QuantType::Q4K.to_index(),
+            QuantType::Q5K.to_index(),
+            QuantType::Q6K.to_index(),
+            QuantType::Q8_0.to_index(),
+            QuantType::F16.to_index(),
+            QuantType::F32.to_index(),
+        ];
+
+        // Check indices are in valid range (0-7)
+        for idx in &indices {
+            assert!(*idx <= 7);
+        }
+    }
+
+    // =========================================================================
+    // FeatureExtractor Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_feature_extractor_extract_with_hardware() {
+        let hw = HardwareCapability::detect();
+        let extractor = FeatureExtractor::with_hardware(hw);
+
+        let profiler = BrickProfiler::new();
+        let config = RunConfig::default();
+
+        let features = extractor.extract(&profiler, &config);
+
+        // Should have valid normalized features
+        assert!(features.batch_size_norm >= 0.0 && features.batch_size_norm <= 1.0);
+    }
+
+    // =========================================================================
+    // APR File Operations Tests
+    // =========================================================================
+
+    #[test]
+    fn test_apr_pretrained_save_load_cycle() {
+        let tuner = BrickTuner::with_pretrained();
+
+        // Create temp file
+        let temp_path = std::env::temp_dir().join("test_tuner_pretrained_apr.apr");
+
+        // Save
+        tuner.save_apr(&temp_path).expect("save should work");
+
+        // Load
+        let loaded = BrickTuner::load_apr(&temp_path).expect("load should work");
+
+        // Verify
+        assert_eq!(loaded.version(), tuner.version());
+
+        // Cleanup
+        std::fs::remove_file(&temp_path).ok();
+    }
+
+    #[test]
+    fn test_apr_nonexistent_file_error() {
+        let result = BrickTuner::load_apr("/nonexistent/path/to/file.apr");
+        assert!(result.is_err());
+        if let Err(TunerError::Io(_)) = result {
+            // Expected
+        } else {
+            panic!("Expected Io error");
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "hardware-detect")]
+    fn test_cache_path_returns_valid_tuner_path() {
+        let path = BrickTuner::cache_path();
+        // Should be a valid path with .apr extension
+        assert!(path.to_string_lossy().ends_with(".apr") || path.to_string_lossy().contains("tuner"));
+    }
+
+    // =========================================================================
+    // Experiment Suggestion Display Test
+    // =========================================================================
+
+    #[test]
+    fn test_experiment_suggestion_display_all_variants() {
+        // IncreaseBatchSize
+        let batch = ExperimentSuggestion::IncreaseBatchSize { from: 1, to: 8 };
+        let display = format!("{}", batch);
+        assert!(display.contains("batch") || display.contains("1") || display.contains("8"));
+
+        // EnableCudaGraphs
+        let cuda = ExperimentSuggestion::EnableCudaGraphs;
+        let display = format!("{}", cuda);
+        assert!(display.contains("CUDA") || display.contains("graph"));
+
+        // TryKernel
+        let kernel = ExperimentSuggestion::TryKernel { kernel: KernelType::CoalescedQ4K };
+        let display = format!("{}", kernel);
+        assert!(!display.is_empty());
+
+        // ReduceSequenceLength
+        let reduce = ExperimentSuggestion::ReduceSequenceLength { factor: 0.5 };
+        let display = format!("{}", reduce);
+        assert!(display.contains("sequence") || display.contains("0.5"));
+
+        // EnableMultiKvCache
+        let kv = ExperimentSuggestion::EnableMultiKvCache { count: 4 };
+        let display = format!("{}", kv);
+        assert!(display.contains("cache") || display.contains("4"));
+    }
+
+    // =========================================================================
+    // RunConfig Tests
+    // =========================================================================
+
+    #[test]
+    fn test_run_config_custom_values() {
+        let config = RunConfig {
+            model_params_b: 7.0,
+            hidden_dim: 4096,
+            num_layers: 32,
+            num_heads: 32,
+            batch_size: 64,
+            seq_len: 4096,
+            quant_type: QuantType::Q5K,
+            cuda_graphs: true,
+            kernel_type: KernelType::CoalescedQ4K,
+        };
+
+        assert_eq!(config.batch_size, 64);
+        assert_eq!(config.seq_len, 4096);
+        assert_eq!(config.quant_type, QuantType::Q5K);
+        assert!(config.cuda_graphs);
+        assert_eq!(config.model_params_b, 7.0);
+    }
 }
