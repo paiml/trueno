@@ -1,7 +1,0 @@
-# trueno cargo configuration
-[build]
-target-dir = "target"
-
-# Deny warnings on CI
-# [build]
-# rustflags = ["-D", "warnings"]
