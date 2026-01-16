@@ -1851,4 +1851,129 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_sse2_abs_matches_scalar() {
+        // Verify SSE2 abs produces same results as scalar
+        let test_cases = vec![
+            vec![],                                             // empty
+            vec![-5.0],                                         // single negative
+            vec![5.0],                                          // single positive
+            vec![-3.0, 1.0, -4.0, 1.5],                         // 4 elements (aligned)
+            vec![-3.0, 1.0, -4.0, 1.5, -9.0, 2.0, -6.0],        // 7 elements (remainder)
+            vec![-1.0, 2.0, -3.0, 4.0, -5.0, 6.0, -7.0, 8.0],   // 8 elements
+            vec![0.0, -0.0, f32::INFINITY, f32::NEG_INFINITY],  // special values
+        ];
+
+        for test_vec in test_cases {
+            let mut scalar_result = vec![0.0f32; test_vec.len()];
+            let mut sse2_result = vec![0.0f32; test_vec.len()];
+
+            // SAFETY: CPU feature verified at runtime, slices bounds-checked
+            unsafe {
+                super::super::scalar::ScalarBackend::abs(&test_vec, &mut scalar_result);
+                Sse2Backend::abs(&test_vec, &mut sse2_result);
+            }
+
+            for (i, (&s, &e)) in scalar_result.iter().zip(sse2_result.iter()).enumerate() {
+                // Handle NaN comparison
+                if s.is_nan() && e.is_nan() {
+                    continue;
+                }
+                assert!(
+                    (s - e).abs() < 1e-5 || (s.is_infinite() && e.is_infinite() && s.signum() == e.signum()),
+                    "abs mismatch at index {} for {:?}: scalar={}, sse2={}",
+                    i,
+                    test_vec,
+                    s,
+                    e
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_sse2_tanh_saturation() {
+        // Test tanh saturation at extreme values (scalar remainder path)
+        let extreme_values = vec![-100.0, -50.0, -31.0, 31.0, 50.0, 100.0];
+        let mut result = vec![0.0f32; extreme_values.len()];
+
+        // SAFETY: CPU feature verified at runtime
+        unsafe {
+            Sse2Backend::tanh(&extreme_values, &mut result);
+        }
+
+        // Values < -30 should saturate to -1.0
+        assert!((result[0] - (-1.0)).abs() < 1e-5, "tanh(-100) should be -1.0");
+        assert!((result[1] - (-1.0)).abs() < 1e-5, "tanh(-50) should be -1.0");
+        assert!((result[2] - (-1.0)).abs() < 1e-5, "tanh(-31) should be -1.0");
+
+        // Values > 30 should saturate to 1.0
+        assert!((result[3] - 1.0).abs() < 1e-5, "tanh(31) should be 1.0");
+        assert!((result[4] - 1.0).abs() < 1e-5, "tanh(50) should be 1.0");
+        assert!((result[5] - 1.0).abs() < 1e-5, "tanh(100) should be 1.0");
+    }
+
+    #[test]
+    fn test_sse2_gelu_edge_cases() {
+        // Test GELU with edge case values
+        let values = vec![-10.0, -5.0, 0.0, 5.0, 10.0];
+        let mut result = vec![0.0f32; values.len()];
+
+        // SAFETY: CPU feature verified at runtime
+        unsafe {
+            Sse2Backend::gelu(&values, &mut result);
+        }
+
+        // GELU(-10) ≈ 0 (very negative values)
+        assert!(result[0].abs() < 1e-3, "GELU(-10) should be near 0");
+
+        // GELU(0) = 0
+        assert!(result[2].abs() < 1e-5, "GELU(0) should be 0");
+
+        // GELU(10) ≈ 10 (very positive values)
+        assert!((result[4] - 10.0).abs() < 0.1, "GELU(10) should be near 10");
+    }
+
+    #[test]
+    fn test_sse2_sigmoid_edge_cases() {
+        // Test sigmoid saturation
+        let values = vec![-100.0, -20.0, 0.0, 20.0, 100.0];
+        let mut result = vec![0.0f32; values.len()];
+
+        // SAFETY: CPU feature verified at runtime
+        unsafe {
+            Sse2Backend::sigmoid(&values, &mut result);
+        }
+
+        // sigmoid(-100) ≈ 0
+        assert!(result[0] < 1e-5, "sigmoid(-100) should be near 0");
+
+        // sigmoid(0) = 0.5
+        assert!((result[2] - 0.5).abs() < 1e-5, "sigmoid(0) should be 0.5");
+
+        // sigmoid(100) ≈ 1
+        assert!((result[4] - 1.0).abs() < 1e-5, "sigmoid(100) should be near 1");
+    }
+
+    #[test]
+    fn test_sse2_exp_edge_cases() {
+        // Test exp with edge values that exercise saturation paths
+        let values = vec![-100.0, -50.0, 0.0, 50.0, 88.0];
+        let mut result = vec![0.0f32; values.len()];
+
+        // SAFETY: CPU feature verified at runtime
+        unsafe {
+            Sse2Backend::exp(&values, &mut result);
+        }
+
+        // exp(-100) ≈ 0
+        assert!(result[0] < 1e-30, "exp(-100) should be near 0");
+
+        // exp(0) = 1
+        assert!((result[2] - 1.0).abs() < 1e-5, "exp(0) should be 1");
+
+        // exp(88) is large but finite
+        assert!(result[4].is_finite(), "exp(88) should be finite");
+    }
 }
