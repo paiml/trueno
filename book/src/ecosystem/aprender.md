@@ -16,7 +16,7 @@ Add the `ml-tuner` feature to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-trueno = { version = "0.11", features = ["ml-tuner"] }
+trueno = { version = "0.13", features = ["ml-tuner"] }
 ```
 
 ## Feature Matrix
