@@ -45,6 +45,7 @@ pub use elementwise::{
     BatchedResidualAddKernel, BatchedRopeKernel, BatchedSwigluKernel,
     ElementwiseMulKernel, FusedResidualRmsNormKernel, FusedSwigluKernel,
     GeluKernel, KvCacheScatterIndirectKernel, KvCacheScatterKernel,
+    PreciseRopeIndirectKernel, PreciseRopeKernel,  // CORRECTNESS-013
     ResidualAddKernel, RopeIndirectKernel, RopeKernel, RopeNeoxKernel,
     RopeNeoxIndirectKernel, SiluKernel,
 };
@@ -53,7 +54,7 @@ pub use gemm::{
     GemmKernel,
 };
 pub use gemv::{CoalescedGemvKernel, GemvKernel};
-pub use layernorm::{BatchedVectorizedRmsNormKernel, LayerNormKernel, RmsNormKernel, VectorizedRmsNormKernel};
+pub use layernorm::{BatchedVectorizedRmsNormKernel, LayerNormKernel, PreciseRmsNormKernel, RmsNormKernel, VectorizedRmsNormKernel};
 pub use megakernel::TransformerBlockMegakernel;
 pub use persistent::PersistentDecoderKernel;
 pub use quantize::{
