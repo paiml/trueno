@@ -1281,10 +1281,12 @@ impl Kernel for MultiWarpIncrementalAttentionKernel {
         let indirect = self.indirect_seq_len;
 
         // Shared memory for cross-warp reduction:
-        // - max_scores[num_warps]: local max per warp
-        // - sum_exps[num_warps]: local sum_exp per warp
-        // - outputs[num_warps * head_dim]: partial outputs per warp
-        let smem_size = (num_warps * 2 + num_warps * head_dim) * 4;
+        // - max_scores[num_warps]: local max per warp (offset 0)
+        // - sum_exps[num_warps]: local sum_exp per warp (offset num_warps*4)
+        // - global_max: 1 float (offset num_warps*8) - CORRECTNESS-013: separate from local values
+        // - global_sum: 1 float (offset num_warps*8+4)
+        // - outputs[num_warps * head_dim]: partial outputs per warp (offset num_warps*8+8)
+        let smem_size = (num_warps * 2 + 2 + num_warps * head_dim) * 4;
 
         let kernel_name = if indirect {
             "multi_warp_attention_indirect"
@@ -1564,18 +1566,23 @@ impl Kernel for MultiWarpIncrementalAttentionKernel {
 
                 ctx.label("reduce_sum_done");
 
-                // Store global_max and global_sum to known locations for all warps
-                ctx.st_shared_f32(max_off_base, global_max);
-                ctx.st_shared_f32(sum_off_base, global_sum);
+                // CORRECTNESS-013: Store global_max and global_sum to SEPARATE locations
+                // Previous bug: storing to max_off_base (0) overwrote warp 0's local max
+                let global_max_off = ctx.mov_u64_imm((num_warps * 8) as u64);
+                let global_sum_off = ctx.mov_u64_imm((num_warps * 8 + 4) as u64);
+                ctx.st_shared_f32(global_max_off, global_max);
+                ctx.st_shared_f32(global_sum_off, global_sum);
 
                 ctx.label("skip_reduce");
 
                 // Barrier to wait for reduction
                 ctx.bar_sync(1);
 
-                // Load global max and sum
-                let global_max = ctx.ld_shared_f32(max_off_base);
-                let global_sum = ctx.ld_shared_f32(sum_off_base);
+                // CORRECTNESS-013: Load global max and sum from dedicated locations
+                let global_max_off = ctx.mov_u64_imm((num_warps * 8) as u64);
+                let global_sum_off = ctx.mov_u64_imm((num_warps * 8 + 4) as u64);
+                let global_max = ctx.ld_shared_f32(global_max_off);
+                let global_sum = ctx.ld_shared_f32(global_sum_off);
 
                 // Compute correction for this warp's contribution
                 let my_max = ctx.ld_shared_f32(max_addr);
@@ -1594,9 +1601,9 @@ impl Kernel for MultiWarpIncrementalAttentionKernel {
                 ctx.mul_f32_inplace(out3, final_scale);
 
                 // Store corrected outputs to shared memory for warp 0 to sum
-                // Output area starts at offset: num_warps*4 (max) + num_warps*4 (sum)
+                // CORRECTNESS-013: Output area starts at offset: num_warps*8 + 8 (after global max/sum)
                 // Each warp stores head_dim * 4 bytes
-                let out_area_base = ctx.mov_u32_imm(num_warps * 8);
+                let out_area_base = ctx.mov_u32_imm(num_warps * 8 + 8);
                 let warp_out_offset = ctx.mul_u32(warp_idx, head_dim * 4);
                 let out_base = ctx.add_u32_reg(out_area_base, warp_out_offset);
 

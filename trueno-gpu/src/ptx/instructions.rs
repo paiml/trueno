@@ -285,6 +285,12 @@ pub enum RoundingMode {
     Rm,
     /// Round to nearest integer
     Rni,
+    /// Round to integer toward zero (truncate)
+    Rzi,
+    /// Round to integer toward positive infinity (ceil)
+    Rpi,
+    /// Round to integer toward minus infinity (floor)
+    Rmi,
 }
 
 impl RoundingMode {
@@ -297,6 +303,9 @@ impl RoundingMode {
             Self::Rp => ".rp",
             Self::Rm => ".rm",
             Self::Rni => ".rni",
+            Self::Rzi => ".rzi",
+            Self::Rpi => ".rpi",
+            Self::Rmi => ".rmi",
         }
     }
 }
