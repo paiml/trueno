@@ -3344,4 +3344,139 @@ mod tests {
         assert!(ptx.contains("ld.global"), "Should have global loads");
         assert!(ptx.contains("st.global"), "Should have global stores");
     }
+
+    // ===== FlashDecodingChunkKernel Tests =====
+
+    #[test]
+    fn test_flash_decoding_chunk_kernel_new() {
+        let kernel = FlashDecodingChunkKernel::new(2048, 64, 32, 8, 4);
+        assert_eq!(kernel.max_seq_len, 2048);
+        assert_eq!(kernel.head_dim, 64);
+        assert_eq!(kernel.num_heads, 32);
+        assert_eq!(kernel.num_kv_heads, 8);
+        assert_eq!(kernel.batch_size, 4);
+        // scale should be 1/sqrt(64) = 0.125
+        assert!((kernel.scale - 0.125).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_flash_decoding_chunk_kernel_name() {
+        let kernel = FlashDecodingChunkKernel::new(1024, 64, 22, 22, 1);
+        assert_eq!(kernel.name(), "flash_decoding_chunk");
+    }
+
+    #[test]
+    fn test_flash_decoding_chunk_num_chunks() {
+        let kernel = FlashDecodingChunkKernel::new(2048, 64, 32, 8, 4);
+        // chunk_size is FLASH_DECODE_CHUNK_SIZE (typically 256)
+        let chunks = kernel.num_chunks(1024);
+        assert!(chunks > 0);
+        assert!(chunks <= 1024);
+    }
+
+    #[test]
+    fn test_flash_decoding_chunk_partials_size() {
+        let kernel = FlashDecodingChunkKernel::new(2048, 64, 32, 8, 4);
+        let size = kernel.partials_size_per_head(8);
+        // size = max_chunks * (head_dim + 2) = 8 * (64 + 2) = 528
+        assert_eq!(size, 8 * (64 + 2));
+    }
+
+    #[test]
+    fn test_flash_decoding_chunk_ptx_generation() {
+        let kernel = FlashDecodingChunkKernel::new(512, 64, 22, 22, 2);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry flash_decoding_chunk"),
+            "Should have flash_decoding_chunk entry"
+        );
+
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 q_ptr"), "Should have q_ptr param");
+        assert!(ptx.contains(".param .u64 k_ptr"), "Should have k_ptr param");
+        assert!(ptx.contains(".param .u64 v_ptr"), "Should have v_ptr param");
+        assert!(ptx.contains(".param .u64 partials_ptr"), "Should have partials_ptr param");
+    }
+
+    #[test]
+    fn test_flash_decoding_chunk_different_configs() {
+        // Test various configurations
+        let configs = [
+            (512, 32, 8, 8, 1),
+            (1024, 64, 16, 4, 2),
+            (2048, 128, 32, 8, 4),
+            (4096, 64, 64, 8, 8),
+        ];
+
+        for (max_seq_len, head_dim, num_heads, num_kv_heads, batch_size) in configs {
+            let kernel = FlashDecodingChunkKernel::new(max_seq_len, head_dim, num_heads, num_kv_heads, batch_size);
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty(), "PTX should not be empty for config {:?}", (max_seq_len, head_dim));
+            assert!(ptx.contains(".entry"), "Should have entry point");
+        }
+    }
+
+    // ===== FlashDecodingReduceKernel Tests =====
+
+    #[test]
+    fn test_flash_decoding_reduce_kernel_new() {
+        let kernel = FlashDecodingReduceKernel::new(64, 32, 4);
+        assert_eq!(kernel.head_dim, 64);
+        assert_eq!(kernel.num_heads, 32);
+        assert_eq!(kernel.batch_size, 4);
+    }
+
+    #[test]
+    fn test_flash_decoding_reduce_kernel_name() {
+        let kernel = FlashDecodingReduceKernel::new(64, 22, 1);
+        assert_eq!(kernel.name(), "flash_decoding_reduce");
+    }
+
+    #[test]
+    fn test_flash_decoding_reduce_ptx_generation() {
+        let kernel = FlashDecodingReduceKernel::new(64, 22, 2);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel entry point
+        assert!(
+            ptx.contains(".entry flash_decoding_reduce"),
+            "Should have flash_decoding_reduce entry"
+        );
+
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 partials_ptr"), "Should have partials_ptr param");
+        assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr param");
+        assert!(ptx.contains(".param .u64 seq_lens_ptr"), "Should have seq_lens_ptr param");
+        assert!(ptx.contains(".param .u32 max_chunks"), "Should have max_chunks param");
+    }
+
+    #[test]
+    fn test_flash_decoding_reduce_different_configs() {
+        // Test various configurations
+        let configs = [
+            (32, 8, 1),
+            (64, 16, 2),
+            (128, 32, 4),
+            (64, 64, 8),
+        ];
+
+        for (head_dim, num_heads, batch_size) in configs {
+            let kernel = FlashDecodingReduceKernel::new(head_dim, num_heads, batch_size);
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty(), "PTX should not be empty for config {:?}", (head_dim, num_heads));
+            assert!(ptx.contains(".entry"), "Should have entry point");
+        }
+    }
+
+    #[test]
+    fn test_flash_decoding_reduce_memory_ops() {
+        let kernel = FlashDecodingReduceKernel::new(64, 22, 2);
+        let ptx = kernel.emit_ptx();
+
+        // Verify memory operations for reduction
+        assert!(ptx.contains("ld.global"), "Should have global loads");
+        assert!(ptx.contains("st.global"), "Should have global stores");
+    }
 }
