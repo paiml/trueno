@@ -206,22 +206,6 @@ dependencies = [
 [[package]]
 name = "aprender"
 version = "0.24.0"
-dependencies = [
- "bincode",
- "getrandom 0.2.16",
- "memmap2",
- "minijinja",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "rmp-serde",
- "serde",
- "serde_json",
- "trueno 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "aprender"
-version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d1140494fee114ac8ae686c8d4e0d859b421c8e082e7a8c4a3f67d0e3f9e2754"
 dependencies = [
@@ -236,6 +220,22 @@ dependencies = [
  "serde",
  "serde_json",
  "trueno 0.11.0",
+]
+
+[[package]]
+name = "aprender"
+version = "0.24.1"
+dependencies = [
+ "bincode",
+ "getrandom 0.2.16",
+ "memmap2",
+ "minijinja",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rmp-serde",
+ "serde",
+ "serde_json",
+ "trueno 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3838,17 +3838,17 @@ dependencies = [
 
 [[package]]
 name = "presentar-core"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "jugar-probar 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
- "trueno 0.11.0",
+ "trueno 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "presentar-terminal"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "bitvec",
  "compact_str",
@@ -5468,7 +5468,7 @@ name = "trueno"
 version = "0.13.0"
 dependencies = [
  "anyhow",
- "aprender 0.24.0",
+ "aprender 0.24.1",
  "bytemuck",
  "chrono",
  "criterion",
@@ -5565,7 +5565,7 @@ dependencies = [
 
 [[package]]
 name = "trueno-gpu"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "bytemuck",
  "criterion",
@@ -5605,7 +5605,7 @@ name = "trueno-graph"
 version = "0.1.11"
 dependencies = [
  "anyhow",
- "aprender 0.24.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "aprender 0.24.0",
  "arrow",
  "parquet",
  "thiserror 2.0.17",
