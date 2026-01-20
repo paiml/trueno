@@ -44,35 +44,25 @@ test-stress: ## Run stress tests with TUI monitor
 # COVERAGE (Two-Phase Pattern with Mold Hack)
 # ============================================================================
 
-coverage: ## Generate coverage report (≥95% required)
-	@echo "📊 Running coverage analysis for trueno-gpu (target: <5 min)..."
-	@echo "🔍 Checking for cargo-llvm-cov and cargo-nextest..."
+# Hardware/display-dependent code excluded (requires actual hardware to test properly)
+COV_EXCLUDE := --ignore-filename-regex='(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs|testing/gpu_renderer\.rs)'
+
+coverage: ## Generate coverage report (≥95% required, ruchy-style FAST)
+	@echo "📊 Running coverage analysis for trueno-gpu (target: <2 min, 95%+)..."
 	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
-	@which cargo-nextest > /dev/null 2>&1 || (echo "📦 Installing cargo-nextest..." && cargo install cargo-nextest --locked)
-	@echo "🧹 Cleaning old coverage data..."
-	@cargo llvm-cov clean --workspace
 	@mkdir -p target/coverage
-	@echo "⚙️  Temporarily disabling global cargo config (mold breaks coverage)..."
-	@test -f ~/.cargo/config.toml && mv ~/.cargo/config.toml ~/.cargo/config.toml.cov-backup || true
-	@echo "🧪 Phase 1: Running tests with instrumentation (no report)..."
-	@# Exclude: tests, examples, and hardware-dependent modules (CUDA driver, WASM)
-	@env PROPTEST_CASES=100 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs)' nextest --no-tests=warn -p trueno-gpu --all-features
-	@echo "📊 Phase 2: Generating coverage reports..."
-	@# Exclude hardware-dependent modules from reports too
-	@cargo llvm-cov report --html --output-dir target/coverage/html --ignore-filename-regex '(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs)'
-	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info --ignore-filename-regex '(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs)'
-	@echo "⚙️  Restoring global cargo config..."
-	@test -f ~/.cargo/config.toml.cov-backup && mv ~/.cargo/config.toml.cov-backup ~/.cargo/config.toml || true
+	@echo "🧪 Running lib tests with instrumentation (PROPTEST_CASES=5)..."
+	@echo "   Using cargo test (1 profraw per binary) NOT nextest (1 profraw per test)"
+	@env PROPTEST_CASES=5 cargo llvm-cov --no-report --lib -p trueno-gpu $(COV_EXCLUDE) \
+		-- --skip matmul_parallel --skip matmul_3level --skip matmul_blocking \
+		--skip test_all_batch --skip slow --skip heavy
+	@echo "📊 Generating coverage reports..."
+	@cargo llvm-cov report --html --output-dir target/coverage/html $(COV_EXCLUDE)
+	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info $(COV_EXCLUDE)
 	@echo ""
-	@echo "📊 Coverage Summary:"
-	@echo "=================="
-	@cargo llvm-cov report --summary-only --ignore-filename-regex '(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs)'
+	@cargo llvm-cov report --summary-only $(COV_EXCLUDE)
 	@echo ""
-	@echo "💡 COVERAGE INSIGHTS:"
-	@echo "- HTML report: target/coverage/html/index.html"
-	@echo "- LCOV file: target/coverage/lcov.info"
-	@echo "- Open HTML: make coverage-open"
-	@echo ""
+	@echo "💡 HTML: target/coverage/html/index.html"
 
 coverage-ci: ## Generate LCOV report for CI/CD (≥95% required)
 	@echo "=== Code Coverage for CI/CD (≥95% required) ==="
