@@ -1315,7 +1315,7 @@ impl<'a> KernelBuilder<'a> {
         let c5 = self.mov_f32_imm(0.001333355903625488281_f32);  // ln(2)⁵/120
 
         // Horner's method: p = c0 + f*(c1 + f*(c2 + f*(c3 + f*(c4 + f*c5))))
-        let f2 = self.mul_f32(f, f);
+        let _f2 = self.mul_f32(f, f);
         let p5 = c5;
         let p4 = self.fma_f32(p5, f, c4);
         let p3 = self.fma_f32(p4, f, c3);

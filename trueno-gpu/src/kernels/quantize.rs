@@ -1972,7 +1972,7 @@ impl Kernel for MultiWarpBatchedQ4KGemvKernel {
     }
 
     fn build_ptx(&self) -> PtxKernel {
-        let warps_per_block = self.warps_per_block;
+        let _warps_per_block = self.warps_per_block;
         let batch_per_warp = 8u32; // Each warp handles 8 sequences
 
         PtxKernel::new("multi_warp_batched_q4k_gemv")
@@ -2038,7 +2038,7 @@ impl Kernel for MultiWarpBatchedQ4KGemvKernel {
                 let two = ctx.mov_u64_imm(2);
                 let dmin_addr = ctx.add_u64(sb_addr, two);
                 let dmin_f16 = ctx.ld_global_f16(dmin_addr);
-                let dmin = ctx.cvt_f32_f16(dmin_f16);
+                let _dmin = ctx.cvt_f32_f16(dmin_f16);
 
                 // Load scales (simplified - just use d*scale for now)
                 // For 8 sub-blocks, each has scale and min
@@ -2059,7 +2059,7 @@ impl Kernel for MultiWarpBatchedQ4KGemvKernel {
                 let qs_base = ctx.add_u64(sb_addr, sixteen_64);
 
                 // Thread partial accumulator
-                let mut thread_partials: Vec<_> = (0..batch_per_warp)
+                let thread_partials: Vec<_> = (0..batch_per_warp)
                     .map(|_| ctx.mov_f32_imm(0.0))
                     .collect();
 
@@ -3221,7 +3221,7 @@ impl Kernel for BatchedQ6KGemvKernel {
 
                 // Determine which sub-block (16 values each, 16 sub-blocks total)
                 let sub_block_idx = ctx.div_u32(val_idx, 16);
-                let sub_val_idx = ctx.rem_u32(val_idx, 16);
+                let _sub_val_idx = ctx.rem_u32(val_idx, 16);
 
                 // Load scale for this sub-block (offset 192 + sub_block_idx)
                 let scales_offset = ctx.mov_u64_imm(192);
