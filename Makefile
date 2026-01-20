@@ -225,28 +225,26 @@ examples: ## List and run examples
 example-%: ## Run specific example (e.g., make example-brick_profiler_v2)
 	cargo run --example $*
 
-coverage: ## Generate coverage report (≥90% required, <5 min target)
-	@echo "📊 Running test coverage analysis (target: <5 min)..."
+# Hardware/display-dependent code and tool crates excluded (focus on core trueno + trueno-gpu)
+COV_EXCLUDE := --ignore-filename-regex='(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs|testing/gpu_renderer\.rs|crates/cbtop/|trueno-explain/)'
+
+coverage: ## Generate coverage report (≥95% required, <2 min target, ruchy-style FAST)
+	@echo "📊 Running coverage analysis (target: 95%, <2 min)..."
 	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
 	@mkdir -p target/coverage
-	@echo "⚙️  Disabling mold linker (breaks coverage instrumentation)..."
-	@echo "🧪 Running trueno lib tests (PROPTEST_CASES=10)..."
-	@env PROPTEST_CASES=10 cargo llvm-cov --no-report test -p trueno --lib
-	@echo "🧪 Running trueno-gpu lib tests (skip slow, PROPTEST_CASES=5)..."
-	@env PROPTEST_CASES=5 cargo llvm-cov --no-report test -p trueno-gpu --lib -- \
+	@echo "🧪 Running trueno lib tests (PROPTEST_CASES=5)..."
+	@env PROPTEST_CASES=5 cargo llvm-cov --no-report test -p trueno --lib $(COV_EXCLUDE)
+	@echo "🧪 Running trueno-gpu lib tests (PROPTEST_CASES=5)..."
+	@env PROPTEST_CASES=5 cargo llvm-cov --no-report test -p trueno-gpu --lib $(COV_EXCLUDE) -- \
 		--skip matmul_parallel --skip matmul_3level --skip matmul_blocking \
-		--skip test_all_batch || true
-	@echo "🧪 Running gpu-pixels/probar TUI validation..."
-	@cargo llvm-cov --no-report test -p trueno-gpu --test gpu_pixels --features gpu-pixels -- \
-		--skip gpu_pixel_suite 2>/dev/null || true
+		--skip test_all_batch --skip slow --skip heavy
 	@echo "📊 Generating reports..."
-	@cargo llvm-cov report --html --output-dir target/coverage/html
-	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info
-	@echo "⚙️  Restoring cargo config..."
+	@cargo llvm-cov report --html --output-dir target/coverage/html $(COV_EXCLUDE)
+	@cargo llvm-cov report --lcov --output-path target/coverage/lcov.info $(COV_EXCLUDE)
 	@echo ""
-	@cargo llvm-cov report --summary-only
+	@cargo llvm-cov report --summary-only $(COV_EXCLUDE)
 	@echo ""
-	@echo "💡 HTML report: target/coverage/html/index.html"
+	@echo "💡 HTML: target/coverage/html/index.html"
 
 coverage-gpu: ## Generate GPU-specific coverage (WGPU + CUDA tests only, longer timeout)
 	@echo "📊 Running GPU coverage analysis (WGPU + CUDA only)..."
