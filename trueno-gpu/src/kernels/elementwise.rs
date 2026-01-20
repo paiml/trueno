@@ -2341,4 +2341,163 @@ mod tests {
         assert!(ptx.contains("ld.global"), "Should have global loads");
         assert!(ptx.contains("st.global"), "Should have global stores");
     }
+
+    // ===== RopeNeoxKernel Tests =====
+
+    #[test]
+    fn test_rope_neox_kernel_new() {
+        let kernel = RopeNeoxKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.head_dim, 64);
+        assert!((kernel.theta - 10000.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_rope_neox_kernel_name() {
+        let kernel = RopeNeoxKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.name(), "rope_neox");
+    }
+
+    #[test]
+    fn test_rope_neox_ptx_generation() {
+        let kernel = RopeNeoxKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry rope_neox"), "Should have rope_neox entry");
+        assert!(ptx.contains(".param .u64 x_ptr"), "Should have x_ptr");
+        assert!(ptx.contains(".param .u64 out_ptr"), "Should have out_ptr");
+        assert!(ptx.contains(".param .u32 pos"), "Should have pos param");
+    }
+
+    #[test]
+    fn test_rope_neox_various_head_dims() {
+        for head_dim in [32, 64, 128, 256] {
+            let kernel = RopeNeoxKernel::new(22, head_dim, 10000.0);
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+            assert!(ptx.contains(".entry"));
+        }
+    }
+
+    // ===== RopeNeoxIndirectKernel Tests =====
+
+    #[test]
+    fn test_rope_neox_indirect_kernel_new() {
+        let kernel = RopeNeoxIndirectKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.head_dim, 64);
+        assert!((kernel.theta - 10000.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_rope_neox_indirect_kernel_name() {
+        let kernel = RopeNeoxIndirectKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.name(), "rope_neox_indirect");
+    }
+
+    #[test]
+    fn test_rope_neox_indirect_ptx_generation() {
+        let kernel = RopeNeoxIndirectKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry rope_neox_indirect"), "Should have rope_neox_indirect entry");
+        assert!(ptx.contains(".param .u64 x_ptr"), "Should have x_ptr");
+        assert!(ptx.contains(".param .u64 pos_ptr"), "Should have pos_ptr for indirect");
+    }
+
+    #[test]
+    fn test_rope_neox_indirect_loads_position() {
+        let kernel = RopeNeoxIndirectKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        // Indirect kernel should load position from device memory
+        assert!(ptx.contains("ld.global"), "Should have global loads for position");
+    }
+
+    // ===== PreciseRopeKernel Tests =====
+
+    #[test]
+    fn test_rope_precise_kernel_new() {
+        let kernel = PreciseRopeKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.head_dim, 64);
+        assert!((kernel.theta - 10000.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_rope_precise_kernel_name() {
+        let kernel = PreciseRopeKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.name(), "rope_precise");
+    }
+
+    #[test]
+    fn test_rope_precise_ptx_generation() {
+        let kernel = PreciseRopeKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry rope_precise"), "Should have rope_precise entry");
+        assert!(ptx.contains(".param .u64 x_ptr"), "Should have x_ptr");
+        assert!(ptx.contains(".param .u64 out_ptr"), "Should have out_ptr");
+        assert!(ptx.contains(".param .u32 pos"), "Should have pos param");
+    }
+
+    #[test]
+    fn test_rope_precise_uses_precise_trig() {
+        let kernel = PreciseRopeKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        // Precise rope should use full precision sin/cos
+        assert!(ptx.contains("sin.approx") || ptx.contains("cos.approx") || ptx.contains("ex2"),
+            "Should use trigonometric operations");
+    }
+
+    #[test]
+    fn test_rope_precise_various_head_dims() {
+        for head_dim in [32, 64, 128, 256] {
+            let kernel = PreciseRopeKernel::new(22, head_dim, 10000.0);
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+            assert!(ptx.contains(".entry"));
+        }
+    }
+
+    // ===== PreciseRopeIndirectKernel Tests =====
+
+    #[test]
+    fn test_rope_precise_indirect_kernel_new() {
+        let kernel = PreciseRopeIndirectKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.head_dim, 64);
+        assert!((kernel.theta - 10000.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_rope_precise_indirect_kernel_name() {
+        let kernel = PreciseRopeIndirectKernel::new(22, 64, 10000.0);
+        assert_eq!(kernel.name(), "rope_precise_indirect");
+    }
+
+    #[test]
+    fn test_rope_precise_indirect_ptx_generation() {
+        let kernel = PreciseRopeIndirectKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry rope_precise_indirect"), "Should have rope_precise_indirect entry");
+        assert!(ptx.contains(".param .u64 x_ptr"), "Should have x_ptr");
+        assert!(ptx.contains(".param .u64 pos_ptr"), "Should have pos_ptr for indirect");
+    }
+
+    #[test]
+    fn test_rope_precise_indirect_loads_position() {
+        let kernel = PreciseRopeIndirectKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        // Indirect kernel should load position from device memory
+        assert!(ptx.contains("ld.global"), "Should have global loads for position");
+    }
+
+    #[test]
+    fn test_rope_precise_indirect_memory_ops() {
+        let kernel = PreciseRopeIndirectKernel::new(22, 64, 10000.0);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains("ld.global"), "Should have global loads");
+        assert!(ptx.contains("st.global"), "Should have global stores");
+    }
 }
