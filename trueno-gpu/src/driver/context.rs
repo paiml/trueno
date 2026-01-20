@@ -172,6 +172,29 @@ impl CudaContext {
         Ok((free, total))
     }
 
+    /// Set this context as the current context for the calling thread
+    ///
+    /// CUDA contexts are thread-local. When using async/multi-threaded code,
+    /// you must call `make_current()` before any CUDA operation if the operation
+    /// might run on a different thread than where the context was created.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::DeviceInit)` if cuCtxSetCurrent fails.
+    pub fn make_current(&self) -> Result<(), GpuError> {
+        let driver = get_driver()?;
+
+        // SAFETY: context is valid (from cuDevicePrimaryCtxRetain in constructor)
+        let result = unsafe { (driver.cuCtxSetCurrent)(self.context) };
+        if result != CUDA_SUCCESS {
+            return Err(GpuError::DeviceInit(format!(
+                "cuCtxSetCurrent failed with code {}",
+                result
+            )));
+        }
+        Ok(())
+    }
+
     /// Synchronize all work on this context
     ///
     /// Blocks until all preceding commands have completed.
