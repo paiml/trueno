@@ -2528,6 +2528,108 @@ pub fn incremental_attention_gpu_async(
     Ok((GpuResidentTensor::from_buffer_internal(output, 1), stream))
 }
 
+/// WAPR-PERF-013: Scatter interleaved K/V to head-first cache slot
+///
+/// Writes a single position's K or V projection directly into the head-first
+/// cache layout without intermediate conversion.
+///
+/// # Memory Layout
+///
+/// - Source: `[n_heads * head_dim]` (interleaved, from GEMV output)
+/// - Cache: `[n_heads, max_seq_len, head_dim]` (head-first)
+/// - Position `pos` is written to `cache[head, pos, :]` for all heads
+///
+/// # Performance
+///
+/// - Single kernel launch (no conversion overhead)
+/// - Coalesced writes (threads write contiguous elements per head)
+/// - Can be chained on same stream as GEMV (no sync needed)
+///
+/// # Arguments
+///
+/// * `ctx` - CUDA context
+/// * `src` - Source tensor `[n_heads * head_dim]` (interleaved)
+/// * `cache` - Target cache buffer `[n_heads * max_seq_len * head_dim]`
+/// * `pos` - Sequence position to write
+/// * `n_heads` - Number of attention heads
+/// * `head_dim` - Dimension per head
+/// * `max_seq_len` - Maximum sequence length (cache capacity)
+/// * `stream` - CUDA stream for async execution
+#[cfg(feature = "cuda")]
+pub fn kv_cache_scatter_gpu(
+    ctx: &CudaContext,
+    src: &GpuResidentTensor<f32>,
+    cache: &mut GpuResidentTensor<f32>,
+    pos: u32,
+    n_heads: u32,
+    head_dim: u32,
+    max_seq_len: u32,
+    stream: &CudaStream,
+) -> Result<()> {
+    use crate::kernels::{KvCacheScatterKernel, Kernel};
+
+    // Validate source size
+    let src_expected = (n_heads * head_dim) as usize;
+    if src.len() != src_expected {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "Source has {} elements, expected {} (n_heads={}, head_dim={})",
+            src.len(), src_expected, n_heads, head_dim
+        )));
+    }
+
+    // Validate cache size
+    let cache_expected = (n_heads * max_seq_len * head_dim) as usize;
+    if cache.len() != cache_expected {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "Cache has {} elements, expected {} (n_heads={}, max_seq_len={}, head_dim={})",
+            cache.len(), cache_expected, n_heads, max_seq_len, head_dim
+        )));
+    }
+
+    // Validate position
+    if pos >= max_seq_len {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "Position {} >= max_seq_len {}", pos, max_seq_len
+        )));
+    }
+
+    // Build and cache kernel
+    let kernel = KvCacheScatterKernel::new(n_heads, head_dim, max_seq_len);
+    let ptx = kernel.emit_ptx();
+    let cache_key = format!("kv_scatter:{}:{}:{}", n_heads, head_dim, max_seq_len);
+    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+    // Launch config: one block per head, head_dim threads per block
+    let config = LaunchConfig {
+        grid: (n_heads, 1, 1),
+        block: (head_dim.min(256), 1, 1), // Cap at 256 threads
+        shared_mem: 0,
+    };
+
+    let src_ptr = src.as_ptr();
+    let cache_ptr = cache.as_ptr();
+
+    let mut args: [*mut std::ffi::c_void; 5] = [
+        std::ptr::addr_of!(src_ptr) as *mut _,
+        std::ptr::addr_of!(cache_ptr) as *mut _,
+        std::ptr::addr_of!(pos) as *mut _,
+        std::ptr::addr_of!(head_dim) as *mut _,
+        std::ptr::addr_of!(max_seq_len) as *mut _,
+    ];
+
+    {
+        let mut module = module_arc.lock().map_err(|e| {
+            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+        })?;
+        unsafe {
+            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+        }
+    }
+
+    // NO SYNC - caller chains operations (Point 149)
+    Ok(())
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
