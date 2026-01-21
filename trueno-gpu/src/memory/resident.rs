@@ -1929,6 +1929,136 @@ pub struct GpuConvFrontendWeights {
     pub conv2_bias: GpuResidentTensor<f32>,
 }
 
+/// WAPR-PERF-013: GPU Decoder Block Weights (similar to encoder but with cross-attention)
+#[cfg(feature = "cuda")]
+pub struct GpuDecoderBlockWeights {
+    // Self-Attention weights
+    /// Layer norm 1: gamma [d_model]
+    pub ln1_gamma: GpuResidentTensor<f32>,
+    /// Layer norm 1: beta [d_model]
+    pub ln1_beta: GpuResidentTensor<f32>,
+    /// Self-Attention Q: weight [d_model, d_model]
+    pub self_w_q: GpuResidentTensor<f32>,
+    /// Self-Attention Q: bias [d_model]
+    pub self_b_q: GpuResidentTensor<f32>,
+    /// Self-Attention K: weight [d_model, d_model]
+    pub self_w_k: GpuResidentTensor<f32>,
+    /// Self-Attention K: bias [d_model]
+    pub self_b_k: GpuResidentTensor<f32>,
+    /// Self-Attention V: weight [d_model, d_model]
+    pub self_w_v: GpuResidentTensor<f32>,
+    /// Self-Attention V: bias [d_model]
+    pub self_b_v: GpuResidentTensor<f32>,
+    /// Self-Attention O: weight [d_model, d_model]
+    pub self_w_o: GpuResidentTensor<f32>,
+    /// Self-Attention O: bias [d_model]
+    pub self_b_o: GpuResidentTensor<f32>,
+
+    // Cross-Attention weights
+    /// Layer norm 2: gamma [d_model]
+    pub ln2_gamma: GpuResidentTensor<f32>,
+    /// Layer norm 2: beta [d_model]
+    pub ln2_beta: GpuResidentTensor<f32>,
+    /// Cross-Attention Q: weight [d_model, d_model]
+    pub cross_w_q: GpuResidentTensor<f32>,
+    /// Cross-Attention Q: bias [d_model]
+    pub cross_b_q: GpuResidentTensor<f32>,
+    /// Cross-Attention K: weight [d_model, d_model]
+    pub cross_w_k: GpuResidentTensor<f32>,
+    /// Cross-Attention K: bias [d_model]
+    pub cross_b_k: GpuResidentTensor<f32>,
+    /// Cross-Attention V: weight [d_model, d_model]
+    pub cross_w_v: GpuResidentTensor<f32>,
+    /// Cross-Attention V: bias [d_model]
+    pub cross_b_v: GpuResidentTensor<f32>,
+    /// Cross-Attention O: weight [d_model, d_model]
+    pub cross_w_o: GpuResidentTensor<f32>,
+    /// Cross-Attention O: bias [d_model]
+    pub cross_b_o: GpuResidentTensor<f32>,
+
+    // FFN weights
+    /// Layer norm 3: gamma [d_model]
+    pub ln3_gamma: GpuResidentTensor<f32>,
+    /// Layer norm 3: beta [d_model]
+    pub ln3_beta: GpuResidentTensor<f32>,
+    /// FFN up projection: weight [d_model, ffn_dim]
+    pub ffn_up_w: GpuResidentTensor<f32>,
+    /// FFN up projection: bias [ffn_dim]
+    pub ffn_up_b: GpuResidentTensor<f32>,
+    /// FFN down projection: weight [ffn_dim, d_model]
+    pub ffn_down_w: GpuResidentTensor<f32>,
+    /// FFN down projection: bias [d_model]
+    pub ffn_down_b: GpuResidentTensor<f32>,
+}
+
+/// WAPR-PERF-013: GPU-Resident KV Cache for decoder
+///
+/// Stores K/V tensors on GPU to avoid D2H/H2D transfers during decoding.
+#[cfg(feature = "cuda")]
+pub struct GpuKvCache {
+    /// Key cache [max_seq_len, d_model] - grows incrementally
+    pub key: GpuResidentTensor<f32>,
+    /// Value cache [max_seq_len, d_model] - grows incrementally
+    pub value: GpuResidentTensor<f32>,
+    /// Current sequence length (number of tokens cached)
+    pub seq_len: usize,
+    /// Maximum sequence length
+    pub max_seq_len: usize,
+    /// Model dimension
+    pub d_model: usize,
+}
+
+#[cfg(feature = "cuda")]
+impl GpuKvCache {
+    /// Create new GPU KV cache
+    pub fn new(ctx: &CudaContext, max_seq_len: usize, d_model: usize) -> Result<Self> {
+        let total_size = max_seq_len * d_model;
+        let zeros = vec![0.0f32; total_size];
+
+        let key = GpuResidentTensor::from_host(ctx, &zeros)?;
+        let value = GpuResidentTensor::from_host(ctx, &zeros)?;
+
+        Ok(Self {
+            key,
+            value,
+            seq_len: 0,
+            max_seq_len,
+            d_model,
+        })
+    }
+
+    /// Reset cache (for new sequence)
+    pub fn reset(&mut self) {
+        self.seq_len = 0;
+    }
+
+    /// Get current sequence length
+    pub fn len(&self) -> usize {
+        self.seq_len
+    }
+
+    /// Check if cache is empty
+    pub fn is_empty(&self) -> bool {
+        self.seq_len == 0
+    }
+}
+
+/// Configuration for GPU decoder
+#[cfg(feature = "cuda")]
+#[derive(Debug, Clone, Copy)]
+pub struct GpuDecoderConfig {
+    /// Model dimension (d_model)
+    pub d_model: u32,
+    /// Number of attention heads
+    pub n_heads: u32,
+    /// FFN hidden dimension (typically 4 * d_model)
+    pub ffn_dim: u32,
+    /// Maximum sequence length
+    pub max_seq_len: u32,
+    /// Number of decoder layers
+    pub n_layers: u32,
+}
+
 /// Configuration for GPU encoder
 #[cfg(feature = "cuda")]
 #[derive(Debug, Clone, Copy)]
