@@ -2419,9 +2419,113 @@ pub fn incremental_attention_gpu(
         }
     }
 
-    stream.synchronize()?;
+    // WAPR-PERF-013: Sync removed for async pipeline support
+    // Caller is responsible for synchronization when needed
+    // stream.synchronize()?;
 
     Ok(GpuResidentTensor::from_buffer_internal(output, 1))
+}
+
+/// WAPR-PERF-013: Async incremental attention with explicit stream return
+///
+/// Same as `incremental_attention_gpu` but returns the stream for caller-controlled
+/// synchronization. Use this in autoregressive loops to avoid ghost syncs.
+///
+/// # Point 149 Compliance
+///
+/// This function launches the kernel without synchronizing. The caller MUST:
+/// 1. Chain dependent operations on the same stream, OR
+/// 2. Call `stream.synchronize()` before reading the output
+///
+/// # Returns
+///
+/// Tuple of (output tensor, stream) - stream must be synchronized before reading output
+#[cfg(feature = "cuda")]
+pub fn incremental_attention_gpu_async(
+    ctx: &CudaContext,
+    q: &GpuResidentTensor<f32>,
+    k_cache: &GpuResidentTensor<f32>,
+    v_cache: &GpuResidentTensor<f32>,
+    n_heads: u32,
+    head_dim: u32,
+    seq_len: u32,
+    max_seq_len: u32,
+) -> Result<(GpuResidentTensor<f32>, CudaStream)> {
+    use crate::kernels::{IncrementalAttentionKernel, Kernel};
+
+    // Validate Q size: [n_heads, head_dim]
+    let q_expected = (n_heads * head_dim) as usize;
+    if q.len() != q_expected {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "Q has {} elements, expected {} (n_heads={}, head_dim={})",
+            q.len(), q_expected, n_heads, head_dim
+        )));
+    }
+
+    // Validate K/V cache size: [n_heads, max_seq_len, head_dim]
+    let cache_expected = (n_heads * max_seq_len * head_dim) as usize;
+    if k_cache.len() != cache_expected || v_cache.len() != cache_expected {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "K/V cache size mismatch: expected {} (n_heads={}, max_seq_len={}, head_dim={})",
+            cache_expected, n_heads, max_seq_len, head_dim
+        )));
+    }
+
+    if seq_len > max_seq_len {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "seq_len ({}) exceeds max_seq_len ({})", seq_len, max_seq_len
+        )));
+    }
+
+    // Handle empty sequence
+    if seq_len == 0 {
+        let zeros = vec![0.0f32; q_expected];
+        let output = GpuResidentTensor::from_host(ctx, &zeros)?;
+        let stream = CudaStream::new(ctx)?;
+        return Ok((output, stream));
+    }
+
+    // Allocate output
+    let output = GpuBuffer::new(ctx, q_expected)?;
+
+    // Build and cache kernel
+    let kernel = IncrementalAttentionKernel::new(max_seq_len, head_dim, n_heads);
+    let ptx = kernel.emit_ptx();
+    let cache_key = format!("incremental_attention:{}:{}:{}", max_seq_len, head_dim, n_heads);
+    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+    let stream = CudaStream::new(ctx)?;
+
+    let config = LaunchConfig {
+        grid: (n_heads, 1, 1),
+        block: (32, 1, 1),
+        shared_mem: 0,
+    };
+
+    let q_ptr = q.as_ptr();
+    let k_ptr = k_cache.as_ptr();
+    let v_ptr = v_cache.as_ptr();
+    let out_ptr = output.as_ptr();
+    let seq_len_val = seq_len;
+
+    let mut args: [*mut std::ffi::c_void; 5] = [
+        std::ptr::addr_of!(q_ptr) as *mut _,
+        std::ptr::addr_of!(k_ptr) as *mut _,
+        std::ptr::addr_of!(v_ptr) as *mut _,
+        std::ptr::addr_of!(out_ptr) as *mut _,
+        std::ptr::addr_of!(seq_len_val) as *mut _,
+    ];
+
+    {
+        let mut module = module_arc.lock().map_err(|e| {
+            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+        })?;
+        unsafe {
+            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+        }
+    }
+
+    // NO SYNC - caller controls synchronization (Point 149)
+    Ok((GpuResidentTensor::from_buffer_internal(output, 1), stream))
 }
 
 // ============================================================================
