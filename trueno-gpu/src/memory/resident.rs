@@ -1073,6 +1073,115 @@ impl GpuResidentTensor<f32> {
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
     }
+
+    /// WAPR-PERF-012: GPU Conv1d with GELU activation
+    ///
+    /// Computes 1D convolution for Whisper audio frontend.
+    /// Target: Move 588ms CPU conv to GPU (<50ms).
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - CUDA context
+    /// * `weight` - Weight tensor [out_channels, in_channels, kernel_size]
+    /// * `bias` - Bias tensor [out_channels] (optional)
+    /// * `in_channels` - Number of input channels
+    /// * `out_channels` - Number of output channels
+    /// * `kernel_size` - Convolution kernel size
+    /// * `stride` - Stride
+    /// * `padding` - Padding
+    /// * `seq_len` - Input sequence length
+    ///
+    /// # Returns
+    ///
+    /// Output tensor [out_seq_len, out_channels] with GELU applied
+    pub fn conv1d(
+        &self,
+        ctx: &CudaContext,
+        weight: &GpuResidentTensor<f32>,
+        bias: Option<&GpuResidentTensor<f32>>,
+        in_channels: u32,
+        out_channels: u32,
+        kernel_size: u32,
+        stride: u32,
+        padding: u32,
+        seq_len: u32,
+    ) -> Result<GpuResidentTensor<f32>> {
+        use crate::kernels::Conv1dKernel;
+
+        // Calculate output sequence length
+        let out_seq_len = (seq_len + 2 * padding - kernel_size) / stride + 1;
+        let output_size = (out_seq_len * out_channels) as usize;
+
+        // Validate input dimensions
+        let expected_input = (seq_len * in_channels) as usize;
+        if self.len() != expected_input {
+            return Err(crate::GpuError::InvalidParameter(format!(
+                "Input has {} elements, expected {} ({}x{})",
+                self.len(), expected_input, seq_len, in_channels
+            )));
+        }
+
+        let expected_weight = (out_channels * in_channels * kernel_size) as usize;
+        if weight.len() != expected_weight {
+            return Err(crate::GpuError::InvalidParameter(format!(
+                "Weight has {} elements, expected {} ({}x{}x{})",
+                weight.len(), expected_weight, out_channels, in_channels, kernel_size
+            )));
+        }
+
+        // Allocate output buffer
+        let output_buffer = GpuBuffer::new(ctx, output_size)?;
+
+        // Build kernel
+        let kernel = Conv1dKernel::new(in_channels, out_channels, kernel_size, stride, padding);
+        let cache_key = format!(
+            "conv1d:{}:{}:{}:{}:{}",
+            in_channels, out_channels, kernel_size, stride, padding
+        );
+        let ptx = kernel.emit_ptx();
+        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+        let stream = CudaStream::new(ctx)?;
+
+        // Launch configuration
+        let block_x = 32u32;
+        let block_y = 8u32;
+        let grid_x = (out_seq_len + block_x - 1) / block_x;
+        let grid_y = (out_channels + block_y - 1) / block_y;
+
+        let config = LaunchConfig {
+            grid: (grid_x, grid_y, 1),
+            block: (block_x, block_y, 1),
+            shared_mem: 0,
+        };
+
+        // Prepare arguments
+        let input_ptr = self.as_ptr();
+        let weight_ptr = weight.as_ptr();
+        let bias_ptr = bias.map_or(0_u64, |b| b.as_ptr());
+        let output_ptr = output_buffer.as_ptr();
+        let seq_len_val = seq_len;
+
+        let mut args: Vec<*mut std::ffi::c_void> = vec![
+            std::ptr::addr_of!(input_ptr) as *mut _,
+            std::ptr::addr_of!(weight_ptr) as *mut _,
+            std::ptr::addr_of!(bias_ptr) as *mut _,
+            std::ptr::addr_of!(output_ptr) as *mut _,
+            std::ptr::addr_of!(seq_len_val) as *mut _,
+        ];
+
+        // Launch kernel
+        {
+            let mut module = module_arc.lock().map_err(|e| {
+                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+            })?;
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+            }
+        }
+        stream.synchronize()?;
+
+        Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
+    }
 }
 
 // ============================================================================
@@ -1805,6 +1914,19 @@ pub struct GpuEncoderBlockWeights {
     pub ffn_down_w: GpuResidentTensor<f32>,
     /// FFN down projection: bias [d_model]
     pub ffn_down_b: GpuResidentTensor<f32>,
+}
+
+/// WAPR-PERF-012: GPU Conv Frontend Weights
+#[cfg(feature = "cuda")]
+pub struct GpuConvFrontendWeights {
+    /// Conv1: weight [out_channels, in_channels, kernel_size] = [384, 80, 3]
+    pub conv1_weight: GpuResidentTensor<f32>,
+    /// Conv1: bias [out_channels] = [384]
+    pub conv1_bias: GpuResidentTensor<f32>,
+    /// Conv2: weight [out_channels, in_channels, kernel_size] = [384, 384, 3]
+    pub conv2_weight: GpuResidentTensor<f32>,
+    /// Conv2: bias [out_channels] = [384]
+    pub conv2_bias: GpuResidentTensor<f32>,
 }
 
 /// Configuration for GPU encoder

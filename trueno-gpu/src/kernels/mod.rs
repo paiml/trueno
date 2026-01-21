@@ -20,6 +20,7 @@
 mod argmax;
 mod attention;
 mod bias_activation;
+mod conv1d;
 mod elementwise;
 mod fused;
 mod gemm;
@@ -34,20 +35,24 @@ mod quantize;
 mod softmax;
 
 pub use argmax::{ArgMaxFinalKernel, ArgMaxKernel};
+pub use conv1d::{Conv1dKernel, TiledConv1dKernel};
 pub use attention::{
     AttentionKernel, BatchedIncrementalAttentionKernel, FlashDecodingChunkKernel,
     FlashDecodingReduceKernel, IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel,
     FLASH_DECODE_CHUNK_SIZE,
 };
 pub use bias_activation::{Activation, BiasActivationKernel};
-pub use fused::{FusedGateUpKernel, FusedQKVKernel};
+pub use fused::{FusedGateUpKernel, FusedGemmBiasGeluKernel, FusedQKVKernel};
 pub use elementwise::{
-    BatchedResidualAddKernel, BatchedRopeKernel, BatchedSwigluKernel,
+    BatchedResidualAddKernel, BatchedRopeKernel, BatchedScaleKernel, BatchedSoftmaxKernel,
+    BatchedSwigluKernel, BatchedToInterleavedKernel, BatchedTransposeKernel,
+    CopySingleHeadKernel, ExtractSingleHeadKernel,
+    InterleavedToBatchedKernel,  // WAPR-PERF-004: Multi-head attention
     ElementwiseMulKernel, FusedResidualRmsNormKernel, FusedSwigluKernel,
     GeluKernel, KvCacheScatterIndirectKernel, KvCacheScatterKernel,
     PreciseRopeIndirectKernel, PreciseRopeKernel,  // CORRECTNESS-013
     ResidualAddKernel, RopeIndirectKernel, RopeKernel, RopeNeoxKernel,
-    RopeNeoxIndirectKernel, SiluKernel,
+    RopeNeoxIndirectKernel, ScaleKernel, SiluKernel, TransposeKernel,  // WAPR-PERF-004
 };
 pub use gemm::{
     Batched4DGemmConfig, Batched4DGemmKernel, BatchedGemmConfig, BatchedGemmKernel, GemmConfig,
@@ -66,7 +71,7 @@ pub use quantize::{
     Q8_0GemvKernel, QuantizeKernel, TensorCoreQ4KGemmKernel, TiledQ4KGemvKernel,
     TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel,
 };
-pub use softmax::SoftmaxKernel;
+pub use softmax::{LongRowSoftmaxKernel, SoftmaxKernel};
 pub use lz4::{Lz4WarpCompressKernel, Lz4WarpDecompressKernel};
 
 use crate::ptx::optimize::barrier_safety::{self, BarrierSafetyResult};
