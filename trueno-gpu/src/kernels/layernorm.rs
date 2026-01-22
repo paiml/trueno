@@ -80,6 +80,7 @@ impl LayerNormKernel {
     fn build_warp_shuffle(&self) -> PtxKernel {
         // Warp-level LayerNorm using shuffle for fast reductions
         // Each warp handles one row of the input
+        // FIXED: Now properly loops over all elements for hidden_size > 32
         let epsilon = self.epsilon;
         let affine = self.affine;
 
@@ -96,36 +97,42 @@ impl LayerNormKernel {
                 let hidden_size_param = ctx.load_param_u32("hidden_size");
                 let batch_size = ctx.load_param_u32("batch_size");
 
-                // Each warp processes one row
-                let warp_id = ctx.div_u32(tid, 32);
+                // Each block handles one row, each thread handles strided elements
+                let row_idx = ctx.special_reg(PtxReg::CtaIdX);
                 let lane_id = ctx.rem_u32(tid, 32);
 
-                // Bounds check - warp must be within batch
-                let pred = ctx.setp_ge_u32(warp_id, batch_size);
+                // Bounds check - row must be within batch
+                let pred = ctx.setp_ge_u32(row_idx, batch_size);
                 ctx.branch_if(pred, "exit");
 
                 // Calculate row offset
                 let input_ptr = ctx.load_param_u64("input_ptr");
-                let row_offset = ctx.mul_wide_u32_reg(warp_id, hidden_size_param);
+                let row_offset = ctx.mul_wide_u32_reg(row_idx, hidden_size_param);
                 let row_offset_bytes = ctx.mul_u64(row_offset, 4);
                 let row_base = ctx.add_u64(input_ptr, row_offset_bytes);
 
+                // Constants
+                let four = ctx.mov_u32_imm(4);
+
                 // ===== Step 1: Compute mean using warp shuffle =====
-                // Each thread loads and sums multiple elements
+                // Each thread loads and sums multiple elements with stride 32
                 let sum = ctx.mov_f32_imm(0.0);
-                let count_reg = ctx.mov_u32_imm(0);
+                let idx = ctx.mov_u32_imm(0);
 
-                // Loop to load all elements (simplified - assumes hidden_size <= 32 for now)
-                let lane_pred = ctx.setp_lt_u32(lane_id, hidden_size_param);
-                ctx.branch_if_not(lane_pred, "skip_load_mean");
+                ctx.label("sum_loop");
+                let elem_idx = ctx.add_u32_reg(idx, lane_id);
+                let in_bounds = ctx.setp_lt_u32(elem_idx, hidden_size_param);
+                ctx.branch_if_not(in_bounds, "sum_loop_end");
 
-                let elem_offset = ctx.mul_wide_u32(lane_id, 4);
+                let elem_offset = ctx.mul_wide_u32_reg(elem_idx, four);
                 let elem_addr = ctx.add_u64(row_base, elem_offset);
                 let val = ctx.ld_global_f32(elem_addr);
-                let sum = ctx.add_f32(sum, val);
-                let _count_reg = ctx.add_u32(count_reg, 1);
+                ctx.add_f32_inplace(sum, val);
 
-                ctx.label("skip_load_mean");
+                ctx.add_u32_inplace(idx, 32); // stride by warp size
+                ctx.branch("sum_loop");
+
+                ctx.label("sum_loop_end");
 
                 // Warp shuffle reduction for sum
                 let shuffled_16 = ctx.shfl_down_f32(sum, 16, 0xFFFF_FFFF);
@@ -144,21 +151,31 @@ impl LayerNormKernel {
                 let warp_sum = ctx.add_f32(sum_4, shuffled_1);
 
                 // Broadcast sum to all lanes and compute mean
-                let broadcast_sum = ctx.shfl_down_f32(warp_sum, 0, 0xFFFF_FFFF);
+                let broadcast_sum = ctx.shfl_idx_f32(warp_sum, 0, 0xFFFF_FFFF);
                 let hidden_f32 = ctx.cvt_f32_u32(hidden_size_param);
                 let mean = ctx.div_f32(broadcast_sum, hidden_f32);
 
                 // ===== Step 2: Compute variance using warp shuffle =====
                 // variance = sum((x - mean)^2) / n
                 let var_sum = ctx.mov_f32_imm(0.0);
+                let idx2 = ctx.mov_u32_imm(0);
 
-                ctx.branch_if_not(lane_pred, "skip_load_var");
+                ctx.label("var_loop");
+                let elem_idx2 = ctx.add_u32_reg(idx2, lane_id);
+                let in_bounds2 = ctx.setp_lt_u32(elem_idx2, hidden_size_param);
+                ctx.branch_if_not(in_bounds2, "var_loop_end");
 
-                let diff = ctx.sub_f32(val, mean);
+                let elem_offset2 = ctx.mul_wide_u32_reg(elem_idx2, four);
+                let elem_addr2 = ctx.add_u64(row_base, elem_offset2);
+                let val2 = ctx.ld_global_f32(elem_addr2);
+                let diff = ctx.sub_f32(val2, mean);
                 let sq_diff = ctx.mul_f32(diff, diff);
-                let var_sum = ctx.add_f32(var_sum, sq_diff);
+                ctx.add_f32_inplace(var_sum, sq_diff);
 
-                ctx.label("skip_load_var");
+                ctx.add_u32_inplace(idx2, 32); // stride by warp size
+                ctx.branch("var_loop");
+
+                ctx.label("var_loop_end");
 
                 // Warp shuffle reduction for variance sum
                 let var_shuffled_16 = ctx.shfl_down_f32(var_sum, 16, 0xFFFF_FFFF);
@@ -177,7 +194,7 @@ impl LayerNormKernel {
                 let warp_var_sum = ctx.add_f32(var_sum_4, var_shuffled_1);
 
                 // Broadcast and compute variance
-                let broadcast_var_sum = ctx.shfl_down_f32(warp_var_sum, 0, 0xFFFF_FFFF);
+                let broadcast_var_sum = ctx.shfl_idx_f32(warp_var_sum, 0, 0xFFFF_FFFF);
                 let variance = ctx.div_f32(broadcast_var_sum, hidden_f32);
 
                 // ===== Step 3: Compute rstd = 1/sqrt(variance + epsilon) =====
@@ -186,17 +203,28 @@ impl LayerNormKernel {
                 let rstd = ctx.rsqrt_f32(var_plus_eps);
 
                 // ===== Step 4: Normalize and apply affine transformation =====
-                ctx.branch_if_not(lane_pred, "skip_normalize");
+                // Third pass to normalize all elements
+                let idx3 = ctx.mov_u32_imm(0);
+
+                ctx.label("norm_loop");
+                let elem_idx3 = ctx.add_u32_reg(idx3, lane_id);
+                let in_bounds3 = ctx.setp_lt_u32(elem_idx3, hidden_size_param);
+                ctx.branch_if_not(in_bounds3, "exit");
+
+                let elem_offset3 = ctx.mul_wide_u32_reg(elem_idx3, four);
+                let elem_addr3 = ctx.add_u64(row_base, elem_offset3);
+                let val3 = ctx.ld_global_f32(elem_addr3);
 
                 // normalized = (x - mean) * rstd
-                let normalized = ctx.mul_f32(diff, rstd);
+                let diff3 = ctx.sub_f32(val3, mean);
+                let normalized = ctx.mul_f32(diff3, rstd);
 
                 // Apply affine: y = gamma * normalized + beta
                 let result = if affine {
                     let gamma_ptr = ctx.load_param_u64("gamma_ptr");
                     let beta_ptr = ctx.load_param_u64("beta_ptr");
-                    let gamma_addr = ctx.add_u64(gamma_ptr, elem_offset);
-                    let beta_addr = ctx.add_u64(beta_ptr, elem_offset);
+                    let gamma_addr = ctx.add_u64(gamma_ptr, elem_offset3);
+                    let beta_addr = ctx.add_u64(beta_ptr, elem_offset3);
                     let gamma = ctx.ld_global_f32(gamma_addr);
                     let beta = ctx.ld_global_f32(beta_addr);
                     let scaled = ctx.mul_f32(gamma, normalized);
@@ -208,10 +236,12 @@ impl LayerNormKernel {
                 // Store result
                 let output_ptr = ctx.load_param_u64("output_ptr");
                 let out_row_base = ctx.add_u64(output_ptr, row_offset_bytes);
-                let out_addr = ctx.add_u64(out_row_base, elem_offset);
+                let out_addr = ctx.add_u64(out_row_base, elem_offset3);
                 ctx.st_global_f32(out_addr, result);
 
-                ctx.label("skip_normalize");
+                ctx.add_u32_inplace(idx3, 32); // stride by warp size
+                ctx.branch("norm_loop");
+
                 ctx.label("exit");
                 ctx.ret();
             })

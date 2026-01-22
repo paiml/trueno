@@ -340,6 +340,17 @@ impl<'a> KernelBuilder<'a> {
         vreg
     }
 
+    /// Load an f32 parameter
+    pub fn load_param_f32(&mut self, name: &str) -> VirtualReg {
+        let vreg = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::LdParam, PtxType::F32)
+                .dst(Operand::Reg(vreg))
+                .src(Operand::Param(name.to_string())),
+        );
+        vreg
+    }
+
     // ===== Arithmetic =====
 
     /// Multiply-add low: dst = a * b + c
@@ -2111,6 +2122,23 @@ impl<'a> KernelBuilder<'a> {
         instr = instr.src(Operand::Reg(addr));
         instr = instr.src(Operand::ImmI64(i64::from(stride)));
         self.instructions.push(instr);
+        frag
+    }
+
+    /// Initialize F32 accumulator fragment C to zero (WAPR-PERF-010)
+    /// This avoids loading from memory address 0 which is invalid
+    pub fn wmma_init_c_zero(&mut self) -> Vec<VirtualReg> {
+        // Accumulator is 8 F32 values, initialize all to 0.0
+        let mut frag = Vec::with_capacity(8);
+        for _ in 0..8 {
+            let reg = self.registers.allocate_virtual(PtxType::F32);
+            self.instructions.push(
+                PtxInstruction::new(PtxOp::Mov, PtxType::F32)
+                    .dst(Operand::Reg(reg))
+                    .src(Operand::ImmF32(0.0)),
+            );
+            frag.push(reg);
+        }
         frag
     }
 
