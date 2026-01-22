@@ -999,6 +999,81 @@ impl GpuResidentTensor<f32> {
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
     }
 
+    /// Transform interleaved layout to head-first layout (for attention KV caches)
+    ///
+    /// Converts: [seq_len, n_heads * head_dim] -> [n_heads, seq_len, head_dim]
+    ///
+    /// This is the inverse of batched-to-interleaved and is used for preparing
+    /// cross-attention K/V caches from encoder output projections.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - CUDA context
+    /// * `seq_len` - Sequence length (first dimension)
+    /// * `n_heads` - Number of attention heads
+    /// * `head_dim` - Dimension per head (n_heads * head_dim = d_model)
+    /// * `stream` - Caller-provided CUDA stream
+    ///
+    /// # Errors
+    ///
+    /// Returns error if dimensions don't match tensor size.
+    pub fn interleaved_to_head_first(
+        &self,
+        ctx: &CudaContext,
+        seq_len: u32,
+        n_heads: u32,
+        head_dim: u32,
+        stream: &CudaStream,
+    ) -> Result<GpuResidentTensor<f32>> {
+        let d_model = n_heads * head_dim;
+        let total_elems = (seq_len * d_model) as usize;
+
+        if self.len() != total_elems {
+            return Err(crate::GpuError::InvalidParameter(format!(
+                "Tensor size {} doesn't match seq_len ({}) × d_model ({})",
+                self.len(),
+                seq_len,
+                d_model
+            )));
+        }
+
+        let output_buffer = GpuBuffer::new(ctx, total_elems)?;
+
+        use crate::kernels::{InterleavedToBatchedKernel, Kernel};
+        let kernel = InterleavedToBatchedKernel::new(seq_len, n_heads, head_dim);
+        let ptx = kernel.emit_ptx();
+        let cache_key = format!("interleaved_to_batched:{}:{}:{}", seq_len, n_heads, head_dim);
+        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+        let threads = 256u32;
+        let blocks = (total_elems as u32 + threads - 1) / threads;
+        let config = LaunchConfig {
+            grid: (blocks, 1, 1),
+            block: (threads, 1, 1),
+            shared_mem: 0,
+        };
+
+        let input_ptr = self.as_ptr();
+        let output_ptr = output_buffer.as_ptr();
+
+        let mut args: Vec<*mut std::ffi::c_void> = vec![
+            std::ptr::addr_of!(input_ptr) as *mut _,
+            std::ptr::addr_of!(output_ptr) as *mut _,
+        ];
+
+        {
+            let mut module = module_arc.lock().map_err(|e| {
+                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+            })?;
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+            }
+        }
+        // NO SYNC - caller controls synchronization for graph capture
+
+        Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
+    }
+
     /// Scale tensor by constant (stays on GPU)
     ///
     /// Computes B = A * scale element-wise.
