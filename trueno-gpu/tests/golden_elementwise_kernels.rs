@@ -1,5 +1,10 @@
 //! Golden Tests for Elementwise Kernels
 //!
+//! ⚠️ IMMUTABLE GUARDIAN - DO NOT MODIFY WITHOUT FALSIFICATION EVIDENCE
+//!
+//! These tests are LOCKED as immutable guardians of elementwise kernel correctness.
+//! To modify: First demonstrate a falsifying test case (black swan).
+//!
 //! Verifies that each elementwise kernel emits valid PTX with expected structure.
 
 use trueno_gpu::kernels::{
