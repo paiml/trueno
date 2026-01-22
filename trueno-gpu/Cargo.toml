@@ -1,6 +1,6 @@
 [package]
 name = "trueno-gpu"
-version = "0.4.9"
+version = "0.4.10"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
@@ -198,4 +198,9 @@ required-features = ["wgpu"]
 [[example]]
 name = "test_coalesced_q6k"
 path = "examples/test_coalesced_q6k.rs"
+required-features = ["cuda"]
+
+[[example]]
+name = "gemm_adversarial_correctness"
+path = "examples/gemm_adversarial_correctness.rs"
 required-features = ["cuda"]
