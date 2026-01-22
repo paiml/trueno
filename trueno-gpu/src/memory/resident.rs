@@ -2419,9 +2419,9 @@ pub fn incremental_attention_gpu(
         }
     }
 
-    // WAPR-PERF-013: Sync removed for async pipeline support
-    // Caller is responsible for synchronization when needed
-    // stream.synchronize()?;
+    // WAPR-PERF-014: MUST sync before returning since stream goes out of scope
+    // Without sync, kernel may not complete before output is used (UB!)
+    stream.synchronize()?;
 
     Ok(GpuResidentTensor::from_buffer_internal(output, 1))
 }
