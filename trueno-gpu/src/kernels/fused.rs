@@ -130,8 +130,8 @@ impl Kernel for FusedQKVKernel {
                 let wv_val = ctx.ld_global_f32(wv_addr);
                 acc_v = ctx.fma_f32(x_val, wv_val, acc_v);
 
-                // k += 32
-                k = ctx.add_u32(k, 32);
+                // k += 32 (must be in-place to update loop variable)
+                ctx.add_u32_inplace(k, 32);
                 ctx.branch("loop_start");
 
                 ctx.label("loop_end");
@@ -291,8 +291,8 @@ impl Kernel for FusedGateUpKernel {
                 let wu_val = ctx.ld_global_f32(wu_addr);
                 acc_up = ctx.fma_f32(x_val, wu_val, acc_up);
 
-                // k += 32
-                k = ctx.add_u32(k, 32);
+                // k += 32 (must be in-place to update loop variable)
+                ctx.add_u32_inplace(k, 32);
                 ctx.branch("loop_start");
 
                 ctx.label("loop_end");

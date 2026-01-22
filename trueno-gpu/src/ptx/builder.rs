@@ -2884,6 +2884,11 @@ fn emit_instruction(instr: &PtxInstruction) -> String {
             // PTX format: rsqrt.approx.f32 dst, src
             s.push_str("rsqrt.approx");
         }
+        PtxOp::Rcp => {
+            // rcp requires .approx modifier for f32
+            // PTX format: rcp.approx.f32 dst, src
+            s.push_str("rcp.approx");
+        }
         PtxOp::WmmaLoadA => {
             // WMMA load A fragment: wmma.load.a.sync.aligned.{shape}.{layout}.{type} {dst...}, [ptr], stride
             // Label contains: "m16n16k16.{layout}.f16.stride.{stride}"
@@ -3433,6 +3438,7 @@ fn write_instruction(instr: &PtxInstruction, out: &mut String) {
         PtxOp::Bfi => out.push_str("bfi"),
         PtxOp::Ex2 => out.push_str("ex2.approx"),
         PtxOp::Rsqrt => out.push_str("rsqrt.approx"),
+        PtxOp::Rcp => out.push_str("rcp.approx"),
         // PAR-060: Sin/Cos for RoPE kernel
         PtxOp::Sin => out.push_str("sin.approx"),
         PtxOp::Cos => out.push_str("cos.approx"),
@@ -6409,7 +6415,8 @@ mod tests {
             ctx.ret();
         });
         let ptx = kernel.emit();
-        assert!(ptx.contains("rcp"), "Expected rcp in: {}", ptx);
+        // rcp requires .approx modifier for f32 per PTX ISA
+        assert!(ptx.contains("rcp.approx.f32"), "Expected rcp.approx.f32 in: {}", ptx);
     }
 
     #[test]
