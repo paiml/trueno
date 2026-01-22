@@ -18,6 +18,7 @@
 //! - `wasm`: WebAssembly SIMD128
 
 pub mod scalar;
+pub mod q4k;
 
 #[cfg(target_arch = "x86_64")]
 pub mod sse2;
