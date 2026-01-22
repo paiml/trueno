@@ -447,6 +447,24 @@ impl<T: Copy> GpuBuffer<T> {
     // PAR-023: Device-to-Device Copy (Zero-Sync Pipeline)
     // =========================================================================
 
+    /// Clone buffer to new GPU memory (device-to-device copy)
+    ///
+    /// Allocates new GPU memory and copies contents from self.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - CUDA context (must be current)
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::MemoryAllocation)` if allocation fails.
+    /// Returns `Err(GpuError::Transfer)` if copy fails.
+    pub fn clone(&self, ctx: &CudaContext) -> Result<Self, GpuError> {
+        let mut new_buffer = GpuBuffer::new(ctx, self.len)?;
+        new_buffer.copy_from_buffer(self)?;
+        Ok(new_buffer)
+    }
+
     /// Copy data from another GPU buffer (device-to-device, synchronous)
     ///
     /// Enables zero-sync GPU pipelines by keeping data on device.

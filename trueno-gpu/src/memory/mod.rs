@@ -7,8 +7,10 @@
 //! - **Pool allocator**: Reduces allocation overhead
 //! - **Transfer utilities**: Efficient H2D/D2H transfers
 //! - **Fragmentation tracking**: Per PagedAttention [12]
+//! - **GPU-Resident Tensors**: Minimize host↔device transfers (WAPR-PERF-004)
 
 mod pool;
+pub mod resident;
 
 pub use pool::{AllocationInfo, MemoryPool, PoolConfig};
 
