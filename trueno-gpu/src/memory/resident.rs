@@ -471,7 +471,9 @@ impl GpuResidentTensor<f32> {
         // WAPR-PERF-010: Use WMMA Tensor Cores for large matrices
         // Fixed: D → C accumulator copy for multi-tile K dimension
         let tile_size = 16u32;
-        let use_wmma = k >= 64 && m >= 64 && n >= 64; // WAPR-PERF-010: Tensor Cores for large matrices
+        // WAPR-PERF-014: Allow disabling WMMA for precision debugging
+        let force_fp32 = std::env::var("TRUENO_FORCE_FP32_GEMM").is_ok();
+        let use_wmma = !force_fp32 && k >= 64 && m >= 64 && n >= 64;
         let use_tiled = !use_wmma && k >= 64;
 
         let (kernel, cache_key, config) = if use_wmma {
@@ -597,7 +599,9 @@ impl GpuResidentTensor<f32> {
 
         // Build and compile GEMM kernel (cached)
         let tile_size = 16u32;
-        let use_wmma = k >= 64 && m >= 64 && n >= 64;
+        // WAPR-PERF-014: Allow disabling WMMA for precision debugging
+        let force_fp32 = std::env::var("TRUENO_FORCE_FP32_GEMM").is_ok();
+        let use_wmma = !force_fp32 && k >= 64 && m >= 64 && n >= 64;
         let use_tiled = !use_wmma && k >= 64;
 
         let (kernel, cache_key, config) = if use_wmma {
@@ -1378,16 +1382,23 @@ impl GpuResidentTensor<f32> {
         let n = self.len();
         let bias_size = bias.len();
 
+        // WAPR-PERF-027 FIX: Create stream FIRST to ensure D2D copy and kernel use same stream
         // BiasActivationKernel is IN-PLACE: reads from output, adds bias, writes to output
-        // So we first copy input to output buffer, then run kernel in-place
-        let output_buffer = self.buffer.clone(ctx)?;
+        let stream = CudaStream::new(ctx)?;
+
+        // Allocate output buffer and copy input data using SAME stream
+        // Previously used clone() which ran on default stream - race condition with kernel!
+        let mut output_buffer = GpuBuffer::new(ctx, n)?;
+        // SAFETY: both buffers valid, stream will be synchronized before returning
+        unsafe {
+            output_buffer.copy_from_buffer_async(&self.buffer, &stream)?;
+        }
 
         use crate::kernels::BiasActivationKernel;
         let kernel = BiasActivationKernel::new(n as u32, bias_size as u32);
         let ptx = kernel.emit_ptx();
         let cache_key = format!("bias_add:{}:{}", n, bias_size);
         let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-        let stream = CudaStream::new(ctx)?;
 
         let threads = 256u32;
         let blocks = ((n as u32) + threads - 1) / threads;
@@ -2046,7 +2057,9 @@ fn batched_gemm(
     // WMMA 16x16x16 tiles work best when m, n, k are multiples of 16
     // For attention: typical dims are batch=6 heads, m=seq_len, n=64, k=64
     let tile_size = 16u32;
-    let use_wmma = k >= 64 && n >= 16 && m >= 16; // WAPR-PERF-011: Tensor Cores for suitable dimensions
+    // WAPR-PERF-014: Allow disabling WMMA for precision debugging
+    let force_fp32 = std::env::var("TRUENO_FORCE_FP32_GEMM").is_ok();
+    let use_wmma = !force_fp32 && k >= 64 && n >= 16 && m >= 16;
 
     let (kernel, cache_key, wmma_mode) = if use_wmma {
         let kernel = BatchedGemmKernel::wmma_fp16(batch, m, n, k);
