@@ -235,7 +235,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "serde_json",
- "trueno 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trueno 0.13.0",
 ]
 
 [[package]]
@@ -843,7 +843,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "toml",
- "trueno 0.13.0",
+ "trueno 0.14.0",
  "trueno-gpu",
 ]
 
@@ -3843,7 +3843,7 @@ dependencies = [
  "jugar-probar 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_json",
- "trueno 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trueno 0.13.0",
 ]
 
 [[package]]
@@ -5466,6 +5466,22 @@ dependencies = [
 [[package]]
 name = "trueno"
 version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ba5457f1f184520c46e6b315d540baa4cf2a2ae3d047e13001a4a23a12c6ab8"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hostname",
+ "num_cpus",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "toml",
+]
+
+[[package]]
+name = "trueno"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "aprender 0.24.1",
@@ -5502,22 +5518,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "trueno"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ba5457f1f184520c46e6b315d540baa4cf2a2ae3d047e13001a4a23a12c6ab8"
-dependencies = [
- "anyhow",
- "chrono",
- "hostname",
- "num_cpus",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "toml",
-]
-
-[[package]]
 name = "trueno-db"
 version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5540,7 +5540,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "trueno 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trueno 0.13.0",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -5565,7 +5565,7 @@ dependencies = [
 
 [[package]]
 name = "trueno-gpu"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "bytemuck",
  "criterion",
@@ -5610,7 +5610,7 @@ dependencies = [
  "parquet",
  "thiserror 2.0.17",
  "tokio",
- "trueno 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trueno 0.13.0",
  "trueno-db",
 ]
 
