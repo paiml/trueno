@@ -1,5 +1,10 @@
 //! Golden PTX Builder Tests (Popperian Falsification)
 //!
+//! ⚠️ IMMUTABLE GUARDIAN - DO NOT MODIFY WITHOUT FALSIFICATION EVIDENCE
+//!
+//! These tests are LOCKED as immutable guardians of PTX correctness.
+//! To modify: First demonstrate a falsifying test case (black swan).
+//!
 //! These tests verify the INTENT of each PTX instruction, not just string presence.
 //! Each test generates PTX and verifies the exact instruction format.
 //!

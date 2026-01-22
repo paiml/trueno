@@ -1,5 +1,10 @@
 //! Advanced PTX Builder Golden Tests
 //!
+//! ⚠️ IMMUTABLE GUARDIAN - DO NOT MODIFY WITHOUT FALSIFICATION EVIDENCE
+//!
+//! These tests are LOCKED as immutable guardians of PTX correctness.
+//! To modify: First demonstrate a falsifying test case (black swan).
+//!
 //! Tests for less commonly used but important PTX operations.
 
 use trueno_gpu::ptx::{PtxKernel, PtxReg, PtxType};
