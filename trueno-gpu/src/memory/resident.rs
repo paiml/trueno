@@ -548,6 +548,128 @@ impl GpuResidentTensor<f32> {
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
     }
 
+    /// WAPR-PERF-014: Matrix multiply with external stream (no stream creation, no sync)
+    ///
+    /// Same as `matmul` but uses caller-provided stream and does NOT synchronize.
+    /// Use this in tight loops to avoid 16+ stream creates/syncs per token.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - CUDA context
+    /// * `other` - Right-hand matrix
+    /// * `m` - Rows of A
+    /// * `n` - Columns of B
+    /// * `k` - Columns of A / Rows of B
+    /// * `stream` - Caller-provided CUDA stream (reuse across operations)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if kernel launch fails.
+    pub fn matmul_with_stream(
+        &self,
+        ctx: &CudaContext,
+        other: &GpuResidentTensor<f32>,
+        m: u32,
+        n: u32,
+        k: u32,
+        stream: &CudaStream,
+    ) -> Result<GpuResidentTensor<f32>> {
+        // Validate dimensions
+        let expected_a = (m * k) as usize;
+        let expected_b = (k * n) as usize;
+        let output_size = (m * n) as usize;
+
+        if self.len() != expected_a {
+            return Err(crate::GpuError::InvalidParameter(format!(
+                "A has {} elements, expected {} ({}x{})",
+                self.len(), expected_a, m, k
+            )));
+        }
+        if other.len() != expected_b {
+            return Err(crate::GpuError::InvalidParameter(format!(
+                "B has {} elements, expected {} ({}x{})",
+                other.len(), expected_b, k, n
+            )));
+        }
+
+        // Allocate output buffer on GPU
+        let output_buffer = GpuBuffer::new(ctx, output_size)?;
+
+        // Build and compile GEMM kernel (cached)
+        let tile_size = 16u32;
+        let use_wmma = k >= 64 && m >= 64 && n >= 64;
+        let use_tiled = !use_wmma && k >= 64;
+
+        let (kernel, cache_key, config) = if use_wmma {
+            let kernel = GemmKernel::wmma_fp16(m, n, k);
+            let key = format!("gemm_wmma_fp16:{}x{}x{}", m, n, k);
+            let grid_x = (n + 15) / 16;
+            let grid_y = (m + 15) / 16;
+            let cfg = LaunchConfig {
+                grid: (grid_x, grid_y, 1),
+                block: (32, 1, 1),
+                shared_mem: 1024,
+            };
+            (kernel, key, cfg)
+        } else if use_tiled {
+            let kernel = GemmKernel::tiled_unrolled(m, n, k, tile_size);
+            let key = format!("gemm_tiled_unrolled:{}x{}x{}", m, n, k);
+            let grid_x = (n + tile_size - 1) / tile_size;
+            let grid_y = (m + tile_size - 1) / tile_size;
+            let cfg = LaunchConfig {
+                grid: (grid_x, grid_y, 1),
+                block: (tile_size, tile_size, 1),
+                shared_mem: tile_size * tile_size * 4 * 2,
+            };
+            (kernel, key, cfg)
+        } else {
+            let kernel = GemmKernel::naive(m, n, k);
+            let key = format!("gemm_naive:{}x{}x{}", m, n, k);
+            let block_size = 16u32;
+            let grid_x = (n + block_size - 1) / block_size;
+            let grid_y = (m + block_size - 1) / block_size;
+            let cfg = LaunchConfig {
+                grid: (grid_x, grid_y, 1),
+                block: (block_size, block_size, 1),
+                shared_mem: 0,
+            };
+            (kernel, key, cfg)
+        };
+
+        let ptx = kernel.emit_ptx();
+        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+        // Prepare arguments
+        let a_ptr = self.as_ptr();
+        let b_ptr = other.as_ptr();
+        let c_ptr = output_buffer.as_ptr();
+        let m_val = m;
+        let n_val = n;
+        let k_val = k;
+
+        let mut args: Vec<*mut std::ffi::c_void> = vec![
+            std::ptr::addr_of!(a_ptr) as *mut _,
+            std::ptr::addr_of!(b_ptr) as *mut _,
+            std::ptr::addr_of!(c_ptr) as *mut _,
+            std::ptr::addr_of!(m_val) as *mut _,
+            std::ptr::addr_of!(n_val) as *mut _,
+            std::ptr::addr_of!(k_val) as *mut _,
+        ];
+
+        // Launch kernel using caller's stream (lock the cached module)
+        {
+            let mut module = module_arc.lock().map_err(|e| {
+                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+            })?;
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+            }
+        }
+
+        // NO SYNC - caller controls synchronization for pipelining
+        Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
+    }
+
     /// Row-wise softmax (stays on GPU)
     ///
     /// Computes softmax along the last dimension.
@@ -646,6 +768,99 @@ impl GpuResidentTensor<f32> {
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
     }
 
+    /// Row-wise softmax with external stream (WAPR-PERF-017: CUDA Graph capture)
+    ///
+    /// Same as `softmax` but accepts caller-provided stream for pipelining.
+    /// Does NOT synchronize - caller controls when to sync.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - CUDA context
+    /// * `seq_len` - Sequence length (number of rows)
+    /// * `stream` - Caller-provided CUDA stream
+    pub fn softmax_with_stream(
+        &self,
+        ctx: &CudaContext,
+        seq_len: u32,
+        stream: &CudaStream,
+    ) -> Result<GpuResidentTensor<f32>> {
+        let total_elements = self.len();
+        let row_size = total_elements / (seq_len as usize);
+
+        if total_elements % (seq_len as usize) != 0 {
+            return Err(crate::GpuError::InvalidParameter(format!(
+                "Tensor size {} not divisible by seq_len {}",
+                total_elements, seq_len
+            )));
+        }
+
+        // Allocate output buffer on GPU
+        let output_buffer = GpuBuffer::new(ctx, total_elements)?;
+        let input_ptr = self.as_ptr();
+        let output_ptr = output_buffer.as_ptr();
+        let row_size_val = row_size as u32;
+
+        if row_size <= 32 {
+            // Use warp shuffle softmax for short rows (cached)
+            let kernel = SoftmaxKernel::new(row_size as u32);
+            let ptx = kernel.emit_ptx();
+            let cache_key = format!("softmax:{}", row_size);
+            let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+            let config = LaunchConfig {
+                grid: (seq_len, 1, 1),
+                block: (32, 1, 1), // One warp per row
+                shared_mem: 0,
+            };
+
+            let mut args: Vec<*mut std::ffi::c_void> = vec![
+                std::ptr::addr_of!(input_ptr) as *mut _,
+                std::ptr::addr_of!(output_ptr) as *mut _,
+                std::ptr::addr_of!(row_size_val) as *mut _,
+            ];
+
+            {
+                let mut module = module_arc.lock().map_err(|e| {
+                    crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+                })?;
+                unsafe {
+                    stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+                }
+            }
+        } else {
+            // Use long row softmax for rows > 32 elements (cached)
+            let kernel = LongRowSoftmaxKernel::new(row_size as u32);
+            let ptx = kernel.emit_ptx();
+            let cache_key = format!("softmax_long_row:{}", row_size);
+            let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+            // 256 threads per block (8 warps), one block per row
+            let config = LaunchConfig {
+                grid: (seq_len, 1, 1),
+                block: (256, 1, 1),
+                shared_mem: 72,
+            };
+
+            let mut args: Vec<*mut std::ffi::c_void> = vec![
+                std::ptr::addr_of!(input_ptr) as *mut _,
+                std::ptr::addr_of!(output_ptr) as *mut _,
+                std::ptr::addr_of!(row_size_val) as *mut _,
+            ];
+
+            {
+                let mut module = module_arc.lock().map_err(|e| {
+                    crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+                })?;
+                unsafe {
+                    stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+                }
+            }
+        }
+        // NO SYNC - caller controls synchronization for graph capture
+
+        Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
+    }
+
     /// Element-wise add (stays on GPU)
     ///
     /// Computes C = A + B element-wise.
@@ -708,6 +923,78 @@ impl GpuResidentTensor<f32> {
             }
         }
         stream.synchronize()?;
+
+        Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
+    }
+
+    /// Element-wise add with external stream (WAPR-PERF-017: CUDA Graph capture)
+    ///
+    /// Same as `add` but accepts caller-provided stream for pipelining.
+    /// Does NOT synchronize - caller controls when to sync.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - CUDA context
+    /// * `other` - Tensor to add
+    /// * `stream` - Caller-provided CUDA stream
+    pub fn add_with_stream(
+        &self,
+        ctx: &CudaContext,
+        other: &GpuResidentTensor<f32>,
+        stream: &CudaStream,
+    ) -> Result<GpuResidentTensor<f32>> {
+        if self.len() != other.len() {
+            return Err(crate::GpuError::InvalidParameter(format!(
+                "Size mismatch: {} vs {}",
+                self.len(),
+                other.len()
+            )));
+        }
+
+        let n = self.len();
+
+        // Allocate output buffer on GPU
+        let output_buffer = GpuBuffer::new(ctx, n)?;
+
+        // Use simple add kernel via ResidualAddKernel (cached)
+        use crate::kernels::ResidualAddKernel;
+        let kernel = ResidualAddKernel::new(n as u32);
+        let ptx = kernel.emit_ptx();
+        let cache_key = format!("residual_add:{}", n);
+        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+        // Configure launch
+        let threads = 256u32;
+        let blocks = ((n as u32) + threads - 1) / threads;
+        let config = LaunchConfig {
+            grid: (blocks, 1, 1),
+            block: (threads, 1, 1),
+            shared_mem: 0,
+        };
+
+        // Prepare arguments
+        let a_ptr = self.as_ptr();
+        let b_ptr = other.as_ptr();
+        let c_ptr = output_buffer.as_ptr();
+        let n_val = n as u32;
+
+        let mut args: Vec<*mut std::ffi::c_void> = vec![
+            std::ptr::addr_of!(a_ptr) as *mut _,
+            std::ptr::addr_of!(b_ptr) as *mut _,
+            std::ptr::addr_of!(c_ptr) as *mut _,
+            std::ptr::addr_of!(n_val) as *mut _,
+        ];
+
+        // Launch kernel (lock the cached module)
+        {
+            let mut module = module_arc.lock().map_err(|e| {
+                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+            })?;
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+            }
+        }
+        // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
     }
@@ -831,6 +1118,73 @@ impl GpuResidentTensor<f32> {
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
     }
 
+    /// Layer normalization with external stream (WAPR-PERF-017: CUDA Graph capture)
+    ///
+    /// Same as `layer_norm` but accepts caller-provided stream for pipelining.
+    /// Does NOT synchronize - caller controls when to sync.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - CUDA context
+    /// * `gamma` - Scale parameters (hidden_size)
+    /// * `beta` - Bias parameters (hidden_size)
+    /// * `hidden_size` - Size of hidden dimension
+    /// * `batch_size` - Number of rows (batch or seq_len)
+    /// * `stream` - Caller-provided CUDA stream
+    pub fn layer_norm_with_stream(
+        &self,
+        ctx: &CudaContext,
+        gamma: &GpuResidentTensor<f32>,
+        beta: &GpuResidentTensor<f32>,
+        hidden_size: u32,
+        batch_size: u32,
+        stream: &CudaStream,
+    ) -> Result<GpuResidentTensor<f32>> {
+        let n = self.len();
+        let output_buffer = GpuBuffer::new(ctx, n)?;
+
+        use crate::kernels::LayerNormKernel;
+        let kernel = LayerNormKernel::new(hidden_size);
+        let ptx = kernel.emit_ptx();
+        let cache_key = format!("layer_norm:{}", hidden_size);
+        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+        // Launch one warp per row
+        let threads = 32u32.min(hidden_size);
+        let blocks = batch_size;
+        let config = LaunchConfig {
+            grid: (blocks, 1, 1),
+            block: (threads, 1, 1),
+            shared_mem: 0,
+        };
+
+        let input_ptr = self.as_ptr();
+        let output_ptr = output_buffer.as_ptr();
+        let gamma_ptr = gamma.as_ptr();
+        let beta_ptr = beta.as_ptr();
+
+        let mut args: Vec<*mut std::ffi::c_void> = vec![
+            std::ptr::addr_of!(input_ptr) as *mut _,
+            std::ptr::addr_of!(output_ptr) as *mut _,
+            std::ptr::addr_of!(gamma_ptr) as *mut _,
+            std::ptr::addr_of!(beta_ptr) as *mut _,
+            std::ptr::addr_of!(hidden_size) as *mut _,
+            std::ptr::addr_of!(batch_size) as *mut _,
+        ];
+
+        {
+            let mut module = module_arc.lock().map_err(|e| {
+                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+            })?;
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+            }
+        }
+        // NO SYNC - caller controls synchronization for graph capture
+
+        Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
+    }
+
     /// GELU activation (stays on GPU)
     ///
     /// Computes: output = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
@@ -876,6 +1230,60 @@ impl GpuResidentTensor<f32> {
             }
         }
         stream.synchronize()?;
+
+        Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
+    }
+
+    /// GELU activation with external stream (WAPR-PERF-017: CUDA Graph capture)
+    ///
+    /// Same as `gelu` but accepts caller-provided stream for pipelining.
+    /// Does NOT synchronize - caller controls when to sync.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - CUDA context
+    /// * `stream` - Caller-provided CUDA stream
+    pub fn gelu_with_stream(
+        &self,
+        ctx: &CudaContext,
+        stream: &CudaStream,
+    ) -> Result<GpuResidentTensor<f32>> {
+        let n = self.len();
+        let output_buffer = GpuBuffer::new(ctx, n)?;
+
+        use crate::kernels::GeluKernel;
+        let kernel = GeluKernel::new(n as u32);
+        let ptx = kernel.emit_ptx();
+        let cache_key = format!("gelu:{}", n);
+        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+        let threads = 256u32;
+        let blocks = ((n as u32) + threads - 1) / threads;
+        let config = LaunchConfig {
+            grid: (blocks, 1, 1),
+            block: (threads, 1, 1),
+            shared_mem: 0,
+        };
+
+        let input_ptr = self.as_ptr();
+        let output_ptr = output_buffer.as_ptr();
+        let n_val = n as u32;
+
+        let mut args: Vec<*mut std::ffi::c_void> = vec![
+            std::ptr::addr_of!(input_ptr) as *mut _,
+            std::ptr::addr_of!(output_ptr) as *mut _,
+            std::ptr::addr_of!(n_val) as *mut _,
+        ];
+
+        {
+            let mut module = module_arc.lock().map_err(|e| {
+                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+            })?;
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+            }
+        }
+        // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
     }
@@ -934,6 +1342,55 @@ impl GpuResidentTensor<f32> {
             }
         }
         stream.synchronize()?;
+
+        Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
+    }
+
+    /// WAPR-PERF-014: Bias add with external stream (no stream creation, no sync)
+    pub fn bias_add_with_stream(
+        &self,
+        ctx: &CudaContext,
+        bias: &GpuResidentTensor<f32>,
+        stream: &CudaStream,
+    ) -> Result<GpuResidentTensor<f32>> {
+        let n = self.len();
+        let bias_size = bias.len();
+
+        let output_buffer = self.buffer.clone(ctx)?;
+
+        use crate::kernels::BiasActivationKernel;
+        let kernel = BiasActivationKernel::new(n as u32, bias_size as u32);
+        let ptx = kernel.emit_ptx();
+        let cache_key = format!("bias_add:{}:{}", n, bias_size);
+        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+        let threads = 256u32;
+        let blocks = ((n as u32) + threads - 1) / threads;
+        let config = LaunchConfig {
+            grid: (blocks, 1, 1),
+            block: (threads, 1, 1),
+            shared_mem: 0,
+        };
+
+        let output_ptr = output_buffer.as_ptr();
+        let bias_ptr = bias.as_ptr();
+        let n_val = n as u32;
+
+        let mut args: Vec<*mut std::ffi::c_void> = vec![
+            std::ptr::addr_of!(output_ptr) as *mut _,
+            std::ptr::addr_of!(bias_ptr) as *mut _,
+            std::ptr::addr_of!(n_val) as *mut _,
+        ];
+
+        {
+            let mut module = module_arc.lock().map_err(|e| {
+                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+            })?;
+            unsafe {
+                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+            }
+        }
+        // NO SYNC - caller controls synchronization
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
     }
