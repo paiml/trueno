@@ -1732,3 +1732,23 @@ roadmap:
   - perf
   - simd
   notes: null
+- id: PMAT-018
+  github_issue: null
+  item_type: task
+  title: 'PMAT-103: Shatter to 95% Coverage + A+ TDG'
+  status: inprogress
+  priority: high
+  assigned_to: null
+  created: 2026-01-22T23:36:48Z
+  updated: 2026-01-22T23:36:55.806767868+00:00
+  spec: null
+  acceptance_criteria:
+  - Achieve 95% test coverage and A+ TDG grade by shattering 5 large files (brick.rs, vector.rs, tuner.rs, quantize.rs, builder.rs) and adding tests. See docs/specifications/shatter-to-95.md
+  phases: []
+  subtasks: []
+  estimated_effort: null
+  labels:
+  - coverage
+  - tdg
+  - refactor
+  notes: null
