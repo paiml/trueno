@@ -35,6 +35,7 @@
 //! A ComputeBrick with no assertions makes no testable claims and is therefore invalid.
 
 // Submodules
+mod buffer;
 mod memory;
 mod perf_metrics;
 mod profiling;
@@ -56,6 +57,9 @@ pub use memory::{
     CacheAligned, MemoryAdvice, PrefetchLocality, CACHE_LINE_SIZE, CACHE_LINE_SIZE_F32,
     DIRECT_IO_ALIGNMENT,
 };
+
+// Re-export buffer types
+pub use buffer::{BufferWatermarks, WatermarkedBuffer};
 
 use crate::error::TruenoError;
 use std::collections::HashMap;
@@ -269,141 +273,6 @@ impl Iterator for Balance211Iter {
 impl ExactSizeIterator for Balance211Iter {
     fn len(&self) -> usize {
         self.ranges.len() - self.current
-    }
-}
-
-// ----------------------------------------------------------------------------
-// AWP-01: Two-Tier Buffer Watermarks
-// ----------------------------------------------------------------------------
-
-/// Two-tier buffer watermarks for back-pressure control.
-///
-/// # Example
-/// ```rust
-/// use trueno::brick::BufferWatermarks;
-///
-/// let wm = BufferWatermarks::default();
-/// assert!(!wm.should_backpressure(1000));  // Below high watermark
-/// assert!(wm.should_backpressure(10000));  // Above high watermark
-/// ```
-#[derive(Debug, Clone, Copy)]
-pub struct BufferWatermarks {
-    /// Low watermark: resume writing when buffer drops below this
-    pub low: usize,
-    /// High watermark: apply back-pressure when buffer exceeds this
-    pub high: usize,
-}
-
-impl Default for BufferWatermarks {
-    fn default() -> Self {
-        Self {
-            low: 1024,       // 1KB
-            high: 8 * 1024,  // 8KB
-        }
-    }
-}
-
-impl BufferWatermarks {
-    /// Create new watermarks.
-    ///
-    /// # Panics
-    /// Panics if low >= high.
-    pub fn new(low: usize, high: usize) -> Self {
-        assert!(low < high, "low watermark must be less than high");
-        Self { low, high }
-    }
-
-    /// Check if back-pressure should be applied.
-    #[must_use]
-    pub fn should_backpressure(&self, current: usize) -> bool {
-        current >= self.high
-    }
-
-    /// Check if writing can resume.
-    #[must_use]
-    pub fn can_write(&self, current: usize) -> bool {
-        current < self.low
-    }
-
-    /// Get pressure level (0.0 = empty, 1.0 = at high watermark).
-    #[must_use]
-    pub fn pressure_level(&self, current: usize) -> f64 {
-        (current as f64 / self.high as f64).min(1.0)
-    }
-}
-
-/// Buffer with watermark-based flow control.
-#[derive(Debug)]
-pub struct WatermarkedBuffer {
-    data: Vec<u8>,
-    watermarks: BufferWatermarks,
-}
-
-impl WatermarkedBuffer {
-    /// Create a new watermarked buffer.
-    pub fn new(watermarks: BufferWatermarks) -> Self {
-        Self {
-            data: Vec::with_capacity(watermarks.high),
-            watermarks,
-        }
-    }
-
-    /// Check if back-pressure should be applied.
-    #[must_use]
-    pub fn should_backpressure(&self) -> bool {
-        self.watermarks.should_backpressure(self.data.len())
-    }
-
-    /// Check if writing can resume.
-    #[must_use]
-    pub fn can_write(&self) -> bool {
-        self.watermarks.can_write(self.data.len())
-    }
-
-    /// Get current buffer length.
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    /// Check if buffer is empty.
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
-
-    /// Write data to the buffer.
-    pub fn write(&mut self, data: &[u8]) {
-        self.data.extend_from_slice(data);
-    }
-
-    /// Drain data from the buffer.
-    pub fn drain(&mut self, amount: usize) -> Vec<u8> {
-        let amount = amount.min(self.data.len());
-        self.data.drain(..amount).collect()
-    }
-
-    /// Clear the buffer.
-    pub fn clear(&mut self) {
-        self.data.clear();
-    }
-
-    /// Get the watermarks configuration.
-    #[must_use]
-    pub fn watermarks(&self) -> BufferWatermarks {
-        self.watermarks
-    }
-
-    /// Get current pressure level.
-    #[must_use]
-    pub fn pressure_level(&self) -> f64 {
-        self.watermarks.pressure_level(self.data.len())
-    }
-}
-
-impl Default for WatermarkedBuffer {
-    fn default() -> Self {
-        Self::new(BufferWatermarks::default())
     }
 }
 
