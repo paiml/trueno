@@ -1234,9 +1234,11 @@ impl GemmKernel {
                 let frag_a = ctx.wmma_load_a_f16(smem_generic_base, 16, WmmaLayout::RowMajor);
 
                 // Load B fragment from shared memory (B is at offset smem_b_base)
+                // WAPR-PERF-014 FIX: B is stored row-major in shared memory, so use RowMajor
+                // B_shared[k, n] is at offset k*16 + n (row_in_tile * 16 + col_in_tile)
                 let smem_b_offset_u64 = ctx.cvt_u64_u32(smem_b_base);
                 let smem_b_ptr = ctx.add_u64(smem_generic_base, smem_b_offset_u64);
-                let frag_b = ctx.wmma_load_b_f16(smem_b_ptr, 16, WmmaLayout::ColMajor);
+                let frag_b = ctx.wmma_load_b_f16(smem_b_ptr, 16, WmmaLayout::RowMajor);
 
                 // Matrix multiply-accumulate: D = A * B + C
                 let frag_d = ctx.wmma_mma_f16_f32(&frag_a, &frag_b, &frag_c);
@@ -2063,9 +2065,10 @@ impl BatchedGemmKernel {
                 let frag_a = ctx.wmma_load_a_f16(smem_generic_base, 16, WmmaLayout::RowMajor);
 
                 // Load B fragment from shared memory
+                // WAPR-PERF-014 FIX: B is stored row-major in shared memory, so use RowMajor
                 let smem_b_offset_u64 = ctx.cvt_u64_u32(smem_b_base);
                 let smem_b_ptr = ctx.add_u64(smem_generic_base, smem_b_offset_u64);
-                let frag_b = ctx.wmma_load_b_f16(smem_b_ptr, 16, WmmaLayout::ColMajor);
+                let frag_b = ctx.wmma_load_b_f16(smem_b_ptr, 16, WmmaLayout::RowMajor);
 
                 // Matrix multiply-accumulate: D = A * B + C
                 let frag_d = ctx.wmma_mma_f16_f32(&frag_a, &frag_b, &frag_c);
