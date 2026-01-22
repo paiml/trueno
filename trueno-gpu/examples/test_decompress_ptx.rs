@@ -1,8 +1,8 @@
-use trueno_gpu::kernels::lz4::Lz4DecompressKernel;
+use trueno_gpu::kernels::lz4::Lz4WarpDecompressKernel;
 use trueno_gpu::kernels::Kernel;
 
 fn main() {
-    let kernel = Lz4DecompressKernel::new(1000);
+    let kernel = Lz4WarpDecompressKernel::new(1000);
     let ptx = kernel.emit_ptx();
     
     // Print first 200 lines
@@ -25,7 +25,7 @@ fn main() {
     if !ptx.contains(".entry") {
         println!("ERROR: Missing .entry");
     }
-    if !ptx.contains("lz4_decompress") {
-        println!("ERROR: Missing lz4_decompress entry");
+    if !ptx.contains("lz4_warp_decompress") {
+        println!("ERROR: Missing lz4_warp_decompress entry");
     }
 }

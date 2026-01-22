@@ -103,6 +103,10 @@ pub fn analyze(ptx: &str) -> BarrierSafetyResult {
     let mut loop_labels: HashSet<String> = HashSet::new();
     let mut loop_end_labels: HashSet<String> = HashSet::new();
 
+    // Pre-scan: count total barriers in kernel
+    // Kernels with NO barriers are always safe (no divergence possible)
+    let has_barriers = ptx.contains("bar.sync") || ptx.contains("bar.arrive");
+
     // First pass: identify loop labels (labels that have a branch back to them)
     for line in &lines {
         let trimmed = line.trim();
@@ -168,7 +172,8 @@ pub fn analyze(ptx: &str) -> BarrierSafetyResult {
             exit_count += 1;
 
             // Check for PARITY-114 pattern: exit before barrier in loop
-            if in_loop && !barrier_seen_in_current_loop {
+            // ONLY flag if kernel actually uses barriers - warp-only kernels are safe
+            if has_barriers && in_loop && !barrier_seen_in_current_loop {
                 if trimmed.starts_with('@') {
                     // Conditional exit - could still cause divergence
                     violations.push(BarrierViolation {
@@ -374,6 +379,63 @@ done:
 "#;
         let result = analyze(ptx);
         assert!(result.is_safe, "KV loop pattern should be safe");
+    }
+
+    /// Warp-only kernels (no barriers) are always safe
+    /// This covers LayerNorm warp_shuffle, RMSNorm, and other shuffle-based kernels
+    #[test]
+    fn test_warp_only_kernel_safe() {
+        // Simulates a warp shuffle reduction kernel with conditional exit in loop
+        // No bar.sync means no barrier divergence possible
+        let ptx = r#"
+.entry rmsnorm() {
+    mov.u32 %r0, %tid.x;
+    setp.lt.u32 %p0, %r0, 32;
+
+sum_loop:
+    @!%p1 bra exit;
+    ld.global.f32 %f0, [%addr];
+    shfl.sync.down.b32 %f1, %f0, 16, 0x1f, 0xffffffff;
+    add.f32 %f0, %f0, %f1;
+    add.u32 %idx, %idx, 32;
+    setp.lt.u32 %p1, %idx, %n;
+    bra sum_loop;
+
+sum_loop_end:
+    st.global.f32 [%out], %f0;
+exit:
+    ret;
+}
+"#;
+        let result = analyze(ptx);
+        assert!(
+            result.is_safe,
+            "Warp-only kernel should be safe: {:?}",
+            result.violations
+        );
+        assert_eq!(result.barrier_count, 0, "No barriers in warp-only kernel");
+    }
+
+    /// Kernels with conditional exit and NO barriers are always safe
+    #[test]
+    fn test_no_barrier_conditional_exit_safe() {
+        let ptx = r#"
+.entry kernel() {
+loop:
+    @%p0 bra exit;
+    ld.global.f32 %f0, [%r0];
+    bra loop;
+
+loop_end:
+exit:
+    ret;
+}
+"#;
+        let result = analyze(ptx);
+        assert!(
+            result.is_safe,
+            "No-barrier kernel with conditional exit should be safe"
+        );
     }
 }
 

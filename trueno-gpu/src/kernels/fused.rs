@@ -547,9 +547,11 @@ mod tests {
         let ptx = kernel.emit_ptx();
         assert!(ptx.contains("fused_gemm_bias_gelu"));
         assert!(ptx.contains(".entry"));
-        // Verify GELU constants are present
-        assert!(ptx.contains("0.797884")); // sqrt(2/π)
-        assert!(ptx.contains("0.044715"));
+        // Verify GELU constants are present (hex format: 0F{bits:08X})
+        // sqrt(2/π) ≈ 0.7978846 -> 0F3F4C422A
+        // 0.044715 -> 0F3D372713
+        assert!(ptx.contains("0F3F4C422A"), "Missing sqrt(2/π) constant");
+        assert!(ptx.contains("0F3D372713"), "Missing 0.044715 constant");
     }
 
     #[test]

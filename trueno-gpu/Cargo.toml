@@ -194,3 +194,8 @@ required-features = ["metal"]
 name = "metal_gemm_benchmark"
 path = "examples/metal_gemm_benchmark.rs"
 required-features = ["wgpu"]
+
+[[example]]
+name = "test_coalesced_q6k"
+path = "examples/test_coalesced_q6k.rs"
+required-features = ["cuda"]
