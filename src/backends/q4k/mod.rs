@@ -33,10 +33,19 @@
 //! let output = matmul_q4k_f32(&q4k_weights, &input, 4864, 896);
 //! ```
 
-const SUPER_BLOCK_SIZE: usize = 256;
-const SUPER_BLOCK_BYTES: usize = 144;
+#![allow(dead_code)]
+
+// Sub-modules
+mod dequant;
+
+// Re-exports
+pub use dequant::dequantize_q4k_to_f32;
+
+// Constants (pub(crate) for submodule access)
+pub(crate) const SUPER_BLOCK_SIZE: usize = 256;
+pub(crate) const SUPER_BLOCK_BYTES: usize = 144;
 #[allow(dead_code)] // Reserved for future sub-block optimizations
-const SUB_BLOCK_SIZE: usize = 32;
+pub(crate) const SUB_BLOCK_SIZE: usize = 32;
 
 /// Convert f16 bits to f32
 #[inline(always)]
@@ -72,7 +81,7 @@ fn f16_to_f32(bits: u16) -> f32 {
 ///
 /// Returns (d, dmin, scales[8], mins[8])
 #[inline(always)]
-fn parse_q4k_header(block: &[u8]) -> (f32, f32, [u8; 8], [u8; 8]) {
+pub(crate) fn parse_q4k_header(block: &[u8]) -> (f32, f32, [u8; 8], [u8; 8]) {
     debug_assert!(block.len() >= 16);
 
     // Read d and dmin (f16)
@@ -314,57 +323,6 @@ pub fn matmul_q4k_f32(
     }
 
     output
-}
-
-/// Dequantize Q4_K data to F32 (for golden test comparison)
-///
-/// This function fully dequantizes Q4K data to F32, matching the
-/// `dequantize_q4_k_to_f32` in aprender/src/format/converter.rs.
-pub fn dequantize_q4k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
-    let num_blocks = (num_elements + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
-    let mut result = vec![0.0f32; num_blocks * SUPER_BLOCK_SIZE];
-
-    for sb_idx in 0..num_blocks {
-        let sb_start = sb_idx * SUPER_BLOCK_BYTES;
-        let out_start = sb_idx * SUPER_BLOCK_SIZE;
-
-        if sb_start + SUPER_BLOCK_BYTES > data.len() {
-            break;
-        }
-
-        let sb_data = &data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-        let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
-        let qs = &sb_data[16..144];
-
-        let mut ys_index = out_start;
-
-        for chunk in 0..4 {
-            let q = &qs[chunk * 32..(chunk + 1) * 32];
-
-            let scale_idx_low = chunk * 2;
-            let scale_idx_high = chunk * 2 + 1;
-
-            let d1 = d * f32::from(scales[scale_idx_low]);
-            let dm1 = dmin * f32::from(mins[scale_idx_low]);
-            let d2 = d * f32::from(scales[scale_idx_high]);
-            let dm2 = dmin * f32::from(mins[scale_idx_high]);
-
-            // First pass: 32 low nibbles
-            for &byte in q {
-                result[ys_index] = d1 * (byte & 0xF) as f32 - dm1;
-                ys_index += 1;
-            }
-
-            // Second pass: 32 high nibbles
-            for &byte in q {
-                result[ys_index] = d2 * (byte >> 4) as f32 - dm2;
-                ys_index += 1;
-            }
-        }
-    }
-
-    result.truncate(num_elements);
-    result
 }
 
 /// Fused Q4_K matrix-vector multiply with AVX2 SIMD (8-wide)
