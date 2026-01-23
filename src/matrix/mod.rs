@@ -24,36 +24,42 @@ use tracing::instrument;
 
 /// Backend dispatch macro for dot product - centralizes platform-specific SIMD dispatch
 /// to eliminate code duplication across matrix operations.
+///
+/// # Safety
+/// The macro wraps unsafe backend calls internally, so callers don't need unsafe blocks.
 macro_rules! dispatch_dot {
     ($backend:expr, $a:expr, $b:expr) => {{
         use crate::backends::{scalar::ScalarBackend, VectorBackend};
         #[cfg(target_arch = "x86_64")]
         use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
-        match $backend {
-            Backend::Scalar => ScalarBackend::dot($a, $b),
-            #[cfg(target_arch = "x86_64")]
-            Backend::SSE2 | Backend::AVX => Sse2Backend::dot($a, $b),
-            #[cfg(target_arch = "x86_64")]
-            Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot($a, $b),
-            #[cfg(not(target_arch = "x86_64"))]
-            Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                ScalarBackend::dot($a, $b)
+        // SAFETY: CPU features verified at runtime before backend selection
+        unsafe {
+            match $backend {
+                Backend::Scalar => ScalarBackend::dot($a, $b),
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::dot($a, $b),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot($a, $b),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::dot($a, $b)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => {
+                    use crate::backends::neon::NeonBackend;
+                    NeonBackend::dot($a, $b)
+                }
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::dot($a, $b),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => {
+                    use crate::backends::wasm::WasmBackend;
+                    WasmBackend::dot($a, $b)
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::dot($a, $b),
+                Backend::GPU | Backend::Auto => ScalarBackend::dot($a, $b),
             }
-            #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-            Backend::NEON => {
-                use crate::backends::neon::NeonBackend;
-                NeonBackend::dot($a, $b)
-            }
-            #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-            Backend::NEON => ScalarBackend::dot($a, $b),
-            #[cfg(target_arch = "wasm32")]
-            Backend::WasmSIMD => {
-                use crate::backends::wasm::WasmBackend;
-                WasmBackend::dot($a, $b)
-            }
-            #[cfg(not(target_arch = "wasm32"))]
-            Backend::WasmSIMD => ScalarBackend::dot($a, $b),
-            Backend::GPU | Backend::Auto => ScalarBackend::dot($a, $b),
         }
     }};
 }
@@ -1016,48 +1022,7 @@ impl Matrix<f32> {
                                         let b_col =
                                             &b_transposed.data[col_start..col_start + block_size];
 
-                                        // SAFETY: AVX2 verified at runtime, slices bounds-checked
-                                        let partial_dot = unsafe {
-                                            match a.backend {
-                                                Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                                #[cfg(target_arch = "x86_64")]
-                                                Backend::SSE2 | Backend::AVX => {
-                                                    Sse2Backend::dot(a_row, b_col)
-                                                }
-                                                #[cfg(not(target_arch = "x86_64"))]
-                                                Backend::SSE2
-                                                | Backend::AVX
-                                                | Backend::AVX2
-                                                | Backend::AVX512 => {
-                                                    ScalarBackend::dot(a_row, b_col)
-                                                }
-                                                #[cfg(any(
-                                                    target_arch = "aarch64",
-                                                    target_arch = "arm"
-                                                ))]
-                                                Backend::NEON => {
-                                                    use crate::backends::neon::NeonBackend;
-                                                    NeonBackend::dot(a_row, b_col)
-                                                }
-                                                #[cfg(not(any(
-                                                    target_arch = "aarch64",
-                                                    target_arch = "arm"
-                                                )))]
-                                                Backend::NEON => ScalarBackend::dot(a_row, b_col),
-                                                #[cfg(target_arch = "wasm32")]
-                                                Backend::WasmSIMD => {
-                                                    use crate::backends::wasm::WasmBackend;
-                                                    WasmBackend::dot(a_row, b_col)
-                                                }
-                                                #[cfg(not(target_arch = "wasm32"))]
-                                                Backend::WasmSIMD => {
-                                                    ScalarBackend::dot(a_row, b_col)
-                                                }
-                                                // Catch-all for GPU, Auto, and any other backends
-                                                _ => ScalarBackend::dot(a_row, b_col),
-                                            }
-                                        };
-
+                                        let partial_dot = dispatch_dot!(a.backend, a_row, b_col);
                                         result.data[i * result.cols + j] += partial_dot;
                                     }
                                 }
@@ -1075,36 +1040,7 @@ impl Matrix<f32> {
                                         let b_col =
                                             &b_transposed.data[col_start..col_start + block_size];
 
-                                        // SAFETY: AVX2 verified at runtime, slices bounds-checked
-                                        let partial_dot = unsafe {
-                                            match a.backend {
-                                                Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                                #[cfg(any(
-                                                    target_arch = "aarch64",
-                                                    target_arch = "arm"
-                                                ))]
-                                                Backend::NEON => {
-                                                    use crate::backends::neon::NeonBackend;
-                                                    NeonBackend::dot(a_row, b_col)
-                                                }
-                                                #[cfg(not(any(
-                                                    target_arch = "aarch64",
-                                                    target_arch = "arm"
-                                                )))]
-                                                Backend::NEON => ScalarBackend::dot(a_row, b_col),
-                                                #[cfg(target_arch = "wasm32")]
-                                                Backend::WasmSIMD => {
-                                                    use crate::backends::wasm::WasmBackend;
-                                                    WasmBackend::dot(a_row, b_col)
-                                                }
-                                                #[cfg(not(target_arch = "wasm32"))]
-                                                Backend::WasmSIMD => {
-                                                    ScalarBackend::dot(a_row, b_col)
-                                                }
-                                                _ => ScalarBackend::dot(a_row, b_col),
-                                            }
-                                        };
-
+                                        let partial_dot = dispatch_dot!(a.backend, a_row, b_col);
                                         result.data[i * result.cols + j] += partial_dot;
                                     }
                                 }
@@ -1134,8 +1070,7 @@ impl Matrix<f32> {
         }
 
         #[cfg(target_arch = "x86_64")]
-        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
-        use crate::backends::{scalar::ScalarBackend, VectorBackend};
+        use crate::backends::{avx2::Avx2Backend, VectorBackend};
 
         // Pre-transpose B for better cache locality (columns become rows)
         let b_transposed = other.transpose();
@@ -1408,56 +1343,7 @@ impl Matrix<f32> {
                                                 let b_col = &b_transposed.data
                                                     [col_start..col_start + block_size];
 
-                                                // SAFETY: AVX2 verified at runtime, slices bounds-checked
-                                                let partial_dot = unsafe {
-                                                    match self.backend {
-                                                        Backend::Scalar => {
-                                                            ScalarBackend::dot(a_row, b_col)
-                                                        }
-                                                        #[cfg(target_arch = "x86_64")]
-                                                        Backend::SSE2 | Backend::AVX => {
-                                                            Sse2Backend::dot(a_row, b_col)
-                                                        }
-                                                        #[cfg(not(target_arch = "x86_64"))]
-                                                        Backend::SSE2
-                                                        | Backend::AVX
-                                                        | Backend::AVX2
-                                                        | Backend::AVX512 => {
-                                                            ScalarBackend::dot(a_row, b_col)
-                                                        }
-                                                        #[cfg(any(
-                                                            target_arch = "aarch64",
-                                                            target_arch = "arm"
-                                                        ))]
-                                                        Backend::NEON => {
-                                                            use crate::backends::neon::NeonBackend;
-                                                            NeonBackend::dot(a_row, b_col)
-                                                        }
-                                                        #[cfg(not(any(
-                                                            target_arch = "aarch64",
-                                                            target_arch = "arm"
-                                                        )))]
-                                                        Backend::NEON => {
-                                                            ScalarBackend::dot(a_row, b_col)
-                                                        }
-                                                        #[cfg(target_arch = "wasm32")]
-                                                        Backend::WasmSIMD => {
-                                                            use crate::backends::wasm::WasmBackend;
-                                                            WasmBackend::dot(a_row, b_col)
-                                                        }
-                                                        #[cfg(not(target_arch = "wasm32"))]
-                                                        Backend::WasmSIMD => {
-                                                            ScalarBackend::dot(a_row, b_col)
-                                                        }
-                                                        Backend::GPU
-                                                        | Backend::Auto
-                                                        | Backend::AVX2
-                                                        | Backend::AVX512 => {
-                                                            ScalarBackend::dot(a_row, b_col)
-                                                        }
-                                                    }
-                                                };
-
+                                                let partial_dot = dispatch_dot!(self.backend, a_row, b_col);
                                                 result.data[i * result.cols + j] += partial_dot;
                                             }
                                         }
@@ -1474,40 +1360,7 @@ impl Matrix<f32> {
                                             let b_col = &b_transposed.data
                                                 [col_start..col_start + block_size];
 
-                                            // SAFETY: AVX2 verified at runtime, slices bounds-checked
-                                            let partial_dot = unsafe {
-                                                match self.backend {
-                                                    Backend::Scalar => {
-                                                        ScalarBackend::dot(a_row, b_col)
-                                                    }
-                                                    #[cfg(any(
-                                                        target_arch = "aarch64",
-                                                        target_arch = "arm"
-                                                    ))]
-                                                    Backend::NEON => {
-                                                        use crate::backends::neon::NeonBackend;
-                                                        NeonBackend::dot(a_row, b_col)
-                                                    }
-                                                    #[cfg(not(any(
-                                                        target_arch = "aarch64",
-                                                        target_arch = "arm"
-                                                    )))]
-                                                    Backend::NEON => {
-                                                        ScalarBackend::dot(a_row, b_col)
-                                                    }
-                                                    #[cfg(target_arch = "wasm32")]
-                                                    Backend::WasmSIMD => {
-                                                        use crate::backends::wasm::WasmBackend;
-                                                        WasmBackend::dot(a_row, b_col)
-                                                    }
-                                                    #[cfg(not(target_arch = "wasm32"))]
-                                                    Backend::WasmSIMD => {
-                                                        ScalarBackend::dot(a_row, b_col)
-                                                    }
-                                                    _ => ScalarBackend::dot(a_row, b_col),
-                                                }
-                                            };
-
+                                            let partial_dot = dispatch_dot!(self.backend, a_row, b_col);
                                             result.data[i * result.cols + j] += partial_dot;
                                         }
                                     }
@@ -1613,46 +1466,7 @@ impl Matrix<f32> {
                                     let b_col =
                                         &b_transposed.data[col_start..col_start + block_size];
 
-                                    // SAFETY: AVX2 verified at runtime, slices bounds-checked
-                                    let partial_dot = unsafe {
-                                        match self.backend {
-                                            Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                            #[cfg(target_arch = "x86_64")]
-                                            Backend::SSE2 | Backend::AVX => {
-                                                Sse2Backend::dot(a_row, b_col)
-                                            }
-                                            #[cfg(not(target_arch = "x86_64"))]
-                                            Backend::SSE2
-                                            | Backend::AVX
-                                            | Backend::AVX2
-                                            | Backend::AVX512 => ScalarBackend::dot(a_row, b_col),
-                                            #[cfg(any(
-                                                target_arch = "aarch64",
-                                                target_arch = "arm"
-                                            ))]
-                                            Backend::NEON => {
-                                                use crate::backends::neon::NeonBackend;
-                                                NeonBackend::dot(a_row, b_col)
-                                            }
-                                            #[cfg(not(any(
-                                                target_arch = "aarch64",
-                                                target_arch = "arm"
-                                            )))]
-                                            Backend::NEON => ScalarBackend::dot(a_row, b_col),
-                                            #[cfg(target_arch = "wasm32")]
-                                            Backend::WasmSIMD => {
-                                                use crate::backends::wasm::WasmBackend;
-                                                WasmBackend::dot(a_row, b_col)
-                                            }
-                                            #[cfg(not(target_arch = "wasm32"))]
-                                            Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
-                                            Backend::GPU
-                                            | Backend::Auto
-                                            | Backend::AVX2
-                                            | Backend::AVX512 => ScalarBackend::dot(a_row, b_col),
-                                        }
-                                    };
-
+                                    let partial_dot = dispatch_dot!(self.backend, a_row, b_col);
                                     result.data[i * result.cols + j] += partial_dot;
                                 }
                             }
@@ -1668,31 +1482,7 @@ impl Matrix<f32> {
                                 let col_start = j * b_transposed.cols + kk;
                                 let b_col = &b_transposed.data[col_start..col_start + block_size];
 
-                                // SAFETY: AVX2 verified at runtime, slices bounds-checked
-                                let partial_dot = unsafe {
-                                    match self.backend {
-                                        Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                                        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                                        Backend::NEON => {
-                                            use crate::backends::neon::NeonBackend;
-                                            NeonBackend::dot(a_row, b_col)
-                                        }
-                                        #[cfg(not(any(
-                                            target_arch = "aarch64",
-                                            target_arch = "arm"
-                                        )))]
-                                        Backend::NEON => ScalarBackend::dot(a_row, b_col),
-                                        #[cfg(target_arch = "wasm32")]
-                                        Backend::WasmSIMD => {
-                                            use crate::backends::wasm::WasmBackend;
-                                            WasmBackend::dot(a_row, b_col)
-                                        }
-                                        #[cfg(not(target_arch = "wasm32"))]
-                                        Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
-                                        _ => ScalarBackend::dot(a_row, b_col),
-                                    }
-                                };
-
+                                let partial_dot = dispatch_dot!(self.backend, a_row, b_col);
                                 result.data[i * result.cols + j] += partial_dot;
                             }
                         }
@@ -1726,8 +1516,7 @@ impl Matrix<f32> {
                 let col_end = col_start + b_transposed.cols;
                 let b_col = &b_transposed.data[col_start..col_end];
 
-                // SAFETY: Backend dot() maintains safety invariants
-                let dot_result = unsafe { dispatch_dot!(self.backend, a_row, b_col) };
+                let dot_result = dispatch_dot!(self.backend, a_row, b_col);
                 result.data[i * result.cols + j] = dot_result;
             }
         }
@@ -1939,10 +1728,6 @@ impl Matrix<f32> {
             )));
         }
 
-        #[cfg(target_arch = "x86_64")]
-        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
-        use crate::backends::{scalar::ScalarBackend, VectorBackend};
-
         let v_slice = v.as_slice();
 
         let mut result_data = vec![0.0; self.rows];
@@ -1965,21 +1750,7 @@ impl Matrix<f32> {
                     let row_start = i * self.cols;
                     let row = &self.data[row_start..(row_start + self.cols)];
 
-                    // SAFETY: CPU feature verified at runtime, slices bounds-checked
-                    let dot_result = unsafe {
-                        #[cfg(target_arch = "x86_64")]
-                        {
-                            match self.backend {
-                                Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(row, v_slice),
-                                Backend::SSE2 | Backend::AVX => Sse2Backend::dot(row, v_slice),
-                                _ => ScalarBackend::dot(row, v_slice),
-                            }
-                        }
-                        #[cfg(not(target_arch = "x86_64"))]
-                        {
-                            ScalarBackend::dot(row, v_slice)
-                        }
-                    };
+                    let dot_result = dispatch_dot!(self.backend, row, v_slice);
 
                     // Write to non-overlapping memory location (thread-safe)
                     // SAFETY: CPU feature verified at runtime, slices bounds-checked
@@ -1999,21 +1770,7 @@ impl Matrix<f32> {
             let row = &self.data[row_start..(row_start + self.cols)];
 
             // Use SIMD dot product for each row
-            // SAFETY: CPU feature verified at runtime, slices bounds-checked
-            *result = unsafe {
-                #[cfg(target_arch = "x86_64")]
-                {
-                    match self.backend {
-                        Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(row, v_slice),
-                        Backend::SSE2 | Backend::AVX => Sse2Backend::dot(row, v_slice),
-                        _ => ScalarBackend::dot(row, v_slice),
-                    }
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                {
-                    ScalarBackend::dot(row, v_slice)
-                }
-            };
+            *result = dispatch_dot!(self.backend, row, v_slice);
         }
 
         Ok(Vector::from_slice(&result_data))

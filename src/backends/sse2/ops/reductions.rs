@@ -83,7 +83,7 @@ pub unsafe fn min(a: &[f32]) -> f32 {
 #[inline]
 #[target_feature(enable = "sse2")]
 pub unsafe fn argmax(a: &[f32]) -> usize {
-    let len = a.len();
+    let _len = a.len();
     let mut max_idx: usize = 0;
     let mut max_val = a[0];
 
@@ -100,7 +100,7 @@ pub unsafe fn argmax(a: &[f32]) -> usize {
 #[inline]
 #[target_feature(enable = "sse2")]
 pub unsafe fn argmin(a: &[f32]) -> usize {
-    let len = a.len();
+    let _len = a.len();
     let mut min_idx: usize = 0;
     let mut min_val = a[0];
 
