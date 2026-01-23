@@ -22,6 +22,42 @@ use crate::{Backend, TruenoError, Vector};
 #[cfg(feature = "tracing")]
 use tracing::instrument;
 
+/// Backend dispatch macro for dot product - centralizes platform-specific SIMD dispatch
+/// to eliminate code duplication across matrix operations.
+macro_rules! dispatch_dot {
+    ($backend:expr, $a:expr, $b:expr) => {{
+        use crate::backends::{scalar::ScalarBackend, VectorBackend};
+        #[cfg(target_arch = "x86_64")]
+        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
+        match $backend {
+            Backend::Scalar => ScalarBackend::dot($a, $b),
+            #[cfg(target_arch = "x86_64")]
+            Backend::SSE2 | Backend::AVX => Sse2Backend::dot($a, $b),
+            #[cfg(target_arch = "x86_64")]
+            Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot($a, $b),
+            #[cfg(not(target_arch = "x86_64"))]
+            Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                ScalarBackend::dot($a, $b)
+            }
+            #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+            Backend::NEON => {
+                use crate::backends::neon::NeonBackend;
+                NeonBackend::dot($a, $b)
+            }
+            #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+            Backend::NEON => ScalarBackend::dot($a, $b),
+            #[cfg(target_arch = "wasm32")]
+            Backend::WasmSIMD => {
+                use crate::backends::wasm::WasmBackend;
+                WasmBackend::dot($a, $b)
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            Backend::WasmSIMD => ScalarBackend::dot($a, $b),
+            Backend::GPU | Backend::Auto => ScalarBackend::dot($a, $b),
+        }
+    }};
+}
+
 /// A 2D matrix with row-major storage
 ///
 /// Data is stored in row-major format (C-style), where consecutive elements
@@ -1677,10 +1713,6 @@ impl Matrix<f32> {
         other: &Matrix<f32>,
         result: &mut Matrix<f32>,
     ) -> Result<(), TruenoError> {
-        #[cfg(target_arch = "x86_64")]
-        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
-        use crate::backends::{scalar::ScalarBackend, VectorBackend};
-
         // Pre-transpose B for better cache locality
         let b_transposed = other.transpose();
 
@@ -1694,37 +1726,8 @@ impl Matrix<f32> {
                 let col_end = col_start + b_transposed.cols;
                 let b_col = &b_transposed.data[col_start..col_end];
 
-                // Compute dot product using SIMD backend directly
                 // SAFETY: Backend dot() maintains safety invariants
-                let dot_result = unsafe {
-                    match self.backend {
-                        Backend::Scalar => ScalarBackend::dot(a_row, b_col),
-                        #[cfg(target_arch = "x86_64")]
-                        Backend::SSE2 | Backend::AVX => Sse2Backend::dot(a_row, b_col),
-                        #[cfg(target_arch = "x86_64")]
-                        Backend::AVX2 | Backend::AVX512 => Avx2Backend::dot(a_row, b_col),
-                        #[cfg(not(target_arch = "x86_64"))]
-                        Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                            ScalarBackend::dot(a_row, b_col)
-                        }
-                        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                        Backend::NEON => {
-                            use crate::backends::neon::NeonBackend;
-                            NeonBackend::dot(a_row, b_col)
-                        }
-                        #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                        Backend::NEON => ScalarBackend::dot(a_row, b_col),
-                        #[cfg(target_arch = "wasm32")]
-                        Backend::WasmSIMD => {
-                            use crate::backends::wasm::WasmBackend;
-                            WasmBackend::dot(a_row, b_col)
-                        }
-                        #[cfg(not(target_arch = "wasm32"))]
-                        Backend::WasmSIMD => ScalarBackend::dot(a_row, b_col),
-                        Backend::GPU | Backend::Auto => ScalarBackend::dot(a_row, b_col),
-                    }
-                };
-
+                let dot_result = unsafe { dispatch_dot!(self.backend, a_row, b_col) };
                 result.data[i * result.cols + j] = dot_result;
             }
         }
