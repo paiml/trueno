@@ -36,9 +36,11 @@
 
 // Submodules
 mod buffer;
+mod circuit;
 mod memory;
 mod perf_metrics;
 mod profiling;
+mod shutdown;
 
 // Re-export profiling functions
 pub use profiling::{
@@ -61,11 +63,17 @@ pub use memory::{
 // Re-export buffer types
 pub use buffer::{BufferWatermarks, WatermarkedBuffer};
 
+// Re-export circuit breaker types
+pub use circuit::{CircuitBreaker, CircuitState};
+
+// Re-export shutdown types
+pub use shutdown::{GracefulShutdown, ShutdownGuard, ShutdownResult};
+
 use crate::error::TruenoError;
 use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 // ============================================================================
@@ -276,136 +284,7 @@ impl ExactSizeIterator for Balance211Iter {
     }
 }
 
-// ----------------------------------------------------------------------------
-// AWP-07: Graceful Shutdown
-// ----------------------------------------------------------------------------
-
 use std::time::Duration;
-
-/// Result of a graceful shutdown operation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ShutdownResult {
-    /// All operations completed cleanly.
-    Clean,
-    /// Timeout reached with operations still active.
-    Timeout {
-        /// Number of operations still active.
-        remaining: usize,
-    },
-}
-
-/// Graceful shutdown coordinator.
-///
-/// # Example
-/// ```rust
-/// use trueno::brick::GracefulShutdown;
-/// use std::time::Duration;
-///
-/// let shutdown = GracefulShutdown::new(Duration::from_secs(5));
-///
-/// // Register an operation
-/// let guard = shutdown.register().unwrap();
-///
-/// // ... do work ...
-///
-/// drop(guard);  // Operation complete
-///
-/// // Initiate shutdown
-/// let result = shutdown.shutdown();
-/// assert_eq!(result, trueno::brick::ShutdownResult::Clean);
-/// ```
-pub struct GracefulShutdown {
-    /// Flag indicating shutdown has been requested.
-    shutdown_requested: AtomicBool,
-    /// Number of active operations.
-    active_count: std::sync::atomic::AtomicUsize,
-    /// Shutdown timeout.
-    timeout: Duration,
-}
-
-impl GracefulShutdown {
-    /// Create a new shutdown coordinator.
-    pub fn new(timeout: Duration) -> Self {
-        Self {
-            shutdown_requested: AtomicBool::new(false),
-            active_count: std::sync::atomic::AtomicUsize::new(0),
-            timeout,
-        }
-    }
-
-    /// Check if shutdown has been requested.
-    #[must_use]
-    pub fn is_shutdown_requested(&self) -> bool {
-        self.shutdown_requested.load(Ordering::Acquire)
-    }
-
-    /// Get the current active operation count.
-    #[must_use]
-    pub fn active_count(&self) -> usize {
-        self.active_count.load(Ordering::Acquire)
-    }
-
-    /// Register an active operation.
-    ///
-    /// Returns `None` if shutdown has already been requested.
-    pub fn register(&self) -> Option<ShutdownGuard<'_>> {
-        if self.is_shutdown_requested() {
-            return None; // Reject new operations during shutdown
-        }
-        self.active_count.fetch_add(1, Ordering::AcqRel);
-        Some(ShutdownGuard { shutdown: self })
-    }
-
-    /// Initiate graceful shutdown.
-    ///
-    /// This will:
-    /// 1. Stop accepting new operations
-    /// 2. Wait for in-flight operations to complete (up to timeout)
-    /// 3. Return the result
-    pub fn shutdown(&self) -> ShutdownResult {
-        // Phase 1: Stop accepting new operations
-        self.shutdown_requested.store(true, Ordering::Release);
-
-        // Phase 2: Wait for in-flight operations
-        let deadline = Instant::now() + self.timeout;
-
-        loop {
-            let active = self.active_count.load(Ordering::Acquire);
-            if active == 0 {
-                return ShutdownResult::Clean;
-            }
-            if Instant::now() >= deadline {
-                return ShutdownResult::Timeout { remaining: active };
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-    }
-
-    /// Reset the shutdown coordinator for reuse.
-    pub fn reset(&self) {
-        self.shutdown_requested.store(false, Ordering::Release);
-        // Note: active_count should already be 0 if shutdown completed cleanly
-    }
-}
-
-impl Default for GracefulShutdown {
-    fn default() -> Self {
-        Self::new(Duration::from_secs(30))
-    }
-}
-
-/// Guard that decrements active count on drop.
-pub struct ShutdownGuard<'a> {
-    shutdown: &'a GracefulShutdown,
-}
-
-impl Drop for ShutdownGuard<'_> {
-    fn drop(&mut self) {
-        self.shutdown
-            .active_count
-            .fetch_sub(1, Ordering::AcqRel);
-    }
-}
 
 // ----------------------------------------------------------------------------
 // AWP-05: Resource Pool with Semaphore
@@ -850,150 +729,6 @@ impl<T, E> AsyncResult<T, E> {
             AsyncResult::Sync(v) => AsyncResult::Sync(f(v)),
             AsyncResult::Error(e) => AsyncResult::Error(e),
         }
-    }
-}
-
-// ----------------------------------------------------------------------------
-// AWP-02: Circuit Breaker
-// ----------------------------------------------------------------------------
-
-/// Circuit breaker states.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CircuitState {
-    /// Circuit is closed (normal operation)
-    Closed,
-    /// Circuit is open (failing fast)
-    Open,
-    /// Circuit is half-open (testing recovery)
-    HalfOpen,
-}
-
-/// Circuit breaker for protecting against cascading failures.
-///
-/// # Example
-/// ```rust
-/// use trueno::brick::CircuitBreaker;
-/// use std::time::Duration;
-///
-/// let mut breaker = CircuitBreaker::new(3, Duration::from_secs(30));
-///
-/// // Record failures
-/// breaker.record_failure();
-/// breaker.record_failure();
-/// assert!(breaker.allow_request()); // Still closed
-///
-/// breaker.record_failure();
-/// assert!(!breaker.allow_request()); // Now open
-/// ```
-pub struct CircuitBreaker {
-    /// Current state
-    state: CircuitState,
-    /// Failure count in current window
-    failure_count: usize,
-    /// Failure threshold to trip the circuit
-    failure_threshold: usize,
-    /// Time when circuit opened
-    opened_at: Option<Instant>,
-    /// Duration to stay open before trying half-open
-    open_duration: Duration,
-    /// Success count in half-open state
-    half_open_successes: usize,
-    /// Successes needed to close from half-open
-    half_open_threshold: usize,
-}
-
-impl CircuitBreaker {
-    /// Create a new circuit breaker.
-    pub fn new(failure_threshold: usize, open_duration: Duration) -> Self {
-        Self {
-            state: CircuitState::Closed,
-            failure_count: 0,
-            failure_threshold,
-            opened_at: None,
-            open_duration,
-            half_open_successes: 0,
-            half_open_threshold: 1,
-        }
-    }
-
-    /// Get current state.
-    #[must_use]
-    pub fn state(&self) -> CircuitState {
-        self.state
-    }
-
-    /// Check if a request should be allowed.
-    #[must_use]
-    pub fn allow_request(&mut self) -> bool {
-        match self.state {
-            CircuitState::Closed => true,
-            CircuitState::Open => {
-                // Check if we should transition to half-open
-                if let Some(opened_at) = self.opened_at {
-                    if opened_at.elapsed() >= self.open_duration {
-                        self.state = CircuitState::HalfOpen;
-                        self.half_open_successes = 0;
-                        return true; // Allow one request to test
-                    }
-                }
-                false
-            }
-            CircuitState::HalfOpen => true, // Allow requests in half-open
-        }
-    }
-
-    /// Record a successful operation.
-    pub fn record_success(&mut self) {
-        match self.state {
-            CircuitState::Closed => {
-                // Reset failure count on success
-                self.failure_count = 0;
-            }
-            CircuitState::HalfOpen => {
-                self.half_open_successes += 1;
-                if self.half_open_successes >= self.half_open_threshold {
-                    // Recovered - close the circuit
-                    self.state = CircuitState::Closed;
-                    self.failure_count = 0;
-                    self.opened_at = None;
-                }
-            }
-            CircuitState::Open => {}
-        }
-    }
-
-    /// Record a failed operation.
-    pub fn record_failure(&mut self) {
-        match self.state {
-            CircuitState::Closed => {
-                self.failure_count += 1;
-                if self.failure_count >= self.failure_threshold {
-                    // Trip the circuit
-                    self.state = CircuitState::Open;
-                    self.opened_at = Some(Instant::now());
-                }
-            }
-            CircuitState::HalfOpen => {
-                // Failed during recovery - reopen
-                self.state = CircuitState::Open;
-                self.opened_at = Some(Instant::now());
-            }
-            CircuitState::Open => {}
-        }
-    }
-
-    /// Reset the circuit breaker to closed state.
-    pub fn reset(&mut self) {
-        self.state = CircuitState::Closed;
-        self.failure_count = 0;
-        self.opened_at = None;
-        self.half_open_successes = 0;
-    }
-}
-
-impl Default for CircuitBreaker {
-    fn default() -> Self {
-        Self::new(5, Duration::from_secs(30))
     }
 }
 
