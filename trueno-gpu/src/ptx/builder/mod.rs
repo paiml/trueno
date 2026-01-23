@@ -43,6 +43,55 @@ use super::types::{PtxStateSpace, PtxType};
 use super::{validate_target, validate_version};
 use crate::error::Result;
 
+// ============================================================================
+// Internal Macros for Reducing Code Duplication (TDG Optimization)
+// ============================================================================
+
+/// Macro for shared memory load operations
+macro_rules! impl_ld_shared {
+    ($fn_name:ident, $ty:ident, $op:ident) => {
+        pub fn $fn_name(&mut self, addr: VirtualReg) -> VirtualReg {
+            let dst = self.registers.allocate_virtual(PtxType::$ty);
+            self.instructions.push(
+                PtxInstruction::new(PtxOp::$op, PtxType::$ty)
+                    .dst(Operand::Reg(dst))
+                    .src(Operand::Reg(addr))
+                    .space(PtxStateSpace::Shared),
+            );
+            dst
+        }
+    };
+}
+
+/// Macro for shared memory store operations
+macro_rules! impl_st_shared {
+    ($fn_name:ident, $ty:ident) => {
+        pub fn $fn_name(&mut self, addr: VirtualReg, val: VirtualReg) {
+            self.instructions.push(
+                PtxInstruction::new(PtxOp::St, PtxType::$ty)
+                    .src(Operand::Reg(addr))
+                    .src(Operand::Reg(val))
+                    .space(PtxStateSpace::Shared),
+            );
+        }
+    };
+}
+
+/// Macro for dp4a operations (in-place variant)
+macro_rules! impl_dp4a_inplace {
+    ($fn_name:ident, $op:ident, $ty:ident) => {
+        pub fn $fn_name(&mut self, acc: VirtualReg, a: VirtualReg, b: VirtualReg) {
+            self.instructions.push(
+                PtxInstruction::new(PtxOp::$op, PtxType::$ty)
+                    .dst(Operand::Reg(acc))
+                    .src(Operand::Reg(a))
+                    .src(Operand::Reg(b))
+                    .src(Operand::Reg(acc)),
+            );
+        }
+    };
+}
+
 /// PTX Module builder
 #[derive(Debug, Clone)]
 pub struct PtxModule {
@@ -507,49 +556,13 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
-    /// PAR-063: Dot product of 4 x u8 vectors with accumulate (in-place)
-    ///
-    /// Like `dp4a_u32` but accumulates into an existing register.
-    pub fn dp4a_u32_inplace(&mut self, acc: VirtualReg, a: VirtualReg, b: VirtualReg) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Dp4a, PtxType::U32)
-                .dst(Operand::Reg(acc))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b))
-                .src(Operand::Reg(acc)),
-        );
-    }
+    // ===== DP4A In-Place Operations (Macro-Generated) =====
+    // Dot product of 4 x u8/s8 vectors with accumulate, generated via macro.
+    // PAR-063: Key SIMD instruction for Q4K inference (llama.cpp pattern).
 
-    /// PAR-063-V3: Dot product with unsigned 'a' and signed 'b' (in-place)
-    ///
-    /// Computes: acc = dot4(a_u8, b_s8) + acc
-    /// where:
-    /// - a contains 4 x u8 values (Q4K weights, 0-15 range, expanded to bytes)
-    /// - b contains 4 x s8 values (quantized activations, -127 to +127)
-    ///
-    /// This is the key instruction for Q4_K × Q8 dot products (llama.cpp pattern).
-    pub fn dp4a_u32_s32_inplace(&mut self, acc: VirtualReg, a: VirtualReg, b: VirtualReg) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Dp4aUS, PtxType::S32)
-                .dst(Operand::Reg(acc))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b))
-                .src(Operand::Reg(acc)),
-        );
-    }
-
-    /// PAR-063-V3: Dot product with both operands signed (in-place)
-    ///
-    /// Computes: acc = dot4(a_s8, b_s8) + acc
-    pub fn dp4a_s32_inplace(&mut self, acc: VirtualReg, a: VirtualReg, b: VirtualReg) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Dp4aS32, PtxType::S32)
-                .dst(Operand::Reg(acc))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b))
-                .src(Operand::Reg(acc)),
-        );
-    }
+    impl_dp4a_inplace!(dp4a_u32_inplace, Dp4a, U32);
+    impl_dp4a_inplace!(dp4a_u32_s32_inplace, Dp4aUS, S32);
+    impl_dp4a_inplace!(dp4a_s32_inplace, Dp4aS32, S32);
 
     /// Barrier synchronization (all threads in block must reach this point)
     pub fn bar_sync(&mut self, barrier_id: u32) {
@@ -578,79 +591,16 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
-    /// Load from shared memory
-    pub fn ld_shared_f32(&mut self, addr: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::F32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Ld, PtxType::F32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(addr))
-                .space(PtxStateSpace::Shared),
-        );
-        dst
-    }
+    // ===== Shared Memory Operations (Macro-Generated) =====
+    // Load/store operations for shared memory, generated via internal macros
+    // to reduce code duplication. See impl_ld_shared! and impl_st_shared! macros.
 
-    /// Store to shared memory
-    pub fn st_shared_f32(&mut self, addr: VirtualReg, val: VirtualReg) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::St, PtxType::F32)
-                .src(Operand::Reg(addr))
-                .src(Operand::Reg(val))
-                .space(PtxStateSpace::Shared),
-        );
-    }
-
-    /// Store F16 to shared memory (uses B16 type for memory ops)
-    pub fn st_shared_f16(&mut self, addr: VirtualReg, val: VirtualReg) {
-        // Use B16 for shared memory stores (F16 not directly supported for memory ops)
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::St, PtxType::B16)
-                .src(Operand::Reg(addr))
-                .src(Operand::Reg(val))
-                .space(PtxStateSpace::Shared),
-        );
-    }
-
-    /// Load u32 from shared memory
-    pub fn ld_shared_u32(&mut self, addr: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Ld, PtxType::U32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(addr))
-                .space(PtxStateSpace::Shared),
-        );
-        dst
-    }
-
-    /// Volatile load u32 from shared memory (F082 fix)
-    ///
-    /// The .volatile qualifier prevents the compiler from optimizing
-    /// dependent loads. This breaks the "Computed Address From Loaded Value"
-    /// SASS optimization pattern that causes CUDA_ERROR_UNKNOWN (716).
-    ///
-    /// Use this when the loaded value will be used to compute an address
-    /// for another shared memory load.
-    pub fn ld_shared_u32_volatile(&mut self, addr: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::LdVolatile, PtxType::U32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(addr))
-                .space(PtxStateSpace::Shared),
-        );
-        dst
-    }
-
-    /// Store u32 to shared memory
-    pub fn st_shared_u32(&mut self, addr: VirtualReg, val: VirtualReg) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::St, PtxType::U32)
-                .src(Operand::Reg(addr))
-                .src(Operand::Reg(val))
-                .space(PtxStateSpace::Shared),
-        );
-    }
+    impl_ld_shared!(ld_shared_f32, F32, Ld);
+    impl_ld_shared!(ld_shared_u32, U32, Ld);
+    impl_ld_shared!(ld_shared_u32_volatile, U32, LdVolatile);
+    impl_st_shared!(st_shared_f32, F32);
+    impl_st_shared!(st_shared_u32, U32);
+    impl_st_shared!(st_shared_f16, B16);
 
     /// Warp shuffle down (for reductions)
     /// Format: shfl.sync.down.b32 dst, src, delta, clamp, membermask
