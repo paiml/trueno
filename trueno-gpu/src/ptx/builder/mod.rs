@@ -1,6 +1,37 @@
 //! PTX Module and Kernel Builder
 //!
 //! Provides a fluent builder API for constructing PTX modules and kernels.
+//!
+//! ## Extension Traits
+//!
+//! The builder functionality is split into focused extension traits for maintainability:
+//!
+//! - [`PtxArithmetic`]: Add, sub, mul, fma, dp4a, transcendentals
+//! - [`PtxComparison`]: setp operations for predicates
+//! - [`PtxMemory`]: Global and shared memory load/store
+//! - [`PtxControl`]: Labels, branches, returns, immediate moves
+//! - [`PtxSync`]: Barriers, shuffles, warp votes, bit manipulation
+//! - [`PtxAtomic`]: Atomic memory operations
+//!
+//! All traits are automatically implemented for `KernelBuilder` via blanket impls.
+
+// Extension trait modules
+mod arithmetic;
+mod atomic;
+mod comparison;
+mod control;
+mod core;
+mod memory;
+mod sync;
+
+// Re-export extension traits for easy use
+pub use arithmetic::PtxArithmetic;
+pub use atomic::PtxAtomic;
+pub use comparison::PtxComparison;
+pub use control::PtxControl;
+pub use core::KernelBuilderCore;
+pub use memory::PtxMemory;
+pub use sync::PtxSync;
 
 use std::fmt::Write;
 
@@ -292,6 +323,21 @@ pub struct KernelBuilder<'a> {
     instructions: Vec<PtxInstruction>,
     /// Labels
     labels: Vec<String>,
+}
+
+// Implement KernelBuilderCore to enable extension traits
+impl<'a> core::KernelBuilderCore for KernelBuilder<'a> {
+    fn registers_mut(&mut self) -> &mut RegisterAllocator {
+        self.registers
+    }
+
+    fn instructions_mut(&mut self) -> &mut Vec<PtxInstruction> {
+        &mut self.instructions
+    }
+
+    fn labels_mut(&mut self) -> &mut Vec<String> {
+        &mut self.labels
+    }
 }
 
 impl<'a> KernelBuilder<'a> {
