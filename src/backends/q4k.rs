@@ -33,11 +33,9 @@
 //! let output = matmul_q4k_f32(&q4k_weights, &input, 4864, 896);
 //! ```
 
-// Allow dead_code for experimental SIMD microkernels kept for future optimization work
-#![allow(dead_code)]
-
 const SUPER_BLOCK_SIZE: usize = 256;
 const SUPER_BLOCK_BYTES: usize = 144;
+#[allow(dead_code)] // Reserved for future sub-block optimizations
 const SUB_BLOCK_SIZE: usize = 32;
 
 /// Convert f16 bits to f32
@@ -661,6 +659,7 @@ pub fn matmul_q4k_f32_colmajor(
 /// - Vectorizes both low and high nibble processing
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+#[allow(dead_code)] // TODO: Wire into colmajor_dispatch when validated
 unsafe fn matmul_q4k_f32_colmajor_avx2(
     q4k_data: &[u8],
     input: &[f32],
@@ -823,6 +822,7 @@ unsafe fn matmul_q4k_f32_colmajor_avx2(
 
 /// Parallel column-major Q4K matmul with AVX2
 #[cfg(target_arch = "x86_64")]
+#[allow(dead_code)] // TODO: Wire into colmajor_dispatch when validated
 fn matmul_q4k_f32_colmajor_parallel_avx2(
     q4k_data: &[u8],
     input: &[f32],
@@ -994,6 +994,7 @@ pub fn matmul_q4k_f32_colmajor_dispatch(
 }
 
 /// Parallel column-major Q4K matmul
+#[allow(dead_code)] // TODO: Wire into colmajor_dispatch when validated
 fn matmul_q4k_f32_colmajor_parallel(
     q4k_data: &[u8],
     input: &[f32],

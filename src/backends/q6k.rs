@@ -6,9 +6,6 @@
 //! - `scales`: 16 bytes (8-bit scales for 16 groups of 16 values)
 //! - `d`: 2 bytes (f16 global scale)
 
-// Allow dead_code for experimental SIMD microkernels kept for future optimization work
-#![allow(dead_code)]
-
 const SUPER_BLOCK_SIZE: usize = 256;
 const SUPER_BLOCK_BYTES: usize = 210;
 
@@ -588,6 +585,7 @@ pub fn matmul_q6k_f32_colmajor(
 /// Uses multiple threads and AVX2 SIMD for large matrices like lm_head.
 /// Processes columns in parallel, each thread using SIMD for the dot product.
 #[cfg(target_arch = "x86_64")]
+#[allow(dead_code)] // TODO: Wire into colmajor_dispatch when validated
 fn matmul_q6k_f32_colmajor_parallel_avx2(
     q6k_data: &[u8],
     input: &[f32],
