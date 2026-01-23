@@ -31,9 +31,10 @@ impl Vector<f32> {
     ///
     /// let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
     /// let b = Vector::from_slice(&[4.0, 5.0, 6.0]);
-    /// let result = a.dot(&b).unwrap();
+    /// let result = a.dot(&b)?;
     ///
     /// assert_eq!(result, 32.0); // 1*4 + 2*5 + 3*6 = 4 + 10 + 18 = 32
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn dot(&self, other: &Self) -> Result<f32> {
         if self.len() != other.len() {
@@ -80,7 +81,8 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
-    /// assert_eq!(v.sum().unwrap(), 10.0);
+    /// assert_eq!(v.sum()?, 10.0);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn sum(&self) -> Result<f32> {
         Ok(dispatch_reduction!(self.backend, sum, &self.data))
@@ -94,7 +96,8 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
-    /// assert_eq!(v.max().unwrap(), 5.0);
+    /// assert_eq!(v.max()?, 5.0);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
@@ -142,7 +145,8 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
-    /// assert_eq!(v.min().unwrap(), 1.0);
+    /// assert_eq!(v.min()?, 1.0);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
@@ -190,7 +194,8 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
-    /// assert_eq!(v.argmax().unwrap(), 1); // max value 5.0 is at index 1
+    /// assert_eq!(v.argmax()?, 1); // max value 5.0 is at index 1
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
@@ -238,7 +243,8 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 5.0, 3.0, 2.0]);
-    /// assert_eq!(v.argmin().unwrap(), 0); // min value 1.0 is at index 0
+    /// assert_eq!(v.argmin()?, 0); // min value 1.0 is at index 0
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
@@ -293,7 +299,8 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
-    /// assert_eq!(v.sum_kahan().unwrap(), 10.0);
+    /// assert_eq!(v.sum_kahan()?, 10.0);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn sum_kahan(&self) -> Result<f32> {
         if self.data.is_empty() {
@@ -338,8 +345,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
-    /// let sum_sq = v.sum_of_squares().unwrap();
+    /// let sum_sq = v.sum_of_squares()?;
     /// assert_eq!(sum_sq, 14.0); // 1^2 + 2^2 + 3^2 = 1 + 4 + 9 = 14
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Empty vectors
@@ -368,8 +376,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
-    /// let avg = v.mean().unwrap();
+    /// let avg = v.mean()?;
     /// assert!((avg - 2.5).abs() < 1e-5); // (1+2+3+4)/4 = 2.5
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Empty vectors
@@ -406,8 +415,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-    /// let var = v.variance().unwrap();
+    /// let var = v.variance()?;
     /// assert!((var - 2.0).abs() < 1e-5); // Population variance
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Empty vectors
@@ -448,8 +458,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-    /// let sd = v.stddev().unwrap();
+    /// let sd = v.stddev()?;
     /// assert!((sd - 1.4142135).abs() < 1e-5); // sqrt(2) ≈ 1.414
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Empty vectors
@@ -483,8 +494,9 @@ impl Vector<f32> {
     ///
     /// let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
     /// let y = Vector::from_slice(&[2.0, 4.0, 6.0]);
-    /// let cov = x.covariance(&y).unwrap();
+    /// let cov = x.covariance(&y)?;
     /// assert!((cov - 1.333).abs() < 0.01); // Perfect positive covariance
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Size mismatch
@@ -546,8 +558,9 @@ impl Vector<f32> {
     ///
     /// let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
     /// let y = Vector::from_slice(&[2.0, 4.0, 6.0]);
-    /// let corr = x.correlation(&y).unwrap();
+    /// let corr = x.correlation(&y)?;
     /// assert!((corr - 1.0).abs() < 1e-5); // Perfect positive correlation
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Size mismatch

@@ -47,7 +47,7 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let logits = Vector::from_slice(&[1.0, 2.0, 3.0]);
-    /// let probs = logits.softmax().unwrap();
+    /// let probs = logits.softmax()?;
     ///
     /// // Verify sum ≈ 1
     /// let sum: f32 = probs.as_slice().iter().sum();
@@ -57,6 +57,7 @@ impl Vector<f32> {
     /// for &p in probs.as_slice() {
     ///     assert!(p >= 0.0 && p <= 1.0);
     /// }
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Empty vectors
@@ -116,12 +117,13 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let logits = Vector::from_slice(&[1.0, 2.0, 3.0]);
-    /// let log_probs = logits.log_softmax().unwrap();
+    /// let log_probs = logits.log_softmax()?;
     ///
     /// // Verify exp(log_softmax) = softmax
     /// let probs_from_log: Vec<f32> = log_probs.as_slice().iter().map(|&x| x.exp()).collect();
     /// let sum: f32 = probs_from_log.iter().sum();
     /// assert!((sum - 1.0).abs() < 1e-5);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Empty vectors
@@ -213,8 +215,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
-    /// let result = v.relu().unwrap();
+    /// let result = v.relu()?;
     /// assert_eq!(result.as_slice(), &[0.0, 0.0, 0.0, 1.0, 2.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn relu(&self) -> Result<Self> {
         if self.data.is_empty() {
@@ -393,12 +396,13 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-2.0, 0.0, 2.0]);
-    /// let result = v.sigmoid().unwrap();
+    /// let result = v.sigmoid()?;
     ///
     /// // sigmoid(-2) ≈ 0.119, sigmoid(0) = 0.5, sigmoid(2) ≈ 0.881
     /// assert!((result.as_slice()[0] - 0.119).abs() < 0.001);
     /// assert!((result.as_slice()[1] - 0.5).abs() < 0.001);
     /// assert!((result.as_slice()[2] - 0.881).abs() < 0.001);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn sigmoid(&self) -> Result<Self> {
         if self.data.is_empty() {
@@ -521,10 +525,11 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
-    /// let result = v.leaky_relu(0.01).unwrap();
+    /// let result = v.leaky_relu(0.01)?;
     ///
     /// // Negative values multiplied by 0.01, positive unchanged
     /// assert_eq!(result.as_slice(), &[-0.02, -0.01, 0.0, 1.0, 2.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn leaky_relu(&self, negative_slope: f32) -> Result<Self> {
         if self.data.is_empty() {
@@ -621,7 +626,7 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
-    /// let result = v.elu(1.0).unwrap();
+    /// let result = v.elu(1.0)?;
     ///
     /// // Negative values: α(e^x - 1), positive unchanged
     /// // elu(-2, 1) ≈ -0.865, elu(-1, 1) ≈ -0.632
@@ -630,6 +635,7 @@ impl Vector<f32> {
     /// assert_eq!(result.as_slice()[2], 0.0);
     /// assert_eq!(result.as_slice()[3], 1.0);
     /// assert_eq!(result.as_slice()[4], 2.0);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn elu(&self, alpha: f32) -> Result<Self> {
         if self.data.is_empty() {
@@ -718,12 +724,13 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
-    /// let result = v.gelu().unwrap();
+    /// let result = v.gelu()?;
     ///
     /// // GELU is smooth and non-monotonic near zero
     /// assert!(result.as_slice()[0] < 0.0); // Negative inputs → small negative outputs
     /// assert_eq!(result.as_slice()[2], 0.0); // gelu(0) = 0
     /// assert!(result.as_slice()[4] > 1.5); // Large positive → ~linear
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn gelu(&self) -> Result<Self> {
         if self.data.is_empty() {
@@ -823,12 +830,13 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
-    /// let result = v.swish().unwrap();
+    /// let result = v.swish()?;
     ///
     /// // Swish is smooth and self-gated
     /// assert!(result.as_slice()[0] < 0.0); // Negative inputs → small negative outputs
     /// assert_eq!(result.as_slice()[2], 0.0); // swish(0) = 0
     /// assert!(result.as_slice()[4] > 1.5); // Large positive → ~linear
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
@@ -938,7 +946,7 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-4.0, -3.0, 0.0, 3.0, 4.0]);
-    /// let result = v.hardswish().unwrap();
+    /// let result = v.hardswish()?;
     ///
     /// // Piece-wise linear behavior
     /// assert_eq!(result.as_slice()[0], 0.0); // x ≤ -3 → 0
@@ -946,6 +954,7 @@ impl Vector<f32> {
     /// assert_eq!(result.as_slice()[2], 0.0); // x = 0 → 0
     /// assert_eq!(result.as_slice()[3], 3.0); // x = 3 → x
     /// assert_eq!(result.as_slice()[4], 4.0); // x ≥ 3 → x
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
@@ -1008,12 +1017,13 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
-    /// let result = v.mish().unwrap();
+    /// let result = v.mish()?;
     ///
     /// // Mish is smooth and self-gated
     /// assert!(result.as_slice()[0] < 0.0); // Small negative output for negative inputs
     /// assert!(result.as_slice()[2].abs() < 1e-5); // mish(0) = 0
     /// assert!(result.as_slice()[4] > 1.5); // Large positive → near linear
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
@@ -1072,7 +1082,7 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-2.0, -1.0, 0.0, 1.0, 2.0]);
-    /// let result = v.selu().unwrap();
+    /// let result = v.selu()?;
     ///
     /// // Positive values scaled by λ ≈ 1.0507
     /// assert!((result.as_slice()[3] - 1.0507).abs() < 0.001);
@@ -1083,6 +1093,7 @@ impl Vector<f32> {
     ///
     /// // Negative values use ELU-like formula
     /// assert!(result.as_slice()[0] < 0.0);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
