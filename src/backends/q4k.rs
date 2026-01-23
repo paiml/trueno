@@ -33,6 +33,9 @@
 //! let output = matmul_q4k_f32(&q4k_weights, &input, 4864, 896);
 //! ```
 
+// Allow dead_code for experimental SIMD microkernels kept for future optimization work
+#![allow(dead_code)]
+
 const SUPER_BLOCK_SIZE: usize = 256;
 const SUPER_BLOCK_BYTES: usize = 144;
 const SUB_BLOCK_SIZE: usize = 32;

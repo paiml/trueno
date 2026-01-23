@@ -14,6 +14,9 @@
 //! assert_eq!(m.cols(), 3);
 //! ```
 
+// Allow dead_code for experimental SIMD microkernels kept for future optimization work
+#![allow(dead_code)]
+
 use crate::{Backend, TruenoError, Vector};
 
 #[cfg(feature = "tracing")]
