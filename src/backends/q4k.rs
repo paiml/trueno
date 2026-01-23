@@ -2229,4 +2229,174 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_parallel_dispatch_large_matrix() {
+        // Test parallel path: total_work >= 8_000_000
+        // Use 4096 x 2048 = 8_388_608 ops (triggers parallel)
+        let out_dim = 4096;
+        let in_dim = 2048; // Must be multiple of 256 (SUPER_BLOCK_SIZE)
+        let total_work = out_dim * in_dim;
+        assert!(
+            total_work >= 8_000_000,
+            "Test must trigger parallel path"
+        );
+
+        let num_superblocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+        let row_bytes = num_superblocks_per_row * SUPER_BLOCK_BYTES;
+        let total_bytes = out_dim * row_bytes;
+
+        // Create deterministic test data
+        let mut q4k_data = vec![0u8; total_bytes];
+        for row in 0..out_dim {
+            for sb in 0..num_superblocks_per_row {
+                let offset = row * row_bytes + sb * SUPER_BLOCK_BYTES;
+                // d = 1.0 as f16
+                q4k_data[offset] = 0x00;
+                q4k_data[offset + 1] = 0x3C;
+                // dmin = 0.0
+                q4k_data[offset + 2] = 0x00;
+                q4k_data[offset + 3] = 0x00;
+                // scales = 1 for all
+                for i in 0..12 {
+                    q4k_data[offset + 4 + i] = 0x01;
+                }
+                // qs = predictable pattern
+                for i in 0..128 {
+                    q4k_data[offset + 16 + i] = ((row + sb + i) % 16) as u8;
+                }
+            }
+        }
+
+        let input: Vec<f32> = (0..in_dim).map(|i| (i % 10) as f32 * 0.1).collect();
+
+        // Call dispatch - should use parallel path
+        let result = matmul_q4k_f32_dispatch(&q4k_data, &input, out_dim, in_dim);
+
+        // Verify dimensions and finiteness
+        assert_eq!(result.len(), out_dim);
+        for (i, &val) in result.iter().enumerate() {
+            assert!(
+                val.is_finite(),
+                "Result[{}] is not finite: {}",
+                i,
+                val
+            );
+        }
+
+        // Compare a few rows against scalar for consistency
+        let scalar_result = matmul_q4k_f32_scalar(&q4k_data, &input, out_dim, in_dim);
+        for i in (0..out_dim).step_by(512) {
+            let diff = (result[i] - scalar_result[i]).abs();
+            let tol = scalar_result[i].abs() * 0.01 + 1e-5;
+            assert!(
+                diff < tol,
+                "Parallel vs scalar mismatch at row {}: parallel={}, scalar={}, diff={}",
+                i,
+                result[i],
+                scalar_result[i],
+                diff
+            );
+        }
+    }
+
+    #[test]
+    fn test_parallel_colmajor_large_matrix() {
+        // Test colmajor path
+        // ne0 = output dimension (rows), ne1 = input dimension (columns)
+        // Input must have length ne1
+        let ne0 = 2048; // output dimension (rows), must be multiple of 256
+        let ne1 = 4096; // input dimension (columns)
+
+        let blocks_per_col = (ne0 + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+        let col_bytes = blocks_per_col * SUPER_BLOCK_BYTES;
+        let total_bytes = ne1 * col_bytes;
+
+        let mut q4k_data = vec![0u8; total_bytes];
+        for col in 0..ne1 {
+            for sb in 0..blocks_per_col {
+                let offset = col * col_bytes + sb * SUPER_BLOCK_BYTES;
+                // d = 0.5 as f16
+                q4k_data[offset] = 0x00;
+                q4k_data[offset + 1] = 0x38;
+                // dmin = 0.0
+                q4k_data[offset + 2] = 0x00;
+                q4k_data[offset + 3] = 0x00;
+                // scales
+                for i in 0..12 {
+                    q4k_data[offset + 4 + i] = 0x02;
+                }
+                // qs
+                for i in 0..128 {
+                    q4k_data[offset + 16 + i] = ((col ^ sb ^ i) % 16) as u8;
+                }
+            }
+        }
+
+        // Input must have length ne1 (input dimension)
+        let input: Vec<f32> = (0..ne1).map(|i| ((i % 7) as f32 - 3.0) * 0.1).collect();
+
+        // Use colmajor dispatch
+        let result = matmul_q4k_f32_colmajor_dispatch(&q4k_data, &input, ne0, ne1);
+
+        // Output has ne0 elements
+        assert_eq!(result.len(), ne0);
+        for (i, &val) in result.iter().enumerate() {
+            assert!(val.is_finite(), "Result[{}] is not finite: {}", i, val);
+        }
+    }
+
+    #[test]
+    fn test_compute_chunk_scalar_small() {
+        // Directly test compute_chunk_q4k_scalar
+        let in_dim = 256;
+        let out_dim = 4;
+        let num_blocks_per_row = 1;
+        let row_bytes = SUPER_BLOCK_BYTES;
+
+        let mut q4k_data = vec![0u8; out_dim * row_bytes];
+        for row in 0..out_dim {
+            let offset = row * row_bytes;
+            // d = 1.0 as f16
+            q4k_data[offset] = 0x00;
+            q4k_data[offset + 1] = 0x3C;
+            // dmin = 0.0
+            q4k_data[offset + 2] = 0x00;
+            q4k_data[offset + 3] = 0x00;
+            // scales = 1
+            for i in 0..12 {
+                q4k_data[offset + 4 + i] = 0x01;
+            }
+            // qs = all zeros (simplest case)
+            for i in 0..128 {
+                q4k_data[offset + 16 + i] = 0x00;
+            }
+        }
+
+        let input = vec![1.0f32; in_dim];
+        let mut chunk = vec![0.0f32; out_dim];
+
+        compute_chunk_q4k_scalar(
+            &q4k_data,
+            &input,
+            &mut chunk,
+            0,
+            out_dim,
+            in_dim,
+            num_blocks_per_row,
+            row_bytes,
+        );
+
+        // With qs=0, d=1, scales=1, dmin=0, result should be negative
+        // Each element: d * scale * 0 - dmin * min = 0 - 0 = 0
+        // Actually with all zeros in qs and dmin=0, output should be 0
+        for (i, &val) in chunk.iter().enumerate() {
+            assert!(
+                val.is_finite(),
+                "Chunk[{}] is not finite: {}",
+                i,
+                val
+            );
+        }
+    }
 }
