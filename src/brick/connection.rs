@@ -1,6 +1,8 @@
-//! Connection TTL and Health Check
+//! Connection Management
 //!
 //! AWP-06: Managed connections with TTL, idle timeout, and health tracking.
+//! AWP-10: Keep-Alive normalization for HTTP connections.
+//! AWP-12: Bitflags connection state for efficient state tracking.
 
 use std::time::{Duration, Instant};
 
@@ -107,6 +109,165 @@ impl<T> ManagedConnection<T> {
     #[must_use]
     pub fn health_failures(&self) -> usize {
         self.health_failures
+    }
+}
+
+// ----------------------------------------------------------------------------
+// AWP-10: Keep-Alive Normalization
+// ----------------------------------------------------------------------------
+
+/// Normalized keep-alive configuration.
+///
+/// Canonicalizes various keep-alive settings into a standard form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeepAliveConfig {
+    /// Whether keep-alive is enabled
+    pub enabled: bool,
+    /// Timeout duration in seconds
+    pub timeout_secs: u32,
+    /// Maximum number of requests per connection
+    pub max_requests: u32,
+}
+
+impl KeepAliveConfig {
+    /// Create with default values.
+    pub fn new() -> Self {
+        Self {
+            enabled: true,
+            timeout_secs: 60,
+            max_requests: 100,
+        }
+    }
+
+    /// Disabled keep-alive.
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            timeout_secs: 0,
+            max_requests: 0,
+        }
+    }
+
+    /// Parse from HTTP header value (e.g., "timeout=5, max=100").
+    pub fn from_header(header: &str) -> Self {
+        let mut config = Self::new();
+
+        for part in header.split(',') {
+            let part = part.trim();
+            if let Some((key, val)) = part.split_once('=') {
+                let key = key.trim().to_lowercase();
+                let val = val.trim();
+
+                match key.as_str() {
+                    "timeout" => {
+                        if let Ok(t) = val.parse() {
+                            config.timeout_secs = t;
+                        }
+                    }
+                    "max" => {
+                        if let Ok(m) = val.parse() {
+                            config.max_requests = m;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        config
+    }
+
+    /// Check if connection should be kept alive after n requests.
+    #[must_use]
+    pub fn should_keep_alive(&self, request_count: u32) -> bool {
+        self.enabled && request_count < self.max_requests
+    }
+}
+
+impl Default for KeepAliveConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ----------------------------------------------------------------------------
+// AWP-12: Bitflags Connection State
+// ----------------------------------------------------------------------------
+
+/// Compact connection state using bitflags.
+///
+/// Efficiently represents multiple boolean states in a single byte.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ConnectionState(u8);
+
+impl ConnectionState {
+    /// Connection is open
+    pub const OPEN: u8 = 0b0000_0001;
+    /// Connection is readable
+    pub const READABLE: u8 = 0b0000_0010;
+    /// Connection is writable
+    pub const WRITABLE: u8 = 0b0000_0100;
+    /// Connection has pending data
+    pub const HAS_PENDING: u8 = 0b0000_1000;
+    /// Connection is in keep-alive mode
+    pub const KEEP_ALIVE: u8 = 0b0001_0000;
+    /// Connection upgrade requested (e.g., WebSocket)
+    pub const UPGRADE: u8 = 0b0010_0000;
+    /// Connection is closing
+    pub const CLOSING: u8 = 0b0100_0000;
+    /// Connection has error
+    pub const ERROR: u8 = 0b1000_0000;
+
+    /// Create new state with no flags set.
+    #[must_use]
+    pub fn new() -> Self {
+        Self(0)
+    }
+
+    /// Create state with initial open + writable.
+    #[must_use]
+    pub fn open_connection() -> Self {
+        Self(Self::OPEN | Self::WRITABLE)
+    }
+
+    /// Set a flag.
+    pub fn set(&mut self, flag: u8) {
+        self.0 |= flag;
+    }
+
+    /// Clear a flag.
+    pub fn clear(&mut self, flag: u8) {
+        self.0 &= !flag;
+    }
+
+    /// Check if flag is set.
+    #[must_use]
+    pub fn is_set(&self, flag: u8) -> bool {
+        self.0 & flag != 0
+    }
+
+    /// Check if connection is open and healthy.
+    #[must_use]
+    pub fn is_healthy(&self) -> bool {
+        self.is_set(Self::OPEN) && !self.is_set(Self::ERROR) && !self.is_set(Self::CLOSING)
+    }
+
+    /// Check if connection can read.
+    #[must_use]
+    pub fn can_read(&self) -> bool {
+        self.is_set(Self::OPEN) && self.is_set(Self::READABLE)
+    }
+
+    /// Check if connection can write.
+    #[must_use]
+    pub fn can_write(&self) -> bool {
+        self.is_set(Self::OPEN) && self.is_set(Self::WRITABLE) && !self.is_set(Self::CLOSING)
+    }
+
+    /// Get raw bits.
+    #[must_use]
+    pub fn bits(&self) -> u8 {
+        self.0
     }
 }
 
@@ -294,5 +455,222 @@ mod tests {
         // Now wait until actually idle
         std::thread::sleep(Duration::from_millis(10));
         assert!(conn.is_idle(), "Should be idle now (25ms since touch)");
+    }
+
+    // =========================================================================
+    // KeepAliveConfig Tests
+    // =========================================================================
+
+    #[test]
+    fn test_keep_alive_config_new() {
+        let config = KeepAliveConfig::new();
+        assert!(config.enabled);
+        assert_eq!(config.timeout_secs, 60);
+        assert_eq!(config.max_requests, 100);
+    }
+
+    #[test]
+    fn test_keep_alive_config_disabled() {
+        let config = KeepAliveConfig::disabled();
+        assert!(!config.enabled);
+        assert_eq!(config.timeout_secs, 0);
+        assert_eq!(config.max_requests, 0);
+    }
+
+    #[test]
+    fn test_keep_alive_config_from_header() {
+        let config = KeepAliveConfig::from_header("timeout=30, max=50");
+        assert!(config.enabled);
+        assert_eq!(config.timeout_secs, 30);
+        assert_eq!(config.max_requests, 50);
+    }
+
+    #[test]
+    fn test_keep_alive_config_from_header_partial() {
+        // Only timeout specified
+        let config = KeepAliveConfig::from_header("timeout=15");
+        assert_eq!(config.timeout_secs, 15);
+        assert_eq!(config.max_requests, 100); // Default
+
+        // Only max specified
+        let config = KeepAliveConfig::from_header("max=25");
+        assert_eq!(config.timeout_secs, 60); // Default
+        assert_eq!(config.max_requests, 25);
+    }
+
+    #[test]
+    fn test_keep_alive_config_from_header_invalid() {
+        // Invalid values are ignored
+        let config = KeepAliveConfig::from_header("timeout=abc, max=xyz");
+        assert_eq!(config.timeout_secs, 60); // Default
+        assert_eq!(config.max_requests, 100); // Default
+    }
+
+    #[test]
+    fn test_keep_alive_config_should_keep_alive() {
+        let config = KeepAliveConfig::new(); // max_requests = 100
+        assert!(config.should_keep_alive(0));
+        assert!(config.should_keep_alive(50));
+        assert!(config.should_keep_alive(99));
+        assert!(!config.should_keep_alive(100));
+        assert!(!config.should_keep_alive(200));
+    }
+
+    #[test]
+    fn test_keep_alive_config_should_keep_alive_disabled() {
+        let config = KeepAliveConfig::disabled();
+        assert!(!config.should_keep_alive(0));
+    }
+
+    #[test]
+    fn test_keep_alive_config_default() {
+        let config = KeepAliveConfig::default();
+        assert_eq!(config, KeepAliveConfig::new());
+    }
+
+    // =========================================================================
+    // ConnectionState Tests
+    // =========================================================================
+
+    #[test]
+    fn test_connection_state_new() {
+        let state = ConnectionState::new();
+        assert_eq!(state.bits(), 0);
+        assert!(!state.is_set(ConnectionState::OPEN));
+    }
+
+    #[test]
+    fn test_connection_state_open_connection() {
+        let state = ConnectionState::open_connection();
+        assert!(state.is_set(ConnectionState::OPEN));
+        assert!(state.is_set(ConnectionState::WRITABLE));
+        assert!(!state.is_set(ConnectionState::READABLE));
+    }
+
+    #[test]
+    fn test_connection_state_set_clear() {
+        let mut state = ConnectionState::new();
+
+        state.set(ConnectionState::OPEN);
+        assert!(state.is_set(ConnectionState::OPEN));
+
+        state.set(ConnectionState::READABLE);
+        assert!(state.is_set(ConnectionState::OPEN));
+        assert!(state.is_set(ConnectionState::READABLE));
+
+        state.clear(ConnectionState::OPEN);
+        assert!(!state.is_set(ConnectionState::OPEN));
+        assert!(state.is_set(ConnectionState::READABLE));
+    }
+
+    #[test]
+    fn test_connection_state_is_healthy() {
+        let mut state = ConnectionState::open_connection();
+        assert!(state.is_healthy());
+
+        state.set(ConnectionState::ERROR);
+        assert!(!state.is_healthy());
+
+        state.clear(ConnectionState::ERROR);
+        state.set(ConnectionState::CLOSING);
+        assert!(!state.is_healthy());
+    }
+
+    #[test]
+    fn test_connection_state_can_read() {
+        let mut state = ConnectionState::open_connection();
+        assert!(!state.can_read()); // Not readable yet
+
+        state.set(ConnectionState::READABLE);
+        assert!(state.can_read());
+
+        state.clear(ConnectionState::OPEN);
+        assert!(!state.can_read()); // Not open
+    }
+
+    #[test]
+    fn test_connection_state_can_write() {
+        let mut state = ConnectionState::open_connection();
+        assert!(state.can_write());
+
+        state.set(ConnectionState::CLOSING);
+        assert!(!state.can_write()); // Can't write when closing
+
+        state.clear(ConnectionState::CLOSING);
+        state.clear(ConnectionState::WRITABLE);
+        assert!(!state.can_write()); // Not writable
+    }
+
+    #[test]
+    fn test_connection_state_bits() {
+        let mut state = ConnectionState::new();
+        state.set(ConnectionState::OPEN);
+        state.set(ConnectionState::WRITABLE);
+        assert_eq!(state.bits(), 0b0000_0101);
+    }
+
+    #[test]
+    fn test_connection_state_default() {
+        let state = ConnectionState::default();
+        assert_eq!(state.bits(), 0);
+    }
+
+    /// FALSIFICATION TEST: ConnectionState bitflags must be non-overlapping
+    #[test]
+    fn test_falsify_connection_state_flags_unique() {
+        let flags = [
+            ConnectionState::OPEN,
+            ConnectionState::READABLE,
+            ConnectionState::WRITABLE,
+            ConnectionState::HAS_PENDING,
+            ConnectionState::KEEP_ALIVE,
+            ConnectionState::UPGRADE,
+            ConnectionState::CLOSING,
+            ConnectionState::ERROR,
+        ];
+
+        // Each flag must be a power of 2 (single bit set)
+        for flag in &flags {
+            assert!(
+                flag.is_power_of_two(),
+                "FALSIFICATION FAILED: Flag {:08b} is not a power of 2",
+                flag
+            );
+        }
+
+        // No two flags should overlap
+        for i in 0..flags.len() {
+            for j in (i + 1)..flags.len() {
+                assert_eq!(
+                    flags[i] & flags[j],
+                    0,
+                    "FALSIFICATION FAILED: Flags {:08b} and {:08b} overlap",
+                    flags[i],
+                    flags[j]
+                );
+            }
+        }
+    }
+
+    /// FALSIFICATION TEST: KeepAliveConfig should_keep_alive boundary
+    #[test]
+    fn test_falsify_keep_alive_boundary() {
+        let config = KeepAliveConfig {
+            enabled: true,
+            timeout_secs: 60,
+            max_requests: 100,
+        };
+
+        // At exactly max_requests, should NOT keep alive
+        assert!(
+            !config.should_keep_alive(100),
+            "FALSIFICATION FAILED: should_keep_alive should return false at max_requests"
+        );
+
+        // One below max should still be true
+        assert!(
+            config.should_keep_alive(99),
+            "FALSIFICATION FAILED: should_keep_alive should return true below max_requests"
+        );
     }
 }
