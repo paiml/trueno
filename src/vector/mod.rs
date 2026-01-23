@@ -1,8 +1,15 @@
 //! Vector type with multi-backend support
+//!
+//! This module provides the core `Vector<T>` type with SIMD-optimized operations
+//! across multiple backends (Scalar, SSE2, AVX2, AVX-512, NEON, WASM SIMD).
+//!
+//! GPU thresholds intentionally set to usize::MAX to disable GPU for element-wise ops.
+//! See docs/performance-analysis.md - GPU is 2-65,000x SLOWER than scalar for these ops.
 
-// GPU thresholds intentionally set to usize::MAX to disable GPU for element-wise ops
-// See docs/performance-analysis.md - GPU is 2-65,000x SLOWER than scalar for these ops
 #![allow(clippy::absurd_extreme_comparisons)]
+
+// Submodules
+pub mod dispatch;
 
 #[cfg(target_arch = "x86_64")]
 use crate::backends::avx2::Avx2Backend;
@@ -18,98 +25,8 @@ use crate::backends::wasm::WasmBackend;
 use crate::backends::VectorBackend;
 use crate::{Backend, Result, TruenoError};
 
-/// Macro to dispatch binary operations to appropriate backend
-macro_rules! dispatch_binary_op {
-    ($backend:expr, $op:ident, $a:expr, $b:expr, $result:expr) => {
-        // SAFETY: CPU feature verified at runtime, slices bounds-checked
-        unsafe {
-            match $backend {
-                Backend::Scalar => ScalarBackend::$op($a, $b, $result),
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => Sse2Backend::$op($a, $b, $result),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 => Avx2Backend::$op($a, $b, $result),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX512 => Avx512Backend::$op($a, $b, $result),
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::$op($a, $b, $result)
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => NeonBackend::$op($a, $b, $result),
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => ScalarBackend::$op($a, $b, $result),
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => WasmBackend::$op($a, $b, $result),
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => ScalarBackend::$op($a, $b, $result),
-                Backend::GPU | Backend::Auto => ScalarBackend::$op($a, $b, $result),
-            }
-        }
-    };
-}
-
-/// Macro to dispatch reduction operations (return f32)
-macro_rules! dispatch_reduction {
-    ($backend:expr, $op:ident, $data:expr) => {
-        // SAFETY: CPU feature verified at runtime, slices bounds-checked
-        unsafe {
-            match $backend {
-                Backend::Scalar => ScalarBackend::$op($data),
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => Sse2Backend::$op($data),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 => Avx2Backend::$op($data),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX512 => Avx512Backend::$op($data),
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::$op($data)
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => NeonBackend::$op($data),
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => ScalarBackend::$op($data),
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => WasmBackend::$op($data),
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => ScalarBackend::$op($data),
-                Backend::GPU | Backend::Auto => ScalarBackend::$op($data),
-            }
-        }
-    };
-}
-
-/// Macro to dispatch unary operations (a -> result)
-macro_rules! dispatch_unary_op {
-    ($backend:expr, $op:ident, $a:expr, $result:expr) => {
-        // SAFETY: CPU feature verified at runtime, slices bounds-checked
-        unsafe {
-            match $backend {
-                Backend::Scalar => ScalarBackend::$op($a, $result),
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => Sse2Backend::$op($a, $result),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 => Avx2Backend::$op($a, $result),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX512 => Avx512Backend::$op($a, $result),
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::$op($a, $result)
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => NeonBackend::$op($a, $result),
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => ScalarBackend::$op($a, $result),
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => WasmBackend::$op($a, $result),
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => ScalarBackend::$op($a, $result),
-                Backend::GPU | Backend::Auto => ScalarBackend::$op($a, $result),
-            }
-        }
-    };
-}
+// Use the dispatch macros from the dispatch submodule (exported at crate root)
+use crate::{dispatch_binary_op, dispatch_reduction, dispatch_unary_op};
 
 /// High-performance vector with multi-backend support
 ///
