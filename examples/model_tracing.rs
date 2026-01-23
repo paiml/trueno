@@ -263,7 +263,6 @@ fn demo_kv_cache_trace() {
     println!("  Total evictions: {}", session.total_evictions);
     println!("  Peak memory: {} KB", session.peak_memory_bytes / 1024);
     println!("  Avg hit rate: {:.1}%", session.avg_hit_rate * 100.0);
-    println!("  Window exhaustions: {}", session.window_exhaustions);
 
     // Check last step
     if let Some(last) = session.steps.last() {
