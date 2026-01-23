@@ -5,20 +5,13 @@
 //! - Parts: `fract` (fractional part)
 //! - Sign: `signum`, `copysign`, `neg`
 
-#[cfg(target_arch = "x86_64")]
-use crate::backends::avx2::Avx2Backend;
-#[cfg(target_arch = "x86_64")]
-use crate::backends::avx512::Avx512Backend;
 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
 use crate::backends::neon::NeonBackend;
-use crate::backends::scalar::ScalarBackend;
-#[cfg(target_arch = "x86_64")]
-use crate::backends::sse2::Sse2Backend;
 #[cfg(target_arch = "wasm32")]
 use crate::backends::wasm::WasmBackend;
 use crate::backends::VectorBackend;
 use crate::vector::Vector;
-use crate::{dispatch_unary_op, Backend, Result, TruenoError};
+use crate::{dispatch_unary_op, Result, TruenoError};
 
 impl Vector<f32> {
     /// Computes the floor (round down to nearest integer) of each element.
