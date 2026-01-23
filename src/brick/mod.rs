@@ -37,9 +37,12 @@
 // Submodules
 mod buffer;
 mod circuit;
+mod connection;
 mod memory;
 mod perf_metrics;
 mod profiling;
+mod rate_limit;
+mod resource_pool;
 mod shutdown;
 
 // Re-export profiling functions
@@ -69,11 +72,19 @@ pub use circuit::{CircuitBreaker, CircuitState};
 // Re-export shutdown types
 pub use shutdown::{GracefulShutdown, ShutdownGuard, ShutdownResult};
 
+// Re-export resource pool types
+pub use resource_pool::{PooledResource, ResourcePool};
+
+// Re-export rate limiting types
+pub use rate_limit::{LimitError, ServeLimits};
+
+// Re-export connection types
+pub use connection::ManagedConnection;
+
 use crate::error::TruenoError;
 use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
-use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 // ============================================================================
@@ -287,341 +298,6 @@ impl ExactSizeIterator for Balance211Iter {
 use std::time::Duration;
 
 // ----------------------------------------------------------------------------
-// AWP-05: Resource Pool with Semaphore
-// ----------------------------------------------------------------------------
-
-/// Semaphore-based resource pool.
-///
-/// # Example
-/// ```rust
-/// use trueno::brick::ResourcePool;
-///
-/// let pool: ResourcePool<Vec<u8>> = ResourcePool::new(4, || Vec::with_capacity(1024));
-///
-/// // Acquire resources (up to max)
-/// let r1 = pool.try_acquire().unwrap();
-/// let r2 = pool.try_acquire().unwrap();
-/// let r3 = pool.try_acquire().unwrap();
-/// let r4 = pool.try_acquire().unwrap();
-///
-/// // Pool is exhausted
-/// assert!(pool.try_acquire().is_none());
-///
-/// // Release one
-/// drop(r1);
-///
-/// // Now we can acquire again
-/// assert!(pool.try_acquire().is_some());
-/// ```
-pub struct ResourcePool<T> {
-    /// Maximum concurrent resources.
-    max_resources: usize,
-    /// Available permits.
-    available: std::sync::atomic::AtomicUsize,
-    /// Pooled resources.
-    resources: std::sync::Mutex<Vec<T>>,
-    /// Factory for creating new resources.
-    factory: Box<dyn Fn() -> T + Send + Sync>,
-}
-
-impl<T> ResourcePool<T> {
-    /// Create a new resource pool.
-    pub fn new(max_resources: usize, factory: impl Fn() -> T + Send + Sync + 'static) -> Self {
-        Self {
-            max_resources,
-            available: std::sync::atomic::AtomicUsize::new(max_resources),
-            resources: std::sync::Mutex::new(Vec::with_capacity(max_resources)),
-            factory: Box::new(factory),
-        }
-    }
-
-    /// Get the maximum number of resources.
-    #[must_use]
-    pub fn max_resources(&self) -> usize {
-        self.max_resources
-    }
-
-    /// Get the number of available permits.
-    #[must_use]
-    pub fn available(&self) -> usize {
-        self.available.load(Ordering::Acquire)
-    }
-
-    /// Try to acquire a resource (non-blocking).
-    pub fn try_acquire(&self) -> Option<PooledResource<'_, T>> {
-        // Try to get a permit
-        loop {
-            let current = self.available.load(Ordering::Acquire);
-            if current == 0 {
-                return None;
-            }
-            if self
-                .available
-                .compare_exchange(
-                    current,
-                    current - 1,
-                    Ordering::AcqRel,
-                    Ordering::Relaxed,
-                )
-                .is_ok()
-            {
-                break;
-            }
-        }
-
-        // Get or create resource
-        let resource = {
-            let mut pool = self.resources.lock().unwrap();
-            pool.pop().unwrap_or_else(|| (self.factory)())
-        };
-
-        Some(PooledResource {
-            resource: Some(resource),
-            pool: self,
-        })
-    }
-
-    fn release(&self, resource: T) {
-        {
-            let mut pool = self.resources.lock().unwrap();
-            if pool.len() < self.max_resources {
-                pool.push(resource);
-            }
-            // else: drop resource (pool is full)
-        }
-        self.available.fetch_add(1, Ordering::Release);
-    }
-}
-
-impl<T: std::fmt::Debug> std::fmt::Debug for ResourcePool<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ResourcePool")
-            .field("max_resources", &self.max_resources)
-            .field("available", &self.available())
-            .finish()
-    }
-}
-
-/// A resource acquired from a pool.
-pub struct PooledResource<'a, T> {
-    resource: Option<T>,
-    pool: &'a ResourcePool<T>,
-}
-
-impl<T> std::ops::Deref for PooledResource<'_, T> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        self.resource.as_ref().unwrap()
-    }
-}
-
-impl<T> std::ops::DerefMut for PooledResource<'_, T> {
-    fn deref_mut(&mut self) -> &mut T {
-        self.resource.as_mut().unwrap()
-    }
-}
-
-impl<T> Drop for PooledResource<'_, T> {
-    fn drop(&mut self) {
-        if let Some(resource) = self.resource.take() {
-            self.pool.release(resource);
-        }
-    }
-}
-
-// ----------------------------------------------------------------------------
-// AWP-15: DoS Prevention Limits
-// ----------------------------------------------------------------------------
-
-/// DoS prevention limits for serving.
-///
-/// # Example
-/// ```rust
-/// use trueno::brick::ServeLimits;
-///
-/// let limits = ServeLimits::default();
-/// assert!(limits.validate_request(50, 1024).is_ok());
-/// assert!(limits.validate_request(200, 1024).is_err());  // Too many headers
-/// ```
-#[derive(Debug, Clone)]
-pub struct ServeLimits {
-    /// Maximum request body size (bytes).
-    pub max_request_size: usize,
-    /// Maximum number of headers.
-    pub max_headers: usize,
-    /// Maximum header size (bytes).
-    pub max_header_size: usize,
-    /// Keep-alive timeout.
-    pub keep_alive_timeout: Duration,
-    /// Client request timeout.
-    pub client_timeout: Duration,
-    /// Maximum pipelined requests.
-    pub max_pipelined: usize,
-    /// Maximum concurrent connections.
-    pub max_connections: usize,
-}
-
-impl Default for ServeLimits {
-    fn default() -> Self {
-        Self {
-            max_request_size: 2 * 1024 * 1024, // 2MB
-            max_headers: 100,
-            max_header_size: 8 * 1024, // 8KB
-            keep_alive_timeout: Duration::from_secs(5),
-            client_timeout: Duration::from_secs(5),
-            max_pipelined: 16,
-            max_connections: 1024,
-        }
-    }
-}
-
-impl ServeLimits {
-    /// Create new limits with custom values.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Builder: set max request size.
-    #[must_use]
-    pub fn with_max_request_size(mut self, size: usize) -> Self {
-        self.max_request_size = size;
-        self
-    }
-
-    /// Builder: set max headers.
-    #[must_use]
-    pub fn with_max_headers(mut self, count: usize) -> Self {
-        self.max_headers = count;
-        self
-    }
-
-    /// Builder: set max connections.
-    #[must_use]
-    pub fn with_max_connections(mut self, count: usize) -> Self {
-        self.max_connections = count;
-        self
-    }
-
-    /// Validate incoming request against limits.
-    pub fn validate_request(
-        &self,
-        headers_count: usize,
-        body_size: usize,
-    ) -> Result<(), LimitError> {
-        if headers_count > self.max_headers {
-            return Err(LimitError::TooManyHeaders {
-                count: headers_count,
-                max: self.max_headers,
-            });
-        }
-        if body_size > self.max_request_size {
-            return Err(LimitError::BodyTooLarge {
-                size: body_size,
-                max: self.max_request_size,
-            });
-        }
-        Ok(())
-    }
-
-    /// Validate header size.
-    pub fn validate_header_size(&self, size: usize) -> Result<(), LimitError> {
-        if size > self.max_header_size {
-            return Err(LimitError::HeaderTooLarge {
-                size,
-                max: self.max_header_size,
-            });
-        }
-        Ok(())
-    }
-
-    /// Validate pipelined request count.
-    pub fn validate_pipelined(&self, count: usize) -> Result<(), LimitError> {
-        if count > self.max_pipelined {
-            return Err(LimitError::TooManyPipelined {
-                count,
-                max: self.max_pipelined,
-            });
-        }
-        Ok(())
-    }
-
-    /// Validate connection count.
-    pub fn validate_connections(&self, current: usize) -> Result<(), LimitError> {
-        if current >= self.max_connections {
-            return Err(LimitError::ConnectionLimitReached {
-                current,
-                max: self.max_connections,
-            });
-        }
-        Ok(())
-    }
-}
-
-/// Error when a limit is exceeded.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LimitError {
-    /// Too many headers in request.
-    TooManyHeaders {
-        /// Actual count.
-        count: usize,
-        /// Maximum allowed.
-        max: usize,
-    },
-    /// Request body too large.
-    BodyTooLarge {
-        /// Actual size.
-        size: usize,
-        /// Maximum allowed.
-        max: usize,
-    },
-    /// Header too large.
-    HeaderTooLarge {
-        /// Actual size.
-        size: usize,
-        /// Maximum allowed.
-        max: usize,
-    },
-    /// Too many pipelined requests.
-    TooManyPipelined {
-        /// Actual count.
-        count: usize,
-        /// Maximum allowed.
-        max: usize,
-    },
-    /// Connection limit reached.
-    ConnectionLimitReached {
-        /// Current connections.
-        current: usize,
-        /// Maximum allowed.
-        max: usize,
-    },
-}
-
-impl fmt::Display for LimitError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LimitError::TooManyHeaders { count, max } => {
-                write!(f, "too many headers: {} (max {})", count, max)
-            }
-            LimitError::BodyTooLarge { size, max } => {
-                write!(f, "body too large: {} bytes (max {})", size, max)
-            }
-            LimitError::HeaderTooLarge { size, max } => {
-                write!(f, "header too large: {} bytes (max {})", size, max)
-            }
-            LimitError::TooManyPipelined { count, max } => {
-                write!(f, "too many pipelined requests: {} (max {})", count, max)
-            }
-            LimitError::ConnectionLimitReached { current, max } => {
-                write!(f, "connection limit reached: {} (max {})", current, max)
-            }
-        }
-    }
-}
-
-impl std::error::Error for LimitError {}
-
-// ----------------------------------------------------------------------------
 // LCP-09: Batch Splitting Strategies
 // ----------------------------------------------------------------------------
 
@@ -729,106 +405,6 @@ impl<T, E> AsyncResult<T, E> {
             AsyncResult::Sync(v) => AsyncResult::Sync(f(v)),
             AsyncResult::Error(e) => AsyncResult::Error(e),
         }
-    }
-}
-
-// ----------------------------------------------------------------------------
-// AWP-06: Connection TTL + Health Check
-// ----------------------------------------------------------------------------
-
-/// Connection with TTL and health tracking.
-#[derive(Debug)]
-pub struct ManagedConnection<T> {
-    /// The underlying connection
-    inner: T,
-    /// When the connection was created
-    created_at: Instant,
-    /// When the connection was last used
-    last_used: Instant,
-    /// Maximum lifetime (TTL)
-    max_lifetime: Duration,
-    /// Maximum idle time
-    max_idle: Duration,
-    /// Health check failures
-    health_failures: usize,
-}
-
-impl<T> ManagedConnection<T> {
-    /// Create a new managed connection.
-    pub fn new(inner: T, max_lifetime: Duration, max_idle: Duration) -> Self {
-        let now = Instant::now();
-        Self {
-            inner,
-            created_at: now,
-            last_used: now,
-            max_lifetime,
-            max_idle,
-            health_failures: 0,
-        }
-    }
-
-    /// Check if the connection is still valid.
-    #[must_use]
-    pub fn is_valid(&self) -> bool {
-        let now = Instant::now();
-        let not_expired = now.duration_since(self.created_at) < self.max_lifetime;
-        let not_idle = now.duration_since(self.last_used) < self.max_idle;
-        let healthy = self.health_failures < 3;
-        not_expired && not_idle && healthy
-    }
-
-    /// Check if the connection has expired (TTL exceeded).
-    #[must_use]
-    pub fn is_expired(&self) -> bool {
-        self.created_at.elapsed() >= self.max_lifetime
-    }
-
-    /// Check if the connection is idle.
-    #[must_use]
-    pub fn is_idle(&self) -> bool {
-        self.last_used.elapsed() >= self.max_idle
-    }
-
-    /// Mark the connection as used.
-    pub fn touch(&mut self) {
-        self.last_used = Instant::now();
-    }
-
-    /// Record a health check failure.
-    pub fn record_health_failure(&mut self) {
-        self.health_failures += 1;
-    }
-
-    /// Reset health failure count.
-    pub fn reset_health(&mut self) {
-        self.health_failures = 0;
-    }
-
-    /// Get the underlying connection.
-    pub fn inner(&self) -> &T {
-        &self.inner
-    }
-
-    /// Get mutable access to the underlying connection.
-    pub fn inner_mut(&mut self) -> &mut T {
-        &mut self.inner
-    }
-
-    /// Consume and return the underlying connection.
-    pub fn into_inner(self) -> T {
-        self.inner
-    }
-
-    /// Get connection age.
-    #[must_use]
-    pub fn age(&self) -> Duration {
-        self.created_at.elapsed()
-    }
-
-    /// Get idle time.
-    #[must_use]
-    pub fn idle_time(&self) -> Duration {
-        self.last_used.elapsed()
     }
 }
 
@@ -11752,7 +11328,7 @@ Layer 0
     /// F161: Cache line alignment effective
     #[test]
     fn test_f161_cache_alignment() {
-        use std::sync::atomic::AtomicU64;
+        use std::sync::atomic::{AtomicU64, Ordering};
 
         let aligned: CacheAligned<AtomicU64> = CacheAligned::new(AtomicU64::new(42));
 
@@ -12196,19 +11772,19 @@ Layer 0
             Duration::from_secs(30),
         );
 
-        assert_eq!(conn.health_failures, 0);
+        assert_eq!(conn.health_failures(), 0);
         assert!(conn.is_valid());
 
         // Record some failures
         conn.record_health_failure();
         conn.record_health_failure();
         conn.record_health_failure();
-        assert_eq!(conn.health_failures, 3);
+        assert_eq!(conn.health_failures(), 3);
         assert!(!conn.is_valid()); // 3+ failures = invalid
 
         // Reset health
         conn.reset_health();
-        assert_eq!(conn.health_failures, 0);
+        assert_eq!(conn.health_failures(), 0);
         assert!(conn.is_valid());
     }
 
