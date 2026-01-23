@@ -34,9 +34,10 @@ impl Vector<f32> {
     ///
     /// let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
     /// let b = Vector::from_slice(&[4.0, 5.0, 6.0]);
-    /// let result = a.add(&b).unwrap();
+    /// let result = a.add(&b)?;
     ///
     /// assert_eq!(result.as_slice(), &[5.0, 7.0, 9.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
@@ -99,9 +100,10 @@ impl Vector<f32> {
     ///
     /// let a = Vector::from_slice(&[5.0, 7.0, 9.0]);
     /// let b = Vector::from_slice(&[1.0, 2.0, 3.0]);
-    /// let result = a.sub(&b).unwrap();
+    /// let result = a.sub(&b)?;
     ///
     /// assert_eq!(result.as_slice(), &[4.0, 5.0, 6.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Errors
@@ -158,9 +160,10 @@ impl Vector<f32> {
     ///
     /// let a = Vector::from_slice(&[2.0, 3.0, 4.0]);
     /// let b = Vector::from_slice(&[5.0, 6.0, 7.0]);
-    /// let result = a.mul(&b).unwrap();
+    /// let result = a.mul(&b)?;
     ///
     /// assert_eq!(result.as_slice(), &[10.0, 18.0, 28.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn mul(&self, other: &Self) -> Result<Self> {
         if self.len() != other.len() {
@@ -213,9 +216,10 @@ impl Vector<f32> {
     ///
     /// let a = Vector::from_slice(&[10.0, 20.0, 30.0]);
     /// let b = Vector::from_slice(&[2.0, 4.0, 5.0]);
-    /// let result = a.div(&b).unwrap();
+    /// let result = a.div(&b)?;
     ///
     /// assert_eq!(result.as_slice(), &[5.0, 5.0, 6.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn div(&self, other: &Self) -> Result<Self> {
         if self.len() != other.len() {
@@ -269,9 +273,10 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
-    /// let result = v.scale(2.0).unwrap();
+    /// let result = v.scale(2.0)?;
     ///
     /// assert_eq!(result.as_slice(), &[2.0, 4.0, 6.0, 8.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Scaling by Zero
@@ -280,8 +285,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
-    /// let result = v.scale(0.0).unwrap();
+    /// let result = v.scale(0.0)?;
     /// assert_eq!(result.as_slice(), &[0.0, 0.0, 0.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Negative Scaling
@@ -290,8 +296,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, -2.0, 3.0]);
-    /// let result = v.scale(-2.0).unwrap();
+    /// let result = v.scale(-2.0)?;
     /// assert_eq!(result.as_slice(), &[-2.0, 4.0, -6.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn scale(&self, scalar: f32) -> Result<Vector<f32>> {
         let mut result_data = vec![0.0; self.len()];
@@ -358,8 +365,9 @@ impl Vector<f32> {
     /// let a = Vector::from_slice(&[2.0, 3.0, 4.0]);
     /// let b = Vector::from_slice(&[5.0, 6.0, 7.0]);
     /// let c = Vector::from_slice(&[1.0, 2.0, 3.0]);
-    /// let result = a.fma(&b, &c).unwrap();
+    /// let result = a.fma(&b, &c)?;
     /// assert_eq!(result.as_slice(), &[11.0, 20.0, 31.0]);  // [2*5+1, 3*6+2, 4*7+3]
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     ///
     /// # Use Cases
