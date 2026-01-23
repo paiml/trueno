@@ -268,4 +268,83 @@ mod tests {
         assert_eq!(retrieved.low, 100);
         assert_eq!(retrieved.high, 1000);
     }
+
+    /// FALSIFICATION TEST (Section 4.3)
+    ///
+    /// Verifies the buffer's behavior when pushed past its high watermark.
+    /// The WatermarkedBuffer is a SIGNALING mechanism, not a blocking mechanism.
+    /// It will accept writes beyond the limit but MUST correctly signal backpressure.
+    ///
+    /// Failure mode: If this test passes but the buffer doesn't signal,
+    /// the caller would never know to stop writing, leading to OOM.
+    #[test]
+    fn test_falsify_buffer_limit_signaling() {
+        let wm = BufferWatermarks::new(10, 100);
+        let mut buffer = WatermarkedBuffer::new(wm);
+
+        // Write incrementally and verify signaling at each step
+        let mut backpressure_signaled_at = None;
+
+        for i in 0..200 {
+            let chunk = [i as u8; 10]; // 10 bytes per write
+            buffer.write(&chunk);
+
+            if buffer.should_backpressure() && backpressure_signaled_at.is_none() {
+                backpressure_signaled_at = Some(buffer.len());
+            }
+        }
+
+        // CRITICAL ASSERTION: Backpressure MUST have been signaled
+        assert!(
+            backpressure_signaled_at.is_some(),
+            "FALSIFICATION FAILED: Buffer accepted 2000 bytes without signaling backpressure"
+        );
+
+        // Verify it was signaled at the right threshold (at or above high watermark)
+        let signal_point = backpressure_signaled_at.unwrap();
+        assert!(
+            signal_point >= 100,
+            "FALSIFICATION FAILED: Backpressure signaled too early at {} bytes (high=100)",
+            signal_point
+        );
+
+        // Verify buffer actually accepted all the data (it's non-blocking)
+        assert_eq!(
+            buffer.len(),
+            2000,
+            "Buffer should accept all writes (signaling is advisory)"
+        );
+
+        // Verify pressure level is capped at 1.0 even when way over
+        assert!(
+            (buffer.pressure_level() - 1.0).abs() < 0.001,
+            "Pressure level should cap at 1.0 when over limit"
+        );
+    }
+
+    /// FALSIFICATION TEST: Verify drain restores write capability
+    #[test]
+    fn test_falsify_drain_restores_writability() {
+        let wm = BufferWatermarks::new(10, 100);
+        let mut buffer = WatermarkedBuffer::new(wm);
+
+        // Fill past high watermark
+        buffer.write(&[0u8; 150]);
+        assert!(buffer.should_backpressure());
+        assert!(!buffer.can_write());
+
+        // Drain to below low watermark
+        buffer.drain(145); // Should leave 5 bytes
+        assert_eq!(buffer.len(), 5);
+
+        // CRITICAL: Must restore write capability
+        assert!(
+            buffer.can_write(),
+            "FALSIFICATION FAILED: Draining below low watermark did not restore writability"
+        );
+        assert!(
+            !buffer.should_backpressure(),
+            "FALSIFICATION FAILED: Draining below low watermark did not clear backpressure"
+        );
+    }
 }
