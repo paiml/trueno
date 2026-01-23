@@ -35,6 +35,7 @@
 //! A ComputeBrick with no assertions makes no testable claims and is therefore invalid.
 
 // Submodules
+mod batch;
 mod buffer;
 mod circuit;
 mod connection;
@@ -81,11 +82,14 @@ pub use rate_limit::{LimitError, ServeLimits};
 // Re-export connection types
 pub use connection::ManagedConnection;
 
+// Re-export batch types
+pub use batch::{balance211, Balance211Iter, BatchSplitStrategy, split_batch};
+
 use crate::error::TruenoError;
 use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 // ============================================================================
 // Async Task Profiler (Pattern 3 from actix-web)
@@ -220,141 +224,7 @@ impl Default for AsyncTaskProfiler {
 // Phase 12: Complete Pattern Catalog (E.10)
 // ============================================================================
 
-// ----------------------------------------------------------------------------
-// LCP-05: Balance211 Work Distribution (Intel MKL pattern)
-// ----------------------------------------------------------------------------
-
-/// Balance211 work distribution (Intel MKL pattern).
-///
-/// Distributes N items across T threads such that no thread
-/// has more than 1 extra item compared to any other.
-///
-/// # Example
-/// ```rust
-/// use trueno::brick::balance211;
-///
-/// let ranges = balance211(10, 3);
-/// // Thread 0: (0, 4) - 4 items
-/// // Thread 1: (4, 3) - 3 items
-/// // Thread 2: (7, 3) - 3 items
-/// assert_eq!(ranges.len(), 3);
-/// ```
-#[must_use]
-pub fn balance211(n: usize, nthreads: usize) -> Vec<(usize, usize)> {
-    if nthreads == 0 {
-        return vec![];
-    }
-    let div = n / nthreads;
-    let rem = n % nthreads;
-
-    (0..nthreads)
-        .map(|i| {
-            let offset = if i < rem {
-                (div + 1) * i
-            } else {
-                div * i + rem
-            };
-            let count = if i < rem { div + 1 } else { div };
-            (offset, count)
-        })
-        .collect()
-}
-
-/// Iterator adapter for balanced work distribution.
-pub struct Balance211Iter {
-    ranges: Vec<(usize, usize)>,
-    current: usize,
-}
-
-impl Balance211Iter {
-    /// Create a new balanced work iterator.
-    pub fn new(n: usize, nthreads: usize) -> Self {
-        Self {
-            ranges: balance211(n, nthreads),
-            current: 0,
-        }
-    }
-}
-
-impl Iterator for Balance211Iter {
-    type Item = std::ops::Range<usize>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current >= self.ranges.len() {
-            return None;
-        }
-        let (offset, count) = self.ranges[self.current];
-        self.current += 1;
-        Some(offset..offset + count)
-    }
-}
-
-impl ExactSizeIterator for Balance211Iter {
-    fn len(&self) -> usize {
-        self.ranges.len() - self.current
-    }
-}
-
-use std::time::Duration;
-
-// ----------------------------------------------------------------------------
-// LCP-09: Batch Splitting Strategies
-// ----------------------------------------------------------------------------
-
-/// Strategy for splitting batches across workers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BatchSplitStrategy {
-    /// Simple equal division (may leave remainder)
-    #[default]
-    Simple,
-    /// Equal distribution using Balance211
-    Equal,
-    /// Sequence-aware (keeps sequences together)
-    SequenceAware,
-}
-
-/// Split a batch into chunks according to strategy.
-///
-/// # Example
-/// ```rust
-/// use trueno::brick::{split_batch, BatchSplitStrategy};
-///
-/// let chunks = split_batch(100, 4, BatchSplitStrategy::Equal);
-/// assert_eq!(chunks.len(), 4);
-/// assert_eq!(chunks.iter().sum::<usize>(), 100);
-/// ```
-#[must_use]
-pub fn split_batch(total: usize, num_workers: usize, strategy: BatchSplitStrategy) -> Vec<usize> {
-    if num_workers == 0 || total == 0 {
-        return vec![];
-    }
-
-    match strategy {
-        BatchSplitStrategy::Simple => {
-            let chunk_size = total / num_workers;
-            let mut chunks = vec![chunk_size; num_workers];
-            // Last worker gets remainder
-            if let Some(last) = chunks.last_mut() {
-                *last += total % num_workers;
-            }
-            chunks
-        }
-        BatchSplitStrategy::Equal => {
-            // Use Balance211 for even distribution
-            balance211(total, num_workers)
-                .iter()
-                .map(|(_, count)| *count)
-                .collect()
-        }
-        BatchSplitStrategy::SequenceAware => {
-            // For now, same as Equal (sequence boundaries would need external info)
-            balance211(total, num_workers)
-                .iter()
-                .map(|(_, count)| *count)
-                .collect()
-        }
-    }
-}
+// Balance211 and BatchSplitStrategy moved to batch.rs
 
 // ----------------------------------------------------------------------------
 // LCP-12: Async Compute with Sync Fallback
