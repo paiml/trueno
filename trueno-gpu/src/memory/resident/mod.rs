@@ -21,183 +21,28 @@
 //! - [Dao2022] FlashAttention: Fast and Memory-Efficient Exact Attention
 //! - [Kwon2023] PagedAttention for LLM Serving with vLLM
 
-use std::sync::atomic::{AtomicU64, Ordering};
+// Sub-modules
+mod cache;
+mod stats;
+
+// Re-exports from submodules
+pub use cache::{
+    clear_kernel_cache, kernel_cache_hits, kernel_cache_misses, reset_kernel_cache_stats,
+};
+pub use stats::{
+    reset_transfer_counters, total_d2h_bytes, total_d2h_transfers, total_h2d_bytes,
+    total_h2d_transfers, TransferStats,
+};
+
+// Internal access to submodule functions
+#[cfg(feature = "cuda")]
+use cache::get_or_compile_kernel;
+// Note: record_d2h_transfer and record_h2d_transfer are used in tests via `use super::*`
 
 #[cfg(feature = "cuda")]
 use crate::driver::{CudaContext, GpuBuffer};
 #[cfg(feature = "cuda")]
 use crate::error::Result;
-
-// ============================================================================
-// Transfer Statistics
-// ============================================================================
-
-/// Global transfer counters for debugging
-static TOTAL_H2D_TRANSFERS: AtomicU64 = AtomicU64::new(0);
-static TOTAL_D2H_TRANSFERS: AtomicU64 = AtomicU64::new(0);
-static TOTAL_H2D_BYTES: AtomicU64 = AtomicU64::new(0);
-static TOTAL_D2H_BYTES: AtomicU64 = AtomicU64::new(0);
-
-/// Get total host-to-device transfers since last reset
-#[must_use]
-pub fn total_h2d_transfers() -> u64 {
-    TOTAL_H2D_TRANSFERS.load(Ordering::Relaxed)
-}
-
-/// Get total device-to-host transfers since last reset
-#[must_use]
-pub fn total_d2h_transfers() -> u64 {
-    TOTAL_D2H_TRANSFERS.load(Ordering::Relaxed)
-}
-
-/// Get total bytes transferred host-to-device since last reset
-#[must_use]
-pub fn total_h2d_bytes() -> u64 {
-    TOTAL_H2D_BYTES.load(Ordering::Relaxed)
-}
-
-/// Get total bytes transferred device-to-host since last reset
-#[must_use]
-pub fn total_d2h_bytes() -> u64 {
-    TOTAL_D2H_BYTES.load(Ordering::Relaxed)
-}
-
-/// Reset all transfer counters to zero
-pub fn reset_transfer_counters() {
-    TOTAL_H2D_TRANSFERS.store(0, Ordering::Relaxed);
-    TOTAL_D2H_TRANSFERS.store(0, Ordering::Relaxed);
-    TOTAL_H2D_BYTES.store(0, Ordering::Relaxed);
-    TOTAL_D2H_BYTES.store(0, Ordering::Relaxed);
-}
-
-// ============================================================================
-// Kernel Cache (WAPR-PERF-004)
-// ============================================================================
-
-#[cfg(feature = "cuda")]
-use std::collections::HashMap;
-#[cfg(feature = "cuda")]
-use std::sync::{Arc, Mutex, OnceLock};
-
-#[cfg(feature = "cuda")]
-use crate::driver::CudaModule;
-
-/// Global kernel cache to eliminate PTX recompilation overhead.
-///
-/// Each unique kernel configuration (name + parameters) is compiled once
-/// and cached for reuse. This eliminates the 24x recompilation per inference
-/// that was previously observed.
-///
-/// ## Keying Strategy
-///
-/// Keys are strings of format: `"{kernel_name}:{config}"` where config
-/// encodes all parameters that affect the PTX output.
-///
-/// ## Thread Safety
-///
-/// The cache uses double-locking:
-/// - Outer Mutex guards the HashMap
-/// - Inner Arc<Mutex<CudaModule>> allows concurrent kernel launches
-///
-/// ## Example Keys
-///
-/// - `"softmax:32"` - SoftmaxKernel for row_size=32
-/// - `"softmax_long_row:1500"` - LongRowSoftmaxKernel for row_size=1500
-/// - `"residual_add:1024"` - ResidualAddKernel for n=1024
-#[cfg(feature = "cuda")]
-static KERNEL_CACHE: OnceLock<Mutex<HashMap<String, Arc<Mutex<CudaModule>>>>> = OnceLock::new();
-
-/// Statistics for kernel cache performance
-#[cfg(feature = "cuda")]
-static KERNEL_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
-#[cfg(feature = "cuda")]
-static KERNEL_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
-
-/// Get the global kernel cache, initializing if needed
-#[cfg(feature = "cuda")]
-fn get_kernel_cache() -> &'static Mutex<HashMap<String, Arc<Mutex<CudaModule>>>> {
-    KERNEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-/// Get a cached kernel module, compiling if not present.
-///
-/// # Arguments
-///
-/// * `ctx` - CUDA context for compilation
-/// * `key` - Cache key (kernel_name:config)
-/// * `ptx` - PTX source to compile on cache miss
-///
-/// # Returns
-///
-/// Arc to the cached module, wrapped in Mutex for mutable access.
-#[cfg(feature = "cuda")]
-fn get_or_compile_kernel(
-    ctx: &CudaContext,
-    key: &str,
-    ptx: &str,
-) -> Result<Arc<Mutex<CudaModule>>> {
-    let cache = get_kernel_cache();
-
-    // Fast path: check if already cached
-    {
-        let cache_guard = cache.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Cache lock poisoned: {}", e))
-        })?;
-        if let Some(module) = cache_guard.get(key) {
-            KERNEL_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
-            return Ok(Arc::clone(module));
-        }
-    }
-
-    // Slow path: compile and cache
-    KERNEL_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
-    eprintln!("[KERNEL-CACHE] Compiling: {}", key);
-
-    let module = CudaModule::from_ptx(ctx, ptx)?;
-    let module_arc = Arc::new(Mutex::new(module));
-
-    // Insert into cache
-    {
-        let mut cache_guard = cache.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Cache lock poisoned: {}", e))
-        })?;
-        cache_guard.insert(key.to_string(), Arc::clone(&module_arc));
-    }
-
-    Ok(module_arc)
-}
-
-/// Get kernel cache statistics
-#[cfg(feature = "cuda")]
-#[must_use]
-pub fn kernel_cache_hits() -> u64 {
-    KERNEL_CACHE_HITS.load(Ordering::Relaxed)
-}
-
-/// Get kernel cache miss count
-#[cfg(feature = "cuda")]
-#[must_use]
-pub fn kernel_cache_misses() -> u64 {
-    KERNEL_CACHE_MISSES.load(Ordering::Relaxed)
-}
-
-/// Reset kernel cache statistics
-#[cfg(feature = "cuda")]
-pub fn reset_kernel_cache_stats() {
-    KERNEL_CACHE_HITS.store(0, Ordering::Relaxed);
-    KERNEL_CACHE_MISSES.store(0, Ordering::Relaxed);
-}
-
-/// Clear the kernel cache (useful for testing)
-#[cfg(feature = "cuda")]
-pub fn clear_kernel_cache() {
-    if let Some(cache) = KERNEL_CACHE.get() {
-        if let Ok(mut guard) = cache.lock() {
-            guard.clear();
-        }
-    }
-    reset_kernel_cache_stats();
-}
 
 // ============================================================================
 // GpuResidentTensor (CUDA-only)
@@ -252,8 +97,8 @@ impl<T: Copy> GpuResidentTensor<T> {
         let bytes = data.len() * std::mem::size_of::<T>();
 
         // Track transfer
-        TOTAL_H2D_TRANSFERS.fetch_add(1, Ordering::Relaxed);
-        TOTAL_H2D_BYTES.fetch_add(bytes as u64, Ordering::Relaxed);
+        record_h2d_transfer(bytes as u64);
+        
 
         Ok(Self {
             buffer,
@@ -308,8 +153,8 @@ impl<T: Copy> GpuResidentTensor<T> {
 
         // Track transfer
         self.d2h_count += 1;
-        TOTAL_D2H_TRANSFERS.fetch_add(1, Ordering::Relaxed);
-        TOTAL_D2H_BYTES.fetch_add(bytes as u64, Ordering::Relaxed);
+        record_d2h_transfer(bytes as u64);
+        
 
         Ok(result)
     }
@@ -2764,72 +2609,6 @@ pub fn forward_encoder_block_gpu(
 }
 
 // ============================================================================
-// Transfer Statistics Summary
-// ============================================================================
-
-/// Summary of GPU transfer statistics
-#[derive(Debug, Clone, Default)]
-pub struct TransferStats {
-    /// Total host-to-device transfers
-    pub h2d_transfers: u64,
-    /// Total device-to-host transfers
-    pub d2h_transfers: u64,
-    /// Total bytes transferred host-to-device
-    pub h2d_bytes: u64,
-    /// Total bytes transferred device-to-host
-    pub d2h_bytes: u64,
-}
-
-impl TransferStats {
-    /// Capture current transfer statistics
-    #[must_use]
-    pub fn capture() -> Self {
-        Self {
-            h2d_transfers: total_h2d_transfers(),
-            d2h_transfers: total_d2h_transfers(),
-            h2d_bytes: total_h2d_bytes(),
-            d2h_bytes: total_d2h_bytes(),
-        }
-    }
-
-    /// Calculate delta from a previous snapshot
-    #[must_use]
-    pub fn delta_from(&self, prev: &Self) -> Self {
-        Self {
-            h2d_transfers: self.h2d_transfers.saturating_sub(prev.h2d_transfers),
-            d2h_transfers: self.d2h_transfers.saturating_sub(prev.d2h_transfers),
-            h2d_bytes: self.h2d_bytes.saturating_sub(prev.h2d_bytes),
-            d2h_bytes: self.d2h_bytes.saturating_sub(prev.d2h_bytes),
-        }
-    }
-
-    /// Total transfers (H2D + D2H)
-    #[must_use]
-    pub const fn total_transfers(&self) -> u64 {
-        self.h2d_transfers + self.d2h_transfers
-    }
-
-    /// Total bytes transferred
-    #[must_use]
-    pub const fn total_bytes(&self) -> u64 {
-        self.h2d_bytes + self.d2h_bytes
-    }
-}
-
-impl std::fmt::Display for TransferStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "H2D: {} ({:.2} MB), D2H: {} ({:.2} MB)",
-            self.h2d_transfers,
-            self.h2d_bytes as f64 / (1024.0 * 1024.0),
-            self.d2h_transfers,
-            self.d2h_bytes as f64 / (1024.0 * 1024.0)
-        )
-    }
-}
-
-// ============================================================================
 // Incremental Attention (Autoregressive Decoder)
 // ============================================================================
 
@@ -3288,6 +3067,7 @@ pub fn kv_cache_scatter_gpu(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::resident::stats::{record_d2h_transfer, record_h2d_transfer};
 
     #[test]
     fn test_transfer_stats_capture_and_delta() {
@@ -3296,21 +3076,21 @@ mod tests {
         let before = TransferStats::capture();
         assert_eq!(before.total_transfers(), 0);
 
-        // Simulate some transfers
-        TOTAL_H2D_TRANSFERS.fetch_add(3, Ordering::Relaxed);
-        TOTAL_D2H_TRANSFERS.fetch_add(1, Ordering::Relaxed);
-        TOTAL_H2D_BYTES.fetch_add(1024, Ordering::Relaxed);
-        TOTAL_D2H_BYTES.fetch_add(512, Ordering::Relaxed);
+        // Simulate some transfers using the record functions
+        record_h2d_transfer(1024);
+        record_h2d_transfer(2048);
+        record_h2d_transfer(512);
+        record_d2h_transfer(512);
 
         let after = TransferStats::capture();
         let delta = after.delta_from(&before);
 
         assert_eq!(delta.h2d_transfers, 3);
         assert_eq!(delta.d2h_transfers, 1);
-        assert_eq!(delta.h2d_bytes, 1024);
+        assert_eq!(delta.h2d_bytes, 3584); // 1024 + 2048 + 512
         assert_eq!(delta.d2h_bytes, 512);
         assert_eq!(delta.total_transfers(), 4);
-        assert_eq!(delta.total_bytes(), 1536);
+        assert_eq!(delta.total_bytes(), 4096);
     }
 
     #[test]
@@ -3331,8 +3111,8 @@ mod tests {
 
     #[test]
     fn test_reset_counters() {
-        TOTAL_H2D_TRANSFERS.fetch_add(100, Ordering::Relaxed);
-        TOTAL_D2H_TRANSFERS.fetch_add(50, Ordering::Relaxed);
+        record_h2d_transfer(100);
+        record_d2h_transfer(50);
 
         reset_transfer_counters();
 
