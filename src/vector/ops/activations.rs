@@ -17,18 +17,51 @@
 //! - [`mish`](crate::Vector::mish): Self-regularizing activation
 //! - [`selu`](crate::Vector::selu): Scaled Exponential Linear Unit
 
-#[cfg(target_arch = "x86_64")]
-use crate::backends::avx2::Avx2Backend;
-#[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-use crate::backends::neon::NeonBackend;
 use crate::backends::scalar::ScalarBackend;
-#[cfg(target_arch = "x86_64")]
-use crate::backends::sse2::Sse2Backend;
-#[cfg(target_arch = "wasm32")]
-use crate::backends::wasm::WasmBackend;
 use crate::backends::VectorBackend;
 use crate::vector::Vector;
 use crate::{Backend, Result, TruenoError};
+
+/// Backend dispatch macro for unary operations - centralizes platform-specific SIMD dispatch
+/// to eliminate code duplication across activation functions.
+///
+/// # Safety
+/// The macro wraps unsafe backend calls internally, so callers don't need unsafe blocks.
+macro_rules! dispatch_unary_op {
+    ($backend:expr, $op:ident, $input:expr, $output:expr) => {{
+        #[cfg(target_arch = "x86_64")]
+        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
+        // SAFETY: CPU features verified at runtime before backend selection
+        unsafe {
+            match $backend {
+                Backend::Scalar => ScalarBackend::$op($input, $output),
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => Sse2Backend::$op($input, $output),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => Avx2Backend::$op($input, $output),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    ScalarBackend::$op($input, $output)
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => {
+                    use crate::backends::neon::NeonBackend;
+                    NeonBackend::$op($input, $output)
+                }
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => ScalarBackend::$op($input, $output),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => {
+                    use crate::backends::wasm::WasmBackend;
+                    WasmBackend::$op($input, $output)
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => ScalarBackend::$op($input, $output),
+                Backend::GPU | Backend::Auto => ScalarBackend::$op($input, $output),
+            }
+        }
+    }};
+}
 
 impl Vector<f32> {
     /// Softmax activation function
@@ -258,45 +291,7 @@ impl Vector<f32> {
                     .par_chunks(CHUNK_SIZE)
                     .zip(result.par_chunks_mut(CHUNK_SIZE))
                     .for_each(|(chunk_in, chunk_out)| {
-                        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-                        unsafe {
-                            match self.backend {
-                                Backend::Scalar => {
-                                    ScalarBackend::relu(chunk_in, chunk_out);
-                                }
-                                #[cfg(target_arch = "x86_64")]
-                                Backend::SSE2 | Backend::AVX => {
-                                    Sse2Backend::relu(chunk_in, chunk_out);
-                                }
-                                #[cfg(target_arch = "x86_64")]
-                                Backend::AVX2 | Backend::AVX512 => {
-                                    Avx2Backend::relu(chunk_in, chunk_out);
-                                }
-                                #[cfg(not(target_arch = "x86_64"))]
-                                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                                    ScalarBackend::relu(chunk_in, chunk_out);
-                                }
-                                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                                Backend::NEON => {
-                                    NeonBackend::relu(chunk_in, chunk_out);
-                                }
-                                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                                Backend::NEON => {
-                                    ScalarBackend::relu(chunk_in, chunk_out);
-                                }
-                                #[cfg(target_arch = "wasm32")]
-                                Backend::WasmSIMD => {
-                                    WasmBackend::relu(chunk_in, chunk_out);
-                                }
-                                #[cfg(not(target_arch = "wasm32"))]
-                                Backend::WasmSIMD => {
-                                    ScalarBackend::relu(chunk_in, chunk_out);
-                                }
-                                Backend::GPU | Backend::Auto => {
-                                    ScalarBackend::relu(chunk_in, chunk_out);
-                                }
-                            }
-                        }
+                        dispatch_unary_op!(self.backend, relu, chunk_in, chunk_out);
                     });
 
                 return Ok(Vector::from_vec(result)); // Use from_vec to avoid extra copy
@@ -304,45 +299,7 @@ impl Vector<f32> {
         }
 
         // Sequential processing for small arrays or when parallel feature disabled
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        unsafe {
-            match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::relu(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => {
-                    Sse2Backend::relu(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => {
-                    Avx2Backend::relu(&self.data, &mut result);
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::relu(&self.data, &mut result);
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => {
-                    NeonBackend::relu(&self.data, &mut result);
-                }
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => {
-                    ScalarBackend::relu(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => {
-                    WasmBackend::relu(&self.data, &mut result);
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => {
-                    ScalarBackend::relu(&self.data, &mut result);
-                }
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::relu(&self.data, &mut result);
-                }
-            }
-        }
+        dispatch_unary_op!(self.backend, relu, &self.data, &mut result);
 
         Ok(Vector::from_vec(result)) // Use from_vec to avoid extra copy
     }
@@ -431,45 +388,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate backend
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        unsafe {
-            match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::sigmoid(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => {
-                    Sse2Backend::sigmoid(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => {
-                    Avx2Backend::sigmoid(&self.data, &mut result);
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::sigmoid(&self.data, &mut result);
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => {
-                    NeonBackend::sigmoid(&self.data, &mut result);
-                }
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => {
-                    ScalarBackend::sigmoid(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => {
-                    WasmBackend::sigmoid(&self.data, &mut result);
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => {
-                    ScalarBackend::sigmoid(&self.data, &mut result);
-                }
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::sigmoid(&self.data, &mut result);
-                }
-            }
-        }
+        dispatch_unary_op!(self.backend, sigmoid, &self.data, &mut result);
 
         Ok(Vector::from_vec(result))
     }
@@ -759,45 +678,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate backend
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        unsafe {
-            match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::gelu(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => {
-                    Sse2Backend::gelu(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => {
-                    Avx2Backend::gelu(&self.data, &mut result);
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::gelu(&self.data, &mut result);
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => {
-                    NeonBackend::gelu(&self.data, &mut result);
-                }
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => {
-                    ScalarBackend::gelu(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => {
-                    WasmBackend::gelu(&self.data, &mut result);
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => {
-                    ScalarBackend::gelu(&self.data, &mut result);
-                }
-                Backend::GPU | Backend::Auto => {
-                    ScalarBackend::gelu(&self.data, &mut result);
-                }
-            }
-        }
+        dispatch_unary_op!(self.backend, gelu, &self.data, &mut result);
 
         Ok(Vector::from_vec(result))
     }
@@ -874,46 +755,7 @@ impl Vector<f32> {
         let mut result = vec![0.0; self.len()];
 
         // Dispatch to appropriate SIMD backend
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        unsafe {
-            match self.backend {
-                Backend::Scalar => {
-                    ScalarBackend::swish(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => {
-                    Sse2Backend::swish(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => {
-                    Avx2Backend::swish(&self.data, &mut result);
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::swish(&self.data, &mut result);
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => {
-                    NeonBackend::swish(&self.data, &mut result);
-                }
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => {
-                    ScalarBackend::swish(&self.data, &mut result);
-                }
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => {
-                    WasmBackend::swish(&self.data, &mut result);
-                }
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => {
-                    ScalarBackend::swish(&self.data, &mut result);
-                }
-                Backend::GPU | Backend::Auto => {
-                    // Not yet implemented, use scalar
-                    ScalarBackend::swish(&self.data, &mut result);
-                }
-            }
-        }
+        dispatch_unary_op!(self.backend, swish, &self.data, &mut result);
 
         Ok(Vector::from_vec(result))
     }
