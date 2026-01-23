@@ -97,3 +97,99 @@ impl Brick for CpuPanelBrick {
         self
     }
 }
+
+impl Default for CpuPanelBrick {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use presentar_core::RecordingCanvas;
+
+    #[test]
+    fn test_cpu_panel_brick_name() {
+        let panel = CpuPanelBrick::new();
+        assert_eq!(panel.brick_name(), "cpu_panel");
+    }
+
+    #[test]
+    fn test_cpu_panel_has_assertions() {
+        let panel = CpuPanelBrick::new();
+        assert!(!panel.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_cpu_panel_paint_empty() {
+        let panel = CpuPanelBrick::new();
+        let mut canvas = RecordingCanvas::new();
+
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw header and per-core meters even with no graph data
+        assert!(!canvas.is_empty());
+        // Header + "Per-Core Usage" + 8 cores * (label + meter + percent) = many commands
+        assert!(canvas.command_count() >= 10);
+    }
+
+    #[test]
+    fn test_cpu_panel_paint_with_data() {
+        let mut panel = CpuPanelBrick::new();
+        panel.cpu_data = vec![10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0];
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw CPU graph + meters
+        assert!(canvas.command_count() >= 15);
+    }
+
+    #[test]
+    fn test_cpu_panel_paint_with_intensity() {
+        let mut panel = CpuPanelBrick::new();
+        panel.intensity = 0.8; // 80% intensity
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Intensity affects per-core usage display
+        assert!(!canvas.is_empty());
+    }
+
+    #[test]
+    fn test_cpu_panel_paint_high_usage() {
+        let mut panel = CpuPanelBrick::new();
+        // High usage data
+        panel.cpu_data = vec![90.0, 95.0, 92.0, 88.0, 91.0];
+        panel.intensity = 1.0; // Max intensity
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should handle high usage values without crashing
+        assert!(canvas.command_count() >= 10);
+    }
+
+    #[test]
+    fn test_cpu_panel_default() {
+        let panel = CpuPanelBrick::default();
+        assert!(panel.cpu_data.is_empty());
+        assert_eq!(panel.intensity, 0.0);
+    }
+
+    #[test]
+    fn test_cpu_panel_verify() {
+        let panel = CpuPanelBrick::new();
+        let verification = panel.verify();
+        assert!(verification.is_valid());
+    }
+
+    #[test]
+    fn test_cpu_panel_budget() {
+        let panel = CpuPanelBrick::new();
+        let budget = panel.budget();
+        assert_eq!(budget.total_ms(), 16); // FRAME_60FPS
+    }
+}

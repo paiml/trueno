@@ -55,7 +55,7 @@
 //!
 //! Run with: `cargo run -p trueno-gpu --example register_allocation`
 
-use trueno_gpu::ptx::{PtxKernel, PtxModule, PtxReg, PtxType};
+use trueno_gpu::ptx::{PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxModule, PtxReg, PtxType};
 
 fn main() {
     println!("=== trueno-gpu: Register Allocation Strategy ===\n");

@@ -23,6 +23,7 @@
 //! 4. **Leader Encoding**: Lane 0 encodes tokens sequentially
 
 use super::Kernel;
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// LZ4 minimum match length (per LZ4 block format spec)

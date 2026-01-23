@@ -22,14 +22,17 @@
 //! assert!(ptx.contains(".version 8.0"));
 //! ```
 
-mod builder;
+pub mod builder;
 mod emit;
 mod instructions;
 pub mod optimize;
 mod registers;
 mod types;
 
-pub use builder::{KernelBuilder, PtxKernel, PtxModule};
+pub use builder::{
+    KernelBuilder, KernelBuilderCore, PtxArithmetic, PtxAtomic, PtxComparison, PtxControl,
+    PtxKernel, PtxMemory, PtxModule, PtxSync,
+};
 pub use instructions::{CmpOp, Operand, PtxInstruction, PtxOp, WmmaLayout, WmmaShape};
 pub use registers::{LiveRange, PhysicalReg, PtxReg, RegisterAllocator, VirtualReg};
 pub use types::{PtxStateSpace, PtxType};

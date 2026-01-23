@@ -23,6 +23,9 @@
 | `trueno-gpu/src/kernels/quantize.rs` | 10,918 | 8 modules |
 | `trueno-gpu/src/ptx/builder.rs` | 6,660 | 7 modules |
 | `src/tuner.rs` | 6,295 | 9 modules |
+| `src/resident.rs` | ~2,500 | 4 modules (Residency, Cache, Eviction, Stats) |
+| `src/backends/avx2.rs` | ~3,200 | 6 modules (Arithmetic, Reductions, Quant, etc.) |
+| `src/backends/q4k.rs` | ~2,800 | 5 modules (Deq, Gemv, Gemm, ColMajor, Dispatch) |
 
 ### Low Coverage Files (cbtop)
 
@@ -583,3 +586,28 @@ cargo modules generate graph | dot -Tpng > architecture.png
 | 2026-01-23 | Shatter `brick.rs` (Profile) | Created `profiler` (1.8k lines); Isolated `BrickProfiler` and `TileStats` | User |
 | 2026-01-23 | Shatter `brick.rs` (Logic) | Created `tracing`, `patterns`, `ops`; Reduced `mod.rs` to ~9k lines | User |
 | 2026-01-23 | Shatter `brick.rs` (Final) | Extracted `tests.rs`, `fused_ops`, `attention`, `quant_ops`. `mod.rs` < 1k lines | User |
+| 2026-01-23 | Shatter `quantize.rs` (Partial) | Extracted `fused.rs` (890 lines); Reduced `mod.rs` by 10% | User |
+| 2026-01-23 | Phase 3: Coverage (Quantize) | `q6k.rs` (GPU) 100% coverage; `q4k`/`q6k` (Backend) +15-24% coverage | User |
+| 2026-01-23 | Phase 3: Hardware (SIMD) | Added AVX2 tests for Threadripper 7960X; Verified large matrix/batch paths | User |
+| 2026-01-23 | Shatter `vector.rs` (Final) | Reduced `mod.rs` to 1.2k lines; Extracted `arithmetic`, `reductions` | User |
+| 2026-01-23 | Phase 3: Parity (Golden) | Added Golden Vector tests for Q4K/Q6K; Verified <0.001% error invariants | User |
+| 2026-01-23 | Shatter `tuner.rs` (Partial) | Reduced `mod.rs` to 3.1k lines; Added "Impossible" robustness tests | User |
+| 2026-01-23 | Phase 3: Coverage (GPU) | Added 29 elementwise kernel tests; Overall coverage reached 81.3% | User |
+| 2026-01-23 | Phase 3: Coverage (Ops) | `quant_ops.rs` reached 99% coverage; `profiler.rs` reached 92% | User |
+| 2026-01-23 | Phase 3: Coverage (Vector) | `arithmetic.rs` (93%), `reductions.rs` (91%); Removed blanket dead_code | User |
+| 2026-01-23 | Phase 3: Coverage (Backend) | `q4k.rs` (77%), `q6k.rs` (83%); Added parallel matmul tests | User |
+| 2026-01-23 | Shatter `builder.rs` (Partial) | Reduced `mod.rs` to 3.4k lines (48% reduction); Enforced Trait Pattern | User |
+| 2026-01-23 | Phase 3: Coverage (UI) | Implemented `MockCanvas` via `RecordingCanvas`; Added 38 panel paint tests | User |
+| 2026-01-23 | Phase 3: Coverage (PTX) | `arithmetic.rs` (99%), `memory.rs` (99%); Verified trait method generation | User |
+| 2026-01-23 | Phase 2: TDG (Doc Fix) | Converted doc comment `.unwrap()` to `?` in `rounding.rs`; Score 93.6 | User |
+| 2026-01-23 | Phase 3: Coverage (Atomics) | `atomic.rs` (95%+), `sync.rs` (95%+); Added warp reduction tests | User |
+| 2026-01-23 | Phase 1: Shatter (AVX2) | Extracted `avx2_tests.rs` (1k lines); `avx2.rs` reduced to 1.6k lines | User |
+| 2026-01-23 | Phase 3: Coverage (Matrix) | Added "Kitchen Sink" tests for `matrix/mod.rs`; `exec_graph` tests | User |
+| 2026-01-23 | Shatter `resident.rs` (Partial) | Extracted `stats.rs` (A+) and `cache.rs` (A); `mod.rs` still C+ | User |
+| 2026-01-23 | Shatter `resident.rs` (Final) | Extracted `weights`, `attention`; All modules are A-grade or higher | User |
+| 2026-01-23 | Shatter `q4k.rs` (Partial) | Converted to directory; Extracted `dequant.rs` (A+) | User |
+| 2026-01-23 | Shatter `q4k.rs` (Final) | Extracted `gemv.rs` (B), `colmajor.rs` (B-); Structure aligned with `q6k` | User |
+| 2026-01-23 | Shatter `q6k.rs` (Final) | Converted to directory; Extracted `gemv.rs` (B), `colmajor.rs` (B+) | User |
+| 2026-01-23 | Phase 3: Coverage (Delete) | Deleted 600 lines of dead AVX2 code; `colmajor.rs` improved to A/99% | User |
+| 2026-01-23 | Shatter `avx2.rs` (Final) | Delegated trait implementation to `ops/`; `mod.rs` improved to A (94.3) | User |
+| 2026-01-23 | Phase 1: SIMD Sweep | Delegated `sse2`, `wasm`, `avx512` to `ops/`; -72% line reduction; B- -> A/A+ | User |

@@ -219,11 +219,81 @@ impl Brick for ConfigPanelBrick {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use presentar_core::RecordingCanvas;
 
     #[test]
     fn test_config_panel_brick_name() {
         let panel = ConfigPanelBrick::new();
         assert_eq!(panel.brick_name(), "config_panel");
+    }
+
+    #[test]
+    fn test_config_panel_paint_default() {
+        let panel = ConfigPanelBrick::new();
+        let mut canvas = RecordingCanvas::new();
+
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw header, config path, profile, settings, and help
+        assert!(!canvas.is_empty());
+        assert!(canvas.command_count() >= 10);
+    }
+
+    #[test]
+    fn test_config_panel_paint_profile_list() {
+        let panel = ConfigPanelBrick::new();
+        let mut canvas = RecordingCanvas::new();
+
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw all 4 profiles + other UI elements
+        // At minimum: header, config path, active profile, 2 checkboxes, "Profiles:" label,
+        // 4 profile entries, 2 help lines = 12+ commands
+        assert!(canvas.command_count() >= 10);
+    }
+
+    #[test]
+    fn test_config_panel_paint_different_selections() {
+        let mut panel = ConfigPanelBrick::new();
+
+        // Test with each profile selected
+        for i in 0..panel.profiles.len() {
+            panel.selected_index = i;
+            let mut canvas = RecordingCanvas::new();
+            panel.paint(&mut canvas, 80.0, 24.0);
+            assert!(!canvas.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_config_panel_paint_with_settings_toggled() {
+        let mut panel = ConfigPanelBrick::new();
+
+        // Toggle settings off
+        panel.toggle_auto_save();
+        panel.toggle_load_last();
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should still render correctly with different checkbox states
+        assert!(!canvas.is_empty());
+    }
+
+    #[test]
+    fn test_config_panel_paint_no_active_profile() {
+        let mut panel = ConfigPanelBrick::new();
+
+        // Deactivate all profiles
+        for profile in &mut panel.profiles {
+            profile.is_active = false;
+        }
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should still render without crashing
+        assert!(!canvas.is_empty());
     }
 
     #[test]

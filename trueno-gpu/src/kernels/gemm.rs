@@ -5,6 +5,7 @@
 #![allow(clippy::similar_names)] // Variable names like a_addr, b_addr, bs_addr are semantically meaningful
 
 use super::Kernel;
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxType};
 
 /// GEMM kernel configuration

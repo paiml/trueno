@@ -16,7 +16,7 @@
 //! - 100% instruction intent coverage > 95% line coverage
 //! - If a generator produces wrong PTX, the test MUST fail
 
-use trueno_gpu::ptx::{PtxKernel, PtxModule, PtxReg, PtxType};
+use trueno_gpu::ptx::{PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxModule, PtxReg, PtxType};
 
 // ============================================================================
 // ARITHMETIC OPERATIONS - Golden Tests

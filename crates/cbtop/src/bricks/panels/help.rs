@@ -79,3 +79,60 @@ impl Brick for HelpPanelBrick {
         self
     }
 }
+
+impl Default for HelpPanelBrick {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use presentar_core::RecordingCanvas;
+
+    #[test]
+    fn test_help_panel_brick_name() {
+        let panel = HelpPanelBrick::new();
+        assert_eq!(panel.brick_name(), "help_panel");
+    }
+
+    #[test]
+    fn test_help_panel_has_assertions() {
+        let panel = HelpPanelBrick::new();
+        assert!(!panel.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_help_panel_paint() {
+        let panel = HelpPanelBrick::new();
+        let mut canvas = RecordingCanvas::new();
+
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw title and all keyboard controls
+        // 1 title + 8 controls (each has key + description)
+        assert!(!canvas.is_empty());
+        assert!(canvas.command_count() >= 10);
+    }
+
+    #[test]
+    fn test_help_panel_default() {
+        let panel = HelpPanelBrick::default();
+        assert_eq!(panel.brick_name(), "help_panel");
+    }
+
+    #[test]
+    fn test_help_panel_verify() {
+        let panel = HelpPanelBrick::new();
+        let verification = panel.verify();
+        assert!(verification.is_valid());
+    }
+
+    #[test]
+    fn test_help_panel_budget() {
+        let panel = HelpPanelBrick::new();
+        let budget = panel.budget();
+        assert_eq!(budget.total_ms(), 16); // FRAME_60FPS
+    }
+}

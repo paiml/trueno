@@ -19,6 +19,7 @@
 //! - Expected speedup: ~1.2x overall (from ~163 tok/s to ~200 tok/s)
 
 use super::Kernel;
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxType};
 
 /// ArgMax kernel configuration

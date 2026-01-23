@@ -576,4 +576,122 @@ mod tests {
         unsafe { Sse2Backend::sqrt(&a, &mut result); }
         assert_eq!(result, [1.0, 2.0, 3.0, 4.0, 5.0]);
     }
+
+    #[test]
+    fn test_sse2_sum_kahan() {
+        let a: Vec<f32> = (1..=16).map(|i| i as f32).collect();
+        let result = unsafe { Sse2Backend::sum_kahan(&a) };
+        assert!((result - 136.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_sse2_norm_l2() {
+        let a = vec![3.0, 4.0];
+        let result = unsafe { Sse2Backend::norm_l2(&a) };
+        assert!((result - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sse2_norm_l1() {
+        let a = vec![-1.0, 2.0, -3.0, 4.0];
+        let result = unsafe { Sse2Backend::norm_l1(&a) };
+        assert!((result - 10.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sse2_lerp() {
+        let a = vec![0.0; 16];
+        let b = vec![10.0; 16];
+        let mut result = vec![0.0; 16];
+        unsafe { Sse2Backend::lerp(&a, &b, 0.5, &mut result); }
+        assert!(result.iter().all(|&x| (x - 5.0).abs() < 1e-5));
+    }
+
+    #[test]
+    fn test_sse2_fma() {
+        let a = vec![2.0; 16];
+        let b = vec![3.0; 16];
+        let c = vec![1.0; 16];
+        let mut result = vec![0.0; 16];
+        unsafe { Sse2Backend::fma(&a, &b, &c, &mut result); }
+        assert!(result.iter().all(|&x| (x - 7.0).abs() < 1e-5));
+    }
+
+    #[test]
+    fn test_sse2_gelu() {
+        let a = vec![0.0, 1.0];
+        let mut result = vec![0.0; 2];
+        unsafe { Sse2Backend::gelu(&a, &mut result); }
+        assert!((result[0]).abs() < 1e-5);
+        assert!((result[1] - 0.841_192).abs() < 1e-2);
+    }
+
+    #[test]
+    fn test_sse2_swish() {
+        let a = vec![0.0, 1.0];
+        let mut result = vec![0.0; 2];
+        unsafe { Sse2Backend::swish(&a, &mut result); }
+        assert!((result[0]).abs() < 1e-5);
+        assert!((result[1] - 0.731_059).abs() < 1e-2);
+    }
+
+    #[test]
+    fn test_sse2_tanh() {
+        let a = vec![0.0, 1.0];
+        let mut result = vec![0.0; 2];
+        unsafe { Sse2Backend::tanh(&a, &mut result); }
+        assert!((result[0]).abs() < 1e-5);
+        assert!((result[1] - 0.761_594_2).abs() < 1e-2);
+    }
+
+    #[test]
+    fn test_sse2_recip() {
+        let a = vec![2.0, 4.0, 5.0];
+        let mut result = vec![0.0; 3];
+        unsafe { Sse2Backend::recip(&a, &mut result); }
+        assert!((result[0] - 0.5).abs() < 1e-5);
+        assert!((result[1] - 0.25).abs() < 1e-5);
+        assert!((result[2] - 0.2).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sse2_transcendental() {
+        let a = vec![1.0, std::f32::consts::E, 10.0];
+        let mut ln_result = vec![0.0; 3];
+        let mut log10_result = vec![0.0; 3];
+        unsafe {
+            Sse2Backend::ln(&a, &mut ln_result);
+            Sse2Backend::log10(&a, &mut log10_result);
+        }
+        assert!((ln_result[0]).abs() < 1e-5);
+        assert!((ln_result[1] - 1.0).abs() < 1e-4);
+        assert!((log10_result[2] - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sse2_trig() {
+        let a = vec![0.0, std::f32::consts::FRAC_PI_2];
+        let mut sin_result = vec![0.0; 2];
+        let mut cos_result = vec![0.0; 2];
+        unsafe {
+            Sse2Backend::sin(&a, &mut sin_result);
+            Sse2Backend::cos(&a, &mut cos_result);
+        }
+        assert!((sin_result[0]).abs() < 1e-5);
+        assert!((sin_result[1] - 1.0).abs() < 1e-5);
+        assert!((cos_result[0] - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_sse2_rounding() {
+        let a = vec![1.3, 1.5, 1.7, -1.3, -1.5, -1.7];
+        let mut floor_result = vec![0.0; 6];
+        let mut ceil_result = vec![0.0; 6];
+        unsafe {
+            Sse2Backend::floor(&a, &mut floor_result);
+            Sse2Backend::ceil(&a, &mut ceil_result);
+        }
+        assert_eq!(floor_result, vec![1.0, 1.0, 1.0, -2.0, -2.0, -2.0]);
+        assert_eq!(ceil_result, vec![2.0, 2.0, 2.0, -1.0, -1.0, -1.0]);
+    }
 }
