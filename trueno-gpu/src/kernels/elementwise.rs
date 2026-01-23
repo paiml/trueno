@@ -3350,4 +3350,257 @@ mod tests {
         assert!(ptx.contains("ld.global"), "Should have global loads");
         assert!(ptx.contains("st.global"), "Should have global stores");
     }
+
+    // ===== ScaleKernel Tests =====
+
+    #[test]
+    fn test_scale_kernel_new() {
+        let kernel = ScaleKernel::new(1024);
+        assert_eq!(kernel.n, 1024);
+    }
+
+    #[test]
+    fn test_scale_kernel_name() {
+        let kernel = ScaleKernel::new(1024);
+        assert_eq!(kernel.name(), "scale");
+    }
+
+    #[test]
+    fn test_scale_kernel_ptx_generation() {
+        let kernel = ScaleKernel::new(2048);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry scale"), "Should have scale entry");
+        assert!(ptx.contains(".param .u64 input_ptr"), "Should have input_ptr");
+        assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
+        assert!(ptx.contains(".param .f32 scale"), "Should have scale param");
+        assert!(ptx.contains(".param .u32 n"), "Should have n param");
+        assert!(ptx.contains("mul.f32"), "Should have multiply op");
+    }
+
+    // ===== TransposeKernel Tests =====
+
+    #[test]
+    fn test_transpose_kernel_new() {
+        let kernel = TransposeKernel::new(512, 1024);
+        assert_eq!(kernel.rows, 512);
+        assert_eq!(kernel.cols, 1024);
+    }
+
+    #[test]
+    fn test_transpose_kernel_name() {
+        let kernel = TransposeKernel::new(64, 64);
+        assert_eq!(kernel.name(), "transpose");
+    }
+
+    #[test]
+    fn test_transpose_kernel_ptx_generation() {
+        let kernel = TransposeKernel::new(256, 512);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry transpose"), "Should have transpose entry");
+        assert!(ptx.contains(".param .u64 input_ptr"), "Should have input_ptr");
+        assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
+        assert!(ptx.contains(".param .u32 rows"), "Should have rows param");
+        assert!(ptx.contains(".param .u32 cols"), "Should have cols param");
+    }
+
+    #[test]
+    fn test_transpose_various_dimensions() {
+        for (rows, cols) in [(64, 64), (128, 256), (512, 128), (1024, 1024)] {
+            let kernel = TransposeKernel::new(rows, cols);
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+            assert!(ptx.contains(".entry"));
+        }
+    }
+
+    // ===== InterleavedToBatchedKernel Tests =====
+
+    #[test]
+    fn test_interleaved_to_batched_kernel_new() {
+        let kernel = InterleavedToBatchedKernel::new(128, 32, 64);
+        assert_eq!(kernel.seq_len, 128);
+        assert_eq!(kernel.n_heads, 32);
+        assert_eq!(kernel.head_dim, 64);
+    }
+
+    #[test]
+    fn test_interleaved_to_batched_kernel_name() {
+        let kernel = InterleavedToBatchedKernel::new(128, 32, 64);
+        assert_eq!(kernel.name(), "interleaved_to_batched");
+    }
+
+    #[test]
+    fn test_interleaved_to_batched_kernel_ptx_generation() {
+        let kernel = InterleavedToBatchedKernel::new(256, 16, 128);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry interleaved_to_batched"), "Should have entry");
+        assert!(ptx.contains(".param .u64 input_ptr"), "Should have input_ptr");
+        assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
+    }
+
+    // ===== ExtractSingleHeadKernel Tests =====
+
+    #[test]
+    fn test_extract_single_head_kernel_new() {
+        let kernel = ExtractSingleHeadKernel::new(128, 32, 64);
+        assert_eq!(kernel.seq_len, 128);
+        assert_eq!(kernel.n_heads, 32);
+        assert_eq!(kernel.head_dim, 64);
+    }
+
+    #[test]
+    fn test_extract_single_head_kernel_name() {
+        let kernel = ExtractSingleHeadKernel::new(128, 32, 64);
+        assert_eq!(kernel.name(), "extract_single_head");
+    }
+
+    #[test]
+    fn test_extract_single_head_kernel_ptx_generation() {
+        let kernel = ExtractSingleHeadKernel::new(256, 32, 128);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry extract_single_head"), "Should have entry");
+        assert!(ptx.contains("ld.global"), "Should have global loads");
+        assert!(ptx.contains("st.global"), "Should have global stores");
+    }
+
+    // ===== CopySingleHeadKernel Tests =====
+
+    #[test]
+    fn test_copy_single_head_kernel_new() {
+        let kernel = CopySingleHeadKernel::new(128, 32, 64);
+        assert_eq!(kernel.seq_len, 128);
+        assert_eq!(kernel.n_heads, 32);
+        assert_eq!(kernel.head_dim, 64);
+    }
+
+    #[test]
+    fn test_copy_single_head_kernel_name() {
+        let kernel = CopySingleHeadKernel::new(128, 32, 64);
+        assert_eq!(kernel.name(), "copy_single_head");
+    }
+
+    #[test]
+    fn test_copy_single_head_kernel_ptx_generation() {
+        let kernel = CopySingleHeadKernel::new(256, 32, 128);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry copy_single_head"), "Should have entry");
+        assert!(ptx.contains("ld.global"), "Should have global loads");
+        assert!(ptx.contains("st.global"), "Should have global stores");
+    }
+
+    // ===== BatchedToInterleavedKernel Tests =====
+
+    #[test]
+    fn test_batched_to_interleaved_kernel_new() {
+        let kernel = BatchedToInterleavedKernel::new(128, 32, 64);
+        assert_eq!(kernel.seq_len, 128);
+        assert_eq!(kernel.n_heads, 32);
+        assert_eq!(kernel.head_dim, 64);
+    }
+
+    #[test]
+    fn test_batched_to_interleaved_kernel_name() {
+        let kernel = BatchedToInterleavedKernel::new(128, 32, 64);
+        assert_eq!(kernel.name(), "batched_to_interleaved");
+    }
+
+    #[test]
+    fn test_batched_to_interleaved_kernel_ptx_generation() {
+        let kernel = BatchedToInterleavedKernel::new(256, 16, 128);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry batched_to_interleaved"), "Should have entry");
+        assert!(ptx.contains("ld.global"), "Should have global loads");
+        assert!(ptx.contains("st.global"), "Should have global stores");
+    }
+
+    // ===== BatchedTransposeKernel Tests =====
+
+    #[test]
+    fn test_batched_transpose_kernel_new() {
+        let kernel = BatchedTransposeKernel::new(32, 128, 64);
+        assert_eq!(kernel.batch, 32);
+        assert_eq!(kernel.rows, 128);
+        assert_eq!(kernel.cols, 64);
+    }
+
+    #[test]
+    fn test_batched_transpose_kernel_name() {
+        let kernel = BatchedTransposeKernel::new(32, 128, 64);
+        assert_eq!(kernel.name(), "batched_transpose");
+    }
+
+    #[test]
+    fn test_batched_transpose_kernel_ptx_generation() {
+        let kernel = BatchedTransposeKernel::new(16, 256, 128);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry batched_transpose"), "Should have entry");
+        assert!(ptx.contains("ld.global"), "Should have global loads");
+        assert!(ptx.contains("st.global"), "Should have global stores");
+    }
+
+    // ===== BatchedScaleKernel Tests =====
+
+    #[test]
+    fn test_batched_scale_kernel_new() {
+        let kernel = BatchedScaleKernel::new(1024);
+        assert_eq!(kernel.n, 1024);
+    }
+
+    #[test]
+    fn test_batched_scale_kernel_name() {
+        let kernel = BatchedScaleKernel::new(1024);
+        assert_eq!(kernel.name(), "batched_scale");
+    }
+
+    #[test]
+    fn test_batched_scale_kernel_ptx_generation() {
+        let kernel = BatchedScaleKernel::new(2048);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry batched_scale"), "Should have entry");
+        assert!(ptx.contains(".param .f32 scale"), "Should have scale param");
+        assert!(ptx.contains("mul.f32"), "Should have multiply op");
+    }
+
+    // ===== BatchedSoftmaxKernel Tests =====
+
+    #[test]
+    fn test_batched_softmax_kernel_new() {
+        let kernel = BatchedSoftmaxKernel::new(32, 128);
+        assert_eq!(kernel.total_rows, 32);
+        assert_eq!(kernel.row_size, 128);
+    }
+
+    #[test]
+    fn test_batched_softmax_kernel_name() {
+        let kernel = BatchedSoftmaxKernel::new(32, 128);
+        assert_eq!(kernel.name(), "batched_softmax");
+    }
+
+    #[test]
+    fn test_batched_softmax_kernel_ptx_generation() {
+        let kernel = BatchedSoftmaxKernel::new(16, 256);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry batched_softmax"), "Should have entry");
+        // Softmax uses exp
+        assert!(ptx.contains("ex2") || ptx.contains("exp"), "Should have exp operation");
+    }
+
+    #[test]
+    fn test_batched_softmax_various_sizes() {
+        for (total_rows, row_size) in [(1, 64), (8, 128), (32, 256), (64, 512)] {
+            let kernel = BatchedSoftmaxKernel::new(total_rows, row_size);
+            let ptx = kernel.emit_ptx();
+            assert!(!ptx.is_empty());
+            assert!(ptx.contains(".entry"));
+        }
+    }
 }
