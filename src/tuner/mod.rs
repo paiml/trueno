@@ -2255,7 +2255,7 @@ impl BrickTuner {
         use std::time::Instant;
 
         let start = Instant::now();
-        let hw = crate::hardware::detect_hardware();
+        let hw = crate::hardware::HardwareCapability::detect();
         let hardware_id = format!("{:?}", hw.gpu);
 
         // Generate synthetic calibration samples based on hardware

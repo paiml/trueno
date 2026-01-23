@@ -31,7 +31,6 @@ mod fkr_101_debug_tests {
             eprintln!("FKR-101 SKIPPED: No CUDA device available");
             return;
         }
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -96,7 +95,6 @@ mod fkr_101_debug_tests {
     /// FKR-101-SMEM: Test debug with shared memory
     #[test]
     fn fkr_101_smem_debug_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
         if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");

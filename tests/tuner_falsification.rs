@@ -810,7 +810,7 @@ fn f042_single_sample_graceful() {
 fn f043_nan_labels_error() {
     let mut regressor = ThroughputRegressor::with_random_forest(10);
     let features = TunerFeatures::builder().model_params_b(1.5).build();
-    let data = vec![(features, f32::NAN)];
+    let data = vec![(features.clone(), f32::NAN)];
 
     let result = regressor.train_random_forest(&data);
     // Should handle gracefully (either error or filter)

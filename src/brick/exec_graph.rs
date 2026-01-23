@@ -960,7 +960,7 @@ impl ExecutionGraph {
                     (
                         format!("{:?}: {} → {}", direction, src, dst),
                         Some(format!("{}B{}", bytes, timing_str)),
-                        Color::Magenta, // Transfer color
+                        Color::new(0.8, 0.4, 0.8, 1.0), // Transfer color (magenta)
                     )
                 }
                 ExecutionNode::AsyncTask {
@@ -983,7 +983,7 @@ impl ExecutionGraph {
                             *total_poll_ns as f64 / 1000.0,
                             efficiency
                         )),
-                        Color::Cyan, // Async task color
+                        Color::new(0.4, 0.8, 0.8, 1.0), // Async task color (cyan)
                     )
                 }
             };
