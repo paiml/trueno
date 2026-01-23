@@ -397,76 +397,7 @@ impl<'a> KernelBuilder<'a> {
         vreg
     }
 
-    // ===== Arithmetic =====
-
-    /// Multiply-add low: dst = a * b + c
-    pub fn mad_lo_u32(&mut self, a: VirtualReg, b: VirtualReg, c: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::MadLo, PtxType::U32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b))
-                .src(Operand::Reg(c)),
-        );
-        dst
-    }
-
-    /// Multiply wide (u32 * u32 -> u64)
-    pub fn mul_wide_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U64);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Mul, PtxType::U64)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::ImmU64(b as u64)),
-        );
-        dst
-    }
-
-    /// Multiply wide (u32 * u32 -> u64) with register operands
-    pub fn mul_wide_u32_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U64);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Mul, PtxType::U64)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b)),
-        );
-        dst
-    }
-
-    /// Add u64
-    pub fn add_u64(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U64);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Add, PtxType::U64)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b)),
-        );
-        dst
-    }
-
-    /// Add u64 into existing register (register reuse for low pressure)
-    pub fn add_u64_into(&mut self, dst: VirtualReg, a: VirtualReg, b: VirtualReg) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Add, PtxType::U64)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b)),
-        );
-    }
-
-    /// Add u32 into existing register (register reuse for low pressure)
-    pub fn add_u32_into(&mut self, dst: VirtualReg, a: VirtualReg, b: VirtualReg) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Add, PtxType::U32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b)),
-        );
-    }
+    // ===== Register Reuse Operations (not in traits) =====
 
     /// Move u64 immediate into existing register (register reuse)
     pub fn mov_u64_into(&mut self, dst: VirtualReg, val: u64) {
@@ -486,49 +417,11 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
-    /// Add f32
-    pub fn add_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::F32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Add, PtxType::F32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b))
-                .rounding(RoundingMode::Rn),
-        );
-        dst
-    }
+    // Comparison and Memory operations now in PtxComparison and PtxMemory traits
 
-    // ===== Comparison =====
+    // ===== Memory Operations (vectorized - not in traits) =====
 
-    /// Set predicate if a >= b (unsigned)
-    pub fn setp_ge_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let pred = self.registers.allocate_virtual(PtxType::Pred);
-        let mut instr = PtxInstruction::new(PtxOp::Setp, PtxType::U32)
-            .dst(Operand::Reg(pred))
-            .src(Operand::Reg(a))
-            .src(Operand::Reg(b));
-        // Comparison operator stored in label field (emitted as setp.ge.u32)
-        instr.label = Some(CmpOp::Ge.to_ptx_string().to_string());
-        self.instructions.push(instr);
-        pred
-    }
-
-    /// Set predicate if a == b
-    pub fn setp_eq_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let pred = self.registers.allocate_virtual(PtxType::Pred);
-        let mut instr = PtxInstruction::new(PtxOp::Setp, PtxType::U32)
-            .dst(Operand::Reg(pred))
-            .src(Operand::Reg(a))
-            .src(Operand::Reg(b));
-        instr.label = Some(CmpOp::Eq.to_ptx_string().to_string());
-        self.instructions.push(instr);
-        pred
-    }
-
-    // ===== Memory Operations =====
-
-    /// Load f32 from global memory
+    /// Load f32 from global memory (kept for compatibility - delegates to trait)
     pub fn ld_global_f32(&mut self, addr: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::F32);
         self.instructions.push(
@@ -573,82 +466,9 @@ impl<'a> KernelBuilder<'a> {
         [r0, r1, r2, r3]
     }
 
-    // ===== Control Flow =====
+    // ===== Immediate Arithmetic (not in traits - different signatures) =====
 
-    /// Branch if predicate is true
-    pub fn branch_if(&mut self, pred: VirtualReg, label: &str) {
-        let predicate = Predicate {
-            reg: pred,
-            negated: false,
-        };
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Bra, PtxType::B32)
-                .predicated(predicate)
-                .label(label),
-        );
-    }
-
-    /// Define a label
-    pub fn label(&mut self, name: &str) {
-        self.labels.push(name.to_string());
-        // Labels are emitted inline, store as special instruction
-        let mut instr = PtxInstruction::new(PtxOp::Mov, PtxType::B32);
-        instr.label = Some(format!("{}:", name));
-        self.instructions.push(instr);
-    }
-
-    /// Return from kernel
-    pub fn ret(&mut self) {
-        self.instructions
-            .push(PtxInstruction::new(PtxOp::Ret, PtxType::B32));
-    }
-
-    /// Unconditional branch
-    pub fn branch(&mut self, label: &str) {
-        self.instructions
-            .push(PtxInstruction::new(PtxOp::Bra, PtxType::B32).label(label));
-    }
-
-    // ===== Immediate Moves =====
-
-    /// Move immediate f32 value
-    pub fn mov_f32_imm(&mut self, val: f32) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::F32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Mov, PtxType::F32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::ImmF32(val)),
-        );
-        dst
-    }
-
-    /// Move immediate u32 value
-    pub fn mov_u32_imm(&mut self, val: u32) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Mov, PtxType::U32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::ImmU64(val as u64)),
-        );
-        dst
-    }
-
-    // ===== Additional Arithmetic =====
-
-    /// Multiply f32
-    pub fn mul_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::F32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Mul, PtxType::F32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b))
-                .rounding(RoundingMode::Rn),
-        );
-        dst
-    }
-
-    /// Add u32
+    /// Add u32 with immediate (different from trait version which takes two registers)
     pub fn add_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
@@ -656,20 +476,6 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(a))
                 .src(Operand::ImmU64(b as u64)),
-        );
-        dst
-    }
-
-    /// Fused multiply-add f32: dst = a * b + c
-    pub fn fma_f32(&mut self, a: VirtualReg, b: VirtualReg, c: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::F32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Fma, PtxType::F32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b))
-                .src(Operand::Reg(c))
-                .rounding(RoundingMode::Rn),
         );
         dst
     }
@@ -1000,18 +806,6 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
-    /// Max f32 of two values
-    pub fn max_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::F32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Max, PtxType::F32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b)),
-        );
-        dst
-    }
-
     /// Min u32 of two values
     pub fn min_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
@@ -1045,43 +839,6 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val)),
         );
-        dst
-    }
-
-    /// Sub f32
-    pub fn sub_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::F32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Sub, PtxType::F32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b)),
-        );
-        dst
-    }
-
-    /// Div f32
-    pub fn div_f32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::F32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Div, PtxType::F32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b)),
-        );
-        dst
-    }
-
-    /// Setp less than u32
-    pub fn setp_lt_u32(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::Pred);
-        let mut instr = PtxInstruction::new(PtxOp::Setp, PtxType::U32)
-            .dst(Operand::Reg(dst))
-            .src(Operand::Reg(a))
-            .src(Operand::Reg(b));
-        // Comparison operator stored in label field (emitted as setp.lt.u32)
-        instr.label = Some(CmpOp::Lt.to_ptx_string().to_string());
-        self.instructions.push(instr);
         dst
     }
 

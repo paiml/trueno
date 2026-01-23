@@ -19,14 +19,15 @@
 //! let cov = Matrix::from_vec(2, 2, vec![
 //!     2.0, 1.0,
 //!     1.0, 2.0,
-//! ]).unwrap();
+//! ])?;
 //!
-//! let eigen = SymmetricEigen::new(&cov).unwrap();
+//! let eigen = SymmetricEigen::new(&cov)?;
 //!
 //! // Eigenvalues in descending order (PCA convention)
 //! let values = eigen.eigenvalues();
 //! assert!((values[0] - 3.0).abs() < 1e-6);  // λ₁ = 3
 //! assert!((values[1] - 1.0).abs() < 1e-6);  // λ₂ = 1
+//! # Ok::<(), trueno::TruenoError>(())
 //! ```
 
 use crate::{Backend, Matrix, TruenoError, Vector};
@@ -100,10 +101,11 @@ impl SymmetricEigen {
     ///     4.0, 2.0, 0.0,
     ///     2.0, 5.0, 3.0,
     ///     0.0, 3.0, 6.0,
-    /// ]).unwrap();
+    /// ])?;
     ///
-    /// let eigen = SymmetricEigen::new(&m).unwrap();
+    /// let eigen = SymmetricEigen::new(&m)?;
     /// assert_eq!(eigen.eigenvalues().len(), 3);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn new(matrix: &Matrix<f32>) -> Result<Self, TruenoError> {
         // Validate input
@@ -353,12 +355,13 @@ impl SymmetricEigen {
     /// ```
     /// use trueno::{Matrix, SymmetricEigen};
     ///
-    /// let m = Matrix::from_vec(2, 2, vec![3.0, 1.0, 1.0, 3.0]).unwrap();
-    /// let eigen = SymmetricEigen::new(&m).unwrap();
+    /// let m = Matrix::from_vec(2, 2, vec![3.0, 1.0, 1.0, 3.0])?;
+    /// let eigen = SymmetricEigen::new(&m)?;
     ///
     /// let values = eigen.eigenvalues();
     /// assert!((values[0] - 4.0).abs() < 1e-5);  // λ₁ = 4
     /// assert!((values[1] - 2.0).abs() < 1e-5);  // λ₂ = 2
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn eigenvalues(&self) -> &[f32] {
         &self.eigenvalues
@@ -375,12 +378,13 @@ impl SymmetricEigen {
     /// use trueno::{Matrix, SymmetricEigen};
     ///
     /// let m = Matrix::identity(3);
-    /// let eigen = SymmetricEigen::new(&m).unwrap();
+    /// let eigen = SymmetricEigen::new(&m)?;
     ///
     /// // Identity matrix has eigenvectors that are the standard basis
     /// let vectors = eigen.eigenvectors();
     /// assert_eq!(vectors.rows(), 3);
     /// assert_eq!(vectors.cols(), 3);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn eigenvectors(&self) -> &Matrix<f32> {
         &self.eigenvectors
@@ -393,12 +397,13 @@ impl SymmetricEigen {
     /// ```
     /// use trueno::{Matrix, SymmetricEigen};
     ///
-    /// let m = Matrix::from_vec(2, 2, vec![2.0, 0.0, 0.0, 1.0]).unwrap();
-    /// let eigen = SymmetricEigen::new(&m).unwrap();
+    /// let m = Matrix::from_vec(2, 2, vec![2.0, 0.0, 0.0, 1.0])?;
+    /// let eigen = SymmetricEigen::new(&m)?;
     ///
     /// for (value, vector) in eigen.iter() {
     ///     println!("λ = {}, v = {:?}", value, vector.as_slice());
     /// }
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn iter(&self) -> EigenIterator<'_> {
         EigenIterator {
@@ -458,12 +463,13 @@ impl SymmetricEigen {
     /// ```
     /// use trueno::{Matrix, SymmetricEigen};
     ///
-    /// let m = Matrix::from_vec(2, 2, vec![4.0, 2.0, 2.0, 4.0]).unwrap();
-    /// let eigen = SymmetricEigen::new(&m).unwrap();
-    /// let reconstructed = eigen.reconstruct().unwrap();
+    /// let m = Matrix::from_vec(2, 2, vec![4.0, 2.0, 2.0, 4.0])?;
+    /// let eigen = SymmetricEigen::new(&m)?;
+    /// let reconstructed = eigen.reconstruct()?;
     ///
     /// // Should be approximately equal to original
     /// assert!((reconstructed.get(0, 0).unwrap() - 4.0).abs() < 1e-5);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn reconstruct(&self) -> Result<Matrix<f32>, TruenoError> {
         let n = self.eigenvalues.len();

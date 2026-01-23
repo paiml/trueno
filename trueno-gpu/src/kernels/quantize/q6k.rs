@@ -16,6 +16,7 @@
 //! - [`BatchedQ6KGemvKernel`]: Batched version for M>1 processing (PAR-130)
 
 use super::{Kernel, Q6K_SUPER_BLOCK_BYTES, Q6K_SUPER_BLOCK_SIZE};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 // =============================================================================

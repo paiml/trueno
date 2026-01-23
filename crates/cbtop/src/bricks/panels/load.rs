@@ -445,11 +445,94 @@ impl Brick for LoadControlPanelBrick {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use presentar_core::RecordingCanvas;
 
     #[test]
     fn test_load_control_brick_name() {
         let panel = LoadControlPanelBrick::new();
         assert_eq!(panel.brick_name(), "load_control_panel");
+    }
+
+    #[test]
+    fn test_load_control_paint_stopped() {
+        let panel = LoadControlPanelBrick::new();
+        let mut canvas = RecordingCanvas::new();
+
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw header, controls, and help text
+        assert!(!canvas.is_empty());
+        assert!(canvas.command_count() >= 10);
+    }
+
+    #[test]
+    fn test_load_control_paint_running() {
+        let mut panel = LoadControlPanelBrick::new();
+        panel.toggle_running();
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw RUNNING status
+        assert!(!canvas.is_empty());
+    }
+
+    #[test]
+    fn test_load_control_paint_with_stats() {
+        let mut panel = LoadControlPanelBrick::new();
+        panel.toggle_running();
+        panel.update_stats(LoadStats {
+            iterations: 1000,
+            elapsed_ms: 5000,
+            ops_per_sec: 200.0,
+            throughput_gbs: 1.5,
+            avg_latency_us: 500.0,
+            p99_latency_us: 1200.0,
+        });
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw stats section
+        assert!(canvas.command_count() >= 15);
+    }
+
+    #[test]
+    fn test_load_control_paint_with_error() {
+        let mut panel = LoadControlPanelBrick::new();
+        panel.set_error("GPU not available".to_string());
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw error message
+        assert!(!canvas.is_empty());
+    }
+
+    #[test]
+    fn test_load_control_paint_with_score() {
+        let mut panel = LoadControlPanelBrick::new();
+        let score = BrickScore::new(38, 22, 20, 14);
+        panel.update_score(score, 27.92);
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw ComputeBrick score section
+        assert!(canvas.command_count() >= 15);
+    }
+
+    #[test]
+    fn test_load_control_paint_different_selections() {
+        let mut panel = LoadControlPanelBrick::new();
+
+        // Test with each menu item selected
+        for item in 0..5 {
+            panel.selected_item = item;
+            let mut canvas = RecordingCanvas::new();
+            panel.paint(&mut canvas, 80.0, 24.0);
+            assert!(!canvas.is_empty());
+        }
     }
 
     #[test]

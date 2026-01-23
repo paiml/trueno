@@ -31,7 +31,7 @@ pub enum ShutdownResult {
 /// let shutdown = GracefulShutdown::new(Duration::from_secs(5));
 ///
 /// // Register an operation
-/// let guard = shutdown.register().unwrap();
+/// let guard = shutdown.register().ok_or("shutdown in progress")?;
 ///
 /// // ... do work ...
 ///
@@ -40,6 +40,7 @@ pub enum ShutdownResult {
 /// // Initiate shutdown
 /// let result = shutdown.shutdown();
 /// assert_eq!(result, trueno::brick::ShutdownResult::Clean);
+/// # Ok::<(), &'static str>(())
 /// ```
 pub struct GracefulShutdown {
     /// Flag indicating shutdown has been requested.

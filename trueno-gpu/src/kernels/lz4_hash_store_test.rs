@@ -10,6 +10,7 @@
 //! 3. Store a constant to hash_entry_addr
 //! 4. Write success marker to global memory
 
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 use super::Kernel;
 

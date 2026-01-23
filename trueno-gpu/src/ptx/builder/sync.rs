@@ -330,4 +330,90 @@ mod tests {
 
         assert_eq!(builder.instructions.len(), 7);
     }
+
+    #[test]
+    fn test_shfl_down_u32() {
+        let mut builder = MockBuilder::new();
+        let val = builder.registers.allocate_virtual(PtxType::U32);
+
+        let result = builder.shfl_down_u32(val, 8);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::ShflDown);
+        assert_eq!(builder.instructions[0].ty, PtxType::U32);
+        assert!(result.id() > 0);
+    }
+
+    #[test]
+    fn test_shfl_xor_f32() {
+        let mut builder = MockBuilder::new();
+        let val = builder.registers.allocate_virtual(PtxType::F32);
+
+        let result = builder.shfl_xor_f32(val, 0x1F);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::ShflBfly);
+        assert_eq!(builder.instructions[0].ty, PtxType::F32);
+        assert!(result.id() > 0);
+    }
+
+    #[test]
+    fn test_shfl_idx_f32() {
+        let mut builder = MockBuilder::new();
+        let val = builder.registers.allocate_virtual(PtxType::F32);
+
+        let result = builder.shfl_idx_f32(val, 0);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::ShflIdx);
+        assert_eq!(builder.instructions[0].ty, PtxType::F32);
+        assert!(result.id() > 0);
+    }
+
+    #[test]
+    fn test_bfe_u32() {
+        let mut builder = MockBuilder::new();
+        let val = builder.registers.allocate_virtual(PtxType::U32);
+
+        let result = builder.bfe_u32(val, 4, 8);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::Bfe);
+        assert_eq!(builder.instructions[0].ty, PtxType::U32);
+        assert!(result.id() > 0);
+    }
+
+    #[test]
+    fn test_all_shuffle_variants() {
+        let mut builder = MockBuilder::new();
+        let f32_val = builder.registers.allocate_virtual(PtxType::F32);
+        let u32_val = builder.registers.allocate_virtual(PtxType::U32);
+
+        // All shuffle operations
+        let _shfl_down_f32 = builder.shfl_down_f32(f32_val, 16);
+        let _shfl_down_u32 = builder.shfl_down_u32(u32_val, 16);
+        let _shfl_xor_f32 = builder.shfl_xor_f32(f32_val, 0x10);
+        let _shfl_idx_f32 = builder.shfl_idx_f32(f32_val, 0);
+
+        assert_eq!(builder.instructions.len(), 4);
+    }
+
+    #[test]
+    fn test_warp_reduction_pattern() {
+        // Test a typical warp reduction pattern
+        let mut builder = MockBuilder::new();
+        let val = builder.registers.allocate_virtual(PtxType::F32);
+
+        // Butterfly reduction: shfl_xor with decreasing masks
+        let _r1 = builder.shfl_xor_f32(val, 16);
+        let _r2 = builder.shfl_xor_f32(val, 8);
+        let _r3 = builder.shfl_xor_f32(val, 4);
+        let _r4 = builder.shfl_xor_f32(val, 2);
+        let _r5 = builder.shfl_xor_f32(val, 1);
+
+        assert_eq!(builder.instructions.len(), 5);
+        for instr in &builder.instructions {
+            assert_eq!(instr.op, PtxOp::ShflBfly);
+        }
+    }
 }

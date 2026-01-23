@@ -28,6 +28,7 @@
 // Allow unused_assignments/unused_mut because PTX branch semantics aren't tracked by Rust
 #![allow(clippy::similar_names, unused_assignments, unused_mut)]
 
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 use super::Kernel;

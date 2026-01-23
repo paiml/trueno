@@ -7,7 +7,7 @@
 //!
 //! Tests for less commonly used but important PTX operations.
 
-use trueno_gpu::ptx::{PtxKernel, PtxReg, PtxType};
+use trueno_gpu::ptx::{PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxReg, PtxType};
 
 // ============================================================================
 // VECTOR LOAD/STORE OPERATIONS - Golden Tests

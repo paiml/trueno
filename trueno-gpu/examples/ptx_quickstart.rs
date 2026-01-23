@@ -5,7 +5,7 @@
 //!
 //! Run with: `cargo run -p trueno-gpu --example ptx_quickstart`
 
-use trueno_gpu::ptx::{PtxKernel, PtxModule, PtxType};
+use trueno_gpu::ptx::{PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxModule, PtxType};
 
 fn main() {
     println!("=== trueno-gpu: Pure Rust PTX Generation ===\n");

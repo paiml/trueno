@@ -9,6 +9,7 @@
 #![allow(clippy::too_many_lines)]
 
 use super::Kernel;
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// Layer normalization kernel configuration

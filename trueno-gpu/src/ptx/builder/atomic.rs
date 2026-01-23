@@ -229,4 +229,67 @@ mod tests {
             assert_eq!(instr.state_space, Some(PtxStateSpace::Shared));
         }
     }
+
+    #[test]
+    fn test_atom_exch_global() {
+        let mut builder = MockBuilder::new();
+        let addr = builder.registers.allocate_virtual(PtxType::U64);
+        let val = builder.registers.allocate_virtual(PtxType::U32);
+
+        let old = builder.atom_exch_global_u32(addr, val);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::AtomExch);
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
+        assert!(old.id() > 0);
+    }
+
+    #[test]
+    fn test_atom_min_global() {
+        let mut builder = MockBuilder::new();
+        let addr = builder.registers.allocate_virtual(PtxType::U64);
+        let val = builder.registers.allocate_virtual(PtxType::U32);
+
+        let old = builder.atom_min_global_u32(addr, val);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::AtomMin);
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
+        assert!(old.id() > 0);
+    }
+
+    #[test]
+    fn test_atom_max_global() {
+        let mut builder = MockBuilder::new();
+        let addr = builder.registers.allocate_virtual(PtxType::U64);
+        let val = builder.registers.allocate_virtual(PtxType::U32);
+
+        let old = builder.atom_max_global_u32(addr, val);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::AtomMax);
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
+        assert!(old.id() > 0);
+    }
+
+    #[test]
+    fn test_global_atomics_all_ops() {
+        let mut builder = MockBuilder::new();
+        let addr = builder.registers.allocate_virtual(PtxType::U64);
+        let val = builder.registers.allocate_virtual(PtxType::U32);
+        let expected = builder.registers.allocate_virtual(PtxType::U32);
+        let new_val = builder.registers.allocate_virtual(PtxType::U32);
+
+        // Test all global atomic operations
+        let _add = builder.atom_add_global_u32(addr, val);
+        let _exch = builder.atom_exch_global_u32(addr, val);
+        let _min = builder.atom_min_global_u32(addr, val);
+        let _max = builder.atom_max_global_u32(addr, val);
+        let _cas = builder.atom_cas_global_u32(addr, expected, new_val);
+
+        assert_eq!(builder.instructions.len(), 5);
+        for instr in &builder.instructions {
+            assert_eq!(instr.state_space, Some(PtxStateSpace::Global));
+        }
+    }
 }

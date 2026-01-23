@@ -18,6 +18,7 @@
 //! assert!(ptx.contains("bias_activation"));
 //! ```
 
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxType};
 
 /// Activation function type

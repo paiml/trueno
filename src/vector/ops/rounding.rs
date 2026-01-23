@@ -22,8 +22,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[3.7, -2.3, 5.0]);
-    /// let result = v.floor().unwrap();
+    /// let result = v.floor()?;
     /// assert_eq!(result.as_slice(), &[3.0, -3.0, 5.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn floor(&self) -> Result<Vector<f32>> {
         let mut result_data = vec![0.0; self.len()];
@@ -46,8 +47,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[3.2, -2.7, 5.0]);
-    /// let result = v.ceil().unwrap();
+    /// let result = v.ceil()?;
     /// assert_eq!(result.as_slice(), &[4.0, -2.0, 5.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn ceil(&self) -> Result<Vector<f32>> {
         let mut result_data = vec![0.0; self.len()];
@@ -74,8 +76,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[3.2, 3.7, -2.3, -2.8]);
-    /// let result = v.round().unwrap();
+    /// let result = v.round()?;
     /// assert_eq!(result.as_slice(), &[3.0, 4.0, -2.0, -3.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn round(&self) -> Result<Vector<f32>> {
         let mut result_data = vec![0.0; self.len()];
@@ -103,8 +106,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[3.7, -2.7, 5.0]);
-    /// let result = v.trunc().unwrap();
+    /// let result = v.trunc()?;
     /// assert_eq!(result.as_slice(), &[3.0, -2.0, 5.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn trunc(&self) -> Result<Vector<f32>> {
         let trunc_data: Vec<f32> = self.data.iter().map(|x| x.trunc()).collect();
@@ -127,10 +131,11 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[3.7, -2.3, 5.0]);
-    /// let result = v.fract().unwrap();
+    /// let result = v.fract()?;
     /// // Fractional parts: 0.7, -0.3, 0.0
     /// assert!((result.as_slice()[0] - 0.7).abs() < 1e-5);
     /// assert!((result.as_slice()[1] - (-0.3)).abs() < 1e-5);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn fract(&self) -> Result<Vector<f32>> {
         let fract_data: Vec<f32> = self.data.iter().map(|x| x.fract()).collect();
@@ -153,8 +158,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[5.0, -3.0, 0.0, -0.0]);
-    /// let result = v.signum().unwrap();
+    /// let result = v.signum()?;
     /// assert_eq!(result.as_slice(), &[1.0, -1.0, 1.0, -1.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn signum(&self) -> Result<Vector<f32>> {
         let signum_data: Vec<f32> = self.data.iter().map(|x| x.signum()).collect();
@@ -184,8 +190,9 @@ impl Vector<f32> {
     ///
     /// let magnitude = Vector::from_slice(&[5.0, 3.0, 2.0]);
     /// let sign = Vector::from_slice(&[-1.0, 1.0, -1.0]);
-    /// let result = magnitude.copysign(&sign).unwrap();
+    /// let result = magnitude.copysign(&sign)?;
     /// assert_eq!(result.as_slice(), &[-5.0, 3.0, -2.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn copysign(&self, sign: &Self) -> Result<Vector<f32>> {
         if self.len() != sign.len() {
@@ -220,8 +227,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     /// let a = Vector::from_slice(&[1.0, 5.0, 3.0]);
     /// let b = Vector::from_slice(&[2.0, 3.0, 4.0]);
-    /// let result = a.minimum(&b).unwrap();
+    /// let result = a.minimum(&b)?;
     /// assert_eq!(result.as_slice(), &[1.0, 3.0, 3.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn minimum(&self, other: &Self) -> Result<Vector<f32>> {
         if self.len() != other.len() {
@@ -256,8 +264,9 @@ impl Vector<f32> {
     /// use trueno::Vector;
     /// let a = Vector::from_slice(&[1.0, 5.0, 3.0]);
     /// let b = Vector::from_slice(&[2.0, 3.0, 4.0]);
-    /// let result = a.maximum(&b).unwrap();
+    /// let result = a.maximum(&b)?;
     /// assert_eq!(result.as_slice(), &[2.0, 5.0, 4.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn maximum(&self, other: &Self) -> Result<Vector<f32>> {
         if self.len() != other.len() {
@@ -291,8 +300,9 @@ impl Vector<f32> {
     /// ```
     /// use trueno::Vector;
     /// let a = Vector::from_slice(&[1.0, -2.0, 3.0]);
-    /// let result = a.neg().unwrap();
+    /// let result = a.neg()?;
     /// assert_eq!(result.as_slice(), &[-1.0, 2.0, -3.0]);
+    /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn neg(&self) -> Result<Vector<f32>> {
         let neg_data: Vec<f32> = self.data.iter().map(|x| -x).collect();

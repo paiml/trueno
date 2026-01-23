@@ -118,3 +118,105 @@ impl Brick for OverviewPanelBrick {
         self
     }
 }
+
+impl Default for OverviewPanelBrick {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use presentar_core::RecordingCanvas;
+
+    #[test]
+    fn test_overview_panel_brick_name() {
+        let panel = OverviewPanelBrick::new();
+        assert_eq!(panel.brick_name(), "overview_panel");
+    }
+
+    #[test]
+    fn test_overview_panel_has_assertions() {
+        let panel = OverviewPanelBrick::new();
+        assert!(!panel.assertions().is_empty());
+    }
+
+    #[test]
+    fn test_overview_panel_paint_empty() {
+        let panel = OverviewPanelBrick::new();
+        let mut canvas = RecordingCanvas::new();
+
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw header and stats even with no data
+        assert!(!canvas.is_empty());
+        assert!(canvas.command_count() >= 5);
+    }
+
+    #[test]
+    fn test_overview_panel_paint_with_cpu_data() {
+        let mut panel = OverviewPanelBrick::new();
+        panel.cpu_data = vec![10.0, 20.0, 30.0, 40.0, 50.0];
+        panel.cpu_avg = 30.0;
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw CPU graph
+        assert!(canvas.command_count() >= 5);
+    }
+
+    #[test]
+    fn test_overview_panel_paint_with_gpu_data() {
+        let mut panel = OverviewPanelBrick::new();
+        panel.gpu_data = vec![15.0, 25.0, 35.0, 45.0, 55.0];
+        panel.gpu_avg = 35.0;
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw GPU graph
+        assert!(canvas.command_count() >= 5);
+    }
+
+    #[test]
+    fn test_overview_panel_paint_with_both_graphs() {
+        let mut panel = OverviewPanelBrick::new();
+        panel.cpu_data = vec![10.0, 20.0, 30.0, 40.0];
+        panel.gpu_data = vec![15.0, 25.0, 35.0, 45.0];
+        panel.cpu_avg = 25.0;
+        panel.gpu_avg = 30.0;
+        panel.frame_count = 100;
+        panel.problem_size = 1024;
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw both graphs and stats
+        assert!(canvas.command_count() >= 8);
+    }
+
+    #[test]
+    fn test_overview_panel_default() {
+        let panel = OverviewPanelBrick::default();
+        assert!(panel.cpu_data.is_empty());
+        assert!(panel.gpu_data.is_empty());
+        assert_eq!(panel.cpu_avg, 0.0);
+        assert_eq!(panel.gpu_avg, 0.0);
+    }
+
+    #[test]
+    fn test_overview_panel_verify() {
+        let panel = OverviewPanelBrick::new();
+        let verification = panel.verify();
+        assert!(verification.is_valid());
+    }
+
+    #[test]
+    fn test_overview_panel_budget() {
+        let panel = OverviewPanelBrick::new();
+        let budget = panel.budget();
+        assert_eq!(budget.total_ms(), 16); // FRAME_60FPS
+    }
+}

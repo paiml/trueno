@@ -13,6 +13,7 @@
 #![allow(clippy::similar_names)]
 
 use super::Kernel;
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// Residual Add Kernel: output = input1 + input2

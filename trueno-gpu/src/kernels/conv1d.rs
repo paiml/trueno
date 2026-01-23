@@ -16,6 +16,7 @@
 //! Each thread computes one output element.
 
 use super::Kernel;
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// 1D Convolution Kernel Configuration

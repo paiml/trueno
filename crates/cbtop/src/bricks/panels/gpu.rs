@@ -195,12 +195,73 @@ impl Default for GpuPanelBrick {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use presentar_core::RecordingCanvas;
     use std::time::Instant;
 
     #[test]
     fn test_gpu_panel_brick_name() {
         let panel = GpuPanelBrick::new();
         assert_eq!(panel.brick_name(), "gpu_panel");
+    }
+
+    #[test]
+    fn test_gpu_panel_paint_empty() {
+        let panel = GpuPanelBrick::new();
+        let mut canvas = RecordingCanvas::new();
+
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should draw header text even with no data
+        assert!(!canvas.is_empty());
+        assert!(canvas.command_count() >= 1);
+    }
+
+    #[test]
+    fn test_gpu_panel_paint_with_data() {
+        let mut panel = GpuPanelBrick::new();
+
+        // Add some GPU data
+        let metrics = GpuMetrics {
+            timestamp: Instant::now(),
+            device_index: 0,
+            device_name: "RTX 4090".to_string(),
+            utilization_gpu: 75,
+            memory_used_mb: 8192,
+            memory_total_mb: 24576,
+        };
+        panel.update_from_metrics(&metrics);
+        panel.update_temperature(72);
+        panel.update_power(250, 350);
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Should have more commands with data
+        assert!(canvas.command_count() >= 5);
+    }
+
+    #[test]
+    fn test_gpu_panel_paint_with_graph() {
+        let mut panel = GpuPanelBrick::new();
+
+        // Add multiple data points for graph
+        for i in 0..10 {
+            let metrics = GpuMetrics {
+                timestamp: Instant::now(),
+                device_index: 0,
+                device_name: "Test GPU".to_string(),
+                utilization_gpu: (i * 10) as u32,
+                memory_used_mb: 1000,
+                memory_total_mb: 2000,
+            };
+            panel.update_from_metrics(&metrics);
+        }
+
+        let mut canvas = RecordingCanvas::new();
+        panel.paint(&mut canvas, 80.0, 24.0);
+
+        // Graph rendering adds more commands
+        assert!(canvas.command_count() >= 5);
     }
 
     #[test]

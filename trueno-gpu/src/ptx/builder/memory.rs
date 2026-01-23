@@ -212,4 +212,48 @@ mod tests {
         assert_eq!(builder.instructions[0].ty, PtxType::U32);
         assert_eq!(builder.instructions[1].ty, PtxType::U32);
     }
+
+    #[test]
+    fn test_global_u8_load() {
+        let mut builder = MockBuilder::new();
+        let addr = builder.registers.allocate_virtual(PtxType::U64);
+
+        let val = builder.ld_global_u8(addr);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::Ld);
+        assert_eq!(builder.instructions[0].ty, PtxType::U8);
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
+        assert_eq!(val.ty(), PtxType::U32); // Zero-extended to u32
+    }
+
+    #[test]
+    fn test_global_u16_load() {
+        let mut builder = MockBuilder::new();
+        let addr = builder.registers.allocate_virtual(PtxType::U64);
+
+        let val = builder.ld_global_u16(addr);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::Ld);
+        assert_eq!(builder.instructions[0].ty, PtxType::U16);
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
+        assert_eq!(val.ty(), PtxType::U32); // Zero-extended
+    }
+
+    #[test]
+    fn test_shared_u32_ops() {
+        let mut builder = MockBuilder::new();
+        let addr = builder.registers.allocate_virtual(PtxType::U32);
+
+        let val = builder.ld_shared_u32(addr);
+        builder.st_shared_u32(addr, val);
+
+        assert_eq!(builder.instructions.len(), 2);
+        assert_eq!(builder.instructions[0].op, PtxOp::Ld);
+        assert_eq!(builder.instructions[0].ty, PtxType::U32);
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Shared));
+        assert_eq!(builder.instructions[1].op, PtxOp::St);
+        assert_eq!(builder.instructions[1].state_space, Some(PtxStateSpace::Shared));
+    }
 }
