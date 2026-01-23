@@ -571,3 +571,15 @@ cargo modules generate graph | dot -Tpng > architecture.png
 | tuner.rs | 6,295 | 10 modules | ~630 |
 
 **Note**: Some modules will be larger (e.g., tracing.rs from brick.rs may need further splitting if >2000 lines).
+
+## Progress Log
+
+| Date | Action | Outcome | Verified By |
+|------|--------|---------|-------------|
+| 2026-01-23 | Shatter `brick.rs` (Partial) | Created `profiling`, `perf_metrics`, `memory`, `buffer` | User |
+| 2026-01-23 | Shatter `brick.rs` (Safety) | Created `shutdown`, `circuit`, `resource_pool`, `rate_limit`, `connection` | User |
+| 2026-01-23 | Shatter `brick.rs` (Logic) | Created `kv_cache`, `simd_config`; Consolidated `connection`; Fixed LRU bug | User |
+| 2026-01-23 | Shatter `brick.rs` (Graph) | Created `exec_graph` (1.8k lines); Added falsification tests for graph cycles | User |
+| 2026-01-23 | Shatter `brick.rs` (Profile) | Created `profiler` (1.8k lines); Isolated `BrickProfiler` and `TileStats` | User |
+| 2026-01-23 | Shatter `brick.rs` (Logic) | Created `tracing`, `patterns`, `ops`; Reduced `mod.rs` to ~9k lines | User |
+| 2026-01-23 | Shatter `brick.rs` (Final) | Extracted `tests.rs`, `fused_ops`, `attention`, `quant_ops`. `mod.rs` < 1k lines | User |

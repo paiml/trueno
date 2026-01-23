@@ -19,6 +19,7 @@
 
 pub mod scalar;
 pub mod q4k;
+pub mod q6k;
 
 #[cfg(target_arch = "x86_64")]
 pub mod sse2;
