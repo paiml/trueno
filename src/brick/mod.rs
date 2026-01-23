@@ -141,8 +141,8 @@ mod attention;
 pub use attention::AttentionOp;
 
 // Q5_K and Q6_K quantization operations (llama.cpp compatible)
-// Note: Types are defined locally in this file to avoid duplication with quant_ops module
 mod quant_ops;
+pub use quant_ops::{BlockQ5K, BlockQ6K, DotQ5KOp, DotQ6KOp};
 
 // Tests (7,400+ lines extracted for TDG compliance)
 #[cfg(test)]
