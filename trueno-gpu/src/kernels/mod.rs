@@ -12,6 +12,7 @@
 //! - **BiasActivation**: Fused bias + activation epilogue (ReLU, GELU)
 //! - **GEMV**: Matrix-vector multiply for M=1 decode throughput (CoalescedGemvKernel)
 //! - **Backward**: Training backward passes (GEMM, Softmax, LayerNorm, RMSNorm, Attention, Activations)
+//! - **Optimizer**: Fused weight updates (AdamW, Adam, gradient clipping)
 //!
 //! ## Barrier Safety (PARITY-114)
 //!
@@ -32,6 +33,7 @@ pub mod lz4;
 #[cfg(test)]
 mod lz4_hash_store_test;
 mod megakernel;
+pub mod optimizer;
 mod persistent;
 mod quantize;
 mod softmax;
@@ -76,6 +78,7 @@ pub use quantize::{
 };
 pub use softmax::{LongRowSoftmaxKernel, SoftmaxKernel};
 pub use lz4::{Lz4WarpCompressKernel, Lz4WarpDecompressKernel};
+pub use optimizer::{AdamStepKernel, AdamWStepKernel, GradientClipKernel};
 
 use crate::ptx::optimize::barrier_safety::{self, BarrierSafetyResult};
 use crate::ptx::{PtxKernel, PtxModule};
