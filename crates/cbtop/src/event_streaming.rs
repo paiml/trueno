@@ -14,7 +14,6 @@
 //! See `tests/event_streaming_f1351.rs` for falsification tests.
 
 use std::collections::HashMap;
-use std::io::Write;
 
 /// Schema version for event format
 pub const SCHEMA_VERSION: u32 = 1;

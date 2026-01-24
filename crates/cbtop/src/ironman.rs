@@ -58,7 +58,7 @@ impl GateResult {
     pub fn score(&self, weight: u32) -> u32 {
         match self {
             GateResult::Pass(_) => weight,
-            _ => 0,
+            GateResult::Fail(_) | GateResult::Skip(_) | GateResult::Pending => 0,
         }
     }
 }
@@ -481,7 +481,7 @@ impl IronmanValidator {
                 // Fallback: grep for unsafe blocks
                 let output = Command::new("grep")
                     .args(["-r", "unsafe", "src/"])
-                    .current_dir(&self.project_root.join("crates/cbtop"))
+                    .current_dir(self.project_root.join("crates/cbtop"))
                     .output();
 
                 match output {

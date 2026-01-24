@@ -194,24 +194,23 @@ mod tests {
     #[test]
     fn test_cached_nanos_or_now_returns_value() {
         let nanos = cached_nanos_or_now();
-        // Should return a valid nanosecond count
-        assert!(nanos >= 0);
+        // Should return a valid nanosecond count (non-zero on most systems)
+        // Note: u64 is always >= 0, so just verify we got a value
+        let _ = nanos; // Value is always valid for u64
     }
 
     #[test]
     fn test_page_fault_tracking() {
         let (result, minor, major) = with_page_fault_tracking("test", || 42);
         assert_eq!(result, 42);
-        // Page faults should be non-negative
-        assert!(minor >= 0);
-        assert!(major >= 0);
+        // Page faults are u64, always non-negative by type
+        let _ = (minor, major); // Values are always valid for u64
     }
 
     #[test]
     fn test_get_page_faults() {
         let (minor, major) = get_page_faults();
-        // Should return valid counts (may be 0 on non-Linux)
-        assert!(minor >= 0);
-        assert!(major >= 0);
+        // Page faults are u64, always non-negative by type (may be 0 on non-Linux)
+        let _ = (minor, major); // Values are always valid for u64
     }
 }

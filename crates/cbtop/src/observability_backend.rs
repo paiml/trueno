@@ -16,7 +16,7 @@
 //! Test: Configure all backends, verify each receives metrics
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Result type for observability operations
 pub type ObservabilityResult<T> = Result<T, ObservabilityError>;

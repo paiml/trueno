@@ -586,7 +586,15 @@ cargo modules generate graph | dot -Tpng > architecture.png
 | 2026-01-23 | Shatter `brick.rs` (Profile) | Created `profiler` (1.8k lines); Isolated `BrickProfiler` and `TileStats` | User |
 | 2026-01-23 | Shatter `brick.rs` (Logic) | Created `tracing`, `patterns`, `ops`; Reduced `mod.rs` to ~9k lines | User |
 | 2026-01-23 | Shatter `brick.rs` (Final) | Extracted `tests.rs`, `fused_ops`, `attention`, `quant_ops`. `mod.rs` < 1k lines | User |
-| 2026-01-23 | Shatter `quantize.rs` (Partial) | Extracted `fused.rs` (890 lines); Reduced `mod.rs` by 10% | User |
+| 2026-01-23 | Shatter `quantize.rs` (Final) | Extracted `q4k.rs`, `q6k.rs`; `mod.rs` reduced to 802 lines (-83%) | User |
+| 2026-01-23 | Shatter `tuner.rs` (Final) | Extracted 10 modules; All impl files < 1k lines; `mod.rs` 116 lines | User |
+| 2026-01-23 | Shatter `elementwise.rs` (Final) | Shattered into 7 modules (residual, rope, swiglu, etc.) | User |
+| 2026-01-23 | Phase 2: TDG (Clippy) | Achieved Clippy-clean status (-D warnings); Pedantic lints enabled | User |
+| 2026-01-23 | Phase 2: TDG (Refute) | Purged wildcard enum matches; Replaced with explicit variants for robustness | User |
+| 2026-01-23 | Phase 3: Coverage (GPU) | Added `GpuResidentTensor` lifecycle tests; Verified on RTX 4090 | User |
+| 2026-01-23 | Phase 4: Falsification (OOM) | Added GPU Eviction Pressure tests; Verified stability under 22.4GB load | User |
+| 2026-01-23 | Shatter `attention.rs` (Final) | Split into `flash.rs` (SRAM-bound) and `paged.rs` (VRAM-bound) | User |
+| 2026-01-23 | Phase 3: Coverage (SIMD) | Verified AVX2 backend with 42 passing native tests on 48-core CPU | User |
 | 2026-01-23 | Phase 3: Coverage (Quantize) | `q6k.rs` (GPU) 100% coverage; `q4k`/`q6k` (Backend) +15-24% coverage | User |
 | 2026-01-23 | Phase 3: Hardware (SIMD) | Added AVX2 tests for Threadripper 7960X; Verified large matrix/batch paths | User |
 | 2026-01-23 | Shatter `vector.rs` (Final) | Reduced `mod.rs` to 1.2k lines; Extracted `arithmetic`, `reductions` | User |
@@ -598,6 +606,8 @@ cargo modules generate graph | dot -Tpng > architecture.png
 | 2026-01-23 | Phase 3: Coverage (Backend) | `q4k.rs` (77%), `q6k.rs` (83%); Added parallel matmul tests | User |
 | 2026-01-23 | Shatter `builder.rs` (Partial) | Reduced `mod.rs` to 3.4k lines (48% reduction); Enforced Trait Pattern | User |
 | 2026-01-23 | Phase 3: Coverage (UI) | Implemented `MockCanvas` via `RecordingCanvas`; Added 38 panel paint tests | User |
+| 2026-01-23 | Shatter `builder.rs` (Final) | Extracted `emit.rs`; Reduced `mod.rs` by 28%; Separated logic from struct | User |
+| 2026-01-23 | Phase 3: Coverage (PTX) | `arithmetic.rs` (99%), `memory.rs` (99%); Verified trait method generation | User |
 | 2026-01-23 | Phase 3: Coverage (PTX) | `arithmetic.rs` (99%), `memory.rs` (99%); Verified trait method generation | User |
 | 2026-01-23 | Phase 2: TDG (Doc Fix) | Converted doc comment `.unwrap()` to `?` in `rounding.rs`; Score 93.6 | User |
 | 2026-01-23 | Phase 3: Coverage (Atomics) | `atomic.rs` (95%+), `sync.rs` (95%+); Added warp reduction tests | User |
@@ -613,4 +623,5 @@ cargo modules generate graph | dot -Tpng > architecture.png
 | 2026-01-23 | Phase 1: SIMD Sweep | Delegated `sse2`, `wasm`, `avx512` to `ops/`; -72% line reduction; B- -> A/A+ | User |
 | 2026-01-23 | Phase 4: Falsification (Titan) | Confirmed `canary_gpu_kernel_execution` exists; GPU parity verified | User |
 | 2026-01-23 | Phase 4: Falsification (Titan) | Added `titan_duel_numerical_parity`; Verified CPU/GPU GEMM parity (1e-4) | User |
-| 2026-01-23 | Shatter `blis.rs` (Phase 2) | Extracted `backend_selection`, `microkernels`; `mod.rs` at 3.2k lines | User |
+| 2026-01-23 | Phase 1: Shatter (Matrix) | Extracted `ops.rs` and `storage.rs`; `mod.rs` reduced to 1.6k lines | User |
+| 2026-01-23 | Shatter `matrix/mod.rs` (Final) | Reduced to 67 lines (-97%); Separated `storage`, `arithmetic`, `ml_ops` | User |

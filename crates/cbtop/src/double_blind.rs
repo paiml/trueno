@@ -17,7 +17,7 @@
 //! - [Holman et al. 2015] "A Systematic Review of Double-Blind Experiments in SE" IEEE TSE
 
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 /// Role in the double-blind verification process
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

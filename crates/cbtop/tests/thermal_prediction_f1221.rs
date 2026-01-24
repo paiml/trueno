@@ -9,8 +9,8 @@
 //! - Thermal-latency correlation
 
 use cbtop::{
-    ThermalAnalyzer, ThermalSample, ThermalPrediction, ThrottleRisk,
-    CooldownRecommendation, ThermalCorrelation, RiskCategory,
+    ThermalAnalyzer, ThermalPrediction, ThrottleRisk,
+    CooldownRecommendation, RiskCategory,
     analyze_thermal, assess_throttle_risk,
 };
 

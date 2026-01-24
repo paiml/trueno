@@ -122,7 +122,7 @@ impl FittedModel {
                 // y = min(peak, bandwidth * intensity)
                 // Simplified: use polynomial approximation
                 let peak = self.coefficients.first().copied().unwrap_or(100.0);
-                let knee = self.coefficients.get(1).copied().unwrap_or(1000.0);
+                let _knee = self.coefficients.get(1).copied().unwrap_or(1000.0);
                 let slope = self.coefficients.get(2).copied().unwrap_or(1.0);
 
                 let linear = slope * x;
@@ -309,29 +309,29 @@ impl PerformancePredictor {
         // Use least squares for quadratic fit
         // y = a*x^2 + b*x + c
         let n = self.data_points.len() as f64;
-        let mut sum_x = 0.0;
-        let mut sum_x2 = 0.0;
-        let mut sum_x3 = 0.0;
-        let mut sum_x4 = 0.0;
+        let mut _sum_x = 0.0;
+        let mut _sum_x2 = 0.0;
+        let mut _sum_x3 = 0.0;
+        let mut _sum_x4 = 0.0;
         let mut sum_y = 0.0;
-        let mut sum_xy = 0.0;
-        let mut sum_x2y = 0.0;
+        let mut _sum_xy = 0.0;
+        let mut _sum_x2y = 0.0;
 
         for p in &self.data_points {
             let x = p.size as f64;
             let y = p.performance;
-            sum_x += x;
-            sum_x2 += x * x;
-            sum_x3 += x * x * x;
-            sum_x4 += x * x * x * x;
+            _sum_x += x;
+            _sum_x2 += x * x;
+            _sum_x3 += x * x * x;
+            _sum_x4 += x * x * x * x;
             sum_y += y;
-            sum_xy += x * y;
-            sum_x2y += x * x * y;
+            _sum_xy += x * y;
+            _sum_x2y += x * x * y;
         }
 
         // Solve 3x3 system (simplified - use Cramer's rule)
         // This is a simplified implementation
-        let mean_y = sum_y / n;
+        let _mean_y = sum_y / n;
 
         // Fallback to linear for now if polynomial fails
         if let Some(linear) = self.fit_linear() {

@@ -174,7 +174,7 @@ impl WorkingSetAnalysis {
         let working_set_bytes = (elements as f64 * element_size as f64 * access_factor) as usize;
         let cache_level = config.classify(working_set_bytes);
 
-        let (utilization_percent, cache_size) = match cache_level {
+        let (utilization_percent, _cache_size) = match cache_level {
             CacheLevel::L1 => ((working_set_bytes as f64 / config.l1_size as f64) * 100.0, config.l1_size),
             CacheLevel::L2 => ((working_set_bytes as f64 / config.l2_size as f64) * 100.0, config.l2_size),
             CacheLevel::L3 => ((working_set_bytes as f64 / config.l3_size as f64) * 100.0, config.l3_size),

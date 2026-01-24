@@ -4089,7 +4089,7 @@ fn test_f193_kv_cache_manager() {
     mgr.step();
     let idx1 = mgr.allocate(1, 101, 0, 0).unwrap();
     mgr.step();
-    let idx2 = mgr.allocate(2, 102, 0, 0).unwrap();
+    let _idx2 = mgr.allocate(2, 102, 0, 0).unwrap();
 
     assert_eq!(mgr.valid_count(), 3);
     assert!(mgr.allocate(3, 103, 0, 0).is_none()); // Full
@@ -7420,13 +7420,6 @@ fn test_simd_exp_005_backend_check() {
     assert!(!SoftmaxOp::is_simd_backend(Backend::Scalar));
     assert!(!SoftmaxOp::is_simd_backend(Backend::Wasm));
 }
-
-// =========================================================================
-// ExecutionGraph coverage tests (PMAT-018) - test uncovered node variants
-// =========================================================================
-
-/// Test ExecutionNode::Function variant formatting
-#[test]
 
 // =========================================================================
 // ExecutionGraph coverage tests (PMAT-018) - test uncovered node variants

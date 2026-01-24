@@ -122,11 +122,11 @@ impl QuantFormat {
             QuantFormat::Q6_K => 210,  // 128+64+16+2
             QuantFormat::Q8_0 => 34,   // 2 (scale) + 32 (8-bit values)
             QuantFormat::Gptq { bits, group_size } => {
-                let data_bytes = (*group_size as usize * *bits as usize + 7) / 8;
+                let data_bytes = (*group_size as usize * *bits as usize).div_ceil(8);
                 data_bytes + 4 // + scale/zero
             }
             QuantFormat::Awq { bits } => {
-                let data_bytes = (128 * *bits as usize + 7) / 8;
+                let data_bytes = (128 * *bits as usize).div_ceil(8);
                 data_bytes + 4
             }
         }
@@ -475,7 +475,7 @@ impl GgufLoader {
         }
 
         let version = u32::from_le_bytes(data[4..8].try_into().unwrap());
-        if version < 2 || version > 3 {
+        if !(2..=3).contains(&version) {
             return Err(GgufError::UnsupportedVersion(version));
         }
 

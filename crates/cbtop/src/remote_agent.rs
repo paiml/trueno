@@ -15,7 +15,7 @@
 //! Test: Connect to 3+ hosts with different architectures, verify metric aggregation
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Result type for remote agent operations
 pub type RemoteResult<T> = Result<T, RemoteError>;
@@ -607,9 +607,9 @@ impl RemoteAgent {
         let start = json.find(&pattern)? + pattern.len();
         let rest = &json[start..];
 
-        if rest.starts_with('"') {
-            let end = rest[1..].find('"')? + 1;
-            Some(rest[1..end].to_string())
+        if let Some(unquoted) = rest.strip_prefix('"') {
+            let end = unquoted.find('"')?;
+            Some(unquoted[..end].to_string())
         } else {
             None
         }
@@ -621,7 +621,7 @@ impl RemoteAgent {
         let start = json.find(&pattern)? + pattern.len();
         let rest = &json[start..];
 
-        let end = rest.find(|c: char| c == ',' || c == '}').unwrap_or(rest.len());
+        let end = rest.find([',', '}']).unwrap_or(rest.len());
         rest[..end].trim().parse().ok()
     }
 
