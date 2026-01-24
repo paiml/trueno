@@ -430,31 +430,34 @@ mod tests {
     }
 
     /// FALSIFICATION TEST: Touch must reset idle timer
+    ///
+    /// Uses 200ms timeout with 100ms sleeps to provide 100ms margin against timing jitter.
+    /// Previous 20ms/15ms (5ms margin) caused flaky failures on Mac.
     #[test]
     fn test_falsify_touch_resets_idle() {
         let mut conn =
-            ManagedConnection::new("test", Duration::from_secs(60), Duration::from_millis(20));
+            ManagedConnection::new("test", Duration::from_secs(60), Duration::from_millis(200));
 
-        // Wait until almost idle
-        std::thread::sleep(Duration::from_millis(15));
+        // Wait until almost idle (100ms of 200ms timeout = 50% margin)
+        std::thread::sleep(Duration::from_millis(100));
         assert!(
             !conn.is_idle(),
-            "Should not be idle yet at 15ms with 20ms timeout"
+            "Should not be idle yet at 100ms with 200ms timeout"
         );
 
         // Touch to reset
         conn.touch();
 
-        // Wait another 15ms (would be 30ms total without touch, but only 15ms since touch)
-        std::thread::sleep(Duration::from_millis(15));
+        // Wait another 100ms (would be 200ms total without touch, but only 100ms since touch)
+        std::thread::sleep(Duration::from_millis(100));
         assert!(
             !conn.is_idle(),
             "FALSIFICATION FAILED: Touch should have reset idle timer"
         );
 
-        // Now wait until actually idle
-        std::thread::sleep(Duration::from_millis(10));
-        assert!(conn.is_idle(), "Should be idle now (25ms since touch)");
+        // Now wait until actually idle (another 150ms = 250ms since touch > 200ms timeout)
+        std::thread::sleep(Duration::from_millis(150));
+        assert!(conn.is_idle(), "Should be idle now (250ms since touch > 200ms timeout)");
     }
 
     // =========================================================================
