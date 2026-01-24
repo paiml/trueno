@@ -17,7 +17,9 @@
 mod fkr_101_debug_tests {
     use std::ffi::c_void;
     use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
-    use trueno_gpu::ptx::{PtxKernel, PtxMemory, PtxModule, PtxReg, PtxType};
+    use trueno_gpu::ptx::{
+        PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxMemory, PtxModule, PtxReg, PtxType,
+    };
     use trueno_gpu::kernels::lz4::{PAGE_SIZE, LZ4_HASH_SIZE};
 
     fn cuda_available() -> bool {

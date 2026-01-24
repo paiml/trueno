@@ -2095,7 +2095,7 @@ mod tests {
     fn test_gpu_lz4_hash_table_bank_conflict_free() {
         // REQ-LZ4-009: Hash table access should avoid bank conflicts
         let kernel = Lz4WarpCompressKernel::new(100);
-        let ptx = kernel.emit_ptx();
+        let _ptx = kernel.emit_ptx();
 
         // Bank conflict avoidance requires:
         // - Padded stride (4097 instead of 4096)

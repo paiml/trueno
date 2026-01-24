@@ -7,7 +7,7 @@
 //! - **GEMM**: Matrix multiplication (naive, tiled, Tensor Core)
 //! - **Softmax**: Numerically stable softmax with warp shuffle
 //! - **LayerNorm**: Fused layer normalization
-//! - **Attention**: FlashAttention-style tiled attention + incremental (PAR-020)
+//! - **Attention**: FlashAttention (SRAM tiling) + Paged (VRAM block management)
 //! - **Quantize**: Q4_K/Q5_K/Q6_K dequantization fused with matmul (PARITY-115/116/117)
 //! - **BiasActivation**: Fused bias + activation epilogue (ReLU, GELU)
 //! - **GEMV**: Matrix-vector multiply for M=1 decode throughput (CoalescedGemvKernel)

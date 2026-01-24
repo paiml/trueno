@@ -1,4 +1,5 @@
 use super::*;
+use super::emit::{emit_global_mem_operand, emit_instruction, emit_operand, emit_shared_mem_operand};
 
 #[test]
 fn test_module_defaults() {
@@ -1017,7 +1018,7 @@ fn test_mul_lo_for_integer() {
         .param(PtxType::U64, "ptr")
         .build(|ctx| {
             let a = ctx.mov_u32_imm(100);
-            let b = ctx.mov_u32_imm(200);
+            let _b = ctx.mov_u32_imm(200);
             let _result = ctx.mul_u32(a, 200);
             ctx.ret();
         });

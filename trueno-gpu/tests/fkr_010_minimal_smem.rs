@@ -4,7 +4,7 @@
 mod fkr_010_tests {
     use std::ffi::c_void;
     use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
-    use trueno_gpu::ptx::{PtxKernel, PtxModule, PtxReg, PtxType};
+    use trueno_gpu::ptx::{PtxArithmetic, PtxControl, PtxKernel, PtxModule, PtxReg, PtxType};
 
     fn emit_minimal_smem_kernel() -> String {
         let kernel = PtxKernel::new("minimal_smem_test")
@@ -114,7 +114,7 @@ mod fkr_010_tests {
 fn fkr_010b_debug_smem_base() {
     use std::ffi::c_void;
     use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
-    use trueno_gpu::ptx::{PtxKernel, PtxModule, PtxReg, PtxType};
+    use trueno_gpu::ptx::{PtxArithmetic, PtxControl, PtxKernel, PtxModule, PtxReg, PtxType};
 
     // Check CUDA availability first
     if CudaContext::new(0).is_err() {
