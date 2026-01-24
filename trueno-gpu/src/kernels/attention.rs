@@ -22,7 +22,7 @@
 #![allow(clippy::too_many_lines)]
 
 use super::Kernel;
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
 use crate::ptx::{PtxKernel, PtxReg, PtxType, WmmaLayout};
 
 /// FlashAttention-style kernel configuration

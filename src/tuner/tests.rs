@@ -3475,3 +3475,112 @@ fn test_impossible_regressor_large_throughput() {
         );
     }
 }
+
+
+// =============================================================================
+// BrickTuner Integration Tests (covering mod.rs uncovered methods)
+// =============================================================================
+
+/// Test: BrickTuner::online_learner() creates a valid learner
+#[test]
+fn test_brick_tuner_online_learner() {
+    let tuner = BrickTuner::new();
+    let learner = tuner.online_learner();
+    
+    // Should start with zero updates
+    assert_eq!(learner.num_updates(), 0);
+    
+    // Should be able to predict
+    let features = TunerFeatures::default().to_vector();
+    let prediction = learner.predict(&features);
+    assert!(prediction.is_finite());
+}
+
+/// Test: BrickTuner::apply_online_updates() applies updates correctly
+#[test]
+fn test_brick_tuner_apply_online_updates() {
+    let mut tuner = BrickTuner::new();
+    let initial_version = tuner.version.clone();
+    
+    let mut learner = tuner.online_learner();
+    
+    // Make some observations
+    let features = TunerFeatures::default().to_vector();
+    learner.observe(&features, 100.0);
+    learner.observe(&features, 110.0);
+    
+    // Apply updates
+    tuner.apply_online_updates(&learner);
+    
+    // Version should change
+    assert_ne!(tuner.version, initial_version);
+    assert!(tuner.version.contains("online"));
+}
+
+/// Test: BrickTuner::apply_online_updates() with no updates is a no-op
+#[test]
+fn test_brick_tuner_apply_online_updates_empty() {
+    let mut tuner = BrickTuner::new();
+    let initial_version = tuner.version.clone();
+    
+    let learner = OnlineLearner::new();
+    tuner.apply_online_updates(&learner);
+    
+    // Version should NOT change (no updates)
+    assert_eq!(tuner.version, initial_version);
+}
+
+/// Test: BrickTuner::kernel_bandit() creates a valid bandit
+#[test]
+fn test_brick_tuner_kernel_bandit() {
+    let tuner = BrickTuner::new();
+    let bandit = tuner.kernel_bandit();
+    
+    // Should start with zero pulls
+    assert_eq!(bandit.total_pulls, 0);
+    
+    // Should be able to select a kernel
+    let kernel = bandit.select();
+    // Kernel should be a valid variant (just verify it does not panic)
+    let _ = format!("{:?}", kernel);
+}
+
+/// Test: BrickTuner::recommend_kernel_with_exploration() explore path
+#[test]
+fn test_brick_tuner_recommend_kernel_with_exploration_explore() {
+    let tuner = BrickTuner::new();
+    let bandit = tuner.kernel_bandit();
+    let features = TunerFeatures::default();
+    
+    // With explore_prob = 1.0, should always explore
+    let rec = tuner.recommend_kernel_with_exploration(&features, &bandit, 1.0);
+    
+    // Should have lower confidence when exploring
+    assert!(rec.confidence <= 0.5);
+}
+
+/// Test: BrickTuner::recommend_kernel_with_exploration() exploit path
+#[test]
+fn test_brick_tuner_recommend_kernel_with_exploration_exploit() {
+    let tuner = BrickTuner::new();
+    let bandit = tuner.kernel_bandit();
+    let features = TunerFeatures::default();
+    
+    // With explore_prob = 0.0, should always exploit
+    let rec = tuner.recommend_kernel_with_exploration(&features, &bandit, 0.0);
+    
+    // Should have higher confidence when exploiting
+    assert!(rec.confidence > 0.5);
+}
+
+/// Test: FeatureExtractor::default() creates same as new()
+#[test]
+fn test_feature_extractor_default_impl() {
+    let from_default = FeatureExtractor::default();
+    let from_new = FeatureExtractor::new();
+    
+    // Both should have hardware as None initially
+    assert!(from_default.hardware.is_none());
+    assert!(from_new.hardware.is_none());
+}
+

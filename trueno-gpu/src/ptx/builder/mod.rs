@@ -43,43 +43,11 @@ use super::types::{PtxStateSpace, PtxType};
 use super::{validate_target, validate_version};
 use crate::error::Result;
 
-// ============================================================================
-// Internal Macros for Reducing Code Duplication (TDG Optimization)
-// ============================================================================
-
-/// Macro for shared memory load operations
-macro_rules! impl_ld_shared {
-    ($fn_name:ident, $ty:ident, $op:ident) => {
-        pub fn $fn_name(&mut self, addr: VirtualReg) -> VirtualReg {
-            let dst = self.registers.allocate_virtual(PtxType::$ty);
-            self.instructions.push(
-                PtxInstruction::new(PtxOp::$op, PtxType::$ty)
-                    .dst(Operand::Reg(dst))
-                    .src(Operand::Reg(addr))
-                    .space(PtxStateSpace::Shared),
-            );
-            dst
-        }
-    };
-}
-
-/// Macro for shared memory store operations
-macro_rules! impl_st_shared {
-    ($fn_name:ident, $ty:ident) => {
-        pub fn $fn_name(&mut self, addr: VirtualReg, val: VirtualReg) {
-            self.instructions.push(
-                PtxInstruction::new(PtxOp::St, PtxType::$ty)
-                    .src(Operand::Reg(addr))
-                    .src(Operand::Reg(val))
-                    .space(PtxStateSpace::Shared),
-            );
-        }
-    };
-}
 
 /// Macro for dp4a operations (in-place variant)
 macro_rules! impl_dp4a_inplace {
-    ($fn_name:ident, $op:ident, $ty:ident) => {
+    ($fn_name:ident, $op:ident, $ty:ident, $doc:expr) => {
+        #[doc = $doc]
         pub fn $fn_name(&mut self, acc: VirtualReg, a: VirtualReg, b: VirtualReg) {
             self.instructions.push(
                 PtxInstruction::new(PtxOp::$op, PtxType::$ty)
@@ -560,9 +528,9 @@ impl<'a> KernelBuilder<'a> {
     // Dot product of 4 x u8/s8 vectors with accumulate, generated via macro.
     // PAR-063: Key SIMD instruction for Q4K inference (llama.cpp pattern).
 
-    impl_dp4a_inplace!(dp4a_u32_inplace, Dp4a, U32);
-    impl_dp4a_inplace!(dp4a_u32_s32_inplace, Dp4aUS, S32);
-    impl_dp4a_inplace!(dp4a_s32_inplace, Dp4aS32, S32);
+    impl_dp4a_inplace!(dp4a_u32_inplace, Dp4a, U32, "DP4A u32 in-place: acc += dot4(a, b) where a,b are packed u8x4");
+    impl_dp4a_inplace!(dp4a_u32_s32_inplace, Dp4aUS, S32, "DP4A u32×s32 in-place: acc += dot4(u8x4, s8x4)");
+    impl_dp4a_inplace!(dp4a_s32_inplace, Dp4aS32, S32, "DP4A s32 in-place: acc += dot4(s8x4, s8x4)");
 
     /// Barrier synchronization (all threads in block must reach this point)
     pub fn bar_sync(&mut self, barrier_id: u32) {
@@ -591,16 +559,14 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
-    // ===== Shared Memory Operations (Macro-Generated) =====
-    // Load/store operations for shared memory, generated via internal macros
-    // to reduce code duplication. See impl_ld_shared! and impl_st_shared! macros.
-
-    impl_ld_shared!(ld_shared_f32, F32, Ld);
-    impl_ld_shared!(ld_shared_u32, U32, Ld);
-    impl_ld_shared!(ld_shared_u32_volatile, U32, LdVolatile);
-    impl_st_shared!(st_shared_f32, F32);
-    impl_st_shared!(st_shared_u32, U32);
-    impl_st_shared!(st_shared_f16, B16);
+    // ===== Shared Memory Operations =====
+    // These operations are provided by the PtxMemory extension trait in memory.rs.
+    // KernelBuilder implements KernelBuilderCore, so it automatically gets all
+    // PtxMemory methods via blanket impl. Available methods:
+    //   - ld_shared_f32, st_shared_f32
+    //   - ld_shared_u32, st_shared_u32
+    //   - ld_shared_u32_volatile
+    //   - st_shared_f16
 
     /// Warp shuffle down (for reductions)
     /// Format: shfl.sync.down.b32 dst, src, delta, clamp, membermask

@@ -14,7 +14,7 @@
 //! - Each warp computes one dot product using warp shuffle reduce
 //! - Coalesced memory access for weight matrix
 
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
 use crate::ptx::{PtxKernel, PtxType};
 
 /// GEMV kernel configuration
