@@ -228,14 +228,28 @@ example-%: ## Run specific example (e.g., make example-brick_profiler_v2)
 # Hardware/display-dependent code and tool crates excluded (focus on core trueno + trueno-gpu)
 COV_EXCLUDE := --ignore-filename-regex='(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs|testing/gpu_renderer\.rs|crates/cbtop/|trueno-explain/)'
 
-coverage: ## Generate coverage report (≥95% required, <2 min target, ruchy-style FAST)
-	@echo "📊 Running coverage analysis (target: 95%, <2 min)..."
+# =============================================================================
+# COVERAGE: Native SIMD + CUDA (Lambda Labs: Threadripper + NVIDIA GPU)
+# =============================================================================
+# This target uses RUSTFLAGS="-C target-cpu=native" to enable ALL CPU features
+# (AVX2, AVX-512, FMA) and --all-features to enable CUDA. The hardware IS present:
+#   - CPU: AMD Threadripper (AVX2 + AVX-512)
+#   - GPU: NVIDIA CUDA-capable GPU
+# "Missing hardware" is a FALSE CONJECTURE. If coverage is low, the TESTS are
+# incomplete, not the hardware. Fix the tests, not the excuses.
+# =============================================================================
+
+coverage: ## Generate coverage report (≥95% required, native SIMD + CUDA, <2 min)
+	@echo "📊 Running coverage analysis (target: 95%, native CPU + CUDA)..."
+	@echo "   Hardware: Threadripper (AVX-512) + NVIDIA GPU (CUDA)"
 	@which cargo-llvm-cov > /dev/null 2>&1 || (echo "📦 Installing cargo-llvm-cov..." && cargo install cargo-llvm-cov --locked)
 	@mkdir -p target/coverage
-	@echo "🧪 Running trueno lib tests (PROPTEST_CASES=5)..."
-	@env PROPTEST_CASES=5 cargo llvm-cov --no-report test -p trueno --lib $(COV_EXCLUDE)
-	@echo "🧪 Running trueno-gpu lib tests (PROPTEST_CASES=5)..."
-	@env PROPTEST_CASES=5 cargo llvm-cov --no-report test -p trueno-gpu --lib $(COV_EXCLUDE) -- \
+	@echo "🧪 Running trueno lib tests (native SIMD, PROPTEST_CASES=5)..."
+	@env PROPTEST_CASES=5 RUSTFLAGS="-C target-cpu=native" \
+		cargo llvm-cov --no-report test -p trueno --lib --all-features $(COV_EXCLUDE)
+	@echo "🧪 Running trueno-gpu lib tests (CUDA enabled, PROPTEST_CASES=5)..."
+	@env PROPTEST_CASES=5 RUSTFLAGS="-C target-cpu=native" \
+		cargo llvm-cov --no-report test -p trueno-gpu --lib --all-features $(COV_EXCLUDE) -- \
 		--skip matmul_parallel --skip matmul_3level --skip matmul_blocking \
 		--skip test_all_batch --skip slow --skip heavy
 	@echo "📊 Generating reports..."
