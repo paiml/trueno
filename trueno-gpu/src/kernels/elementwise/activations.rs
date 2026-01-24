@@ -2,6 +2,7 @@
 //!
 //! GPU kernels for activation functions used in transformer FFN blocks.
 //!
+//! - `ReluKernel`: Rectified Linear Unit
 //! - `SiluKernel`: Sigmoid Linear Unit (SiLU/Swish)
 //! - `GeluKernel`: Gaussian Error Linear Unit
 //! - `ElementwiseMulKernel`: Element-wise multiplication
@@ -12,6 +13,74 @@
 use crate::kernels::Kernel;
 use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
+
+/// ReLU Activation Kernel: output = max(0, x)
+///
+/// Rectified Linear Unit activation function.
+/// ReLU(x) = max(0, x)
+///
+/// # Issue #88: Forward kernel for training pipelines
+#[derive(Debug, Clone)]
+pub struct ReluKernel {
+    /// Number of elements
+    pub n: u32,
+}
+
+impl ReluKernel {
+    /// Create a new ReLU activation kernel
+    #[must_use]
+    pub const fn new(n: u32) -> Self {
+        Self { n }
+    }
+}
+
+impl Kernel for ReluKernel {
+    fn name(&self) -> &str {
+        "relu"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        PtxKernel::new("relu")
+            .param(PtxType::U64, "input_ptr")
+            .param(PtxType::U64, "output_ptr")
+            .param(PtxType::U32, "n")
+            .build(|ctx| {
+                // Global thread ID
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let ctaid = ctx.special_reg(PtxReg::CtaIdX);
+                let ntid = ctx.special_reg(PtxReg::NtidX);
+                let gid = ctx.mad_lo_u32(ctaid, ntid, tid);
+
+                // Load parameters
+                let n = ctx.load_param_u32("n");
+                let input_ptr = ctx.load_param_u64("input_ptr");
+                let output_ptr = ctx.load_param_u64("output_ptr");
+
+                // Bounds check
+                let in_bounds = ctx.setp_lt_u32(gid, n);
+                ctx.branch_if_not(in_bounds, "exit");
+
+                // Calculate address
+                let four = ctx.mov_u32_imm(4);
+                let offset = ctx.mul_wide_u32_reg(gid, four);
+                let in_addr = ctx.add_u64(input_ptr, offset);
+                let out_addr = ctx.add_u64(output_ptr, offset);
+
+                // Load x
+                let x = ctx.ld_global_f32(in_addr);
+
+                // Compute ReLU: max(0, x)
+                let zero = ctx.mov_f32_imm(0.0);
+                let result = ctx.max_f32(x, zero);
+
+                // Store
+                ctx.st_global_f32(out_addr, result);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
 
 /// SiLU (Swish) Activation Kernel: output = x * sigmoid(x)
 ///
@@ -342,6 +411,24 @@ impl Kernel for ScaleKernel {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_relu_kernel_name() {
+        let kernel = ReluKernel::new(2048);
+        assert_eq!(kernel.name(), "relu");
+    }
+
+    #[test]
+    fn test_relu_ptx_generation() {
+        let kernel = ReluKernel::new(2048);
+        let ptx = kernel.emit_ptx();
+
+        // Verify entry point
+        assert!(ptx.contains(".entry relu"));
+
+        // Verify max operation for ReLU
+        assert!(ptx.contains("max.f32"));
+    }
 
     #[test]
     fn test_silu_kernel_name() {

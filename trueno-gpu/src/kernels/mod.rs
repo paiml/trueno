@@ -11,6 +11,7 @@
 //! - **Quantize**: Q4_K/Q5_K/Q6_K dequantization fused with matmul (PARITY-115/116/117)
 //! - **BiasActivation**: Fused bias + activation epilogue (ReLU, GELU)
 //! - **GEMV**: Matrix-vector multiply for M=1 decode throughput (CoalescedGemvKernel)
+//! - **Backward**: Training backward passes (GEMM, Softmax, LayerNorm, RMSNorm, Attention, Activations)
 //!
 //! ## Barrier Safety (PARITY-114)
 //!
@@ -19,6 +20,7 @@
 
 mod argmax;
 mod attention;
+pub mod backward;
 mod bias_activation;
 mod conv1d;
 mod elementwise;
@@ -51,6 +53,7 @@ pub use elementwise::{
     ElementwiseMulKernel, FusedResidualRmsNormKernel, FusedSwigluKernel,
     GeluKernel, KvCacheScatterIndirectKernel, KvCacheScatterKernel,
     PreciseRopeIndirectKernel, PreciseRopeKernel,  // CORRECTNESS-013
+    ReluKernel,  // Issue #88: Forward ReLU kernel
     ResidualAddKernel, RopeIndirectKernel, RopeKernel, RopeNeoxKernel,
     RopeNeoxIndirectKernel, ScaleKernel, SiluKernel, TransposeKernel,  // WAPR-PERF-004
 };
