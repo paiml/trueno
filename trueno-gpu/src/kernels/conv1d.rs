@@ -280,7 +280,7 @@ impl Kernel for Conv1dKernel {
                 // sigmoid(x) = 1 / (1 + exp(-x))
                 // Use approximation: neg_arg = -sigmoid_arg
                 let neg_arg = ctx.neg_f32(sigmoid_arg);
-                let log2e = ctx.mov_f32_imm(1.4427); // log2(e)
+                let log2e = ctx.mov_f32_imm(std::f32::consts::LOG2_E); // log2(e)
                 let scaled_neg = ctx.mul_f32(neg_arg, log2e);
                 let exp_neg = ctx.ex2_f32(scaled_neg); // exp(x) ≈ 2^(x * log2(e))
                 let one_plus_exp = ctx.add_f32(one_f32, exp_neg);

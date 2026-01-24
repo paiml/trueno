@@ -647,11 +647,11 @@ pub fn gemm_blis_parallel(
     let nc = NC.min(n);
     let kc = KC.min(k);
     let packed_b_total_size = ((n + NR - 1) / NR) * ((k + KC - 1) / KC) * packed_b_size(kc, nc);
-    let packed_b = std::sync::Arc::new(std::sync::RwLock::new(vec![0.0f32; packed_b_total_size]));
+    let _packed_b = std::sync::Arc::new(std::sync::RwLock::new(vec![0.0f32; packed_b_total_size]));
 
     // Parallel over M partitions
     let c_ptr = c.as_mut_ptr() as usize;
-    let c_len = c.len();
+    let _c_len = c.len();
 
     partitions.into_par_iter().for_each(|m_range| {
         let m_local = m_range.len();
