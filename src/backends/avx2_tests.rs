@@ -5,7 +5,6 @@
 #[cfg(test)]
 mod tests {
     use super::super::avx2::Avx2Backend;
-    #[allow(unused_imports)]
     use super::super::scalar::ScalarBackend;
     use super::super::VectorBackend;
 
@@ -130,7 +129,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = vec![1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5];
         let b = vec![10.5, 9.5, 8.5, 7.5, 6.5, 5.5, 4.5, 3.5, 2.5, 1.5];
@@ -195,7 +193,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [-5.0, -3.0, -1.0, 0.0, 1.0, 3.0, 5.0, -2.0, 2.0, -4.0, 4.0];
         let mut avx2_result = [0.0; 11];
@@ -218,7 +215,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [-10.0, -1.0, 0.0, 1.0, 10.0];
         let mut avx2_result = [0.0; 5];
@@ -248,7 +244,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         // Test various ranges: negative, zero, positive, large values
         let test_values = vec![
@@ -289,7 +284,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [-2.0, -1.0, 0.0, 1.0, 2.0];
         let mut avx2_result = [0.0; 5];
@@ -319,7 +313,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [-10.0, -1.0, 0.0, 1.0, 10.0];
         let mut avx2_result = [0.0; 5];
@@ -349,7 +342,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0];
         let b = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
@@ -373,7 +365,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0];
         let b = [2.0, 4.0, 5.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0];
@@ -397,7 +388,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let scalar = 2.5;
@@ -421,7 +411,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0];
         let mut avx2_result = [0.0; 9];
@@ -444,7 +433,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let b = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
@@ -469,7 +457,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0];
         let b = [
@@ -502,7 +489,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 5.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
 
@@ -522,7 +508,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [5.0, 1.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
 
@@ -542,7 +527,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
 
@@ -562,7 +546,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0];
 
@@ -582,7 +565,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [3.0, 4.0, 0.0, 0.0, 5.0, 12.0, 0.0, 8.0, 15.0];
 
@@ -602,7 +584,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let b = [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
@@ -623,7 +604,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5];
         let b = [2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
@@ -647,7 +627,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5];
         let b = [8.5, 9.5, 10.5, 11.5, 12.5, 13.5, 14.5, 15.5, 16.5];
@@ -671,7 +650,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
 
@@ -691,7 +669,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 5.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
 
@@ -711,7 +688,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         let a = [5.0, 1.0, 3.0, 10.0, 2.0, 8.0, 4.0, 9.0, 6.0];
 
@@ -727,7 +703,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_sqrt_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         let a = [4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0, 81.0, 100.0, 144.0];
         let mut avx2_result = vec![0.0; a.len()];
@@ -753,7 +728,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_recip_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 2.0, 4.0, 5.0, 8.0, 10.0, 16.0, 20.0, 25.0, 32.0];
         let mut avx2_result = vec![0.0; a.len()];
@@ -779,7 +753,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_ln_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0];
         let mut avx2_result = vec![0.0; a.len()];
@@ -805,7 +778,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_log2_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 512.0];
         let mut avx2_result = vec![0.0; a.len()];
@@ -831,7 +803,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_log10_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.0, 10.0, 100.0, 1000.0, 2.0, 20.0, 200.0, 5.0, 50.0, 500.0];
         let mut avx2_result = vec![0.0; a.len()];
@@ -857,7 +828,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_sin_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         use std::f32::consts::PI;
         let a = [
@@ -895,7 +865,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_cos_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         use std::f32::consts::PI;
         let a = [
@@ -933,7 +902,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_tan_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         use std::f32::consts::PI;
         let a = [
@@ -971,7 +939,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_floor_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.1, 2.5, 3.9, -1.1, -2.5, -3.9, 0.1, 0.9, -0.1, -0.9];
         let mut avx2_result = vec![0.0; a.len()];
@@ -995,7 +962,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_ceil_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.1, 2.5, 3.9, -1.1, -2.5, -3.9, 0.1, 0.9, -0.1, -0.9];
         let mut avx2_result = vec![0.0; a.len()];
@@ -1019,7 +985,6 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_avx2_round_matches_scalar() {
-        use super::super::scalar::ScalarBackend;
 
         let a = [1.1, 2.5, 3.9, -1.1, -2.5, -3.9, 0.1, 0.9, -0.1, -0.9];
         let mut avx2_result = vec![0.0; a.len()];
@@ -1050,7 +1015,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         // Test various input sizes
         let test_cases = vec![
@@ -1096,7 +1060,6 @@ mod tests {
             return;
         }
 
-        use super::super::scalar::ScalarBackend;
 
         // Simple deterministic pseudo-random generator (xorshift32)
         // Using deterministic seed for reproducibility
