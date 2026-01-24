@@ -923,8 +923,7 @@ impl Matrix<f32> {
         l3_block_size: usize,
     ) {
         #[cfg(target_arch = "x86_64")]
-        use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
-        use crate::backends::{scalar::ScalarBackend, VectorBackend};
+        use crate::backends::{avx2::Avx2Backend, VectorBackend};
 
         // Process all column blocks for this row block
         for jjj in (0..b_transposed.rows).step_by(l3_block_size) {

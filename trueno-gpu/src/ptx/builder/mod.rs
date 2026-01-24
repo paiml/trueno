@@ -940,9 +940,9 @@ impl<'a> KernelBuilder<'a> {
 
         // Now x_reduced is in [-π, π]
         // Polynomial coefficients (Cephes sin polynomial)
-        let c1 = self.mov_f32_imm(-0.166666666666_f32);  // -1/6
-        let c2 = self.mov_f32_imm(0.00833333333333_f32); // 1/120
-        let c3 = self.mov_f32_imm(-0.000198412698_f32);  // -1/5040
+        let c1 = self.mov_f32_imm(-0.166_666_67_f32);  // -1/6
+        let c2 = self.mov_f32_imm(0.008_333_334_f32); // 1/120
+        let c3 = self.mov_f32_imm(-0.000_198_412_7_f32);  // -1/5040
 
         // x² and higher powers
         let x2 = self.mul_f32(x_reduced, x_reduced);
@@ -978,8 +978,8 @@ impl<'a> KernelBuilder<'a> {
 
         // Polynomial coefficients (Cephes cos polynomial)
         let c1 = self.mov_f32_imm(-0.5_f32);              // -1/2
-        let c2 = self.mov_f32_imm(0.0416666666667_f32);   // 1/24
-        let c3 = self.mov_f32_imm(-0.00138888888889_f32); // -1/720
+        let c2 = self.mov_f32_imm(0.041_666_668_f32);   // 1/24
+        let c3 = self.mov_f32_imm(-0.001_388_888_9_f32); // -1/720
 
         let x2 = self.mul_f32(x_reduced, x_reduced);
         let x4 = self.mul_f32(x2, x2);
@@ -1038,11 +1038,11 @@ impl<'a> KernelBuilder<'a> {
         // 2^f ≈ c0 + c1*f + c2*f² + c3*f³ + c4*f⁴ + c5*f⁵ + c6*f⁶
         // Coefficients from sollya/libm for 2^x on [-0.5, 0.5]
         let c0 = self.mov_f32_imm(1.0);
-        let c1 = self.mov_f32_imm(0.693147182464599609375_f32);  // ln(2)
-        let c2 = self.mov_f32_imm(0.2402265071868896484375_f32); // ln(2)²/2
-        let c3 = self.mov_f32_imm(0.05550318956375122070_f32);   // ln(2)³/6
-        let c4 = self.mov_f32_imm(0.009618341922760009766_f32);  // ln(2)⁴/24
-        let c5 = self.mov_f32_imm(0.001333355903625488281_f32);  // ln(2)⁵/120
+        let c1 = self.mov_f32_imm(std::f32::consts::LN_2);  // ln(2)
+        let c2 = self.mov_f32_imm(0.240_226_5_f32); // ln(2)²/2
+        let c3 = self.mov_f32_imm(0.055_503_19_f32);   // ln(2)³/6
+        let c4 = self.mov_f32_imm(0.009_618_342_f32);  // ln(2)⁴/24
+        let c5 = self.mov_f32_imm(0.001_333_355_9_f32);  // ln(2)⁵/120
 
         // Horner's method: p = c0 + f*(c1 + f*(c2 + f*(c3 + f*(c4 + f*c5))))
         let _f2 = self.mul_f32(f, f);

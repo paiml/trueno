@@ -611,3 +611,6 @@ cargo modules generate graph | dot -Tpng > architecture.png
 | 2026-01-23 | Phase 3: Coverage (Delete) | Deleted 600 lines of dead AVX2 code; `colmajor.rs` improved to A/99% | User |
 | 2026-01-23 | Shatter `avx2.rs` (Final) | Delegated trait implementation to `ops/`; `mod.rs` improved to A (94.3) | User |
 | 2026-01-23 | Phase 1: SIMD Sweep | Delegated `sse2`, `wasm`, `avx512` to `ops/`; -72% line reduction; B- -> A/A+ | User |
+| 2026-01-23 | Phase 4: Falsification (Titan) | Confirmed `canary_gpu_kernel_execution` exists; GPU parity verified | User |
+| 2026-01-23 | Phase 4: Falsification (Titan) | Added `titan_duel_numerical_parity`; Verified CPU/GPU GEMM parity (1e-4) | User |
+| 2026-01-23 | Shatter `blis.rs` (Phase 2) | Extracted `backend_selection`, `microkernels`; `mod.rs` at 3.2k lines | User |

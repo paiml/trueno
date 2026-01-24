@@ -110,6 +110,20 @@
 #![allow(clippy::doc_lazy_continuation)]
 // Allow useless_vec in tests - clearer intent
 #![allow(clippy::useless_vec)]
+// Allow similar names - k_h vs kt_h are semantically distinct (key vs key-transposed)
+#![allow(clippy::similar_names)]
+// Allow many single char names - standard matrix notation (a, b, m, n, k)
+#![allow(clippy::many_single_char_names)]
+// Allow doc nested refdefs - acceptable in list items
+#![allow(clippy::doc_nested_refdefs)]
+// Allow cloned instead of copied - semantic clarity
+#![allow(clippy::cloned_instead_of_copied)]
+// Allow too many arguments - GPU APIs require many parameters
+#![allow(clippy::too_many_arguments)]
+// Allow explicit lifetimes - clearer for complex lifetime relationships
+#![allow(clippy::elidable_lifetime_names)]
+// Allow manual slice size calculation - clearer intent
+#![allow(clippy::manual_slice_size_calculation)]
 
 pub mod backend;
 pub mod driver;

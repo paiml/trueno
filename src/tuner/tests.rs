@@ -2935,7 +2935,7 @@ fn test_kernel_classifier_predict_with_features() {
 
 #[test]
 fn test_bottleneck_class_from_brick_memory_compute() {
-    // BrickBottleneck is already in scope from module imports
+    use crate::brick::BrickBottleneck;
     let memory = BottleneckClass::from_brick_bottleneck(BrickBottleneck::Memory);
     assert!(matches!(memory, BottleneckClass::MemoryBound));
 
@@ -3016,6 +3016,7 @@ fn test_quant_type_all_indices() {
 
 #[test]
 fn test_feature_extractor_extract_with_hardware() {
+    use crate::hardware::HardwareCapability;
     let hw = HardwareCapability::detect();
     let extractor = FeatureExtractor::with_hardware(hw);
 

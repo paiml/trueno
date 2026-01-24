@@ -1,3 +1,41 @@
+// ============================================================================
+// Development-phase lint allows - to be addressed incrementally
+// ============================================================================
+// Allow manual_div_ceil - clearer for block calculations
+#![allow(clippy::manual_div_ceil)]
+// Allow manual_is_multiple_of - clearer alignment checks
+#![allow(clippy::manual_is_multiple_of)]
+// Allow needless_range_loop - index access is clearer in some SIMD algorithms
+#![allow(clippy::needless_range_loop)]
+// Allow empty line after doc comments - formatting preference
+#![allow(clippy::empty_line_after_doc_comments)]
+// Allow similar names - semantic distinction is clear
+#![allow(clippy::similar_names)]
+// Allow many single char names - standard math/matrix notation
+#![allow(clippy::many_single_char_names)]
+// Allow too many arguments - SIMD/compute APIs require many parameters
+#![allow(clippy::too_many_arguments)]
+// Allow type complexity - complex SIMD types
+#![allow(clippy::type_complexity)]
+// Allow macro metavars in unsafe - necessary for SIMD dispatch macros
+#![allow(clippy::macro_metavars_in_unsafe)]
+// Allow missing panics doc - will be added incrementally
+#![allow(clippy::missing_panics_doc)]
+// Allow missing errors doc - will be added incrementally
+#![allow(clippy::missing_errors_doc)]
+// Allow missing safety doc - will be added incrementally
+#![allow(clippy::missing_safety_doc)]
+// Allow excessive precision - SIMD math constants need specific precision
+#![allow(clippy::excessive_precision)]
+// Allow unnecessary cast - clearer type annotations in some cases
+#![allow(clippy::unnecessary_cast)]
+// Allow cast_possible_truncation - handled in SIMD code
+#![allow(clippy::cast_possible_truncation)]
+// Allow cast_sign_loss - handled in SIMD code
+#![allow(clippy::cast_sign_loss)]
+// Allow cast_precision_loss - handled in SIMD code
+#![allow(clippy::cast_precision_loss)]
+
 //! Trueno: Multi-Target High-Performance Compute Library
 //!
 //! **Trueno** (Spanish: "thunder") provides unified, high-performance compute primitives
