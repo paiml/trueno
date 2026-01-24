@@ -1,8 +1,8 @@
 //! Vector module tests
 //!
 //! Organized into:
-//! - `unit_tests`: Basic correctness tests
+//! - `unit`: Basic correctness tests (shattered into focused modules)
 //! - `property_tests`: Property-based tests using proptest
 
-mod unit_tests;
+mod unit;
 mod property_tests;
