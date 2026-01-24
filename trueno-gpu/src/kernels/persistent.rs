@@ -28,7 +28,7 @@
 //! - Expected speedup: 1.3x for decode phase
 
 use super::Kernel;
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// Persistent decoder kernel for eliminating launch overhead (PAR-036)

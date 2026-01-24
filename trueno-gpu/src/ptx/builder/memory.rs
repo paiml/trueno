@@ -136,6 +136,33 @@ pub trait PtxMemory: KernelBuilderCore {
                 .src(Operand::Reg(val)),
         );
     }
+
+    /// Load u32 from shared memory with volatile semantics
+    ///
+    /// Volatile loads ensure the value is always read from memory,
+    /// not from registers or cache. Used for synchronization.
+    fn ld_shared_u32_volatile(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers_mut().allocate_virtual(PtxType::U32);
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::LdVolatile, PtxType::U32)
+                .space(PtxStateSpace::Shared)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+        );
+        dst
+    }
+
+    /// Store f16 to shared memory (stored as b16)
+    ///
+    /// Half-precision floats are stored using b16 type in PTX.
+    fn st_shared_f16(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::St, PtxType::B16)
+                .space(PtxStateSpace::Shared)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val)),
+        );
+    }
 }
 
 // Blanket implementation

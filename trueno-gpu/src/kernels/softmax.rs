@@ -3,7 +3,7 @@
 //! Implements softmax(x)_i = exp(x_i - max(x)) / sum(exp(x - max(x)))
 
 use super::Kernel;
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
 use crate::ptx::{PtxKernel, PtxType};
 
 /// Softmax kernel configuration
