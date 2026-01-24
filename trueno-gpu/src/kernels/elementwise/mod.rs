@@ -10,6 +10,7 @@
 //! - [`FusedResidualRmsNormKernel`]: Fused residual add + RMSNorm
 //!
 //! ### Activation Kernels
+//! - [`ReluKernel`]: ReLU activation
 //! - [`SiluKernel`]: SiLU/Swish activation
 //! - [`GeluKernel`]: GELU activation (approximate)
 //! - [`ElementwiseMulKernel`]: Element-wise multiplication
@@ -54,7 +55,7 @@ mod swiglu;
 mod transform;
 
 // Re-export all kernel types
-pub use activations::{ElementwiseMulKernel, GeluKernel, ScaleKernel, SiluKernel};
+pub use activations::{ElementwiseMulKernel, GeluKernel, ReluKernel, ScaleKernel, SiluKernel};
 pub use kv_cache::{KvCacheScatterIndirectKernel, KvCacheScatterKernel};
 pub use residual::{BatchedResidualAddKernel, FusedResidualRmsNormKernel, ResidualAddKernel};
 pub use rope::{
