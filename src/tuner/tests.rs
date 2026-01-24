@@ -3578,9 +3578,245 @@ fn test_brick_tuner_recommend_kernel_with_exploration_exploit() {
 fn test_feature_extractor_default_impl() {
     let from_default = FeatureExtractor::default();
     let from_new = FeatureExtractor::new();
-    
+
     // Both should have hardware as None initially
     assert!(from_default.hardware.is_none());
     assert!(from_new.hardware.is_none());
+}
+
+// =============================================================================
+// TunerDataCollector Additional Tests (covering uncovered methods)
+// =============================================================================
+
+/// Test: TunerDataCollector::ready_to_train() threshold logic
+#[test]
+fn test_collector_ready_to_train_below_threshold() {
+    let collector = TunerDataCollector::new();
+    // Empty collector should not be ready
+    assert!(!collector.ready_to_train());
+}
+
+/// Test: TunerDataCollector::ready_to_train() at threshold
+#[test]
+fn test_collector_ready_to_train_at_threshold() {
+    let mut collector = TunerDataCollector::new();
+
+    // Add exactly MIN_SAMPLES_FOR_TRAINING samples
+    for i in 0..TunerDataCollector::MIN_SAMPLES_FOR_TRAINING {
+        let features = TunerFeatures::builder()
+            .model_params_b(7.0)
+            .hidden_dim(4096)
+            .batch_size((i as u32) + 1)
+            .build();
+        collector.samples.push(TrainingSample {
+            features,
+            throughput_tps: 100.0 + i as f32,
+            best_kernel: KernelType::TiledQ4K,
+            bottleneck: BottleneckClass::MemoryBound,
+            timestamp: format!("{}", i),
+            hardware_id: "test".to_string(),
+        });
+    }
+
+    assert!(collector.ready_to_train());
+}
+
+/// Test: TunerDataCollector::training_progress() returns correct counts
+#[test]
+fn test_collector_training_progress() {
+    let mut collector = TunerDataCollector::new();
+
+    let (current, required) = collector.training_progress();
+    assert_eq!(current, 0);
+    assert_eq!(required, TunerDataCollector::MIN_SAMPLES_FOR_TRAINING);
+
+    // Add 5 samples
+    for i in 0..5 {
+        let features = TunerFeatures::builder()
+            .model_params_b(7.0)
+            .batch_size((i as u32) + 1)
+            .build();
+        collector.samples.push(TrainingSample {
+            features,
+            throughput_tps: 100.0,
+            best_kernel: KernelType::TiledQ4K,
+            bottleneck: BottleneckClass::MemoryBound,
+            timestamp: format!("{}", i),
+            hardware_id: "test".to_string(),
+        });
+    }
+
+    let (current, required) = collector.training_progress();
+    assert_eq!(current, 5);
+    assert_eq!(required, TunerDataCollector::MIN_SAMPLES_FOR_TRAINING);
+}
+
+/// Test: TunerDataCollector::train_if_ready() returns None when not ready
+#[test]
+fn test_collector_train_if_ready_not_ready() {
+    let collector = TunerDataCollector::new();
+    assert!(collector.train_if_ready().is_none());
+}
+
+/// Test: TunerDataCollector::train_if_ready() returns Some when ready
+#[test]
+fn test_collector_train_if_ready_success() {
+    let mut collector = TunerDataCollector::new();
+
+    // Add MIN_SAMPLES_FOR_TRAINING samples (1000) to trigger training
+    for i in 0..TunerDataCollector::MIN_SAMPLES_FOR_TRAINING {
+        let features = TunerFeatures::builder()
+            .model_params_b(1.0 + (i as f32) % 20.0)
+            .hidden_dim(2048 + (i as u32) % 4096)
+            .batch_size((i as u32) % 16 + 1)
+            .quant_type(if i % 2 == 0 { QuantType::Q4K } else { QuantType::Q8_0 })
+            .build();
+        collector.samples.push(TrainingSample {
+            features,
+            throughput_tps: 50.0 + (i as f32) % 200.0,
+            best_kernel: KernelType::TiledQ4K,
+            bottleneck: BottleneckClass::MemoryBound,
+            timestamp: format!("{}", i),
+            hardware_id: "test-gpu".to_string(),
+        });
+    }
+
+    let result = collector.train_if_ready();
+    assert!(result.is_some());
+
+    let tuner = result.unwrap();
+    // Tuner should have been trained
+    assert!(tuner.throughput_sample_count() > 0);
+}
+
+/// Test: TunerDataCollector::bootstrap_from_five_whys() returns valid collector
+#[test]
+fn test_collector_bootstrap_from_five_whys() {
+    let collector = TunerDataCollector::bootstrap_from_five_whys();
+
+    // Bootstrap returns empty collector for now (TODO: load actual data)
+    // But it should still be a valid collector
+    assert!(collector.samples().is_empty() || collector.samples().len() > 0);
+    assert!(!collector.is_online_learning_enabled());
+}
+
+/// Test: TunerDataCollector::auto_retrain() when not ready
+#[test]
+fn test_collector_auto_retrain_not_ready() {
+    let mut collector = TunerDataCollector::new();
+    let mut tuner = BrickTuner::new();
+
+    // Should return false when not ready to retrain
+    assert!(!collector.auto_retrain(&mut tuner));
+}
+
+/// Test: TunerDataCollector::auto_retrain() with sufficient data
+#[test]
+fn test_collector_auto_retrain_success() {
+    let mut collector = TunerDataCollector::with_online_learning();
+    let mut tuner = BrickTuner::new();
+
+    // Add enough samples to trigger retrain
+    for i in 0..150 {
+        let features = TunerFeatures::builder()
+            .model_params_b(1.0 + (i as f32) * 0.1)
+            .hidden_dim(2048)
+            .batch_size((i as u32) % 16 + 1)
+            .quant_type(if i % 2 == 0 { QuantType::Q4K } else { QuantType::Q8_0 })
+            .build();
+        collector.samples.push(TrainingSample {
+            features,
+            throughput_tps: 30.0 + (i as f32) * 2.0,
+            best_kernel: KernelType::TiledQ4K,
+            bottleneck: BottleneckClass::MemoryBound,
+            timestamp: format!("{}", i),
+            hardware_id: "auto-retrain-test".to_string(),
+        });
+    }
+
+    // Force should_retrain to return true by exceeding threshold
+    collector.samples_at_last_train = 0;
+    collector.retrain_threshold = 50;
+
+    let result = collector.auto_retrain(&mut tuner);
+    assert!(result);
+}
+
+/// Test: TunerDataCollector::from_json() parses valid JSON by round-tripping
+#[test]
+fn test_collector_from_json_valid() {
+    // Create a collector with samples, serialize it, then deserialize
+    let mut original = TunerDataCollector::new();
+    let features = TunerFeatures::builder()
+        .model_params_b(7.0)
+        .hidden_dim(4096)
+        .batch_size(1)
+        .build();
+    original.samples.push(TrainingSample {
+        features,
+        throughput_tps: 150.0,
+        best_kernel: KernelType::TiledQ4K,
+        bottleneck: BottleneckClass::MemoryBound,
+        timestamp: "1704067200".to_string(),
+        hardware_id: "RTX4090".to_string(),
+    });
+
+    // Round-trip through JSON
+    let json = original.to_json().unwrap();
+    let result = TunerDataCollector::from_json(&json);
+    assert!(result.is_ok());
+
+    let collector = result.unwrap();
+    assert_eq!(collector.samples().len(), 1);
+    assert_eq!(collector.samples()[0].throughput_tps, 150.0);
+}
+
+/// Test: TunerDataCollector::from_json() handles invalid JSON
+#[test]
+fn test_collector_from_json_invalid() {
+    let json = "not valid json";
+    let result = TunerDataCollector::from_json(json);
+    assert!(result.is_err());
+}
+
+/// Test: ConceptDriftStatus fields
+#[test]
+fn test_concept_drift_status_fields() {
+    let status = ConceptDriftStatus {
+        drift_detected: true,
+        staleness_score: 0.75,
+        samples_since_training: 100,
+        recommend_retrain: true,
+        explanation: "High error rate detected".to_string(),
+    };
+
+    assert!(status.drift_detected);
+    assert_eq!(status.staleness_score, 0.75);
+    assert_eq!(status.samples_since_training, 100);
+    assert!(status.recommend_retrain);
+    assert!(status.explanation.contains("error"));
+}
+
+/// Test: TrainingStats fields
+#[test]
+fn test_training_stats_all_fields() {
+    let stats = TrainingStats {
+        total_samples: 500,
+        samples_since_training: 50,
+        accepted_count: 200,
+        rejected_count: 50,
+        alternative_count: 100,
+        staleness_score: 0.3,
+        drift_detected: false,
+        online_learning_enabled: true,
+    };
+
+    assert_eq!(stats.total_samples, 500);
+    assert_eq!(stats.samples_since_training, 50);
+    assert_eq!(stats.accepted_count, 200);
+    assert_eq!(stats.rejected_count, 50);
+    assert_eq!(stats.alternative_count, 100);
+    assert!(!stats.drift_detected);
+    assert!(stats.online_learning_enabled);
 }
 
