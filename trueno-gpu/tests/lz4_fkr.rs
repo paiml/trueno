@@ -332,6 +332,7 @@ fn lz4_fkr_constants() {
 
 #[cfg(feature = "cuda")]
 mod ptx_runtime {
+    #[allow(unused_imports)]
     use super::*;
     use trueno_gpu::driver::CudaContext;
 
