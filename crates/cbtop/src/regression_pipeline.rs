@@ -492,7 +492,7 @@ impl RegressionPipeline {
 
         let branch = match git_ref {
             GitRef::Branch(name) => name.clone(),
-            _ => "detached".to_string(),
+            GitRef::Commit(_) | GitRef::Tag(_) | GitRef::PullRequest(_) => "detached".to_string(),
         };
 
         let mut results = BenchmarkResults::new(commit, branch);
@@ -590,7 +590,9 @@ impl RegressionPipeline {
                     self.config.regression_threshold_percent
                 )
             }
-            _ => "Pipeline status unknown".to_string(),
+            PipelineStatus::Pending | PipelineStatus::Running | PipelineStatus::Cancelled | PipelineStatus::Error => {
+                "Pipeline status unknown".to_string()
+            }
         }
     }
 
@@ -598,7 +600,7 @@ impl RegressionPipeline {
     fn extract_pr_number(&self, git_ref: &GitRef) -> Option<u64> {
         match git_ref {
             GitRef::PullRequest(num) => Some(*num),
-            _ => None,
+            GitRef::Branch(_) | GitRef::Commit(_) | GitRef::Tag(_) => None,
         }
     }
 
@@ -671,7 +673,9 @@ impl RegressionPipeline {
             PipelineStatus::Passed => "![Passed](https://img.shields.io/badge/status-passed-green)",
             PipelineStatus::Warning => "![Warning](https://img.shields.io/badge/status-warning-yellow)",
             PipelineStatus::Failed => "![Failed](https://img.shields.io/badge/status-failed-red)",
-            _ => "![Unknown](https://img.shields.io/badge/status-unknown-gray)",
+            PipelineStatus::Pending | PipelineStatus::Running | PipelineStatus::Cancelled | PipelineStatus::Error => {
+                "![Unknown](https://img.shields.io/badge/status-unknown-gray)"
+            }
         };
         report.push_str(&format!("{}\n\n", badge));
 
@@ -703,7 +707,7 @@ impl RegressionPipeline {
             ));
         }
 
-        report.push_str("\n");
+        report.push('\n');
 
         // Details
         report.push_str("## Details\n\n");

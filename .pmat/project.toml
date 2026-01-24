@@ -1,11 +1,4 @@
 [pmat]
 version = "2.213.7"
-last_compliance_check = "2026-01-22T23:09:53.491095855Z"
+last_compliance_check = "2026-01-24T14:42:23.993867466Z"
 auto_update = false
-
-[tdg]
-# Exclude .unwrap() in doc comments - these are examples, not production code
-exclude_patterns = [
-    "/// .*\\.unwrap\\(\\)",  # Doc comments with example code
-    "//! .*\\.unwrap\\(\\)",  # Module doc comments with example code
-]

@@ -329,8 +329,14 @@ impl WorkloadSpec {
                 // QK^T + softmax + AV
                 b * h * (s * s * d * 2 + s * s + s * s * d * 2)
             }
-            Operation::Elementwise => self.dimensions.n,
-            _ => self.dimensions.n, // Default estimate
+            // Default estimate for remaining operations
+            Operation::Elementwise
+            | Operation::Conv2d
+            | Operation::Softmax
+            | Operation::LayerNorm
+            | Operation::Ffn
+            | Operation::Reduce
+            | Operation::Custom(_) => self.dimensions.n,
         }
     }
 }

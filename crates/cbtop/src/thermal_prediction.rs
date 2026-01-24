@@ -118,7 +118,7 @@ impl ThrottleRisk {
         horizon_sec: f64,
     ) -> Self {
         let margin = threshold - current_temp;
-        let predicted_temp = current_temp + trend_slope * horizon_sec;
+        let _predicted_temp = current_temp + trend_slope * horizon_sec;
 
         // Calculate risk based on:
         // 1. How close we are to threshold

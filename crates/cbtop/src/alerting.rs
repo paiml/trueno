@@ -48,7 +48,7 @@ impl AlertSeverity {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_uppercase().as_str() {
             "INFO" => Some(Self::Info),
             "WARNING" | "WARN" => Some(Self::Warning),
@@ -197,8 +197,7 @@ impl Alert {
     /// Format as PagerDuty event
     pub fn to_pagerduty_json(&self, routing_key: &str) -> String {
         let action = match self.severity {
-            AlertSeverity::Critical => "trigger",
-            _ => "trigger",
+            AlertSeverity::Critical | AlertSeverity::Warning | AlertSeverity::Info => "trigger",
         };
 
         format!(
@@ -601,9 +600,9 @@ mod tests {
 
     #[test]
     fn test_severity_parsing() {
-        assert_eq!(AlertSeverity::from_str("INFO"), Some(AlertSeverity::Info));
-        assert_eq!(AlertSeverity::from_str("warning"), Some(AlertSeverity::Warning));
-        assert_eq!(AlertSeverity::from_str("invalid"), None);
+        assert_eq!(AlertSeverity::parse("INFO"), Some(AlertSeverity::Info));
+        assert_eq!(AlertSeverity::parse("warning"), Some(AlertSeverity::Warning));
+        assert_eq!(AlertSeverity::parse("invalid"), None);
     }
 
     #[test]

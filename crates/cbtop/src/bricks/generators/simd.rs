@@ -103,7 +103,7 @@ impl SimdLoadBrick {
         let tile_size = optimal_tile_size();
 
         // PERF-001: Pre-allocate tile vectors to avoid allocation in hot path
-        let num_tiles = (problem_size + tile_size - 1) / tile_size;
+        let num_tiles = problem_size.div_ceil(tile_size);
         let tile_vectors: Vec<(Vector<f32>, Vector<f32>)> = (0..num_tiles)
             .map(|i| {
                 let start = i * tile_size;

@@ -16,6 +16,8 @@
 //!
 //! let guard = JidokaGuard::strict();
 //! guard.check_input(1.0, "matrix_a")?;
+//! let computed = 1.0f32;
+//! let expected = 1.0f32;
 //! guard.validate(computed, expected)?;
 //! # Ok::<(), JidokaError>(())
 //! ```

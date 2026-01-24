@@ -515,13 +515,13 @@ impl BackendRegressionDetector {
                         overhead * 100.0
                     )
                 } else {
-                    format!("Best throughput with low transfer overhead")
+                    "Best throughput with low transfer overhead".to_string()
                 }
             } else {
-                format!("Best throughput among available backends")
+                "Best throughput among available backends".to_string()
             }
         } else {
-            format!("Best CPU backend for this size")
+            "Best CPU backend for this size".to_string()
         };
 
         Some(BackendRecommendation {

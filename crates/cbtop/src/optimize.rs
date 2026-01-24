@@ -126,7 +126,7 @@ impl CpuCapabilities {
             let l1d = Self::read_cache_size(0, 0).unwrap_or(32 * 1024);  // 32 KB default
             let l2 = Self::read_cache_size(0, 2).unwrap_or(512 * 1024);  // 512 KB default
             let l3 = Self::read_cache_size(0, 3).unwrap_or(32 * 1024 * 1024); // 32 MB default
-            return (l1d, l2, l3);
+            (l1d, l2, l3)
         }
 
         #[cfg(not(target_os = "linux"))]
@@ -189,7 +189,7 @@ impl CpuCapabilities {
 
         // Determine which cache level (if any) the data fits in
         // Use 80% of cache as threshold to account for other data
-        let cache_bound = if working_set_bytes < (self.l1d_cache * 80 / 100) {
+        if working_set_bytes < (self.l1d_cache * 80 / 100) {
             // L1 cache: effectively compute-bound
             self.compute_peak_gflops()
         } else if working_set_bytes < (self.l2_cache * 80 / 100) {
@@ -201,9 +201,7 @@ impl CpuCapabilities {
         } else {
             // Main memory: memory-bound
             self.memory_peak_gflops(bytes_per_flop)
-        };
-
-        cache_bound
+        }
     }
 }
 

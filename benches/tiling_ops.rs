@@ -5,9 +5,10 @@
 //! - f16_to_f32 conversion overhead
 //! - Index calculation overhead
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use trueno::tiling::{
-    pack_a_index, pack_b_index, swizzle_index, Q4K_SUPERBLOCK_BYTES, Q4K_SUPERBLOCK_SIZE,
+    pack_a_index, pack_b_index, swizzle_index, Q4K_SUPERBLOCK_BYTES,
     TcbGeometry, TcbIndexCalculator, TiledQ4KMatvec, TilingConfig,
 };
 

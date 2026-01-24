@@ -49,7 +49,7 @@ impl CpuGovernor {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.trim().to_lowercase().as_str() {
             "performance" => Self::Performance,
             "powersave" => Self::Powersave,
@@ -231,13 +231,13 @@ impl FrequencyController {
 
         let governor_str = read_sysfs_string(&cpu_path.join("scaling_governor"))
             .unwrap_or_else(|| "unknown".to_string());
-        let governor = CpuGovernor::from_str(&governor_str);
+        let governor = CpuGovernor::parse(&governor_str);
 
         let available_str = read_sysfs_string(&cpu_path.join("scaling_available_governors"))
             .unwrap_or_default();
         let available_governors: Vec<CpuGovernor> = available_str
             .split_whitespace()
-            .map(CpuGovernor::from_str)
+            .map(CpuGovernor::parse)
             .collect();
 
         Some(CpuFrequencyInfo {
@@ -471,9 +471,9 @@ mod tests {
 
     #[test]
     fn test_governor_from_str() {
-        assert_eq!(CpuGovernor::from_str("performance"), CpuGovernor::Performance);
-        assert_eq!(CpuGovernor::from_str("POWERSAVE"), CpuGovernor::Powersave);
-        assert_eq!(CpuGovernor::from_str("unknown_gov"), CpuGovernor::Unknown);
+        assert_eq!(CpuGovernor::parse("performance"), CpuGovernor::Performance);
+        assert_eq!(CpuGovernor::parse("POWERSAVE"), CpuGovernor::Powersave);
+        assert_eq!(CpuGovernor::parse("unknown_gov"), CpuGovernor::Unknown);
     }
 
     #[test]

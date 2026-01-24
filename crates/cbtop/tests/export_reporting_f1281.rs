@@ -264,11 +264,11 @@ fn f1289_format_dispatch() {
 /// F1289.2: Format from string
 #[test]
 fn f1289_format_from_str() {
-    assert_eq!(ExportFormat::from_str("json"), Some(ExportFormat::Json));
-    assert_eq!(ExportFormat::from_str("csv"), Some(ExportFormat::Csv));
-    assert_eq!(ExportFormat::from_str("md"), Some(ExportFormat::Markdown));
-    assert_eq!(ExportFormat::from_str("html"), Some(ExportFormat::Html));
-    assert_eq!(ExportFormat::from_str("invalid"), None);
+    assert_eq!(ExportFormat::parse("json"), Some(ExportFormat::Json));
+    assert_eq!(ExportFormat::parse("csv"), Some(ExportFormat::Csv));
+    assert_eq!(ExportFormat::parse("md"), Some(ExportFormat::Markdown));
+    assert_eq!(ExportFormat::parse("html"), Some(ExportFormat::Html));
+    assert_eq!(ExportFormat::parse("invalid"), None);
 }
 
 // =============================================================================

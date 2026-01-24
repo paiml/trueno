@@ -377,7 +377,7 @@ impl PagedKvCache {
 
     /// Calculate blocks needed for tokens.
     fn blocks_needed(&self, num_tokens: usize) -> usize {
-        (num_tokens + self.block_size - 1) / self.block_size
+        num_tokens.div_ceil(self.block_size)
     }
 
     /// Allocate a single block.

@@ -52,7 +52,7 @@ impl ExportFormat {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "json" => Some(Self::Json),
             "csv" => Some(Self::Csv),
@@ -425,7 +425,7 @@ impl ReportExporter {
         for e in &report.entries {
             let change = e.percent_change();
             let indicator = if change.abs() > report.regression_threshold {
-                if change > 0.0 { "⚠️" } else { "⚠️" }
+                "⚠️"
             } else {
                 "✅"
             };
@@ -464,7 +464,7 @@ impl ReportExporter {
         match format {
             ExportFormat::Json => Self::comparison_to_json(report),
             ExportFormat::Markdown => Self::comparison_to_markdown(report),
-            _ => Self::comparison_to_json(report), // Default to JSON for unsupported
+            ExportFormat::Csv | ExportFormat::Html => Self::comparison_to_json(report),
         }
     }
 
@@ -575,9 +575,9 @@ mod tests {
 
     #[test]
     fn test_format_from_str() {
-        assert_eq!(ExportFormat::from_str("json"), Some(ExportFormat::Json));
-        assert_eq!(ExportFormat::from_str("md"), Some(ExportFormat::Markdown));
-        assert_eq!(ExportFormat::from_str("invalid"), None);
+        assert_eq!(ExportFormat::parse("json"), Some(ExportFormat::Json));
+        assert_eq!(ExportFormat::parse("md"), Some(ExportFormat::Markdown));
+        assert_eq!(ExportFormat::parse("invalid"), None);
     }
 
     #[test]

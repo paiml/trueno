@@ -442,9 +442,9 @@ mod tests {
         // On non-Linux, this is a no-op
         unsafe {
             let mut data = [0u8; 4096];
-            let result = madvise_region(data.as_mut_ptr(), data.len(), MemoryAdvice::WillNeed);
+            let _result = madvise_region(data.as_mut_ptr(), data.len(), MemoryAdvice::WillNeed);
             #[cfg(not(target_os = "linux"))]
-            assert!(result.is_ok());
+            assert!(_result.is_ok());
         }
     }
 
@@ -452,9 +452,9 @@ mod tests {
     fn test_prefetch_for_inference_stub() {
         unsafe {
             let mut data = [0u8; 4096];
-            let result = prefetch_for_inference(data.as_mut_ptr(), data.len());
+            let _result = prefetch_for_inference(data.as_mut_ptr(), data.len());
             #[cfg(not(target_os = "linux"))]
-            assert!(result.is_ok());
+            assert!(_result.is_ok());
         }
     }
 }

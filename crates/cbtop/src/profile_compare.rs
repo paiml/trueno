@@ -610,8 +610,7 @@ impl ProfileComparator {
             // Beta approximation
             let a = df / 2.0;
             let b = 0.5;
-            let incomplete_beta = self.incomplete_beta(x, a, b);
-            incomplete_beta
+            self.incomplete_beta(x, a, b)
         }
     }
 
@@ -637,7 +636,7 @@ impl ProfileComparator {
     /// Incomplete beta function approximation
     fn incomplete_beta(&self, x: f64, a: f64, b: f64) -> f64 {
         // Simple continued fraction approximation
-        if x < 0.0 || x > 1.0 {
+        if !(0.0..=1.0).contains(&x) {
             return 0.0;
         }
         if x == 0.0 {
@@ -697,6 +696,7 @@ impl ProfileComparator {
     }
 
     /// Log gamma function approximation (Stirling)
+    #[allow(clippy::excessive_precision)]
     fn ln_gamma(&self, x: f64) -> f64 {
         if x <= 0.0 {
             return f64::INFINITY;

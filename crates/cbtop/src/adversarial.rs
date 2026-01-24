@@ -175,7 +175,7 @@ impl InputValidator {
         }
 
         // F1005: Maximum-size inputs handled
-        let byte_size = data.len() * std::mem::size_of::<f32>();
+        let byte_size = std::mem::size_of_val(data);
         if byte_size > self.max_size {
             return Err(AdversarialError::MaxSizeExceeded {
                 size: byte_size,
@@ -637,7 +637,7 @@ impl ConfigValidator {
 
         // Unclosed quotes
         let quotes = trimmed.matches('"').count();
-        if quotes % 2 != 0 {
+        if !quotes.is_multiple_of(2) {
             return Err(AdversarialError::ConfigParseError {
                 field: "root".to_string(),
                 reason: "unclosed string literal".to_string(),

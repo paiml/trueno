@@ -63,20 +63,20 @@ fn f1302_detect_governor() {
 /// F1302.2: Governor name parsing
 #[test]
 fn f1302_governor_names() {
-    assert_eq!(CpuGovernor::from_str("performance"), CpuGovernor::Performance);
-    assert_eq!(CpuGovernor::from_str("powersave"), CpuGovernor::Powersave);
-    assert_eq!(CpuGovernor::from_str("ondemand"), CpuGovernor::Ondemand);
-    assert_eq!(CpuGovernor::from_str("conservative"), CpuGovernor::Conservative);
-    assert_eq!(CpuGovernor::from_str("schedutil"), CpuGovernor::Schedutil);
-    assert_eq!(CpuGovernor::from_str("userspace"), CpuGovernor::Userspace);
-    assert_eq!(CpuGovernor::from_str("unknown_gov"), CpuGovernor::Unknown);
+    assert_eq!(CpuGovernor::parse("performance"), CpuGovernor::Performance);
+    assert_eq!(CpuGovernor::parse("powersave"), CpuGovernor::Powersave);
+    assert_eq!(CpuGovernor::parse("ondemand"), CpuGovernor::Ondemand);
+    assert_eq!(CpuGovernor::parse("conservative"), CpuGovernor::Conservative);
+    assert_eq!(CpuGovernor::parse("schedutil"), CpuGovernor::Schedutil);
+    assert_eq!(CpuGovernor::parse("userspace"), CpuGovernor::Userspace);
+    assert_eq!(CpuGovernor::parse("unknown_gov"), CpuGovernor::Unknown);
 }
 
 /// F1302.3: Case insensitive parsing
 #[test]
 fn f1302_case_insensitive() {
-    assert_eq!(CpuGovernor::from_str("PERFORMANCE"), CpuGovernor::Performance);
-    assert_eq!(CpuGovernor::from_str("PoWeRsAvE"), CpuGovernor::Powersave);
+    assert_eq!(CpuGovernor::parse("PERFORMANCE"), CpuGovernor::Performance);
+    assert_eq!(CpuGovernor::parse("PoWeRsAvE"), CpuGovernor::Powersave);
 }
 
 // =============================================================================

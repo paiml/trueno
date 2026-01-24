@@ -15,7 +15,6 @@
 //! Test: Store 100 sequential snapshots, verify disk usage <5% of raw
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
 use std::time::{Duration, Instant};
 
 /// Result type for snapshot operations
@@ -547,7 +546,7 @@ impl IncrementalSnapshotStore {
         self.total_raw_size += raw_size;
 
         // Decide if this should be a keyframe
-        let is_keyframe = self.next_index % self.config.keyframe_interval == 0
+        let is_keyframe = self.next_index.is_multiple_of(self.config.keyframe_interval)
             || self.keyframes.is_empty();
 
         let (compressed_size, is_delta, base_index) = if is_keyframe {
@@ -689,8 +688,8 @@ impl IncrementalSnapshotStore {
     }
 
     /// Clean up old snapshots based on retention policy
-    pub fn cleanup(&mut self, now: Instant, reference_time: u64) {
-        let raw_cutoff = reference_time.saturating_sub(
+    pub fn cleanup(&mut self, _now: Instant, reference_time: u64) {
+        let _raw_cutoff = reference_time.saturating_sub(
             self.config.raw_max_age.as_nanos() as u64
         );
         let compressed_cutoff = reference_time.saturating_sub(
