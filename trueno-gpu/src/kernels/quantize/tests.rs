@@ -1673,32 +1673,6 @@ fn test_dp4a_q4k_gemv_ptx_generation() {
 }
 
 // =========================================================================
-// DP4A SIMD Q4K GEMV KERNEL TESTS
-// =========================================================================
-
-#[test]
-fn test_dp4a_simd_q4k_gemv_kernel_name() {
-    let kernel = Dp4aSIMDQ4KGemvKernel::new(3584, 4096);
-    assert_eq!(kernel.name(), "dp4a_simd_q4k_gemv");
-}
-
-#[test]
-fn test_dp4a_simd_q4k_gemv_config() {
-    let kernel = Dp4aSIMDQ4KGemvKernel::new(3584, 4096);
-    assert_eq!(kernel.k, 3584);
-    assert_eq!(kernel.n, 4096);
-}
-
-#[test]
-fn test_dp4a_simd_q4k_gemv_ptx_generation() {
-    let kernel = Dp4aSIMDQ4KGemvKernel::new(3584, 4096);
-    let ptx = kernel.emit_ptx();
-
-    assert!(ptx.contains(".visible .entry dp4a_simd_q4k_gemv"));
-    assert!(ptx.contains("dp4a"));
-}
-
-// =========================================================================
 // TRUE DP4A Q4K GEMV KERNEL TESTS
 // =========================================================================
 

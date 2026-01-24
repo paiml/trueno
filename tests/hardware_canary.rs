@@ -335,7 +335,7 @@ fn titan_duel_numerical_parity() {
     // ============================================================
     // GPU: Generate PTX and execute
     // ============================================================
-    let kernel = GemmKernel::naive(N, N, N);
+    let kernel = GemmKernel::naive(N as u32, N as u32, N as u32);
     let ptx = kernel.emit_ptx();
 
     let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX compilation failed");
