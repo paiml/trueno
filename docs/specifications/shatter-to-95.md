@@ -654,4 +654,6 @@ cargo modules generate graph | dot -Tpng > architecture.png
 | 2026-01-24 | Issue #85: Backward Kernels | Added 8 backward kernels (softmax, rms_norm, layer_norm, gemm A/B); entrenar unblocked | User |
 | 2026-01-24 | Shatter `resident/mod.rs` | Extracted `ops.rs` (f32 ops); `mod.rs` reduced from 1939 to 617 lines (-68%) | User |
 | 2026-01-24 | Phase 2: TDG (Dedup) | Removed 37 duplicate `ScalarBackend` imports in `avx2_tests.rs`; Improved B- (72) to B (77) | User |
+| 2026-01-24 | Shatter `emit.rs` (Final) | Shattered into 7 modules; Complexity 187 → <20; TDG reached 94.4 | User |
+| 2026-01-24 | Shatter `gemm.rs` (Final) | Modularized GEMM kernel logic; Removed internal complexity | User |
 | 2026-01-24 | Shatter `emit.rs` (Final) | Destroyed monolith; Created `emit/` with 6 modules; Complexity 187→<20 per file; TDG 94.2→94.3 | User |
