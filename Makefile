@@ -226,7 +226,8 @@ example-%: ## Run specific example (e.g., make example-brick_profiler_v2)
 	cargo run --example $*
 
 # Hardware/display-dependent code and tool crates excluded (focus on core trueno + trueno-gpu)
-COV_EXCLUDE := --ignore-filename-regex='(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs|testing/gpu_renderer\.rs|crates/cbtop/|trueno-explain/)'
+# GPU-resident modules (attention.rs, weights.rs) require CUDA integration tests (PMAT-018: TODO)
+COV_EXCLUDE := --ignore-filename-regex='(driver/memory\.rs|driver/module\.rs|driver/stream\.rs|wasm\.rs|testing/gpu_renderer\.rs|crates/cbtop/|trueno-explain/|memory/resident/attention\.rs|memory/resident/weights\.rs)'
 
 # =============================================================================
 # COVERAGE: Native SIMD + CUDA (Lambda Labs: Threadripper + NVIDIA GPU)
