@@ -26,6 +26,21 @@
 | `src/resident.rs` | ~2,500 | 4 modules (Residency, Cache, Eviction, Stats) |
 | `src/backends/avx2.rs` | ~3,200 | 6 modules (Arithmetic, Reductions, Quant, etc.) |
 | `src/backends/q4k.rs` | ~2,800 | 5 modules (Deq, Gemv, Gemm, ColMajor, Dispatch) |
+| `trueno-gpu/src/ptx/builder/emit.rs` | 978 | 5 modules (Arithmetic, Memory, Control, Warp, WMMA) |
+
+### 1.6 `trueno-gpu/src/ptx/builder/emit.rs` → `emit/`
+
+The goal is to reduce the cyclomatic complexity (187) by delegating op-specific formatting:
+
+```
+trueno-gpu/src/ptx/builder/emit/
+├── mod.rs           # Entry points: emit_instruction, write_instruction
+├── arithmetic.rs    # add, sub, mul, mad, div, rem, abs, neg, min, max, fma
+├── memory.rs        # ld, st, ldparam, cvt, cvta, atom_*
+├── control.rs       # bra, call, ret, exit, bar, membar
+├── warp.rs          # shfl, vote
+└── wmma.rs          # All wmma_* helpers
+```
 
 ### Low Coverage Files (cbtop)
 
@@ -311,6 +326,9 @@ fn test_load_panel_paint_with_score() {
 ```
 
 ### 3.3 Kernel Tests (trueno-gpu)
+...
+### 3.4 Exhaustive Emitter Testing
+Write a test suite that iterates through all `PtxOp` variants and asserts the string output of `emit_instruction`. This ensures 100% coverage of the emission logic and prevents regression during shattering.
 
 **elementwise.rs RoPE tests**:
 ```rust
@@ -516,6 +534,11 @@ The `MockCanvas` assertions must be periodically validated against a "Golden Fra
 - If `MockCanvas` says "GPU" is at (2,1) but a `Snapshot` test shows it at (2,2) due to a padding bug, the mock is falsified and must be destroyed.
 
 ### 4.3 Negative Tests (The Search for Failure)
+...
+### 4.4 Memory Leak Falsification (Scarcity Verification)
+Use the RTX 4090 to verify Scarcity Handling:
+- **Test**: `test_gpu_eviction_under_pressure`. Allocate tensors until OOM is imminent.
+- **Verification**: Assert `EvictionPolicy` triggers and `cudaMemGetInfo` shows VRAM release after `Drop`.
 Coverage must include "Error Paths":
 - Provide a `ResourcePool` with 0 capacity. Expect `TunerError::ResourceExhaustion`.
 - Provide a `BatchSplitStrategy` with a negative batch size. Expect immediate panic or `Err`.
@@ -625,3 +648,10 @@ cargo modules generate graph | dot -Tpng > architecture.png
 | 2026-01-23 | Phase 4: Falsification (Titan) | Added `titan_duel_numerical_parity`; Verified CPU/GPU GEMM parity (1e-4) | User |
 | 2026-01-23 | Phase 1: Shatter (Matrix) | Extracted `ops.rs` and `storage.rs`; `mod.rs` reduced to 1.6k lines | User |
 | 2026-01-23 | Shatter `matrix/mod.rs` (Final) | Reduced to 67 lines (-97%); Separated `storage`, `arithmetic`, `ml_ops` | User |
+| 2026-01-23 | Shatter `q4k.rs` (Final) | Shattered into 6 modular files; Monolith destroyed | User |
+| 2026-01-23 | Shatter `simulation.rs` (Final) | Shattered into 5 modular files; All impl files < 700 lines | User |
+| 2026-01-23 | Phase 2: TDG (Score) | Overall TDG reached 94.2; 0.8 points to the 95.0 milestone | User |
+| 2026-01-24 | Issue #85: Backward Kernels | Added 8 backward kernels (softmax, rms_norm, layer_norm, gemm A/B); entrenar unblocked | User |
+| 2026-01-24 | Shatter `resident/mod.rs` | Extracted `ops.rs` (f32 ops); `mod.rs` reduced from 1939 to 617 lines (-68%) | User |
+| 2026-01-24 | Phase 2: TDG (Dedup) | Removed 37 duplicate `ScalarBackend` imports in `avx2_tests.rs`; Improved B- (72) to B (77) | User |
+| 2026-01-24 | Shatter `emit.rs` (Final) | Destroyed monolith; Created `emit/` with 6 modules; Complexity 187→<20 per file; TDG 94.2→94.3 | User |
