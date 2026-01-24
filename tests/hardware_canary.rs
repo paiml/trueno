@@ -287,6 +287,147 @@ fn canary_gpu_kernel_execution() {
     println!("✅ GPU CANARY PASSED: PTX kernel execution successful");
 }
 
+/// Titan Duel: Numerical Parity Test - CPU vs GPU GEMM
+///
+/// This is the "Duel of the Titans" - verifying that GPU GEMM produces
+/// mathematically identical results to the CPU reference implementation.
+///
+/// If this test fails, the GPU kernel is a "successful hallucination" -
+/// it runs without crashing but produces incorrect results.
+#[test]
+#[cfg(feature = "cuda")]
+fn titan_duel_numerical_parity() {
+    use std::ffi::c_void;
+    use trueno::blis::gemm_reference;
+    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
+    use trueno_gpu::kernels::{GemmKernel, Kernel};
+
+    const N: usize = 128; // 128x128 matrix
+    const EPSILON: f32 = 1e-4; // Tolerance for FP32 accumulation differences
+
+    let ctx = match CudaContext::new(0) {
+        Ok(ctx) => ctx,
+        Err(_) => {
+            println!("⚠️  TITAN DUEL SKIPPED: No CUDA device available");
+            return;
+        }
+    };
+
+    let stream = CudaStream::new(&ctx).expect("CUDA stream");
+
+    // Generate deterministic test data (not random for reproducibility)
+    let mut a = vec![0.0f32; N * N];
+    let mut b = vec![0.0f32; N * N];
+    for i in 0..N {
+        for j in 0..N {
+            // Simple pattern: a[i,j] = (i + j) % 10 / 10.0
+            a[i * N + j] = ((i + j) % 10) as f32 / 10.0;
+            b[i * N + j] = ((i * 2 + j) % 10) as f32 / 10.0;
+        }
+    }
+
+    // ============================================================
+    // CPU Reference: gemm_reference (gold standard)
+    // ============================================================
+    let mut c_cpu = vec![0.0f32; N * N];
+    gemm_reference(N, N, N, &a, &b, &mut c_cpu).expect("CPU GEMM failed");
+
+    // ============================================================
+    // GPU: Generate PTX and execute
+    // ============================================================
+    let kernel = GemmKernel::naive(N, N, N);
+    let ptx = kernel.emit_ptx();
+
+    let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX compilation failed");
+
+    // Upload matrices to GPU
+    let mut gpu_a: GpuBuffer<f32> = GpuBuffer::new(&ctx, N * N).expect("Buffer A");
+    let mut gpu_b: GpuBuffer<f32> = GpuBuffer::new(&ctx, N * N).expect("Buffer B");
+    let mut gpu_c: GpuBuffer<f32> = GpuBuffer::new(&ctx, N * N).expect("Buffer C");
+
+    gpu_a.copy_from_host(&a).expect("Copy A");
+    gpu_b.copy_from_host(&b).expect("Copy B");
+    gpu_c.copy_from_host(&vec![0.0f32; N * N]).expect("Copy C");
+
+    // Launch kernel
+    let block_size = 16;
+    let grid_size = (N + block_size - 1) / block_size;
+    let config = LaunchConfig {
+        grid: (grid_size as u32, grid_size as u32, 1),
+        block: (block_size as u32, block_size as u32, 1),
+        shared_mem: 0,
+    };
+
+    let m = N as u32;
+    let n = N as u32;
+    let k = N as u32;
+
+    let mut args: [*mut c_void; 6] = [
+        gpu_a.as_kernel_arg(),
+        gpu_b.as_kernel_arg(),
+        gpu_c.as_kernel_arg(),
+        &m as *const u32 as *mut c_void,
+        &n as *const u32 as *mut c_void,
+        &k as *const u32 as *mut c_void,
+    ];
+
+    unsafe {
+        stream
+            .launch_kernel(&mut module, "gemm_naive", &config, &mut args)
+            .expect("Kernel launch failed");
+    }
+
+    stream.synchronize().expect("Sync failed");
+
+    // Download result
+    let mut c_gpu = vec![0.0f32; N * N];
+    gpu_c.copy_to_host(&mut c_gpu).expect("Copy result");
+
+    // ============================================================
+    // PARITY CHECK: Compare CPU vs GPU
+    // ============================================================
+    let mut max_diff: f32 = 0.0;
+    let mut diff_count = 0;
+
+    for i in 0..N * N {
+        let diff = (c_cpu[i] - c_gpu[i]).abs();
+        if diff > EPSILON {
+            diff_count += 1;
+            if diff_count <= 5 {
+                println!(
+                    "  Mismatch at [{}]: CPU={:.6}, GPU={:.6}, diff={:.6}",
+                    i, c_cpu[i], c_gpu[i], diff
+                );
+            }
+        }
+        max_diff = max_diff.max(diff);
+    }
+
+    if diff_count > 0 {
+        panic!(
+            "\n\
+            ╔══════════════════════════════════════════════════════════════════════════════╗\n\
+            ║  TITAN DUEL FAILED: GPU NUMERICAL PARITY VIOLATION                           ║\n\
+            ╠══════════════════════════════════════════════════════════════════════════════╣\n\
+            ║  The GPU GEMM kernel produces mathematically incorrect results.              ║\n\
+            ║  This is a 'successful hallucination' - it runs but lies.                    ║\n\
+            ║                                                                              ║\n\
+            ║  Matrix size: {}x{}                                                         ║\n\
+            ║  Max difference: {:.6}                                                      ║\n\
+            ║  Elements failing (>{:.0e}): {} / {}                                       ║\n\
+            ║                                                                              ║\n\
+            ║  FIX: Review GPU kernel PTX for accumulation order or precision issues.      ║\n\
+            ╚══════════════════════════════════════════════════════════════════════════════╝\n",
+            N, N, max_diff, EPSILON, diff_count, N * N
+        );
+    }
+
+    println!(
+        "✅ TITAN DUEL PASSED: CPU-GPU parity verified (max diff: {:.2e}, {}x{} matrix)",
+        max_diff, N, N
+    );
+}
+
 // ============================================================================
 // NON-CUDA STUBS (when CUDA feature is disabled)
 // ============================================================================
@@ -307,6 +448,12 @@ mod cuda_stubs {
     #[test]
     fn canary_gpu_kernel_execution() {
         println!("⚠️  GPU CANARY SKIPPED: CUDA feature not enabled");
+    }
+
+    #[test]
+    fn titan_duel_numerical_parity() {
+        println!("⚠️  TITAN DUEL SKIPPED: CUDA feature not enabled");
+        println!("   Run with: cargo test --test hardware_canary --all-features");
     }
 }
 
