@@ -1,0 +1,32 @@
+//! Q4_K GEMV Kernels (Fused Dequantization Matrix-Vector Multiplication)
+//!
+//! Optimized kernels for M=1 matmuls (token generation critical path):
+//! y = W * x where W is (N×K) in Q4_K format, x is (K), y is (N)
+//!
+//! ## Kernel Variants
+//!
+//! - `Q4KGemvKernel`: Basic warp-per-output GEMV
+//! - `BatchedQ4KGemvKernel`: Multi-batch processing with register tiling
+//! - `TiledQ4KGemvKernel`: Shared memory input caching
+//! - `ChunkedTiledQ4KGemvKernel`: Overlapped compute + global read
+//! - `CoalescedQ4KGemvKernel`: Multi-output per block with vectorized loads
+//! - `Dp4aQ4KGemvKernel`: DP4A integer dot product acceleration
+//! - `VectorizedQ4KGemvKernel`: Coalesced u32 loads for high bandwidth
+//! - `TrueDp4aQ4KGemvKernel`: Full DP4A implementation with Q8 activations
+//!
+//! ## Memory Bandwidth
+//!
+//! Q4_K: 144 bytes per 256 values = 0.5625 bytes/value (vs 4 bytes for f32)
+//! This is 7.1x more memory efficient than dequantize+GEMV approach.
+
+mod basic;
+mod batched;
+mod coalesced;
+mod dp4a;
+mod tiled;
+
+pub use basic::Q4KGemvKernel;
+pub use batched::BatchedQ4KGemvKernel;
+pub use coalesced::{CoalescedQ4KGemvKernel, VectorizedQ4KGemvKernel};
+pub use dp4a::{Dp4aQ4KGemvKernel, TrueDp4aQ4KGemvKernel};
+pub use tiled::{ChunkedTiledQ4KGemvKernel, TiledQ4KGemvKernel};
