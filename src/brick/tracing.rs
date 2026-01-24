@@ -564,7 +564,7 @@ impl LogitEvolutionTrace {
     pub fn track_token(&mut self, token_id: u32, token_str: String) -> &mut TokenLogitEvolution {
         self.tracked_tokens
             .push(TokenLogitEvolution::new(token_id, token_str));
-        self.tracked_tokens.last_mut().unwrap()
+        self.tracked_tokens.last_mut().expect("invariant: just pushed")
     }
 
     /// Compute rank of a token in a logit distribution.
@@ -730,7 +730,7 @@ impl ModelQuantizationError {
     pub fn worst_brick(&self) -> Option<&QuantizationErrorTrace> {
         self.brick_errors
             .iter()
-            .min_by(|a, b| a.cosine_similarity.partial_cmp(&b.cosine_similarity).unwrap())
+            .min_by(|a, b| a.cosine_similarity.partial_cmp(&b.cosine_similarity).unwrap_or(std::cmp::Ordering::Equal))
     }
 }
 
