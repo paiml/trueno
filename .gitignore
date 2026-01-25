@@ -44,3 +44,5 @@ perf.data
 .pmat-metrics/
 deep_context.md
 *.o
+*.profraw
+*.lcov

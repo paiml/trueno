@@ -111,6 +111,12 @@ pub fn device_count() -> usize {
     0
 }
 
+// CUDA hardware tests - REQUIRE RTX 4090
+#[cfg(all(test, feature = "cuda"))]
+mod cuda_tests;
+#[cfg(all(test, feature = "cuda"))]
+mod memory_fuzz_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;

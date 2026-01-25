@@ -59,7 +59,7 @@ pub use types::{BottleneckClass, KernelType, QuantType};
 
 // Re-export helpers for tests (crate-internal)
 #[cfg(test)]
-pub(crate) use helpers::{chrono_lite_now, crc32_hash, crc32_update, pad_right};
+pub(crate) use helpers::{chrono_lite_now, pad_right};
 
 // ============================================================================
 // BrickProfiler Integration

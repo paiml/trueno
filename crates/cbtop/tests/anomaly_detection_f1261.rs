@@ -4,7 +4,7 @@
 
 use cbtop::{
     AnomalyDetector, Anomaly, AnomalyType, AnomalySeverity, ChangePoint,
-    AnomalyReport, DEFAULT_ZSCORE_THRESHOLD, DEFAULT_IQR_MULTIPLIER,
+    DEFAULT_ZSCORE_THRESHOLD, DEFAULT_IQR_MULTIPLIER,
     MIN_SAMPLES_FOR_DETECTION,
 };
 

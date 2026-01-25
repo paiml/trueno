@@ -176,6 +176,195 @@ mod tests {
         assert_eq!(kernel.activation, Activation::None);
     }
 
+    // ===== Derived Trait Coverage Tests =====
+
+    #[test]
+    fn test_activation_default_trait() {
+        // Test Default trait implementation
+        let activation: Activation = Default::default();
+        assert_eq!(activation, Activation::None);
+        assert_eq!(Activation::default(), Activation::None);
+    }
+
+    #[test]
+    fn test_activation_clone_trait() {
+        // Test Clone trait implementation
+        let original = Activation::ReLU;
+        let cloned = original.clone();
+        assert_eq!(original, cloned);
+
+        let gelu = Activation::GELU;
+        let gelu_cloned = gelu.clone();
+        assert_eq!(gelu, gelu_cloned);
+    }
+
+    #[test]
+    fn test_activation_copy_trait() {
+        // Test Copy trait - assignment should copy, not move
+        let original = Activation::GELU;
+        let copied = original; // Copy, not move
+        assert_eq!(original, copied); // original still usable
+        assert_eq!(copied, Activation::GELU);
+    }
+
+    #[test]
+    fn test_activation_debug_trait() {
+        // Test Debug trait implementation
+        let debug_none = format!("{:?}", Activation::None);
+        let debug_relu = format!("{:?}", Activation::ReLU);
+        let debug_gelu = format!("{:?}", Activation::GELU);
+
+        assert!(debug_none.contains("None"));
+        assert!(debug_relu.contains("ReLU"));
+        assert!(debug_gelu.contains("GELU"));
+    }
+
+    #[test]
+    fn test_activation_eq_trait() {
+        // Test PartialEq and Eq traits
+        assert_eq!(Activation::None, Activation::None);
+        assert_eq!(Activation::ReLU, Activation::ReLU);
+        assert_eq!(Activation::GELU, Activation::GELU);
+
+        assert_ne!(Activation::None, Activation::ReLU);
+        assert_ne!(Activation::ReLU, Activation::GELU);
+        assert_ne!(Activation::None, Activation::GELU);
+    }
+
+    #[test]
+    fn test_kernel_clone_trait() {
+        // Test Clone trait on BiasActivationKernel
+        let original = BiasActivationKernel::new(2048, 128).with_gelu();
+        let cloned = original.clone();
+
+        assert_eq!(cloned.n, original.n);
+        assert_eq!(cloned.bias_size, original.bias_size);
+        assert_eq!(cloned.activation, original.activation);
+
+        // Verify both produce valid PTX (register order may vary due to HashSet)
+        let original_ptx = original.emit_ptx();
+        let cloned_ptx = cloned.emit_ptx();
+
+        assert!(original_ptx.contains(".entry bias_activation"));
+        assert!(cloned_ptx.contains(".entry bias_activation"));
+        assert!(original_ptx.contains("ex2.approx")); // GELU signature
+        assert!(cloned_ptx.contains("ex2.approx")); // GELU signature
+    }
+
+    #[test]
+    fn test_kernel_debug_trait() {
+        // Test Debug trait on BiasActivationKernel
+        let kernel = BiasActivationKernel::new(512, 32).with_relu();
+        let debug_output = format!("{:?}", kernel);
+
+        assert!(debug_output.contains("BiasActivationKernel"));
+        assert!(debug_output.contains("512"));
+        assert!(debug_output.contains("32"));
+        assert!(debug_output.contains("ReLU"));
+    }
+
+    // ===== Edge Case Tests =====
+
+    #[test]
+    fn test_minimum_sizes() {
+        // Test with minimum valid sizes
+        let kernel = BiasActivationKernel::new(1, 1);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry bias_activation"));
+        assert!(ptx.contains("rem.u32"));
+    }
+
+    #[test]
+    fn test_large_sizes() {
+        // Test with large sizes typical in ML workloads
+        let kernel = BiasActivationKernel::new(1_000_000, 4096).with_gelu();
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry bias_activation"));
+        assert!(ptx.contains("ex2")); // GELU uses exp
+    }
+
+    #[test]
+    fn test_bias_size_equals_n() {
+        // Test when bias_size equals n (no modulo wrap)
+        let kernel = BiasActivationKernel::new(64, 64);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains("rem.u32")); // Still uses modulo
+    }
+
+    #[test]
+    fn test_bias_size_larger_than_n() {
+        // Test when bias_size > n (subset of bias vector used)
+        let kernel = BiasActivationKernel::new(32, 64);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains("rem.u32"));
+    }
+
+    #[test]
+    fn test_with_activation_none() {
+        // Test with_activation for None variant
+        let kernel = BiasActivationKernel::new(1024, 64)
+            .with_relu() // Set to ReLU first
+            .with_activation(Activation::None); // Then override
+
+        assert_eq!(kernel.activation, Activation::None);
+
+        let ptx = kernel.emit_ptx();
+        // Should not have max.f32 (ReLU) or ex2 (GELU)
+        assert!(!ptx.contains("max.f32"));
+    }
+
+    #[test]
+    fn test_chained_activation_changes() {
+        // Test that chaining activation changes works correctly
+        let kernel = BiasActivationKernel::new(1024, 64)
+            .with_relu()
+            .with_gelu()
+            .with_activation(Activation::None)
+            .with_relu();
+
+        assert_eq!(kernel.activation, Activation::ReLU);
+    }
+
+    #[test]
+    fn test_none_activation_ptx_structure() {
+        // Verify None activation produces minimal PTX (no activation ops)
+        let kernel = BiasActivationKernel::new(1024, 64).with_activation(Activation::None);
+        let ptx = kernel.emit_ptx();
+
+        // Should have bias addition
+        assert!(ptx.contains("add.f32"));
+        // Should NOT have ReLU max
+        assert!(!ptx.contains("max.f32"));
+    }
+
+    #[test]
+    fn test_relu_activation_ptx_structure() {
+        // Verify ReLU produces correct PTX structure
+        let kernel = BiasActivationKernel::new(1024, 64).with_activation(Activation::ReLU);
+        let ptx = kernel.emit_ptx();
+
+        // ReLU needs: max.f32 and a zero constant
+        assert!(ptx.contains("max.f32"));
+        assert!(ptx.contains("mov.f32") || ptx.contains("0.0")); // Zero for ReLU
+    }
+
+    #[test]
+    fn test_gelu_activation_ptx_structure() {
+        // Verify GELU produces correct PTX structure with all components
+        let kernel = BiasActivationKernel::new(1024, 64).with_activation(Activation::GELU);
+        let ptx = kernel.emit_ptx();
+
+        // GELU needs: mul (for 1.702*x and x*sigmoid), ex2 (for exp), div (for 1/(1+exp))
+        assert!(ptx.contains("mul.f32"));
+        assert!(ptx.contains("ex2"));
+        assert!(ptx.contains("div"));
+        assert!(ptx.contains("sub.f32")); // For negation (0 - scaled)
+    }
+
     #[test]
     fn test_bias_activation_with_relu() {
         let kernel = BiasActivationKernel::new(1024, 64).with_relu();

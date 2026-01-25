@@ -778,8 +778,9 @@ impl GpuResidentTensor<f32> {
         let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
         let stream = CudaStream::new(ctx)?;
 
-        // Launch one warp per row
-        let threads = 32u32.min(hidden_size);
+        // Launch one warp per row - always use 32 threads for warp shuffle reduction
+        // The kernel handles bounds checking internally for hidden_size < 32
+        let threads = 32u32;
         let blocks = batch_size;
         let config = LaunchConfig {
             grid: (blocks, 1, 1),
@@ -845,8 +846,9 @@ impl GpuResidentTensor<f32> {
         let cache_key = format!("layer_norm:{}", hidden_size);
         let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
-        // Launch one warp per row
-        let threads = 32u32.min(hidden_size);
+        // Launch one warp per row - always use 32 threads for warp shuffle reduction
+        // The kernel handles bounds checking internally for hidden_size < 32
+        let threads = 32u32;
         let blocks = batch_size;
         let config = LaunchConfig {
             grid: (blocks, 1, 1),

@@ -4,7 +4,7 @@
 
 use cbtop::{
     ContextRegressionPredictor, SystemContext,
-    RegressionThreshold, RegressionCheck, Trend,
+    RegressionThreshold,
     DEFAULT_COLD_START_MARGIN, MIN_SAMPLES_FOR_CONTEXT, DEFAULT_STALENESS_SEC,
 };
 
@@ -286,7 +286,7 @@ fn f1318_stale_baseline() {
     let predictor = ContextRegressionPredictor::new()
         .with_staleness(60); // 60 second staleness
 
-    let old_context = SystemContext::new()
+    let _old_context = SystemContext::new()
         .with_timestamp(1000);
 
     let new_context = SystemContext::new()

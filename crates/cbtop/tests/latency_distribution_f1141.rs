@@ -9,7 +9,7 @@
 //! - Histogram entropy
 
 use cbtop::{
-    LatencyDistribution, LatencyHistogram, HistogramBucket,
+    LatencyDistribution, LatencyHistogram,
     TailSeverity, DistributionShape,
 };
 

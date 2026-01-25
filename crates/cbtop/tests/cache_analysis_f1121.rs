@@ -557,7 +557,7 @@ fn f1130_llm_attention() {
     let element_size = 2; // fp16
 
     // Q, K, V each are batch × seq × dim
-    let qkv_size = 3 * batch * seq * dim * element_size;
+    let _qkv_size = 3 * batch * seq * dim * element_size;
 
     let analysis = WorkingSetAnalysis::analyze(
         batch * seq * dim * 3, // total elements

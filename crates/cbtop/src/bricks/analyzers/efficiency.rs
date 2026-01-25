@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn test_efficiency_class_color_hints() {
-        let (r, g, b) = EfficiencyClass::Excellent.color_hint();
+        let (r, g, _b) = EfficiencyClass::Excellent.color_hint();
         assert!(g > r, "Excellent should be greenish");
 
         let (r, g, _) = EfficiencyClass::Poor.color_hint();

@@ -10,7 +10,7 @@
 
 use cbtop::{
     BackendRegressionDetector, BackendMeasurement, BackendComparison,
-    Backend, BackendWorkload, SizeCliff, BackendRecommendation,
+    Backend, BackendWorkload, SizeCliff,
 };
 
 // =============================================================================
@@ -207,8 +207,8 @@ fn f1236_custom_threshold() {
 
     assert!(!cmp.is_regression);
 
-    // With stricter threshold
-    let detector2 = BackendRegressionDetector::new().with_threshold(2.0);
+    // With stricter threshold (created to verify it compiles)
+    let _detector2 = BackendRegressionDetector::new().with_threshold(2.0);
     // Same measurements would be regression
 }
 

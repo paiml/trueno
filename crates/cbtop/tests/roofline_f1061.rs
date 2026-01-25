@@ -5,7 +5,7 @@
 use cbtop::{
     BottleneckType, HardwareProfile, WorkloadMetrics,
     RooflineAnalysis, RooflinePlotPoint, RooflinePlot,
-    BatchRooflineAnalysis, BatchSummary,
+    BatchRooflineAnalysis,
 };
 use cbtop::roofline::profiles;
 

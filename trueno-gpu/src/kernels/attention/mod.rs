@@ -19,6 +19,11 @@
 mod flash;
 mod paged;
 
+#[cfg(test)]
+mod paged_tests;
+#[cfg(test)]
+mod flash_tests;
+
 // Re-export FlashAttention kernel
 pub use flash::AttentionKernel;
 

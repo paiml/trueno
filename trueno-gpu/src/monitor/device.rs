@@ -759,35 +759,37 @@ mod tests {
     fn h006_memory_usage_percent() {
         let cpu = CpuDevice::new();
         let percent = cpu.memory_usage_percent();
-        // Should not error and be in valid range
-        if let Ok(p) = percent {
-            assert!(p >= 0.0 && p <= 100.0);
-        }
+        // On Linux, this should always succeed
+        assert!(percent.is_ok());
+        let p = percent.unwrap();
+        assert!(p >= 0.0 && p <= 100.0);
     }
 
     #[test]
     fn h006_memory_available_bytes() {
         let cpu = CpuDevice::new();
-        if let (Ok(avail), Ok(total)) = (cpu.memory_available_bytes(), cpu.memory_total_bytes()) {
-            assert!(avail <= total);
-        }
+        // On Linux, these should always succeed
+        let avail = cpu.memory_available_bytes().unwrap();
+        let total = cpu.memory_total_bytes().unwrap();
+        assert!(avail <= total);
     }
 
     #[test]
     fn h006_memory_mb_helpers() {
         let cpu = CpuDevice::new();
-        if let (Ok(used_mb), Ok(total_mb)) = (cpu.memory_used_mb(), cpu.memory_total_mb()) {
-            assert!(used_mb <= total_mb);
-        }
+        // On Linux, these should always succeed
+        let used_mb = cpu.memory_used_mb().unwrap();
+        let total_mb = cpu.memory_total_mb().unwrap();
+        assert!(used_mb <= total_mb);
     }
 
     #[test]
     fn h006_memory_gb_helper() {
         let cpu = CpuDevice::new();
-        if let Ok(total_gb) = cpu.memory_total_gb() {
-            // Should be positive (most systems have > 1GB)
-            assert!(total_gb > 0.0);
-        }
+        // On Linux, this should always succeed
+        let total_gb = cpu.memory_total_gb().unwrap();
+        // Should be positive (most systems have > 1GB)
+        assert!(total_gb > 0.0);
     }
 
     // =========================================================================
@@ -1048,22 +1050,17 @@ mod tests {
     #[test]
     fn h013_cpu_clock_speed() {
         let cpu = CpuDevice::new();
-        // Clock speed should be positive (or error)
-        let clock = cpu.compute_clock_mhz();
-        if let Ok(mhz) = clock {
-            assert!(mhz > 0);
-        }
+        // Clock speed should be positive (or NotSupported error on some systems)
+        // Just verify we can call it without panic
+        let _ = cpu.compute_clock_mhz();
     }
 
     #[test]
     fn h013_cpu_temperature() {
         let cpu = CpuDevice::new();
         // Temperature may not be available on all systems
-        let temp = cpu.compute_temperature_c();
-        if let Ok(t) = temp {
-            // Reasonable range 0-150 C
-            assert!(t >= 0.0 && t <= 150.0);
-        }
+        // Just verify we can call it without panic
+        let _ = cpu.compute_temperature_c();
     }
 
     // =========================================================================
@@ -1205,5 +1202,1061 @@ mod tests {
 
         let bw = cpu.memory_bandwidth_gbps();
         assert!(matches!(bw, Err(GpuError::NotSupported(_))));
+    }
+
+    // =========================================================================
+    // H019: CpuDevice active_compute_units Test
+    // =========================================================================
+
+    #[test]
+    fn h019_cpu_active_compute_units() {
+        let cpu = CpuDevice::new();
+
+        // active_compute_units should return the core count
+        let active = cpu.active_compute_units();
+        assert!(active.is_ok());
+        let count = active.unwrap();
+        assert!(count > 0, "Should have at least one active compute unit");
+        assert_eq!(count, cpu.compute_unit_count(), "Active should equal total cores");
+    }
+
+    // =========================================================================
+    // H020: MockDevice Full Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn h020_mock_device_pcie_metrics() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+
+        // PCIe metrics should return NotSupported
+        assert!(matches!(mock.pcie_tx_bytes_per_sec(), Err(GpuError::NotSupported(_))));
+        assert!(matches!(mock.pcie_rx_bytes_per_sec(), Err(GpuError::NotSupported(_))));
+        assert_eq!(mock.pcie_generation(), 0);
+        assert_eq!(mock.pcie_width(), 0);
+    }
+
+    #[test]
+    fn h020_mock_device_active_compute_units() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+
+        let active = mock.active_compute_units();
+        assert!(active.is_ok());
+        assert_eq!(active.unwrap(), 8); // MockDevice returns 8 compute units
+    }
+
+    #[test]
+    fn h020_mock_device_memory_bandwidth() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+
+        assert!(matches!(mock.memory_bandwidth_gbps(), Err(GpuError::NotSupported(_))));
+    }
+
+    #[test]
+    fn h020_mock_device_refresh() {
+        let mut mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+
+        // refresh should succeed
+        assert!(mock.refresh().is_ok());
+    }
+
+    // =========================================================================
+    // H021: CpuDevice Default Derived Metrics
+    // =========================================================================
+
+    #[test]
+    fn h021_cpu_device_memory_mb_conversion() {
+        let cpu = CpuDevice::new();
+
+        // Test memory_used_mb conversion
+        if let Ok(used_bytes) = cpu.memory_used_bytes() {
+            let used_mb = cpu.memory_used_mb();
+            assert!(used_mb.is_ok());
+            assert_eq!(used_mb.unwrap(), used_bytes / (1024 * 1024));
+        }
+    }
+
+    #[test]
+    fn h021_cpu_device_memory_total_mb() {
+        let cpu = CpuDevice::new();
+
+        if let Ok(total_bytes) = cpu.memory_total_bytes() {
+            let total_mb = cpu.memory_total_mb();
+            assert!(total_mb.is_ok());
+            assert_eq!(total_mb.unwrap(), total_bytes / (1024 * 1024));
+        }
+    }
+
+    #[test]
+    fn h021_cpu_device_memory_total_gb() {
+        let cpu = CpuDevice::new();
+
+        if let Ok(total_bytes) = cpu.memory_total_bytes() {
+            let total_gb = cpu.memory_total_gb();
+            assert!(total_gb.is_ok());
+            let expected_gb = total_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+            assert!((total_gb.unwrap() - expected_gb).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn h021_cpu_device_memory_available() {
+        let cpu = CpuDevice::new();
+
+        if let (Ok(used), Ok(total)) = (cpu.memory_used_bytes(), cpu.memory_total_bytes()) {
+            let available = cpu.memory_available_bytes();
+            assert!(available.is_ok());
+            assert_eq!(available.unwrap(), total.saturating_sub(used));
+        }
+    }
+
+    // =========================================================================
+    // H022: Edge Case Tests for Default Trait Implementations
+    // =========================================================================
+
+    #[test]
+    fn h022_mock_device_thermal_throttling_at_threshold() {
+        // Test exactly at the 80 degree threshold
+        let mock_at_80 = MockDevice::new(0, 0, 0.0, 0.0, 80.0);
+        // 80.0 is not > 80.0, so no throttling
+        assert!(!mock_at_80.is_thermal_throttling().unwrap());
+
+        // Just above threshold
+        let mock_at_80_1 = MockDevice::new(0, 0, 0.0, 0.0, 80.1);
+        assert!(mock_at_80_1.is_thermal_throttling().unwrap());
+    }
+
+    #[test]
+    fn h022_mock_device_power_throttling_at_threshold() {
+        // Test exactly at the 95% threshold
+        let mock_at_95 = MockDevice::new(0, 0, 95.0, 100.0, 0.0);
+        // 95.0 is not > 95.0, so no throttling
+        assert!(!mock_at_95.is_power_throttling().unwrap());
+
+        // Just above threshold
+        let mock_at_95_1 = MockDevice::new(0, 0, 95.1, 100.0, 0.0);
+        assert!(mock_at_95_1.is_power_throttling().unwrap());
+    }
+
+    #[test]
+    fn h022_mock_device_memory_usage_full() {
+        // Test 100% memory usage
+        let mock_full = MockDevice::new(100, 100, 0.0, 0.0, 0.0);
+        assert!((mock_full.memory_usage_percent().unwrap() - 100.0).abs() < 0.01);
+        assert_eq!(mock_full.memory_available_bytes().unwrap(), 0);
+    }
+
+    // =========================================================================
+    // H023: DeviceSnapshot Additional Field Coverage
+    // =========================================================================
+
+    #[test]
+    fn h023_device_snapshot_field_access() {
+        let mock = MockDevice::new(8 * 1024 * 1024 * 1024, 32 * 1024 * 1024 * 1024, 250.0, 350.0, 72.0);
+        let snapshot = DeviceSnapshot::capture(&mock).unwrap();
+
+        // Verify all fields are accessible and have expected values
+        assert_eq!(snapshot.memory_used_bytes, 8 * 1024 * 1024 * 1024);
+        assert_eq!(snapshot.memory_total_bytes, 32 * 1024 * 1024 * 1024);
+        assert!((snapshot.temperature_c - 72.0).abs() < 0.01);
+        assert!((snapshot.power_watts - 250.0).abs() < 0.01);
+        assert_eq!(snapshot.clock_mhz, 3000);
+
+        // Test memory_usage_percent calculation
+        // 8GB / 32GB = 25%
+        assert!((snapshot.memory_usage_percent() - 25.0).abs() < 0.01);
+    }
+
+    // =========================================================================
+    // H024: CpuDevice Internal Method Coverage via Refresh
+    // =========================================================================
+
+    #[test]
+    fn h024_cpu_device_refresh_populates_fields() {
+        let mut cpu = CpuDevice::new();
+
+        // First refresh
+        let result = cpu.refresh();
+        assert!(result.is_ok());
+
+        // After refresh, utilization should be populated (may be 0 if just started)
+        let util = cpu.compute_utilization();
+        assert!(util.is_ok());
+        let util_val = util.unwrap();
+        assert!(util_val >= 0.0 && util_val <= 100.0);
+
+        // Memory used should be reasonable
+        let mem = cpu.memory_used_bytes();
+        assert!(mem.is_ok());
+    }
+
+    #[test]
+    fn h024_cpu_device_refresh_multiple_times() {
+        let mut cpu = CpuDevice::new();
+
+        // Refresh multiple times should always succeed
+        for _ in 0..5 {
+            assert!(cpu.refresh().is_ok());
+        }
+
+        // Values should still be accessible
+        assert!(cpu.compute_utilization().is_ok());
+        assert!(cpu.memory_used_bytes().is_ok());
+    }
+
+    // =========================================================================
+    // H025: CpuDevice Direct Read Functions Coverage
+    // =========================================================================
+
+    #[test]
+    fn h025_cpu_device_read_core_count() {
+        // read_core_count is called in CpuDevice::new()
+        // On Linux it reads from /proc/cpuinfo
+        // Verify the result is a valid positive number
+        let cpu = CpuDevice::new();
+        let count = cpu.compute_unit_count();
+        assert!(count >= 1, "Should have at least 1 core");
+        assert!(count <= 1024, "Sanity check: should have fewer than 1024 cores");
+    }
+
+    #[test]
+    fn h025_cpu_device_read_total_memory() {
+        // read_total_memory is called in CpuDevice::new()
+        let cpu = CpuDevice::new();
+        let total = cpu.memory_total_bytes().unwrap();
+        // System should have at least 1GB and less than 1TB typically
+        assert!(total >= 1024 * 1024 * 1024, "Should have at least 1GB");
+        assert!(total < 100 * 1024 * 1024 * 1024 * 1024, "Sanity: < 100TB");
+    }
+
+    #[test]
+    fn h025_cpu_device_read_cpu_name() {
+        // read_cpu_name is called in CpuDevice::new()
+        let cpu = CpuDevice::new();
+        let name = cpu.device_name();
+        assert!(!name.is_empty(), "CPU name should not be empty");
+        // Name could be "Unknown CPU" if /proc/cpuinfo doesn't have model name
+    }
+
+    // =========================================================================
+    // H026: CpuDevice Compute Clock Coverage
+    // =========================================================================
+
+    #[test]
+    fn h026_cpu_device_compute_clock_value() {
+        let cpu = CpuDevice::new();
+        // On systems with frequency scaling, this should return Ok
+        // On systems without, it returns NotSupported
+        match cpu.compute_clock_mhz() {
+            Ok(mhz) => {
+                // Valid frequency range: 100 MHz to 10 GHz
+                assert!(mhz >= 100, "Clock should be at least 100 MHz");
+                assert!(mhz <= 10000, "Clock should be at most 10 GHz");
+            }
+            Err(GpuError::NotSupported(_)) => {
+                // Expected on systems without frequency info
+            }
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+    }
+
+    // =========================================================================
+    // H027: CpuDevice Temperature Coverage
+    // =========================================================================
+
+    #[test]
+    fn h027_cpu_device_temperature_value() {
+        let mut cpu = CpuDevice::new();
+        cpu.refresh().unwrap();
+
+        // Temperature may or may not be available depending on hardware/permissions
+        match cpu.compute_temperature_c() {
+            Ok(temp) => {
+                // Valid temperature range: 0 to 150 Celsius
+                assert!(temp >= 0.0, "Temperature should be non-negative");
+                assert!(temp <= 150.0, "Temperature should be at most 150C");
+            }
+            Err(GpuError::NotSupported(_)) => {
+                // Expected on systems without temperature sensors
+            }
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+    }
+
+    // =========================================================================
+    // H028: CpuDevice CPU Usage Coverage
+    // =========================================================================
+
+    #[test]
+    fn h028_cpu_device_cpu_usage_after_refresh() {
+        let mut cpu = CpuDevice::new();
+        cpu.refresh().unwrap();
+
+        let usage = cpu.compute_utilization().unwrap();
+        // CPU usage should be between 0 and 100
+        assert!(usage >= 0.0, "CPU usage should be non-negative");
+        assert!(usage <= 100.0, "CPU usage should be at most 100%");
+    }
+
+    // =========================================================================
+    // H029: CpuDevice Memory Used Coverage
+    // =========================================================================
+
+    #[test]
+    fn h029_cpu_device_memory_used_after_refresh() {
+        let mut cpu = CpuDevice::new();
+        cpu.refresh().unwrap();
+
+        let used = cpu.memory_used_bytes().unwrap();
+        let total = cpu.memory_total_bytes().unwrap();
+
+        // Used should be <= total
+        assert!(used <= total, "Used memory should not exceed total");
+        // At least some memory should be used (kernel, etc.)
+        assert!(used > 0, "Some memory should be in use");
+    }
+
+    // =========================================================================
+    // H030: MockDevice Additional Coverage
+    // =========================================================================
+
+    #[test]
+    fn h030_mock_device_device_name() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+        assert_eq!(mock.device_name(), "Mock");
+    }
+
+    #[test]
+    fn h030_mock_device_device_type() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+        assert!(matches!(mock.device_type(), DeviceType::Cpu));
+    }
+
+    #[test]
+    fn h030_mock_device_device_id() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+        assert_eq!(mock.device_id(), DeviceId::cpu());
+    }
+
+    #[test]
+    fn h030_mock_device_compute_utilization() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+        assert!((mock.compute_utilization().unwrap() - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn h030_mock_device_compute_clock() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+        assert_eq!(mock.compute_clock_mhz().unwrap(), 3000);
+    }
+
+    #[test]
+    fn h030_mock_device_compute_temperature() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 45.0);
+        assert!((mock.compute_temperature_c().unwrap() - 45.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn h030_mock_device_compute_power() {
+        let mock = MockDevice::new(0, 0, 200.0, 300.0, 0.0);
+        assert!((mock.compute_power_watts().unwrap() - 200.0).abs() < 0.01);
+        assert!((mock.compute_power_limit_watts().unwrap() - 300.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn h030_mock_device_compute_unit_count() {
+        let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
+        assert_eq!(mock.compute_unit_count(), 8);
+    }
+
+    #[test]
+    fn h030_mock_device_memory_bytes() {
+        let mock = MockDevice::new(1000, 2000, 0.0, 0.0, 0.0);
+        assert_eq!(mock.memory_used_bytes().unwrap(), 1000);
+        assert_eq!(mock.memory_total_bytes().unwrap(), 2000);
+    }
+
+    // =========================================================================
+    // H031: Error-Propagating Mock Device
+    // =========================================================================
+
+    /// Mock device that returns errors for testing error propagation in default trait methods
+    struct ErrorMockDevice {
+        return_error: bool,
+    }
+
+    impl ErrorMockDevice {
+        fn new(return_error: bool) -> Self {
+            Self { return_error }
+        }
+    }
+
+    impl ComputeDevice for ErrorMockDevice {
+        fn device_id(&self) -> DeviceId { DeviceId::cpu() }
+        fn device_name(&self) -> &str { "ErrorMock" }
+        fn device_type(&self) -> DeviceType { DeviceType::Cpu }
+        fn compute_utilization(&self) -> Result<f64, GpuError> {
+            if self.return_error {
+                Err(GpuError::NotSupported("test".into()))
+            } else {
+                Ok(50.0)
+            }
+        }
+        fn compute_clock_mhz(&self) -> Result<u32, GpuError> {
+            if self.return_error {
+                Err(GpuError::NotSupported("test".into()))
+            } else {
+                Ok(3000)
+            }
+        }
+        fn compute_temperature_c(&self) -> Result<f64, GpuError> {
+            if self.return_error {
+                Err(GpuError::NotSupported("test".into()))
+            } else {
+                Ok(50.0)
+            }
+        }
+        fn compute_power_watts(&self) -> Result<f64, GpuError> {
+            if self.return_error {
+                Err(GpuError::NotSupported("test".into()))
+            } else {
+                Ok(100.0)
+            }
+        }
+        fn compute_power_limit_watts(&self) -> Result<f64, GpuError> {
+            if self.return_error {
+                Err(GpuError::NotSupported("test".into()))
+            } else {
+                Ok(200.0)
+            }
+        }
+        fn memory_used_bytes(&self) -> Result<u64, GpuError> {
+            if self.return_error {
+                Err(GpuError::NotSupported("test".into()))
+            } else {
+                Ok(1024)
+            }
+        }
+        fn memory_total_bytes(&self) -> Result<u64, GpuError> {
+            if self.return_error {
+                Err(GpuError::NotSupported("test".into()))
+            } else {
+                Ok(2048)
+            }
+        }
+        fn memory_bandwidth_gbps(&self) -> Result<f64, GpuError> {
+            Err(GpuError::NotSupported("mock".into()))
+        }
+        fn compute_unit_count(&self) -> u32 { 8 }
+        fn active_compute_units(&self) -> Result<u32, GpuError> { Ok(8) }
+        fn pcie_tx_bytes_per_sec(&self) -> Result<u64, GpuError> {
+            Err(GpuError::NotSupported("mock".into()))
+        }
+        fn pcie_rx_bytes_per_sec(&self) -> Result<u64, GpuError> {
+            Err(GpuError::NotSupported("mock".into()))
+        }
+        fn pcie_generation(&self) -> u8 { 0 }
+        fn pcie_width(&self) -> u8 { 0 }
+        fn refresh(&mut self) -> Result<(), GpuError> { Ok(()) }
+    }
+
+    #[test]
+    fn h031_error_mock_memory_usage_percent_error() {
+        let mock = ErrorMockDevice::new(true);
+        // Should propagate the error from memory_used_bytes
+        let result = mock.memory_usage_percent();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h031_error_mock_memory_available_bytes_error() {
+        let mock = ErrorMockDevice::new(true);
+        // Should propagate the error from memory_used_bytes
+        let result = mock.memory_available_bytes();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h031_error_mock_memory_used_mb_error() {
+        let mock = ErrorMockDevice::new(true);
+        let result = mock.memory_used_mb();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h031_error_mock_memory_total_mb_error() {
+        let mock = ErrorMockDevice::new(true);
+        let result = mock.memory_total_mb();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h031_error_mock_memory_total_gb_error() {
+        let mock = ErrorMockDevice::new(true);
+        let result = mock.memory_total_gb();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h031_error_mock_power_usage_percent_error() {
+        let mock = ErrorMockDevice::new(true);
+        // Should propagate the error from compute_power_watts
+        let result = mock.power_usage_percent();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h031_error_mock_is_thermal_throttling_error() {
+        let mock = ErrorMockDevice::new(true);
+        // Should propagate the error from compute_temperature_c
+        let result = mock.is_thermal_throttling();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h031_error_mock_is_power_throttling_error() {
+        let mock = ErrorMockDevice::new(true);
+        // Should propagate the error from power_usage_percent -> compute_power_watts
+        let result = mock.is_power_throttling();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h031_error_mock_working_correctly() {
+        let mock = ErrorMockDevice::new(false);
+        // When not returning errors, should work
+        assert!(mock.memory_usage_percent().is_ok());
+        assert!(mock.memory_available_bytes().is_ok());
+        assert!(mock.memory_used_mb().is_ok());
+        assert!(mock.memory_total_mb().is_ok());
+        assert!(mock.memory_total_gb().is_ok());
+        assert!(mock.power_usage_percent().is_ok());
+        assert!(mock.is_thermal_throttling().is_ok());
+        assert!(mock.is_power_throttling().is_ok());
+    }
+
+    // =========================================================================
+    // H032: DeviceSnapshot with Errors
+    // =========================================================================
+
+    #[test]
+    fn h032_device_snapshot_with_errors() {
+        let mock = ErrorMockDevice::new(true);
+        // DeviceSnapshot::capture uses unwrap_or defaults
+        let snapshot = DeviceSnapshot::capture(&mock);
+        assert!(snapshot.is_ok());
+
+        let snap = snapshot.unwrap();
+        // Should use defaults when metrics fail
+        assert_eq!(snap.compute_utilization, 0.0);
+        assert_eq!(snap.memory_used_bytes, 0);
+        assert_eq!(snap.memory_total_bytes, 0);
+        assert_eq!(snap.temperature_c, 0.0);
+        assert_eq!(snap.power_watts, 0.0);
+        assert_eq!(snap.clock_mhz, 0);
+    }
+
+    // =========================================================================
+    // H033: ThrottleReason Complete Coverage
+    // =========================================================================
+
+    #[test]
+    fn h033_throttle_reason_clone() {
+        let reason = ThrottleReason::Power;
+        let cloned = reason.clone();
+        assert_eq!(reason, cloned);
+    }
+
+    #[test]
+    fn h033_throttle_reason_copy() {
+        let reason = ThrottleReason::Thermal;
+        let copied: ThrottleReason = reason; // Copy
+        assert_eq!(reason, copied);
+    }
+
+    #[test]
+    fn h033_throttle_reason_equality() {
+        assert_eq!(ThrottleReason::None, ThrottleReason::None);
+        assert_eq!(ThrottleReason::Thermal, ThrottleReason::Thermal);
+        assert_ne!(ThrottleReason::None, ThrottleReason::Thermal);
+        assert_ne!(ThrottleReason::Power, ThrottleReason::Thermal);
+    }
+
+    #[test]
+    fn h033_throttle_reason_debug() {
+        let reason = ThrottleReason::HwSlowdown;
+        let debug_str = format!("{:?}", reason);
+        assert!(debug_str.contains("HwSlowdown"));
+    }
+
+    // =========================================================================
+    // H034: DeviceType Complete Coverage
+    // =========================================================================
+
+    #[test]
+    fn h034_device_type_clone() {
+        let dt = DeviceType::NvidiaGpu;
+        let cloned = dt.clone();
+        assert_eq!(dt, cloned);
+    }
+
+    #[test]
+    fn h034_device_type_copy() {
+        let dt = DeviceType::AmdGpu;
+        let copied: DeviceType = dt; // Copy
+        assert_eq!(dt, copied);
+    }
+
+    #[test]
+    fn h034_device_type_equality() {
+        assert_eq!(DeviceType::Cpu, DeviceType::Cpu);
+        assert_ne!(DeviceType::Cpu, DeviceType::NvidiaGpu);
+        assert_ne!(DeviceType::NvidiaGpu, DeviceType::AmdGpu);
+        assert_ne!(DeviceType::AmdGpu, DeviceType::IntelGpu);
+        assert_ne!(DeviceType::IntelGpu, DeviceType::AppleSilicon);
+    }
+
+    #[test]
+    fn h034_device_type_hash() {
+        use std::collections::HashSet;
+
+        let mut set = HashSet::new();
+        set.insert(DeviceType::Cpu);
+        set.insert(DeviceType::NvidiaGpu);
+        set.insert(DeviceType::AmdGpu);
+        set.insert(DeviceType::IntelGpu);
+        set.insert(DeviceType::AppleSilicon);
+
+        assert_eq!(set.len(), 5);
+
+        // Duplicate should not increase size
+        set.insert(DeviceType::Cpu);
+        assert_eq!(set.len(), 5);
+    }
+
+    // =========================================================================
+    // H035: DeviceId Complete Coverage
+    // =========================================================================
+
+    #[test]
+    fn h035_device_id_copy() {
+        let id = DeviceId::nvidia(0);
+        let copied: DeviceId = id; // Copy
+        assert_eq!(id, copied);
+    }
+
+    #[test]
+    fn h035_device_id_new_with_all_types() {
+        // Test DeviceId::new with all DeviceTypes
+        let cpu = DeviceId::new(DeviceType::Cpu, 0);
+        let nvidia = DeviceId::new(DeviceType::NvidiaGpu, 1);
+        let amd = DeviceId::new(DeviceType::AmdGpu, 2);
+        let intel = DeviceId::new(DeviceType::IntelGpu, 3);
+        let apple = DeviceId::new(DeviceType::AppleSilicon, 4);
+
+        assert_eq!(cpu.device_type, DeviceType::Cpu);
+        assert_eq!(cpu.index, 0);
+        assert_eq!(nvidia.device_type, DeviceType::NvidiaGpu);
+        assert_eq!(nvidia.index, 1);
+        assert_eq!(amd.device_type, DeviceType::AmdGpu);
+        assert_eq!(amd.index, 2);
+        assert_eq!(intel.device_type, DeviceType::IntelGpu);
+        assert_eq!(intel.index, 3);
+        assert_eq!(apple.device_type, DeviceType::AppleSilicon);
+        assert_eq!(apple.index, 4);
+    }
+
+    // =========================================================================
+    // H036: CpuDevice Partial Coverage via Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn h036_cpu_device_memory_used_realistic() {
+        let mut cpu = CpuDevice::new();
+        cpu.refresh().unwrap();
+
+        // memory_used should be between 0 and total
+        let used = cpu.memory_used_bytes().unwrap();
+        let total = cpu.memory_total_bytes().unwrap();
+        assert!(used <= total);
+    }
+
+    // =========================================================================
+    // H037: Boundary Tests for Default Implementations
+    // =========================================================================
+
+    #[test]
+    fn h037_memory_usage_percent_boundary_values() {
+        // Test 0% usage
+        let mock_empty = MockDevice::new(0, 1000, 0.0, 0.0, 0.0);
+        assert!((mock_empty.memory_usage_percent().unwrap() - 0.0).abs() < 0.01);
+
+        // Test 100% usage
+        let mock_full = MockDevice::new(1000, 1000, 0.0, 0.0, 0.0);
+        assert!((mock_full.memory_usage_percent().unwrap() - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn h037_memory_available_boundary() {
+        // All memory available
+        let mock_empty = MockDevice::new(0, 1000, 0.0, 0.0, 0.0);
+        assert_eq!(mock_empty.memory_available_bytes().unwrap(), 1000);
+
+        // No memory available
+        let mock_full = MockDevice::new(1000, 1000, 0.0, 0.0, 0.0);
+        assert_eq!(mock_full.memory_available_bytes().unwrap(), 0);
+    }
+
+    #[test]
+    fn h037_power_usage_percent_boundary() {
+        // 0% power
+        let mock_idle = MockDevice::new(0, 0, 0.0, 100.0, 0.0);
+        assert!((mock_idle.power_usage_percent().unwrap() - 0.0).abs() < 0.01);
+
+        // 100% power
+        let mock_max = MockDevice::new(0, 0, 100.0, 100.0, 0.0);
+        assert!((mock_max.power_usage_percent().unwrap() - 100.0).abs() < 0.01);
+    }
+
+    // =========================================================================
+    // H038: DeviceSnapshot Memory Percent Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn h038_snapshot_memory_percent_edge_cases() {
+        // Test with various memory ratios
+        let snap_50 = DeviceSnapshot {
+            device_id: DeviceId::cpu(),
+            timestamp_ms: 12345,
+            compute_utilization: 25.0,
+            memory_used_bytes: 500,
+            memory_total_bytes: 1000,
+            temperature_c: 60.0,
+            power_watts: 75.0,
+            clock_mhz: 2500,
+        };
+        assert!((snap_50.memory_usage_percent() - 50.0).abs() < 0.01);
+
+        // Test 0%
+        let snap_0 = DeviceSnapshot {
+            device_id: DeviceId::cpu(),
+            timestamp_ms: 0,
+            compute_utilization: 0.0,
+            memory_used_bytes: 0,
+            memory_total_bytes: 1000,
+            temperature_c: 0.0,
+            power_watts: 0.0,
+            clock_mhz: 0,
+        };
+        assert!((snap_0.memory_usage_percent() - 0.0).abs() < 0.01);
+
+        // Test 100%
+        let snap_100 = DeviceSnapshot {
+            device_id: DeviceId::cpu(),
+            timestamp_ms: 0,
+            compute_utilization: 0.0,
+            memory_used_bytes: 1000,
+            memory_total_bytes: 1000,
+            temperature_c: 0.0,
+            power_watts: 0.0,
+            clock_mhz: 0,
+        };
+        assert!((snap_100.memory_usage_percent() - 100.0).abs() < 0.01);
+    }
+
+    // =========================================================================
+    // H039: CpuDevice Method Coverage via Direct Tests
+    // =========================================================================
+
+    #[test]
+    fn h039_cpu_device_device_id_and_type() {
+        let cpu = CpuDevice::new();
+        assert_eq!(cpu.device_id(), DeviceId::cpu());
+        assert_eq!(cpu.device_type(), DeviceType::Cpu);
+    }
+
+    #[test]
+    fn h039_cpu_utilization_initial() {
+        let cpu = CpuDevice::new();
+        // Initially cpu_usage is 0.0 before refresh
+        let util = cpu.compute_utilization().unwrap();
+        assert!(util >= 0.0 && util <= 100.0);
+    }
+
+    #[test]
+    fn h039_cpu_memory_used_initial() {
+        let cpu = CpuDevice::new();
+        // Initially memory_used is 0 before refresh
+        let used = cpu.memory_used_bytes().unwrap();
+        assert!(used >= 0);
+    }
+
+    #[test]
+    fn h039_cpu_active_units_equals_total() {
+        let cpu = CpuDevice::new();
+        let total = cpu.compute_unit_count();
+        let active = cpu.active_compute_units().unwrap();
+        assert_eq!(total, active);
+    }
+
+    // =========================================================================
+    // H040: Additional MockDevice Trait Methods
+    // =========================================================================
+
+    #[test]
+    fn h040_mock_device_power_limit_access() {
+        let mock = MockDevice::new(0, 0, 50.0, 100.0, 0.0);
+        let limit = mock.compute_power_limit_watts().unwrap();
+        assert!((limit - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn h040_mock_device_memory_total_access() {
+        let mock = MockDevice::new(500, 1000, 0.0, 0.0, 0.0);
+        let total = mock.memory_total_bytes().unwrap();
+        assert_eq!(total, 1000);
+    }
+
+    // =========================================================================
+    // H041: ErrorMockDevice Additional Coverage
+    // =========================================================================
+
+    #[test]
+    fn h041_error_mock_device_name() {
+        let mock = ErrorMockDevice::new(false);
+        assert_eq!(mock.device_name(), "ErrorMock");
+    }
+
+    #[test]
+    fn h041_error_mock_device_type() {
+        let mock = ErrorMockDevice::new(false);
+        assert_eq!(mock.device_type(), DeviceType::Cpu);
+    }
+
+    #[test]
+    fn h041_error_mock_compute_units() {
+        let mock = ErrorMockDevice::new(false);
+        assert_eq!(mock.compute_unit_count(), 8);
+        assert_eq!(mock.active_compute_units().unwrap(), 8);
+    }
+
+    #[test]
+    fn h041_error_mock_pcie_metrics() {
+        let mock = ErrorMockDevice::new(false);
+        assert_eq!(mock.pcie_generation(), 0);
+        assert_eq!(mock.pcie_width(), 0);
+        assert!(mock.pcie_tx_bytes_per_sec().is_err());
+        assert!(mock.pcie_rx_bytes_per_sec().is_err());
+    }
+
+    #[test]
+    fn h041_error_mock_refresh() {
+        let mut mock = ErrorMockDevice::new(false);
+        assert!(mock.refresh().is_ok());
+    }
+
+    #[test]
+    fn h041_error_mock_memory_bandwidth() {
+        let mock = ErrorMockDevice::new(false);
+        assert!(mock.memory_bandwidth_gbps().is_err());
+    }
+
+    // =========================================================================
+    // H042: Partial Error Mock for Second-Call Error Propagation
+    // =========================================================================
+
+    /// Mock device that returns errors only for total memory (not used)
+    /// to test error propagation in memory_usage_percent when second call fails
+    struct PartialErrorMockDevice {
+        error_on_total: bool,
+        error_on_limit: bool,
+    }
+
+    impl PartialErrorMockDevice {
+        fn with_total_error() -> Self {
+            Self { error_on_total: true, error_on_limit: false }
+        }
+
+        fn with_limit_error() -> Self {
+            Self { error_on_total: false, error_on_limit: true }
+        }
+    }
+
+    impl ComputeDevice for PartialErrorMockDevice {
+        fn device_id(&self) -> DeviceId { DeviceId::cpu() }
+        fn device_name(&self) -> &str { "PartialErrorMock" }
+        fn device_type(&self) -> DeviceType { DeviceType::Cpu }
+        fn compute_utilization(&self) -> Result<f64, GpuError> { Ok(50.0) }
+        fn compute_clock_mhz(&self) -> Result<u32, GpuError> { Ok(3000) }
+        fn compute_temperature_c(&self) -> Result<f64, GpuError> { Ok(50.0) }
+        fn compute_power_watts(&self) -> Result<f64, GpuError> { Ok(100.0) }
+        fn compute_power_limit_watts(&self) -> Result<f64, GpuError> {
+            if self.error_on_limit {
+                Err(GpuError::NotSupported("limit error".into()))
+            } else {
+                Ok(200.0)
+            }
+        }
+        fn memory_used_bytes(&self) -> Result<u64, GpuError> { Ok(1024) }
+        fn memory_total_bytes(&self) -> Result<u64, GpuError> {
+            if self.error_on_total {
+                Err(GpuError::NotSupported("total error".into()))
+            } else {
+                Ok(2048)
+            }
+        }
+        fn memory_bandwidth_gbps(&self) -> Result<f64, GpuError> {
+            Err(GpuError::NotSupported("mock".into()))
+        }
+        fn compute_unit_count(&self) -> u32 { 8 }
+        fn active_compute_units(&self) -> Result<u32, GpuError> { Ok(8) }
+        fn pcie_tx_bytes_per_sec(&self) -> Result<u64, GpuError> {
+            Err(GpuError::NotSupported("mock".into()))
+        }
+        fn pcie_rx_bytes_per_sec(&self) -> Result<u64, GpuError> {
+            Err(GpuError::NotSupported("mock".into()))
+        }
+        fn pcie_generation(&self) -> u8 { 0 }
+        fn pcie_width(&self) -> u8 { 0 }
+        fn refresh(&mut self) -> Result<(), GpuError> { Ok(()) }
+    }
+
+    #[test]
+    fn h042_partial_error_memory_usage_percent_total_error() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        // memory_used_bytes succeeds, but memory_total_bytes fails
+        // Should propagate the error from the second call
+        let result = mock.memory_usage_percent();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h042_partial_error_memory_available_bytes_total_error() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        // memory_used_bytes succeeds, but memory_total_bytes fails
+        let result = mock.memory_available_bytes();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h042_partial_error_power_usage_percent_limit_error() {
+        let mock = PartialErrorMockDevice::with_limit_error();
+        // compute_power_watts succeeds, but compute_power_limit_watts fails
+        let result = mock.power_usage_percent();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn h042_partial_error_device_name() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert_eq!(mock.device_name(), "PartialErrorMock");
+    }
+
+    #[test]
+    fn h042_partial_error_device_type() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert_eq!(mock.device_type(), DeviceType::Cpu);
+    }
+
+    #[test]
+    fn h042_partial_error_device_id() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert_eq!(mock.device_id(), DeviceId::cpu());
+    }
+
+    #[test]
+    fn h042_partial_error_compute_utilization() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert!((mock.compute_utilization().unwrap() - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn h042_partial_error_compute_clock() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert_eq!(mock.compute_clock_mhz().unwrap(), 3000);
+    }
+
+    #[test]
+    fn h042_partial_error_compute_temperature() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert!((mock.compute_temperature_c().unwrap() - 50.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn h042_partial_error_compute_power() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert!((mock.compute_power_watts().unwrap() - 100.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn h042_partial_error_memory_used() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert_eq!(mock.memory_used_bytes().unwrap(), 1024);
+    }
+
+    #[test]
+    fn h042_partial_error_compute_units() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert_eq!(mock.compute_unit_count(), 8);
+        assert_eq!(mock.active_compute_units().unwrap(), 8);
+    }
+
+    #[test]
+    fn h042_partial_error_pcie_metrics() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert_eq!(mock.pcie_generation(), 0);
+        assert_eq!(mock.pcie_width(), 0);
+        assert!(mock.pcie_tx_bytes_per_sec().is_err());
+        assert!(mock.pcie_rx_bytes_per_sec().is_err());
+    }
+
+    #[test]
+    fn h042_partial_error_memory_bandwidth() {
+        let mock = PartialErrorMockDevice::with_total_error();
+        assert!(mock.memory_bandwidth_gbps().is_err());
+    }
+
+    #[test]
+    fn h042_partial_error_refresh() {
+        let mut mock = PartialErrorMockDevice::with_total_error();
+        assert!(mock.refresh().is_ok());
+    }
+
+    // =========================================================================
+    // H043: DeviceSnapshot Timestamp Coverage
+    // =========================================================================
+
+    #[test]
+    fn h043_device_snapshot_timestamp_non_zero() {
+        let mock = MockDevice::new(1024, 2048, 100.0, 200.0, 50.0);
+        let snapshot = DeviceSnapshot::capture(&mock).unwrap();
+
+        // Timestamp should be non-zero (based on system time)
+        assert!(snapshot.timestamp_ms > 0);
+    }
+
+    #[test]
+    fn h043_device_snapshot_all_fields_populated() {
+        let mock = MockDevice::new(1024, 2048, 100.0, 200.0, 50.0);
+        let snapshot = DeviceSnapshot::capture(&mock).unwrap();
+
+        // Verify all fields are populated from the mock
+        assert_eq!(snapshot.device_id, DeviceId::cpu());
+        assert!((snapshot.compute_utilization - 50.0).abs() < 0.01);
+        assert_eq!(snapshot.memory_used_bytes, 1024);
+        assert_eq!(snapshot.memory_total_bytes, 2048);
+        assert!((snapshot.temperature_c - 50.0).abs() < 0.01);
+        assert!((snapshot.power_watts - 100.0).abs() < 0.01);
+        assert_eq!(snapshot.clock_mhz, 3000);
+    }
+
+    // =========================================================================
+    // H044: CpuDevice Debug Trait Coverage
+    // =========================================================================
+
+    #[test]
+    fn h044_cpu_device_debug() {
+        let cpu = CpuDevice::new();
+        let debug_str = format!("{:?}", cpu);
+        assert!(debug_str.contains("CpuDevice"));
     }
 }

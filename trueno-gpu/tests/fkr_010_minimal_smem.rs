@@ -189,7 +189,7 @@ fn fkr_010b_debug_smem_base() {
     
     let config = LaunchConfig {
         grid: (1, 1, 1),
-        block: (96, 1, 1),  // 3 warps like LZ4
+        block: (1, 1, 1),  // Single thread to avoid race condition on output
         shared_mem: 0,
     };
 
