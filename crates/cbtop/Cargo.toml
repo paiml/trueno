@@ -16,8 +16,8 @@ path = "src/main.rs"
 [dependencies]
 # Canonical Brick/Widget framework - ALL WIDGETS FROM HERE
 # Provides: BrailleGraph, Meter, Table, TuiApp, DirectTerminalCanvas, ColorMode
-presentar-core = { path = "../../../presentar/crates/presentar-core" }
-presentar-terminal = { path = "../../../presentar/crates/presentar-terminal" }
+presentar-core = "0.3"
+presentar-terminal = "0.3"
 
 # Compute backends
 trueno = { path = "../.." }
@@ -53,7 +53,7 @@ libc = "0.2"
 proptest = "1"
 tempfile = "3"
 # TUI pixel-level testing framework
-jugar-probar = { path = "../../../probar/crates/probar" }
+jugar-probar = "1.0"
 
 [features]
 default = []
