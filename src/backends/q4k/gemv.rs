@@ -408,6 +408,7 @@ pub fn matmul_q4k_f32_dispatch(
 // Parallel Execution Helpers
 // ============================================================================
 
+#[cfg(target_arch = "x86_64")]
 fn matmul_q4k_f32_parallel(
     q4k_data: &[u8],
     input: &[f32],
