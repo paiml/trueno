@@ -379,7 +379,7 @@ mod tests {
     fn test_mov_f32_imm_value() {
         let mut builder = MockBuilder::new();
 
-        let reg = builder.mov_f32_imm(2.71828);
+        let reg = builder.mov_f32_imm(std::f32::consts::E);
 
         let instr = &builder.instructions[0];
         assert_eq!(instr.ty, PtxType::F32);
@@ -393,7 +393,7 @@ mod tests {
         // Verify source
         assert!(!instr.srcs.is_empty());
         match &instr.srcs[0] {
-            Operand::ImmF32(v) => assert!((v - 2.71828).abs() < 1e-5),
+            Operand::ImmF32(v) => assert!((v - std::f32::consts::E).abs() < 1e-5),
             _ => panic!("Expected ImmF32 source"),
         }
     }

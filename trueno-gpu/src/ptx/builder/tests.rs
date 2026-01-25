@@ -2984,7 +2984,7 @@ fn test_mov_s32_from_u32() {
 #[test]
 fn test_const_f32_wrapper() {
     let kernel = PtxKernel::new("test_const_f32").build(|ctx| {
-        let _val = ctx.const_f32(3.14159);
+        let _val = ctx.const_f32(std::f32::consts::PI);
         ctx.ret();
     });
     let ptx = kernel.emit();

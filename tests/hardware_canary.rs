@@ -153,7 +153,7 @@ fn canary_gpu_vector_roundtrip() {
     let stream = CudaStream::new(&ctx).expect("CUDA stream creation failed");
 
     // Test data: recognizable pattern to verify integrity
-    let test_data: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 0.5, -0.5, 3.14159, 2.71828];
+    let test_data: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 0.5, -0.5, std::f32::consts::PI, std::f32::consts::E];
     let n = test_data.len();
 
     // Allocate GPU buffer and upload
@@ -347,11 +347,12 @@ fn titan_duel_numerical_parity() {
 
     gpu_a.copy_from_host(&a).expect("Copy A");
     gpu_b.copy_from_host(&b).expect("Copy B");
-    gpu_c.copy_from_host(&vec![0.0f32; N * N]).expect("Copy C");
+    let zeros = [0.0f32; N * N];
+    gpu_c.copy_from_host(&zeros).expect("Copy C");
 
     // Launch kernel
     let block_size = 16;
-    let grid_size = (N + block_size - 1) / block_size;
+    let grid_size = N.div_ceil(block_size);
     let config = LaunchConfig {
         grid: (grid_size as u32, grid_size as u32, 1),
         block: (block_size as u32, block_size as u32, 1),
