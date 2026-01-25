@@ -192,9 +192,8 @@ use super::super::*;
         let a: Vec<f32> = (0..n * n)
             .map(|i| if i % 2 == 0 { big } else { -big })
             .collect();
-        let b: Vec<f32> = (0..n * n)
-            .map(|i| if i / n % 2 == 0 { small } else { small })
-            .collect();
+        // All elements are `small` for this test case (deliberate design)
+        let b: Vec<f32> = vec![small; n * n];
         let mut c = vec![0.0; n * n];
 
         gemm_blis(n, n, n, &a, &b, &mut c, None).unwrap();

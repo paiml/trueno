@@ -674,7 +674,7 @@ mod tests {
                 let scale_val = ((row + sb) as u8 % 16) | (((row + sb + 1) as u8 % 16) << 4);
                 q4k_data.extend_from_slice(&[scale_val; 12]);
                 for i in 0..128 {
-                    q4k_data.push(((i % 16) | ((i + 1) % 16 << 4)) as u8);
+                    q4k_data.push(((i % 16) | (((i + 1) % 16) << 4)) as u8);
                 }
             }
         }
@@ -718,7 +718,7 @@ mod tests {
                 let scale_val = (row as u8 % 16) | (((row + 1) as u8 % 16) << 4);
                 q4k_data.extend_from_slice(&[scale_val; 12]);
                 for i in 0..128 {
-                    q4k_data.push(((i % 16) | ((i + 5) % 16 << 4)) as u8);
+                    q4k_data.push(((i % 16) | (((i + 5) % 16) << 4)) as u8);
                 }
             }
         }

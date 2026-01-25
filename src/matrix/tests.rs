@@ -258,7 +258,7 @@ fn test_matmul_public_api_rectangular() {
 // The public API tests above provide equivalent coverage.
 // TODO: Move internal tests to ops/arithmetic.rs if needed.
 
-#[cfg(feature = "_internal_matrix_tests")]
+#[cfg(internal_matrix_tests)]
 mod internal_tests {
     use super::*;
 

@@ -1117,8 +1117,8 @@ fn test_f288_logit_evolution_finalize() {
     // Finalize with this token selected
     trace.finalize(42);
     // Decisive layer should be set based on token's evolution
-    // The jump from 200 to 1 is the biggest
-    assert!(trace.decisive_layer > 0 || trace.decisive_layer == 0); // Should be set
+    // The jump from 200 to 1 is the biggest - verify finalize completes without panic
+    let _ = trace.decisive_layer;
 
     // Finalize with non-tracked token
     let mut trace2 = LogitEvolutionTrace::new(100, 0.7, 0.9);

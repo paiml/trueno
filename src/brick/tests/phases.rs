@@ -70,11 +70,7 @@ fn test_f152_cached_time_precision() {
 
     if cached > 0 && cached_after > 0 {
         let cached_elapsed = cached_after.saturating_sub(cached);
-        let drift = if elapsed_real > cached_elapsed {
-            elapsed_real - cached_elapsed
-        } else {
-            cached_elapsed - elapsed_real
-        };
+        let drift = elapsed_real.abs_diff(cached_elapsed);
 
         // Should be within 500µs (500_000ns)
         // The time service updates every 100µs, so drift should be bounded

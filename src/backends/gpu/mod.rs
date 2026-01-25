@@ -571,7 +571,7 @@ mod stub_tests {
 
     #[test]
     fn test_gpu_backend_stub_default() {
-        let _backend = GpuBackend::default();
+        let _backend = GpuBackend;
     }
 
     #[test]
