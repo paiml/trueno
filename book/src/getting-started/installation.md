@@ -85,7 +85,7 @@ Add Trueno to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-trueno = "0.1"
+trueno = "0.14"
 ```
 
 Or use `cargo add`:
@@ -110,16 +110,16 @@ Trueno supports feature flags for selective compilation:
 ```toml
 [dependencies]
 # Default: SIMD backends only (no GPU)
-trueno = "0.1"
+trueno = "0.14"
 
 # Enable GPU support
-trueno = { version = "0.1", features = ["gpu"] }
+trueno = { version = "0.14", features = ["gpu"] }
 
 # Enable all features
-trueno = { version = "0.1", features = ["gpu", "wasm"] }
+trueno = { version = "0.14", features = ["gpu", "parallel"] }
 
 # Minimal (scalar only, for testing)
-trueno = { version = "0.1", default-features = false }
+trueno = { version = "0.14", default-features = false }
 ```
 
 **Available features:**
@@ -140,7 +140,7 @@ Add Trueno to `Cargo.toml`:
 
 ```toml
 [dependencies]
-trueno = "0.1"
+trueno = "0.14"
 ```
 
 Replace `src/main.rs` with:
@@ -302,7 +302,7 @@ If GPU is available but not being used:
 
 2. **Verify GPU feature flag**:
    ```toml
-   trueno = { version = "0.1", features = ["gpu"] }
+   trueno = { version = "0.14", features = ["gpu"] }
    ```
 
 3. **Check workload size** (GPU only used for 100K+ elements):

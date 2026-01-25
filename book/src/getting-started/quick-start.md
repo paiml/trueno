@@ -19,7 +19,7 @@ Edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-trueno = "0.1"
+trueno = "0.14"
 ```
 
 ### Write the Code

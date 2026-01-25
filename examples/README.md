@@ -24,6 +24,15 @@ This directory contains examples demonstrating Trueno's high-performance compute
 | `regression_test.rs` | Numerical regression testing | `cargo run --release --example regression_test` |
 | `vocab_bench.rs` | Vocabulary processing benchmark | `cargo run --release --example vocab_bench` |
 | `profile_vocab.rs` | Vocabulary profiling | `cargo run --release --example profile_vocab` |
+| `execution_graph.rs` | Execution path graph demo | `cargo run --release --features execution-graph --example execution_graph` |
+| `ml_tuner_demo.rs` | ML-based kernel selection | `cargo run --release --features ml-tuner --example ml_tuner_demo` |
+| `ml_tuner_evolution.rs` | ML tuner evolution demo | `cargo run --release --features ml-tuner --example ml_tuner_evolution` |
+| `model_tracing.rs` | Model-level inference tracing | `cargo run --release --example model_tracing` |
+| `tiling_demo.rs` | Tiling compute blocks | `cargo run --release --example tiling_demo` |
+| `tile_profiler_demo.rs` | Tile profiler demo | `cargo run --release --example tile_profiler_demo` |
+| `blis_benchmark.rs` | BLIS-style GEMM benchmark | `cargo run --release --example blis_benchmark` |
+| `simd_comparison.rs` | SIMD backend comparison | `cargo run --release --example simd_comparison` |
+| `simd_softmax_quant.rs` | SIMD softmax + quantization | `cargo run --release --example simd_softmax_quant` |
 
 #### Benchmark Examples
 
@@ -203,6 +212,6 @@ See `CLAUDE.md` for development guidelines.
 
 ---
 
-**Last Updated**: 2026-01-04
-**Version**: v0.11.1
+**Last Updated**: 2026-01-25
+**Version**: v0.14.1
 **Contact**: [GitHub Issues](https://github.com/paiml/trueno/issues)
