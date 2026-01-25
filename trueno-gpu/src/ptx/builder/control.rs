@@ -206,4 +206,206 @@ mod tests {
         assert_eq!(builder.instructions.len(), 1);
         assert_eq!(builder.instructions[0].op, PtxOp::Ret);
     }
+
+    #[test]
+    fn test_mov_reg() {
+        let mut builder = MockBuilder::new();
+
+        // First create a source register with a value
+        let src = builder.mov_u32_imm(42);
+
+        // Then copy it to another register
+        let dst = builder.mov_reg(src, PtxType::U32);
+
+        // Should have 2 instructions: original mov_imm and the reg-to-reg mov
+        assert_eq!(builder.instructions.len(), 2);
+
+        // Both should be Mov operations
+        assert_eq!(builder.instructions[0].op, PtxOp::Mov);
+        assert_eq!(builder.instructions[1].op, PtxOp::Mov);
+
+        // The source and destination should be different registers
+        assert_ne!(src, dst);
+
+        // Check that the second instruction has the src register as source operand
+        assert!(!builder.instructions[1].srcs.is_empty());
+        match &builder.instructions[1].srcs[0] {
+            Operand::Reg(r) => assert_eq!(*r, src),
+            _ => panic!("Expected register source operand"),
+        }
+
+        // Check that the second instruction has the dst register as destination operand
+        match &builder.instructions[1].dst {
+            Some(Operand::Reg(r)) => assert_eq!(*r, dst),
+            _ => panic!("Expected register destination operand"),
+        }
+    }
+
+    #[test]
+    fn test_mov_reg_f32() {
+        let mut builder = MockBuilder::new();
+
+        // Create f32 source register
+        let src = builder.mov_f32_imm(3.14);
+
+        // Copy to another f32 register
+        let dst = builder.mov_reg(src, PtxType::F32);
+
+        assert_eq!(builder.instructions.len(), 2);
+        assert_eq!(builder.instructions[1].ty, PtxType::F32);
+        assert_ne!(src, dst);
+    }
+
+    #[test]
+    fn test_multiple_labels() {
+        let mut builder = MockBuilder::new();
+
+        builder.label("start");
+        builder.label("middle");
+        builder.label("end");
+
+        assert_eq!(builder.labels.len(), 3);
+        assert_eq!(builder.labels[0], "start");
+        assert_eq!(builder.labels[1], "middle");
+        assert_eq!(builder.labels[2], "end");
+
+        // Verify label instructions are created
+        assert_eq!(builder.instructions.len(), 3);
+        for instr in &builder.instructions {
+            assert!(instr.label.is_some());
+        }
+    }
+
+    #[test]
+    fn test_label_format() {
+        let mut builder = MockBuilder::new();
+
+        builder.label("my_loop");
+
+        let instr = &builder.instructions[0];
+        assert_eq!(instr.label, Some("my_loop:".to_string()));
+    }
+
+    #[test]
+    fn test_branch_creates_label_target() {
+        let mut builder = MockBuilder::new();
+
+        builder.branch("exit");
+
+        let instr = &builder.instructions[0];
+        assert_eq!(instr.op, PtxOp::Bra);
+        assert_eq!(instr.label, Some("exit".to_string()));
+        assert!(instr.predicate.is_none());
+    }
+
+    #[test]
+    fn test_branch_if_predicate_structure() {
+        let mut builder = MockBuilder::new();
+        let pred = builder.registers.allocate_virtual(PtxType::Pred);
+
+        builder.branch_if(pred, "target_label");
+
+        let instr = &builder.instructions[0];
+        let predicate = instr.predicate.as_ref().unwrap();
+
+        assert_eq!(predicate.reg, pred);
+        assert!(!predicate.negated);
+    }
+
+    #[test]
+    fn test_branch_if_not_predicate_structure() {
+        let mut builder = MockBuilder::new();
+        let pred = builder.registers.allocate_virtual(PtxType::Pred);
+
+        builder.branch_if_not(pred, "other_label");
+
+        let instr = &builder.instructions[0];
+        let predicate = instr.predicate.as_ref().unwrap();
+
+        assert_eq!(predicate.reg, pred);
+        assert!(predicate.negated);
+    }
+
+    #[test]
+    fn test_mov_u64_imm_value() {
+        let mut builder = MockBuilder::new();
+
+        let reg = builder.mov_u64_imm(0xDEADBEEFCAFEBABE);
+
+        assert_eq!(builder.instructions.len(), 1);
+        let instr = &builder.instructions[0];
+
+        assert_eq!(instr.op, PtxOp::Mov);
+        assert_eq!(instr.ty, PtxType::U64);
+
+        // Verify destination is the returned register
+        match &instr.dst {
+            Some(Operand::Reg(r)) => assert_eq!(*r, reg),
+            _ => panic!("Expected register destination"),
+        }
+
+        // Verify source is the immediate value
+        assert!(!instr.srcs.is_empty());
+        match &instr.srcs[0] {
+            Operand::ImmU64(v) => assert_eq!(*v, 0xDEADBEEFCAFEBABE),
+            _ => panic!("Expected ImmU64 source"),
+        }
+    }
+
+    #[test]
+    fn test_mov_u32_imm_value() {
+        let mut builder = MockBuilder::new();
+
+        let reg = builder.mov_u32_imm(0xCAFEBABE);
+
+        let instr = &builder.instructions[0];
+        assert_eq!(instr.ty, PtxType::U32);
+
+        // Verify destination
+        match &instr.dst {
+            Some(Operand::Reg(r)) => assert_eq!(*r, reg),
+            _ => panic!("Expected register destination"),
+        }
+
+        // Verify source (stored as i64)
+        assert!(!instr.srcs.is_empty());
+        match &instr.srcs[0] {
+            Operand::ImmI64(v) => assert_eq!(*v, 0xCAFEBABE_i64),
+            _ => panic!("Expected ImmI64 source"),
+        }
+    }
+
+    #[test]
+    fn test_mov_f32_imm_value() {
+        let mut builder = MockBuilder::new();
+
+        let reg = builder.mov_f32_imm(2.71828);
+
+        let instr = &builder.instructions[0];
+        assert_eq!(instr.ty, PtxType::F32);
+
+        // Verify destination
+        match &instr.dst {
+            Some(Operand::Reg(r)) => assert_eq!(*r, reg),
+            _ => panic!("Expected register destination"),
+        }
+
+        // Verify source
+        assert!(!instr.srcs.is_empty());
+        match &instr.srcs[0] {
+            Operand::ImmF32(v) => assert!((v - 2.71828).abs() < 1e-5),
+            _ => panic!("Expected ImmF32 source"),
+        }
+    }
+
+    #[test]
+    fn test_ret_instruction_type() {
+        let mut builder = MockBuilder::new();
+
+        builder.ret();
+
+        let instr = &builder.instructions[0];
+        assert_eq!(instr.op, PtxOp::Ret);
+        assert_eq!(instr.ty, PtxType::Pred);
+    }
 }

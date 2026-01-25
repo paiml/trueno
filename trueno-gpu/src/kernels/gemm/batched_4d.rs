@@ -402,50 +402,27 @@ mod tests {
 
     #[test]
     fn test_ptx_output_for_verification() {
-        // Generate PTX for manual verification with ptxas
         let kernel = GemmKernel::tiled(128, 128, 128, 32);
         let ptx = kernel.emit_ptx();
 
-        // Write to /tmp for ptxas verification
         std::fs::write("/tmp/test_tiled.ptx", &ptx).expect("write PTX");
-        eprintln!("PTX written to /tmp/test_tiled.ptx");
 
-        // Verify key patterns are present
-        assert!(
-            ptx.contains("fma.rn.f32"),
-            "Expected fma.rn.f32 for accumulation"
-        );
-        assert!(ptx.contains("add.u32"), "Expected add.u32 for loop counter");
-        // Verify in-place updates (same register as src and dst)
-        // Inner loop: add.u32 %rN, %rN, 1
-        assert!(
-            ptx.contains("%r17, %r17, 1") || ptx.contains("%r"), // inner_k in-place
-            "Expected in-place inner loop counter update"
-        );
-        // Tile loop: add.u32 %rN, %rN, 1
-        assert!(
-            ptx.contains("%r10, %r10, 1") || ptx.contains("%r"), // tile_idx in-place
-            "Expected in-place tile loop counter update"
-        );
+        assert!(ptx.contains("fma.rn.f32"));
+        assert!(ptx.contains("add.u32"));
+        assert!(ptx.contains("%r17, %r17, 1") || ptx.contains("%r"));
+        assert!(ptx.contains("%r10, %r10, 1") || ptx.contains("%r"));
     }
 
     #[test]
     fn test_naive_ptx_for_verification() {
-        // Generate PTX for naive GEMM
         let kernel = GemmKernel::naive(128, 128, 128);
         let ptx = kernel.emit_ptx();
 
-        // Write to /tmp for ptxas verification
         std::fs::write("/tmp/test_naive.ptx", &ptx).expect("write PTX");
-        eprintln!("Naive PTX written to /tmp/test_naive.ptx");
 
-        // Verify key patterns
-        assert!(
-            ptx.contains("fma.rn.f32"),
-            "Expected fma.rn.f32 for accumulation"
-        );
-        assert!(ptx.contains("loop_k:"), "Expected loop_k label");
-        assert!(ptx.contains("loop_end:"), "Expected loop_end label");
+        assert!(ptx.contains("fma.rn.f32"));
+        assert!(ptx.contains("loop_k:"));
+        assert!(ptx.contains("loop_end:"));
     }
 
     #[test]
@@ -480,7 +457,6 @@ mod tests {
 
     #[test]
     fn test_all_gemm_variants_emit_valid_ptx() {
-        // Comprehensive test for all variants
         let variants: Vec<GemmKernel> = vec![
             GemmKernel::naive(64, 64, 64),
             GemmKernel::tiled(64, 64, 64, 16),
@@ -493,17 +469,12 @@ mod tests {
             let ptx = kernel.emit_ptx();
             let ptx_kernel = kernel.build_ptx();
 
-            // All variants must produce valid PTX
-            assert!(ptx.contains(".version"), "{name} missing PTX version");
-            assert!(ptx.contains(".entry"), "{name} missing entry point");
-            assert!(ptx.contains(".param"), "{name} missing parameters");
+            assert!(ptx.contains(".version"));
+            assert!(ptx.contains(".entry"));
+            assert!(ptx.contains(".param"));
 
-            // Verify shared memory for tiled variants
             if name.contains("tiled") || name.contains("tensor") || name.contains("wmma") {
-                assert!(
-                    ptx_kernel.shared_memory_bytes() > 0,
-                    "{name} should use shared memory"
-                );
+                assert!(ptx_kernel.shared_memory_bytes() > 0);
             }
         }
     }
@@ -525,63 +496,25 @@ mod tests {
     }
 
     /// PARITY-114: Verify tiled GEMM doesn't have early exit before barriers
-    ///
-    /// Bug: Threads with row >= m or col >= n exit before bar.sync, causing:
-    /// 1. Barrier deadlock/undefined behavior (not all threads reach bar.sync)
-    /// 2. Incomplete shared memory loading (only valid threads load data)
-    /// 3. Wrong results for small matrices (m < tile_size or n < tile_size)
-    ///
-    /// Fix: Move bounds check to AFTER tile_loop_end, only guard output store
     #[test]
     fn test_parity_114_tiled_gemm_no_early_exit_before_barrier() {
-        // Test with small matrix where m < tile_size and n < tile_size
-        // This exposes the bug because most threads would exit early
-        let kernel = GemmKernel::tiled(4, 8, 64, 32); // m=4, n=8, tile_size=32
+        let kernel = GemmKernel::tiled(4, 8, 64, 32);
         let ptx = kernel.emit_ptx();
 
-        // Find the position of key elements in the PTX
-        let bar_sync_pos = ptx.find("bar.sync").expect("PTX should have bar.sync");
-        let tile_loop_end_pos = ptx
-            .find("tile_loop_end:")
-            .expect("PTX should have tile_loop_end");
+        let bar_sync_pos = ptx.find("bar.sync").expect("bar.sync required");
+        let tile_loop_end_pos = ptx.find("tile_loop_end:").expect("tile_loop_end required");
 
-        // Find all early exit branches (branches to exit before tile_loop)
-        // Pattern: "@%pN bra exit;" where this appears BEFORE bar.sync
-        let mut early_exit_found = false;
-        let mut line_num = 0;
-        for line in ptx.lines() {
-            line_num += 1;
-            // Check if this line is a conditional branch to exit
+        // Verify no early exit before tile_loop_end
+        let early_exit = ptx.lines().any(|line| {
             if line.contains("@%p") && line.contains("bra exit") {
-                // Calculate position of this line in the PTX
-                let line_start = ptx[..ptx.find(line).unwrap_or(0)].len();
-
-                // If this exit branch is BEFORE tile_loop_end, it's the bug
-                if line_start < tile_loop_end_pos {
-                    early_exit_found = true;
-                    eprintln!(
-                        "PARITY-114 BUG: Early exit at line {}: {}",
-                        line_num,
-                        line.trim()
-                    );
-                }
+                let pos = ptx.find(line).unwrap_or(0);
+                pos < tile_loop_end_pos
+            } else {
+                false
             }
-        }
-
-        // FAIL if early exit found before tile_loop_end
-        // After fix, this assertion should pass
-        assert!(
-            !early_exit_found,
-            "PARITY-114: Tiled GEMM has early exit before bar.sync. \
-             All threads must participate in barriers. \
-             Move bounds check to after tile_loop_end."
-        );
-
-        // Additional check: bar.sync should be BEFORE tile_loop_end (inside the loop)
-        assert!(
-            bar_sync_pos < tile_loop_end_pos,
-            "bar.sync should be inside tile_loop (before tile_loop_end)"
-        );
+        });
+        assert!(!early_exit, "PARITY-114 violation");
+        assert!(bar_sync_pos < tile_loop_end_pos, "bar.sync must be in loop");
     }
 
     /// PARITY-114: Verify n_tiles is correctly computed for small k
@@ -664,25 +597,12 @@ mod tests {
             let kernel = GemmKernel::tensor_core(m, n, k);
             let ptx = kernel.emit_ptx();
 
-            // Verify kernel generates valid PTX
-            assert!(
-                ptx.contains(".entry"),
-                "Kernel m={m} n={n} k={k} should have entry point"
-            );
+            assert!(ptx.contains(".entry"));
+            assert!(ptx.contains("bar.sync"));
 
-            // Verify barrier is present (all threads must participate)
-            assert!(
-                ptx.contains("bar.sync"),
-                "Kernel m={m} n={n} k={k} should have barrier"
-            );
-
-            // Verify bounds check happens AFTER barrier loop
             let bar_sync_pos = ptx.find("bar.sync").unwrap();
             let k_tile_end_pos = ptx.find("k_tile_end:").unwrap();
-            assert!(
-                bar_sync_pos < k_tile_end_pos,
-                "Kernel m={m} n={n} k={k}: barrier must be inside loop"
-            );
+            assert!(bar_sync_pos < k_tile_end_pos);
         }
     }
 
@@ -700,14 +620,8 @@ mod tests {
             let kernel = GemmKernel::tiled(m, n, k, tile);
             let ptx = kernel.emit_ptx();
 
-            assert!(
-                ptx.contains(".entry"),
-                "Tiled kernel m={m} n={n} k={k} tile={tile} should have entry"
-            );
-            assert!(
-                ptx.contains("bar.sync"),
-                "Tiled kernel m={m} n={n} k={k} tile={tile} should have barrier"
-            );
+            assert!(ptx.contains(".entry"));
+            assert!(ptx.contains("bar.sync"));
         }
     }
 
@@ -721,18 +635,9 @@ mod tests {
             let kernel = GemmKernel::wmma_fp16(m, n, k);
             let ptx = kernel.emit_ptx();
 
-            assert!(
-                ptx.contains(".entry"),
-                "WMMA kernel m={m} n={n} k={k} should have entry"
-            );
-            assert!(
-                ptx.contains("bar.sync"),
-                "WMMA kernel m={m} n={n} k={k} should have barrier"
-            );
-            assert!(
-                ptx.contains("wmma.mma"),
-                "WMMA kernel m={m} n={n} k={k} should have wmma.mma"
-            );
+            assert!(ptx.contains(".entry"));
+            assert!(ptx.contains("bar.sync"));
+            assert!(ptx.contains("wmma.mma"));
         }
     }
 
@@ -761,7 +666,6 @@ mod tests {
     /// WAPR-PERF-011: Test batched WMMA kernel for multi-head attention
     #[test]
     fn test_batched_gemm_wmma_fp16() {
-        // Typical attention dimensions: 6 heads, seq_len=94, head_dim=64
         let kernel = BatchedGemmKernel::wmma_fp16(6, 94, 64, 64);
         assert_eq!(kernel.name(), "batched_gemm_wmma_fp16");
 
@@ -769,27 +673,15 @@ mod tests {
         assert!(ptx.contains(".entry batched_gemm_wmma_fp16"));
         assert!(ptx.contains(".param .u32 batch"));
         assert!(ptx.contains("bar.sync"));
-        // WAPR-PERF-010 FIX: Must use cvta.shared.u64 for WMMA loads
-        assert!(
-            ptx.contains("cvta.shared.u64"),
-            "Batched WMMA must use cvta.shared.u64 for generic pointers"
-        );
-        // Must have WMMA intrinsics
-        assert!(
-            ptx.contains("wmma") || ptx.contains("mma"),
-            "Batched WMMA must use Tensor Core instructions"
-        );
+        assert!(ptx.contains("cvta.shared.u64"));
+        assert!(ptx.contains("wmma") || ptx.contains("mma"));
     }
 
     #[test]
     fn test_batched_gemm_uses_z_dimension() {
         let kernel = BatchedGemmKernel::naive(8, 32, 32, 32);
         let ptx = kernel.emit_ptx();
-        // Should use ctaid.z for batch indexing
-        assert!(
-            ptx.contains("%ctaid.z"),
-            "Batched GEMM should use ctaid.z for batch"
-        );
+        assert!(ptx.contains("%ctaid.z"));
     }
 
     #[test]
@@ -835,16 +727,8 @@ mod tests {
     fn test_batched_4d_gemm_uses_batch_head_indexing() {
         let kernel = Batched4DGemmKernel::new(4, 12, 128, 128, 64);
         let ptx = kernel.emit_ptx();
-        // Should use ctaid.z for batch*heads indexing
-        assert!(
-            ptx.contains("%ctaid.z"),
-            "4D GEMM should use ctaid.z for batch*heads"
-        );
-        // Should have div and rem for separating batch and head
-        assert!(
-            ptx.contains("div.") || ptx.contains("rem."),
-            "4D GEMM should extract batch and head from z index"
-        );
+        assert!(ptx.contains("%ctaid.z"));
+        assert!(ptx.contains("div.") || ptx.contains("rem."));
     }
 
     /// PARITY-114: Verify batched GEMM tiled is barrier-safe
@@ -852,11 +736,7 @@ mod tests {
     fn test_barrier_safety_batched_gemm_tiled() {
         let kernel = BatchedGemmKernel::tiled(4, 64, 64, 64, 16);
         let result = kernel.analyze_barrier_safety();
-        assert!(
-            result.is_safe,
-            "Batched GEMM tiled should be barrier-safe: {:?}",
-            result.violations
-        );
+        assert!(result.is_safe);
     }
 
     /// PARITY-114: Verify batched 4D GEMM is barrier-safe
@@ -864,11 +744,7 @@ mod tests {
     fn test_barrier_safety_batched_4d_gemm() {
         let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
         let result = kernel.analyze_barrier_safety();
-        assert!(
-            result.is_safe,
-            "Batched 4D GEMM should be barrier-safe: {:?}",
-            result.violations
-        );
+        assert!(result.is_safe);
     }
 
     /// Test batched GEMM boundary conditions
@@ -883,14 +759,8 @@ mod tests {
         for (batch, m, n, k, tile) in boundary_cases {
             let kernel = BatchedGemmKernel::tiled(batch, m, n, k, tile);
             let ptx = kernel.emit_ptx();
-            assert!(
-                ptx.contains(".entry"),
-                "Batched kernel should have entry"
-            );
-            assert!(
-                ptx.contains("bar.sync"),
-                "Batched kernel should have barrier"
-            );
+            assert!(ptx.contains(".entry"));
+            assert!(ptx.contains("bar.sync"));
         }
     }
 
@@ -898,22 +768,272 @@ mod tests {
     #[test]
     fn test_batched_4d_gemm_boundary_conditions() {
         let boundary_cases = [
-            (1, 1, 64, 64, 32),    // Single batch, single head
-            (2, 12, 17, 17, 17),  // Non-power-of-2 dimensions
-            (4, 8, 128, 64, 32),  // Different M and N
+            (1, 1, 64, 64, 32),
+            (2, 12, 17, 17, 17),
+            (4, 8, 128, 64, 32),
         ];
 
         for (batch, heads, m, n, k) in boundary_cases {
             let kernel = Batched4DGemmKernel::new(batch, heads, m, n, k);
             let ptx = kernel.emit_ptx();
-            assert!(
-                ptx.contains(".entry"),
-                "4D GEMM should have entry"
-            );
-            assert!(
-                ptx.contains("bar.sync"),
-                "4D GEMM should have barrier"
-            );
+            assert!(ptx.contains(".entry"));
+            assert!(ptx.contains("bar.sync"));
         }
+    }
+
+    // =========================================================================
+    // Additional tests for Batched4DGemmKernel coverage (95%+ target)
+    // =========================================================================
+
+    /// Test Debug trait for Batched4DGemmConfig
+    #[test]
+    fn test_batched_4d_gemm_config_debug() {
+        let config = Batched4DGemmConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("Batched4DGemmConfig"));
+        assert!(debug_str.contains("batch"));
+        assert!(debug_str.contains("heads"));
+        assert!(debug_str.contains("tile_size"));
+    }
+
+    /// Test Clone trait for Batched4DGemmConfig
+    #[test]
+    fn test_batched_4d_gemm_config_clone() {
+        let config = Batched4DGemmConfig {
+            batch: 4,
+            heads: 12,
+            m: 256,
+            n: 256,
+            k: 64,
+            tile_size: 32,
+        };
+        let cloned = config.clone();
+        assert_eq!(config.batch, cloned.batch);
+        assert_eq!(config.heads, cloned.heads);
+        assert_eq!(config.m, cloned.m);
+        assert_eq!(config.n, cloned.n);
+        assert_eq!(config.k, cloned.k);
+        assert_eq!(config.tile_size, cloned.tile_size);
+    }
+
+    /// Test Debug trait for Batched4DGemmKernel
+    #[test]
+    fn test_batched_4d_gemm_kernel_debug() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        let debug_str = format!("{:?}", kernel);
+        assert!(debug_str.contains("Batched4DGemmKernel"));
+        assert!(debug_str.contains("config"));
+    }
+
+    /// Test Clone trait for Batched4DGemmKernel
+    #[test]
+    fn test_batched_4d_gemm_kernel_clone() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        let cloned = kernel.clone();
+        assert_eq!(kernel.name(), cloned.name());
+        assert_eq!(kernel.config.batch, cloned.config.batch);
+        assert_eq!(kernel.config.heads, cloned.config.heads);
+        assert_eq!(kernel.config.m, cloned.config.m);
+        assert_eq!(kernel.config.n, cloned.config.n);
+        assert_eq!(kernel.config.k, cloned.config.k);
+    }
+
+    /// Test as_module() method for Batched4DGemmKernel
+    #[test]
+    fn test_batched_4d_gemm_as_module() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        let module = kernel.as_module();
+        let ptx = module.emit();
+
+        // Verify module structure
+        assert!(ptx.contains(".version 8.0"));
+        assert!(ptx.contains(".target sm_89"));
+        assert!(ptx.contains(".address_size 64"));
+        assert!(ptx.contains(".entry batched_4d_gemm"));
+    }
+
+    /// Test PTX content for 4D batched GEMM
+    #[test]
+    fn test_batched_4d_gemm_ptx_content() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        let ptx = kernel.emit_ptx();
+
+        // Verify all parameters are present
+        assert!(ptx.contains(".param .u64 a_ptr"));
+        assert!(ptx.contains(".param .u64 b_ptr"));
+        assert!(ptx.contains(".param .u64 c_ptr"));
+        assert!(ptx.contains(".param .u32 batch"));
+        assert!(ptx.contains(".param .u32 heads"));
+        assert!(ptx.contains(".param .u32 m"));
+        assert!(ptx.contains(".param .u32 n"));
+        assert!(ptx.contains(".param .u32 k"));
+
+        // Verify batch/head indexing
+        assert!(ptx.contains("%ctaid.z"));
+        assert!(ptx.contains("div.u32") || ptx.contains("rem.u32"));
+    }
+
+    /// Test shared memory allocation for 4D batched GEMM
+    #[test]
+    fn test_batched_4d_gemm_shared_memory() {
+        let kernel = Batched4DGemmKernel::with_tile_size(2, 8, 64, 64, 32, 16);
+        let ptx_kernel = kernel.build_ptx();
+
+        // Shared memory = tile_size * tile_size * 4 * 2 (for A and B tiles)
+        // 16 * 16 * 4 * 2 = 2048 bytes
+        assert_eq!(ptx_kernel.shared_memory_bytes(), 2048);
+    }
+
+    /// Test 4D GEMM with large tile size
+    #[test]
+    fn test_batched_4d_gemm_large_tile() {
+        let kernel = Batched4DGemmKernel::with_tile_size(1, 4, 128, 128, 64, 32);
+        let ptx = kernel.emit_ptx();
+
+        // Verify kernel generates valid PTX
+        assert!(ptx.contains(".entry batched_4d_gemm"));
+        assert!(ptx.contains("bar.sync"));
+
+        // Check shared memory is larger
+        let ptx_kernel = kernel.build_ptx();
+        assert_eq!(ptx_kernel.shared_memory_bytes(), 32 * 32 * 4 * 2);
+    }
+
+    /// Test 4D GEMM with minimum dimensions
+    #[test]
+    fn test_batched_4d_gemm_minimum_dims() {
+        let kernel = Batched4DGemmKernel::new(1, 1, 1, 1, 1);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains(".entry batched_4d_gemm"));
+        assert!(ptx.contains("bar.sync"));
+    }
+
+    /// Test 4D GEMM loop structure
+    #[test]
+    fn test_batched_4d_gemm_loop_structure() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        let ptx = kernel.emit_ptx();
+
+        // Verify tile loop
+        assert!(ptx.contains("tile_loop:"));
+        assert!(ptx.contains("tile_loop_end:"));
+
+        // Verify inner k loop
+        assert!(ptx.contains("inner_k_loop:"));
+        assert!(ptx.contains("inner_k_end:"));
+
+        // Verify exit label
+        assert!(ptx.contains("exit:"));
+    }
+
+    /// Test 4D GEMM FMA operations
+    #[test]
+    fn test_batched_4d_gemm_fma_operations() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        let ptx = kernel.emit_ptx();
+
+        // Verify FMA is used for accumulation
+        assert!(ptx.contains("fma.rn.f32"));
+
+        // Verify shared memory operations
+        assert!(ptx.contains("ld.shared.f32"));
+        assert!(ptx.contains("st.shared.f32"));
+
+        // Verify global memory operations
+        assert!(ptx.contains("ld.global.f32"));
+        assert!(ptx.contains("st.global.f32"));
+    }
+
+    /// Test 4D GEMM skip labels for bounds checking
+    #[test]
+    fn test_batched_4d_gemm_skip_labels() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        let ptx = kernel.emit_ptx();
+
+        // Verify skip labels for A and B loading
+        assert!(ptx.contains("skip_a_load:"));
+        assert!(ptx.contains("skip_b_load:"));
+    }
+
+    /// Test 4D GEMM with varying head counts
+    #[test]
+    fn test_batched_4d_gemm_varying_heads() {
+        let head_counts = [1, 2, 4, 8, 12, 16, 32];
+
+        for heads in head_counts {
+            let kernel = Batched4DGemmKernel::new(2, heads, 64, 64, 32);
+            let ptx = kernel.emit_ptx();
+
+            assert!(ptx.contains(".entry batched_4d_gemm"));
+            assert!(ptx.contains("bar.sync"));
+
+            // Config should match
+            assert_eq!(kernel.config.heads, heads);
+        }
+    }
+
+    /// Test 4D GEMM with varying batch sizes
+    #[test]
+    fn test_batched_4d_gemm_varying_batches() {
+        let batch_sizes = [1, 2, 4, 8, 16, 32];
+
+        for batch in batch_sizes {
+            let kernel = Batched4DGemmKernel::new(batch, 8, 64, 64, 32);
+            let ptx = kernel.emit_ptx();
+
+            assert!(ptx.contains(".entry batched_4d_gemm"));
+            assert_eq!(kernel.config.batch, batch);
+        }
+    }
+
+    /// Test 4D GEMM barrier safety passes
+    #[test]
+    fn test_batched_4d_gemm_barrier_safety_result() {
+        let kernel = Batched4DGemmKernel::new(2, 8, 64, 64, 32);
+        let result = kernel.analyze_barrier_safety();
+
+        assert!(result.is_safe);
+        assert!(result.violations.is_empty());
+        assert!(result.barrier_count > 0);
+    }
+
+    /// Test 4D GEMM with non-power-of-2 dimensions
+    #[test]
+    fn test_batched_4d_gemm_non_power_of_2() {
+        let cases = [
+            (3, 7, 33, 33, 17),
+            (5, 11, 100, 100, 50),
+            (2, 6, 94, 64, 64),  // Typical attention pattern
+        ];
+
+        for (batch, heads, m, n, k) in cases {
+            let kernel = Batched4DGemmKernel::new(batch, heads, m, n, k);
+            let ptx = kernel.emit_ptx();
+
+            assert!(ptx.contains(".entry batched_4d_gemm"));
+            assert!(ptx.contains("bar.sync"));
+        }
+    }
+
+    /// Test name() method returns correct value
+    #[test]
+    fn test_batched_4d_gemm_name() {
+        let kernel = Batched4DGemmKernel::new(1, 1, 64, 64, 64);
+        assert_eq!(kernel.name(), "batched_4d_gemm");
+    }
+
+    /// Test config default values match documentation
+    #[test]
+    fn test_batched_4d_gemm_config_default_values() {
+        let config = Batched4DGemmConfig::default();
+
+        // Verify documented defaults
+        assert_eq!(config.batch, 1, "Default batch should be 1");
+        assert_eq!(config.heads, 8, "Default heads should be 8");
+        assert_eq!(config.m, 512, "Default m should be 512");
+        assert_eq!(config.n, 512, "Default n should be 512");
+        assert_eq!(config.k, 64, "Default k should be 64");
+        assert_eq!(config.tile_size, 16, "Default tile_size should be 16");
     }
 }

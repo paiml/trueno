@@ -54,6 +54,12 @@ mod rope;
 mod swiglu;
 mod transform;
 
+#[cfg(test)]
+mod rope_tests;
+
+#[cfg(test)]
+mod transform_tests;
+
 // Re-export all kernel types
 pub use activations::{ElementwiseMulKernel, GeluKernel, ReluKernel, ScaleKernel, SiluKernel};
 pub use kv_cache::{KvCacheScatterIndirectKernel, KvCacheScatterKernel};

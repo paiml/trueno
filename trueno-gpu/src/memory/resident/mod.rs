@@ -28,6 +28,9 @@ mod ops;
 mod stats;
 mod weights;
 
+#[cfg(test)]
+mod ops_tests;
+
 // Re-exports from submodules
 #[cfg(feature = "cuda")]
 pub use attention::{

@@ -10,7 +10,7 @@
 
 use cbtop::{
     GoldenTrace, GoldenTraceManager, GoldenComparator, GoldenTraceError,
-    TraceMetrics, TraceSyscallBreakdown as SyscallBreakdown, TraceComparison,
+    TraceMetrics, TraceSyscallBreakdown as SyscallBreakdown,
 };
 use tempfile::TempDir;
 

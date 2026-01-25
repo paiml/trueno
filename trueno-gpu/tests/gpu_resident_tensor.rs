@@ -29,7 +29,7 @@
 use trueno_gpu::driver::CudaContext;
 #[cfg(feature = "cuda")]
 use trueno_gpu::memory::resident::{
-    batched_multihead_attention, reset_transfer_counters, total_d2h_transfers,
+    batched_multihead_attention, clear_kernel_cache, reset_transfer_counters, total_d2h_transfers,
     total_h2d_transfers, GpuResidentTensor, TransferStats,
 };
 
@@ -271,6 +271,7 @@ fn test_batched_attention_fused_softmax() {
 #[test]
 #[cfg(feature = "cuda")]
 fn test_matmul_2x2_correctness() {
+    clear_kernel_cache();
     let ctx = match CudaContext::new(0) {
         Ok(ctx) => ctx,
         Err(_) => return,
@@ -405,6 +406,7 @@ fn test_attention_steps_individually() {
 #[test]
 #[cfg(feature = "cuda")]
 fn test_batched_attention_correctness() {
+    clear_kernel_cache();
     let ctx = match CudaContext::new(0) {
         Ok(ctx) => ctx,
         Err(_) => {

@@ -1,5 +1,4 @@
 use super::super::super::*;
-use crate::Backend;
 
 // Unit Tests: minimum()
 // ========================================

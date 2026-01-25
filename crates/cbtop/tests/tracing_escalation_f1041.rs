@@ -6,7 +6,6 @@ use cbtop::{
     EscalationReason, EscalationThresholds, SyscallBreakdown,
     TraceResult, TracingEscalation, OtlpSpanAttributes,
 };
-use std::time::Duration;
 
 // ============================================================================
 // F1041: CV threshold triggers escalation

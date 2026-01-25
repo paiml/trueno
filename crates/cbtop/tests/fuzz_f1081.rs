@@ -3,8 +3,8 @@
 //! Popperian falsification criteria for fuzz testing per §36.3 Resilience.
 
 use cbtop::{
-    FuzzResult, FuzzFailure, FuzzInputValidator, FuzzValidationError,
-    FuzzTargetConfig, FuzzSuite, FuzzSummary,
+    FuzzResult, FuzzInputValidator, FuzzValidationError,
+    FuzzTargetConfig, FuzzSuite,
     safe_div, checked_add_u64, checked_mul_u64, bound_value, sanitize_float,
     test_float_edge_cases, test_u64_edge_cases,
     // Components to fuzz

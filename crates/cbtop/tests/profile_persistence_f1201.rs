@@ -14,7 +14,6 @@ use cbtop::{
     profile_persistence::templates,
 };
 use tempfile::TempDir;
-use std::path::PathBuf;
 
 // =============================================================================
 // F1201: Profile Loading Tests
@@ -212,7 +211,7 @@ fn f1206_directory_created() {
 #[test]
 fn f1206_ensure_directory_idempotent() {
     let temp_dir = TempDir::new().unwrap();
-    let mut manager = ProfileManager::new(temp_dir.path().join("profiles"));
+    let manager = ProfileManager::new(temp_dir.path().join("profiles"));
 
     // Call multiple times - should not fail
     manager.ensure_directory().unwrap();
@@ -286,7 +285,7 @@ fn f1208_export_creates_file() {
 #[test]
 fn f1208_export_nonexistent() {
     let temp_dir = TempDir::new().unwrap();
-    let mut manager = ProfileManager::new(temp_dir.path().to_path_buf());
+    let manager = ProfileManager::new(temp_dir.path().to_path_buf());
     manager.ensure_directory().unwrap();
 
     let export_path = temp_dir.path().join("fail.toml");

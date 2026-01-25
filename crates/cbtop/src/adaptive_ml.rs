@@ -797,7 +797,7 @@ mod tests {
 
         // Check drift with very different samples
         let drifted: Vec<f64> = (0..100).map(|i| 200.0 + (i as f64 * 5.0)).collect();
-        let drift = ml.check_drift(&drifted).unwrap();
+        let _drift = ml.check_drift(&drifted).unwrap();
         // May or may not detect drift depending on threshold model
     }
 

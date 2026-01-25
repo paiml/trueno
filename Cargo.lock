@@ -843,7 +843,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "toml",
- "trueno 0.14.0",
+ "trueno 0.14.1",
  "trueno-gpu",
 ]
 
@@ -5481,7 +5481,7 @@ dependencies = [
 
 [[package]]
 name = "trueno"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "aprender 0.24.1",
@@ -5565,7 +5565,7 @@ dependencies = [
 
 [[package]]
 name = "trueno-gpu"
-version = "0.4.10"
+version = "0.4.11"
 dependencies = [
  "bytemuck",
  "criterion",

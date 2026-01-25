@@ -98,7 +98,8 @@ fn f206_collector_metrics_stable() {
     use cbtop::bricks::collectors::cpu::CpuCollectorBrick;
 
     const RUNS: usize = 10;
-    const MAX_CV: f64 = 10.0; // Allow more variance for system metrics
+    #[allow(dead_code)]
+    const MAX_CV: f64 = 10.0; // Allow more variance for system metrics (reserved for CV checks)
 
     let mut collector = CpuCollectorBrick::new();
 
