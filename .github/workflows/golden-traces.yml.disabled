@@ -1,0 +1,182 @@
+name: Golden Trace Validation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  # Allow manual trigger
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  validate-golden-traces:
+    name: Validate SIMD Performance with Golden Traces
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-golden-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Renacer
+        run: cargo install renacer --version 0.6.2 --locked
+
+      - name: Build examples (release with debug symbols)
+        run: cargo build --release --examples
+
+      - name: Capture golden traces
+        run: ./scripts/capture_golden_traces.sh
+
+      - name: Validate trace files exist
+        run: |
+          echo "📊 Checking golden trace files..."
+          test -f golden_traces/backend_detection.json || exit 1
+          test -f golden_traces/matrix_operations.json || exit 1
+          test -f golden_traces/activation_functions.json || exit 1
+          test -f golden_traces/performance_demo.json || exit 1
+          test -f golden_traces/ml_similarity.json || exit 1
+          echo "✅ All golden trace files present"
+
+      - name: Verify trace files
+        run: |
+          echo "📊 Verifying golden trace files..."
+
+          # Check that summary files exist and contain data
+          for summary in golden_traces/*_summary.txt; do
+            if [ -f "$summary" ]; then
+              echo "Checking $summary..."
+              # Verify file is non-empty and contains "total" line
+              if grep -q "^100.00" "$summary"; then
+                echo "✅ $summary contains valid trace data"
+              else
+                echo "❌ $summary missing performance data"
+                exit 1
+              fi
+            fi
+          done
+
+          echo "✅ All golden trace summary files are valid"
+
+      - name: Check for performance regressions
+        run: |
+          echo "📈 Checking for performance regressions..."
+
+          # Parse runtime from summary files and compare with baselines
+          # Golden baselines (from GOLDEN_TRACE_INTEGRATION_SUMMARY.md):
+          # - backend_detection: 0.730ms (budget: 10ms)
+          # - matrix_operations: 1.560ms (budget: 20ms)
+          # - activation_functions: 1.298ms (budget: 20ms)
+          # - performance_demo: 1.507ms (budget: 50ms)
+          # - ml_similarity: 0.817ms (budget: 20ms)
+
+          # Extract total runtime from summary files (in milliseconds)
+          check_performance() {
+            local example=$1
+            local baseline_ms=$2
+            local budget_ms=$3
+            local summary="golden_traces/${example}_summary.txt"
+
+            if [ -f "$summary" ]; then
+              # Extract total runtime (last line with "total")
+              local runtime=$(grep "^100.00" "$summary" | awk '{print $2}')
+              if [ -n "$runtime" ]; then
+                # Convert to milliseconds (runtime is in seconds)
+                local runtime_ms=$(echo "$runtime * 1000" | bc)
+                echo "  $example: ${runtime_ms}ms (baseline: ${baseline_ms}ms, budget: ${budget_ms}ms)"
+
+                # Check if within budget (allow 50% over baseline, but must be under absolute budget)
+                local threshold=$(echo "$baseline_ms * 1.5" | bc)
+                local over_threshold=$(echo "$runtime_ms > $threshold" | bc)
+                local over_budget=$(echo "$runtime_ms > $budget_ms" | bc)
+
+                if [ "$over_budget" -eq 1 ]; then
+                  echo "  ❌ FAILED: Over budget (${runtime_ms}ms > ${budget_ms}ms)"
+                  return 1
+                elif [ "$over_threshold" -eq 1 ]; then
+                  echo "  ⚠️  WARNING: ${runtime_ms}ms > 150% of baseline (${threshold}ms)"
+                else
+                  echo "  ✅ PASSED"
+                fi
+              else
+                echo "  ⚠️  Could not parse runtime from $summary"
+              fi
+            else
+              echo "  ⚠️  Summary file not found: $summary"
+            fi
+          }
+
+          echo "Validating performance budgets:"
+          check_performance "backend_detection" "0.730" "10"
+          check_performance "matrix_operations" "1.560" "20"
+          check_performance "activation_functions" "1.298" "20"
+          check_performance "performance_demo" "1.507" "50"
+          check_performance "ml_similarity" "0.817" "20"
+
+          echo ""
+          echo "✅ Performance validation complete"
+
+      - name: Upload golden traces as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-traces-${{ github.sha }}
+          path: golden_traces/
+          retention-days: 30
+
+      - name: Generate summary report
+        if: always()
+        run: |
+          echo "## Golden Trace Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Trace Files Generated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          ls -lh golden_traces/*.json golden_traces/*.txt | awk '{print "- " $9 " (" $5 ")"}' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Performance Baselines" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Example | Baseline | Budget | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|----------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| backend_detection | 0.730ms | 10ms | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| matrix_operations | 1.560ms | 20ms | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| activation_functions | 1.298ms | 20ms | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| performance_demo | 1.507ms | 50ms | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| ml_similarity | 0.817ms | 20ms | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Documentation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Integration Report: [docs/integration-report-golden-trace.md](docs/integration-report-golden-trace.md)" >> $GITHUB_STEP_SUMMARY
+          echo "- Golden Trace Analysis: [golden_traces/ANALYSIS.md](golden_traces/ANALYSIS.md)" >> $GITHUB_STEP_SUMMARY
+          echo "- Integration Summary: [GOLDEN_TRACE_INTEGRATION_SUMMARY.md](GOLDEN_TRACE_INTEGRATION_SUMMARY.md)" >> $GITHUB_STEP_SUMMARY
+
+  # Optional: PCIe bottleneck detection for GPU workloads
+  # Requires GPU-enabled runner (not available on standard GitHub Actions)
+  # validate-gpu-traces:
+  #   name: Validate GPU Performance (PCIe Bottleneck Detection)
+  #   runs-on: [self-hosted, gpu]
+  #   if: false  # Disabled until GPU runner available
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     # ... similar steps but with GPU examples

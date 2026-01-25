@@ -1,0 +1,21 @@
+name: Miri
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  miri:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Miri
+        run: |
+          rustup toolchain install nightly --component miri
+          rustup override set nightly
+      - name: Run Miri (Scalar Backend)
+        run: |
+          # Only test scalar backend to save time and avoid FFI/SIMD issues
+          cargo miri test --lib -- --skip simd --skip gpu --skip avx --skip sse --skip neon
