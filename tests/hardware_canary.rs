@@ -33,6 +33,7 @@
 /// - Run: `RUSTFLAGS="-C target-cpu=native" cargo test`
 #[test]
 #[cfg(target_arch = "x86_64")]
+#[ignore = "Requires AVX-512 hardware (not available on CI runners)"]
 fn canary_avx512_detected() {
     use std::arch::is_x86_feature_detected;
 
