@@ -922,7 +922,7 @@ mod tests {
         let v = Vector::from_slice(&[0.0, 0.5, 1.0]);
         let result = v.asin().unwrap();
         assert!((result.as_slice()[0] - 0.0).abs() < 1e-6);
-        assert!((result.as_slice()[1] - 0.5236).abs() < 1e-3); // ~π/6
+        assert!((result.as_slice()[1] - std::f32::consts::FRAC_PI_6).abs() < 1e-3);
         assert!((result.as_slice()[2] - std::f32::consts::FRAC_PI_2).abs() < 1e-5);
     }
 
@@ -938,7 +938,7 @@ mod tests {
         let v = Vector::from_slice(&[1.0, 0.5, 0.0]);
         let result = v.acos().unwrap();
         assert!((result.as_slice()[0] - 0.0).abs() < 1e-6);
-        assert!((result.as_slice()[1] - 1.0472).abs() < 1e-3); // ~π/3
+        assert!((result.as_slice()[1] - std::f32::consts::FRAC_PI_3).abs() < 1e-3);
         assert!((result.as_slice()[2] - std::f32::consts::FRAC_PI_2).abs() < 1e-5);
     }
 
