@@ -601,12 +601,12 @@ fn test_f121_to_tree_node_hierarchy() {
 
     let brick = &tree.children[0];
     assert_eq!(brick.label, "RmsNorm", "F121: Brick label");
-    assert!(brick.info.as_ref().map_or(false, |i| i.contains("50.0µs")), "F121: Brick has timing");
+    assert!(brick.info.as_ref().is_some_and(|i| i.contains("50.0µs")), "F121: Brick has timing");
     assert_eq!(brick.children.len(), 1, "F121: Brick has 1 child (kernel)");
 
     let kernel = &brick.children[0];
     assert_eq!(kernel.label, "rmsnorm_kernel", "F121: Kernel label");
-    assert!(kernel.info.as_ref().map_or(false, |i| i.contains("smem=1024B")), "F121: Kernel has shared mem");
+    assert!(kernel.info.as_ref().is_some_and(|i| i.contains("smem=1024B")), "F121: Kernel has shared mem");
 
     // Verify depth
     assert_eq!(tree.depth(), 3, "F121: Tree depth is 3 (layer->brick->kernel)");

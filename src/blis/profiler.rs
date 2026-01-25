@@ -230,9 +230,11 @@ mod tests {
 
     #[test]
     fn test_kaizen_metrics_gflops() {
-        let mut m = KaizenMetrics::default();
-        m.flops = 1_000_000_000;
-        m.time_ns = 1_000_000_000;
+        let m = KaizenMetrics {
+            flops: 1_000_000_000,
+            time_ns: 1_000_000_000,
+            ..Default::default()
+        };
         assert!((m.gflops() - 1.0).abs() < 1e-10);
     }
 
@@ -285,9 +287,11 @@ mod tests {
 
     #[test]
     fn test_blis_level_stats_gflops() {
-        let mut s = BlisLevelStats::default();
-        s.total_ns = 1_000_000_000;
-        s.flops = 1_000_000_000;
+        let s = BlisLevelStats {
+            total_ns: 1_000_000_000,
+            flops: 1_000_000_000,
+            ..Default::default()
+        };
         assert!((s.gflops() - 1.0).abs() < 1e-10);
     }
 

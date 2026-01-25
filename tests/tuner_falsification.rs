@@ -455,7 +455,7 @@ fn f022_features_normalized() {
         .build();
 
     let vec = features.to_vector();
-    let in_range_count = vec.iter().filter(|&&v| v >= 0.0 && v <= 1.5).count();
+    let in_range_count = vec.iter().filter(|&&v| (0.0..=1.5).contains(&v)).count();
 
     // At least 80% of features should be in reasonable range
     assert!(

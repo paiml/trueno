@@ -39,10 +39,10 @@ fn test_tile_stats_avg_us() {
     let mut stats = TileStats::new(TileLevel::Micro);
     assert_eq!(stats.avg_us(), 0.0);
 
-    stats.add_sample(2000_000, 100, 200); // 2000 µs
+    stats.add_sample(2_000_000, 100, 200); // 2000 µs
     assert!((stats.avg_us() - 2000.0).abs() < 0.01);
 
-    stats.add_sample(4000_000, 100, 200); // 4000 µs
+    stats.add_sample(4_000_000, 100, 200); // 4000 µs
     assert!((stats.avg_us() - 3000.0).abs() < 0.01); // (2000 + 4000) / 2
 }
 
