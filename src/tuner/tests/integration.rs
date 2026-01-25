@@ -64,8 +64,10 @@ fn f072_prediction_deterministic() {
 #[test]
 fn f075_error_handling_graceful() {
     // Invalid features should not panic
-    let mut features = TunerFeatures::default();
-    features.model_params_b = f32::NAN;
+    let features = TunerFeatures {
+        model_params_b: f32::NAN,
+        ..Default::default()
+    };
 
     let result = features.validate();
     assert!(result.is_err());

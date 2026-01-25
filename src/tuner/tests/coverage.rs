@@ -107,8 +107,10 @@ fn test_pad_right() {
 
 #[test]
 fn test_validation_infinite_features() {
-    let mut features = TunerFeatures::default();
-    features.model_params_b = f32::INFINITY;
+    let features = TunerFeatures {
+        model_params_b: f32::INFINITY,
+        ..Default::default()
+    };
     let result = features.validate();
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("Infinite"));
@@ -116,8 +118,10 @@ fn test_validation_infinite_features() {
 
 #[test]
 fn test_validation_out_of_range() {
-    let mut features = TunerFeatures::default();
-    features.batch_size_norm = 2.0; // Out of [0, 1]
+    let features = TunerFeatures {
+        batch_size_norm: 2.0, // Out of [0, 1]
+        ..Default::default()
+    };
     let result = features.validate();
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("outside [0, 1]"));
@@ -125,14 +129,19 @@ fn test_validation_out_of_range() {
 
 #[test]
 fn test_validation_bad_quant_onehot() {
-    let mut features = TunerFeatures::default();
-    features.quant_type_onehot = [0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; // Sums to 1 but invalid one-hot
+    let features = TunerFeatures {
+        quant_type_onehot: [0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], // Sums to 1 but invalid one-hot
+        ..Default::default()
+    };
     // This should actually pass since sum is 1.0
     assert!(features.validate().is_ok());
 
     // Now test with sum != 1
-    features.quant_type_onehot = [0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; // Sums to 0.5
-    let result = features.validate();
+    let features2 = TunerFeatures {
+        quant_type_onehot: [0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], // Sums to 0.5
+        ..Default::default()
+    };
+    let result = features2.validate();
     assert!(result.is_err());
 }
 
