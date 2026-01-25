@@ -46,3 +46,4 @@ deep_context.md
 *.o
 *.profraw
 *.lcov
+.pmat/project.toml
