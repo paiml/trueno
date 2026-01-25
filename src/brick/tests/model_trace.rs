@@ -2163,7 +2163,7 @@ fn test_execution_node_async_task_formatting() {
 
     // Test formatting
     let ascii = graph.to_ascii_tree();
-    assert!(ascii.contains("load_weights") || ascii.len() > 0); // May or may not be in tree
+    assert!(ascii.contains("load_weights") || !ascii.is_empty()); // May or may not be in tree
 
     // Use node IDs
     assert!(graph.node(task1).is_some());
