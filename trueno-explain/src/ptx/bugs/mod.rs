@@ -15,7 +15,7 @@ mod analyzer;
 mod coverage;
 
 pub use types::{BugSeverity, PtxBug, PtxBugClass, PtxBugReport};
-pub use analyzer::{PtxBugAnalyzer, WhitelistEntry};
+pub use analyzer::PtxBugAnalyzer;
 pub use coverage::{PtxCoverageReport, PtxCoverageTracker, PtxCoverageTrackerBuilder, PtxFeature};
 
 #[cfg(test)]

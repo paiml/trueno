@@ -138,8 +138,10 @@ fn test_validation_bad_quant_onehot() {
 
 #[test]
 fn test_validation_bad_kernel_onehot() {
-    let mut features = TunerFeatures::default();
-    features.kernel_type_onehot = [0.0; 16]; // All zeros, sum = 0
+    let mut features = TunerFeatures {
+        kernel_type_onehot: [0.0; 16], // All zeros, sum = 0
+        ..Default::default()
+    };
     // Zero sum is allowed (unspecified kernel)
     assert!(features.validate().is_ok());
 
@@ -306,7 +308,8 @@ fn test_collector_bootstrap_from_five_whys() {
 
     // Bootstrap returns empty collector for now (TODO: load actual data)
     // But it should still be a valid collector
-    assert!(collector.samples().is_empty() || collector.samples().len() > 0);
+    // Collector is either empty or has samples - this is always true but exercises the API
+    let _ = collector.samples();
     assert!(!collector.is_online_learning_enabled());
 }
 

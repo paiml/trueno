@@ -987,7 +987,7 @@ mod tests {
         assert!((sum - 1.0).abs() < 1e-5);
         // Check all values in [0, 1]
         for &val in result.as_slice() {
-            assert!(val >= 0.0 && val <= 1.0);
+            assert!((0.0..=1.0).contains(&val));
         }
         // Check highest input has highest probability
         assert!(result.as_slice()[2] > result.as_slice()[1]);
@@ -1114,7 +1114,7 @@ mod tests {
         let v = Vector::from_slice(&[-100.0, -1.0, 0.0, 1.0, 100.0]);
         let result = v.sigmoid().unwrap();
         for &val in result.as_slice() {
-            assert!(val >= 0.0 && val <= 1.0);
+            assert!((0.0..=1.0).contains(&val));
         }
     }
 

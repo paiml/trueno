@@ -96,8 +96,8 @@ use super::super::*;
         let k = 64;
         let a: Vec<f32> = (0..MR * k).map(|i| ((i % 10) as f32) * 0.1).collect();
         let b: Vec<f32> = (0..k * NR).map(|i| ((i % 10) as f32) * 0.1).collect();
-        let mut c_ref = vec![0.0; MR * NR];
-        let mut c_scalar = vec![0.0; MR * NR];
+        let mut c_ref = [0.0f32; MR * NR];
+        let mut c_scalar = [0.0f32; MR * NR];
 
         // Reference: simple accumulation
         for p in 0..k {
@@ -121,8 +121,8 @@ use super::super::*;
         let k = 256;
         let a: Vec<f32> = (0..MR * k).map(|i| ((i % 50) as f32) * 0.01).collect();
         let b: Vec<f32> = (0..k * NR).map(|i| ((i % 50) as f32) * 0.01).collect();
-        let mut c_ref = vec![0.0; MR * NR];
-        let mut c_scalar = vec![0.0; MR * NR];
+        let mut c_ref = [0.0f32; MR * NR];
+        let mut c_scalar = [0.0f32; MR * NR];
 
         for p in 0..k {
             for j in 0..NR {
