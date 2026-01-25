@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.1] - 2026-01-25
+
+### Quality
+
+- **95% Velocity Mandate** - Achieved 95%+ coverage on ALL individual files
+  - trueno: 98.40% overall coverage (2421 tests)
+  - trueno-gpu: 97.98% overall coverage (1873 tests)
+  - No file below 95% threshold
+
+### Ecosystem Updates
+
+All trueno ecosystem crates updated to use trueno 0.14:
+- trueno-db v0.3.12
+- trueno-graph v0.1.12
+- trueno-rag v0.1.11
+- trueno-viz v0.1.21
+- trueno-explain v0.2.2 (trueno-gpu v0.4.11)
+
+### Infrastructure
+
+- Pre-commit hooks enforce 90% coverage threshold
+- All 4294 tests passing (2421 trueno + 1873 trueno-gpu)
+
 ## [Unreleased]
 
 ### Added
