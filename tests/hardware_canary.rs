@@ -253,7 +253,7 @@ fn canary_gpu_kernel_execution() {
 
     // Allocate output buffer
     let mut output: GpuBuffer<u32> = GpuBuffer::new(&ctx, 32).expect("Buffer allocation");
-    output.copy_from_host(&vec![0u32; 32]).expect("Buffer init");
+    output.copy_from_host(&[0u32; 32]).expect("Buffer init");
 
     // Launch kernel with 32 threads
     let config = LaunchConfig {
