@@ -17,7 +17,7 @@ fn test_h003_cpu_core_count() {
     #[cfg(target_os = "linux")]
     {
         let output = Command::new("grep")
-            .args(&["-c", "^processor", "/proc/cpuinfo"])
+            .args(["-c", "^processor", "/proc/cpuinfo"])
             .output()
             .expect("Failed to execute grep");
         
