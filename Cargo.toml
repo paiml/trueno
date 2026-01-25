@@ -75,12 +75,12 @@ chrono = "0.4"
 hostname = "0.4"
 toml = "0.8"
 # ML tuner integration (SHOWCASE-BRICK-001, Section 12)
-# Path dep for local dev, version for publish (aprender 0.24.0 has RandomForest)
-aprender = { version = "0.24", path = "../aprender", optional = true, default-features = false }
+# Uses aprender 0.24.0 RandomForest for learned optimization
+aprender = { version = "0.24", optional = true, default-features = false }
 # Execution path graph (PAR-201, Section E.7)
-trueno-graph = { version = "0.1", path = "../trueno-graph", optional = true }
+trueno-graph = { version = "0.1.12", optional = true }
 # TUI visualization for execution graphs (PAR-201)
-presentar-terminal = { version = "0.3", path = "../presentar/crates/presentar-terminal", optional = true }
+presentar-terminal = { version = "0.3", optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Web-sys for WebGPU (auto-enabled when gpu-wasm feature is on)
