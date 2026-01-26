@@ -1,5 +1,6 @@
 //! WebAssembly SIMD128 reduction operations (dot, sum, max, min, argmax, argmin).
 
+use crate::backends::VectorBackend;
 #[cfg(target_arch = "wasm32")]
 use std::arch::wasm32::*;
 
