@@ -11,7 +11,7 @@ fn test_fused_qkv_op_new() {
     assert_eq!(op.hidden_size, 3584);
     assert_eq!(op.num_heads, 28);
     assert_eq!(op.head_dim, 128); // 3584 / 28
-    assert_eq!(op.kv_dim, 512);   // 4 * 128
+    assert_eq!(op.kv_dim, 512); // 4 * 128
 }
 
 #[test]
@@ -26,16 +26,13 @@ fn test_fused_qkv_op_execute_small() {
     let num_heads = 2;
     let num_kv_heads = 2;
     let head_dim = hidden_size / num_heads; // 2
-    let kv_dim = num_kv_heads * head_dim;   // 4
+    let kv_dim = num_kv_heads * head_dim; // 4
 
     let op = FusedQKVOp::new(hidden_size, num_heads, num_kv_heads);
 
     // Identity-like weights for testing
     let q_weight = vec![
-        1.0, 0.0, 0.0, 0.0,
-        0.0, 1.0, 0.0, 0.0,
-        0.0, 0.0, 1.0, 0.0,
-        0.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
     ];
     let k_weight = q_weight.clone();
     let v_weight = q_weight.clone();
@@ -115,14 +112,14 @@ fn test_fused_gate_up_op_execute_small() {
 
     // Simple weights
     let gate_weight = vec![
-        1.0, 0.0,  // intermediate[0] = x[0]
-        0.0, 1.0,  // intermediate[1] = x[1]
-        1.0, 1.0,  // intermediate[2] = x[0] + x[1]
+        1.0, 0.0, // intermediate[0] = x[0]
+        0.0, 1.0, // intermediate[1] = x[1]
+        1.0, 1.0, // intermediate[2] = x[0] + x[1]
     ];
     let up_weight = vec![
-        1.0, 0.0,  // up[0] = x[0]
-        0.0, 1.0,  // up[1] = x[1]
-        0.5, 0.5,  // up[2] = 0.5 * (x[0] + x[1])
+        1.0, 0.0, // up[0] = x[0]
+        0.0, 1.0, // up[1] = x[1]
+        0.5, 0.5, // up[2] = 0.5 * (x[0] + x[1])
     ];
 
     let weights = FusedGateUpWeights {
@@ -195,10 +192,8 @@ fn test_fused_gate_up_compute_brick() {
 #[test]
 fn test_fused_ops_brick_layer() {
     // Build a transformer layer with fused ops
-    let qkv_brick = ComputeBrick::new(FusedQKVOp::new(1024, 8, 8))
-        .budget_tok_per_sec(100_000.0);
-    let ffn_brick = ComputeBrick::new(FusedGateUpOp::new(1024, 4096))
-        .budget_tok_per_sec(50_000.0); // FFN is typically slower
+    let qkv_brick = ComputeBrick::new(FusedQKVOp::new(1024, 8, 8)).budget_tok_per_sec(100_000.0);
+    let ffn_brick = ComputeBrick::new(FusedGateUpOp::new(1024, 4096)).budget_tok_per_sec(50_000.0); // FFN is typically slower
 
     let layer = BrickLayer::new()
         .with_brick(&qkv_brick)

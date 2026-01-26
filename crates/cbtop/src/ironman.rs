@@ -341,11 +341,7 @@ impl IronmanScorecard {
     pub fn failed_gates(&self) -> Vec<&QualityGate> {
         IRONMAN_GATES
             .iter()
-            .filter(|g| {
-                self.results
-                    .get(g.id)
-                    .map_or(false, |r| r.failed())
-            })
+            .filter(|g| self.results.get(g.id).map_or(false, |r| r.failed()))
             .collect()
     }
 
@@ -439,17 +435,50 @@ impl IronmanValidator {
         }
 
         // Remaining gates skipped by default (require special setup)
-        scorecard.record("F902", GateResult::Skip("Fuzzing requires cargo-fuzz setup".to_string()));
-        scorecard.record("F904", GateResult::Skip("Loom requires test annotations".to_string()));
-        scorecard.record("F905", GateResult::Skip("ThreadSanitizer requires nightly".to_string()));
-        scorecard.record("F906", GateResult::Skip("AddressSanitizer requires nightly".to_string()));
-        scorecard.record("F907", GateResult::Skip("LeakSanitizer requires nightly".to_string()));
-        scorecard.record("F908", GateResult::Skip("Panic freedom requires fuzz corpus".to_string()));
-        scorecard.record("F913", GateResult::Skip("Doc coverage requires --document-private-items".to_string()));
-        scorecard.record("F914", GateResult::Skip("License check requires cargo-deny".to_string()));
-        scorecard.record("F917", GateResult::Skip("Frame latency requires TUI benchmark".to_string()));
-        scorecard.record("F918", GateResult::Skip("Battery impact requires powertop".to_string()));
-        scorecard.record("F919", GateResult::Skip("Accessibility requires screen reader".to_string()));
+        scorecard.record(
+            "F902",
+            GateResult::Skip("Fuzzing requires cargo-fuzz setup".to_string()),
+        );
+        scorecard.record(
+            "F904",
+            GateResult::Skip("Loom requires test annotations".to_string()),
+        );
+        scorecard.record(
+            "F905",
+            GateResult::Skip("ThreadSanitizer requires nightly".to_string()),
+        );
+        scorecard.record(
+            "F906",
+            GateResult::Skip("AddressSanitizer requires nightly".to_string()),
+        );
+        scorecard.record(
+            "F907",
+            GateResult::Skip("LeakSanitizer requires nightly".to_string()),
+        );
+        scorecard.record(
+            "F908",
+            GateResult::Skip("Panic freedom requires fuzz corpus".to_string()),
+        );
+        scorecard.record(
+            "F913",
+            GateResult::Skip("Doc coverage requires --document-private-items".to_string()),
+        );
+        scorecard.record(
+            "F914",
+            GateResult::Skip("License check requires cargo-deny".to_string()),
+        );
+        scorecard.record(
+            "F917",
+            GateResult::Skip("Frame latency requires TUI benchmark".to_string()),
+        );
+        scorecard.record(
+            "F918",
+            GateResult::Skip("Battery impact requires powertop".to_string()),
+        );
+        scorecard.record(
+            "F919",
+            GateResult::Skip("Accessibility requires screen reader".to_string()),
+        );
 
         scorecard
     }
@@ -486,13 +515,14 @@ impl IronmanValidator {
 
                 match output {
                     Ok(result) => {
-                        let count = String::from_utf8_lossy(&result.stdout)
-                            .lines()
-                            .count();
+                        let count = String::from_utf8_lossy(&result.stdout).lines().count();
                         if count == 0 {
                             GateResult::Pass("No unsafe blocks found".to_string())
                         } else {
-                            GateResult::Pass(format!("{} unsafe references (audit required)", count))
+                            GateResult::Pass(format!(
+                                "{} unsafe references (audit required)",
+                                count
+                            ))
                         }
                     }
                     Err(_) => GateResult::Skip("cargo-geiger not installed".to_string()),
@@ -514,7 +544,10 @@ impl IronmanValidator {
                     GateResult::Pass("No known vulnerabilities".to_string())
                 } else {
                     let stderr = String::from_utf8_lossy(&result.stderr);
-                    let vuln_count = stderr.lines().filter(|l| l.contains("Vulnerability")).count();
+                    let vuln_count = stderr
+                        .lines()
+                        .filter(|l| l.contains("Vulnerability"))
+                        .count();
                     if vuln_count > 0 {
                         GateResult::Fail(format!("{} vulnerabilities found", vuln_count))
                     } else {
@@ -541,7 +574,8 @@ impl IronmanValidator {
                 let combined = format!("{}{}", stdout, stderr);
 
                 if combined.contains("unused") || combined.contains("Unused") {
-                    let count = combined.lines()
+                    let count = combined
+                        .lines()
                         .filter(|l| l.contains("unused") || l.contains("Unused"))
                         .count();
                     GateResult::Fail(format!("{} unused dependencies", count))
@@ -560,10 +594,13 @@ impl IronmanValidator {
         let output = Command::new("cargo")
             .args([
                 "clippy",
-                "-p", "cbtop",
+                "-p",
+                "cbtop",
                 "--",
-                "-W", "clippy::cognitive_complexity",
-                "--cap-lints", "warn",
+                "-W",
+                "clippy::cognitive_complexity",
+                "--cap-lints",
+                "warn",
             ])
             .current_dir(&self.project_root)
             .output();
@@ -579,7 +616,10 @@ impl IronmanValidator {
                 if complexity_warnings == 0 {
                     GateResult::Pass("All functions under complexity limit".to_string())
                 } else {
-                    GateResult::Fail(format!("{} functions over complexity limit", complexity_warnings))
+                    GateResult::Fail(format!(
+                        "{} functions over complexity limit",
+                        complexity_warnings
+                    ))
                 }
             }
             Err(e) => GateResult::Fail(format!("Clippy failed: {}", e)),
@@ -628,9 +668,7 @@ impl IronmanValidator {
 
         // Measure cold start with --help (exits immediately)
         let start = Instant::now();
-        let result = Command::new(&binary_path)
-            .args(["--help"])
-            .output();
+        let result = Command::new(&binary_path).args(["--help"]).output();
         let elapsed = start.elapsed();
 
         match result {
@@ -656,14 +694,14 @@ impl IronmanValidator {
     pub fn check_i18n(&self) -> GateResult {
         // Test that non-ASCII input doesn't crash
         let test_inputs = [
-            "日本語テスト",          // Japanese
-            "中文测试",              // Chinese
-            "한국어 테스트",         // Korean
-            "тест на русском",       // Russian
-            "δοκιμή ελληνικά",       // Greek
-            "🔥💻🚀",               // Emoji
-            "\u{FEFF}BOM test",     // BOM
-            "\0null\0byte",         // Null bytes
+            "日本語テスト",     // Japanese
+            "中文测试",         // Chinese
+            "한국어 테스트",    // Korean
+            "тест на русском",  // Russian
+            "δοκιμή ελληνικά",  // Greek
+            "🔥💻🚀",           // Emoji
+            "\u{FEFF}BOM test", // BOM
+            "\0null\0byte",     // Null bytes
         ];
 
         for input in test_inputs {
@@ -728,7 +766,16 @@ impl IronmanValidator {
 
         // Miri only works on a subset of tests
         let output = Command::new("cargo")
-            .args(["+nightly", "miri", "test", "-p", "cbtop", "--lib", "--", "--test-threads=1"])
+            .args([
+                "+nightly",
+                "miri",
+                "test",
+                "-p",
+                "cbtop",
+                "--lib",
+                "--",
+                "--test-threads=1",
+            ])
             .current_dir(&self.project_root)
             .env("MIRIFLAGS", "-Zmiri-disable-isolation")
             .output();

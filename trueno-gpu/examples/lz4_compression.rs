@@ -29,8 +29,8 @@ fn main() {
     // Test 1: Zero page compression (best case - ZRAM workload)
     let zero_page = vec![0u8; PAGE_SIZE as usize];
     let mut compressed = vec![0u8; PAGE_SIZE as usize];
-    let comp_size = lz4_compress_block(&zero_page, &mut compressed)
-        .expect("compression should succeed");
+    let comp_size =
+        lz4_compress_block(&zero_page, &mut compressed).expect("compression should succeed");
     let ratio = PAGE_SIZE as f64 / comp_size as f64;
     println!("  Zero Page (4KB):");
     println!("    Original:   {} bytes", PAGE_SIZE);
@@ -42,8 +42,8 @@ fn main() {
     for i in 0..PAGE_SIZE as usize {
         pattern_page[i] = (i % 256) as u8;
     }
-    let comp_size = lz4_compress_block(&pattern_page, &mut compressed)
-        .expect("compression should succeed");
+    let comp_size =
+        lz4_compress_block(&pattern_page, &mut compressed).expect("compression should succeed");
     let ratio = PAGE_SIZE as f64 / comp_size as f64;
     println!("  Repeated Pattern (0-255 cycle):");
     println!("    Original:   {} bytes", PAGE_SIZE);
@@ -61,8 +61,8 @@ fn main() {
             chunk[0] = b'A' + (i % 26) as u8;
         }
     }
-    let comp_size = lz4_compress_block(&text_page, &mut compressed)
-        .expect("compression should succeed");
+    let comp_size =
+        lz4_compress_block(&text_page, &mut compressed).expect("compression should succeed");
     let ratio = PAGE_SIZE as f64 / comp_size as f64;
     println!("  Text Data (repeated sentences):");
     println!("    Original:   {} bytes", PAGE_SIZE);
@@ -76,7 +76,10 @@ fn main() {
     let matches = decompressed[..decomp_size] == text_page[..decomp_size];
     println!("  Roundtrip Verification:");
     println!("    Decompressed size: {} bytes", decomp_size);
-    println!("    Data matches:      {}\n", if matches { "✓" } else { "✗" });
+    println!(
+        "    Data matches:      {}\n",
+        if matches { "✓" } else { "✗" }
+    );
 
     // ==========================================================================
     // Part 2: GPU Kernel Generation
@@ -93,9 +96,11 @@ fn main() {
     println!("    Batch size:    {} pages", kernel.batch_size());
     println!("    Grid dim:      {:?}", kernel.grid_dim());
     println!("    Block dim:     {:?}", kernel.block_dim());
-    println!("    Shared memory: {} bytes ({:.1} KB)\n",
+    println!(
+        "    Shared memory: {} bytes ({:.1} KB)\n",
         kernel.shared_memory_bytes(),
-        kernel.shared_memory_bytes() as f64 / 1024.0);
+        kernel.shared_memory_bytes() as f64 / 1024.0
+    );
 
     // Generate PTX
     let ptx = kernel.emit_ptx();
@@ -108,7 +113,14 @@ fn main() {
     // Barrier safety analysis
     let safety = kernel.analyze_barrier_safety();
     println!("  Barrier Safety Analysis:");
-    println!("    Status:        {}", if safety.is_safe { "✓ Safe" } else { "✗ Violations found" });
+    println!(
+        "    Status:        {}",
+        if safety.is_safe {
+            "✓ Safe"
+        } else {
+            "✗ Violations found"
+        }
+    );
     if !safety.is_safe {
         for v in &safety.violations {
             println!("    Violation:     {:?}", v);
@@ -158,7 +170,10 @@ fn main() {
     for (i, line) in ptx.lines().take(40).enumerate() {
         println!("  {:3} │ {}", i + 1, line);
     }
-    println!("  ... [{} more lines]\n", ptx.lines().count().saturating_sub(40));
+    println!(
+        "  ... [{} more lines]\n",
+        ptx.lines().count().saturating_sub(40)
+    );
 
     // ==========================================================================
     // Summary

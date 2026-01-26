@@ -332,7 +332,11 @@ impl ContextRegressionPredictor {
     }
 
     /// Compute context-aware threshold
-    pub fn compute_threshold(&self, metric: &str, current_context: &SystemContext) -> RegressionThreshold {
+    pub fn compute_threshold(
+        &self,
+        metric: &str,
+        current_context: &SystemContext,
+    ) -> RegressionThreshold {
         let sample_count = self.baseline_count(metric);
 
         // Cold start: use conservative margin
@@ -367,28 +371,42 @@ impl ContextRegressionPredictor {
         let base_percent = (cv * 2.0).max(self.min_margin);
 
         // Temperature adjustment: warmer = more variance expected
-        let avg_temp: f64 = entries.iter().map(|e| e.context.cpu_temp_c).sum::<f64>()
-            / entries.len() as f64;
+        let avg_temp: f64 =
+            entries.iter().map(|e| e.context.cpu_temp_c).sum::<f64>() / entries.len() as f64;
         let temp_diff = current_context.cpu_temp_c - avg_temp;
         let temp_adjustment = (temp_diff / 10.0) * self.temp_factor;
 
         // Memory adjustment: higher pressure = more variance
-        let avg_mem: f64 = entries.iter().map(|e| e.context.memory_percent).sum::<f64>()
+        let avg_mem: f64 = entries
+            .iter()
+            .map(|e| e.context.memory_percent)
+            .sum::<f64>()
             / entries.len() as f64;
         let mem_diff = current_context.memory_percent - avg_mem;
         let memory_adjustment = (mem_diff / 10.0).max(0.0) * self.memory_factor;
 
         // Frequency adjustment: lower frequency = expect slower
-        let avg_freq_util: f64 = entries.iter().map(|e| e.context.freq_utilization()).sum::<f64>()
+        let avg_freq_util: f64 = entries
+            .iter()
+            .map(|e| e.context.freq_utilization())
+            .sum::<f64>()
             / entries.len() as f64;
         let freq_diff = avg_freq_util - current_context.freq_utilization();
         let freq_adjustment = (freq_diff * 10.0).max(0.0) * self.freq_factor;
 
         // Cache adjustment: cold cache = expect slower
-        let cache_adjustment = if !current_context.cache_warm { self.cache_cold_penalty } else { 0.0 };
+        let cache_adjustment = if !current_context.cache_warm {
+            self.cache_cold_penalty
+        } else {
+            0.0
+        };
 
         // Final threshold
-        let final_percent = (base_percent + temp_adjustment + memory_adjustment + freq_adjustment + cache_adjustment)
+        let final_percent = (base_percent
+            + temp_adjustment
+            + memory_adjustment
+            + freq_adjustment
+            + cache_adjustment)
             .max(self.min_margin);
 
         // Confidence increases with more samples
@@ -448,7 +466,11 @@ impl ContextRegressionPredictor {
             ss_res += (entry.value - y_pred).powi(2);
             ss_tot += (entry.value - mean_y).powi(2);
         }
-        let r_squared = if ss_tot > 0.0 { 1.0 - ss_res / ss_tot } else { 0.0 };
+        let r_squared = if ss_tot > 0.0 {
+            1.0 - ss_res / ss_tot
+        } else {
+            0.0
+        };
 
         let direction = if slope > 0.1 {
             "increasing"
@@ -466,7 +488,12 @@ impl ContextRegressionPredictor {
     }
 
     /// Check for regression
-    pub fn check_regression(&self, metric: &str, current_value: f64, context: &SystemContext) -> RegressionCheck {
+    pub fn check_regression(
+        &self,
+        metric: &str,
+        current_value: f64,
+        context: &SystemContext,
+    ) -> RegressionCheck {
         let threshold = self.compute_threshold(metric, context);
 
         let entries = self.baselines.get(metric);
@@ -509,9 +536,19 @@ impl ContextRegressionPredictor {
         let entries = self.baselines.get(metric)?;
         let entries_json: Vec<String> = entries
             .iter()
-            .map(|e| format!(r#"{{"value":{},"context":{}}}"#, e.value, e.context.to_json()))
+            .map(|e| {
+                format!(
+                    r#"{{"value":{},"context":{}}}"#,
+                    e.value,
+                    e.context.to_json()
+                )
+            })
             .collect();
-        Some(format!(r#"{{"metric":"{}","entries":[{}]}}"#, metric, entries_json.join(",")))
+        Some(format!(
+            r#"{{"metric":"{}","entries":[{}]}}"#,
+            metric,
+            entries_json.join(",")
+        ))
     }
 }
 

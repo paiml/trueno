@@ -345,7 +345,8 @@ impl BaselineComparison {
         // SM utilization suggestions
         match self.sm_health {
             SmHealth::Critical => {
-                suggestions.push("Critical: SM utilization < 50% - check batch size and kernel occupancy");
+                suggestions
+                    .push("Critical: SM utilization < 50% - check batch size and kernel occupancy");
                 suggestions.push("Consider increasing batch size or concurrent requests");
             }
             SmHealth::Moderate => {
@@ -353,7 +354,8 @@ impl BaselineComparison {
                 suggestions.push("Try increasing kernel occupancy or reducing memory pressure");
             }
             SmHealth::Saturated => {
-                suggestions.push("SM utilization > 95% - at saturation, throughput limited by compute");
+                suggestions
+                    .push("SM utilization > 95% - at saturation, throughput limited by compute");
             }
             SmHealth::Optimal => {}
         }
@@ -362,13 +364,15 @@ impl BaselineComparison {
         match self.grade {
             ThroughputGrade::F => {
                 suggestions.push("Throughput < 40% of baseline - major optimization needed");
-                suggestions.push("Check for: kernel inefficiency, memory bottlenecks, PCIe transfers");
+                suggestions
+                    .push("Check for: kernel inefficiency, memory bottlenecks, PCIe transfers");
             }
             ThroughputGrade::D => {
                 suggestions.push("Throughput 40-60% of baseline - significant optimization needed");
             }
             ThroughputGrade::C => {
-                suggestions.push("Throughput 60-80% of baseline - optimization opportunities exist");
+                suggestions
+                    .push("Throughput 60-80% of baseline - optimization opportunities exist");
             }
             ThroughputGrade::B | ThroughputGrade::A => {}
         }
@@ -383,11 +387,7 @@ impl fmt::Display for BaselineComparison {
         writeln!(f, "==========================")?;
         writeln!(f)?;
         writeln!(f, "GPU Class: {}", self.gpu_class)?;
-        writeln!(
-            f,
-            "Actual Throughput: {} tok/s",
-            self.actual_tok_per_sec
-        )?;
+        writeln!(f, "Actual Throughput: {} tok/s", self.actual_tok_per_sec)?;
         writeln!(
             f,
             "Expected Range: {}-{} tok/s",
@@ -395,7 +395,11 @@ impl fmt::Display for BaselineComparison {
         )?;
         writeln!(f, "Grade: {}", self.grade)?;
         writeln!(f)?;
-        writeln!(f, "SM Utilization: {}% ({})", self.sm_utilization, self.sm_health)?;
+        writeln!(
+            f,
+            "SM Utilization: {}% ({})",
+            self.sm_utilization, self.sm_health
+        )?;
         if let Some(latency) = self.p95_latency_ms {
             writeln!(f, "P95 Latency: {} ms", latency)?;
         }
@@ -585,8 +589,14 @@ mod tests {
         assert_eq!(GpuClass::from_name("NVIDIA A10"), GpuClass::A10);
         assert_eq!(GpuClass::from_name("NVIDIA A100-SXM4-80GB"), GpuClass::A100);
         assert_eq!(GpuClass::from_name("NVIDIA H100 PCIe"), GpuClass::H100);
-        assert_eq!(GpuClass::from_name("NVIDIA GeForce RTX 4090"), GpuClass::Rtx4090);
-        assert_eq!(GpuClass::from_name("NVIDIA GeForce RTX 3090"), GpuClass::Rtx3090);
+        assert_eq!(
+            GpuClass::from_name("NVIDIA GeForce RTX 4090"),
+            GpuClass::Rtx4090
+        );
+        assert_eq!(
+            GpuClass::from_name("NVIDIA GeForce RTX 3090"),
+            GpuClass::Rtx3090
+        );
         assert_eq!(GpuClass::from_name("Unknown GPU"), GpuClass::Unknown);
     }
 

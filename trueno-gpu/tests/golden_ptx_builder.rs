@@ -16,7 +16,9 @@
 //! - 100% instruction intent coverage > 95% line coverage
 //! - If a generator produces wrong PTX, the test MUST fail
 
-use trueno_gpu::ptx::{PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxMemory, PtxModule, PtxReg, PtxType};
+use trueno_gpu::ptx::{
+    PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxMemory, PtxModule, PtxReg, PtxType,
+};
 
 // ============================================================================
 // ARITHMETIC OPERATIONS - Golden Tests
@@ -694,12 +696,11 @@ fn golden_special_reg_ntid_x() {
 
 #[test]
 fn golden_module_structure() {
-    let module = PtxModule::new()
-        .version(8, 0)
-        .target("sm_80")
-        .add_kernel(PtxKernel::new("test_kernel").build(|ctx| {
+    let module = PtxModule::new().version(8, 0).target("sm_80").add_kernel(
+        PtxKernel::new("test_kernel").build(|ctx| {
             ctx.ret();
-        }));
+        }),
+    );
 
     let ptx = module.emit();
 

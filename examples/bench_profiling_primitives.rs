@@ -5,7 +5,9 @@
 //! Run with: cargo run --release --example bench_profiling_primitives
 
 use std::time::Instant;
-use trueno::brick::{cpu_cycles, cached_nanos, cached_nanos_or_now, init_time_service, get_page_faults};
+use trueno::brick::{
+    cached_nanos, cached_nanos_or_now, cpu_cycles, get_page_faults, init_time_service,
+};
 
 const ITERATIONS: u64 = 1_000_000;
 
@@ -34,8 +36,17 @@ fn main() {
     println!("  Avg per call: {:.2}ns", avg_ns);
     println!("  Target: < 50ns");
     let f150_pass = avg_ns < 50.0;
-    println!("  Result: {} ({})", if f150_pass { "PASS" } else { "FAIL" },
-             if avg_ns < 10.0 { "Excellent" } else if avg_ns < 30.0 { "Good" } else { "Acceptable" });
+    println!(
+        "  Result: {} ({})",
+        if f150_pass { "PASS" } else { "FAIL" },
+        if avg_ns < 10.0 {
+            "Excellent"
+        } else if avg_ns < 30.0 {
+            "Good"
+        } else {
+            "Acceptable"
+        }
+    );
 
     // F151: Cycle Monotonicity
     println!("\nF151: Cycle Counter Monotonicity");
@@ -66,8 +77,17 @@ fn main() {
     println!("  Target: < 20ns");
     println!("  Sum (anti-optimize): {}", sum);
     let f153_pass = avg_ns < 20.0;
-    println!("  Result: {} ({})", if f153_pass { "PASS" } else { "FAIL" },
-             if avg_ns < 5.0 { "Excellent" } else if avg_ns < 10.0 { "Good" } else { "Acceptable" });
+    println!(
+        "  Result: {} ({})",
+        if f153_pass { "PASS" } else { "FAIL" },
+        if avg_ns < 5.0 {
+            "Excellent"
+        } else if avg_ns < 10.0 {
+            "Good"
+        } else {
+            "Acceptable"
+        }
+    );
 
     // F152: Cached Time Drift Check
     println!("\nF152: Cached Time Drift Check");
@@ -84,8 +104,16 @@ fn main() {
     let drift = (cached_delta as i64 - instant_delta as i64).unsigned_abs();
 
     println!("  Sleep duration: 2 seconds");
-    println!("  Cached delta: {}ns ({:.3}s)", cached_delta, cached_delta as f64 / 1_000_000_000.0);
-    println!("  Instant delta: {}ns ({:.3}s)", instant_delta, instant_delta as f64 / 1_000_000_000.0);
+    println!(
+        "  Cached delta: {}ns ({:.3}s)",
+        cached_delta,
+        cached_delta as f64 / 1_000_000_000.0
+    );
+    println!(
+        "  Instant delta: {}ns ({:.3}s)",
+        instant_delta,
+        instant_delta as f64 / 1_000_000_000.0
+    );
     println!("  Drift: {}µs", drift / 1000);
     println!("  Target: < 500µs");
     let f152_pass = drift < 500_000;
@@ -123,16 +151,38 @@ fn main() {
     println!("┌──────┬─────────────────────┬───────────────┬────────┐");
     println!("│ ID   │ Test Name           │ Threshold     │ Result │");
     println!("├──────┼─────────────────────┼───────────────┼────────┤");
-    println!("│ F150 │ RDTSCP Overhead     │ < 50ns        │ [{}]  │", if f150_pass { "✓" } else { " " });
-    println!("│ F151 │ Cycle Monotonicity  │ Always > Prev │ [{}]  │", if f151_pass { "✓" } else { " " });
-    println!("│ F152 │ Cached Time Drift   │ < 500µs       │ [{}]  │", if f152_pass { "✓" } else { " " });
-    println!("│ F153 │ Cached Time Speed   │ < 20ns        │ [{}]  │", if f153_pass { "✓" } else { " " });
+    println!(
+        "│ F150 │ RDTSCP Overhead     │ < 50ns        │ [{}]  │",
+        if f150_pass { "✓" } else { " " }
+    );
+    println!(
+        "│ F151 │ Cycle Monotonicity  │ Always > Prev │ [{}]  │",
+        if f151_pass { "✓" } else { " " }
+    );
+    println!(
+        "│ F152 │ Cached Time Drift   │ < 500µs       │ [{}]  │",
+        if f152_pass { "✓" } else { " " }
+    );
+    println!(
+        "│ F153 │ Cached Time Speed   │ < 20ns        │ [{}]  │",
+        if f153_pass { "✓" } else { " " }
+    );
     println!("│ F154 │ Poll Count Accuracy │ (unit tests)  │ [✓]  │");
-    println!("│ F155 │ Page Fault Tracking │ > 0 on alloc  │ [{}]  │", if f155_pass { "✓" } else { " " });
+    println!(
+        "│ F155 │ Page Fault Tracking │ > 0 on alloc  │ [{}]  │",
+        if f155_pass { "✓" } else { " " }
+    );
     println!("└──────┴─────────────────────┴───────────────┴────────┘");
 
     let all_pass = f150_pass && f151_pass && f152_pass && f153_pass && f155_pass;
-    println!("\nOverall: {}", if all_pass { "ALL TESTS PASSED ✓" } else { "SOME TESTS FAILED" });
+    println!(
+        "\nOverall: {}",
+        if all_pass {
+            "ALL TESTS PASSED ✓"
+        } else {
+            "SOME TESTS FAILED"
+        }
+    );
 
     if !all_pass {
         std::process::exit(1);

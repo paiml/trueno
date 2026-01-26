@@ -23,7 +23,7 @@
 use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
 #[cfg(feature = "cuda")]
 use trueno_gpu::kernels::{
-    BatchedGemmKernel, BatchedTransposeKernel, BatchedToInterleavedKernel,
+    BatchedGemmKernel, BatchedToInterleavedKernel, BatchedTransposeKernel,
     InterleavedToBatchedKernel, Kernel,
 };
 
@@ -71,14 +71,7 @@ fn cpu_batched_transpose(input: &[f32], batch: usize, rows: usize, cols: usize) 
 
 /// CPU reference: batched GEMM
 /// A: [batch, m, k], B: [batch, k, n] -> C: [batch, m, n]
-fn cpu_batched_gemm(
-    a: &[f32],
-    b: &[f32],
-    batch: usize,
-    m: usize,
-    n: usize,
-    k: usize,
-) -> Vec<f32> {
+fn cpu_batched_gemm(a: &[f32], b: &[f32], batch: usize, m: usize, n: usize, k: usize) -> Vec<f32> {
     let mut c = vec![0.0f32; batch * m * n];
 
     for ba in 0..batch {
@@ -141,7 +134,12 @@ fn test_interleaved_to_batched_small() {
 
     // Create sequential input for easy verification
     let input: Vec<f32> = (0..total).map(|i| i as f32).collect();
-    let expected = cpu_interleaved_to_batched(&input, seq_len as usize, n_heads as usize, head_dim as usize);
+    let expected = cpu_interleaved_to_batched(
+        &input,
+        seq_len as usize,
+        n_heads as usize,
+        head_dim as usize,
+    );
 
     let input_buf = GpuBuffer::from_host(&ctx, &input).expect("Upload failed");
     let output_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total as usize).expect("Alloc failed");
@@ -168,17 +166,25 @@ fn test_interleaved_to_batched_small() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
 
     let mut output = vec![0.0f32; total as usize];
-    output_buf.copy_to_host(&mut output).expect("Download failed");
+    output_buf
+        .copy_to_host(&mut output)
+        .expect("Download failed");
 
     for i in 0..total as usize {
-        assert!((output[i] - expected[i]).abs() < 1e-6,
-            "InterleavedToBatched [{}]: GPU={} vs CPU={}", i, output[i], expected[i]);
+        assert!(
+            (output[i] - expected[i]).abs() < 1e-6,
+            "InterleavedToBatched [{}]: GPU={} vs CPU={}",
+            i,
+            output[i],
+            expected[i]
+        );
     }
 
     eprintln!("✓ InterleavedToBatched small test PASSED");
@@ -231,17 +237,25 @@ fn test_batched_transpose_small() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
 
     let mut output = vec![0.0f32; total as usize];
-    output_buf.copy_to_host(&mut output).expect("Download failed");
+    output_buf
+        .copy_to_host(&mut output)
+        .expect("Download failed");
 
     for i in 0..total as usize {
-        assert!((output[i] - expected[i]).abs() < 1e-6,
-            "BatchedTranspose [{}]: GPU={} vs CPU={}", i, output[i], expected[i]);
+        assert!(
+            (output[i] - expected[i]).abs() < 1e-6,
+            "BatchedTranspose [{}]: GPU={} vs CPU={}",
+            i,
+            output[i],
+            expected[i]
+        );
     }
 
     eprintln!("✓ BatchedTranspose small test PASSED");
@@ -268,7 +282,8 @@ fn test_batched_gemm_small() {
 
     let a_buf = GpuBuffer::from_host(&ctx, &a).expect("Upload A failed");
     let b_buf = GpuBuffer::from_host(&ctx, &b).expect("Upload B failed");
-    let c_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, (batch * m * n) as usize).expect("Alloc C failed");
+    let c_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, (batch * m * n) as usize).expect("Alloc C failed");
 
     let kernel = BatchedGemmKernel::naive(batch, m, n, k);
     let ptx = kernel.emit_ptx();
@@ -299,7 +314,8 @@ fn test_batched_gemm_small() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
@@ -309,8 +325,14 @@ fn test_batched_gemm_small() {
 
     for i in 0..(batch * m * n) as usize {
         let delta = (output[i] - expected[i]).abs();
-        assert!(delta < 1e-4,
-            "BatchedGemm [{}]: GPU={} vs CPU={}, delta={}", i, output[i], expected[i], delta);
+        assert!(
+            delta < 1e-4,
+            "BatchedGemm [{}]: GPU={} vs CPU={}, delta={}",
+            i,
+            output[i],
+            expected[i],
+            delta
+        );
     }
 
     eprintln!("✓ BatchedGemm small test PASSED");
@@ -333,7 +355,12 @@ fn test_batched_to_interleaved_small() {
 
     // Create sequential input in batched layout
     let input: Vec<f32> = (0..total).map(|i| i as f32).collect();
-    let expected = cpu_batched_to_interleaved(&input, seq_len as usize, n_heads as usize, head_dim as usize);
+    let expected = cpu_batched_to_interleaved(
+        &input,
+        seq_len as usize,
+        n_heads as usize,
+        head_dim as usize,
+    );
 
     let input_buf = GpuBuffer::from_host(&ctx, &input).expect("Upload failed");
     let output_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total as usize).expect("Alloc failed");
@@ -360,17 +387,25 @@ fn test_batched_to_interleaved_small() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
 
     let mut output = vec![0.0f32; total as usize];
-    output_buf.copy_to_host(&mut output).expect("Download failed");
+    output_buf
+        .copy_to_host(&mut output)
+        .expect("Download failed");
 
     for i in 0..total as usize {
-        assert!((output[i] - expected[i]).abs() < 1e-6,
-            "BatchedToInterleaved [{}]: GPU={} vs CPU={}", i, output[i], expected[i]);
+        assert!(
+            (output[i] - expected[i]).abs() < 1e-6,
+            "BatchedToInterleaved [{}]: GPU={} vs CPU={}",
+            i,
+            output[i],
+            expected[i]
+        );
     }
 
     eprintln!("✓ BatchedToInterleaved small test PASSED");
@@ -395,8 +430,10 @@ fn test_layout_roundtrip() {
     let original: Vec<f32> = (0..total).map(|i| i as f32).collect();
 
     let orig_buf = GpuBuffer::from_host(&ctx, &original).expect("Upload failed");
-    let batched_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total as usize).expect("Alloc batched failed");
-    let result_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total as usize).expect("Alloc result failed");
+    let batched_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, total as usize).expect("Alloc batched failed");
+    let result_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, total as usize).expect("Alloc result failed");
 
     let stream = CudaStream::new(&ctx).expect("Stream failed");
 
@@ -423,7 +460,8 @@ fn test_layout_roundtrip() {
         ];
 
         unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+            stream
+                .launch_kernel(&mut module, kernel.name(), &config, &mut args)
                 .expect("Launch i2b failed");
         }
     }
@@ -451,7 +489,8 @@ fn test_layout_roundtrip() {
         ];
 
         unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+            stream
+                .launch_kernel(&mut module, kernel.name(), &config, &mut args)
                 .expect("Launch b2i failed");
         }
     }
@@ -459,11 +498,18 @@ fn test_layout_roundtrip() {
     stream.synchronize().expect("Sync failed");
 
     let mut result = vec![0.0f32; total as usize];
-    result_buf.copy_to_host(&mut result).expect("Download failed");
+    result_buf
+        .copy_to_host(&mut result)
+        .expect("Download failed");
 
     for i in 0..total as usize {
-        assert!((result[i] - original[i]).abs() < 1e-6,
-            "Roundtrip [{}]: result={} vs original={}", i, result[i], original[i]);
+        assert!(
+            (result[i] - original[i]).abs() < 1e-6,
+            "Roundtrip [{}]: result={} vs original={}",
+            i,
+            result[i],
+            original[i]
+        );
     }
 
     eprintln!("✓ Layout roundtrip test PASSED");
@@ -486,25 +532,45 @@ fn test_full_attention_pipeline_small() {
 
     // Create simple Q, K, V inputs
     let q: Vec<f32> = (0..seq_len * d_model).map(|i| (i as f32) * 0.1).collect();
-    let k: Vec<f32> = (0..seq_len * d_model).map(|i| (i as f32) * 0.1 + 0.5).collect();
-    let v: Vec<f32> = (0..seq_len * d_model).map(|i| (i as f32) * 0.1 - 0.3).collect();
+    let k: Vec<f32> = (0..seq_len * d_model)
+        .map(|i| (i as f32) * 0.1 + 0.5)
+        .collect();
+    let v: Vec<f32> = (0..seq_len * d_model)
+        .map(|i| (i as f32) * 0.1 - 0.3)
+        .collect();
 
     // CPU reference for full attention
     let q_batched = cpu_interleaved_to_batched(&q, seq_len, n_heads, head_dim);
     let k_batched = cpu_interleaved_to_batched(&k, seq_len, n_heads, head_dim);
     let v_batched = cpu_interleaved_to_batched(&v, seq_len, n_heads, head_dim);
 
-    eprintln!("CPU Q batched (head 0, first row): {:?}", &q_batched[..head_dim]);
-    eprintln!("CPU K batched (head 0, first row): {:?}", &k_batched[..head_dim]);
+    eprintln!(
+        "CPU Q batched (head 0, first row): {:?}",
+        &q_batched[..head_dim]
+    );
+    eprintln!(
+        "CPU K batched (head 0, first row): {:?}",
+        &k_batched[..head_dim]
+    );
 
     let k_transposed = cpu_batched_transpose(&k_batched, n_heads, seq_len, head_dim);
-    eprintln!("CPU K transposed (head 0, first row): {:?}", &k_transposed[..seq_len]);
+    eprintln!(
+        "CPU K transposed (head 0, first row): {:?}",
+        &k_transposed[..seq_len]
+    );
 
     // Q @ K^T -> scores
     // After transpose, K is [n_heads, head_dim, seq_len]
     // Q is [n_heads, seq_len, head_dim]
     // scores = Q @ K^T = [n_heads, seq_len, head_dim] @ [n_heads, head_dim, seq_len] = [n_heads, seq_len, seq_len]
-    let scores = cpu_batched_gemm(&q_batched, &k_transposed, n_heads, seq_len, seq_len, head_dim);
+    let scores = cpu_batched_gemm(
+        &q_batched,
+        &k_transposed,
+        n_heads,
+        seq_len,
+        seq_len,
+        head_dim,
+    );
     eprintln!("CPU scores (head 0, first row): {:?}", &scores[..seq_len]);
 
     eprintln!("✓ Full attention pipeline reference computed");
@@ -527,7 +593,12 @@ fn test_interleaved_to_batched_whisper_scale() {
 
     // Create input with pattern we can verify
     let input: Vec<f32> = (0..total).map(|i| (i % 1000) as f32 * 0.001).collect();
-    let expected = cpu_interleaved_to_batched(&input, seq_len as usize, n_heads as usize, head_dim as usize);
+    let expected = cpu_interleaved_to_batched(
+        &input,
+        seq_len as usize,
+        n_heads as usize,
+        head_dim as usize,
+    );
 
     let input_buf = GpuBuffer::from_host(&ctx, &input).expect("Upload failed");
     let output_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total as usize).expect("Alloc failed");
@@ -554,13 +625,16 @@ fn test_interleaved_to_batched_whisper_scale() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
 
     let mut output = vec![0.0f32; total as usize];
-    output_buf.copy_to_host(&mut output).expect("Download failed");
+    output_buf
+        .copy_to_host(&mut output)
+        .expect("Download failed");
 
     // Check samples throughout the output
     let mut mismatches = 0;
@@ -569,13 +643,20 @@ fn test_interleaved_to_batched_whisper_scale() {
         if i < total as usize {
             let delta = (output[i] - expected[i]).abs();
             if delta > 1e-5 {
-                eprintln!("Mismatch at {}: GPU={} vs CPU={}", i, output[i], expected[i]);
+                eprintln!(
+                    "Mismatch at {}: GPU={} vs CPU={}",
+                    i, output[i], expected[i]
+                );
                 mismatches += 1;
             }
         }
     }
 
-    assert_eq!(mismatches, 0, "InterleavedToBatched at Whisper scale has {} mismatches", mismatches);
+    assert_eq!(
+        mismatches, 0,
+        "InterleavedToBatched at Whisper scale has {} mismatches",
+        mismatches
+    );
     eprintln!("✓ InterleavedToBatched Whisper scale test PASSED");
 }
 
@@ -590,8 +671,8 @@ fn test_batched_transpose_whisper_scale() {
 
     // K matrix: [n_heads, seq_len, head_dim] -> [n_heads, head_dim, seq_len]
     let batch = 6u32;
-    let rows = 1500u32;  // seq_len
-    let cols = 64u32;    // head_dim
+    let rows = 1500u32; // seq_len
+    let cols = 64u32; // head_dim
     let total = batch * rows * cols;
 
     let input: Vec<f32> = (0..total).map(|i| (i % 1000) as f32 * 0.001).collect();
@@ -626,13 +707,16 @@ fn test_batched_transpose_whisper_scale() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
 
     let mut output = vec![0.0f32; total as usize];
-    output_buf.copy_to_host(&mut output).expect("Download failed");
+    output_buf
+        .copy_to_host(&mut output)
+        .expect("Download failed");
 
     // Check samples
     let mut mismatches = 0;
@@ -641,13 +725,20 @@ fn test_batched_transpose_whisper_scale() {
         if i < total as usize {
             let delta = (output[i] - expected[i]).abs();
             if delta > 1e-5 {
-                eprintln!("Mismatch at {}: GPU={} vs CPU={}", i, output[i], expected[i]);
+                eprintln!(
+                    "Mismatch at {}: GPU={} vs CPU={}",
+                    i, output[i], expected[i]
+                );
                 mismatches += 1;
             }
         }
     }
 
-    assert_eq!(mismatches, 0, "BatchedTranspose at Whisper scale has {} mismatches", mismatches);
+    assert_eq!(
+        mismatches, 0,
+        "BatchedTranspose at Whisper scale has {} mismatches",
+        mismatches
+    );
     eprintln!("✓ BatchedTranspose Whisper scale test PASSED");
 }
 
@@ -662,21 +753,29 @@ fn test_batched_gemm_qkt_whisper_scale() {
 
     // Q @ K^T: [6, 1500, 64] @ [6, 64, 1500] -> [6, 1500, 1500]
     let batch = 6u32;
-    let m = 1500u32;  // seq_len
-    let n = 1500u32;  // seq_len
-    let k = 64u32;    // head_dim
+    let m = 1500u32; // seq_len
+    let n = 1500u32; // seq_len
+    let k = 64u32; // head_dim
 
     // Create small-valued inputs to avoid overflow
-    let a: Vec<f32> = (0..batch * m * k).map(|i| (i % 100) as f32 * 0.01 - 0.5).collect();
-    let b: Vec<f32> = (0..batch * k * n).map(|i| (i % 100) as f32 * 0.01 - 0.5).collect();
+    let a: Vec<f32> = (0..batch * m * k)
+        .map(|i| (i % 100) as f32 * 0.01 - 0.5)
+        .collect();
+    let b: Vec<f32> = (0..batch * k * n)
+        .map(|i| (i % 100) as f32 * 0.01 - 0.5)
+        .collect();
 
     eprintln!("Computing CPU reference for GEMM [6, 1500, 64] @ [6, 64, 1500]...");
     let expected = cpu_batched_gemm(&a, &b, batch as usize, m as usize, n as usize, k as usize);
-    eprintln!("CPU reference computed. Sample values: {:?}", &expected[..5]);
+    eprintln!(
+        "CPU reference computed. Sample values: {:?}",
+        &expected[..5]
+    );
 
     let a_buf = GpuBuffer::from_host(&ctx, &a).expect("Upload A failed");
     let b_buf = GpuBuffer::from_host(&ctx, &b).expect("Upload B failed");
-    let c_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, (batch * m * n) as usize).expect("Alloc C failed");
+    let c_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, (batch * m * n) as usize).expect("Alloc C failed");
 
     let kernel = BatchedGemmKernel::naive(batch, m, n, k);
     let ptx = kernel.emit_ptx();
@@ -707,7 +806,8 @@ fn test_batched_gemm_qkt_whisper_scale() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
@@ -724,36 +824,55 @@ fn test_batched_gemm_qkt_whisper_scale() {
     for &i in &check_indices {
         if i < total {
             let delta = (output[i] - expected[i]).abs();
-            let rel_delta = if expected[i].abs() > 1e-6 { delta / expected[i].abs() } else { delta };
+            let rel_delta = if expected[i].abs() > 1e-6 {
+                delta / expected[i].abs()
+            } else {
+                delta
+            };
             if rel_delta > 0.01 && delta > 1e-4 {
-                eprintln!("Mismatch at {}: GPU={} vs CPU={}, delta={}, rel={}",
-                    i, output[i], expected[i], delta, rel_delta);
+                eprintln!(
+                    "Mismatch at {}: GPU={} vs CPU={}, delta={}, rel={}",
+                    i, output[i], expected[i], delta, rel_delta
+                );
                 mismatches += 1;
             }
         }
     }
 
-    assert_eq!(mismatches, 0, "BatchedGemm Q@K^T at Whisper scale has {} mismatches", mismatches);
+    assert_eq!(
+        mismatches, 0,
+        "BatchedGemm Q@K^T at Whisper scale has {} mismatches",
+        mismatches
+    );
     eprintln!("✓ BatchedGemm Q@K^T Whisper scale test PASSED");
 }
 
 #[cfg(not(feature = "cuda"))]
-#[test] fn test_interleaved_to_batched_whisper_scale() {}
+#[test]
+fn test_interleaved_to_batched_whisper_scale() {}
 #[cfg(not(feature = "cuda"))]
-#[test] fn test_batched_transpose_whisper_scale() {}
+#[test]
+fn test_batched_transpose_whisper_scale() {}
 #[cfg(not(feature = "cuda"))]
-#[test] fn test_batched_gemm_qkt_whisper_scale() {}
+#[test]
+fn test_batched_gemm_qkt_whisper_scale() {}
 
 // Stub tests for non-CUDA builds
 #[cfg(not(feature = "cuda"))]
-#[test] fn test_interleaved_to_batched_small() {}
+#[test]
+fn test_interleaved_to_batched_small() {}
 #[cfg(not(feature = "cuda"))]
-#[test] fn test_batched_transpose_small() {}
+#[test]
+fn test_batched_transpose_small() {}
 #[cfg(not(feature = "cuda"))]
-#[test] fn test_batched_gemm_small() {}
+#[test]
+fn test_batched_gemm_small() {}
 #[cfg(not(feature = "cuda"))]
-#[test] fn test_batched_to_interleaved_small() {}
+#[test]
+fn test_batched_to_interleaved_small() {}
 #[cfg(not(feature = "cuda"))]
-#[test] fn test_layout_roundtrip() {}
+#[test]
+fn test_layout_roundtrip() {}
 #[cfg(not(feature = "cuda"))]
-#[test] fn test_full_attention_pipeline_small() {}
+#[test]
+fn test_full_attention_pipeline_small() {}

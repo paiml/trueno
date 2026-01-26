@@ -37,14 +37,13 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use trueno_gpu::monitor::{
-    cuda_monitoring_available, CudaDeviceInfo, CudaMemoryInfo,
-    CpuDevice, ComputeDevice, MemoryMetrics, PressureLevel,
-    StressTestConfig, StressTarget, ChaosPreset,
-};
-use tracing::{info, warn, debug};
-use tracing_subscriber::{fmt, EnvFilter, prelude::*};
+use tracing::{debug, info, warn};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use trueno_gpu::monitor::{
+    cuda_monitoring_available, ChaosPreset, ComputeDevice, CpuDevice, CudaDeviceInfo,
+    CudaMemoryInfo, MemoryMetrics, PressureLevel, StressTarget, StressTestConfig,
+};
 
 // Trueno compute primitives for real stress testing
 use trueno::Matrix;
@@ -343,7 +342,8 @@ impl App {
             self.mem_ops_history.remove(0);
             self.mem_ops_history.push(self.mem_ops_per_sec / 1_000_000);
             self.gpu_ops_history.remove(0);
-            self.gpu_ops_history.push(self.gpu_ops_per_sec / 1_000_000_000); // G FLOPS
+            self.gpu_ops_history
+                .push(self.gpu_ops_per_sec / 1_000_000_000); // G FLOPS
 
             // Track peak utilization for stress report
             let cpu_util = self.cpu.compute_utilization().unwrap_or(0.0);
@@ -354,7 +354,11 @@ impl App {
             if ram_util > self.peak_ram_util {
                 self.peak_ram_util = ram_util;
             }
-            let vram_util = self.gpus.iter().map(|g| g.vram_percent).fold(0.0_f64, f64::max);
+            let vram_util = self
+                .gpus
+                .iter()
+                .map(|g| g.vram_percent)
+                .fold(0.0_f64, f64::max);
             if vram_util > self.peak_vram_util {
                 self.peak_vram_util = vram_util;
             }
@@ -438,8 +442,12 @@ impl App {
                 // Create matrices for SIMD matmul stress
                 // 512x512 matmul = 512^3 = 134M FLOPs per operation
                 let n = matrix_size;
-                let data_a: Vec<f32> = (0..n*n).map(|i| ((i + worker_id) % 1000) as f32 * 0.001).collect();
-                let data_b: Vec<f32> = (0..n*n).map(|i| ((i * 7 + worker_id) % 1000) as f32 * 0.001).collect();
+                let data_a: Vec<f32> = (0..n * n)
+                    .map(|i| ((i + worker_id) % 1000) as f32 * 0.001)
+                    .collect();
+                let data_b: Vec<f32> = (0..n * n)
+                    .map(|i| ((i * 7 + worker_id) % 1000) as f32 * 0.001)
+                    .collect();
 
                 let a = Matrix::from_vec(n, n, data_a).expect("stress test matrix A creation");
                 let b = Matrix::from_vec(n, n, data_b).expect("stress test matrix B creation");
@@ -575,7 +583,10 @@ impl App {
         self.stress_running = false;
 
         // Calculate duration before clearing
-        let duration_secs = self.stress_start.map(|s| s.elapsed().as_secs()).unwrap_or(0);
+        let duration_secs = self
+            .stress_start
+            .map(|s| s.elapsed().as_secs())
+            .unwrap_or(0);
         let cpu_worker_count = self.cpu_workers.len();
         let gpu_worker_count = self.gpu_workers.len();
 
@@ -615,23 +626,27 @@ impl App {
         }
 
         // Generate stress test report (renacer integration)
-        let verdict = if self.peak_cpu_util > 95.0 && (gpu_worker_count == 0 || self.peak_vram_util > 10.0) {
-            StressTestVerdict::Pass
-        } else if self.peak_cpu_util > 70.0 {
-            StressTestVerdict::PassWithNotes
-        } else {
-            StressTestVerdict::Fail
-        };
+        let verdict =
+            if self.peak_cpu_util > 95.0 && (gpu_worker_count == 0 || self.peak_vram_util > 10.0) {
+                StressTestVerdict::Pass
+            } else if self.peak_cpu_util > 70.0 {
+                StressTestVerdict::PassWithNotes
+            } else {
+                StressTestVerdict::Fail
+            };
 
         let mut recommendations = Vec::new();
         if self.peak_cpu_util < 90.0 {
-            recommendations.push("CPU saturation below 90% - consider more compute-intensive workloads".to_string());
+            recommendations.push(
+                "CPU saturation below 90% - consider more compute-intensive workloads".to_string(),
+            );
         }
         if gpu_worker_count > 0 && self.peak_vram_util < 20.0 {
             recommendations.push("GPU VRAM usage low - consider larger buffer sizes".to_string());
         }
         if self.peak_ram_util > 90.0 {
-            recommendations.push("High RAM pressure detected - monitor for OOM conditions".to_string());
+            recommendations
+                .push("High RAM pressure detected - monitor for OOM conditions".to_string());
         }
 
         self.stress_report = Some(StressTestReport {
@@ -683,18 +698,19 @@ fn init_logging() -> tracing_appender::non_blocking::WorkerGuard {
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     // Build subscriber with env filter (default: info)
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     tracing_subscriber::registry()
         .with(filter)
-        .with(fmt::layer()
-            .with_writer(non_blocking)
-            .with_ansi(false)
-            .with_target(true)
-            .with_thread_ids(true)
-            .with_file(true)
-            .with_line_number(true))
+        .with(
+            fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false)
+                .with_target(true)
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true),
+        )
         .init();
 
     guard
@@ -786,9 +802,9 @@ fn ui(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Header
-            Constraint::Min(10),    // Content
-            Constraint::Length(3),  // Footer
+            Constraint::Length(3), // Header
+            Constraint::Min(10),   // Content
+            Constraint::Length(3), // Footer
         ])
         .split(size);
 
@@ -805,7 +821,11 @@ fn ui(f: &mut Frame, app: &App) {
         .block(Block::default().borders(Borders::ALL).title(title))
         .select(app.selected_tab)
         .style(Style::default().fg(Color::White))
-        .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD));
+        .highlight_style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        );
     f.render_widget(tabs, chunks[0]);
 
     // Content based on selected tab
@@ -840,11 +860,11 @@ fn render_compute_tab(f: &mut Frame, app: &App, area: Rect) {
 
     // Add stress banner if running
     if app.stress_running {
-        constraints.push(Constraint::Length(1));  // Stress banner
+        constraints.push(Constraint::Length(1)); // Stress banner
     }
 
-    constraints.push(Constraint::Length(3));  // CPU gauge
-    constraints.push(Constraint::Length(5));  // CPU sparkline
+    constraints.push(Constraint::Length(3)); // CPU gauge
+    constraints.push(Constraint::Length(5)); // CPU sparkline
 
     // Add constraints for each GPU
     for _ in &app.gpus {
@@ -871,7 +891,12 @@ fn render_compute_tab(f: &mut Frame, app: &App, area: Rect) {
             app.mem_ops_per_sec as f64 / 1_000_000.0,
             app.gpu_ops_per_sec as f64 / 1_000_000_000.0
         ))
-        .style(Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD));
+        .style(
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        );
         f.render_widget(banner, chunks[idx]);
         idx += 1;
     }
@@ -887,7 +912,10 @@ fn render_compute_tab(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let cpu_title = if app.stress_running {
-        format!(" CPU Utilization [STRESS: {} workers] ", app.cpu_workers.len())
+        format!(
+            " CPU Utilization [STRESS: {} workers] ",
+            app.cpu_workers.len()
+        )
     } else {
         " CPU Utilization ".to_string()
     };
@@ -902,7 +930,11 @@ fn render_compute_tab(f: &mut Frame, app: &App, area: Rect) {
 
     // CPU sparkline (60-second history)
     let sparkline = Sparkline::default()
-        .block(Block::default().title(" CPU History (60s) ").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title(" CPU History (60s) ")
+                .borders(Borders::ALL),
+        )
         .data(&app.cpu_history)
         .max(100)
         .style(Style::default().fg(Color::Cyan));
@@ -958,7 +990,11 @@ fn render_compute_tab(f: &mut Frame, app: &App, area: Rect) {
             Span::styled("Temp: ", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 format!("{:.0}C", temp),
-                Style::default().fg(if temp > 80.0 { Color::Red } else { Color::Green }),
+                Style::default().fg(if temp > 80.0 {
+                    Color::Red
+                } else {
+                    Color::Green
+                }),
             ),
         ]),
     ];
@@ -975,8 +1011,11 @@ fn render_compute_tab(f: &mut Frame, app: &App, area: Rect) {
         ]));
     }
 
-    let info = Paragraph::new(info_lines)
-        .block(Block::default().title(" Device Info ").borders(Borders::ALL));
+    let info = Paragraph::new(info_lines).block(
+        Block::default()
+            .title(" Device Info ")
+            .borders(Borders::ALL),
+    );
     f.render_widget(info, chunks[idx]);
 }
 
@@ -985,11 +1024,11 @@ fn render_memory_tab(f: &mut Frame, app: &App, area: Rect) {
     let mut constraints = vec![];
 
     if app.stress_running {
-        constraints.push(Constraint::Length(1));  // Stress banner
+        constraints.push(Constraint::Length(1)); // Stress banner
     }
 
-    constraints.push(Constraint::Length(3));  // RAM gauge
-    constraints.push(Constraint::Length(3));  // SWAP gauge
+    constraints.push(Constraint::Length(3)); // RAM gauge
+    constraints.push(Constraint::Length(3)); // SWAP gauge
 
     // Add VRAM gauge for each GPU
     for _ in &app.gpus {
@@ -997,7 +1036,7 @@ fn render_memory_tab(f: &mut Frame, app: &App, area: Rect) {
     }
 
     constraints.push(Constraint::Length(5)); // Memory sparkline
-    constraints.push(Constraint::Min(3));    // Pressure info
+    constraints.push(Constraint::Min(3)); // Pressure info
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -1014,7 +1053,12 @@ fn render_memory_tab(f: &mut Frame, app: &App, area: Rect) {
             app.gpu_workers.len() * 8, // 8MB per GPU (2 x 4MB buffers)
             app.memory.pressure_level
         ))
-        .style(Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD));
+        .style(
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        );
         f.render_widget(banner, chunks[idx]);
         idx += 1;
     }
@@ -1153,9 +1197,7 @@ fn render_dataflow_tab(f: &mut Frame, app: &App, area: Rect) {
         " Data Flow Monitor "
     };
 
-    let block = Block::default()
-        .title(title)
-        .borders(Borders::ALL);
+    let block = Block::default().title(title).borders(Borders::ALL);
 
     if app.gpus.is_empty() {
         // No GPU - show message
@@ -1199,7 +1241,10 @@ fn render_dataflow_tab(f: &mut Frame, app: &App, area: Rect) {
 
         for (i, gpu) in app.gpus.iter().enumerate() {
             lines.push(Line::from(vec![
-                Span::styled(format!("  GPU {}: ", i), Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("  GPU {}: ", i),
+                    Style::default().fg(Color::DarkGray),
+                ),
                 Span::styled(&gpu.info.name, Style::default().fg(Color::Magenta)),
             ]));
 
@@ -1228,12 +1273,21 @@ fn render_dataflow_tab(f: &mut Frame, app: &App, area: Rect) {
 
             // PCIe info
             if app.stress_running && !app.gpu_workers.is_empty() {
-                let bandwidth_gbps = (app.gpu_ops_per_sec as f64 * 4.0) / (1024.0 * 1024.0 * 1024.0);
+                let bandwidth_gbps =
+                    (app.gpu_ops_per_sec as f64 * 4.0) / (1024.0 * 1024.0 * 1024.0);
                 lines.push(Line::from(vec![
                     Span::raw("    PCIe: "),
-                    Span::styled("STRESS ACTIVE", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        "STRESS ACTIVE",
+                        Style::default()
+                            .fg(Color::Yellow)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                     Span::raw(" - "),
-                    Span::styled(format!("{:.2} GB/s", bandwidth_gbps), Style::default().fg(Color::Cyan)),
+                    Span::styled(
+                        format!("{:.2} GB/s", bandwidth_gbps),
+                        Style::default().fg(Color::Cyan),
+                    ),
                     Span::raw(" actual"),
                 ]));
             } else {
@@ -1271,8 +1325,13 @@ fn render_dataflow_tab(f: &mut Frame, app: &App, area: Rect) {
             lines.push(Line::from(vec![
                 Span::raw("    "),
                 Span::styled(
-                    format!("Throughput: {:.2} G elements/sec", app.gpu_ops_per_sec as f64 / 1_000_000_000.0),
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                    format!(
+                        "Throughput: {:.2} G elements/sec",
+                        app.gpu_ops_per_sec as f64 / 1_000_000_000.0
+                    ),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]));
         } else {
@@ -1345,7 +1404,10 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
         Line::from(vec![
             Span::raw("    "),
             Span::styled("CPU:", Style::default().fg(Color::Yellow)),
-            Span::raw(format!(" {} threads doing FP math (sin/cos/sqrt)", num_cpus::get())),
+            Span::raw(format!(
+                " {} threads doing FP math (sin/cos/sqrt)",
+                num_cpus::get()
+            )),
         ]),
         Line::from(vec![
             Span::raw("    "),
@@ -1382,7 +1444,9 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
                 Span::raw("    Verdict: "),
                 Span::styled(
                     format!("{}", report.verdict),
-                    Style::default().fg(verdict_color).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(verdict_color)
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
@@ -1401,14 +1465,22 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
             Line::from(vec![
                 Span::raw("    Peak CPU: "),
                 Span::styled(
-                    format!("{:.2} M ops/sec ({:.1}%)", report.peak_cpu_ops as f64 / 1_000_000.0, report.peak_cpu_util),
+                    format!(
+                        "{:.2} M ops/sec ({:.1}%)",
+                        report.peak_cpu_ops as f64 / 1_000_000.0,
+                        report.peak_cpu_util
+                    ),
                     Style::default().fg(Color::Cyan),
                 ),
             ]),
             Line::from(vec![
                 Span::raw("    Peak MEM: "),
                 Span::styled(
-                    format!("{:.2} M pages/sec ({:.1}%)", report.peak_mem_ops as f64 / 1_000_000.0, report.peak_ram_util),
+                    format!(
+                        "{:.2} M pages/sec ({:.1}%)",
+                        report.peak_mem_ops as f64 / 1_000_000.0,
+                        report.peak_ram_util
+                    ),
                     Style::default().fg(Color::Magenta),
                 ),
             ]),
@@ -1417,7 +1489,11 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
             text.push(Line::from(vec![
                 Span::raw("    Peak GPU: "),
                 Span::styled(
-                    format!("{:.2} G xfers/sec ({:.1}% VRAM)", report.peak_gpu_ops as f64 / 1_000_000_000.0, report.peak_vram_util),
+                    format!(
+                        "{:.2} G xfers/sec ({:.1}% VRAM)",
+                        report.peak_gpu_ops as f64 / 1_000_000_000.0,
+                        report.peak_vram_util
+                    ),
                     Style::default().fg(Color::Yellow),
                 ),
             ]));
@@ -1427,7 +1503,9 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
             text.push(Line::from(""));
             text.push(Line::from(Span::styled(
                 "  Recommendations:",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             )));
             for rec in &report.recommendations {
                 text.push(Line::from(vec![
@@ -1457,19 +1535,19 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
     let has_gpu = !app.gpu_workers.is_empty();
 
     let mut constraints = vec![
-        Constraint::Length(3),  // Status bar
-        Constraint::Length(3),  // CPU ops gauge
-        Constraint::Length(4),  // CPU ops sparkline
-        Constraint::Length(3),  // Memory ops gauge
-        Constraint::Length(4),  // Memory ops sparkline
+        Constraint::Length(3), // Status bar
+        Constraint::Length(3), // CPU ops gauge
+        Constraint::Length(4), // CPU ops sparkline
+        Constraint::Length(3), // Memory ops gauge
+        Constraint::Length(4), // Memory ops sparkline
     ];
 
     if has_gpu {
-        constraints.push(Constraint::Length(3));  // GPU ops gauge
-        constraints.push(Constraint::Length(4));  // GPU ops sparkline
+        constraints.push(Constraint::Length(3)); // GPU ops gauge
+        constraints.push(Constraint::Length(4)); // GPU ops sparkline
     }
 
-    constraints.push(Constraint::Min(3));  // Stats
+    constraints.push(Constraint::Min(3)); // Stats
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -1515,7 +1593,11 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
 
     // CPU ops sparkline
     let cpu_sparkline = Sparkline::default()
-        .block(Block::default().title(" CPU History ").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title(" CPU History ")
+                .borders(Borders::ALL),
+        )
         .data(&app.cpu_ops_history)
         .style(Style::default().fg(Color::Cyan));
     f.render_widget(cpu_sparkline, chunks[2]);
@@ -1540,7 +1622,11 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
 
     // Memory ops sparkline
     let mem_sparkline = Sparkline::default()
-        .block(Block::default().title(" Memory History ").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title(" Memory History ")
+                .borders(Borders::ALL),
+        )
         .data(&app.mem_ops_history)
         .style(Style::default().fg(Color::Magenta));
     f.render_widget(mem_sparkline, chunks[4]);
@@ -1566,7 +1652,11 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
 
         // GPU ops sparkline
         let gpu_sparkline = Sparkline::default()
-            .block(Block::default().title(" GPU History ").borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title(" GPU History ")
+                    .borders(Borders::ALL),
+            )
             .data(&app.gpu_ops_history)
             .style(Style::default().fg(Color::Yellow));
         f.render_widget(gpu_sparkline, chunks[6]);
@@ -1580,38 +1670,51 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
     let cpu_util = app.cpu.compute_utilization().unwrap_or(0.0);
     let mem_pct_used = app.memory.ram_usage_percent();
 
-    let mut stats = vec![
-        Line::from(vec![
-            Span::styled("System: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(
-                format!("CPU {:.0}%", cpu_util),
-                Style::default().fg(if cpu_util > 90.0 { Color::Red } else { Color::Green }),
-            ),
-            Span::raw(" | "),
-            Span::styled(
-                format!("RAM {:.0}%", mem_pct_used),
-                Style::default().fg(if mem_pct_used > 80.0 { Color::Red } else { Color::Green }),
-            ),
-            Span::raw(" | Pressure: "),
-            Span::styled(
-                format!("{}", app.memory.pressure_level),
-                Style::default().fg(match app.memory.pressure_level {
-                    PressureLevel::Ok => Color::Green,
-                    PressureLevel::Elevated => Color::Yellow,
-                    PressureLevel::Warning => Color::Rgb(255, 165, 0),
-                    PressureLevel::Critical => Color::Red,
-                }),
-            ),
-        ]),
-    ];
+    let mut stats = vec![Line::from(vec![
+        Span::styled("System: ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            format!("CPU {:.0}%", cpu_util),
+            Style::default().fg(if cpu_util > 90.0 {
+                Color::Red
+            } else {
+                Color::Green
+            }),
+        ),
+        Span::raw(" | "),
+        Span::styled(
+            format!("RAM {:.0}%", mem_pct_used),
+            Style::default().fg(if mem_pct_used > 80.0 {
+                Color::Red
+            } else {
+                Color::Green
+            }),
+        ),
+        Span::raw(" | Pressure: "),
+        Span::styled(
+            format!("{}", app.memory.pressure_level),
+            Style::default().fg(match app.memory.pressure_level {
+                PressureLevel::Ok => Color::Green,
+                PressureLevel::Elevated => Color::Yellow,
+                PressureLevel::Warning => Color::Rgb(255, 165, 0),
+                PressureLevel::Critical => Color::Red,
+            }),
+        ),
+    ])];
 
     // Show GPU VRAM if available
     for (i, gpu) in app.gpus.iter().enumerate() {
         stats.push(Line::from(vec![
-            Span::styled(format!("GPU{} VRAM: ", i), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!("GPU{} VRAM: ", i),
+                Style::default().fg(Color::DarkGray),
+            ),
             Span::styled(
                 format!("{:.1}%", gpu.vram_percent),
-                Style::default().fg(if gpu.vram_percent > 90.0 { Color::Red } else { Color::Green }),
+                Style::default().fg(if gpu.vram_percent > 90.0 {
+                    Color::Red
+                } else {
+                    Color::Green
+                }),
             ),
             Span::styled(
                 format!(" ({:.1}/{:.1} GB)", gpu.vram_used_gb, gpu.vram_total_gb),
@@ -1620,8 +1723,11 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
         ]));
     }
 
-    let stats_block = Paragraph::new(stats)
-        .block(Block::default().title(" System Impact ").borders(Borders::ALL));
+    let stats_block = Paragraph::new(stats).block(
+        Block::default()
+            .title(" System Impact ")
+            .borders(Borders::ALL),
+    );
     f.render_widget(stats_block, chunks[stats_idx]);
 }
 

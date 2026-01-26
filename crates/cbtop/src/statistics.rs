@@ -89,10 +89,7 @@ impl StatisticalAnalysis {
         }
 
         // Filter out NaN/Inf
-        let valid: Vec<f64> = samples.iter()
-            .copied()
-            .filter(|x| x.is_finite())
-            .collect();
+        let valid: Vec<f64> = samples.iter().copied().filter(|x| x.is_finite()).collect();
 
         if valid.is_empty() {
             return None;
@@ -114,9 +111,7 @@ impl StatisticalAnalysis {
             });
         }
 
-        let variance = valid.iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / (n - 1) as f64;
+        let variance = valid.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
         let std_dev = variance.sqrt();
         let std_error = std_dev / (n as f64).sqrt();
 
@@ -186,12 +181,8 @@ impl EffectSize {
         let mean1 = sample1.iter().sum::<f64>() / n1;
         let mean2 = sample2.iter().sum::<f64>() / n2;
 
-        let var1 = sample1.iter()
-            .map(|x| (x - mean1).powi(2))
-            .sum::<f64>() / (n1 - 1.0).max(1.0);
-        let var2 = sample2.iter()
-            .map(|x| (x - mean2).powi(2))
-            .sum::<f64>() / (n2 - 1.0).max(1.0);
+        let var1 = sample1.iter().map(|x| (x - mean1).powi(2)).sum::<f64>() / (n1 - 1.0).max(1.0);
+        let var2 = sample2.iter().map(|x| (x - mean2).powi(2)).sum::<f64>() / (n2 - 1.0).max(1.0);
 
         // Pooled standard deviation
         let pooled_var = ((n1 - 1.0) * var1 + (n2 - 1.0) * var2) / (n1 + n2 - 2.0).max(1.0);
@@ -258,12 +249,8 @@ impl ComparisonResult {
         let mean1 = sample1.iter().sum::<f64>() / n1;
         let mean2 = sample2.iter().sum::<f64>() / n2;
 
-        let var1 = sample1.iter()
-            .map(|x| (x - mean1).powi(2))
-            .sum::<f64>() / (n1 - 1.0);
-        let var2 = sample2.iter()
-            .map(|x| (x - mean2).powi(2))
-            .sum::<f64>() / (n2 - 1.0);
+        let var1 = sample1.iter().map(|x| (x - mean1).powi(2)).sum::<f64>() / (n1 - 1.0);
+        let var2 = sample2.iter().map(|x| (x - mean2).powi(2)).sum::<f64>() / (n2 - 1.0);
 
         let se1 = var1 / n1;
         let se2 = var2 / n2;
@@ -323,7 +310,8 @@ impl MannWhitneyResult {
         let n2 = sample2.len();
 
         // Combine and rank
-        let mut combined: Vec<(f64, usize)> = sample1.iter()
+        let mut combined: Vec<(f64, usize)> = sample1
+            .iter()
             .map(|&x| (x, 0))
             .chain(sample2.iter().map(|&x| (x, 1)))
             .collect();
@@ -346,7 +334,9 @@ impl MannWhitneyResult {
         }
 
         // Sum of ranks for sample 1
-        let r1: f64 = combined.iter().enumerate()
+        let r1: f64 = combined
+            .iter()
+            .enumerate()
             .filter(|(_, (_, group))| *group == 0)
             .map(|(idx, _)| ranks[idx])
             .sum();
@@ -360,7 +350,11 @@ impl MannWhitneyResult {
         let mean_u = (n1 * n2) as f64 / 2.0;
         let std_u = ((n1 * n2 * (n1 + n2 + 1)) as f64 / 12.0).sqrt();
 
-        let z = if std_u > 0.0 { (u - mean_u) / std_u } else { 0.0 };
+        let z = if std_u > 0.0 {
+            (u - mean_u) / std_u
+        } else {
+            0.0
+        };
         let p_value = 2.0 * (1.0 - normal_cdf(z.abs()));
 
         // Rank-biserial correlation as effect size
@@ -404,10 +398,7 @@ impl OutlierFilter {
             return None;
         }
 
-        let mut sorted: Vec<f64> = samples.iter()
-            .copied()
-            .filter(|x| x.is_finite())
-            .collect();
+        let mut sorted: Vec<f64> = samples.iter().copied().filter(|x| x.is_finite()).collect();
 
         if sorted.is_empty() {
             return None;
@@ -439,7 +430,8 @@ impl OutlierFilter {
 
     /// Filter outliers from samples
     pub fn filter(&self, samples: &[f64]) -> Vec<f64> {
-        samples.iter()
+        samples
+            .iter()
             .copied()
             .filter(|&x| !self.is_outlier(x))
             .collect()
@@ -485,8 +477,13 @@ pub fn bootstrap_ci(samples: &[f64], confidence_level: f64, iterations: usize) -
     let lower_idx = ((alpha / 2.0) * iterations as f64) as usize;
     let upper_idx = ((1.0 - alpha / 2.0) * iterations as f64) as usize;
 
-    let ci_lower = bootstrap_means.get(lower_idx).copied().unwrap_or(bootstrap_means[0]);
-    let ci_upper = bootstrap_means.get(upper_idx.min(iterations - 1)).copied()
+    let ci_lower = bootstrap_means
+        .get(lower_idx)
+        .copied()
+        .unwrap_or(bootstrap_means[0]);
+    let ci_upper = bootstrap_means
+        .get(upper_idx.min(iterations - 1))
+        .copied()
         .unwrap_or(*bootstrap_means.last().unwrap());
 
     (ci_lower, ci_upper)
@@ -531,10 +528,7 @@ pub fn trimmed_mean(samples: &[f64], trim_percent: f64) -> Option<f64> {
         return None;
     }
 
-    let mut sorted: Vec<f64> = samples.iter()
-        .copied()
-        .filter(|x| x.is_finite())
-        .collect();
+    let mut sorted: Vec<f64> = samples.iter().copied().filter(|x| x.is_finite()).collect();
 
     if sorted.is_empty() {
         return None;
@@ -560,7 +554,10 @@ mod tests {
 
     #[test]
     fn test_effect_category() {
-        assert_eq!(EffectCategory::from_cohens_d(0.1), EffectCategory::Negligible);
+        assert_eq!(
+            EffectCategory::from_cohens_d(0.1),
+            EffectCategory::Negligible
+        );
         assert_eq!(EffectCategory::from_cohens_d(0.3), EffectCategory::Small);
         assert_eq!(EffectCategory::from_cohens_d(0.6), EffectCategory::Medium);
         assert_eq!(EffectCategory::from_cohens_d(1.0), EffectCategory::Large);

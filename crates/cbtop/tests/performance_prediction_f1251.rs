@@ -3,8 +3,7 @@
 //! F1251-F1260: Performance prediction falsification tests
 
 use cbtop::{
-    PerformancePredictor, DataPoint, ModelType, FittedModel, Prediction,
-    MIN_SAMPLES_FOR_FIT,
+    DataPoint, FittedModel, ModelType, PerformancePredictor, Prediction, MIN_SAMPLES_FOR_FIT,
 };
 
 // =============================================================================
@@ -129,7 +128,11 @@ fn f1255_linear_fit_perfect() {
     }
 
     let model = predictor.fit_linear().unwrap();
-    assert!(model.r_squared > 0.99, "Expected R² > 0.99, got {}", model.r_squared);
+    assert!(
+        model.r_squared > 0.99,
+        "Expected R² > 0.99, got {}",
+        model.r_squared
+    );
     assert_eq!(model.model_type, ModelType::Linear);
 }
 

@@ -64,4 +64,3 @@ fn test_softmax_op() {
     assert!(result[0] < result[1]);
     assert!(result[1] < result[2]);
 }
-

@@ -78,7 +78,8 @@ impl CudaModule {
                 eprintln!("[PTX-DEBUG] Failing PTX dumped to {}", ptx_path);
             }
             // Extract kernel name from PTX for better diagnostics
-            let kernel_name = ptx.lines()
+            let kernel_name = ptx
+                .lines()
                 .find(|l| l.contains(".entry"))
                 .map(|l| l.trim())
                 .unwrap_or("<unknown>");

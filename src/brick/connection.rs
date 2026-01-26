@@ -311,11 +311,8 @@ mod tests {
 
     #[test]
     fn test_managed_connection_touch() {
-        let mut conn = ManagedConnection::new(
-            "test",
-            Duration::from_secs(60),
-            Duration::from_millis(10),
-        );
+        let mut conn =
+            ManagedConnection::new("test", Duration::from_secs(60), Duration::from_millis(10));
 
         std::thread::sleep(Duration::from_millis(5));
         let idle_before = conn.idle_time();
@@ -346,8 +343,7 @@ mod tests {
 
     #[test]
     fn test_managed_connection_age() {
-        let conn =
-            ManagedConnection::new("test", Duration::from_secs(60), Duration::from_secs(10));
+        let conn = ManagedConnection::new("test", Duration::from_secs(60), Duration::from_secs(10));
 
         let age = conn.age();
         assert!(age < Duration::from_millis(100));
@@ -386,11 +382,8 @@ mod tests {
     #[test]
     fn test_falsify_validity_requires_all_conditions() {
         // Test 1: Healthy and not idle, but expired
-        let expired = ManagedConnection::new(
-            "test",
-            Duration::from_millis(5),
-            Duration::from_secs(60),
-        );
+        let expired =
+            ManagedConnection::new("test", Duration::from_millis(5), Duration::from_secs(60));
         std::thread::sleep(Duration::from_millis(10));
         assert!(
             !expired.is_valid(),
@@ -398,11 +391,8 @@ mod tests {
         );
 
         // Test 2: Healthy and not expired, but idle
-        let idle = ManagedConnection::new(
-            "test",
-            Duration::from_secs(60),
-            Duration::from_millis(5),
-        );
+        let idle =
+            ManagedConnection::new("test", Duration::from_secs(60), Duration::from_millis(5));
         std::thread::sleep(Duration::from_millis(10));
         assert!(
             !idle.is_valid(),
@@ -457,7 +447,10 @@ mod tests {
 
         // Now wait until actually idle (another 150ms = 250ms since touch > 200ms timeout)
         std::thread::sleep(Duration::from_millis(150));
-        assert!(conn.is_idle(), "Should be idle now (250ms since touch > 200ms timeout)");
+        assert!(
+            conn.is_idle(),
+            "Should be idle now (250ms since touch > 200ms timeout)"
+        );
     }
 
     // =========================================================================

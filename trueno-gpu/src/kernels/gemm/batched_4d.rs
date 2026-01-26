@@ -751,9 +751,9 @@ mod tests {
     #[test]
     fn test_batched_gemm_boundary_conditions() {
         let boundary_cases = [
-            (1, 17, 17, 17, 16),  // Single batch, non-power-of-2
+            (1, 17, 17, 17, 16),    // Single batch, non-power-of-2
             (8, 100, 100, 100, 16), // Multiple batches
-            (16, 1, 64, 64, 16),   // Single row
+            (16, 1, 64, 64, 16),    // Single row
         ];
 
         for (batch, m, n, k, tile) in boundary_cases {
@@ -767,11 +767,7 @@ mod tests {
     /// Test 4D GEMM boundary conditions
     #[test]
     fn test_batched_4d_gemm_boundary_conditions() {
-        let boundary_cases = [
-            (1, 1, 64, 64, 32),
-            (2, 12, 17, 17, 17),
-            (4, 8, 128, 64, 32),
-        ];
+        let boundary_cases = [(1, 1, 64, 64, 32), (2, 12, 17, 17, 17), (4, 8, 128, 64, 32)];
 
         for (batch, heads, m, n, k) in boundary_cases {
             let kernel = Batched4DGemmKernel::new(batch, heads, m, n, k);
@@ -1004,7 +1000,7 @@ mod tests {
         let cases = [
             (3, 7, 33, 33, 17),
             (5, 11, 100, 100, 50),
-            (2, 6, 94, 64, 64),  // Typical attention pattern
+            (2, 6, 94, 64, 64), // Typical attention pattern
         ];
 
         for (batch, heads, m, n, k) in cases {

@@ -12,7 +12,7 @@ use std::process::Command;
 #[test]
 fn test_h003_cpu_core_count() {
     let detected_cores = num_cpus::get();
-    
+
     // Linux-specific verification via lscpu or /proc/cpuinfo
     #[cfg(target_os = "linux")]
     {
@@ -20,10 +20,13 @@ fn test_h003_cpu_core_count() {
             .args(["-c", "^processor", "/proc/cpuinfo"])
             .output()
             .expect("Failed to execute grep");
-        
+
         let proc_string = String::from_utf8(output.stdout).expect("Invalid UTF-8");
-        let proc_cores: usize = proc_string.trim().parse().expect("Failed to parse core count");
-        
+        let proc_cores: usize = proc_string
+            .trim()
+            .parse()
+            .expect("Failed to parse core count");
+
         assert_eq!(
             detected_cores, proc_cores,
             "H003 FALSIFIED: num_cpus ({}) != /proc/cpuinfo ({})",
@@ -39,33 +42,67 @@ fn test_h003_cpu_core_count() {
 fn test_h009_unified_device_trait_structure() {
     // This test verifies the trait definition exists and is implementable
     // We define a MockDevice to prove the trait is sound
-    
-    use trueno::monitor::{ComputeDevice, DeviceId, DeviceType};
+
     use anyhow::Result;
+    use trueno::monitor::{ComputeDevice, DeviceId, DeviceType};
 
     struct MockCpu;
     impl ComputeDevice for MockCpu {
-        fn device_id(&self) -> DeviceId { DeviceId(0) }
-        fn device_name(&self) -> &str { "Mock CPU" }
-        fn device_type(&self) -> DeviceType { DeviceType::Cpu }
-        
-        fn compute_utilization(&self) -> Result<f64> { Ok(0.5) }
-        fn compute_clock_mhz(&self) -> Result<u32> { Ok(3000) }
-        fn compute_temperature_c(&self) -> Result<f64> { Ok(45.0) }
-        fn compute_power_watts(&self) -> Result<f64> { Ok(65.0) }
-        fn compute_power_limit_watts(&self) -> Result<f64> { Ok(105.0) }
-        
-        fn memory_used_bytes(&self) -> Result<u64> { Ok(1024) }
-        fn memory_total_bytes(&self) -> Result<u64> { Ok(2048) }
-        fn memory_bandwidth_gbps(&self) -> Result<f64> { Ok(50.0) }
-        
-        fn sm_count(&self) -> u32 { 8 }
-        fn active_sm_count(&self) -> Result<u32> { Ok(4) }
-        
-        fn pcie_tx_bytes_per_sec(&self) -> Result<u64> { Ok(0) }
-        fn pcie_rx_bytes_per_sec(&self) -> Result<u64> { Ok(0) }
-        fn pcie_generation(&self) -> u8 { 0 }
-        fn pcie_width(&self) -> u8 { 0 }
+        fn device_id(&self) -> DeviceId {
+            DeviceId(0)
+        }
+        fn device_name(&self) -> &str {
+            "Mock CPU"
+        }
+        fn device_type(&self) -> DeviceType {
+            DeviceType::Cpu
+        }
+
+        fn compute_utilization(&self) -> Result<f64> {
+            Ok(0.5)
+        }
+        fn compute_clock_mhz(&self) -> Result<u32> {
+            Ok(3000)
+        }
+        fn compute_temperature_c(&self) -> Result<f64> {
+            Ok(45.0)
+        }
+        fn compute_power_watts(&self) -> Result<f64> {
+            Ok(65.0)
+        }
+        fn compute_power_limit_watts(&self) -> Result<f64> {
+            Ok(105.0)
+        }
+
+        fn memory_used_bytes(&self) -> Result<u64> {
+            Ok(1024)
+        }
+        fn memory_total_bytes(&self) -> Result<u64> {
+            Ok(2048)
+        }
+        fn memory_bandwidth_gbps(&self) -> Result<f64> {
+            Ok(50.0)
+        }
+
+        fn sm_count(&self) -> u32 {
+            8
+        }
+        fn active_sm_count(&self) -> Result<u32> {
+            Ok(4)
+        }
+
+        fn pcie_tx_bytes_per_sec(&self) -> Result<u64> {
+            Ok(0)
+        }
+        fn pcie_rx_bytes_per_sec(&self) -> Result<u64> {
+            Ok(0)
+        }
+        fn pcie_generation(&self) -> u8 {
+            0
+        }
+        fn pcie_width(&self) -> u8 {
+            0
+        }
     }
 
     let device = MockCpu;

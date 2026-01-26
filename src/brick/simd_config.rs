@@ -431,11 +431,26 @@ mod tests {
 
     #[test]
     fn test_unroll_factor_for_backend() {
-        assert_eq!(UnrollFactor::for_backend(ComputeBackend::Avx512), UnrollFactor::X8);
-        assert_eq!(UnrollFactor::for_backend(ComputeBackend::Avx2), UnrollFactor::X4);
-        assert_eq!(UnrollFactor::for_backend(ComputeBackend::Sse2), UnrollFactor::X2);
-        assert_eq!(UnrollFactor::for_backend(ComputeBackend::Neon), UnrollFactor::X2);
-        assert_eq!(UnrollFactor::for_backend(ComputeBackend::Scalar), UnrollFactor::None);
+        assert_eq!(
+            UnrollFactor::for_backend(ComputeBackend::Avx512),
+            UnrollFactor::X8
+        );
+        assert_eq!(
+            UnrollFactor::for_backend(ComputeBackend::Avx2),
+            UnrollFactor::X4
+        );
+        assert_eq!(
+            UnrollFactor::for_backend(ComputeBackend::Sse2),
+            UnrollFactor::X2
+        );
+        assert_eq!(
+            UnrollFactor::for_backend(ComputeBackend::Neon),
+            UnrollFactor::X2
+        );
+        assert_eq!(
+            UnrollFactor::for_backend(ComputeBackend::Scalar),
+            UnrollFactor::None
+        );
     }
 
     // =========================================================================
@@ -571,8 +586,12 @@ mod tests {
     #[test]
     fn test_falsify_unroll_tail_covers_all() {
         for total in [1, 7, 8, 10, 100, 1000] {
-            for factor in [UnrollFactor::None, UnrollFactor::X2, UnrollFactor::X4, UnrollFactor::X8]
-            {
+            for factor in [
+                UnrollFactor::None,
+                UnrollFactor::X2,
+                UnrollFactor::X4,
+                UnrollFactor::X8,
+            ] {
                 let mut iter = UnrollTailIterator::new(total, factor);
                 let mut covered = 0usize;
 

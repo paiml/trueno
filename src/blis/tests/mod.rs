@@ -10,11 +10,11 @@
 //! - `falsification` - Falsification tests (F21-F30)
 //! - `numerical` - Numerical stability tests (F31-F42)
 
+mod blis_gemm;
+mod falsification;
 mod gemm_ref;
 mod jidoka;
 mod microkernel;
-mod packing;
-mod blis_gemm;
-mod profiler_heijunka;
-mod falsification;
 mod numerical;
+mod packing;
+mod profiler_heijunka;

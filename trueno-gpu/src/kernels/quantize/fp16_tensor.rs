@@ -436,17 +436,17 @@ impl Kernel for TensorCoreQ4KGemmKernel {
         let smem_bytes = tile_k * 16 * 2; // 16x16 FP16 tile = 512 bytes
 
         PtxKernel::new("tensor_core_q4k_gemm")
-            .param(PtxType::U64, "a_ptr")        // FP16 activations [M, K]
-            .param(PtxType::U64, "b_quant_ptr")  // Q4K weights [K, N]
-            .param(PtxType::U64, "c_ptr")        // FP16 output [M, N]
+            .param(PtxType::U64, "a_ptr") // FP16 activations [M, K]
+            .param(PtxType::U64, "b_quant_ptr") // Q4K weights [K, N]
+            .param(PtxType::U64, "c_ptr") // FP16 output [M, N]
             .shared_memory(smem_bytes as usize)
             .build(move |ctx| {
                 // PAR-034: Tensor Core Q4K GEMM
                 // Grid: (ceil(N/16), ceil(M/16)) blocks
                 // Block: 32 threads (1 warp for WMMA)
 
-                let block_x = ctx.special_reg(PtxReg::CtaIdX);  // Output column tile
-                let block_y = ctx.special_reg(PtxReg::CtaIdY);  // Output row tile
+                let block_x = ctx.special_reg(PtxReg::CtaIdX); // Output column tile
+                let block_y = ctx.special_reg(PtxReg::CtaIdY); // Output row tile
                 let thread_id = ctx.special_reg(PtxReg::TidX);
 
                 // Compute output tile position

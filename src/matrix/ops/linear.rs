@@ -13,9 +13,9 @@ use tracing::instrument;
 /// Backend dispatch macro for dot product - centralizes platform-specific SIMD dispatch
 macro_rules! dispatch_dot {
     ($backend:expr, $a:expr, $b:expr) => {{
-        use crate::backends::{scalar::ScalarBackend, VectorBackend};
         #[cfg(target_arch = "x86_64")]
         use crate::backends::{avx2::Avx2Backend, sse2::Sse2Backend};
+        use crate::backends::{scalar::ScalarBackend, VectorBackend};
         // SAFETY: CPU features verified at runtime before backend selection
         unsafe {
             match $backend {

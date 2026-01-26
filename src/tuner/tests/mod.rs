@@ -9,10 +9,10 @@
 //! - `classifiers`: Additional classifier and bottleneck tests
 //! - `coverage`: Additional coverage for builder, error, and config tests
 
-mod model_accuracy;
-mod feature_engineering;
-mod training_data;
-mod integration;
-mod generalization;
 mod classifiers;
 mod coverage;
+mod feature_engineering;
+mod generalization;
+mod integration;
+mod model_accuracy;
+mod training_data;

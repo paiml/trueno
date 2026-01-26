@@ -65,7 +65,7 @@ mod tests {
         for _ in 0..out_dim {
             // ql: 128 bytes (all zeros = q4 part is 0)
             q6k_data.extend_from_slice(&[0x55u8; 128]); // 5 in each nibble
-            // qh: 64 bytes (all zeros = q2 part is 0)
+                                                        // qh: 64 bytes (all zeros = q2 part is 0)
             q6k_data.extend_from_slice(&[0x00u8; 64]);
             // scales: 16 bytes (all ones)
             q6k_data.extend_from_slice(&[0x01u8; 16]);
@@ -113,7 +113,10 @@ mod tests {
             assert!(
                 diff < 1e-4,
                 "Row {}: scalar {} vs dispatch {} (diff {})",
-                i, s, d, diff
+                i,
+                s,
+                d,
+                diff
             );
         }
     }
@@ -161,11 +164,19 @@ mod tests {
     fn test_f16_to_f32_subnormal() {
         // Smallest subnormal: 0x0001 ≈ 5.96e-8
         let result = f16_to_f32(0x0001);
-        assert!(result > 0.0 && result < 1e-6, "Expected small subnormal, got {}", result);
+        assert!(
+            result > 0.0 && result < 1e-6,
+            "Expected small subnormal, got {}",
+            result
+        );
 
         // Larger subnormal: 0x03FF (largest subnormal)
         let result = f16_to_f32(0x03FF);
-        assert!(result > 0.0 && result < 1e-4, "Expected subnormal, got {}", result);
+        assert!(
+            result > 0.0 && result < 1e-4,
+            "Expected subnormal, got {}",
+            result
+        );
     }
 
     #[test]
@@ -177,7 +188,7 @@ mod tests {
         let mut q6k_data = Vec::new();
         for _ in 0..out_dim {
             q6k_data.extend_from_slice(&[0x33u8; 128]); // ql
-            q6k_data.extend_from_slice(&[0x00u8; 64]);  // qh
+            q6k_data.extend_from_slice(&[0x00u8; 64]); // qh
             q6k_data.extend_from_slice(&[0x01u8; 16]); // scales
             q6k_data.extend_from_slice(&[0x00, 0x3C]); // d = 1.0
         }
@@ -246,7 +257,7 @@ mod tests {
 
         let mut q6k_data = Vec::new();
         q6k_data.extend_from_slice(&[0xAAu8; 128]); // ql
-        q6k_data.extend_from_slice(&[0x55u8; 64]);  // qh (alternating bits)
+        q6k_data.extend_from_slice(&[0x55u8; 64]); // qh (alternating bits)
         q6k_data.extend_from_slice(&[0x01u8; 16]); // scales
         q6k_data.extend_from_slice(&[0x00, 0x3C]); // d = 1.0
 
@@ -312,7 +323,7 @@ mod tests {
 
         let mut q6k_data = Vec::new();
         q6k_data.extend_from_slice(&[0x00u8; 128]); // ql = 0
-        q6k_data.extend_from_slice(&[0x00u8; 64]);  // qh = 0
+        q6k_data.extend_from_slice(&[0x00u8; 64]); // qh = 0
         q6k_data.extend_from_slice(&[0x80u8; 16]); // scales = -128 (negative)
         q6k_data.extend_from_slice(&[0x00, 0x3C]); // d = 1.0
 
@@ -374,7 +385,8 @@ mod tests {
         assert_eq!(scalar_output.len(), dispatch_output.len());
         let mut max_abs_error = 0.0f32;
 
-        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
+        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
+        {
             let abs_error = (scalar - dispatch).abs();
             max_abs_error = max_abs_error.max(abs_error);
 
@@ -382,7 +394,10 @@ mod tests {
             assert!(
                 abs_error < 2e-4,
                 "Row {}: scalar={}, dispatch={}, diff={}",
-                i, scalar, dispatch, abs_error
+                i,
+                scalar,
+                dispatch,
+                abs_error
             );
         }
 
@@ -420,15 +435,23 @@ mod tests {
             .collect();
 
         let colmajor_output = matmul_q6k_f32_colmajor(&q6k_data, &input, out_dim, in_dim);
-        let colmajor_dispatch = matmul_q6k_f32_colmajor_dispatch(&q6k_data, &input, out_dim, in_dim);
+        let colmajor_dispatch =
+            matmul_q6k_f32_colmajor_dispatch(&q6k_data, &input, out_dim, in_dim);
 
         assert_eq!(colmajor_output.len(), colmajor_dispatch.len());
-        for (i, (base, dispatch)) in colmajor_output.iter().zip(colmajor_dispatch.iter()).enumerate() {
+        for (i, (base, dispatch)) in colmajor_output
+            .iter()
+            .zip(colmajor_dispatch.iter())
+            .enumerate()
+        {
             let diff = (base - dispatch).abs();
             assert!(
                 diff < 1e-4,
                 "Row {}: colmajor base={}, dispatch={}, diff={}",
-                i, base, dispatch, diff
+                i,
+                base,
+                dispatch,
+                diff
             );
         }
     }
@@ -447,7 +470,7 @@ mod tests {
             q6k_data.extend_from_slice(&[0xFFu8; 64]);
             // scales: positive
             q6k_data.extend_from_slice(&[0x3Fu8; 16]); // scale = 63
-            // d = 1.0
+                                                       // d = 1.0
             q6k_data.extend_from_slice(&[0x00, 0x3C]);
         }
 
@@ -455,7 +478,8 @@ mod tests {
         let scalar_output = matmul_q6k_f32_scalar(&q6k_data, &input, out_dim, in_dim);
         let dispatch_output = matmul_q6k_f32_dispatch(&q6k_data, &input, out_dim, in_dim);
 
-        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
+        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
+        {
             assert!(
                 scalar.is_finite() && dispatch.is_finite(),
                 "Row {}: max values should produce finite output",
@@ -465,7 +489,10 @@ mod tests {
             assert!(
                 diff < 1e-4,
                 "Row {}: max quant scalar={}, dispatch={}, diff={}",
-                i, scalar, dispatch, diff
+                i,
+                scalar,
+                dispatch,
+                diff
             );
         }
     }
@@ -480,7 +507,7 @@ mod tests {
         for _ in 0..out_dim {
             // ql: mid-range values
             q6k_data.extend_from_slice(&[0x77u8; 128]); // 7, 7 repeated
-            // qh: zeros (full value = 7)
+                                                        // qh: zeros (full value = 7)
             q6k_data.extend_from_slice(&[0x00u8; 64]);
             // scales: alternating +32, -32
             for i in 0..16 {
@@ -498,12 +525,16 @@ mod tests {
         let scalar_output = matmul_q6k_f32_scalar(&q6k_data, &input, out_dim, in_dim);
         let dispatch_output = matmul_q6k_f32_dispatch(&q6k_data, &input, out_dim, in_dim);
 
-        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
+        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
+        {
             let diff = (scalar - dispatch).abs();
             assert!(
                 diff < 1e-4,
                 "Row {}: alternating scales scalar={}, dispatch={}, diff={}",
-                i, scalar, dispatch, diff
+                i,
+                scalar,
+                dispatch,
+                diff
             );
         }
     }
@@ -546,7 +577,8 @@ mod tests {
         let dispatch_output = matmul_q6k_f32_dispatch(&q6k_data, &input, out_dim, in_dim);
 
         let mut max_rel_error = 0.0f32;
-        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
+        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
+        {
             let abs_error = (scalar - dispatch).abs();
             let rel_error = if scalar.abs() > 1e-6 {
                 abs_error / scalar.abs()
@@ -558,7 +590,10 @@ mod tests {
             assert!(
                 rel_error < 1e-4 || abs_error < 1e-4,
                 "Row {}: large SIMD scalar={}, dispatch={}, rel_err={:.6}",
-                i, scalar, dispatch, rel_error
+                i,
+                scalar,
+                dispatch,
+                rel_error
             );
         }
 
@@ -572,10 +607,7 @@ mod tests {
         let out_dim = 4096;
         let in_dim = 2048; // Must be multiple of 256 (SUPER_BLOCK_SIZE)
         let total_work = out_dim * in_dim;
-        assert!(
-            total_work >= 8_000_000,
-            "Test must trigger parallel path"
-        );
+        assert!(total_work >= 8_000_000, "Test must trigger parallel path");
 
         let num_superblocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
         let row_bytes = num_superblocks_per_row * SUPER_BLOCK_BYTES;
@@ -612,12 +644,7 @@ mod tests {
         // Verify dimensions and finiteness
         assert_eq!(result.len(), out_dim);
         for (i, &val) in result.iter().enumerate() {
-            assert!(
-                val.is_finite(),
-                "Result[{}] is not finite: {}",
-                i,
-                val
-            );
+            assert!(val.is_finite(), "Result[{}] is not finite: {}", i, val);
         }
 
         // Compare a few rows against scalar for consistency
@@ -726,12 +753,7 @@ mod tests {
 
         // Verify results are finite
         for (i, &val) in chunk.iter().enumerate() {
-            assert!(
-                val.is_finite(),
-                "Chunk[{}] is not finite: {}",
-                i,
-                val
-            );
+            assert!(val.is_finite(), "Chunk[{}] is not finite: {}", i, val);
         }
     }
 }

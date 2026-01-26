@@ -324,13 +324,17 @@ mod tests {
         let pred10 = builder.setp_lt_u32_imm(a, 20);
 
         // All predicates should be unique
-        let preds = vec![pred1, pred2, pred3, pred4, pred5, pred6, pred7, pred8, pred9, pred10];
+        let preds = vec![
+            pred1, pred2, pred3, pred4, pred5, pred6, pred7, pred8, pred9, pred10,
+        ];
         for i in 0..preds.len() {
             for j in (i + 1)..preds.len() {
                 assert_ne!(
-                    preds[i].id(), preds[j].id(),
+                    preds[i].id(),
+                    preds[j].id(),
                     "Predicate {} and {} should have different IDs",
-                    i, j
+                    i,
+                    j
                 );
             }
         }

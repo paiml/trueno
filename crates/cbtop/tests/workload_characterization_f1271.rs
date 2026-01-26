@@ -3,8 +3,8 @@
 //! F1271-F1280: Workload characterization falsification tests
 
 use cbtop::{
-    WorkloadCharacterizer, WorkloadFeatures, WorkloadCategory,
-    ClassificationResult, RecommendedBackend,
+    ClassificationResult, RecommendedBackend, WorkloadCategory, WorkloadCharacterizer,
+    WorkloadFeatures,
 };
 
 // =============================================================================
@@ -17,10 +17,10 @@ fn f1271_feature_extraction() {
     let characterizer = WorkloadCharacterizer::new();
 
     let features = characterizer.extract_features(
-        1_000_000.0,  // FLOPs
-        100_000.0,    // Bytes accessed
-        1_000_000,    // Memory footprint
-        100_000,      // Working set
+        1_000_000.0, // FLOPs
+        100_000.0,   // Bytes accessed
+        1_000_000,   // Memory footprint
+        100_000,     // Working set
     );
 
     assert_eq!(features.arithmetic_intensity, 10.0); // 1M / 100K = 10
@@ -153,8 +153,12 @@ fn f1275_identical_similarity() {
 /// F1275.3: Cosine similarity in valid range
 #[test]
 fn f1275_cosine_similarity() {
-    let a = WorkloadFeatures::new().with_intensity(10.0).with_compute_density(5.0);
-    let b = WorkloadFeatures::new().with_intensity(20.0).with_compute_density(10.0);
+    let a = WorkloadFeatures::new()
+        .with_intensity(10.0)
+        .with_compute_density(5.0);
+    let b = WorkloadFeatures::new()
+        .with_intensity(20.0)
+        .with_compute_density(10.0);
 
     let sim = a.cosine_similarity(&b);
     assert!(sim >= -1.0 && sim <= 1.0);

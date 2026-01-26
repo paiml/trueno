@@ -169,9 +169,7 @@ impl CudaStream {
     pub fn begin_capture(&self, mode: CaptureMode) -> Result<(), GpuError> {
         let driver = get_driver()?;
         // SAFETY: stream is valid from constructor
-        let result = unsafe {
-            (driver.cuStreamBeginCapture)(self.stream, mode.to_cuda_mode())
-        };
+        let result = unsafe { (driver.cuStreamBeginCapture)(self.stream, mode.to_cuda_mode()) };
         CudaDriver::check(result).map_err(|e| GpuError::GraphCapture(e.to_string()))
     }
 
@@ -186,9 +184,7 @@ impl CudaStream {
         let driver = get_driver()?;
         let mut graph = ptr::null_mut();
         // SAFETY: stream is valid from constructor
-        let result = unsafe {
-            (driver.cuStreamEndCapture)(self.stream, &mut graph)
-        };
+        let result = unsafe { (driver.cuStreamEndCapture)(self.stream, &mut graph) };
         CudaDriver::check(result).map_err(|e| GpuError::GraphCapture(e.to_string()))?;
         Ok(CudaGraph::from_raw(graph))
     }

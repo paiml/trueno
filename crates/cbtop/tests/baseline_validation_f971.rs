@@ -23,8 +23,8 @@
 //! | F985 | Benchmark methodology documented | test_f985_methodology_documented |
 
 use cbtop::{
-    BaselineComparison, BaselineValidator, GpuClass, SmHealth, ThroughputGrade,
-    INDUSTRY_BASELINES, TGI_BASELINE, TRITON_BASELINE, VLLM_BASELINE,
+    BaselineComparison, BaselineValidator, GpuClass, SmHealth, ThroughputGrade, INDUSTRY_BASELINES,
+    TGI_BASELINE, TRITON_BASELINE, VLLM_BASELINE,
 };
 
 /// F971: cbtop shows realistic GPU throughput (within 30% of vLLM baseline).

@@ -109,7 +109,9 @@ impl SequenceGroup {
 
     /// Remaining tokens to generate.
     pub fn remaining_tokens(&self) -> usize {
-        self.request.max_new_tokens.saturating_sub(self.output_tokens.len())
+        self.request
+            .max_new_tokens
+            .saturating_sub(self.output_tokens.len())
     }
 
     /// Add generated token.
@@ -416,7 +418,10 @@ impl ContinuousBatcher {
     pub fn process_outputs(&mut self, outputs: Vec<TokenOutput>) {
         for output in outputs {
             // Find the sequence and add the token
-            if let Some(seq_group) = self.running.iter_mut().find(|s| s.request.id == output.seq_id)
+            if let Some(seq_group) = self
+                .running
+                .iter_mut()
+                .find(|s| s.request.id == output.seq_id)
             {
                 seq_group.add_token(output.token);
                 self.stats.total_tokens += 1;
@@ -465,7 +470,9 @@ impl ContinuousBatcher {
             && !self.running.is_empty()
             && matches!(
                 self.policy,
-                SchedulingPolicy::Priority { preempt_enabled: true }
+                SchedulingPolicy::Priority {
+                    preempt_enabled: true
+                }
             )
     }
 
@@ -666,15 +673,9 @@ impl SpeculativeDecoder {
 
         // Get target token (either after rejection or as the k+1 token)
         let target_token = if let Some(idx) = rejection_idx {
-            target_probs
-                .get(idx)
-                .map(|(t, _)| *t)
-                .unwrap_or(0)
+            target_probs.get(idx).map(|(t, _)| *t).unwrap_or(0)
         } else {
-            target_probs
-                .get(draft_count)
-                .map(|(t, _)| *t)
-                .unwrap_or(0)
+            target_probs.get(draft_count).map(|(t, _)| *t).unwrap_or(0)
         };
 
         let output = SpeculativeOutput {
@@ -818,8 +819,10 @@ mod tests {
 
     #[test]
     fn test_preemption() {
-        let mut batcher = ContinuousBatcher::new(64, 4096)
-            .with_policy(SchedulingPolicy::Priority { preempt_enabled: true });
+        let mut batcher =
+            ContinuousBatcher::new(64, 4096).with_policy(SchedulingPolicy::Priority {
+                preempt_enabled: true,
+            });
 
         // Add and schedule requests
         for i in 0..5 {

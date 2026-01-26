@@ -189,7 +189,8 @@ impl BrickTuner {
                     kernel: KernelType::BatchedQ4K,
                 });
                 if batch_size > 1 {
-                    suggestions.push(ExperimentSuggestion::EnableMultiKvCache { count: batch_size });
+                    suggestions
+                        .push(ExperimentSuggestion::EnableMultiKvCache { count: batch_size });
                 }
             }
             BottleneckClass::LaunchBound => {
@@ -279,9 +280,7 @@ impl BrickTuner {
             "│           BrickTuner Recommendations v{}                 │",
             self.version
         ));
-        lines.push(
-            "├─────────────────────────────────────────────────────────────┤".to_string(),
-        );
+        lines.push("├─────────────────────────────────────────────────────────────┤".to_string());
         lines.push(format!(
             "│ Predicted throughput: {:>7.1} tok/s ({:>4.0}% confidence)     │",
             rec.throughput.predicted_tps,
@@ -297,19 +296,13 @@ impl BrickTuner {
             rec.bottleneck.class,
             rec.bottleneck.confidence * 100.0
         ));
-        lines.push(
-            "├─────────────────────────────────────────────────────────────┤".to_string(),
-        );
+        lines.push("├─────────────────────────────────────────────────────────────┤".to_string());
         lines.push(format!(
             "│ Explanation: {}│",
             pad_right(&rec.bottleneck.explanation, 47)
         ));
-        lines.push(
-            "├─────────────────────────────────────────────────────────────┤".to_string(),
-        );
-        lines.push(
-            "│ Suggested experiments:                                      │".to_string(),
-        );
+        lines.push("├─────────────────────────────────────────────────────────────┤".to_string());
+        lines.push("│ Suggested experiments:                                      │".to_string());
 
         for (i, exp) in rec.suggested_experiments.iter().take(3).enumerate() {
             lines.push(format!(
@@ -326,12 +319,8 @@ impl BrickTuner {
             );
         }
 
-        lines.push(
-            "├─────────────────────────────────────────────────────────────┤".to_string(),
-        );
-        lines.push(
-            "│ [Press 'a' to apply] [Press 't' to toggle] [Press 'r' to run]│".to_string(),
-        );
+        lines.push("├─────────────────────────────────────────────────────────────┤".to_string());
+        lines.push("│ [Press 'a' to apply] [Press 't' to toggle] [Press 'r' to run]│".to_string());
 
         lines
     }
@@ -448,8 +437,7 @@ impl BrickTuner {
         let json = self.to_json()?;
         let json_bytes = json.as_bytes();
 
-        let mut file =
-            std::fs::File::create(path).map_err(|e| TunerError::Io(e.to_string()))?;
+        let mut file = std::fs::File::create(path).map_err(|e| TunerError::Io(e.to_string()))?;
 
         // Write magic
         file.write_all(&Self::APR_MAGIC)
@@ -479,8 +467,7 @@ impl BrickTuner {
     pub fn load_apr<P: AsRef<std::path::Path>>(path: P) -> Result<Self, TunerError> {
         use std::io::Read;
 
-        let mut file =
-            std::fs::File::open(path).map_err(|e| TunerError::Io(e.to_string()))?;
+        let mut file = std::fs::File::open(path).map_err(|e| TunerError::Io(e.to_string()))?;
 
         // Read and verify magic
         let mut magic = [0u8; 4];
@@ -522,8 +509,8 @@ impl BrickTuner {
         }
 
         // Parse JSON
-        let json = String::from_utf8(json_bytes)
-            .map_err(|e| TunerError::Serialization(e.to_string()))?;
+        let json =
+            String::from_utf8(json_bytes).map_err(|e| TunerError::Serialization(e.to_string()))?;
 
         Self::from_json(&json)
     }

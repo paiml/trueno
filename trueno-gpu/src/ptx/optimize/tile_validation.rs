@@ -208,9 +208,21 @@ mod tests {
             max: 16_777_216,
         };
         let msg = err.to_string();
-        assert!(msg.contains("20000000"), "Should contain actual count: {}", msg);
-        assert!(msg.contains("16777216"), "Should contain max count: {}", msg);
-        assert!(msg.contains("too many elements"), "Should describe the error: {}", msg);
+        assert!(
+            msg.contains("20000000"),
+            "Should contain actual count: {}",
+            msg
+        );
+        assert!(
+            msg.contains("16777216"),
+            "Should contain max count: {}",
+            msg
+        );
+        assert!(
+            msg.contains("too many elements"),
+            "Should describe the error: {}",
+            msg
+        );
     }
 
     #[test]
@@ -220,9 +232,21 @@ mod tests {
             max: 4096,
         };
         let msg = err.to_string();
-        assert!(msg.contains("8192"), "Should contain actual dimension: {}", msg);
-        assert!(msg.contains("4096"), "Should contain max dimension: {}", msg);
-        assert!(msg.contains("exceeds"), "Should describe the error: {}", msg);
+        assert!(
+            msg.contains("8192"),
+            "Should contain actual dimension: {}",
+            msg
+        );
+        assert!(
+            msg.contains("4096"),
+            "Should contain max dimension: {}",
+            msg
+        );
+        assert!(
+            msg.contains("exceeds"),
+            "Should describe the error: {}",
+            msg
+        );
     }
 
     #[test]
@@ -232,7 +256,11 @@ mod tests {
         };
         let msg = err.to_string();
         assert!(msg.contains("m64n64k64"), "Should contain shape: {}", msg);
-        assert!(msg.contains("Invalid WMMA"), "Should describe the error: {}", msg);
+        assert!(
+            msg.contains("Invalid WMMA"),
+            "Should describe the error: {}",
+            msg
+        );
     }
 
     #[test]
@@ -240,7 +268,11 @@ mod tests {
         let err = TileError::NonPowerOfTwo { dim: 123 };
         let msg = err.to_string();
         assert!(msg.contains("123"), "Should contain dimension: {}", msg);
-        assert!(msg.contains("power of two"), "Should describe the error: {}", msg);
+        assert!(
+            msg.contains("power of two"),
+            "Should describe the error: {}",
+            msg
+        );
     }
 
     #[test]
@@ -321,20 +353,14 @@ mod tests {
     fn test_validate_shape_multiple_dims_with_non_power_of_two() {
         // First dimension is valid, second is not
         let result = validate_shape(&[32, 100]);
-        assert!(matches!(
-            result,
-            Err(TileError::NonPowerOfTwo { dim: 100 })
-        ));
+        assert!(matches!(result, Err(TileError::NonPowerOfTwo { dim: 100 })));
     }
 
     #[test]
     fn test_validate_shape_first_dim_non_power_of_two() {
         // First dimension is invalid
         let result = validate_shape(&[13, 16]);
-        assert!(matches!(
-            result,
-            Err(TileError::NonPowerOfTwo { dim: 13 })
-        ));
+        assert!(matches!(result, Err(TileError::NonPowerOfTwo { dim: 13 })));
     }
 
     #[test]
@@ -375,7 +401,10 @@ mod tests {
         // Just over MAX_TILE_DIM (but still power of two)
         assert!(matches!(
             validate_shape(&[8192]),
-            Err(TileError::DimensionTooLarge { actual: 8192, max: 4096 })
+            Err(TileError::DimensionTooLarge {
+                actual: 8192,
+                max: 4096
+            })
         ));
     }
 
@@ -401,12 +430,24 @@ mod tests {
     fn test_wmma_shape_validation_invalid_combinations() {
         // Various invalid combinations
         let cases = [
-            WmmaShape { m: 8, n: 8, k: 8 },     // All 8s
-            WmmaShape { m: 32, n: 32, k: 32 },  // All 32s
-            WmmaShape { m: 16, n: 32, k: 16 },  // Wrong combination
-            WmmaShape { m: 8, n: 16, k: 16 },   // Wrong combination
-            WmmaShape { m: 1, n: 1, k: 1 },     // Minimal
-            WmmaShape { m: 64, n: 64, k: 64 },  // Too large
+            WmmaShape { m: 8, n: 8, k: 8 }, // All 8s
+            WmmaShape {
+                m: 32,
+                n: 32,
+                k: 32,
+            }, // All 32s
+            WmmaShape {
+                m: 16,
+                n: 32,
+                k: 16,
+            }, // Wrong combination
+            WmmaShape { m: 8, n: 16, k: 16 }, // Wrong combination
+            WmmaShape { m: 1, n: 1, k: 1 }, // Minimal
+            WmmaShape {
+                m: 64,
+                n: 64,
+                k: 64,
+            }, // Too large
         ];
 
         for shape in cases {
@@ -422,11 +463,7 @@ mod tests {
 
     #[test]
     fn test_wmma_invalid_error_message_format() {
-        let shape = WmmaShape {
-            m: 24,
-            n: 24,
-            k: 8,
-        };
+        let shape = WmmaShape { m: 24, n: 24, k: 8 };
         let result = validate_wmma_shape(&shape);
 
         match result {

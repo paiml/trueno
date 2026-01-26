@@ -14,12 +14,12 @@
 //! - `phases` - Phase 11-12 tests (F150-F175)
 //! - `model_trace` - Model-level inference tracing (F250-F270)
 
-mod ops;
 mod attention;
 mod budget;
-mod fused;
-mod profiler;
-mod falsification_v2;
 mod cpa;
-mod phases;
+mod falsification_v2;
+mod fused;
 mod model_trace;
+mod ops;
+mod phases;
+mod profiler;

@@ -86,7 +86,8 @@ impl Kernel for ReluBackwardKernel {
                 let is_positive = ctx.setp_gt_f32(x, zero);
 
                 // Select between grad_out and 0 based on condition
-                let grad_in = ctx.selp_f32(grad_out, zero, is_positive);
+                // selp_f32(pred, true_val, false_val): d = pred ? true_val : false_val
+                let grad_in = ctx.selp_f32(is_positive, grad_out, zero);
 
                 // Store result
                 ctx.st_global_f32(grad_in_addr, grad_in);

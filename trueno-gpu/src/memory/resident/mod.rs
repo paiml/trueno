@@ -34,9 +34,8 @@ mod ops_tests;
 // Re-exports from submodules
 #[cfg(feature = "cuda")]
 pub use attention::{
-    batched_multihead_attention, batched_multihead_attention_optimized,
-    incremental_attention_gpu, incremental_attention_gpu_async,
-    incremental_attention_gpu_with_stream, kv_cache_scatter_gpu,
+    batched_multihead_attention, batched_multihead_attention_optimized, incremental_attention_gpu,
+    incremental_attention_gpu_async, incremental_attention_gpu_with_stream, kv_cache_scatter_gpu,
 };
 pub use cache::{
     clear_kernel_cache, kernel_cache_hits, kernel_cache_misses, reset_kernel_cache_stats,
@@ -47,8 +46,8 @@ pub use stats::{
 };
 #[cfg(feature = "cuda")]
 pub use weights::{
-    forward_encoder_block_gpu, GpuConvFrontendWeights, GpuDecoderBlockWeights,
-    GpuDecoderConfig, GpuEncoderBlockWeights, GpuEncoderConfig, GpuKvCache,
+    forward_encoder_block_gpu, GpuConvFrontendWeights, GpuDecoderBlockWeights, GpuDecoderConfig,
+    GpuEncoderBlockWeights, GpuEncoderConfig, GpuKvCache,
 };
 
 // Internal access to submodule functions
@@ -114,7 +113,6 @@ impl<T: Copy> GpuResidentTensor<T> {
 
         // Track transfer
         record_h2d_transfer(bytes as u64);
-        
 
         Ok(Self {
             buffer,
@@ -170,7 +168,6 @@ impl<T: Copy> GpuResidentTensor<T> {
         // Track transfer
         self.d2h_count += 1;
         record_d2h_transfer(bytes as u64);
-        
 
         Ok(result)
     }
@@ -301,8 +298,8 @@ mod tests {
 
         // 1. Create tensor from host data (1 H2D transfer)
         let data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
-        let mut tensor = GpuResidentTensor::from_host(&ctx, &data)
-            .expect("Failed to create GpuResidentTensor");
+        let mut tensor =
+            GpuResidentTensor::from_host(&ctx, &data).expect("Failed to create GpuResidentTensor");
 
         // Verify initial state
         assert!(tensor.is_device_resident());
@@ -376,8 +373,8 @@ mod tests {
         reset_transfer_counters();
 
         let data = vec![42.0f32; 4];
-        let tensor = GpuResidentTensor::from_host(&ctx, &data)
-            .expect("Failed to create GpuResidentTensor");
+        let tensor =
+            GpuResidentTensor::from_host(&ctx, &data).expect("Failed to create GpuResidentTensor");
 
         // Initial state: 1 H2D, 0 D2H
         let before_h2d = total_h2d_transfers();
@@ -408,8 +405,8 @@ mod tests {
         };
 
         let data = vec![1.0f32, 2.0, 3.0, 4.0];
-        let mut tensor = GpuResidentTensor::from_host(&ctx, &data)
-            .expect("Failed to create GpuResidentTensor");
+        let mut tensor =
+            GpuResidentTensor::from_host(&ctx, &data).expect("Failed to create GpuResidentTensor");
 
         // Test immutable buffer access
         let buf = tensor.buffer();

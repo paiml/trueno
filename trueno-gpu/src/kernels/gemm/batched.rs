@@ -889,7 +889,7 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         assert!(ptx.contains(".entry batched_gemm_tiled"));
-        assert!(ptx.contains(".shared"));  // Should use shared memory
+        assert!(ptx.contains(".shared")); // Should use shared memory
         assert!(ptx.contains("bar.sync")); // Should have barrier
     }
 
@@ -910,17 +910,29 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         assert!(ptx.contains(".entry batched_gemm_wmma_fp16"));
-        assert!(ptx.contains("wmma.load"));  // WMMA loads
-        assert!(ptx.contains("wmma.mma"));   // WMMA MMA
+        assert!(ptx.contains("wmma.load")); // WMMA loads
+        assert!(ptx.contains("wmma.mma")); // WMMA MMA
         assert!(ptx.contains("wmma.store")); // WMMA store
     }
 
     #[test]
     fn test_batched_gemm_kernel_names() {
-        assert_eq!(BatchedGemmKernel::naive(1, 32, 32, 32).name(), "batched_gemm_naive");
-        assert_eq!(BatchedGemmKernel::tiled(1, 32, 32, 32, 16).name(), "batched_gemm_tiled");
-        assert_eq!(BatchedGemmKernel::tiled_unrolled(1, 32, 32, 32, 16).name(), "batched_gemm_tiled_unrolled");
-        assert_eq!(BatchedGemmKernel::wmma_fp16(1, 32, 32, 32).name(), "batched_gemm_wmma_fp16");
+        assert_eq!(
+            BatchedGemmKernel::naive(1, 32, 32, 32).name(),
+            "batched_gemm_naive"
+        );
+        assert_eq!(
+            BatchedGemmKernel::tiled(1, 32, 32, 32, 16).name(),
+            "batched_gemm_tiled"
+        );
+        assert_eq!(
+            BatchedGemmKernel::tiled_unrolled(1, 32, 32, 32, 16).name(),
+            "batched_gemm_tiled_unrolled"
+        );
+        assert_eq!(
+            BatchedGemmKernel::wmma_fp16(1, 32, 32, 32).name(),
+            "batched_gemm_wmma_fp16"
+        );
     }
 
     #[test]

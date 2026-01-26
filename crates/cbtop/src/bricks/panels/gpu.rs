@@ -8,11 +8,11 @@
 //! - Temperature monitoring
 //! - Power consumption
 
-use std::any::Any;
-use presentar_core::{Canvas, Point, Rect, TextStyle, Widget};
-use presentar_terminal::{BrailleGraph, GraphMode, Theme};
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use crate::bricks::collectors::gpu::GpuMetrics;
+use presentar_core::{Canvas, Point, Rect, TextStyle, Widget};
+use presentar_terminal::{BrailleGraph, GraphMode, Theme};
+use std::any::Any;
 
 /// GPU panel displaying real-time GPU metrics
 pub struct GpuPanelBrick {
@@ -99,8 +99,16 @@ impl GpuPanelBrick {
                 ("No GPU detected", 0.0, 0.0, 0.0)
             };
 
-        let data_source = if self.current_metrics.is_some() { "CUPTI" } else { "none" };
-        canvas.draw_text(&format!("GPU Info ({})", data_source), Point::new(2.0, 12.0), &label_style);
+        let data_source = if self.current_metrics.is_some() {
+            "CUPTI"
+        } else {
+            "none"
+        };
+        canvas.draw_text(
+            &format!("GPU Info ({})", data_source),
+            Point::new(2.0, 12.0),
+            &label_style,
+        );
 
         canvas.draw_text("Device: ", Point::new(2.0, 13.0), &dim_style);
         canvas.draw_text(device_name, Point::new(10.0, 13.0), &label_style);
@@ -117,7 +125,10 @@ impl GpuPanelBrick {
             ..Default::default()
         };
         canvas.draw_text(
-            &format!("{:.1} / {:.1} GB ({:.0}%)", vram_used_gb, vram_total_gb, vram_pct),
+            &format!(
+                "{:.1} / {:.1} GB ({:.0}%)",
+                vram_used_gb, vram_total_gb, vram_pct
+            ),
             Point::new(8.0, 14.0),
             &vram_style,
         );
@@ -128,7 +139,11 @@ impl GpuPanelBrick {
             color: self.theme.gpu_color(util_pct),
             ..Default::default()
         };
-        canvas.draw_text(&format!("{:.0}%", util_pct), Point::new(8.0, 15.0), &util_style);
+        canvas.draw_text(
+            &format!("{:.0}%", util_pct),
+            Point::new(8.0, 15.0),
+            &util_style,
+        );
 
         // Temperature with temp gradient
         canvas.draw_text("Temp: ", Point::new(16.0, 15.0), &dim_style);

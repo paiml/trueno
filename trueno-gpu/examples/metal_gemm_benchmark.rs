@@ -87,8 +87,8 @@ fn run_wgpu_benchmark() {
 
         for &n in &sizes {
             // Generate test data
-            let a: Vec<f32> = (0..n*n).map(|i| (i % 17) as f32 * 0.1).collect();
-            let b: Vec<f32> = (0..n*n).map(|i| (i % 13) as f32 * 0.1).collect();
+            let a: Vec<f32> = (0..n * n).map(|i| (i % 17) as f32 * 0.1).collect();
+            let b: Vec<f32> = (0..n * n).map(|i| (i % 13) as f32 * 0.1).collect();
 
             let iterations = if n <= 512 { 10 } else { 3 };
 
@@ -109,8 +109,10 @@ fn run_wgpu_benchmark() {
                 all_pass = false;
             }
 
-            println!("│ {:>5}x{:<3} │ {:>10.2} │ {:>10.2} │ {:>10.2}x │ {} │",
-                n, n, cpu_time, gpu_time, ratio, status);
+            println!(
+                "│ {:>5}x{:<3} │ {:>10.2} │ {:>10.2} │ {:>10.2}x │ {} │",
+                n, n, cpu_time, gpu_time, ratio, status
+            );
         }
 
         println!("└─────────┴────────────┴────────────┴────────────┴─────────┘\n");

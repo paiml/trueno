@@ -236,7 +236,7 @@ impl SoftmaxOp {
             }
         }
         let _ = backend; // suppress warning on non-x86
-        // Scalar fallback
+                         // Scalar fallback
         input.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
     }
 
@@ -254,7 +254,7 @@ impl SoftmaxOp {
             }
         }
         let _ = backend; // suppress warning on non-x86
-        // Scalar fallback
+                         // Scalar fallback
         for (i, &x) in input.iter().enumerate() {
             output[i] = x.exp();
         }
@@ -270,7 +270,7 @@ impl SoftmaxOp {
             }
         }
         let _ = backend; // suppress warning on non-x86
-        // Scalar fallback
+                         // Scalar fallback
         input.iter().sum()
     }
 
@@ -285,7 +285,7 @@ impl SoftmaxOp {
             }
         }
         let _ = backend; // suppress warning on non-x86
-        // Scalar fallback
+                         // Scalar fallback
         for (i, &x) in input.iter().enumerate() {
             output[i] = x * scalar;
         }

@@ -1,9 +1,9 @@
 //! Overview panel brick (Layer 3)
 
-use std::any::Any;
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use presentar_core::{Canvas, Point, Rect, TextStyle, Widget};
 use presentar_terminal::{BrailleGraph, GraphMode, Theme};
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 /// Overview panel brick
 pub struct OverviewPanelBrick {
@@ -52,7 +52,11 @@ impl OverviewPanelBrick {
         }
 
         // GPU section
-        canvas.draw_text("GPU Utilization", Point::new(width / 2.0 + 2.0, 2.0), &label_style);
+        canvas.draw_text(
+            "GPU Utilization",
+            Point::new(width / 2.0 + 2.0, 2.0),
+            &label_style,
+        );
         if !self.gpu_data.is_empty() {
             let gpu_usage = self.gpu_data.last().copied().unwrap_or(0.0);
             let mut graph = BrailleGraph::new(self.gpu_data.clone())
@@ -77,12 +81,23 @@ impl OverviewPanelBrick {
         };
 
         canvas.draw_text("CPU Avg: ", Point::new(2.0, 11.0), &dim_style);
-        canvas.draw_text(&format!("{:.1}%", self.cpu_avg), Point::new(12.0, 11.0), &cpu_color_style);
+        canvas.draw_text(
+            &format!("{:.1}%", self.cpu_avg),
+            Point::new(12.0, 11.0),
+            &cpu_color_style,
+        );
         canvas.draw_text("  GPU Avg: ", Point::new(18.0, 11.0), &dim_style);
-        canvas.draw_text(&format!("{:.1}%", self.gpu_avg), Point::new(30.0, 11.0), &gpu_color_style);
+        canvas.draw_text(
+            &format!("{:.1}%", self.gpu_avg),
+            Point::new(30.0, 11.0),
+            &gpu_color_style,
+        );
 
         canvas.draw_text(
-            &format!("Samples: {}  Problem Size: {}", self.frame_count, self.problem_size),
+            &format!(
+                "Samples: {}  Problem Size: {}",
+                self.frame_count, self.problem_size
+            ),
             Point::new(2.0, 12.0),
             &dim_style,
         );

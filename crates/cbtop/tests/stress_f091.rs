@@ -50,14 +50,22 @@ fn f092_ring_buffer_extreme_sizes() {
         tiny.push(i as f64);
     }
     assert_eq!(tiny.len(), 1, "F092 FALSIFIED: Tiny buffer wrong size");
-    assert_eq!(tiny.back(), Some(&99.0), "F092 FALSIFIED: Tiny buffer wrong value");
+    assert_eq!(
+        tiny.back(),
+        Some(&99.0),
+        "F092 FALSIFIED: Tiny buffer wrong value"
+    );
 
     // Very large buffer
     let mut large: RingBuffer<u32> = RingBuffer::new(10_000);
     for i in 0..20_000u32 {
         large.push(i);
     }
-    assert_eq!(large.len(), 10_000, "F092 FALSIFIED: Large buffer wrong size");
+    assert_eq!(
+        large.len(),
+        10_000,
+        "F092 FALSIFIED: Large buffer wrong size"
+    );
 
     // Empty operations
     let empty: RingBuffer<f64> = RingBuffer::new(100);
@@ -82,9 +90,18 @@ fn f093_rapid_collection() {
     }
 
     // Verify histories are bounded
-    assert!(cpu.history().len() <= 120, "F093 FALSIFIED: CPU history unbounded");
-    assert!(gpu.history().len() <= 120, "F093 FALSIFIED: GPU history unbounded");
-    assert!(mem.history().len() <= 120, "F093 FALSIFIED: Memory history unbounded");
+    assert!(
+        cpu.history().len() <= 120,
+        "F093 FALSIFIED: CPU history unbounded"
+    );
+    assert!(
+        gpu.history().len() <= 120,
+        "F093 FALSIFIED: GPU history unbounded"
+    );
+    assert!(
+        mem.history().len() <= 120,
+        "F093 FALSIFIED: Memory history unbounded"
+    );
 
     println!("✅ F093 Collectors handle rapid collection");
 }

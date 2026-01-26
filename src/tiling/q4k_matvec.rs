@@ -96,7 +96,10 @@ impl TiledQ4KMatvec {
     ///
     /// For parallel execution, use [`execute_parallel`] when the `parallel` feature is enabled.
     pub fn execute_scalar(&self, weights: &[u8], input: &[f32], output: &mut [f32]) {
-        assert_eq!(weights.len(), self.total_superblocks() * Q4K_SUPERBLOCK_BYTES);
+        assert_eq!(
+            weights.len(),
+            self.total_superblocks() * Q4K_SUPERBLOCK_BYTES
+        );
         assert_eq!(input.len(), self.k);
         assert_eq!(output.len(), self.m);
 
@@ -112,7 +115,10 @@ impl TiledQ4KMatvec {
 
                 // Dequantize and dot product for this superblock
                 let input_offset = sb * Q4K_SUPERBLOCK_SIZE;
-                sum += self.scalar_superblock_dot(sb_data, &input[input_offset..input_offset + Q4K_SUPERBLOCK_SIZE]);
+                sum += self.scalar_superblock_dot(
+                    sb_data,
+                    &input[input_offset..input_offset + Q4K_SUPERBLOCK_SIZE],
+                );
             }
 
             output[row] = sum;
@@ -132,7 +138,10 @@ impl TiledQ4KMatvec {
     pub fn execute_parallel(&self, weights: &[u8], input: &[f32], output: &mut [f32]) {
         use rayon::prelude::*;
 
-        assert_eq!(weights.len(), self.total_superblocks() * Q4K_SUPERBLOCK_BYTES);
+        assert_eq!(
+            weights.len(),
+            self.total_superblocks() * Q4K_SUPERBLOCK_BYTES
+        );
         assert_eq!(input.len(), self.k);
         assert_eq!(output.len(), self.m);
 
@@ -148,7 +157,10 @@ impl TiledQ4KMatvec {
                 let sb_data = &weights[sb_offset..sb_offset + Q4K_SUPERBLOCK_BYTES];
 
                 let input_offset = sb * Q4K_SUPERBLOCK_SIZE;
-                sum += self.scalar_superblock_dot(sb_data, &input[input_offset..input_offset + Q4K_SUPERBLOCK_SIZE]);
+                sum += self.scalar_superblock_dot(
+                    sb_data,
+                    &input[input_offset..input_offset + Q4K_SUPERBLOCK_SIZE],
+                );
             }
 
             *out = sum;
@@ -234,7 +246,8 @@ impl TiledQ4KMatvec {
             output_bytes,
             superblocks: self.total_superblocks(),
             arithmetic_ops: self.m * self.k * 2, // 2 ops per element (mul + add)
-            arithmetic_intensity: (self.m * self.k * 2) as f32 / (total_weight_bytes + input_bytes) as f32,
+            arithmetic_intensity: (self.m * self.k * 2) as f32
+                / (total_weight_bytes + input_bytes) as f32,
         }
     }
 }
@@ -317,7 +330,11 @@ fn f16_special_to_f32(sign: u16, exponent: u16, mantissa: u16) -> f32 {
 
     // exponent == 31: Inf or NaN
     if mantissa == 0 {
-        if sign == 1 { f32::NEG_INFINITY } else { f32::INFINITY }
+        if sign == 1 {
+            f32::NEG_INFINITY
+        } else {
+            f32::INFINITY
+        }
     } else {
         f32::NAN
     }
@@ -359,7 +376,11 @@ pub fn extract_scale_min_6bit(scales: &[u8], idx: usize) -> (f32, f32) {
     // Extract min: branchless using masking
     let min_even = ((b0 >> 6) | ((b1 & 0x0F) << 2)) as u32;
     // For odd indices, we need byte at base+2, but use 0 if at boundary
-    let b2 = if base + 2 < scales.len() { scales[base + 2] } else { 0 };
+    let b2 = if base + 2 < scales.len() {
+        scales[base + 2]
+    } else {
+        0
+    };
     let min_odd = ((b1 >> 4) | ((b2 & 0x03) << 4)) as u32;
     let min = if is_odd == 0 { min_even } else { min_odd };
 

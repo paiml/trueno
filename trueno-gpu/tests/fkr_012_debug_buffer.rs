@@ -31,7 +31,7 @@ mod fkr_012_tests {
                 // marker = 0xDEAD0000 | tid
                 let marker_base = ctx.mov_u32_imm(0xDEAD0000);
                 let marker = ctx.or_u32(marker_base, tid);
-                
+
                 let _slot = ctx.emit_debug_value(debug_ptr, marker);
 
                 ctx.ret();
@@ -47,7 +47,10 @@ mod fkr_012_tests {
         println!("=== Debug Buffer PTX ===\n{}", ptx);
 
         // Verify PTX contains atom.global.add
-        assert!(ptx.contains("atom.global.add"), "PTX should contain atomic add");
+        assert!(
+            ptx.contains("atom.global.add"),
+            "PTX should contain atomic add"
+        );
 
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");

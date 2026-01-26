@@ -30,7 +30,11 @@ fn test_f102_immediate_mode_matches_v1() {
     // Should be within 10x (timing variance on CI, especially on busy systems)
     // The important thing is that both APIs work, not that they have identical timing
     let ratio = new_ns as f64 / legacy_ns as f64;
-    assert!(ratio > 0.1 && ratio < 10.0, "F102 failed: ratio={:.2}", ratio);
+    assert!(
+        ratio > 0.1 && ratio < 10.0,
+        "F102 failed: ratio={:.2}",
+        ratio
+    );
 }
 
 /// F103: BrickId lookup is O(1) - verified by direct array access
@@ -70,7 +74,11 @@ fn test_f104_category_aggregation_correct() {
     let cat_total: u64 = cats.iter().map(|c| c.total_ns).sum();
 
     // Category sum must equal total
-    assert_eq!(cat_total, profiler.total_ns(), "F104 failed: category sum mismatch");
+    assert_eq!(
+        cat_total,
+        profiler.total_ns(),
+        "F104 failed: category sum mismatch"
+    );
 }
 
 /// F105: Dynamic fallback works for unknown bricks
@@ -111,7 +119,10 @@ fn test_f106_finalize_idempotent() {
     profiler.finalize(end);
     let count_after_second = profiler.brick_stats(BrickId::RmsNorm).count;
 
-    assert_eq!(count_after_first, count_after_second, "F106 failed: finalize not idempotent");
+    assert_eq!(
+        count_after_first, count_after_second,
+        "F106 failed: finalize not idempotent"
+    );
 }
 
 /// F108: Zero-alloc hot path (verified by no String in BrickIdTimer)
@@ -123,7 +134,11 @@ fn test_f108_zero_alloc_hot_path() {
     // BrickIdTimer is small (BrickId + Instant, with padding)
     // Instant is 16 bytes on Linux, so BrickIdTimer is 24 bytes (with alignment)
     let brick_id_timer_size = std::mem::size_of::<BrickIdTimer>();
-    assert!(brick_id_timer_size <= 32, "F108: BrickIdTimer too large: {}", brick_id_timer_size);
+    assert!(
+        brick_id_timer_size <= 32,
+        "F108: BrickIdTimer too large: {}",
+        brick_id_timer_size
+    );
 
     // Verify BrickTimer (legacy) is larger due to String
     // String is 24 bytes (ptr + len + cap), so BrickTimer is at least 40 bytes
@@ -131,7 +146,8 @@ fn test_f108_zero_alloc_hot_path() {
     assert!(
         brick_timer_size > brick_id_timer_size,
         "F108: BrickTimer ({}) should be larger than BrickIdTimer ({})",
-        brick_timer_size, brick_id_timer_size
+        brick_timer_size,
+        brick_id_timer_size
     );
 }
 
@@ -165,8 +181,14 @@ fn test_f110_json_export_includes_categories() {
     let json = profiler.to_json();
 
     // JSON should contain the brick name
-    assert!(json.contains("\"name\":\"RmsNorm\""), "F110 failed: JSON missing brick name");
-    assert!(json.contains("\"count\":1"), "F110 failed: JSON missing count");
+    assert!(
+        json.contains("\"name\":\"RmsNorm\""),
+        "F110 failed: JSON missing brick name"
+    );
+    assert!(
+        json.contains("\"count\":1"),
+        "F110 failed: JSON missing count"
+    );
 }
 
 /// F101: Deferred mode overhead <10% (simplified unit test version)
@@ -203,11 +225,16 @@ fn test_f101_deferred_mode_low_overhead() {
     // Overhead should be reasonable (allow up to 1000x for tiny workloads)
     // Real overhead is measured with actual GPU workloads in benchmarks
     let overhead = deferred_ns as f64 / baseline_ns.max(1) as f64;
-    println!("F101: baseline={}ns, deferred={}ns, overhead={:.1}x",
-        baseline_ns, deferred_ns, overhead);
+    println!(
+        "F101: baseline={}ns, deferred={}ns, overhead={:.1}x",
+        baseline_ns, deferred_ns, overhead
+    );
 
     // Verify profiler recorded correctly
-    assert_eq!(profiler.brick_stats(BrickId::RmsNorm).count, ITERATIONS as u64);
+    assert_eq!(
+        profiler.brick_stats(BrickId::RmsNorm).count,
+        ITERATIONS as u64
+    );
 }
 
 /// F107: Thread-safe (no race conditions)
@@ -222,25 +249,27 @@ fn test_f107_thread_safe() {
         p.enable();
     }
 
-    let handles: Vec<_> = (0..4).map(|i| {
-        let p = Arc::clone(&profiler);
-        std::thread::spawn(move || {
-            for _ in 0..100 {
-                let profiler = p.lock().unwrap();
-                let brick_id = match i % 4 {
-                    0 => BrickId::RmsNorm,
-                    1 => BrickId::QkvProjection,
-                    2 => BrickId::GateProjection,
-                    _ => BrickId::DownProjection,
-                };
-                let timer = profiler.start_brick(brick_id);
-                drop(profiler); // Release lock during "work"
-                std::thread::yield_now();
-                let mut profiler = p.lock().unwrap();
-                profiler.stop_brick(timer, 1);
-            }
+    let handles: Vec<_> = (0..4)
+        .map(|i| {
+            let p = Arc::clone(&profiler);
+            std::thread::spawn(move || {
+                for _ in 0..100 {
+                    let profiler = p.lock().unwrap();
+                    let brick_id = match i % 4 {
+                        0 => BrickId::RmsNorm,
+                        1 => BrickId::QkvProjection,
+                        2 => BrickId::GateProjection,
+                        _ => BrickId::DownProjection,
+                    };
+                    let timer = profiler.start_brick(brick_id);
+                    drop(profiler); // Release lock during "work"
+                    std::thread::yield_now();
+                    let mut profiler = p.lock().unwrap();
+                    profiler.stop_brick(timer, 1);
+                }
+            })
         })
-    }).collect();
+        .collect();
 
     for h in handles {
         h.join().unwrap();
@@ -248,7 +277,11 @@ fn test_f107_thread_safe() {
 
     let profiler = profiler.lock().unwrap();
     let total = profiler.total_tokens();
-    assert_eq!(total, 400, "F107 failed: expected 400 tokens, got {}", total);
+    assert_eq!(
+        total, 400,
+        "F107 failed: expected 400 tokens, got {}",
+        total
+    );
 }
 
 // ========================================================================
@@ -306,7 +339,10 @@ fn test_f112_ptx_hash_stable() {
 .target sm_80
 .entry other() { ret; }";
     let hash3 = PtxRegistry::hash_ptx(ptx3);
-    assert_ne!(hash1, hash3, "F112: Different PTX must produce different hash");
+    assert_ne!(
+        hash1, hash3,
+        "F112: Different PTX must produce different hash"
+    );
 }
 
 /// F113: Kernel launch recorded in graph
@@ -347,16 +383,25 @@ fn test_f113_kernel_launch_recorded() {
 fn test_f114_scope_balanced() {
     let mut graph = ExecutionGraph::new();
 
-    assert!(graph.is_scope_balanced(), "F114: Empty graph should be balanced");
+    assert!(
+        graph.is_scope_balanced(),
+        "F114: Empty graph should be balanced"
+    );
 
     graph.push_scope(ExecutionNode::Layer { index: 0 });
     assert!(!graph.is_scope_balanced(), "F114: After push, not balanced");
 
     graph.push_scope(ExecutionNode::Layer { index: 1 });
-    assert!(!graph.is_scope_balanced(), "F114: After 2 pushes, not balanced");
+    assert!(
+        !graph.is_scope_balanced(),
+        "F114: After 2 pushes, not balanced"
+    );
 
     graph.pop_scope();
-    assert!(!graph.is_scope_balanced(), "F114: After 1 pop, not balanced");
+    assert!(
+        !graph.is_scope_balanced(),
+        "F114: After 1 pop, not balanced"
+    );
 
     graph.pop_scope();
     assert!(graph.is_scope_balanced(), "F114: After 2 pops, balanced");
@@ -416,13 +461,30 @@ fn test_f116_dot_export_valid() {
     let dot = graph.to_dot();
 
     // Basic DOT format validation
-    assert!(dot.starts_with("digraph"), "F116: DOT must start with digraph");
+    assert!(
+        dot.starts_with("digraph"),
+        "F116: DOT must start with digraph"
+    );
     assert!(dot.contains("->"), "F116: DOT must contain edges");
-    assert!(dot.ends_with("}
-"), "F116: DOT must end with closing brace");
-    assert!(dot.contains("Layer 0"), "F116: DOT must contain layer label");
-    assert!(dot.contains("QkvProjection"), "F116: DOT must contain brick label");
-    assert!(dot.contains("test_kernel"), "F116: DOT must contain kernel label");
+    assert!(
+        dot.ends_with(
+            "}
+"
+        ),
+        "F116: DOT must end with closing brace"
+    );
+    assert!(
+        dot.contains("Layer 0"),
+        "F116: DOT must contain layer label"
+    );
+    assert!(
+        dot.contains("QkvProjection"),
+        "F116: DOT must contain brick label"
+    );
+    assert!(
+        dot.contains("test_kernel"),
+        "F116: DOT must contain kernel label"
+    );
 
     // Check node count in DOT
     let node_count = dot.matches("[label=").count();
@@ -476,15 +538,27 @@ fn test_f118_ptx_registry_lookup() {
 .entry kernel2() {}";
 
     registry.register("kernel1", ptx1, None);
-    registry.register("kernel2", ptx2, Some(std::path::Path::new("/src/kernels.ptx")));
+    registry.register(
+        "kernel2",
+        ptx2,
+        Some(std::path::Path::new("/src/kernels.ptx")),
+    );
 
     let hash1 = PtxRegistry::hash_ptx(ptx1);
     let hash2 = PtxRegistry::hash_ptx(ptx2);
 
     assert_eq!(registry.lookup(hash1), Some(ptx1), "F118: PTX1 lookup");
     assert_eq!(registry.lookup(hash2), Some(ptx2), "F118: PTX2 lookup");
-    assert_eq!(registry.lookup_name(hash1), Some("kernel1"), "F118: Name1 lookup");
-    assert_eq!(registry.lookup_name(hash2), Some("kernel2"), "F118: Name2 lookup");
+    assert_eq!(
+        registry.lookup_name(hash1),
+        Some("kernel1"),
+        "F118: Name1 lookup"
+    );
+    assert_eq!(
+        registry.lookup_name(hash2),
+        Some("kernel2"),
+        "F118: Name2 lookup"
+    );
     assert!(registry.lookup_path(hash1).is_none(), "F118: Path1 is None");
     assert_eq!(
         registry.lookup_path(hash2),
@@ -572,7 +646,10 @@ fn test_f120_graph_clear() {
     assert!(graph.is_scope_balanced(), "F120: Post-clear balanced");
     assert_eq!(graph.num_nodes(), 0, "F120: Post-clear no nodes");
     assert_eq!(graph.num_edges(), 0, "F120: Post-clear no edges");
-    assert!(graph.node_by_name("Layer0").is_none(), "F120: Post-clear no name lookup");
+    assert!(
+        graph.node_by_name("Layer0").is_none(),
+        "F120: Post-clear no name lookup"
+    );
 
     let _ = n1; // Silence unused warning
 }
@@ -602,15 +679,28 @@ fn test_f121_to_tree_node_hierarchy() {
 
     let brick = &tree.children[0];
     assert_eq!(brick.label, "RmsNorm", "F121: Brick label");
-    assert!(brick.info.as_ref().is_some_and(|i| i.contains("50.0µs")), "F121: Brick has timing");
+    assert!(
+        brick.info.as_ref().is_some_and(|i| i.contains("50.0µs")),
+        "F121: Brick has timing"
+    );
     assert_eq!(brick.children.len(), 1, "F121: Brick has 1 child (kernel)");
 
     let kernel = &brick.children[0];
     assert_eq!(kernel.label, "rmsnorm_kernel", "F121: Kernel label");
-    assert!(kernel.info.as_ref().is_some_and(|i| i.contains("smem=1024B")), "F121: Kernel has shared mem");
+    assert!(
+        kernel
+            .info
+            .as_ref()
+            .is_some_and(|i| i.contains("smem=1024B")),
+        "F121: Kernel has shared mem"
+    );
 
     // Verify depth
-    assert_eq!(tree.depth(), 3, "F121: Tree depth is 3 (layer->brick->kernel)");
+    assert_eq!(
+        tree.depth(),
+        3,
+        "F121: Tree depth is 3 (layer->brick->kernel)"
+    );
     assert_eq!(tree.count_nodes(), 3, "F121: Tree has 3 nodes");
 
     let _ = layer_id;
@@ -672,7 +762,10 @@ fn test_f124_to_ascii_tree_hierarchy() {
     assert!(tree.contains("smem=1024B"), "F124: Contains shared mem");
 
     // Verify tree structure characters
-    assert!(tree.contains("├──") || tree.contains("└──"), "F124: Has tree connectors");
+    assert!(
+        tree.contains("├──") || tree.contains("└──"),
+        "F124: Has tree connectors"
+    );
 }
 
 /// F125: to_ascii_tree with multiple roots

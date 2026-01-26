@@ -29,10 +29,10 @@ use super::{MR, NR};
 #[inline(never)]
 pub fn microkernel_scalar(
     k: usize,
-    a: &[f32],      // MR x K, column-major (MR stride)
-    b: &[f32],      // K x NR, row-major (NR stride)
-    c: &mut [f32],  // MR x NR, column-major
-    ldc: usize,     // Leading dimension of C
+    a: &[f32],     // MR x K, column-major (MR stride)
+    b: &[f32],     // K x NR, row-major (NR stride)
+    c: &mut [f32], // MR x NR, column-major
+    ldc: usize,    // Leading dimension of C
 ) {
     // Accumulate MR x NR output tile
     for p in 0..k {
@@ -58,10 +58,10 @@ pub fn microkernel_scalar(
 #[target_feature(enable = "avx2", enable = "fma")]
 pub unsafe fn microkernel_8x6_avx2(
     k: usize,
-    a: *const f32,  // MR x K packed, column-major
-    b: *const f32,  // K x NR packed, row-major
-    c: *mut f32,    // MR x NR output, column-major
-    ldc: usize,     // Leading dimension of C
+    a: *const f32, // MR x K packed, column-major
+    b: *const f32, // K x NR packed, row-major
+    c: *mut f32,   // MR x NR output, column-major
+    ldc: usize,    // Leading dimension of C
 ) {
     use std::arch::x86_64::*;
 
@@ -128,10 +128,10 @@ pub unsafe fn microkernel_8x6_avx2(
 #[target_feature(enable = "avx2", enable = "fma")]
 pub unsafe fn microkernel_8x6_avx2_asm(
     k: usize,
-    a: *const f32,  // MR x K packed, column-major
-    b: *const f32,  // K x NR packed, row-major
-    c: *mut f32,    // MR x NR output, column-major
-    ldc: usize,     // Leading dimension of C
+    a: *const f32, // MR x K packed, column-major
+    b: *const f32, // K x NR packed, row-major
+    c: *mut f32,   // MR x NR output, column-major
+    ldc: usize,    // Leading dimension of C
 ) {
     use std::arch::x86_64::*;
 

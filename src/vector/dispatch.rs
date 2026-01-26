@@ -21,9 +21,7 @@ macro_rules! dispatch_binary_op {
                     $crate::backends::sse2::Sse2Backend::$op($a, $b, $result)
                 }
                 #[cfg(target_arch = "x86_64")]
-                $crate::Backend::AVX2 => {
-                    $crate::backends::avx2::Avx2Backend::$op($a, $b, $result)
-                }
+                $crate::Backend::AVX2 => $crate::backends::avx2::Avx2Backend::$op($a, $b, $result),
                 #[cfg(target_arch = "x86_64")]
                 $crate::Backend::AVX512 => {
                     $crate::backends::avx512::Avx512Backend::$op($a, $b, $result)
@@ -36,9 +34,7 @@ macro_rules! dispatch_binary_op {
                     $crate::backends::scalar::ScalarBackend::$op($a, $b, $result)
                 }
                 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                $crate::Backend::NEON => {
-                    $crate::backends::neon::NeonBackend::$op($a, $b, $result)
-                }
+                $crate::Backend::NEON => $crate::backends::neon::NeonBackend::$op($a, $b, $result),
                 #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
                 $crate::Backend::NEON => {
                     $crate::backends::scalar::ScalarBackend::$op($a, $b, $result)
@@ -82,9 +78,7 @@ macro_rules! dispatch_reduction {
                 $crate::Backend::SSE2
                 | $crate::Backend::AVX
                 | $crate::Backend::AVX2
-                | $crate::Backend::AVX512 => {
-                    $crate::backends::scalar::ScalarBackend::$op($data)
-                }
+                | $crate::Backend::AVX512 => $crate::backends::scalar::ScalarBackend::$op($data),
                 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
                 $crate::Backend::NEON => $crate::backends::neon::NeonBackend::$op($data),
                 #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
@@ -119,9 +113,7 @@ macro_rules! dispatch_unary_op {
                     $crate::backends::sse2::Sse2Backend::$op($a, $result)
                 }
                 #[cfg(target_arch = "x86_64")]
-                $crate::Backend::AVX2 => {
-                    $crate::backends::avx2::Avx2Backend::$op($a, $result)
-                }
+                $crate::Backend::AVX2 => $crate::backends::avx2::Avx2Backend::$op($a, $result),
                 #[cfg(target_arch = "x86_64")]
                 $crate::Backend::AVX512 => {
                     $crate::backends::avx512::Avx512Backend::$op($a, $result)
@@ -134,17 +126,11 @@ macro_rules! dispatch_unary_op {
                     $crate::backends::scalar::ScalarBackend::$op($a, $result)
                 }
                 #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                $crate::Backend::NEON => {
-                    $crate::backends::neon::NeonBackend::$op($a, $result)
-                }
+                $crate::Backend::NEON => $crate::backends::neon::NeonBackend::$op($a, $result),
                 #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                $crate::Backend::NEON => {
-                    $crate::backends::scalar::ScalarBackend::$op($a, $result)
-                }
+                $crate::Backend::NEON => $crate::backends::scalar::ScalarBackend::$op($a, $result),
                 #[cfg(target_arch = "wasm32")]
-                $crate::Backend::WasmSIMD => {
-                    $crate::backends::wasm::WasmBackend::$op($a, $result)
-                }
+                $crate::Backend::WasmSIMD => $crate::backends::wasm::WasmBackend::$op($a, $result),
                 #[cfg(not(target_arch = "wasm32"))]
                 $crate::Backend::WasmSIMD => {
                     $crate::backends::scalar::ScalarBackend::$op($a, $result)

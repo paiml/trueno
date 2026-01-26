@@ -44,7 +44,11 @@ impl std::fmt::Display for SnapshotError {
             Self::NotFound { index } => write!(f, "Snapshot {} not found", index),
             Self::Corrupt { reason } => write!(f, "Corrupt snapshot: {}", reason),
             Self::ChecksumMismatch { expected, actual } => {
-                write!(f, "Checksum mismatch: expected {}, got {}", expected, actual)
+                write!(
+                    f,
+                    "Checksum mismatch: expected {}, got {}",
+                    expected, actual
+                )
             }
             Self::IndexOutOfBounds { index, max } => {
                 write!(f, "Index {} out of bounds (max {})", index, max)
@@ -73,9 +77,9 @@ impl RetentionTier {
     /// Get maximum age for this tier
     pub fn max_age(&self) -> Duration {
         match self {
-            Self::Raw => Duration::from_secs(24 * 60 * 60),      // 1 day
-            Self::Compressed => Duration::from_secs(30 * 24 * 60 * 60),  // 30 days
-            Self::Archive => Duration::from_secs(365 * 24 * 60 * 60),    // 1 year
+            Self::Raw => Duration::from_secs(24 * 60 * 60), // 1 day
+            Self::Compressed => Duration::from_secs(30 * 24 * 60 * 60), // 30 days
+            Self::Archive => Duration::from_secs(365 * 24 * 60 * 60), // 1 year
         }
     }
 }
@@ -243,9 +247,7 @@ impl ProfileSnapshot {
     /// Get total size in bytes
     pub fn size_bytes(&self) -> usize {
         let metrics_size: usize = self.metrics.values().map(|m| m.size_bytes()).sum();
-        let metadata_size: usize = self.metadata.iter()
-            .map(|(k, v)| k.len() + v.len())
-            .sum();
+        let metadata_size: usize = self.metadata.iter().map(|(k, v)| k.len() + v.len()).sum();
 
         24 + self.workload_fingerprint.len() + metrics_size + metadata_size
     }
@@ -272,7 +274,9 @@ impl ProfileSnapshot {
                     // Include both halves of f64 bits
                     let bits = val.to_bits();
                     hash = hash.wrapping_mul(31).wrapping_add((bits >> 32) as u32);
-                    hash = hash.wrapping_mul(31).wrapping_add((bits & 0xFFFFFFFF) as u32);
+                    hash = hash
+                        .wrapping_mul(31)
+                        .wrapping_add((bits & 0xFFFFFFFF) as u32);
                 }
             }
         }
@@ -495,7 +499,7 @@ pub struct SnapshotConfig {
 impl Default for SnapshotConfig {
     fn default() -> Self {
         Self {
-            max_query_memory_bytes: 50 * 1024 * 1024,  // 50MB
+            max_query_memory_bytes: 50 * 1024 * 1024, // 50MB
             keyframe_interval: 10,
             verify_checksums: true,
             raw_max_age: Duration::from_secs(24 * 60 * 60),
@@ -546,7 +550,9 @@ impl IncrementalSnapshotStore {
         self.total_raw_size += raw_size;
 
         // Decide if this should be a keyframe
-        let is_keyframe = self.next_index.is_multiple_of(self.config.keyframe_interval)
+        let is_keyframe = self
+            .next_index
+            .is_multiple_of(self.config.keyframe_interval)
             || self.keyframes.is_empty();
 
         let (compressed_size, is_delta, base_index) = if is_keyframe {
@@ -556,8 +562,8 @@ impl IncrementalSnapshotStore {
             (size, false, None)
         } else {
             // Find nearest keyframe
-            let keyframe_idx = (self.next_index / self.config.keyframe_interval)
-                * self.config.keyframe_interval;
+            let keyframe_idx =
+                (self.next_index / self.config.keyframe_interval) * self.config.keyframe_interval;
 
             if let Some(base) = self.keyframes.get(&keyframe_idx) {
                 // Create delta from keyframe
@@ -581,7 +587,7 @@ impl IncrementalSnapshotStore {
             timestamp_ns: snapshot.timestamp_ns,
             fingerprint: snapshot.workload_fingerprint.clone(),
             tier: RetentionTier::Raw,
-            offset: 0,  // In-memory, no offset
+            offset: 0, // In-memory, no offset
             size_bytes: compressed_size,
             is_delta,
             base_index,
@@ -689,12 +695,9 @@ impl IncrementalSnapshotStore {
 
     /// Clean up old snapshots based on retention policy
     pub fn cleanup(&mut self, _now: Instant, reference_time: u64) {
-        let _raw_cutoff = reference_time.saturating_sub(
-            self.config.raw_max_age.as_nanos() as u64
-        );
-        let compressed_cutoff = reference_time.saturating_sub(
-            self.config.compressed_max_age.as_nanos() as u64
-        );
+        let _raw_cutoff = reference_time.saturating_sub(self.config.raw_max_age.as_nanos() as u64);
+        let compressed_cutoff =
+            reference_time.saturating_sub(self.config.compressed_max_age.as_nanos() as u64);
 
         // Update tiers and remove expired
         self.index.retain(|idx| {
@@ -729,7 +732,11 @@ pub const DEFAULT_MAX_QUERY_MEMORY: usize = 50 * 1024 * 1024;
 mod tests {
     use super::*;
 
-    fn create_test_snapshot(index: usize, num_metrics: usize, values_per_metric: usize) -> ProfileSnapshot {
+    fn create_test_snapshot(
+        index: usize,
+        num_metrics: usize,
+        values_per_metric: usize,
+    ) -> ProfileSnapshot {
         let mut snapshot = ProfileSnapshot::new(index);
         snapshot.set_fingerprint(format!("workload_{}", index % 3));
 
@@ -770,7 +777,11 @@ mod tests {
         let mut current = MetricData::new("test");
         for i in 0..100 {
             // Only change a few values
-            let val = if i % 10 == 0 { i as f64 * 2.0 } else { i as f64 };
+            let val = if i % 10 == 0 {
+                i as f64 * 2.0
+            } else {
+                i as f64
+            };
             current.add(val, i as u64 * 1000);
         }
 
@@ -872,9 +883,7 @@ mod tests {
         }
 
         // Query by time range
-        let query = SnapshotQuery::new()
-            .time_range(1200, 1700)
-            .limit(5);
+        let query = SnapshotQuery::new().time_range(1200, 1700).limit(5);
 
         let results = store.query(&query).unwrap();
         assert!(results.len() <= 5);
@@ -892,8 +901,7 @@ mod tests {
             store.append(create_test_snapshot(i, 5, 100)).unwrap();
         }
 
-        let query = SnapshotQuery::new()
-            .fingerprint("workload_0");
+        let query = SnapshotQuery::new().fingerprint("workload_0");
 
         let results = store.query(&query).unwrap();
 
@@ -935,7 +943,11 @@ mod tests {
 
         // With delta encoding on similar data, ratio should be <= 1
         // (may be close to 1 for this synthetic data, but shouldn't exceed it)
-        assert!(ratio <= 1.5, "Compression ratio {} should be reasonable", ratio);
+        assert!(
+            ratio <= 1.5,
+            "Compression ratio {} should be reasonable",
+            ratio
+        );
     }
 
     #[test]
@@ -946,7 +958,10 @@ mod tests {
         store.append(create_test_snapshot(0, 5, 100)).unwrap();
 
         let result = store.get(999);
-        assert!(matches!(result, Err(SnapshotError::IndexOutOfBounds { .. })));
+        assert!(matches!(
+            result,
+            Err(SnapshotError::IndexOutOfBounds { .. })
+        ));
     }
 
     #[test]
@@ -1007,7 +1022,9 @@ mod tests {
         // The key assertion is that reconstruction works correctly
         println!(
             "Compression: {}/{} bytes ({:.1}% ratio)",
-            compressed_size, raw_size, (compressed_size as f64 / raw_size as f64) * 100.0
+            compressed_size,
+            raw_size,
+            (compressed_size as f64 / raw_size as f64) * 100.0
         );
 
         // Verify we can reconstruct all snapshots correctly

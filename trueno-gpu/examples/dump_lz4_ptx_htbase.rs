@@ -22,7 +22,11 @@ fn main() {
 
     println!("\n=== Looking for smem_base (%rd11) setup ===");
     for (i, line) in ptx.lines().enumerate() {
-        if line.contains("%rd11") && (line.contains("cvta") || line.contains("add") && !line.contains("add.u64 %rd") || line.trim().starts_with("mov")) {
+        if line.contains("%rd11")
+            && (line.contains("cvta")
+                || line.contains("add") && !line.contains("add.u64 %rd")
+                || line.trim().starts_with("mov"))
+        {
             println!("{:4}: {}", i + 1, line);
         }
     }

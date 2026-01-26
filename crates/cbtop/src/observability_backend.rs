@@ -31,7 +31,10 @@ pub enum ObservabilityError {
     /// Invalid configuration
     InvalidConfig { reason: String },
     /// Rate limited by backend
-    RateLimited { backend: String, retry_after_sec: u64 },
+    RateLimited {
+        backend: String,
+        retry_after_sec: u64,
+    },
     /// Export failed
     ExportFailed { backend: String, reason: String },
     /// Backend not configured
@@ -52,8 +55,15 @@ impl std::fmt::Display for ObservabilityError {
             Self::InvalidConfig { reason } => {
                 write!(f, "Invalid configuration: {}", reason)
             }
-            Self::RateLimited { backend, retry_after_sec } => {
-                write!(f, "{} rate limited, retry after {}s", backend, retry_after_sec)
+            Self::RateLimited {
+                backend,
+                retry_after_sec,
+            } => {
+                write!(
+                    f,
+                    "{} rate limited, retry after {}s",
+                    backend, retry_after_sec
+                )
             }
             Self::ExportFailed { backend, reason } => {
                 write!(f, "Export to {} failed: {}", backend, reason)
@@ -444,13 +454,16 @@ impl ObservabilityExporter {
 
         // Initialize health for each enabled backend
         for backend in config.enabled_backends() {
-            health.insert(backend, BackendHealth {
+            health.insert(
                 backend,
-                healthy: true,
-                last_success: None,
-                consecutive_failures: 0,
-                avg_latency_ms: 0.0,
-            });
+                BackendHealth {
+                    backend,
+                    healthy: true,
+                    last_success: None,
+                    consecutive_failures: 0,
+                    avg_latency_ms: 0.0,
+                },
+            );
         }
 
         Self {
@@ -500,7 +513,11 @@ impl ObservabilityExporter {
     }
 
     /// Export metrics to a specific backend
-    fn export_to_backend(&mut self, backend: ObservabilityBackend, metrics: &[ExportMetric]) -> ExportResult {
+    fn export_to_backend(
+        &mut self,
+        backend: ObservabilityBackend,
+        metrics: &[ExportMetric],
+    ) -> ExportResult {
         let start = Instant::now();
 
         // Simulate export (in production, this would make actual HTTP/UDP calls)
@@ -536,7 +553,9 @@ impl ObservabilityExporter {
         // Format metrics in DogStatsD format
         let mut formatted = Vec::new();
         for metric in metrics {
-            let tags: Vec<String> = metric.tags.iter()
+            let tags: Vec<String> = metric
+                .tags
+                .iter()
                 .map(|(k, v)| format!("{}:{}", k, v))
                 .chain(config.default_tags.iter().cloned())
                 .collect();
@@ -647,7 +666,9 @@ impl ObservabilityExporter {
         // Format as JSON array
         let mut json_metrics = Vec::new();
         for metric in metrics {
-            let tags_json: Vec<String> = metric.tags.iter()
+            let tags_json: Vec<String> = metric
+                .tags
+                .iter()
                 .map(|(k, v)| format!(r#""{}":"{}""#, k, v))
                 .collect();
 
@@ -677,8 +698,8 @@ impl ObservabilityExporter {
 
                 // Update average latency
                 let n = self.export_counts.get(&backend).copied().unwrap_or(1) as f64;
-                health.avg_latency_ms = health.avg_latency_ms * ((n - 1.0) / n)
-                    + (result.duration_ms as f64) / n;
+                health.avg_latency_ms =
+                    health.avg_latency_ms * ((n - 1.0) / n) + (result.duration_ms as f64) / n;
             } else {
                 health.consecutive_failures += 1;
                 if health.consecutive_failures >= 3 {
@@ -727,7 +748,9 @@ impl ObservabilityExporter {
 
 /// Format metric for DogStatsD protocol
 pub fn format_dogstatsd(metric: &ExportMetric, prefix: &str, default_tags: &[String]) -> String {
-    let tags: Vec<String> = metric.tags.iter()
+    let tags: Vec<String> = metric
+        .tags
+        .iter()
         .map(|(k, v)| format!("{}:{}", k, v))
         .chain(default_tags.iter().cloned())
         .collect();
@@ -744,7 +767,10 @@ pub fn format_dogstatsd(metric: &ExportMetric, prefix: &str, default_tags: &[Str
         MetricExportType::Histogram => "h",
     };
 
-    format!("{}.{}:{}|{}{}", prefix, metric.name, metric.value, metric_type, tag_str)
+    format!(
+        "{}.{}:{}|{}{}",
+        prefix, metric.name, metric.value, metric_type, tag_str
+    )
 }
 
 /// Default batch size
@@ -789,8 +815,8 @@ mod tests {
 
     #[test]
     fn test_newrelic_config() {
-        let config = NewRelicConfig::new("api-key", "12345")
-            .with_endpoint("https://eu-api.newrelic.com");
+        let config =
+            NewRelicConfig::new("api-key", "12345").with_endpoint("https://eu-api.newrelic.com");
 
         assert_eq!(config.api_key, "api-key");
         assert_eq!(config.account_id, "12345");
@@ -808,8 +834,7 @@ mod tests {
 
     #[test]
     fn test_webhook_config() {
-        let config = WebhookConfig::new("https://example.com/metrics")
-            .with_auth("token123");
+        let config = WebhookConfig::new("https://example.com/metrics").with_auth("token123");
 
         assert_eq!(config.url, "https://example.com/metrics");
         assert_eq!(config.auth_token, Some("token123".to_string()));
@@ -830,8 +855,7 @@ mod tests {
 
     #[test]
     fn test_exporter_record_and_flush() {
-        let config = ObservabilityConfig::new()
-            .with_datadog(DatadogConfig::default());
+        let config = ObservabilityConfig::new().with_datadog(DatadogConfig::default());
 
         let mut exporter = ObservabilityExporter::new(config);
 
@@ -842,7 +866,7 @@ mod tests {
 
         let results = exporter.flush();
 
-        assert_eq!(results.len(), 1);  // One backend (Datadog)
+        assert_eq!(results.len(), 1); // One backend (Datadog)
         assert!(results[0].success);
         assert_eq!(results[0].metrics_exported, 2);
         assert_eq!(exporter.buffer_size(), 0);
@@ -850,8 +874,7 @@ mod tests {
 
     #[test]
     fn test_exporter_auto_flush() {
-        let mut config = ObservabilityConfig::new()
-            .with_datadog(DatadogConfig::default());
+        let mut config = ObservabilityConfig::new().with_datadog(DatadogConfig::default());
         config.batch_size = 3;
 
         let mut exporter = ObservabilityExporter::new(config);
@@ -862,13 +885,12 @@ mod tests {
 
         // Third record triggers auto-flush
         exporter.record(ExportMetric::gauge("m3", 3.0));
-        assert_eq!(exporter.buffer_size(), 0);  // Buffer flushed
+        assert_eq!(exporter.buffer_size(), 0); // Buffer flushed
     }
 
     #[test]
     fn test_exporter_health_tracking() {
-        let config = ObservabilityConfig::new()
-            .with_datadog(DatadogConfig::default());
+        let config = ObservabilityConfig::new().with_datadog(DatadogConfig::default());
 
         let mut exporter = ObservabilityExporter::new(config);
 
@@ -883,8 +905,7 @@ mod tests {
 
     #[test]
     fn test_export_count() {
-        let config = ObservabilityConfig::new()
-            .with_datadog(DatadogConfig::default());
+        let config = ObservabilityConfig::new().with_datadog(DatadogConfig::default());
 
         let mut exporter = ObservabilityExporter::new(config);
 
@@ -897,8 +918,7 @@ mod tests {
 
     #[test]
     fn test_dogstatsd_format() {
-        let metric = ExportMetric::gauge("cpu", 75.0)
-            .with_tag("host", "server1");
+        let metric = ExportMetric::gauge("cpu", 75.0).with_tag("host", "server1");
 
         let formatted = format_dogstatsd(&metric, "cbtop", &["env:prod".to_string()]);
 
@@ -935,8 +955,7 @@ mod tests {
 
     #[test]
     fn test_record_batch() {
-        let config = ObservabilityConfig::new()
-            .with_datadog(DatadogConfig::default());
+        let config = ObservabilityConfig::new().with_datadog(DatadogConfig::default());
 
         let mut exporter = ObservabilityExporter::new(config);
 
@@ -953,8 +972,7 @@ mod tests {
 
     #[test]
     fn test_should_flush_empty() {
-        let config = ObservabilityConfig::new()
-            .with_datadog(DatadogConfig::default());
+        let config = ObservabilityConfig::new().with_datadog(DatadogConfig::default());
 
         let exporter = ObservabilityExporter::new(config);
 
@@ -986,7 +1004,8 @@ mod tests {
         assert_eq!(results.len(), 5);
 
         // Verify each backend received metrics
-        let successful_backends: Vec<_> = results.iter()
+        let successful_backends: Vec<_> = results
+            .iter()
             .filter(|r| r.success)
             .map(|r| r.backend)
             .collect();

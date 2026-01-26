@@ -1,7 +1,7 @@
 //! Bottleneck analyzer using Roofline model
 
-use std::any::Any;
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 /// Roofline model analysis
 pub struct BottleneckAnalyzerBrick {

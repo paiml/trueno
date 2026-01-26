@@ -242,10 +242,10 @@ impl ChaosPreset {
     #[must_use]
     pub fn memory_limit_factor(&self) -> f64 {
         match self {
-            Self::Gentle => 0.9,      // 90% of available
-            Self::Moderate => 0.75,   // 75%
-            Self::Aggressive => 0.5,  // 50%
-            Self::Extreme => 0.25,    // 25%
+            Self::Gentle => 0.9,     // 90% of available
+            Self::Moderate => 0.75,  // 75%
+            Self::Aggressive => 0.5, // 50%
+            Self::Extreme => 0.25,   // 25%
         }
     }
 
@@ -253,10 +253,10 @@ impl ChaosPreset {
     #[must_use]
     pub fn cpu_throttle_factor(&self) -> f64 {
         match self {
-            Self::Gentle => 1.0,      // No throttle
-            Self::Moderate => 0.9,    // 90%
-            Self::Aggressive => 0.7,  // 70%
-            Self::Extreme => 0.5,     // 50%
+            Self::Gentle => 1.0,     // No throttle
+            Self::Moderate => 0.9,   // 90%
+            Self::Aggressive => 0.7, // 70%
+            Self::Extreme => 0.5,    // 50%
         }
     }
 
@@ -729,7 +729,10 @@ mod tests {
     fn h054_chaos_preset_parse() {
         assert_eq!(ChaosPreset::parse("gentle"), Some(ChaosPreset::Gentle));
         assert_eq!(ChaosPreset::parse("MODERATE"), Some(ChaosPreset::Moderate));
-        assert_eq!(ChaosPreset::parse("aggressive"), Some(ChaosPreset::Aggressive));
+        assert_eq!(
+            ChaosPreset::parse("aggressive"),
+            Some(ChaosPreset::Aggressive)
+        );
         assert_eq!(ChaosPreset::parse("extreme"), Some(ChaosPreset::Extreme));
         assert_eq!(ChaosPreset::parse("invalid"), None);
     }
@@ -892,7 +895,10 @@ mod tests {
     #[test]
     fn h058_verdict_display() {
         assert_eq!(format!("{}", StressTestVerdict::Pass), "PASS");
-        assert_eq!(format!("{}", StressTestVerdict::PassWithNotes), "PASS_WITH_NOTES");
+        assert_eq!(
+            format!("{}", StressTestVerdict::PassWithNotes),
+            "PASS_WITH_NOTES"
+        );
         assert_eq!(format!("{}", StressTestVerdict::Fail), "FAIL");
     }
 }

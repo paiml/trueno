@@ -496,10 +496,10 @@ pub struct ColorScheme {
 impl Default for ColorScheme {
     fn default() -> Self {
         Self {
-            ok: RgbColor::new(0x21, 0x91, 0x8c),      // Teal
-            warning: RgbColor::new(0xfd, 0xe7, 0x25), // Yellow
-            critical: RgbColor::new(0xf0, 0x3b, 0x20), // Red-orange
-            neutral: RgbColor::new(0x3b, 0x52, 0x8b), // Blue
+            ok: RgbColor::new(0x21, 0x91, 0x8c),         // Teal
+            warning: RgbColor::new(0xfd, 0xe7, 0x25),    // Yellow
+            critical: RgbColor::new(0xf0, 0x3b, 0x20),   // Red-orange
+            neutral: RgbColor::new(0x3b, 0x52, 0x8b),    // Blue
             background: RgbColor::new(0x44, 0x01, 0x54), // Dark purple
         }
     }
@@ -539,9 +539,9 @@ impl RgbColor {
     #[must_use]
     pub fn for_pressure_level(level: PressureLevel) -> Self {
         match level {
-            PressureLevel::Ok => Self::new(0x21, 0x91, 0x8c),       // Teal
+            PressureLevel::Ok => Self::new(0x21, 0x91, 0x8c), // Teal
             PressureLevel::Elevated => Self::new(0xfd, 0xe7, 0x25), // Yellow
-            PressureLevel::Warning => Self::new(0xfd, 0xa6, 0x00),  // Orange
+            PressureLevel::Warning => Self::new(0xfd, 0xa6, 0x00), // Orange
             PressureLevel::Critical => Self::new(0xf0, 0x3b, 0x20), // Red
         }
     }
@@ -1023,8 +1023,7 @@ mod tests {
 
     #[test]
     fn h060_gauge_with_thresholds() {
-        let gauge = GaugeWidget::new("Test")
-            .with_thresholds(60.0, 80.0);
+        let gauge = GaugeWidget::new("Test").with_thresholds(60.0, 80.0);
         assert!((gauge.warning_threshold - 60.0).abs() < 0.01);
         assert!((gauge.critical_threshold - 80.0).abs() < 0.01);
     }

@@ -765,14 +765,8 @@ mod tests {
 
     #[test]
     fn test_measurement_creation() {
-        let m = BackendMeasurement::new(
-            Backend::Avx2,
-            WorkloadType::Gemm,
-            1024,
-            100.0,
-            10000.0,
-        )
-        .with_efficiency(85.0);
+        let m = BackendMeasurement::new(Backend::Avx2, WorkloadType::Gemm, 1024, 100.0, 10000.0)
+            .with_efficiency(85.0);
 
         assert_eq!(m.backend, Backend::Avx2);
         assert_eq!(m.size, 1024);
@@ -783,7 +777,14 @@ mod tests {
     fn test_detector_add_measurement() {
         let mut detector = BackendRegressionDetector::new();
 
-        detector.add(Backend::Scalar, WorkloadType::Gemm, 1024, 1000.0, 1000.0, 50.0);
+        detector.add(
+            Backend::Scalar,
+            WorkloadType::Gemm,
+            1024,
+            1000.0,
+            1000.0,
+            50.0,
+        );
         detector.add(Backend::Avx2, WorkloadType::Gemm, 1024, 250.0, 4000.0, 80.0);
 
         assert_eq!(detector.measurement_count(), 2);
@@ -793,7 +794,14 @@ mod tests {
     fn test_compare_backends() {
         let mut detector = BackendRegressionDetector::new();
 
-        detector.add(Backend::Scalar, WorkloadType::Gemm, 1024, 1000.0, 1000.0, 50.0);
+        detector.add(
+            Backend::Scalar,
+            WorkloadType::Gemm,
+            1024,
+            1000.0,
+            1000.0,
+            50.0,
+        );
         detector.add(Backend::Avx2, WorkloadType::Gemm, 1024, 250.0, 4000.0, 80.0);
 
         let cmp = detector
@@ -809,8 +817,22 @@ mod tests {
         let mut detector = BackendRegressionDetector::new().with_cliff_threshold(10.0);
 
         // Normal efficiency at small sizes
-        detector.add(Backend::Avx2, WorkloadType::Gemm, 1024, 100.0, 10000.0, 90.0);
-        detector.add(Backend::Avx2, WorkloadType::Gemm, 2048, 200.0, 10000.0, 88.0);
+        detector.add(
+            Backend::Avx2,
+            WorkloadType::Gemm,
+            1024,
+            100.0,
+            10000.0,
+            90.0,
+        );
+        detector.add(
+            Backend::Avx2,
+            WorkloadType::Gemm,
+            2048,
+            200.0,
+            10000.0,
+            88.0,
+        );
         // Cliff: efficiency drops significantly
         detector.add(Backend::Avx2, WorkloadType::Gemm, 4096, 500.0, 8000.0, 60.0);
 
@@ -824,25 +846,35 @@ mod tests {
     fn test_recommend_backend() {
         let mut detector = BackendRegressionDetector::new();
 
-        detector.add(Backend::Scalar, WorkloadType::Gemm, 1024, 1000.0, 1000.0, 50.0);
+        detector.add(
+            Backend::Scalar,
+            WorkloadType::Gemm,
+            1024,
+            1000.0,
+            1000.0,
+            50.0,
+        );
         detector.add(Backend::Avx2, WorkloadType::Gemm, 1024, 250.0, 4000.0, 80.0);
-        detector.add(Backend::Cuda, WorkloadType::Gemm, 1024, 100.0, 10000.0, 95.0);
+        detector.add(
+            Backend::Cuda,
+            WorkloadType::Gemm,
+            1024,
+            100.0,
+            10000.0,
+            95.0,
+        );
 
-        let rec = detector.recommend_backend(WorkloadType::Gemm, 1024).unwrap();
+        let rec = detector
+            .recommend_backend(WorkloadType::Gemm, 1024)
+            .unwrap();
 
         assert_eq!(rec.backend, Backend::Cuda);
     }
 
     #[test]
     fn test_transfer_overhead() {
-        let m = BackendMeasurement::new(
-            Backend::Cuda,
-            WorkloadType::Gemm,
-            1024,
-            100.0,
-            10000.0,
-        )
-        .with_gpu_timing(30.0, 70.0);
+        let m = BackendMeasurement::new(Backend::Cuda, WorkloadType::Gemm, 1024, 100.0, 10000.0)
+            .with_gpu_timing(30.0, 70.0);
 
         let overhead = m.transfer_overhead().unwrap();
         assert!((overhead - 0.3).abs() < 0.01);
@@ -852,7 +884,14 @@ mod tests {
     fn test_summary() {
         let mut detector = BackendRegressionDetector::new();
 
-        detector.add(Backend::Scalar, WorkloadType::Gemm, 1024, 1000.0, 1000.0, 50.0);
+        detector.add(
+            Backend::Scalar,
+            WorkloadType::Gemm,
+            1024,
+            1000.0,
+            1000.0,
+            50.0,
+        );
         detector.add(Backend::Avx2, WorkloadType::Gemm, 1024, 250.0, 4000.0, 80.0);
 
         let summary = detector.summary();

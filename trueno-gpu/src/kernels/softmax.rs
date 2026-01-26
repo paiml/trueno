@@ -574,7 +574,6 @@ impl Kernel for LongRowSoftmaxKernel {
                 ctx.ret();
             })
     }
-
 }
 
 #[cfg(test)]
@@ -599,13 +598,25 @@ mod tests {
         assert!(ptx.contains("softmax_long_row"), "Missing kernel name");
 
         // Verify parameters
-        assert!(ptx.contains(".param .u64 input_ptr"), "Missing input_ptr param");
-        assert!(ptx.contains(".param .u64 output_ptr"), "Missing output_ptr param");
-        assert!(ptx.contains(".param .u32 row_size"), "Missing row_size param");
+        assert!(
+            ptx.contains(".param .u64 input_ptr"),
+            "Missing input_ptr param"
+        );
+        assert!(
+            ptx.contains(".param .u64 output_ptr"),
+            "Missing output_ptr param"
+        );
+        assert!(
+            ptx.contains(".param .u32 row_size"),
+            "Missing row_size param"
+        );
 
         // Verify has grid-stride loops (multiple branch labels)
         assert!(ptx.contains("max_loop:"), "Missing max_loop label");
-        assert!(ptx.contains("max_loop_done:"), "Missing max_loop_done label");
+        assert!(
+            ptx.contains("max_loop_done:"),
+            "Missing max_loop_done label"
+        );
         assert!(ptx.contains("sum_loop:"), "Missing sum_loop label");
         assert!(ptx.contains("write_loop:"), "Missing write_loop label");
 
@@ -613,8 +624,10 @@ mod tests {
         assert!(ptx.contains("bar.sync"), "Missing barrier sync");
 
         // Verify has warp shuffles for intra-warp reduction
-        assert!(ptx.contains("shfl") || ptx.contains("shfl.down") || ptx.contains("shfl.sync.down"),
-                "Missing warp shuffle");
+        assert!(
+            ptx.contains("shfl") || ptx.contains("shfl.down") || ptx.contains("shfl.sync.down"),
+            "Missing warp shuffle"
+        );
 
         // Print first 300 lines for debugging
         for (i, line) in ptx.lines().enumerate().take(300) {

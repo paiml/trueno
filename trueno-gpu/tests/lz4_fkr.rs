@@ -18,8 +18,8 @@ use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
 // Import LZ4 internals directly from the module
 mod lz4_internal {
     pub use trueno_gpu::kernels::lz4::{
-        lz4_compress_block, lz4_decompress_block, lz4_hash,
-        LZ4_HASH_MULT, LZ4_HASH_SIZE, LZ4_MIN_MATCH, PAGE_SIZE,
+        lz4_compress_block, lz4_decompress_block, lz4_hash, LZ4_HASH_MULT, LZ4_HASH_SIZE,
+        LZ4_MIN_MATCH, PAGE_SIZE,
     };
 }
 use lz4_internal::*;
@@ -120,7 +120,9 @@ fn lz4_fkr_ptx_has_compression_loop() {
     let ptx = kernel.emit_ptx();
 
     assert!(
-        ptx.contains("L_compress_loop") || ptx.contains("L_main_loop") || ptx.contains("L_compress"),
+        ptx.contains("L_compress_loop")
+            || ptx.contains("L_main_loop")
+            || ptx.contains("L_compress"),
         "LZ4 kernel missing main compression loop label"
     );
 }
@@ -217,12 +219,7 @@ mod ptx_analysis {
 fn lz4_fkr_scalar_hash_12bit() {
     for val in [0u32, 1, 0x12345678, 0xFFFFFFFF, 0xDEADBEEF] {
         let h = lz4_hash(val);
-        assert!(
-            h < LZ4_HASH_SIZE,
-            "Hash {} >= 4096 for input {}",
-            h,
-            val
-        );
+        assert!(h < LZ4_HASH_SIZE, "Hash {} >= 4096 for input {}", h, val);
     }
 }
 
@@ -241,8 +238,7 @@ fn lz4_fkr_scalar_roundtrip_small() {
     let mut decompressed = [0u8; 64];
 
     let comp_size = lz4_compress_block(input, &mut compressed).unwrap();
-    let decomp_size =
-        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..decomp_size], input.as_slice());
@@ -256,8 +252,7 @@ fn lz4_fkr_scalar_roundtrip_repeated() {
     let mut decompressed = [0u8; 512];
 
     let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size =
-        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..], &input[..]);
@@ -296,8 +291,7 @@ fn lz4_fkr_scalar_roundtrip_page() {
     let mut decompressed = [0u8; PAGE_SIZE as usize];
 
     let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size =
-        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
 
     assert_eq!(decomp_size, PAGE_SIZE as usize);
     assert_eq!(&decompressed[..], &input[..]);
@@ -322,7 +316,10 @@ fn lz4_fkr_scalar_deterministic() {
 fn lz4_fkr_constants() {
     assert_eq!(LZ4_MIN_MATCH, 4, "LZ4 minimum match is 4 bytes");
     assert_eq!(LZ4_HASH_SIZE, 4096, "LZ4 hash table is 4096 entries");
-    assert_eq!(LZ4_HASH_MULT, 2654435761, "LZ4 hash multiplier is 0x9E3779B1");
+    assert_eq!(
+        LZ4_HASH_MULT, 2654435761,
+        "LZ4 hash multiplier is 0x9E3779B1"
+    );
     assert_eq!(PAGE_SIZE, 4096, "Page size is 4KB");
 }
 

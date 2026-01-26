@@ -201,13 +201,19 @@ impl GpuResidentTensor<f32> {
         if self.len() != expected_a {
             return Err(crate::GpuError::InvalidParameter(format!(
                 "A has {} elements, expected {} ({}x{})",
-                self.len(), expected_a, m, k
+                self.len(),
+                expected_a,
+                m,
+                k
             )));
         }
         if other.len() != expected_b {
             return Err(crate::GpuError::InvalidParameter(format!(
                 "B has {} elements, expected {} ({}x{})",
-                other.len(), expected_b, k, n
+                other.len(),
+                expected_b,
+                k,
+                n
             )));
         }
 
@@ -490,7 +496,11 @@ impl GpuResidentTensor<f32> {
     /// # Errors
     ///
     /// Returns error if sizes don't match or kernel fails.
-    pub fn add(&self, ctx: &CudaContext, other: &GpuResidentTensor<f32>) -> Result<GpuResidentTensor<f32>> {
+    pub fn add(
+        &self,
+        ctx: &CudaContext,
+        other: &GpuResidentTensor<f32>,
+    ) -> Result<GpuResidentTensor<f32>> {
         if self.len() != other.len() {
             return Err(crate::GpuError::InvalidParameter(format!(
                 "Size mismatch: {} vs {}",
@@ -663,7 +673,10 @@ impl GpuResidentTensor<f32> {
         use crate::kernels::{InterleavedToBatchedKernel, Kernel};
         let kernel = InterleavedToBatchedKernel::new(seq_len, n_heads, head_dim);
         let ptx = kernel.emit_ptx();
-        let cache_key = format!("interleaved_to_batched:{}:{}:{}", seq_len, n_heads, head_dim);
+        let cache_key = format!(
+            "interleaved_to_batched:{}:{}:{}",
+            seq_len, n_heads, head_dim
+        );
         let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
         let threads = 256u32;
@@ -1120,12 +1133,19 @@ impl GpuResidentTensor<f32> {
     ) -> Result<GpuResidentTensor<f32>> {
         let debug = std::env::var("WHISPER_DEBUG_LINEAR").is_ok();
         if debug {
-            eprintln!("[DEBUG-LINEAR] input: len={}, batch={}, in_feat={}, out_feat={}",
-                self.len(), batch_size, in_features, out_features);
+            eprintln!(
+                "[DEBUG-LINEAR] input: len={}, batch={}, in_feat={}, out_feat={}",
+                self.len(),
+                batch_size,
+                in_features,
+                out_features
+            );
             let inp = self.peek_host()?;
-            eprintln!("[DEBUG-LINEAR] input stats: mean={:.6}, max={:.6}",
+            eprintln!(
+                "[DEBUG-LINEAR] input stats: mean={:.6}, max={:.6}",
                 inp.iter().sum::<f32>() / inp.len() as f32,
-                inp.iter().cloned().fold(f32::NEG_INFINITY, f32::max));
+                inp.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
+            );
         }
 
         // matmul: [batch_size, in_features] @ [in_features, out_features] = [batch_size, out_features]
@@ -1133,10 +1153,12 @@ impl GpuResidentTensor<f32> {
 
         if debug {
             let res = result.peek_host()?;
-            eprintln!("[DEBUG-LINEAR] matmul result: len={}, mean={:.6}, max={:.6}",
+            eprintln!(
+                "[DEBUG-LINEAR] matmul result: len={}, mean={:.6}, max={:.6}",
                 res.len(),
                 res.iter().sum::<f32>() / res.len() as f32,
-                res.iter().cloned().fold(f32::NEG_INFINITY, f32::max));
+                res.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
+            );
         }
 
         // Add bias if provided
@@ -1144,10 +1166,12 @@ impl GpuResidentTensor<f32> {
             let output = result.bias_add(ctx, b)?;
             if debug {
                 let out = output.peek_host()?;
-                eprintln!("[DEBUG-LINEAR] after bias_add: len={}, mean={:.6}, max={:.6}",
+                eprintln!(
+                    "[DEBUG-LINEAR] after bias_add: len={}, mean={:.6}, max={:.6}",
                     out.len(),
                     out.iter().sum::<f32>() / out.len() as f32,
-                    out.iter().cloned().fold(f32::NEG_INFINITY, f32::max));
+                    out.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
+                );
             }
             Ok(output)
         } else {
@@ -1189,7 +1213,10 @@ impl GpuResidentTensor<f32> {
         // Build and compile fused kernel (cached)
         let kernel = FusedGemmBiasGeluKernel::new(batch_size, out_features, in_features);
         let ptx = kernel.emit_ptx();
-        let cache_key = format!("fused_gemm_bias_gelu:{}x{}x{}", batch_size, out_features, in_features);
+        let cache_key = format!(
+            "fused_gemm_bias_gelu:{}x{}x{}",
+            batch_size, out_features, in_features
+        );
         let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
         let stream = CudaStream::new(ctx)?;
 
@@ -1279,7 +1306,10 @@ impl GpuResidentTensor<f32> {
         if self.len() != expected_input {
             return Err(crate::GpuError::InvalidParameter(format!(
                 "Input has {} elements, expected {} ({}x{})",
-                self.len(), expected_input, seq_len, in_channels
+                self.len(),
+                expected_input,
+                seq_len,
+                in_channels
             )));
         }
 
@@ -1287,7 +1317,11 @@ impl GpuResidentTensor<f32> {
         if weight.len() != expected_weight {
             return Err(crate::GpuError::InvalidParameter(format!(
                 "Weight has {} elements, expected {} ({}x{}x{})",
-                weight.len(), expected_weight, out_channels, in_channels, kernel_size
+                weight.len(),
+                expected_weight,
+                out_channels,
+                in_channels,
+                kernel_size
             )));
         }
 

@@ -3,8 +3,8 @@
 //! Popperian falsification criteria for tracing escalation per §35.2.
 
 use cbtop::{
-    EscalationReason, EscalationThresholds, SyscallBreakdown,
-    TraceResult, TracingEscalation, OtlpSpanAttributes,
+    EscalationReason, EscalationThresholds, OtlpSpanAttributes, SyscallBreakdown, TraceResult,
+    TracingEscalation,
 };
 
 // ============================================================================
@@ -63,30 +63,46 @@ fn f1042_efficiency_exactly_at_threshold_no_trigger() {
 
 #[test]
 fn f1043_rate_limit_allows_up_to_max() {
-    let thresholds = EscalationThresholds::default()
-        .with_rate_limit(3);
+    let thresholds = EscalationThresholds::default().with_rate_limit(3);
     let mut escalation = TracingEscalation::new(thresholds);
 
     let breakdown = SyscallBreakdown::default();
 
     // Should allow first 3
     for i in 0..3 {
-        let result = escalation.try_trace("brick", 100, 150, EscalationReason::CvExceeded, breakdown.clone());
+        let result = escalation.try_trace(
+            "brick",
+            100,
+            150,
+            EscalationReason::CvExceeded,
+            breakdown.clone(),
+        );
         assert!(result.is_some(), "Trace {} should be allowed", i + 1);
     }
 }
 
 #[test]
 fn f1043_rate_limit_blocks_excess() {
-    let thresholds = EscalationThresholds::default()
-        .with_rate_limit(2);
+    let thresholds = EscalationThresholds::default().with_rate_limit(2);
     let mut escalation = TracingEscalation::new(thresholds);
 
     let breakdown = SyscallBreakdown::default();
 
     // First 2 allowed
-    escalation.try_trace("brick", 100, 150, EscalationReason::CvExceeded, breakdown.clone());
-    escalation.try_trace("brick", 100, 150, EscalationReason::CvExceeded, breakdown.clone());
+    escalation.try_trace(
+        "brick",
+        100,
+        150,
+        EscalationReason::CvExceeded,
+        breakdown.clone(),
+    );
+    escalation.try_trace(
+        "brick",
+        100,
+        150,
+        EscalationReason::CvExceeded,
+        breakdown.clone(),
+    );
 
     // 3rd should be blocked
     let result = escalation.try_trace("brick", 100, 150, EscalationReason::CvExceeded, breakdown);
@@ -95,12 +111,17 @@ fn f1043_rate_limit_blocks_excess() {
 
 #[test]
 fn f1043_rate_limit_count_tracked() {
-    let thresholds = EscalationThresholds::default()
-        .with_rate_limit(10);
+    let thresholds = EscalationThresholds::default().with_rate_limit(10);
     let mut escalation = TracingEscalation::new(thresholds);
 
     let breakdown = SyscallBreakdown::default();
-    escalation.try_trace("brick", 100, 150, EscalationReason::CvExceeded, breakdown.clone());
+    escalation.try_trace(
+        "brick",
+        100,
+        150,
+        EscalationReason::CvExceeded,
+        breakdown.clone(),
+    );
     escalation.try_trace("brick", 100, 150, EscalationReason::CvExceeded, breakdown);
 
     assert_eq!(escalation.trace_count(), 2);
@@ -144,7 +165,9 @@ fn f1044_reason_descriptions_non_empty() {
     assert!(!EscalationReason::EfficiencyLow.description().is_empty());
     assert!(!EscalationReason::Both.description().is_empty());
     assert!(!EscalationReason::MemoryCliff.description().is_empty());
-    assert!(!EscalationReason::GpuTransferOverhead.description().is_empty());
+    assert!(!EscalationReason::GpuTransferOverhead
+        .description()
+        .is_empty());
     assert!(!EscalationReason::Manual.description().is_empty());
 }
 
@@ -290,7 +313,14 @@ fn f1049_trace_result_has_metrics() {
     breakdown.total_us = 200;
     breakdown.mmap_us = 50;
 
-    let result = escalation.try_trace("TestBrick", 100, 150, EscalationReason::CvExceeded, breakdown)
+    let result = escalation
+        .try_trace(
+            "TestBrick",
+            100,
+            150,
+            EscalationReason::CvExceeded,
+            breakdown,
+        )
         .expect("Should create trace");
 
     assert_eq!(result.brick_name, "TestBrick");
@@ -333,8 +363,14 @@ fn f1050_otlp_attributes_present() {
     let attrs = OtlpSpanAttributes::from_trace_result(&result);
 
     assert!(attrs.has_required_attributes());
-    assert_eq!(attrs.attributes.get("brick.name"), Some(&"TestBrick".to_string()));
-    assert_eq!(attrs.attributes.get("escalation.reason"), Some(&"cv_exceeded".to_string()));
+    assert_eq!(
+        attrs.attributes.get("brick.name"),
+        Some(&"TestBrick".to_string())
+    );
+    assert_eq!(
+        attrs.attributes.get("escalation.reason"),
+        Some(&"cv_exceeded".to_string())
+    );
 }
 
 #[test]
@@ -348,10 +384,13 @@ fn f1050_otlp_attributes_custom() {
         timestamp: std::time::Instant::now(),
     };
 
-    let attrs = OtlpSpanAttributes::from_trace_result(&result)
-        .with_attribute("custom.key", "custom_value");
+    let attrs =
+        OtlpSpanAttributes::from_trace_result(&result).with_attribute("custom.key", "custom_value");
 
-    assert_eq!(attrs.attributes.get("custom.key"), Some(&"custom_value".to_string()));
+    assert_eq!(
+        attrs.attributes.get("custom.key"),
+        Some(&"custom_value".to_string())
+    );
 }
 
 // ============================================================================
@@ -363,8 +402,20 @@ fn test_escalation_history() {
     let mut escalation = TracingEscalation::default();
     let breakdown = SyscallBreakdown::default();
 
-    escalation.try_trace("brick1", 100, 150, EscalationReason::CvExceeded, breakdown.clone());
-    escalation.try_trace("brick2", 100, 150, EscalationReason::EfficiencyLow, breakdown);
+    escalation.try_trace(
+        "brick1",
+        100,
+        150,
+        EscalationReason::CvExceeded,
+        breakdown.clone(),
+    );
+    escalation.try_trace(
+        "brick2",
+        100,
+        150,
+        EscalationReason::EfficiencyLow,
+        breakdown,
+    );
 
     assert_eq!(escalation.history().len(), 2);
 }
@@ -391,8 +442,7 @@ fn test_gpu_transfer_threshold() {
 
 #[test]
 fn test_otlp_endpoint() {
-    let escalation = TracingEscalation::default()
-        .with_otlp_endpoint("http://localhost:4317");
+    let escalation = TracingEscalation::default().with_otlp_endpoint("http://localhost:4317");
 
     // Just verify it compiles and doesn't panic
     assert!(escalation.thresholds().cv_threshold > 0.0);
@@ -401,10 +451,16 @@ fn test_otlp_endpoint() {
 #[test]
 fn test_reason_otlp_values() {
     assert_eq!(EscalationReason::CvExceeded.otlp_value(), "cv_exceeded");
-    assert_eq!(EscalationReason::EfficiencyLow.otlp_value(), "efficiency_low");
+    assert_eq!(
+        EscalationReason::EfficiencyLow.otlp_value(),
+        "efficiency_low"
+    );
     assert_eq!(EscalationReason::Both.otlp_value(), "both");
     assert_eq!(EscalationReason::MemoryCliff.otlp_value(), "memory_cliff");
-    assert_eq!(EscalationReason::GpuTransferOverhead.otlp_value(), "gpu_transfer_overhead");
+    assert_eq!(
+        EscalationReason::GpuTransferOverhead.otlp_value(),
+        "gpu_transfer_overhead"
+    );
     assert_eq!(EscalationReason::Manual.otlp_value(), "manual");
 }
 

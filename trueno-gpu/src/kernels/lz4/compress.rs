@@ -5,7 +5,9 @@
 // Allow similar names for offset variables (imm4, imm8, imm12, etc. are intentionally named)
 #![allow(clippy::similar_names)]
 
-use super::{LZ4_HASH_BITS, LZ4_HASH_MULT, LZ4_HASH_SIZE, LZ4_MAX_OFFSET, LZ4_MIN_MATCH, PAGE_SIZE};
+use super::{
+    LZ4_HASH_BITS, LZ4_HASH_MULT, LZ4_HASH_SIZE, LZ4_MAX_OFFSET, LZ4_MIN_MATCH, PAGE_SIZE,
+};
 use crate::kernels::Kernel;
 use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};

@@ -3,8 +3,8 @@
 //! F1281-F1290: Export reporting falsification tests
 
 use cbtop::{
-    ExportFormat, ReportType, BenchmarkMetric, BenchmarkReport,
-    ComparisonEntry, ComparisonReport, ReportExporter, ReportBuilder,
+    BenchmarkMetric, BenchmarkReport, ComparisonEntry, ComparisonReport, ExportFormat,
+    ReportBuilder, ReportExporter, ReportType,
 };
 
 // =============================================================================
@@ -176,8 +176,7 @@ fn f1286_diff_computed() {
 /// F1286.2: Comparison report JSON
 #[test]
 fn f1286_comparison_json() {
-    let mut report = ComparisonReport::new("Compare")
-        .with_labels("baseline", "current");
+    let mut report = ComparisonReport::new("Compare").with_labels("baseline", "current");
     report.add_entry("latency", 100.0, 110.0, "ms");
 
     let json = ReportExporter::comparison_to_json(&report);

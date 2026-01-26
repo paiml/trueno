@@ -96,26 +96,63 @@ pub use vector::Vector;
 
 // ComputeBrick exports
 pub use brick::{
-    AddOp, AssertionResult, AttentionOp, BrickError, BrickLayer, BrickProfiler, BrickSample,
-    BrickStats, BrickTimer, BrickVerification, ByteBudget, ComputeAssertion, ComputeBackend,
-    ComputeBrick, ComputeOp, DotOp, FusedGateUpOp, FusedGateUpWeights, FusedQKVOp,
-    FusedQKVWeights, MatmulOp, SoftmaxOp, TokenBudget, TokenResult,
+    fnv1a_f32_checksum,
+    AddOp,
+    AssertionResult,
+    AttentionOp,
     // QUANT-Q5K: Q5_K and Q6_K quantization formats (llama.cpp compatible)
-    BlockQ5K, BlockQ6K, DotQ5KOp, DotQ6KOp,
-    // CORRECTNESS-011: Divergence detection types
-    KernelChecksum, DivergenceInfo, fnv1a_f32_checksum,
+    BlockQ5K,
+    BlockQ6K,
+    BrickBottleneck,
+    BrickCategory,
+    BrickError,
     // PAR-200: BrickProfiler v2 types
-    BrickId, BrickIdTimer, BrickCategory, BrickBottleneck, CategoryStats, SyncMode,
+    BrickId,
+    BrickIdTimer,
+    BrickLayer,
+    BrickProfiler,
+    BrickSample,
+    BrickStats,
+    BrickTimer,
+    BrickVerification,
+    ByteBudget,
+    CategoryStats,
+    ComputeAssertion,
+    ComputeBackend,
+    ComputeBrick,
+    ComputeOp,
+    DivergenceInfo,
+    DotOp,
+    DotQ5KOp,
+    DotQ6KOp,
+    EdgeType,
+    ExecutionEdge,
+    ExecutionGraph,
+    ExecutionNode,
     // PAR-201: Execution path graph types
-    ExecutionNodeId, ExecutionNode, EdgeType, ExecutionEdge, ExecutionGraph, PtxRegistry,
+    ExecutionNodeId,
+    FusedGateUpOp,
+    FusedGateUpWeights,
+    FusedQKVOp,
+    FusedQKVWeights,
+    // CORRECTNESS-011: Divergence detection types
+    KernelChecksum,
+    MatmulOp,
+    PtxRegistry,
+    SoftmaxOp,
+    SyncMode,
     // TILING-SPEC-001: Tile-level profiling types
-    TileLevel, TileStats, TileTimer,
+    TileLevel,
+    TileStats,
+    TileTimer,
+    TokenBudget,
+    TokenResult,
 };
 
 // Hardware capability exports (PMAT-447)
 pub use hardware::{
-    Bottleneck, CpuCapability, GpuCapability, HardwareCapability, RooflineParams, SimdWidth,
-    GpuBackend as HardwareGpuBackend, default_hardware_path,
+    default_hardware_path, Bottleneck, CpuCapability, GpuBackend as HardwareGpuBackend,
+    GpuCapability, HardwareCapability, RooflineParams, SimdWidth,
 };
 
 // ML Tuner exports (T-TUNER-003 through T-TUNER-007, GH#80-84)
@@ -128,10 +165,9 @@ pub use tuner::{
 
 // Tiling Compute Blocks exports (TILING-SPEC-001)
 pub use tiling::{
-    PackingLayout, PrefetchLocality, TcbGeometry, TcbIndexCalculator, TcbLevel, TilingBackend,
-    TilingConfig, TilingError, TilingStats, TiledQ4KMatvec,
-    Q4K_SUPERBLOCK_SIZE, Q4K_SUPERBLOCK_BYTES,
-    optimal_prefetch_distance, pack_a_index, pack_b_index, swizzle_index,
+    optimal_prefetch_distance, pack_a_index, pack_b_index, swizzle_index, PackingLayout,
+    PrefetchLocality, TcbGeometry, TcbIndexCalculator, TcbLevel, TiledQ4KMatvec, TilingBackend,
+    TilingConfig, TilingError, TilingStats, Q4K_SUPERBLOCK_BYTES, Q4K_SUPERBLOCK_SIZE,
 };
 
 /// Backend execution target

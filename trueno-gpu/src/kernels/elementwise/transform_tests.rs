@@ -5,9 +5,8 @@
 #![cfg(test)]
 
 use super::transform::{
-    TransposeKernel, InterleavedToBatchedKernel, ExtractSingleHeadKernel,
-    CopySingleHeadKernel, BatchedToInterleavedKernel, BatchedTransposeKernel,
-    BatchedScaleKernel, BatchedSoftmaxKernel,
+    BatchedScaleKernel, BatchedSoftmaxKernel, BatchedToInterleavedKernel, BatchedTransposeKernel,
+    CopySingleHeadKernel, ExtractSingleHeadKernel, InterleavedToBatchedKernel, TransposeKernel,
 };
 use crate::kernels::Kernel;
 
@@ -194,7 +193,7 @@ fn test_batched_softmax_kernel_large() {
 #[test]
 fn test_all_transform_kernel_variants() {
     let configs = vec![
-        (128, 8, 64),    // seq_len, n_heads, head_dim
+        (128, 8, 64), // seq_len, n_heads, head_dim
         (256, 16, 128),
         (512, 32, 64),
     ];

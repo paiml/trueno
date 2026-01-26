@@ -2,10 +2,10 @@
 //!
 //! Collects GPU metrics via NVML/wgpu (Genchi Genbutsu)
 
-use std::any::Any;
-use std::time::Instant;
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use crate::ring_buffer::RingBuffer;
+use std::any::Any;
+use std::time::Instant;
 
 #[cfg(feature = "cuda")]
 use trueno_gpu::monitor::{CudaDeviceInfo, CudaMemoryInfo};
@@ -63,12 +63,12 @@ impl GpuCollectorBrick {
         if let Ok(info) = CudaDeviceInfo::query(self.device_index) {
             metrics.memory_total_mb = info.total_memory_mb();
             metrics.device_name = info.name;
-            
+
             if let Ok(ctx) = trueno_gpu::driver::CudaContext::new(self.device_index as i32) {
-                 if let Ok(mem) = CudaMemoryInfo::query(&ctx) {
-                     metrics.memory_used_mb = mem.used_mb();
-                     metrics.utilization_gpu = (mem.usage_percent() as u32).min(100); 
-                 }
+                if let Ok(mem) = CudaMemoryInfo::query(&ctx) {
+                    metrics.memory_used_mb = mem.used_mb();
+                    metrics.utilization_gpu = (mem.usage_percent() as u32).min(100);
+                }
             }
         }
         metrics
@@ -85,29 +85,41 @@ impl GpuCollectorBrick {
 }
 
 impl Brick for GpuCollectorBrick {
-    fn brick_name(&self) -> &'static str { "gpu_collector" }
-    
+    fn brick_name(&self) -> &'static str {
+        "gpu_collector"
+    }
+
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
             BrickAssertion::custom("memory_valid", |b| {
                 let s = b.downcast_ref::<GpuCollectorBrick>().unwrap();
-                s.history.back().map_or(true, |m| m.memory_used_mb <= m.memory_total_mb)
+                s.history
+                    .back()
+                    .map_or(true, |m| m.memory_used_mb <= m.memory_total_mb)
             }),
             BrickAssertion::max_latency_ms(20),
         ]
     }
 
     fn budget(&self) -> BrickBudget {
-        BrickBudget { collect_ms: 20, layout_ms: 0, render_ms: 0 }
+        BrickBudget {
+            collect_ms: 20,
+            layout_ms: 0,
+            render_ms: 0,
+        }
     }
 
     fn verify(&self) -> BrickVerification {
         let mut v = BrickVerification::new();
-        for a in self.assertions() { v.check(&a); }
+        for a in self.assertions() {
+            v.check(&a);
+        }
         v
     }
 
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[cfg(test)]

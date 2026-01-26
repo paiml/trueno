@@ -92,14 +92,14 @@ pub const KERNEL_WEIGHTS: [[f32; TunerFeatures::DIM + 1]; 12] = [
 /// Feature importance (for explainability)
 /// Indices reference positions in TunerFeatures::to_vector()
 pub const FEATURE_IMPORTANCE: [(usize, &str, f32); 10] = [
-    (6, "batch_size", 0.28),           // batch_size_norm
-    (36, "gpu_mem_bw", 0.18),          // gpu_mem_bw_norm (hw feature)
-    (0, "model_params_b", 0.14),       // model_params_b
-    (37, "gpu_sm_count", 0.10),        // gpu_sm_norm (hw feature)
-    (8, "cuda_graphs", 0.08),          // cuda_graphs
-    (7, "seq_len", 0.06),              // seq_len_log
-    (35, "gpu_compute", 0.05),         // gpu_compute_norm (hw feature)
-    (40, "bottleneck_memory", 0.04),   // derived feature
-    (4, "head_dim", 0.04),             // head_dim_norm
-    (41, "bottleneck_compute", 0.03),  // derived feature
+    (6, "batch_size", 0.28),          // batch_size_norm
+    (36, "gpu_mem_bw", 0.18),         // gpu_mem_bw_norm (hw feature)
+    (0, "model_params_b", 0.14),      // model_params_b
+    (37, "gpu_sm_count", 0.10),       // gpu_sm_norm (hw feature)
+    (8, "cuda_graphs", 0.08),         // cuda_graphs
+    (7, "seq_len", 0.06),             // seq_len_log
+    (35, "gpu_compute", 0.05),        // gpu_compute_norm (hw feature)
+    (40, "bottleneck_memory", 0.04),  // derived feature
+    (4, "head_dim", 0.04),            // head_dim_norm
+    (41, "bottleneck_compute", 0.03), // derived feature
 ];

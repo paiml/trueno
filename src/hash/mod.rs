@@ -49,7 +49,11 @@ pub fn hash_bytes(bytes: &[u8]) -> u64 {
     let remainder = chunks.remainder();
 
     for chunk in chunks {
-        let word = u64::from_le_bytes(chunk.try_into().expect("chunks_exact(8) guarantees 8 bytes"));
+        let word = u64::from_le_bytes(
+            chunk
+                .try_into()
+                .expect("chunks_exact(8) guarantees 8 bytes"),
+        );
         hash = hash.rotate_left(5).bitxor(word).wrapping_mul(K);
     }
 

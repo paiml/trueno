@@ -522,9 +522,8 @@ impl ComputeDevice for CpuDevice {
     }
 
     fn compute_temperature_c(&self) -> Result<f64, GpuError> {
-        self.temperature.ok_or_else(|| {
-            GpuError::NotSupported("CPU temperature not available".to_string())
-        })
+        self.temperature
+            .ok_or_else(|| GpuError::NotSupported("CPU temperature not available".to_string()))
     }
 
     fn compute_power_watts(&self) -> Result<f64, GpuError> {
@@ -566,11 +565,15 @@ impl ComputeDevice for CpuDevice {
     }
 
     fn pcie_tx_bytes_per_sec(&self) -> Result<u64, GpuError> {
-        Err(GpuError::NotSupported("CPU has no PCIe metrics".to_string()))
+        Err(GpuError::NotSupported(
+            "CPU has no PCIe metrics".to_string(),
+        ))
     }
 
     fn pcie_rx_bytes_per_sec(&self) -> Result<u64, GpuError> {
-        Err(GpuError::NotSupported("CPU has no PCIe metrics".to_string()))
+        Err(GpuError::NotSupported(
+            "CPU has no PCIe metrics".to_string(),
+        ))
     }
 
     fn pcie_generation(&self) -> u8 {
@@ -873,7 +876,10 @@ mod tests {
         assert_eq!(format!("{}", ThrottleReason::None), "None");
         assert_eq!(format!("{}", ThrottleReason::Thermal), "Thermal");
         assert_eq!(format!("{}", ThrottleReason::Power), "Power");
-        assert_eq!(format!("{}", ThrottleReason::ApplicationClocks), "AppClocks");
+        assert_eq!(
+            format!("{}", ThrottleReason::ApplicationClocks),
+            "AppClocks"
+        );
         assert_eq!(format!("{}", ThrottleReason::SwPowerCap), "SwPowerCap");
         assert_eq!(format!("{}", ThrottleReason::HwSlowdown), "HwSlowdown");
         assert_eq!(format!("{}", ThrottleReason::SyncBoost), "SyncBoost");
@@ -893,30 +899,78 @@ mod tests {
     }
 
     impl MockDevice {
-        fn new(mem_used: u64, mem_total: u64, power_current: f64, power_limit: f64, temperature: f64) -> Self {
-            Self { mem_used, mem_total, power_current, power_limit, temperature }
+        fn new(
+            mem_used: u64,
+            mem_total: u64,
+            power_current: f64,
+            power_limit: f64,
+            temperature: f64,
+        ) -> Self {
+            Self {
+                mem_used,
+                mem_total,
+                power_current,
+                power_limit,
+                temperature,
+            }
         }
     }
 
     impl ComputeDevice for MockDevice {
-        fn device_id(&self) -> DeviceId { DeviceId::cpu() }
-        fn device_name(&self) -> &str { "Mock" }
-        fn device_type(&self) -> DeviceType { DeviceType::Cpu }
-        fn compute_utilization(&self) -> Result<f64, GpuError> { Ok(50.0) }
-        fn compute_clock_mhz(&self) -> Result<u32, GpuError> { Ok(3000) }
-        fn compute_temperature_c(&self) -> Result<f64, GpuError> { Ok(self.temperature) }
-        fn compute_power_watts(&self) -> Result<f64, GpuError> { Ok(self.power_current) }
-        fn compute_power_limit_watts(&self) -> Result<f64, GpuError> { Ok(self.power_limit) }
-        fn memory_used_bytes(&self) -> Result<u64, GpuError> { Ok(self.mem_used) }
-        fn memory_total_bytes(&self) -> Result<u64, GpuError> { Ok(self.mem_total) }
-        fn memory_bandwidth_gbps(&self) -> Result<f64, GpuError> { Err(GpuError::NotSupported("mock".into())) }
-        fn compute_unit_count(&self) -> u32 { 8 }
-        fn active_compute_units(&self) -> Result<u32, GpuError> { Ok(8) }
-        fn pcie_tx_bytes_per_sec(&self) -> Result<u64, GpuError> { Err(GpuError::NotSupported("mock".into())) }
-        fn pcie_rx_bytes_per_sec(&self) -> Result<u64, GpuError> { Err(GpuError::NotSupported("mock".into())) }
-        fn pcie_generation(&self) -> u8 { 0 }
-        fn pcie_width(&self) -> u8 { 0 }
-        fn refresh(&mut self) -> Result<(), GpuError> { Ok(()) }
+        fn device_id(&self) -> DeviceId {
+            DeviceId::cpu()
+        }
+        fn device_name(&self) -> &str {
+            "Mock"
+        }
+        fn device_type(&self) -> DeviceType {
+            DeviceType::Cpu
+        }
+        fn compute_utilization(&self) -> Result<f64, GpuError> {
+            Ok(50.0)
+        }
+        fn compute_clock_mhz(&self) -> Result<u32, GpuError> {
+            Ok(3000)
+        }
+        fn compute_temperature_c(&self) -> Result<f64, GpuError> {
+            Ok(self.temperature)
+        }
+        fn compute_power_watts(&self) -> Result<f64, GpuError> {
+            Ok(self.power_current)
+        }
+        fn compute_power_limit_watts(&self) -> Result<f64, GpuError> {
+            Ok(self.power_limit)
+        }
+        fn memory_used_bytes(&self) -> Result<u64, GpuError> {
+            Ok(self.mem_used)
+        }
+        fn memory_total_bytes(&self) -> Result<u64, GpuError> {
+            Ok(self.mem_total)
+        }
+        fn memory_bandwidth_gbps(&self) -> Result<f64, GpuError> {
+            Err(GpuError::NotSupported("mock".into()))
+        }
+        fn compute_unit_count(&self) -> u32 {
+            8
+        }
+        fn active_compute_units(&self) -> Result<u32, GpuError> {
+            Ok(8)
+        }
+        fn pcie_tx_bytes_per_sec(&self) -> Result<u64, GpuError> {
+            Err(GpuError::NotSupported("mock".into()))
+        }
+        fn pcie_rx_bytes_per_sec(&self) -> Result<u64, GpuError> {
+            Err(GpuError::NotSupported("mock".into()))
+        }
+        fn pcie_generation(&self) -> u8 {
+            0
+        }
+        fn pcie_width(&self) -> u8 {
+            0
+        }
+        fn refresh(&mut self) -> Result<(), GpuError> {
+            Ok(())
+        }
     }
 
     #[test]
@@ -928,14 +982,26 @@ mod tests {
 
     #[test]
     fn h011_memory_usage_percent_normal() {
-        let mock = MockDevice::new(50 * 1024 * 1024 * 1024, 100 * 1024 * 1024 * 1024, 0.0, 0.0, 0.0);
+        let mock = MockDevice::new(
+            50 * 1024 * 1024 * 1024,
+            100 * 1024 * 1024 * 1024,
+            0.0,
+            0.0,
+            0.0,
+        );
         // 50% usage
         assert!((mock.memory_usage_percent().unwrap() - 50.0).abs() < 0.01);
     }
 
     #[test]
     fn h011_memory_available_bytes() {
-        let mock = MockDevice::new(30 * 1024 * 1024 * 1024, 100 * 1024 * 1024 * 1024, 0.0, 0.0, 0.0);
+        let mock = MockDevice::new(
+            30 * 1024 * 1024 * 1024,
+            100 * 1024 * 1024 * 1024,
+            0.0,
+            0.0,
+            0.0,
+        );
         // 70GB available
         let available = mock.memory_available_bytes().unwrap();
         assert_eq!(available, 70 * 1024 * 1024 * 1024);
@@ -1000,7 +1066,13 @@ mod tests {
 
     #[test]
     fn h012_device_snapshot_from_mock() {
-        let mock = MockDevice::new(8 * 1024 * 1024 * 1024, 16 * 1024 * 1024 * 1024, 150.0, 300.0, 65.0);
+        let mock = MockDevice::new(
+            8 * 1024 * 1024 * 1024,
+            16 * 1024 * 1024 * 1024,
+            150.0,
+            300.0,
+            65.0,
+        );
         let snapshot = DeviceSnapshot::capture(&mock).unwrap();
 
         assert_eq!(snapshot.device_id, DeviceId::cpu());
@@ -1098,7 +1170,13 @@ mod tests {
 
     #[test]
     fn h014_mock_device_mb_gb_helpers() {
-        let mock = MockDevice::new(1024 * 1024 * 1024, 2 * 1024 * 1024 * 1024, 10.0, 100.0, 30.0);
+        let mock = MockDevice::new(
+            1024 * 1024 * 1024,
+            2 * 1024 * 1024 * 1024,
+            10.0,
+            100.0,
+            30.0,
+        );
 
         let used_mb = mock.memory_used_mb().unwrap();
         assert_eq!(used_mb, 1024); // 1 GB = 1024 MB
@@ -1217,7 +1295,11 @@ mod tests {
         assert!(active.is_ok());
         let count = active.unwrap();
         assert!(count > 0, "Should have at least one active compute unit");
-        assert_eq!(count, cpu.compute_unit_count(), "Active should equal total cores");
+        assert_eq!(
+            count,
+            cpu.compute_unit_count(),
+            "Active should equal total cores"
+        );
     }
 
     // =========================================================================
@@ -1229,8 +1311,14 @@ mod tests {
         let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
 
         // PCIe metrics should return NotSupported
-        assert!(matches!(mock.pcie_tx_bytes_per_sec(), Err(GpuError::NotSupported(_))));
-        assert!(matches!(mock.pcie_rx_bytes_per_sec(), Err(GpuError::NotSupported(_))));
+        assert!(matches!(
+            mock.pcie_tx_bytes_per_sec(),
+            Err(GpuError::NotSupported(_))
+        ));
+        assert!(matches!(
+            mock.pcie_rx_bytes_per_sec(),
+            Err(GpuError::NotSupported(_))
+        ));
         assert_eq!(mock.pcie_generation(), 0);
         assert_eq!(mock.pcie_width(), 0);
     }
@@ -1248,7 +1336,10 @@ mod tests {
     fn h020_mock_device_memory_bandwidth() {
         let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
 
-        assert!(matches!(mock.memory_bandwidth_gbps(), Err(GpuError::NotSupported(_))));
+        assert!(matches!(
+            mock.memory_bandwidth_gbps(),
+            Err(GpuError::NotSupported(_))
+        ));
     }
 
     #[test]
@@ -1351,7 +1442,13 @@ mod tests {
 
     #[test]
     fn h023_device_snapshot_field_access() {
-        let mock = MockDevice::new(8 * 1024 * 1024 * 1024, 32 * 1024 * 1024 * 1024, 250.0, 350.0, 72.0);
+        let mock = MockDevice::new(
+            8 * 1024 * 1024 * 1024,
+            32 * 1024 * 1024 * 1024,
+            250.0,
+            350.0,
+            72.0,
+        );
         let snapshot = DeviceSnapshot::capture(&mock).unwrap();
 
         // Verify all fields are accessible and have expected values
@@ -1415,7 +1512,10 @@ mod tests {
         let cpu = CpuDevice::new();
         let count = cpu.compute_unit_count();
         assert!(count >= 1, "Should have at least 1 core");
-        assert!(count <= 1024, "Sanity check: should have fewer than 1024 cores");
+        assert!(
+            count <= 1024,
+            "Sanity check: should have fewer than 1024 cores"
+        );
     }
 
     #[test]
@@ -1591,9 +1691,15 @@ mod tests {
     }
 
     impl ComputeDevice for ErrorMockDevice {
-        fn device_id(&self) -> DeviceId { DeviceId::cpu() }
-        fn device_name(&self) -> &str { "ErrorMock" }
-        fn device_type(&self) -> DeviceType { DeviceType::Cpu }
+        fn device_id(&self) -> DeviceId {
+            DeviceId::cpu()
+        }
+        fn device_name(&self) -> &str {
+            "ErrorMock"
+        }
+        fn device_type(&self) -> DeviceType {
+            DeviceType::Cpu
+        }
         fn compute_utilization(&self) -> Result<f64, GpuError> {
             if self.return_error {
                 Err(GpuError::NotSupported("test".into()))
@@ -1646,17 +1752,27 @@ mod tests {
         fn memory_bandwidth_gbps(&self) -> Result<f64, GpuError> {
             Err(GpuError::NotSupported("mock".into()))
         }
-        fn compute_unit_count(&self) -> u32 { 8 }
-        fn active_compute_units(&self) -> Result<u32, GpuError> { Ok(8) }
+        fn compute_unit_count(&self) -> u32 {
+            8
+        }
+        fn active_compute_units(&self) -> Result<u32, GpuError> {
+            Ok(8)
+        }
         fn pcie_tx_bytes_per_sec(&self) -> Result<u64, GpuError> {
             Err(GpuError::NotSupported("mock".into()))
         }
         fn pcie_rx_bytes_per_sec(&self) -> Result<u64, GpuError> {
             Err(GpuError::NotSupported("mock".into()))
         }
-        fn pcie_generation(&self) -> u8 { 0 }
-        fn pcie_width(&self) -> u8 { 0 }
-        fn refresh(&mut self) -> Result<(), GpuError> { Ok(()) }
+        fn pcie_generation(&self) -> u8 {
+            0
+        }
+        fn pcie_width(&self) -> u8 {
+            0
+        }
+        fn refresh(&mut self) -> Result<(), GpuError> {
+            Ok(())
+        }
     }
 
     #[test]
@@ -2073,22 +2189,42 @@ mod tests {
 
     impl PartialErrorMockDevice {
         fn with_total_error() -> Self {
-            Self { error_on_total: true, error_on_limit: false }
+            Self {
+                error_on_total: true,
+                error_on_limit: false,
+            }
         }
 
         fn with_limit_error() -> Self {
-            Self { error_on_total: false, error_on_limit: true }
+            Self {
+                error_on_total: false,
+                error_on_limit: true,
+            }
         }
     }
 
     impl ComputeDevice for PartialErrorMockDevice {
-        fn device_id(&self) -> DeviceId { DeviceId::cpu() }
-        fn device_name(&self) -> &str { "PartialErrorMock" }
-        fn device_type(&self) -> DeviceType { DeviceType::Cpu }
-        fn compute_utilization(&self) -> Result<f64, GpuError> { Ok(50.0) }
-        fn compute_clock_mhz(&self) -> Result<u32, GpuError> { Ok(3000) }
-        fn compute_temperature_c(&self) -> Result<f64, GpuError> { Ok(50.0) }
-        fn compute_power_watts(&self) -> Result<f64, GpuError> { Ok(100.0) }
+        fn device_id(&self) -> DeviceId {
+            DeviceId::cpu()
+        }
+        fn device_name(&self) -> &str {
+            "PartialErrorMock"
+        }
+        fn device_type(&self) -> DeviceType {
+            DeviceType::Cpu
+        }
+        fn compute_utilization(&self) -> Result<f64, GpuError> {
+            Ok(50.0)
+        }
+        fn compute_clock_mhz(&self) -> Result<u32, GpuError> {
+            Ok(3000)
+        }
+        fn compute_temperature_c(&self) -> Result<f64, GpuError> {
+            Ok(50.0)
+        }
+        fn compute_power_watts(&self) -> Result<f64, GpuError> {
+            Ok(100.0)
+        }
         fn compute_power_limit_watts(&self) -> Result<f64, GpuError> {
             if self.error_on_limit {
                 Err(GpuError::NotSupported("limit error".into()))
@@ -2096,7 +2232,9 @@ mod tests {
                 Ok(200.0)
             }
         }
-        fn memory_used_bytes(&self) -> Result<u64, GpuError> { Ok(1024) }
+        fn memory_used_bytes(&self) -> Result<u64, GpuError> {
+            Ok(1024)
+        }
         fn memory_total_bytes(&self) -> Result<u64, GpuError> {
             if self.error_on_total {
                 Err(GpuError::NotSupported("total error".into()))
@@ -2107,17 +2245,27 @@ mod tests {
         fn memory_bandwidth_gbps(&self) -> Result<f64, GpuError> {
             Err(GpuError::NotSupported("mock".into()))
         }
-        fn compute_unit_count(&self) -> u32 { 8 }
-        fn active_compute_units(&self) -> Result<u32, GpuError> { Ok(8) }
+        fn compute_unit_count(&self) -> u32 {
+            8
+        }
+        fn active_compute_units(&self) -> Result<u32, GpuError> {
+            Ok(8)
+        }
         fn pcie_tx_bytes_per_sec(&self) -> Result<u64, GpuError> {
             Err(GpuError::NotSupported("mock".into()))
         }
         fn pcie_rx_bytes_per_sec(&self) -> Result<u64, GpuError> {
             Err(GpuError::NotSupported("mock".into()))
         }
-        fn pcie_generation(&self) -> u8 { 0 }
-        fn pcie_width(&self) -> u8 { 0 }
-        fn refresh(&mut self) -> Result<(), GpuError> { Ok(()) }
+        fn pcie_generation(&self) -> u8 {
+            0
+        }
+        fn pcie_width(&self) -> u8 {
+            0
+        }
+        fn refresh(&mut self) -> Result<(), GpuError> {
+            Ok(())
+        }
     }
 
     #[test]

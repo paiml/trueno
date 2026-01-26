@@ -3,10 +3,8 @@
 //! Popperian falsification criteria for statistical analysis per §24.23.
 
 use cbtop::{
-    EffectCategory, StatisticalAnalysis, EffectSize,
-    StatisticalComparison,
-    MannWhitneyResult, OutlierFilter,
-    bootstrap_ci, percentile, trimmed_mean,
+    bootstrap_ci, percentile, trimmed_mean, EffectCategory, EffectSize, MannWhitneyResult,
+    OutlierFilter, StatisticalAnalysis, StatisticalComparison,
 };
 
 // ============================================================================
@@ -27,7 +25,9 @@ fn f1101_bootstrap_ci_contains_mean() {
 fn f1101_bootstrap_ci_95_coverage() {
     // Test that 95% CI actually covers true mean ~95% of time
     let true_mean = 5.0;
-    let samples: Vec<f64> = (0..100).map(|i| true_mean + (i as f64 % 10.0) - 5.0).collect();
+    let samples: Vec<f64> = (0..100)
+        .map(|i| true_mean + (i as f64 % 10.0) - 5.0)
+        .collect();
 
     let (lower, upper) = bootstrap_ci(&samples, 0.95, 10000);
 
@@ -52,9 +52,18 @@ fn f1101_statistical_analysis_ci() {
 
 #[test]
 fn f1102_effect_negligible() {
-    assert_eq!(EffectCategory::from_cohens_d(0.0), EffectCategory::Negligible);
-    assert_eq!(EffectCategory::from_cohens_d(0.1), EffectCategory::Negligible);
-    assert_eq!(EffectCategory::from_cohens_d(0.19), EffectCategory::Negligible);
+    assert_eq!(
+        EffectCategory::from_cohens_d(0.0),
+        EffectCategory::Negligible
+    );
+    assert_eq!(
+        EffectCategory::from_cohens_d(0.1),
+        EffectCategory::Negligible
+    );
+    assert_eq!(
+        EffectCategory::from_cohens_d(0.19),
+        EffectCategory::Negligible
+    );
 }
 
 #[test]
@@ -81,7 +90,10 @@ fn f1102_effect_large() {
 #[test]
 fn f1102_effect_negative() {
     // Negative d should still be categorized by magnitude
-    assert_eq!(EffectCategory::from_cohens_d(-0.1), EffectCategory::Negligible);
+    assert_eq!(
+        EffectCategory::from_cohens_d(-0.1),
+        EffectCategory::Negligible
+    );
     assert_eq!(EffectCategory::from_cohens_d(-0.5), EffectCategory::Medium);
     assert_eq!(EffectCategory::from_cohens_d(-1.0), EffectCategory::Large);
 }

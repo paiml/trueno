@@ -4,11 +4,9 @@
 //! Instead of "proving it works," we attempt to break the system.
 
 use cbtop::{
-    AdversarialError, AdversarialTactic,
-    InputValidator, BitFlipInjector, CheckedArithmetic,
-    MonotonicClock, ResourceLimiter,
-    ConfigValidator, CancellationToken, RecoveryHandler,
-    AdversarialTestSummary,
+    AdversarialError, AdversarialTactic, AdversarialTestSummary, BitFlipInjector,
+    CancellationToken, CheckedArithmetic, ConfigValidator, InputValidator, MonotonicClock,
+    RecoveryHandler, ResourceLimiter,
 };
 use std::time::Duration;
 
@@ -57,7 +55,10 @@ fn f1002_checksum_verification_fails_on_corruption() {
 
     // Verification should fail
     let result = validator.verify_checksum(&corrupted, checksum);
-    assert!(matches!(result, Err(AdversarialError::CorruptedInput { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::CorruptedInput { .. })
+    ));
 }
 
 #[test]
@@ -84,7 +85,10 @@ fn f1003_memory_request_within_limit_succeeds() {
 fn f1003_memory_request_exceeding_limit_fails() {
     let mut limiter = ResourceLimiter::new().with_max_memory(1024);
     let result = limiter.request_memory(2048);
-    assert!(matches!(result, Err(AdversarialError::ResourceExhausted { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::ResourceExhausted { .. })
+    ));
 }
 
 #[test]
@@ -123,7 +127,10 @@ fn f1005_max_size_bytes_rejected() {
     let validator = InputValidator::new().with_max_size(100);
     let data = vec![0u8; 200];
     let result = validator.validate_bytes(&data);
-    assert!(matches!(result, Err(AdversarialError::MaxSizeExceeded { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::MaxSizeExceeded { .. })
+    ));
 }
 
 #[test]
@@ -193,31 +200,42 @@ fn f1007_cancellation_token_thread_safe() {
 fn f1008_unclosed_brackets_rejected() {
     let validator = ConfigValidator::new();
     let result = validator.validate_toml_string("[section");
-    assert!(matches!(result, Err(AdversarialError::ConfigParseError { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::ConfigParseError { .. })
+    ));
 }
 
 #[test]
 fn f1008_unclosed_quotes_rejected() {
     let validator = ConfigValidator::new();
     let result = validator.validate_toml_string(r#"key = "unclosed"#);
-    assert!(matches!(result, Err(AdversarialError::ConfigParseError { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::ConfigParseError { .. })
+    ));
 }
 
 #[test]
 fn f1008_empty_config_rejected() {
     let validator = ConfigValidator::new();
     let result = validator.validate_toml_string("");
-    assert!(matches!(result, Err(AdversarialError::ConfigParseError { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::ConfigParseError { .. })
+    ));
 }
 
 #[test]
 fn f1008_valid_toml_accepted() {
     let validator = ConfigValidator::new();
-    let result = validator.validate_toml_string(r#"
+    let result = validator.validate_toml_string(
+        r#"
 [section]
 key = "value"
 number = 42
-"#);
+"#,
+    );
     assert!(result.is_ok());
 }
 
@@ -227,26 +245,29 @@ number = 42
 
 #[test]
 fn f1009_value_below_min_rejected() {
-    let validator = ConfigValidator::new()
-        .with_bound("temperature", 0.0, 2.0);
+    let validator = ConfigValidator::new().with_bound("temperature", 0.0, 2.0);
 
     let result = validator.validate_numeric("temperature", -1.0);
-    assert!(matches!(result, Err(AdversarialError::ConfigOutOfBounds { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::ConfigOutOfBounds { .. })
+    ));
 }
 
 #[test]
 fn f1009_value_above_max_rejected() {
-    let validator = ConfigValidator::new()
-        .with_bound("temperature", 0.0, 2.0);
+    let validator = ConfigValidator::new().with_bound("temperature", 0.0, 2.0);
 
     let result = validator.validate_numeric("temperature", 5.0);
-    assert!(matches!(result, Err(AdversarialError::ConfigOutOfBounds { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::ConfigOutOfBounds { .. })
+    ));
 }
 
 #[test]
 fn f1009_value_within_bounds_accepted() {
-    let validator = ConfigValidator::new()
-        .with_bound("temperature", 0.0, 2.0);
+    let validator = ConfigValidator::new().with_bound("temperature", 0.0, 2.0);
 
     let result = validator.validate_numeric("temperature", 1.0);
     assert!(result.is_ok());
@@ -275,19 +296,28 @@ fn f1010_f1011_rust_memory_safety() {
 #[test]
 fn f1012_i64_add_overflow_detected() {
     let result = CheckedArithmetic::checked_add_i64(i64::MAX, 1);
-    assert!(matches!(result, Err(AdversarialError::IntegerOverflow { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::IntegerOverflow { .. })
+    ));
 }
 
 #[test]
 fn f1012_i64_mul_overflow_detected() {
     let result = CheckedArithmetic::checked_mul_i64(i64::MAX, 2);
-    assert!(matches!(result, Err(AdversarialError::IntegerOverflow { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::IntegerOverflow { .. })
+    ));
 }
 
 #[test]
 fn f1012_usize_add_overflow_detected() {
     let result = CheckedArithmetic::checked_add_usize(usize::MAX, 1);
-    assert!(matches!(result, Err(AdversarialError::IntegerOverflow { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::IntegerOverflow { .. })
+    ));
 }
 
 #[test]
@@ -303,13 +333,19 @@ fn f1012_valid_arithmetic_succeeds() {
 #[test]
 fn f1013_float_div_zero_detected() {
     let result = CheckedArithmetic::checked_div_f64(10.0, 0.0);
-    assert!(matches!(result, Err(AdversarialError::DivisionByZero { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::DivisionByZero { .. })
+    ));
 }
 
 #[test]
 fn f1013_int_div_zero_detected() {
     let result = CheckedArithmetic::checked_div_i64(10, 0);
-    assert!(matches!(result, Err(AdversarialError::DivisionByZero { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::DivisionByZero { .. })
+    ));
 }
 
 #[test]
@@ -327,14 +363,20 @@ fn f1014_nan_detected_in_floats() {
     let validator = InputValidator::new();
     let data = vec![1.0, 2.0, f32::NAN, 4.0];
     let result = validator.validate_floats(&data);
-    assert!(matches!(result, Err(AdversarialError::NaNDetected { index: 2 })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::NaNDetected { index: 2 })
+    ));
 }
 
 #[test]
 fn f1014_config_nan_rejected() {
     let validator = ConfigValidator::new();
     let result = validator.validate_numeric("value", f64::NAN);
-    assert!(matches!(result, Err(AdversarialError::ConfigParseError { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::ConfigParseError { .. })
+    ));
 }
 
 // ============================================================================
@@ -346,7 +388,13 @@ fn f1015_positive_inf_detected() {
     let validator = InputValidator::new();
     let data = vec![1.0, f32::INFINITY, 3.0];
     let result = validator.validate_floats(&data);
-    assert!(matches!(result, Err(AdversarialError::InfinityDetected { index: 1, positive: true })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::InfinityDetected {
+            index: 1,
+            positive: true
+        })
+    ));
 }
 
 #[test]
@@ -354,7 +402,13 @@ fn f1015_negative_inf_detected() {
     let validator = InputValidator::new();
     let data = vec![1.0, f32::NEG_INFINITY, 3.0];
     let result = validator.validate_floats(&data);
-    assert!(matches!(result, Err(AdversarialError::InfinityDetected { index: 1, positive: false })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::InfinityDetected {
+            index: 1,
+            positive: false
+        })
+    ));
 }
 
 // ============================================================================
@@ -372,7 +426,10 @@ fn f1016_stack_depth_limit_enforced() {
 
     // 11th should fail
     let result = limiter.enter_recursion();
-    assert!(matches!(result, Err(AdversarialError::StackOverflow { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::StackOverflow { .. })
+    ));
 }
 
 #[test]
@@ -401,7 +458,10 @@ fn f1017_cumulative_memory_tracked() {
     limiter.request_memory(400).unwrap();
     // Third request would exceed
     let result = limiter.request_memory(400);
-    assert!(matches!(result, Err(AdversarialError::ResourceExhausted { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::ResourceExhausted { .. })
+    ));
 }
 
 // ============================================================================
@@ -455,7 +515,10 @@ fn f1019_cancelled_check_fails() {
 fn f1020_recovery_without_checkpoint_fails() {
     let handler: RecoveryHandler<i32> = RecoveryHandler::new();
     let result = handler.recover();
-    assert!(matches!(result, Err(AdversarialError::RecoveryFailed { .. })));
+    assert!(matches!(
+        result,
+        Err(AdversarialError::RecoveryFailed { .. })
+    ));
 }
 
 #[test]

@@ -287,7 +287,10 @@ mod tests {
 
     #[test]
     fn test_limit_error_display() {
-        let err = LimitError::TooManyHeaders { count: 150, max: 100 };
+        let err = LimitError::TooManyHeaders {
+            count: 150,
+            max: 100,
+        };
         assert_eq!(format!("{}", err), "too many headers: 150 (max 100)");
 
         let err = LimitError::BodyTooLarge {
@@ -302,9 +305,18 @@ mod tests {
 
     #[test]
     fn test_limit_error_eq() {
-        let err1 = LimitError::TooManyHeaders { count: 150, max: 100 };
-        let err2 = LimitError::TooManyHeaders { count: 150, max: 100 };
-        let err3 = LimitError::TooManyHeaders { count: 200, max: 100 };
+        let err1 = LimitError::TooManyHeaders {
+            count: 150,
+            max: 100,
+        };
+        let err2 = LimitError::TooManyHeaders {
+            count: 150,
+            max: 100,
+        };
+        let err3 = LimitError::TooManyHeaders {
+            count: 200,
+            max: 100,
+        };
 
         assert_eq!(err1, err2);
         assert_ne!(err1, err3);

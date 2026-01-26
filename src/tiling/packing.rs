@@ -1,6 +1,5 @@
 //! Memory packing layout utilities.
 
-
 /// Memory layout for packed matrices
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PackingLayout {

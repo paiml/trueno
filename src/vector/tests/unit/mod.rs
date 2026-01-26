@@ -7,8 +7,8 @@
 //! - `normalize` - Normalization tests (zscore, minmax, layer_norm)
 //! - `activation` - Activation function tests (softmax, swish, mish, etc.)
 
+mod activation;
 mod core;
 mod minmax;
-mod stats;
 mod normalize;
-mod activation;
+mod stats;

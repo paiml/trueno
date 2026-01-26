@@ -8,14 +8,14 @@
 //! - Tile-level profiling for cache-blocked operations (TILING-SPEC-001)
 //! - Kernel checksum capture for divergence detection (CORRECTNESS-011)
 
-mod tile_stats;
 mod checksum;
+mod tile_stats;
 
 #[cfg(test)]
 mod tests;
 
-pub use tile_stats::{TileStats, TileLevel, TileTimer};
-pub use checksum::{KernelChecksum, DivergenceInfo, fnv1a_f32_checksum};
+pub use checksum::{fnv1a_f32_checksum, DivergenceInfo, KernelChecksum};
+pub use tile_stats::{TileLevel, TileStats, TileTimer};
 
 use std::time::Instant;
 

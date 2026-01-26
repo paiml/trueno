@@ -178,7 +178,9 @@ impl TunerDataCollector {
     ) -> Option<()> {
         let throughput_tps = profiler.tokens_per_sec()?;
         let features = self.extractor.extract(profiler, config);
-        let bottleneck = features.bottleneck_class.unwrap_or(BottleneckClass::Unknown);
+        let bottleneck = features
+            .bottleneck_class
+            .unwrap_or(BottleneckClass::Unknown);
 
         let sample = TrainingSample {
             features,
@@ -247,10 +249,7 @@ impl TunerDataCollector {
             "{}-{:?}-{}-{}",
             hw.cpu.cores,
             hw.cpu.simd,
-            hw.gpu
-                .as_ref()
-                .map(|g| g.model.as_str())
-                .unwrap_or("none"),
+            hw.gpu.as_ref().map(|g| g.model.as_str()).unwrap_or("none"),
             hw.gpu.as_ref().map(|g| g.vram_gb as u32).unwrap_or(0),
         );
 

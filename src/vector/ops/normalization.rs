@@ -378,7 +378,10 @@ mod tests {
     #[test]
     fn test_minmax_normalize_empty() {
         let v: Vector<f32> = Vector::from_slice(&[]);
-        assert!(matches!(v.minmax_normalize(), Err(TruenoError::EmptyVector)));
+        assert!(matches!(
+            v.minmax_normalize(),
+            Err(TruenoError::EmptyVector)
+        ));
     }
 
     #[test]

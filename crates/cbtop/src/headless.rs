@@ -12,10 +12,10 @@
 //! cbtop bench --backend simd --workload gemm --duration 5
 //! ```
 
+use crate::brick::{BrickScore, Scorable};
+use crate::bricks::generators::SimdLoadBrick;
 use crate::config::{ComputeBackend, WorkloadType};
 use crate::error::CbtopError;
-use crate::bricks::generators::SimdLoadBrick;
-use crate::brick::{BrickScore, Scorable};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
@@ -310,10 +310,14 @@ Score: {}/100 (Grade: {})
             if self.warnings.is_empty() {
                 String::new()
             } else {
-                format!("\nWarnings:\n{}", self.warnings.iter()
-                    .map(|w| format!("  - {}", w))
-                    .collect::<Vec<_>>()
-                    .join("\n"))
+                format!(
+                    "\nWarnings:\n{}",
+                    self.warnings
+                        .iter()
+                        .map(|w| format!("  - {}", w))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
             },
         )
     }
@@ -505,13 +509,13 @@ impl HeadlessBenchmark {
         // Small workloads complete too quickly, causing high variance (CV > 600%)
         // Require more iterations for smaller sizes to get stable measurements
         let min_iterations: u64 = if self.size < 10_000 {
-            5000  // Very small: need many iterations
+            5000 // Very small: need many iterations
         } else if self.size < 100_000 {
-            1000  // Small: need moderate iterations
+            1000 // Small: need moderate iterations
         } else if self.size < 1_000_000 {
-            100   // Medium: fewer iterations needed
+            100 // Medium: fewer iterations needed
         } else {
-            10    // Large: minimal iterations (each takes significant time)
+            10 // Large: minimal iterations (each takes significant time)
         };
 
         // Measurement phase
@@ -615,7 +619,11 @@ impl HeadlessBenchmark {
         // OPT-015: Filter outliers using IQR method before calculating CV
         // This reduces measurement noise from system interrupts, GC pauses, etc.
         let filtered = Self::filter_outliers_iqr(latencies);
-        let data = if filtered.len() >= 10 { &filtered } else { latencies };
+        let data = if filtered.len() >= 10 {
+            &filtered
+        } else {
+            latencies
+        };
 
         let n = data.len() as f64;
         let mean = data.iter().sum::<f64>() / n;
@@ -625,7 +633,11 @@ impl HeadlessBenchmark {
         // Calculate standard deviation on filtered data
         let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
         let std_dev = variance.sqrt();
-        let cv_percent = if mean > 0.0 { (std_dev / mean) * 100.0 } else { 0.0 };
+        let cv_percent = if mean > 0.0 {
+            (std_dev / mean) * 100.0
+        } else {
+            0.0
+        };
 
         // Calculate percentiles on original data (for accurate p95/p99)
         let mut sorted = latencies.to_vec();
@@ -904,15 +916,22 @@ mod tests {
                 gflops: 25.0,
                 throughput_ops_sec: 1000.0,
                 latency_ms: LatencyStats {
-                    mean: 1.0, min: 0.5, max: 2.0,
-                    p50: 0.9, p95: 1.5, p99: 1.8,
+                    mean: 1.0,
+                    min: 0.5,
+                    max: 2.0,
+                    p50: 0.9,
+                    p95: 1.5,
+                    p99: 1.8,
                     cv_percent: 10.0,
                 },
             },
             score: ScoreInfo {
-                total: 85, grade: "B".to_string(),
-                performance: 35, efficiency: 20,
-                correctness: 20, stability: 10,
+                total: 85,
+                grade: "B".to_string(),
+                performance: 35,
+                efficiency: 20,
+                correctness: 20,
+                stability: 10,
             },
             warnings: vec![],
         };
@@ -943,9 +962,7 @@ mod tests {
     // HL-007: Library API tests
     #[test]
     fn test_benchmark_builder_defaults() {
-        let benchmark = Benchmark::builder()
-            .build()
-            .unwrap();
+        let benchmark = Benchmark::builder().build().unwrap();
 
         let result = benchmark.run().unwrap();
         assert!(result.results.gflops > 0.0);

@@ -26,7 +26,7 @@ mod fkr_011_tests {
         }
         let kernel = PtxKernel::new("direct_shared_test")
             .param(PtxType::U64, "output")
-            .shared_memory(4096)  // 4KB shared memory
+            .shared_memory(4096) // 4KB shared memory
             .build(|ctx| {
                 // Get thread ID
                 let tid = ctx.special_reg(PtxReg::TidX);
@@ -78,7 +78,8 @@ mod fkr_011_tests {
         let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
         unsafe {
-            stream.launch_kernel(&mut module, "direct_shared_test", &config, &mut args)
+            stream
+                .launch_kernel(&mut module, "direct_shared_test", &config, &mut args)
                 .expect("Kernel launch");
         }
 
@@ -102,11 +103,11 @@ mod fkr_011_tests {
             eprintln!("FKR-011b SKIPPED: No CUDA device available");
             return;
         }
-        const WARP_SMEM_SIZE: u32 = 12544;  // Same as LZ4
+        const WARP_SMEM_SIZE: u32 = 12544; // Same as LZ4
 
         let kernel = PtxKernel::new("multi_warp_shared_test")
             .param(PtxType::U64, "output")
-            .shared_memory((WARP_SMEM_SIZE * 3) as usize)  // 3 warps
+            .shared_memory((WARP_SMEM_SIZE * 3) as usize) // 3 warps
             .build(|ctx| {
                 // Get thread ID and compute warp ID
                 let tid = ctx.special_reg(PtxReg::TidX);
@@ -153,14 +154,15 @@ mod fkr_011_tests {
 
         let config = LaunchConfig {
             grid: (1, 1, 1),
-            block: (96, 1, 1),  // 3 warps
+            block: (96, 1, 1), // 3 warps
             shared_mem: 0,
         };
 
         let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
         unsafe {
-            stream.launch_kernel(&mut module, "multi_warp_shared_test", &config, &mut args)
+            stream
+                .launch_kernel(&mut module, "multi_warp_shared_test", &config, &mut args)
                 .expect("Kernel launch");
         }
 
@@ -187,7 +189,7 @@ mod fkr_011_tests {
             return;
         }
         const WARP_SMEM_SIZE: u32 = 12544;
-        const STATE_OFFSET: u32 = 4096 + 8192 + 128 + 4;  // 12420
+        const STATE_OFFSET: u32 = 4096 + 8192 + 128 + 4; // 12420
 
         let kernel = PtxKernel::new("lz4_state_pattern_test")
             .param(PtxType::U64, "output")
@@ -200,21 +202,21 @@ mod fkr_011_tests {
                 ctx.branch_if_not(is_leader, "L_skip");
 
                 // Compute state_base offset: warp_id * WARP_SMEM_SIZE + STATE_OFFSET
-                let warp_id = ctx.shr_u32_imm(tid, 5);  // 0 for thread 0
+                let warp_id = ctx.shr_u32_imm(tid, 5); // 0 for thread 0
                 let warp_offset = ctx.mul_u32(warp_id, WARP_SMEM_SIZE);
                 let state_offset = ctx.add_u32(warp_offset, STATE_OFFSET);
 
                 // Write test values to state using direct .shared
                 let test_val1 = ctx.mov_u32_imm(0xDEADBEEF);
-                ctx.st_shared_u32(state_offset, test_val1);  // state[0] = in_pos
+                ctx.st_shared_u32(state_offset, test_val1); // state[0] = in_pos
 
                 let off4 = ctx.add_u32(state_offset, 4);
                 let test_val2 = ctx.mov_u32_imm(0xCAFEBABE);
-                ctx.st_shared_u32(off4, test_val2);  // state[1] = out_pos
+                ctx.st_shared_u32(off4, test_val2); // state[1] = out_pos
 
                 let off8 = ctx.add_u32(state_offset, 8);
                 let test_val3 = ctx.mov_u32_imm(0x12345678);
-                ctx.st_shared_u32(off8, test_val3);  // state[2] = anchor
+                ctx.st_shared_u32(off8, test_val3); // state[2] = anchor
 
                 ctx.bar_sync(0);
 
@@ -268,7 +270,8 @@ mod fkr_011_tests {
         let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
         unsafe {
-            stream.launch_kernel(&mut module, "lz4_state_pattern_test", &config, &mut args)
+            stream
+                .launch_kernel(&mut module, "lz4_state_pattern_test", &config, &mut args)
                 .expect("Kernel launch");
         }
 
@@ -278,15 +281,31 @@ mod fkr_011_tests {
         output_buf.copy_to_host(&mut output).unwrap();
 
         println!("=== LZ4 State Pattern Results ===");
-        println!("state[0] (in_pos):   0x{:08X} (expected 0xDEADBEEF)", output[0]);
-        println!("state[1] (out_pos):  0x{:08X} (expected 0xCAFEBABE)", output[1]);
-        println!("state[2] (anchor):   0x{:08X} (expected 0x12345678)", output[2]);
-        println!("state_offset:        {} (expected {})", output[3], STATE_OFFSET);
+        println!(
+            "state[0] (in_pos):   0x{:08X} (expected 0xDEADBEEF)",
+            output[0]
+        );
+        println!(
+            "state[1] (out_pos):  0x{:08X} (expected 0xCAFEBABE)",
+            output[1]
+        );
+        println!(
+            "state[2] (anchor):   0x{:08X} (expected 0x12345678)",
+            output[2]
+        );
+        println!(
+            "state_offset:        {} (expected {})",
+            output[3], STATE_OFFSET
+        );
 
         assert_eq!(output[0], 0xDEADBEEF, "in_pos should be 0xDEADBEEF");
         assert_eq!(output[1], 0xCAFEBABE, "out_pos should be 0xCAFEBABE");
         assert_eq!(output[2], 0x12345678, "anchor should be 0x12345678");
-        assert_eq!(output[3], STATE_OFFSET, "state_offset should be {}", STATE_OFFSET);
+        assert_eq!(
+            output[3], STATE_OFFSET,
+            "state_offset should be {}",
+            STATE_OFFSET
+        );
 
         println!("FKR-011c: LZ4 state pattern PASSED!");
     }

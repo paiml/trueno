@@ -144,7 +144,10 @@ mod tests {
             ShutdownResult::Timeout { remaining: 5 },
             ShutdownResult::Timeout { remaining: 5 }
         );
-        assert_ne!(ShutdownResult::Clean, ShutdownResult::Timeout { remaining: 0 });
+        assert_ne!(
+            ShutdownResult::Clean,
+            ShutdownResult::Timeout { remaining: 0 }
+        );
     }
 
     #[test]
@@ -202,7 +205,10 @@ mod tests {
 
         // Try to register after shutdown
         let guard = shutdown.register();
-        assert!(guard.is_none(), "Should reject new operations after shutdown");
+        assert!(
+            guard.is_none(),
+            "Should reject new operations after shutdown"
+        );
     }
 
     #[test]

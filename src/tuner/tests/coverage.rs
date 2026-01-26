@@ -61,7 +61,9 @@ fn test_experiment_suggestion_display() {
     let exp = ExperimentSuggestion::EnableCudaGraphs;
     assert!(format!("{}", exp).contains("CUDA graphs"));
 
-    let exp = ExperimentSuggestion::TryKernel { kernel: KernelType::BatchedQ4K };
+    let exp = ExperimentSuggestion::TryKernel {
+        kernel: KernelType::BatchedQ4K,
+    };
     assert!(format!("{}", exp).contains("kernel"));
 
     let exp = ExperimentSuggestion::ReduceSequenceLength { factor: 0.5 };
@@ -171,14 +173,10 @@ fn test_builder_gpu_l2_cache_mb() {
 
 #[test]
 fn test_builder_is_zero_copy() {
-    let features_enabled = TunerFeatures::builder()
-        .is_zero_copy(true)
-        .build();
+    let features_enabled = TunerFeatures::builder().is_zero_copy(true).build();
     assert_eq!(features_enabled.is_zero_copy, 1.0);
 
-    let features_disabled = TunerFeatures::builder()
-        .is_zero_copy(false)
-        .build();
+    let features_disabled = TunerFeatures::builder().is_zero_copy(false).build();
     assert_eq!(features_disabled.is_zero_copy, 0.0);
 }
 
@@ -243,7 +241,10 @@ fn test_brick_tuner_train_insufficient_data() {
 
     let result = tuner.train(&data);
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), TunerError::InsufficientData(5)));
+    assert!(matches!(
+        result.unwrap_err(),
+        TunerError::InsufficientData(5)
+    ));
 }
 
 #[test]
@@ -291,7 +292,11 @@ fn test_collector_train_if_ready_success() {
             .model_params_b(1.0 + (i as f32) % 20.0)
             .hidden_dim(2048 + (i as u32) % 4096)
             .batch_size((i as u32) % 16 + 1)
-            .quant_type(if i % 2 == 0 { QuantType::Q4K } else { QuantType::Q8_0 })
+            .quant_type(if i % 2 == 0 {
+                QuantType::Q4K
+            } else {
+                QuantType::Q8_0
+            })
             .build();
         collector.samples.push(TrainingSample {
             features,
@@ -342,7 +347,11 @@ fn test_collector_auto_retrain_success() {
             .model_params_b(1.0 + (i as f32) * 0.1)
             .hidden_dim(2048)
             .batch_size((i as u32) % 16 + 1)
-            .quant_type(if i % 2 == 0 { QuantType::Q4K } else { QuantType::Q8_0 })
+            .quant_type(if i % 2 == 0 {
+                QuantType::Q4K
+            } else {
+                QuantType::Q8_0
+            })
             .build();
         collector.samples.push(TrainingSample {
             features,

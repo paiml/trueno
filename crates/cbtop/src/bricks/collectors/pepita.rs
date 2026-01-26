@@ -9,10 +9,10 @@
 //! - Average I/O latency
 //! - ublk device metrics
 
-use std::any::Any;
-use std::time::{Duration, Instant};
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use crate::ring_buffer::RingBuffer;
+use std::any::Any;
+use std::time::{Duration, Instant};
 
 /// io_uring metrics
 #[derive(Debug, Clone)]
@@ -233,7 +233,10 @@ impl Brick for PepitaCollectorBrick {
 
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
-            BrickAssertion::ValueInRange { min: 0.0, max: 1_000_000.0 }, // IOPS
+            BrickAssertion::ValueInRange {
+                min: 0.0,
+                max: 1_000_000.0,
+            }, // IOPS
             BrickAssertion::max_latency_ms(1), // Low latency for io_uring
         ]
     }

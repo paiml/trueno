@@ -11,6 +11,8 @@
 //! - `kv_cache_scatter_gpu` - KV cache scatter operation
 
 #[cfg(feature = "cuda")]
+use super::cache::get_or_compile_kernel;
+#[cfg(feature = "cuda")]
 use super::GpuResidentTensor;
 #[cfg(feature = "cuda")]
 use crate::driver::{CudaContext, CudaStream, GpuBuffer, LaunchConfig};
@@ -18,8 +20,6 @@ use crate::driver::{CudaContext, CudaStream, GpuBuffer, LaunchConfig};
 use crate::error::Result;
 #[cfg(feature = "cuda")]
 use crate::kernels::Kernel;
-#[cfg(feature = "cuda")]
-use super::cache::get_or_compile_kernel;
 
 // Note: Batched4DGemmKernel available for optimized multi-head attention (future)
 #[allow(unused_imports)]
@@ -114,10 +114,12 @@ pub fn batched_multihead_attention(
             let q_host = q_h.peek_host()?;
             let k_host = k_h.peek_host()?;
             let v_host = v_h.peek_host()?;
-            eprintln!("[DEBUG-ATTN] head 0: Q_h mean={:.6}, K_h mean={:.6}, V_h mean={:.6}",
+            eprintln!(
+                "[DEBUG-ATTN] head 0: Q_h mean={:.6}, K_h mean={:.6}, V_h mean={:.6}",
                 q_host.iter().sum::<f32>() / q_host.len() as f32,
                 k_host.iter().sum::<f32>() / k_host.len() as f32,
-                v_host.iter().sum::<f32>() / v_host.len() as f32);
+                v_host.iter().sum::<f32>() / v_host.len() as f32
+            );
         }
 
         // Transpose K_h: [seq_len, head_dim] -> [head_dim, seq_len]
@@ -129,9 +131,14 @@ pub fn batched_multihead_attention(
 
         if debug_attn && h == 0 {
             let scores_host = scores_h.peek_host()?;
-            eprintln!("[DEBUG-ATTN] head 0: scores mean={:.6}, max={:.6}",
+            eprintln!(
+                "[DEBUG-ATTN] head 0: scores mean={:.6}, max={:.6}",
                 scores_host.iter().sum::<f32>() / scores_host.len() as f32,
-                scores_host.iter().cloned().fold(f32::NEG_INFINITY, f32::max));
+                scores_host
+                    .iter()
+                    .cloned()
+                    .fold(f32::NEG_INFINITY, f32::max)
+            );
         }
 
         // Scale and softmax
@@ -142,9 +149,11 @@ pub fn batched_multihead_attention(
             let attn_host = attn_h.peek_host()?;
             // Check first row sums to ~1
             let first_row_sum: f32 = attn_host[..seq_len as usize].iter().sum();
-            eprintln!("[DEBUG-ATTN] head 0: attn first_row_sum={:.6}, mean={:.6}",
+            eprintln!(
+                "[DEBUG-ATTN] head 0: attn first_row_sum={:.6}, mean={:.6}",
                 first_row_sum,
-                attn_host.iter().sum::<f32>() / attn_host.len() as f32);
+                attn_host.iter().sum::<f32>() / attn_host.len() as f32
+            );
         }
 
         // Attn @ V_h: [seq_len, seq_len] @ [seq_len, head_dim] = [seq_len, head_dim]
@@ -152,9 +161,11 @@ pub fn batched_multihead_attention(
 
         if debug_attn && h == 0 {
             let out_host = out_h.peek_host()?;
-            eprintln!("[DEBUG-ATTN] head 0: out mean={:.6}, std={:.6}",
+            eprintln!(
+                "[DEBUG-ATTN] head 0: out mean={:.6}, std={:.6}",
                 out_host.iter().sum::<f32>() / out_host.len() as f32,
-                (out_host.iter().map(|v| v.powi(2)).sum::<f32>() / out_host.len() as f32).sqrt());
+                (out_host.iter().map(|v| v.powi(2)).sum::<f32>() / out_host.len() as f32).sqrt()
+            );
         }
 
         // Copy out_h to output at head h position
@@ -195,7 +206,7 @@ pub fn batched_multihead_attention_optimized(
     }
 
     let scale = 1.0 / (head_dim as f32).sqrt();
-    let batch = n_heads;  // Each head is a "batch" item
+    let batch = n_heads; // Each head is a "batch" item
 
     // Step 1: Convert interleaved -> batched for Q, K, V
     // [seq_len, n_heads * head_dim] -> [n_heads, seq_len, head_dim]
@@ -209,7 +220,15 @@ pub fn batched_multihead_attention_optimized(
 
     // Step 3: Q @ K^T for all heads using BatchedGemmKernel
     // [n_heads, seq_len, head_dim] @ [n_heads, head_dim, seq_len] -> [n_heads, seq_len, seq_len]
-    let scores = batched_gemm(ctx, &q_batched, &kt_batched, batch, seq_len, seq_len, head_dim)?;
+    let scores = batched_gemm(
+        ctx,
+        &q_batched,
+        &kt_batched,
+        batch,
+        seq_len,
+        seq_len,
+        head_dim,
+    )?;
 
     // Step 4: Scale all scores
     let total_scores = batch * seq_len * seq_len;
@@ -249,7 +268,10 @@ fn interleaved_to_batched_all(
 
     let kernel = InterleavedToBatchedKernel::new(seq_len, n_heads, head_dim);
     let ptx = kernel.emit_ptx();
-    let cache_key = format!("interleaved_to_batched:{}:{}:{}", seq_len, n_heads, head_dim);
+    let cache_key = format!(
+        "interleaved_to_batched:{}:{}:{}",
+        seq_len, n_heads, head_dim
+    );
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
@@ -270,9 +292,9 @@ fn interleaved_to_batched_all(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -306,7 +328,7 @@ fn batched_transpose_all(
     let elems_per_batch = rows * cols;
     let blocks_x = (elems_per_batch + threads - 1) / threads;
     let config = LaunchConfig {
-        grid: (blocks_x, 1, batch),  // z-dimension for batch/heads
+        grid: (blocks_x, 1, batch), // z-dimension for batch/heads
         block: (threads, 1, 1),
         shared_mem: 0,
     };
@@ -323,9 +345,9 @@ fn batched_transpose_all(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -407,9 +429,9 @@ fn batched_gemm(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -456,9 +478,9 @@ fn batched_scale_all(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -505,9 +527,9 @@ fn batched_softmax_all(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -533,7 +555,10 @@ fn batched_to_interleaved_all(
 
     let kernel = BatchedToInterleavedKernel::new(seq_len, n_heads, head_dim);
     let ptx = kernel.emit_ptx();
-    let cache_key = format!("batched_to_interleaved:{}:{}:{}", seq_len, n_heads, head_dim);
+    let cache_key = format!(
+        "batched_to_interleaved:{}:{}:{}",
+        seq_len, n_heads, head_dim
+    );
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
@@ -554,9 +579,9 @@ fn batched_to_interleaved_all(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -604,9 +629,9 @@ fn transpose_matrix(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, transpose.name(), &config, &mut args)?;
         }
@@ -654,9 +679,9 @@ fn extract_single_head(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -703,9 +728,9 @@ fn copy_head_to_output(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -842,9 +867,9 @@ pub fn incremental_attention_gpu(
 
     // Launch kernel (lock the cached module)
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -890,7 +915,10 @@ pub fn incremental_attention_gpu_with_stream(
     if q.len() != q_expected {
         return Err(crate::GpuError::InvalidParameter(format!(
             "Q has {} elements, expected {} (n_heads={}, head_dim={})",
-            q.len(), q_expected, n_heads, head_dim
+            q.len(),
+            q_expected,
+            n_heads,
+            head_dim
         )));
     }
 
@@ -899,19 +927,22 @@ pub fn incremental_attention_gpu_with_stream(
     if k_cache.len() != cache_expected {
         return Err(crate::GpuError::InvalidParameter(format!(
             "K cache has {} elements, expected {}",
-            k_cache.len(), cache_expected
+            k_cache.len(),
+            cache_expected
         )));
     }
     if v_cache.len() != cache_expected {
         return Err(crate::GpuError::InvalidParameter(format!(
             "V cache has {} elements, expected {}",
-            v_cache.len(), cache_expected
+            v_cache.len(),
+            cache_expected
         )));
     }
 
     if seq_len > max_seq_len {
         return Err(crate::GpuError::InvalidParameter(format!(
-            "seq_len ({}) exceeds max_seq_len ({})", seq_len, max_seq_len
+            "seq_len ({}) exceeds max_seq_len ({})",
+            seq_len, max_seq_len
         )));
     }
 
@@ -927,7 +958,10 @@ pub fn incremental_attention_gpu_with_stream(
     // Build and cache kernel
     let kernel = IncrementalAttentionKernel::new(max_seq_len, head_dim, n_heads);
     let ptx = kernel.emit_ptx();
-    let cache_key = format!("incremental_attention:{}:{}:{}", max_seq_len, head_dim, n_heads);
+    let cache_key = format!(
+        "incremental_attention:{}:{}:{}",
+        max_seq_len, head_dim, n_heads
+    );
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
     let config = LaunchConfig {
@@ -951,9 +985,9 @@ pub fn incremental_attention_gpu_with_stream(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -995,7 +1029,10 @@ pub fn incremental_attention_gpu_async(
     if q.len() != q_expected {
         return Err(crate::GpuError::InvalidParameter(format!(
             "Q has {} elements, expected {} (n_heads={}, head_dim={})",
-            q.len(), q_expected, n_heads, head_dim
+            q.len(),
+            q_expected,
+            n_heads,
+            head_dim
         )));
     }
 
@@ -1010,7 +1047,8 @@ pub fn incremental_attention_gpu_async(
 
     if seq_len > max_seq_len {
         return Err(crate::GpuError::InvalidParameter(format!(
-            "seq_len ({}) exceeds max_seq_len ({})", seq_len, max_seq_len
+            "seq_len ({}) exceeds max_seq_len ({})",
+            seq_len, max_seq_len
         )));
     }
 
@@ -1028,7 +1066,10 @@ pub fn incremental_attention_gpu_async(
     // Build and cache kernel
     let kernel = IncrementalAttentionKernel::new(max_seq_len, head_dim, n_heads);
     let ptx = kernel.emit_ptx();
-    let cache_key = format!("incremental_attention:{}:{}:{}", max_seq_len, head_dim, n_heads);
+    let cache_key = format!(
+        "incremental_attention:{}:{}:{}",
+        max_seq_len, head_dim, n_heads
+    );
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
@@ -1053,9 +1094,9 @@ pub fn incremental_attention_gpu_async(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }
@@ -1103,14 +1144,17 @@ pub fn kv_cache_scatter_gpu(
     max_seq_len: u32,
     stream: &CudaStream,
 ) -> Result<()> {
-    use crate::kernels::{KvCacheScatterKernel, Kernel};
+    use crate::kernels::{Kernel, KvCacheScatterKernel};
 
     // Validate source size
     let src_expected = (n_heads * head_dim) as usize;
     if src.len() != src_expected {
         return Err(crate::GpuError::InvalidParameter(format!(
             "Source has {} elements, expected {} (n_heads={}, head_dim={})",
-            src.len(), src_expected, n_heads, head_dim
+            src.len(),
+            src_expected,
+            n_heads,
+            head_dim
         )));
     }
 
@@ -1119,14 +1163,19 @@ pub fn kv_cache_scatter_gpu(
     if cache.len() != cache_expected {
         return Err(crate::GpuError::InvalidParameter(format!(
             "Cache has {} elements, expected {} (n_heads={}, max_seq_len={}, head_dim={})",
-            cache.len(), cache_expected, n_heads, max_seq_len, head_dim
+            cache.len(),
+            cache_expected,
+            n_heads,
+            max_seq_len,
+            head_dim
         )));
     }
 
     // Validate position
     if pos >= max_seq_len {
         return Err(crate::GpuError::InvalidParameter(format!(
-            "Position {} >= max_seq_len {}", pos, max_seq_len
+            "Position {} >= max_seq_len {}",
+            pos, max_seq_len
         )));
     }
 
@@ -1155,9 +1204,9 @@ pub fn kv_cache_scatter_gpu(
     ];
 
     {
-        let mut module = module_arc.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-        })?;
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
         unsafe {
             stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
         }

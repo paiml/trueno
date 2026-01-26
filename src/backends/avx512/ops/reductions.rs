@@ -55,7 +55,11 @@ pub unsafe fn max(a: &[f32]) -> f32 {
     }
 
     let mut result = _mm512_reduce_max_ps(vmax);
-    for &val in &a[i..] { if val > result { result = val; } }
+    for &val in &a[i..] {
+        if val > result {
+            result = val;
+        }
+    }
     result
 }
 
@@ -73,7 +77,11 @@ pub unsafe fn min(a: &[f32]) -> f32 {
     }
 
     let mut result = _mm512_reduce_min_ps(vmin);
-    for &val in &a[i..] { if val < result { result = val; } }
+    for &val in &a[i..] {
+        if val < result {
+            result = val;
+        }
+    }
     result
 }
 
@@ -84,7 +92,10 @@ pub unsafe fn argmax(a: &[f32]) -> usize {
     let mut max_idx: usize = 0;
     let mut max_val = a[0];
     for (i, &val) in a.iter().enumerate() {
-        if val > max_val { max_val = val; max_idx = i; }
+        if val > max_val {
+            max_val = val;
+            max_idx = i;
+        }
     }
     max_idx
 }
@@ -96,7 +107,10 @@ pub unsafe fn argmin(a: &[f32]) -> usize {
     let mut min_idx: usize = 0;
     let mut min_val = a[0];
     for (i, &val) in a.iter().enumerate() {
-        if val < min_val { min_val = val; min_idx = i; }
+        if val < min_val {
+            min_val = val;
+            min_idx = i;
+        }
     }
     min_idx
 }

@@ -37,16 +37,16 @@ pub use jidoka::{JidokaError, JidokaGuard};
 pub use profiler::{BlisLevelStats, BlisProfileLevel, BlisProfiler, KaizenMetrics};
 
 // Re-export microkernel functions
+#[cfg(target_arch = "aarch64")]
+pub use microkernels::microkernel_8x8_neon;
 pub use microkernels::microkernel_scalar;
 #[cfg(target_arch = "x86_64")]
 pub use microkernels::{microkernel_8x6_avx2, microkernel_8x6_avx2_asm, microkernel_8x6_true_asm};
-#[cfg(target_arch = "aarch64")]
-pub use microkernels::microkernel_8x8_neon;
 
 // Re-export backend selection types
 pub use backend_selection::{
-    BackendCostModel, BrickLevel, ComputeBackend, PtxMicrokernelSpec, RooflineResult,
-    UnifiedBrickProfiler, WgslMicrokernelSpec, gemm_auto,
+    gemm_auto, BackendCostModel, BrickLevel, ComputeBackend, PtxMicrokernelSpec, RooflineResult,
+    UnifiedBrickProfiler, WgslMicrokernelSpec,
 };
 
 use std::time::Instant;
@@ -210,9 +210,9 @@ pub fn gemm_reference_with_jidoka(
 /// 3. Aligned loads for SIMD
 pub fn pack_a(
     a: &[f32],
-    lda: usize,  // Leading dimension of A (number of columns in original)
-    mc: usize,   // Number of rows to pack
-    kc: usize,   // Number of columns to pack
+    lda: usize, // Leading dimension of A (number of columns in original)
+    mc: usize,  // Number of rows to pack
+    kc: usize,  // Number of columns to pack
     packed: &mut [f32],
 ) {
     let mut pack_idx = 0;
@@ -257,9 +257,9 @@ pub fn pack_a(
 /// [b10 b11 b12 ...]            \____ NR elements ____/
 pub fn pack_b(
     b: &[f32],
-    ldb: usize,  // Leading dimension of B (number of columns in original)
-    kc: usize,   // Number of rows to pack
-    nc: usize,   // Number of columns to pack
+    ldb: usize, // Leading dimension of B (number of columns in original)
+    kc: usize,  // Number of rows to pack
+    nc: usize,  // Number of columns to pack
     packed: &mut [f32],
 ) {
     let mut pack_idx = 0;
@@ -388,7 +388,11 @@ pub fn gemm_blis(
             let pack_start = Instant::now();
             pack_b_block(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
             if let Some(ref mut prof) = profiler.as_deref_mut() {
-                prof.record(BlisProfileLevel::Pack, pack_start.elapsed().as_nanos() as u64, 0);
+                prof.record(
+                    BlisProfileLevel::Pack,
+                    pack_start.elapsed().as_nanos() as u64,
+                    0,
+                );
             }
 
             // Loop 3: ic (M dimension, L1 blocking)
@@ -399,7 +403,11 @@ pub fn gemm_blis(
                 let pack_start = Instant::now();
                 pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
                 if let Some(ref mut prof) = profiler.as_deref_mut() {
-                    prof.record(BlisProfileLevel::Pack, pack_start.elapsed().as_nanos() as u64, 0);
+                    prof.record(
+                        BlisProfileLevel::Pack,
+                        pack_start.elapsed().as_nanos() as u64,
+                        0,
+                    );
                 }
 
                 // Midi profiling
@@ -445,7 +453,13 @@ pub fn gemm_blis(
                                         );
                                     }
                                 } else {
-                                    microkernel_scalar(kc_block, a_panel, b_panel, &mut c_micro, MR);
+                                    microkernel_scalar(
+                                        kc_block,
+                                        a_panel,
+                                        b_panel,
+                                        &mut c_micro,
+                                        MR,
+                                    );
                                 }
                             } else {
                                 microkernel_scalar(kc_block, a_panel, b_panel, &mut c_micro, MR);

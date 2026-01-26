@@ -1596,7 +1596,7 @@ pub trait ComputeDevice: Send + Sync {
     fn device_type(&self) -> DeviceType;
 
     /// Compute metrics
-    fn compute_utilization(&self) -> anyhow::Result<f64>;      // 0.0-100.0%
+    fn compute_utilization(&self) -> anyhow::Result<f64>; // 0.0-100.0%
     fn compute_clock_mhz(&self) -> anyhow::Result<u32>;
     fn compute_temperature_c(&self) -> anyhow::Result<f64>;
     fn compute_power_watts(&self) -> anyhow::Result<f64>;
@@ -1617,4 +1617,3 @@ pub trait ComputeDevice: Send + Sync {
     fn pcie_generation(&self) -> u8;
     fn pcie_width(&self) -> u8;
 }
-

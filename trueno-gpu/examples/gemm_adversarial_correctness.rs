@@ -232,8 +232,18 @@ fn main() {
     let test_cases: Vec<(u32, u32, u32, &str)> = vec![
         // (M, N, K, description)
         (1, 1, 1, "Minimum dimension (N=1)"),
-        (tile_size + 1, tile_size + 1, tile_size + 1, "Tile+1 (17x17x17)"),
-        (tile_size - 1, tile_size - 1, tile_size - 1, "Tile-1 (15x15x15)"),
+        (
+            tile_size + 1,
+            tile_size + 1,
+            tile_size + 1,
+            "Tile+1 (17x17x17)",
+        ),
+        (
+            tile_size - 1,
+            tile_size - 1,
+            tile_size - 1,
+            "Tile-1 (15x15x15)",
+        ),
         (31, 31, 31, "2*Tile-1 (31x31x31)"),
         (33, 33, 33, "2*Tile+1 (33x33x33)"),
         (64, 63, 65, "Mixed non-aligned"),
@@ -295,7 +305,14 @@ fn main() {
         let ptx = kernel.emit_ptx();
 
         if ptx.contains(".entry gemm_tiled") {
-            println!("  {} ({}x{}x{}): PTX generated OK ({} bytes)", desc, m, n, k, ptx.len());
+            println!(
+                "  {} ({}x{}x{}): PTX generated OK ({} bytes)",
+                desc,
+                m,
+                n,
+                k,
+                ptx.len()
+            );
         } else {
             println!("  {} ({}x{}x{}): PTX GENERATION FAILED", desc, m, n, k);
         }

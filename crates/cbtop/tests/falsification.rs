@@ -151,9 +151,18 @@ fn f021_budget_60fps_correct() {
 fn f023_budget_uniform_distribution() {
     let budget = BrickBudget::uniform(10);
     // uniform(n) sets each phase to n ms
-    assert_eq!(budget.collect_ms, 10, "F023 FALSIFIED: uniform collect_ms wrong");
-    assert_eq!(budget.layout_ms, 10, "F023 FALSIFIED: uniform layout_ms wrong");
-    assert_eq!(budget.render_ms, 10, "F023 FALSIFIED: uniform render_ms wrong");
+    assert_eq!(
+        budget.collect_ms, 10,
+        "F023 FALSIFIED: uniform collect_ms wrong"
+    );
+    assert_eq!(
+        budget.layout_ms, 10,
+        "F023 FALSIFIED: uniform layout_ms wrong"
+    );
+    assert_eq!(
+        budget.render_ms, 10,
+        "F023 FALSIFIED: uniform render_ms wrong"
+    );
 }
 
 /// F025: Zero total budget handled correctly
@@ -196,7 +205,7 @@ fn f041_cpu_collector_valid_metrics() {
 #[test]
 fn f042_gpu_collector_no_panic() {
     let mut collector = GpuCollectorBrick::new(999); // Non-existent GPU
-    // Should not panic, just return default metrics
+                                                     // Should not panic, just return default metrics
     let metrics = collector.collect();
     assert!(
         metrics.device_name == "None" || !metrics.device_name.is_empty(),
@@ -210,10 +219,7 @@ fn f043_memory_collector_valid_metrics() {
     let mut collector = MemoryCollectorBrick::new();
     let metrics = collector.collect();
 
-    assert!(
-        metrics.total_kb > 0,
-        "F043 FALSIFIED: Total memory is 0"
-    );
+    assert!(metrics.total_kb > 0, "F043 FALSIFIED: Total memory is 0");
     // Used = total - available
     let used_kb = metrics.total_kb.saturating_sub(metrics.available_kb);
     assert!(
@@ -329,7 +335,10 @@ fn f101_assertions_no_panic() {
         BrickAssertion::MinWidth(40),
         BrickAssertion::MinHeight(15),
         BrickAssertion::max_latency_ms(16),
-        BrickAssertion::ValueInRange { min: 0.0, max: 100.0 },
+        BrickAssertion::ValueInRange {
+            min: 0.0,
+            max: 100.0,
+        },
     ];
 
     for assertion in assertions {
@@ -342,10 +351,7 @@ fn f101_assertions_no_panic() {
 #[test]
 fn f102_verification_starts_valid() {
     let v = BrickVerification::new();
-    assert!(
-        v.is_valid(),
-        "F102 FALSIFIED: New verification is invalid"
-    );
+    assert!(v.is_valid(), "F102 FALSIFIED: New verification is invalid");
 }
 
 /// F103: BrickVerification can fail
@@ -376,10 +382,18 @@ fn f121_ring_buffer_memory_bounded() {
     }
 
     // Should only contain 10 items
-    assert_eq!(buf.len(), 10, "F121 FALSIFIED: Ring buffer grew beyond capacity");
+    assert_eq!(
+        buf.len(),
+        10,
+        "F121 FALSIFIED: Ring buffer grew beyond capacity"
+    );
 
     // Last item should be 999
-    assert_eq!(buf.back(), Some(&999u64), "F121 FALSIFIED: Ring buffer lost newest item");
+    assert_eq!(
+        buf.back(),
+        Some(&999u64),
+        "F121 FALSIFIED: Ring buffer lost newest item"
+    );
 }
 
 /// F122: Statistics calculation handles empty buffer
@@ -390,8 +404,16 @@ fn f122_statistics_empty_buffer() {
     let buf: RingBuffer<f64> = RingBuffer::new(10);
 
     // Empty buffer should return 0.0 for mean
-    assert_eq!(buf.mean(), 0.0, "F122 FALSIFIED: Empty buffer has non-zero mean");
-    assert_eq!(buf.len(), 0, "F122 FALSIFIED: Empty buffer has non-zero count");
+    assert_eq!(
+        buf.mean(),
+        0.0,
+        "F122 FALSIFIED: Empty buffer has non-zero mean"
+    );
+    assert_eq!(
+        buf.len(),
+        0,
+        "F122 FALSIFIED: Empty buffer has non-zero count"
+    );
 }
 
 // ============================================================================
@@ -466,7 +488,11 @@ fn f162_collectors_implement_brick() {
         let verification = brick.verify();
 
         assert!(!name.is_empty(), "F162 FALSIFIED: Empty brick name");
-        assert!(!assertions.is_empty(), "F162 FALSIFIED: No assertions for {}", name);
+        assert!(
+            !assertions.is_empty(),
+            "F162 FALSIFIED: No assertions for {}",
+            name
+        );
         let _ = budget;
         let _ = verification;
     }
@@ -483,10 +509,7 @@ fn f181_verification_explicit_failures() {
     v.add_fail(BrickAssertion::MinWidth(100), "explicit test failure");
 
     let failure_count = v.failure_count();
-    assert!(
-        failure_count > 0,
-        "F181 FALSIFIED: Failure not recorded"
-    );
+    assert!(failure_count > 0, "F181 FALSIFIED: Failure not recorded");
     assert!(
         !v.is_valid(),
         "F181 FALSIFIED: Verification with failure is still valid"
@@ -644,7 +667,11 @@ fn f190_ring_buffer_last_n() {
     }
 
     let last_3: Vec<_> = buf.last_n(3).copied().collect();
-    assert_eq!(last_3, vec![7, 8, 9], "F190 FALSIFIED: last_n returned wrong values");
+    assert_eq!(
+        last_3,
+        vec![7, 8, 9],
+        "F190 FALSIFIED: last_n returned wrong values"
+    );
 }
 
 // ============================================================================
@@ -677,8 +704,5 @@ fn f200_falsification_coverage() {
     // 3. Integration tests via `cargo test -p cbtop`
     // 4. Property-based tests (if added)
 
-    assert!(
-        true,
-        "F200: Falsification framework operational"
-    );
+    assert!(true, "F200: Falsification framework operational");
 }

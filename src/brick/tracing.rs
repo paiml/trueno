@@ -522,8 +522,7 @@ impl TokenLogitEvolution {
         let mut decisive = 0;
 
         for i in 1..self.per_layer_rank.len() {
-            let change =
-                (self.per_layer_rank[i] as i64 - self.per_layer_rank[i - 1] as i64).abs();
+            let change = (self.per_layer_rank[i] as i64 - self.per_layer_rank[i - 1] as i64).abs();
             if change > max_change {
                 max_change = change;
                 decisive = i;
@@ -564,7 +563,9 @@ impl LogitEvolutionTrace {
     pub fn track_token(&mut self, token_id: u32, token_str: String) -> &mut TokenLogitEvolution {
         self.tracked_tokens
             .push(TokenLogitEvolution::new(token_id, token_str));
-        self.tracked_tokens.last_mut().expect("invariant: just pushed")
+        self.tracked_tokens
+            .last_mut()
+            .expect("invariant: just pushed")
     }
 
     /// Compute rank of a token in a logit distribution.
@@ -728,9 +729,11 @@ impl ModelQuantizationError {
 
     /// Get worst brick by cosine similarity.
     pub fn worst_brick(&self) -> Option<&QuantizationErrorTrace> {
-        self.brick_errors
-            .iter()
-            .min_by(|a, b| a.cosine_similarity.partial_cmp(&b.cosine_similarity).unwrap_or(std::cmp::Ordering::Equal))
+        self.brick_errors.iter().min_by(|a, b| {
+            a.cosine_similarity
+                .partial_cmp(&b.cosine_similarity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     }
 }
 
@@ -806,8 +809,7 @@ impl KvCacheSessionTrace {
 
         // Update rolling average
         let n = self.steps.len() as f32 + 1.0;
-        self.avg_hit_rate =
-            (self.avg_hit_rate * (n - 1.0) + trace.cache_hit_rate) / n;
+        self.avg_hit_rate = (self.avg_hit_rate * (n - 1.0) + trace.cache_hit_rate) / n;
 
         self.steps.push(trace);
     }
@@ -817,7 +819,11 @@ impl KvCacheSessionTrace {
         if self.steps.is_empty() {
             return false;
         }
-        let eviction_steps = self.steps.iter().filter(|s| s.evictions_this_step > 0).count();
+        let eviction_steps = self
+            .steps
+            .iter()
+            .filter(|s| s.evictions_this_step > 0)
+            .count();
         eviction_steps as f32 / self.steps.len() as f32 > 0.1
     }
 
@@ -997,7 +1003,10 @@ impl ModelTracer {
     pub fn record_logits(&mut self, layer_idx: usize, logits: &[f32]) {
         if let Some(ref mut logit_trace) = self.current_logit_trace {
             for token_evo in &mut logit_trace.tracked_tokens {
-                let logit = logits.get(token_evo.token_id as usize).copied().unwrap_or(0.0);
+                let logit = logits
+                    .get(token_evo.token_id as usize)
+                    .copied()
+                    .unwrap_or(0.0);
                 let rank = LogitEvolutionTrace::compute_rank(logits, token_evo.token_id);
                 token_evo.record_layer(logit, rank);
             }
@@ -1052,7 +1061,11 @@ impl ModelTracer {
     pub fn summary(&self) -> ModelTracerSummary {
         ModelTracerSummary {
             total_forwards: self.activation_traces.len(),
-            anomalies_detected: self.activation_traces.iter().filter(|t| t.has_anomaly).count(),
+            anomalies_detected: self
+                .activation_traces
+                .iter()
+                .filter(|t| t.has_anomaly)
+                .count(),
             attention_traces: self.attention_traces.len(),
             logit_traces: self.logit_traces.len(),
             kv_steps: self.kv_trace.steps.len(),
@@ -1310,7 +1323,7 @@ mod tests {
     #[test]
     fn test_logit_evolution_trace_compute_rank() {
         let logits = vec![1.0, 5.0, 3.0, 2.0]; // sorted: 5, 3, 2, 1
-        // Token 0 has logit 1.0, rank 3 (3 values above it)
+                                               // Token 0 has logit 1.0, rank 3 (3 values above it)
         assert_eq!(LogitEvolutionTrace::compute_rank(&logits, 0), 3);
         // Token 1 has logit 5.0, rank 0 (nothing above it)
         assert_eq!(LogitEvolutionTrace::compute_rank(&logits, 1), 0);
@@ -1502,13 +1515,8 @@ mod tests {
     #[test]
     fn test_falsify_cosine_identical_vectors() {
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        let trace = QuantizationErrorTrace::compute(
-            BrickId::RmsNorm,
-            0,
-            &data,
-            &data,
-            QuantType::F32,
-        );
+        let trace =
+            QuantizationErrorTrace::compute(BrickId::RmsNorm, 0, &data, &data, QuantType::F32);
 
         assert!(
             (trace.cosine_similarity - 1.0).abs() < 1e-6,
@@ -1523,12 +1531,8 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![4.0, 5.0, 6.0];
 
-        let trace_ab = QuantizationErrorTrace::compute(
-            BrickId::RmsNorm, 0, &a, &b, QuantType::F32,
-        );
-        let trace_ba = QuantizationErrorTrace::compute(
-            BrickId::RmsNorm, 0, &b, &a, QuantType::F32,
-        );
+        let trace_ab = QuantizationErrorTrace::compute(BrickId::RmsNorm, 0, &a, &b, QuantType::F32);
+        let trace_ba = QuantizationErrorTrace::compute(BrickId::RmsNorm, 0, &b, &a, QuantType::F32);
 
         assert!(
             (trace_ab.cosine_similarity - trace_ba.cosine_similarity).abs() < 1e-6,

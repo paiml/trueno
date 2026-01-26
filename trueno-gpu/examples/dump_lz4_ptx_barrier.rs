@@ -3,12 +3,12 @@ use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
 fn main() {
     let kernel = Lz4WarpCompressKernel::new(3);
     let ptx = kernel.emit_ptx();
-    
-    // Print lines around barriers and leader check  
+
+    // Print lines around barriers and leader check
     let lines: Vec<&str> = ptx.lines().collect();
     for (i, line) in lines.iter().enumerate() {
-        if line.contains("bar.sync") 
-            || line.contains("L_leader") 
+        if line.contains("bar.sync")
+            || line.contains("L_leader")
             || line.contains("L_warp_done")
             || line.contains("p_leader")
             || line.contains("L_compress_loop")

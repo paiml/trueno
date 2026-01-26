@@ -24,8 +24,7 @@ fn amd_gpu_present() -> bool {
     // Check for AMD GPU via sysfs (Linux)
     #[cfg(target_os = "linux")]
     {
-        std::path::Path::new("/sys/class/drm/card0/device/vendor")
-            .exists()
+        std::path::Path::new("/sys/class/drm/card0/device/vendor").exists()
     }
     #[cfg(not(target_os = "linux"))]
     {

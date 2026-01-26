@@ -87,9 +87,9 @@ impl Kernel for Q4KQ8DotKernel {
         // - Q4K super-block: 144 bytes = 2 (d) + 2 (dmin) + 12 (scales) + 128 (qs)
         // - Q8_1 block: 36 bytes = 32 (qs) + 4 (d as f16 + sum as f16)
         PtxKernel::new("q4k_q8_dot")
-            .param(PtxType::U64, "y_ptr")     // f32 output [n]
-            .param(PtxType::U64, "w_ptr")     // Q4K weights [n * bytes_per_row]
-            .param(PtxType::U64, "x_ptr")     // Q8_1 input [k/32 * 36] bytes
+            .param(PtxType::U64, "y_ptr") // f32 output [n]
+            .param(PtxType::U64, "w_ptr") // Q4K weights [n * bytes_per_row]
+            .param(PtxType::U64, "x_ptr") // Q8_1 input [k/32 * 36] bytes
             .param(PtxType::U32, "k_dim")
             .param(PtxType::U32, "n_dim")
             .build(|ctx| {
@@ -390,9 +390,9 @@ impl Kernel for PackedDp4aQ4KQ8Kernel {
         // Key optimization: Use dp4a.u32.s32 for 4 multiply-adds per instruction
         // This requires packing Q4K nibbles and Q8 bytes into u32 operands
         PtxKernel::new("packed_dp4a_q4k_q8")
-            .param(PtxType::U64, "y_ptr")     // f32 output [n]
-            .param(PtxType::U64, "w_ptr")     // Q4K weights [n * bytes_per_row]
-            .param(PtxType::U64, "x_ptr")     // Q8_1 input [k/32 * 36] bytes
+            .param(PtxType::U64, "y_ptr") // f32 output [n]
+            .param(PtxType::U64, "w_ptr") // Q4K weights [n * bytes_per_row]
+            .param(PtxType::U64, "x_ptr") // Q8_1 input [k/32 * 36] bytes
             .param(PtxType::U32, "k_dim")
             .param(PtxType::U32, "n_dim")
             .build(|ctx| {

@@ -170,12 +170,7 @@ impl BrickAssertion {
 
 impl KernelTrace {
     /// Create a new kernel trace
-    pub fn new(
-        kernel_name: &str,
-        layer_idx: usize,
-        position: u32,
-        backend: &str,
-    ) -> Self {
+    pub fn new(kernel_name: &str, layer_idx: usize, position: u32, backend: &str) -> Self {
         Self {
             kernel_name: kernel_name.to_string(),
             layer_idx,
@@ -222,16 +217,15 @@ impl DivergenceReport {
             expected_trace: None,
             actual_trace: None,
             kernels_compared,
-            diagnosis: format!("All {} kernels matched between CPU and GPU", kernels_compared),
+            diagnosis: format!(
+                "All {} kernels matched between CPU and GPU",
+                kernels_compared
+            ),
         }
     }
 
     /// Create a report indicating divergence at specific kernel
-    pub fn diverged(
-        expected: KernelTrace,
-        actual: KernelTrace,
-        kernels_compared: usize,
-    ) -> Self {
+    pub fn diverged(expected: KernelTrace, actual: KernelTrace, kernels_compared: usize) -> Self {
         let diagnosis = format!(
             "DIVERGENCE at kernel '{}' (layer {}, position {}): \
              CPU checksum 0x{:016X} != GPU checksum 0x{:016X}. \
@@ -754,12 +748,7 @@ impl Default for BrickScore {
 
 impl fmt::Display for BrickScore {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}/100 ({})",
-            self.total(),
-            self.grade().description()
-        )
+        write!(f, "{}/100 ({})", self.total(), self.grade().description())
     }
 }
 
@@ -1041,7 +1030,10 @@ mod tests {
     #[test]
     fn f505_total_is_sum_of_components() {
         let score = BrickScore::new(38, 22, 20, 14);
-        assert_eq!(score.total(), score.performance + score.efficiency + score.correctness + score.stability);
+        assert_eq!(
+            score.total(),
+            score.performance + score.efficiency + score.correctness + score.stability
+        );
         assert_eq!(score.total(), 38 + 22 + 20 + 14);
         assert_eq!(score.total(), 94);
 
@@ -1157,25 +1149,22 @@ mod tests {
         cpu_profiler.add_trace(
             KernelTrace::new("rope", 0, 1, "CPU")
                 .with_input_checksum(&[1.0, 2.0])
-                .with_output_checksum(&[3.0, 4.0])
+                .with_output_checksum(&[3.0, 4.0]),
         );
         gpu_profiler.add_trace(
             KernelTrace::new("rope", 0, 1, "CUDA")
                 .with_input_checksum(&[1.0, 2.0])
-                .with_output_checksum(&[3.0, 4.0])
+                .with_output_checksum(&[3.0, 4.0]),
         );
 
         let report = cpu_profiler.compare(&gpu_profiler);
         assert!(report.matched);
 
         // Add divergent kernel
-        cpu_profiler.add_trace(
-            KernelTrace::new("rmsnorm", 1, 1, "CPU")
-                .with_output_checksum(&[5.0, 6.0])
-        );
+        cpu_profiler
+            .add_trace(KernelTrace::new("rmsnorm", 1, 1, "CPU").with_output_checksum(&[5.0, 6.0]));
         gpu_profiler.add_trace(
-            KernelTrace::new("rmsnorm", 1, 1, "CUDA")
-                .with_output_checksum(&[7.0, 8.0]) // Different!
+            KernelTrace::new("rmsnorm", 1, 1, "CUDA").with_output_checksum(&[7.0, 8.0]), // Different!
         );
 
         let report = cpu_profiler.compare(&gpu_profiler);

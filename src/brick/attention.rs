@@ -289,9 +289,9 @@ mod tests {
         // Cross-attention: Q from decoder (seq=1), K/V from encoder (seq=4)
         let op = AttentionOp::new(1, 4, 8); // q_seq=1, kv_seq=4, head_dim=8
 
-        let q = vec![1.0; 8];   // 1 x 8
-        let k = vec![1.0; 32];  // 4 x 8
-        let v = vec![1.0; 32];  // 4 x 8
+        let q = vec![1.0; 8]; // 1 x 8
+        let k = vec![1.0; 32]; // 4 x 8
+        let v = vec![1.0; 32]; // 4 x 8
 
         let output = op.execute((q, k, v), Backend::Scalar).unwrap();
         assert_eq!(output.len(), 8);

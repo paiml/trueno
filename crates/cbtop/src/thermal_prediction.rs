@@ -111,12 +111,7 @@ pub struct ThrottleRisk {
 
 impl ThrottleRisk {
     /// Create from temperature and trend
-    pub fn assess(
-        current_temp: f64,
-        threshold: f64,
-        trend_slope: f64,
-        horizon_sec: f64,
-    ) -> Self {
+    pub fn assess(current_temp: f64, threshold: f64, trend_slope: f64, horizon_sec: f64) -> Self {
         let margin = threshold - current_temp;
         let _predicted_temp = current_temp + trend_slope * horizon_sec;
 
@@ -211,11 +206,7 @@ pub struct CooldownRecommendation {
 
 impl CooldownRecommendation {
     /// Calculate cooldown time needed
-    pub fn calculate(
-        current_temp: f64,
-        target_temp: f64,
-        cooling_rate: f64,
-    ) -> Self {
+    pub fn calculate(current_temp: f64, target_temp: f64, cooling_rate: f64) -> Self {
         let temp_delta = current_temp - target_temp;
         let duration = if temp_delta > 0.0 && cooling_rate > 0.0 {
             temp_delta / cooling_rate
@@ -602,11 +593,7 @@ pub fn analyze_thermal(
 }
 
 /// Convenience function to assess throttle risk
-pub fn assess_throttle_risk(
-    current_temp: f64,
-    threshold: f64,
-    trend_slope: f64,
-) -> ThrottleRisk {
+pub fn assess_throttle_risk(current_temp: f64, threshold: f64, trend_slope: f64) -> ThrottleRisk {
     ThrottleRisk::assess(current_temp, threshold, trend_slope, 10.0)
 }
 
@@ -699,9 +686,9 @@ mod tests {
     #[test]
     fn test_cooldown_recommendation() {
         let cooldown = CooldownRecommendation::calculate(
-            90.0,  // Current temp
-            75.0,  // Target temp
-            0.5,   // Cooling rate
+            90.0, // Current temp
+            75.0, // Target temp
+            0.5,  // Cooling rate
         );
 
         // Need to cool 15°C at 0.5°C/sec = 30 seconds
@@ -712,8 +699,8 @@ mod tests {
     #[test]
     fn test_no_cooldown_needed() {
         let cooldown = CooldownRecommendation::calculate(
-            70.0,  // Current temp
-            75.0,  // Target temp (already below target)
+            70.0, // Current temp
+            75.0, // Target temp (already below target)
             0.5,
         );
 

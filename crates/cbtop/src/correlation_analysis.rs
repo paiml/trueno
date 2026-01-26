@@ -648,7 +648,11 @@ mod tests {
         for i in 0..20 {
             let t = i as f64;
             analyzer.add_perf_sample(PerformanceSample::new(t, 5.0 + i as f64, 100.0));
-            analyzer.add_event_sample(EventSample::new(EventType::Interrupt, t, 100.0 + i as f64 * 10.0));
+            analyzer.add_event_sample(EventSample::new(
+                EventType::Interrupt,
+                t,
+                100.0 + i as f64 * 10.0,
+            ));
         }
 
         let result = analyzer.correlate_events(EventType::Interrupt).unwrap();

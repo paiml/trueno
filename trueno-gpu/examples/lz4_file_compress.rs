@@ -59,7 +59,9 @@ fn print_usage() {
     println!("  gpu-info                    Show GPU kernel info");
     println!();
     println!("Examples:");
-    println!("  cargo run -p trueno-gpu --example lz4_file_compress -- compress README.md readme.lz4");
+    println!(
+        "  cargo run -p trueno-gpu --example lz4_file_compress -- compress README.md readme.lz4"
+    );
     println!("  cargo run -p trueno-gpu --example lz4_file_compress -- decompress readme.lz4 restored.md");
     println!("  cargo run -p trueno-gpu --example lz4_file_compress -- bench");
 }
@@ -68,7 +70,9 @@ fn compress_file(input_path: &str, output_path: &str) {
     // Read input file
     let mut input_file = File::open(input_path).expect("Failed to open input file");
     let mut input_data = Vec::new();
-    input_file.read_to_end(&mut input_data).expect("Failed to read input");
+    input_file
+        .read_to_end(&mut input_data)
+        .expect("Failed to read input");
 
     let original_size = input_data.len();
     println!("Compressing: {} ({} bytes)", input_path, original_size);
@@ -89,8 +93,7 @@ fn compress_file(input_path: &str, output_path: &str) {
         let page_data = &input_data[page_start..page_start + page_size];
 
         let mut compressed = vec![0u8; page_size + 256]; // LZ4 can expand
-        let comp_size = lz4_compress_block(page_data, &mut compressed)
-            .expect("Compression failed");
+        let comp_size = lz4_compress_block(page_data, &mut compressed).expect("Compression failed");
 
         compressed.truncate(comp_size);
         total_compressed += comp_size;
@@ -104,11 +107,17 @@ fn compress_file(input_path: &str, output_path: &str) {
 
     // Header: magic + original_size + page_count + compressed_sizes
     output_file.write_all(MAGIC).unwrap();
-    output_file.write_all(&(original_size as u64).to_le_bytes()).unwrap();
-    output_file.write_all(&(num_pages as u32).to_le_bytes()).unwrap();
+    output_file
+        .write_all(&(original_size as u64).to_le_bytes())
+        .unwrap();
+    output_file
+        .write_all(&(num_pages as u32).to_le_bytes())
+        .unwrap();
 
     for page in &compressed_pages {
-        output_file.write_all(&(page.len() as u32).to_le_bytes()).unwrap();
+        output_file
+            .write_all(&(page.len() as u32).to_le_bytes())
+            .unwrap();
     }
 
     // Compressed data
@@ -121,7 +130,11 @@ fn compress_file(input_path: &str, output_path: &str) {
     let speed = original_size as f64 / elapsed.as_secs_f64() / 1_000_000.0;
 
     println!("Output:      {} ({} bytes)", output_path, output_size);
-    println!("Ratio:       {:.2}:1 ({:.1}% reduction)", ratio, (1.0 - 1.0/ratio) * 100.0);
+    println!(
+        "Ratio:       {:.2}:1 ({:.1}% reduction)",
+        ratio,
+        (1.0 - 1.0 / ratio) * 100.0
+    );
     println!("Speed:       {:.1} MB/s", speed);
     println!("Time:        {:.2}ms", elapsed.as_secs_f64() * 1000.0);
 }
@@ -130,7 +143,9 @@ fn decompress_file(input_path: &str, output_path: &str) {
     // Read compressed file
     let mut input_file = File::open(input_path).expect("Failed to open input file");
     let mut input_data = Vec::new();
-    input_file.read_to_end(&mut input_data).expect("Failed to read input");
+    input_file
+        .read_to_end(&mut input_data)
+        .expect("Failed to read input");
 
     println!("Decompressing: {} ({} bytes)", input_path, input_data.len());
 
@@ -149,7 +164,7 @@ fn decompress_file(input_path: &str, output_path: &str) {
     let mut compressed_sizes = Vec::with_capacity(num_pages);
     let mut pos = 16;
     for _ in 0..num_pages {
-        let size = u32::from_le_bytes(input_data[pos..pos+4].try_into().unwrap()) as usize;
+        let size = u32::from_le_bytes(input_data[pos..pos + 4].try_into().unwrap()) as usize;
         compressed_sizes.push(size);
         pos += 4;
     }
@@ -163,11 +178,13 @@ fn decompress_file(input_path: &str, output_path: &str) {
         let page_start = page_idx * page_size;
         let page_buf = &mut output_data[page_start..page_start + page_size];
 
-        let decomp_size = lz4_decompress_block(compressed, page_buf)
-            .expect("Decompression failed");
+        let decomp_size = lz4_decompress_block(compressed, page_buf).expect("Decompression failed");
 
         if decomp_size != page_size && page_idx < num_pages - 1 {
-            eprintln!("Warning: Page {} decompressed to {} bytes", page_idx, decomp_size);
+            eprintln!(
+                "Warning: Page {} decompressed to {} bytes",
+                page_idx, decomp_size
+            );
         }
 
         pos += comp_size;
@@ -204,8 +221,10 @@ fn benchmark() {
         ("Random (1MB)", generate_random_data(256 * page_size)),
     ];
 
-    println!("{:<20} {:>10} {:>10} {:>10} {:>12}",
-             "Data Type", "Original", "Compressed", "Ratio", "Speed");
+    println!(
+        "{:<20} {:>10} {:>10} {:>10} {:>12}",
+        "Data Type", "Original", "Compressed", "Ratio", "Speed"
+    );
     println!("{}", "─".repeat(66));
 
     for (name, data) in test_cases {
@@ -225,17 +244,21 @@ fn benchmark() {
         let ratio = data.len() as f64 / total_compressed as f64;
         let speed = data.len() as f64 / elapsed.as_secs_f64() / 1_000_000.0;
 
-        println!("{:<20} {:>10} {:>10} {:>10.1}:1 {:>10.0} MB/s",
-                 name,
-                 format_size(data.len()),
-                 format_size(total_compressed),
-                 ratio,
-                 speed);
+        println!(
+            "{:<20} {:>10} {:>10} {:>10.1}:1 {:>10.0} MB/s",
+            name,
+            format_size(data.len()),
+            format_size(total_compressed),
+            ratio,
+            speed
+        );
     }
 
     println!("\n{}", "─".repeat(66));
-    println!("Note: CPU implementation. GPU would batch {} pages/kernel.",
-             Lz4WarpCompressKernel::new(1000).batch_size());
+    println!(
+        "Note: CPU implementation. GPU would batch {} pages/kernel.",
+        Lz4WarpCompressKernel::new(1000).batch_size()
+    );
 }
 
 fn gpu_info() {
@@ -246,8 +269,11 @@ fn gpu_info() {
     let kernel = Lz4WarpCompressKernel::new(10000);
 
     println!("Kernel: {}", kernel.name());
-    println!("Batch:  {} pages ({} MB)", kernel.batch_size(),
-             kernel.batch_size() as usize * PAGE_SIZE as usize / 1_000_000);
+    println!(
+        "Batch:  {} pages ({} MB)",
+        kernel.batch_size(),
+        kernel.batch_size() as usize * PAGE_SIZE as usize / 1_000_000
+    );
     println!("Grid:   {:?}", kernel.grid_dim());
     println!("Block:  {:?}", kernel.block_dim());
     println!("Shared: {} KB", kernel.shared_memory_bytes() / 1024);
@@ -261,7 +287,14 @@ fn gpu_info() {
     println!();
 
     let safety = kernel.analyze_barrier_safety();
-    println!("Barrier safety: {}", if safety.is_safe { "✓ Safe" } else { "✗ Violations" });
+    println!(
+        "Barrier safety: {}",
+        if safety.is_safe {
+            "✓ Safe"
+        } else {
+            "✗ Violations"
+        }
+    );
 
     println!("\nTheoretical throughput:");
     println!("  RTX 4090: ~100 GB/s (PCIe 4.0 limited)");
@@ -285,10 +318,12 @@ fn generate_binary_data(size: usize) -> Vec<u8> {
 fn generate_random_data(size: usize) -> Vec<u8> {
     // LCG pseudo-random (not cryptographic)
     let mut seed = 0x12345678u32;
-    (0..size).map(|_| {
-        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-        (seed >> 16) as u8
-    }).collect()
+    (0..size)
+        .map(|_| {
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            (seed >> 16) as u8
+        })
+        .collect()
 }
 
 fn format_size(bytes: usize) -> String {

@@ -2,9 +2,9 @@
 //!
 //! Run with: cargo run --example execution_graph
 
-use trueno::{BrickProfiler, BrickId, ExecutionNode, PtxRegistry};
 use std::thread::sleep;
 use std::time::Duration;
+use trueno::{BrickId, BrickProfiler, ExecutionNode, PtxRegistry};
 
 fn main() {
     println!("=== PAR-201: Execution Path Graph Demo ===\n");
@@ -110,9 +110,20 @@ fn main() {
     let kernels: Vec<_> = graph.kernel_nodes().collect();
     println!("\nKernel Nodes ({}):", kernels.len());
     for (id, node) in &kernels {
-        if let ExecutionNode::Kernel { name, ptx_hash, grid, block, shared_mem, .. } = node {
+        if let ExecutionNode::Kernel {
+            name,
+            ptx_hash,
+            grid,
+            block,
+            shared_mem,
+            ..
+        } = node
+        {
             println!("  [{:>2}] {} (hash: 0x{:016x})", id.0, name, ptx_hash);
-            println!("       grid: {:?}, block: {:?}, smem: {}B", grid, block, shared_mem);
+            println!(
+                "       grid: {:?}, block: {:?}, smem: {}B",
+                grid, block, shared_mem
+            );
         }
     }
 
@@ -129,14 +140,19 @@ fn main() {
     // Phase 9: Critical Path Analysis
     println!("\n=== Phase 9: Critical Path Analysis ===\n");
     let (critical_path, total_ns) = graph.critical_path();
-    println!("Critical Path: {:.2}ms ({} nodes)", total_ns as f64 / 1_000_000.0, critical_path.len());
+    println!(
+        "Critical Path: {:.2}ms ({} nodes)",
+        total_ns as f64 / 1_000_000.0,
+        critical_path.len()
+    );
 
     let slack = graph.compute_slack();
-    let high_slack: Vec<_> = slack.iter()
-        .filter(|(_, &s)| s > 0)
-        .collect();
+    let high_slack: Vec<_> = slack.iter().filter(|(_, &s)| s > 0).collect();
     if !high_slack.is_empty() {
-        println!("\nParallelization Opportunities ({} nodes with slack):", high_slack.len());
+        println!(
+            "\nParallelization Opportunities ({} nodes with slack):",
+            high_slack.len()
+        );
     }
 
     // Formatted summary
@@ -164,13 +180,20 @@ fn main() {
 }
 "#;
 
-    registry.register("rmsnorm_kernel", ptx_rmsnorm, Some(std::path::Path::new("src/kernels/norm.ptx")));
+    registry.register(
+        "rmsnorm_kernel",
+        ptx_rmsnorm,
+        Some(std::path::Path::new("src/kernels/norm.ptx")),
+    );
     registry.register("batched_q4k_gemv", ptx_gemv, None);
 
     println!("Registered {} kernels", registry.len());
     for hash in registry.hashes() {
         if let Some(name) = registry.lookup_name(hash) {
-            let path = registry.lookup_path(hash).map(|p| p.display().to_string()).unwrap_or_else(|| "N/A".into());
+            let path = registry
+                .lookup_path(hash)
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "N/A".into());
             println!("  0x{:016x} -> {} ({})", hash, name, path);
         }
     }
@@ -199,7 +222,11 @@ fn main() {
     {
         println!("\n=== TUI TreeNode (presentar-terminal) ===\n");
         let tree_node = graph.to_tree_node();
-        println!("TreeNode structure: {} nodes, depth {}", tree_node.count_nodes(), tree_node.depth());
+        println!(
+            "TreeNode structure: {} nodes, depth {}",
+            tree_node.count_nodes(),
+            tree_node.depth()
+        );
         println!("(Use Tree widget for interactive TUI display)");
     }
 

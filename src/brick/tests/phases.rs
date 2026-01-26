@@ -241,7 +241,10 @@ fn test_execution_graph_async_task() {
     // Test DOT export
     let dot = graph.to_dot();
     assert!(dot.contains("inference"), "DOT should contain task name");
-    assert!(dot.contains("lightcyan"), "AsyncTask should have cyan color");
+    assert!(
+        dot.contains("lightcyan"),
+        "AsyncTask should have cyan color"
+    );
 }
 
 /// F150+: with_page_fault_tracking helper
@@ -774,8 +777,8 @@ fn test_f181_circuit_breaker_transitions() {
 fn test_f182_managed_connection_ttl() {
     let conn = ManagedConnection::new(
         "test-conn",
-        Duration::from_millis(50),  // max lifetime
-        Duration::from_millis(20),  // max idle
+        Duration::from_millis(50), // max lifetime
+        Duration::from_millis(20), // max idle
     );
 
     assert!(conn.is_valid());
@@ -790,11 +793,7 @@ fn test_f182_managed_connection_ttl() {
 /// F183: ManagedConnection health (AWP-06)
 #[test]
 fn test_f183_managed_connection_health() {
-    let mut conn = ManagedConnection::new(
-        42i32,
-        Duration::from_secs(60),
-        Duration::from_secs(30),
-    );
+    let mut conn = ManagedConnection::new(42i32, Duration::from_secs(60), Duration::from_secs(30));
 
     assert_eq!(conn.health_failures(), 0);
     assert!(conn.is_valid());
@@ -1183,9 +1182,18 @@ fn test_f202_unroll_factor() {
     assert_eq!(UnrollFactor::X8.value(), 8);
 
     // Backend selection
-    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Avx512), UnrollFactor::X8);
-    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Avx2), UnrollFactor::X4);
-    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Scalar), UnrollFactor::None);
+    assert_eq!(
+        UnrollFactor::for_backend(ComputeBackend::Avx512),
+        UnrollFactor::X8
+    );
+    assert_eq!(
+        UnrollFactor::for_backend(ComputeBackend::Avx2),
+        UnrollFactor::X4
+    );
+    assert_eq!(
+        UnrollFactor::for_backend(ComputeBackend::Scalar),
+        UnrollFactor::None
+    );
 }
 
 /// F203: UnrollTailIterator chunks and tail (LCP-13)
@@ -1422,7 +1430,10 @@ fn test_f214_stream_capacity_window_ops() {
 
     // Consume receive window
     cap.consume_receive(50000);
-    assert_eq!(cap.available_receive(), StreamCapacity::DEFAULT_WINDOW - 50000);
+    assert_eq!(
+        cap.available_receive(),
+        StreamCapacity::DEFAULT_WINDOW - 50000
+    );
 
     // Check if needs window update (when < 50% of initial)
     cap.consume_receive(20000);
@@ -1430,7 +1441,10 @@ fn test_f214_stream_capacity_window_ops() {
 
     // Replenish
     cap.replenish_receive(10000);
-    assert_eq!(cap.available_receive(), StreamCapacity::DEFAULT_WINDOW - 60000);
+    assert_eq!(
+        cap.available_receive(),
+        StreamCapacity::DEFAULT_WINDOW - 60000
+    );
 
     // Default trait
     let cap2 = StreamCapacity::default();
@@ -1550,7 +1564,10 @@ fn test_f219_unroll_factor_traits() {
 /// F220: SimdBackendState Debug/PartialEq
 #[test]
 fn test_f220_simd_backend_state_traits() {
-    assert_eq!(SimdBackendState::Uninitialized, SimdBackendState::Uninitialized);
+    assert_eq!(
+        SimdBackendState::Uninitialized,
+        SimdBackendState::Uninitialized
+    );
     assert_ne!(SimdBackendState::Ready, SimdBackendState::Failed);
     assert!(!format!("{:?}", SimdBackendState::Configuring).is_empty());
 }
@@ -1893,8 +1910,8 @@ fn test_f232_buffer_watermarks() {
     assert!(watermarks.should_backpressure(80));
 
     // can_write when current < low
-    assert!(watermarks.can_write(10));  // 10 < 25
-    assert!(watermarks.can_write(20));  // 20 < 25
+    assert!(watermarks.can_write(10)); // 10 < 25
+    assert!(watermarks.can_write(20)); // 20 < 25
     assert!(!watermarks.can_write(50)); // 50 >= 25
 
     // Pressure level
@@ -1998,11 +2015,7 @@ fn test_f235_circuit_breaker_comprehensive() {
 fn test_f236_managed_connection() {
     use std::time::Duration;
 
-    let mut conn = ManagedConnection::new(
-        "test",
-        Duration::from_secs(60),
-        Duration::from_secs(30),
-    );
+    let mut conn = ManagedConnection::new("test", Duration::from_secs(60), Duration::from_secs(30));
 
     // Initial state
     assert!(conn.is_valid());
@@ -2240,7 +2253,10 @@ fn test_f243_serve_limits() {
 /// F244: LimitError Display
 #[test]
 fn test_f244_limit_error_display() {
-    let err = LimitError::BodyTooLarge { size: 2000, max: 1000 };
+    let err = LimitError::BodyTooLarge {
+        size: 2000,
+        max: 1000,
+    };
     let msg = format!("{}", err);
     assert!(msg.contains("2000"));
 
@@ -2248,11 +2264,17 @@ fn test_f244_limit_error_display() {
     let msg = format!("{}", err);
     assert!(msg.contains("50"));
 
-    let err = LimitError::ConnectionLimitReached { current: 200, max: 100 };
+    let err = LimitError::ConnectionLimitReached {
+        current: 200,
+        max: 100,
+    };
     let msg = format!("{}", err);
     assert!(msg.contains("200"));
 
-    let err = LimitError::HeaderTooLarge { size: 5000, max: 1000 };
+    let err = LimitError::HeaderTooLarge {
+        size: 5000,
+        max: 1000,
+    };
     let msg = format!("{}", err);
     assert!(msg.contains("5000"));
 

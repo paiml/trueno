@@ -28,16 +28,16 @@ mod tests {
             // Verify basic invariants
             assert!(kernel.seq_len > 0);
             assert!(kernel.head_dim > 0);
-            
+
             // Verify PTX generation doesn't panic
             let ptx = kernel.emit_ptx();
             assert!(ptx.contains(".visible .entry flash_attention"));
-            
+
             // Check for critical instructions based on config
             if use_tensor_cores {
                 // Should have wmma instructions if tensor cores are enabled
                 // Note: The builder might fall back if dimensions aren't multiples of 16
-                // checking for wmma might be flaky if the builder is smart, 
+                // checking for wmma might be flaky if the builder is smart,
                 // but at least it shouldn't panic.
             } else {
                 // Should use standard fma
@@ -60,7 +60,7 @@ mod tests {
         };
         // Just ensure it doesn't crash during emit
         let _ = kernel_zero.emit_ptx();
-        
+
         // Test very large sequence
         let kernel_large = AttentionKernel {
             seq_len: 1_000_000,

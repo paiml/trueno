@@ -81,13 +81,17 @@ impl VectorBackend for WasmBackend {
 
     #[target_feature(enable = "simd128")]
     unsafe fn norm_l2(a: &[f32]) -> f32 {
-        if a.is_empty() { return 0.0; }
+        if a.is_empty() {
+            return 0.0;
+        }
         Self::dot(a, a).sqrt()
     }
 
     #[target_feature(enable = "simd128")]
     unsafe fn norm_l1(a: &[f32]) -> f32 {
-        if a.is_empty() { return 0.0; }
+        if a.is_empty() {
+            return 0.0;
+        }
         let len = a.len();
         let mut i = 0;
         let mut acc = f32x4_splat(0.0);
@@ -100,13 +104,17 @@ impl VectorBackend for WasmBackend {
             + f32x4_extract_lane::<1>(acc)
             + f32x4_extract_lane::<2>(acc)
             + f32x4_extract_lane::<3>(acc);
-        for &val in &a[i..] { result += val.abs(); }
+        for &val in &a[i..] {
+            result += val.abs();
+        }
         result
     }
 
     #[target_feature(enable = "simd128")]
     unsafe fn norm_linf(a: &[f32]) -> f32 {
-        if a.is_empty() { return 0.0; }
+        if a.is_empty() {
+            return 0.0;
+        }
         let len = a.len();
         let mut i = 0;
         let mut vmax = f32x4_splat(0.0);
@@ -119,7 +127,12 @@ impl VectorBackend for WasmBackend {
             .max(f32x4_extract_lane::<1>(vmax))
             .max(f32x4_extract_lane::<2>(vmax))
             .max(f32x4_extract_lane::<3>(vmax));
-        for &val in &a[i..] { let abs_val = val.abs(); if abs_val > result { result = abs_val; } }
+        for &val in &a[i..] {
+            let abs_val = val.abs();
+            if abs_val > result {
+                result = abs_val;
+            }
+        }
         result
     }
 
@@ -130,10 +143,15 @@ impl VectorBackend for WasmBackend {
         let scalar_vec = f32x4_splat(scalar);
         while i + 4 <= len {
             let va = v128_load(a.as_ptr().add(i) as *const v128);
-            v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_mul(va, scalar_vec));
+            v128_store(
+                result.as_mut_ptr().add(i) as *mut v128,
+                f32x4_mul(va, scalar_vec),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j] * scalar; }
+        for j in i..len {
+            result[j] = a[j] * scalar;
+        }
     }
 
     #[target_feature(enable = "simd128")]
@@ -145,7 +163,9 @@ impl VectorBackend for WasmBackend {
             v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_abs(va));
             i += 4;
         }
-        for j in i..len { result[j] = a[j].abs(); }
+        for j in i..len {
+            result[j] = a[j].abs();
+        }
     }
 
     #[target_feature(enable = "simd128")]
@@ -156,10 +176,15 @@ impl VectorBackend for WasmBackend {
         let max_vec = f32x4_splat(max_val);
         while i + 4 <= len {
             let va = v128_load(a.as_ptr().add(i) as *const v128);
-            v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_pmin(f32x4_pmax(va, min_vec), max_vec));
+            v128_store(
+                result.as_mut_ptr().add(i) as *mut v128,
+                f32x4_pmin(f32x4_pmax(va, min_vec), max_vec),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j].max(min_val).min(max_val); }
+        for j in i..len {
+            result[j] = a[j].max(min_val).min(max_val);
+        }
     }
 
     #[target_feature(enable = "simd128")]
@@ -171,10 +196,15 @@ impl VectorBackend for WasmBackend {
             let va = v128_load(a.as_ptr().add(i) as *const v128);
             let vb = v128_load(b.as_ptr().add(i) as *const v128);
             let diff = f32x4_sub(vb, va);
-            v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_add(va, f32x4_mul(t_vec, diff)));
+            v128_store(
+                result.as_mut_ptr().add(i) as *mut v128,
+                f32x4_add(va, f32x4_mul(t_vec, diff)),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j] + t * (b[j] - a[j]); }
+        for j in i..len {
+            result[j] = a[j] + t * (b[j] - a[j]);
+        }
     }
 
     #[target_feature(enable = "simd128")]
@@ -185,10 +215,15 @@ impl VectorBackend for WasmBackend {
             let va = v128_load(a.as_ptr().add(i) as *const v128);
             let vb = v128_load(b.as_ptr().add(i) as *const v128);
             let vc = v128_load(c.as_ptr().add(i) as *const v128);
-            v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_add(f32x4_mul(va, vb), vc));
+            v128_store(
+                result.as_mut_ptr().add(i) as *mut v128,
+                f32x4_add(f32x4_mul(va, vb), vc),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j] * b[j] + c[j]; }
+        for j in i..len {
+            result[j] = a[j] * b[j] + c[j];
+        }
     }
 
     #[target_feature(enable = "simd128")]
@@ -198,10 +233,15 @@ impl VectorBackend for WasmBackend {
         let zero = f32x4_splat(0.0);
         while i + 4 <= len {
             let va = v128_load(a.as_ptr().add(i) as *const v128);
-            v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_pmax(va, zero));
+            v128_store(
+                result.as_mut_ptr().add(i) as *mut v128,
+                f32x4_pmax(va, zero),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j].max(0.0); }
+        for j in i..len {
+            result[j] = a[j].max(0.0);
+        }
     }
 
     #[target_feature(enable = "simd128")]
@@ -227,17 +267,24 @@ impl VectorBackend for WasmBackend {
             poly = f32x4_add(one, f32x4_mul(r, f32x4_add(c2, f32x4_mul(r, poly))));
             poly = f32x4_add(one, f32x4_mul(r, poly));
             let exp_k = i32x4_shl(i32x4_add(k, i32x4_splat(127)), 23);
-            v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_mul(poly, v128_bitselect(exp_k, exp_k, exp_k)));
+            v128_store(
+                result.as_mut_ptr().add(i) as *mut v128,
+                f32x4_mul(poly, v128_bitselect(exp_k, exp_k, exp_k)),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j].exp(); }
+        for j in i..len {
+            result[j] = a[j].exp();
+        }
     }
 
     #[target_feature(enable = "simd128")]
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         // sigmoid(x) = 1 / (1 + exp(-x))
         let len = a.len();
-        for j in 0..len { result[j] = 1.0 / (1.0 + (-a[j]).exp()); }
+        for j in 0..len {
+            result[j] = 1.0 / (1.0 + (-a[j]).exp());
+        }
     }
 
     #[target_feature(enable = "simd128")]
@@ -253,25 +300,51 @@ impl VectorBackend for WasmBackend {
     #[target_feature(enable = "simd128")]
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
         // swish(x) = x * sigmoid(x)
-        for j in 0..a.len() { result[j] = a[j] / (1.0 + (-a[j]).exp()); }
+        for j in 0..a.len() {
+            result[j] = a[j] / (1.0 + (-a[j]).exp());
+        }
     }
 
     #[target_feature(enable = "simd128")]
     unsafe fn tanh(a: &[f32], result: &mut [f32]) {
-        for j in 0..a.len() { result[j] = a[j].tanh(); }
+        for j in 0..a.len() {
+            result[j] = a[j].tanh();
+        }
     }
 
-    unsafe fn sqrt(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::sqrt(a, result); }
-    unsafe fn recip(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::recip(a, result); }
-    unsafe fn ln(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::ln(a, result); }
-    unsafe fn log2(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::log2(a, result); }
-    unsafe fn log10(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::log10(a, result); }
-    unsafe fn sin(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::sin(a, result); }
-    unsafe fn cos(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::cos(a, result); }
-    unsafe fn tan(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::tan(a, result); }
-    unsafe fn floor(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::floor(a, result); }
-    unsafe fn ceil(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::ceil(a, result); }
-    unsafe fn round(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::round(a, result); }
+    unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::sqrt(a, result);
+    }
+    unsafe fn recip(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::recip(a, result);
+    }
+    unsafe fn ln(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ln(a, result);
+    }
+    unsafe fn log2(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log2(a, result);
+    }
+    unsafe fn log10(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log10(a, result);
+    }
+    unsafe fn sin(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::sin(a, result);
+    }
+    unsafe fn cos(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::cos(a, result);
+    }
+    unsafe fn tan(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::tan(a, result);
+    }
+    unsafe fn floor(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::floor(a, result);
+    }
+    unsafe fn ceil(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ceil(a, result);
+    }
+    unsafe fn round(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::round(a, result);
+    }
 }
 
 #[cfg(test)]
@@ -284,8 +357,13 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let b = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
         let mut result = vec![0.0; 9];
-        unsafe { WasmBackend::add(&a, &b, &mut result); }
-        assert_eq!(result, vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
+        unsafe {
+            WasmBackend::add(&a, &b, &mut result);
+        }
+        assert_eq!(
+            result,
+            vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
+        );
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -294,8 +372,13 @@ mod tests {
         let a = vec![2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         let b = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let mut result = vec![0.0; 9];
-        unsafe { WasmBackend::mul(&a, &b, &mut result); }
-        assert_eq!(result, vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]);
+        unsafe {
+            WasmBackend::mul(&a, &b, &mut result);
+        }
+        assert_eq!(
+            result,
+            vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]
+        );
     }
 
     #[cfg(target_arch = "wasm32")]

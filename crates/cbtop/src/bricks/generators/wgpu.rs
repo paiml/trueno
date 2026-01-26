@@ -1,7 +1,7 @@
 //! wgpu load generator using compute shaders
 
-use std::any::Any;
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 pub struct WgpuLoadBrick {
     is_running: bool,

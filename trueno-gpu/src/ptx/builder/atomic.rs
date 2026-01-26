@@ -195,7 +195,10 @@ mod tests {
 
         assert_eq!(builder.instructions.len(), 1);
         assert_eq!(builder.instructions[0].op, PtxOp::AtomAdd);
-        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
+        assert_eq!(
+            builder.instructions[0].state_space,
+            Some(PtxStateSpace::Global)
+        );
         assert!(old.id() > 0);
     }
 
@@ -240,7 +243,10 @@ mod tests {
 
         assert_eq!(builder.instructions.len(), 1);
         assert_eq!(builder.instructions[0].op, PtxOp::AtomExch);
-        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
+        assert_eq!(
+            builder.instructions[0].state_space,
+            Some(PtxStateSpace::Global)
+        );
         assert!(old.id() > 0);
     }
 
@@ -254,7 +260,10 @@ mod tests {
 
         assert_eq!(builder.instructions.len(), 1);
         assert_eq!(builder.instructions[0].op, PtxOp::AtomMin);
-        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
+        assert_eq!(
+            builder.instructions[0].state_space,
+            Some(PtxStateSpace::Global)
+        );
         assert!(old.id() > 0);
     }
 
@@ -268,7 +277,10 @@ mod tests {
 
         assert_eq!(builder.instructions.len(), 1);
         assert_eq!(builder.instructions[0].op, PtxOp::AtomMax);
-        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
+        assert_eq!(
+            builder.instructions[0].state_space,
+            Some(PtxStateSpace::Global)
+        );
         assert!(old.id() > 0);
     }
 

@@ -82,7 +82,10 @@ fn test_token_result_map() {
 fn test_compute_assertion_equiv_with_tolerance() {
     let assertion = ComputeAssertion::equiv_with_tolerance(Backend::Scalar, 1e-3);
     match assertion {
-        ComputeAssertion::Equivalence { baseline, tolerance } => {
+        ComputeAssertion::Equivalence {
+            baseline,
+            tolerance,
+        } => {
             assert_eq!(baseline, Backend::Scalar);
             assert!((tolerance - 1e-3).abs() < 1e-10);
         }
@@ -266,8 +269,7 @@ fn test_token_budget_with_batch_size_min() {
 
 #[test]
 fn test_compute_brick_run_zero_tokens() {
-    let brick = ComputeBrick::new(SoftmaxOp::new(0))
-        .backend(Backend::Scalar);
+    let brick = ComputeBrick::new(SoftmaxOp::new(0)).backend(Backend::Scalar);
 
     let result = brick.run(vec![]).unwrap();
     assert!(result.output.is_empty());

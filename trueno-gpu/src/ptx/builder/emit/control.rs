@@ -6,10 +6,7 @@ use crate::ptx::instructions::{PtxInstruction, PtxOp};
 use std::fmt::Write;
 
 /// Emit control flow opcode - returns Some(full_instruction) for early-return ops
-pub(crate) fn emit_control_opcode(
-    instr: &PtxInstruction,
-    prefix: &str,
-) -> Option<String> {
+pub(crate) fn emit_control_opcode(instr: &PtxInstruction, prefix: &str) -> Option<String> {
     match instr.op {
         PtxOp::Bra => {
             if let Some(label) = &instr.label {
@@ -38,7 +35,10 @@ pub(crate) fn emit_setp_opcode(instr: &PtxInstruction, s: &mut String) {
 
 /// Check if this is a control flow operation
 pub(crate) fn is_control_op(op: &PtxOp) -> bool {
-    matches!(op, PtxOp::Bra | PtxOp::Ret | PtxOp::Bar | PtxOp::MemBar | PtxOp::Setp)
+    matches!(
+        op,
+        PtxOp::Bra | PtxOp::Ret | PtxOp::Bar | PtxOp::MemBar | PtxOp::Setp
+    )
 }
 
 /// Check if this is an early-return control op

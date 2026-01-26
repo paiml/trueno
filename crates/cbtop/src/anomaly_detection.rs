@@ -216,10 +216,7 @@ impl AnomalyReport {
 
     /// Get critical anomalies
     pub fn critical_anomalies(&self) -> Vec<&Anomaly> {
-        self.anomalies
-            .iter()
-            .filter(|a| a.is_critical())
-            .collect()
+        self.anomalies.iter().filter(|a| a.is_critical()).collect()
     }
 
     /// Check if any critical anomalies exist
@@ -330,7 +327,8 @@ impl AnomalyDetector {
         if data.len() < 2 {
             return 0.0;
         }
-        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (data.len() - 1) as f64;
+        let variance =
+            data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (data.len() - 1) as f64;
         variance.sqrt()
     }
 
@@ -475,7 +473,9 @@ impl AnomalyDetector {
         let nearby_count = self
             .anomalies
             .iter()
-            .filter(|a| (a.index as i64 - anomaly.index as i64).abs() < 3 && a.index != anomaly.index)
+            .filter(|a| {
+                (a.index as i64 - anomaly.index as i64).abs() < 3 && a.index != anomaly.index
+            })
             .count();
 
         if nearby_count >= 2 {
@@ -510,7 +510,11 @@ impl AnomalyDetector {
             change_points,
             mean,
             std_dev,
-            method: if zscore_outliers.is_empty() { "iqr" } else { "zscore" },
+            method: if zscore_outliers.is_empty() {
+                "iqr"
+            } else {
+                "zscore"
+            },
         }
     }
 
@@ -573,8 +577,14 @@ mod tests {
     #[test]
     fn test_anomaly_severity() {
         assert_eq!(AnomalySeverity::from_deviation(2.0), AnomalySeverity::Info);
-        assert_eq!(AnomalySeverity::from_deviation(3.5), AnomalySeverity::Warning);
-        assert_eq!(AnomalySeverity::from_deviation(6.0), AnomalySeverity::Critical);
+        assert_eq!(
+            AnomalySeverity::from_deviation(3.5),
+            AnomalySeverity::Warning
+        );
+        assert_eq!(
+            AnomalySeverity::from_deviation(6.0),
+            AnomalySeverity::Critical
+        );
     }
 
     #[test]

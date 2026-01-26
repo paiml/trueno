@@ -2,12 +2,12 @@
 //!
 //! Generate controlled compute workloads.
 
-mod simd;
 mod cuda;
-mod wgpu;
 mod memory;
+mod simd;
+mod wgpu;
 
-pub use simd::SimdLoadBrick;
 pub use cuda::CudaLoadBrick;
-pub use wgpu::WgpuLoadBrick;
 pub use memory::MemBandwidthBrick;
+pub use simd::SimdLoadBrick;
+pub use wgpu::WgpuLoadBrick;

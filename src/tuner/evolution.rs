@@ -419,8 +419,7 @@ impl BrickTuner {
                         .build();
 
                     // Estimate throughput based on hardware and configuration
-                    let estimated_tps = baseline_tps
-                        * (batch_size as f32).sqrt()
+                    let estimated_tps = baseline_tps * (batch_size as f32).sqrt()
                         / model_size.sqrt() as f32
                         * quant.bytes_per_param();
 

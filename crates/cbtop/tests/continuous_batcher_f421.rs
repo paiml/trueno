@@ -55,8 +55,9 @@ fn test_f421_empty_schedule() {
 /// F422: Preemption works under memory pressure.
 #[test]
 fn test_f422_preemption() {
-    let mut batcher = ContinuousBatcher::new(10, 4096)
-        .with_policy(SchedulingPolicy::Priority { preempt_enabled: true });
+    let mut batcher = ContinuousBatcher::new(10, 4096).with_policy(SchedulingPolicy::Priority {
+        preempt_enabled: true,
+    });
 
     // Fill the batch
     for i in 0..10 {
@@ -79,8 +80,7 @@ fn test_f422_preemption() {
 /// F422 negative: Preemption does nothing when disabled.
 #[test]
 fn test_f422_preemption_disabled() {
-    let mut batcher =
-        ContinuousBatcher::new(10, 4096).with_policy(SchedulingPolicy::FCFS);
+    let mut batcher = ContinuousBatcher::new(10, 4096).with_policy(SchedulingPolicy::FCFS);
 
     // Fill the batch
     for i in 0..5 {
@@ -144,9 +144,9 @@ fn test_f424_sjf_priority() {
 
     // Add long sequence first
     let long_req = InferenceRequest::new(SeqId(1), vec![1; 500], 1000); // 1500 estimated
-    // Add short sequence second
+                                                                        // Add short sequence second
     let short_req = InferenceRequest::new(SeqId(2), vec![1; 10], 50); // 60 estimated
-    // Add medium sequence third
+                                                                      // Add medium sequence third
     let medium_req = InferenceRequest::new(SeqId(3), vec![1; 100], 200); // 300 estimated
 
     batcher.add_request(long_req);
@@ -156,7 +156,11 @@ fn test_f424_sjf_priority() {
     let schedule = batcher.schedule();
 
     // Short should be first
-    assert_eq!(schedule.sequence_ids[0], SeqId(2), "SJF should schedule shortest first");
+    assert_eq!(
+        schedule.sequence_ids[0],
+        SeqId(2),
+        "SJF should schedule shortest first"
+    );
     // Medium should be second
     assert_eq!(schedule.sequence_ids[1], SeqId(3));
     // Long should be last

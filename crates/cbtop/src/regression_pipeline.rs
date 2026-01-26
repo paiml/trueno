@@ -203,9 +203,8 @@ impl BenchmarkMetric {
             return 0.0;
         }
         let mean = self.mean();
-        let variance = self.samples.iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / (self.samples.len() - 1) as f64;
+        let variance = self.samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+            / (self.samples.len() - 1) as f64;
         variance.sqrt()
     }
 
@@ -313,9 +312,9 @@ impl MetricRegression {
             || baseline.name.contains("duration");
 
         let regression_change = if is_latency_metric {
-            percent_change  // Increase is bad
+            percent_change // Increase is bad
         } else {
-            -percent_change  // Decrease is bad
+            -percent_change // Decrease is bad
         };
 
         Self {
@@ -324,7 +323,8 @@ impl MetricRegression {
             current_mean,
             percent_change,
             is_regression: regression_change >= regression_threshold,
-            is_warning: regression_change >= warning_threshold && regression_change < regression_threshold,
+            is_warning: regression_change >= warning_threshold
+                && regression_change < regression_threshold,
             unit: baseline.unit.clone(),
         }
     }
@@ -360,15 +360,16 @@ impl RegressionAnalysis {
 
     /// Count improvements
     pub fn improvement_count(&self) -> usize {
-        self.regressions.iter()
+        self.regressions
+            .iter()
             .filter(|r| !r.is_regression && !r.is_warning && r.percent_change.abs() > 1.0)
             .filter(|r| {
                 // Check if change is improvement
                 let is_latency = r.name.contains("latency") || r.name.contains("time");
                 if is_latency {
-                    r.percent_change < 0.0  // Decrease is good
+                    r.percent_change < 0.0 // Decrease is good
                 } else {
-                    r.percent_change > 0.0  // Increase is good
+                    r.percent_change > 0.0 // Increase is good
                 }
             })
             .count()
@@ -376,10 +377,13 @@ impl RegressionAnalysis {
 
     /// Get worst regression
     pub fn worst_regression(&self) -> Option<&MetricRegression> {
-        self.regressions.iter()
+        self.regressions
+            .iter()
             .filter(|r| r.is_regression)
             .max_by(|a, b| {
-                a.percent_change.abs().partial_cmp(&b.percent_change.abs())
+                a.percent_change
+                    .abs()
+                    .partial_cmp(&b.percent_change.abs())
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
     }
@@ -586,13 +590,13 @@ impl RegressionPipeline {
             PipelineStatus::Failed => {
                 format!(
                     "Performance regression detected: {} metrics degraded by >{:.1}%",
-                    regression_count,
-                    self.config.regression_threshold_percent
+                    regression_count, self.config.regression_threshold_percent
                 )
             }
-            PipelineStatus::Pending | PipelineStatus::Running | PipelineStatus::Cancelled | PipelineStatus::Error => {
-                "Pipeline status unknown".to_string()
-            }
+            PipelineStatus::Pending
+            | PipelineStatus::Running
+            | PipelineStatus::Cancelled
+            | PipelineStatus::Error => "Pipeline status unknown".to_string(),
         }
     }
 
@@ -651,8 +655,7 @@ impl RegressionPipeline {
         // In production, serialize and store to artifact_path
         let artifact_id = format!(
             "{}-{}",
-            analysis.current.commit,
-            analysis.current.timestamp_ns
+            analysis.current.commit, analysis.current.timestamp_ns
         );
 
         Ok(artifact_id)
@@ -671,9 +674,14 @@ impl RegressionPipeline {
         // Status badge
         let badge = match analysis.status {
             PipelineStatus::Passed => "![Passed](https://img.shields.io/badge/status-passed-green)",
-            PipelineStatus::Warning => "![Warning](https://img.shields.io/badge/status-warning-yellow)",
+            PipelineStatus::Warning => {
+                "![Warning](https://img.shields.io/badge/status-warning-yellow)"
+            }
             PipelineStatus::Failed => "![Failed](https://img.shields.io/badge/status-failed-red)",
-            PipelineStatus::Pending | PipelineStatus::Running | PipelineStatus::Cancelled | PipelineStatus::Error => {
+            PipelineStatus::Pending
+            | PipelineStatus::Running
+            | PipelineStatus::Cancelled
+            | PipelineStatus::Error => {
                 "![Unknown](https://img.shields.io/badge/status-unknown-gray)"
             }
         };
@@ -711,9 +719,18 @@ impl RegressionPipeline {
 
         // Details
         report.push_str("## Details\n\n");
-        report.push_str(&format!("- **Baseline commit:** {}\n", analysis.baseline.commit));
-        report.push_str(&format!("- **Current commit:** {}\n", analysis.current.commit));
-        report.push_str(&format!("- **Analysis time:** {}ms\n", analysis.analysis_duration_ms));
+        report.push_str(&format!(
+            "- **Baseline commit:** {}\n",
+            analysis.baseline.commit
+        ));
+        report.push_str(&format!(
+            "- **Current commit:** {}\n",
+            analysis.current.commit
+        ));
+        report.push_str(&format!(
+            "- **Analysis time:** {}ms\n",
+            analysis.analysis_duration_ms
+        ));
 
         report
     }
@@ -734,15 +751,11 @@ mod tests {
 
     #[test]
     fn test_benchmark_metric_statistics() {
-        let metric = BenchmarkMetric::new(
-            "latency",
-            vec![100.0, 102.0, 98.0, 101.0, 99.0],
-            "μs",
-        );
+        let metric = BenchmarkMetric::new("latency", vec![100.0, 102.0, 98.0, 101.0, 99.0], "μs");
 
         assert_eq!(metric.mean(), 100.0);
         assert!((metric.std_dev() - 1.58).abs() < 0.1);
-        assert!(metric.cv() < 2.0);  // Low variance
+        assert!(metric.cv() < 2.0); // Low variance
     }
 
     #[test]
@@ -769,7 +782,7 @@ mod tests {
     #[test]
     fn test_metric_regression_latency() {
         let baseline = BenchmarkMetric::new("latency_p50", vec![100.0; 5], "μs");
-        let current = BenchmarkMetric::new("latency_p50", vec![110.0; 5], "μs");  // 10% worse
+        let current = BenchmarkMetric::new("latency_p50", vec![110.0; 5], "μs"); // 10% worse
 
         let regression = MetricRegression::from_metrics(&baseline, &current, 5.0, 2.0);
 
@@ -781,18 +794,18 @@ mod tests {
     #[test]
     fn test_metric_regression_throughput() {
         let baseline = BenchmarkMetric::new("throughput", vec![1000.0; 5], "ops/s");
-        let current = BenchmarkMetric::new("throughput", vec![900.0; 5], "ops/s");  // 10% worse
+        let current = BenchmarkMetric::new("throughput", vec![900.0; 5], "ops/s"); // 10% worse
 
         let regression = MetricRegression::from_metrics(&baseline, &current, 5.0, 2.0);
 
         assert_eq!(regression.percent_change, -10.0);
-        assert!(regression.is_regression);  // Decrease in throughput is regression
+        assert!(regression.is_regression); // Decrease in throughput is regression
     }
 
     #[test]
     fn test_metric_regression_warning() {
         let baseline = BenchmarkMetric::new("latency_p50", vec![100.0; 5], "μs");
-        let current = BenchmarkMetric::new("latency_p50", vec![103.0; 5], "μs");  // 3% worse
+        let current = BenchmarkMetric::new("latency_p50", vec![103.0; 5], "μs"); // 3% worse
 
         let regression = MetricRegression::from_metrics(&baseline, &current, 5.0, 2.0);
 
@@ -830,7 +843,10 @@ mod tests {
     fn test_git_ref_as_str() {
         assert_eq!(GitRef::Branch("main".to_string()).as_ref_str(), "main");
         assert_eq!(GitRef::Commit("abc123".to_string()).as_ref_str(), "abc123");
-        assert_eq!(GitRef::Tag("v1.0.0".to_string()).as_ref_str(), "refs/tags/v1.0.0");
+        assert_eq!(
+            GitRef::Tag("v1.0.0".to_string()).as_ref_str(),
+            "refs/tags/v1.0.0"
+        );
         assert_eq!(GitRef::PullRequest(123).as_ref_str(), "refs/pull/123/head");
     }
 
@@ -865,7 +881,9 @@ mod tests {
         let config = PipelineConfig::default();
         let mut pipeline = RegressionPipeline::new(config);
 
-        let result = pipeline.run(&GitRef::Branch("feature".to_string())).unwrap();
+        let result = pipeline
+            .run(&GitRef::Branch("feature".to_string()))
+            .unwrap();
 
         // All simulated metrics should be stable
         assert_eq!(result.regression_count(), 0);
@@ -877,7 +895,9 @@ mod tests {
         let config = PipelineConfig::default();
         let mut pipeline = RegressionPipeline::new(config);
 
-        let analysis = pipeline.run(&GitRef::Branch("feature".to_string())).unwrap();
+        let analysis = pipeline
+            .run(&GitRef::Branch("feature".to_string()))
+            .unwrap();
         let report = pipeline.generate_report(&analysis);
 
         assert!(report.contains("# Performance Regression Report"));
@@ -887,7 +907,9 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let err = PipelineError::GitError { reason: "not found".to_string() };
+        let err = PipelineError::GitError {
+            reason: "not found".to_string(),
+        };
         assert!(err.to_string().contains("not found"));
 
         let err = PipelineError::Timeout { timeout_sec: 60 };
@@ -899,7 +921,9 @@ mod tests {
         let config = PipelineConfig::default();
         let mut pipeline = RegressionPipeline::new(config);
 
-        let analysis = pipeline.run(&GitRef::Branch("feature".to_string())).unwrap();
+        let analysis = pipeline
+            .run(&GitRef::Branch("feature".to_string()))
+            .unwrap();
         let artifact_id = pipeline.store_artifact(&analysis).unwrap();
 
         assert!(!artifact_id.is_empty());
@@ -923,7 +947,11 @@ mod tests {
         let elapsed = start.elapsed();
 
         // Must complete within 60 seconds
-        assert!(elapsed.as_secs() < 60, "Pipeline took too long: {:?}", elapsed);
+        assert!(
+            elapsed.as_secs() < 60,
+            "Pipeline took too long: {:?}",
+            elapsed
+        );
 
         // Must produce valid result
         assert!(result.is_ok());

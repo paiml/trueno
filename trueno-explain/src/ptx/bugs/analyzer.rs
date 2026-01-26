@@ -212,17 +212,22 @@ impl PtxBugAnalyzer {
 
     /// Extract kernel name from PTX
     fn extract_kernel_name(&self, ptx: &str) -> Option<String> {
-        let entry_pattern = Regex::new(r"\.(?:visible\s+)?\.entry\s+(\w+)").expect("invariant: regex pattern is valid");
-        entry_pattern
-            .captures(ptx)
-            .map(|c| c.get(1).expect("invariant: capture group 1 exists").as_str().to_string())
+        let entry_pattern = Regex::new(r"\.(?:visible\s+)?\.entry\s+(\w+)")
+            .expect("invariant: regex pattern is valid");
+        entry_pattern.captures(ptx).map(|c| {
+            c.get(1)
+                .expect("invariant: capture group 1 exists")
+                .as_str()
+                .to_string()
+        })
     }
 
     /// Detect shared memory accessed with 64-bit register
     fn detect_shared_mem_u64(&self, _ptx: &str, lines: &[&str]) -> Vec<PtxBug> {
         let mut bugs = Vec::new();
         // Pattern: st.shared.* [%rd*] or ld.shared.* [%rd*]
-        let pattern = Regex::new(r"(?:st|ld)\.shared\.[^\[]+\[%rd\d+").expect("invariant: regex pattern is valid");
+        let pattern = Regex::new(r"(?:st|ld)\.shared\.[^\[]+\[%rd\d+")
+            .expect("invariant: regex pattern is valid");
 
         for (line_num, line) in lines.iter().enumerate() {
             let trimmed = line.trim();
@@ -250,8 +255,10 @@ impl PtxBugAnalyzer {
         }
 
         // Collect loop labels
-        let loop_label = Regex::new(r"^(\w+(?:_loop|loop_)\w*):").expect("invariant: regex pattern is valid");
-        let branch_instr = Regex::new(r"^\s*bra\s+(\w+);").expect("invariant: regex pattern is valid");
+        let loop_label =
+            Regex::new(r"^(\w+(?:_loop|loop_)\w*):").expect("invariant: regex pattern is valid");
+        let branch_instr =
+            Regex::new(r"^\s*bra\s+(\w+);").expect("invariant: regex pattern is valid");
 
         let mut loop_start_labels: HashSet<String> = HashSet::new();
         let mut loop_end_labels: HashSet<String> = HashSet::new();
@@ -260,7 +267,10 @@ impl PtxBugAnalyzer {
         for line in lines {
             let trimmed = line.trim();
             if let Some(caps) = loop_label.captures(trimmed) {
-                let label = caps.get(1).expect("invariant: capture group exists").as_str();
+                let label = caps
+                    .get(1)
+                    .expect("invariant: capture group exists")
+                    .as_str();
                 if label.contains("_start")
                     || label.ends_with("_loop")
                     || label.starts_with("loop_")
@@ -276,7 +286,10 @@ impl PtxBugAnalyzer {
         for (line_num, line) in lines.iter().enumerate() {
             let trimmed = line.trim();
             if let Some(caps) = branch_instr.captures(trimmed) {
-                let target = caps.get(1).expect("invariant: capture group exists").as_str();
+                let target = caps
+                    .get(1)
+                    .expect("invariant: capture group exists")
+                    .as_str();
                 // Unconditional branch (not @%p prefixed) to _end label
                 if loop_end_labels.contains(target) && !trimmed.starts_with('@') {
                     bugs.push(PtxBug {
@@ -453,7 +466,8 @@ impl PtxBugAnalyzer {
     fn detect_missing_entry_point(&self, ptx: &str, _lines: &[&str]) -> Vec<PtxBug> {
         let mut bugs = Vec::new();
 
-        let entry_pattern = Regex::new(r"\.entry\s+\w+").expect("invariant: regex pattern is valid");
+        let entry_pattern =
+            Regex::new(r"\.entry\s+\w+").expect("invariant: regex pattern is valid");
         let has_entry = entry_pattern.is_match(ptx);
 
         // Only flag if PTX has some content but no entry point
@@ -476,7 +490,8 @@ impl PtxBugAnalyzer {
         let mut bugs = Vec::new();
 
         // Look for mov chains: mov %a, %b; mov %c, %a; → should be mov %c, %b
-        let mov_pattern = Regex::new(r"^\s*mov\.\w+\s+(%\w+),\s*(%\w+)").expect("invariant: regex pattern is valid");
+        let mov_pattern = Regex::new(r"^\s*mov\.\w+\s+(%\w+),\s*(%\w+)")
+            .expect("invariant: regex pattern is valid");
 
         let mut last_mov: Option<(usize, String, String)> = None; // (line, dest, src)
 
@@ -484,8 +499,16 @@ impl PtxBugAnalyzer {
             let trimmed = line.trim();
 
             if let Some(caps) = mov_pattern.captures(trimmed) {
-                let dest = caps.get(1).expect("invariant: capture group exists").as_str().to_string();
-                let src = caps.get(2).expect("invariant: capture group exists").as_str().to_string();
+                let dest = caps
+                    .get(1)
+                    .expect("invariant: capture group exists")
+                    .as_str()
+                    .to_string();
+                let src = caps
+                    .get(2)
+                    .expect("invariant: capture group exists")
+                    .as_str()
+                    .to_string();
 
                 // Check if src matches previous dest (redundant chain)
                 if let Some((prev_line, prev_dest, _prev_src)) = &last_mov {
@@ -524,8 +547,10 @@ impl PtxBugAnalyzer {
 
         // Pattern 1: Multiple single-element loads that could be vectorized
         // ld.global.f32 x4 in sequence could be ld.global.v4.f32
-        let single_load = Regex::new(r"ld\.global\.f32").expect("invariant: regex pattern is valid");
-        let vector_load = Regex::new(r"ld\.global\.v[24]\.f32").expect("invariant: regex pattern is valid");
+        let single_load =
+            Regex::new(r"ld\.global\.f32").expect("invariant: regex pattern is valid");
+        let vector_load =
+            Regex::new(r"ld\.global\.v[24]\.f32").expect("invariant: regex pattern is valid");
 
         let single_loads = single_load.find_iter(ptx).count();
         let vector_loads = vector_load.find_iter(ptx).count();
@@ -547,7 +572,8 @@ impl PtxBugAnalyzer {
 
         // Pattern 2: Look for non-coalesced access hints
         // Strided access: base + i * stride where stride != sizeof(element)
-        let strided_pattern = Regex::new(r"mul\.wide\.[us]32\s+%\w+,\s*%\w+,\s*(\d+)").expect("invariant: regex pattern is valid");
+        let strided_pattern = Regex::new(r"mul\.wide\.[us]32\s+%\w+,\s*%\w+,\s*(\d+)")
+            .expect("invariant: regex pattern is valid");
         let mut suspicious_strides = Vec::new();
 
         // Known quantization block strides (not bugs - legitimate data layouts)
@@ -556,7 +582,12 @@ impl PtxBugAnalyzer {
 
         for (line_num, line) in lines.iter().enumerate() {
             if let Some(caps) = strided_pattern.captures(line) {
-                if let Ok(stride) = caps.get(1).expect("invariant: capture group exists").as_str().parse::<u32>() {
+                if let Ok(stride) = caps
+                    .get(1)
+                    .expect("invariant: capture group exists")
+                    .as_str()
+                    .parse::<u32>()
+                {
                     // Suspicious if stride is not standard and not a known quantization block size
                     // Standard: 4 (f32), 8 (f64), 2 (f16), 1 (byte), or multiple of 4
                     if stride > 8 && stride % 4 != 0 && !quantization_strides.contains(&stride) {
@@ -586,7 +617,8 @@ impl PtxBugAnalyzer {
         let mut bugs = Vec::new();
 
         // Count register declarations: .reg .type %name<count>
-        let reg_pattern = Regex::new(r"\.reg\s+\.\w+\s+%\w+<(\d+)>").expect("invariant: regex pattern is valid");
+        let reg_pattern =
+            Regex::new(r"\.reg\s+\.\w+\s+%\w+<(\d+)>").expect("invariant: regex pattern is valid");
         let total_regs: usize = reg_pattern
             .captures_iter(ptx)
             .filter_map(|c| c.get(1).and_then(|m| m.as_str().parse::<usize>().ok()))
@@ -618,9 +650,15 @@ impl PtxBugAnalyzer {
         let mut bugs = Vec::new();
 
         // Pattern: .reg .pred %p<count>
-        let pred_pattern = Regex::new(r"\.reg\s+\.pred\s+%p<(\d+)>").expect("invariant: regex pattern is valid");
+        let pred_pattern =
+            Regex::new(r"\.reg\s+\.pred\s+%p<(\d+)>").expect("invariant: regex pattern is valid");
         if let Some(caps) = pred_pattern.captures(ptx) {
-            if let Ok(pred_count) = caps.get(1).expect("invariant: capture group exists").as_str().parse::<usize>() {
+            if let Ok(pred_count) = caps
+                .get(1)
+                .expect("invariant: capture group exists")
+                .as_str()
+                .parse::<usize>()
+            {
                 if pred_count > 8 {
                     bugs.push(PtxBug {
                         class: PtxBugClass::PredicateOverflow,
@@ -691,7 +729,8 @@ impl PtxBugAnalyzer {
 
         // Find loop patterns: label followed by branch back to same label
         let label_pattern = Regex::new(r"^(\w+):$").expect("invariant: regex pattern is valid");
-        let branch_pattern = Regex::new(r"^\s*(?:@%\w+\s+)?bra\s+(\w+);").expect("invariant: regex pattern is valid");
+        let branch_pattern = Regex::new(r"^\s*(?:@%\w+\s+)?bra\s+(\w+);")
+            .expect("invariant: regex pattern is valid");
 
         let mut i = 0;
         while i < lines.len() {
@@ -699,7 +738,10 @@ impl PtxBugAnalyzer {
 
             // Check if this is a loop label
             if let Some(label_caps) = label_pattern.captures(line) {
-                let label = label_caps.get(1).expect("invariant: capture group exists").as_str();
+                let label = label_caps
+                    .get(1)
+                    .expect("invariant: capture group exists")
+                    .as_str();
 
                 // Look for the loop body and back-edge
                 let mut j = i + 1;
@@ -731,7 +773,10 @@ impl PtxBugAnalyzer {
 
                     // Check for branch back to loop label
                     if let Some(br_caps) = branch_pattern.captures(inner) {
-                        let target = br_caps.get(1).expect("invariant: capture group exists").as_str();
+                        let target = br_caps
+                            .get(1)
+                            .expect("invariant: capture group exists")
+                            .as_str();
                         if target == label {
                             loop_end = Some(j);
                             break;
@@ -778,7 +823,9 @@ impl PtxBugAnalyzer {
         // Check for common bounds check patterns
         let has_tid = ptx.contains("%tid.") || ptx.contains("%ntid.");
         let has_setp_lt = ptx.contains("setp.lt") || ptx.contains("setp.ge");
-        let has_predicated_branch = Regex::new(r"@%p\d+\s+bra").expect("invariant: regex pattern is valid").is_match(ptx);
+        let has_predicated_branch = Regex::new(r"@%p\d+\s+bra")
+            .expect("invariant: regex pattern is valid")
+            .is_match(ptx);
 
         // If kernel uses tid and global memory but has no bounds check
         if has_tid && !has_setp_lt && !has_predicated_branch {
@@ -801,7 +848,8 @@ impl PtxBugAnalyzer {
         let mut bugs = Vec::new();
 
         let unconditional_ret = Regex::new(r"^\s*ret;").expect("invariant: regex pattern is valid");
-        let unconditional_bra = Regex::new(r"^\s*bra\s+\w+;").expect("invariant: regex pattern is valid"); // No @%p prefix
+        let unconditional_bra =
+            Regex::new(r"^\s*bra\s+\w+;").expect("invariant: regex pattern is valid"); // No @%p prefix
         let label_pattern = Regex::new(r"^\w+:$").expect("invariant: regex pattern is valid");
 
         let mut after_unconditional = false;

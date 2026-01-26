@@ -33,12 +33,15 @@ impl BottleneckType {
     /// Get optimization recommendation
     pub fn recommendation(&self) -> &'static str {
         match self {
-            BottleneckType::MemoryBound =>
-                "Improve memory access patterns: coalescing, prefetching, cache blocking",
-            BottleneckType::ComputeBound =>
-                "Improve compute efficiency: SIMD, kernel fusion, algorithm optimization",
-            BottleneckType::Balanced =>
-                "Both memory and compute matter equally; profile to find specific bottleneck",
+            BottleneckType::MemoryBound => {
+                "Improve memory access patterns: coalescing, prefetching, cache blocking"
+            }
+            BottleneckType::ComputeBound => {
+                "Improve compute efficiency: SIMD, kernel fusion, algorithm optimization"
+            }
+            BottleneckType::Balanced => {
+                "Both memory and compute matter equally; profile to find specific bottleneck"
+            }
         }
     }
 
@@ -320,7 +323,8 @@ impl RooflinePlot {
             .collect();
 
         // Workload points
-        let workload_points: Vec<RooflinePlotPoint> = workloads.iter()
+        let workload_points: Vec<RooflinePlotPoint> = workloads
+            .iter()
             .map(|w| RooflinePlotPoint::new(&w.name, w.operational_intensity(), w.measured_gflops))
             .collect();
 
@@ -349,7 +353,8 @@ pub struct BatchRooflineAnalysis {
 impl BatchRooflineAnalysis {
     /// Analyze multiple workloads
     pub fn analyze(hardware: &HardwareProfile, workloads: &[WorkloadMetrics]) -> Self {
-        let analyses = workloads.iter()
+        let analyses = workloads
+            .iter()
             .map(|w| RooflineAnalysis::analyze(hardware, w))
             .collect();
         Self {
@@ -360,19 +365,29 @@ impl BatchRooflineAnalysis {
 
     /// Get summary statistics
     pub fn summary(&self) -> BatchSummary {
-        let memory_bound = self.analyses.iter()
+        let memory_bound = self
+            .analyses
+            .iter()
             .filter(|a| a.bottleneck == BottleneckType::MemoryBound)
             .count();
-        let compute_bound = self.analyses.iter()
+        let compute_bound = self
+            .analyses
+            .iter()
             .filter(|a| a.bottleneck == BottleneckType::ComputeBound)
             .count();
-        let balanced = self.analyses.iter()
+        let balanced = self
+            .analyses
+            .iter()
             .filter(|a| a.bottleneck == BottleneckType::Balanced)
             .count();
         let avg_efficiency = if self.analyses.is_empty() {
             0.0
         } else {
-            self.analyses.iter().map(|a| a.attained_efficiency).sum::<f64>() / self.analyses.len() as f64
+            self.analyses
+                .iter()
+                .map(|a| a.attained_efficiency)
+                .sum::<f64>()
+                / self.analyses.len() as f64
         };
 
         BatchSummary {
@@ -414,14 +429,20 @@ mod tests {
     fn test_bottleneck_classification_memory_bound() {
         let profile = HardwareProfile::new("Test", 1000.0, 100.0);
         // OI = 5 < Ridge = 10 → memory-bound
-        assert_eq!(profile.classify_bottleneck(5.0), BottleneckType::MemoryBound);
+        assert_eq!(
+            profile.classify_bottleneck(5.0),
+            BottleneckType::MemoryBound
+        );
     }
 
     #[test]
     fn test_bottleneck_classification_compute_bound() {
         let profile = HardwareProfile::new("Test", 1000.0, 100.0);
         // OI = 20 > Ridge = 10 → compute-bound
-        assert_eq!(profile.classify_bottleneck(20.0), BottleneckType::ComputeBound);
+        assert_eq!(
+            profile.classify_bottleneck(20.0),
+            BottleneckType::ComputeBound
+        );
     }
 
     #[test]

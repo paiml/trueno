@@ -25,9 +25,9 @@ pub fn optimal_prefetch_distance(geometry: &TcbGeometry, level: TcbLevel) -> usi
 
     // Memory latency in cycles (approximate for modern x86)
     let mem_latency = match level {
-        TcbLevel::Micro => 4,    // L1: ~4 cycles
-        TcbLevel::Midi => 12,   // L2: ~12 cycles
-        TcbLevel::Macro => 40,  // L3: ~40 cycles
+        TcbLevel::Micro => 4,  // L1: ~4 cycles
+        TcbLevel::Midi => 12,  // L2: ~12 cycles
+        TcbLevel::Macro => 40, // L3: ~40 cycles
     };
 
     // Distance = latency / compute_time, minimum 1

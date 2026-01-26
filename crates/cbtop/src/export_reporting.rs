@@ -368,8 +368,14 @@ impl ReportExporter {
         html.push_str("<style>table{border-collapse:collapse;}th,td{border:1px solid #ccc;padding:8px;}</style>\n");
         html.push_str("</head>\n<body>\n");
         html.push_str(&format!("<h1>{}</h1>\n", report.title));
-        html.push_str(&format!("<p><strong>Workload:</strong> {}</p>\n", report.workload));
-        html.push_str(&format!("<p><strong>Backend:</strong> {}</p>\n", report.backend));
+        html.push_str(&format!(
+            "<p><strong>Workload:</strong> {}</p>\n",
+            report.workload
+        ));
+        html.push_str(&format!(
+            "<p><strong>Backend:</strong> {}</p>\n",
+            report.backend
+        ));
         html.push_str(&format!("<p><strong>Size:</strong> {}</p>\n", report.size));
 
         html.push_str("<h2>Metrics</h2>\n");

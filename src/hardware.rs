@@ -61,7 +61,7 @@ impl SimdWidth {
         match self {
             SimdWidth::Scalar => 1.0,
             SimdWidth::Neon128 | SimdWidth::Sse2 | SimdWidth::WasmSimd128 => 4.0,
-            SimdWidth::Avx2 => 10.0,  // 8-12x measured in trueno-zram
+            SimdWidth::Avx2 => 10.0,   // 8-12x measured in trueno-zram
             SimdWidth::Avx512 => 12.0, // 8-13x measured
         }
     }
@@ -158,7 +158,9 @@ impl HardwareCapability {
         let gpu = detect_gpu();
 
         let cpu_ai = cpu.peak_gflops / cpu.memory_bw_gbps;
-        let gpu_ai = gpu.as_ref().map(|g| g.peak_tflops_fp32 * 1000.0 / g.memory_bw_gbps);
+        let gpu_ai = gpu
+            .as_ref()
+            .map(|g| g.peak_tflops_fp32 * 1000.0 / g.memory_bw_gbps);
         // PMAT-452: Extract memory bandwidth before moving cpu
         let byte_budget_throughput = cpu.memory_bw_gbps.min(25.0);
 
@@ -172,7 +174,9 @@ impl HardwareCapability {
                 gpu_arithmetic_intensity: gpu_ai,
             },
             // PMAT-452: Default byte budget based on memory bandwidth
-            byte_budget: Some(crate::brick::ByteBudget::from_throughput(byte_budget_throughput)),
+            byte_budget: Some(crate::brick::ByteBudget::from_throughput(
+                byte_budget_throughput,
+            )),
         }
     }
 
@@ -479,7 +483,11 @@ cpu_arithmetic_intensity = 1.4
         // Should be a valid backend (even if None)
         assert!(matches!(
             backend,
-            GpuBackend::None | GpuBackend::Cuda | GpuBackend::Metal | GpuBackend::Vulkan | GpuBackend::Wgpu
+            GpuBackend::None
+                | GpuBackend::Cuda
+                | GpuBackend::Metal
+                | GpuBackend::Vulkan
+                | GpuBackend::Wgpu
         ));
     }
 

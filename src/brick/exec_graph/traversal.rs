@@ -4,9 +4,7 @@
 
 use std::collections::HashMap;
 
-use super::node::{
-    EdgeType, ExecutionEdge, ExecutionNode, ExecutionNodeId, TransferDirection,
-};
+use super::node::{EdgeType, ExecutionEdge, ExecutionNode, ExecutionNodeId, TransferDirection};
 
 /// Execution path graph for tracking brick → kernel → PTX relationships.
 ///
@@ -305,9 +303,10 @@ impl ExecutionGraph {
         // Add nodes with styling based on type
         for (i, node) in self.nodes.iter().enumerate() {
             let (label, style) = match node {
-                ExecutionNode::Layer { index } => {
-                    (format!("Layer {}", index), "style=filled,fillcolor=lightblue")
-                }
+                ExecutionNode::Layer { index } => (
+                    format!("Layer {}", index),
+                    "style=filled,fillcolor=lightblue",
+                ),
                 ExecutionNode::Brick { id, timing_ns, .. } => (
                     format!("{}\\n{:.1}µs", id.name(), *timing_ns as f64 / 1000.0),
                     "style=filled,fillcolor=lightgreen",
@@ -434,10 +433,7 @@ impl ExecutionGraph {
 
         for edge in &self.edges {
             if edge.edge_type == EdgeType::Contains || edge.edge_type == EdgeType::Launches {
-                children_map
-                    .entry(edge.src.0)
-                    .or_default()
-                    .push(edge.dst.0);
+                children_map.entry(edge.src.0).or_default().push(edge.dst.0);
                 has_parent.insert(edge.dst.0);
             }
         }
@@ -459,9 +455,7 @@ impl ExecutionGraph {
         ) -> TreeNode {
             let node = &graph.nodes[id as usize];
             let (label, info, color) = match node {
-                ExecutionNode::Layer { index } => {
-                    (format!("Layer {}", index), None, layer_color)
-                }
+                ExecutionNode::Layer { index } => (format!("Layer {}", index), None, layer_color),
                 ExecutionNode::Brick {
                     id: brick_id,
                     timing_ns,
@@ -576,8 +570,8 @@ impl ExecutionGraph {
             )
         } else {
             // Multiple roots: wrap in a synthetic root
-            let mut root =
-                TreeNode::new(u64::MAX, "Execution Graph").with_color(Color::new(0.9, 0.9, 0.9, 1.0));
+            let mut root = TreeNode::new(u64::MAX, "Execution Graph")
+                .with_color(Color::new(0.9, 0.9, 0.9, 1.0));
             for &root_id in &root_ids {
                 let child = build_node(
                     self,
@@ -605,10 +599,7 @@ impl ExecutionGraph {
 
         for edge in &self.edges {
             if edge.edge_type == EdgeType::Contains || edge.edge_type == EdgeType::Launches {
-                children_map
-                    .entry(edge.src.0)
-                    .or_default()
-                    .push(edge.dst.0);
+                children_map.entry(edge.src.0).or_default().push(edge.dst.0);
                 has_parent.insert(edge.dst.0);
             }
         }
@@ -711,7 +702,14 @@ impl ExecutionGraph {
                     } else {
                         format!("{}│   ", prefix)
                     };
-                    build_tree(graph, child_id, children_map, &new_prefix, new_connector, output);
+                    build_tree(
+                        graph,
+                        child_id,
+                        children_map,
+                        &new_prefix,
+                        new_connector,
+                        output,
+                    );
                 }
             }
         }
@@ -869,8 +867,8 @@ impl ExecutionGraph {
         for i in 0..self.nodes.len() {
             let mut max_pred = 0u64;
             for &pred in &reverse_adj[i] {
-                max_pred =
-                    max_pred.max(earliest[pred as usize] + self.node_timing_ns(ExecutionNodeId(pred)));
+                max_pred = max_pred
+                    .max(earliest[pred as usize] + self.node_timing_ns(ExecutionNodeId(pred)));
             }
             earliest[i] = max_pred;
         }
@@ -1016,7 +1014,10 @@ impl ExecutionGraph {
                 ExecutionNode::Kernel { name, .. } => name.clone(),
                 ExecutionNode::Function { name, .. } => name.clone(),
                 ExecutionNode::Transfer {
-                    direction, src, dst, ..
+                    direction,
+                    src,
+                    dst,
+                    ..
                 } => {
                     format!("{:?} {} → {}", direction, src, dst)
                 }
@@ -1057,7 +1058,10 @@ impl ExecutionGraph {
                         ExecutionNode::Kernel { name, .. } => name.clone(),
                         ExecutionNode::Function { name, .. } => name.clone(),
                         ExecutionNode::Transfer {
-                            direction, src, dst, ..
+                            direction,
+                            src,
+                            dst,
+                            ..
                         } => {
                             format!("{:?} {} → {}", direction, src, dst)
                         }

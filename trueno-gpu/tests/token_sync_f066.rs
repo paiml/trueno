@@ -386,7 +386,10 @@ fn test_token_from_id() {
 
     let reconstructed = Token::from_id(id);
     assert_eq!(reconstructed.id(), id, "from_id should preserve ID");
-    assert_eq!(original, reconstructed, "Tokens with same ID should be equal");
+    assert_eq!(
+        original, reconstructed,
+        "Tokens with same ID should be equal"
+    );
 
     println!("Token from_id reconstruction verified");
 }
@@ -398,7 +401,11 @@ fn test_defaults() {
     assert!(token.id() > 0, "Default token should have valid ID");
 
     let ordering = MemoryOrdering::default();
-    assert_eq!(ordering, MemoryOrdering::Weak, "Default ordering should be Weak");
+    assert_eq!(
+        ordering,
+        MemoryOrdering::Weak,
+        "Default ordering should be Weak"
+    );
 
     let scope = MemoryScope::default();
     assert_eq!(scope, MemoryScope::Device, "Default scope should be Device");

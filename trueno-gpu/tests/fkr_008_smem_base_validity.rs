@@ -11,8 +11,8 @@
 
 #[cfg(feature = "cuda")]
 mod fkr_008_tests {
-    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
     use std::ffi::c_void;
+    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
 
     fn cuda_available() -> bool {
         CudaContext::new(0).is_ok()
@@ -118,7 +118,7 @@ L_not_leader:
 
         let config = LaunchConfig {
             grid: (1, 1, 1),
-            block: (96, 1, 1),  // 3 warps like LZ4
+            block: (96, 1, 1), // 3 warps like LZ4
             shared_mem: 0,
         };
 
@@ -130,7 +130,8 @@ L_not_leader:
         ];
 
         unsafe {
-            stream.launch_kernel(&mut module, "fkr_008_smem_check", &config, &mut args)
+            stream
+                .launch_kernel(&mut module, "fkr_008_smem_check", &config, &mut args)
                 .expect("Kernel launch");
         }
         stream.synchronize().expect("Sync");
@@ -151,8 +152,14 @@ L_not_leader:
         println!("  cvta_result     = 0x{:016X}", cvta_result);
         println!("  curr_addr       = 0x{:016X} (smem_base + 0)", curr_addr);
         println!("  loaded_val      = 0x{:016X}", loaded_val);
-        println!("  hash_table_base = 0x{:016X} (smem_base + 4096)", hash_table_base);
-        println!("  state_base      = 0x{:016X} (smem_base + 12420)", state_base);
+        println!(
+            "  hash_table_base = 0x{:016X} (smem_base + 4096)",
+            hash_table_base
+        );
+        println!(
+            "  state_base      = 0x{:016X} (smem_base + 12420)",
+            state_base
+        );
         println!("  success_marker  = 0x{:016X}", success_marker);
 
         // Falsification checks
@@ -176,7 +183,8 @@ L_not_leader:
             "FALSIFIED: curr_addr should equal smem_base when in_pos=0"
         );
         assert_eq!(
-            hash_table_base, smem_base + 4096,
+            hash_table_base,
+            smem_base + 4096,
             "FALSIFIED: hash_table_base should be smem_base + 4096"
         );
         assert_eq!(
@@ -195,8 +203,8 @@ L_not_leader:
     #[test]
     #[ignore = "Uses buggy Lz4WarpCompressKernel - F082 confirmed"]
     fn fkr_008b_actual_lz4_kernel_address_check() {
-        use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
         use trueno_gpu::kernels::lz4::PAGE_SIZE;
+        use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
 
         if !cuda_available() {
             eprintln!("FKR-008b SKIPPED: No CUDA device available");
@@ -227,12 +235,12 @@ L_not_leader:
         println!("PTX around compress loop:");
         let lines: Vec<&str> = ptx.lines().collect();
         for (i, line) in lines.iter().enumerate() {
-            if line.contains("L_compress_loop") ||
-               line.contains("in_pos_64") ||
-               line.contains("curr_addr") ||
-               (i > 0 && lines[i-1].contains("L_compress_loop"))
+            if line.contains("L_compress_loop")
+                || line.contains("in_pos_64")
+                || line.contains("curr_addr")
+                || (i > 0 && lines[i - 1].contains("L_compress_loop"))
             {
-                println!("  L{}: {}", i+1, line);
+                println!("  L{}: {}", i + 1, line);
             }
         }
 
@@ -255,7 +263,8 @@ L_not_leader:
         println!("\nLaunching actual LZ4 kernel with non-zero data...");
 
         unsafe {
-            stream.launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
+            stream
+                .launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
                 .expect("Kernel launch");
         }
 
@@ -267,11 +276,17 @@ L_not_leader:
                 let mut sizes = vec![0u32; 1];
                 sizes_buf.copy_to_host(&mut sizes).unwrap();
                 println!("FKR-008b: PASSED - kernel completed, size = {}", sizes[0]);
-                assert!(sizes[0] > 0 && sizes[0] <= 4352, "Output size should be valid");
+                assert!(
+                    sizes[0] > 0 && sizes[0] <= 4352,
+                    "Output size should be valid"
+                );
             }
             Err(e) => {
-                panic!("FKR-008b: FALSIFIED - kernel crashed: {:?}\n\
-                        This confirms smem_base corruption in compress loop", e);
+                panic!(
+                    "FKR-008b: FALSIFIED - kernel crashed: {:?}\n\
+                        This confirms smem_base corruption in compress loop",
+                    e
+                );
             }
         }
     }
@@ -296,10 +311,11 @@ L_not_leader:
         println!("  .reg .pred declarations: {}", reg_pred_count);
 
         // Find the actual max register numbers used
-        let max_rd = ptx.lines()
+        let max_rd = ptx
+            .lines()
             .filter_map(|line| {
                 if let Some(pos) = line.find("%rd") {
-                    let rest = &line[pos+3..];
+                    let rest = &line[pos + 3..];
                     rest.chars()
                         .take_while(|c| c.is_ascii_digit())
                         .collect::<String>()
@@ -312,15 +328,17 @@ L_not_leader:
             .max()
             .unwrap_or(0);
 
-        let max_r = ptx.lines()
+        let max_r = ptx
+            .lines()
             .filter_map(|line| {
                 // Match %r followed by digits, but not %rd
                 let bytes = line.as_bytes();
                 let mut max = 0u32;
                 for i in 0..bytes.len().saturating_sub(2) {
-                    if bytes[i] == b'%' && bytes[i+1] == b'r' && bytes[i+2] != b'd' {
-                        let rest = &line[i+2..];
-                        if let Some(num) = rest.chars()
+                    if bytes[i] == b'%' && bytes[i + 1] == b'r' && bytes[i + 2] != b'd' {
+                        let rest = &line[i + 2..];
+                        if let Some(num) = rest
+                            .chars()
                             .take_while(|c| c.is_ascii_digit())
                             .collect::<String>()
                             .parse::<u32>()
@@ -330,7 +348,11 @@ L_not_leader:
                         }
                     }
                 }
-                if max > 0 { Some(max) } else { None }
+                if max > 0 {
+                    Some(max)
+                } else {
+                    None
+                }
             })
             .max()
             .unwrap_or(0);
@@ -343,10 +365,16 @@ L_not_leader:
         // The PTX assembler handles register allocation, so we allow high counts
         // but warn about potential performance implications
         if max_rd > 200 {
-            println!("WARNING: High u64 register count ({}) may impact performance", max_rd);
+            println!(
+                "WARNING: High u64 register count ({}) may impact performance",
+                max_rd
+            );
         }
         if max_r > 400 {
-            println!("WARNING: High u32 register count ({}) may impact performance", max_r);
+            println!(
+                "WARNING: High u32 register count ({}) may impact performance",
+                max_r
+            );
         }
         // The assertion is informational, not a hard failure
         // Actual spilling depends on SM register file size and occupancy
@@ -362,13 +390,11 @@ L_not_leader:
         );
 
         // Check if smem_base register (%rd11 typically) is reused elsewhere
-        let rd11_uses: Vec<&str> = ptx.lines()
-            .filter(|line| line.contains("%rd11"))
-            .collect();
+        let rd11_uses: Vec<&str> = ptx.lines().filter(|line| line.contains("%rd11")).collect();
 
         println!("\n  Uses of %rd11 (smem_base): {}", rd11_uses.len());
         for (i, line) in rd11_uses.iter().take(10).enumerate() {
-            println!("    {}: {}", i+1, line.trim());
+            println!("    {}: {}", i + 1, line.trim());
         }
 
         println!("\nFKR-008c: PASSED - register analysis complete");

@@ -21,10 +21,7 @@ pub(crate) fn emit_arithmetic_opcode(instr: &PtxInstruction, s: &mut String) {
             }
         }
         PtxOp::Fma => {
-            let round = instr
-                .rounding
-                .as_ref()
-                .map_or(".rn", |r| r.to_ptx_string());
+            let round = instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string());
             s.push_str("fma");
             s.push_str(round);
         }
@@ -33,10 +30,7 @@ pub(crate) fn emit_arithmetic_opcode(instr: &PtxInstruction, s: &mut String) {
         PtxOp::Rsqrt => s.push_str("rsqrt.approx"),
         PtxOp::Rcp => s.push_str("rcp.approx"),
         PtxOp::Sqrt => {
-            let round = instr
-                .rounding
-                .as_ref()
-                .map_or(".rn", |r| r.to_ptx_string());
+            let round = instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string());
             s.push_str("sqrt");
             s.push_str(round);
         }

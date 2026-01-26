@@ -4,7 +4,7 @@
 //!
 //! Run with: cargo run --example adaptive_ml_demo -p cbtop
 
-use cbtop::{AdaptiveThresholdMl, MlThresholdConfig, WorkloadClass, TimeSeriesFeatures};
+use cbtop::{AdaptiveThresholdMl, MlThresholdConfig, TimeSeriesFeatures, WorkloadClass};
 
 fn main() {
     println!("=== Adaptive ML Thresholds Demo ===\n");
@@ -33,9 +33,7 @@ fn main() {
 
     // Create Matmul workload samples (low variance pattern)
     println!("Training on Matmul workload samples (low variance)...");
-    let matmul_samples: Vec<f64> = (0..50)
-        .map(|i| 100.0 + (i as f64 * 0.1))
-        .collect();
+    let matmul_samples: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64 * 0.1)).collect();
 
     // Train with Matmul samples (not anomalous)
     for chunk in matmul_samples.chunks(10) {
@@ -46,7 +44,11 @@ fn main() {
 
     // Get thresholds for different workloads
     println!("\n=== Learned Per-Workload Thresholds ===");
-    for class in [WorkloadClass::Ffn, WorkloadClass::Matmul, WorkloadClass::Attention] {
+    for class in [
+        WorkloadClass::Ffn,
+        WorkloadClass::Matmul,
+        WorkloadClass::Attention,
+    ] {
         let threshold = ml.get_threshold(class);
         println!("{:?}: CV threshold = {:.2}%", class, threshold);
     }
@@ -94,10 +96,7 @@ fn main() {
 
     if let Ok(drift_zscore) = ml.check_drift(&drifted) {
         if let Some(zscore) = drift_zscore {
-            println!(
-                "Drift detected: z-score = {:.2} (threshold: 3.0)",
-                zscore
-            );
+            println!("Drift detected: z-score = {:.2} (threshold: 3.0)", zscore);
         } else {
             println!("No significant drift detected");
         }
@@ -125,7 +124,11 @@ fn main() {
         WorkloadClass::Unknown,
     ];
     for class in classes {
-        println!("  {:?} (default CV threshold: {:.1}%)", class, class.default_cv_threshold());
+        println!(
+            "  {:?} (default CV threshold: {:.1}%)",
+            class,
+            class.default_cv_threshold()
+        );
     }
 
     println!("\n✅ Adaptive ML thresholds demo complete!");

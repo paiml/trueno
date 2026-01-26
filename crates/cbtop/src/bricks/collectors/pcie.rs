@@ -2,11 +2,11 @@
 //!
 //! Collects PCIe link speed from sysfs (Genchi Genbutsu)
 
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use crate::ring_buffer::RingBuffer;
 use std::any::Any;
 use std::fs;
 use std::time::Instant;
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
-use crate::ring_buffer::RingBuffer;
 
 #[derive(Debug, Clone)]
 pub struct PcieMetrics {
@@ -56,17 +56,22 @@ impl PcieCollectorBrick {
             for entry in entries {
                 if let Ok(entry) = entry {
                     let path = entry.path();
-                    
+
                     // Check generation
                     if let Ok(speed) = fs::read_to_string(path.join("current_link_speed")) {
-                        if speed.contains("16.0 GT/s") { gen4 += 1; }
-                        else if speed.contains("32.0 GT/s") { gen5 += 1; }
+                        if speed.contains("16.0 GT/s") {
+                            gen4 += 1;
+                        } else if speed.contains("32.0 GT/s") {
+                            gen5 += 1;
+                        }
                     }
 
                     // Check width
                     if let Ok(width_str) = fs::read_to_string(path.join("current_link_width")) {
                         if let Ok(width) = width_str.trim().parse::<u8>() {
-                            if width > max_width { max_width = width; }
+                            if width > max_width {
+                                max_width = width;
+                            }
                         }
                     }
                 }
@@ -87,8 +92,10 @@ impl PcieCollectorBrick {
 }
 
 impl Brick for PcieCollectorBrick {
-    fn brick_name(&self) -> &'static str { "pcie_collector" }
-    
+    fn brick_name(&self) -> &'static str {
+        "pcie_collector"
+    }
+
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
             BrickAssertion::custom("width_valid", |b| {
@@ -100,16 +107,24 @@ impl Brick for PcieCollectorBrick {
     }
 
     fn budget(&self) -> BrickBudget {
-        BrickBudget { collect_ms: 10, layout_ms: 0, render_ms: 0 }
+        BrickBudget {
+            collect_ms: 10,
+            layout_ms: 0,
+            render_ms: 0,
+        }
     }
 
     fn verify(&self) -> BrickVerification {
         let mut v = BrickVerification::new();
-        for a in self.assertions() { v.check(&a); }
+        for a in self.assertions() {
+            v.check(&a);
+        }
         v
     }
 
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[cfg(test)]

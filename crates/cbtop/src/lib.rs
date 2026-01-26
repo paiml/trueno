@@ -48,60 +48,60 @@
 //! cbtop does NOT implement its own widgets. If a widget is missing, it MUST
 //! be added to presentar-terminal FIRST, then used here.
 
+pub mod adaptive_ml;
+pub mod adaptive_threshold;
 pub mod adversarial;
+pub mod alerting;
+pub mod anomaly_detection;
+pub mod app;
+pub mod backend_regression;
 pub mod baseline;
 pub mod brick;
 pub mod bricks;
-pub mod ring_buffer;
-pub mod app;
 pub mod cache_analysis;
 pub mod config;
+pub mod context_regression;
+pub mod continuous_batcher;
+pub mod correlation_analysis;
+pub mod cost_tracker;
 pub mod double_blind;
 pub mod error;
+pub mod event_streaming;
+pub mod export_reporting;
+pub mod federated_metrics;
+pub mod frequency_control;
+pub mod fuzz;
+pub mod golden_trace;
 pub mod grammar;
 pub mod headless;
-pub mod continuous_batcher;
+pub mod incremental_snapshot;
 pub mod ironman;
 pub mod latency_distribution;
+pub mod observability_backend;
 pub mod optimize;
 pub mod paged_kv;
-pub mod quantize;
-pub mod roofline;
-pub mod tracing_escalation;
-pub mod fuzz;
-pub mod statistics;
-pub mod variance_analysis;
-pub mod profile_persistence;
-pub mod golden_trace;
-pub mod thermal_prediction;
-pub mod backend_regression;
-pub mod correlation_analysis;
 pub mod performance_prediction;
-pub mod anomaly_detection;
-pub mod workload_characterization;
-pub mod export_reporting;
-pub mod adaptive_threshold;
-pub mod frequency_control;
-pub mod context_regression;
-pub mod alerting;
-pub mod prometheus;
-pub mod cost_tracker;
-pub mod event_streaming;
-pub mod remote_agent;
-pub mod profile_compare;
-pub mod observability_backend;
-pub mod regression_pipeline;
-pub mod federated_metrics;
-pub mod adaptive_ml;
-pub mod incremental_snapshot;
 pub mod predictive_scheduler;
+pub mod profile_compare;
+pub mod profile_persistence;
+pub mod prometheus;
+pub mod quantize;
+pub mod regression_pipeline;
+pub mod remote_agent;
+pub mod ring_buffer;
+pub mod roofline;
+pub mod statistics;
+pub mod thermal_prediction;
+pub mod tracing_escalation;
+pub mod variance_analysis;
+pub mod workload_characterization;
 
 // Core brick traits (cbtop-specific)
 pub use brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 // ComputeBrick Scoring Framework (§29)
-pub use brick::{BrickScore, BrickGrade, Scorable};
+pub use brick::{BrickGrade, BrickScore, Scorable};
 // CORRECTNESS-011: Per-kernel divergence detection
-pub use brick::{KernelTrace, DivergenceReport, fnv1a_f32, BrickProfiler};
+pub use brick::{fnv1a_f32, BrickProfiler, DivergenceReport, KernelTrace};
 
 // Application
 pub use app::CbtopApp;
@@ -110,312 +110,278 @@ pub use error::CbtopError;
 
 // Headless benchmarking API (HL-007)
 pub use headless::{
-    Benchmark, BenchmarkBuilder, BenchmarkResult, BenchmarkConfig,
-    BenchmarkResults, LatencyStats, RegressionResult, ComparisonResult,
-    OutputFormat, SystemInfo, ScoreInfo,
+    Benchmark, BenchmarkBuilder, BenchmarkConfig, BenchmarkResult, BenchmarkResults,
+    ComparisonResult, LatencyStats, OutputFormat, RegressionResult, ScoreInfo, SystemInfo,
 };
 // Re-export config types for benchmark builder
 pub use config::{ComputeBackend, WorkloadType};
 
 // Optimization tooling (OPT-001 to OPT-004)
 pub use optimize::{
-    CpuCapabilities,
-    OptimizationSuite, BaselineReport, BaselineEntry, WorkloadConfig,
-    BottleneckAnalysis, BottleneckEntry, BottleneckSeverity, AnalysisSummary,
-    RegressionDetector, RegressionReport, RegressionEntry,
-    OptimizationValidator, ValidationResult,
+    AnalysisSummary, BaselineEntry, BaselineReport, BottleneckAnalysis, BottleneckEntry,
+    BottleneckSeverity, CpuCapabilities, OptimizationSuite, OptimizationValidator,
+    RegressionDetector, RegressionEntry, RegressionReport, ValidationResult, WorkloadConfig,
 };
 
 // Industry Baseline Validation (PMAT-016)
 pub use baseline::{
-    ServerBaseline, GpuClass, ThroughputGrade, SmHealth,
-    BaselineComparison, SingleComparison, BaselineValidator, ValidationSummary,
-    VLLM_BASELINE, TGI_BASELINE, TRITON_BASELINE, INDUSTRY_BASELINES,
+    BaselineComparison, BaselineValidator, GpuClass, ServerBaseline, SingleComparison, SmHealth,
+    ThroughputGrade, ValidationSummary, INDUSTRY_BASELINES, TGI_BASELINE, TRITON_BASELINE,
+    VLLM_BASELINE,
 };
 
 // Quantized Weight Support (PMAT-013)
 pub use quantize::{
-    QuantFormat, DequantStrategy, QuantizedWeights, QuantStats, LayerQuantStats,
-    GgufHeader, GgufValue, GgufTensorInfo, GgufLoader, GgufResult, GgufError,
-    QuantizedBrick, ggml_type_to_format,
+    ggml_type_to_format, DequantStrategy, GgufError, GgufHeader, GgufLoader, GgufResult,
+    GgufTensorInfo, GgufValue, LayerQuantStats, QuantFormat, QuantStats, QuantizedBrick,
+    QuantizedWeights,
 };
 
 // Paged KV Cache (PMAT-014)
 pub use paged_kv::{
-    BlockId, SeqId, EvictionStrategy, KvBlock, SequenceInfo,
-    PagedKvCache, PagedKvError, PagedKvResult, CacheStats,
+    BlockId, CacheStats, EvictionStrategy, KvBlock, PagedKvCache, PagedKvError, PagedKvResult,
+    SeqId, SequenceInfo,
 };
 
 // Continuous Batcher (PMAT-015)
 pub use continuous_batcher::{
-    Token, Priority, InferenceRequest, SequenceGroup, SchedulingPolicy,
-    BatchSchedule, TokenOutput, BatcherStats, ContinuousBatcher,
-    ExponentialMovingAverage, SpeculativeOutput, SpeculativeDecoder,
+    BatchSchedule, BatcherStats, ContinuousBatcher, ExponentialMovingAverage, InferenceRequest,
+    Priority, SchedulingPolicy, SequenceGroup, SpeculativeDecoder, SpeculativeOutput, Token,
+    TokenOutput,
 };
 
 // Ironman Falsification Suite (PMAT-017)
 pub use ironman::{
-    GateResult, QualityGate, GateCategory, IronmanScorecard,
-    IronmanValidator, IRONMAN_GATES, quick_validate, full_validate,
+    full_validate, quick_validate, GateCategory, GateResult, IronmanScorecard, IronmanValidator,
+    QualityGate, IRONMAN_GATES,
 };
 
 // Grammar of ComputeBlock (PMAT-018)
 pub use grammar::{
-    GrammarResult, GrammarError, Operation, DataType, Dimensions, TensorSpec,
-    WorkloadSpec, ScaleBinding, ByteSize, ResourceMapping, SimdWidth, GpuDevice,
-    KernelSpec, ExecutionStrategy, QuantScheme, DataTransform, CpuAffinity,
-    ExecutionContext, CompositionMode, QosLevel, RetryPolicy, ResourceLimits,
-    ObservabilityConfig, ExecutionPolicy, StrategyLayer, ExecutionResult,
-    BuiltComputeBlock, ComputeBlock, ComputeBlockBuilder, ResourceScale,
-    LinearResourceScale, LogResourceScale,
+    BuiltComputeBlock, ByteSize, CompositionMode, ComputeBlock, ComputeBlockBuilder, CpuAffinity,
+    DataTransform, DataType, Dimensions, ExecutionContext, ExecutionPolicy, ExecutionResult,
+    ExecutionStrategy, GpuDevice, GrammarError, GrammarResult, KernelSpec, LinearResourceScale,
+    LogResourceScale, ObservabilityConfig, Operation, QosLevel, QuantScheme, ResourceLimits,
+    ResourceMapping, ResourceScale, RetryPolicy, ScaleBinding, SimdWidth, StrategyLayer,
+    TensorSpec, WorkloadSpec,
 };
 
 // Adversarial Falsification Testing (PMAT-019)
 pub use adversarial::{
-    AdversarialError, AdversarialResult, AdversarialTactic,
-    InputValidator, BitFlipInjector, CheckedArithmetic,
-    MonotonicClock, ResourceLimiter, ResourceUsage,
-    ConfigValidator, CancellationToken, RecoveryHandler,
-    AdversarialTestSummary,
+    AdversarialError, AdversarialResult, AdversarialTactic, AdversarialTestSummary,
+    BitFlipInjector, CancellationToken, CheckedArithmetic, ConfigValidator, InputValidator,
+    MonotonicClock, RecoveryHandler, ResourceLimiter, ResourceUsage,
 };
 
 // Double-Blind Verification Framework (PMAT-020)
 pub use double_blind::{
-    Role, VerificationResult, FalsificationCriterion,
-    FalsificationClaim, BlackBoxArtifact, VerificationAttempt,
-    ScorecardComponent, ScorecardV2, ReleaseDecision,
-    AuditEntry, VerificationSession, SessionState,
-    VerificationReport,
+    AuditEntry, BlackBoxArtifact, FalsificationClaim, FalsificationCriterion, ReleaseDecision,
+    Role, ScorecardComponent, ScorecardV2, SessionState, VerificationAttempt, VerificationReport,
+    VerificationResult, VerificationSession,
 };
 
 // Tracing Escalation Framework (PMAT-021)
 pub use tracing_escalation::{
-    EscalationReason, EscalationThresholds, SyscallBreakdown,
-    TraceResult, TracingEscalation, OtlpSpanAttributes,
+    EscalationReason, EscalationThresholds, OtlpSpanAttributes, SyscallBreakdown, TraceResult,
+    TracingEscalation,
 };
 
 // Roofline Model Analyzer (PMAT-022)
 pub use roofline::{
-    BottleneckType, HardwareProfile, WorkloadMetrics,
-    RooflineAnalysis, RooflinePlotPoint, RooflinePlot,
-    BatchRooflineAnalysis, BatchSummary,
+    BatchRooflineAnalysis, BatchSummary, BottleneckType, HardwareProfile, RooflineAnalysis,
+    RooflinePlot, RooflinePlotPoint, WorkloadMetrics,
 };
 
 // Fuzz Testing Integration (PMAT-023)
 pub use fuzz::{
-    FuzzResult, FuzzFailure, FuzzInputValidator, FuzzValidationError,
-    FuzzTargetConfig, FuzzSuite, FuzzSummary,
-    safe_div, checked_add_u64, checked_mul_u64, bound_value, sanitize_float,
-    test_float_edge_cases, test_u64_edge_cases,
+    bound_value, checked_add_u64, checked_mul_u64, safe_div, sanitize_float, test_float_edge_cases,
+    test_u64_edge_cases, FuzzFailure, FuzzInputValidator, FuzzResult, FuzzSuite, FuzzSummary,
+    FuzzTargetConfig, FuzzValidationError,
 };
 
 // Statistical Analysis (PMAT-024)
 pub use statistics::{
-    EffectCategory, StatisticalAnalysis, EffectSize,
-    ComparisonResult as StatisticalComparison,
-    MannWhitneyResult, OutlierFilter,
-    bootstrap_ci, percentile, trimmed_mean,
+    bootstrap_ci, percentile, trimmed_mean, ComparisonResult as StatisticalComparison,
+    EffectCategory, EffectSize, MannWhitneyResult, OutlierFilter, StatisticalAnalysis,
 };
 
 // Cache Efficiency Analysis (PMAT-025)
 pub use cache_analysis::{
-    CacheLevel, CacheConfig, WorkingSetAnalysis,
-    AccessPattern, BandwidthPrediction,
-    matrix_working_set, optimal_matmul_tile, elementwise_working_set,
+    elementwise_working_set, matrix_working_set, optimal_matmul_tile, AccessPattern,
+    BandwidthPrediction, CacheConfig, CacheLevel, WorkingSetAnalysis,
 };
 
 // Latency Distribution Analysis (PMAT-026)
 pub use latency_distribution::{
-    LatencyDistribution, LatencyHistogram, HistogramBucket,
-    TailSeverity, DistributionShape,
+    DistributionShape, HistogramBucket, LatencyDistribution, LatencyHistogram, TailSeverity,
 };
 
 // Variance Source Analysis (PMAT-027)
-pub use variance_analysis::{
-    VarianceSource, VarianceAnalysis, VarianceInput,
-};
+pub use variance_analysis::{VarianceAnalysis, VarianceInput, VarianceSource};
 
 // Profile Persistence and Rotation (PMAT-028)
 pub use profile_persistence::{
-    ProfileConfig, ProfileManager, ProfileOverlay, ProfileError, ProfileResult,
-    BackendConfig as ProfileBackend, WorkloadConfig as ProfileWorkload,
+    BackendConfig as ProfileBackend, ProfileConfig, ProfileError, ProfileManager, ProfileOverlay,
+    ProfileResult, WorkloadConfig as ProfileWorkload,
 };
 
 // Golden Trace Comparison (PMAT-029)
 pub use golden_trace::{
-    GoldenTrace, GoldenTraceManager, GoldenComparator, GoldenTraceError, GoldenTraceResult,
-    TraceMetrics, SyscallBreakdownDelta, TraceComparison,
-    SyscallBreakdown as TraceSyscallBreakdown,
+    GoldenComparator, GoldenTrace, GoldenTraceError, GoldenTraceManager, GoldenTraceResult,
+    SyscallBreakdown as TraceSyscallBreakdown, SyscallBreakdownDelta, TraceComparison,
+    TraceMetrics,
 };
 
 // Thermal Trend Prediction (PMAT-030)
 pub use thermal_prediction::{
-    ThermalAnalyzer, ThermalSample, ThermalPrediction, ThrottleRisk,
-    CooldownRecommendation, ThermalCorrelation, ThermalVariance, RiskCategory,
-    analyze_thermal, assess_throttle_risk,
+    analyze_thermal, assess_throttle_risk, CooldownRecommendation, RiskCategory, ThermalAnalyzer,
+    ThermalCorrelation, ThermalPrediction, ThermalSample, ThermalVariance, ThrottleRisk,
     DEFAULT_THROTTLE_THRESHOLD_C, MIN_SAMPLES_FOR_ANALYSIS,
 };
 
 // Cross-Backend Regression Detector (PMAT-031)
 pub use backend_regression::{
-    Backend, WorkloadType as BackendWorkload, BackendMeasurement, BackendComparison,
-    BackendRegressionDetector, SizeCliff, BackendRecommendation, TransferAnalysis,
-    BackendSummary,
+    Backend, BackendComparison, BackendMeasurement, BackendRecommendation,
+    BackendRegressionDetector, BackendSummary, SizeCliff, TransferAnalysis,
+    WorkloadType as BackendWorkload,
 };
 
 // Multi-Metric Correlation Analysis (PMAT-032)
 pub use correlation_analysis::{
-    CorrelationAnalyzer, EventType, EventSample, PerformanceSample,
-    CorrelationResult, InterferenceResult, InterferenceCategory,
-    IsolationRecommendation, IsolationAction, SystemSnapshot,
+    CorrelationAnalyzer, CorrelationResult, EventSample, EventType, InterferenceCategory,
+    InterferenceResult, IsolationAction, IsolationRecommendation, PerformanceSample,
+    SystemSnapshot,
 };
 
 // Performance Prediction Model (PMAT-033)
 pub use performance_prediction::{
-    PerformancePredictor, DataPoint, ModelType, FittedModel, Prediction,
-    MIN_SAMPLES_FOR_FIT,
+    DataPoint, FittedModel, ModelType, PerformancePredictor, Prediction, MIN_SAMPLES_FOR_FIT,
 };
 
 // Anomaly Detection Engine (PMAT-034)
 pub use anomaly_detection::{
-    AnomalyDetector, Anomaly, AnomalyType, AnomalySeverity, ChangePoint,
-    AnomalyReport, DEFAULT_ZSCORE_THRESHOLD, DEFAULT_IQR_MULTIPLIER,
-    MIN_SAMPLES_FOR_DETECTION,
+    Anomaly, AnomalyDetector, AnomalyReport, AnomalySeverity, AnomalyType, ChangePoint,
+    DEFAULT_IQR_MULTIPLIER, DEFAULT_ZSCORE_THRESHOLD, MIN_SAMPLES_FOR_DETECTION,
 };
 
 // Workload Characterization System (PMAT-035)
 pub use workload_characterization::{
-    WorkloadCharacterizer, WorkloadFeatures, WorkloadCategory,
-    ClassificationResult, RecommendedBackend,
+    ClassificationResult, RecommendedBackend, WorkloadCategory, WorkloadCharacterizer,
+    WorkloadFeatures,
 };
 
 // Multi-Format Export System (PMAT-036)
 pub use export_reporting::{
-    ExportFormat, ReportType, BenchmarkMetric, BenchmarkReport,
-    ComparisonEntry, ComparisonReport, ReportExporter, ReportBuilder,
+    BenchmarkMetric, BenchmarkReport, ComparisonEntry, ComparisonReport, ExportFormat,
+    ReportBuilder, ReportExporter, ReportType,
 };
 
 // Adaptive Threshold Learning System (PMAT-037)
 pub use adaptive_threshold::{
-    ThresholdLearner, LearnedThreshold, ThresholdDirection, ThresholdCheck,
-    MIN_SAMPLES_FOR_LEARNING, DEFAULT_CONFIDENCE_LEVEL, DEFAULT_OUTLIER_THRESHOLD,
+    LearnedThreshold, ThresholdCheck, ThresholdDirection, ThresholdLearner,
+    DEFAULT_CONFIDENCE_LEVEL, DEFAULT_OUTLIER_THRESHOLD, MIN_SAMPLES_FOR_LEARNING,
 };
 
 // CPU Frequency Control Backend (PMAT-038)
 pub use frequency_control::{
-    FrequencyController, FrequencyReading, FrequencyVariance, FrequencyLock,
-    CpuGovernor, CpuFrequencyInfo,
+    CpuFrequencyInfo, CpuGovernor, FrequencyController, FrequencyLock, FrequencyReading,
+    FrequencyVariance,
 };
 
 // Context-Aware Regression Predictor (PMAT-039)
 pub use context_regression::{
-    ContextRegressionPredictor, SystemContext,
-    BaselineEntry as ContextBaselineEntry,
-    RegressionThreshold, RegressionCheck, Trend,
-    DEFAULT_COLD_START_MARGIN, MIN_SAMPLES_FOR_CONTEXT, DEFAULT_STALENESS_SEC,
+    BaselineEntry as ContextBaselineEntry, ContextRegressionPredictor, RegressionCheck,
+    RegressionThreshold, SystemContext, Trend, DEFAULT_COLD_START_MARGIN, DEFAULT_STALENESS_SEC,
+    MIN_SAMPLES_FOR_CONTEXT,
 };
 
 // Real-Time Alert Integration System (PMAT-040)
 pub use alerting::{
-    AlertSeverity, AlertChannel, Alert, AlertRouter, AlertRouterConfig,
-    DeliveryResult, MessageTemplate, alert_from_anomaly,
+    alert_from_anomaly, Alert, AlertChannel, AlertRouter, AlertRouterConfig, AlertSeverity,
+    DeliveryResult, MessageTemplate,
 };
 
 // Prometheus Metrics Exporter (PMAT-041)
 pub use prometheus::{
-    MetricType, Labels, MetricsRegistry, GaugeValue, CounterValue, HistogramValue,
-    HistogramBuckets, MetricDef, validate_metric_name,
-    DEFAULT_MAX_LABELS, DEFAULT_BUCKETS,
+    validate_metric_name, CounterValue, GaugeValue, HistogramBuckets, HistogramValue, Labels,
+    MetricDef, MetricType, MetricsRegistry, DEFAULT_BUCKETS, DEFAULT_MAX_LABELS,
 };
 
 // Cost and Energy Efficiency Tracker (PMAT-042)
 pub use cost_tracker::{
-    CloudProvider, GpuPricing, EnergyMeasurement, CostResult, CostComparison,
-    BudgetAlert, CostTracker, default_gpu_pricing,
-    JOULES_PER_KWH, DEFAULT_CARBON_INTENSITY,
+    default_gpu_pricing, BudgetAlert, CloudProvider, CostComparison, CostResult, CostTracker,
+    EnergyMeasurement, GpuPricing, DEFAULT_CARBON_INTENSITY, JOULES_PER_KWH,
 };
 
 // Structured Event Streaming (PMAT-043)
 pub use event_streaming::{
-    SinkType, MetricEvent, EventBatch, SinkHealth, RetryConfig, EventStreamer,
-    event_from_sample, compress_data,
-    SCHEMA_VERSION, DEFAULT_BATCH_SIZE,
+    compress_data, event_from_sample, EventBatch, EventStreamer, MetricEvent, RetryConfig,
+    SinkHealth, SinkType, DEFAULT_BATCH_SIZE, SCHEMA_VERSION,
 };
 
 // Remote SSH/Headless Agent Integration (PMAT-044)
 pub use remote_agent::{
-    RemoteError, RemoteResult, AuthMethod, HostConfig, HostHealth, HostState,
-    CommandResult, AggregatedResult, HostBenchmark, AggregationStrategy,
-    RemoteAgentConfig, RemoteAgent,
-    DEFAULT_RETRY_DELAY_MS, DEFAULT_MAX_CONCURRENT, DEFAULT_HEALTH_CHECK_INTERVAL_SEC,
+    AggregatedResult, AggregationStrategy, AuthMethod, CommandResult, HostBenchmark, HostConfig,
+    HostHealth, HostState, RemoteAgent, RemoteAgentConfig, RemoteError, RemoteResult,
+    DEFAULT_HEALTH_CHECK_INTERVAL_SEC, DEFAULT_MAX_CONCURRENT, DEFAULT_RETRY_DELAY_MS,
 };
 
 // Profile Diffing and A/B Comparison (PMAT-045)
 pub use profile_compare::{
-    CompareError, CompareResult, BenchmarkProfile, MetricSamples,
-    WelchTestResult, EffectMagnitude, EffectSizeResult, ChangeDirection,
-    MetricComparison, ProfileComparison, ComparisonVerdict, CompareConfig,
-    ProfileComparator,
-    MIN_COMPARISON_SAMPLES,
+    BenchmarkProfile, ChangeDirection, CompareConfig, CompareError, CompareResult,
+    ComparisonVerdict, EffectMagnitude, EffectSizeResult, MetricComparison, MetricSamples,
+    ProfileComparator, ProfileComparison, WelchTestResult,
     DEFAULT_CONFIDENCE_LEVEL as COMPARE_DEFAULT_CONFIDENCE_LEVEL,
-    DEFAULT_REGRESSION_THRESHOLD as COMPARE_DEFAULT_REGRESSION_THRESHOLD,
+    DEFAULT_REGRESSION_THRESHOLD as COMPARE_DEFAULT_REGRESSION_THRESHOLD, MIN_COMPARISON_SAMPLES,
 };
 
 // Observability Backend Integrations (PMAT-046)
 pub use observability_backend::{
-    ObservabilityError, ObservabilityResult, ObservabilityBackend,
-    DatadogConfig, NewRelicConfig, HoneycombConfig, OtlpConfig, WebhookConfig,
-    ExportMetric, MetricExportType, ExportResult, BackendHealth,
-    ObservabilityConfig as ObsBackendConfig, ObservabilityExporter, format_dogstatsd,
-    DEFAULT_BATCH_SIZE as OBS_DEFAULT_BATCH_SIZE, DEFAULT_FLUSH_INTERVAL_MS,
+    format_dogstatsd, BackendHealth, DatadogConfig, ExportMetric, ExportResult, HoneycombConfig,
+    MetricExportType, NewRelicConfig, ObservabilityBackend,
+    ObservabilityConfig as ObsBackendConfig, ObservabilityError, ObservabilityExporter,
+    ObservabilityResult, OtlpConfig, WebhookConfig, DEFAULT_BATCH_SIZE as OBS_DEFAULT_BATCH_SIZE,
+    DEFAULT_FLUSH_INTERVAL_MS,
 };
 
 // CI/CD Regression Detection Pipeline (PMAT-047)
 pub use regression_pipeline::{
-    PipelineError, PipelineResult, PipelineStatus, GitRef,
-    PipelineConfig, BenchmarkMetric as PipelineBenchmarkMetric, BenchmarkResults as PipelineBenchmarkResults,
-    MetricRegression, RegressionAnalysis, StatusCheck, RegressionPipeline,
-    DEFAULT_TIMEOUT_SEC, DEFAULT_REGRESSION_THRESHOLD as PIPELINE_REGRESSION_THRESHOLD,
+    BenchmarkMetric as PipelineBenchmarkMetric, BenchmarkResults as PipelineBenchmarkResults,
+    GitRef, MetricRegression, PipelineConfig, PipelineError, PipelineResult, PipelineStatus,
+    RegressionAnalysis, RegressionPipeline, StatusCheck,
+    DEFAULT_REGRESSION_THRESHOLD as PIPELINE_REGRESSION_THRESHOLD, DEFAULT_TIMEOUT_SEC,
     DEFAULT_WARNING_THRESHOLD,
 };
 
 // Federated Metrics Aggregation (PMAT-048)
 pub use federated_metrics::{
-    GCounter, LwwRegister, OrSet, FederatedHost, AggregatedMetrics,
-    FederationConfig, MetricsFederation,
+    AggregatedMetrics, FederatedHost, FederationConfig, GCounter, LwwRegister, MetricsFederation,
+    OrSet,
 };
 
 // Dynamic Adaptive Thresholds with ML (PMAT-049)
 pub use adaptive_ml::{
-    WorkloadClass, TimeSeriesFeatures, LearnedWorkloadThreshold,
-    MlThresholdConfig, AdaptiveThresholdMl, ClassificationMetrics as MlClassificationMetrics,
-    MlThresholdError, AnomalyResult as MlAnomalyResult,
+    AdaptiveThresholdMl, AnomalyResult as MlAnomalyResult,
+    ClassificationMetrics as MlClassificationMetrics, LearnedWorkloadThreshold, MlThresholdConfig,
+    MlThresholdError, TimeSeriesFeatures, WorkloadClass,
 };
 
 // Incremental Profile Snapshots (PMAT-050)
 pub use incremental_snapshot::{
-    MetricData, ProfileSnapshot, DeltaMetric, DeltaSnapshot,
-    SnapshotConfig, IncrementalSnapshotStore, SnapshotIndex, SnapshotQuery,
-    SnapshotError, RetentionTier,
+    DeltaMetric, DeltaSnapshot, IncrementalSnapshotStore, MetricData, ProfileSnapshot,
+    RetentionTier, SnapshotConfig, SnapshotError, SnapshotIndex, SnapshotQuery,
 };
 
 // Predictive Scheduling Optimizer (PMAT-051)
 pub use predictive_scheduler::{
-    InstanceType, HostProfile, WorkloadSpec as SchedulerWorkloadSpec, SchedulingDecision, SchedulerMetrics,
-    PredictiveSchedulerConfig, PredictiveScheduler,
+    HostProfile, InstanceType, PredictiveScheduler, PredictiveSchedulerConfig, SchedulerMetrics,
+    SchedulingDecision, WorkloadSpec as SchedulerWorkloadSpec,
 };
 
 // Re-export presentar-terminal widgets and canvas for convenience
 // All widgets MUST come from presentar-terminal - DO NOT reimplement
-pub use presentar_terminal::{
-    BrailleGraph, GraphMode, Meter, Table,
-    ColorMode,
-};
-pub use presentar_terminal::direct::{
-    CellBuffer, DiffRenderer, DirectTerminalCanvas,
-};
+pub use presentar_terminal::direct::{CellBuffer, DiffRenderer, DirectTerminalCanvas};
+pub use presentar_terminal::{BrailleGraph, ColorMode, GraphMode, Meter, Table};
 
 // Re-export presentar-core traits
-pub use presentar_core::{
-    Canvas, Color, Point, Rect, Size, TextStyle, Constraints,
-};
+pub use presentar_core::{Canvas, Color, Constraints, Point, Rect, Size, TextStyle};

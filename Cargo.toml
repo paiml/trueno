@@ -35,7 +35,7 @@ unnecessary_unwrap = "allow"
 
 [package]
 name = "trueno"
-version = "0.14.2"
+version = "0.14.3"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"

@@ -33,11 +33,13 @@ fn main() {
     println!("=== End PTX ===\n");
 
     // Allocate output buffer
-    let mut output_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1)
-        .expect("Failed to allocate output buffer");
+    let mut output_buf: GpuBuffer<u32> =
+        GpuBuffer::new(&ctx, 1).expect("Failed to allocate output buffer");
 
     let init_val = [0xBAD_BADu32];
-    output_buf.copy_from_host(&init_val).expect("Failed to init output");
+    output_buf
+        .copy_from_host(&init_val)
+        .expect("Failed to init output");
 
     let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("Failed to load PTX");
     println!("Module loaded successfully");
@@ -48,13 +50,12 @@ fn main() {
         shared_mem: 0,     // Static shared memory
     };
 
-    let mut args: [*mut c_void; 1] = [
-        output_buf.as_kernel_arg(),
-    ];
+    let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
     println!("Launching kernel...");
     unsafe {
-        stream.launch_kernel(&mut module, "lz4_hash_flow_test", &config, &mut args)
+        stream
+            .launch_kernel(&mut module, "lz4_hash_flow_test", &config, &mut args)
             .expect("Kernel launch failed");
     }
 
@@ -62,7 +63,9 @@ fn main() {
     stream.synchronize().expect("Stream sync failed");
 
     let mut result = [0u32; 1];
-    output_buf.copy_to_host(&mut result).expect("Failed to copy result");
+    output_buf
+        .copy_to_host(&mut result)
+        .expect("Failed to copy result");
 
     println!();
     println!("=== RESULT ===");
@@ -84,7 +87,8 @@ fn generate_lz4_hash_flow_ptx() -> String {
     let hash_shift: u32 = 21; // >> 21 gives 11-bit index (0-2047)
     let hash_mask: u32 = 2047;
 
-    format!(r#".version 8.0
+    format!(
+        r#".version 8.0
 .target sm_89
 .address_size 64
 
@@ -160,11 +164,12 @@ L_done:
     ret;
 }}
 "#,
-    warp_smem_size = WARP_SMEM_SIZE,
-    lz4_prime = lz4_prime,
-    hash_shift = hash_shift,
-    hash_mask = hash_mask,
-    page_size = PAGE_SIZE)
+        warp_smem_size = WARP_SMEM_SIZE,
+        lz4_prime = lz4_prime,
+        hash_shift = hash_shift,
+        hash_mask = hash_mask,
+        page_size = PAGE_SIZE
+    )
 }
 
 #[cfg(not(feature = "cuda"))]

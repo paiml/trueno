@@ -5,9 +5,8 @@
 #![cfg(test)]
 
 use super::paged::{
-    IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel,
-    BatchedIncrementalAttentionKernel, FlashDecodingChunkKernel,
-    FlashDecodingReduceKernel, FLASH_DECODE_CHUNK_SIZE,
+    BatchedIncrementalAttentionKernel, FlashDecodingChunkKernel, FlashDecodingReduceKernel,
+    IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel, FLASH_DECODE_CHUNK_SIZE,
 };
 use crate::kernels::Kernel;
 
@@ -50,8 +49,7 @@ fn test_incremental_attention_kernel_gqa() {
 #[test]
 fn test_incremental_attention_kernel_indirect_seq_len() {
     // PAR-061: Indirect seq_len mode for CUDA graph compatibility
-    let kernel = IncrementalAttentionKernel::new(4096, 64, 16)
-        .with_indirect_seq_len(true);
+    let kernel = IncrementalAttentionKernel::new(4096, 64, 16).with_indirect_seq_len(true);
 
     assert_eq!(kernel.name(), "incremental_attention_indirect");
     assert!(kernel.indirect_seq_len);
@@ -111,8 +109,8 @@ fn test_multi_warp_incremental_attention_gqa() {
 
 #[test]
 fn test_multi_warp_incremental_attention_indirect() {
-    let kernel = MultiWarpIncrementalAttentionKernel::new(2048, 64, 16, 16, 4)
-        .with_indirect_seq_len(true);
+    let kernel =
+        MultiWarpIncrementalAttentionKernel::new(2048, 64, 16, 16, 4).with_indirect_seq_len(true);
 
     assert!(kernel.name().contains("indirect"));
 
@@ -245,7 +243,8 @@ fn test_flash_decoding_kernel_pair() {
     let num_heads = 32;
     let batch_size = 4;
 
-    let chunk_kernel = FlashDecodingChunkKernel::new(max_seq, head_dim, num_heads, num_heads, batch_size);
+    let chunk_kernel =
+        FlashDecodingChunkKernel::new(max_seq, head_dim, num_heads, num_heads, batch_size);
     let reduce_kernel = FlashDecodingReduceKernel::new(head_dim, num_heads, batch_size);
 
     let chunk_ptx = chunk_kernel.emit_ptx();
@@ -271,11 +270,18 @@ fn test_all_attention_kernel_variants() {
         assert!(k1.emit_ptx().contains(".version"));
 
         // MultiWarpIncrementalAttentionKernel (num_warps=4)
-        let k2 = MultiWarpIncrementalAttentionKernel::new(max_seq, head_dim, num_heads, num_kv_heads, 4);
+        let k2 =
+            MultiWarpIncrementalAttentionKernel::new(max_seq, head_dim, num_heads, num_kv_heads, 4);
         assert!(k2.emit_ptx().contains(".version"));
 
         // BatchedIncrementalAttentionKernel
-        let k3 = BatchedIncrementalAttentionKernel::new(max_seq, head_dim, num_heads, num_kv_heads, batch);
+        let k3 = BatchedIncrementalAttentionKernel::new(
+            max_seq,
+            head_dim,
+            num_heads,
+            num_kv_heads,
+            batch,
+        );
         assert!(k3.emit_ptx().contains(".version"));
 
         // FlashDecodingChunkKernel

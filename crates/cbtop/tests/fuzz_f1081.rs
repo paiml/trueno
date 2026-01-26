@@ -3,13 +3,25 @@
 //! Popperian falsification criteria for fuzz testing per §36.3 Resilience.
 
 use cbtop::{
-    FuzzResult, FuzzInputValidator, FuzzValidationError,
-    FuzzTargetConfig, FuzzSuite,
-    safe_div, checked_add_u64, checked_mul_u64, bound_value, sanitize_float,
-    test_float_edge_cases, test_u64_edge_cases,
+    bound_value,
+    checked_add_u64,
+    checked_mul_u64,
+    safe_div,
+    sanitize_float,
+    test_float_edge_cases,
+    test_u64_edge_cases,
+    EscalationThresholds,
+    FuzzInputValidator,
+    FuzzResult,
+    FuzzSuite,
+    FuzzTargetConfig,
+    FuzzValidationError,
+    HardwareProfile,
+    RooflineAnalysis,
     // Components to fuzz
-    SyscallBreakdown, EscalationThresholds, TracingEscalation,
-    HardwareProfile, WorkloadMetrics, RooflineAnalysis,
+    SyscallBreakdown,
+    TracingEscalation,
+    WorkloadMetrics,
 };
 
 // ============================================================================
@@ -81,7 +93,10 @@ fn f1082_validator_rejects_nan() {
 #[test]
 fn f1082_validator_rejects_infinity() {
     let v = FuzzInputValidator::new();
-    assert_eq!(v.validate_float(f64::INFINITY), Err(FuzzValidationError::Infinity));
+    assert_eq!(
+        v.validate_float(f64::INFINITY),
+        Err(FuzzValidationError::Infinity)
+    );
 }
 
 // ============================================================================
@@ -180,7 +195,10 @@ fn f1086_validator_allows_negative() {
 #[test]
 fn f1086_validator_rejects_negative_when_configured() {
     let v = FuzzInputValidator::non_negative();
-    assert!(matches!(v.validate_float(-1.0), Err(FuzzValidationError::NegativeValue(_))));
+    assert!(matches!(
+        v.validate_float(-1.0),
+        Err(FuzzValidationError::NegativeValue(_))
+    ));
 }
 
 #[test]
@@ -196,7 +214,10 @@ fn f1086_bound_value_handles_negative() {
 #[test]
 fn f1087_validator_rejects_too_large() {
     let v = FuzzInputValidator::new();
-    assert!(matches!(v.validate_float(1e16), Err(FuzzValidationError::TooLarge(_))));
+    assert!(matches!(
+        v.validate_float(1e16),
+        Err(FuzzValidationError::TooLarge(_))
+    ));
 }
 
 #[test]
@@ -220,7 +241,10 @@ fn f1088_validator_rejects_control_chars() {
     let v = FuzzInputValidator::new();
     // Control characters except \n and \t should be rejected
     let with_control = "test\x00string";
-    assert!(matches!(v.validate_string(with_control), Err(FuzzValidationError::InvalidControlChars)));
+    assert!(matches!(
+        v.validate_string(with_control),
+        Err(FuzzValidationError::InvalidControlChars)
+    ));
 }
 
 #[test]
@@ -238,7 +262,10 @@ fn f1088_validator_allows_newline_tab() {
 fn f1089_validator_rejects_too_long_string() {
     let v = FuzzInputValidator::new();
     let long = "a".repeat(2000);
-    assert!(matches!(v.validate_string(&long), Err(FuzzValidationError::StringTooLong(_))));
+    assert!(matches!(
+        v.validate_string(&long),
+        Err(FuzzValidationError::StringTooLong(_))
+    ));
 }
 
 #[test]
@@ -255,13 +282,15 @@ fn f1089_validator_accepts_normal_string() {
 fn f1090_validator_enforces_numeric_bounds() {
     let v = FuzzInputValidator::strict();
     assert!(v.validate_float(1e10).is_ok());
-    assert!(matches!(v.validate_float(1e13), Err(FuzzValidationError::TooLarge(_))));
+    assert!(matches!(
+        v.validate_float(1e13),
+        Err(FuzzValidationError::TooLarge(_))
+    ));
 }
 
 #[test]
 fn f1090_fuzz_config_iterations_bounded() {
-    let config = FuzzTargetConfig::new("test")
-        .with_iterations(1_000_000);
+    let config = FuzzTargetConfig::new("test").with_iterations(1_000_000);
     assert_eq!(config.iterations, 1_000_000);
 }
 
@@ -400,8 +429,14 @@ fn test_fuzz_validation_error_display() {
 fn test_validator_positive_only() {
     let v = FuzzInputValidator::positive_only();
     assert!(v.validate_float(1.0).is_ok());
-    assert!(matches!(v.validate_float(0.0), Err(FuzzValidationError::ZeroValue)));
-    assert!(matches!(v.validate_float(-1.0), Err(FuzzValidationError::NegativeValue(_))));
+    assert!(matches!(
+        v.validate_float(0.0),
+        Err(FuzzValidationError::ZeroValue)
+    ));
+    assert!(matches!(
+        v.validate_float(-1.0),
+        Err(FuzzValidationError::NegativeValue(_))
+    ));
 }
 
 #[test]

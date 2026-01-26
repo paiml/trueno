@@ -2,8 +2,8 @@
 
 #[cfg(feature = "cuda")]
 fn main() {
-    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
     use std::ffi::c_void;
+    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
 
     let ctx = CudaContext::new(0).expect("CUDA context");
     let stream = CudaStream::new(&ctx).expect("CUDA stream");
@@ -62,12 +62,11 @@ L_done:
         shared_mem: 0,
     };
 
-    let mut args: [*mut c_void; 1] = [
-        output_buf.as_kernel_arg(),
-    ];
+    let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
     unsafe {
-        stream.launch_kernel(&mut module, "debug_cvta", &config, &mut args)
+        stream
+            .launch_kernel(&mut module, "debug_cvta", &config, &mut args)
             .expect("Kernel launch");
     }
     stream.synchronize().expect("Sync");

@@ -154,11 +154,21 @@ fn canary_gpu_vector_roundtrip() {
     let stream = CudaStream::new(&ctx).expect("CUDA stream creation failed");
 
     // Test data: recognizable pattern to verify integrity
-    let test_data: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 0.5, -0.5, std::f32::consts::PI, std::f32::consts::E];
+    let test_data: Vec<f32> = vec![
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        0.5,
+        -0.5,
+        std::f32::consts::PI,
+        std::f32::consts::E,
+    ];
     let n = test_data.len();
 
     // Allocate GPU buffer and upload
-    let mut gpu_buffer: GpuBuffer<f32> = GpuBuffer::new(&ctx, n).expect("GPU buffer allocation failed");
+    let mut gpu_buffer: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, n).expect("GPU buffer allocation failed");
     gpu_buffer
         .copy_from_host(&test_data)
         .expect("Host→GPU copy failed");
@@ -204,7 +214,10 @@ fn canary_gpu_device_info() {
     };
 
     // If we got here, CUDA is working
-    println!("✅ GPU CANARY PASSED: CUDA device {} accessible", ctx.device());
+    println!(
+        "✅ GPU CANARY PASSED: CUDA device {} accessible",
+        ctx.device()
+    );
 }
 
 /// GPU Canary: Basic kernel execution test
@@ -420,7 +433,12 @@ fn titan_duel_numerical_parity() {
             ║                                                                              ║\n\
             ║  FIX: Review GPU kernel PTX for accumulation order or precision issues.      ║\n\
             ╚══════════════════════════════════════════════════════════════════════════════╝\n",
-            N, N, max_diff, EPSILON, diff_count, N * N
+            N,
+            N,
+            max_diff,
+            EPSILON,
+            diff_count,
+            N * N
         );
     }
 

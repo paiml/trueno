@@ -9,9 +9,8 @@
 //! - Bandwidth prediction
 
 use cbtop::{
-    CacheLevel, CacheConfig, WorkingSetAnalysis,
-    AccessPattern, BandwidthPrediction,
-    matrix_working_set, optimal_matmul_tile, elementwise_working_set,
+    elementwise_working_set, matrix_working_set, optimal_matmul_tile, AccessPattern,
+    BandwidthPrediction, CacheConfig, CacheLevel, WorkingSetAnalysis,
 };
 
 // =============================================================================
@@ -412,8 +411,12 @@ fn f1127_pattern_names() {
 #[test]
 fn f1127_efficiency_factors() {
     // Reuse should be best, random worst
-    assert!(AccessPattern::Reuse.efficiency_factor() > AccessPattern::Streaming.efficiency_factor());
-    assert!(AccessPattern::Streaming.efficiency_factor() > AccessPattern::Random.efficiency_factor());
+    assert!(
+        AccessPattern::Reuse.efficiency_factor() > AccessPattern::Streaming.efficiency_factor()
+    );
+    assert!(
+        AccessPattern::Streaming.efficiency_factor() > AccessPattern::Random.efficiency_factor()
+    );
 }
 
 // =============================================================================
@@ -457,12 +460,7 @@ fn f1128_limiting_factor() {
     let config = CacheConfig::default();
 
     // Random pattern should be the limiting factor for L1
-    let prediction = BandwidthPrediction::predict(
-        100.0,
-        1024,
-        AccessPattern::Random,
-        &config,
-    );
+    let prediction = BandwidthPrediction::predict(100.0, 1024, AccessPattern::Random, &config);
 
     assert!(prediction.limiting_factor.contains("random"));
 }
@@ -471,12 +469,7 @@ fn f1128_limiting_factor() {
 #[test]
 fn f1128_peak_preserved() {
     let config = CacheConfig::default();
-    let prediction = BandwidthPrediction::predict(
-        200.0,
-        1024,
-        AccessPattern::Reuse,
-        &config,
-    );
+    let prediction = BandwidthPrediction::predict(200.0, 1024, AccessPattern::Reuse, &config);
 
     assert_eq!(prediction.peak_bandwidth_gbps, 200.0);
 }
@@ -528,7 +521,10 @@ fn f1130_bandwidth_cliff() {
     let analysis = WorkingSetAnalysis::analyze(4_000_000, 8, 1.0, &config);
 
     // Should trigger L3/RAM boundary
-    assert!(matches!(analysis.cache_level, CacheLevel::L3 | CacheLevel::Ram));
+    assert!(matches!(
+        analysis.cache_level,
+        CacheLevel::L3 | CacheLevel::Ram
+    ));
     assert!(analysis.tiling_recommended);
 }
 
@@ -578,7 +574,7 @@ fn f1130_streaming_workload() {
 
     // Large streaming workload (video processing)
     let prediction = BandwidthPrediction::predict(
-        50.0, // 50 GB/s memory bandwidth
+        50.0,               // 50 GB/s memory bandwidth
         1024 * 1024 * 1024, // 1GB stream
         AccessPattern::Streaming,
         &config,

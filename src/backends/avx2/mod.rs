@@ -82,14 +82,18 @@ impl VectorBackend for Avx2Backend {
     #[inline]
     #[target_feature(enable = "avx2,fma")]
     unsafe fn norm_l2(a: &[f32]) -> f32 {
-        if a.is_empty() { return 0.0; }
+        if a.is_empty() {
+            return 0.0;
+        }
         Self::dot(a, a).sqrt()
     }
 
     #[inline]
     #[target_feature(enable = "avx2")]
     unsafe fn norm_l1(a: &[f32]) -> f32 {
-        if a.is_empty() { return 0.0; }
+        if a.is_empty() {
+            return 0.0;
+        }
         let len = a.len();
         let mut i = 0;
         let mut acc = _mm256_setzero_ps();
@@ -109,14 +113,18 @@ impl VectorBackend for Avx2Backend {
             _mm_cvtss_f32(temp)
         };
 
-        for &val in &a[i..] { result += val.abs(); }
+        for &val in &a[i..] {
+            result += val.abs();
+        }
         result
     }
 
     #[inline]
     #[target_feature(enable = "avx2")]
     unsafe fn norm_linf(a: &[f32]) -> f32 {
-        if a.is_empty() { return 0.0; }
+        if a.is_empty() {
+            return 0.0;
+        }
         let len = a.len();
         let mut i = 0;
         let mut max_vec = _mm256_setzero_ps();
@@ -130,7 +138,10 @@ impl VectorBackend for Avx2Backend {
         }
 
         let mut result = {
-            let max_halves = _mm_max_ps(_mm256_castps256_ps128(max_vec), _mm256_extractf128_ps(max_vec, 1));
+            let max_halves = _mm_max_ps(
+                _mm256_castps256_ps128(max_vec),
+                _mm256_extractf128_ps(max_vec, 1),
+            );
             let temp = _mm_max_ps(max_halves, _mm_movehl_ps(max_halves, max_halves));
             let temp = _mm_max_ss(temp, _mm_shuffle_ps(temp, temp, 1));
             _mm_cvtss_f32(temp)
@@ -138,7 +149,9 @@ impl VectorBackend for Avx2Backend {
 
         for &val in &a[i..] {
             let abs_val = val.abs();
-            if abs_val > result { result = abs_val; }
+            if abs_val > result {
+                result = abs_val;
+            }
         }
         result
     }
@@ -177,7 +190,9 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = a[j].abs(); }
+        for j in i..len {
+            result[j] = a[j].abs();
+        }
     }
 
     #[inline]
@@ -195,7 +210,9 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = a[j].clamp(min_val, max_val); }
+        for j in i..len {
+            result[j] = a[j].clamp(min_val, max_val);
+        }
     }
 
     #[inline]
@@ -214,7 +231,9 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = a[j] * (1.0 - t) + b[j] * t; }
+        for j in i..len {
+            result[j] = a[j] * (1.0 - t) + b[j] * t;
+        }
     }
 
     #[inline]
@@ -232,7 +251,9 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = a[j] * b[j] + c[j]; }
+        for j in i..len {
+            result[j] = a[j] * b[j] + c[j];
+        }
     }
 
     #[inline]
@@ -249,7 +270,9 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = a[j].max(0.0); }
+        for j in i..len {
+            result[j] = a[j].max(0.0);
+        }
     }
 
     // Delegate transcendental functions to scalar backend
@@ -291,7 +314,9 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = a[j].sqrt(); }
+        for j in i..len {
+            result[j] = a[j].sqrt();
+        }
     }
 
     #[inline]
@@ -308,7 +333,9 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = 1.0 / a[j]; }
+        for j in i..len {
+            result[j] = 1.0 / a[j];
+        }
     }
 
     // Delegate log functions to scalar backend
@@ -356,7 +383,9 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = a[j].floor(); }
+        for j in i..len {
+            result[j] = a[j].floor();
+        }
     }
 
     #[inline]
@@ -372,7 +401,9 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = a[j].ceil(); }
+        for j in i..len {
+            result[j] = a[j].ceil();
+        }
     }
 
     #[inline]
@@ -397,6 +428,8 @@ impl VectorBackend for Avx2Backend {
             i += 8;
         }
 
-        for j in i..len { result[j] = a[j].round(); }
+        for j in i..len {
+            result[j] = a[j].round();
+        }
     }
 }

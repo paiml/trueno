@@ -8,8 +8,8 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::hint::black_box;
 use trueno::tiling::{
-    pack_a_index, pack_b_index, swizzle_index, Q4K_SUPERBLOCK_BYTES,
-    TcbGeometry, TcbIndexCalculator, TiledQ4KMatvec, TilingConfig,
+    pack_a_index, pack_b_index, swizzle_index, TcbGeometry, TcbIndexCalculator, TiledQ4KMatvec,
+    TilingConfig, Q4K_SUPERBLOCK_BYTES,
 };
 
 /// Benchmark Q4K MatVec scalar execution

@@ -83,7 +83,7 @@ pub use rate_limit::{LimitError, ServeLimits};
 pub use connection::{ConnectionState, KeepAliveConfig, ManagedConnection};
 
 // Re-export batch types
-pub use batch::{balance211, Balance211Iter, BatchSplitStrategy, split_batch};
+pub use batch::{balance211, split_batch, Balance211Iter, BatchSplitStrategy};
 
 // KV cache management
 mod kv_cache;
@@ -281,7 +281,6 @@ impl Default for AsyncTaskProfiler {
         Self::new("unnamed")
     }
 }
-
 
 /// Execution backend for compute operations.
 /// This is the brick-specific backend enum with additional GPU backends.
@@ -536,21 +535,13 @@ pub enum BrickError {
 #[derive(Debug, Clone)]
 pub enum ComputeAssertion {
     /// Output must match baseline backend within tolerance
-    Equivalence {
-        baseline: Backend,
-        tolerance: f64,
-    },
+    Equivalence { baseline: Backend, tolerance: f64 },
     /// Output values must be within bounds
-    Bounds {
-        min: f64,
-        max: f64,
-    },
+    Bounds { min: f64, max: f64 },
     /// Output must not contain NaN or infinity
     Finite,
     /// Custom assertion with name and check function index
-    Custom {
-        name: String,
-    },
+    Custom { name: String },
 }
 
 impl ComputeAssertion {
@@ -564,7 +555,10 @@ impl ComputeAssertion {
 
     /// Create equivalence assertion with custom tolerance.
     pub fn equiv_with_tolerance(baseline: Backend, tolerance: f64) -> Self {
-        Self::Equivalence { baseline, tolerance }
+        Self::Equivalence {
+            baseline,
+            tolerance,
+        }
     }
 
     /// Create bounds assertion.
@@ -807,7 +801,9 @@ impl<Op: ComputeOp> ComputeBrick<Op> {
                         name: "popperian_falsifiability".to_string(),
                     },
                     passed: false,
-                    error: Some("No assertions defined - violates Popperian falsifiability".to_string()),
+                    error: Some(
+                        "No assertions defined - violates Popperian falsifiability".to_string(),
+                    ),
                 }],
                 verification_us: start.elapsed().as_secs_f64() * 1_000_000.0,
             };

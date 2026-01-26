@@ -91,7 +91,9 @@ impl VectorBackend for Avx512Backend {
     #[inline]
     #[target_feature(enable = "avx512f")]
     unsafe fn norm_l2(a: &[f32]) -> f32 {
-        if a.is_empty() { return 0.0; }
+        if a.is_empty() {
+            return 0.0;
+        }
         let len = a.len();
         let mut i = 0;
         let mut acc = _mm512_setzero_ps();
@@ -101,7 +103,9 @@ impl VectorBackend for Avx512Backend {
             i += 16;
         }
         let mut sum_sq = _mm512_reduce_add_ps(acc);
-        for &val in &a[i..] { sum_sq += val * val; }
+        for &val in &a[i..] {
+            sum_sq += val * val;
+        }
         sum_sq.sqrt()
     }
 
@@ -113,11 +117,16 @@ impl VectorBackend for Avx512Backend {
         let sign_mask = _mm512_set1_ps(f32::from_bits(0x7FFF_FFFF));
         let mut acc = _mm512_setzero_ps();
         while i + 16 <= len {
-            acc = _mm512_add_ps(acc, _mm512_and_ps(_mm512_loadu_ps(a.as_ptr().add(i)), sign_mask));
+            acc = _mm512_add_ps(
+                acc,
+                _mm512_and_ps(_mm512_loadu_ps(a.as_ptr().add(i)), sign_mask),
+            );
             i += 16;
         }
         let mut result = _mm512_reduce_add_ps(acc);
-        for &val in &a[i..] { result += val.abs(); }
+        for &val in &a[i..] {
+            result += val.abs();
+        }
         result
     }
 
@@ -129,11 +138,19 @@ impl VectorBackend for Avx512Backend {
         let sign_mask = _mm512_set1_ps(f32::from_bits(0x7FFF_FFFF));
         let mut max_vec = _mm512_setzero_ps();
         while i + 16 <= len {
-            max_vec = _mm512_max_ps(max_vec, _mm512_and_ps(_mm512_loadu_ps(a.as_ptr().add(i)), sign_mask));
+            max_vec = _mm512_max_ps(
+                max_vec,
+                _mm512_and_ps(_mm512_loadu_ps(a.as_ptr().add(i)), sign_mask),
+            );
             i += 16;
         }
         let mut result = _mm512_reduce_max_ps(max_vec);
-        for &val in &a[i..] { let abs_val = val.abs(); if abs_val > result { result = abs_val; } }
+        for &val in &a[i..] {
+            let abs_val = val.abs();
+            if abs_val > result {
+                result = abs_val;
+            }
+        }
         result
     }
 
@@ -144,10 +161,15 @@ impl VectorBackend for Avx512Backend {
         let mut i = 0;
         let scalar_vec = _mm512_set1_ps(scalar);
         while i + 16 <= len {
-            _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_mul_ps(_mm512_loadu_ps(a.as_ptr().add(i)), scalar_vec));
+            _mm512_storeu_ps(
+                result.as_mut_ptr().add(i),
+                _mm512_mul_ps(_mm512_loadu_ps(a.as_ptr().add(i)), scalar_vec),
+            );
             i += 16;
         }
-        for j in i..len { result[j] = a[j] * scalar; }
+        for j in i..len {
+            result[j] = a[j] * scalar;
+        }
     }
 
     #[inline]
@@ -157,10 +179,15 @@ impl VectorBackend for Avx512Backend {
         let mut i = 0;
         let sign_mask = _mm512_set1_ps(f32::from_bits(0x7FFF_FFFF));
         while i + 16 <= len {
-            _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_and_ps(_mm512_loadu_ps(a.as_ptr().add(i)), sign_mask));
+            _mm512_storeu_ps(
+                result.as_mut_ptr().add(i),
+                _mm512_and_ps(_mm512_loadu_ps(a.as_ptr().add(i)), sign_mask),
+            );
             i += 16;
         }
-        for j in i..len { result[j] = a[j].abs(); }
+        for j in i..len {
+            result[j] = a[j].abs();
+        }
     }
 
     #[inline]
@@ -172,10 +199,15 @@ impl VectorBackend for Avx512Backend {
         let max_vec = _mm512_set1_ps(max_val);
         while i + 16 <= len {
             let va = _mm512_loadu_ps(a.as_ptr().add(i));
-            _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_min_ps(_mm512_max_ps(va, min_vec), max_vec));
+            _mm512_storeu_ps(
+                result.as_mut_ptr().add(i),
+                _mm512_min_ps(_mm512_max_ps(va, min_vec), max_vec),
+            );
             i += 16;
         }
-        for j in i..len { result[j] = a[j].max(min_val).min(max_val); }
+        for j in i..len {
+            result[j] = a[j].max(min_val).min(max_val);
+        }
     }
 
     #[inline]
@@ -187,10 +219,15 @@ impl VectorBackend for Avx512Backend {
         while i + 16 <= len {
             let va = _mm512_loadu_ps(a.as_ptr().add(i));
             let vb = _mm512_loadu_ps(b.as_ptr().add(i));
-            _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_fmadd_ps(t_vec, _mm512_sub_ps(vb, va), va));
+            _mm512_storeu_ps(
+                result.as_mut_ptr().add(i),
+                _mm512_fmadd_ps(t_vec, _mm512_sub_ps(vb, va), va),
+            );
             i += 16;
         }
-        for j in i..len { result[j] = a[j] + t * (b[j] - a[j]); }
+        for j in i..len {
+            result[j] = a[j] + t * (b[j] - a[j]);
+        }
     }
 
     #[inline]
@@ -205,7 +242,9 @@ impl VectorBackend for Avx512Backend {
             _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_fmadd_ps(va, vb, vc));
             i += 16;
         }
-        for j in i..len { result[j] = a[j] * b[j] + c[j]; }
+        for j in i..len {
+            result[j] = a[j] * b[j] + c[j];
+        }
     }
 
     #[inline]
@@ -215,10 +254,15 @@ impl VectorBackend for Avx512Backend {
         let mut i = 0;
         let zero = _mm512_setzero_ps();
         while i + 16 <= len {
-            _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_max_ps(_mm512_loadu_ps(a.as_ptr().add(i)), zero));
+            _mm512_storeu_ps(
+                result.as_mut_ptr().add(i),
+                _mm512_max_ps(_mm512_loadu_ps(a.as_ptr().add(i)), zero),
+            );
             i += 16;
         }
-        for j in i..len { result[j] = a[j].max(0.0); }
+        for j in i..len {
+            result[j] = a[j].max(0.0);
+        }
     }
 
     #[inline]
@@ -243,11 +287,16 @@ impl VectorBackend for Avx512Backend {
             poly = _mm512_fmadd_ps(r, _mm512_fmadd_ps(r, poly, c3), one);
             poly = _mm512_fmadd_ps(r, _mm512_fmadd_ps(r, poly, c2), one);
             poly = _mm512_fmadd_ps(r, poly, one);
-            let exp_k = _mm512_castsi512_ps(_mm512_slli_epi32(_mm512_add_epi32(k, _mm512_set1_epi32(127)), 23));
+            let exp_k = _mm512_castsi512_ps(_mm512_slli_epi32(
+                _mm512_add_epi32(k, _mm512_set1_epi32(127)),
+                23,
+            ));
             _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_mul_ps(poly, exp_k));
             i += 16;
         }
-        for j in i..len { result[j] = a[j].exp(); }
+        for j in i..len {
+            result[j] = a[j].exp();
+        }
     }
 
     #[inline]
@@ -255,7 +304,9 @@ impl VectorBackend for Avx512Backend {
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         // sigmoid(x) = 1 / (1 + exp(-x))
         let len = a.len();
-        for j in 0..len { result[j] = 1.0 / (1.0 + (-a[j]).exp()); }
+        for j in 0..len {
+            result[j] = 1.0 / (1.0 + (-a[j]).exp());
+        }
     }
 
     #[inline]
@@ -271,13 +322,17 @@ impl VectorBackend for Avx512Backend {
     #[inline]
     #[target_feature(enable = "avx512f")]
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
-        for j in 0..a.len() { result[j] = a[j] / (1.0 + (-a[j]).exp()); }
+        for j in 0..a.len() {
+            result[j] = a[j] / (1.0 + (-a[j]).exp());
+        }
     }
 
     #[inline]
     #[target_feature(enable = "avx512f")]
     unsafe fn tanh(a: &[f32], result: &mut [f32]) {
-        for j in 0..a.len() { result[j] = a[j].tanh(); }
+        for j in 0..a.len() {
+            result[j] = a[j].tanh();
+        }
     }
 
     #[inline]
@@ -286,10 +341,15 @@ impl VectorBackend for Avx512Backend {
         let len = a.len();
         let mut i = 0;
         while i + 16 <= len {
-            _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_sqrt_ps(_mm512_loadu_ps(a.as_ptr().add(i))));
+            _mm512_storeu_ps(
+                result.as_mut_ptr().add(i),
+                _mm512_sqrt_ps(_mm512_loadu_ps(a.as_ptr().add(i))),
+            );
             i += 16;
         }
-        for j in i..len { result[j] = a[j].sqrt(); }
+        for j in i..len {
+            result[j] = a[j].sqrt();
+        }
     }
 
     #[inline]
@@ -299,22 +359,45 @@ impl VectorBackend for Avx512Backend {
         let mut i = 0;
         let one = _mm512_set1_ps(1.0);
         while i + 16 <= len {
-            _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_div_ps(one, _mm512_loadu_ps(a.as_ptr().add(i))));
+            _mm512_storeu_ps(
+                result.as_mut_ptr().add(i),
+                _mm512_div_ps(one, _mm512_loadu_ps(a.as_ptr().add(i))),
+            );
             i += 16;
         }
-        for j in i..len { result[j] = a[j].recip(); }
+        for j in i..len {
+            result[j] = a[j].recip();
+        }
     }
 
-    unsafe fn ln(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::ln(a, result); }
-    unsafe fn log2(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::log2(a, result); }
-    unsafe fn log10(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::log10(a, result); }
-    unsafe fn sin(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::sin(a, result); }
-    unsafe fn cos(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::cos(a, result); }
-    unsafe fn tan(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::tan(a, result); }
+    unsafe fn ln(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ln(a, result);
+    }
+    unsafe fn log2(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log2(a, result);
+    }
+    unsafe fn log10(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log10(a, result);
+    }
+    unsafe fn sin(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::sin(a, result);
+    }
+    unsafe fn cos(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::cos(a, result);
+    }
+    unsafe fn tan(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::tan(a, result);
+    }
 
-    unsafe fn floor(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::floor(a, result); }
-    unsafe fn ceil(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::ceil(a, result); }
-    unsafe fn round(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::round(a, result); }
+    unsafe fn floor(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::floor(a, result);
+    }
+    unsafe fn ceil(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ceil(a, result);
+    }
+    unsafe fn round(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::round(a, result);
+    }
 }
 
 #[cfg(all(test, target_arch = "x86_64"))]
@@ -322,9 +405,15 @@ mod tests {
     use super::*;
     use crate::backends::scalar::ScalarBackend;
 
-    fn avx512_test<F>(test_fn: F) where F: FnOnce() {
-        if is_x86_feature_detected!("avx512f") { test_fn(); }
-        else { println!("Skipping AVX-512 test (CPU does not support avx512f)"); }
+    fn avx512_test<F>(test_fn: F)
+    where
+        F: FnOnce(),
+    {
+        if is_x86_feature_detected!("avx512f") {
+            test_fn();
+        } else {
+            println!("Skipping AVX-512 test (CPU does not support avx512f)");
+        }
     }
 
     #[test]
@@ -333,7 +422,9 @@ mod tests {
             let a = vec![1.0; 32];
             let b = vec![2.0; 32];
             let mut result = vec![0.0; 32];
-            unsafe { Avx512Backend::add(&a, &b, &mut result); }
+            unsafe {
+                Avx512Backend::add(&a, &b, &mut result);
+            }
             assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-6));
         });
     }
@@ -344,7 +435,9 @@ mod tests {
             let a = vec![5.0; 32];
             let b = vec![2.0; 32];
             let mut result = vec![0.0; 32];
-            unsafe { Avx512Backend::sub(&a, &b, &mut result); }
+            unsafe {
+                Avx512Backend::sub(&a, &b, &mut result);
+            }
             assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-6));
         });
     }
@@ -355,7 +448,9 @@ mod tests {
             let a = vec![2.0; 32];
             let b = vec![3.0; 32];
             let mut result = vec![0.0; 32];
-            unsafe { Avx512Backend::mul(&a, &b, &mut result); }
+            unsafe {
+                Avx512Backend::mul(&a, &b, &mut result);
+            }
             assert!(result.iter().all(|&x| (x - 6.0).abs() < 1e-6));
         });
     }
@@ -366,7 +461,9 @@ mod tests {
             let a = vec![6.0; 32];
             let b = vec![2.0; 32];
             let mut result = vec![0.0; 32];
-            unsafe { Avx512Backend::div(&a, &b, &mut result); }
+            unsafe {
+                Avx512Backend::div(&a, &b, &mut result);
+            }
             assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-6));
         });
     }
@@ -468,7 +565,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![1.0; 32];
             let mut result = vec![0.0; 32];
-            unsafe { Avx512Backend::scale(&a, 3.0, &mut result); }
+            unsafe {
+                Avx512Backend::scale(&a, 3.0, &mut result);
+            }
             assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-6));
         });
     }
@@ -478,7 +577,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![-1.0, 2.0, -3.0, 4.0];
             let mut result = vec![0.0; 4];
-            unsafe { Avx512Backend::abs(&a, &mut result); }
+            unsafe {
+                Avx512Backend::abs(&a, &mut result);
+            }
             assert_eq!(result, vec![1.0, 2.0, 3.0, 4.0]);
         });
     }
@@ -488,7 +589,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![0.0, 5.0, 10.0, 15.0];
             let mut result = vec![0.0; 4];
-            unsafe { Avx512Backend::clamp(&a, 2.0, 12.0, &mut result); }
+            unsafe {
+                Avx512Backend::clamp(&a, 2.0, 12.0, &mut result);
+            }
             assert_eq!(result, vec![2.0, 5.0, 10.0, 12.0]);
         });
     }
@@ -499,7 +602,9 @@ mod tests {
             let a = vec![0.0; 32];
             let b = vec![10.0; 32];
             let mut result = vec![0.0; 32];
-            unsafe { Avx512Backend::lerp(&a, &b, 0.5, &mut result); }
+            unsafe {
+                Avx512Backend::lerp(&a, &b, 0.5, &mut result);
+            }
             assert!(result.iter().all(|&x| (x - 5.0).abs() < 1e-5));
         });
     }
@@ -511,7 +616,9 @@ mod tests {
             let b = vec![3.0; 32];
             let c = vec![1.0; 32];
             let mut result = vec![0.0; 32];
-            unsafe { Avx512Backend::fma(&a, &b, &c, &mut result); }
+            unsafe {
+                Avx512Backend::fma(&a, &b, &c, &mut result);
+            }
             assert!(result.iter().all(|&x| (x - 7.0).abs() < 1e-5));
         });
     }
@@ -521,7 +628,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![-1.0, 0.0, 1.0, 2.0];
             let mut result = vec![0.0; 4];
-            unsafe { Avx512Backend::relu(&a, &mut result); }
+            unsafe {
+                Avx512Backend::relu(&a, &mut result);
+            }
             assert_eq!(result, vec![0.0, 0.0, 1.0, 2.0]);
         });
     }
@@ -531,7 +640,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![0.0, 1.0];
             let mut result = vec![0.0; 2];
-            unsafe { Avx512Backend::exp(&a, &mut result); }
+            unsafe {
+                Avx512Backend::exp(&a, &mut result);
+            }
             assert!((result[0] - 1.0).abs() < 1e-4);
             assert!((result[1] - std::f32::consts::E).abs() < 1e-3);
         });
@@ -542,7 +653,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![0.0];
             let mut result = vec![0.0; 1];
-            unsafe { Avx512Backend::sigmoid(&a, &mut result); }
+            unsafe {
+                Avx512Backend::sigmoid(&a, &mut result);
+            }
             assert!((result[0] - 0.5).abs() < 1e-5);
         });
     }
@@ -552,7 +665,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![0.0, 1.0];
             let mut result = vec![0.0; 2];
-            unsafe { Avx512Backend::gelu(&a, &mut result); }
+            unsafe {
+                Avx512Backend::gelu(&a, &mut result);
+            }
             assert!((result[0]).abs() < 1e-5);
             assert!((result[1] - 0.841_192).abs() < 1e-3);
         });
@@ -563,7 +678,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![0.0, 1.0];
             let mut result = vec![0.0; 2];
-            unsafe { Avx512Backend::swish(&a, &mut result); }
+            unsafe {
+                Avx512Backend::swish(&a, &mut result);
+            }
             assert!((result[0]).abs() < 1e-5);
             assert!((result[1] - 0.731_059).abs() < 1e-3);
         });
@@ -574,7 +691,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![0.0, 1.0];
             let mut result = vec![0.0; 2];
-            unsafe { Avx512Backend::tanh(&a, &mut result); }
+            unsafe {
+                Avx512Backend::tanh(&a, &mut result);
+            }
             assert!((result[0]).abs() < 1e-5);
             assert!((result[1] - 0.761_594_2).abs() < 1e-3);
         });
@@ -585,7 +704,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![4.0, 9.0, 16.0];
             let mut result = vec![0.0; 3];
-            unsafe { Avx512Backend::sqrt(&a, &mut result); }
+            unsafe {
+                Avx512Backend::sqrt(&a, &mut result);
+            }
             assert!((result[0] - 2.0).abs() < 1e-5);
             assert!((result[1] - 3.0).abs() < 1e-5);
             assert!((result[2] - 4.0).abs() < 1e-5);
@@ -597,7 +718,9 @@ mod tests {
         avx512_test(|| {
             let a = vec![2.0, 4.0, 5.0];
             let mut result = vec![0.0; 3];
-            unsafe { Avx512Backend::recip(&a, &mut result); }
+            unsafe {
+                Avx512Backend::recip(&a, &mut result);
+            }
             assert!((result[0] - 0.5).abs() < 1e-5);
             assert!((result[1] - 0.25).abs() < 1e-5);
             assert!((result[2] - 0.2).abs() < 1e-5);
@@ -669,7 +792,11 @@ mod tests {
                 ScalarBackend::add(&a, &b, &mut scalar_add);
             }
             for i in 0..100 {
-                assert!((avx512_add[i] - scalar_add[i]).abs() < 1e-5, "add mismatch at {}", i);
+                assert!(
+                    (avx512_add[i] - scalar_add[i]).abs() < 1e-5,
+                    "add mismatch at {}",
+                    i
+                );
             }
         });
     }

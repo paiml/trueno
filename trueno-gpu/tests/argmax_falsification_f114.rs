@@ -12,9 +12,9 @@
 
 #[cfg(feature = "cuda")]
 mod argmax_falsification_tests {
-    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
-    use trueno_gpu::kernels::{ArgMaxKernel, ArgMaxFinalKernel, Kernel};
     use std::ffi::c_void;
+    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
+    use trueno_gpu::kernels::{ArgMaxFinalKernel, ArgMaxKernel, Kernel};
 
     // =========================================================================
     // F114-TEST-1: Barrier Safety (PARITY-114)
@@ -35,7 +35,8 @@ mod argmax_falsification_tests {
         println!("  bar.sync count: {}", bar_sync_count);
 
         // Verify PTX structure has barrier after each skip label
-        let skip_labels: Vec<&str> = ptx.lines()
+        let skip_labels: Vec<&str> = ptx
+            .lines()
             .filter(|line: &&str| line.contains("skip_"))
             .collect();
 
@@ -43,7 +44,10 @@ mod argmax_falsification_tests {
 
         // Each reduction step should have a barrier after the skip label
         // Expected pattern: skip_reduce_X: followed by bar.sync 0;
-        assert!(bar_sync_count >= 8, "Expected at least 8 bar.sync (7 reduction steps + 1 initial)");
+        assert!(
+            bar_sync_count >= 8,
+            "Expected at least 8 bar.sync (7 reduction steps + 1 initial)"
+        );
 
         // Verify no early exit before barriers
         let lines: Vec<&str> = ptx.lines().collect();
@@ -53,7 +57,7 @@ mod argmax_falsification_tests {
             let line_str: &str = *line;
             if line_str.contains("bra exit") {
                 // Check if next non-empty line is bar.sync
-                for j in (i+1)..lines.len() {
+                for j in (i + 1)..lines.len() {
                     let next = lines[j].trim();
                     if !next.is_empty() && !next.starts_with("//") {
                         if !next.starts_with("exit:") && next.contains("bar.sync") {
@@ -65,7 +69,10 @@ mod argmax_falsification_tests {
             }
         }
 
-        assert!(!found_exit_before_barrier, "PARITY-114: Found potential barrier divergence");
+        assert!(
+            !found_exit_before_barrier,
+            "PARITY-114: Found potential barrier divergence"
+        );
         println!("  PASSED - No barrier divergence detected");
     }
 
@@ -80,15 +87,18 @@ mod argmax_falsification_tests {
         println!("F114-TEST-2: Bounds Verification");
 
         // Parse shared memory size from PTX
-        let smem_line = ptx.lines()
+        let smem_line = ptx
+            .lines()
             .find(|line: &&str| line.contains(".shared"))
             .expect("Should have shared memory declaration");
 
         println!("  Shared memory declaration: {}", smem_line.trim());
 
         // Verify shared memory is at least 2KB (256 threads * 8 bytes)
-        assert!(smem_line.contains("2048") || smem_line.contains("smem[2048]"),
-            "PAR-002: Shared memory size should be 2048 bytes");
+        assert!(
+            smem_line.contains("2048") || smem_line.contains("smem[2048]"),
+            "PAR-002: Shared memory size should be 2048 bytes"
+        );
 
         // Verify offset calculations use proper bounds
         // Each thread accesses shared_base + tid * 4 for values
@@ -152,31 +162,28 @@ mod argmax_falsification_tests {
             &length as *const u32 as *mut c_void,
         ];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args)
-        };
+        let result =
+            unsafe { stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args) };
 
         match result {
-            Ok(_) => {
-                match stream.synchronize() {
-                    Ok(_) => {
-                        let mut block_vals = vec![0.0f32; 1];
-                        let mut block_idxs = vec![0u32; 1];
-                        block_vals_buf.copy_to_host(&mut block_vals).unwrap();
-                        block_idxs_buf.copy_to_host(&mut block_idxs).unwrap();
+            Ok(_) => match stream.synchronize() {
+                Ok(_) => {
+                    let mut block_vals = vec![0.0f32; 1];
+                    let mut block_idxs = vec![0u32; 1];
+                    block_vals_buf.copy_to_host(&mut block_vals).unwrap();
+                    block_idxs_buf.copy_to_host(&mut block_idxs).unwrap();
 
-                        println!("  Block max value: {}", block_vals[0]);
-                        println!("  Block max index: {}", block_idxs[0]);
+                    println!("  Block max value: {}", block_vals[0]);
+                    println!("  Block max index: {}", block_idxs[0]);
 
-                        assert_eq!(block_idxs[0], 42, "Expected argmax at index 42");
-                        assert_eq!(block_vals[0], 100.0, "Expected max value 100.0");
-                        println!("  PASSED - Correctness verified");
-                    }
-                    Err(e) => {
-                        panic!("  CRASHED at sync: {} - PAR-062 correctness FAILED", e);
-                    }
+                    assert_eq!(block_idxs[0], 42, "Expected argmax at index 42");
+                    assert_eq!(block_vals[0], 100.0, "Expected max value 100.0");
+                    println!("  PASSED - Correctness verified");
                 }
-            }
+                Err(e) => {
+                    panic!("  CRASHED at sync: {} - PAR-062 correctness FAILED", e);
+                }
+            },
             Err(e) => {
                 panic!("  Launch failed: {} - Kernel execution FAILED", e);
             }
@@ -232,9 +239,8 @@ mod argmax_falsification_tests {
             &length as *const u32 as *mut c_void,
         ];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args)
-        };
+        let result =
+            unsafe { stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args) };
 
         match result {
             Ok(_) => {
@@ -304,9 +310,8 @@ mod argmax_falsification_tests {
             &length as *const u32 as *mut c_void,
         ];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args)
-        };
+        let result =
+            unsafe { stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args) };
 
         match result {
             Ok(_) => {
@@ -383,9 +388,8 @@ mod argmax_falsification_tests {
             &vocab_size as *const u32 as *mut c_void,
         ];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args)
-        };
+        let result =
+            unsafe { stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args) };
 
         match result {
             Ok(_) => {
@@ -414,7 +418,12 @@ mod argmax_falsification_tests {
                 ];
 
                 let final_result = unsafe {
-                    stream.launch_kernel(&mut final_module, "argmax_final_reduce", &final_config, &mut final_args)
+                    stream.launch_kernel(
+                        &mut final_module,
+                        "argmax_final_reduce",
+                        &final_config,
+                        &mut final_args,
+                    )
                 };
 
                 match final_result {
@@ -427,7 +436,11 @@ mod argmax_falsification_tests {
                         output_buf.copy_to_host(&mut output).unwrap();
 
                         println!("  Final argmax: {}", output[0]);
-                        assert_eq!(output[0], expected_max_idx, "Expected argmax at index {}", expected_max_idx);
+                        assert_eq!(
+                            output[0], expected_max_idx,
+                            "Expected argmax at index {}",
+                            expected_max_idx
+                        );
                         println!("  PASSED - Multi-block reduction correct");
                     }
                     Err(e) => {
@@ -466,7 +479,8 @@ mod argmax_falsification_tests {
             .collect();
 
         // CPU reference
-        let cpu_argmax = input.iter()
+        let cpu_argmax = input
+            .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
             .map(|(i, _)| i as u32)
@@ -505,9 +519,8 @@ mod argmax_falsification_tests {
             &length as *const u32 as *mut c_void,
         ];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args)
-        };
+        let result =
+            unsafe { stream.launch_kernel(&mut module, "argmax_block_reduce", &config, &mut args) };
 
         match result {
             Ok(_) => {
@@ -521,8 +534,11 @@ mod argmax_falsification_tests {
                 let gpu_argmax = block_idxs[0];
                 println!("  GPU argmax: {}", gpu_argmax);
 
-                assert_eq!(gpu_argmax, cpu_argmax,
-                    "GPU argmax ({}) != CPU argmax ({})", gpu_argmax, cpu_argmax);
+                assert_eq!(
+                    gpu_argmax, cpu_argmax,
+                    "GPU argmax ({}) != CPU argmax ({})",
+                    gpu_argmax, cpu_argmax
+                );
                 println!("  PASSED - GPU matches CPU reference");
             }
             Err(e) => {
@@ -544,7 +560,8 @@ mod argmax_falsification_tests {
         let ptx = kernel.emit_ptx();
 
         // Count register declarations
-        let reg_lines: Vec<&str> = ptx.lines()
+        let reg_lines: Vec<&str> = ptx
+            .lines()
             .filter(|line: &&str| line.contains(".reg"))
             .collect();
 
@@ -554,7 +571,7 @@ mod argmax_falsification_tests {
             // Parse register count from declarations like ".reg .u64  %rd<44>;"
             if let Some(count_start) = line_str.find('<') {
                 if let Some(count_end) = line_str.find('>') {
-                    if let Ok(count) = line_str[count_start+1..count_end].parse::<u32>() {
+                    if let Ok(count) = line_str[count_start + 1..count_end].parse::<u32>() {
                         total_regs += count;
                     }
                 }
@@ -567,7 +584,11 @@ mod argmax_falsification_tests {
         // SM 8.9 has 65536 registers per SM
         // With 256 threads per block, max ~256 registers per thread
         // Good target: < 64 registers per thread
-        assert!(total_regs < 256, "Excessive register usage: {} (target < 256)", total_regs);
+        assert!(
+            total_regs < 256,
+            "Excessive register usage: {} (target < 256)",
+            total_regs
+        );
 
         println!("  PASSED - Register usage acceptable");
     }
@@ -581,12 +602,20 @@ mod argmax_falsification_tests {
         let ptx = kernel.emit_ptx();
 
         // Verify shared memory declaration
-        assert!(ptx.contains(".shared .align"), "Missing shared memory alignment");
-        assert!(ptx.contains("smem[2048]") || ptx.contains(".b8 smem[2048]"),
-            "Expected 2KB shared memory");
+        assert!(
+            ptx.contains(".shared .align"),
+            "Missing shared memory alignment"
+        );
+        assert!(
+            ptx.contains("smem[2048]") || ptx.contains(".b8 smem[2048]"),
+            "Expected 2KB shared memory"
+        );
 
         // Verify cvta.shared for generic addressing
-        assert!(ptx.contains("cvta.shared.u64"), "Missing shared memory address conversion");
+        assert!(
+            ptx.contains("cvta.shared.u64"),
+            "Missing shared memory address conversion"
+        );
 
         println!("  Shared memory: 2048 bytes (256 values + 256 indices)");
         println!("  Bank conflicts: Avoided (stride 4 access)");

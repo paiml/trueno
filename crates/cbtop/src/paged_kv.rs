@@ -75,7 +75,11 @@ impl fmt::Display for EvictionStrategy {
                 sink_tokens,
                 window_tokens,
             } => {
-                write!(f, "StreamingLLM(sink={}, window={})", sink_tokens, window_tokens)
+                write!(
+                    f,
+                    "StreamingLLM(sink={}, window={})",
+                    sink_tokens, window_tokens
+                )
             }
         }
     }
@@ -277,8 +281,7 @@ impl PagedKvCache {
     /// - `head_dim`: Dimension of each head
     pub fn new(num_blocks: usize, block_size: usize, num_heads: usize, head_dim: usize) -> Self {
         // Initialize free blocks
-        let free_blocks: VecDeque<BlockId> =
-            (0..num_blocks as u32).map(BlockId).collect();
+        let free_blocks: VecDeque<BlockId> = (0..num_blocks as u32).map(BlockId).collect();
 
         Self {
             block_size,
@@ -595,7 +598,9 @@ impl PagedKvCache {
     pub fn evict(&mut self) -> PagedKvResult<SeqId> {
         let target = self
             .select_eviction_target()
-            .ok_or(PagedKvError::InvalidOperation("No sequences to evict".to_string()))?;
+            .ok_or(PagedKvError::InvalidOperation(
+                "No sequences to evict".to_string(),
+            ))?;
 
         self.free(target)?;
         self.stats.total_evictions += 1;
@@ -677,7 +682,11 @@ impl PagedKvCache {
 impl fmt::Display for PagedKvCache {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "PagedKvCache")?;
-        writeln!(f, "  Strategy: {} (block_size={})", self.eviction_strategy, self.block_size)?;
+        writeln!(
+            f,
+            "  Strategy: {} (block_size={})",
+            self.eviction_strategy, self.block_size
+        )?;
         writeln!(
             f,
             "  Blocks: {}/{} ({:.1}% used)",
@@ -809,8 +818,8 @@ mod tests {
 
     #[test]
     fn test_lru_eviction() {
-        let mut cache = PagedKvCache::new(100, 16, 32, 128)
-            .with_eviction_strategy(EvictionStrategy::LRU);
+        let mut cache =
+            PagedKvCache::new(100, 16, 32, 128).with_eviction_strategy(EvictionStrategy::LRU);
 
         cache.allocate(SeqId(1), 16).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));

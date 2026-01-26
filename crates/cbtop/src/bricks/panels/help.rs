@@ -1,9 +1,9 @@
 //! Help panel brick (Layer 3)
 
-use std::any::Any;
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use presentar_core::{Canvas, Point, TextStyle};
 use presentar_terminal::Theme;
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 pub struct HelpPanelBrick {
     pub theme: Theme,
@@ -30,7 +30,11 @@ impl HelpPanelBrick {
             ..Default::default()
         };
 
-        canvas.draw_text("Help - Keyboard Controls", Point::new(2.0, 2.0), &title_style);
+        canvas.draw_text(
+            "Help - Keyboard Controls",
+            Point::new(2.0, 2.0),
+            &title_style,
+        );
 
         let controls = [
             ("1-9", "Switch panels"),
@@ -57,10 +61,7 @@ impl Brick for HelpPanelBrick {
     }
 
     fn assertions(&self) -> Vec<BrickAssertion> {
-        vec![
-            BrickAssertion::MinWidth(30),
-            BrickAssertion::MinHeight(10),
-        ]
+        vec![BrickAssertion::MinWidth(30), BrickAssertion::MinHeight(10)]
     }
 
     fn budget(&self) -> BrickBudget {

@@ -431,7 +431,10 @@ mod tests {
         let available = cuda_monitoring_available();
         // Without the cuda feature, this should be false
         #[cfg(not(feature = "cuda"))]
-        assert!(!available, "Without CUDA feature, monitoring should not be available");
+        assert!(
+            !available,
+            "Without CUDA feature, monitoring should not be available"
+        );
         // With cuda feature but possibly no hardware, it might be true or false
         #[cfg(feature = "cuda")]
         {
@@ -446,7 +449,10 @@ mod tests {
         let result = cuda_device_count();
         #[cfg(not(feature = "cuda"))]
         {
-            assert!(result.is_err(), "Without CUDA feature, device count should error");
+            assert!(
+                result.is_err(),
+                "Without CUDA feature, device count should error"
+            );
             if let Err(e) = result {
                 let err_msg = format!("{:?}", e);
                 assert!(
@@ -552,8 +558,8 @@ mod tests {
     fn h0_cuda_mon_60_memory_info_used_saturating() {
         // Test saturating_sub edge case where free > total (shouldn't happen but be safe)
         let mem = CudaMemoryInfo {
-            free: 10 * 1024 * 1024 * 1024,  // 10 GB free (impossible: more than total)
-            total: 8 * 1024 * 1024 * 1024,  // 8 GB total
+            free: 10 * 1024 * 1024 * 1024, // 10 GB free (impossible: more than total)
+            total: 8 * 1024 * 1024 * 1024, // 8 GB total
         };
 
         // saturating_sub should return 0, not underflow
@@ -571,7 +577,10 @@ mod tests {
         };
 
         let display = format!("{}", info);
-        assert!(display.contains("[7]"), "Display should show index in brackets");
+        assert!(
+            display.contains("[7]"),
+            "Display should show index in brackets"
+        );
         assert!(display.contains("GPU Seven"));
         assert!(display.contains("12.0"));
     }
@@ -580,7 +589,7 @@ mod tests {
     fn h0_cuda_mon_62_memory_info_display_formatting() {
         // Test Display with specific values to verify format
         let mem = CudaMemoryInfo {
-            free: 0, // 0 bytes free
+            free: 0,                   // 0 bytes free
             total: 1024 * 1024 * 1024, // 1 GB total
         };
 

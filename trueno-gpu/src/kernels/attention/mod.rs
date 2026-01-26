@@ -20,9 +20,9 @@ mod flash;
 mod paged;
 
 #[cfg(test)]
-mod paged_tests;
-#[cfg(test)]
 mod flash_tests;
+#[cfg(test)]
+mod paged_tests;
 
 // Re-export FlashAttention kernel
 pub use flash::AttentionKernel;
@@ -146,7 +146,10 @@ mod tests {
         // Flash: Uses SRAM tiling (shared_memory_bytes > 0)
         let flash = AttentionKernel::new(512, 64);
         let flash_ptx = flash.build_ptx();
-        assert!(flash_ptx.shared_memory_bytes() > 0, "Flash should use shared memory");
+        assert!(
+            flash_ptx.shared_memory_bytes() > 0,
+            "Flash should use shared memory"
+        );
 
         // Paged: Single-query, no SRAM tiling needed
         let paged = IncrementalAttentionKernel::new(512, 64, 8);

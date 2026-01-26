@@ -505,7 +505,11 @@ impl FeatureExtractor {
     }
 
     /// Calculate efficiency from profiler data
-    pub fn calculate_efficiency(&self, profiler: &BrickProfiler, config: &RunConfig) -> Option<f32> {
+    pub fn calculate_efficiency(
+        &self,
+        profiler: &BrickProfiler,
+        config: &RunConfig,
+    ) -> Option<f32> {
         let measured_tps = profiler.tokens_per_sec()?;
         let hw = self.hardware.as_ref()?;
         let gpu = hw.gpu.as_ref()?;

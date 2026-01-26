@@ -54,7 +54,9 @@ impl VarianceSource {
                 "Add cooldown periods between runs or improve cooling"
             }
             VarianceSource::CacheState => "Increase warmup iterations before measurement",
-            VarianceSource::SystemNoise => "Run with CPU isolation (isolcpus) or reduce background tasks",
+            VarianceSource::SystemNoise => {
+                "Run with CPU isolation (isolcpus) or reduce background tasks"
+            }
             VarianceSource::Unknown => "Profile with renacer for deeper analysis",
         }
     }
@@ -311,11 +313,8 @@ fn calculate_cv(samples: &[f64]) -> f64 {
         return 0.0;
     }
 
-    let variance = samples
-        .iter()
-        .map(|x| (x - mean).powi(2))
-        .sum::<f64>()
-        / (samples.len() - 1) as f64;
+    let variance =
+        samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (samples.len() - 1) as f64;
 
     (variance.sqrt() / mean) * 100.0
 }
@@ -377,12 +376,7 @@ fn calculate_trend(samples: &[f64]) -> f64 {
 }
 
 /// Identify the dominant source of variance
-fn identify_dominant_source(
-    freq: f64,
-    thermal: f64,
-    cache: f64,
-    residual: f64,
-) -> VarianceSource {
+fn identify_dominant_source(freq: f64, thermal: f64, cache: f64, residual: f64) -> VarianceSource {
     let max = freq.max(thermal).max(cache).max(residual);
 
     if max < 0.5 {
@@ -569,8 +563,14 @@ mod tests {
 
     #[test]
     fn test_variance_source_names() {
-        assert_eq!(VarianceSource::FrequencyScaling.name(), "CPU frequency scaling");
-        assert_eq!(VarianceSource::ThermalThrottling.name(), "thermal throttling");
+        assert_eq!(
+            VarianceSource::FrequencyScaling.name(),
+            "CPU frequency scaling"
+        );
+        assert_eq!(
+            VarianceSource::ThermalThrottling.name(),
+            "thermal throttling"
+        );
         assert_eq!(VarianceSource::CacheState.name(), "cache state variance");
         assert_eq!(VarianceSource::SystemNoise.name(), "system noise");
     }

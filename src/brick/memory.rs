@@ -100,7 +100,11 @@ impl AlignedBuffer {
             return Err(TruenoError::InvalidInput("allocation failed".into()));
         }
 
-        Ok(Self { ptr, len: size, layout })
+        Ok(Self {
+            ptr,
+            len: size,
+            layout,
+        })
     }
 
     /// Get the buffer as a slice.
@@ -181,7 +185,11 @@ const MADV_DONTNEED: i32 = 4;
 /// # Safety
 /// The pointer must be valid and the length must not exceed the mapped region.
 #[cfg(target_os = "linux")]
-pub unsafe fn madvise_region(addr: *mut u8, len: usize, advice: MemoryAdvice) -> std::io::Result<()> {
+pub unsafe fn madvise_region(
+    addr: *mut u8,
+    len: usize,
+    advice: MemoryAdvice,
+) -> std::io::Result<()> {
     // madvise syscall number is 28 on x86_64
     #[cfg(target_arch = "x86_64")]
     const SYS_MADVISE: i64 = 28;
@@ -230,7 +238,11 @@ pub unsafe fn madvise_region(addr: *mut u8, len: usize, advice: MemoryAdvice) ->
 
 /// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
-pub unsafe fn madvise_region(_addr: *mut u8, _len: usize, _advice: MemoryAdvice) -> std::io::Result<()> {
+pub unsafe fn madvise_region(
+    _addr: *mut u8,
+    _len: usize,
+    _advice: MemoryAdvice,
+) -> std::io::Result<()> {
     Ok(()) // No-op on non-Linux
 }
 

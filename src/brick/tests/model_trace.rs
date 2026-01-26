@@ -175,7 +175,8 @@ fn test_f259_snr_db_computation() {
     // Signal power = 1, Noise power = 0.01, SNR = 100 = 20 dB
     let signal = vec![1.0, 1.0, 1.0];
     let noisy = vec![1.1, 1.1, 1.1];
-    let trace2 = QuantizationErrorTrace::compute(BrickId::RmsNorm, 0, &noisy, &signal, QuantType::F32);
+    let trace2 =
+        QuantizationErrorTrace::compute(BrickId::RmsNorm, 0, &noisy, &signal, QuantType::F32);
     // SNR should be around 20 dB
     assert!(trace2.snr_db > 15.0 && trace2.snr_db < 25.0);
 }
@@ -354,9 +355,9 @@ fn test_token_decisive_layer() {
 
     // Gradual change: decisive layer should be where biggest jump occurs
     token.record_layer(1.0, 100); // Layer 0
-    token.record_layer(1.5, 50);  // Layer 1: rank dropped 50
-    token.record_layer(2.0, 48);  // Layer 2: rank dropped 2
-    token.record_layer(3.0, 1);   // Layer 3: rank dropped 47
+    token.record_layer(1.5, 50); // Layer 1: rank dropped 50
+    token.record_layer(2.0, 48); // Layer 2: rank dropped 2
+    token.record_layer(3.0, 1); // Layer 3: rank dropped 47
 
     let decisive = token.decisive_layer();
     assert_eq!(decisive, Some(1)); // Biggest jump was 100->50 at layer 1
@@ -538,7 +539,10 @@ fn test_f263_tracing_overhead() {
     // Verify zero work done
     assert!(result.is_none());
     let summary = tracer_disabled.summary();
-    assert_eq!(summary.total_forwards, 0, "Disabled tracer should not track forwards");
+    assert_eq!(
+        summary.total_forwards, 0,
+        "Disabled tracer should not track forwards"
+    );
     assert_eq!(summary.attention_traces, 0);
     assert_eq!(summary.kv_steps, 0);
 
@@ -638,11 +642,26 @@ fn test_f272_bit_exactness() {
 
     // Bit-exact comparison
     assert_eq!(stats_with_tracing.count, stats_without_tracing.count);
-    assert_eq!(stats_with_tracing.min.to_bits(), stats_without_tracing.min.to_bits());
-    assert_eq!(stats_with_tracing.max.to_bits(), stats_without_tracing.max.to_bits());
-    assert_eq!(stats_with_tracing.mean.to_bits(), stats_without_tracing.mean.to_bits());
-    assert_eq!(stats_with_tracing.std.to_bits(), stats_without_tracing.std.to_bits());
-    assert_eq!(stats_with_tracing.l2_norm.to_bits(), stats_without_tracing.l2_norm.to_bits());
+    assert_eq!(
+        stats_with_tracing.min.to_bits(),
+        stats_without_tracing.min.to_bits()
+    );
+    assert_eq!(
+        stats_with_tracing.max.to_bits(),
+        stats_without_tracing.max.to_bits()
+    );
+    assert_eq!(
+        stats_with_tracing.mean.to_bits(),
+        stats_without_tracing.mean.to_bits()
+    );
+    assert_eq!(
+        stats_with_tracing.std.to_bits(),
+        stats_without_tracing.std.to_bits()
+    );
+    assert_eq!(
+        stats_with_tracing.l2_norm.to_bits(),
+        stats_without_tracing.l2_norm.to_bits()
+    );
 
     // Verify tracer doesn't modify data by reference
     let mut tracer = ModelTracer::new(ModelTracerConfig::full());
@@ -719,7 +738,10 @@ fn test_f275_anomaly_integration() {
     tracer.record_layer_activation(inf_layer);
     let result2 = tracer.end_forward();
     assert!(result2.is_some(), "Inf should trigger anomaly");
-    assert!(result2.unwrap().contains("Inf"), "Anomaly should mention Inf");
+    assert!(
+        result2.unwrap().contains("Inf"),
+        "Anomaly should mention Inf"
+    );
 
     // Forward pass 3: Inject NaN
     tracer.begin_forward(2);
@@ -728,7 +750,10 @@ fn test_f275_anomaly_integration() {
     tracer.record_layer_activation(nan_layer);
     let result3 = tracer.end_forward();
     assert!(result3.is_some(), "NaN should trigger anomaly");
-    assert!(result3.unwrap().contains("NaN"), "Anomaly should mention NaN");
+    assert!(
+        result3.unwrap().contains("NaN"),
+        "Anomaly should mention NaN"
+    );
 
     // Verify summary counts anomalies
     let summary = tracer.summary();
@@ -923,7 +948,14 @@ fn test_f280_execution_graph_node_types() {
     graph.add_edge(root, brick, EdgeType::Contains);
     graph.add_edge(brick, kernel, EdgeType::Launches);
     graph.add_edge(root, func, EdgeType::Calls);
-    graph.add_edge(func, transfer, EdgeType::Transfer { bytes: 4096, direction: TransferDirection::H2D });
+    graph.add_edge(
+        func,
+        transfer,
+        EdgeType::Transfer {
+            bytes: 4096,
+            direction: TransferDirection::H2D,
+        },
+    );
     graph.add_edge(kernel, transfer, EdgeType::DependsOn);
 
     // Verify node IDs are sequential
@@ -1012,13 +1044,8 @@ fn test_f283_logit_rank_edge_cases() {
 fn test_f284_quant_error_boundaries() {
     // Perfect match (identical)
     let data = vec![1.0, 2.0, 3.0, 4.0];
-    let trace = QuantizationErrorTrace::compute(
-        BrickId::QkvProjection,
-        0,
-        &data,
-        &data,
-        QuantType::F32,
-    );
+    let trace =
+        QuantizationErrorTrace::compute(BrickId::QkvProjection, 0, &data, &data, QuantType::F32);
     assert_eq!(trace.mse, 0.0);
     assert!((trace.cosine_similarity - 1.0).abs() < 0.0001);
     assert!(trace.is_acceptable());
@@ -1123,20 +1150,15 @@ fn test_f288_logit_evolution_finalize() {
     // Finalize with non-tracked token
     let mut trace2 = LogitEvolutionTrace::new(100, 0.7, 0.9);
     trace2.finalize(999); // Token not tracked
-    // Should not panic, just won't find decisive layer
+                          // Should not panic, just won't find decisive layer
 }
 
 /// F289: QuantizationErrorTrace with empty data
 #[test]
 fn test_f289_quant_error_empty() {
     let empty: Vec<f32> = vec![];
-    let trace = QuantizationErrorTrace::compute(
-        BrickId::QkvProjection,
-        0,
-        &empty,
-        &empty,
-        QuantType::Q4_K,
-    );
+    let trace =
+        QuantizationErrorTrace::compute(BrickId::QkvProjection, 0, &empty, &empty, QuantType::Q4_K);
     assert_eq!(trace.mse, 0.0);
     assert_eq!(trace.cosine_similarity, 1.0);
     assert!(trace.snr_db.is_infinite());
@@ -1622,11 +1644,13 @@ fn test_f373_hierarchy_aggregation() {
     }
 
     assert_eq!(
-        profiler.tile_stats(TileLevel::Micro).count, 4,
+        profiler.tile_stats(TileLevel::Micro).count,
+        4,
         "Expected 4 micro tiles"
     );
     assert_eq!(
-        profiler.tile_stats(TileLevel::Midi).count, 1,
+        profiler.tile_stats(TileLevel::Midi).count,
+        1,
         "Expected 1 midi tile"
     );
 }
@@ -1681,7 +1705,8 @@ fn test_f375_toggle_safety_zero_cost() {
 
     // Zero stats recorded
     assert_eq!(
-        profiler.tile_stats(TileLevel::Micro).count, 0,
+        profiler.tile_stats(TileLevel::Micro).count,
+        0,
         "Disabled profiling should not record stats"
     );
 
@@ -1720,7 +1745,10 @@ fn test_f376_summary_format_required_sections() {
     assert!(summary.contains("macro"), "Summary missing 'macro' section");
     assert!(summary.contains("midi"), "Summary missing 'midi' section");
     assert!(summary.contains("micro"), "Summary missing 'micro' section");
-    assert!(summary.contains("GFLOP/s"), "Summary missing 'GFLOP/s' column");
+    assert!(
+        summary.contains("GFLOP/s"),
+        "Summary missing 'GFLOP/s' column"
+    );
 }
 
 /// F377: JSON schema validation
@@ -1735,8 +1763,7 @@ fn test_f377_json_schema_valid() {
     let json = profiler.tile_stats_to_json();
 
     // Parse as JSON
-    let parsed: serde_json::Value = serde_json::from_str(&json)
-        .expect("Invalid JSON");
+    let parsed: serde_json::Value = serde_json::from_str(&json).expect("Invalid JSON");
 
     // Required fields
     assert!(parsed["tile_profiling_enabled"].is_boolean());
@@ -1785,11 +1812,7 @@ fn test_f378_q4k_matvec_realistic_ai() {
 
     // Should have non-zero GFLOP/s
     let gflops = stats.gflops();
-    assert!(
-        gflops > 0.0,
-        "GFLOP/s should be positive, got {}",
-        gflops
-    );
+    assert!(gflops > 0.0, "GFLOP/s should be positive, got {}", gflops);
 }
 
 // =========================================================================
@@ -2050,7 +2073,10 @@ fn test_execution_node_function_formatting() {
     // Test the formatting via to_ascii_tree
     let ascii = graph.to_ascii_tree();
     assert!(ascii.contains("test_func"), "Should contain function name");
-    assert!(ascii.contains("anonymous"), "Should contain anonymous function");
+    assert!(
+        ascii.contains("anonymous"),
+        "Should contain anonymous function"
+    );
 
     // Use the node IDs to prevent unused warnings
     assert!(graph.node(func1).is_some());
@@ -2106,7 +2132,7 @@ fn test_execution_node_transfer_formatting() {
 /// Test slowest_kernel edge cases (covers the `_ => {}` match arm)
 #[test]
 fn test_slowest_kernel_edge_cases() {
-    use crate::brick::exec_graph::{ExecutionGraph, ExecutionNode, BrickId};
+    use crate::brick::exec_graph::{BrickId, ExecutionGraph, ExecutionNode};
 
     let mut graph = ExecutionGraph::new();
 
@@ -2173,7 +2199,7 @@ fn test_execution_node_async_task_formatting() {
 /// Test graph with all node types for DOT export
 #[test]
 fn test_to_dot_all_node_types() {
-    use crate::brick::exec_graph::{ExecutionGraph, ExecutionNode, TransferDirection, BrickId};
+    use crate::brick::exec_graph::{BrickId, ExecutionGraph, ExecutionNode, TransferDirection};
 
     let mut graph = ExecutionGraph::new();
 
@@ -2224,7 +2250,10 @@ fn test_to_dot_all_node_types() {
     let dot = graph.to_dot();
 
     // Verify DOT contains expected structure
-    assert!(dot.contains("digraph ExecutionGraph"), "Should have digraph header");
+    assert!(
+        dot.contains("digraph ExecutionGraph"),
+        "Should have digraph header"
+    );
     assert!(dot.contains("Layer 0"), "Should contain layer");
     assert!(dot.contains("matmul_f32"), "Should contain kernel name");
 
@@ -2235,7 +2264,7 @@ fn test_to_dot_all_node_types() {
 /// Test slowest_kernel with actual kernels (via Brick→Kernel edges)
 #[test]
 fn test_slowest_kernel_with_kernels() {
-    use crate::brick::exec_graph::{ExecutionGraph, ExecutionNode, BrickId, EdgeType};
+    use crate::brick::exec_graph::{BrickId, EdgeType, ExecutionGraph, ExecutionNode};
 
     let mut graph = ExecutionGraph::new();
 

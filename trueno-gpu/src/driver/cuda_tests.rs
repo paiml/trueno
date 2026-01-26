@@ -169,7 +169,9 @@ fn test_gpu_buffer_round_trip() {
     let buffer = GpuBuffer::from_host(&ctx, &data).expect("Buffer creation MUST succeed");
 
     let mut result = vec![0.0f32; 4];
-    buffer.copy_to_host(&mut result).expect("copy_to_host MUST succeed");
+    buffer
+        .copy_to_host(&mut result)
+        .expect("copy_to_host MUST succeed");
     assert_eq!(result, data, "Round-trip data MUST match");
 }
 
@@ -188,10 +190,14 @@ fn test_gpu_buffer_copy_from_host() {
     let mut buffer: GpuBuffer<f32> = GpuBuffer::new(&ctx, 1024).expect("Buffer new MUST succeed");
 
     let data = vec![42.0f32; 1024];
-    buffer.copy_from_host(&data).expect("copy_from_host MUST succeed");
+    buffer
+        .copy_from_host(&data)
+        .expect("copy_from_host MUST succeed");
 
     let mut result = vec![0.0f32; 1024];
-    buffer.copy_to_host(&mut result).expect("copy_to_host MUST succeed");
+    buffer
+        .copy_to_host(&mut result)
+        .expect("copy_to_host MUST succeed");
     assert_eq!(result[0], 42.0);
     assert_eq!(result[1023], 42.0);
 }
@@ -220,7 +226,9 @@ fn test_gpu_buffer_clone() {
     assert_eq!(cloned.len(), original.len());
 
     let mut result = vec![0.0f32; 4];
-    cloned.copy_to_host(&mut result).expect("copy_to_host MUST succeed");
+    cloned
+        .copy_to_host(&mut result)
+        .expect("copy_to_host MUST succeed");
     assert_eq!(result, data);
 }
 
@@ -256,7 +264,9 @@ fn test_cuda_graph_capture_and_replay() {
     let stream = CudaStream::new(&ctx).expect("Stream creation MUST succeed");
 
     // Begin capture
-    stream.begin_capture(CaptureMode::Global).expect("Begin capture MUST succeed");
+    stream
+        .begin_capture(CaptureMode::Global)
+        .expect("Begin capture MUST succeed");
 
     // Simulate some work (empty capture is valid)
     // In a real scenario, we'd launch kernels here
@@ -271,7 +281,9 @@ fn test_cuda_graph_capture_and_replay() {
 
     // Launch the graph 10 times to verify replay works
     for _ in 0..10 {
-        stream.launch_graph(&exec).expect("Graph launch MUST succeed");
+        stream
+            .launch_graph(&exec)
+            .expect("Graph launch MUST succeed");
     }
 
     stream.synchronize().expect("Final sync MUST succeed");
@@ -283,8 +295,14 @@ fn test_cuda_graph_capture_modes() {
     let stream = CudaStream::new(&ctx).expect("Stream creation MUST succeed");
 
     // Test each capture mode
-    for mode in [CaptureMode::Global, CaptureMode::ThreadLocal, CaptureMode::Relaxed] {
-        stream.begin_capture(mode).expect("Begin capture MUST succeed");
+    for mode in [
+        CaptureMode::Global,
+        CaptureMode::ThreadLocal,
+        CaptureMode::Relaxed,
+    ] {
+        stream
+            .begin_capture(mode)
+            .expect("Begin capture MUST succeed");
         let graph = stream.end_capture().expect("End capture MUST succeed");
         let exec = graph.instantiate().expect("Instantiate MUST succeed");
         stream.launch_graph(&exec).expect("Launch MUST succeed");
@@ -343,16 +361,21 @@ $done:
     let config = LaunchConfig::linear(256, 256);
 
     // Begin capture
-    stream.begin_capture(CaptureMode::Global).expect("Begin capture MUST succeed");
+    stream
+        .begin_capture(CaptureMode::Global)
+        .expect("Begin capture MUST succeed");
 
     // Launch kernel (will be captured)
     let mut ptr_arg = buffer.as_ptr() as *mut c_void;
     let mut n_arg = (&n as *const u32) as *mut c_void;
-    let mut args = [&mut ptr_arg as *mut *mut c_void as *mut c_void,
-                   &mut n_arg as *mut *mut c_void as *mut c_void];
+    let mut args = [
+        &mut ptr_arg as *mut *mut c_void as *mut c_void,
+        &mut n_arg as *mut *mut c_void as *mut c_void,
+    ];
 
     unsafe {
-        stream.launch_kernel(&mut module, "add_one", &config, &mut args)
+        stream
+            .launch_kernel(&mut module, "add_one", &config, &mut args)
             .expect("Kernel launch MUST succeed");
     }
 
@@ -362,7 +385,9 @@ $done:
 
     // Replay the graph 100 times
     for _ in 0..100 {
-        stream.launch_graph(&exec).expect("Graph launch MUST succeed");
+        stream
+            .launch_graph(&exec)
+            .expect("Graph launch MUST succeed");
     }
 
     stream.synchronize().expect("Sync MUST succeed");
@@ -371,7 +396,9 @@ $done:
     // Note: Graph capture does NOT execute the kernel - it only records it
     // So: initial 1.0 + (100 replays × 1.0) = 101.0
     let mut result = vec![0.0f32; 256];
-    buffer.copy_to_host(&mut result).expect("copy_to_host MUST succeed");
+    buffer
+        .copy_to_host(&mut result)
+        .expect("copy_to_host MUST succeed");
     for (i, &val) in result.iter().enumerate() {
         assert!(
             (val - 101.0).abs() < 0.01,
@@ -430,7 +457,9 @@ fn test_module_get_function() {
 "#;
 
     let mut module = CudaModule::from_ptx(&ctx, ptx).expect("Module MUST succeed");
-    let func = module.get_function("test_func").expect("get_function MUST succeed");
+    let func = module
+        .get_function("test_func")
+        .expect("get_function MUST succeed");
     assert!(!func.is_null());
 }
 
@@ -471,7 +500,8 @@ fn test_module_launch_noop_kernel() {
     let mut args: [*mut c_void; 0] = [];
 
     unsafe {
-        stream.launch_kernel(&mut module, "noop", &config, &mut args)
+        stream
+            .launch_kernel(&mut module, "noop", &config, &mut args)
             .expect("Kernel launch MUST succeed");
     }
 
@@ -526,14 +556,17 @@ fn test_cuda_stress_memory_pressure() {
     }
 
     // We should have allocated at least 8 chunks (2GB) on RTX 4090
-    assert!(buffers.len() >= 8, "RTX 4090 should handle at least 2GB allocation");
+    assert!(
+        buffers.len() >= 8,
+        "RTX 4090 should handle at least 2GB allocation"
+    );
 
     // Drop all buffers - verify cleanup
     drop(buffers);
 
     // Should be able to allocate again
-    let _new_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, chunk_size)
-        .expect("Post-cleanup allocation MUST succeed");
+    let _new_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, chunk_size).expect("Post-cleanup allocation MUST succeed");
 }
 
 // ============================================================================
@@ -590,8 +623,12 @@ fn test_launch_config_with_shared_mem() {
 #[test]
 fn test_launch_config_total_threads() {
     let config = LaunchConfig::linear(1000, 256);
-    let total = config.grid.0 * config.grid.1 * config.grid.2 *
-                config.block.0 * config.block.1 * config.block.2;
+    let total = config.grid.0
+        * config.grid.1
+        * config.grid.2
+        * config.block.0
+        * config.block.1
+        * config.block.2;
     assert!(total >= 1000);
 }
 
@@ -610,7 +647,8 @@ fn test_gpu_buffer_copy_from_buffer_at_async_raw() {
 
     let mut dst: GpuBuffer<f32> = GpuBuffer::new(&ctx, 64).expect("dst buffer MUST succeed");
     let zeros = vec![0.0f32; 64];
-    dst.copy_from_host(&zeros).expect("copy_from_host MUST succeed");
+    dst.copy_from_host(&zeros)
+        .expect("copy_from_host MUST succeed");
 
     // Use raw stream handle API (line 636-669)
     unsafe {
@@ -620,7 +658,8 @@ fn test_gpu_buffer_copy_from_buffer_at_async_raw() {
     stream.synchronize().expect("Sync MUST succeed");
 
     let mut result = vec![0.0f32; 64];
-    dst.copy_to_host(&mut result).expect("copy_to_host MUST succeed");
+    dst.copy_to_host(&mut result)
+        .expect("copy_to_host MUST succeed");
 
     // Verify copy was correct
     assert_eq!(result[15], 0.0, "Before copy region should be 0");
@@ -661,14 +700,17 @@ fn test_gpu_buffer_async_host_to_device() {
 
     // Async host-to-device copy
     unsafe {
-        buffer.copy_from_host_async(&data, &stream)
+        buffer
+            .copy_from_host_async(&data, &stream)
             .expect("copy_from_host_async MUST succeed");
     }
     stream.synchronize().expect("Sync MUST succeed");
 
     // Verify data
     let mut result = vec![0.0f32; 256];
-    buffer.copy_to_host(&mut result).expect("copy_to_host MUST succeed");
+    buffer
+        .copy_to_host(&mut result)
+        .expect("copy_to_host MUST succeed");
     assert_eq!(result, data);
 }
 
@@ -682,7 +724,8 @@ fn test_gpu_buffer_async_device_to_host() {
 
     let mut result = vec![0.0f32; 128];
     unsafe {
-        buffer.copy_to_host_async(&mut result, &stream)
+        buffer
+            .copy_to_host_async(&mut result, &stream)
             .expect("copy_to_host_async MUST succeed");
     }
     stream.synchronize().expect("Sync MUST succeed");
@@ -911,10 +954,14 @@ fn test_module_get_function_cached() {
     let mut module = CudaModule::from_ptx(&ctx, ptx).expect("Module MUST succeed");
 
     // First lookup
-    let func1 = module.get_function("cached_test").expect("First lookup MUST succeed");
+    let func1 = module
+        .get_function("cached_test")
+        .expect("First lookup MUST succeed");
 
     // Second lookup (from cache)
-    let func2 = module.get_function("cached_test").expect("Second lookup MUST succeed");
+    let func2 = module
+        .get_function("cached_test")
+        .expect("Second lookup MUST succeed");
 
     // Should return same function handle
     assert_eq!(func1, func2);

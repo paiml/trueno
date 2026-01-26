@@ -2,12 +2,12 @@
 
 #[cfg(feature = "cuda")]
 fn main() {
+    use std::ffi::c_void;
     use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
     use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
-    use std::ffi::c_void;
 
     const PAGE_SIZE: u32 = 4096;
-    const NUM_PAGES: u32 = 1;  // Just ONE page
+    const NUM_PAGES: u32 = 1; // Just ONE page
 
     let ctx = CudaContext::new(0).expect("CUDA context");
     let stream = CudaStream::new(&ctx).expect("CUDA stream");
@@ -31,7 +31,11 @@ fn main() {
     let kernel = Lz4WarpCompressKernel::new(NUM_PAGES);
     let ptx = kernel.emit_ptx();
 
-    println!("Grid: {:?}, Block: {:?}", kernel.grid_dim(), kernel.block_dim());
+    println!(
+        "Grid: {:?}, Block: {:?}",
+        kernel.grid_dim(),
+        kernel.block_dim()
+    );
 
     let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
 
@@ -51,7 +55,8 @@ fn main() {
 
     println!("Launching kernel...");
     unsafe {
-        stream.launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
+        stream
+            .launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
             .expect("Kernel launch");
     }
 
@@ -67,7 +72,8 @@ fn main() {
         assert!(
             size > 0 && size <= 4352,
             "Page {} should have valid size in (0, 4352], got {}",
-            i, size
+            i,
+            size
         );
     }
 

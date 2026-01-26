@@ -361,7 +361,9 @@ fn f099_higham_stability_suite() {
     );
 
     // Test 3: Alternating series stability
-    let alternating: Vec<f32> = (0..1000).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+    let alternating: Vec<f32> = (0..1000)
+        .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
     let alt_v = Vector::from_slice(&alternating);
     let sum_sq = alt_v.dot(&alt_v).unwrap();
 

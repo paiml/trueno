@@ -2,11 +2,11 @@
 //!
 //! Collects temperatures from /sys/class/thermal (Genchi Genbutsu)
 
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use crate::ring_buffer::RingBuffer;
 use std::any::Any;
 use std::fs;
 use std::time::Instant;
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
-use crate::ring_buffer::RingBuffer;
 
 #[derive(Debug, Clone)]
 pub struct ThermalMetrics {
@@ -59,7 +59,9 @@ impl ThermalCollectorBrick {
                             if let Ok(content) = fs::read_to_string(path.join("temp")) {
                                 if let Ok(temp_milli) = content.trim().parse::<f64>() {
                                     let temp = temp_milli / 1000.0;
-                                    if temp > max_temp { max_temp = temp; }
+                                    if temp > max_temp {
+                                        max_temp = temp;
+                                    }
                                     total_temp += temp;
                                     count += 1;
                                 }
@@ -73,7 +75,11 @@ impl ThermalCollectorBrick {
         Ok(ThermalMetrics {
             timestamp: Instant::now(),
             max_temp_c: max_temp,
-            avg_temp_c: if count > 0 { total_temp / count as f64 } else { 0.0 },
+            avg_temp_c: if count > 0 {
+                total_temp / count as f64
+            } else {
+                0.0
+            },
         })
     }
 
@@ -83,26 +89,39 @@ impl ThermalCollectorBrick {
 }
 
 impl Brick for ThermalCollectorBrick {
-    fn brick_name(&self) -> &'static str { "thermal_collector" }
-    
+    fn brick_name(&self) -> &'static str {
+        "thermal_collector"
+    }
+
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
-            BrickAssertion::ValueInRange { min: 0.0, max: 200.0 }, // Temp range
+            BrickAssertion::ValueInRange {
+                min: 0.0,
+                max: 200.0,
+            }, // Temp range
             BrickAssertion::max_latency_ms(5),
         ]
     }
 
     fn budget(&self) -> BrickBudget {
-        BrickBudget { collect_ms: 5, layout_ms: 0, render_ms: 0 }
+        BrickBudget {
+            collect_ms: 5,
+            layout_ms: 0,
+            render_ms: 0,
+        }
     }
 
     fn verify(&self) -> BrickVerification {
         let mut v = BrickVerification::new();
-        for a in self.assertions() { v.check(&a); }
+        for a in self.assertions() {
+            v.check(&a);
+        }
         v
     }
 
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[cfg(test)]

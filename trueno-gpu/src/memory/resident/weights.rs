@@ -249,54 +249,96 @@ pub fn forward_encoder_block_gpu(
         let ln1_host = x_norm.peek_host()?;
         let mean = ln1_host.iter().sum::<f32>() / ln1_host.len() as f32;
         let std = (ln1_host.iter().map(|v| v.powi(2)).sum::<f32>() / ln1_host.len() as f32).sqrt();
-        eprintln!("[DEBUG-GPU-INTERNAL] LN1 output: mean={:.6}, std={:.6}", mean, std);
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] LN1 output: mean={:.6}, std={:.6}",
+            mean, std
+        );
 
         // Check weight matrices
         let wq_host = weights.w_q.peek_host()?;
         let bq_host = weights.b_q.peek_host()?;
-        eprintln!("[DEBUG-GPU-INTERNAL] w_q: len={}, mean={:.6}, max={:.6}",
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] w_q: len={}, mean={:.6}, max={:.6}",
             wq_host.len(),
             wq_host.iter().sum::<f32>() / wq_host.len() as f32,
-            wq_host.iter().cloned().fold(f32::NEG_INFINITY, f32::max));
-        eprintln!("[DEBUG-GPU-INTERNAL] b_q: len={}, mean={:.6}",
+            wq_host.iter().cloned().fold(f32::NEG_INFINITY, f32::max)
+        );
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] b_q: len={}, mean={:.6}",
             bq_host.len(),
-            bq_host.iter().sum::<f32>() / bq_host.len() as f32);
+            bq_host.iter().sum::<f32>() / bq_host.len() as f32
+        );
     }
 
     // Q, K, V projections (all on GPU)
-    let q = x_norm.linear(ctx, &weights.w_q, Some(&weights.b_q), seq_len, d_model, d_model)?;
-    let k = x_norm.linear(ctx, &weights.w_k, Some(&weights.b_k), seq_len, d_model, d_model)?;
-    let v = x_norm.linear(ctx, &weights.w_v, Some(&weights.b_v), seq_len, d_model, d_model)?;
+    let q = x_norm.linear(
+        ctx,
+        &weights.w_q,
+        Some(&weights.b_q),
+        seq_len,
+        d_model,
+        d_model,
+    )?;
+    let k = x_norm.linear(
+        ctx,
+        &weights.w_k,
+        Some(&weights.b_k),
+        seq_len,
+        d_model,
+        d_model,
+    )?;
+    let v = x_norm.linear(
+        ctx,
+        &weights.w_v,
+        Some(&weights.b_v),
+        seq_len,
+        d_model,
+        d_model,
+    )?;
 
     if debug {
         let q_host = q.peek_host()?;
         let k_host = k.peek_host()?;
         let v_host = v.peek_host()?;
-        eprintln!("[DEBUG-GPU-INTERNAL] Q: mean={:.6}, K: mean={:.6}, V: mean={:.6}",
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] Q: mean={:.6}, K: mean={:.6}, V: mean={:.6}",
             q_host.iter().sum::<f32>() / q_host.len() as f32,
             k_host.iter().sum::<f32>() / k_host.len() as f32,
-            v_host.iter().sum::<f32>() / v_host.len() as f32);
+            v_host.iter().sum::<f32>() / v_host.len() as f32
+        );
     }
 
     // Multi-head attention (on GPU)
     // WAPR-PERF-008: Batched attention (reduces 54 kernel launches to 9, correct output)
-    let attn_out = batched_multihead_attention_optimized(ctx, &q, &k, &v, n_heads, head_dim, seq_len)?;
+    let attn_out =
+        batched_multihead_attention_optimized(ctx, &q, &k, &v, n_heads, head_dim, seq_len)?;
 
     if debug {
         let attn_host = attn_out.peek_host()?;
-        eprintln!("[DEBUG-GPU-INTERNAL] attn_out: mean={:.6}, std={:.6}",
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] attn_out: mean={:.6}, std={:.6}",
             attn_host.iter().sum::<f32>() / attn_host.len() as f32,
-            (attn_host.iter().map(|v| v.powi(2)).sum::<f32>() / attn_host.len() as f32).sqrt());
+            (attn_host.iter().map(|v| v.powi(2)).sum::<f32>() / attn_host.len() as f32).sqrt()
+        );
     }
 
     // Output projection
-    let attn_proj = attn_out.linear(ctx, &weights.w_o, Some(&weights.b_o), seq_len, d_model, d_model)?;
+    let attn_proj = attn_out.linear(
+        ctx,
+        &weights.w_o,
+        Some(&weights.b_o),
+        seq_len,
+        d_model,
+        d_model,
+    )?;
 
     if debug {
         let proj_host = attn_proj.peek_host()?;
-        eprintln!("[DEBUG-GPU-INTERNAL] attn_proj: mean={:.6}, std={:.6}",
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] attn_proj: mean={:.6}, std={:.6}",
             proj_host.iter().sum::<f32>() / proj_host.len() as f32,
-            (proj_host.iter().map(|v| v.powi(2)).sum::<f32>() / proj_host.len() as f32).sqrt());
+            (proj_host.iter().map(|v| v.powi(2)).sum::<f32>() / proj_host.len() as f32).sqrt()
+        );
     }
 
     // Residual connection: x + attn_proj
@@ -304,44 +346,65 @@ pub fn forward_encoder_block_gpu(
 
     if debug {
         let res1_host = residual1.peek_host()?;
-        eprintln!("[DEBUG-GPU-INTERNAL] residual1: mean={:.6}, std={:.6}",
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] residual1: mean={:.6}, std={:.6}",
             res1_host.iter().sum::<f32>() / res1_host.len() as f32,
-            (res1_host.iter().map(|v| v.powi(2)).sum::<f32>() / res1_host.len() as f32).sqrt());
+            (res1_host.iter().map(|v| v.powi(2)).sum::<f32>() / res1_host.len() as f32).sqrt()
+        );
     }
 
     // ====== FFN Block ======
 
     // Pre-norm: x_norm2 = LayerNorm(residual1)
-    let x_norm2 = residual1.layer_norm(ctx, &weights.ln2_gamma, &weights.ln2_beta, d_model, seq_len)?;
+    let x_norm2 =
+        residual1.layer_norm(ctx, &weights.ln2_gamma, &weights.ln2_beta, d_model, seq_len)?;
 
     if debug {
         let ln2_host = x_norm2.peek_host()?;
-        eprintln!("[DEBUG-GPU-INTERNAL] LN2 output: mean={:.6}, std={:.6}",
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] LN2 output: mean={:.6}, std={:.6}",
             ln2_host.iter().sum::<f32>() / ln2_host.len() as f32,
-            (ln2_host.iter().map(|v| v.powi(2)).sum::<f32>() / ln2_host.len() as f32).sqrt());
+            (ln2_host.iter().map(|v| v.powi(2)).sum::<f32>() / ln2_host.len() as f32).sqrt()
+        );
     }
 
     // FFN up projection + GELU (FUSED - WAPR-PERF-007)
     // Uses single kernel instead of 3 (GEMM + Bias + GELU)
     let ffn_gelu = x_norm2.fused_linear_gelu(
-        ctx, &weights.ffn_up_w, &weights.ffn_up_b, seq_len, d_model, ffn_dim
+        ctx,
+        &weights.ffn_up_w,
+        &weights.ffn_up_b,
+        seq_len,
+        d_model,
+        ffn_dim,
     )?;
 
     if debug {
         let gelu_host = ffn_gelu.peek_host()?;
-        eprintln!("[DEBUG-GPU-INTERNAL] ffn_gelu (fused): mean={:.6}, std={:.6}",
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] ffn_gelu (fused): mean={:.6}, std={:.6}",
             gelu_host.iter().sum::<f32>() / gelu_host.len() as f32,
-            (gelu_host.iter().map(|v| v.powi(2)).sum::<f32>() / gelu_host.len() as f32).sqrt());
+            (gelu_host.iter().map(|v| v.powi(2)).sum::<f32>() / gelu_host.len() as f32).sqrt()
+        );
     }
 
     // FFN down projection
-    let ffn_down = ffn_gelu.linear(ctx, &weights.ffn_down_w, Some(&weights.ffn_down_b), seq_len, ffn_dim, d_model)?;
+    let ffn_down = ffn_gelu.linear(
+        ctx,
+        &weights.ffn_down_w,
+        Some(&weights.ffn_down_b),
+        seq_len,
+        ffn_dim,
+        d_model,
+    )?;
 
     if debug {
         let down_host = ffn_down.peek_host()?;
-        eprintln!("[DEBUG-GPU-INTERNAL] ffn_down: mean={:.6}, std={:.6}",
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] ffn_down: mean={:.6}, std={:.6}",
             down_host.iter().sum::<f32>() / down_host.len() as f32,
-            (down_host.iter().map(|v| v.powi(2)).sum::<f32>() / down_host.len() as f32).sqrt());
+            (down_host.iter().map(|v| v.powi(2)).sum::<f32>() / down_host.len() as f32).sqrt()
+        );
     }
 
     // Residual connection: residual1 + ffn_down
@@ -349,9 +412,11 @@ pub fn forward_encoder_block_gpu(
 
     if debug {
         let out_host = output.peek_host()?;
-        eprintln!("[DEBUG-GPU-INTERNAL] block_output: mean={:.6}, std={:.6}",
+        eprintln!(
+            "[DEBUG-GPU-INTERNAL] block_output: mean={:.6}, std={:.6}",
             out_host.iter().sum::<f32>() / out_host.len() as f32,
-            (out_host.iter().map(|v| v.powi(2)).sum::<f32>() / out_host.len() as f32).sqrt());
+            (out_host.iter().map(|v| v.powi(2)).sum::<f32>() / out_host.len() as f32).sqrt()
+        );
     }
 
     Ok(output)

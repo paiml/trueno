@@ -32,7 +32,10 @@ pub enum FederatedError {
     /// Clock drift too large
     ClockDriftExceeded { drift_ms: i64, max_ms: i64 },
     /// Memory limit exceeded
-    MemoryLimitExceeded { used_bytes: usize, limit_bytes: usize },
+    MemoryLimitExceeded {
+        used_bytes: usize,
+        limit_bytes: usize,
+    },
     /// Invalid configuration
     InvalidConfig { reason: String },
 }
@@ -48,7 +51,10 @@ impl std::fmt::Display for FederatedError {
             Self::ClockDriftExceeded { drift_ms, max_ms } => {
                 write!(f, "Clock drift {}ms exceeds max {}ms", drift_ms, max_ms)
             }
-            Self::MemoryLimitExceeded { used_bytes, limit_bytes } => {
+            Self::MemoryLimitExceeded {
+                used_bytes,
+                limit_bytes,
+            } => {
                 write!(f, "Memory {} exceeds limit {}", used_bytes, limit_bytes)
             }
             Self::InvalidConfig { reason } => write!(f, "Invalid config: {}", reason),
@@ -261,9 +267,8 @@ impl<T: Clone + Eq + std::hash::Hash> OrSet<T> {
     pub fn contains(&self, element: &T) -> bool {
         if let Some(tags) = self.elements.get(element) {
             let tombstones = self.tombstones.get(element);
-            tags.iter().any(|tag| {
-                tombstones.map_or(true, |ts| !ts.contains(tag))
-            })
+            tags.iter()
+                .any(|tag| tombstones.map_or(true, |ts| !ts.contains(tag)))
         } else {
             false
         }
@@ -271,10 +276,7 @@ impl<T: Clone + Eq + std::hash::Hash> OrSet<T> {
 
     /// Get all active elements
     pub fn elements(&self) -> Vec<&T> {
-        self.elements
-            .keys()
-            .filter(|e| self.contains(e))
-            .collect()
+        self.elements.keys().filter(|e| self.contains(e)).collect()
     }
 
     /// Merge with another OR-Set
@@ -319,7 +321,7 @@ impl FederatedHost {
             last_seen: Instant::now(),
             sample_count: GCounter::new(),
             health: 1.0,
-            sampling_rate: 100.0,  // Default 100 Hz
+            sampling_rate: 100.0, // Default 100 Hz
             latency_ms: 0.0,
             logical_clock: 0,
         }
@@ -434,7 +436,8 @@ impl AggregatedMetrics {
         for (host_id, count) in &self.host_counts {
             // Calculate host-specific mean (simplified: use count as proxy)
             let expected_count = self.values.len() / self.host_counts.len().max(1);
-            let deviation = ((*count as f64 - expected_count as f64) / expected_count as f64).abs() * 100.0;
+            let deviation =
+                ((*count as f64 - expected_count as f64) / expected_count as f64).abs() * 100.0;
 
             if deviation > threshold_percent {
                 skewed.push(host_id.clone());
@@ -466,7 +469,7 @@ impl Default for FederationConfig {
         Self {
             max_clock_drift_ms: 100,
             host_timeout: Duration::from_secs(30),
-            memory_limit_bytes: 100 * 1024 * 1024,  // 100MB
+            memory_limit_bytes: 100 * 1024 * 1024, // 100MB
             default_sampling_rate: 100.0,
             skew_threshold_percent: 40.0,
             partition_recovery_timeout: Duration::from_secs(30),
@@ -552,17 +555,16 @@ impl MetricsFederation {
     }
 
     /// Record a local metric sample
-    pub fn record(&mut self, metric_name: impl Into<String>, value: f64) -> FederatedResult<SampleId> {
+    pub fn record(
+        &mut self,
+        metric_name: impl Into<String>,
+        value: f64,
+    ) -> FederatedResult<SampleId> {
         let time = self.tick();
         self.sequence += 1;
 
-        let sample = MetricSample::new(
-            &self.local_host_id,
-            time,
-            self.sequence,
-            metric_name,
-            value,
-        );
+        let sample =
+            MetricSample::new(&self.local_host_id, time, self.sequence, metric_name, value);
 
         self.add_sample(sample)
     }
@@ -591,7 +593,8 @@ impl MetricsFederation {
         }
 
         // Update aggregation
-        let agg = self.aggregated
+        let agg = self
+            .aggregated
             .entry(sample.metric_name.clone())
             .or_insert_with(|| AggregatedMetrics::new(&sample.metric_name));
         agg.add_sample(&sample.id.host_id, sample.value);
@@ -749,15 +752,15 @@ mod tests {
         c1.increment("host2", 3);
 
         let mut c2 = GCounter::new();
-        c2.increment("host1", 3);  // Less than c1
-        c2.increment("host2", 7);  // More than c1
-        c2.increment("host3", 2);  // New host
+        c2.increment("host1", 3); // Less than c1
+        c2.increment("host2", 7); // More than c1
+        c2.increment("host3", 2); // New host
 
         c1.merge(&c2);
 
-        assert_eq!(c1.host_count("host1"), 5);  // Max(5, 3) = 5
-        assert_eq!(c1.host_count("host2"), 7);  // Max(3, 7) = 7
-        assert_eq!(c1.host_count("host3"), 2);  // New host
+        assert_eq!(c1.host_count("host1"), 5); // Max(5, 3) = 5
+        assert_eq!(c1.host_count("host2"), 7); // Max(3, 7) = 7
+        assert_eq!(c1.host_count("host3"), 2); // New host
         assert_eq!(c1.value(), 14);
     }
 
@@ -853,7 +856,7 @@ mod tests {
         fed.add_host("remote1");
         fed.add_host("remote2");
 
-        assert_eq!(fed.active_host_count(), 3);  // local + 2 remote
+        assert_eq!(fed.active_host_count(), 3); // local + 2 remote
     }
 
     #[test]
@@ -870,7 +873,7 @@ mod tests {
 
         let merged = fed1.merge(&fed2).unwrap();
 
-        assert_eq!(merged, 2);  // 2 samples from fed2
+        assert_eq!(merged, 2); // 2 samples from fed2
         assert_eq!(fed1.total_samples(), 4);
     }
 
@@ -889,7 +892,7 @@ mod tests {
 
         // Second merge (should be idempotent)
         let merged2 = fed1.merge(&fed2).unwrap();
-        assert_eq!(merged2, 0);  // No new samples
+        assert_eq!(merged2, 0); // No new samples
 
         assert_eq!(fed1.total_samples(), 2);
     }
@@ -926,7 +929,7 @@ mod tests {
     #[test]
     fn test_federation_memory_limit() {
         let config = FederationConfig {
-            memory_limit_bytes: 1000,  // Very small limit
+            memory_limit_bytes: 1000, // Very small limit
             ..Default::default()
         };
         let mut fed = MetricsFederation::new("local", config);
@@ -1034,7 +1037,7 @@ mod tests {
         node1.merge(&node3).unwrap();
 
         // Phase 3: Verify convergence
-        assert_eq!(node1.total_samples(), 30);  // All samples merged
+        assert_eq!(node1.total_samples(), 30); // All samples merged
 
         // Verify percentiles are correct
         let agg = node1.get_aggregated("metric").unwrap();
@@ -1046,6 +1049,6 @@ mod tests {
 
         // Verify no duplicates (idempotent merge)
         node1.merge(&node2).unwrap();
-        assert_eq!(node1.total_samples(), 30);  // Still 30, no duplicates
+        assert_eq!(node1.total_samples(), 30); // Still 30, no duplicates
     }
 }

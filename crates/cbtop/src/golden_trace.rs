@@ -303,8 +303,8 @@ impl GoldenTrace {
 
     /// Compute deterministic hash of trace
     pub fn compute_hash(&self) -> String {
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
         self.name.hash(&mut hasher);
@@ -491,8 +491,7 @@ impl GoldenComparator {
         let time_delta = Self::calc_delta(current.total_time_us, golden.metrics.total_time_us);
         let p50_delta = Self::calc_delta(current.p50_latency_us, golden.metrics.p50_latency_us);
         let p99_delta = Self::calc_delta(current.p99_latency_us, golden.metrics.p99_latency_us);
-        let throughput_delta =
-            Self::calc_delta(current.throughput, golden.metrics.throughput);
+        let throughput_delta = Self::calc_delta(current.throughput, golden.metrics.throughput);
         let memory_delta = Self::calc_delta(
             current.peak_memory_bytes as f64,
             golden.metrics.peak_memory_bytes as f64,
@@ -641,7 +640,10 @@ impl GoldenTraceManager {
         let mut names = Vec::new();
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "toml" || ext == "json") {
+            if path
+                .extension()
+                .map_or(false, |ext| ext == "toml" || ext == "json")
+            {
                 if let Some(stem) = path.file_stem() {
                     if let Some(name) = stem.to_str() {
                         names.push(name.to_string());

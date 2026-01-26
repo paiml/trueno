@@ -10,13 +10,13 @@
 //! - P1 High: `NonInPlaceLoopAccumulator`, `RegisterSpills`
 //! - P2 Medium: `RedundantMoves`, `UnoptimizedMemoryPattern`
 
-mod types;
 mod analyzer;
 mod coverage;
+mod types;
 
-pub use types::{BugSeverity, PtxBug, PtxBugClass, PtxBugReport};
 pub use analyzer::PtxBugAnalyzer;
 pub use coverage::{PtxCoverageReport, PtxCoverageTracker, PtxCoverageTrackerBuilder, PtxFeature};
+pub use types::{BugSeverity, PtxBug, PtxBugClass, PtxBugReport};
 
 #[cfg(test)]
 mod tests;

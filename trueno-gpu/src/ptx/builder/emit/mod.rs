@@ -437,10 +437,7 @@ mod tests {
     fn test_emit_atom_add() {
         let mut instr = make_instr(PtxOp::AtomAdd);
         instr.dst = Some(Operand::Reg(vreg(0, PtxType::U32)));
-        instr.srcs = vec![
-            Operand::Reg(vreg(1, PtxType::U64)),
-            Operand::ImmU64(1),
-        ];
+        instr.srcs = vec![Operand::Reg(vreg(1, PtxType::U64)), Operand::ImmU64(1)];
         instr.state_space = Some(PtxStateSpace::Global);
         let result = emit_instruction(&instr);
         assert!(result.contains("atom"));
@@ -600,10 +597,7 @@ mod tests {
     fn test_write_atom_global() {
         let mut instr = make_instr(PtxOp::AtomAdd);
         instr.dst = Some(Operand::Reg(vreg(0, PtxType::U32)));
-        instr.srcs = vec![
-            Operand::Reg(vreg(1, PtxType::U64)),
-            Operand::ImmU64(1),
-        ];
+        instr.srcs = vec![Operand::Reg(vreg(1, PtxType::U64)), Operand::ImmU64(1)];
         instr.state_space = Some(PtxStateSpace::Global);
         let mut out = String::new();
         write_instruction(&instr, &mut out);

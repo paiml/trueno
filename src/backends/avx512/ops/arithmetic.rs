@@ -15,7 +15,9 @@ pub unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
         _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_add_ps(va, vb));
         i += 16;
     }
-    for j in i..len { result[j] = a[j] + b[j]; }
+    for j in i..len {
+        result[j] = a[j] + b[j];
+    }
 }
 
 /// AVX-512 vector subtraction.
@@ -30,7 +32,9 @@ pub unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
         _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_sub_ps(va, vb));
         i += 16;
     }
-    for j in i..len { result[j] = a[j] - b[j]; }
+    for j in i..len {
+        result[j] = a[j] - b[j];
+    }
 }
 
 /// AVX-512 vector multiplication.
@@ -45,7 +49,9 @@ pub unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_mul_ps(va, vb));
         i += 16;
     }
-    for j in i..len { result[j] = a[j] * b[j]; }
+    for j in i..len {
+        result[j] = a[j] * b[j];
+    }
 }
 
 /// AVX-512 vector division.
@@ -60,5 +66,7 @@ pub unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
         _mm512_storeu_ps(result.as_mut_ptr().add(i), _mm512_div_ps(va, vb));
         i += 16;
     }
-    for j in i..len { result[j] = a[j] / b[j]; }
+    for j in i..len {
+        result[j] = a[j] / b[j];
+    }
 }

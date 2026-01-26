@@ -5,8 +5,8 @@
 #![cfg(test)]
 
 use super::rope::{
-    RopeKernel, RopeIndirectKernel, RopeNeoxKernel, RopeNeoxIndirectKernel,
-    BatchedRopeKernel, PreciseRopeKernel, PreciseRopeIndirectKernel,
+    BatchedRopeKernel, PreciseRopeIndirectKernel, PreciseRopeKernel, RopeIndirectKernel,
+    RopeKernel, RopeNeoxIndirectKernel, RopeNeoxKernel,
 };
 use crate::kernels::Kernel;
 
@@ -176,11 +176,7 @@ fn test_precise_rope_indirect_kernel() {
 
 #[test]
 fn test_all_rope_kernel_variants() {
-    let configs = vec![
-        (8, 64, 10000.0),
-        (16, 128, 10000.0),
-        (32, 64, 1_000_000.0),
-    ];
+    let configs = vec![(8, 64, 10000.0), (16, 128, 10000.0), (32, 64, 1_000_000.0)];
 
     for (num_heads, head_dim, theta) in configs {
         // Standard RoPE

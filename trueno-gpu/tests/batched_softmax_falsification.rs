@@ -46,11 +46,20 @@ fn test_cpu_softmax_sanity() {
 
     // Sum must be 1.0
     let sum: f32 = output.iter().sum();
-    assert!((sum - 1.0).abs() < 1e-6, "Softmax sum should be 1.0, got {}", sum);
+    assert!(
+        (sum - 1.0).abs() < 1e-6,
+        "Softmax sum should be 1.0, got {}",
+        sum
+    );
 
     // Values should be in (0, 1)
     for (i, &v) in output.iter().enumerate() {
-        assert!(v > 0.0 && v < 1.0, "Softmax[{}] = {} should be in (0, 1)", i, v);
+        assert!(
+            v > 0.0 && v < 1.0,
+            "Softmax[{}] = {} should be in (0, 1)",
+            i,
+            v
+        );
     }
 
     // Larger input should have larger softmax
@@ -100,27 +109,38 @@ fn test_batched_softmax_short_row() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
 
     // Download result
     let mut output = vec![0.0f32; row_size as usize];
-    output_buf.copy_to_host(&mut output).expect("Download failed");
+    output_buf
+        .copy_to_host(&mut output)
+        .expect("Download failed");
 
     // Verify sum = 1.0
     let sum: f32 = output.iter().sum();
-    assert!((sum - 1.0).abs() < 1e-5,
+    assert!(
+        (sum - 1.0).abs() < 1e-5,
         "Short row: softmax sum should be 1.0, got {} (delta={})",
-        sum, (sum - 1.0).abs());
+        sum,
+        (sum - 1.0).abs()
+    );
 
     // Verify individual values match CPU reference
     for (i, (&gpu, &cpu)) in output.iter().zip(expected.iter()).enumerate() {
         let delta: f32 = (gpu - cpu).abs();
-        assert!(delta < 1e-5,
+        assert!(
+            delta < 1e-5,
             "Short row [{}]: GPU={} vs CPU={}, delta={}",
-            i, gpu, cpu, delta);
+            i,
+            gpu,
+            cpu,
+            delta
+        );
     }
 
     eprintln!("✓ Short row (32 elements) softmax PASSED");
@@ -145,10 +165,16 @@ fn test_batched_softmax_long_row_1500() {
         .collect();
     let expected = cpu_softmax(&input);
 
-    eprintln!("Input: first 5 = {:?}, last 5 = {:?}",
-        &input[..5], &input[row_size as usize - 5..]);
-    eprintln!("CPU expected: first 5 = {:?}, last 5 = {:?}",
-        &expected[..5], &expected[row_size as usize - 5..]);
+    eprintln!(
+        "Input: first 5 = {:?}, last 5 = {:?}",
+        &input[..5],
+        &input[row_size as usize - 5..]
+    );
+    eprintln!(
+        "CPU expected: first 5 = {:?}, last 5 = {:?}",
+        &expected[..5],
+        &expected[row_size as usize - 5..]
+    );
     eprintln!("CPU expected sum = {}", expected.iter().sum::<f32>());
 
     // Upload to GPU
@@ -185,50 +211,90 @@ fn test_batched_softmax_long_row_1500() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
 
     // Download result
     let mut output = vec![0.0f32; row_size as usize];
-    output_buf.copy_to_host(&mut output).expect("Download failed");
+    output_buf
+        .copy_to_host(&mut output)
+        .expect("Download failed");
 
-    eprintln!("GPU output: first 5 = {:?}, last 5 = {:?}",
-        &output[..5], &output[row_size as usize - 5..]);
+    eprintln!(
+        "GPU output: first 5 = {:?}, last 5 = {:?}",
+        &output[..5],
+        &output[row_size as usize - 5..]
+    );
 
     // Verify sum = 1.0 (THE CRITICAL CHECK)
     let sum: f32 = output.iter().sum();
     eprintln!("GPU sum = {}", sum);
 
-    assert!((sum - 1.0).abs() < 1e-4,
+    assert!(
+        (sum - 1.0).abs() < 1e-4,
         "LONG ROW BUG: softmax sum should be 1.0, got {} (delta={})",
-        sum, (sum - 1.0).abs());
+        sum,
+        (sum - 1.0).abs()
+    );
 
     // Verify max and min are reasonable
     let gpu_max = output.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let gpu_min = output.iter().cloned().filter(|&x| x > 0.0).fold(f32::INFINITY, f32::min);
+    let gpu_min = output
+        .iter()
+        .cloned()
+        .filter(|&x| x > 0.0)
+        .fold(f32::INFINITY, f32::min);
     let cpu_max = expected.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let cpu_min = expected.iter().cloned().filter(|&x| x > 0.0).fold(f32::INFINITY, f32::min);
+    let cpu_min = expected
+        .iter()
+        .cloned()
+        .filter(|&x| x > 0.0)
+        .fold(f32::INFINITY, f32::min);
 
     eprintln!("GPU max={}, min={}", gpu_max, gpu_min);
     eprintln!("CPU max={}, min={}", cpu_max, cpu_min);
 
     // Verify the distribution shape roughly matches
-    let gpu_argmax = output.iter().enumerate().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()).unwrap().0;
-    let cpu_argmax = expected.iter().enumerate().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()).unwrap().0;
+    let gpu_argmax = output
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .unwrap()
+        .0;
+    let cpu_argmax = expected
+        .iter()
+        .enumerate()
+        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .unwrap()
+        .0;
 
-    assert_eq!(gpu_argmax, cpu_argmax,
-        "Argmax mismatch: GPU={} vs CPU={}", gpu_argmax, cpu_argmax);
+    assert_eq!(
+        gpu_argmax, cpu_argmax,
+        "Argmax mismatch: GPU={} vs CPU={}",
+        gpu_argmax, cpu_argmax
+    );
 
     // Sample comparison at specific indices
     let test_indices = [0, 32, 100, 500, 1000, 1499];
     for &i in &test_indices {
         let delta = (output[i] - expected[i]).abs();
-        let rel_delta = if expected[i].abs() > 1e-10 { delta / expected[i].abs() } else { delta };
-        assert!(rel_delta < 0.1 || delta < 1e-6,
+        let rel_delta = if expected[i].abs() > 1e-10 {
+            delta / expected[i].abs()
+        } else {
+            delta
+        };
+        assert!(
+            rel_delta < 0.1 || delta < 1e-6,
             "Long row [{}]: GPU={} vs CPU={}, delta={}, rel_delta={}",
-            i, output[i], expected[i], delta, rel_delta);
+            i,
+            output[i],
+            expected[i],
+            delta,
+            rel_delta
+        );
     }
 
     eprintln!("✓ Long row (1500 elements) softmax PASSED");
@@ -244,7 +310,7 @@ fn test_batched_softmax_6_rows_of_1500() {
     };
 
     let row_size = 1500u32;
-    let total_rows = 6u32;  // Simulating 6 attention heads
+    let total_rows = 6u32; // Simulating 6 attention heads
 
     // Create input: different values for each row
     let mut input: Vec<f32> = Vec::with_capacity((total_rows * row_size) as usize);
@@ -267,8 +333,8 @@ fn test_batched_softmax_6_rows_of_1500() {
 
     // Upload to GPU
     let input_buf = GpuBuffer::from_host(&ctx, &input).expect("Upload failed");
-    let output_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, (total_rows * row_size) as usize)
-        .expect("Alloc failed");
+    let output_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, (total_rows * row_size) as usize).expect("Alloc failed");
 
     // Compile and run kernel
     let kernel = BatchedSoftmaxKernel::new(total_rows, row_size);
@@ -293,14 +359,17 @@ fn test_batched_softmax_6_rows_of_1500() {
     ];
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .expect("Launch failed");
     }
     stream.synchronize().expect("Sync failed");
 
     // Download result
     let mut output = vec![0.0f32; (total_rows * row_size) as usize];
-    output_buf.copy_to_host(&mut output).expect("Download failed");
+    output_buf
+        .copy_to_host(&mut output)
+        .expect("Download failed");
 
     // Verify each row sums to 1.0
     for row in 0..total_rows {
@@ -308,9 +377,13 @@ fn test_batched_softmax_6_rows_of_1500() {
         let end = start + row_size as usize;
         let row_sum: f32 = output[start..end].iter().sum();
 
-        assert!((row_sum - 1.0).abs() < 1e-4,
+        assert!(
+            (row_sum - 1.0).abs() < 1e-4,
             "Row {}: softmax sum should be 1.0, got {} (delta={})",
-            row, row_sum, (row_sum - 1.0).abs());
+            row,
+            row_sum,
+            (row_sum - 1.0).abs()
+        );
     }
 
     eprintln!("✓ Batched softmax (6 rows × 1500 elements) PASSED");

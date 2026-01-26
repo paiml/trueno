@@ -39,46 +39,65 @@ mod quantize;
 mod softmax;
 
 pub use argmax::{ArgMaxFinalKernel, ArgMaxKernel};
-pub use conv1d::{Conv1dKernel, TiledConv1dKernel};
 pub use attention::{
     AttentionKernel, BatchedIncrementalAttentionKernel, FlashDecodingChunkKernel,
     FlashDecodingReduceKernel, IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel,
     FLASH_DECODE_CHUNK_SIZE,
 };
 pub use bias_activation::{Activation, BiasActivationKernel};
-pub use fused::{FusedGateUpKernel, FusedGemmBiasGeluKernel, FusedQKVKernel};
+pub use conv1d::{Conv1dKernel, TiledConv1dKernel};
 pub use elementwise::{
-    BatchedResidualAddKernel, BatchedRopeKernel, BatchedScaleKernel, BatchedSoftmaxKernel,
-    BatchedSwigluKernel, BatchedToInterleavedKernel, BatchedTransposeKernel,
-    CopySingleHeadKernel, ExtractSingleHeadKernel,
-    InterleavedToBatchedKernel,  // WAPR-PERF-004: Multi-head attention
-    ElementwiseMulKernel, FusedResidualRmsNormKernel, FusedSwigluKernel,
-    GeluKernel, KvCacheScatterIndirectKernel, KvCacheScatterKernel,
-    PreciseRopeIndirectKernel, PreciseRopeKernel,  // CORRECTNESS-013
-    ReluKernel,  // Issue #88: Forward ReLU kernel
-    ResidualAddKernel, RopeIndirectKernel, RopeKernel, RopeNeoxKernel,
-    RopeNeoxIndirectKernel, ScaleKernel, SiluKernel, TransposeKernel,  // WAPR-PERF-004
+    BatchedResidualAddKernel,
+    BatchedRopeKernel,
+    BatchedScaleKernel,
+    BatchedSoftmaxKernel,
+    BatchedSwigluKernel,
+    BatchedToInterleavedKernel,
+    BatchedTransposeKernel,
+    CopySingleHeadKernel,
+    ElementwiseMulKernel,
+    ExtractSingleHeadKernel,
+    FusedResidualRmsNormKernel,
+    FusedSwigluKernel,
+    GeluKernel,
+    InterleavedToBatchedKernel, // WAPR-PERF-004: Multi-head attention
+    KvCacheScatterIndirectKernel,
+    KvCacheScatterKernel,
+    PreciseRopeIndirectKernel,
+    PreciseRopeKernel, // CORRECTNESS-013
+    ReluKernel,        // Issue #88: Forward ReLU kernel
+    ResidualAddKernel,
+    RopeIndirectKernel,
+    RopeKernel,
+    RopeNeoxIndirectKernel,
+    RopeNeoxKernel,
+    ScaleKernel,
+    SiluKernel,
+    TransposeKernel, // WAPR-PERF-004
 };
+pub use fused::{FusedGateUpKernel, FusedGemmBiasGeluKernel, FusedQKVKernel};
 pub use gemm::{
     Batched4DGemmConfig, Batched4DGemmKernel, BatchedGemmConfig, BatchedGemmKernel, GemmConfig,
     GemmKernel,
 };
 pub use gemv::{CoalescedGemvKernel, GemvKernel};
-pub use layernorm::{BatchedVectorizedRmsNormKernel, LayerNormKernel, PreciseRmsNormKernel, RmsNormKernel, VectorizedRmsNormKernel};
+pub use layernorm::{
+    BatchedVectorizedRmsNormKernel, LayerNormKernel, PreciseRmsNormKernel, RmsNormKernel,
+    VectorizedRmsNormKernel,
+};
+pub use lz4::{Lz4WarpCompressKernel, Lz4WarpDecompressKernel};
 pub use megakernel::TransformerBlockMegakernel;
+pub use optimizer::{AdamStepKernel, AdamWStepKernel, GradientClipKernel};
 pub use persistent::PersistentDecoderKernel;
 pub use quantize::{
     BatchedQ4KGemvKernel, BatchedQ6KGemvKernel, ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel,
-    CoalescedQ6KGemvKernel, Dp4aQ4KGemvKernel, Fp16Q4KGemvKernel,
-    FusedGateUpQ4KGemvKernel, FusedRmsNormQ4KGemvKernel,
-    PackedDp4aQ4KQ8Kernel, Q4KGemvKernel, Q4KQ8DotKernel, Q4_0GemvKernel, Q4_1GemvKernel,
-    Q5KGemvKernel, Q5KKernel, Q5_0GemvKernel, Q6KGemvKernel, Q6KKernel, Q8QuantizeKernel,
-    Q8_0GemvKernel, QuantizeKernel, TensorCoreQ4KGemmKernel, TiledQ4KGemvKernel,
-    TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel,
+    CoalescedQ6KGemvKernel, Dp4aQ4KGemvKernel, Fp16Q4KGemvKernel, FusedGateUpQ4KGemvKernel,
+    FusedRmsNormQ4KGemvKernel, PackedDp4aQ4KQ8Kernel, Q4KGemvKernel, Q4KQ8DotKernel,
+    Q4_0GemvKernel, Q4_1GemvKernel, Q5KGemvKernel, Q5KKernel, Q5_0GemvKernel, Q6KGemvKernel,
+    Q6KKernel, Q8QuantizeKernel, Q8_0GemvKernel, QuantizeKernel, TensorCoreQ4KGemmKernel,
+    TiledQ4KGemvKernel, TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel,
 };
 pub use softmax::{LongRowSoftmaxKernel, SoftmaxKernel};
-pub use lz4::{Lz4WarpCompressKernel, Lz4WarpDecompressKernel};
-pub use optimizer::{AdamStepKernel, AdamWStepKernel, GradientClipKernel};
 
 use crate::ptx::optimize::barrier_safety::{self, BarrierSafetyResult};
 use crate::ptx::{PtxKernel, PtxModule};
@@ -331,7 +350,8 @@ loop_start_end:
 exit:
     ret;
 }
-"#.to_string()
+"#
+            .to_string()
         }
     }
 
@@ -635,14 +655,26 @@ exit:
     fn test_barrier_safety_optimizer() {
         assert!(AdamWStepKernel::new(4096).analyze_barrier_safety().is_safe);
         assert!(AdamStepKernel::new(4096).analyze_barrier_safety().is_safe);
-        assert!(GradientClipKernel::new(4096).analyze_barrier_safety().is_safe);
+        assert!(
+            GradientClipKernel::new(4096)
+                .analyze_barrier_safety()
+                .is_safe
+        );
     }
 
     /// Test quantize kernels barrier safety
     #[test]
     fn test_barrier_safety_quantize() {
-        assert!(Q4KGemvKernel::new(4096, 4096).analyze_barrier_safety().is_safe);
-        assert!(Q6KGemvKernel::new(4096, 4096).analyze_barrier_safety().is_safe);
+        assert!(
+            Q4KGemvKernel::new(4096, 4096)
+                .analyze_barrier_safety()
+                .is_safe
+        );
+        assert!(
+            Q6KGemvKernel::new(4096, 4096)
+                .analyze_barrier_safety()
+                .is_safe
+        );
         assert!(Q8QuantizeKernel::new(4096).analyze_barrier_safety().is_safe);
     }
 
@@ -686,15 +718,31 @@ exit:
     /// Test Lz4 kernels barrier safety
     #[test]
     fn test_barrier_safety_lz4() {
-        assert!(Lz4WarpCompressKernel::new(4).analyze_barrier_safety().is_safe);
-        assert!(Lz4WarpDecompressKernel::new(4).analyze_barrier_safety().is_safe);
+        assert!(
+            Lz4WarpCompressKernel::new(4)
+                .analyze_barrier_safety()
+                .is_safe
+        );
+        assert!(
+            Lz4WarpDecompressKernel::new(4)
+                .analyze_barrier_safety()
+                .is_safe
+        );
     }
 
     /// Test batched elementwise kernels
     #[test]
     fn test_barrier_safety_batched_elementwise() {
-        assert!(BatchedSoftmaxKernel::new(4, 1024).analyze_barrier_safety().is_safe);
-        assert!(BatchedScaleKernel::new(1024).analyze_barrier_safety().is_safe);
+        assert!(
+            BatchedSoftmaxKernel::new(4, 1024)
+                .analyze_barrier_safety()
+                .is_safe
+        );
+        assert!(
+            BatchedScaleKernel::new(1024)
+                .analyze_barrier_safety()
+                .is_safe
+        );
     }
 
     /// Test FusedResidualRmsNormKernel barrier safety
@@ -912,6 +960,9 @@ mod property_tests {
         let kernel = Batched4DGemmKernel::new(2, 8, 512, 512, 64);
         let ptx = kernel.emit_ptx();
         assert!(ptx.contains(".entry"), "Should handle attention pattern");
-        assert!(ptx.contains("bar.sync"), "Should have barriers for tiled compute");
+        assert!(
+            ptx.contains("bar.sync"),
+            "Should have barriers for tiled compute"
+        );
     }
 }

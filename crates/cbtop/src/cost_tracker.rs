@@ -61,7 +61,12 @@ pub struct GpuPricing {
 
 impl GpuPricing {
     /// Create new pricing
-    pub fn new(provider: CloudProvider, gpu_type: &str, price_per_hour: f64, power_watts: f64) -> Self {
+    pub fn new(
+        provider: CloudProvider,
+        gpu_type: &str,
+        price_per_hour: f64,
+        power_watts: f64,
+    ) -> Self {
         Self {
             provider,
             gpu_type: gpu_type.to_string(),
@@ -356,7 +361,11 @@ impl CostTracker {
     }
 
     /// Calculate cost from energy measurement
-    pub fn calculate_from_energy(&mut self, energy: &EnergyMeasurement, token_count: u64) -> CostResult {
+    pub fn calculate_from_energy(
+        &mut self,
+        energy: &EnergyMeasurement,
+        token_count: u64,
+    ) -> CostResult {
         let pricing = self.current_pricing().cloned().unwrap_or_else(|| {
             GpuPricing::new(self.current_provider, &self.current_gpu, 5.0, 400.0)
         });
@@ -365,7 +374,13 @@ impl CostTracker {
         let energy_kwh = energy.kwh();
         let carbon_g = energy_kwh * self.carbon_intensity;
 
-        let result = CostResult::new(cost, energy.joules, carbon_g, energy.duration_sec, token_count);
+        let result = CostResult::new(
+            cost,
+            energy.joules,
+            carbon_g,
+            energy.duration_sec,
+            token_count,
+        );
 
         self.total_spend += cost;
 
@@ -410,15 +425,21 @@ impl CostTracker {
         }
 
         // Compare last 10 to previous 10
-        let recent: f64 = self.history.iter().rev().take(10)
+        let recent: f64 = self
+            .history
+            .iter()
+            .rev()
+            .take(10)
             .map(|r| r.cost_per_million_tokens)
-            .sum::<f64>() / 10.0;
+            .sum::<f64>()
+            / 10.0;
 
         let older_start = self.history.len().saturating_sub(20);
-        let older: f64 = self.history[older_start..older_start+10.min(self.history.len() - 10)]
+        let older: f64 = self.history[older_start..older_start + 10.min(self.history.len() - 10)]
             .iter()
             .map(|r| r.cost_per_million_tokens)
-            .sum::<f64>() / 10.0;
+            .sum::<f64>()
+            / 10.0;
 
         if older > 0.0 {
             let change = ((recent - older) / older) * 100.0;
@@ -437,7 +458,9 @@ impl CostTracker {
 
     /// Export history to CSV
     pub fn export_csv(&self) -> String {
-        let mut lines = vec!["duration_sec,token_count,total_cost,cost_per_million,energy_kwh,carbon_g".to_string()];
+        let mut lines = vec![
+            "duration_sec,token_count,total_cost,cost_per_million,energy_kwh,carbon_g".to_string(),
+        ];
 
         for result in &self.history {
             lines.push(format!(
@@ -496,8 +519,7 @@ mod tests {
 
     #[test]
     fn test_cost_calculation() {
-        let mut tracker = CostTracker::new()
-            .with_gpu(CloudProvider::Aws, "A100-40GB");
+        let mut tracker = CostTracker::new().with_gpu(CloudProvider::Aws, "A100-40GB");
 
         let result = tracker.calculate_cost(60.0, 10000);
 
@@ -563,8 +585,7 @@ mod tests {
 
     #[test]
     fn test_carbon_estimation() {
-        let mut tracker = CostTracker::new()
-            .with_carbon_intensity(500.0); // High carbon grid
+        let mut tracker = CostTracker::new().with_carbon_intensity(500.0); // High carbon grid
 
         let result = tracker.calculate_cost(3600.0, 100000);
 

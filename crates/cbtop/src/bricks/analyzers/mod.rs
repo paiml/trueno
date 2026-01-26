@@ -2,12 +2,12 @@
 //!
 //! Business logic and derived metrics.
 
-mod throughput;
 mod bottleneck;
-mod thermal;
 mod efficiency;
+mod thermal;
+mod throughput;
 
-pub use throughput::ThroughputAnalyzerBrick;
 pub use bottleneck::BottleneckAnalyzerBrick;
-pub use thermal::ThermalAnalyzerBrick;
 pub use efficiency::EfficiencyAnalyzerBrick;
+pub use thermal::ThermalAnalyzerBrick;
+pub use throughput::ThroughputAnalyzerBrick;

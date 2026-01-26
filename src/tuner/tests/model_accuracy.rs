@@ -33,7 +33,11 @@ fn f010_prediction_latency_under_1ms() {
     let _rec = tuner.recommend(&features);
     let elapsed = start.elapsed();
 
-    assert!(elapsed.as_millis() < 1, "Prediction took {}ms", elapsed.as_millis());
+    assert!(
+        elapsed.as_millis() < 1,
+        "Prediction took {}ms",
+        elapsed.as_millis()
+    );
 }
 
 #[test]

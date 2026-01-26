@@ -341,7 +341,8 @@ mod loading {
                 // Graph types (PAR-037)
                 type FnGraphCreate = unsafe extern "C" fn(*mut CUgraph, c_uint) -> CUresult;
                 type FnGraphDestroy = unsafe extern "C" fn(CUgraph) -> CUresult;
-                type FnGraphInstantiate = unsafe extern "C" fn(*mut CUgraphExec, CUgraph, u64) -> CUresult;
+                type FnGraphInstantiate =
+                    unsafe extern "C" fn(*mut CUgraphExec, CUgraph, u64) -> CUresult;
                 type FnGraphExecDestroy = unsafe extern "C" fn(CUgraphExec) -> CUresult;
                 type FnGraphLaunch = unsafe extern "C" fn(CUgraphExec, CUstream) -> CUresult;
                 type FnStreamBeginCapture = unsafe extern "C" fn(CUstream, c_uint) -> CUresult;
@@ -382,7 +383,10 @@ mod loading {
                     // Graph functions (PAR-037)
                     cuGraphCreate: load_sym!(cuGraphCreate, FnGraphCreate),
                     cuGraphDestroy: load_sym!(cuGraphDestroy, FnGraphDestroy),
-                    cuGraphInstantiateWithFlags: load_sym!(cuGraphInstantiateWithFlags, FnGraphInstantiate),
+                    cuGraphInstantiateWithFlags: load_sym!(
+                        cuGraphInstantiateWithFlags,
+                        FnGraphInstantiate
+                    ),
                     cuGraphExecDestroy: load_sym!(cuGraphExecDestroy, FnGraphExecDestroy),
                     cuGraphLaunch: load_sym!(cuGraphLaunch, FnGraphLaunch),
                     cuStreamBeginCapture: load_sym!(cuStreamBeginCapture, FnStreamBeginCapture),

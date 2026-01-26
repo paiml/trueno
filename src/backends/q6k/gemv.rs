@@ -444,11 +444,6 @@ pub(crate) fn compute_chunk_scalar(
 }
 
 /// Public alias for the optimized Q6K matmul
-pub fn matmul_q6k_f32(
-    q6k_data: &[u8],
-    input: &[f32],
-    out_dim: usize,
-    in_dim: usize,
-) -> Vec<f32> {
+pub fn matmul_q6k_f32(q6k_data: &[u8], input: &[f32], out_dim: usize, in_dim: usize) -> Vec<f32> {
     matmul_q6k_f32_dispatch(q6k_data, input, out_dim, in_dim)
 }

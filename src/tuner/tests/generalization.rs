@@ -35,8 +35,8 @@ fn f091_cold_start_handling() {
 fn f096_extreme_values_clipped() {
     let features = TunerFeatures::builder()
         .model_params_b(1000.0) // Way over max
-        .hidden_dim(100000)     // Way over max
-        .batch_size(1000)       // Way over max
+        .hidden_dim(100000) // Way over max
+        .batch_size(1000) // Way over max
         .build();
 
     // All values should be clipped to [0, 1]

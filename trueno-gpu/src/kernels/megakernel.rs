@@ -120,24 +120,24 @@ impl Kernel for TransformerBlockMegakernel {
 
         PtxKernel::new("transformer_block_megakernel")
             // Input/Output
-            .param(PtxType::U64, "input_ptr")       // FP16 input [hidden_size]
-            .param(PtxType::U64, "output_ptr")      // FP16 output [hidden_size]
+            .param(PtxType::U64, "input_ptr") // FP16 input [hidden_size]
+            .param(PtxType::U64, "output_ptr") // FP16 output [hidden_size]
             // Attention weights (Q4K)
-            .param(PtxType::U64, "q_proj_ptr")      // Q4K [hidden, hidden]
-            .param(PtxType::U64, "k_proj_ptr")      // Q4K [hidden, head_dim]
-            .param(PtxType::U64, "v_proj_ptr")      // Q4K [hidden, head_dim]
-            .param(PtxType::U64, "o_proj_ptr")      // Q4K [hidden, hidden]
+            .param(PtxType::U64, "q_proj_ptr") // Q4K [hidden, hidden]
+            .param(PtxType::U64, "k_proj_ptr") // Q4K [hidden, head_dim]
+            .param(PtxType::U64, "v_proj_ptr") // Q4K [hidden, head_dim]
+            .param(PtxType::U64, "o_proj_ptr") // Q4K [hidden, hidden]
             // FFN weights (Q4K)
-            .param(PtxType::U64, "gate_proj_ptr")   // Q4K [hidden, intermediate]
-            .param(PtxType::U64, "up_proj_ptr")     // Q4K [hidden, intermediate]
-            .param(PtxType::U64, "down_proj_ptr")   // Q4K [intermediate, hidden]
+            .param(PtxType::U64, "gate_proj_ptr") // Q4K [hidden, intermediate]
+            .param(PtxType::U64, "up_proj_ptr") // Q4K [hidden, intermediate]
+            .param(PtxType::U64, "down_proj_ptr") // Q4K [intermediate, hidden]
             // RMSNorm weights (FP32)
-            .param(PtxType::U64, "attn_norm_ptr")   // FP32 [hidden]
-            .param(PtxType::U64, "ffn_norm_ptr")    // FP32 [hidden]
+            .param(PtxType::U64, "attn_norm_ptr") // FP32 [hidden]
+            .param(PtxType::U64, "ffn_norm_ptr") // FP32 [hidden]
             // KV cache
-            .param(PtxType::U64, "k_cache_ptr")     // FP16 [seq_len, head_dim]
-            .param(PtxType::U64, "v_cache_ptr")     // FP16 [seq_len, head_dim]
-            .param(PtxType::U32, "seq_pos")         // Current sequence position
+            .param(PtxType::U64, "k_cache_ptr") // FP16 [seq_len, head_dim]
+            .param(PtxType::U64, "v_cache_ptr") // FP16 [seq_len, head_dim]
+            .param(PtxType::U32, "seq_pos") // Current sequence position
             .shared_memory(smem_bytes)
             .build(move |ctx| {
                 // PAR-039: Transformer Block Megakernel

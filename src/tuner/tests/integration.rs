@@ -54,10 +54,7 @@ fn f072_prediction_deterministic() {
     let rec1 = tuner.recommend(&features);
     let rec2 = tuner.recommend(&features);
 
-    assert_eq!(
-        rec1.throughput.predicted_tps,
-        rec2.throughput.predicted_tps
-    );
+    assert_eq!(rec1.throughput.predicted_tps, rec2.throughput.predicted_tps);
     assert_eq!(rec1.kernel.top_kernel, rec2.kernel.top_kernel);
 }
 

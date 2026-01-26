@@ -3,8 +3,8 @@
 //! F1291-F1300: Adaptive threshold falsification tests
 
 use cbtop::{
-    ThresholdLearner, ThresholdDirection, ThresholdCheck,
-    MIN_SAMPLES_FOR_LEARNING, DEFAULT_CONFIDENCE_LEVEL, DEFAULT_OUTLIER_THRESHOLD,
+    ThresholdCheck, ThresholdDirection, ThresholdLearner, DEFAULT_CONFIDENCE_LEVEL,
+    DEFAULT_OUTLIER_THRESHOLD, MIN_SAMPLES_FOR_LEARNING,
 };
 
 // =============================================================================

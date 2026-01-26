@@ -161,10 +161,7 @@ fn f301_color_gradient_bars() {
         frame.contains("█"),
         "Progress bars should use filled blocks"
     );
-    assert!(
-        frame.contains("░"),
-        "Progress bars should use empty blocks"
-    );
+    assert!(frame.contains("░"), "Progress bars should use empty blocks");
 }
 
 #[test]

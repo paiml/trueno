@@ -1095,7 +1095,8 @@ mod tests {
 
     #[test]
     fn test_sin_scalar_backend() {
-        let v = Vector::from_slice_with_backend(&[0.0, std::f32::consts::FRAC_PI_2], Backend::Scalar);
+        let v =
+            Vector::from_slice_with_backend(&[0.0, std::f32::consts::FRAC_PI_2], Backend::Scalar);
         let result = v.sin().unwrap();
         assert!((result.as_slice()[0] - 0.0).abs() < 1e-6);
         assert!((result.as_slice()[1] - 1.0).abs() < 1e-6);

@@ -1860,7 +1860,9 @@ impl GpuDevice {
         let buffer_slice = staging_buffer.slice(..);
         let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-            sender.send(result).expect("oneshot channel receiver dropped");
+            sender
+                .send(result)
+                .expect("oneshot channel receiver dropped");
         });
 
         // Poll device to ensure GPU work completes and callbacks are invoked
@@ -2197,7 +2199,9 @@ impl GpuDevice {
         let eigenvector_slice = staging_eigenvectors.slice(..);
         let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
         eigenvector_slice.map_async(wgpu::MapMode::Read, move |result| {
-            sender.send(result).expect("oneshot channel receiver dropped");
+            sender
+                .send(result)
+                .expect("oneshot channel receiver dropped");
         });
 
         self.device

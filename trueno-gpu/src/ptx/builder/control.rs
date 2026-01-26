@@ -34,9 +34,8 @@ pub trait PtxControl: KernelBuilderCore {
 
     /// Unconditional branch
     fn branch(&mut self, target: &str) {
-        self.instructions_mut().push(
-            PtxInstruction::new(PtxOp::Bra, PtxType::B32).label(target),
-        );
+        self.instructions_mut()
+            .push(PtxInstruction::new(PtxOp::Bra, PtxType::B32).label(target));
     }
 
     /// Conditional branch (if predicate is true)

@@ -42,7 +42,10 @@ fn f051_loop_splitting_eliminates_divergence() {
         "F051 FALSIFIED: Loop splitting should identify divergent pattern"
     );
 
-    println!("F051 PASSED: Loop splitting identified {} splittable conditions", splittable.len());
+    println!(
+        "F051 PASSED: Loop splitting identified {} splittable conditions",
+        splittable.len()
+    );
 }
 
 /// F052: Split loops produce identical output to original
@@ -81,8 +84,10 @@ fn f052_split_preserves_semantics() {
         "F052 FALSIFIED: Profitability analysis not deterministic"
     );
 
-    println!("F052 PASSED: Loop splitting preserves semantics (heavy={}, light={})",
-             true, light_profitable);
+    println!(
+        "F052 PASSED: Loop splitting preserves semantics (heavy={}, light={})",
+        true, light_profitable
+    );
 }
 
 /// F053: Splitting handles nested conditionals
@@ -121,7 +126,10 @@ fn f053_nested_conditional_handling() {
         splittable.len()
     );
 
-    println!("F053 PASSED: Nested conditionals handled ({} split points)", splittable.len());
+    println!(
+        "F053 PASSED: Nested conditionals handled ({} split points)",
+        splittable.len()
+    );
 }
 
 /// F054: Splitting preserves loop-carried dependencies
@@ -132,7 +140,7 @@ fn f053_nested_conditional_handling() {
 fn f054_loop_carried_dependencies() {
     // Simulate loop with carried dependency: sum += arr[i]
     let instructions = vec![
-        PtxInstruction::new(PtxOp::Ld, PtxType::F32),  // load arr[i]
+        PtxInstruction::new(PtxOp::Ld, PtxType::F32), // load arr[i]
         PtxInstruction::new(PtxOp::Add, PtxType::F32), // sum += loaded
         PtxInstruction::new(PtxOp::Setp, PtxType::Pred)
             .dst(Operand::Reg(VirtualReg::new(0, PtxType::Pred)))
@@ -162,10 +170,10 @@ fn f054_loop_carried_dependencies() {
 fn f059_non_unit_step_handling() {
     // Test various step sizes
     let test_cases = vec![
-        (5, 0, 4, 8),   // split=5, lower=0, step=4 -> 8
-        (8, 0, 4, 8),   // already aligned
-        (10, 2, 4, 10), // split=10, lower=2, step=4 -> 10
-        (9, 2, 4, 10),  // split=9, lower=2, step=4 -> 10
+        (5, 0, 4, 8),      // split=5, lower=0, step=4 -> 8
+        (8, 0, 4, 8),      // already aligned
+        (10, 2, 4, 10),    // split=10, lower=2, step=4 -> 10
+        (9, 2, 4, 10),     // split=9, lower=2, step=4 -> 10
         (100, 0, 32, 128), // CUDA warp size alignment
     ];
 
@@ -191,7 +199,11 @@ fn f061_boundary_conditions() {
     assert_eq!(align_split_point(0, 0, 4), 0, "F061: Zero boundary");
     assert_eq!(align_split_point(0, 5, 4), 5, "F061: Below lower bound");
     assert_eq!(align_split_point(5, 5, 4), 5, "F061: At lower bound");
-    assert_eq!(align_split_point(1000000, 0, 1), 1000000, "F061: Large values");
+    assert_eq!(
+        align_split_point(1000000, 0, 1),
+        1000000,
+        "F061: Large values"
+    );
 
     println!("F061 PASSED: Boundary conditions handled correctly");
 }
@@ -292,7 +304,10 @@ fn f065_overhead_threshold() {
         analysis_ns / 1_000_000.0
     );
 
-    println!("F065 PASSED: Overhead acceptable ({:.2}ns per analysis)", analysis_ns);
+    println!(
+        "F065 PASSED: Overhead acceptable ({:.2}ns per analysis)",
+        analysis_ns
+    );
 }
 
 /// Test LoopPredicate conversions
@@ -300,10 +315,22 @@ fn f065_overhead_threshold() {
 fn test_loop_predicate_conversions() {
     // CmpOp is imported at module level from trueno_gpu::ptx
 
-    assert_eq!(LoopPredicate::from_cmp_op(CmpOp::Lt), Some(LoopPredicate::LessThan));
-    assert_eq!(LoopPredicate::from_cmp_op(CmpOp::Le), Some(LoopPredicate::LessEqual));
-    assert_eq!(LoopPredicate::from_cmp_op(CmpOp::Gt), Some(LoopPredicate::GreaterThan));
-    assert_eq!(LoopPredicate::from_cmp_op(CmpOp::Ge), Some(LoopPredicate::GreaterEqual));
+    assert_eq!(
+        LoopPredicate::from_cmp_op(CmpOp::Lt),
+        Some(LoopPredicate::LessThan)
+    );
+    assert_eq!(
+        LoopPredicate::from_cmp_op(CmpOp::Le),
+        Some(LoopPredicate::LessEqual)
+    );
+    assert_eq!(
+        LoopPredicate::from_cmp_op(CmpOp::Gt),
+        Some(LoopPredicate::GreaterThan)
+    );
+    assert_eq!(
+        LoopPredicate::from_cmp_op(CmpOp::Ge),
+        Some(LoopPredicate::GreaterEqual)
+    );
     assert_eq!(LoopPredicate::from_cmp_op(CmpOp::Eq), None);
     assert_eq!(LoopPredicate::from_cmp_op(CmpOp::Ne), None);
 
