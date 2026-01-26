@@ -9,6 +9,20 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
+/// Get hostname (native only, returns "wasm" on WASM targets)
+#[cfg(not(target_arch = "wasm32"))]
+fn get_hostname() -> String {
+    hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string())
+}
+
+/// Get hostname (WASM fallback)
+#[cfg(target_arch = "wasm32")]
+fn get_hostname() -> String {
+    "wasm".to_string()
+}
+
 /// SIMD instruction set width
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SimdWidth {
@@ -150,9 +164,7 @@ impl HardwareCapability {
 
         HardwareCapability {
             timestamp: chrono::Utc::now().to_rfc3339(),
-            hostname: hostname::get()
-                .map(|h| h.to_string_lossy().to_string())
-                .unwrap_or_else(|_| "unknown".to_string()),
+            hostname: get_hostname(),
             cpu,
             gpu,
             roofline: RooflineParams {
