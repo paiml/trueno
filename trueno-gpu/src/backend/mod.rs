@@ -190,7 +190,10 @@ mod tests {
         let backend = MetalBackend;
         // On macOS with metal feature, should detect GPUs
         assert!(backend.is_available(), "Metal should be available on macOS");
-        assert!(backend.device_count() > 0, "Should have at least one Metal device");
+        assert!(
+            backend.device_count() > 0,
+            "Should have at least one Metal device"
+        );
     }
 
     #[test]
@@ -239,7 +242,10 @@ mod tests {
     fn test_metal_backend_device_count_macos() {
         let backend = MetalBackend;
         // On macOS with metal feature, should have at least 1 GPU
-        assert!(backend.device_count() >= 1, "Should have at least one Metal device");
+        assert!(
+            backend.device_count() >= 1,
+            "Should have at least one Metal device"
+        );
     }
 
     #[test]

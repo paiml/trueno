@@ -106,10 +106,7 @@ pub fn cached_nanos_or_now() -> u64 {
     let cached = CACHED_NANOS.load(Ordering::Relaxed);
     if cached == 0 && !TIME_SERVICE_INIT.load(Ordering::Relaxed) {
         // Fall back to syscall if time service not initialized
-        EPOCH
-            .get_or_init(Instant::now)
-            .elapsed()
-            .as_nanos() as u64
+        EPOCH.get_or_init(Instant::now).elapsed().as_nanos() as u64
     } else {
         cached
     }

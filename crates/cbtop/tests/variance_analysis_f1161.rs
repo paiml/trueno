@@ -8,7 +8,7 @@
 //! - Cache warmup effect
 //! - Variance budget compliance
 
-use cbtop::{VarianceSource, VarianceAnalysis, VarianceInput};
+use cbtop::{VarianceAnalysis, VarianceInput, VarianceSource};
 
 // =============================================================================
 // F1161: Frequency Variance Measurement
@@ -247,7 +247,10 @@ fn f1167_no_warnings() {
     let analysis = VarianceAnalysis::analyze(&input).unwrap();
     // Should have a positive message
     assert!(!analysis.recommendations.is_empty());
-    assert!(analysis.recommendations[0].contains("acceptable") || analysis.recommendations[0].contains("within"));
+    assert!(
+        analysis.recommendations[0].contains("acceptable")
+            || analysis.recommendations[0].contains("within")
+    );
 }
 
 // =============================================================================
@@ -368,8 +371,14 @@ fn test_empty_input() {
 /// Test variance source names
 #[test]
 fn test_variance_source_names() {
-    assert_eq!(VarianceSource::FrequencyScaling.name(), "CPU frequency scaling");
-    assert_eq!(VarianceSource::ThermalThrottling.name(), "thermal throttling");
+    assert_eq!(
+        VarianceSource::FrequencyScaling.name(),
+        "CPU frequency scaling"
+    );
+    assert_eq!(
+        VarianceSource::ThermalThrottling.name(),
+        "thermal throttling"
+    );
     assert_eq!(VarianceSource::CacheState.name(), "cache state variance");
     assert_eq!(VarianceSource::SystemNoise.name(), "system noise");
     assert_eq!(VarianceSource::Unknown.name(), "unknown");
@@ -378,10 +387,16 @@ fn test_variance_source_names() {
 /// Test variance source mitigations
 #[test]
 fn test_variance_source_mitigations() {
-    assert!(VarianceSource::FrequencyScaling.mitigation().contains("cpupower"));
-    assert!(VarianceSource::ThermalThrottling.mitigation().contains("cooldown"));
+    assert!(VarianceSource::FrequencyScaling
+        .mitigation()
+        .contains("cpupower"));
+    assert!(VarianceSource::ThermalThrottling
+        .mitigation()
+        .contains("cooldown"));
     assert!(VarianceSource::CacheState.mitigation().contains("warmup"));
-    assert!(VarianceSource::SystemNoise.mitigation().contains("isolation"));
+    assert!(VarianceSource::SystemNoise
+        .mitigation()
+        .contains("isolation"));
 }
 
 /// Test summary output

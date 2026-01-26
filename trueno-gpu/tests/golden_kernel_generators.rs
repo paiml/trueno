@@ -677,5 +677,8 @@ fn golden_kernel_names_consistent() {
         "layernorm_shared"
     );
     assert_eq!(RmsNormKernel::new(2048).name(), "rmsnorm");
-    assert_eq!(VectorizedRmsNormKernel::new(2048).name(), "rmsnorm_vectorized");
+    assert_eq!(
+        VectorizedRmsNormKernel::new(2048).name(),
+        "rmsnorm_vectorized"
+    );
 }

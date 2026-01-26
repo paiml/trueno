@@ -28,7 +28,11 @@ pub enum RemoteError {
     /// Authentication failed
     AuthenticationFailed { host: String },
     /// Command execution failed
-    CommandFailed { host: String, exit_code: i32, stderr: String },
+    CommandFailed {
+        host: String,
+        exit_code: i32,
+        stderr: String,
+    },
     /// Timeout waiting for response
     Timeout { host: String, timeout_ms: u64 },
     /// Host not found in pool
@@ -50,8 +54,16 @@ impl std::fmt::Display for RemoteError {
             Self::AuthenticationFailed { host } => {
                 write!(f, "Authentication failed for {}", host)
             }
-            Self::CommandFailed { host, exit_code, stderr } => {
-                write!(f, "Command failed on {} (exit {}): {}", host, exit_code, stderr)
+            Self::CommandFailed {
+                host,
+                exit_code,
+                stderr,
+            } => {
+                write!(
+                    f,
+                    "Command failed on {} (exit {}): {}",
+                    host, exit_code, stderr
+                )
             }
             Self::Timeout { host, timeout_ms } => {
                 write!(f, "Timeout after {}ms waiting for {}", timeout_ms, host)
@@ -223,7 +235,10 @@ impl HostState {
 
     /// Check if host is available for commands
     pub fn is_available(&self) -> bool {
-        matches!(self.health, HostHealth::Healthy | HostHealth::Degraded { .. } | HostHealth::Unknown)
+        matches!(
+            self.health,
+            HostHealth::Healthy | HostHealth::Degraded { .. } | HostHealth::Unknown
+        )
     }
 
     /// Record a successful command execution
@@ -411,7 +426,8 @@ impl RemoteAgent {
     /// Remove a host from the pool
     pub fn remove_host(&mut self, host: &str) -> Option<HostState> {
         // Try with default port if not specified
-        self.hosts.remove(host)
+        self.hosts
+            .remove(host)
             .or_else(|| self.hosts.remove(&format!("{}:22", host)))
     }
 
@@ -436,11 +452,19 @@ impl RemoteAgent {
     }
 
     /// Execute a command on a specific host (simulated for now)
-    pub fn execute_on_host(&mut self, host_key: &str, command: &str) -> RemoteResult<CommandResult> {
+    pub fn execute_on_host(
+        &mut self,
+        host_key: &str,
+        command: &str,
+    ) -> RemoteResult<CommandResult> {
         // Clone config to avoid borrow conflict
         let config = {
-            let state = self.hosts.get(host_key)
-                .ok_or_else(|| RemoteError::HostNotFound { host: host_key.to_string() })?;
+            let state = self
+                .hosts
+                .get(host_key)
+                .ok_or_else(|| RemoteError::HostNotFound {
+                    host: host_key.to_string(),
+                })?;
             state.config.clone()
         };
 
@@ -507,7 +531,8 @@ impl RemoteAgent {
 
     /// Execute a command on all available hosts
     pub fn execute_on_all(&mut self, command: &str) -> Vec<Result<CommandResult, RemoteError>> {
-        let host_keys: Vec<String> = self.available_hosts()
+        let host_keys: Vec<String> = self
+            .available_hosts()
             .map(|h| format!("{}:{}", h.config.host, h.config.port))
             .collect();
 
@@ -580,7 +605,9 @@ impl RemoteAgent {
         let stdout = &result.stdout;
 
         let host = self.extract_json_string(stdout, "host")?;
-        let arch = self.extract_json_string(stdout, "arch").unwrap_or_else(|| "unknown".to_string());
+        let arch = self
+            .extract_json_string(stdout, "arch")
+            .unwrap_or_else(|| "unknown".to_string());
         let throughput = self.extract_json_number(stdout, "throughput")?;
         let latency_p50 = self.extract_json_number(stdout, "latency_p50")?;
         let latency_p99 = self.extract_json_number(stdout, "latency_p99")?;
@@ -626,7 +653,11 @@ impl RemoteAgent {
     }
 
     /// Aggregate benchmark results based on strategy
-    fn aggregate_results(&self, benchmarks: &[HostBenchmark], failure_count: usize) -> (f64, f64, f64, usize, usize) {
+    fn aggregate_results(
+        &self,
+        benchmarks: &[HostBenchmark],
+        failure_count: usize,
+    ) -> (f64, f64, f64, usize, usize) {
         if benchmarks.is_empty() {
             return (0.0, 0.0, 0.0, 0, failure_count);
         }
@@ -634,46 +665,89 @@ impl RemoteAgent {
         match self.config.aggregation {
             AggregationStrategy::GeometricMean => {
                 // Geometric mean for throughput
-                let log_sum: f64 = benchmarks.iter()
-                    .map(|b| b.throughput_ops.ln())
-                    .sum();
+                let log_sum: f64 = benchmarks.iter().map(|b| b.throughput_ops.ln()).sum();
                 let throughput_geomean = (log_sum / benchmarks.len() as f64).exp();
 
                 // Arithmetic mean for latency p50
-                let latency_p50_mean = benchmarks.iter()
-                    .map(|b| b.latency_p50_us)
-                    .sum::<f64>() / benchmarks.len() as f64;
+                let latency_p50_mean = benchmarks.iter().map(|b| b.latency_p50_us).sum::<f64>()
+                    / benchmarks.len() as f64;
 
                 // Max for latency p99 (worst case)
-                let latency_p99_max = benchmarks.iter()
+                let latency_p99_max = benchmarks
+                    .iter()
                     .map(|b| b.latency_p99_us)
                     .fold(0.0_f64, |a, b| a.max(b));
 
-                (throughput_geomean, latency_p50_mean, latency_p99_max, benchmarks.len(), failure_count)
+                (
+                    throughput_geomean,
+                    latency_p50_mean,
+                    latency_p99_max,
+                    benchmarks.len(),
+                    failure_count,
+                )
             }
             AggregationStrategy::Median => {
-                let mut throughputs: Vec<f64> = benchmarks.iter().map(|b| b.throughput_ops).collect();
-                let mut latencies_p50: Vec<f64> = benchmarks.iter().map(|b| b.latency_p50_us).collect();
-                let mut latencies_p99: Vec<f64> = benchmarks.iter().map(|b| b.latency_p99_us).collect();
+                let mut throughputs: Vec<f64> =
+                    benchmarks.iter().map(|b| b.throughput_ops).collect();
+                let mut latencies_p50: Vec<f64> =
+                    benchmarks.iter().map(|b| b.latency_p50_us).collect();
+                let mut latencies_p99: Vec<f64> =
+                    benchmarks.iter().map(|b| b.latency_p99_us).collect();
 
                 throughputs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 latencies_p50.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 latencies_p99.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
                 let mid = benchmarks.len() / 2;
-                (throughputs[mid], latencies_p50[mid], latencies_p99[mid], benchmarks.len(), failure_count)
+                (
+                    throughputs[mid],
+                    latencies_p50[mid],
+                    latencies_p99[mid],
+                    benchmarks.len(),
+                    failure_count,
+                )
             }
             AggregationStrategy::Minimum => {
-                let throughput = benchmarks.iter().map(|b| b.throughput_ops).fold(f64::INFINITY, f64::min);
-                let latency_p50 = benchmarks.iter().map(|b| b.latency_p50_us).fold(f64::INFINITY, f64::min);
-                let latency_p99 = benchmarks.iter().map(|b| b.latency_p99_us).fold(f64::INFINITY, f64::min);
-                (throughput, latency_p50, latency_p99, benchmarks.len(), failure_count)
+                let throughput = benchmarks
+                    .iter()
+                    .map(|b| b.throughput_ops)
+                    .fold(f64::INFINITY, f64::min);
+                let latency_p50 = benchmarks
+                    .iter()
+                    .map(|b| b.latency_p50_us)
+                    .fold(f64::INFINITY, f64::min);
+                let latency_p99 = benchmarks
+                    .iter()
+                    .map(|b| b.latency_p99_us)
+                    .fold(f64::INFINITY, f64::min);
+                (
+                    throughput,
+                    latency_p50,
+                    latency_p99,
+                    benchmarks.len(),
+                    failure_count,
+                )
             }
             AggregationStrategy::Maximum => {
-                let throughput = benchmarks.iter().map(|b| b.throughput_ops).fold(0.0_f64, f64::max);
-                let latency_p50 = benchmarks.iter().map(|b| b.latency_p50_us).fold(0.0_f64, f64::max);
-                let latency_p99 = benchmarks.iter().map(|b| b.latency_p99_us).fold(0.0_f64, f64::max);
-                (throughput, latency_p50, latency_p99, benchmarks.len(), failure_count)
+                let throughput = benchmarks
+                    .iter()
+                    .map(|b| b.throughput_ops)
+                    .fold(0.0_f64, f64::max);
+                let latency_p50 = benchmarks
+                    .iter()
+                    .map(|b| b.latency_p50_us)
+                    .fold(0.0_f64, f64::max);
+                let latency_p99 = benchmarks
+                    .iter()
+                    .map(|b| b.latency_p99_us)
+                    .fold(0.0_f64, f64::max);
+                (
+                    throughput,
+                    latency_p50,
+                    latency_p99,
+                    benchmarks.len(),
+                    failure_count,
+                )
             }
         }
     }
@@ -698,14 +772,22 @@ impl RemoteAgent {
 
     /// Filter hosts by label
     pub fn hosts_with_label(&self, key: &str, value: &str) -> Vec<&HostState> {
-        self.hosts.values()
-            .filter(|h| h.config.labels.get(key).map(|v| v == value).unwrap_or(false))
+        self.hosts
+            .values()
+            .filter(|h| {
+                h.config
+                    .labels
+                    .get(key)
+                    .map(|v| v == value)
+                    .unwrap_or(false)
+            })
             .collect()
     }
 
     /// Filter hosts by architecture
     pub fn hosts_with_arch(&self, arch: &str) -> Vec<&HostState> {
-        self.hosts.values()
+        self.hosts
+            .values()
             .filter(|h| h.config.architecture.as_deref() == Some(arch))
             .collect()
     }
@@ -938,8 +1020,7 @@ mod tests {
             },
         ];
 
-        let (throughput, latency_p50, latency_p99, _, _) =
-            agent.aggregate_results(&benchmarks, 0);
+        let (throughput, latency_p50, latency_p99, _, _) = agent.aggregate_results(&benchmarks, 0);
 
         // Median of [100, 200, 300] is 200
         assert_eq!(throughput, 200.0);
@@ -978,8 +1059,7 @@ mod tests {
             },
         ];
 
-        let (throughput, latency_p50, latency_p99, _, _) =
-            agent.aggregate_results(&benchmarks, 0);
+        let (throughput, latency_p50, latency_p99, _, _) = agent.aggregate_results(&benchmarks, 0);
 
         assert_eq!(throughput, 100.0);
         assert_eq!(latency_p50, 50.0);
@@ -1074,13 +1154,25 @@ mod tests {
         let json = r#"{"host":"server1","arch":"x86_64","throughput":1000000,"latency_p50":50,"latency_p99":200,"memory":1073741824}"#;
 
         // Test string extraction
-        assert_eq!(agent.extract_json_string(json, "host"), Some("server1".to_string()));
-        assert_eq!(agent.extract_json_string(json, "arch"), Some("x86_64".to_string()));
+        assert_eq!(
+            agent.extract_json_string(json, "host"),
+            Some("server1".to_string())
+        );
+        assert_eq!(
+            agent.extract_json_string(json, "arch"),
+            Some("x86_64".to_string())
+        );
 
         // Test number extraction
-        assert_eq!(agent.extract_json_number(json, "throughput"), Some(1000000.0));
+        assert_eq!(
+            agent.extract_json_number(json, "throughput"),
+            Some(1000000.0)
+        );
         assert_eq!(agent.extract_json_number(json, "latency_p50"), Some(50.0));
-        assert_eq!(agent.extract_json_number(json, "memory"), Some(1073741824.0));
+        assert_eq!(
+            agent.extract_json_number(json, "memory"),
+            Some(1073741824.0)
+        );
     }
 
     #[test]
@@ -1120,7 +1212,9 @@ mod tests {
         assert_eq!(aggregated.host_results.len(), 3);
 
         // Verify different architectures are represented
-        let archs: Vec<&str> = aggregated.host_results.iter()
+        let archs: Vec<&str> = aggregated
+            .host_results
+            .iter()
             .map(|r| r.architecture.as_str())
             .collect();
         assert!(archs.contains(&"x86_64"));

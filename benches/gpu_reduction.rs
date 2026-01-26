@@ -52,9 +52,9 @@ fn bench_tiled_sum(c: &mut Criterion) {
 
     // Test sizes: 1M, 10M, 32M (Metal buffer binding limit is 128MB)
     let sizes: Vec<(usize, usize, &str)> = vec![
-        (1000, 1000, "1M"),      // 1M elements = 4MB
-        (3162, 3163, "10M"),     // ~10M elements = 40MB
-        (5657, 5657, "32M"),     // ~32M elements = 128MB (Metal limit)
+        (1000, 1000, "1M"),  // 1M elements = 4MB
+        (3162, 3163, "10M"), // ~10M elements = 40MB
+        (5657, 5657, "32M"), // ~32M elements = 128MB (Metal limit)
     ];
 
     for (width, height, label) in sizes.iter() {
@@ -103,11 +103,8 @@ fn bench_tiled_max(c: &mut Criterion) {
     let mut group = c.benchmark_group("tiled_max_reduction");
     group.sample_size(20);
 
-    let sizes: Vec<(usize, usize, &str)> = vec![
-        (1000, 1000, "1M"),
-        (3162, 3163, "10M"),
-        (5657, 5657, "32M"),
-    ];
+    let sizes: Vec<(usize, usize, &str)> =
+        vec![(1000, 1000, "1M"), (3162, 3163, "10M"), (5657, 5657, "32M")];
 
     for (width, height, label) in sizes.iter() {
         let total = width * height;
@@ -155,11 +152,8 @@ fn bench_tiled_min(c: &mut Criterion) {
     let mut group = c.benchmark_group("tiled_min_reduction");
     group.sample_size(20);
 
-    let sizes: Vec<(usize, usize, &str)> = vec![
-        (1000, 1000, "1M"),
-        (3162, 3163, "10M"),
-        (5657, 5657, "32M"),
-    ];
+    let sizes: Vec<(usize, usize, &str)> =
+        vec![(1000, 1000, "1M"), (3162, 3163, "10M"), (5657, 5657, "32M")];
 
     for (width, height, label) in sizes.iter() {
         let total = width * height;
@@ -197,10 +191,5 @@ fn bench_tiled_min(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_tiled_sum,
-    bench_tiled_max,
-    bench_tiled_min
-);
+criterion_group!(benches, bench_tiled_sum, bench_tiled_max, bench_tiled_min);
 criterion_main!(benches);

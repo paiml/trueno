@@ -37,7 +37,11 @@ fn main() {
         .address_size(64)
         .add_kernel(kernel.build_ptx())
         .emit();
-    println!("       PTX generated ({} bytes, {} lines)", ptx.len(), ptx.lines().count());
+    println!(
+        "       PTX generated ({} bytes, {} lines)",
+        ptx.len(),
+        ptx.lines().count()
+    );
 
     // Load module
     println!("[3/7] JIT compiling PTX...");
@@ -74,7 +78,10 @@ fn main() {
     let output_size = n as usize;
 
     println!("[5/7] Allocating buffers...");
-    println!("       Weights: {} bytes ({} super-blocks)", weights_size, n_super_blocks);
+    println!(
+        "       Weights: {} bytes ({} super-blocks)",
+        weights_size, n_super_blocks
+    );
     println!("       Input: {} floats", input_size);
     println!("       Output: {} floats", output_size);
 

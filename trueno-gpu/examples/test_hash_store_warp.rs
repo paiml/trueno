@@ -43,11 +43,13 @@ fn main() {
     }
 
     // Allocate output buffer for 3 results (one per warp)
-    let mut output_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 3)
-        .expect("Failed to allocate output buffer");
+    let mut output_buf: GpuBuffer<u32> =
+        GpuBuffer::new(&ctx, 3).expect("Failed to allocate output buffer");
 
     let init_val = [0xBAD_BADu32; 3];
-    output_buf.copy_from_host(&init_val).expect("Failed to init output");
+    output_buf
+        .copy_from_host(&init_val)
+        .expect("Failed to init output");
 
     let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("Failed to load PTX");
     println!("\nModule loaded successfully");
@@ -60,13 +62,12 @@ fn main() {
         shared_mem: 0,
     };
 
-    let mut args: [*mut c_void; 1] = [
-        output_buf.as_kernel_arg(),
-    ];
+    let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
     println!("Launching kernel (1 block, 96 threads = 3 warps)...");
     unsafe {
-        stream.launch_kernel(&mut module, "hash_store_warp_test", &config, &mut args)
+        stream
+            .launch_kernel(&mut module, "hash_store_warp_test", &config, &mut args)
             .expect("Kernel launch failed");
     }
 
@@ -75,18 +76,27 @@ fn main() {
 
     // Read results
     let mut results = [0u32; 3];
-    output_buf.copy_to_host(&mut results).expect("Failed to copy results");
+    output_buf
+        .copy_to_host(&mut results)
+        .expect("Failed to copy results");
 
     println!();
     println!("=== RESULTS ===");
     for (i, &result) in results.iter().enumerate() {
         let expected = 0xDEAD0000 + (i as u32 + 1) * 0x100;
-        println!("Warp {}: 0x{:08X} (expected 0x{:08X}) - {}",
-            i, result, expected,
-            if result == expected { "OK" } else { "MISMATCH" });
+        println!(
+            "Warp {}: 0x{:08X} (expected 0x{:08X}) - {}",
+            i,
+            result,
+            expected,
+            if result == expected { "OK" } else { "MISMATCH" }
+        );
     }
 
-    let all_ok = results.iter().enumerate().all(|(i, &r)| r == 0xDEAD0000 + (i as u32 + 1) * 0x100);
+    let all_ok = results
+        .iter()
+        .enumerate()
+        .all(|(i, &r)| r == 0xDEAD0000 + (i as u32 + 1) * 0x100);
     if all_ok {
         println!("\nSUCCESS: All warps stored and loaded correctly!");
     } else {
@@ -96,7 +106,8 @@ fn main() {
 
 #[cfg(feature = "cuda")]
 fn generate_warp_hash_store_ptx() -> String {
-    format!(r#".version 8.0
+    format!(
+        r#".version 8.0
 .target sm_89
 .address_size 64
 
@@ -167,9 +178,10 @@ L_done:
     ret;
 }}
 "#,
-    total_smem = WARP_SMEM_SIZE * NUM_WARPS,
-    warp_smem_size = WARP_SMEM_SIZE,
-    page_size = PAGE_SIZE)
+        total_smem = WARP_SMEM_SIZE * NUM_WARPS,
+        warp_smem_size = WARP_SMEM_SIZE,
+        page_size = PAGE_SIZE
+    )
 }
 
 #[cfg(not(feature = "cuda"))]

@@ -25,22 +25,20 @@
 //! - [Liker2004] Toyota Way principles (Genchi Genbutsu, Jidoka)
 //! - [LAMBDA-0002] Memory pressure levels specification
 
-mod device;
-mod memory;
 mod compute;
 mod data_flow;
-mod tui_layout;
+mod device;
+mod memory;
 mod stress_test;
+mod tui_layout;
 
-pub use device::*;
-pub use memory::*;
 pub use compute::*;
 pub use data_flow::*;
-pub use tui_layout::*;
+pub use device::*;
+pub use memory::*;
 pub use stress_test::*;
+pub use tui_layout::*;
 
 // Re-export legacy CUDA types for backwards compatibility
 mod cuda;
-pub use cuda::{
-    cuda_device_count, cuda_monitoring_available, CudaDeviceInfo, CudaMemoryInfo,
-};
+pub use cuda::{cuda_device_count, cuda_monitoring_available, CudaDeviceInfo, CudaMemoryInfo};

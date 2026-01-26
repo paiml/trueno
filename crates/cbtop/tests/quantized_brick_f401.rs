@@ -18,8 +18,8 @@
 //! | F410 | Statistics aggregation correct | test_f410_statistics_aggregation |
 
 use cbtop::{
-    DequantStrategy, GgufError, GgufLoader, QuantFormat, QuantStats, QuantizedBrick,
-    QuantizedWeights, ggml_type_to_format,
+    ggml_type_to_format, DequantStrategy, GgufError, GgufLoader, QuantFormat, QuantStats,
+    QuantizedBrick, QuantizedWeights,
 };
 
 /// F401: QuantizedBrick supports all required formats.
@@ -181,7 +181,9 @@ fn test_f404_dequant_strategies() {
     // Verify all strategies can be constructed
     let strategies = vec![
         DequantStrategy::Fused,
-        DequantStrategy::Prefetch { lookahead_blocks: 4 },
+        DequantStrategy::Prefetch {
+            lookahead_blocks: 4,
+        },
         DequantStrategy::OnDemand,
     ];
 

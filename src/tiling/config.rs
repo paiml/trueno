@@ -1,8 +1,8 @@
 //! Tiling configuration and backend selection.
 
-use serde::{Deserialize, Serialize};
-use super::geometry::TcbGeometry;
 use super::error::TilingError;
+use super::geometry::TcbGeometry;
+use serde::{Deserialize, Serialize};
 
 /// Complete tiling configuration for a kernel
 ///

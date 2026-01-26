@@ -139,9 +139,9 @@ fn test_f131_roofline_at_peak() {
         (128, 1, 1),
         (256, 1, 1),
         8192,
-        100_000,    // 100µs
-        100.0,      // AI = 100 FLOPs/byte (compute bound)
-        10.0,       // 10 TFLOPS achieved
+        100_000, // 100µs
+        100.0,   // AI = 100 FLOPs/byte (compute bound)
+        10.0,    // 10 TFLOPS achieved
     );
 
     // Peak = 10 TFLOPS, bandwidth = 1000 GB/s
@@ -149,7 +149,10 @@ fn test_f131_roofline_at_peak() {
 
     // Should be at or near zero distance (achieving peak)
     for &dist in distances.values() {
-        assert!(dist <= 0.1, "F131: Roofline distance should be near 0 at peak");
+        assert!(
+            dist <= 0.1,
+            "F131: Roofline distance should be near 0 at peak"
+        );
     }
 }
 
@@ -165,9 +168,9 @@ fn test_f132_roofline_underperforming() {
         (32, 1, 1),
         (64, 1, 1),
         1024,
-        100_000,    // 100µs
-        100.0,      // AI = 100 (compute bound)
-        1.0,        // Only 1 TFLOPS (10% of peak)
+        100_000, // 100µs
+        100.0,   // AI = 100 (compute bound)
+        1.0,     // Only 1 TFLOPS (10% of peak)
     );
 
     // Peak = 10 TFLOPS
@@ -175,7 +178,10 @@ fn test_f132_roofline_underperforming() {
 
     // Distance should be high (0.9 = 90% from optimal)
     for &dist in distances.values() {
-        assert!(dist >= 0.8, "F132: Roofline distance should be high for underperforming kernel");
+        assert!(
+            dist >= 0.8,
+            "F132: Roofline distance should be high for underperforming kernel"
+        );
     }
 }
 
@@ -230,7 +236,10 @@ fn test_f134_no_false_positive_ping_pong() {
 
     let patterns = graph.detect_ping_pong();
 
-    assert!(patterns.is_empty(), "F134: Should not detect ping-pong for different sizes");
+    assert!(
+        patterns.is_empty(),
+        "F134: Should not detect ping-pong for different sizes"
+    );
 }
 
 /// F135: Critical path summary includes all critical nodes
@@ -258,9 +267,18 @@ fn test_f135_critical_path_summary() {
     let summary = graph.critical_path_summary();
 
     // Summary should mention both bricks
-    assert!(summary.contains("RmsNorm"), "F135: Summary should include RmsNorm");
-    assert!(summary.contains("QkvProjection"), "F135: Summary should include QkvProjection");
-    assert!(summary.contains("ms"), "F135: Summary should include timing in ms");
+    assert!(
+        summary.contains("RmsNorm"),
+        "F135: Summary should include RmsNorm"
+    );
+    assert!(
+        summary.contains("QkvProjection"),
+        "F135: Summary should include QkvProjection"
+    );
+    assert!(
+        summary.contains("ms"),
+        "F135: Summary should include timing in ms"
+    );
 }
 
 // ========================
@@ -406,9 +424,9 @@ fn test_f138_roofline_anomaly_detection() {
         (128, 1, 1),
         (256, 1, 1),
         8192,
-        100_000,     // 100µs
-        50.0,        // AI = 50 FLOPs/byte
-        1000.0,      // 1000 TFLOPS - impossible!
+        100_000, // 100µs
+        50.0,    // AI = 50 FLOPs/byte
+        1000.0,  // 1000 TFLOPS - impossible!
     );
 
     // Distance should be negative (or clamped) since achieved > peak
@@ -483,7 +501,11 @@ fn test_f140_transfer_metadata_preservation() {
         assert_eq!(src, "src_buffer", "F140: Source buffer mismatch");
         assert_eq!(dst, "dst_buffer", "F140: Dest buffer mismatch");
         assert_eq!(*bytes, 4 * 1024 * 1024, "F140: Bytes mismatch");
-        assert_eq!(*direction, TransferDirection::H2D, "F140: Direction mismatch");
+        assert_eq!(
+            *direction,
+            TransferDirection::H2D,
+            "F140: Direction mismatch"
+        );
         assert_eq!(*timing_ns, Some(25_000), "F140: Timing mismatch");
     } else {
         panic!("F140: Expected Transfer node");
@@ -498,7 +520,11 @@ fn test_f140_transfer_metadata_preservation() {
 #[test]
 fn test_c001_compute_assertion_equiv() {
     let assertion = ComputeAssertion::equiv(Backend::Scalar);
-    if let ComputeAssertion::Equivalence { baseline, tolerance } = assertion {
+    if let ComputeAssertion::Equivalence {
+        baseline,
+        tolerance,
+    } = assertion
+    {
         assert_eq!(baseline, Backend::Scalar);
         assert!((tolerance - 1e-5).abs() < 1e-10);
     } else {
@@ -509,8 +535,7 @@ fn test_c001_compute_assertion_equiv() {
 /// C002: assert_equiv builder method
 #[test]
 fn test_c002_compute_brick_assert_equiv() {
-    let brick = ComputeBrick::new(AddOp::new(4))
-        .assert_equiv(Backend::Scalar);
+    let brick = ComputeBrick::new(AddOp::new(4)).assert_equiv(Backend::Scalar);
     // Verify assertion was added
     assert!(!brick.assertions.is_empty());
 }
@@ -921,7 +946,9 @@ fn test_c025_record_kernel_with_parent() {
     graph.pop_scope();
 
     // Should have Launches edge from brick to kernel
-    let edges: Vec<_> = graph.edges().iter()
+    let edges: Vec<_> = graph
+        .edges()
+        .iter()
         .filter(|e| e.dst == kernel_id && matches!(e.edge_type, EdgeType::Launches))
         .collect();
     assert_eq!(edges.len(), 1, "Should have Launches edge");
@@ -936,18 +963,15 @@ fn test_c026_record_transfer_with_parent() {
     let _layer = graph.push_scope(ExecutionNode::Layer { index: 0 });
 
     // Record transfer within scope
-    let transfer_id = graph.record_transfer(
-        "host",
-        "device",
-        1024,
-        TransferDirection::H2D,
-        Some(100),
-    );
+    let transfer_id =
+        graph.record_transfer("host", "device", 1024, TransferDirection::H2D, Some(100));
 
     graph.pop_scope();
 
     // Should have Contains edge from layer to transfer
-    let edges: Vec<_> = graph.edges().iter()
+    let edges: Vec<_> = graph
+        .edges()
+        .iter()
         .filter(|e| e.dst == transfer_id && matches!(e.edge_type, EdgeType::Contains))
         .collect();
     assert_eq!(edges.len(), 1, "Should have Contains edge");
@@ -1039,7 +1063,10 @@ fn test_c030_to_dot_function_and_transfer() {
     assert!(dot.contains("digraph"), "Should be valid digraph");
     assert!(dot.contains("my_function"), "Should contain function name");
     assert!(dot.contains("src/main.rs:42"), "Should contain file:line");
-    assert!(dot.contains("anonymous"), "Should contain anonymous function");
+    assert!(
+        dot.contains("anonymous"),
+        "Should contain anonymous function"
+    );
     assert!(dot.contains("H2D"), "Should contain H2D transfer");
     assert!(dot.contains("D2D"), "Should contain D2D transfer");
     assert!(dot.contains("lightsalmon"), "Transfer should have color");

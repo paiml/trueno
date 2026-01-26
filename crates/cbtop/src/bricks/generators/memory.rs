@@ -1,7 +1,7 @@
 //! Memory bandwidth stress generator
 
-use std::any::Any;
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 pub struct MemBandwidthBrick {
     is_running: bool,

@@ -9,8 +9,8 @@
 //! - Export/import functionality
 
 use cbtop::{
-    GoldenTrace, GoldenTraceManager, GoldenComparator, GoldenTraceError,
-    TraceMetrics, TraceSyscallBreakdown as SyscallBreakdown,
+    GoldenComparator, GoldenTrace, GoldenTraceError, GoldenTraceManager, TraceMetrics,
+    TraceSyscallBreakdown as SyscallBreakdown,
 };
 use tempfile::TempDir;
 
@@ -52,9 +52,7 @@ fn f1211_capture_with_syscalls() {
         other_count: 15,
     };
 
-    let metrics = TraceMetrics::new()
-        .total_time_us(1000.0)
-        .syscalls(syscalls);
+    let metrics = TraceMetrics::new().total_time_us(1000.0).syscalls(syscalls);
 
     let trace = GoldenTrace::new("syscall_test", metrics);
 
@@ -80,8 +78,8 @@ fn f1212_delta_calculation() {
 
     let current = TraceMetrics::new()
         .total_time_us(1100.0) // 10% slower
-        .p50_latency_us(55.0)  // 10% slower
-        .throughput(9000.0);   // 10% lower
+        .p50_latency_us(55.0) // 10% slower
+        .throughput(9000.0); // 10% lower
 
     let comparator = GoldenComparator::new();
     let result = comparator.compare(&current, &golden).unwrap();
@@ -97,14 +95,10 @@ fn f1212_delta_calculation() {
 fn f1212_zero_baseline() {
     let golden = GoldenTrace::new(
         "zero_baseline",
-        TraceMetrics::new()
-            .total_time_us(0.0)
-            .throughput(0.0),
+        TraceMetrics::new().total_time_us(0.0).throughput(0.0),
     );
 
-    let current = TraceMetrics::new()
-        .total_time_us(100.0)
-        .throughput(1000.0);
+    let current = TraceMetrics::new().total_time_us(100.0).throughput(1000.0);
 
     let comparator = GoldenComparator::new();
     let result = comparator.compare(&current, &golden).unwrap();
@@ -167,10 +161,7 @@ fn f1213_no_regression_below_threshold() {
 /// F1213.3: Custom threshold works
 #[test]
 fn f1213_custom_threshold() {
-    let golden = GoldenTrace::new(
-        "baseline",
-        TraceMetrics::new().total_time_us(1000.0),
-    );
+    let golden = GoldenTrace::new("baseline", TraceMetrics::new().total_time_us(1000.0));
 
     let current = TraceMetrics::new().total_time_us(1060.0); // 6% slower
 
@@ -204,8 +195,7 @@ fn f1214_version_stored() {
 /// F1214.2: Git commit stored
 #[test]
 fn f1214_git_commit_stored() {
-    let trace = GoldenTrace::new("git_test", TraceMetrics::new())
-        .git_commit("abc123def456");
+    let trace = GoldenTrace::new("git_test", TraceMetrics::new()).git_commit("abc123def456");
 
     assert_eq!(trace.git_commit, Some("abc123def456".to_string()));
 }
@@ -253,11 +243,11 @@ fn f1216_syscall_diff() {
     };
 
     let current = SyscallBreakdown {
-        read_count: 120,  // 20% increase
-        write_count: 50,  // unchanged
-        mmap_count: 15,   // 50% increase
-        futex_count: 22,  // 10% increase
-        other_count: 5,   // unchanged
+        read_count: 120, // 20% increase
+        write_count: 50, // unchanged
+        mmap_count: 15,  // 50% increase
+        futex_count: 22, // 10% increase
+        other_count: 5,  // unchanged
     };
 
     let delta = current.percentage_diff(&baseline);
@@ -282,7 +272,7 @@ fn f1216_max_delta() {
     let current = SyscallBreakdown {
         read_count: 100,
         write_count: 100,
-        mmap_count: 200,  // 100% increase - max delta
+        mmap_count: 200, // 100% increase - max delta
         futex_count: 100,
         other_count: 100,
     };
@@ -357,9 +347,15 @@ fn f1219_multiple_goldens() {
     let mut manager = GoldenTraceManager::new(temp_dir.path().to_path_buf());
 
     // Save multiple goldens
-    manager.capture_golden("v1", TraceMetrics::new().total_time_us(1000.0)).unwrap();
-    manager.capture_golden("v2", TraceMetrics::new().total_time_us(900.0)).unwrap();
-    manager.capture_golden("v3", TraceMetrics::new().total_time_us(800.0)).unwrap();
+    manager
+        .capture_golden("v1", TraceMetrics::new().total_time_us(1000.0))
+        .unwrap();
+    manager
+        .capture_golden("v2", TraceMetrics::new().total_time_us(900.0))
+        .unwrap();
+    manager
+        .capture_golden("v3", TraceMetrics::new().total_time_us(800.0))
+        .unwrap();
 
     let names = manager.list_goldens().unwrap();
     assert_eq!(names.len(), 3);
@@ -371,8 +367,12 @@ fn f1219_version_selection() {
     let temp_dir = TempDir::new().unwrap();
     let mut manager = GoldenTraceManager::new(temp_dir.path().to_path_buf());
 
-    manager.capture_golden("release_1_0", TraceMetrics::new().total_time_us(1000.0)).unwrap();
-    manager.capture_golden("release_2_0", TraceMetrics::new().total_time_us(800.0)).unwrap();
+    manager
+        .capture_golden("release_1_0", TraceMetrics::new().total_time_us(1000.0))
+        .unwrap();
+    manager
+        .capture_golden("release_2_0", TraceMetrics::new().total_time_us(800.0))
+        .unwrap();
 
     // Can load specific version
     let v1 = manager.load_golden("release_1_0").unwrap();
@@ -423,7 +423,9 @@ fn f1220_export_to_file() {
     let temp_dir = TempDir::new().unwrap();
     let mut manager = GoldenTraceManager::new(temp_dir.path().join("goldens"));
 
-    manager.capture_golden("exportable", TraceMetrics::new().total_time_us(1000.0)).unwrap();
+    manager
+        .capture_golden("exportable", TraceMetrics::new().total_time_us(1000.0))
+        .unwrap();
 
     // Export to different location
     let export_path = temp_dir.path().join("exported.toml");
@@ -445,7 +447,9 @@ fn test_trace_deletion() {
     let temp_dir = TempDir::new().unwrap();
     let mut manager = GoldenTraceManager::new(temp_dir.path().to_path_buf());
 
-    manager.capture_golden("deletable", TraceMetrics::new()).unwrap();
+    manager
+        .capture_golden("deletable", TraceMetrics::new())
+        .unwrap();
     assert!(manager.golden_exists("deletable"));
 
     manager.delete_golden("deletable").unwrap();
@@ -455,10 +459,7 @@ fn test_trace_deletion() {
 /// Test regression summary message
 #[test]
 fn test_regression_summary() {
-    let golden = GoldenTrace::new(
-        "baseline",
-        TraceMetrics::new().total_time_us(1000.0),
-    );
+    let golden = GoldenTrace::new("baseline", TraceMetrics::new().total_time_us(1000.0));
 
     let current = TraceMetrics::new().total_time_us(1500.0); // 50% regression
 
@@ -482,8 +483,8 @@ fn test_regressions_list() {
 
     let current = TraceMetrics::new()
         .total_time_us(1200.0) // 20% regression
-        .p50_latency_us(65.0)  // 30% regression
-        .throughput(7000.0);   // 30% regression
+        .p50_latency_us(65.0) // 30% regression
+        .throughput(7000.0); // 30% regression
 
     let comparator = GoldenComparator::new().with_threshold(10.0);
     let result = comparator.compare(&current, &golden).unwrap();

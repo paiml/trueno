@@ -297,13 +297,18 @@ fn test_matmul_2x2_correctness() {
     println!("Expected: {:?}", expected);
     println!("GPU result: {:?}", result);
 
-    let max_diff: f32 = result.iter()
+    let max_diff: f32 = result
+        .iter()
         .zip(expected.iter())
         .map(|(a, b)| (a - b).abs())
         .fold(0.0f32, f32::max);
 
     println!("Max diff: {}", max_diff);
-    assert!(max_diff < 0.01, "Matmul 2x2 failed: max diff {} > 0.01", max_diff);
+    assert!(
+        max_diff < 0.01,
+        "Matmul 2x2 failed: max diff {} > 0.01",
+        max_diff
+    );
     println!("✓ Matmul 2x2 PASSED!");
 }
 
@@ -343,7 +348,9 @@ fn test_attention_steps_individually() {
     // Expected scores: [1.0, 0.0, 0.0, 1.0]
     // Note: We need to manually do transpose + matmul to test
     // For now, test Q @ K (not transposed) which should give same result for identity matrix
-    let mut scores = q.matmul(&ctx, &k, seq_len, seq_len, d_model).expect("Q@K failed");
+    let mut scores = q
+        .matmul(&ctx, &k, seq_len, seq_len, d_model)
+        .expect("Q@K failed");
     let scores_host = scores.to_host().expect("download scores");
     println!("Step 1 - Q @ K (should be identity): {:?}", scores_host);
 
@@ -351,7 +358,9 @@ fn test_attention_steps_individually() {
     let scale = 1.0 / (d_model as f32).sqrt(); // 1/sqrt(2) = 0.707
     let q2 = GpuResidentTensor::from_host(&ctx, &q_data).expect("upload Q2");
     let k2 = GpuResidentTensor::from_host(&ctx, &k_data).expect("upload K2");
-    let mut scores2 = q2.matmul(&ctx, &k2, seq_len, seq_len, d_model).expect("Q@K");
+    let mut scores2 = q2
+        .matmul(&ctx, &k2, seq_len, seq_len, d_model)
+        .expect("Q@K");
     let scaled = scores2.scale(&ctx, scale).expect("scale failed");
     let mut scaled_mut = scaled;
     let scaled_host = scaled_mut.to_host().expect("download scaled");
@@ -360,7 +369,9 @@ fn test_attention_steps_individually() {
     // Step 4: Softmax
     let q3 = GpuResidentTensor::from_host(&ctx, &q_data).expect("upload Q3");
     let k3 = GpuResidentTensor::from_host(&ctx, &k_data).expect("upload K3");
-    let mut scores3 = q3.matmul(&ctx, &k3, seq_len, seq_len, d_model).expect("Q@K");
+    let mut scores3 = q3
+        .matmul(&ctx, &k3, seq_len, seq_len, d_model)
+        .expect("Q@K");
     let scaled3 = scores3.scale(&ctx, scale).expect("scale");
     let softmax_result = scaled3.softmax(&ctx, seq_len).expect("softmax failed");
     let mut softmax_mut = softmax_result;
@@ -376,10 +387,14 @@ fn test_attention_steps_individually() {
     let q4 = GpuResidentTensor::from_host(&ctx, &q_data).expect("Q4");
     let k4 = GpuResidentTensor::from_host(&ctx, &k_data).expect("K4");
     let v4 = GpuResidentTensor::from_host(&ctx, &v_data).expect("V4");
-    let mut scores4 = q4.matmul(&ctx, &k4, seq_len, seq_len, d_model).expect("Q@K");
+    let mut scores4 = q4
+        .matmul(&ctx, &k4, seq_len, seq_len, d_model)
+        .expect("Q@K");
     let scaled4 = scores4.scale(&ctx, scale).expect("scale");
     let attn4 = scaled4.softmax(&ctx, seq_len).expect("softmax");
-    let mut output4 = attn4.matmul(&ctx, &v4, seq_len, d_model, seq_len).expect("attn@V failed");
+    let mut output4 = attn4
+        .matmul(&ctx, &v4, seq_len, d_model, seq_len)
+        .expect("attn@V failed");
     let output_host = output4.to_host().expect("download output");
     println!("Step 4 - Output (attn @ V): {:?}", output_host);
 
@@ -471,7 +486,8 @@ fn test_batched_attention_correctness() {
     let mut expected = vec![0.0f32; 4];
     for i in 0..2 {
         for j in 0..2 {
-            expected[i * 2 + j] = attn_weights[i * 2] * v_data[j] + attn_weights[i * 2 + 1] * v_data[2 + j];
+            expected[i * 2 + j] =
+                attn_weights[i * 2] * v_data[j] + attn_weights[i * 2 + 1] * v_data[2 + j];
         }
     }
 
@@ -480,7 +496,7 @@ fn test_batched_attention_correctness() {
     println!("K: {:?}", k_data);
     println!("V: {:?}", v_data);
     println!("Scores (Q@K^T): {:?}", scores);
-    println!("Scaled (/{:.3}): {:?}", 1.0/scale, scaled);
+    println!("Scaled (/{:.3}): {:?}", 1.0 / scale, scaled);
     println!("Attn weights: {:?}", attn_weights);
     println!("Expected output: {:?}", expected);
 
@@ -496,14 +512,19 @@ fn test_batched_attention_correctness() {
     println!("GPU output: {:?}", result);
 
     // Check numerical accuracy
-    let max_diff: f32 = result.iter()
+    let max_diff: f32 = result
+        .iter()
         .zip(expected.iter())
         .map(|(a, b)| (a - b).abs())
         .fold(0.0f32, f32::max);
 
     println!("Max diff: {}", max_diff);
 
-    assert!(max_diff < 0.01, "Max diff: {} exceeds tolerance 0.01", max_diff);
+    assert!(
+        max_diff < 0.01,
+        "Max diff: {} exceeds tolerance 0.01",
+        max_diff
+    );
     println!("✓ Correctness test PASSED!");
 }
 
@@ -705,7 +726,10 @@ fn test_debug_isolate_crash() {
     println!("  ✓ Upload succeeded");
 
     // Test 2: TransposeKernel
-    println!("Step 2: TransposeKernel [{}x{}] -> [{}x{}]...", rows, cols, cols, rows);
+    println!(
+        "Step 2: TransposeKernel [{}x{}] -> [{}x{}]...",
+        rows, cols, cols, rows
+    );
     let output_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total).expect("Alloc failed");
 
     let transpose = TransposeKernel::new(rows, cols);
@@ -724,7 +748,10 @@ fn test_debug_isolate_crash() {
         block: (threads, 1, 1),
         shared_mem: 0,
     };
-    println!("  Launch config: grid=({}, 1, 1), block=({}, 1, 1)", blocks, threads);
+    println!(
+        "  Launch config: grid=({}, 1, 1), block=({}, 1, 1)",
+        blocks, threads
+    );
 
     let input_ptr = input_buf.as_ptr();
     let output_ptr = output_buf.as_ptr();
@@ -759,16 +786,22 @@ fn test_debug_isolate_crash() {
     // Test 3: Read back result
     println!("Step 3: Verify transpose result...");
     let mut result = vec![0.0f32; total];
-    output_buf.copy_to_host(&mut result).expect("Readback failed");
+    output_buf
+        .copy_to_host(&mut result)
+        .expect("Readback failed");
 
     // Check a few values: input[0,0] should be at output[0,0]
     // input[0,1] (index 1) should be at output[1,0] (index rows = 4)
     let expected_0_0 = input_data[0]; // input[0,0]
     let expected_1_0 = input_data[1]; // input[0,1] -> output[1,0]
-    println!("  input[0,0]={:.1} -> output[0,0]={:.1} (expected {:.1})",
-             input_data[0], result[0], expected_0_0);
-    println!("  input[0,1]={:.1} -> output[1,0]={:.1} (expected {:.1})",
-             input_data[1], result[rows as usize], expected_1_0);
+    println!(
+        "  input[0,0]={:.1} -> output[0,0]={:.1} (expected {:.1})",
+        input_data[0], result[0], expected_0_0
+    );
+    println!(
+        "  input[0,1]={:.1} -> output[1,0]={:.1} (expected {:.1})",
+        input_data[1], result[rows as usize], expected_1_0
+    );
 
     // Test 4: GemmKernel
     println!("Step 4: GemmKernel [4x16] @ [16x4] = [4x4]...");
@@ -794,9 +827,12 @@ fn test_debug_isolate_crash() {
         block: (block_size, block_size, 1),
         shared_mem: 0,
     };
-    println!("  Launch config: grid=({}, {}, 1), block=({}, {}, 1)", grid_x, grid_y, block_size, block_size);
+    println!(
+        "  Launch config: grid=({}, {}, 1), block=({}, {}, 1)",
+        grid_x, grid_y, block_size, block_size
+    );
 
-    let a_ptr = input_buf.as_ptr();  // [4,16]
+    let a_ptr = input_buf.as_ptr(); // [4,16]
     let b_ptr = output_buf.as_ptr(); // [16,4] (transposed)
     let c_ptr = c_buf.as_ptr();
     let m_val = m;
@@ -840,7 +876,8 @@ fn test_debug_isolate_crash() {
     use trueno_gpu::kernels::ScaleKernel;
 
     let scale_in_size = (m * n) as usize; // 16 elements
-    let scale_out_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, scale_in_size).expect("Alloc scale out");
+    let scale_out_buf: GpuBuffer<f32> =
+        GpuBuffer::new(&ctx, scale_in_size).expect("Alloc scale out");
 
     let scale_kernel = ScaleKernel::new(scale_in_size as u32);
     let ptx = scale_kernel.emit_ptx();
@@ -909,8 +946,10 @@ fn test_debug_isolate_crash() {
         block: (threads_per_block, 1, 1),
         shared_mem: (sm_row_size as usize * std::mem::size_of::<f32>()) as u32,
     };
-    println!("  Launch config: grid=({}, 1, 1), block=({}, 1, 1), smem={}",
-             sm_rows, threads_per_block, config.shared_mem);
+    println!(
+        "  Launch config: grid=({}, 1, 1), block=({}, 1, 1), smem={}",
+        sm_rows, threads_per_block, config.shared_mem
+    );
 
     let sm_input_ptr = scale_out_buf.as_ptr();
     let sm_output_ptr = sm_out_buf.as_ptr();
@@ -961,7 +1000,9 @@ fn test_gpu_operations_individually() {
     // Test data
     let d = 4u32; // small dimension for testing
     let data: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0];
-    let weights: Vec<f32> = vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0];
+    let weights: Vec<f32> = vec![
+        1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,
+    ];
     let bias: Vec<f32> = vec![0.1, 0.2, 0.3, 0.4];
     let gamma: Vec<f32> = vec![1.0, 1.0, 1.0, 1.0];
     let beta: Vec<f32> = vec![0.0, 0.0, 0.0, 0.0];
@@ -1070,7 +1111,9 @@ fn test_full_encoder_block_gpu() {
     let b_proj: Vec<f32> = (0..d_model).map(|_| 0.0).collect();
     let ffn_up_w: Vec<f32> = (0..ffn_up_size).map(|i| (i as f32 * 0.001).sin()).collect();
     let ffn_up_b: Vec<f32> = (0..ffn_dim).map(|_| 0.0).collect();
-    let ffn_down_w: Vec<f32> = (0..ffn_down_size).map(|i| (i as f32 * 0.001).sin()).collect();
+    let ffn_down_w: Vec<f32> = (0..ffn_down_size)
+        .map(|i| (i as f32 * 0.001).sin())
+        .collect();
     let ffn_down_b: Vec<f32> = (0..d_model).map(|_| 0.0).collect();
 
     // Upload weights (this counts as H2D transfers during initialization)
@@ -1112,8 +1155,8 @@ fn test_full_encoder_block_gpu() {
     println!("Input upload: {} H2D transfers", h2d_after_input);
 
     // Run forward pass (should have 0 additional transfers during computation)
-    let mut output = forward_encoder_block_gpu(&ctx, &input, &weights, &config)
-        .expect("forward pass failed");
+    let mut output =
+        forward_encoder_block_gpu(&ctx, &input, &weights, &config).expect("forward pass failed");
 
     let h2d_after_forward = total_h2d_transfers();
     let d2h_after_forward = total_d2h_transfers();
@@ -1180,7 +1223,10 @@ fn test_long_row_softmax_correctness() {
     let row_size = 64;
     let total_size = n_rows * row_size;
 
-    println!("Testing softmax with {} rows x {} elements...", n_rows, row_size);
+    println!(
+        "Testing softmax with {} rows x {} elements...",
+        n_rows, row_size
+    );
 
     // Create simple input data
     let input_data: Vec<f32> = (0..total_size)
@@ -1201,7 +1247,10 @@ fn test_long_row_softmax_correctness() {
     println!("Result downloaded, len={}", result.len());
 
     println!("Output first row (first 8): {:?}", &result[0..8]);
-    println!("Output first row (last 4):  {:?}", &result[row_size-4..row_size]);
+    println!(
+        "Output first row (last 4):  {:?}",
+        &result[row_size - 4..row_size]
+    );
 
     // FULL SOFTMAX TEST: Verify row sums to 1.0 and values match expected
     for row in 0..n_rows {
@@ -1219,9 +1268,15 @@ fn test_long_row_softmax_correctness() {
         // Check row sums to 1.0
         let row_sum: f32 = row_output.iter().sum();
         let sum_diff = (row_sum - 1.0).abs();
-        println!("Row {}: sum = {:.6} (diff from 1.0: {:.6})", row, row_sum, sum_diff);
+        println!(
+            "Row {}: sum = {:.6} (diff from 1.0: {:.6})",
+            row, row_sum, sum_diff
+        );
         if sum_diff > 0.01 {
-            panic!("Row {}: sum={:.6} does not equal 1.0 (diff={:.6})", row, row_sum, sum_diff);
+            panic!(
+                "Row {}: sum={:.6} does not equal 1.0 (diff={:.6})",
+                row, row_sum, sum_diff
+            );
         }
 
         // Check individual values
@@ -1256,7 +1311,9 @@ fn test_long_row_softmax_correctness() {
         .collect();
 
     let input_gpu = GpuResidentTensor::from_host(&ctx, &input_large).expect("upload");
-    let mut output_gpu = input_gpu.softmax(&ctx, n_rows_large as u32).expect("softmax");
+    let mut output_gpu = input_gpu
+        .softmax(&ctx, n_rows_large as u32)
+        .expect("softmax");
     let result_large = output_gpu.to_host().expect("download");
 
     for row in 0..n_rows_large {
@@ -1265,7 +1322,10 @@ fn test_long_row_softmax_correctness() {
         let row_output = &result_large[start..end];
         let row_sum: f32 = row_output.iter().sum();
         let sum_diff = (row_sum - 1.0).abs();
-        println!("Row {}: sum = {:.6} (diff from 1.0: {:.6})", row, row_sum, sum_diff);
+        println!(
+            "Row {}: sum = {:.6} (diff from 1.0: {:.6})",
+            row, row_sum, sum_diff
+        );
         if sum_diff > 0.01 {
             panic!("Row {}: sum={:.6} does not equal 1.0", row, row_sum);
         }

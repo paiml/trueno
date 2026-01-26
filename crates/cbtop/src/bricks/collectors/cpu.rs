@@ -2,11 +2,11 @@
 //!
 //! Collects CPU usage from /proc/stat (Genchi Genbutsu: real data)
 
-use std::any::Any;
-use std::time::{Duration, Instant};
-use std::fs::read_to_string;
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use crate::ring_buffer::RingBuffer;
+use std::any::Any;
+use std::fs::read_to_string;
+use std::time::{Duration, Instant};
 
 /// CPU metrics
 #[derive(Debug, Clone)]
@@ -65,7 +65,14 @@ struct CpuTimes {
 
 impl CpuTimes {
     fn total(&self) -> u64 {
-        self.user + self.nice + self.system + self.idle + self.iowait + self.irq + self.softirq + self.steal
+        self.user
+            + self.nice
+            + self.system
+            + self.idle
+            + self.iowait
+            + self.irq
+            + self.softirq
+            + self.steal
     }
 
     fn active(&self) -> u64 {
@@ -163,7 +170,7 @@ impl CpuCollectorBrick {
             total_usage,
             per_core_usage,
             frequency_mhz: vec![3000; self.core_count], // Fixed for now
-            temperature_c: Some(55.0), // Fixed for now
+            temperature_c: Some(55.0),                  // Fixed for now
         }
     }
 }
@@ -199,7 +206,10 @@ impl Brick for CpuCollectorBrick {
 
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
-            BrickAssertion::ValueInRange { min: 0.0, max: 100.0 },
+            BrickAssertion::ValueInRange {
+                min: 0.0,
+                max: 100.0,
+            },
             BrickAssertion::max_latency_ms(5),
         ]
     }

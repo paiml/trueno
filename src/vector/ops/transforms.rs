@@ -76,7 +76,10 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
+        Ok(Vector::from_slice_with_backend(
+            &result_data,
+            self.backend(),
+        ))
     }
 
     /// Clip values to a specified range [min_val, max_val]
@@ -198,14 +201,15 @@ impl Vector<f32> {
                         return Err(TruenoError::UnsupportedBackend(Backend::Auto));
                     }
                     #[allow(unreachable_patterns)]
-                    _ => {
-                        ScalarBackend::clamp(self.as_slice(), min_val, max_val, &mut result_data)
-                    }
+                    _ => ScalarBackend::clamp(self.as_slice(), min_val, max_val, &mut result_data),
                 }
             }
         }
 
-        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
+        Ok(Vector::from_slice_with_backend(
+            &result_data,
+            self.backend(),
+        ))
     }
 
     /// Linear interpolation between two vectors
@@ -289,7 +293,10 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
+        Ok(Vector::from_slice_with_backend(
+            &result_data,
+            self.backend(),
+        ))
     }
 
     /// Element-wise square root: result\[i\] = sqrt(self\[i\])
@@ -348,14 +355,20 @@ impl Vector<f32> {
                             dispatch_unary_op!(self.backend(), sqrt, chunk_in, chunk_out);
                         });
 
-                    return Ok(Vector::from_slice_with_backend(&result_data, self.backend()));
+                    return Ok(Vector::from_slice_with_backend(
+                        &result_data,
+                        self.backend(),
+                    ));
                 }
             }
 
             dispatch_unary_op!(self.backend(), sqrt, self.as_slice(), &mut result_data);
         }
 
-        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
+        Ok(Vector::from_slice_with_backend(
+            &result_data,
+            self.backend(),
+        ))
     }
 
     /// Element-wise reciprocal: result\[i\] = 1 / self\[i\]
@@ -401,7 +414,10 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend(), recip, self.as_slice(), &mut result_data);
         }
 
-        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
+        Ok(Vector::from_slice_with_backend(
+            &result_data,
+            self.backend(),
+        ))
     }
 
     /// Element-wise power: result\[i\] = base\[i\]^n

@@ -37,12 +37,14 @@ fn main() {
     }
 
     // Allocate output buffer for result
-    let mut output_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1)
-        .expect("Failed to allocate output buffer");
+    let mut output_buf: GpuBuffer<u32> =
+        GpuBuffer::new(&ctx, 1).expect("Failed to allocate output buffer");
 
     // Initialize to sentinel value
     let init_val = [0xBAD_BADu32];
-    output_buf.copy_from_host(&init_val).expect("Failed to init output");
+    output_buf
+        .copy_from_host(&init_val)
+        .expect("Failed to init output");
 
     let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("Failed to load PTX");
     println!("\nModule loaded successfully");
@@ -54,13 +56,12 @@ fn main() {
         shared_mem: 12288, // PAGE_SIZE + HASH_TABLE_SIZE
     };
 
-    let mut args: [*mut c_void; 1] = [
-        output_buf.as_kernel_arg(),
-    ];
+    let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
     println!("Launching kernel (1 block, 32 threads)...");
     unsafe {
-        stream.launch_kernel(&mut module, "hash_store_test", &config, &mut args)
+        stream
+            .launch_kernel(&mut module, "hash_store_test", &config, &mut args)
             .expect("Kernel launch failed");
     }
 
@@ -69,7 +70,9 @@ fn main() {
 
     // Read result
     let mut result = [0u32; 1];
-    output_buf.copy_to_host(&mut result).expect("Failed to copy result");
+    output_buf
+        .copy_to_host(&mut result)
+        .expect("Failed to copy result");
 
     println!();
     println!("=== RESULT ===");
@@ -144,7 +147,8 @@ fn generate_minimal_hash_store_ptx() -> String {
 L_done:
     ret;
 }
-"#.to_string()
+"#
+    .to_string()
 }
 
 #[cfg(not(feature = "cuda"))]

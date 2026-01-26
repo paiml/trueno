@@ -7,10 +7,9 @@
 //! Run with: cargo run --example model_tracing
 
 use trueno::brick::{
-    AttentionTraceConfig, AttentionWeightTrace, BrickId, KvCacheSessionTrace,
-    KvCacheStateTrace, LayerActivationTrace, LogitEvolutionTrace, ModelActivationTrace,
-    ModelQuantizationError, ModelTracer, ModelTracerConfig, QuantType,
-    QuantizationErrorTrace, TensorStats,
+    AttentionTraceConfig, AttentionWeightTrace, BrickId, KvCacheSessionTrace, KvCacheStateTrace,
+    LayerActivationTrace, LogitEvolutionTrace, ModelActivationTrace, ModelQuantizationError,
+    ModelTracer, ModelTracerConfig, QuantType, QuantizationErrorTrace, TensorStats,
 };
 
 fn main() {
@@ -46,25 +45,42 @@ fn demo_tensor_stats() {
     // Normal tensor
     let normal_data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
     let normal_stats = TensorStats::from_slice(&normal_data);
-    println!("Normal tensor: mean={:.2}, std={:.2}, L2={:.2}",
-             normal_stats.mean, normal_stats.std, normal_stats.l2_norm);
-    println!("  Anomaly: {}", if normal_stats.has_anomaly() { "YES" } else { "no" });
+    println!(
+        "Normal tensor: mean={:.2}, std={:.2}, L2={:.2}",
+        normal_stats.mean, normal_stats.std, normal_stats.l2_norm
+    );
+    println!(
+        "  Anomaly: {}",
+        if normal_stats.has_anomaly() {
+            "YES"
+        } else {
+            "no"
+        }
+    );
 
     // Tensor with NaN (bad!)
     let nan_data = vec![1.0, f32::NAN, 3.0, 4.0, 5.0];
     let nan_stats = TensorStats::from_slice(&nan_data);
     println!("NaN tensor: nan_count={}", nan_stats.nan_count);
-    println!("  Anomaly: {} - {}",
-             if nan_stats.has_anomaly() { "YES" } else { "no" },
-             nan_stats.anomaly_description().unwrap_or_default());
+    println!(
+        "  Anomaly: {} - {}",
+        if nan_stats.has_anomaly() { "YES" } else { "no" },
+        nan_stats.anomaly_description().unwrap_or_default()
+    );
 
     // Exploding tensor (bad!)
     let explode_data = vec![1.0, 2.0, 1e7, 4.0, 5.0];
     let explode_stats = TensorStats::from_slice(&explode_data);
     println!("Exploding tensor: max={:.2e}", explode_stats.max);
-    println!("  Anomaly: {} - {}",
-             if explode_stats.has_anomaly() { "YES" } else { "no" },
-             explode_stats.anomaly_description().unwrap_or_default());
+    println!(
+        "  Anomaly: {} - {}",
+        if explode_stats.has_anomaly() {
+            "YES"
+        } else {
+            "no"
+        },
+        explode_stats.anomaly_description().unwrap_or_default()
+    );
 
     println!();
 }
@@ -87,14 +103,19 @@ fn demo_layer_activation_trace() {
         layer.output_stats = TensorStats::from_slice(&vec![scale * 1.3; 100]);
         layer.residual_ratio = 0.85;
 
-        println!("Layer {}: input_mean={:.2}, output_mean={:.2}, residual={:.2}",
-                 layer_idx, layer.input_stats.mean, layer.output_stats.mean, layer.residual_ratio);
+        println!(
+            "Layer {}: input_mean={:.2}, output_mean={:.2}, residual={:.2}",
+            layer_idx, layer.input_stats.mean, layer.output_stats.mean, layer.residual_ratio
+        );
 
         model_trace.add_layer(layer);
     }
 
     model_trace.finalize();
-    println!("Model anomaly: {}", if model_trace.has_anomaly { "YES" } else { "no" });
+    println!(
+        "Model anomaly: {}",
+        if model_trace.has_anomaly { "YES" } else { "no" }
+    );
     println!();
 }
 
@@ -102,19 +123,27 @@ fn demo_attention_trace() {
     println!("--- Demo 3: AttentionWeightTrace (MLT-02) ---");
 
     // Simulate attention weights for position 10 looking at positions 0-10
-    let weights = vec![0.4, 0.05, 0.05, 0.05, 0.05, 0.1, 0.05, 0.05, 0.1, 0.05, 0.05];
+    let weights = vec![
+        0.4, 0.05, 0.05, 0.05, 0.05, 0.1, 0.05, 0.05, 0.1, 0.05, 0.05,
+    ];
 
     let trace = AttentionWeightTrace::from_weights(
-        0,      // layer 0
-        0,      // head 0
-        10,     // query position
-        &weights,
-        5,      // top-k = 5
+        0,  // layer 0
+        0,  // head 0
+        10, // query position
+        &weights, 5, // top-k = 5
     );
 
     println!("Query position: {}", trace.query_pos);
     println!("Top-5 attended positions: {:?}", trace.top_k_positions);
-    println!("Top-5 weights: {:?}", trace.top_k_weights.iter().map(|w| format!("{:.2}", w)).collect::<Vec<_>>());
+    println!(
+        "Top-5 weights: {:?}",
+        trace
+            .top_k_weights
+            .iter()
+            .map(|w| format!("{:.2}", w))
+            .collect::<Vec<_>>()
+    );
     println!("Tail mass (outside top-5): {:.2}", trace.tail_mass);
     println!("Entropy: {:.3}", trace.entropy);
 
@@ -125,8 +154,8 @@ fn demo_attention_trace() {
     // Configure selective tracing
     let config = AttentionTraceConfig {
         top_k: 10,
-        layers: Some(vec![0, 5, 10]),  // Only trace layers 0, 5, 10
-        heads: Some(vec![0]),           // Only trace head 0
+        layers: Some(vec![0, 5, 10]), // Only trace layers 0, 5, 10
+        heads: Some(vec![0]),         // Only trace head 0
         weight_threshold: 0.01,
     };
     println!("Trace layer 0? {}", config.should_trace_layer(0));
@@ -142,11 +171,11 @@ fn demo_logit_evolution() {
 
     // Track token "hello" (id=42)
     let hello = trace.track_token(42, "hello".to_string());
-    hello.record_layer(0.5, 500);   // Layer 0: rank 500
-    hello.record_layer(1.0, 200);   // Layer 1: rank 200
-    hello.record_layer(2.5, 50);    // Layer 2: rank 50
-    hello.record_layer(5.0, 10);    // Layer 3: rank 10
-    hello.record_layer(8.0, 1);     // Layer 4: rank 1 (almost selected)
+    hello.record_layer(0.5, 500); // Layer 0: rank 500
+    hello.record_layer(1.0, 200); // Layer 1: rank 200
+    hello.record_layer(2.5, 50); // Layer 2: rank 50
+    hello.record_layer(5.0, 10); // Layer 3: rank 10
+    hello.record_layer(8.0, 1); // Layer 4: rank 1 (almost selected)
     hello.final_probability = 0.35;
     hello.final_rank = 1;
 
@@ -156,16 +185,20 @@ fn demo_logit_evolution() {
     world.record_layer(2.0, 150);
     world.record_layer(3.0, 80);
     world.record_layer(4.0, 40);
-    world.record_layer(9.0, 0);     // Selected!
+    world.record_layer(9.0, 0); // Selected!
     world.final_probability = 0.40;
     world.final_rank = 0;
 
-    println!("Position: {}, Temperature: {}, Top-p: {}",
-             trace.position, trace.temperature, trace.top_p);
+    println!(
+        "Position: {}, Temperature: {}, Top-p: {}",
+        trace.position, trace.temperature, trace.top_p
+    );
 
     for token in &trace.tracked_tokens {
-        println!("Token '{}' (id={}): final_rank={}, final_prob={:.2}",
-                 token.token_str, token.token_id, token.final_rank, token.final_probability);
+        println!(
+            "Token '{}' (id={}): final_rank={}, final_prob={:.2}",
+            token.token_str, token.token_id, token.final_rank, token.final_probability
+        );
         println!("  Rank evolution: {:?}", token.per_layer_rank);
         if let Some(decisive) = token.decisive_layer() {
             println!("  Decisive layer: {}", decisive);
@@ -174,8 +207,14 @@ fn demo_logit_evolution() {
 
     // Demonstrate rank computation
     let logits = vec![1.0, 5.0, 3.0, 2.0, 4.0];
-    println!("Rank of token 1 (logit=5.0): {}", LogitEvolutionTrace::compute_rank(&logits, 1));
-    println!("Rank of token 0 (logit=1.0): {}", LogitEvolutionTrace::compute_rank(&logits, 0));
+    println!(
+        "Rank of token 1 (logit=5.0): {}",
+        LogitEvolutionTrace::compute_rank(&logits, 1)
+    );
+    println!(
+        "Rank of token 0 (logit=1.0): {}",
+        LogitEvolutionTrace::compute_rank(&logits, 0)
+    );
 
     println!();
 }
@@ -198,19 +237,27 @@ fn demo_quantization_error() {
     );
 
     println!("Brick: {:?}, Layer: {}", trace.brick_id, trace.layer_idx);
-    println!("Quantization: {:?} ({:.1} bits/element, {:.1}x compression)",
-             trace.quant_type,
-             trace.quant_type.bits_per_element(),
-             trace.quant_type.compression_ratio());
+    println!(
+        "Quantization: {:?} ({:.1} bits/element, {:.1}x compression)",
+        trace.quant_type,
+        trace.quant_type.bits_per_element(),
+        trace.quant_type.compression_ratio()
+    );
     println!("MSE: {:.6}", trace.mse);
     println!("Max Abs Error: {:.4}", trace.max_abs_error);
     println!("Cosine Similarity: {:.6}", trace.cosine_similarity);
     println!("SNR: {:.1} dB", trace.snr_db);
 
-    println!("Status: {}",
-             if trace.is_acceptable() { "ACCEPTABLE" }
-             else if trace.is_warning() { "WARNING" }
-             else { "CRITICAL" });
+    println!(
+        "Status: {}",
+        if trace.is_acceptable() {
+            "ACCEPTABLE"
+        } else if trace.is_warning() {
+            "WARNING"
+        } else {
+            "CRITICAL"
+        }
+    );
 
     // Model-level aggregation
     let mut model_error = ModelQuantizationError::default();
@@ -232,8 +279,10 @@ fn demo_quantization_error() {
     println!("  Warnings: {}", model_error.warning_count());
     println!("  Criticals: {}", model_error.critical_count());
     if let Some(worst) = model_error.worst_brick() {
-        println!("  Worst brick: {:?} at layer {} (cosine={:.4})",
-                 worst.brick_id, worst.layer_idx, worst.cosine_similarity);
+        println!(
+            "  Worst brick: {:?} at layer {} (cosine={:.4})",
+            worst.brick_id, worst.layer_idx, worst.cosine_similarity
+        );
     }
 
     println!();
@@ -267,7 +316,10 @@ fn demo_kv_cache_trace() {
     // Check last step
     if let Some(last) = session.steps.last() {
         println!("\nFinal step state:");
-        println!("  Valid positions: {}/{}", last.valid_positions, last.max_positions);
+        println!(
+            "  Valid positions: {}/{}",
+            last.valid_positions, last.max_positions
+        );
         println!("  Utilization: {:.1}%", last.utilization() * 100.0);
         println!("  Window exhausted: {}", last.is_window_exhausted());
     }
@@ -283,9 +335,14 @@ fn demo_model_tracer() {
 
     // Create tracer with full configuration
     let config = ModelTracerConfig::full();
-    println!("Config: activations={}, attention={}, logits={}, quant={}, kv_cache={}",
-             config.trace_activations, config.trace_attention, config.trace_logits,
-             config.trace_quant_error, config.trace_kv_cache);
+    println!(
+        "Config: activations={}, attention={}, logits={}, quant={}, kv_cache={}",
+        config.trace_activations,
+        config.trace_attention,
+        config.trace_logits,
+        config.trace_quant_error,
+        config.trace_kv_cache
+    );
 
     let mut tracer = ModelTracer::new(config);
 
@@ -330,11 +387,19 @@ fn demo_model_tracer() {
     // Demonstrate lightweight config (production use)
     println!("\nLightweight config (for production):");
     let lightweight = ModelTracerConfig::lightweight();
-    println!("  activations={}, attention={}, logits={}, quant={}, kv_cache={}",
-             lightweight.trace_activations, lightweight.trace_attention, lightweight.trace_logits,
-             lightweight.trace_quant_error, lightweight.trace_kv_cache);
+    println!(
+        "  activations={}, attention={}, logits={}, quant={}, kv_cache={}",
+        lightweight.trace_activations,
+        lightweight.trace_attention,
+        lightweight.trace_logits,
+        lightweight.trace_quant_error,
+        lightweight.trace_kv_cache
+    );
 
     // Demonstrate disabled config (zero overhead)
     let disabled = ModelTracerConfig::default();
-    println!("\nDisabled config (zero overhead): is_enabled={}", disabled.is_enabled());
+    println!(
+        "\nDisabled config (zero overhead): is_enabled={}",
+        disabled.is_enabled()
+    );
 }

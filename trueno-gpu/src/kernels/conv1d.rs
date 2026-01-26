@@ -271,7 +271,7 @@ impl Kernel for Conv1dKernel {
                 // Simplified: tanh approximation using fast formula
                 // Use x * sigmoid(1.702 * x) approximation for speed
                 let gelu_coef = ctx.mov_f32_imm(1.702);
-                let _half = ctx.mov_f32_imm(0.5);  // Reserved for future GELU variants
+                let _half = ctx.mov_f32_imm(0.5); // Reserved for future GELU variants
                 let one_f32 = ctx.mov_f32_imm(1.0);
 
                 // sigmoid_arg = 1.702 * sum
@@ -402,10 +402,19 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         assert!(ptx.contains(".entry conv1d"), "Should have conv1d entry");
-        assert!(ptx.contains(".param .u64 input_ptr"), "Should have input_ptr");
-        assert!(ptx.contains(".param .u64 weight_ptr"), "Should have weight_ptr");
+        assert!(
+            ptx.contains(".param .u64 input_ptr"),
+            "Should have input_ptr"
+        );
+        assert!(
+            ptx.contains(".param .u64 weight_ptr"),
+            "Should have weight_ptr"
+        );
         assert!(ptx.contains(".param .u64 bias_ptr"), "Should have bias_ptr");
-        assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
+        assert!(
+            ptx.contains(".param .u64 output_ptr"),
+            "Should have output_ptr"
+        );
         assert!(ptx.contains(".param .u32 seq_len"), "Should have seq_len");
     }
 

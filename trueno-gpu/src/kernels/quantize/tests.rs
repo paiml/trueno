@@ -775,9 +775,11 @@ fn test_q4k_ggml_barrier_safety() {
         // Print PTX around the violation
         for (i, line) in ptx.lines().enumerate() {
             let lineno = i + 1;
-            if result.violations.iter().any(|v| {
-                v.line.saturating_sub(5) <= lineno && lineno <= v.line.saturating_add(5)
-            }) {
+            if result
+                .violations
+                .iter()
+                .any(|v| v.line.saturating_sub(5) <= lineno && lineno <= v.line.saturating_add(5))
+            {
                 println!("{:4}: {}", lineno, line);
             }
         }
@@ -1097,14 +1099,23 @@ fn test_fused_rmsnorm_q4k_gemv_operations() {
     assert!(ptx.contains("shfl"), "Should have warp shuffle");
 
     // Verify shared memory operations
-    assert!(ptx.contains("ld.shared.f32"), "Should load from shared memory");
-    assert!(ptx.contains("st.shared.f32"), "Should store to shared memory");
+    assert!(
+        ptx.contains("ld.shared.f32"),
+        "Should load from shared memory"
+    );
+    assert!(
+        ptx.contains("st.shared.f32"),
+        "Should store to shared memory"
+    );
 
     // Verify barrier synchronization
     assert!(ptx.contains("bar.sync"), "Should have barrier sync");
 
     // Verify Q4K dequantization (d, dmin loads)
-    assert!(ptx.contains("cvt.f32.f16"), "Should convert F16 to F32 for d/dmin");
+    assert!(
+        ptx.contains("cvt.f32.f16"),
+        "Should convert F16 to F32 for d/dmin"
+    );
 }
 
 #[test]
@@ -1217,9 +1228,18 @@ fn test_tiled_q4k_gemv_operations() {
 
     // Verify shared memory via generic addressing (cvta.shared approach)
     // The kernel uses cvta.shared to get a generic address, then generic ld/st
-    assert!(ptx.contains("cvta.shared"), "Should convert shared address to generic");
-    assert!(ptx.contains("ld.f32"), "Should have generic loads (for shared via cvta)");
-    assert!(ptx.contains("st.f32"), "Should have generic stores (for shared via cvta)");
+    assert!(
+        ptx.contains("cvta.shared"),
+        "Should convert shared address to generic"
+    );
+    assert!(
+        ptx.contains("ld.f32"),
+        "Should have generic loads (for shared via cvta)"
+    );
+    assert!(
+        ptx.contains("st.f32"),
+        "Should have generic stores (for shared via cvta)"
+    );
 
     // Verify barrier synchronization
     assert!(ptx.contains("bar.sync"), "Should have barrier sync");
@@ -1228,7 +1248,10 @@ fn test_tiled_q4k_gemv_operations() {
     assert!(ptx.contains("shfl"), "Should have warp shuffle");
 
     // Verify Q4K dequantization (d, dmin loads)
-    assert!(ptx.contains("cvt.f32.f16"), "Should convert F16 to F32 for d/dmin");
+    assert!(
+        ptx.contains("cvt.f32.f16"),
+        "Should convert F16 to F32 for d/dmin"
+    );
 }
 
 #[test]

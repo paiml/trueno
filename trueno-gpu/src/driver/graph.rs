@@ -79,9 +79,8 @@ impl CudaGraph {
 
         let mut graph_exec: CUgraphExec = ptr::null_mut();
         // SAFETY: graph and graph_exec pointers are valid
-        let result = unsafe {
-            (driver.cuGraphInstantiateWithFlags)(&mut graph_exec, self.graph, 0)
-        };
+        let result =
+            unsafe { (driver.cuGraphInstantiateWithFlags)(&mut graph_exec, self.graph, 0) };
         CudaDriver::check(result).map_err(|e| GpuError::GraphInstantiate(e.to_string()))?;
 
         Ok(CudaGraphExec::from_raw(graph_exec))
@@ -191,13 +190,12 @@ impl CaptureMode {
     #[must_use]
     pub fn to_cuda_mode(self) -> u32 {
         match self {
-            CaptureMode::Global => 0,       // CU_STREAM_CAPTURE_MODE_GLOBAL
-            CaptureMode::ThreadLocal => 1,  // CU_STREAM_CAPTURE_MODE_THREAD_LOCAL
-            CaptureMode::Relaxed => 2,      // CU_STREAM_CAPTURE_MODE_RELAXED
+            CaptureMode::Global => 0,      // CU_STREAM_CAPTURE_MODE_GLOBAL
+            CaptureMode::ThreadLocal => 1, // CU_STREAM_CAPTURE_MODE_THREAD_LOCAL
+            CaptureMode::Relaxed => 2,     // CU_STREAM_CAPTURE_MODE_RELAXED
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -157,8 +157,12 @@ impl SyscallBreakdown {
 
     /// Calculate compute time (total - all syscall overhead)
     pub fn compute_us(&self) -> u64 {
-        let syscall_total = self.mmap_us + self.futex_us + self.ioctl_us
-            + self.read_us + self.write_us + self.other_us;
+        let syscall_total = self.mmap_us
+            + self.futex_us
+            + self.ioctl_us
+            + self.read_us
+            + self.write_us
+            + self.other_us;
         self.total_us.saturating_sub(syscall_total)
     }
 
@@ -167,8 +171,12 @@ impl SyscallBreakdown {
         if self.total_us == 0 {
             return 0.0;
         }
-        let syscall_total = self.mmap_us + self.futex_us + self.ioctl_us
-            + self.read_us + self.write_us + self.other_us;
+        let syscall_total = self.mmap_us
+            + self.futex_us
+            + self.ioctl_us
+            + self.read_us
+            + self.write_us
+            + self.other_us;
         (syscall_total as f64 / self.total_us as f64) * 100.0
     }
 
@@ -188,7 +196,8 @@ impl SyscallBreakdown {
             return "none";
         }
 
-        categories.iter()
+        categories
+            .iter()
             .max_by_key(|(time, _)| time)
             .map(|(_, name)| *name)
             .unwrap_or("none")
@@ -199,11 +208,15 @@ impl SyscallBreakdown {
     /// Uses saturating arithmetic to prevent integer overflow on extreme values.
     pub fn add_syscall(&mut self, syscall: &str, duration_us: u64) {
         match syscall {
-            "mmap" | "munmap" | "mprotect" | "brk" => self.mmap_us = self.mmap_us.saturating_add(duration_us),
+            "mmap" | "munmap" | "mprotect" | "brk" => {
+                self.mmap_us = self.mmap_us.saturating_add(duration_us)
+            }
             "futex" => self.futex_us = self.futex_us.saturating_add(duration_us),
             "ioctl" => self.ioctl_us = self.ioctl_us.saturating_add(duration_us),
             "read" | "pread64" | "readv" => self.read_us = self.read_us.saturating_add(duration_us),
-            "write" | "pwrite64" | "writev" => self.write_us = self.write_us.saturating_add(duration_us),
+            "write" | "pwrite64" | "writev" => {
+                self.write_us = self.write_us.saturating_add(duration_us)
+            }
             _ => self.other_us = self.other_us.saturating_add(duration_us),
         }
     }
@@ -260,13 +273,26 @@ impl TraceResult {
         attrs.insert("brick.name".to_string(), self.brick_name.clone());
         attrs.insert("brick.budget_us".to_string(), self.budget_us.to_string());
         attrs.insert("brick.actual_us".to_string(), self.actual_us.to_string());
-        attrs.insert("brick.efficiency".to_string(), format!("{:.1}", self.efficiency()));
-        attrs.insert("brick.over_budget".to_string(), self.over_budget().to_string());
-        attrs.insert("escalation.reason".to_string(), self.reason.otlp_value().to_string());
-        attrs.insert("syscall.overhead_percent".to_string(),
-                    format!("{:.1}", self.syscall_breakdown.syscall_overhead_percent()));
-        attrs.insert("syscall.dominant".to_string(),
-                    self.syscall_breakdown.dominant_syscall().to_string());
+        attrs.insert(
+            "brick.efficiency".to_string(),
+            format!("{:.1}", self.efficiency()),
+        );
+        attrs.insert(
+            "brick.over_budget".to_string(),
+            self.over_budget().to_string(),
+        );
+        attrs.insert(
+            "escalation.reason".to_string(),
+            self.reason.otlp_value().to_string(),
+        );
+        attrs.insert(
+            "syscall.overhead_percent".to_string(),
+            format!("{:.1}", self.syscall_breakdown.syscall_overhead_percent()),
+        );
+        attrs.insert(
+            "syscall.dominant".to_string(),
+            self.syscall_breakdown.dominant_syscall().to_string(),
+        );
         attrs
     }
 }
@@ -358,8 +384,8 @@ impl TracingEscalation {
 
     /// Check if tracing should be escalated based on metrics
     pub fn should_trace(&self, cv_percent: f64, efficiency_percent: f64) -> bool {
-        cv_percent > self.thresholds.cv_threshold ||
-        efficiency_percent < self.thresholds.efficiency_threshold
+        cv_percent > self.thresholds.cv_threshold
+            || efficiency_percent < self.thresholds.efficiency_threshold
     }
 
     /// Check if GPU transfer overhead should trigger escalation
@@ -368,7 +394,11 @@ impl TracingEscalation {
     }
 
     /// Determine escalation reason
-    pub fn escalation_reason(&self, cv_percent: f64, efficiency_percent: f64) -> Option<EscalationReason> {
+    pub fn escalation_reason(
+        &self,
+        cv_percent: f64,
+        efficiency_percent: f64,
+    ) -> Option<EscalationReason> {
         let cv_exceeded = cv_percent > self.thresholds.cv_threshold;
         let efficiency_low = efficiency_percent < self.thresholds.efficiency_threshold;
 
@@ -381,8 +411,14 @@ impl TracingEscalation {
     }
 
     /// Check rate limit and record trace if allowed
-    pub fn try_trace(&mut self, brick_name: &str, budget_us: u64, actual_us: u64,
-                     reason: EscalationReason, breakdown: SyscallBreakdown) -> Option<TraceResult> {
+    pub fn try_trace(
+        &mut self,
+        brick_name: &str,
+        budget_us: u64,
+        actual_us: u64,
+        reason: EscalationReason,
+        breakdown: SyscallBreakdown,
+    ) -> Option<TraceResult> {
         if !self.rate_limiter.should_allow() {
             return None;
         }
@@ -423,7 +459,8 @@ impl TracingEscalation {
     /// Update thresholds
     pub fn set_thresholds(&mut self, thresholds: EscalationThresholds) {
         self.thresholds = thresholds;
-        self.rate_limiter = RateLimiter::new(self.thresholds.rate_limit, self.thresholds.rate_interval);
+        self.rate_limiter =
+            RateLimiter::new(self.thresholds.rate_limit, self.thresholds.rate_interval);
     }
 
     /// Clear history
@@ -456,11 +493,18 @@ impl OtlpSpanAttributes {
     /// Check if all required attributes are present
     pub fn has_required_attributes(&self) -> bool {
         let required = [
-            "brick.name", "brick.budget_us", "brick.actual_us",
-            "brick.efficiency", "brick.over_budget",
-            "escalation.reason", "syscall.overhead_percent", "syscall.dominant"
+            "brick.name",
+            "brick.budget_us",
+            "brick.actual_us",
+            "brick.efficiency",
+            "brick.over_budget",
+            "escalation.reason",
+            "syscall.overhead_percent",
+            "syscall.dominant",
         ];
-        required.iter().all(|key| self.attributes.contains_key(*key))
+        required
+            .iter()
+            .all(|key| self.attributes.contains_key(*key))
     }
 }
 
@@ -520,9 +564,18 @@ mod tests {
     fn test_escalation_reason() {
         let escalation = TracingEscalation::default();
 
-        assert_eq!(escalation.escalation_reason(16.0, 20.0), Some(EscalationReason::Both));
-        assert_eq!(escalation.escalation_reason(16.0, 50.0), Some(EscalationReason::CvExceeded));
-        assert_eq!(escalation.escalation_reason(10.0, 20.0), Some(EscalationReason::EfficiencyLow));
+        assert_eq!(
+            escalation.escalation_reason(16.0, 20.0),
+            Some(EscalationReason::Both)
+        );
+        assert_eq!(
+            escalation.escalation_reason(16.0, 50.0),
+            Some(EscalationReason::CvExceeded)
+        );
+        assert_eq!(
+            escalation.escalation_reason(10.0, 20.0),
+            Some(EscalationReason::EfficiencyLow)
+        );
         assert_eq!(escalation.escalation_reason(10.0, 50.0), None);
     }
 }

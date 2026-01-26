@@ -1,8 +1,8 @@
 //! Thermal analyzer with throttling detection
 
-use std::any::Any;
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use crate::ring_buffer::RingBuffer;
+use std::any::Any;
 
 pub struct ThermalAnalyzerBrick {
     history: RingBuffer<f64>,

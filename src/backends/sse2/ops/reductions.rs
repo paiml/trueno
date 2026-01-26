@@ -57,7 +57,11 @@ pub unsafe fn max(a: &[f32]) -> f32 {
     }
 
     let mut result = horizontal_max_ps(vmax);
-    for &val in &a[i..] { if val > result { result = val; } }
+    for &val in &a[i..] {
+        if val > result {
+            result = val;
+        }
+    }
     result
 }
 
@@ -75,7 +79,11 @@ pub unsafe fn min(a: &[f32]) -> f32 {
     }
 
     let mut result = horizontal_min_ps(vmin);
-    for &val in &a[i..] { if val < result { result = val; } }
+    for &val in &a[i..] {
+        if val < result {
+            result = val;
+        }
+    }
     result
 }
 

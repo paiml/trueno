@@ -60,11 +60,11 @@ impl QuantFormat {
             QuantFormat::F32 => 32.0,
             QuantFormat::F16 => 16.0,
             QuantFormat::BF16 => 16.0,
-            QuantFormat::Q4_0 => 4.5,  // 4 bits + scale overhead
-            QuantFormat::Q4_K => 4.5,  // 4 bits + 6-bit scales
+            QuantFormat::Q4_0 => 4.5, // 4 bits + scale overhead
+            QuantFormat::Q4_K => 4.5, // 4 bits + 6-bit scales
             QuantFormat::Q5_K => 5.5,
             QuantFormat::Q6_K => 6.5,
-            QuantFormat::Q8_0 => 8.5,  // 8 bits + scale
+            QuantFormat::Q8_0 => 8.5, // 8 bits + scale
             QuantFormat::Gptq { bits, .. } => *bits as f64 + 0.5,
             QuantFormat::Awq { bits } => *bits as f64 + 0.5,
         }
@@ -116,11 +116,11 @@ impl QuantFormat {
         match self {
             QuantFormat::F32 => 4,
             QuantFormat::F16 | QuantFormat::BF16 => 2,
-            QuantFormat::Q4_0 => 18,   // 2 (scale) + 16 (32 × 4-bit)
-            QuantFormat::Q4_K => 144,  // 2+2+12+128 (super-block)
-            QuantFormat::Q5_K => 176,  // 2+2+12+128+32
-            QuantFormat::Q6_K => 210,  // 128+64+16+2
-            QuantFormat::Q8_0 => 34,   // 2 (scale) + 32 (8-bit values)
+            QuantFormat::Q4_0 => 18,  // 2 (scale) + 16 (32 × 4-bit)
+            QuantFormat::Q4_K => 144, // 2+2+12+128 (super-block)
+            QuantFormat::Q5_K => 176, // 2+2+12+128+32
+            QuantFormat::Q6_K => 210, // 128+64+16+2
+            QuantFormat::Q8_0 => 34,  // 2 (scale) + 32 (8-bit values)
             QuantFormat::Gptq { bits, group_size } => {
                 let data_bytes = (*group_size as usize * *bits as usize).div_ceil(8);
                 data_bytes + 4 // + scale/zero
@@ -466,7 +466,9 @@ impl GgufLoader {
     /// Parse GGUF header from bytes.
     pub fn parse_header(&mut self, data: &[u8]) -> GgufResult<()> {
         if data.len() < 24 {
-            return Err(GgufError::InvalidData("File too small for header".to_string()));
+            return Err(GgufError::InvalidData(
+                "File too small for header".to_string(),
+            ));
         }
 
         let magic: [u8; 4] = data[0..4].try_into().unwrap();
@@ -631,7 +633,13 @@ mod tests {
         assert_eq!(format!("{}", QuantFormat::Q4_K), "Q4_K");
         assert_eq!(format!("{}", QuantFormat::Q8_0), "Q8_0");
         assert_eq!(
-            format!("{}", QuantFormat::Gptq { bits: 4, group_size: 128 }),
+            format!(
+                "{}",
+                QuantFormat::Gptq {
+                    bits: 4,
+                    group_size: 128
+                }
+            ),
             "GPTQ-4bit-g128"
         );
     }
@@ -654,18 +662,10 @@ mod tests {
     fn test_quant_stats() {
         let mut stats = QuantStats::new();
 
-        let weights1 = QuantizedWeights::new(
-            QuantFormat::Q4_K,
-            vec![0u8; 1000],
-            (100, 100),
-            "layer1",
-        );
-        let weights2 = QuantizedWeights::new(
-            QuantFormat::Q8_0,
-            vec![0u8; 2000],
-            (100, 100),
-            "layer2",
-        );
+        let weights1 =
+            QuantizedWeights::new(QuantFormat::Q4_K, vec![0u8; 1000], (100, 100), "layer1");
+        let weights2 =
+            QuantizedWeights::new(QuantFormat::Q8_0, vec![0u8; 2000], (100, 100), "layer2");
 
         stats.add_layer(&weights1);
         stats.add_layer(&weights2);
@@ -707,12 +707,8 @@ mod tests {
 
     #[test]
     fn test_quantized_brick() {
-        let weights = QuantizedWeights::new(
-            QuantFormat::Q4_K,
-            vec![0u8; 144],
-            (256, 256),
-            "test_layer",
-        );
+        let weights =
+            QuantizedWeights::new(QuantFormat::Q4_K, vec![0u8; 144], (256, 256), "test_layer");
 
         let brick = QuantizedBrick::new("matmul")
             .with_weights(weights)

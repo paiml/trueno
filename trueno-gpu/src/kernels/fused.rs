@@ -53,7 +53,10 @@ pub struct FusedQKVKernel {
 impl FusedQKVKernel {
     /// Create a new fused QKV kernel.
     pub fn new(hidden_size: usize, kv_dim: usize) -> Self {
-        Self { hidden_size, kv_dim }
+        Self {
+            hidden_size,
+            kv_dim,
+        }
     }
 }
 
@@ -397,10 +400,10 @@ impl Kernel for FusedGemmBiasGeluKernel {
         let n_val = self.n;
 
         PtxKernel::new("fused_gemm_bias_gelu")
-            .param(PtxType::U64, "a_ptr")      // Input matrix A [M, K]
-            .param(PtxType::U64, "b_ptr")      // Weight matrix B [K, N]
-            .param(PtxType::U64, "bias_ptr")   // Bias vector [N]
-            .param(PtxType::U64, "c_ptr")      // Output matrix C [M, N]
+            .param(PtxType::U64, "a_ptr") // Input matrix A [M, K]
+            .param(PtxType::U64, "b_ptr") // Weight matrix B [K, N]
+            .param(PtxType::U64, "bias_ptr") // Bias vector [N]
+            .param(PtxType::U64, "c_ptr") // Output matrix C [M, N]
             .param(PtxType::U32, "m")
             .param(PtxType::U32, "n")
             .param(PtxType::U32, "k")
@@ -485,7 +488,7 @@ impl Kernel for FusedGemmBiasGeluKernel {
                 let x = acc_biased;
 
                 // Constants
-                let sqrt_2_pi = ctx.mov_f32_imm(0.797_884_6);  // sqrt(2/π)
+                let sqrt_2_pi = ctx.mov_f32_imm(0.797_884_6); // sqrt(2/π)
                 let c = ctx.mov_f32_imm(0.044_715);
                 let half = ctx.mov_f32_imm(0.5);
                 let one = ctx.mov_f32_imm(1.0);

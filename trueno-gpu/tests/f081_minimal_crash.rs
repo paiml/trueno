@@ -238,17 +238,26 @@ mod f081_tests {
                 println!("╔══════════════════════════════════════════════════════════════╗");
                 println!("║  F081 HYPOTHESIS FALSIFIED!                                   ║");
                 println!("║                                                              ║");
-                println!("║  Kernel SUCCEEDED with value 0x{:08X}                     ║", out[0]);
+                println!(
+                    "║  Kernel SUCCEEDED with value 0x{:08X}                     ║",
+                    out[0]
+                );
                 println!("║  Pattern ld.shared → st.global does NOT crash!               ║");
                 println!("║                                                              ║");
                 println!("║  Original LZ4 bug was F082 or F021, not F081.                ║");
                 println!("╚══════════════════════════════════════════════════════════════╝");
                 // F081 is falsified - this test now EXPECTS success
-                assert_eq!(out[0], 0xBEEFCAFE, "F081 falsified: pattern works correctly");
+                assert_eq!(
+                    out[0], 0xBEEFCAFE,
+                    "F081 falsified: pattern works correctly"
+                );
             }
             Err(e) => {
                 // If this crashes, F081 hypothesis would be confirmed - but it doesn't!
-                panic!("UNEXPECTED CRASH: {:?} - F081 would be confirmed, but we expect success", e);
+                panic!(
+                    "UNEXPECTED CRASH: {:?} - F081 would be confirmed, but we expect success",
+                    e
+                );
             }
         }
     }
@@ -338,5 +347,4 @@ mod f081_tests {
             }
         }
     }
-
 }

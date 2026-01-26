@@ -31,8 +31,8 @@ fn test_kernel_classifier_batched_for_high_m() {
 fn test_feature_builder_normalization() {
     let features = TunerFeatures::builder()
         .model_params_b(1.0) // log10(1.0) = 0, normalized = (0+1)/3 = 0.33
-        .hidden_dim(1536)    // 1536/16384 approx 0.094
-        .batch_size(4)       // 4/64 = 0.0625
+        .hidden_dim(1536) // 1536/16384 approx 0.094
+        .batch_size(4) // 4/64 = 0.0625
         .build();
 
     assert!(features.model_params_b > 0.0 && features.model_params_b < 1.0);
@@ -112,7 +112,10 @@ fn test_bottleneck_display() {
     assert_eq!(format!("{}", BottleneckClass::MemoryBound), "MemoryBound");
     assert_eq!(format!("{}", BottleneckClass::ComputeBound), "ComputeBound");
     assert_eq!(format!("{}", BottleneckClass::LaunchBound), "LaunchBound");
-    assert_eq!(format!("{}", BottleneckClass::AttentionBound), "AttentionBound");
+    assert_eq!(
+        format!("{}", BottleneckClass::AttentionBound),
+        "AttentionBound"
+    );
 }
 
 #[test]

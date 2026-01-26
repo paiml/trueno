@@ -1,11 +1,11 @@
 //! Simple GPU LZ4 test with non-zero pages
 
-use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
 use trueno_gpu::kernels::lz4::PAGE_SIZE;
+use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
 
+use std::ffi::c_void;
 #[cfg(feature = "cuda")]
 use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
-use std::ffi::c_void;
 
 #[cfg(feature = "cuda")]
 fn main() {
@@ -24,17 +24,23 @@ fn main() {
             input_flat.push(((page_idx * 17 + byte_idx) % 256) as u8);
         }
     }
-    println!("Input: {} bytes, first 16: {:?}", input_flat.len(), &input_flat[0..16]);
+    println!(
+        "Input: {} bytes, first 16: {:?}",
+        input_flat.len(),
+        &input_flat[0..16]
+    );
 
     // Allocate GPU buffers (using OUTPUT_STRIDE = 4352 bytes per page)
-    let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, input_flat.len())
-        .expect("Failed to allocate input buffer");
+    let mut input_buf: GpuBuffer<u8> =
+        GpuBuffer::new(&ctx, input_flat.len()).expect("Failed to allocate input buffer");
     let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize)
         .expect("Failed to allocate output buffer");
-    let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, NUM_PAGES as usize)
-        .expect("Failed to allocate sizes buffer");
+    let mut sizes_buf: GpuBuffer<u32> =
+        GpuBuffer::new(&ctx, NUM_PAGES as usize).expect("Failed to allocate sizes buffer");
 
-    input_buf.copy_from_host(&input_flat).expect("Failed to copy input");
+    input_buf
+        .copy_from_host(&input_flat)
+        .expect("Failed to copy input");
 
     let kernel = Lz4WarpCompressKernel::new(NUM_PAGES);
     let ptx = kernel.emit_ptx();
@@ -69,7 +75,8 @@ fn main() {
 
     println!("Launching kernel...");
     unsafe {
-        stream.launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
+        stream
+            .launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
             .expect("Kernel launch failed");
     }
 
@@ -78,7 +85,9 @@ fn main() {
 
     println!("Copying results...");
     let mut sizes_host = vec![0u32; NUM_PAGES as usize];
-    sizes_buf.copy_to_host(&mut sizes_host).expect("Failed to copy sizes");
+    sizes_buf
+        .copy_to_host(&mut sizes_host)
+        .expect("Failed to copy sizes");
 
     println!("Results:");
     for (i, size) in sizes_host.iter().enumerate() {

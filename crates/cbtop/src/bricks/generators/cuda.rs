@@ -1,7 +1,7 @@
 //! CUDA load generator using trueno-gpu PTX
 
-use std::any::Any;
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 pub struct CudaLoadBrick {
     is_running: bool,

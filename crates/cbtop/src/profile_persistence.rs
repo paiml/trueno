@@ -222,7 +222,9 @@ impl ProfileConfig {
 /// Validate profile name
 fn validate_profile_name(name: &str) -> ProfileResult<()> {
     if name.is_empty() {
-        return Err(ProfileError::InvalidName("name cannot be empty".to_string()));
+        return Err(ProfileError::InvalidName(
+            "name cannot be empty".to_string(),
+        ));
     }
 
     if name.len() > 64 {
@@ -366,8 +368,8 @@ impl ProfileManager {
             return Ok(vec![]);
         }
 
-        let entries =
-            std::fs::read_dir(&self.profile_dir).map_err(|e| ProfileError::IoError(e.to_string()))?;
+        let entries = std::fs::read_dir(&self.profile_dir)
+            .map_err(|e| ProfileError::IoError(e.to_string()))?;
 
         let mut profiles = Vec::new();
         for entry in entries.flatten() {
@@ -429,9 +431,7 @@ impl ProfileManager {
     /// Import a profile from a specific path
     pub fn import_profile(&mut self, import_path: &Path) -> ProfileResult<ProfileConfig> {
         if !import_path.exists() {
-            return Err(ProfileError::NotFound(
-                import_path.display().to_string(),
-            ));
+            return Err(ProfileError::NotFound(import_path.display().to_string()));
         }
 
         let content = std::fs::read_to_string(import_path)

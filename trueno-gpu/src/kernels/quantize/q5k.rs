@@ -414,7 +414,8 @@ impl Kernel for Q5KGemvKernel {
                     // Safe subtraction: for sub_block < 4, use 0 to avoid underflow
                     let zero_safe = ctx.mov_u32_imm(0);
                     let sub_block_minus_4_raw = ctx.sub_u32_reg(sub_block, four_u32);
-                    let sub_block_minus_4 = ctx.selp_u32(is_simple, zero_safe, sub_block_minus_4_raw);
+                    let sub_block_minus_4 =
+                        ctx.selp_u32(is_simple, zero_safe, sub_block_minus_4_raw);
                     let sub_block_minus_4_64 = ctx.cvt_u64_u32(sub_block_minus_4);
                     let scales_jm4_addr = ctx.add_u64(scales_base, sub_block_minus_4_64);
                     let scales_jm4 = ctx.ld_global_u8(scales_jm4_addr);

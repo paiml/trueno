@@ -27,7 +27,10 @@ fn main() {
     // Create kernel for small dimensions (N=4, K=256 = 1 super-block)
     let n: u32 = 4;
     let k: u32 = 256;
-    println!("[2/7] Generating CoalescedQ6KGemvKernel PTX (N={}, K={})...", n, k);
+    println!(
+        "[2/7] Generating CoalescedQ6KGemvKernel PTX (N={}, K={})...",
+        n, k
+    );
     let kernel = CoalescedQ6KGemvKernel::new(k, n);
 
     // Generate PTX with proper module wrapper
@@ -37,7 +40,11 @@ fn main() {
         .address_size(64)
         .add_kernel(kernel.build_ptx())
         .emit();
-    println!("       PTX generated ({} bytes, {} lines)", ptx.len(), ptx.lines().count());
+    println!(
+        "       PTX generated ({} bytes, {} lines)",
+        ptx.len(),
+        ptx.lines().count()
+    );
 
     // Load module
     println!("[3/7] JIT compiling PTX...");
@@ -73,7 +80,10 @@ fn main() {
     let output_size = n as usize;
 
     println!("[5/7] Allocating buffers...");
-    println!("       Weights: {} bytes ({} super-blocks per row)", weights_size, n_super_blocks);
+    println!(
+        "       Weights: {} bytes ({} super-blocks per row)",
+        weights_size, n_super_blocks
+    );
     println!("       Input: {} floats", input_size);
     println!("       Output: {} floats", output_size);
 

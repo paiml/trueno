@@ -2,12 +2,11 @@
 //!
 //! Popperian falsification criteria for Williams Roofline Model per §35.3.
 
-use cbtop::{
-    BottleneckType, HardwareProfile, WorkloadMetrics,
-    RooflineAnalysis, RooflinePlotPoint, RooflinePlot,
-    BatchRooflineAnalysis,
-};
 use cbtop::roofline::profiles;
+use cbtop::{
+    BatchRooflineAnalysis, BottleneckType, HardwareProfile, RooflineAnalysis, RooflinePlot,
+    RooflinePlotPoint, WorkloadMetrics,
+};
 
 // ============================================================================
 // F1061: Ridge point calculation
@@ -48,14 +47,20 @@ fn f1061_h100_ridge_point() {
 fn f1062_memory_bound_classification() {
     let profile = HardwareProfile::new("Test", 1000.0, 100.0);
     // OI = 5 < Ridge = 10 → memory-bound
-    assert_eq!(profile.classify_bottleneck(5.0), BottleneckType::MemoryBound);
+    assert_eq!(
+        profile.classify_bottleneck(5.0),
+        BottleneckType::MemoryBound
+    );
 }
 
 #[test]
 fn f1062_compute_bound_classification() {
     let profile = HardwareProfile::new("Test", 1000.0, 100.0);
     // OI = 20 > Ridge = 10 → compute-bound
-    assert_eq!(profile.classify_bottleneck(20.0), BottleneckType::ComputeBound);
+    assert_eq!(
+        profile.classify_bottleneck(20.0),
+        BottleneckType::ComputeBound
+    );
 }
 
 #[test]

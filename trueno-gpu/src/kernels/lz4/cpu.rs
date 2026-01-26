@@ -60,7 +60,11 @@ pub fn lz4_encode_sequence(
     let literal_len = literals.len();
 
     // Calculate token
-    let token_lit = if literal_len >= 15 { 15 } else { literal_len as u8 };
+    let token_lit = if literal_len >= 15 {
+        15
+    } else {
+        literal_len as u8
+    };
     let token_match = if match_length == 0 {
         0
     } else if match_length - LZ4_MIN_MATCH as usize >= 15 {
@@ -71,19 +75,18 @@ pub fn lz4_encode_sequence(
     let token = (token_lit << 4) | token_match;
 
     // Check output space
-    let needed = 1
-        + (if literal_len >= 15 {
+    let needed =
+        1 + (if literal_len >= 15 {
             1 + (literal_len - 15) / 255 + 1
         } else {
             0
-        })
-        + literal_len
-        + if match_length > 0 { 2 } else { 0 }
-        + if match_length > 0 && match_length - LZ4_MIN_MATCH as usize >= 15 {
-            1 + (match_length - LZ4_MIN_MATCH as usize - 15) / 255 + 1
-        } else {
-            0
-        };
+        }) + literal_len
+            + if match_length > 0 { 2 } else { 0 }
+            + if match_length > 0 && match_length - LZ4_MIN_MATCH as usize >= 15 {
+                1 + (match_length - LZ4_MIN_MATCH as usize - 15) / 255 + 1
+            } else {
+                0
+            };
 
     if *out_pos + needed > output.len() {
         return Err("Output buffer too small");
@@ -265,12 +268,8 @@ pub fn lz4_compress_block(input: &[u8], output: &mut [u8]) -> Result<usize, &'st
             && read_u32_le(input, in_pos) == read_u32_le(input, match_pos)
         {
             // Found a match! Extend it
-            let match_len = lz4_match_length(
-                input,
-                in_pos + 4,
-                match_pos + 4,
-                input.len() - in_pos - 4,
-            ) + 4; // Add the initial 4 bytes
+            let match_len =
+                lz4_match_length(input, in_pos + 4, match_pos + 4, input.len() - in_pos - 4) + 4; // Add the initial 4 bytes
 
             // Emit literals from anchor to in_pos, then the match
             let literals = &input[anchor..in_pos];
@@ -711,9 +710,9 @@ mod tests {
         // Token 0xF0 = 15 literals, extension byte 255 means continue reading
         let mut input = Vec::new();
         input.push(0xF0); // Token: 15 literals, 0 match
-        input.push(255);  // Extended: +255, continue reading
-        input.push(10);   // Extended: +10, stop (total = 15 + 255 + 10 = 280)
-        // Now we need 280 literal bytes
+        input.push(255); // Extended: +255, continue reading
+        input.push(10); // Extended: +10, stop (total = 15 + 255 + 10 = 280)
+                        // Now we need 280 literal bytes
         input.extend(std::iter::repeat(b'A').take(280));
 
         let mut output = [0u8; 512];
@@ -788,7 +787,7 @@ mod tests {
         input.push(b'A'); // 1 literal
         input.push(0x01); // offset low
         input.push(0x00); // offset high (offset=1, valid since out_pos will be 1)
-        // No match length extension byte
+                          // No match length extension byte
 
         let mut output = [0u8; 64];
         let result = lz4_decompress_block(&input, &mut output);
@@ -804,7 +803,7 @@ mod tests {
         input.push(b'A'); // 1 literal
         input.push(0x01); // offset low
         input.push(0x00); // offset high (offset=1)
-        // match_len = 0 + 4 = 4 bytes to copy
+                          // match_len = 0 + 4 = 4 bytes to copy
 
         let mut output = [0u8; 3]; // Too small: 1 literal + 4 match = 5 needed
 

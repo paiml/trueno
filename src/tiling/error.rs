@@ -1,7 +1,7 @@
 //! Tiling error types.
 
-use std::fmt;
 use super::geometry::TcbLevel;
+use std::fmt;
 
 /// Tiling configuration errors
 #[derive(Debug, Clone)]
@@ -22,10 +22,7 @@ pub enum TilingError {
         available_bytes: usize,
     },
     /// Alignment violation
-    AlignmentError {
-        required: u32,
-        actual: u32,
-    },
+    AlignmentError { required: u32, actual: u32 },
     /// Quantization alignment violated
     QuantAlignmentError {
         format: &'static str,

@@ -4,9 +4,7 @@
 //!
 //! Run with: cargo run --example incremental_snapshot_demo -p cbtop
 
-use cbtop::{
-    IncrementalSnapshotStore, MetricData, ProfileSnapshot, SnapshotConfig, SnapshotQuery,
-};
+use cbtop::{IncrementalSnapshotStore, MetricData, ProfileSnapshot, SnapshotConfig, SnapshotQuery};
 
 fn main() {
     println!("=== Incremental Profile Snapshots Demo ===\n");
@@ -54,15 +52,11 @@ fn main() {
     println!("\n=== Query by Workload Fingerprint ===");
     let query = SnapshotQuery::new().fingerprint("workload_0");
     let results = store.query(&query).unwrap();
-    println!(
-        "Snapshots with fingerprint 'workload_0': {}",
-        results.len()
-    );
+    println!("Snapshots with fingerprint 'workload_0': {}", results.len());
 
     // Query by time range
     println!("\n=== Query by Time Range ===");
-    let query = SnapshotQuery::new()
-        .time_range(1000005000000, 1000015000000);
+    let query = SnapshotQuery::new().time_range(1000005000000, 1000015000000);
     let results = store.query(&query).unwrap();
     println!(
         "Snapshots in time range: {} ({} - {})",

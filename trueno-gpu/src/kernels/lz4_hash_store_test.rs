@@ -10,9 +10,9 @@
 //! 3. Store a constant to hash_entry_addr
 //! 4. Write success marker to global memory
 
+use super::Kernel;
 use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
-use super::Kernel;
 
 pub const PAGE_SIZE: u32 = 4096;
 pub const HASH_TABLE_SIZE: u32 = 8192; // 2048 entries * 4 bytes
@@ -103,14 +103,20 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         // PTX must contain entry point
-        assert!(ptx.contains(".entry hash_store_test"), "Missing entry point");
+        assert!(
+            ptx.contains(".entry hash_store_test"),
+            "Missing entry point"
+        );
 
         // PTX must contain shared memory declaration
         assert!(ptx.contains(".shared"), "Missing shared memory");
 
         // PTX must contain generic address conversion
         // cvta.shared converts shared → generic (not cvta.to.shared which is generic → shared)
-        assert!(ptx.contains("cvta.shared"), "Missing cvta.shared for shared→generic conversion");
+        assert!(
+            ptx.contains("cvta.shared"),
+            "Missing cvta.shared for shared→generic conversion"
+        );
 
         // PTX must contain store operations
         assert!(ptx.contains("st.u32"), "Missing st.u32 instructions");
@@ -145,7 +151,12 @@ mod tests {
 
         let max_entry_offset: u32 = 2047 * 4; // 8188
         let max_byte_accessed = PAGE_SIZE + max_entry_offset + 3; // 12287
-        assert!((max_byte_accessed as usize) < SMEM_SIZE, "Max byte {} >= smem size {}", max_byte_accessed, SMEM_SIZE);
+        assert!(
+            (max_byte_accessed as usize) < SMEM_SIZE,
+            "Max byte {} >= smem size {}",
+            max_byte_accessed,
+            SMEM_SIZE
+        );
     }
 
     /// TDD RED: Verify offset computation doesn't overflow
@@ -159,7 +170,9 @@ mod tests {
         assert_eq!(max_entry_off, 8188);
 
         // Total offset from smem_base: PAGE_SIZE + max_entry_off = 4096 + 8188 = 12284
-        let total_offset = PAGE_SIZE.checked_add(max_entry_off).expect("should not overflow");
+        let total_offset = PAGE_SIZE
+            .checked_add(max_entry_off)
+            .expect("should not overflow");
         assert_eq!(total_offset, 12284);
     }
 }

@@ -109,9 +109,9 @@ impl CpuCapabilities {
     fn detect_max_freq() -> Option<u32> {
         #[cfg(target_os = "linux")]
         {
-            if let Ok(content) = std::fs::read_to_string(
-                "/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq"
-            ) {
+            if let Ok(content) =
+                std::fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
+            {
                 // cpuinfo_max_freq is in kHz
                 return content.trim().parse::<u32>().ok().map(|khz| khz / 1000);
             }
@@ -123,8 +123,8 @@ impl CpuCapabilities {
     fn detect_cache_sizes() -> (usize, usize, usize) {
         #[cfg(target_os = "linux")]
         {
-            let l1d = Self::read_cache_size(0, 0).unwrap_or(32 * 1024);  // 32 KB default
-            let l2 = Self::read_cache_size(0, 2).unwrap_or(512 * 1024);  // 512 KB default
+            let l1d = Self::read_cache_size(0, 0).unwrap_or(32 * 1024); // 32 KB default
+            let l2 = Self::read_cache_size(0, 2).unwrap_or(512 * 1024); // 512 KB default
             let l3 = Self::read_cache_size(0, 3).unwrap_or(32 * 1024 * 1024); // 32 MB default
             (l1d, l2, l3)
         }
@@ -181,7 +181,12 @@ impl CpuCapabilities {
 
     /// Calculate theoretical peak for a given size (cache vs memory bound)
     /// Uses bytes_per_flop to estimate total working set (includes all arrays)
-    pub fn theoretical_peak_for_size(&self, size: usize, _bytes_per_element: usize, bytes_per_flop: f64) -> f64 {
+    pub fn theoretical_peak_for_size(
+        &self,
+        size: usize,
+        _bytes_per_element: usize,
+        bytes_per_flop: f64,
+    ) -> f64 {
         // Calculate working set using bytes_per_flop which accounts for all arrays
         // e.g., elementwise_mul: 12 bytes/FLOP = 3 arrays × 4 bytes
         // This gives accurate cache behavior estimation
@@ -414,7 +419,8 @@ impl OptimizationSuite {
 
                     // Calculate working set for this benchmark (used for next cooldown)
                     // Working set = size * bytes_per_flop (accounts for all arrays)
-                    prev_working_set_mb = ((size as f64 * workload.bytes_per_flop) / (1024.0 * 1024.0)) as usize;
+                    prev_working_set_mb =
+                        ((size as f64 * workload.bytes_per_flop) / (1024.0 * 1024.0)) as usize;
 
                     let result = Benchmark::builder()
                         .workload_type(workload.workload)
@@ -547,10 +553,7 @@ impl OptimizationSuite {
         let mut efficiencies = Vec::new();
 
         for entry in &baseline.entries {
-            let workload = self
-                .workloads
-                .iter()
-                .find(|w| w.name == entry.workload);
+            let workload = self.workloads.iter().find(|w| w.name == entry.workload);
 
             let efficiency = entry.efficiency;
             efficiencies.push(efficiency);
@@ -562,7 +565,11 @@ impl OptimizationSuite {
                     size: entry.size,
                     efficiency,
                     gflops: entry.gflops,
-                    recommendation: self.recommend_optimization(workload, entry, BottleneckSeverity::Critical),
+                    recommendation: self.recommend_optimization(
+                        workload,
+                        entry,
+                        BottleneckSeverity::Critical,
+                    ),
                     severity: BottleneckSeverity::Critical,
                 });
             } else if efficiency < 0.50 {
@@ -571,7 +578,11 @@ impl OptimizationSuite {
                     size: entry.size,
                     efficiency,
                     gflops: entry.gflops,
-                    recommendation: self.recommend_optimization(workload, entry, BottleneckSeverity::Severe),
+                    recommendation: self.recommend_optimization(
+                        workload,
+                        entry,
+                        BottleneckSeverity::Severe,
+                    ),
                     severity: BottleneckSeverity::Severe,
                 });
             } else if efficiency < 0.75 {
@@ -580,7 +591,11 @@ impl OptimizationSuite {
                     size: entry.size,
                     efficiency,
                     gflops: entry.gflops,
-                    recommendation: self.recommend_optimization(workload, entry, BottleneckSeverity::Moderate),
+                    recommendation: self.recommend_optimization(
+                        workload,
+                        entry,
+                        BottleneckSeverity::Moderate,
+                    ),
                     severity: BottleneckSeverity::Moderate,
                 });
             }
@@ -615,7 +630,10 @@ impl OptimizationSuite {
                 efficiencies.iter().sum::<f64>() / efficiencies.len() as f64
             },
             min_efficiency: efficiencies.iter().cloned().fold(f64::INFINITY, f64::min),
-            max_efficiency: efficiencies.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            max_efficiency: efficiencies
+                .iter()
+                .cloned()
+                .fold(f64::NEG_INFINITY, f64::max),
         };
 
         analysis
@@ -754,7 +772,9 @@ impl BottleneckAnalysis {
             && self.moderate.is_empty()
             && self.unstable.is_empty()
         {
-            report.push_str("**All operations performing at >= 75% efficiency with stable measurements.**\n");
+            report.push_str(
+                "**All operations performing at >= 75% efficiency with stable measurements.**\n",
+            );
         }
 
         report
@@ -824,9 +844,9 @@ impl RegressionDetector {
         for current_entry in &current.entries {
             if let Some(baseline_entry) = self.find_baseline(current_entry) {
                 if baseline_entry.gflops > 0.0 {
-                    let change =
-                        (current_entry.gflops - baseline_entry.gflops) / baseline_entry.gflops
-                            * 100.0;
+                    let change = (current_entry.gflops - baseline_entry.gflops)
+                        / baseline_entry.gflops
+                        * 100.0;
 
                     if change < -self.threshold_percent {
                         regressions.push(RegressionEntry {
@@ -874,9 +894,7 @@ impl RegressionDetector {
 
     fn find_baseline(&self, current: &BaselineEntry) -> Option<&BaselineEntry> {
         self.baseline.entries.iter().find(|b| {
-            b.workload == current.workload
-                && b.size == current.size
-                && b.backend == current.backend
+            b.workload == current.workload && b.size == current.size && b.backend == current.backend
         })
     }
 }
@@ -985,14 +1003,8 @@ impl OptimizationValidator {
         after_results: &[BenchmarkResult],
     ) -> ValidationResult {
         // Extract GFLOP/s values
-        let before_samples: Vec<f64> = before_results
-            .iter()
-            .map(|r| r.results.gflops)
-            .collect();
-        let after_samples: Vec<f64> = after_results
-            .iter()
-            .map(|r| r.results.gflops)
-            .collect();
+        let before_samples: Vec<f64> = before_results.iter().map(|r| r.results.gflops).collect();
+        let after_samples: Vec<f64> = after_results.iter().map(|r| r.results.gflops).collect();
 
         self.validate_samples(&before_samples, &after_samples)
     }
@@ -1110,7 +1122,8 @@ fn std_dev(samples: &[f64]) -> f64 {
         return 0.0;
     }
     let m = mean(samples);
-    let variance = samples.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (samples.len() - 1) as f64;
+    let variance =
+        samples.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (samples.len() - 1) as f64;
     variance.sqrt()
 }
 

@@ -6,7 +6,7 @@
 #![cfg(all(test, feature = "cuda"))]
 
 use crate::driver::{CudaContext, CudaStream};
-use crate::memory::resident::{GpuResidentTensor, reset_transfer_counters};
+use crate::memory::resident::{reset_transfer_counters, GpuResidentTensor};
 
 /// Helper to create CUDA context, skipping test if unavailable
 macro_rules! cuda_ctx {
@@ -36,7 +36,9 @@ fn test_ops_matmul_naive_small() {
     let k = 4u32;
 
     // A: 4x4 identity-like matrix
-    let a_data: Vec<f32> = (0..16).map(|i| if i % 5 == 0 { 1.0 } else { 0.0 }).collect();
+    let a_data: Vec<f32> = (0..16)
+        .map(|i| if i % 5 == 0 { 1.0 } else { 0.0 })
+        .collect();
     // B: 4x4 matrix with values 1-16
     let b_data: Vec<f32> = (1..=16).map(|i| i as f32).collect();
 
@@ -99,7 +101,7 @@ fn test_ops_matmul_dimension_error() {
 
     // Create tensors with wrong sizes
     let a_data = vec![1.0f32; 16]; // 4x4
-    let b_data = vec![1.0f32; 9];  // 3x3
+    let b_data = vec![1.0f32; 9]; // 3x3
 
     let a = GpuResidentTensor::from_host(&ctx, &a_data).unwrap();
     let b = GpuResidentTensor::from_host(&ctx, &b_data).unwrap();
@@ -182,7 +184,7 @@ fn test_ops_softmax_dimension_error() {
     let data: Vec<f32> = vec![1.0; 10];
     let tensor = GpuResidentTensor::from_host(&ctx, &data).unwrap();
 
-    let result = tensor.softmax(&ctx, 3);  // 10 not divisible by 3
+    let result = tensor.softmax(&ctx, 3); // 10 not divisible by 3
     assert!(result.is_err());
 }
 
@@ -299,7 +301,9 @@ fn test_ops_layer_norm() {
     let gamma = GpuResidentTensor::from_host(&ctx, &gamma_data).unwrap();
     let beta = GpuResidentTensor::from_host(&ctx, &beta_data).unwrap();
 
-    let mut output = input.layer_norm(&ctx, &gamma, &beta, hidden_size, batch_size).unwrap();
+    let mut output = input
+        .layer_norm(&ctx, &gamma, &beta, hidden_size, batch_size)
+        .unwrap();
     assert_eq!(output.len(), (hidden_size * batch_size) as usize);
 
     // With gamma=1, beta=0, output should be normalized (mean~0, std~1)
@@ -307,7 +311,11 @@ fn test_ops_layer_norm() {
     // Check first row mean is approximately 0
     let first_row: Vec<f32> = host_output[0..hidden_size as usize].to_vec();
     let mean: f32 = first_row.iter().sum::<f32>() / hidden_size as f32;
-    assert!((mean).abs() < 0.1, "LayerNorm output mean should be ~0, got {}", mean);
+    assert!(
+        (mean).abs() < 0.1,
+        "LayerNorm output mean should be ~0, got {}",
+        mean
+    );
 }
 
 #[test]
@@ -328,7 +336,9 @@ fn test_ops_layer_norm_with_stream() {
     let beta = GpuResidentTensor::from_host(&ctx, &beta_data).unwrap();
 
     let stream = CudaStream::new(&ctx).unwrap();
-    let output = input.layer_norm_with_stream(&ctx, &gamma, &beta, hidden_size, batch_size, &stream).unwrap();
+    let output = input
+        .layer_norm_with_stream(&ctx, &gamma, &beta, hidden_size, batch_size, &stream)
+        .unwrap();
     stream.synchronize().unwrap();
 
     assert_eq!(output.len(), (hidden_size * batch_size) as usize);
@@ -357,7 +367,10 @@ fn test_ops_gelu() {
     assert!((result[1] - 0.841).abs() < 0.1, "GELU(1) should be ~0.841");
 
     // GELU(-1) ≈ -0.159 (approximate)
-    assert!((result[3] - (-0.159)).abs() < 0.1, "GELU(-1) should be ~-0.159");
+    assert!(
+        (result[3] - (-0.159)).abs() < 0.1,
+        "GELU(-1) should be ~-0.159"
+    );
 }
 
 #[test]
@@ -383,7 +396,9 @@ fn test_ops_bias_add() {
     let ctx = cuda_ctx!();
 
     // 4 rows of 3 elements each
-    let input_data = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0];
+    let input_data = vec![
+        1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+    ];
     let bias_data = vec![0.1f32, 0.2, 0.3];
 
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
@@ -438,7 +453,9 @@ fn test_ops_linear_without_bias() {
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
 
-    let output = input.linear(&ctx, &weight, None, batch_size, in_features, out_features).unwrap();
+    let output = input
+        .linear(&ctx, &weight, None, batch_size, in_features, out_features)
+        .unwrap();
     assert_eq!(output.len(), (batch_size * out_features) as usize);
 }
 
@@ -458,7 +475,16 @@ fn test_ops_linear_with_bias() {
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
     let bias = GpuResidentTensor::from_host(&ctx, &bias_data).unwrap();
 
-    let output = input.linear(&ctx, &weight, Some(&bias), batch_size, in_features, out_features).unwrap();
+    let output = input
+        .linear(
+            &ctx,
+            &weight,
+            Some(&bias),
+            batch_size,
+            in_features,
+            out_features,
+        )
+        .unwrap();
     assert_eq!(output.len(), (batch_size * out_features) as usize);
 }
 
@@ -482,7 +508,9 @@ fn test_ops_fused_linear_gelu() {
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
     let bias = GpuResidentTensor::from_host(&ctx, &bias_data).unwrap();
 
-    let mut output = input.fused_linear_gelu(&ctx, &weight, &bias, batch_size, in_features, out_features).unwrap();
+    let mut output = input
+        .fused_linear_gelu(&ctx, &weight, &bias, batch_size, in_features, out_features)
+        .unwrap();
     assert_eq!(output.len(), (batch_size * out_features) as usize);
 
     // Output should be GELU-activated (non-negative for positive inputs after matmul)
@@ -517,11 +545,19 @@ fn test_ops_conv1d() {
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
     let bias = GpuResidentTensor::from_host(&ctx, &bias_data).unwrap();
 
-    let output = input.conv1d(
-        &ctx, &weight, Some(&bias),
-        in_channels, out_channels, kernel_size,
-        stride, padding, seq_len
-    ).unwrap();
+    let output = input
+        .conv1d(
+            &ctx,
+            &weight,
+            Some(&bias),
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            seq_len,
+        )
+        .unwrap();
 
     // Expected output length: (seq_len + 2*padding - kernel_size) / stride + 1
     let expected_out_len = (seq_len + 2 * padding - kernel_size) / stride + 1;
@@ -544,7 +580,17 @@ fn test_ops_conv1d_dimension_error() {
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
 
-    let result = input.conv1d(&ctx, &weight, None, in_channels, out_channels, kernel_size, 1, 0, seq_len);
+    let result = input.conv1d(
+        &ctx,
+        &weight,
+        None,
+        in_channels,
+        out_channels,
+        kernel_size,
+        1,
+        0,
+        seq_len,
+    );
     assert!(result.is_err());
 }
 
@@ -565,14 +611,14 @@ fn test_ops_interleaved_to_head_first() {
 
     // Input: [seq_len, n_heads * head_dim]
     let d_model = n_heads * head_dim;
-    let input_data: Vec<f32> = (0..(seq_len * d_model))
-        .map(|i| i as f32 * 0.001)
-        .collect();
+    let input_data: Vec<f32> = (0..(seq_len * d_model)).map(|i| i as f32 * 0.001).collect();
 
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
     let stream = CudaStream::new(&ctx).unwrap();
 
-    let output = input.interleaved_to_head_first(&ctx, seq_len, n_heads, head_dim, &stream).unwrap();
+    let output = input
+        .interleaved_to_head_first(&ctx, seq_len, n_heads, head_dim, &stream)
+        .unwrap();
     stream.synchronize().unwrap();
 
     // Output shape: [n_heads, seq_len, head_dim] flattened
@@ -687,22 +733,30 @@ fn test_batched_multihead_attention_optimized() {
     let seq_len = 4u32;
     let d_model = (n_heads * head_dim) as usize;
 
-    let q_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| (i as f32) * 0.1).collect();
-    let k_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| (i as f32) * 0.1).collect();
-    let v_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| (i as f32) * 0.1).collect();
+    let q_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| (i as f32) * 0.1)
+        .collect();
+    let k_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| (i as f32) * 0.1)
+        .collect();
+    let v_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| (i as f32) * 0.1)
+        .collect();
 
     let q = GpuResidentTensor::from_host(&ctx, &q_data).unwrap();
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let output = batched_multihead_attention_optimized(&ctx, &q, &k, &v, n_heads, head_dim, seq_len).unwrap();
+    let output =
+        batched_multihead_attention_optimized(&ctx, &q, &k, &v, n_heads, head_dim, seq_len)
+            .unwrap();
     assert_eq!(output.len(), seq_len as usize * d_model);
 }
 
 #[test]
 fn test_incremental_attention_gpu() {
-    use crate::memory::resident::incremental_attention_gpu;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -723,14 +777,16 @@ fn test_incremental_attention_gpu() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let output = incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len).unwrap();
+    let output =
+        incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len)
+            .unwrap();
     assert_eq!(output.len(), d_model); // single token output
 }
 
 #[test]
 fn test_incremental_attention_gpu_with_stream() {
-    use crate::memory::resident::incremental_attention_gpu_with_stream;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_with_stream;
     // Clear cache because kernel modules are tied to CUDA contexts
     // and previous tests may have cached modules with different contexts
     clear_kernel_cache();
@@ -752,7 +808,18 @@ fn test_incremental_attention_gpu_with_stream() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let output = incremental_attention_gpu_with_stream(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream).unwrap();
+    let output = incremental_attention_gpu_with_stream(
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
+    )
+    .unwrap();
     assert_eq!(output.len(), d_model);
 }
 
@@ -777,7 +844,17 @@ fn test_kv_cache_scatter_gpu() {
     let mut cache = GpuResidentTensor::from_host(&ctx, &cache_data).unwrap();
     let new_tensor = GpuResidentTensor::from_host(&ctx, &new_kv).unwrap();
 
-    kv_cache_scatter_gpu(&ctx, &new_tensor, &mut cache, position, n_heads, head_dim, max_seq_len, &stream).unwrap();
+    kv_cache_scatter_gpu(
+        &ctx,
+        &new_tensor,
+        &mut cache,
+        position,
+        n_heads,
+        head_dim,
+        max_seq_len,
+        &stream,
+    )
+    .unwrap();
 
     // Verify scatter happened
     let result = cache.to_host().unwrap();
@@ -881,7 +958,9 @@ fn test_gpu_encoder_block_weights_structure() {
 
 #[test]
 fn test_forward_encoder_block_gpu() {
-    use crate::memory::resident::{forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig, clear_kernel_cache};
+    use crate::memory::resident::{
+        clear_kernel_cache, forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig,
+    };
     // Clear cache because kernel modules are tied to CUDA contexts
     clear_kernel_cache();
     let ctx = cuda_ctx!();
@@ -918,7 +997,9 @@ fn test_forward_encoder_block_gpu() {
     };
 
     // Input: [seq_len * d_model]
-    let input_data: Vec<f32> = (0..(seq_len * d_model)).map(|i| (i as f32) * 0.01).collect();
+    let input_data: Vec<f32> = (0..(seq_len * d_model))
+        .map(|i| (i as f32) * 0.01)
+        .collect();
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
 
     let output = forward_encoder_block_gpu(&ctx, &input, &weights, &config).unwrap();
@@ -963,9 +1044,17 @@ fn test_gpu_conv_frontend_weights_structure() {
     let kernel_size = 3usize;
 
     let weights = GpuConvFrontendWeights {
-        conv1_weight: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; hidden * in_channels * kernel_size]).unwrap(),
+        conv1_weight: GpuResidentTensor::from_host(
+            &ctx,
+            &vec![0.01f32; hidden * in_channels * kernel_size],
+        )
+        .unwrap(),
         conv1_bias: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; hidden]).unwrap(),
-        conv2_weight: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; hidden * hidden * kernel_size]).unwrap(),
+        conv2_weight: GpuResidentTensor::from_host(
+            &ctx,
+            &vec![0.01f32; hidden * hidden * kernel_size],
+        )
+        .unwrap(),
         conv2_bias: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; hidden]).unwrap(),
     };
 
@@ -973,7 +1062,10 @@ fn test_gpu_conv_frontend_weights_structure() {
     assert!(weights.conv1_bias.is_device_resident());
     assert!(weights.conv2_weight.is_device_resident());
     assert!(weights.conv2_bias.is_device_resident());
-    assert_eq!(weights.conv1_weight.len(), hidden * in_channels * kernel_size);
+    assert_eq!(
+        weights.conv1_weight.len(),
+        hidden * in_channels * kernel_size
+    );
     assert_eq!(weights.conv2_weight.len(), hidden * hidden * kernel_size);
 }
 
@@ -1027,7 +1119,9 @@ fn test_gpu_decoder_block_weights_structure() {
 
 #[test]
 fn test_forward_encoder_block_with_debug() {
-    use crate::memory::resident::{forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig, clear_kernel_cache};
+    use crate::memory::resident::{
+        clear_kernel_cache, forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig,
+    };
     // Clear cache because kernel modules are tied to CUDA contexts
     clear_kernel_cache();
     let ctx = cuda_ctx!();
@@ -1141,9 +1235,15 @@ fn test_batched_multihead_attention_with_debug() {
     let seq_len = 3u32;
     let d_model = (n_heads * head_dim) as usize;
 
-    let q_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| (i as f32) * 0.1).collect();
-    let k_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| (i as f32) * 0.1).collect();
-    let v_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| (i as f32) * 0.1).collect();
+    let q_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| (i as f32) * 0.1)
+        .collect();
+    let k_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| (i as f32) * 0.1)
+        .collect();
+    let v_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| (i as f32) * 0.1)
+        .collect();
 
     let q = GpuResidentTensor::from_host(&ctx, &q_data).unwrap();
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
@@ -1197,7 +1297,8 @@ fn test_batched_multihead_attention_optimized_size_error() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = batched_multihead_attention_optimized(&ctx, &q, &k, &v, n_heads, head_dim, seq_len);
+    let result =
+        batched_multihead_attention_optimized(&ctx, &q, &k, &v, n_heads, head_dim, seq_len);
     assert!(result.is_err());
 }
 
@@ -1222,7 +1323,8 @@ fn test_incremental_attention_dimension_error() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
+    let result =
+        incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
     assert!(result.is_err());
 }
 
@@ -1244,7 +1346,16 @@ fn test_kv_cache_scatter_dimension_error() {
     let new_tensor = GpuResidentTensor::from_host(&ctx, &new_kv).unwrap();
     let mut cache = GpuResidentTensor::from_host(&ctx, &cache_data).unwrap();
 
-    let result = kv_cache_scatter_gpu(&ctx, &new_tensor, &mut cache, 3, n_heads, head_dim, max_seq_len, &stream);
+    let result = kv_cache_scatter_gpu(
+        &ctx,
+        &new_tensor,
+        &mut cache,
+        3,
+        n_heads,
+        head_dim,
+        max_seq_len,
+        &stream,
+    );
     assert!(result.is_err());
 }
 
@@ -1259,9 +1370,15 @@ fn test_batched_multihead_attention_larger_heads() {
     let seq_len = 4u32;
     let d_model = (n_heads * head_dim) as usize;
 
-    let q_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| ((i % 10) as f32) * 0.1).collect();
-    let k_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| ((i % 7) as f32) * 0.1).collect();
-    let v_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| ((i % 5) as f32) * 0.1).collect();
+    let q_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| ((i % 10) as f32) * 0.1)
+        .collect();
+    let k_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| ((i % 7) as f32) * 0.1)
+        .collect();
+    let v_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| ((i % 5) as f32) * 0.1)
+        .collect();
 
     let q = GpuResidentTensor::from_host(&ctx, &q_data).unwrap();
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
@@ -1281,15 +1398,23 @@ fn test_batched_multihead_attention_optimized_larger() {
     let seq_len = 8u32;
     let d_model = (n_heads * head_dim) as usize;
 
-    let q_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| ((i % 10) as f32) * 0.01).collect();
-    let k_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| ((i % 10) as f32) * 0.01).collect();
-    let v_data: Vec<f32> = (0..(seq_len as usize * d_model)).map(|i| ((i % 10) as f32) * 0.01).collect();
+    let q_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| ((i % 10) as f32) * 0.01)
+        .collect();
+    let k_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| ((i % 10) as f32) * 0.01)
+        .collect();
+    let v_data: Vec<f32> = (0..(seq_len as usize * d_model))
+        .map(|i| ((i % 10) as f32) * 0.01)
+        .collect();
 
     let q = GpuResidentTensor::from_host(&ctx, &q_data).unwrap();
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let output = batched_multihead_attention_optimized(&ctx, &q, &k, &v, n_heads, head_dim, seq_len).unwrap();
+    let output =
+        batched_multihead_attention_optimized(&ctx, &q, &k, &v, n_heads, head_dim, seq_len)
+            .unwrap();
     assert_eq!(output.len(), seq_len as usize * d_model);
 }
 
@@ -1299,8 +1424,8 @@ fn test_batched_multihead_attention_optimized_larger() {
 
 #[test]
 fn test_incremental_attention_v_cache_error() {
-    use crate::memory::resident::incremental_attention_gpu;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -1320,14 +1445,15 @@ fn test_incremental_attention_v_cache_error() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
+    let result =
+        incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_k_cache_error() {
-    use crate::memory::resident::incremental_attention_gpu;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -1347,14 +1473,15 @@ fn test_incremental_attention_k_cache_error() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
+    let result =
+        incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_seq_exceeds_max() {
-    use crate::memory::resident::incremental_attention_gpu;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -1373,14 +1500,15 @@ fn test_incremental_attention_seq_exceeds_max() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
+    let result =
+        incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_empty_sequence() {
-    use crate::memory::resident::incremental_attention_gpu;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -1400,14 +1528,16 @@ fn test_incremental_attention_empty_sequence() {
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
     // Empty sequence should return zeros
-    let output = incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len).unwrap();
+    let output =
+        incremental_attention_gpu(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len)
+            .unwrap();
     assert_eq!(output.len(), d_model);
 }
 
 #[test]
 fn test_incremental_attention_gpu_async() {
-    use crate::memory::resident::incremental_attention_gpu_async;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_async;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -1426,15 +1556,17 @@ fn test_incremental_attention_gpu_async() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let (output, stream) = incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len).unwrap();
+    let (output, stream) =
+        incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len)
+            .unwrap();
     stream.synchronize().unwrap();
     assert_eq!(output.len(), d_model);
 }
 
 #[test]
 fn test_incremental_attention_gpu_async_empty_seq() {
-    use crate::memory::resident::incremental_attention_gpu_async;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_async;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -1454,14 +1586,16 @@ fn test_incremental_attention_gpu_async_empty_seq() {
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
     // Empty sequence should return zeros + stream
-    let (output, _stream) = incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len).unwrap();
+    let (output, _stream) =
+        incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len)
+            .unwrap();
     assert_eq!(output.len(), d_model);
 }
 
 #[test]
 fn test_incremental_attention_gpu_async_q_error() {
-    use crate::memory::resident::incremental_attention_gpu_async;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_async;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -1480,14 +1614,15 @@ fn test_incremental_attention_gpu_async_q_error() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
+    let result =
+        incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_gpu_async_kv_cache_error() {
-    use crate::memory::resident::incremental_attention_gpu_async;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_async;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -1506,14 +1641,15 @@ fn test_incremental_attention_gpu_async_kv_cache_error() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
+    let result =
+        incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_gpu_async_seq_exceeds_max() {
-    use crate::memory::resident::incremental_attention_gpu_async;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_async;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -1532,14 +1668,15 @@ fn test_incremental_attention_gpu_async_seq_exceeds_max() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
+    let result =
+        incremental_attention_gpu_async(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_with_stream_q_error() {
-    use crate::memory::resident::incremental_attention_gpu_with_stream;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_with_stream;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
     let stream = CudaStream::new(&ctx).unwrap();
@@ -1559,14 +1696,24 @@ fn test_incremental_attention_with_stream_q_error() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu_with_stream(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream);
+    let result = incremental_attention_gpu_with_stream(
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
+    );
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_with_stream_k_cache_error() {
-    use crate::memory::resident::incremental_attention_gpu_with_stream;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_with_stream;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
     let stream = CudaStream::new(&ctx).unwrap();
@@ -1587,14 +1734,24 @@ fn test_incremental_attention_with_stream_k_cache_error() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu_with_stream(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream);
+    let result = incremental_attention_gpu_with_stream(
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
+    );
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_with_stream_v_cache_error() {
-    use crate::memory::resident::incremental_attention_gpu_with_stream;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_with_stream;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
     let stream = CudaStream::new(&ctx).unwrap();
@@ -1615,14 +1772,24 @@ fn test_incremental_attention_with_stream_v_cache_error() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu_with_stream(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream);
+    let result = incremental_attention_gpu_with_stream(
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
+    );
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_with_stream_seq_exceeds_max() {
-    use crate::memory::resident::incremental_attention_gpu_with_stream;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_with_stream;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
     let stream = CudaStream::new(&ctx).unwrap();
@@ -1642,14 +1809,24 @@ fn test_incremental_attention_with_stream_seq_exceeds_max() {
     let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
-    let result = incremental_attention_gpu_with_stream(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream);
+    let result = incremental_attention_gpu_with_stream(
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
+    );
     assert!(result.is_err());
 }
 
 #[test]
 fn test_incremental_attention_with_stream_empty_seq() {
-    use crate::memory::resident::incremental_attention_gpu_with_stream;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::incremental_attention_gpu_with_stream;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
     let stream = CudaStream::new(&ctx).unwrap();
@@ -1670,14 +1847,25 @@ fn test_incremental_attention_with_stream_empty_seq() {
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
     // Empty sequence should return zeros
-    let output = incremental_attention_gpu_with_stream(&ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream).unwrap();
+    let output = incremental_attention_gpu_with_stream(
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
+    )
+    .unwrap();
     assert_eq!(output.len(), d_model);
 }
 
 #[test]
 fn test_kv_cache_scatter_cache_size_error() {
-    use crate::memory::resident::kv_cache_scatter_gpu;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::kv_cache_scatter_gpu;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
     let stream = CudaStream::new(&ctx).unwrap();
@@ -1694,14 +1882,23 @@ fn test_kv_cache_scatter_cache_size_error() {
     let mut cache = GpuResidentTensor::from_host(&ctx, &cache_data).unwrap();
     let new_tensor = GpuResidentTensor::from_host(&ctx, &new_kv).unwrap();
 
-    let result = kv_cache_scatter_gpu(&ctx, &new_tensor, &mut cache, 3, n_heads, head_dim, max_seq_len, &stream);
+    let result = kv_cache_scatter_gpu(
+        &ctx,
+        &new_tensor,
+        &mut cache,
+        3,
+        n_heads,
+        head_dim,
+        max_seq_len,
+        &stream,
+    );
     assert!(result.is_err());
 }
 
 #[test]
 fn test_kv_cache_scatter_position_exceeds_max() {
-    use crate::memory::resident::kv_cache_scatter_gpu;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::kv_cache_scatter_gpu;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
     let stream = CudaStream::new(&ctx).unwrap();
@@ -1719,7 +1916,16 @@ fn test_kv_cache_scatter_position_exceeds_max() {
     let mut cache = GpuResidentTensor::from_host(&ctx, &cache_data).unwrap();
     let new_tensor = GpuResidentTensor::from_host(&ctx, &new_kv).unwrap();
 
-    let result = kv_cache_scatter_gpu(&ctx, &new_tensor, &mut cache, position, n_heads, head_dim, max_seq_len, &stream);
+    let result = kv_cache_scatter_gpu(
+        &ctx,
+        &new_tensor,
+        &mut cache,
+        position,
+        n_heads,
+        head_dim,
+        max_seq_len,
+        &stream,
+    );
     assert!(result.is_err());
 }
 
@@ -1936,11 +2142,19 @@ fn test_ops_conv1d_without_bias() {
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
 
     // Call without bias (None)
-    let output = input.conv1d(
-        &ctx, &weight, None,
-        in_channels, out_channels, kernel_size,
-        stride, padding, seq_len
-    ).unwrap();
+    let output = input
+        .conv1d(
+            &ctx,
+            &weight,
+            None,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            seq_len,
+        )
+        .unwrap();
 
     let expected_out_len = (seq_len + 2 * padding - kernel_size) / stride + 1;
     assert_eq!(output.len(), (expected_out_len * out_channels) as usize);
@@ -1965,7 +2179,17 @@ fn test_ops_conv1d_weight_dimension_error() {
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
 
-    let result = input.conv1d(&ctx, &weight, None, in_channels, out_channels, kernel_size, 1, 0, seq_len);
+    let result = input.conv1d(
+        &ctx,
+        &weight,
+        None,
+        in_channels,
+        out_channels,
+        kernel_size,
+        1,
+        0,
+        seq_len,
+    );
     assert!(result.is_err());
 }
 
@@ -1990,7 +2214,16 @@ fn test_ops_linear_with_debug() {
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
     let bias = GpuResidentTensor::from_host(&ctx, &bias_data).unwrap();
 
-    let output = input.linear(&ctx, &weight, Some(&bias), batch_size, in_features, out_features).unwrap();
+    let output = input
+        .linear(
+            &ctx,
+            &weight,
+            Some(&bias),
+            batch_size,
+            in_features,
+            out_features,
+        )
+        .unwrap();
     assert_eq!(output.len(), (batch_size * out_features) as usize);
 
     std::env::remove_var("WHISPER_DEBUG_LINEAR");
@@ -2016,7 +2249,9 @@ fn test_ops_linear_without_bias_and_debug() {
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
 
     // Call without bias to exercise that code path
-    let output = input.linear(&ctx, &weight, None, batch_size, in_features, out_features).unwrap();
+    let output = input
+        .linear(&ctx, &weight, None, batch_size, in_features, out_features)
+        .unwrap();
     assert_eq!(output.len(), (batch_size * out_features) as usize);
 
     std::env::remove_var("WHISPER_DEBUG_LINEAR");
@@ -2074,7 +2309,9 @@ fn test_ops_layer_norm_larger_batch() {
     let gamma = GpuResidentTensor::from_host(&ctx, &gamma_data).unwrap();
     let beta = GpuResidentTensor::from_host(&ctx, &beta_data).unwrap();
 
-    let output = input.layer_norm(&ctx, &gamma, &beta, hidden_size, batch_size).unwrap();
+    let output = input
+        .layer_norm(&ctx, &gamma, &beta, hidden_size, batch_size)
+        .unwrap();
     assert_eq!(output.len(), (hidden_size * batch_size) as usize);
 }
 
@@ -2097,8 +2334,8 @@ fn test_ops_bias_add_larger_tensor() {
     let result = output.to_host().unwrap();
 
     // Check that bias was added correctly
-    assert!((result[0] - 1.0).abs() < 1e-5);  // 1.0 + 0.0
-    assert!((result[1] - 1.1).abs() < 1e-5);  // 1.0 + 0.1
+    assert!((result[0] - 1.0).abs() < 1e-5); // 1.0 + 0.0
+    assert!((result[1] - 1.1).abs() < 1e-5); // 1.0 + 0.1
     assert!((result[64] - 1.0).abs() < 1e-5); // Next row, first element
 }
 
@@ -2120,7 +2357,9 @@ fn test_ops_fused_linear_gelu_larger() {
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
     let bias = GpuResidentTensor::from_host(&ctx, &bias_data).unwrap();
 
-    let mut output = input.fused_linear_gelu(&ctx, &weight, &bias, batch_size, in_features, out_features).unwrap();
+    let mut output = input
+        .fused_linear_gelu(&ctx, &weight, &bias, batch_size, in_features, out_features)
+        .unwrap();
     assert_eq!(output.len(), (batch_size * out_features) as usize);
 
     // Output values should be valid floats
@@ -2167,7 +2406,9 @@ fn test_ops_interleaved_to_head_first_larger() {
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
     let stream = CudaStream::new(&ctx).unwrap();
 
-    let output = input.interleaved_to_head_first(&ctx, seq_len, n_heads, head_dim, &stream).unwrap();
+    let output = input
+        .interleaved_to_head_first(&ctx, seq_len, n_heads, head_dim, &stream)
+        .unwrap();
     stream.synchronize().unwrap();
 
     assert_eq!(output.len(), (seq_len * d_model) as usize);
@@ -2194,11 +2435,19 @@ fn test_ops_conv1d_with_stride() {
     let weight = GpuResidentTensor::from_host(&ctx, &weight_data).unwrap();
     let bias = GpuResidentTensor::from_host(&ctx, &bias_data).unwrap();
 
-    let output = input.conv1d(
-        &ctx, &weight, Some(&bias),
-        in_channels, out_channels, kernel_size,
-        stride, padding, seq_len
-    ).unwrap();
+    let output = input
+        .conv1d(
+            &ctx,
+            &weight,
+            Some(&bias),
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            seq_len,
+        )
+        .unwrap();
 
     // Expected output length with stride=2: (100 + 2*2 - 5) / 2 + 1 = 50
     let expected_out_len = (seq_len + 2 * padding - kernel_size) / stride + 1;
@@ -2242,7 +2491,9 @@ fn test_ops_layer_norm_with_stream_larger() {
     let beta = GpuResidentTensor::from_host(&ctx, &beta_data).unwrap();
 
     let stream = CudaStream::new(&ctx).unwrap();
-    let output = input.layer_norm_with_stream(&ctx, &gamma, &beta, hidden_size, batch_size, &stream).unwrap();
+    let output = input
+        .layer_norm_with_stream(&ctx, &gamma, &beta, hidden_size, batch_size, &stream)
+        .unwrap();
     stream.synchronize().unwrap();
 
     assert_eq!(output.len(), (hidden_size * batch_size) as usize);
@@ -2466,8 +2717,8 @@ fn test_gpu_resident_tensor_buffer_and_buffer_mut() {
 
 #[test]
 fn test_gpu_resident_tensor_from_buffer_internal() {
-    use crate::memory::resident::clear_kernel_cache;
     use crate::driver::GpuBuffer;
+    use crate::memory::resident::clear_kernel_cache;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2573,7 +2824,9 @@ fn test_transfer_stats_debug() {
 
 #[test]
 fn test_kernel_cache_stats_after_operations() {
-    use crate::memory::resident::{kernel_cache_hits, kernel_cache_misses, reset_kernel_cache_stats, clear_kernel_cache};
+    use crate::memory::resident::{
+        clear_kernel_cache, kernel_cache_hits, kernel_cache_misses, reset_kernel_cache_stats,
+    };
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2592,7 +2845,10 @@ fn test_kernel_cache_stats_after_operations() {
     let _ = tensor2.gelu(&ctx).unwrap();
 
     let hits = kernel_cache_hits();
-    assert!(hits >= 1, "Should have at least 1 cache hit on repeated operation");
+    assert!(
+        hits >= 1,
+        "Should have at least 1 cache hit on repeated operation"
+    );
 }
 
 // ============================================================================
@@ -2601,8 +2857,8 @@ fn test_kernel_cache_stats_after_operations() {
 
 #[test]
 fn test_gpu_kv_cache_key_and_value_access() {
-    use crate::memory::resident::GpuKvCache;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::GpuKvCache;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2626,8 +2882,8 @@ fn test_gpu_kv_cache_key_and_value_access() {
 
 #[test]
 fn test_gpu_kv_cache_len_changes() {
-    use crate::memory::resident::GpuKvCache;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::GpuKvCache;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2655,7 +2911,9 @@ fn test_gpu_kv_cache_len_changes() {
 
 #[test]
 fn test_forward_encoder_block_gpu_verifies_output_shape() {
-    use crate::memory::resident::{forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig, clear_kernel_cache};
+    use crate::memory::resident::{
+        clear_kernel_cache, forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig,
+    };
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2690,7 +2948,9 @@ fn test_forward_encoder_block_gpu_verifies_output_shape() {
     };
 
     // Input with different sequence length
-    let input_data: Vec<f32> = (0..(seq_len * d_model)).map(|i| (i as f32) * 0.01).collect();
+    let input_data: Vec<f32> = (0..(seq_len * d_model))
+        .map(|i| (i as f32) * 0.01)
+        .collect();
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
 
     let output = forward_encoder_block_gpu(&ctx, &input, &weights, &config).unwrap();
@@ -2707,7 +2967,9 @@ fn test_forward_encoder_block_gpu_verifies_output_shape() {
 
 #[test]
 fn test_forward_encoder_block_gpu_with_different_n_heads() {
-    use crate::memory::resident::{forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig, clear_kernel_cache};
+    use crate::memory::resident::{
+        clear_kernel_cache, forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig,
+    };
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2742,7 +3004,9 @@ fn test_forward_encoder_block_gpu_with_different_n_heads() {
         ffn_down_b: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
     };
 
-    let input_data: Vec<f32> = (0..(seq_len * d_model)).map(|i| (i as f32) * 0.01).collect();
+    let input_data: Vec<f32> = (0..(seq_len * d_model))
+        .map(|i| (i as f32) * 0.01)
+        .collect();
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
 
     let output = forward_encoder_block_gpu(&ctx, &input, &weights, &config).unwrap();
@@ -2751,8 +3015,8 @@ fn test_forward_encoder_block_gpu_with_different_n_heads() {
 
 #[test]
 fn test_gpu_decoder_block_weights_all_fields() {
-    use crate::memory::resident::GpuDecoderBlockWeights;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::GpuDecoderBlockWeights;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2818,8 +3082,8 @@ fn test_gpu_decoder_block_weights_all_fields() {
 
 #[test]
 fn test_gpu_conv_frontend_weights_tensor_sizes() {
-    use crate::memory::resident::GpuConvFrontendWeights;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::GpuConvFrontendWeights;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2829,14 +3093,25 @@ fn test_gpu_conv_frontend_weights_tensor_sizes() {
     let kernel_size = 3usize;
 
     let weights = GpuConvFrontendWeights {
-        conv1_weight: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; hidden * in_channels * kernel_size]).unwrap(),
+        conv1_weight: GpuResidentTensor::from_host(
+            &ctx,
+            &vec![0.01f32; hidden * in_channels * kernel_size],
+        )
+        .unwrap(),
         conv1_bias: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; hidden]).unwrap(),
-        conv2_weight: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; hidden * hidden * kernel_size]).unwrap(),
+        conv2_weight: GpuResidentTensor::from_host(
+            &ctx,
+            &vec![0.01f32; hidden * hidden * kernel_size],
+        )
+        .unwrap(),
         conv2_bias: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; hidden]).unwrap(),
     };
 
     // Verify tensor sizes match expected dimensions
-    assert_eq!(weights.conv1_weight.len(), hidden * in_channels * kernel_size);
+    assert_eq!(
+        weights.conv1_weight.len(),
+        hidden * in_channels * kernel_size
+    );
     assert_eq!(weights.conv1_bias.len(), hidden);
     assert_eq!(weights.conv2_weight.len(), hidden * hidden * kernel_size);
     assert_eq!(weights.conv2_bias.len(), hidden);
@@ -2892,7 +3167,9 @@ fn test_gpu_decoder_config_copy_trait() {
 
 #[test]
 fn test_forward_encoder_block_with_varied_input_values() {
-    use crate::memory::resident::{forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig, clear_kernel_cache};
+    use crate::memory::resident::{
+        clear_kernel_cache, forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig,
+    };
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2911,24 +3188,62 @@ fn test_forward_encoder_block_with_varied_input_values() {
     let weights = GpuEncoderBlockWeights {
         ln1_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
         ln1_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_q: GpuResidentTensor::from_host(&ctx, &(0..d_model*d_model).map(|i| (i as f32) * 0.001).collect::<Vec<_>>()).unwrap(),
+        w_q: GpuResidentTensor::from_host(
+            &ctx,
+            &(0..d_model * d_model)
+                .map(|i| (i as f32) * 0.001)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap(),
         b_q: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
-        w_k: GpuResidentTensor::from_host(&ctx, &(0..d_model*d_model).map(|i| (i as f32) * 0.001).collect::<Vec<_>>()).unwrap(),
+        w_k: GpuResidentTensor::from_host(
+            &ctx,
+            &(0..d_model * d_model)
+                .map(|i| (i as f32) * 0.001)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap(),
         b_k: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
-        w_v: GpuResidentTensor::from_host(&ctx, &(0..d_model*d_model).map(|i| (i as f32) * 0.001).collect::<Vec<_>>()).unwrap(),
+        w_v: GpuResidentTensor::from_host(
+            &ctx,
+            &(0..d_model * d_model)
+                .map(|i| (i as f32) * 0.001)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap(),
         b_v: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
-        w_o: GpuResidentTensor::from_host(&ctx, &(0..d_model*d_model).map(|i| (i as f32) * 0.001).collect::<Vec<_>>()).unwrap(),
+        w_o: GpuResidentTensor::from_host(
+            &ctx,
+            &(0..d_model * d_model)
+                .map(|i| (i as f32) * 0.001)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap(),
         b_o: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
         ln2_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
         ln2_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        ffn_up_w: GpuResidentTensor::from_host(&ctx, &(0..d_model*ffn_dim).map(|i| (i as f32) * 0.001).collect::<Vec<_>>()).unwrap(),
+        ffn_up_w: GpuResidentTensor::from_host(
+            &ctx,
+            &(0..d_model * ffn_dim)
+                .map(|i| (i as f32) * 0.001)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap(),
         ffn_up_b: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; ffn_dim]).unwrap(),
-        ffn_down_w: GpuResidentTensor::from_host(&ctx, &(0..ffn_dim*d_model).map(|i| (i as f32) * 0.001).collect::<Vec<_>>()).unwrap(),
+        ffn_down_w: GpuResidentTensor::from_host(
+            &ctx,
+            &(0..ffn_dim * d_model)
+                .map(|i| (i as f32) * 0.001)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap(),
         ffn_down_b: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
     };
 
     // Input with varied values
-    let input_data: Vec<f32> = (0..(seq_len * d_model)).map(|i| ((i % 10) as f32) * 0.1 - 0.5).collect();
+    let input_data: Vec<f32> = (0..(seq_len * d_model))
+        .map(|i| ((i % 10) as f32) * 0.1 - 0.5)
+        .collect();
     let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
 
     let output = forward_encoder_block_gpu(&ctx, &input, &weights, &config).unwrap();
@@ -2937,8 +3252,8 @@ fn test_forward_encoder_block_with_varied_input_values() {
 
 #[test]
 fn test_gpu_encoder_block_weights_field_sizes() {
-    use crate::memory::resident::GpuEncoderBlockWeights;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::GpuEncoderBlockWeights;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -2985,8 +3300,8 @@ fn test_gpu_encoder_block_weights_field_sizes() {
 
 #[test]
 fn test_gpu_decoder_block_weights_field_sizes() {
-    use crate::memory::resident::GpuDecoderBlockWeights;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::GpuDecoderBlockWeights;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
@@ -3053,8 +3368,8 @@ fn test_gpu_decoder_block_weights_field_sizes() {
 
 #[test]
 fn test_gpu_kv_cache_field_access() {
-    use crate::memory::resident::GpuKvCache;
     use crate::memory::resident::clear_kernel_cache;
+    use crate::memory::resident::GpuKvCache;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 

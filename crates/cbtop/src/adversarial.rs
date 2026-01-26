@@ -25,7 +25,11 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, PartialEq)]
 pub enum AdversarialError {
     /// Input tensor contains corrupted data
-    CorruptedInput { byte_index: usize, expected_checksum: u32, actual_checksum: u32 },
+    CorruptedInput {
+        byte_index: usize,
+        expected_checksum: u32,
+        actual_checksum: u32,
+    },
     /// Memory allocation failed under pressure
     AllocationFailed { requested_bytes: usize },
     /// Zero-size input detected
@@ -39,7 +43,12 @@ pub enum AdversarialError {
     /// Configuration parsing failed
     ConfigParseError { field: String, reason: String },
     /// Configuration value out of bounds
-    ConfigOutOfBounds { field: String, value: String, min: String, max: String },
+    ConfigOutOfBounds {
+        field: String,
+        value: String,
+        min: String,
+        max: String,
+    },
     /// Integer overflow detected
     IntegerOverflow { operation: String },
     /// Division by zero attempted
@@ -53,11 +62,18 @@ pub enum AdversarialError {
     /// Resource exhaustion (memory, handles, etc.)
     ResourceExhausted { resource: String },
     /// Operation timed out
-    Timeout { operation: String, elapsed: Duration, limit: Duration },
+    Timeout {
+        operation: String,
+        elapsed: Duration,
+        limit: Duration,
+    },
     /// Operation was cancelled
     Cancelled { operation: String },
     /// Recovery failed after error
-    RecoveryFailed { original_error: String, recovery_error: String },
+    RecoveryFailed {
+        original_error: String,
+        recovery_error: String,
+    },
 }
 
 /// Result type for adversarial operations
@@ -272,7 +288,8 @@ impl BitFlipInjector {
         let mut rng_state = self.seed;
         for _ in 0..self.flip_count {
             // LCG: next = (a * state + c) mod m
-            rng_state = rng_state.wrapping_mul(6364136223846793005)
+            rng_state = rng_state
+                .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
 
             let byte_idx = (rng_state as usize) % result.len();
@@ -287,13 +304,12 @@ impl BitFlipInjector {
     /// Inject bit flips into float data
     pub fn inject_floats(&self, data: &[f32]) -> Vec<f32> {
         // Convert to bytes, flip bits, convert back
-        let bytes: Vec<u8> = data.iter()
-            .flat_map(|f| f.to_le_bytes())
-            .collect();
+        let bytes: Vec<u8> = data.iter().flat_map(|f| f.to_le_bytes()).collect();
 
         let corrupted = self.inject(&bytes);
 
-        corrupted.chunks_exact(4)
+        corrupted
+            .chunks_exact(4)
             .map(|chunk| {
                 let arr: [u8; 4] = chunk.try_into().unwrap_or([0; 4]);
                 f32::from_le_bytes(arr)
@@ -314,30 +330,34 @@ impl CheckedArithmetic {
 
     /// Add with overflow check (F1012)
     pub fn checked_add_i64(a: i64, b: i64) -> AdversarialResult<i64> {
-        a.checked_add(b).ok_or_else(|| AdversarialError::IntegerOverflow {
-            operation: format!("{a} + {b}"),
-        })
+        a.checked_add(b)
+            .ok_or_else(|| AdversarialError::IntegerOverflow {
+                operation: format!("{a} + {b}"),
+            })
     }
 
     /// Multiply with overflow check (F1012)
     pub fn checked_mul_i64(a: i64, b: i64) -> AdversarialResult<i64> {
-        a.checked_mul(b).ok_or_else(|| AdversarialError::IntegerOverflow {
-            operation: format!("{a} * {b}"),
-        })
+        a.checked_mul(b)
+            .ok_or_else(|| AdversarialError::IntegerOverflow {
+                operation: format!("{a} * {b}"),
+            })
     }
 
     /// Add with overflow check for usize
     pub fn checked_add_usize(a: usize, b: usize) -> AdversarialResult<usize> {
-        a.checked_add(b).ok_or_else(|| AdversarialError::IntegerOverflow {
-            operation: format!("{a} + {b}"),
-        })
+        a.checked_add(b)
+            .ok_or_else(|| AdversarialError::IntegerOverflow {
+                operation: format!("{a} + {b}"),
+            })
     }
 
     /// Multiply with overflow check for usize
     pub fn checked_mul_usize(a: usize, b: usize) -> AdversarialResult<usize> {
-        a.checked_mul(b).ok_or_else(|| AdversarialError::IntegerOverflow {
-            operation: format!("{a} * {b}"),
-        })
+        a.checked_mul(b)
+            .ok_or_else(|| AdversarialError::IntegerOverflow {
+                operation: format!("{a} * {b}"),
+            })
     }
 
     /// Division with zero check (F1013)
@@ -351,7 +371,9 @@ impl CheckedArithmetic {
     /// Division with zero check for integers
     pub fn checked_div_i64(a: i64, b: i64) -> AdversarialResult<i64> {
         if b == 0 {
-            return Err(AdversarialError::DivisionByZero { numerator: a as f64 });
+            return Err(AdversarialError::DivisionByZero {
+                numerator: a as f64,
+            });
         }
         Ok(a / b)
     }
@@ -372,7 +394,9 @@ impl Default for MonotonicClock {
 impl MonotonicClock {
     /// Create a new monotonic clock tracker
     pub fn new() -> Self {
-        Self { last_timestamp: None }
+        Self {
+            last_timestamp: None,
+        }
     }
 
     /// Record a timestamp and verify monotonicity
@@ -383,10 +407,7 @@ impl MonotonicClock {
             // In Rust, Instant is guaranteed monotonic, but we check anyway
             // for systems with broken clocks
             if now < prev {
-                return Err(AdversarialError::ClockSkew {
-                    prev,
-                    curr: now,
-                });
+                return Err(AdversarialError::ClockSkew { prev, curr: now });
             }
         }
 
@@ -503,8 +524,10 @@ impl ResourceLimiter {
         let new_total = self.current_memory.saturating_add(bytes);
         if new_total > self.max_memory_bytes {
             return Err(AdversarialError::ResourceExhausted {
-                resource: format!("memory: requested {bytes} bytes, would exceed limit of {} bytes",
-                                  self.max_memory_bytes),
+                resource: format!(
+                    "memory: requested {bytes} bytes, would exceed limit of {} bytes",
+                    self.max_memory_bytes
+                ),
             });
         }
         self.current_memory = new_total;
@@ -592,7 +615,10 @@ impl ConfigValidator {
                     field: field.to_string(),
                     value: value.to_string(),
                     min: min.to_string(),
-                    max: self.maxs.get(field).map_or("unbounded".to_string(), |m| m.to_string()),
+                    max: self
+                        .maxs
+                        .get(field)
+                        .map_or("unbounded".to_string(), |m| m.to_string()),
                 });
             }
         }
@@ -602,7 +628,10 @@ impl ConfigValidator {
                 return Err(AdversarialError::ConfigOutOfBounds {
                     field: field.to_string(),
                     value: value.to_string(),
-                    min: self.mins.get(field).map_or("unbounded".to_string(), |m| m.to_string()),
+                    min: self
+                        .mins
+                        .get(field)
+                        .map_or("unbounded".to_string(), |m| m.to_string()),
                     max: max.to_string(),
                 });
             }
@@ -630,8 +659,10 @@ impl ConfigValidator {
         if open_brackets != close_brackets {
             return Err(AdversarialError::ConfigParseError {
                 field: "root".to_string(),
-                reason: format!("mismatched brackets: {} open, {} close",
-                               open_brackets, close_brackets),
+                reason: format!(
+                    "mismatched brackets: {} open, {} close",
+                    open_brackets, close_brackets
+                ),
             });
         }
 
@@ -670,7 +701,8 @@ impl CancellationToken {
 
     /// Request cancellation
     pub fn cancel(&self) {
-        self.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Check if cancelled
@@ -722,10 +754,12 @@ impl<S: Clone> RecoveryHandler<S> {
 
     /// Recover from error using checkpoint
     pub fn recover(&self) -> AdversarialResult<S> {
-        self.checkpoint.clone().ok_or_else(|| AdversarialError::RecoveryFailed {
-            original_error: "unknown".to_string(),
-            recovery_error: "no checkpoint available".to_string(),
-        })
+        self.checkpoint
+            .clone()
+            .ok_or_else(|| AdversarialError::RecoveryFailed {
+                original_error: "unknown".to_string(),
+                recovery_error: "no checkpoint available".to_string(),
+            })
     }
 
     /// Try operation with automatic recovery on failure
@@ -840,7 +874,10 @@ mod tests {
         let validator = InputValidator::new().with_max_size(100);
         let data = vec![0u8; 200];
         let result = validator.validate_bytes(&data);
-        assert!(matches!(result, Err(AdversarialError::MaxSizeExceeded { .. })));
+        assert!(matches!(
+            result,
+            Err(AdversarialError::MaxSizeExceeded { .. })
+        ));
     }
 
     #[test]
@@ -864,13 +901,19 @@ mod tests {
     #[test]
     fn test_checked_arithmetic_overflow() {
         let result = CheckedArithmetic::checked_add_i64(i64::MAX, 1);
-        assert!(matches!(result, Err(AdversarialError::IntegerOverflow { .. })));
+        assert!(matches!(
+            result,
+            Err(AdversarialError::IntegerOverflow { .. })
+        ));
     }
 
     #[test]
     fn test_checked_div_zero() {
         let result = CheckedArithmetic::checked_div_f64(10.0, 0.0);
-        assert!(matches!(result, Err(AdversarialError::DivisionByZero { .. })));
+        assert!(matches!(
+            result,
+            Err(AdversarialError::DivisionByZero { .. })
+        ));
     }
 
     #[test]
@@ -912,8 +955,7 @@ mod tests {
 
     #[test]
     fn test_config_validator_bounds() {
-        let validator = ConfigValidator::new()
-            .with_bound("learning_rate", 0.0001, 1.0);
+        let validator = ConfigValidator::new().with_bound("learning_rate", 0.0001, 1.0);
 
         assert!(validator.validate_numeric("learning_rate", 0.01).is_ok());
         assert!(matches!(

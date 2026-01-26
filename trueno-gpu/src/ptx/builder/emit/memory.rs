@@ -91,10 +91,7 @@ fn emit_cvt_opcode(instr: &PtxInstruction, s: &mut String) {
                 .is_some_and(|src| matches!(src, Operand::Reg(vreg) if vreg.ty().is_float())));
 
     let round = if needs_rounding {
-        instr
-            .rounding
-            .as_ref()
-            .map_or(".rn", |r| r.to_ptx_string())
+        instr.rounding.as_ref().map_or(".rn", |r| r.to_ptx_string())
     } else {
         ""
     };

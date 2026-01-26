@@ -73,9 +73,9 @@ pub(crate) fn get_or_compile_kernel(
 
     // Fast path: check if already cached
     {
-        let cache_guard = cache.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Cache lock poisoned: {}", e))
-        })?;
+        let cache_guard = cache
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Cache lock poisoned: {}", e)))?;
         if let Some(module) = cache_guard.get(key) {
             KERNEL_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
             return Ok(Arc::clone(module));
@@ -91,9 +91,9 @@ pub(crate) fn get_or_compile_kernel(
 
     // Insert into cache
     {
-        let mut cache_guard = cache.lock().map_err(|e| {
-            crate::GpuError::KernelLaunch(format!("Cache lock poisoned: {}", e))
-        })?;
+        let mut cache_guard = cache
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Cache lock poisoned: {}", e)))?;
         cache_guard.insert(key.to_string(), Arc::clone(&module_arc));
     }
 

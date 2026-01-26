@@ -1444,9 +1444,18 @@ mod tests {
         );
 
         // Verify parameters
-        assert!(ptx.contains(".param .u64 input_ptr"), "Should have input_ptr");
-        assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
-        assert!(ptx.contains(".param .u64 gamma_ptr"), "Should have gamma_ptr");
+        assert!(
+            ptx.contains(".param .u64 input_ptr"),
+            "Should have input_ptr"
+        );
+        assert!(
+            ptx.contains(".param .u64 output_ptr"),
+            "Should have output_ptr"
+        );
+        assert!(
+            ptx.contains(".param .u64 gamma_ptr"),
+            "Should have gamma_ptr"
+        );
     }
 
     #[test]
@@ -1537,9 +1546,18 @@ mod tests {
         );
 
         // Verify parameters
-        assert!(ptx.contains(".param .u64 input_ptr"), "Should have input_ptr");
-        assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
-        assert!(ptx.contains(".param .u64 gamma_ptr"), "Should have gamma_ptr");
+        assert!(
+            ptx.contains(".param .u64 input_ptr"),
+            "Should have input_ptr"
+        );
+        assert!(
+            ptx.contains(".param .u64 output_ptr"),
+            "Should have output_ptr"
+        );
+        assert!(
+            ptx.contains(".param .u64 gamma_ptr"),
+            "Should have gamma_ptr"
+        );
     }
 
     #[test]

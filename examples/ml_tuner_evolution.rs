@@ -25,10 +25,22 @@ fn main() {
     // =========================================================================
     println!("━━━ MLT-10: Pre-trained Weights ━━━\n");
 
-    println!("Pre-trained throughput weights ({} elements):", pretrained::THROUGHPUT_WEIGHTS.len());
-    println!("  Bias (baseline): {:.3}", pretrained::THROUGHPUT_WEIGHTS[0]);
-    println!("  batch_size_norm weight: {:.3} (MOST IMPORTANT)", pretrained::THROUGHPUT_WEIGHTS[7]);
-    println!("  gpu_mem_bw weight: {:.3}", pretrained::THROUGHPUT_WEIGHTS[36]);
+    println!(
+        "Pre-trained throughput weights ({} elements):",
+        pretrained::THROUGHPUT_WEIGHTS.len()
+    );
+    println!(
+        "  Bias (baseline): {:.3}",
+        pretrained::THROUGHPUT_WEIGHTS[0]
+    );
+    println!(
+        "  batch_size_norm weight: {:.3} (MOST IMPORTANT)",
+        pretrained::THROUGHPUT_WEIGHTS[7]
+    );
+    println!(
+        "  gpu_mem_bw weight: {:.3}",
+        pretrained::THROUGHPUT_WEIGHTS[36]
+    );
     println!();
 
     println!("Feature Importance (top 5):");
@@ -88,7 +100,10 @@ fn main() {
 
     println!();
     println!("After training:");
-    println!("  Converging: {}", if learner.is_converging() { "YES" } else { "NO" });
+    println!(
+        "  Converging: {}",
+        if learner.is_converging() { "YES" } else { "NO" }
+    );
     println!("  Final EMA Loss: {:.4}", learner.ema_loss());
     println!();
 
@@ -107,7 +122,10 @@ fn main() {
     let mut bandit = KernelBandit::new();
     println!("KernelBandit (UCB1 algorithm):");
     println!("  Num kernels: {}", KernelBandit::NUM_KERNELS);
-    println!("  Initial exploration rate: {:.2}", bandit.exploration_rate());
+    println!(
+        "  Initial exploration rate: {:.2}",
+        bandit.exploration_rate()
+    );
     println!();
 
     // Simulate kernel selection with rewards
@@ -158,12 +176,19 @@ fn main() {
     let mut thompson_bandit = KernelBandit::with_thompson_sampling();
     for _ in 0..20 {
         let kernel = thompson_bandit.select();
-        let reward = if matches!(kernel, KernelType::BatchedQ4K) { 0.9 } else { 0.5 };
+        let reward = if matches!(kernel, KernelType::BatchedQ4K) {
+            0.9
+        } else {
+            0.5
+        };
         thompson_bandit.update(kernel, reward);
     }
     println!("Thompson Sampling (20 trials):");
     println!("  Best kernel: {:?}", thompson_bandit.best_kernel());
-    println!("  Exploration rate: {:.2}", thompson_bandit.exploration_rate());
+    println!(
+        "  Exploration rate: {:.2}",
+        thompson_bandit.exploration_rate()
+    );
     println!();
 
     // =========================================================================
@@ -173,7 +198,10 @@ fn main() {
 
     // 1. Start with pre-trained
     let mut production_tuner = BrickTuner::with_pretrained();
-    println!("1. Loaded pre-trained tuner (v{})", production_tuner.version());
+    println!(
+        "1. Loaded pre-trained tuner (v{})",
+        production_tuner.version()
+    );
 
     // 2. Create online learner
     let mut online = production_tuner.online_learner();
@@ -187,7 +215,8 @@ fn main() {
     println!("4. Running 20-step production simulation...");
     for step in 0..20 {
         // Get recommendation
-        let rec = production_tuner.recommend_kernel_with_exploration(&features, &kernel_bandit, 0.2);
+        let rec =
+            production_tuner.recommend_kernel_with_exploration(&features, &kernel_bandit, 0.2);
 
         // "Measure" throughput
         let measured_tps = 180.0 + (step as f32 * 1.5);
@@ -207,8 +236,13 @@ fn main() {
     println!("  Tuner version: {}", production_tuner.version());
     println!("  Online updates: {}", online.num_updates());
     println!("  Bandit best kernel: {:?}", kernel_bandit.best_kernel());
-    println!("  Predicted throughput: {:.1} tok/s",
-        production_tuner.recommend(&features).throughput.predicted_tps);
+    println!(
+        "  Predicted throughput: {:.1} tok/s",
+        production_tuner
+            .recommend(&features)
+            .throughput
+            .predicted_tps
+    );
 
     println!();
     println!("╔══════════════════════════════════════════════════════════════╗");

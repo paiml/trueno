@@ -41,8 +41,8 @@ impl AlertSeverity {
     /// Get severity color (for Slack)
     pub fn color(&self) -> &'static str {
         match self {
-            Self::Info => "#36a64f",    // Green
-            Self::Warning => "#ffcc00", // Yellow
+            Self::Info => "#36a64f",     // Green
+            Self::Warning => "#ffcc00",  // Yellow
             Self::Critical => "#ff0000", // Red
         }
     }
@@ -66,7 +66,11 @@ pub enum AlertChannel {
     /// PagerDuty Events API
     PagerDuty { routing_key: String },
     /// Email via SMTP
-    Email { smtp_host: String, to: String, from: String },
+    Email {
+        smtp_host: String,
+        to: String,
+        from: String,
+    },
     /// Generic HTTP webhook
     Webhook { url: String, method: String },
     /// Console output (for testing)
@@ -179,7 +183,10 @@ impl Alert {
     /// Format as Slack message
     pub fn to_slack_json(&self) -> String {
         let value_str = self.value.map(|v| format!("{:.2}", v)).unwrap_or_default();
-        let threshold_str = self.threshold.map(|t| format!("{:.2}", t)).unwrap_or_default();
+        let threshold_str = self
+            .threshold
+            .map(|t| format!("{:.2}", t))
+            .unwrap_or_default();
 
         format!(
             r#"{{"attachments":[{{"color":"{}","title":"{}","text":"{}","fields":[{{"title":"Severity","value":"{}","short":true}},{{"title":"Source","value":"{}","short":true}},{{"title":"Value","value":"{}","short":true}},{{"title":"Threshold","value":"{}","short":true}}],"ts":{}}}]}}"#,
@@ -221,8 +228,12 @@ impl Alert {
             self.message,
             self.severity.name(),
             self.source,
-            self.value.map(|v| format!("{}", v)).unwrap_or("null".to_string()),
-            self.threshold.map(|t| format!("{}", t)).unwrap_or("null".to_string()),
+            self.value
+                .map(|v| format!("{}", v))
+                .unwrap_or("null".to_string()),
+            self.threshold
+                .map(|t| format!("{}", t))
+                .unwrap_or("null".to_string()),
             self.timestamp
         )
     }
@@ -384,10 +395,7 @@ impl Default for AlertRouter {
 impl AlertRouter {
     /// Create new router
     pub fn new(config: AlertRouterConfig) -> Self {
-        let rate_limiter = RateLimiter::new(
-            config.rate_limit_per_minute,
-            Duration::from_secs(60),
-        );
+        let rate_limiter = RateLimiter::new(config.rate_limit_per_minute, Duration::from_secs(60));
         let deduplicator = Deduplicator::new(Duration::from_secs(config.dedup_window_sec));
 
         Self {
@@ -428,7 +436,8 @@ impl AlertRouter {
 
     /// Get channels for alert
     fn get_channels(&self, severity: AlertSeverity) -> Vec<&AlertChannel> {
-        let mut channels: Vec<&AlertChannel> = self.config
+        let mut channels: Vec<&AlertChannel> = self
+            .config
             .severity_routes
             .get(&severity)
             .map(|c| c.iter().collect())
@@ -462,15 +471,9 @@ impl AlertRouter {
                 // For now, simulate success
                 DeliveryResult::success("slack", 50)
             }
-            AlertChannel::PagerDuty { routing_key: _ } => {
-                DeliveryResult::success("pagerduty", 100)
-            }
-            AlertChannel::Email { .. } => {
-                DeliveryResult::success("email", 200)
-            }
-            AlertChannel::Webhook { url: _, method: _ } => {
-                DeliveryResult::success("webhook", 30)
-            }
+            AlertChannel::PagerDuty { routing_key: _ } => DeliveryResult::success("pagerduty", 100),
+            AlertChannel::Email { .. } => DeliveryResult::success("email", 200),
+            AlertChannel::Webhook { url: _, method: _ } => DeliveryResult::success("webhook", 30),
         }
     }
 
@@ -555,7 +558,10 @@ impl MessageTemplate {
             )
             .replace(
                 "{threshold}",
-                &alert.threshold.map(|t| format!("{:.2}", t)).unwrap_or_default(),
+                &alert
+                    .threshold
+                    .map(|t| format!("{:.2}", t))
+                    .unwrap_or_default(),
             )
     }
 }
@@ -601,7 +607,10 @@ mod tests {
     #[test]
     fn test_severity_parsing() {
         assert_eq!(AlertSeverity::parse("INFO"), Some(AlertSeverity::Info));
-        assert_eq!(AlertSeverity::parse("warning"), Some(AlertSeverity::Warning));
+        assert_eq!(
+            AlertSeverity::parse("warning"),
+            Some(AlertSeverity::Warning)
+        );
         assert_eq!(AlertSeverity::parse("invalid"), None);
     }
 
@@ -626,8 +635,7 @@ mod tests {
 
     #[test]
     fn test_alert_json() {
-        let alert = Alert::new("Test", "Message", AlertSeverity::Info)
-            .with_source("test_source");
+        let alert = Alert::new("Test", "Message", AlertSeverity::Info).with_source("test_source");
 
         let json = alert.to_json();
         assert!(json.contains("\"title\":\"Test\""));

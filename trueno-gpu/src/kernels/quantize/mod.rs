@@ -677,8 +677,8 @@ impl Kernel for Q8QuantizeKernel {
         // Grid: one block per Q8 block (32 values)
         // Each warp (32 threads) processes one Q8 block cooperatively
         PtxKernel::new("q8_quantize")
-            .param(PtxType::U64, "out_ptr")   // Q8 output: [num_blocks * 34] bytes
-            .param(PtxType::U64, "in_ptr")    // f32 input: [n] floats
+            .param(PtxType::U64, "out_ptr") // Q8 output: [num_blocks * 34] bytes
+            .param(PtxType::U64, "in_ptr") // f32 input: [n] floats
             .param(PtxType::U32, "n_dim")
             .build(|ctx| {
                 let block_id = ctx.special_reg(PtxReg::CtaIdX);

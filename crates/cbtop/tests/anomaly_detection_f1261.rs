@@ -3,9 +3,8 @@
 //! F1261-F1270: Anomaly detection falsification tests
 
 use cbtop::{
-    AnomalyDetector, Anomaly, AnomalyType, AnomalySeverity, ChangePoint,
-    DEFAULT_ZSCORE_THRESHOLD, DEFAULT_IQR_MULTIPLIER,
-    MIN_SAMPLES_FOR_DETECTION,
+    Anomaly, AnomalyDetector, AnomalySeverity, AnomalyType, ChangePoint, DEFAULT_IQR_MULTIPLIER,
+    DEFAULT_ZSCORE_THRESHOLD, MIN_SAMPLES_FOR_DETECTION,
 };
 
 // =============================================================================
@@ -226,8 +225,14 @@ fn f1268_severity_ranking() {
 #[test]
 fn f1268_severity_from_deviation() {
     assert_eq!(AnomalySeverity::from_deviation(2.0), AnomalySeverity::Info);
-    assert_eq!(AnomalySeverity::from_deviation(4.0), AnomalySeverity::Warning);
-    assert_eq!(AnomalySeverity::from_deviation(6.0), AnomalySeverity::Critical);
+    assert_eq!(
+        AnomalySeverity::from_deviation(4.0),
+        AnomalySeverity::Warning
+    );
+    assert_eq!(
+        AnomalySeverity::from_deviation(6.0),
+        AnomalySeverity::Critical
+    );
 }
 
 /// F1268.3: Severity names

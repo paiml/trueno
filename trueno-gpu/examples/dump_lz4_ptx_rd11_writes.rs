@@ -10,7 +10,10 @@ fn main() {
         // Check if %rd11 is the destination register
         // PTX format: instr dest, src1, src2  or  instr dest, src
         if let Some(after_instr) = trimmed.split_whitespace().nth(1) {
-            if after_instr.starts_with("%rd11,") || after_instr == "%rd11" || after_instr == "%rd11;" {
+            if after_instr.starts_with("%rd11,")
+                || after_instr == "%rd11"
+                || after_instr == "%rd11;"
+            {
                 println!("{:4}: {} <-- WRITES", i + 1, line);
             }
         }
@@ -31,7 +34,8 @@ fn main() {
     println!("Total 64-bit registers used: {}", rd_regs.len());
 
     // Check max register number
-    let max_rd: u32 = rd_regs.iter()
+    let max_rd: u32 = rd_regs
+        .iter()
         .filter_map(|r| r.strip_prefix("%rd").and_then(|n| n.parse().ok()))
         .max()
         .unwrap_or(0);

@@ -3,8 +3,8 @@
 //! F1241-F1250: Correlation analysis falsification tests
 
 use cbtop::{
-    CorrelationAnalyzer, EventType, EventSample, PerformanceSample,
-    CorrelationResult, InterferenceCategory, IsolationAction, SystemSnapshot,
+    CorrelationAnalyzer, CorrelationResult, EventSample, EventType, InterferenceCategory,
+    IsolationAction, PerformanceSample, SystemSnapshot,
 };
 
 // =============================================================================
@@ -20,7 +20,11 @@ fn f1241_event_correlation() {
     for i in 0..20 {
         let t = i as f64;
         analyzer.add_perf_sample(PerformanceSample::new(t, 5.0 + i as f64, 100.0));
-        analyzer.add_event_sample(EventSample::new(EventType::Interrupt, t, 100.0 + i as f64 * 10.0));
+        analyzer.add_event_sample(EventSample::new(
+            EventType::Interrupt,
+            t,
+            100.0 + i as f64 * 10.0,
+        ));
     }
 
     let result = analyzer.correlate_events(EventType::Interrupt).unwrap();
@@ -57,7 +61,11 @@ fn f1242_interference_detected() {
     for i in 0..30 {
         let t = i as f64;
         analyzer.add_perf_sample(PerformanceSample::new(t, 5.0 + i as f64 * 2.0, 100.0));
-        analyzer.add_event_sample(EventSample::new(EventType::Interrupt, t, 100.0 + i as f64 * 20.0));
+        analyzer.add_event_sample(EventSample::new(
+            EventType::Interrupt,
+            t,
+            100.0 + i as f64 * 20.0,
+        ));
     }
 
     let result = analyzer.detect_interference().unwrap();
@@ -122,7 +130,11 @@ fn f1244_isolation_recommended() {
     for i in 0..30 {
         let t = i as f64;
         analyzer.add_perf_sample(PerformanceSample::new(t, 5.0 + i as f64 * 2.0, 100.0));
-        analyzer.add_event_sample(EventSample::new(EventType::ContextSwitch, t, 100.0 + i as f64 * 20.0));
+        analyzer.add_event_sample(EventSample::new(
+            EventType::ContextSwitch,
+            t,
+            100.0 + i as f64 * 20.0,
+        ));
     }
 
     let rec = analyzer.recommend_isolation();
@@ -163,8 +175,7 @@ fn f1245_irq_tracking() {
 /// F1246.1: Disk I/O bytes/sec tracked
 #[test]
 fn f1246_disk_io_tracking() {
-    let snapshot = SystemSnapshot::new(1.0)
-        .with_disk_io(500_000_000.0); // 500 MB/s
+    let snapshot = SystemSnapshot::new(1.0).with_disk_io(500_000_000.0); // 500 MB/s
 
     assert_eq!(snapshot.disk_io_bytes_per_sec, 500_000_000.0);
 }
@@ -176,8 +187,7 @@ fn f1246_disk_io_tracking() {
 /// F1247.1: Network packets tracked
 #[test]
 fn f1247_network_tracking() {
-    let snapshot = SystemSnapshot::new(1.0)
-        .with_network(10000.0);
+    let snapshot = SystemSnapshot::new(1.0).with_network(10000.0);
 
     assert_eq!(snapshot.network_packets_per_sec, 10000.0);
 }
@@ -281,7 +291,10 @@ fn test_interference_category() {
 fn test_isolation_action_names() {
     assert_eq!(IsolationAction::CpuPin.name(), "cpu_pin");
     assert_eq!(IsolationAction::MemoryIsolation.name(), "memory_isolation");
-    assert_eq!(IsolationAction::RealtimePriority.name(), "realtime_priority");
+    assert_eq!(
+        IsolationAction::RealtimePriority.name(),
+        "realtime_priority"
+    );
     assert_eq!(IsolationAction::None.name(), "none");
 }
 

@@ -83,8 +83,8 @@ impl Default for CacheConfig {
             l1_size: 32 * 1024,        // 32KB
             l2_size: 512 * 1024,       // 512KB
             l3_size: 32 * 1024 * 1024, // 32MB
-            l3_sharing: 8,              // 8 cores share L3
-            line_size: 64,              // 64 bytes
+            l3_sharing: 8,             // 8 cores share L3
+            line_size: 64,             // 64 bytes
         }
     }
 }
@@ -117,9 +117,9 @@ impl CacheConfig {
         Self {
             l1_size: 128 * 1024,       // 128KB per P-core
             l2_size: 16 * 1024 * 1024, // 16MB shared L2
-            l3_size: 0,                 // No L3
+            l3_size: 0,                // No L3
             l3_sharing: 1,
-            line_size: 128,             // 128-byte cache lines
+            line_size: 128, // 128-byte cache lines
         }
     }
 
@@ -175,9 +175,18 @@ impl WorkingSetAnalysis {
         let cache_level = config.classify(working_set_bytes);
 
         let (utilization_percent, _cache_size) = match cache_level {
-            CacheLevel::L1 => ((working_set_bytes as f64 / config.l1_size as f64) * 100.0, config.l1_size),
-            CacheLevel::L2 => ((working_set_bytes as f64 / config.l2_size as f64) * 100.0, config.l2_size),
-            CacheLevel::L3 => ((working_set_bytes as f64 / config.l3_size as f64) * 100.0, config.l3_size),
+            CacheLevel::L1 => (
+                (working_set_bytes as f64 / config.l1_size as f64) * 100.0,
+                config.l1_size,
+            ),
+            CacheLevel::L2 => (
+                (working_set_bytes as f64 / config.l2_size as f64) * 100.0,
+                config.l2_size,
+            ),
+            CacheLevel::L3 => (
+                (working_set_bytes as f64 / config.l3_size as f64) * 100.0,
+                config.l3_size,
+            ),
             CacheLevel::Ram => (100.0, working_set_bytes),
         };
 
@@ -246,7 +255,12 @@ pub fn optimal_matmul_tile(config: &CacheConfig, element_size: usize) -> usize {
 }
 
 /// Calculate working set for elementwise operations
-pub fn elementwise_working_set(elements: usize, inputs: usize, outputs: usize, element_size: usize) -> usize {
+pub fn elementwise_working_set(
+    elements: usize,
+    inputs: usize,
+    outputs: usize,
+    element_size: usize,
+) -> usize {
     elements * (inputs + outputs) * element_size
 }
 
@@ -285,9 +299,9 @@ impl AccessPattern {
     /// Get expected efficiency multiplier
     pub fn efficiency_factor(&self) -> f64 {
         match self {
-            AccessPattern::Streaming => 0.5,  // 50% - prefetching helps
-            AccessPattern::Reuse => 1.0,      // 100% - cache hits
-            AccessPattern::Random => 0.1,     // 10% - cache misses
+            AccessPattern::Streaming => 0.5, // 50% - prefetching helps
+            AccessPattern::Reuse => 1.0,     // 100% - cache hits
+            AccessPattern::Random => 0.1,    // 10% - cache misses
         }
     }
 }

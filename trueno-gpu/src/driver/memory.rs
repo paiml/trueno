@@ -963,7 +963,9 @@ mod tests {
             let src = GpuBuffer::from_host(&ctx, &data).unwrap();
             let mut dst: GpuBuffer<f32> = GpuBuffer::new(&ctx, 64).unwrap();
 
-            unsafe { dst.copy_from_buffer_async(&src, &stream).unwrap(); }
+            unsafe {
+                dst.copy_from_buffer_async(&src, &stream).unwrap();
+            }
             stream.synchronize().unwrap();
 
             let mut result = vec![0.0f32; 64];
@@ -984,7 +986,10 @@ mod tests {
             let zeros = vec![0.0f32; 50];
             dst.copy_from_host(&zeros).unwrap();
 
-            unsafe { dst.copy_from_buffer_at_async(&src, 15, 0, 10, &stream).unwrap(); }
+            unsafe {
+                dst.copy_from_buffer_at_async(&src, 15, 0, 10, &stream)
+                    .unwrap();
+            }
             stream.synchronize().unwrap();
 
             let mut result = vec![0.0f32; 50];
@@ -1017,7 +1022,9 @@ mod tests {
             let src: GpuBuffer<f32> = GpuBuffer::new(&ctx, 0).unwrap();
             let mut dst: GpuBuffer<f32> = GpuBuffer::new(&ctx, 0).unwrap();
 
-            unsafe { dst.copy_from_buffer_async(&src, &stream).unwrap(); }
+            unsafe {
+                dst.copy_from_buffer_async(&src, &stream).unwrap();
+            }
         }
 
         #[test]
@@ -1038,7 +1045,10 @@ mod tests {
             assert!(result.is_err());
 
             // zero count
-            unsafe { dst.copy_from_buffer_at_async(&src, 0, 0, 0, &stream).unwrap(); }
+            unsafe {
+                dst.copy_from_buffer_at_async(&src, 0, 0, 0, &stream)
+                    .unwrap();
+            }
         }
     }
 }

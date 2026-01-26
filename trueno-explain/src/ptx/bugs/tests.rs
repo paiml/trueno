@@ -1,6 +1,6 @@
-use super::types::*;
 use super::analyzer::*;
 use super::coverage::*;
+use super::types::*;
 
 #[cfg(test)]
 mod tests {

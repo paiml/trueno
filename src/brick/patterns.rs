@@ -566,10 +566,7 @@ pub enum FlowControlError {
     /// Tried to reserve negative bytes
     NegativeReservation,
     /// Not enough capacity
-    InsufficientCapacity {
-        requested: i32,
-        available: i32,
-    },
+    InsufficientCapacity { requested: i32, available: i32 },
 }
 
 // ============================================================================
@@ -899,10 +896,7 @@ mod tests {
         assert!(!cap.is_blocked());
 
         cap.reserve_send(1000).unwrap();
-        assert_eq!(
-            cap.available_send(),
-            StreamCapacity::DEFAULT_WINDOW - 1000
-        );
+        assert_eq!(cap.available_send(), StreamCapacity::DEFAULT_WINDOW - 1000);
     }
 
     #[test]

@@ -26,11 +26,11 @@
 
 #[allow(unused_imports)]
 use std::time::Duration;
+#[cfg(feature = "cuda-monitor")]
+use trueno::cuda_monitor_available;
 use trueno::monitor::{GpuBackend, GpuDeviceInfo, GpuMemoryMetrics, GpuVendor};
 #[cfg(feature = "gpu")]
 use trueno::{GpuMonitor, MonitorConfig, MonitorError};
-#[cfg(feature = "cuda-monitor")]
-use trueno::cuda_monitor_available;
 
 fn main() {
     println!("=================================================");

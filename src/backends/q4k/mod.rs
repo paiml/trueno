@@ -203,7 +203,11 @@ mod tests {
         let scalar_output = matmul_q4k_f32_scalar(&q4k_data, &input, out_dim, in_dim);
         let optimized_output = matmul_q4k_f32(&q4k_data, &input, out_dim, in_dim);
 
-        for (i, (s, o)) in scalar_output.iter().zip(optimized_output.iter()).enumerate() {
+        for (i, (s, o)) in scalar_output
+            .iter()
+            .zip(optimized_output.iter())
+            .enumerate()
+        {
             let diff = (s - o).abs();
             // Allow small FP differences from mul_add vs separate multiply-add
             assert!(
@@ -257,7 +261,7 @@ mod tests {
             // d ~ 0.1, dmin ~ 0.05
             q4k_data.extend_from_slice(&[0x66, 0x2E]); // d
             q4k_data.extend_from_slice(&[0x66, 0x2A]); // dmin
-            // Varied scales
+                                                       // Varied scales
             let scale_val = (row as u8 + 1) | ((row as u8 + 2) << 4);
             q4k_data.extend_from_slice(&[scale_val; 12]);
             // Varied quantized values
@@ -281,7 +285,8 @@ mod tests {
         let scalar_output = matmul_q4k_f32(&full_data, &input, out_dim, in_dim);
         let dispatch_output = matmul_q4k_f32_dispatch(&full_data, &input, out_dim, in_dim);
 
-        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
+        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
+        {
             let diff = (scalar - dispatch).abs();
             let rel_diff = if scalar.abs() > 1e-6 {
                 diff / scalar.abs()
@@ -443,7 +448,8 @@ mod tests {
             q4k_data.extend_from_slice(&[0x66, 0x2E]); // d ~ 0.1
             q4k_data.extend_from_slice(&[0x00, 0x00]); // dmin = 0
             q4k_data.extend_from_slice(&[(row as u8 + 1); 12]); // varying scales
-            q4k_data.extend_from_slice(&[(row as u8 * 17).wrapping_add(0x44); 128]); // varying qs
+            q4k_data.extend_from_slice(&[(row as u8 * 17).wrapping_add(0x44); 128]);
+            // varying qs
         }
 
         let input: Vec<f32> = (0..in_dim).map(|i| (i as f32) * 0.01 - 1.0).collect();
@@ -577,7 +583,11 @@ mod tests {
         let (d, dmin, scales, mins) = parse_q4k_header(&block);
 
         assert!((d - 1.0).abs() < 0.01, "d should be ~1.0, got {}", d);
-        assert!((dmin - 0.5).abs() < 0.01, "dmin should be ~0.5, got {}", dmin);
+        assert!(
+            (dmin - 0.5).abs() < 0.01,
+            "dmin should be ~0.5, got {}",
+            dmin
+        );
         // Check first scales/mins have expected low 6-bit values
         assert_eq!(scales[0], 0x01, "scales[0] should be 1");
         assert_eq!(scales[1], 0x02, "scales[1] should be 2");
@@ -622,7 +632,7 @@ mod tests {
                 // d ~ 0.1, dmin ~ 0.05
                 q4k_data.extend_from_slice(&[0x66, 0x2E]); // d
                 q4k_data.extend_from_slice(&[0x66, 0x2A]); // dmin
-                // Varied scales based on row
+                                                           // Varied scales based on row
                 let scale_val = (row as u8 % 16) | (((row + 1) as u8 % 16) << 4);
                 q4k_data.extend_from_slice(&[scale_val; 12]);
                 // Varied quantized values
@@ -639,7 +649,8 @@ mod tests {
         let scalar_output = matmul_q4k_f32(&q4k_data, &input, out_dim, in_dim);
         let dispatch_output = matmul_q4k_f32_dispatch(&q4k_data, &input, out_dim, in_dim);
 
-        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
+        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
+        {
             let diff = (scalar - dispatch).abs();
             let rel_diff = if scalar.abs() > 1e-6 {
                 diff / scalar.abs()
@@ -649,7 +660,11 @@ mod tests {
             assert!(
                 rel_diff < 1e-4 || diff < 1e-4,
                 "Row {}: AVX2 vs scalar divergence: {} vs {} (Δ={}, rel={})",
-                i, dispatch, scalar, diff, rel_diff
+                i,
+                dispatch,
+                scalar,
+                diff,
+                rel_diff
             );
         }
     }
@@ -692,7 +707,10 @@ mod tests {
             assert!(
                 diff < 1e-3 || (diff / base.abs()) < 1e-4,
                 "Row {}: colmajor mismatch: {} vs {} (diff={})",
-                i, base, dispatched, diff
+                i,
+                base,
+                dispatched,
+                diff
             );
         }
     }
@@ -731,7 +749,8 @@ mod tests {
         assert_eq!(scalar_output.len(), out_dim);
         assert_eq!(dispatch_output.len(), out_dim);
 
-        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
+        for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
+        {
             let diff = (scalar - dispatch).abs();
             let rel_diff = if scalar.abs() > 1e-6 {
                 diff / scalar.abs()
@@ -742,7 +761,11 @@ mod tests {
             assert!(
                 rel_diff < 1e-5 || diff < 1e-2,
                 "Row {}: non-aligned AVX2 mismatch: {} vs {} (diff={}, rel={})",
-                i, scalar, dispatch, diff, rel_diff
+                i,
+                scalar,
+                dispatch,
+                diff,
+                rel_diff
             );
         }
     }
@@ -782,7 +805,8 @@ mod tests {
             assert!(
                 val.is_finite(),
                 "Row {}: parallel AVX2 produced non-finite: {}",
-                i, val
+                i,
+                val
             );
         }
     }
@@ -825,7 +849,7 @@ mod tests {
                 // d ~ 0.1, dmin ~ 0.05 (realistic for normalized weights)
                 q4k_data.extend_from_slice(&[0x66, 0x2E]); // d
                 q4k_data.extend_from_slice(&[0x66, 0x2A]); // dmin
-                // Varied scales based on position
+                                                           // Varied scales based on position
                 let scale_base = ((row * 7 + sb * 3) % 16) as u8;
                 for i in 0..12 {
                     q4k_data.push(scale_base + (i as u8 % 4));
@@ -857,7 +881,8 @@ mod tests {
         let mut max_rel_error = 0.0f32;
         let mut max_abs_error = 0.0f32;
 
-        for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate() {
+        for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate()
+        {
             let abs_error = (fused - reference).abs();
             let rel_error = if reference.abs() > 1e-6 {
                 abs_error / reference.abs()
@@ -871,14 +896,19 @@ mod tests {
                 rel_error < 0.05 || abs_error < 0.01,
                 "Golden invariant violated at row {}: fused={}, reference={}, \
                  rel_error={:.4}%, abs_error={:.6}",
-                i, fused, reference, rel_error * 100.0, abs_error
+                i,
+                fused,
+                reference,
+                rel_error * 100.0,
+                abs_error
             );
         }
 
         // Report max errors for visibility
         eprintln!(
             "[Golden Q4K Test] max_rel_error={:.4}%, max_abs_error={:.6}",
-            max_rel_error * 100.0, max_abs_error
+            max_rel_error * 100.0,
+            max_abs_error
         );
     }
 
@@ -920,7 +950,11 @@ mod tests {
         let reference_output = matmul_f32_naive(&dequantized, &input, out_dim, in_dim);
 
         let mut max_rel_error = 0.0f32;
-        for (i, (dispatch, reference)) in dispatch_output.iter().zip(reference_output.iter()).enumerate() {
+        for (i, (dispatch, reference)) in dispatch_output
+            .iter()
+            .zip(reference_output.iter())
+            .enumerate()
+        {
             let abs_error = (dispatch - reference).abs();
             let rel_error = if reference.abs() > 1e-6 {
                 abs_error / reference.abs()
@@ -933,7 +967,10 @@ mod tests {
                 rel_error < 0.05 || abs_error < 0.01,
                 "Golden invariant violated (dispatch) at row {}: \
                  dispatch={}, reference={}, rel_error={:.4}%",
-                i, dispatch, reference, rel_error * 100.0
+                i,
+                dispatch,
+                reference,
+                rel_error * 100.0
             );
         }
 
@@ -965,7 +1002,8 @@ mod tests {
             assert!(
                 val.abs() < 1e-6,
                 "Zero input should give ~zero output, got {} at row {}",
-                val, i
+                val,
+                i
             );
         }
     }
@@ -994,7 +1032,8 @@ mod tests {
         let dequantized = dequantize_q4k_to_f32(&q4k_data, total_elements);
         let reference_output = matmul_f32_naive(&dequantized, &input, out_dim, in_dim);
 
-        for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate() {
+        for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate()
+        {
             let rel_error = if reference.abs() > 1e-6 {
                 (fused - reference).abs() / reference.abs()
             } else {
@@ -1003,7 +1042,10 @@ mod tests {
             assert!(
                 rel_error < 0.05,
                 "Uniform input failed at row {}: fused={}, ref={}, err={:.2}%",
-                i, fused, reference, rel_error * 100.0
+                i,
+                fused,
+                reference,
+                rel_error * 100.0
             );
         }
     }
@@ -1015,10 +1057,7 @@ mod tests {
         let out_dim = 4096;
         let in_dim = 2048; // Must be multiple of 256 (SUPER_BLOCK_SIZE)
         let total_work = out_dim * in_dim;
-        assert!(
-            total_work >= 8_000_000,
-            "Test must trigger parallel path"
-        );
+        assert!(total_work >= 8_000_000, "Test must trigger parallel path");
 
         let num_superblocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
         let row_bytes = num_superblocks_per_row * SUPER_BLOCK_BYTES;
@@ -1054,12 +1093,7 @@ mod tests {
         // Verify dimensions and finiteness
         assert_eq!(result.len(), out_dim);
         for (i, &val) in result.iter().enumerate() {
-            assert!(
-                val.is_finite(),
-                "Result[{}] is not finite: {}",
-                i,
-                val
-            );
+            assert!(val.is_finite(), "Result[{}] is not finite: {}", i, val);
         }
 
         // Compare a few rows against scalar for consistency
@@ -1169,12 +1203,7 @@ mod tests {
         // Each element: d * scale * 0 - dmin * min = 0 - 0 = 0
         // Actually with all zeros in qs and dmin=0, output should be 0
         for (i, &val) in chunk.iter().enumerate() {
-            assert!(
-                val.is_finite(),
-                "Chunk[{}] is not finite: {}",
-                i,
-                val
-            );
+            assert!(val.is_finite(), "Chunk[{}] is not finite: {}", i, val);
         }
     }
 }

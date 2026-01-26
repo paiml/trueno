@@ -3,8 +3,8 @@
 //! F1301-F1310: CPU frequency control falsification tests
 
 use cbtop::{
-    FrequencyController, FrequencyReading, FrequencyVariance, FrequencyLock,
-    CpuGovernor, CpuFrequencyInfo,
+    CpuFrequencyInfo, CpuGovernor, FrequencyController, FrequencyLock, FrequencyReading,
+    FrequencyVariance,
 };
 
 // =============================================================================
@@ -66,7 +66,10 @@ fn f1302_governor_names() {
     assert_eq!(CpuGovernor::parse("performance"), CpuGovernor::Performance);
     assert_eq!(CpuGovernor::parse("powersave"), CpuGovernor::Powersave);
     assert_eq!(CpuGovernor::parse("ondemand"), CpuGovernor::Ondemand);
-    assert_eq!(CpuGovernor::parse("conservative"), CpuGovernor::Conservative);
+    assert_eq!(
+        CpuGovernor::parse("conservative"),
+        CpuGovernor::Conservative
+    );
     assert_eq!(CpuGovernor::parse("schedutil"), CpuGovernor::Schedutil);
     assert_eq!(CpuGovernor::parse("userspace"), CpuGovernor::Userspace);
     assert_eq!(CpuGovernor::parse("unknown_gov"), CpuGovernor::Unknown);

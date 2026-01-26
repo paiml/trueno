@@ -329,12 +329,12 @@ impl WorkloadCharacterizer {
         ];
 
         let gpu_thresholds = vec![
-            (WorkloadCategory::Gemm, 10_000),        // GPU wins at ~100x100
+            (WorkloadCategory::Gemm, 10_000),         // GPU wins at ~100x100
             (WorkloadCategory::Bandwidth, 1_000_000), // GPU wins at 1M elements
-            (WorkloadCategory::Attention, 50_000),   // GPU wins at ~224 seq len
-            (WorkloadCategory::Conv2d, 100_000),     // GPU wins at moderate sizes
+            (WorkloadCategory::Attention, 50_000),    // GPU wins at ~224 seq len
+            (WorkloadCategory::Conv2d, 100_000),      // GPU wins at moderate sizes
             (WorkloadCategory::Elementwise, 500_000), // GPU wins at 500K elements
-            (WorkloadCategory::Reduction, 100_000),  // GPU wins at 100K elements
+            (WorkloadCategory::Reduction, 100_000),   // GPU wins at 100K elements
         ];
 
         Self {
@@ -487,8 +487,12 @@ mod tests {
 
     #[test]
     fn test_cosine_similarity() {
-        let a = WorkloadFeatures::new().with_intensity(10.0).with_compute_density(5.0);
-        let b = WorkloadFeatures::new().with_intensity(20.0).with_compute_density(10.0);
+        let a = WorkloadFeatures::new()
+            .with_intensity(10.0)
+            .with_compute_density(5.0);
+        let b = WorkloadFeatures::new()
+            .with_intensity(20.0)
+            .with_compute_density(10.0);
 
         let sim = a.cosine_similarity(&b);
         assert!(sim > 0.9); // Same direction, similar features

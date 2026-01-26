@@ -16,8 +16,8 @@ fn f32_to_f16_bytes(val: f32) -> [u8; 2] {
     }
     let bits = val.to_bits();
     let sign = (bits >> 31) as u16;
-    let exp = ((bits >> 23) & 0xFF) as i16 - 127;  // f32 bias
-    let mantissa = (bits >> 13) & 0x3FF;  // Top 10 bits of f32 mantissa
+    let exp = ((bits >> 23) & 0xFF) as i16 - 127; // f32 bias
+    let mantissa = (bits >> 13) & 0x3FF; // Top 10 bits of f32 mantissa
 
     // f16 bias is 15
     let f16_exp = (exp + 15).clamp(0, 31) as u16;
@@ -42,12 +42,12 @@ fn create_valid_q4k_block(d: f32, dmin: f32, scale: u8, min_val: u8) -> [u8; 144
     // scales (bytes 4-15) - 12 bytes
     // For sub-blocks 0-3: scale in low 6 bits, min in next 6 bits
     for i in 0..4 {
-        block[4 + i] = scale & 0x3F;        // scale for sub-block i
-        block[4 + 4 + i] = min_val & 0x3F;  // min for sub-block i+4
+        block[4 + i] = scale & 0x3F; // scale for sub-block i
+        block[4 + 4 + i] = min_val & 0x3F; // min for sub-block i+4
     }
     // Bytes 12-15 for sub-blocks 4-7 (high bits)
     for i in 0..4 {
-        block[12 + i] = scale & 0x0F;  // low 4 bits of scale for sub-block 4+i
+        block[12 + i] = scale & 0x0F; // low 4 bits of scale for sub-block 4+i
     }
 
     // qs (bytes 16-143) - 128 bytes = 256 x 4-bit values
@@ -73,8 +73,8 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
         .emit();
 
     // Load module
-    let mut module = CudaModule::from_ptx(ctx, &ptx)
-        .map_err(|e| format!("PTX compile failed: {}", e))?;
+    let mut module =
+        CudaModule::from_ptx(ctx, &ptx).map_err(|e| format!("PTX compile failed: {}", e))?;
 
     let stream = CudaStream::new(ctx).map_err(|e| format!("Stream failed: {}", e))?;
 
@@ -101,10 +101,10 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
 
     let weights_buf: GpuBuffer<u8> = GpuBuffer::from_host(ctx, &weights_data)
         .map_err(|e| format!("Weights alloc failed: {}", e))?;
-    let input_buf: GpuBuffer<f32> = GpuBuffer::from_host(ctx, &input_data)
-        .map_err(|e| format!("Input alloc failed: {}", e))?;
-    let output_buf: GpuBuffer<f32> = GpuBuffer::new(ctx, n as usize)
-        .map_err(|e| format!("Output alloc failed: {}", e))?;
+    let input_buf: GpuBuffer<f32> =
+        GpuBuffer::from_host(ctx, &input_data).map_err(|e| format!("Input alloc failed: {}", e))?;
+    let output_buf: GpuBuffer<f32> =
+        GpuBuffer::new(ctx, n as usize).map_err(|e| format!("Output alloc failed: {}", e))?;
 
     // Build args
     let mut output_ptr = output_buf.as_ptr();
@@ -129,14 +129,18 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
     };
 
     unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)
+        stream
+            .launch_kernel(&mut module, kernel.name(), &config, &mut args)
             .map_err(|e| format!("Launch failed: {}", e))?;
     }
 
-    stream.synchronize().map_err(|e| format!("Sync failed: {}", e))?;
+    stream
+        .synchronize()
+        .map_err(|e| format!("Sync failed: {}", e))?;
 
     let mut output = vec![0.0f32; n as usize];
-    output_buf.copy_to_host(&mut output)
+    output_buf
+        .copy_to_host(&mut output)
         .map_err(|e| format!("D2H failed: {}", e))?;
 
     // Check for NaN and report which outputs are affected
@@ -155,8 +159,16 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
     }
 
     println!("  Total outputs: {}", n);
-    println!("  OK outputs: {} (first 8: {:?})", ok_outputs.len(), &ok_outputs[..ok_outputs.len().min(8)]);
-    println!("  NaN outputs: {} (first 8: {:?})", nan_outputs.len(), &nan_outputs[..nan_outputs.len().min(8)]);
+    println!(
+        "  OK outputs: {} (first 8: {:?})",
+        ok_outputs.len(),
+        &ok_outputs[..ok_outputs.len().min(8)]
+    );
+    println!(
+        "  NaN outputs: {} (first 8: {:?})",
+        nan_outputs.len(),
+        &nan_outputs[..nan_outputs.len().min(8)]
+    );
     println!("  Inf outputs: {}", inf_outputs.len());
 
     if !nan_outputs.is_empty() {
@@ -167,7 +179,11 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
             // Check for pattern
             let mod4: Vec<usize> = nan_outputs.iter().map(|x| x % 4).collect();
             let unique_mod4: std::collections::HashSet<_> = mod4.iter().collect();
-            println!("  NaN indices mod 4: {:?} (unique: {:?})", &mod4[..mod4.len().min(16)], unique_mod4);
+            println!(
+                "  NaN indices mod 4: {:?} (unique: {:?})",
+                &mod4[..mod4.len().min(16)],
+                unique_mod4
+            );
         }
 
         // Show first few OK values
@@ -202,13 +218,13 @@ fn main() {
     println!("GPU: {}", device_name);
 
     let test_cases = [
-        (8, 256),      // Minimal: 8 outputs, 1 super-block
-        (16, 256),     // 16 outputs, 4 per block
-        (32, 256),     // 32 outputs, 8 blocks
-        (256, 256),    // Square
-        (256, 512),    // 2 super-blocks per row
-        (896, 896),    // 0.5B hidden
-        (1536, 1536),  // 1.5B hidden
+        (8, 256),     // Minimal: 8 outputs, 1 super-block
+        (16, 256),    // 16 outputs, 4 per block
+        (32, 256),    // 32 outputs, 8 blocks
+        (256, 256),   // Square
+        (256, 512),   // 2 super-blocks per row
+        (896, 896),   // 0.5B hidden
+        (1536, 1536), // 1.5B hidden
     ];
 
     let mut all_passed = true;
@@ -229,5 +245,12 @@ fn main() {
         }
     }
 
-    println!("\n═══ {} ═══", if all_passed { "ALL TESTS PASSED" } else { "SOME TESTS FAILED" });
+    println!(
+        "\n═══ {} ═══",
+        if all_passed {
+            "ALL TESTS PASSED"
+        } else {
+            "SOME TESTS FAILED"
+        }
+    );
 }

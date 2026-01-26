@@ -8,11 +8,11 @@
 //! - Prevents L3 cache overflow at large problem sizes
 //! - Maintains performance at 4M+ elements
 
-use std::any::Any;
-use std::time::Duration;
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification, BrickScore, Scorable};
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickScore, BrickVerification, Scorable};
 use crate::config::WorkloadType;
 use crate::ring_buffer::RingBuffer;
+use std::any::Any;
+use std::time::Duration;
 use trueno::Vector;
 
 /// Default L2 cache size per core assumption (1 MB for modern CPUs)
@@ -205,7 +205,9 @@ impl SimdLoadBrick {
                         self.tiled_elementwise_mul();
                     } else {
                         // SAFETY: vec_a and vec_b are pre-allocated with matching sizes in new()
-                        let result = self.vec_a.mul(&self.vec_b)
+                        let result = self
+                            .vec_a
+                            .mul(&self.vec_b)
                             .expect("pre-allocated vectors have matching sizes");
                         std::hint::black_box(&result);
                     }
@@ -232,7 +234,9 @@ impl SimdLoadBrick {
                         self.tiled_elementwise_add();
                     } else {
                         // SAFETY: vec_a and vec_b are pre-allocated with matching sizes in new()
-                        let result = self.vec_a.add(&self.vec_b)
+                        let result = self
+                            .vec_a
+                            .add(&self.vec_b)
                             .expect("pre-allocated vectors have matching sizes");
                         std::hint::black_box(&result);
                     }
@@ -280,7 +284,8 @@ impl SimdLoadBrick {
     fn tiled_elementwise_mul(&self) {
         for (tile_a, tile_b) in &self.tile_vectors {
             // SAFETY: tile vectors are pre-allocated with matching sizes in new()
-            let result = tile_a.mul(tile_b)
+            let result = tile_a
+                .mul(tile_b)
                 .expect("pre-allocated tile vectors have matching sizes");
             std::hint::black_box(&result);
         }
@@ -290,7 +295,8 @@ impl SimdLoadBrick {
     fn tiled_elementwise_add(&self) {
         for (tile_a, tile_b) in &self.tile_vectors {
             // SAFETY: tile vectors are pre-allocated with matching sizes in new()
-            let result = tile_a.add(tile_b)
+            let result = tile_a
+                .add(tile_b)
                 .expect("pre-allocated tile vectors have matching sizes");
             std::hint::black_box(&result);
         }
@@ -333,10 +339,12 @@ impl SimdLoadBrick {
             return 0.0;
         }
 
-        let variance: f64 = self.latency_history
+        let variance: f64 = self
+            .latency_history
             .iter()
             .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / self.latency_history.len() as f64;
+            .sum::<f64>()
+            / self.latency_history.len() as f64;
 
         let std_dev = variance.sqrt();
         (std_dev / mean) * 100.0
@@ -406,10 +414,10 @@ impl Scorable for SimdLoadBrick {
         // - Conv2d/Attention: 4.0x (average)
         // PERF-004: Updated from hardcoded 1.7x to measured values
         let speedup = match self.workload {
-            WorkloadType::Gemm | WorkloadType::Reduction => 6.0,  // dot product (unchanged)
-            WorkloadType::Elementwise => 4.0,  // was 1.7x, measured ~4x
-            WorkloadType::Bandwidth => 3.0,    // memory-bound, was 1.7x
-            WorkloadType::Conv2d | WorkloadType::Attention | WorkloadType::All => 4.0,  // average
+            WorkloadType::Gemm | WorkloadType::Reduction => 6.0, // dot product (unchanged)
+            WorkloadType::Elementwise => 4.0,                    // was 1.7x, measured ~4x
+            WorkloadType::Bandwidth => 3.0,                      // memory-bound, was 1.7x
+            WorkloadType::Conv2d | WorkloadType::Attention | WorkloadType::All => 4.0, // average
         };
         let speedup_score = BrickScore::score_speedup(speedup);
         // Backend efficiency: 10 pts for using SIMD, plus speedup score (max 25)
@@ -428,13 +436,19 @@ impl Scorable for SimdLoadBrick {
         let stability_score = BrickScore::score_cv(cv);
         // Add reproducibility bonus (3 pts) and outlier bonus (4 pts) for low CV
         let stability_total = if cv < 5.0 {
-            stability_score + 7  // 8 + 7 = 15 max
+            stability_score + 7 // 8 + 7 = 15 max
         } else if cv < 10.0 {
-            stability_score + 3  // 4 + 3 = 7
+            stability_score + 3 // 4 + 3 = 7
         } else {
             stability_score
-        }.min(15);
+        }
+        .min(15);
 
-        BrickScore::new(perf_score, efficiency_score, correctness_score, stability_total)
+        BrickScore::new(
+            perf_score,
+            efficiency_score,
+            correctness_score,
+            stability_total,
+        )
     }
 }

@@ -16,9 +16,9 @@
 //! - Volkov (2010): "Better Performance at Lower Occupancy"
 
 use trueno::tiling::{
-    optimal_prefetch_distance, pack_a_index, pack_b_index, swizzle_index,
-    Q4K_SUPERBLOCK_BYTES, Q4K_SUPERBLOCK_SIZE, TcbGeometry, TcbIndexCalculator,
-    TcbLevel, TiledQ4KMatvec, TilingConfig,
+    optimal_prefetch_distance, pack_a_index, pack_b_index, swizzle_index, TcbGeometry,
+    TcbIndexCalculator, TcbLevel, TiledQ4KMatvec, TilingConfig, Q4K_SUPERBLOCK_BYTES,
+    Q4K_SUPERBLOCK_SIZE,
 };
 
 fn main() {
@@ -78,15 +78,9 @@ fn main() {
     let calc = TcbIndexCalculator::new(config.clone(), 1024, 1024, 1024);
 
     println!("   Problem: 1024×1024×1024 GEMM");
-    println!(
-        "   Macro tiles: {}",
-        config.num_macro_tiles(1024, 1024)
-    );
+    println!("   Macro tiles: {}", config.num_macro_tiles(1024, 1024));
     println!("   Midi tiles per macro: {}", config.midi_tiles_per_macro());
-    println!(
-        "   Micro tiles per midi: {}",
-        config.micro_tiles_per_midi()
-    );
+    println!("   Micro tiles per midi: {}", config.micro_tiles_per_midi());
     println!("   K blocks: {}", calc.num_k_blocks());
 
     // Show tile offsets
@@ -104,7 +98,10 @@ fn main() {
     let small_calc = TcbIndexCalculator::new(config.clone(), 100, 100, 256);
     let (actual_m, actual_n) = small_calc.actual_tile_dims(0);
     println!("\n   Boundary handling (100×100 problem):");
-    println!("     First tile is boundary: {}", small_calc.is_boundary_tile(0));
+    println!(
+        "     First tile is boundary: {}",
+        small_calc.is_boundary_tile(0)
+    );
     println!("     Actual dimensions: {}×{}", actual_m, actual_n);
 
     // =========================================================================
@@ -115,21 +112,47 @@ fn main() {
 
     // Goto algorithm panel packing
     println!("   Panel-major packing (Goto algorithm):");
-    println!("     pack_a_index(row=0, col=0, mr=4, kc=256) = {}", pack_a_index(0, 0, 4, 256, 64));
-    println!("     pack_a_index(row=1, col=0, mr=4, kc=256) = {}", pack_a_index(1, 0, 4, 256, 64));
-    println!("     pack_a_index(row=0, col=1, mr=4, kc=256) = {}", pack_a_index(0, 1, 4, 256, 64));
-    println!("     pack_a_index(row=4, col=0, mr=4, kc=256) = {} (next panel)", pack_a_index(4, 0, 4, 256, 64));
+    println!(
+        "     pack_a_index(row=0, col=0, mr=4, kc=256) = {}",
+        pack_a_index(0, 0, 4, 256, 64)
+    );
+    println!(
+        "     pack_a_index(row=1, col=0, mr=4, kc=256) = {}",
+        pack_a_index(1, 0, 4, 256, 64)
+    );
+    println!(
+        "     pack_a_index(row=0, col=1, mr=4, kc=256) = {}",
+        pack_a_index(0, 1, 4, 256, 64)
+    );
+    println!(
+        "     pack_a_index(row=4, col=0, mr=4, kc=256) = {} (next panel)",
+        pack_a_index(4, 0, 4, 256, 64)
+    );
 
     println!("\n   Panel B packing:");
-    println!("     pack_b_index(row=0, col=0, nr=8, kc=64) = {}", pack_b_index(0, 0, 8, 64, 64));
-    println!("     pack_b_index(row=1, col=0, nr=8, kc=64) = {}", pack_b_index(1, 0, 8, 64, 64));
-    println!("     pack_b_index(row=0, col=8, nr=8, kc=64) = {} (next panel)", pack_b_index(0, 8, 8, 64, 64));
+    println!(
+        "     pack_b_index(row=0, col=0, nr=8, kc=64) = {}",
+        pack_b_index(0, 0, 8, 64, 64)
+    );
+    println!(
+        "     pack_b_index(row=1, col=0, nr=8, kc=64) = {}",
+        pack_b_index(1, 0, 8, 64, 64)
+    );
+    println!(
+        "     pack_b_index(row=0, col=8, nr=8, kc=64) = {} (next panel)",
+        pack_b_index(0, 8, 8, 64, 64)
+    );
 
     // Shared memory swizzling
     println!("\n   XOR swizzling for bank conflict avoidance:");
     for idx in [0, 32, 64, 96] {
         let swizzled = swizzle_index(idx);
-        println!("     idx {} → swizzled {} (bank {})", idx, swizzled, swizzled % 32);
+        println!(
+            "     idx {} → swizzled {} (bank {})",
+            idx,
+            swizzled,
+            swizzled % 32
+        );
     }
 
     // =========================================================================
@@ -150,7 +173,10 @@ fn main() {
     println!("\n   4096×4096 Q4_K MatVec:");
     println!("     Superblocks per row: {}", matvec.superblocks_per_row());
     println!("     Total superblocks: {}", matvec.total_superblocks());
-    println!("     Weight offset for row 100: {} bytes", matvec.weight_row_offset(100));
+    println!(
+        "     Weight offset for row 100: {} bytes",
+        matvec.weight_row_offset(100)
+    );
     println!(
         "     Optimal parallel rows (256KB L2): {}",
         matvec.optimal_parallel_rows(256 * 1024)
@@ -158,10 +184,16 @@ fn main() {
 
     let stats = matvec.stats();
     println!("\n   Statistics:");
-    println!("     Weight bytes: {:.2} MB", stats.total_weight_bytes as f64 / (1024.0 * 1024.0));
+    println!(
+        "     Weight bytes: {:.2} MB",
+        stats.total_weight_bytes as f64 / (1024.0 * 1024.0)
+    );
     println!("     Input bytes: {} KB", stats.input_bytes / 1024);
     println!("     Output bytes: {} KB", stats.output_bytes / 1024);
-    println!("     Arithmetic ops: {:.0}M", stats.arithmetic_ops as f64 / 1_000_000.0);
+    println!(
+        "     Arithmetic ops: {:.0}M",
+        stats.arithmetic_ops as f64 / 1_000_000.0
+    );
     println!(
         "     Arithmetic intensity: {:.2} FLOP/byte",
         stats.arithmetic_intensity
@@ -175,14 +207,32 @@ fn main() {
 
     let geom = TcbGeometry::new(4, 8, 64);
     println!("   For micro-tile {}:", geom);
-    println!("     L1 prefetch distance: {} tiles", optimal_prefetch_distance(&geom, TcbLevel::Micro));
-    println!("     L2 prefetch distance: {} tiles", optimal_prefetch_distance(&geom, TcbLevel::Midi));
-    println!("     L3 prefetch distance: {} tiles", optimal_prefetch_distance(&geom, TcbLevel::Macro));
+    println!(
+        "     L1 prefetch distance: {} tiles",
+        optimal_prefetch_distance(&geom, TcbLevel::Micro)
+    );
+    println!(
+        "     L2 prefetch distance: {} tiles",
+        optimal_prefetch_distance(&geom, TcbLevel::Midi)
+    );
+    println!(
+        "     L3 prefetch distance: {} tiles",
+        optimal_prefetch_distance(&geom, TcbLevel::Macro)
+    );
 
     println!("\n   Cache level typical sizes:");
-    println!("     L1 (Micro): {} KB", TcbLevel::Micro.typical_cache_bytes() / 1024);
-    println!("     L2 (Midi): {} KB", TcbLevel::Midi.typical_cache_bytes() / 1024);
-    println!("     L3 (Macro): {} MB", TcbLevel::Macro.typical_cache_bytes() / (1024 * 1024));
+    println!(
+        "     L1 (Micro): {} KB",
+        TcbLevel::Micro.typical_cache_bytes() / 1024
+    );
+    println!(
+        "     L2 (Midi): {} KB",
+        TcbLevel::Midi.typical_cache_bytes() / 1024
+    );
+    println!(
+        "     L3 (Macro): {} MB",
+        TcbLevel::Macro.typical_cache_bytes() / (1024 * 1024)
+    );
 
     // =========================================================================
     // 7. Configuration comparison
@@ -223,8 +273,14 @@ fn compare_backends() {
         TilingConfig::gpu_q4k_matmul(),
     ];
 
-    println!("\n   {:20} {:>10} {:>10} {:>10} {:>12}", "Backend", "Micro M", "Micro N", "Alignment", "AI (FLOP/B)");
-    println!("   {:─<20} {:─>10} {:─>10} {:─>10} {:─>12}", "", "", "", "", "");
+    println!(
+        "\n   {:20} {:>10} {:>10} {:>10} {:>12}",
+        "Backend", "Micro M", "Micro N", "Alignment", "AI (FLOP/B)"
+    );
+    println!(
+        "   {:─<20} {:─>10} {:─>10} {:─>10} {:─>12}",
+        "", "", "", "", ""
+    );
 
     for config in &configs {
         println!(

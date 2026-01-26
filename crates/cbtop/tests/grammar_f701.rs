@@ -15,11 +15,10 @@
 //! | F719 | Builder immutability | Reuse builder | Independent instances |
 
 use cbtop::{
-    ComputeBlock, ComputeBlockBuilder, WorkloadSpec, ExecutionStrategy,
-    DataTransform, ExecutionPolicy, CompositionMode, ExecutionContext,
-    GrammarError, LinearResourceScale, LogResourceScale, ResourceScale,
-    Operation, DataType, Dimensions, TensorSpec, ByteSize, ResourceMapping,
-    SimdWidth, GpuDevice, QosLevel, StrategyLayer,
+    ByteSize, CompositionMode, ComputeBlock, ComputeBlockBuilder, DataTransform, DataType,
+    Dimensions, ExecutionContext, ExecutionPolicy, ExecutionStrategy, GpuDevice, GrammarError,
+    LinearResourceScale, LogResourceScale, Operation, QosLevel, ResourceMapping, ResourceScale,
+    SimdWidth, StrategyLayer, TensorSpec, WorkloadSpec,
 };
 
 // ============================================================================
@@ -92,8 +91,7 @@ fn f702_fallback_to_lower_priority() {
 #[test]
 fn f703_resource_mapping_cores() {
     // F703: Resource mapping with core binding
-    let resources = ResourceMapping::new()
-        .cores_value(8);
+    let resources = ResourceMapping::new().cores_value(8);
 
     assert_eq!(resources.cores_value, Some(8));
 }
@@ -101,8 +99,7 @@ fn f703_resource_mapping_cores() {
 #[test]
 fn f703_resource_mapping_memory() {
     // F703: Resource mapping with memory limit
-    let resources = ResourceMapping::new()
-        .memory_value(ByteSize::gb(4));
+    let resources = ResourceMapping::new().memory_value(ByteSize::gb(4));
 
     assert_eq!(resources.memory_value, Some(ByteSize::gb(4)));
 }
@@ -201,14 +198,20 @@ fn f710_transform_identity_constructor() {
 fn f711_linear_scale_invalid_domain() {
     // F711: Domain(10, 0) must return Err
     let result = LinearResourceScale::new((10.0, 0.0), (0.0, 8.0));
-    assert!(matches!(result, Err(GrammarError::InvalidScaleDomain { .. })));
+    assert!(matches!(
+        result,
+        Err(GrammarError::InvalidScaleDomain { .. })
+    ));
 }
 
 #[test]
 fn f711_linear_scale_equal_domain() {
     // F711: Domain(10, 10) must return Err
     let result = LinearResourceScale::new((10.0, 10.0), (0.0, 8.0));
-    assert!(matches!(result, Err(GrammarError::InvalidScaleDomain { .. })));
+    assert!(matches!(
+        result,
+        Err(GrammarError::InvalidScaleDomain { .. })
+    ));
 }
 
 #[test]
@@ -222,7 +225,10 @@ fn f711_linear_scale_valid_domain() {
 fn f711_log_scale_invalid_domain() {
     // F711: Log scale with invalid domain
     let result = LogResourceScale::new(10.0, (100.0, 1.0), (0.0, 8.0));
-    assert!(matches!(result, Err(GrammarError::InvalidScaleDomain { .. })));
+    assert!(matches!(
+        result,
+        Err(GrammarError::InvalidScaleDomain { .. })
+    ));
 }
 
 #[test]
@@ -256,11 +262,16 @@ fn f712_facet_by_sets_params() {
 #[test]
 fn f719_builder_creates_independent_instances() {
     // F719: Reusing builder creates independent instances
-    let builder = ComputeBlock::builder()
-        .workload(WorkloadSpec::dot(1000));
+    let builder = ComputeBlock::builder().workload(WorkloadSpec::dot(1000));
 
-    let block1 = builder.clone().strategy(ExecutionStrategy::simd_auto()).build();
-    let block2 = builder.clone().strategy(ExecutionStrategy::Sequential).build();
+    let block1 = builder
+        .clone()
+        .strategy(ExecutionStrategy::simd_auto())
+        .build();
+    let block2 = builder
+        .clone()
+        .strategy(ExecutionStrategy::Sequential)
+        .build();
 
     assert!(block1.is_ok());
     assert!(block2.is_ok());
@@ -365,25 +376,44 @@ fn test_tensor_spec_byte_size() {
 #[test]
 fn test_strategy_simd_auto() {
     let strategy = ExecutionStrategy::simd_auto();
-    assert!(matches!(strategy, ExecutionStrategy::Simd { width: SimdWidth::Auto }));
+    assert!(matches!(
+        strategy,
+        ExecutionStrategy::Simd {
+            width: SimdWidth::Auto
+        }
+    ));
 }
 
 #[test]
 fn test_strategy_simd_avx2() {
     let strategy = ExecutionStrategy::simd(SimdWidth::Avx2);
-    assert!(matches!(strategy, ExecutionStrategy::Simd { width: SimdWidth::Avx2 }));
+    assert!(matches!(
+        strategy,
+        ExecutionStrategy::Simd {
+            width: SimdWidth::Avx2
+        }
+    ));
 }
 
 #[test]
 fn test_strategy_parallel() {
     let strategy = ExecutionStrategy::parallel(8);
-    assert!(matches!(strategy, ExecutionStrategy::Parallel { threads: 8, .. }));
+    assert!(matches!(
+        strategy,
+        ExecutionStrategy::Parallel { threads: 8, .. }
+    ));
 }
 
 #[test]
 fn test_strategy_gpu_auto() {
     let strategy = ExecutionStrategy::gpu_auto();
-    assert!(matches!(strategy, ExecutionStrategy::Gpu { device: GpuDevice::Auto, .. }));
+    assert!(matches!(
+        strategy,
+        ExecutionStrategy::Gpu {
+            device: GpuDevice::Auto,
+            ..
+        }
+    ));
 }
 
 // ============================================================================
@@ -475,8 +505,7 @@ fn test_strategy_layer_new() {
 
 #[test]
 fn test_strategy_layer_priority() {
-    let layer = StrategyLayer::new(ExecutionStrategy::gpu_auto())
-        .priority(10);
+    let layer = StrategyLayer::new(ExecutionStrategy::gpu_auto()).priority(10);
     assert_eq!(layer.priority, 10);
 }
 
@@ -542,6 +571,9 @@ fn test_error_display() {
     let err = GrammarError::InvalidDimensions("test".to_string());
     assert!(err.to_string().contains("test"));
 
-    let err = GrammarError::InvalidScaleDomain { min: 10.0, max: 0.0 };
+    let err = GrammarError::InvalidScaleDomain {
+        min: 10.0,
+        max: 0.0,
+    };
     assert!(err.to_string().contains("10"));
 }

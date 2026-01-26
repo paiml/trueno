@@ -299,7 +299,11 @@ impl WorkloadSpec {
                 TensorSpec::new("k", vec![batch, seq_len, embed_dim], DataType::F32),
                 TensorSpec::new("v", vec![batch, seq_len, embed_dim], DataType::F32),
             ],
-            outputs: vec![TensorSpec::new("out", vec![batch, seq_len, embed_dim], DataType::F32)],
+            outputs: vec![TensorSpec::new(
+                "out",
+                vec![batch, seq_len, embed_dim],
+                DataType::F32,
+            )],
         }
     }
 
@@ -318,9 +322,7 @@ impl WorkloadSpec {
     pub fn flop_count(&self) -> usize {
         match self.operation {
             Operation::Dot => self.dimensions.n * 2, // mul + add
-            Operation::Matmul => {
-                self.dimensions.m * self.dimensions.n * self.dimensions.k * 2
-            }
+            Operation::Matmul => self.dimensions.m * self.dimensions.n * self.dimensions.k * 2,
             Operation::Attention => {
                 let b = self.dimensions.batch;
                 let s = self.dimensions.seq_len;
@@ -484,7 +486,10 @@ pub enum ExecutionStrategy {
     /// Multi-threaded parallel
     Parallel { threads: usize, chunk_size: usize },
     /// GPU acceleration
-    Gpu { device: GpuDevice, kernel: Option<KernelSpec> },
+    Gpu {
+        device: GpuDevice,
+        kernel: Option<KernelSpec>,
+    },
     /// Distributed across nodes
     Distributed { nodes: Vec<String> },
     /// Hybrid CPU+GPU
@@ -494,7 +499,9 @@ pub enum ExecutionStrategy {
 impl ExecutionStrategy {
     /// Create SIMD strategy with auto width
     pub fn simd_auto() -> Self {
-        ExecutionStrategy::Simd { width: SimdWidth::Auto }
+        ExecutionStrategy::Simd {
+            width: SimdWidth::Auto,
+        }
     }
 
     /// Create SIMD strategy with specific width
@@ -520,7 +527,10 @@ impl ExecutionStrategy {
 
     /// Create GPU strategy with specific device
     pub fn gpu(device: GpuDevice) -> Self {
-        ExecutionStrategy::Gpu { device, kernel: None }
+        ExecutionStrategy::Gpu {
+            device,
+            kernel: None,
+        }
     }
 }
 
@@ -604,9 +614,7 @@ pub enum ExecutionContext {
     /// GPU execution
     Gpu { device_id: u32, stream: Option<u32> },
     /// Heterogeneous (multiple contexts)
-    Heterogeneous {
-        contexts: Vec<ExecutionContext>,
-    },
+    Heterogeneous { contexts: Vec<ExecutionContext> },
 }
 
 impl Default for ExecutionContext {
@@ -888,7 +896,12 @@ impl BuiltComputeBlock {
 
         // Simulate execution (real implementation would dispatch to backends)
         let duration = start.elapsed();
-        let flops = self.inner.workload.as_ref().map(|w| w.flop_count()).unwrap_or(0);
+        let flops = self
+            .inner
+            .workload
+            .as_ref()
+            .map(|w| w.flop_count())
+            .unwrap_or(0);
         let gflops = if duration.as_secs_f64() > 0.0 {
             flops as f64 / duration.as_secs_f64() / 1e9
         } else {
@@ -1108,7 +1121,11 @@ impl LogResourceScale {
                 max: domain.1,
             });
         }
-        Ok(Self { base, domain, range })
+        Ok(Self {
+            base,
+            domain,
+            range,
+        })
     }
 }
 
@@ -1198,7 +1215,10 @@ mod tests {
     #[test]
     fn test_linear_scale_invalid_domain() {
         let result = LinearResourceScale::new((100.0, 0.0), (0.0, 8.0));
-        assert!(matches!(result, Err(GrammarError::InvalidScaleDomain { .. })));
+        assert!(matches!(
+            result,
+            Err(GrammarError::InvalidScaleDomain { .. })
+        ));
     }
 
     #[test]
@@ -1218,7 +1238,10 @@ mod tests {
     #[test]
     fn test_composition_modes() {
         let batch = CompositionMode::batch(32);
-        assert!(matches!(batch, CompositionMode::Batch { batch_size: 32, .. }));
+        assert!(matches!(
+            batch,
+            CompositionMode::Batch { batch_size: 32, .. }
+        ));
 
         let dp = CompositionMode::data_parallel(4);
         assert!(matches!(dp, CompositionMode::DataParallel { shards: 4 }));

@@ -14,7 +14,9 @@ pub unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
         v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_add(va, vb));
         i += 4;
     }
-    for j in i..len { result[j] = a[j] + b[j]; }
+    for j in i..len {
+        result[j] = a[j] + b[j];
+    }
 }
 
 /// WASM SIMD128 vector subtraction.
@@ -28,7 +30,9 @@ pub unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
         v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_sub(va, vb));
         i += 4;
     }
-    for j in i..len { result[j] = a[j] - b[j]; }
+    for j in i..len {
+        result[j] = a[j] - b[j];
+    }
 }
 
 /// WASM SIMD128 vector multiplication.
@@ -42,7 +46,9 @@ pub unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_mul(va, vb));
         i += 4;
     }
-    for j in i..len { result[j] = a[j] * b[j]; }
+    for j in i..len {
+        result[j] = a[j] * b[j];
+    }
 }
 
 /// WASM SIMD128 vector division.
@@ -56,5 +62,7 @@ pub unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
         v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_div(va, vb));
         i += 4;
     }
-    for j in i..len { result[j] = a[j] / b[j]; }
+    for j in i..len {
+        result[j] = a[j] / b[j];
+    }
 }

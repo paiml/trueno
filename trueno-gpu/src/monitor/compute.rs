@@ -66,7 +66,10 @@ impl ComputeMetrics {
     /// Calculate total pipeline latency
     #[must_use]
     pub fn total_latency_ms(&self) -> f64 {
-        self.input_latency_ms + self.compute_latency_ms + self.reduce_latency_ms + self.output_latency_ms
+        self.input_latency_ms
+            + self.compute_latency_ms
+            + self.reduce_latency_ms
+            + self.output_latency_ms
     }
 
     /// Calculate throughput in operations per second
@@ -102,7 +105,8 @@ impl ComputeMetrics {
 
     /// Clear completed kernels
     pub fn clear_completed_kernels(&mut self) {
-        self.active_kernels.retain(|k| k.status != KernelStatus::Completed);
+        self.active_kernels
+            .retain(|k| k.status != KernelStatus::Completed);
     }
 }
 
@@ -299,7 +303,8 @@ impl KernelExecution {
     #[must_use]
     pub fn total_threads(&self) -> u64 {
         let grid_total = self.grid_dim.0 as u64 * self.grid_dim.1 as u64 * self.grid_dim.2 as u64;
-        let block_total = self.block_dim.0 as u64 * self.block_dim.1 as u64 * self.block_dim.2 as u64;
+        let block_total =
+            self.block_dim.0 as u64 * self.block_dim.1 as u64 * self.block_dim.2 as u64;
         grid_total * block_total
     }
 
@@ -474,7 +479,10 @@ mod tests {
             metrics.update_utilization(i as f64);
         }
 
-        assert_eq!(metrics.history.len(), DeviceComputeMetrics::MAX_HISTORY_POINTS);
+        assert_eq!(
+            metrics.history.len(),
+            DeviceComputeMetrics::MAX_HISTORY_POINTS
+        );
         // Last value should be 99
         assert!((metrics.history.back().unwrap() - 99.0).abs() < 0.01);
     }
@@ -550,8 +558,8 @@ mod tests {
 
     #[test]
     fn h023_kernel_execution_total_threads() {
-        let kernel = KernelExecution::new("test", DeviceId::nvidia(0))
-            .with_dims((128, 64, 1), (16, 16, 1));
+        let kernel =
+            KernelExecution::new("test", DeviceId::nvidia(0)).with_dims((128, 64, 1), (16, 16, 1));
 
         // 128 * 64 * 1 blocks * 16 * 16 * 1 threads/block = 2,097,152
         assert_eq!(kernel.total_threads(), 128 * 64 * 16 * 16);
@@ -559,16 +567,16 @@ mod tests {
 
     #[test]
     fn h023_kernel_execution_total_blocks() {
-        let kernel = KernelExecution::new("test", DeviceId::nvidia(0))
-            .with_dims((128, 64, 2), (16, 16, 1));
+        let kernel =
+            KernelExecution::new("test", DeviceId::nvidia(0)).with_dims((128, 64, 2), (16, 16, 1));
 
         assert_eq!(kernel.total_blocks(), 128 * 64 * 2);
     }
 
     #[test]
     fn h023_kernel_execution_threads_per_block() {
-        let kernel = KernelExecution::new("test", DeviceId::nvidia(0))
-            .with_dims((1, 1, 1), (16, 16, 4));
+        let kernel =
+            KernelExecution::new("test", DeviceId::nvidia(0)).with_dims((1, 1, 1), (16, 16, 4));
 
         assert_eq!(kernel.threads_per_block(), 16 * 16 * 4);
     }

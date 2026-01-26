@@ -147,13 +147,21 @@ impl Matrix<f32> {
         if a_data.len() != batch * a_stride {
             return Err(TruenoError::InvalidInput(format!(
                 "A data size mismatch: expected {} ({}×{}×{}), got {}",
-                batch * a_stride, batch, m, k, a_data.len()
+                batch * a_stride,
+                batch,
+                m,
+                k,
+                a_data.len()
             )));
         }
         if b_data.len() != batch * b_stride {
             return Err(TruenoError::InvalidInput(format!(
                 "B data size mismatch: expected {} ({}×{}×{}), got {}",
-                batch * b_stride, batch, k, n, b_data.len()
+                batch * b_stride,
+                batch,
+                k,
+                n,
+                b_data.len()
             )));
         }
 
@@ -203,13 +211,23 @@ impl Matrix<f32> {
         if a_data.len() != expected_a {
             return Err(TruenoError::InvalidInput(format!(
                 "A data size mismatch: expected {} ({}×{}×{}×{}), got {}",
-                expected_a, batch, heads, m, k, a_data.len()
+                expected_a,
+                batch,
+                heads,
+                m,
+                k,
+                a_data.len()
             )));
         }
         if b_data.len() != expected_b {
             return Err(TruenoError::InvalidInput(format!(
                 "B data size mismatch: expected {} ({}×{}×{}×{}), got {}",
-                expected_b, batch, heads, k, n, b_data.len()
+                expected_b,
+                batch,
+                heads,
+                k,
+                n,
+                b_data.len()
             )));
         }
 

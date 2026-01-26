@@ -87,12 +87,12 @@ impl DataFlowMetrics {
     pub fn calculate_pcie_bandwidth(generation: u8, width: u8) -> f64 {
         // GT/s per lane by generation
         let gt_per_lane = match generation {
-            1 => 2.5,   // PCIe 1.0
-            2 => 5.0,   // PCIe 2.0
-            3 => 8.0,   // PCIe 3.0
-            4 => 16.0,  // PCIe 4.0
-            5 => 32.0,  // PCIe 5.0
-            6 => 64.0,  // PCIe 6.0
+            1 => 2.5,  // PCIe 1.0
+            2 => 5.0,  // PCIe 2.0
+            3 => 8.0,  // PCIe 3.0
+            4 => 16.0, // PCIe 4.0
+            5 => 32.0, // PCIe 5.0
+            6 => 64.0, // PCIe 6.0
             _ => 0.0,
         };
 
@@ -137,7 +137,11 @@ impl DataFlowMetrics {
 
     /// Complete a transfer and move to history
     pub fn complete_transfer(&mut self, transfer_id: TransferId) {
-        if let Some(idx) = self.active_transfers.iter().position(|t| t.id == transfer_id) {
+        if let Some(idx) = self
+            .active_transfers
+            .iter()
+            .position(|t| t.id == transfer_id)
+        {
             let mut transfer = self.active_transfers.remove(idx);
             transfer.complete();
             self.completed_transfers.push_back(transfer);
@@ -159,7 +163,8 @@ impl DataFlowMetrics {
             self.pcie_rx_history.pop_front();
         }
 
-        self.memory_bus_history.push_back(self.memory_bus_utilization_pct);
+        self.memory_bus_history
+            .push_back(self.memory_bus_utilization_pct);
         if self.memory_bus_history.len() > Self::MAX_HISTORY_POINTS {
             self.memory_bus_history.pop_front();
         }
@@ -564,8 +569,7 @@ mod tests {
 
     #[test]
     fn h033_transfer_with_label() {
-        let transfer = Transfer::host_to_device(1024, DeviceId::nvidia(0))
-            .with_label("tensor_a");
+        let transfer = Transfer::host_to_device(1024, DeviceId::nvidia(0)).with_label("tensor_a");
         assert_eq!(transfer.label, "tensor_a");
     }
 
@@ -646,9 +650,18 @@ mod tests {
             metrics.update_history();
         }
 
-        assert_eq!(metrics.pcie_tx_history.len(), DataFlowMetrics::MAX_HISTORY_POINTS);
-        assert_eq!(metrics.pcie_rx_history.len(), DataFlowMetrics::MAX_HISTORY_POINTS);
-        assert_eq!(metrics.memory_bus_history.len(), DataFlowMetrics::MAX_HISTORY_POINTS);
+        assert_eq!(
+            metrics.pcie_tx_history.len(),
+            DataFlowMetrics::MAX_HISTORY_POINTS
+        );
+        assert_eq!(
+            metrics.pcie_rx_history.len(),
+            DataFlowMetrics::MAX_HISTORY_POINTS
+        );
+        assert_eq!(
+            metrics.memory_bus_history.len(),
+            DataFlowMetrics::MAX_HISTORY_POINTS
+        );
     }
 
     // =========================================================================
@@ -680,7 +693,10 @@ mod tests {
             metrics.complete_transfer(id);
         }
 
-        assert_eq!(metrics.completed_transfers.len(), DataFlowMetrics::MAX_COMPLETED_TRANSFERS);
+        assert_eq!(
+            metrics.completed_transfers.len(),
+            DataFlowMetrics::MAX_COMPLETED_TRANSFERS
+        );
     }
 
     #[test]

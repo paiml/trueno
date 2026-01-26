@@ -9,8 +9,8 @@
 
 #[cfg(feature = "cuda")]
 mod f082_falsification_tests {
-    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
     use std::ffi::c_void;
+    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
 
     /// F082-TEST-1: Global→Global computed address
     ///
@@ -94,30 +94,26 @@ mod f082_falsification_tests {
             offset_buf.as_kernel_arg(),
         ];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "f082_test1", &config, &mut args)
-        };
+        let result = unsafe { stream.launch_kernel(&mut module, "f082_test1", &config, &mut args) };
 
         match result {
-            Ok(_) => {
-                match stream.synchronize() {
-                    Ok(_) => {
-                        let mut output = vec![0u32; 256];
-                        output_buf.copy_to_host(&mut output).unwrap();
+            Ok(_) => match stream.synchronize() {
+                Ok(_) => {
+                    let mut output = vec![0u32; 256];
+                    output_buf.copy_to_host(&mut output).unwrap();
 
-                        if output[4] == 0xDEADBEEF {
-                            println!("  PASSED - Global→Global computed address WORKS");
-                            println!("  → F082 is SHARED-MEMORY-SPECIFIC");
-                        } else {
-                            println!("  Data mismatch - got {:08X} at index 4", output[4]);
-                        }
-                    }
-                    Err(e) => {
-                        println!("  CRASHED at sync: {}", e);
-                        println!("  → F082 is NOT shared-memory-specific (REFUTES hypothesis)");
+                    if output[4] == 0xDEADBEEF {
+                        println!("  PASSED - Global→Global computed address WORKS");
+                        println!("  → F082 is SHARED-MEMORY-SPECIFIC");
+                    } else {
+                        println!("  Data mismatch - got {:08X} at index 4", output[4]);
                     }
                 }
-            }
+                Err(e) => {
+                    println!("  CRASHED at sync: {}", e);
+                    println!("  → F082 is NOT shared-memory-specific (REFUTES hypothesis)");
+                }
+            },
             Err(e) => {
                 println!("  Launch failed: {}", e);
             }
@@ -201,35 +197,29 @@ L_skip:
             shared_mem: 64,
         };
 
-        let mut args: [*mut c_void; 1] = [
-            output_buf.as_kernel_arg(),
-        ];
+        let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "f082_test2", &config, &mut args)
-        };
+        let result = unsafe { stream.launch_kernel(&mut module, "f082_test2", &config, &mut args) };
 
         match result {
-            Ok(_) => {
-                match stream.synchronize() {
-                    Ok(_) => {
-                        let mut output = vec![0u32; 256];
-                        output_buf.copy_to_host(&mut output).unwrap();
+            Ok(_) => match stream.synchronize() {
+                Ok(_) => {
+                    let mut output = vec![0u32; 256];
+                    output_buf.copy_to_host(&mut output).unwrap();
 
-                        if output[4] == 0xCAFEBABE {
-                            println!("  PASSED - 64-bit load WORKS");
-                            println!("  → cvt.u64.u32 conversion IS the bug!");
-                            println!("  → FIX: Use 64-bit shared memory values for addresses");
-                        } else {
-                            println!("  Data mismatch - got {:08X} at index 4", output[4]);
-                        }
-                    }
-                    Err(e) => {
-                        println!("  CRASHED at sync: {}", e);
-                        println!("  → 64-bit load doesn't help (conversion not the issue)");
+                    if output[4] == 0xCAFEBABE {
+                        println!("  PASSED - 64-bit load WORKS");
+                        println!("  → cvt.u64.u32 conversion IS the bug!");
+                        println!("  → FIX: Use 64-bit shared memory values for addresses");
+                    } else {
+                        println!("  Data mismatch - got {:08X} at index 4", output[4]);
                     }
                 }
-            }
+                Err(e) => {
+                    println!("  CRASHED at sync: {}", e);
+                    println!("  → 64-bit load doesn't help (conversion not the issue)");
+                }
+            },
             Err(e) => {
                 println!("  Launch failed: {}", e);
             }
@@ -316,34 +306,30 @@ L_skip:
             shared_mem: 64,
         };
 
-        let mut args: [*mut c_void; 1] = [
-            output_buf.as_kernel_arg(),
-        ];
+        let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "f082_test3", &config, &mut args)
-        };
+        let result = unsafe { stream.launch_kernel(&mut module, "f082_test3", &config, &mut args) };
 
         match result {
-            Ok(_) => {
-                match stream.synchronize() {
-                    Ok(_) => {
-                        let mut output = vec![0u32; 256];
-                        output_buf.copy_to_host(&mut output).unwrap();
+            Ok(_) => match stream.synchronize() {
+                Ok(_) => {
+                    let mut output = vec![0u32; 256];
+                    output_buf.copy_to_host(&mut output).unwrap();
 
-                        if output[4] == 0xF082DEAD {
-                            println!("  UNEXPECTED: F082 pattern WORKS in minimal kernel!");
-                            println!("  → F082 may be triggered by kernel complexity, not this pattern");
-                        } else {
-                            println!("  Data mismatch - got {:08X} at index 4", output[4]);
-                        }
-                    }
-                    Err(e) => {
-                        println!("  CRASHED as expected: {}", e);
-                        println!("  → Confirmed: F082 pattern reproduces in minimal kernel");
+                    if output[4] == 0xF082DEAD {
+                        println!("  UNEXPECTED: F082 pattern WORKS in minimal kernel!");
+                        println!(
+                            "  → F082 may be triggered by kernel complexity, not this pattern"
+                        );
+                    } else {
+                        println!("  Data mismatch - got {:08X} at index 4", output[4]);
                     }
                 }
-            }
+                Err(e) => {
+                    println!("  CRASHED as expected: {}", e);
+                    println!("  → Confirmed: F082 pattern reproduces in minimal kernel");
+                }
+            },
             Err(e) => {
                 println!("  Launch failed: {}", e);
             }
@@ -438,34 +424,28 @@ L_skip:
             shared_mem: 1024,
         };
 
-        let mut args: [*mut c_void; 1] = [
-            output_buf.as_kernel_arg(),
-        ];
+        let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "f082_test4", &config, &mut args)
-        };
+        let result = unsafe { stream.launch_kernel(&mut module, "f082_test4", &config, &mut args) };
 
         match result {
-            Ok(_) => {
-                match stream.synchronize() {
-                    Ok(_) => {
-                        let mut output = vec![0u32; 1];
-                        output_buf.copy_to_host(&mut output).unwrap();
+            Ok(_) => match stream.synchronize() {
+                Ok(_) => {
+                    let mut output = vec![0u32; 1];
+                    output_buf.copy_to_host(&mut output).unwrap();
 
-                        if output[0] == 0x5AAED01 {
-                            println!("  PASSED - Shared→Shared computed address WORKS");
-                            println!("  → Bug is in shared→GLOBAL crossing specifically");
-                        } else {
-                            println!("  Data mismatch - got {:08X}", output[0]);
-                        }
-                    }
-                    Err(e) => {
-                        println!("  CRASHED: {}", e);
-                        println!("  → Bug is in shared memory address computation itself");
+                    if output[0] == 0x5AAED01 {
+                        println!("  PASSED - Shared→Shared computed address WORKS");
+                        println!("  → Bug is in shared→GLOBAL crossing specifically");
+                    } else {
+                        println!("  Data mismatch - got {:08X}", output[0]);
                     }
                 }
-            }
+                Err(e) => {
+                    println!("  CRASHED: {}", e);
+                    println!("  → Bug is in shared memory address computation itself");
+                }
+            },
             Err(e) => {
                 println!("  Launch failed: {}", e);
             }
@@ -561,35 +541,29 @@ L_skip:
             shared_mem: 64,
         };
 
-        let mut args: [*mut c_void; 1] = [
-            output_buf.as_kernel_arg(),
-        ];
+        let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
-        let result = unsafe {
-            stream.launch_kernel(&mut module, "f082_test5", &config, &mut args)
-        };
+        let result = unsafe { stream.launch_kernel(&mut module, "f082_test5", &config, &mut args) };
 
         match result {
-            Ok(_) => {
-                match stream.synchronize() {
-                    Ok(_) => {
-                        let mut output = vec![0u32; 256];
-                        output_buf.copy_to_host(&mut output).unwrap();
+            Ok(_) => match stream.synchronize() {
+                Ok(_) => {
+                    let mut output = vec![0u32; 256];
+                    output_buf.copy_to_host(&mut output).unwrap();
 
-                        if output[4] == 0xBABA6001 {
-                            println!("  PASSED - membar.gl WORKS");
-                            println!("  → REFUTES 'barriers don't work' claim");
-                            println!("  → FIX: Use membar.gl (not just membar.cta)");
-                        } else {
-                            println!("  Data mismatch - got {:08X} at index 4", output[4]);
-                        }
-                    }
-                    Err(e) => {
-                        println!("  CRASHED: {}", e);
-                        println!("  → membar.gl doesn't help (supports original F082 hypothesis)");
+                    if output[4] == 0xBABA6001 {
+                        println!("  PASSED - membar.gl WORKS");
+                        println!("  → REFUTES 'barriers don't work' claim");
+                        println!("  → FIX: Use membar.gl (not just membar.cta)");
+                    } else {
+                        println!("  Data mismatch - got {:08X} at index 4", output[4]);
                     }
                 }
-            }
+                Err(e) => {
+                    println!("  CRASHED: {}", e);
+                    println!("  → membar.gl doesn't help (supports original F082 hypothesis)");
+                }
+            },
             Err(e) => {
                 println!("  Launch failed: {}", e);
             }

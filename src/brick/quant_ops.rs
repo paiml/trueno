@@ -511,7 +511,7 @@ mod tests {
         // Test that all 16 sub-blocks are processed
         let block = BlockQ6K {
             ql: [0x12; 128],
-            qh: [0x03; 64],  // Different pattern per position
+            qh: [0x03; 64], // Different pattern per position
             scales: [1, 2, 3, 4, 5, 6, 7, 8, -1, -2, -3, -4, -5, -6, -7, -8],
             d: 0.1,
         };
@@ -618,7 +618,9 @@ mod tests {
             qs: [0x44; 128],
         };
         let x = vec![0.5f32; 512];
-        let result = op.execute((vec![block.clone(), block], x), Backend::Scalar).unwrap();
+        let result = op
+            .execute((vec![block.clone(), block], x), Backend::Scalar)
+            .unwrap();
         assert!(result.is_finite());
     }
 
@@ -719,7 +721,9 @@ mod tests {
             d: 0.25,
         };
         let x = vec![0.5f32; 512];
-        let result = op.execute((vec![block.clone(), block], x), Backend::Scalar).unwrap();
+        let result = op
+            .execute((vec![block.clone(), block], x), Backend::Scalar)
+            .unwrap();
         assert!(result.is_finite());
     }
 
@@ -765,12 +769,17 @@ mod tests {
         };
         let x = vec![1.5f32; 256];
 
-        let scalar = op.execute((vec![block.clone()], x.clone()), Backend::Scalar).unwrap();
+        let scalar = op
+            .execute((vec![block.clone()], x.clone()), Backend::Scalar)
+            .unwrap();
         let auto = op.execute((vec![block], x), Backend::Auto).unwrap();
 
         // Allow small FP differences due to SIMD operation ordering
         let rel_diff = (scalar - auto).abs() / scalar.abs().max(1e-6);
-        assert!(rel_diff < 1e-4, "scalar={scalar}, auto={auto}, rel_diff={rel_diff}");
+        assert!(
+            rel_diff < 1e-4,
+            "scalar={scalar}, auto={auto}, rel_diff={rel_diff}"
+        );
     }
 
     #[test]
@@ -784,12 +793,17 @@ mod tests {
         };
         let x = vec![1.5f32; 256];
 
-        let scalar = op.execute((vec![block.clone()], x.clone()), Backend::Scalar).unwrap();
+        let scalar = op
+            .execute((vec![block.clone()], x.clone()), Backend::Scalar)
+            .unwrap();
         let auto = op.execute((vec![block], x), Backend::Auto).unwrap();
 
         // Allow small FP differences due to SIMD operation ordering
         let rel_diff = (scalar - auto).abs() / scalar.abs().max(1e-6);
-        assert!(rel_diff < 1e-4, "scalar={scalar}, auto={auto}, rel_diff={rel_diff}");
+        assert!(
+            rel_diff < 1e-4,
+            "scalar={scalar}, auto={auto}, rel_diff={rel_diff}"
+        );
     }
 
     // ===== Clone/Debug Trait Tests =====

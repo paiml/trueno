@@ -3,9 +3,8 @@
 //! F1311-F1320: Context regression falsification tests
 
 use cbtop::{
-    ContextRegressionPredictor, SystemContext,
-    RegressionThreshold,
-    DEFAULT_COLD_START_MARGIN, MIN_SAMPLES_FOR_CONTEXT, DEFAULT_STALENESS_SEC,
+    ContextRegressionPredictor, RegressionThreshold, SystemContext, DEFAULT_COLD_START_MARGIN,
+    DEFAULT_STALENESS_SEC, MIN_SAMPLES_FOR_CONTEXT,
 };
 
 // =============================================================================
@@ -283,14 +282,11 @@ fn f1317_regression_detected() {
 /// F1318.1: Stale baseline detected
 #[test]
 fn f1318_stale_baseline() {
-    let predictor = ContextRegressionPredictor::new()
-        .with_staleness(60); // 60 second staleness
+    let predictor = ContextRegressionPredictor::new().with_staleness(60); // 60 second staleness
 
-    let _old_context = SystemContext::new()
-        .with_timestamp(1000);
+    let _old_context = SystemContext::new().with_timestamp(1000);
 
-    let new_context = SystemContext::new()
-        .with_timestamp(100_000); // 100 seconds later
+    let new_context = SystemContext::new().with_timestamp(100_000); // 100 seconds later
 
     // Even with stale data, threshold should still compute
     let threshold = predictor.compute_threshold("latency", &new_context);
@@ -304,8 +300,7 @@ fn f1318_stale_baseline() {
 /// F1319.1: Custom cold start margin
 #[test]
 fn f1319_custom_cold_margin() {
-    let predictor = ContextRegressionPredictor::new()
-        .with_cold_start_margin(25.0);
+    let predictor = ContextRegressionPredictor::new().with_cold_start_margin(25.0);
 
     let ctx = SystemContext::new();
     let threshold = predictor.compute_threshold("test", &ctx);
@@ -316,8 +311,7 @@ fn f1319_custom_cold_margin() {
 /// F1319.2: Custom min margin
 #[test]
 fn f1319_custom_min_margin() {
-    let predictor = ContextRegressionPredictor::new()
-        .with_min_margin(5.0);
+    let predictor = ContextRegressionPredictor::new().with_min_margin(5.0);
 
     // No baselines yet, so baseline_count is 0
     assert_eq!(predictor.baseline_count("test"), 0);
@@ -326,8 +320,7 @@ fn f1319_custom_min_margin() {
 /// F1319.3: Custom temp factor
 #[test]
 fn f1319_custom_temp_factor() {
-    let predictor = ContextRegressionPredictor::new()
-        .with_temp_factor(5.0);
+    let predictor = ContextRegressionPredictor::new().with_temp_factor(5.0);
 
     // Verify configuration works
     assert_eq!(predictor.baseline_count("test"), 0);

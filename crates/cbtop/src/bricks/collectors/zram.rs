@@ -9,10 +9,10 @@
 //! - Algorithm efficiency
 //! - GPU acceleration status
 
-use std::any::Any;
-use std::time::{Duration, Instant};
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use crate::ring_buffer::RingBuffer;
+use std::any::Any;
+use std::time::{Duration, Instant};
 
 /// ZRAM metrics
 #[derive(Debug, Clone)]
@@ -241,11 +241,7 @@ impl ZramCollectorBrick {
 
     /// Read u64 from sysfs file
     fn read_sysfs_u64(path: &str) -> Option<u64> {
-        std::fs::read_to_string(path)
-            .ok()?
-            .trim()
-            .parse()
-            .ok()
+        std::fs::read_to_string(path).ok()?.trim().parse().ok()
     }
 
     /// Get metrics history
@@ -343,7 +339,10 @@ impl Brick for ZramCollectorBrick {
 
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
-            BrickAssertion::ValueInRange { min: 1.0, max: 10.0 }, // Compression ratio
+            BrickAssertion::ValueInRange {
+                min: 1.0,
+                max: 10.0,
+            }, // Compression ratio
             BrickAssertion::max_latency_ms(5),
         ]
     }

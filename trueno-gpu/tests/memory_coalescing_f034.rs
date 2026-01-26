@@ -332,8 +332,14 @@ fn test_memory_access_constants() {
     );
 
     // Memory transaction sizes
-    assert!(L1_CACHE_LINE.is_power_of_two(), "Cache line must be power of two");
-    assert!(L2_CACHE_LINE.is_power_of_two(), "Cache line must be power of two");
+    assert!(
+        L1_CACHE_LINE.is_power_of_two(),
+        "Cache line must be power of two"
+    );
+    assert!(
+        L2_CACHE_LINE.is_power_of_two(),
+        "Cache line must be power of two"
+    );
 
     println!("Memory access constants verified");
 }
@@ -351,10 +357,7 @@ fn test_tile_edge_cases() {
     );
 
     // Maximum valid 2D tile
-    assert!(
-        validate_shape(&[4096, 4]).is_ok(),
-        "4096x4 should be valid"
-    );
+    assert!(validate_shape(&[4096, 4]).is_ok(), "4096x4 should be valid");
 
     // Exactly at element limit
     assert!(

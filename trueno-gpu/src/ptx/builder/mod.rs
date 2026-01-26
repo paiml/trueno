@@ -36,7 +36,9 @@ pub use sync::PtxSync;
 
 use std::fmt::Write;
 
-use super::instructions::{CmpOp, Operand, Predicate, PtxInstruction, PtxOp, RoundingMode, WmmaLayout};
+use super::instructions::{
+    CmpOp, Operand, Predicate, PtxInstruction, PtxOp, RoundingMode, WmmaLayout,
+};
 use super::registers::{PtxReg, RegisterAllocator, VirtualReg};
 use super::types::{PtxStateSpace, PtxType};
 use super::{validate_target, validate_version};
@@ -44,7 +46,6 @@ use crate::error::Result;
 
 // Emit functions extracted to emit.rs (PMAT-018 domain separation)
 use emit::write_instruction;
-
 
 /// Macro for dp4a operations (in-place variant)
 macro_rules! impl_dp4a_inplace {
@@ -530,9 +531,24 @@ impl<'a> KernelBuilder<'a> {
     // Dot product of 4 x u8/s8 vectors with accumulate, generated via macro.
     // PAR-063: Key SIMD instruction for Q4K inference (llama.cpp pattern).
 
-    impl_dp4a_inplace!(dp4a_u32_inplace, Dp4a, U32, "DP4A u32 in-place: acc += dot4(a, b) where a,b are packed u8x4");
-    impl_dp4a_inplace!(dp4a_u32_s32_inplace, Dp4aUS, S32, "DP4A u32×s32 in-place: acc += dot4(u8x4, s8x4)");
-    impl_dp4a_inplace!(dp4a_s32_inplace, Dp4aS32, S32, "DP4A s32 in-place: acc += dot4(s8x4, s8x4)");
+    impl_dp4a_inplace!(
+        dp4a_u32_inplace,
+        Dp4a,
+        U32,
+        "DP4A u32 in-place: acc += dot4(a, b) where a,b are packed u8x4"
+    );
+    impl_dp4a_inplace!(
+        dp4a_u32_s32_inplace,
+        Dp4aUS,
+        S32,
+        "DP4A u32×s32 in-place: acc += dot4(u8x4, s8x4)"
+    );
+    impl_dp4a_inplace!(
+        dp4a_s32_inplace,
+        Dp4aS32,
+        S32,
+        "DP4A s32 in-place: acc += dot4(s8x4, s8x4)"
+    );
 
     /// Barrier synchronization (all threads in block must reach this point)
     pub fn bar_sync(&mut self, barrier_id: u32) {
@@ -546,9 +562,8 @@ impl<'a> KernelBuilder<'a> {
     /// Ensures all prior memory operations are visible to other threads in the block.
     /// PTX: membar.cta;
     pub fn membar_cta(&mut self) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::MemBar, PtxType::B32).label("cta".to_string()),
-        );
+        self.instructions
+            .push(PtxInstruction::new(PtxOp::MemBar, PtxType::B32).label("cta".to_string()));
     }
 
     /// Memory fence at GPU level
@@ -556,9 +571,8 @@ impl<'a> KernelBuilder<'a> {
     /// Ensures all prior memory operations are visible to other threads on the GPU.
     /// PTX: membar.gl;
     pub fn membar_gl(&mut self) {
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::MemBar, PtxType::B32).label("gl".to_string()),
-        );
+        self.instructions
+            .push(PtxInstruction::new(PtxOp::MemBar, PtxType::B32).label("gl".to_string()));
     }
 
     // ===== Shared Memory Operations =====
@@ -631,7 +645,12 @@ impl<'a> KernelBuilder<'a> {
     ///
     /// Format: shfl.sync.idx.b32 dst, src, srcLane, width, membermask
     /// srcLane comes from a register instead of immediate.
-    pub fn shfl_idx_u32_reg(&mut self, val: VirtualReg, src_lane_reg: VirtualReg, mask: u32) -> VirtualReg {
+    pub fn shfl_idx_u32_reg(
+        &mut self,
+        val: VirtualReg,
+        src_lane_reg: VirtualReg,
+        mask: u32,
+    ) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
             PtxInstruction::new(PtxOp::ShflIdx, PtxType::U32)
@@ -879,7 +898,7 @@ impl<'a> KernelBuilder<'a> {
             PtxInstruction::new(PtxOp::Cvt, PtxType::F32)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
-                .with_src_type(PtxType::S32)  // Force .s32 source type
+                .with_src_type(PtxType::S32) // Force .s32 source type
                 .rounding(RoundingMode::Rn),
         );
         dst
@@ -942,9 +961,9 @@ impl<'a> KernelBuilder<'a> {
 
         // Now x_reduced is in [-π, π]
         // Polynomial coefficients (Cephes sin polynomial)
-        let c1 = self.mov_f32_imm(-0.166_666_67_f32);  // -1/6
+        let c1 = self.mov_f32_imm(-0.166_666_67_f32); // -1/6
         let c2 = self.mov_f32_imm(0.008_333_334_f32); // 1/120
-        let c3 = self.mov_f32_imm(-0.000_198_412_7_f32);  // -1/5040
+        let c3 = self.mov_f32_imm(-0.000_198_412_7_f32); // -1/5040
 
         // x² and higher powers
         let x2 = self.mul_f32(x_reduced, x_reduced);
@@ -979,8 +998,8 @@ impl<'a> KernelBuilder<'a> {
         let x_reduced = self.fma_f32(n_f32, neg_two_pi, x);
 
         // Polynomial coefficients (Cephes cos polynomial)
-        let c1 = self.mov_f32_imm(-0.5_f32);              // -1/2
-        let c2 = self.mov_f32_imm(0.041_666_668_f32);   // 1/24
+        let c1 = self.mov_f32_imm(-0.5_f32); // -1/2
+        let c2 = self.mov_f32_imm(0.041_666_668_f32); // 1/24
         let c3 = self.mov_f32_imm(-0.001_388_888_9_f32); // -1/720
 
         let x2 = self.mul_f32(x_reduced, x_reduced);
@@ -1002,7 +1021,7 @@ impl<'a> KernelBuilder<'a> {
         self.instructions.push(
             PtxInstruction::new(PtxOp::Cvt, PtxType::F32)
                 .with_src_type(PtxType::F32)
-                .rounding(RoundingMode::Rmi)  // round-to-integer-toward-minus-infinity (floor)
+                .rounding(RoundingMode::Rmi) // round-to-integer-toward-minus-infinity (floor)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val)),
         );
@@ -1040,11 +1059,11 @@ impl<'a> KernelBuilder<'a> {
         // 2^f ≈ c0 + c1*f + c2*f² + c3*f³ + c4*f⁴ + c5*f⁵ + c6*f⁶
         // Coefficients from sollya/libm for 2^x on [-0.5, 0.5]
         let c0 = self.mov_f32_imm(1.0);
-        let c1 = self.mov_f32_imm(std::f32::consts::LN_2);  // ln(2)
+        let c1 = self.mov_f32_imm(std::f32::consts::LN_2); // ln(2)
         let c2 = self.mov_f32_imm(0.240_226_5_f32); // ln(2)²/2
-        let c3 = self.mov_f32_imm(0.055_503_19_f32);   // ln(2)³/6
-        let c4 = self.mov_f32_imm(0.009_618_342_f32);  // ln(2)⁴/24
-        let c5 = self.mov_f32_imm(0.001_333_355_9_f32);  // ln(2)⁵/120
+        let c3 = self.mov_f32_imm(0.055_503_19_f32); // ln(2)³/6
+        let c4 = self.mov_f32_imm(0.009_618_342_f32); // ln(2)⁴/24
+        let c5 = self.mov_f32_imm(0.001_333_355_9_f32); // ln(2)⁵/120
 
         // Horner's method: p = c0 + f*(c1 + f*(c2 + f*(c3 + f*(c4 + f*c5))))
         let _f2 = self.mul_f32(f, f);
@@ -1619,7 +1638,6 @@ impl<'a> KernelBuilder<'a> {
         let imm_reg = self.mov_u32_imm(imm);
         self.and_u32(a, imm_reg)
     }
-
 
     // ===== In-Place Updates (for loops) =====
 

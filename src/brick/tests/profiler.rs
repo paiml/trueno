@@ -93,8 +93,20 @@ fn test_brick_profiler_record_elapsed_with_bytes() {
     let mut profiler = BrickProfiler::new();
     profiler.enable(); // Profiler is disabled by default
 
-    profiler.record_elapsed_with_bytes("Compress", Duration::from_nanos(1000), 100, 1_000_000, 250_000);
-    profiler.record_elapsed_with_bytes("Compress", Duration::from_nanos(2000), 200, 2_000_000, 500_000);
+    profiler.record_elapsed_with_bytes(
+        "Compress",
+        Duration::from_nanos(1000),
+        100,
+        1_000_000,
+        250_000,
+    );
+    profiler.record_elapsed_with_bytes(
+        "Compress",
+        Duration::from_nanos(2000),
+        200,
+        2_000_000,
+        500_000,
+    );
 
     let stats = profiler.stats("Compress").unwrap();
     assert_eq!(stats.count, 2);
@@ -121,7 +133,13 @@ fn test_brick_profiler_to_json_includes_pmat451_fields() {
     use std::time::Duration;
     let mut profiler = BrickProfiler::new();
     profiler.enable(); // Profiler is disabled by default
-    profiler.record_elapsed_with_bytes("Compress", Duration::from_micros(1000), 100, 1_000_000, 250_000);
+    profiler.record_elapsed_with_bytes(
+        "Compress",
+        Duration::from_micros(1000),
+        100,
+        1_000_000,
+        250_000,
+    );
     profiler.set_brick_bottleneck("Compress", BrickBottleneck::Memory);
 
     let json = profiler.to_json();
@@ -142,7 +160,10 @@ fn test_brick_id_category() {
     assert_eq!(BrickId::RmsNorm.category(), BrickCategory::Norm);
     assert_eq!(BrickId::LayerNorm.category(), BrickCategory::Norm);
     assert_eq!(BrickId::QkvProjection.category(), BrickCategory::Attention);
-    assert_eq!(BrickId::AttentionSoftmax.category(), BrickCategory::Attention);
+    assert_eq!(
+        BrickId::AttentionSoftmax.category(),
+        BrickCategory::Attention
+    );
     assert_eq!(BrickId::GateProjection.category(), BrickCategory::Ffn);
     assert_eq!(BrickId::DownProjection.category(), BrickCategory::Ffn);
     assert_eq!(BrickId::Embedding.category(), BrickCategory::Other);

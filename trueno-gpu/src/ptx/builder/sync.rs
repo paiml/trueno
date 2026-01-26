@@ -28,9 +28,8 @@ pub trait PtxSync: KernelBuilderCore {
 
     /// Synchronize all threads in the block
     fn bar_sync(&mut self, id: u32) {
-        self.instructions_mut().push(
-            PtxInstruction::new(PtxOp::Bar, PtxType::U32).src(Operand::ImmI64(id as i64)),
-        );
+        self.instructions_mut()
+            .push(PtxInstruction::new(PtxOp::Bar, PtxType::U32).src(Operand::ImmI64(id as i64)));
     }
 
     /// Memory fence (CTA scope)

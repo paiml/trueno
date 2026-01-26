@@ -86,7 +86,10 @@ fn main() {
     let fault_ratio = minor_faults as f64 / expected_faults as f64;
 
     if minor_faults > 1000 {
-        println!("[WARN] High page fault count detected: minor_faults={}", minor_faults);
+        println!(
+            "[WARN] High page fault count detected: minor_faults={}",
+            minor_faults
+        );
     }
 
     if fault_ipc < 0.5 {

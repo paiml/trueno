@@ -26,7 +26,10 @@ fn main() {
 
         // Test creating a compute pipeline
         if let Ok(compute) = MetalCompute::default_device() {
-            println!("\nMetal compute pipeline created on: {}", compute.device_name());
+            println!(
+                "\nMetal compute pipeline created on: {}",
+                compute.device_name()
+            );
 
             // Test shader compilation
             let shader = compute.compile_shader(

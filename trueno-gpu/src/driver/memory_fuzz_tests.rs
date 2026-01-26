@@ -17,7 +17,7 @@ use proptest::prelude::*;
 #[test]
 fn test_zero_sized_buffer() {
     let ctx = CudaContext::new(0).expect("Context");
-    
+
     // 0-sized allocation should either succeed (ptr=null/special) or fail gracefully
     // It should NOT panic or crash CUDA
     let buf_result = GpuBuffer::<f32>::new(&ctx, 0);
@@ -27,7 +27,8 @@ fn test_zero_sized_buffer() {
         assert_eq!(buf.len(), 0);
         // Copying 0 bytes should be a no-op
         let src: Vec<f32> = vec![];
-        buf.copy_from_host(&src).expect("Zero-byte copy should succeed");
+        buf.copy_from_host(&src)
+            .expect("Zero-byte copy should succeed");
     }
 }
 
@@ -36,13 +37,13 @@ fn test_unaligned_byte_copy() {
     let ctx = CudaContext::new(0).expect("Context");
     let len = 1024;
     let mut buf = GpuBuffer::<u8>::new(&ctx, len).expect("Alloc");
-    
+
     let data: Vec<u8> = (0..len).map(|i| (i % 255) as u8).collect();
     buf.copy_from_host(&data).expect("Copy");
-    
+
     let mut out = vec![0u8; len];
     buf.copy_to_host(&mut out).expect("Download");
-    
+
     assert_eq!(data, out);
 }
 
@@ -50,15 +51,15 @@ fn test_unaligned_byte_copy() {
 fn test_oom_resilience() {
     let ctx = CudaContext::new(0).expect("Context");
     let (free_start, _) = ctx.memory_info().expect("Mem info");
-    
+
     // Allocate 1GB chunks until failure
     let mut allocations = Vec::new();
     let chunk_size = 1024 * 1024 * 1024 / 4; // 1GB of f32 (256M elements)
-    
+
     // RTX 4090 has 24GB. 30 chunks * 1GB = 30GB -> Must OOM.
     // Limit to 20 to avoid freezing system if driver is aggressive
     let mut hit_oom = false;
-    
+
     for i in 0..30 {
         match GpuBuffer::<f32>::new(&ctx, chunk_size) {
             Ok(buf) => allocations.push(buf),
@@ -76,20 +77,28 @@ fn test_oom_resilience() {
             Err(e) => panic!("Unexpected error during OOM stress: {:?}", e),
         }
     }
-    
+
     // If we didn't hit OOM, we either have >30GB RAM or something is wrong
     // But we don't assert(hit_oom) to avoid flaky fails on 80GB A100s if running elsewhere
-    
+
     // Drop all allocations
     drop(allocations);
-    
+
     // Verify memory is returned
     let (free_end, _) = ctx.memory_info().expect("Mem info");
     // Allow some small driver overhead variance, but major blocks should be free
     // Diff should be small
-    let diff = if free_start > free_end { free_start - free_end } else { 0 };
+    let diff = if free_start > free_end {
+        free_start - free_end
+    } else {
+        0
+    };
     // 100MB tolerance
-    assert!(diff < 100 * 1024 * 1024, "Memory leak detected! {} bytes missing", diff);
+    assert!(
+        diff < 100 * 1024 * 1024,
+        "Memory leak detected! {} bytes missing",
+        diff
+    );
 }
 
 proptest! {
@@ -161,11 +170,15 @@ fn test_copy_from_host_too_small() {
     let small_data = vec![1.0f32; 500];
     let result = buf.copy_from_host(&small_data);
 
-    assert!(result.is_err(), "copy_from_host should fail when host buffer is smaller");
+    assert!(
+        result.is_err(),
+        "copy_from_host should fail when host buffer is smaller"
+    );
     if let Err(e) = result {
         assert!(
             format!("{:?}", e).contains("mismatch") || format!("{:?}", e).contains("Transfer"),
-            "Error should mention size mismatch: {:?}", e
+            "Error should mention size mismatch: {:?}",
+            e
         );
     }
 }
@@ -180,7 +193,10 @@ fn test_copy_to_host_too_large() {
     let mut large_data = vec![0.0f32; 500];
     let result = buf.copy_to_host(&mut large_data);
 
-    assert!(result.is_err(), "copy_to_host should fail when host buffer size doesn't match");
+    assert!(
+        result.is_err(),
+        "copy_to_host should fail when host buffer size doesn't match"
+    );
 }
 
 /// Falsification Test 4: Partial copy out of bounds (offset too large)
@@ -193,7 +209,10 @@ fn test_copy_from_host_at_out_of_bounds() {
 
     // Offset 60 + len 50 = 110 > 100 buffer size
     let result = buf.copy_from_host_at(&data, 60);
-    assert!(result.is_err(), "copy_from_host_at should fail when offset+len > buffer size");
+    assert!(
+        result.is_err(),
+        "copy_from_host_at should fail when offset+len > buffer size"
+    );
 }
 
 /// Falsification Test 5: Partial copy to host out of bounds
@@ -207,7 +226,10 @@ fn test_copy_to_host_at_out_of_bounds() {
 
     // Offset 60 + len 50 = 110 > 100 buffer size
     let copy_result = buf.copy_to_host_at(&mut result, 60);
-    assert!(copy_result.is_err(), "copy_to_host_at should fail when offset+len > buffer size");
+    assert!(
+        copy_result.is_err(),
+        "copy_to_host_at should fail when offset+len > buffer size"
+    );
 }
 
 /// Falsification Test 6: D2D copy size mismatch
@@ -219,7 +241,10 @@ fn test_d2d_copy_size_mismatch() {
     let mut dst = GpuBuffer::<f32>::new(&ctx, 200).expect("Alloc dst");
 
     let result = dst.copy_from_buffer(&src);
-    assert!(result.is_err(), "D2D copy should fail when buffer sizes don't match");
+    assert!(
+        result.is_err(),
+        "D2D copy should fail when buffer sizes don't match"
+    );
 }
 
 /// Falsification Test 7: D2D partial copy out of bounds (dst)
@@ -232,7 +257,10 @@ fn test_d2d_copy_at_dst_out_of_bounds() {
 
     // dst_offset 60 + count 50 = 110 > dst.len 100
     let result = dst.copy_from_buffer_at(&src, 60, 0, 50);
-    assert!(result.is_err(), "D2D copy_at should fail when dst_offset+count > dst.len");
+    assert!(
+        result.is_err(),
+        "D2D copy_at should fail when dst_offset+count > dst.len"
+    );
 }
 
 /// Falsification Test 8: D2D partial copy out of bounds (src)
@@ -245,7 +273,10 @@ fn test_d2d_copy_at_src_out_of_bounds() {
 
     // src_offset 30 + count 50 = 80 > src.len 50
     let result = dst.copy_from_buffer_at(&src, 0, 30, 50);
-    assert!(result.is_err(), "D2D copy_at should fail when src_offset+count > src.len");
+    assert!(
+        result.is_err(),
+        "D2D copy_at should fail when src_offset+count > src.len"
+    );
 }
 
 /// Falsification Test 9: RAII cleanup verification
@@ -266,7 +297,8 @@ fn test_raii_cleanup_single_buffer() {
         assert!(
             free_during < free_before,
             "Memory should decrease after allocation: before={}, during={}",
-            free_before, free_during
+            free_before,
+            free_during
         );
     }
     // Buffer dropped here
@@ -278,7 +310,9 @@ fn test_raii_cleanup_single_buffer() {
     assert!(
         free_after >= free_before - tolerance,
         "Memory leak detected! before={}, after={}, diff={}",
-        free_before, free_after, free_before.saturating_sub(free_after)
+        free_before,
+        free_after,
+        free_before.saturating_sub(free_after)
     );
 }
 
@@ -294,7 +328,10 @@ fn test_async_d2d_copy_size_mismatch() {
     let mut dst = GpuBuffer::<f32>::new(&ctx, 200).expect("Alloc dst");
 
     let result = unsafe { dst.copy_from_buffer_async(&src, &stream) };
-    assert!(result.is_err(), "Async D2D copy should fail when buffer sizes don't match");
+    assert!(
+        result.is_err(),
+        "Async D2D copy should fail when buffer sizes don't match"
+    );
 }
 
 /// Falsification Test 11: Async partial copy out of bounds
@@ -310,11 +347,17 @@ fn test_async_d2d_copy_at_out_of_bounds() {
 
     // dst out of bounds
     let result = unsafe { dst.copy_from_buffer_at_async(&src, 60, 0, 50, &stream) };
-    assert!(result.is_err(), "Async D2D copy_at should fail when dst out of bounds");
+    assert!(
+        result.is_err(),
+        "Async D2D copy_at should fail when dst out of bounds"
+    );
 
     // src out of bounds
     let result = unsafe { dst.copy_from_buffer_at_async(&src, 0, 30, 50, &stream) };
-    assert!(result.is_err(), "Async D2D copy_at should fail when src out of bounds");
+    assert!(
+        result.is_err(),
+        "Async D2D copy_at should fail when src out of bounds"
+    );
 }
 
 /// Falsification Test 12: Async H2D copy size mismatch
@@ -329,7 +372,10 @@ fn test_async_h2d_copy_size_mismatch() {
     let small_data = vec![1.0f32; 50];
 
     let result = unsafe { buf.copy_from_host_async(&small_data, &stream) };
-    assert!(result.is_err(), "Async H2D copy should fail when host buffer size doesn't match");
+    assert!(
+        result.is_err(),
+        "Async H2D copy should fail when host buffer size doesn't match"
+    );
 }
 
 /// Falsification Test 13: Async D2H copy size mismatch
@@ -344,7 +390,10 @@ fn test_async_d2h_copy_size_mismatch() {
     let mut large_data = vec![0.0f32; 200];
 
     let result = unsafe { buf.copy_to_host_async(&mut large_data, &stream) };
-    assert!(result.is_err(), "Async D2H copy should fail when host buffer size doesn't match");
+    assert!(
+        result.is_err(),
+        "Async D2H copy should fail when host buffer size doesn't match"
+    );
 }
 
 /// Falsification Test 14: Empty buffer operations
@@ -359,14 +408,20 @@ fn test_empty_buffer_operations() {
 
     // All these should succeed as no-ops
     let empty_data: Vec<f32> = vec![];
-    empty_buf.copy_from_host(&empty_data).expect("Empty H2D should succeed");
+    empty_buf
+        .copy_from_host(&empty_data)
+        .expect("Empty H2D should succeed");
 
     let mut empty_out: Vec<f32> = vec![];
-    empty_buf.copy_to_host(&mut empty_out).expect("Empty D2H should succeed");
+    empty_buf
+        .copy_to_host(&mut empty_out)
+        .expect("Empty D2H should succeed");
 
     // D2D with empty buffers
     let mut empty_dst = GpuBuffer::<f32>::new(&ctx, 0).expect("Alloc empty dst");
-    empty_dst.copy_from_buffer(&empty_buf).expect("Empty D2D should succeed");
+    empty_dst
+        .copy_from_buffer(&empty_buf)
+        .expect("Empty D2D should succeed");
 }
 
 /// Falsification Test 15: Partial copy with zero count
@@ -378,8 +433,10 @@ fn test_partial_copy_zero_count() {
     let mut dst = GpuBuffer::<f32>::new(&ctx, 100).expect("Alloc dst");
 
     // Zero count should be a no-op, regardless of offsets
-    dst.copy_from_buffer_at(&src, 0, 0, 0).expect("Zero count D2D should succeed");
-    dst.copy_from_buffer_at(&src, 50, 50, 0).expect("Zero count D2D with offsets should succeed");
+    dst.copy_from_buffer_at(&src, 0, 0, 0)
+        .expect("Zero count D2D should succeed");
+    dst.copy_from_buffer_at(&src, 50, 50, 0)
+        .expect("Zero count D2D with offsets should succeed");
 }
 
 /// Falsification Test 16: Async raw copy bounds check
@@ -398,14 +455,23 @@ fn test_async_raw_copy_bounds_check() {
 
     // dst out of bounds
     let result = unsafe { dst.copy_from_buffer_at_async_raw(&src, 60, 0, 50, stream_handle) };
-    assert!(result.is_err(), "Async raw D2D should fail when dst out of bounds");
+    assert!(
+        result.is_err(),
+        "Async raw D2D should fail when dst out of bounds"
+    );
 
     // src out of bounds
     let result = unsafe { dst.copy_from_buffer_at_async_raw(&src, 0, 30, 50, stream_handle) };
-    assert!(result.is_err(), "Async raw D2D should fail when src out of bounds");
+    assert!(
+        result.is_err(),
+        "Async raw D2D should fail when src out of bounds"
+    );
 
     // Zero count should succeed
-    unsafe { dst.copy_from_buffer_at_async_raw(&src, 0, 0, 0, stream_handle).expect("Zero count should succeed"); }
+    unsafe {
+        dst.copy_from_buffer_at_async_raw(&src, 0, 0, 0, stream_handle)
+            .expect("Zero count should succeed");
+    }
 }
 
 /// Falsification Test 17: Buffer view properties
@@ -449,6 +515,8 @@ fn test_stress_alloc_dealloc_cycle() {
     assert!(
         free_end >= free_start - tolerance,
         "Memory leak after 100 alloc/dealloc cycles! start={}, end={}, leaked={}",
-        free_start, free_end, free_start.saturating_sub(free_end)
+        free_start,
+        free_end,
+        free_start.saturating_sub(free_end)
     );
 }

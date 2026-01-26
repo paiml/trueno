@@ -62,6 +62,9 @@ pub mod sys;
 #[allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr, clippy::cast_sign_loss)]
 mod context;
 #[cfg(feature = "cuda")]
+#[allow(clippy::borrow_as_ptr, clippy::not_unsafe_ptr_arg_deref)]
+mod graph;
+#[cfg(feature = "cuda")]
 #[allow(clippy::ptr_as_ptr, clippy::borrow_as_ptr)]
 mod memory;
 #[cfg(feature = "cuda")]
@@ -70,9 +73,6 @@ mod module;
 #[cfg(feature = "cuda")]
 #[allow(clippy::borrow_as_ptr)]
 mod stream;
-#[cfg(feature = "cuda")]
-#[allow(clippy::borrow_as_ptr, clippy::not_unsafe_ptr_arg_deref)]
-mod graph;
 
 // Re-export for use without cuda feature (types only)
 mod types;
@@ -82,13 +82,13 @@ pub use types::*;
 #[cfg(feature = "cuda")]
 pub use context::{cuda_available, device_count, CudaContext};
 #[cfg(feature = "cuda")]
+pub use graph::{CaptureMode, CudaGraph, CudaGraphExec};
+#[cfg(feature = "cuda")]
 pub use memory::GpuBuffer;
 #[cfg(feature = "cuda")]
 pub use module::CudaModule;
 #[cfg(feature = "cuda")]
 pub use stream::{CudaStream, DEFAULT_STREAM};
-#[cfg(feature = "cuda")]
-pub use graph::{CaptureMode, CudaGraph, CudaGraphExec};
 
 /// Check if CUDA is available at runtime
 ///

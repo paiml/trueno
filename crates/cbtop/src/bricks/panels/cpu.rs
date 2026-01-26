@@ -1,9 +1,9 @@
 //! CPU panel brick (Layer 3)
 
-use std::any::Any;
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use presentar_core::{Canvas, Point, Rect, TextStyle, Widget};
 use presentar_terminal::{BrailleGraph, GraphMode, Meter, Theme};
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 pub struct CpuPanelBrick {
     pub cpu_data: Vec<f64>,
@@ -44,7 +44,11 @@ impl CpuPanelBrick {
         }
 
         // Simulated per-core meters
-        canvas.draw_text("Per-Core Usage (simulated)", Point::new(2.0, 12.0), &label_style);
+        canvas.draw_text(
+            "Per-Core Usage (simulated)",
+            Point::new(2.0, 12.0),
+            &label_style,
+        );
         for i in 0..8 {
             let y = 13.0 + i as f32;
             let usage = 30.0 + (i as f64 * 7.0) + (self.intensity * 50.0);
@@ -53,8 +57,7 @@ impl CpuPanelBrick {
             canvas.draw_text(&format!("Core {}: ", i), Point::new(2.0, y), &dim_style);
 
             // Use theme gradient for per-core meter color
-            let mut meter = Meter::new(usage, 100.0)
-                .with_color(self.theme.cpu_color(usage));
+            let mut meter = Meter::new(usage, 100.0).with_color(self.theme.cpu_color(usage));
             meter.layout(Rect::new(12.0, y, 20.0, 1.0));
             meter.paint(canvas);
 

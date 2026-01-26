@@ -17,13 +17,19 @@ pub unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let va = vld1q_f32(a.as_ptr().add(i));
         let vb = vld1q_f32(b.as_ptr().add(i));
         #[cfg(target_arch = "aarch64")]
-        { acc = vfmaq_f32(acc, va, vb); }
+        {
+            acc = vfmaq_f32(acc, va, vb);
+        }
         #[cfg(target_arch = "arm")]
-        { acc = vmlaq_f32(acc, va, vb); }
+        {
+            acc = vmlaq_f32(acc, va, vb);
+        }
         i += 4;
     }
     let mut result = horizontal_sum(acc);
-    for j in i..len { result += a[j] * b[j]; }
+    for j in i..len {
+        result += a[j] * b[j];
+    }
     result
 }
 
@@ -39,7 +45,9 @@ pub unsafe fn sum(a: &[f32]) -> f32 {
         i += 4;
     }
     let mut result = horizontal_sum(acc);
-    for j in i..len { result += a[j]; }
+    for j in i..len {
+        result += a[j];
+    }
     result
 }
 
@@ -55,7 +63,11 @@ pub unsafe fn max(a: &[f32]) -> f32 {
         i += 4;
     }
     let mut result = horizontal_max(vmax);
-    for j in i..len { if a[j] > result { result = a[j]; } }
+    for j in i..len {
+        if a[j] > result {
+            result = a[j];
+        }
+    }
     result
 }
 
@@ -71,7 +83,11 @@ pub unsafe fn min(a: &[f32]) -> f32 {
         i += 4;
     }
     let mut result = horizontal_min(vmin);
-    for j in i..len { if a[j] < result { result = a[j]; } }
+    for j in i..len {
+        if a[j] < result {
+            result = a[j];
+        }
+    }
     result
 }
 
@@ -82,7 +98,10 @@ pub unsafe fn argmax(a: &[f32]) -> usize {
     let mut max_idx = 0;
     let mut max_val = a[0];
     for (i, &v) in a.iter().enumerate() {
-        if v > max_val { max_val = v; max_idx = i; }
+        if v > max_val {
+            max_val = v;
+            max_idx = i;
+        }
     }
     max_idx
 }
@@ -94,7 +113,10 @@ pub unsafe fn argmin(a: &[f32]) -> usize {
     let mut min_idx = 0;
     let mut min_val = a[0];
     for (i, &v) in a.iter().enumerate() {
-        if v < min_val { min_val = v; min_idx = i; }
+        if v < min_val {
+            min_val = v;
+            min_idx = i;
+        }
     }
     min_idx
 }
@@ -118,7 +140,9 @@ pub unsafe fn sum_kahan(a: &[f32]) -> f32 {
 #[target_feature(enable = "neon")]
 unsafe fn horizontal_sum(v: float32x4_t) -> f32 {
     #[cfg(target_arch = "aarch64")]
-    { vaddvq_f32(v) }
+    {
+        vaddvq_f32(v)
+    }
     #[cfg(target_arch = "arm")]
     {
         let pair = vpadd_f32(vget_low_f32(v), vget_high_f32(v));
@@ -132,7 +156,9 @@ unsafe fn horizontal_sum(v: float32x4_t) -> f32 {
 #[target_feature(enable = "neon")]
 unsafe fn horizontal_max(v: float32x4_t) -> f32 {
     #[cfg(target_arch = "aarch64")]
-    { vmaxvq_f32(v) }
+    {
+        vmaxvq_f32(v)
+    }
     #[cfg(target_arch = "arm")]
     {
         let pair = vpmax_f32(vget_low_f32(v), vget_high_f32(v));
@@ -146,7 +172,9 @@ unsafe fn horizontal_max(v: float32x4_t) -> f32 {
 #[target_feature(enable = "neon")]
 unsafe fn horizontal_min(v: float32x4_t) -> f32 {
     #[cfg(target_arch = "aarch64")]
-    { vminvq_f32(v) }
+    {
+        vminvq_f32(v)
+    }
     #[cfg(target_arch = "arm")]
     {
         let pair = vpmin_f32(vget_low_f32(v), vget_high_f32(v));

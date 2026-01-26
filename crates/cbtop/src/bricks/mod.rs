@@ -6,12 +6,12 @@
 //! - Layer 3: Panels - Rendering using presentar-terminal widgets
 //! - Layer 4: Generators - Load generation
 
-pub mod collectors;
 pub mod analyzers;
-pub mod panels;
+pub mod collectors;
 pub mod generators;
+pub mod panels;
 
 // Re-exports
-pub use collectors::*;
 pub use analyzers::*;
+pub use collectors::*;
 pub use generators::*;

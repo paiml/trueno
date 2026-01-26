@@ -102,7 +102,8 @@ impl BenchmarkProfile {
 
     /// Add a metric with samples
     pub fn add_metric(&mut self, name: impl Into<String>, samples: Vec<f64>) {
-        self.metrics.insert(name.into(), MetricSamples::new(samples));
+        self.metrics
+            .insert(name.into(), MetricSamples::new(samples));
     }
 
     /// Get metric by name
@@ -141,14 +142,18 @@ impl MetricSamples {
             (0.0, 0.0, 0.0)
         } else {
             let mean = values.iter().sum::<f64>() / values.len() as f64;
-            let variance = values.iter()
-                .map(|x| (x - mean).powi(2))
-                .sum::<f64>() / (values.len() - 1).max(1) as f64;
+            let variance = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
+                / (values.len() - 1).max(1) as f64;
             let std_dev = variance.sqrt();
             (mean, variance, std_dev)
         };
 
-        Self { values, mean, variance, std_dev }
+        Self {
+            values,
+            mean,
+            variance,
+            std_dev,
+        }
     }
 
     /// Get sample count
@@ -178,7 +183,10 @@ impl MetricSamples {
 
     /// Get maximum value
     pub fn max(&self) -> f64 {
-        self.values.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
+        self.values
+            .iter()
+            .cloned()
+            .fold(f64::NEG_INFINITY, f64::max)
     }
 }
 
@@ -387,7 +395,8 @@ impl ProfileComparator {
         comparison: &BenchmarkProfile,
     ) -> CompareResult<ProfileComparison> {
         // Find common metrics
-        let common_metrics: Vec<String> = baseline.metric_names()
+        let common_metrics: Vec<String> = baseline
+            .metric_names()
             .filter(|name| comparison.metrics.contains_key(*name))
             .cloned()
             .collect();
@@ -443,9 +452,14 @@ impl ProfileComparator {
             ComparisonVerdict::Pass
         } else {
             // Check if any regression exceeds threshold
-            let severe_regression = metric_comparisons.iter()
-                .filter(|m| m.is_regression)
-                .any(|m| m.effect_size.percent_change.abs() >= self.config.regression_threshold_percent);
+            let severe_regression =
+                metric_comparisons
+                    .iter()
+                    .filter(|m| m.is_regression)
+                    .any(|m| {
+                        m.effect_size.percent_change.abs()
+                            >= self.config.regression_threshold_percent
+                    });
 
             if severe_regression {
                 ComparisonVerdict::Fail
@@ -504,7 +518,10 @@ impl ProfileComparator {
         };
 
         // Determine direction and regression
-        let higher_is_better = self.config.higher_is_better.iter()
+        let higher_is_better = self
+            .config
+            .higher_is_better
+            .iter()
             .any(|m| name.contains(m));
 
         let direction = if !t_test.significant {
@@ -560,11 +577,7 @@ impl ProfileComparator {
         let mean_diff = b.mean() - a.mean();
         let se = ((var1 / n1) + (var2 / n2)).sqrt();
 
-        let t_statistic = if se > 1e-10 {
-            mean_diff / se
-        } else {
-            0.0
-        };
+        let t_statistic = if se > 1e-10 { mean_diff / se } else { 0.0 };
 
         // Welch-Satterthwaite degrees of freedom
         let v1 = var1 / n1;
@@ -651,7 +664,8 @@ impl ProfileComparator {
             0.0
         } else {
             (self.ln_gamma(a + b) - self.ln_gamma(a) - self.ln_gamma(b)
-                + a * x.ln() + b * (1.0 - x).ln())
+                + a * x.ln()
+                + b * (1.0 - x).ln())
             .exp()
         };
 
@@ -717,7 +731,9 @@ impl ProfileComparator {
         ];
 
         if x < 0.5 {
-            std::f64::consts::PI.ln() - (std::f64::consts::PI * x).sin().ln() - self.ln_gamma(1.0 - x)
+            std::f64::consts::PI.ln()
+                - (std::f64::consts::PI * x).sin().ln()
+                - self.ln_gamma(1.0 - x)
         } else {
             let x = x - 1.0;
             let mut a = c[0];
@@ -738,8 +754,7 @@ impl ProfileComparator {
             return 0.0;
         }
 
-        let pooled_var = ((n1 - 1.0) * a.variance() + (n2 - 1.0) * b.variance())
-            / (n1 + n2 - 2.0);
+        let pooled_var = ((n1 - 1.0) * a.variance() + (n2 - 1.0) * b.variance()) / (n1 + n2 - 2.0);
 
         pooled_var.sqrt()
     }
@@ -784,7 +799,11 @@ impl ProfileComparator {
 
         let x = t - (c0 + c1 * t + c2 * t * t) / (1.0 + d1 * t + d2 * t * t + d3 * t * t * t);
 
-        if p < 0.5 { -x } else { x }
+        if p < 0.5 {
+            -x
+        } else {
+            x
+        }
     }
 
     /// Get configuration
@@ -806,7 +825,11 @@ pub const DEFAULT_REGRESSION_THRESHOLD: f64 = 5.0;
 mod tests {
     use super::*;
 
-    fn create_test_profile(name: &str, latency_samples: Vec<f64>, throughput_samples: Vec<f64>) -> BenchmarkProfile {
+    fn create_test_profile(
+        name: &str,
+        latency_samples: Vec<f64>,
+        throughput_samples: Vec<f64>,
+    ) -> BenchmarkProfile {
         let mut profile = BenchmarkProfile::new(name);
         profile.add_metric("latency_p50", latency_samples);
         profile.add_metric("throughput", throughput_samples);
@@ -836,7 +859,10 @@ mod tests {
 
     #[test]
     fn test_effect_magnitude() {
-        assert_eq!(EffectMagnitude::from_cohens_d(0.1), EffectMagnitude::Negligible);
+        assert_eq!(
+            EffectMagnitude::from_cohens_d(0.1),
+            EffectMagnitude::Negligible
+        );
         assert_eq!(EffectMagnitude::from_cohens_d(0.3), EffectMagnitude::Small);
         assert_eq!(EffectMagnitude::from_cohens_d(0.6), EffectMagnitude::Medium);
         assert_eq!(EffectMagnitude::from_cohens_d(1.0), EffectMagnitude::Large);
@@ -858,14 +884,14 @@ mod tests {
     fn test_profile_comparison_no_regression() {
         let baseline = create_test_profile(
             "baseline",
-            vec![100.0, 102.0, 98.0, 101.0, 99.0],  // latency
-            vec![1000.0, 1010.0, 990.0, 1005.0, 995.0],  // throughput
+            vec![100.0, 102.0, 98.0, 101.0, 99.0], // latency
+            vec![1000.0, 1010.0, 990.0, 1005.0, 995.0], // throughput
         );
 
         let comparison = create_test_profile(
             "comparison",
-            vec![99.0, 101.0, 97.0, 100.0, 98.0],  // slightly better latency
-            vec![1005.0, 1015.0, 995.0, 1010.0, 1000.0],  // slightly better throughput
+            vec![99.0, 101.0, 97.0, 100.0, 98.0], // slightly better latency
+            vec![1005.0, 1015.0, 995.0, 1010.0, 1000.0], // slightly better throughput
         );
 
         let comparator = ProfileComparator::new(CompareConfig::default());
@@ -879,14 +905,14 @@ mod tests {
     fn test_profile_comparison_with_regression() {
         let baseline = create_test_profile(
             "baseline",
-            vec![100.0, 102.0, 98.0, 101.0, 99.0],  // latency ~100
-            vec![1000.0, 1010.0, 990.0, 1005.0, 995.0],  // throughput ~1000
+            vec![100.0, 102.0, 98.0, 101.0, 99.0], // latency ~100
+            vec![1000.0, 1010.0, 990.0, 1005.0, 995.0], // throughput ~1000
         );
 
         let comparison = create_test_profile(
             "comparison",
-            vec![120.0, 122.0, 118.0, 121.0, 119.0],  // latency ~120 (20% worse)
-            vec![800.0, 810.0, 790.0, 805.0, 795.0],  // throughput ~800 (20% worse)
+            vec![120.0, 122.0, 118.0, 121.0, 119.0], // latency ~120 (20% worse)
+            vec![800.0, 810.0, 790.0, 805.0, 795.0], // throughput ~800 (20% worse)
         );
 
         let comparator = ProfileComparator::new(CompareConfig::default());
@@ -960,7 +986,7 @@ mod tests {
 
         // Very different means should be significant
         assert!(result.t_test.significant);
-        assert!(result.effect_size.percent_change > 90.0);  // ~100% increase
+        assert!(result.effect_size.percent_change > 90.0); // ~100% increase
     }
 
     #[test]
@@ -987,12 +1013,16 @@ mod tests {
         let b = MetricSamples::new(vec![120.0, 121.0, 119.0, 120.5, 119.5]);
 
         // Throughput: higher is better
-        let result = comparator.compare_metric("throughput", &a, &b, 0.05).unwrap();
+        let result = comparator
+            .compare_metric("throughput", &a, &b, 0.05)
+            .unwrap();
         assert_eq!(result.direction, ChangeDirection::Improved);
         assert!(!result.is_regression);
 
         // Latency: lower is better, so increase is regression
-        let result = comparator.compare_metric("latency_p50", &a, &b, 0.05).unwrap();
+        let result = comparator
+            .compare_metric("latency_p50", &a, &b, 0.05)
+            .unwrap();
         assert_eq!(result.direction, ChangeDirection::Regressed);
         assert!(result.is_regression);
     }
@@ -1020,7 +1050,9 @@ mod tests {
         assert!(err.to_string().contains("3"));
         assert!(err.to_string().contains("5"));
 
-        let err = CompareError::MetricNotFound { name: "latency".to_string() };
+        let err = CompareError::MetricNotFound {
+            name: "latency".to_string(),
+        };
         assert!(err.to_string().contains("latency"));
     }
 

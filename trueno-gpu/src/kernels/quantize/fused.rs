@@ -72,12 +72,12 @@ impl Kernel for FusedRmsNormQ4KGemvKernel {
         let smem_size = (k * 4 + 32) as usize;
 
         PtxKernel::new("fused_rmsnorm_q4k_gemv")
-            .param(PtxType::U64, "y_ptr")     // Output vector (N)
-            .param(PtxType::U64, "w_ptr")     // Q4_K weights (N × K/256 super-blocks)
-            .param(PtxType::U64, "x_ptr")     // Input vector (K) - raw, not normalized
+            .param(PtxType::U64, "y_ptr") // Output vector (N)
+            .param(PtxType::U64, "w_ptr") // Q4_K weights (N × K/256 super-blocks)
+            .param(PtxType::U64, "x_ptr") // Input vector (K) - raw, not normalized
             .param(PtxType::U64, "gamma_ptr") // RMSNorm scale weights (K)
-            .param(PtxType::U32, "k_dim")     // K dimension
-            .param(PtxType::U32, "n_dim")     // N dimension
+            .param(PtxType::U32, "k_dim") // K dimension
+            .param(PtxType::U32, "n_dim") // N dimension
             .shared_memory(smem_size)
             .build(move |ctx| {
                 let block_id = ctx.special_reg(PtxReg::CtaIdX);
@@ -311,7 +311,8 @@ impl Kernel for FusedRmsNormQ4KGemvKernel {
                 // (the loaded value won't be used anyway due to selp)
                 let sub_block_minus_4_raw = ctx.sub_u32_reg(sub_block, four_reg);
                 let zero_safe_fused = ctx.mov_u32_imm(0);
-                let sub_block_minus_4 = ctx.selp_u32(sub_block_lt_4, zero_safe_fused, sub_block_minus_4_raw);
+                let sub_block_minus_4 =
+                    ctx.selp_u32(sub_block_lt_4, zero_safe_fused, sub_block_minus_4_raw);
                 let sub_block_minus_4_64 = ctx.cvt_u64_u32(sub_block_minus_4);
                 let scales_8_addr = ctx.add_u64(scales_8_base, sub_block_minus_4_64);
                 let s8_byte = ctx.ld_global_u8(scales_8_addr);
@@ -489,12 +490,12 @@ impl Kernel for FusedGateUpQ4KGemvKernel {
 
         PtxKernel::new("fused_gate_up_q4k_gemv")
             .param(PtxType::U64, "gate_out_ptr") // Output: gate projection (N)
-            .param(PtxType::U64, "up_out_ptr")   // Output: up projection (N)
-            .param(PtxType::U64, "wg_ptr")       // Q4_K gate weights (N × K/256 super-blocks)
-            .param(PtxType::U64, "wu_ptr")       // Q4_K up weights (N × K/256 super-blocks)
-            .param(PtxType::U64, "x_ptr")        // Input vector (K)
-            .param(PtxType::U32, "k_dim")        // K dimension
-            .param(PtxType::U32, "n_dim")        // N dimension
+            .param(PtxType::U64, "up_out_ptr") // Output: up projection (N)
+            .param(PtxType::U64, "wg_ptr") // Q4_K gate weights (N × K/256 super-blocks)
+            .param(PtxType::U64, "wu_ptr") // Q4_K up weights (N × K/256 super-blocks)
+            .param(PtxType::U64, "x_ptr") // Input vector (K)
+            .param(PtxType::U32, "k_dim") // K dimension
+            .param(PtxType::U32, "n_dim") // N dimension
             .shared_memory(smem_size)
             .build(move |ctx| {
                 let block_id = ctx.special_reg(PtxReg::CtaIdX);

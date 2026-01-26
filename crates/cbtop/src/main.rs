@@ -7,11 +7,11 @@
 //! Headless mode for CI/CD and AI agents:
 //!   cbtop --headless --format json --duration 5
 
-use clap::{Parser, Subcommand};
-use cbtop::{Config, CbtopApp, CbtopError};
 use cbtop::config::{ComputeBackend, LoadProfile, WorkloadType};
-use cbtop::headless::{HeadlessBenchmark, BenchmarkResult, OutputFormat};
-use cbtop::optimize::{OptimizationSuite, BaselineReport, RegressionDetector};
+use cbtop::headless::{BenchmarkResult, HeadlessBenchmark, OutputFormat};
+use cbtop::optimize::{BaselineReport, OptimizationSuite, RegressionDetector};
+use cbtop::{CbtopApp, CbtopError, Config};
+use clap::{Parser, Subcommand};
 
 /// Compute Block Top - Real-time load testing and hardware monitoring TUI
 #[derive(Parser, Debug)]
@@ -307,8 +307,7 @@ fn run_headless(
     let output_str = result.format(output_format);
 
     if let Some(path) = output {
-        std::fs::write(&path, &output_str)
-            .map_err(|e| CbtopError::Io(e.to_string()))?;
+        std::fs::write(&path, &output_str).map_err(|e| CbtopError::Io(e.to_string()))?;
         eprintln!("Results written to: {}", path.display());
     } else {
         println!("{}", output_str);
@@ -352,8 +351,7 @@ fn run_bench(
         let output_str = comparison.format(output_format);
 
         if let Some(path) = output {
-            std::fs::write(&path, &output_str)
-                .map_err(|e| CbtopError::Io(e.to_string()))?;
+            std::fs::write(&path, &output_str).map_err(|e| CbtopError::Io(e.to_string()))?;
         } else {
             println!("{}", output_str);
         }
@@ -373,17 +371,16 @@ fn run_bench(
 
     // Check for regression if baseline provided
     if let Some(baseline_path) = baseline {
-        let baseline_str = std::fs::read_to_string(&baseline_path)
-            .map_err(|e| CbtopError::Io(e.to_string()))?;
-        let baseline_result: BenchmarkResult = serde_json::from_str(&baseline_str)
-            .map_err(|e| CbtopError::Config(e.to_string()))?;
+        let baseline_str =
+            std::fs::read_to_string(&baseline_path).map_err(|e| CbtopError::Io(e.to_string()))?;
+        let baseline_result: BenchmarkResult =
+            serde_json::from_str(&baseline_str).map_err(|e| CbtopError::Config(e.to_string()))?;
 
         let regression = result.check_regression(&baseline_result, fail_on_regression);
 
         let output_str = regression.format(output_format);
         if let Some(path) = output {
-            std::fs::write(&path, &output_str)
-                .map_err(|e| CbtopError::Io(e.to_string()))?;
+            std::fs::write(&path, &output_str).map_err(|e| CbtopError::Io(e.to_string()))?;
         } else {
             println!("{}", output_str);
         }
@@ -397,8 +394,7 @@ fn run_bench(
     // Output result
     let output_str = result.format(output_format);
     if let Some(path) = output {
-        std::fs::write(&path, &output_str)
-            .map_err(|e| CbtopError::Io(e.to_string()))?;
+        std::fs::write(&path, &output_str).map_err(|e| CbtopError::Io(e.to_string()))?;
         eprintln!("Results written to: {}", path.display());
     } else {
         println!("{}", output_str);
@@ -410,15 +406,22 @@ fn run_bench(
 /// Run optimization subcommands (OPT-005)
 fn run_optimize(action: OptimizeAction) -> Result<(), CbtopError> {
     match action {
-        OptimizeAction::Baseline { output, quick, duration } => {
-            run_optimize_baseline(output, quick, duration)
-        }
-        OptimizeAction::Analyze { baseline, format, output } => {
-            run_optimize_analyze(baseline, &format, output)
-        }
-        OptimizeAction::Check { baseline, threshold, quick, format } => {
-            run_optimize_check(baseline, threshold, quick, &format)
-        }
+        OptimizeAction::Baseline {
+            output,
+            quick,
+            duration,
+        } => run_optimize_baseline(output, quick, duration),
+        OptimizeAction::Analyze {
+            baseline,
+            format,
+            output,
+        } => run_optimize_analyze(baseline, &format, output),
+        OptimizeAction::Check {
+            baseline,
+            threshold,
+            quick,
+            format,
+        } => run_optimize_check(baseline, threshold, quick, &format),
     }
 }
 
@@ -462,12 +465,12 @@ fn run_optimize_baseline(
     eprintln!("\nBaseline Summary:");
     eprintln!("  Entries: {}", baseline.entries.len());
 
-    let avg_gflops: f64 = baseline.entries.iter().map(|e| e.gflops).sum::<f64>()
-        / baseline.entries.len() as f64;
+    let avg_gflops: f64 =
+        baseline.entries.iter().map(|e| e.gflops).sum::<f64>() / baseline.entries.len() as f64;
     eprintln!("  Average GFLOP/s: {:.2}", avg_gflops);
 
-    let avg_efficiency: f64 = baseline.entries.iter().map(|e| e.efficiency).sum::<f64>()
-        / baseline.entries.len() as f64;
+    let avg_efficiency: f64 =
+        baseline.entries.iter().map(|e| e.efficiency).sum::<f64>() / baseline.entries.len() as f64;
     eprintln!("  Average Efficiency: {:.1}%", avg_efficiency * 100.0);
 
     Ok(())
@@ -490,8 +493,7 @@ fn run_optimize_analyze(
     };
 
     if let Some(path) = output {
-        std::fs::write(&path, &report)
-            .map_err(|e| CbtopError::Io(e.to_string()))?;
+        std::fs::write(&path, &report).map_err(|e| CbtopError::Io(e.to_string()))?;
         eprintln!("Analysis saved to: {}", path.display());
     } else {
         println!("{}", report);

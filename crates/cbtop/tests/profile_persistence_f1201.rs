@@ -9,9 +9,8 @@
 //! - Export/import functionality
 
 use cbtop::{
-    ProfileConfig, ProfileManager, ProfileOverlay, ProfileError,
-    ProfileBackend as BackendConfig, ProfileWorkload as WorkloadConfig,
-    profile_persistence::templates,
+    profile_persistence::templates, ProfileBackend as BackendConfig, ProfileConfig, ProfileError,
+    ProfileManager, ProfileOverlay, ProfileWorkload as WorkloadConfig,
 };
 use tempfile::TempDir;
 
@@ -26,7 +25,8 @@ fn f1201_profile_loaded_by_name() {
     let mut manager = ProfileManager::new(temp_dir.path().to_path_buf());
 
     // Save a profile
-    let profile = ProfileConfig::new("my_profile").unwrap()
+    let profile = ProfileConfig::new("my_profile")
+        .unwrap()
         .backend(BackendConfig::Cuda)
         .problem_size(2048);
     manager.save_profile(&profile).unwrap();
@@ -74,7 +74,8 @@ fn f1202_profile_saved_to_disk() {
 /// F1202.2: Profile content is valid TOML
 #[test]
 fn f1202_profile_content_valid_toml() {
-    let profile = ProfileConfig::new("toml_test").unwrap()
+    let profile = ProfileConfig::new("toml_test")
+        .unwrap()
         .backend(BackendConfig::Simd)
         .workload(WorkloadConfig::Attention);
 
@@ -98,9 +99,15 @@ fn f1203_profile_listing() {
     let mut manager = ProfileManager::new(temp_dir.path().to_path_buf());
 
     // Save multiple profiles
-    manager.save_profile(&ProfileConfig::new("alpha").unwrap()).unwrap();
-    manager.save_profile(&ProfileConfig::new("beta").unwrap()).unwrap();
-    manager.save_profile(&ProfileConfig::new("gamma").unwrap()).unwrap();
+    manager
+        .save_profile(&ProfileConfig::new("alpha").unwrap())
+        .unwrap();
+    manager
+        .save_profile(&ProfileConfig::new("beta").unwrap())
+        .unwrap();
+    manager
+        .save_profile(&ProfileConfig::new("gamma").unwrap())
+        .unwrap();
 
     let profiles = manager.list_profiles().unwrap();
     assert_eq!(profiles.len(), 3);
@@ -126,13 +133,14 @@ fn f1203_empty_listing() {
 /// F1204.1: CLI overlay merges correctly
 #[test]
 fn f1204_overlay_merges() {
-    let profile = ProfileConfig::new("base").unwrap()
+    let profile = ProfileConfig::new("base")
+        .unwrap()
         .backend(BackendConfig::Simd)
         .problem_size(1024);
 
     let overlay = ProfileOverlay::new()
-        .backend(BackendConfig::Cuda)  // Override backend
-        .refresh_ms(50);  // Override refresh
+        .backend(BackendConfig::Cuda) // Override backend
+        .refresh_ms(50); // Override refresh
 
     let merged = overlay.apply(profile);
 
@@ -146,7 +154,8 @@ fn f1204_overlay_merges() {
 /// F1204.2: Empty overlay preserves profile
 #[test]
 fn f1204_empty_overlay() {
-    let profile = ProfileConfig::new("unchanged").unwrap()
+    let profile = ProfileConfig::new("unchanged")
+        .unwrap()
         .backend(BackendConfig::Wgpu)
         .problem_size(4096);
 
@@ -201,7 +210,9 @@ fn f1206_directory_created() {
     assert!(!subdir.exists());
 
     // Save creates directory
-    manager.save_profile(&ProfileConfig::new("test").unwrap()).unwrap();
+    manager
+        .save_profile(&ProfileConfig::new("test").unwrap())
+        .unwrap();
 
     // Now it exists
     assert!(subdir.exists());
@@ -266,7 +277,8 @@ fn f1208_export_creates_file() {
     let mut manager = ProfileManager::new(temp_dir.path().join("profiles"));
 
     // Save a profile
-    let profile = ProfileConfig::new("exportable").unwrap()
+    let profile = ProfileConfig::new("exportable")
+        .unwrap()
         .backend(BackendConfig::Cuda);
     manager.save_profile(&profile).unwrap();
 
@@ -315,7 +327,8 @@ fn f1209_named_default_profile() {
     let mut manager = ProfileManager::new(temp_dir.path().to_path_buf());
 
     // Save and set as default
-    let profile = ProfileConfig::new("my_default").unwrap()
+    let profile = ProfileConfig::new("my_default")
+        .unwrap()
         .backend(BackendConfig::Cuda);
     manager.save_profile(&profile).unwrap();
     manager.set_default("my_default");
@@ -332,16 +345,18 @@ fn f1209_named_default_profile() {
 /// F1210.1: Profile description stored
 #[test]
 fn f1210_description_stored() {
-    let profile = ProfileConfig::with_description(
-        "described",
-        "This is a test profile for stress testing"
-    ).unwrap();
+    let profile =
+        ProfileConfig::with_description("described", "This is a test profile for stress testing")
+            .unwrap();
 
     let toml = profile.to_toml().unwrap();
     assert!(toml.contains("description = \"This is a test profile"));
 
     let parsed = ProfileConfig::from_toml(&toml).unwrap();
-    assert_eq!(parsed.description, "This is a test profile for stress testing");
+    assert_eq!(
+        parsed.description,
+        "This is a test profile for stress testing"
+    );
 }
 
 /// F1210.2: Metadata preserved through save/load
@@ -350,14 +365,18 @@ fn f1210_metadata_preserved() {
     let temp_dir = TempDir::new().unwrap();
     let mut manager = ProfileManager::new(temp_dir.path().to_path_buf());
 
-    let profile = ProfileConfig::new("with_meta").unwrap()
+    let profile = ProfileConfig::new("with_meta")
+        .unwrap()
         .with_metadata("author", "test_user")
         .with_metadata("version", "2.0");
 
     manager.save_profile(&profile).unwrap();
 
     let loaded = manager.load_profile("with_meta").unwrap();
-    assert_eq!(loaded.metadata.get("author"), Some(&"test_user".to_string()));
+    assert_eq!(
+        loaded.metadata.get("author"),
+        Some(&"test_user".to_string())
+    );
     assert_eq!(loaded.metadata.get("version"), Some(&"2.0".to_string()));
 }
 
@@ -371,7 +390,9 @@ fn test_profile_deletion() {
     let temp_dir = TempDir::new().unwrap();
     let mut manager = ProfileManager::new(temp_dir.path().to_path_buf());
 
-    manager.save_profile(&ProfileConfig::new("deletable").unwrap()).unwrap();
+    manager
+        .save_profile(&ProfileConfig::new("deletable").unwrap())
+        .unwrap();
     assert!(manager.profile_exists("deletable"));
 
     manager.delete_profile("deletable").unwrap();
@@ -427,7 +448,8 @@ fn test_profile_import() {
 
     // Create an external profile file
     let external_path = temp_dir.path().join("external.toml");
-    let profile = ProfileConfig::new("imported").unwrap()
+    let profile = ProfileConfig::new("imported")
+        .unwrap()
         .backend(BackendConfig::Wgpu);
     std::fs::write(&external_path, profile.to_toml().unwrap()).unwrap();
 
@@ -448,17 +470,22 @@ fn test_profile_count() {
 
     assert_eq!(manager.profile_count().unwrap(), 0);
 
-    manager.save_profile(&ProfileConfig::new("one").unwrap()).unwrap();
+    manager
+        .save_profile(&ProfileConfig::new("one").unwrap())
+        .unwrap();
     assert_eq!(manager.profile_count().unwrap(), 1);
 
-    manager.save_profile(&ProfileConfig::new("two").unwrap()).unwrap();
+    manager
+        .save_profile(&ProfileConfig::new("two").unwrap())
+        .unwrap();
     assert_eq!(manager.profile_count().unwrap(), 2);
 }
 
 /// Test builder pattern
 #[test]
 fn test_builder_pattern() {
-    let profile = ProfileConfig::new("builder_test").unwrap()
+    let profile = ProfileConfig::new("builder_test")
+        .unwrap()
         .backend(BackendConfig::Cuda)
         .workload(WorkloadConfig::Gemm)
         .problem_size(2048)
@@ -475,11 +502,13 @@ fn test_builder_pattern() {
 /// Test load intensity clamping
 #[test]
 fn test_load_intensity_clamping() {
-    let profile = ProfileConfig::new("clamp_test").unwrap()
-        .load_intensity(1.5);  // Should be clamped to 1.0
+    let profile = ProfileConfig::new("clamp_test")
+        .unwrap()
+        .load_intensity(1.5); // Should be clamped to 1.0
     assert_eq!(profile.load_intensity, 1.0);
 
-    let profile2 = ProfileConfig::new("clamp_test2").unwrap()
-        .load_intensity(-0.5);  // Should be clamped to 0.0
+    let profile2 = ProfileConfig::new("clamp_test2")
+        .unwrap()
+        .load_intensity(-0.5); // Should be clamped to 0.0
     assert_eq!(profile2.load_intensity, 0.0);
 }

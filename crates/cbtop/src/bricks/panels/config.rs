@@ -2,10 +2,10 @@
 //!
 //! Displays current configuration, profile selection, and auto-save settings.
 
-use std::any::Any;
-use presentar_core::{Canvas, Color, Point, TextStyle};
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use presentar_core::{Canvas, Color, Point, TextStyle};
 use presentar_terminal::Theme;
+use std::any::Any;
 
 /// Configuration profile
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,7 +87,8 @@ impl ConfigPanelBrick {
     /// Select previous profile
     pub fn prev_profile(&mut self) {
         if !self.profiles.is_empty() {
-            self.selected_index = (self.selected_index + self.profiles.len() - 1) % self.profiles.len();
+            self.selected_index =
+                (self.selected_index + self.profiles.len() - 1) % self.profiles.len();
         }
     }
 
@@ -147,15 +148,27 @@ impl ConfigPanelBrick {
         let auto_save_check = if self.auto_save { "[x]" } else { "[ ]" };
         let load_last_check = if self.load_last { "[x]" } else { "[ ]" };
 
-        canvas.draw_text(&format!("{} Auto-save on exit", auto_save_check), Point::new(2.0, 7.0), &label_style);
-        canvas.draw_text(&format!("{} Load last profile on start", load_last_check), Point::new(2.0, 8.0), &label_style);
+        canvas.draw_text(
+            &format!("{} Auto-save on exit", auto_save_check),
+            Point::new(2.0, 7.0),
+            &label_style,
+        );
+        canvas.draw_text(
+            &format!("{} Load last profile on start", load_last_check),
+            Point::new(2.0, 8.0),
+            &label_style,
+        );
 
         // Profile list
         canvas.draw_text("Profiles:", Point::new(2.0, 10.0), &dim_style);
 
         for (i, profile) in self.profiles.iter().enumerate() {
             let y = 11.0 + i as f32;
-            let prefix = if i == self.selected_index { " > " } else { "   " };
+            let prefix = if i == self.selected_index {
+                " > "
+            } else {
+                "   "
+            };
             let suffix = if profile.is_active { " (active)" } else { "" };
 
             let style = if i == self.selected_index {
@@ -175,8 +188,16 @@ impl ConfigPanelBrick {
 
         // Help text
         let help_y = 11.0 + self.profiles.len() as f32 + 2.0;
-        canvas.draw_text("Press 'P' to activate profile", Point::new(2.0, help_y), &dim_style);
-        canvas.draw_text("Press 'S' to save current as new profile", Point::new(2.0, help_y + 1.0), &dim_style);
+        canvas.draw_text(
+            "Press 'P' to activate profile",
+            Point::new(2.0, help_y),
+            &dim_style,
+        );
+        canvas.draw_text(
+            "Press 'S' to save current as new profile",
+            Point::new(2.0, help_y + 1.0),
+            &dim_style,
+        );
     }
 }
 

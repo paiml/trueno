@@ -27,8 +27,8 @@ pub struct BufferWatermarks {
 impl Default for BufferWatermarks {
     fn default() -> Self {
         Self {
-            low: 1024,       // 1KB
-            high: 8 * 1024,  // 8KB
+            low: 1024,      // 1KB
+            high: 8 * 1024, // 8KB
         }
     }
 }

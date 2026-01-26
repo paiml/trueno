@@ -2,11 +2,11 @@
 //!
 //! Collects memory usage from /proc/meminfo (Genchi Genbutsu)
 
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use crate::ring_buffer::RingBuffer;
 use std::any::Any;
 use std::fs::read_to_string;
 use std::time::Instant;
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
-use crate::ring_buffer::RingBuffer;
 
 #[derive(Debug, Clone)]
 pub struct MemoryMetrics {
@@ -57,7 +57,9 @@ impl MemoryCollectorBrick {
 
         for line in content.lines() {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() < 2 { continue; }
+            if parts.len() < 2 {
+                continue;
+            }
 
             let value = parts[1].parse::<u64>().unwrap_or(0);
             match parts[0] {
@@ -78,8 +80,10 @@ impl MemoryCollectorBrick {
 }
 
 impl Brick for MemoryCollectorBrick {
-    fn brick_name(&self) -> &'static str { "memory_collector" }
-    
+    fn brick_name(&self) -> &'static str {
+        "memory_collector"
+    }
+
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
             BrickAssertion::custom("mem_total_positive", |b| {
@@ -91,16 +95,24 @@ impl Brick for MemoryCollectorBrick {
     }
 
     fn budget(&self) -> BrickBudget {
-        BrickBudget { collect_ms: 2, layout_ms: 0, render_ms: 0 }
+        BrickBudget {
+            collect_ms: 2,
+            layout_ms: 0,
+            render_ms: 0,
+        }
     }
 
     fn verify(&self) -> BrickVerification {
         let mut v = BrickVerification::new();
-        for a in self.assertions() { v.check(&a); }
+        for a in self.assertions() {
+            v.check(&a);
+        }
         v
     }
 
-    fn as_any(&self) -> &dyn Any { self }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 #[cfg(test)]
@@ -117,7 +129,7 @@ mod tests {
             assert!(metrics.total_kb > 0);
         } else {
             // Fallback for non-linux
-            assert!(metrics.total_kb == 0); 
+            assert!(metrics.total_kb == 0);
         }
     }
 }

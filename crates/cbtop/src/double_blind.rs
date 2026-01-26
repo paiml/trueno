@@ -274,7 +274,8 @@ impl VerificationAttempt {
 
     /// Record result for a criterion
     pub fn record_criterion(&mut self, criterion_id: &str, passed: bool) {
-        self.criterion_results.insert(criterion_id.to_string(), passed);
+        self.criterion_results
+            .insert(criterion_id.to_string(), passed);
     }
 
     /// Add evidence
@@ -526,7 +527,11 @@ impl VerificationSession {
     }
 
     /// Submit a claim (Dev role only)
-    pub fn submit_claim(&mut self, role: Role, claim: FalsificationClaim) -> Result<(), &'static str> {
+    pub fn submit_claim(
+        &mut self,
+        role: Role,
+        claim: FalsificationClaim,
+    ) -> Result<(), &'static str> {
         if !role.can_claim() {
             return Err("Only Dev role can submit claims");
         }
@@ -540,7 +545,8 @@ impl VerificationSession {
             role,
             &claim.claimant,
             &format!("Submitted claim for {}", claim.feature),
-        ).with_artifact(&claim.id);
+        )
+        .with_artifact(&claim.id);
         self.audit_trail.push(entry);
 
         self.claims.push(claim);
@@ -549,7 +555,11 @@ impl VerificationSession {
     }
 
     /// Generate black-box artifact from claim
-    pub fn generate_artifact(&mut self, claim_id: &str, binary_hash: &str) -> Option<BlackBoxArtifact> {
+    pub fn generate_artifact(
+        &mut self,
+        claim_id: &str,
+        binary_hash: &str,
+    ) -> Option<BlackBoxArtifact> {
         let claim = self.claims.iter().find(|c| c.id == claim_id)?;
         let artifact = BlackBoxArtifact::from_claim(claim, binary_hash);
 
@@ -558,7 +568,8 @@ impl VerificationSession {
             Role::System,
             "System",
             &format!("Generated black-box artifact from claim {}", claim_id),
-        ).with_artifact(&artifact.id);
+        )
+        .with_artifact(&artifact.id);
         self.audit_trail.push(entry);
 
         self.artifacts.push(artifact.clone());
@@ -566,7 +577,11 @@ impl VerificationSession {
     }
 
     /// Submit verification attempt (QA role only)
-    pub fn submit_attempt(&mut self, role: Role, attempt: VerificationAttempt) -> Result<(), &'static str> {
+    pub fn submit_attempt(
+        &mut self,
+        role: Role,
+        attempt: VerificationAttempt,
+    ) -> Result<(), &'static str> {
         if !role.can_verify() {
             return Err("Only QA role can submit verification attempts");
         }
@@ -577,7 +592,8 @@ impl VerificationSession {
             role,
             &attempt.verifier,
             &format!("Submitted verification attempt: {:?}", attempt.result),
-        ).with_artifact(&attempt.artifact_id);
+        )
+        .with_artifact(&attempt.artifact_id);
         self.audit_trail.push(entry);
 
         self.attempts.push(attempt);
@@ -586,7 +602,10 @@ impl VerificationSession {
 
     /// Get all attempts for an artifact
     pub fn get_attempts(&self, artifact_id: &str) -> Vec<&VerificationAttempt> {
-        self.attempts.iter().filter(|a| a.artifact_id == artifact_id).collect()
+        self.attempts
+            .iter()
+            .filter(|a| a.artifact_id == artifact_id)
+            .collect()
     }
 
     /// Make release decision (System role only)
@@ -602,10 +621,16 @@ impl VerificationSession {
         }
 
         // Check if any attempt successfully falsified
-        let falsified = self.attempts.iter().any(|a| a.result == VerificationResult::Falsified);
+        let falsified = self
+            .attempts
+            .iter()
+            .any(|a| a.result == VerificationResult::Falsified);
 
         // Check if all attempts are inconclusive
-        let all_inconclusive = self.attempts.iter().all(|a| a.result == VerificationResult::Inconclusive);
+        let all_inconclusive = self
+            .attempts
+            .iter()
+            .all(|a| a.result == VerificationResult::Inconclusive);
 
         let decision = if falsified {
             ReleaseDecision::Rejected {
@@ -671,9 +696,21 @@ impl VerificationSession {
             total_claims: self.claims.len(),
             total_artifacts: self.artifacts.len(),
             total_attempts: self.attempts.len(),
-            falsified_count: self.attempts.iter().filter(|a| a.result == VerificationResult::Falsified).count(),
-            unfalsified_count: self.attempts.iter().filter(|a| a.result == VerificationResult::Unfalsified).count(),
-            inconclusive_count: self.attempts.iter().filter(|a| a.result == VerificationResult::Inconclusive).count(),
+            falsified_count: self
+                .attempts
+                .iter()
+                .filter(|a| a.result == VerificationResult::Falsified)
+                .count(),
+            unfalsified_count: self
+                .attempts
+                .iter()
+                .filter(|a| a.result == VerificationResult::Unfalsified)
+                .count(),
+            inconclusive_count: self
+                .attempts
+                .iter()
+                .filter(|a| a.result == VerificationResult::Inconclusive)
+                .count(),
             scorecard_total: self.scorecard.total_score(),
             scorecard_grade: self.scorecard.grade().to_string(),
             audit_entries: self.audit_trail.len(),

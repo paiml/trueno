@@ -3,8 +3,8 @@
 //! Calculates compute efficiency metrics based on theoretical vs actual throughput.
 //! Uses roofline model principles to determine bottleneck type.
 
-use std::any::Any;
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 /// Efficiency classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -52,11 +52,11 @@ impl EfficiencyClass {
     /// Color hint for UI (green=good, red=poor)
     pub fn color_hint(&self) -> (f32, f32, f32) {
         match self {
-            Self::Excellent => (0.3, 1.0, 0.5),  // Green
-            Self::Good => (0.5, 1.0, 0.3),       // Yellow-green
-            Self::Fair => (1.0, 0.8, 0.2),       // Yellow
-            Self::Poor => (1.0, 0.3, 0.2),       // Red
-            Self::Unknown => (0.5, 0.5, 0.5),    // Gray
+            Self::Excellent => (0.3, 1.0, 0.5), // Green
+            Self::Good => (0.5, 1.0, 0.3),      // Yellow-green
+            Self::Fair => (1.0, 0.8, 0.2),      // Yellow
+            Self::Poor => (1.0, 0.3, 0.2),      // Red
+            Self::Unknown => (0.5, 0.5, 0.5),   // Gray
         }
     }
 }
@@ -226,7 +226,8 @@ impl EfficiencyAnalyzerBrick {
         );
 
         // Track history
-        self.efficiency_history.push(self.metrics.overall_efficiency);
+        self.efficiency_history
+            .push(self.metrics.overall_efficiency);
         if self.efficiency_history.len() > self.history_limit {
             self.efficiency_history.remove(0);
         }
@@ -260,7 +261,14 @@ impl EfficiencyAnalyzerBrick {
             return 0.0;
         }
         let recent: f64 = self.efficiency_history.iter().rev().take(5).sum::<f64>() / 5.0;
-        let older: f64 = self.efficiency_history.iter().rev().skip(5).take(5).sum::<f64>() / 5.0;
+        let older: f64 = self
+            .efficiency_history
+            .iter()
+            .rev()
+            .skip(5)
+            .take(5)
+            .sum::<f64>()
+            / 5.0;
         recent - older
     }
 }
@@ -277,9 +285,7 @@ impl Brick for EfficiencyAnalyzerBrick {
     }
 
     fn assertions(&self) -> Vec<BrickAssertion> {
-        vec![
-            BrickAssertion::max_latency_ms(4),
-        ]
+        vec![BrickAssertion::max_latency_ms(4)]
     }
 
     fn budget(&self) -> BrickBudget {
@@ -311,7 +317,10 @@ mod tests {
 
     #[test]
     fn test_efficiency_class_from_percent() {
-        assert_eq!(EfficiencyClass::from_percent(95.0), EfficiencyClass::Excellent);
+        assert_eq!(
+            EfficiencyClass::from_percent(95.0),
+            EfficiencyClass::Excellent
+        );
         assert_eq!(EfficiencyClass::from_percent(80.0), EfficiencyClass::Good);
         assert_eq!(EfficiencyClass::from_percent(60.0), EfficiencyClass::Fair);
         assert_eq!(EfficiencyClass::from_percent(30.0), EfficiencyClass::Poor);
@@ -321,10 +330,10 @@ mod tests {
     #[test]
     fn test_efficiency_metrics_calculate() {
         let metrics = EfficiencyMetrics::calculate(
-            5000.0,  // actual GFLOPS
-            10000.0, // peak GFLOPS
-            250.0,   // actual GB/s
-            500.0,   // peak GB/s
+            5000.0,    // actual GFLOPS
+            10000.0,   // peak GFLOPS
+            250.0,     // actual GB/s
+            500.0,     // peak GB/s
             1_000_000, // operations
             100_000,   // bytes
         );
@@ -340,12 +349,9 @@ mod tests {
     #[test]
     fn test_memory_bound_detection() {
         let metrics = EfficiencyMetrics::calculate(
-            9000.0,  // high compute utilization
-            10000.0,
-            100.0,   // low memory utilization
-            500.0,
-            1_000_000,
-            100_000,
+            9000.0, // high compute utilization
+            10000.0, 100.0, // low memory utilization
+            500.0, 1_000_000, 100_000,
         );
 
         assert_eq!(metrics.bottleneck, BottleneckType::MemoryBound);
@@ -354,12 +360,9 @@ mod tests {
     #[test]
     fn test_compute_bound_detection() {
         let metrics = EfficiencyMetrics::calculate(
-            1000.0,  // low compute utilization
-            10000.0,
-            450.0,   // high memory utilization
-            500.0,
-            1_000_000,
-            100_000,
+            1000.0, // low compute utilization
+            10000.0, 450.0, // high memory utilization
+            500.0, 1_000_000, 100_000,
         );
 
         assert_eq!(metrics.bottleneck, BottleneckType::ComputeBound);
@@ -368,12 +371,9 @@ mod tests {
     #[test]
     fn test_latency_bound_detection() {
         let metrics = EfficiencyMetrics::calculate(
-            100.0,   // very low compute
-            10000.0,
-            50.0,    // very low memory
-            500.0,
-            1_000_000,
-            100_000,
+            100.0, // very low compute
+            10000.0, 50.0, // very low memory
+            500.0, 1_000_000, 100_000,
         );
 
         assert_eq!(metrics.bottleneck, BottleneckType::LatencyBound);
@@ -384,12 +384,7 @@ mod tests {
         let mut analyzer = EfficiencyAnalyzerBrick::new(10000.0, 500.0);
 
         for i in 0..10 {
-            analyzer.update(
-                (5000 + i * 100) as f64,
-                250.0,
-                1_000_000,
-                100_000,
-            );
+            analyzer.update((5000 + i * 100) as f64, 250.0, 1_000_000, 100_000);
         }
 
         assert_eq!(analyzer.efficiency_history.len(), 10);
@@ -402,16 +397,14 @@ mod tests {
 
         // Add improving efficiency samples
         for i in 0..15 {
-            analyzer.update(
-                (2000 + i * 500) as f64,
-                250.0,
-                1_000_000,
-                100_000,
-            );
+            analyzer.update((2000 + i * 500) as f64, 250.0, 1_000_000, 100_000);
         }
 
         let trend = analyzer.efficiency_trend();
-        assert!(trend > 0.0, "Trend should be positive for improving efficiency");
+        assert!(
+            trend > 0.0,
+            "Trend should be positive for improving efficiency"
+        );
     }
 
     #[test]

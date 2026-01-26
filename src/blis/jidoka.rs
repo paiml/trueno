@@ -111,14 +111,10 @@ impl JidokaGuard {
     pub fn validate(&self, computed: f32, expected: f32) -> Result<(), JidokaError> {
         if self.check_special {
             if computed.is_nan() {
-                return Err(JidokaError::NaNDetected {
-                    location: "output",
-                });
+                return Err(JidokaError::NaNDetected { location: "output" });
             }
             if computed.is_infinite() {
-                return Err(JidokaError::InfDetected {
-                    location: "output",
-                });
+                return Err(JidokaError::InfDetected { location: "output" });
             }
         }
 

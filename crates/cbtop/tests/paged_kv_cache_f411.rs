@@ -309,11 +309,12 @@ fn test_f419_reference_counting() {
 /// F420: StreamingLLM eviction preserves sink tokens.
 #[test]
 fn test_f420_streaming_llm() {
-    let mut cache = PagedKvCache::new(100, 16, 32, 128)
-        .with_eviction_strategy(EvictionStrategy::StreamingLLM {
+    let mut cache = PagedKvCache::new(100, 16, 32, 128).with_eviction_strategy(
+        EvictionStrategy::StreamingLLM {
             sink_tokens: 4,
             window_tokens: 16,
-        });
+        },
+    );
 
     // Create sequence with many tokens
     cache.allocate(SeqId(1), 160).unwrap(); // 10 blocks

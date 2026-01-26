@@ -70,8 +70,8 @@ impl InstanceType {
     pub fn cost_multiplier(&self) -> f64 {
         match self {
             Self::OnDemand => 1.0,
-            Self::Spot => 0.3,       // 70% discount
-            Self::Reserved => 0.6,   // 40% discount
+            Self::Spot => 0.3,        // 70% discount
+            Self::Reserved => 0.6,    // 40% discount
             Self::Preemptible => 0.2, // 80% discount
         }
     }
@@ -323,7 +323,9 @@ impl PredictiveScheduler {
         let start = Instant::now();
 
         // Filter eligible hosts
-        let eligible_hosts: Vec<_> = self.hosts.values()
+        let eligible_hosts: Vec<_> = self
+            .hosts
+            .values()
             .filter(|h| self.is_host_eligible(h, workload))
             .collect();
 
@@ -354,7 +356,8 @@ impl PredictiveScheduler {
             // Track spot savings
             if let Some(host) = self.hosts.get(&decision.host_id) {
                 if host.instance_type == InstanceType::Spot {
-                    let on_demand_cost = decision.predicted_cost / host.instance_type.cost_multiplier();
+                    let on_demand_cost =
+                        decision.predicted_cost / host.instance_type.cost_multiplier();
                     self.metrics.spot_savings += on_demand_cost - decision.predicted_cost;
                 }
             }
@@ -500,8 +503,10 @@ impl PredictiveScheduler {
             slo_compliance_prob * 100.0
         } else {
             // Penalty for below-target compliance
-            slo_compliance_prob * 100.0 - self.config.slo_violation_penalty *
-                (self.config.target_slo_compliance - slo_compliance_prob) * 100.0
+            slo_compliance_prob * 100.0
+                - self.config.slo_violation_penalty
+                    * (self.config.target_slo_compliance - slo_compliance_prob)
+                    * 100.0
         };
 
         // Cost score (inverse - lower is better)
@@ -587,22 +592,24 @@ impl PredictiveScheduler {
 
         // Update host utilization
         if let Some(host) = self.hosts.get(host_id) {
-            self.metrics.host_utilization.insert(
-                host_id.to_string(),
-                host.current_load,
-            );
+            self.metrics
+                .host_utilization
+                .insert(host_id.to_string(), host.current_load);
         }
 
         // Update host historical compliance
         if let Some(host) = self.hosts.get_mut(host_id) {
             if let Some(history) = self.violation_history.get(host_id) {
-                let recent_violations = history.iter().rev()
+                let recent_violations = history
+                    .iter()
+                    .rev()
                     .take(self.config.history_window)
                     .filter(|&&v| v)
                     .count();
                 let total = history.len().min(self.config.history_window);
                 if total > 0 {
-                    host.historical_slo_compliance = 1.0 - (recent_violations as f64 / total as f64);
+                    host.historical_slo_compliance =
+                        1.0 - (recent_violations as f64 / total as f64);
                 }
             }
         }
@@ -628,11 +635,17 @@ impl PredictiveScheduler {
         let mut migrations = Vec::new();
 
         // Find overloaded and underloaded hosts
-        let mut overloaded: Vec<_> = self.hosts.values()
+        let mut overloaded: Vec<_> = self
+            .hosts
+            .values()
             .filter(|h| h.current_load > 0.8)
             .collect();
-        let mut underloaded: Vec<_> = self.hosts.values()
-            .filter(|h| h.current_load < 0.3 && h.is_safe_for_scheduling(self.config.preemption_buffer))
+        let mut underloaded: Vec<_> = self
+            .hosts
+            .values()
+            .filter(|h| {
+                h.current_load < 0.3 && h.is_safe_for_scheduling(self.config.preemption_buffer)
+            })
             .collect();
 
         overloaded.sort_by(|a, b| b.current_load.partial_cmp(&a.current_load).unwrap());
@@ -775,12 +788,7 @@ mod tests {
 
         // Record multiple results
         for i in 0..5 {
-            scheduler.record_result(
-                "host-1",
-                Duration::from_millis(100 + i * 10),
-                false,
-                0.01,
-            );
+            scheduler.record_result("host-1", Duration::from_millis(100 + i * 10), false, 0.01);
         }
 
         // Record a violation
@@ -871,9 +879,8 @@ mod tests {
 
                 // Simulate execution with small variance (5-15%)
                 let variance = 1.0 + (i as f64 % 10.0) / 100.0;
-                let actual_time = Duration::from_secs_f64(
-                    decision.predicted_time.as_secs_f64() * variance
-                );
+                let actual_time =
+                    Duration::from_secs_f64(decision.predicted_time.as_secs_f64() * variance);
                 let violated = actual_time > workload.slo_deadline;
                 if violated {
                     violations += 1;
@@ -898,8 +905,12 @@ mod tests {
 
         // Hypothesis: >99% SLO compliance
         let compliance_rate = 1.0 - (violations as f64 / total_decisions as f64);
-        println!("SLO Compliance Rate: {:.2}% ({} violations / {} total)",
-            compliance_rate * 100.0, violations, total_decisions);
+        println!(
+            "SLO Compliance Rate: {:.2}% ({} violations / {} total)",
+            compliance_rate * 100.0,
+            violations,
+            total_decisions
+        );
 
         // Falsification: If compliance < 95%, hypothesis needs revision
         // Note: 99% is target, 95% is acceptable threshold for test
@@ -911,8 +922,10 @@ mod tests {
 
         // Secondary hypothesis: Cost optimization
         let metrics = scheduler.metrics();
-        println!("Total cost: {:.4}, Spot savings: {:.4}",
-            metrics.total_cost, metrics.spot_savings);
+        println!(
+            "Total cost: {:.4}, Spot savings: {:.4}",
+            metrics.total_cost, metrics.spot_savings
+        );
 
         // Verify spot instances provided savings
         assert!(

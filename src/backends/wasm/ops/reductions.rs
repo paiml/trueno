@@ -62,7 +62,11 @@ pub unsafe fn max(a: &[f32]) -> f32 {
         .max(f32x4_extract_lane::<1>(vmax))
         .max(f32x4_extract_lane::<2>(vmax))
         .max(f32x4_extract_lane::<3>(vmax));
-    for &val in &a[i..] { if val > result { result = val; } }
+    for &val in &a[i..] {
+        if val > result {
+            result = val;
+        }
+    }
     result
 }
 
@@ -82,7 +86,11 @@ pub unsafe fn min(a: &[f32]) -> f32 {
         .min(f32x4_extract_lane::<1>(vmin))
         .min(f32x4_extract_lane::<2>(vmin))
         .min(f32x4_extract_lane::<3>(vmin));
-    for &val in &a[i..] { if val < result { result = val; } }
+    for &val in &a[i..] {
+        if val < result {
+            result = val;
+        }
+    }
     result
 }
 
@@ -92,7 +100,10 @@ pub unsafe fn argmax(a: &[f32]) -> usize {
     let mut max_idx: usize = 0;
     let mut max_val = a[0];
     for (i, &val) in a.iter().enumerate() {
-        if val > max_val { max_val = val; max_idx = i; }
+        if val > max_val {
+            max_val = val;
+            max_idx = i;
+        }
     }
     max_idx
 }
@@ -103,7 +114,10 @@ pub unsafe fn argmin(a: &[f32]) -> usize {
     let mut min_idx: usize = 0;
     let mut min_val = a[0];
     for (i, &val) in a.iter().enumerate() {
-        if val < min_val { min_val = val; min_idx = i; }
+        if val < min_val {
+            min_val = val;
+            min_idx = i;
+        }
     }
     min_idx
 }

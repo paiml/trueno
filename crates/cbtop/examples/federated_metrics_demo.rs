@@ -4,7 +4,7 @@
 //!
 //! Run with: cargo run --example federated_metrics_demo -p cbtop
 
-use cbtop::{FederationConfig, MetricsFederation, GCounter, LwwRegister, OrSet};
+use cbtop::{FederationConfig, GCounter, LwwRegister, MetricsFederation, OrSet};
 use std::time::Duration;
 
 fn main() {

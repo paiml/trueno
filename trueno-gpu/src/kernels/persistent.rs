@@ -96,14 +96,14 @@ impl Kernel for PersistentDecoderKernel {
 
         PtxKernel::new("persistent_decoder")
             // Work queue for persistent execution
-            .param(PtxType::U64, "work_queue_ptr")     // Global work queue
-            .param(PtxType::U64, "work_counter_ptr")   // Atomic work counter
+            .param(PtxType::U64, "work_queue_ptr") // Global work queue
+            .param(PtxType::U64, "work_counter_ptr") // Atomic work counter
             // Input/output buffers
-            .param(PtxType::U64, "input_ptr")          // FP16 input [seq_len, hidden]
-            .param(PtxType::U64, "output_ptr")         // FP16 output [seq_len, hidden]
+            .param(PtxType::U64, "input_ptr") // FP16 input [seq_len, hidden]
+            .param(PtxType::U64, "output_ptr") // FP16 output [seq_len, hidden]
             // Control parameters
-            .param(PtxType::U32, "num_tokens")         // Number of tokens to process
-            .param(PtxType::U32, "stop_flag_ptr")      // Stop flag address
+            .param(PtxType::U32, "num_tokens") // Number of tokens to process
+            .param(PtxType::U32, "stop_flag_ptr") // Stop flag address
             .shared_memory(smem_bytes)
             .build(move |ctx| {
                 // PAR-036: Persistent Decoder Kernel

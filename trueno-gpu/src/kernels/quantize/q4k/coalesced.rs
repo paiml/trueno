@@ -716,19 +716,19 @@ impl Kernel for VectorizedQ4KGemvKernel {
                 // - High nibbles (1, 3, 5, 7) use ds_high/dm_high
                 let dq0 = ctx.mul_f32(ds_low, nib0_f);
                 let dq0 = ctx.sub_f32(dq0, dm_low);
-                let dq1 = ctx.mul_f32(ds_high, nib1_f);  // HIGH nibble
+                let dq1 = ctx.mul_f32(ds_high, nib1_f); // HIGH nibble
                 let dq1 = ctx.sub_f32(dq1, dm_high);
                 let dq2 = ctx.mul_f32(ds_low, nib2_f);
                 let dq2 = ctx.sub_f32(dq2, dm_low);
-                let dq3 = ctx.mul_f32(ds_high, nib3_f);  // HIGH nibble
+                let dq3 = ctx.mul_f32(ds_high, nib3_f); // HIGH nibble
                 let dq3 = ctx.sub_f32(dq3, dm_high);
                 let dq4 = ctx.mul_f32(ds_low, nib4_f);
                 let dq4 = ctx.sub_f32(dq4, dm_low);
-                let dq5 = ctx.mul_f32(ds_high, nib5_f);  // HIGH nibble
+                let dq5 = ctx.mul_f32(ds_high, nib5_f); // HIGH nibble
                 let dq5 = ctx.sub_f32(dq5, dm_high);
                 let dq6 = ctx.mul_f32(ds_low, nib6_f);
                 let dq6 = ctx.sub_f32(dq6, dm_low);
-                let dq7 = ctx.mul_f32(ds_high, nib7_f);  // HIGH nibble
+                let dq7 = ctx.mul_f32(ds_high, nib7_f); // HIGH nibble
                 let dq7 = ctx.sub_f32(dq7, dm_high);
 
                 // ============================================================
@@ -743,13 +743,13 @@ impl Kernel for VectorizedQ4KGemvKernel {
                 // ============================================================
                 let sb_k_base = ctx.mul_u32(sb_idx, Q4K_SUPER_BLOCK_SIZE);
                 let sixty_four = ctx.mov_u32_imm(64);
-                let chunk_base = ctx.mul_u32_reg(chunk_idx, sixty_four);  // chunk * 64
-                let chunk_start = ctx.add_u32_reg(sb_k_base, chunk_base);  // sb_base + chunk*64
+                let chunk_base = ctx.mul_u32_reg(chunk_idx, sixty_four); // chunk * 64
+                let chunk_start = ctx.add_u32_reg(sb_k_base, chunk_base); // sb_base + chunk*64
 
                 // byte_in_chunk = (lane_id % 8) * 4
                 let seven_mask = ctx.mov_u32_imm(7);
-                let lane_in_chunk = ctx.and_u32(lane_id, seven_mask);  // lane_id % 8
-                let byte_in_chunk = ctx.shl_u32(lane_in_chunk, two_u32);  // * 4
+                let lane_in_chunk = ctx.and_u32(lane_id, seven_mask); // lane_id % 8
+                let byte_in_chunk = ctx.shl_u32(lane_in_chunk, two_u32); // * 4
 
                 // Base for low nibbles: chunk_start + byte_in_chunk
                 let low_base = ctx.add_u32_reg(chunk_start, byte_in_chunk);
@@ -855,4 +855,3 @@ impl Kernel for VectorizedQ4KGemvKernel {
             })
     }
 }
-

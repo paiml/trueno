@@ -15,8 +15,7 @@
 //! | F920 | I18n Safe | non-ASCII input | No crash |
 
 use cbtop::{
-    GateResult, GateCategory, IronmanScorecard,
-    IronmanValidator, IRONMAN_GATES, quick_validate,
+    quick_validate, GateCategory, GateResult, IronmanScorecard, IronmanValidator, IRONMAN_GATES,
 };
 
 // ============================================================================
@@ -59,9 +58,8 @@ fn f901_gate_result_scoring() {
 fn f902_all_gates_defined() {
     // F902: Verify all F901-F920 gates are defined
     let expected_ids = [
-        "F901", "F902", "F903", "F904", "F905", "F906", "F907", "F908",
-        "F909", "F910", "F911", "F912", "F913", "F914", "F915", "F916",
-        "F917", "F918", "F919", "F920",
+        "F901", "F902", "F903", "F904", "F905", "F906", "F907", "F908", "F909", "F910", "F911",
+        "F912", "F913", "F914", "F915", "F916", "F917", "F918", "F919", "F920",
     ];
 
     let gate_ids: Vec<_> = IRONMAN_GATES.iter().map(|g| g.id).collect();
@@ -280,9 +278,7 @@ fn f912_validator_new() {
 #[test]
 fn f912_validator_builder_pattern() {
     // F912: Validator builder pattern works
-    let validator = IronmanValidator::new(".")
-        .verbose(true)
-        .skip_slow(true);
+    let validator = IronmanValidator::new(".").verbose(true).skip_slow(true);
 
     assert!(validator.verbose);
     assert!(validator.skip_slow);
@@ -445,10 +441,15 @@ fn test_category_coverage() {
     ];
 
     for category in categories {
-        let gates_in_category = IRONMAN_GATES.iter()
+        let gates_in_category = IRONMAN_GATES
+            .iter()
             .filter(|g| g.category == category)
             .count();
-        assert!(gates_in_category > 0, "Category {:?} has no gates", category);
+        assert!(
+            gates_in_category > 0,
+            "Category {:?} has no gates",
+            category
+        );
     }
 }
 
@@ -456,6 +457,14 @@ fn test_category_coverage() {
 fn test_total_weight_reasonable() {
     // Integration: Total weight is reasonable (100-200 points)
     let total_weight: u32 = IRONMAN_GATES.iter().map(|g| g.weight).sum();
-    assert!(total_weight >= 100, "Total weight too low: {}", total_weight);
-    assert!(total_weight <= 200, "Total weight too high: {}", total_weight);
+    assert!(
+        total_weight >= 100,
+        "Total weight too low: {}",
+        total_weight
+    );
+    assert!(
+        total_weight <= 200,
+        "Total weight too high: {}",
+        total_weight
+    );
 }

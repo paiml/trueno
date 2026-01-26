@@ -1,7 +1,7 @@
 //! Throughput analyzer using Little's Law
 
-use std::any::Any;
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 /// Little's Law: L = λW
 /// L = average number in system

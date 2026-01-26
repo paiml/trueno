@@ -17,8 +17,8 @@
 //!
 //! F1081-F1095: Input validation and error path testing
 
-use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
 
 /// Result of a fuzz test run
 #[derive(Debug, Clone)]
@@ -148,7 +148,10 @@ impl FuzzInputValidator {
             return Err(FuzzValidationError::StringTooLong(value.len()));
         }
         // Check for valid UTF-8 (already guaranteed by &str, but check control chars)
-        if value.chars().any(|c| c.is_control() && c != '\n' && c != '\t') {
+        if value
+            .chars()
+            .any(|c| c.is_control() && c != '\n' && c != '\t')
+        {
             return Err(FuzzValidationError::InvalidControlChars);
         }
         Ok(value)
@@ -283,7 +286,11 @@ pub fn sanitize_float(value: f64) -> f64 {
     if value.is_nan() {
         0.0
     } else if value.is_infinite() {
-        if value > 0.0 { f64::MAX } else { f64::MIN }
+        if value > 0.0 {
+            f64::MAX
+        } else {
+            f64::MIN
+        }
     } else {
         value
     }
@@ -390,7 +397,10 @@ impl FuzzSuite {
         let avg_coverage = if self.results.is_empty() {
             0.0
         } else {
-            self.results.values().map(|r| r.coverage_percent).sum::<f64>()
+            self.results
+                .values()
+                .map(|r| r.coverage_percent)
+                .sum::<f64>()
                 / self.results.len() as f64
         };
 
@@ -537,15 +547,24 @@ mod tests {
     #[test]
     fn test_validator_rejects_infinity() {
         let v = FuzzInputValidator::new();
-        assert_eq!(v.validate_float(f64::INFINITY), Err(FuzzValidationError::Infinity));
-        assert_eq!(v.validate_float(f64::NEG_INFINITY), Err(FuzzValidationError::Infinity));
+        assert_eq!(
+            v.validate_float(f64::INFINITY),
+            Err(FuzzValidationError::Infinity)
+        );
+        assert_eq!(
+            v.validate_float(f64::NEG_INFINITY),
+            Err(FuzzValidationError::Infinity)
+        );
     }
 
     #[test]
     fn test_validator_positive_only() {
         let v = FuzzInputValidator::positive_only();
         assert!(v.validate_float(1.0).is_ok());
-        assert!(matches!(v.validate_float(-1.0), Err(FuzzValidationError::NegativeValue(_))));
+        assert!(matches!(
+            v.validate_float(-1.0),
+            Err(FuzzValidationError::NegativeValue(_))
+        ));
         assert_eq!(v.validate_float(0.0), Err(FuzzValidationError::ZeroValue));
     }
 
@@ -626,7 +645,10 @@ mod tests {
         assert!(v.validate_string("").is_ok());
 
         let long_string = "a".repeat(2000);
-        assert!(matches!(v.validate_string(&long_string), Err(FuzzValidationError::StringTooLong(_))));
+        assert!(matches!(
+            v.validate_string(&long_string),
+            Err(FuzzValidationError::StringTooLong(_))
+        ));
     }
 
     #[test]

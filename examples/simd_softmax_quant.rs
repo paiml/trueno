@@ -81,8 +81,8 @@ fn demo_q5k_quantization(profiler: &mut BrickProfiler) {
         d: 0.1,
         dmin: -0.05,
         scales: [40, 42, 44, 46, 48, 50, 52, 54, 0, 0, 0, 0], // Non-zero scales
-        qh: [0b0101_0101; 32], // Alternating 5th bits
-        qs: [0x55; 128],       // Pattern: 0101 0101
+        qh: [0b0101_0101; 32],                                // Alternating 5th bits
+        qs: [0x55; 128],                                      // Pattern: 0101 0101
     };
 
     // Dequantize
@@ -95,7 +95,10 @@ fn demo_q5k_quantization(profiler: &mut BrickProfiler) {
 
     println!("  Block size:      {} elements", BlockQ5K::BLOCK_SIZE);
     println!("  Dequant time:    {:?}", dequant_time);
-    println!("  Sample values:   [{:.4}, {:.4}, {:.4}, ...]", dequant[0], dequant[1], dequant[2]);
+    println!(
+        "  Sample values:   [{:.4}, {:.4}, {:.4}, ...]",
+        dequant[0], dequant[1], dequant[2]
+    );
 
     // Dot product with Q5_K
     let op = DotQ5KOp::new(256);
@@ -119,7 +122,9 @@ fn demo_q6k_quantization(profiler: &mut BrickProfiler) {
     let block = BlockQ6K {
         ql: [0x55; 128], // Pattern: 0101 0101 (low 4 bits)
         qh: [0x55; 64],  // Pattern: 0101 0101 (high 2 bits)
-        scales: [10, 12, 14, 16, 18, 20, 22, 24, 10, 12, 14, 16, 18, 20, 22, 24],
+        scales: [
+            10, 12, 14, 16, 18, 20, 22, 24, 10, 12, 14, 16, 18, 20, 22, 24,
+        ],
         d: 0.1,
     };
 
@@ -133,7 +138,10 @@ fn demo_q6k_quantization(profiler: &mut BrickProfiler) {
 
     println!("  Block size:      {} elements", BlockQ6K::BLOCK_SIZE);
     println!("  Dequant time:    {:?}", dequant_time);
-    println!("  Sample values:   [{:.4}, {:.4}, {:.4}, ...]", dequant[0], dequant[1], dequant[2]);
+    println!(
+        "  Sample values:   [{:.4}, {:.4}, {:.4}, ...]",
+        dequant[0], dequant[1], dequant[2]
+    );
 
     // Dot product with Q6_K
     let op = DotQ6KOp::new(256);

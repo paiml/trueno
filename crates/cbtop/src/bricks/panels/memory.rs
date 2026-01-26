@@ -2,10 +2,10 @@
 //!
 //! Displays RAM, swap, and per-process memory usage.
 
-use std::any::Any;
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use presentar_core::{Canvas, Point, Rect, TextStyle, Widget};
 use presentar_terminal::{Meter, Theme};
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 /// Memory metrics for display
 #[derive(Debug, Clone, Default)]
@@ -95,8 +95,7 @@ impl MemoryPanelBrick {
         let ram_pct = self.metrics.ram_percent();
         canvas.draw_text("RAM:", Point::new(2.0, 4.0), &dim_style);
 
-        let mut ram_meter = Meter::new(ram_pct, 100.0)
-            .with_color(self.theme.memory_color(ram_pct));
+        let mut ram_meter = Meter::new(ram_pct, 100.0).with_color(self.theme.memory_color(ram_pct));
         ram_meter.layout(Rect::new(10.0, 4.0, width - 30.0, 1.0));
         ram_meter.paint(canvas);
 
@@ -116,8 +115,8 @@ impl MemoryPanelBrick {
         let swap_pct = self.metrics.swap_percent();
         canvas.draw_text("Swap:", Point::new(2.0, 7.0), &dim_style);
 
-        let mut swap_meter = Meter::new(swap_pct, 100.0)
-            .with_color(self.theme.memory_color(swap_pct));
+        let mut swap_meter =
+            Meter::new(swap_pct, 100.0).with_color(self.theme.memory_color(swap_pct));
         swap_meter.layout(Rect::new(10.0, 7.0, width - 30.0, 1.0));
         swap_meter.paint(canvas);
 

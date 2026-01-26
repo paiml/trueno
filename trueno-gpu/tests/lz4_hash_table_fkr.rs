@@ -3,7 +3,7 @@
 //! These tests isolate specific hypotheses about hash table crashes.
 //! Each test is designed to FAIL if the hypothesis is correct.
 
-use trueno_gpu::kernels::lz4::{PAGE_SIZE, LZ4_HASH_SIZE};
+use trueno_gpu::kernels::lz4::{LZ4_HASH_SIZE, PAGE_SIZE};
 
 // =============================================================================
 // CPU REFERENCE TESTS (No GPU required - pure logic validation)
@@ -109,8 +109,12 @@ fn fkr_004_warp_regions_no_overlap() {
                 assert!(
                     warp_end <= other_start || warp_start >= other_end,
                     "Warp {} [{}, {}) overlaps with warp {} [{}, {})",
-                    warp_id, warp_start, warp_end,
-                    other_warp, other_start, other_end
+                    warp_id,
+                    warp_start,
+                    warp_end,
+                    other_warp,
+                    other_start,
+                    other_end
                 );
             }
         }
@@ -196,8 +200,11 @@ fn fkr_012_smem_base_register_used_consistently() {
     // smem_base should be used in hash table calculations
     // Look for add.u64 patterns that compute hash_table_base
     let has_hash_table_calc = ptx.lines().any(|line| {
-        line.contains("add.u64") &&
-        (line.contains("4096") || ptx.lines().any(|l| l.contains("mov.u32") && l.contains("4096")))
+        line.contains("add.u64")
+            && (line.contains("4096")
+                || ptx
+                    .lines()
+                    .any(|l| l.contains("mov.u32") && l.contains("4096")))
     });
 
     assert!(
@@ -212,10 +219,10 @@ fn fkr_012_smem_base_register_used_consistently() {
 
 #[cfg(feature = "cuda")]
 mod gpu_tests {
-    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
-    use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
-    use trueno_gpu::kernels::lz4::PAGE_SIZE;
     use std::ffi::c_void;
+    use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
+    use trueno_gpu::kernels::lz4::PAGE_SIZE;
+    use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
 
     fn cuda_available() -> bool {
         CudaContext::new(0).is_ok()
@@ -237,7 +244,8 @@ mod gpu_tests {
         let input: Vec<u8> = vec![0u8; (NUM_PAGES * PAGE_SIZE) as usize];
 
         let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, input.len()).unwrap();
-        let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize).unwrap();
+        let mut output_buf: GpuBuffer<u8> =
+            GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize).unwrap();
         let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, NUM_PAGES as usize).unwrap();
 
         input_buf.copy_from_host(&input).unwrap();
@@ -261,7 +269,8 @@ mod gpu_tests {
         ];
 
         unsafe {
-            stream.launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
+            stream
+                .launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
                 .expect("Kernel launch");
         }
         stream.synchronize().expect("Sync");
@@ -274,7 +283,8 @@ mod gpu_tests {
             assert!(
                 size <= 100,
                 "Zero page {} should compress to <100 bytes, got {}",
-                i, size
+                i,
+                size
             );
         }
     }
@@ -302,7 +312,8 @@ mod gpu_tests {
         }
 
         let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, input.len()).unwrap();
-        let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize).unwrap();
+        let mut output_buf: GpuBuffer<u8> =
+            GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize).unwrap();
         let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, NUM_PAGES as usize).unwrap();
 
         input_buf.copy_from_host(&input).unwrap();
@@ -326,12 +337,15 @@ mod gpu_tests {
         ];
 
         unsafe {
-            stream.launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
+            stream
+                .launch_kernel(&mut module, "lz4_compress_warp", &config, &mut args)
                 .expect("Kernel launch should not fail");
         }
 
         // THIS IS THE CRITICAL TEST - sync should not crash
-        stream.synchronize().expect("Sync should not crash with non-zero pages");
+        stream
+            .synchronize()
+            .expect("Sync should not crash with non-zero pages");
 
         let mut sizes = vec![0u32; NUM_PAGES as usize];
         sizes_buf.copy_to_host(&mut sizes).unwrap();
@@ -341,7 +355,8 @@ mod gpu_tests {
             assert!(
                 size > 0 && size <= 4352,
                 "Page {} should have valid size in (0, 4352], got {}",
-                i, size
+                i,
+                size
             );
         }
     }

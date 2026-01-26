@@ -69,11 +69,11 @@ impl Kernel for ArgMaxKernel {
         // A second pass (or CPU reduction) finds global max from block results.
 
         PtxKernel::new("argmax_block_reduce")
-            .param(PtxType::U64, "input_ptr")       // f32* input values
-            .param(PtxType::U64, "block_max_vals")  // f32* per-block max values
-            .param(PtxType::U64, "block_max_idxs")  // u32* per-block max indices
-            .param(PtxType::U32, "length")          // Total number of elements
-            .shared_memory(256 * 8)                 // 256 * (f32 + u32) = 2KB
+            .param(PtxType::U64, "input_ptr") // f32* input values
+            .param(PtxType::U64, "block_max_vals") // f32* per-block max values
+            .param(PtxType::U64, "block_max_idxs") // u32* per-block max indices
+            .param(PtxType::U32, "length") // Total number of elements
+            .shared_memory(256 * 8) // 256 * (f32 + u32) = 2KB
             .build(|ctx| {
                 // Thread and block IDs
                 let tid = ctx.special_reg(crate::ptx::PtxReg::TidX);
@@ -259,10 +259,10 @@ impl Kernel for ArgMaxFinalKernel {
 
     fn build_ptx(&self) -> PtxKernel {
         PtxKernel::new("argmax_final_reduce")
-            .param(PtxType::U64, "block_max_vals")  // f32* from first pass
-            .param(PtxType::U64, "block_max_idxs")  // u32* from first pass
-            .param(PtxType::U64, "output_idx")      // u32* single output index
-            .param(PtxType::U32, "num_blocks")      // Number of block results
+            .param(PtxType::U64, "block_max_vals") // f32* from first pass
+            .param(PtxType::U64, "block_max_idxs") // u32* from first pass
+            .param(PtxType::U64, "output_idx") // u32* single output index
+            .param(PtxType::U32, "num_blocks") // Number of block results
             .shared_memory(256 * 8)
             .build(|ctx| {
                 let tid = ctx.special_reg(crate::ptx::PtxReg::TidX);

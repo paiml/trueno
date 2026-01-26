@@ -720,11 +720,7 @@ mod tests {
         ];
 
         let result = pass(instructions);
-        assert_eq!(
-            result.len(),
-            2,
-            "Add with immediate source should not fuse"
-        );
+        assert_eq!(result.len(), 2, "Add with immediate source should not fuse");
     }
 
     // Test register not in definition map (undefined register)

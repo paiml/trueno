@@ -74,9 +74,9 @@ impl Default for BackendCostModel {
     fn default() -> Self {
         Self {
             pcie_bandwidth_gbps: 15.75,  // PCIe 3.0 x16
-            gpu_peak_tflops: 10.0,        // Mid-range GPU
-            cpu_peak_gflops: 400.0,       // Modern AVX2 CPU
-            gpu_min_elements: 1_000_000,  // ~1M elements
+            gpu_peak_tflops: 10.0,       // Mid-range GPU
+            cpu_peak_gflops: 400.0,      // Modern AVX2 CPU
+            gpu_min_elements: 1_000_000, // ~1M elements
         }
     }
 }
@@ -139,9 +139,7 @@ impl BackendCostModel {
                 let compute_us = flops / (self.gpu_peak_tflops * 1e6);
                 transfer_us + compute_us
             }
-            ComputeBackend::Cpu => {
-                flops / (self.cpu_peak_gflops * 1e3)
-            }
+            ComputeBackend::Cpu => flops / (self.cpu_peak_gflops * 1e3),
             ComputeBackend::Scalar => {
                 // Assume 1 GFLOP/s for scalar
                 flops / 1e3

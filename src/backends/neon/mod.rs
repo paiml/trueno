@@ -89,7 +89,9 @@ impl VectorBackend for NeonBackend {
     #[inline]
     #[target_feature(enable = "neon")]
     unsafe fn norm_l2(a: &[f32]) -> f32 {
-        if a.is_empty() { return 0.0; }
+        if a.is_empty() {
+            return 0.0;
+        }
         let len = a.len();
         let mut i = 0;
         let mut acc = vdupq_n_f32(0.0);
@@ -106,7 +108,9 @@ impl VectorBackend for NeonBackend {
             let pair = vpadd_f32(pair, pair);
             vget_lane_f32::<0>(pair)
         };
-        for j in i..len { sum_sq += a[j] * a[j]; }
+        for j in i..len {
+            sum_sq += a[j] * a[j];
+        }
         sum_sq.sqrt()
     }
 
@@ -128,7 +132,9 @@ impl VectorBackend for NeonBackend {
             let pair = vpadd_f32(pair, pair);
             vget_lane_f32::<0>(pair)
         };
-        for j in i..len { result += a[j].abs(); }
+        for j in i..len {
+            result += a[j].abs();
+        }
         result
     }
 
@@ -144,7 +150,12 @@ impl VectorBackend for NeonBackend {
             i += 4;
         }
         let mut result = vmaxvq_f32(vmax);
-        for j in i..len { let abs_val = a[j].abs(); if abs_val > result { result = abs_val; } }
+        for j in i..len {
+            let abs_val = a[j].abs();
+            if abs_val > result {
+                result = abs_val;
+            }
+        }
         result
     }
 
@@ -162,7 +173,12 @@ impl VectorBackend for NeonBackend {
         let pair = vpmax_f32(vget_low_f32(vmax), vget_high_f32(vmax));
         let pair = vpmax_f32(pair, pair);
         let mut result = vget_lane_f32::<0>(pair);
-        for j in i..len { let abs_val = a[j].abs(); if abs_val > result { result = abs_val; } }
+        for j in i..len {
+            let abs_val = a[j].abs();
+            if abs_val > result {
+                result = abs_val;
+            }
+        }
         result
     }
 
@@ -173,10 +189,15 @@ impl VectorBackend for NeonBackend {
         let mut i = 0;
         let scalar_vec = vdupq_n_f32(scalar);
         while i + 4 <= len {
-            vst1q_f32(result.as_mut_ptr().add(i), vmulq_f32(vld1q_f32(a.as_ptr().add(i)), scalar_vec));
+            vst1q_f32(
+                result.as_mut_ptr().add(i),
+                vmulq_f32(vld1q_f32(a.as_ptr().add(i)), scalar_vec),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j] * scalar; }
+        for j in i..len {
+            result[j] = a[j] * scalar;
+        }
     }
 
     #[inline]
@@ -185,10 +206,15 @@ impl VectorBackend for NeonBackend {
         let len = a.len();
         let mut i = 0;
         while i + 4 <= len {
-            vst1q_f32(result.as_mut_ptr().add(i), vabsq_f32(vld1q_f32(a.as_ptr().add(i))));
+            vst1q_f32(
+                result.as_mut_ptr().add(i),
+                vabsq_f32(vld1q_f32(a.as_ptr().add(i))),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j].abs(); }
+        for j in i..len {
+            result[j] = a[j].abs();
+        }
     }
 
     #[inline]
@@ -200,10 +226,15 @@ impl VectorBackend for NeonBackend {
         let max_vec = vdupq_n_f32(max_val);
         while i + 4 <= len {
             let va = vld1q_f32(a.as_ptr().add(i));
-            vst1q_f32(result.as_mut_ptr().add(i), vminq_f32(vmaxq_f32(va, min_vec), max_vec));
+            vst1q_f32(
+                result.as_mut_ptr().add(i),
+                vminq_f32(vmaxq_f32(va, min_vec), max_vec),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j].max(min_val).min(max_val); }
+        for j in i..len {
+            result[j] = a[j].max(min_val).min(max_val);
+        }
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -216,10 +247,15 @@ impl VectorBackend for NeonBackend {
         while i + 4 <= len {
             let va = vld1q_f32(a.as_ptr().add(i));
             let vb = vld1q_f32(b.as_ptr().add(i));
-            vst1q_f32(result.as_mut_ptr().add(i), vfmaq_f32(va, t_vec, vsubq_f32(vb, va)));
+            vst1q_f32(
+                result.as_mut_ptr().add(i),
+                vfmaq_f32(va, t_vec, vsubq_f32(vb, va)),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j] + t * (b[j] - a[j]); }
+        for j in i..len {
+            result[j] = a[j] + t * (b[j] - a[j]);
+        }
     }
 
     #[cfg(target_arch = "arm")]
@@ -232,10 +268,15 @@ impl VectorBackend for NeonBackend {
         while i + 4 <= len {
             let va = vld1q_f32(a.as_ptr().add(i));
             let vb = vld1q_f32(b.as_ptr().add(i));
-            vst1q_f32(result.as_mut_ptr().add(i), vmlaq_f32(va, t_vec, vsubq_f32(vb, va)));
+            vst1q_f32(
+                result.as_mut_ptr().add(i),
+                vmlaq_f32(va, t_vec, vsubq_f32(vb, va)),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j] + t * (b[j] - a[j]); }
+        for j in i..len {
+            result[j] = a[j] + t * (b[j] - a[j]);
+        }
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -251,7 +292,9 @@ impl VectorBackend for NeonBackend {
             vst1q_f32(result.as_mut_ptr().add(i), vfmaq_f32(vc, va, vb));
             i += 4;
         }
-        for j in i..len { result[j] = a[j] * b[j] + c[j]; }
+        for j in i..len {
+            result[j] = a[j] * b[j] + c[j];
+        }
     }
 
     #[cfg(target_arch = "arm")]
@@ -267,7 +310,9 @@ impl VectorBackend for NeonBackend {
             vst1q_f32(result.as_mut_ptr().add(i), vmlaq_f32(vc, va, vb));
             i += 4;
         }
-        for j in i..len { result[j] = a[j] * b[j] + c[j]; }
+        for j in i..len {
+            result[j] = a[j] * b[j] + c[j];
+        }
     }
 
     #[inline]
@@ -277,14 +322,25 @@ impl VectorBackend for NeonBackend {
         let mut i = 0;
         let zero = vdupq_n_f32(0.0);
         while i + 4 <= len {
-            vst1q_f32(result.as_mut_ptr().add(i), vmaxq_f32(vld1q_f32(a.as_ptr().add(i)), zero));
+            vst1q_f32(
+                result.as_mut_ptr().add(i),
+                vmaxq_f32(vld1q_f32(a.as_ptr().add(i)), zero),
+            );
             i += 4;
         }
-        for j in i..len { result[j] = a[j].max(0.0); }
+        for j in i..len {
+            result[j] = a[j].max(0.0);
+        }
     }
 
-    unsafe fn exp(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::exp(a, result); }
-    unsafe fn sigmoid(a: &[f32], result: &mut [f32]) { for j in 0..a.len() { result[j] = 1.0 / (1.0 + (-a[j]).exp()); } }
+    unsafe fn exp(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::exp(a, result);
+    }
+    unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
+        for j in 0..a.len() {
+            result[j] = 1.0 / (1.0 + (-a[j]).exp());
+        }
+    }
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
         for j in 0..a.len() {
             let x = a[j];
@@ -292,19 +348,49 @@ impl VectorBackend for NeonBackend {
             result[j] = 0.5 * x * (1.0 + inner.tanh());
         }
     }
-    unsafe fn swish(a: &[f32], result: &mut [f32]) { for j in 0..a.len() { result[j] = a[j] / (1.0 + (-a[j]).exp()); } }
-    unsafe fn tanh(a: &[f32], result: &mut [f32]) { for j in 0..a.len() { result[j] = a[j].tanh(); } }
-    unsafe fn sqrt(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::sqrt(a, result); }
-    unsafe fn recip(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::recip(a, result); }
-    unsafe fn ln(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::ln(a, result); }
-    unsafe fn log2(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::log2(a, result); }
-    unsafe fn log10(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::log10(a, result); }
-    unsafe fn sin(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::sin(a, result); }
-    unsafe fn cos(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::cos(a, result); }
-    unsafe fn tan(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::tan(a, result); }
-    unsafe fn floor(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::floor(a, result); }
-    unsafe fn ceil(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::ceil(a, result); }
-    unsafe fn round(a: &[f32], result: &mut [f32]) { super::scalar::ScalarBackend::round(a, result); }
+    unsafe fn swish(a: &[f32], result: &mut [f32]) {
+        for j in 0..a.len() {
+            result[j] = a[j] / (1.0 + (-a[j]).exp());
+        }
+    }
+    unsafe fn tanh(a: &[f32], result: &mut [f32]) {
+        for j in 0..a.len() {
+            result[j] = a[j].tanh();
+        }
+    }
+    unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::sqrt(a, result);
+    }
+    unsafe fn recip(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::recip(a, result);
+    }
+    unsafe fn ln(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ln(a, result);
+    }
+    unsafe fn log2(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log2(a, result);
+    }
+    unsafe fn log10(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::log10(a, result);
+    }
+    unsafe fn sin(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::sin(a, result);
+    }
+    unsafe fn cos(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::cos(a, result);
+    }
+    unsafe fn tan(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::tan(a, result);
+    }
+    unsafe fn floor(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::floor(a, result);
+    }
+    unsafe fn ceil(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::ceil(a, result);
+    }
+    unsafe fn round(a: &[f32], result: &mut [f32]) {
+        super::scalar::ScalarBackend::round(a, result);
+    }
 }
 
 #[cfg(all(test, any(target_arch = "aarch64", target_arch = "arm")))]
@@ -316,7 +402,9 @@ mod tests {
         let a = vec![1.0; 16];
         let b = vec![2.0; 16];
         let mut result = vec![0.0; 16];
-        unsafe { NeonBackend::add(&a, &b, &mut result); }
+        unsafe {
+            NeonBackend::add(&a, &b, &mut result);
+        }
         assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-6));
     }
 
@@ -325,7 +413,9 @@ mod tests {
         let a = vec![5.0; 16];
         let b = vec![2.0; 16];
         let mut result = vec![0.0; 16];
-        unsafe { NeonBackend::sub(&a, &b, &mut result); }
+        unsafe {
+            NeonBackend::sub(&a, &b, &mut result);
+        }
         assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-6));
     }
 
@@ -334,7 +424,9 @@ mod tests {
         let a = vec![2.0; 16];
         let b = vec![3.0; 16];
         let mut result = vec![0.0; 16];
-        unsafe { NeonBackend::mul(&a, &b, &mut result); }
+        unsafe {
+            NeonBackend::mul(&a, &b, &mut result);
+        }
         assert!(result.iter().all(|&x| (x - 6.0).abs() < 1e-6));
     }
 
@@ -343,7 +435,9 @@ mod tests {
         let a = vec![6.0; 16];
         let b = vec![2.0; 16];
         let mut result = vec![0.0; 16];
-        unsafe { NeonBackend::div(&a, &b, &mut result); }
+        unsafe {
+            NeonBackend::div(&a, &b, &mut result);
+        }
         assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-4));
     }
 

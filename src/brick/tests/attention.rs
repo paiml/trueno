@@ -63,10 +63,7 @@ fn test_attention_op_dimension_validation() {
     assert!(result.is_err());
 
     // Wrong K size
-    let result = op.execute(
-        (vec![0.0; 8], vec![0.0; 8], vec![0.0; 12]),
-        Backend::Scalar,
-    );
+    let result = op.execute((vec![0.0; 8], vec![0.0; 8], vec![0.0; 12]), Backend::Scalar);
     assert!(result.is_err());
 }
 

@@ -19,7 +19,9 @@ use std::collections::HashMap;
 pub const DEFAULT_MAX_LABELS: usize = 10;
 
 /// Default histogram buckets
-pub const DEFAULT_BUCKETS: [f64; 11] = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0];
+pub const DEFAULT_BUCKETS: [f64; 11] = [
+    0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+];
 
 /// Metric type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,7 +69,8 @@ impl Labels {
             return String::new();
         }
 
-        let parts: Vec<String> = self.pairs
+        let parts: Vec<String> = self
+            .pairs
             .iter()
             .map(|(k, v)| format!("{}=\"{}\"", k, escape_label_value(v)))
             .collect();
@@ -147,7 +150,11 @@ impl HistogramBuckets {
             let bucket_label = if label_str.is_empty() {
                 format!("{{le=\"{}\"}}", boundary)
             } else {
-                format!("{{le=\"{}\",{}}}", boundary, &label_str[1..label_str.len()-1])
+                format!(
+                    "{{le=\"{}\",{}}}",
+                    boundary,
+                    &label_str[1..label_str.len() - 1]
+                )
             };
             lines.push(format!("{}_bucket{} {}", name, bucket_label, cumulative));
         }
@@ -156,7 +163,7 @@ impl HistogramBuckets {
         let inf_label = if label_str.is_empty() {
             "{le=\"+Inf\"}".to_string()
         } else {
-            format!("{{le=\"+Inf\",{}}}", &label_str[1..label_str.len()-1])
+            format!("{{le=\"+Inf\",{}}}", &label_str[1..label_str.len() - 1])
         };
         lines.push(format!("{}_bucket{} {}", name, inf_label, self.count));
 
@@ -236,7 +243,10 @@ impl GaugeValue {
     /// Format as Prometheus line
     pub fn format(&self, name: &str) -> String {
         let label_str = self.labels.format();
-        let ts_str = self.timestamp.map(|t| format!(" {}", t)).unwrap_or_default();
+        let ts_str = self
+            .timestamp
+            .map(|t| format!(" {}", t))
+            .unwrap_or_default();
         format!("{}{} {}{}", name, label_str, self.value, ts_str)
     }
 }
@@ -537,7 +547,8 @@ pub fn validate_metric_name(name: &str) -> bool {
         return false;
     }
 
-    name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    name.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 #[cfg(test)]
@@ -553,9 +564,7 @@ mod tests {
 
     #[test]
     fn test_labels() {
-        let labels = Labels::new()
-            .add("host", "server1")
-            .add("env", "prod");
+        let labels = Labels::new().add("host", "server1").add("env", "prod");
 
         assert_eq!(labels.len(), 2);
         assert!(labels.format().contains("host=\"server1\""));
@@ -570,8 +579,7 @@ mod tests {
 
     #[test]
     fn test_gauge_value() {
-        let gauge = GaugeValue::new(42.5)
-            .with_labels(Labels::new().add("cpu", "0"));
+        let gauge = GaugeValue::new(42.5).with_labels(Labels::new().add("cpu", "0"));
 
         let formatted = gauge.format("cpu_usage");
         assert!(formatted.contains("cpu_usage"));

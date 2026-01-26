@@ -48,10 +48,16 @@ impl std::fmt::Display for MlThresholdError {
             Self::FeatureExtractionFailed { reason } => {
                 write!(f, "Feature extraction failed: {}", reason)
             }
-            Self::LowConfidence { confidence, threshold } => {
+            Self::LowConfidence {
+                confidence,
+                threshold,
+            } => {
                 write!(f, "Low confidence {} < {}", confidence, threshold)
             }
-            Self::DriftDetected { metric, drift_score } => {
+            Self::DriftDetected {
+                metric,
+                drift_score,
+            } => {
                 write!(f, "Drift detected in {}: score {:.2}", metric, drift_score)
             }
         }
@@ -83,13 +89,13 @@ impl WorkloadClass {
     /// Get default CV threshold for this workload class
     pub fn default_cv_threshold(&self) -> f64 {
         match self {
-            Self::Ffn => 18.0,          // FFN naturally has higher variance
-            Self::Matmul => 10.0,       // Matmul is very consistent
-            Self::Attention => 15.0,    // Attention has moderate variance
-            Self::Quantize => 12.0,     // Quantize is fairly consistent
-            Self::MemoryBound => 20.0,  // Memory-bound is highly variable
-            Self::ComputeBound => 8.0,  // Compute-bound is very consistent
-            Self::Unknown => 15.0,      // Conservative default
+            Self::Ffn => 18.0,         // FFN naturally has higher variance
+            Self::Matmul => 10.0,      // Matmul is very consistent
+            Self::Attention => 15.0,   // Attention has moderate variance
+            Self::Quantize => 12.0,    // Quantize is fairly consistent
+            Self::MemoryBound => 20.0, // Memory-bound is highly variable
+            Self::ComputeBound => 8.0, // Compute-bound is very consistent
+            Self::Unknown => 15.0,     // Conservative default
         }
     }
 
@@ -138,9 +144,7 @@ impl TimeSeriesFeatures {
         let n = values.len() as f64;
         let mean = values.iter().sum::<f64>() / n;
 
-        let variance = values.iter()
-            .map(|x| (x - mean).powi(2))
-            .sum::<f64>() / n;
+        let variance = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
         let std_dev = variance.sqrt();
 
         let cv = if mean.abs() > 1e-10 {
@@ -151,9 +155,11 @@ impl TimeSeriesFeatures {
 
         // Skewness
         let skewness = if std_dev > 1e-10 {
-            let m3 = values.iter()
+            let m3 = values
+                .iter()
                 .map(|x| ((x - mean) / std_dev).powi(3))
-                .sum::<f64>() / n;
+                .sum::<f64>()
+                / n;
             m3
         } else {
             0.0
@@ -161,10 +167,12 @@ impl TimeSeriesFeatures {
 
         // Kurtosis
         let kurtosis = if std_dev > 1e-10 {
-            let m4 = values.iter()
+            let m4 = values
+                .iter()
                 .map(|x| ((x - mean) / std_dev).powi(4))
-                .sum::<f64>() / n;
-            m4 - 3.0  // Excess kurtosis
+                .sum::<f64>()
+                / n;
+            m4 - 3.0 // Excess kurtosis
         } else {
             0.0
         };
@@ -190,7 +198,11 @@ impl TimeSeriesFeatures {
                 num += (x - x_mean) * (y - mean);
                 den += (x - x_mean).powi(2);
             }
-            if den > 1e-10 { num / den } else { 0.0 }
+            if den > 1e-10 {
+                num / den
+            } else {
+                0.0
+            }
         };
 
         Some(Self {
@@ -259,10 +271,10 @@ impl LearnedWorkloadThreshold {
         if !is_anomaly {
             // Normal sample: threshold should be above observed CV
             let observed_cv = features.cv;
-            let margin = 1.2;  // 20% margin above normal
+            let margin = 1.2; // 20% margin above normal
 
             // Weighted update
-            let weight = 0.1;  // Learning rate
+            let weight = 0.1; // Learning rate
             let target = observed_cv * margin;
 
             if target > self.cv_threshold {
@@ -288,7 +300,8 @@ impl LearnedWorkloadThreshold {
                 // Update variance estimate
                 if n > 1.0 {
                     self.feature_stds[i] = ((n - 2.0) / (n - 1.0) * self.feature_stds[i].powi(2)
-                        + delta * delta2 / n).sqrt();
+                        + delta * delta2 / n)
+                        .sqrt();
                 }
             }
         }
@@ -416,7 +429,7 @@ impl Default for MlThresholdConfig {
         Self {
             min_training_samples: 50,
             min_confidence: 0.7,
-            max_threshold_age: Duration::from_secs(24 * 60 * 60),  // 24 hours
+            max_threshold_age: Duration::from_secs(24 * 60 * 60), // 24 hours
             drift_zscore_threshold: 3.0,
             cold_start_multiplier: 1.5,
         }
@@ -483,8 +496,8 @@ impl AdaptiveThresholdMl {
 
     /// Detect anomaly in a time series
     pub fn detect_anomaly(&self, values: &[f64]) -> MlThresholdResult<AnomalyResult> {
-        let features = TimeSeriesFeatures::extract(values)
-            .ok_or(MlThresholdError::InsufficientData {
+        let features =
+            TimeSeriesFeatures::extract(values).ok_or(MlThresholdError::InsufficientData {
                 have: values.len(),
                 need: 10,
             })?;
@@ -495,7 +508,8 @@ impl AdaptiveThresholdMl {
         let is_anomaly = features.cv > threshold;
         let score = features.cv / threshold;
 
-        let confidence = self.thresholds
+        let confidence = self
+            .thresholds
             .get(&workload)
             .map(|t| t.confidence)
             .unwrap_or(0.0);
@@ -518,8 +532,8 @@ impl AdaptiveThresholdMl {
 
     /// Train on labeled sample
     pub fn train(&mut self, values: &[f64], is_anomaly: bool) -> MlThresholdResult<()> {
-        let features = TimeSeriesFeatures::extract(values)
-            .ok_or(MlThresholdError::InsufficientData {
+        let features =
+            TimeSeriesFeatures::extract(values).ok_or(MlThresholdError::InsufficientData {
                 have: values.len(),
                 need: 10,
             })?;
@@ -527,7 +541,8 @@ impl AdaptiveThresholdMl {
         let workload = self.classify_workload(&features);
 
         // Get or create threshold for this workload
-        let threshold = self.thresholds
+        let threshold = self
+            .thresholds
             .entry(workload)
             .or_insert_with(|| LearnedWorkloadThreshold::new(workload));
 
@@ -547,8 +562,8 @@ impl AdaptiveThresholdMl {
 
     /// Check for drift in recent samples
     pub fn check_drift(&self, values: &[f64]) -> MlThresholdResult<Option<f64>> {
-        let features = TimeSeriesFeatures::extract(values)
-            .ok_or(MlThresholdError::InsufficientData {
+        let features =
+            TimeSeriesFeatures::extract(values).ok_or(MlThresholdError::InsufficientData {
                 have: values.len(),
                 need: 10,
             })?;
@@ -573,7 +588,10 @@ impl AdaptiveThresholdMl {
     }
 
     /// Get learned threshold for workload
-    pub fn get_learned_threshold(&self, workload: WorkloadClass) -> Option<&LearnedWorkloadThreshold> {
+    pub fn get_learned_threshold(
+        &self,
+        workload: WorkloadClass,
+    ) -> Option<&LearnedWorkloadThreshold> {
         self.thresholds.get(&workload)
     }
 
@@ -587,7 +605,10 @@ impl AdaptiveThresholdMl {
         self.thresholds
             .iter()
             .map(|(k, v)| {
-                (k.name().to_string(), (v.cv_threshold, v.confidence, v.training_samples))
+                (
+                    k.name().to_string(),
+                    (v.cv_threshold, v.confidence, v.training_samples),
+                )
             })
             .collect()
     }
@@ -650,7 +671,9 @@ mod tests {
 
     #[test]
     fn test_time_series_features() {
-        let values: Vec<f64> = (0..100).map(|i| 100.0 + (i as f64 * 0.1).sin() * 10.0).collect();
+        let values: Vec<f64> = (0..100)
+            .map(|i| 100.0 + (i as f64 * 0.1).sin() * 10.0)
+            .collect();
 
         let features = TimeSeriesFeatures::extract(&values).unwrap();
 
@@ -668,8 +691,14 @@ mod tests {
 
     #[test]
     fn test_workload_class_defaults() {
-        assert!(WorkloadClass::Matmul.default_cv_threshold() < WorkloadClass::Ffn.default_cv_threshold());
-        assert!(WorkloadClass::ComputeBound.default_cv_threshold() < WorkloadClass::MemoryBound.default_cv_threshold());
+        assert!(
+            WorkloadClass::Matmul.default_cv_threshold()
+                < WorkloadClass::Ffn.default_cv_threshold()
+        );
+        assert!(
+            WorkloadClass::ComputeBound.default_cv_threshold()
+                < WorkloadClass::MemoryBound.default_cv_threshold()
+        );
     }
 
     #[test]
@@ -743,8 +772,13 @@ mod tests {
 
         // Check metrics are being tracked
         let metrics = ml.get_metrics();
-        assert!(metrics.true_positives + metrics.false_positives +
-                metrics.true_negatives + metrics.false_negatives > 0);
+        assert!(
+            metrics.true_positives
+                + metrics.false_positives
+                + metrics.true_negatives
+                + metrics.false_negatives
+                > 0
+        );
     }
 
     #[test]
@@ -763,7 +797,10 @@ mod tests {
             trend_slope: 0.0,
             sample_count: 100,
         };
-        assert_eq!(ml.classify_workload(&compute_features), WorkloadClass::ComputeBound);
+        assert_eq!(
+            ml.classify_workload(&compute_features),
+            WorkloadClass::ComputeBound
+        );
 
         // High CV, low autocorrelation -> MemoryBound
         let memory_features = TimeSeriesFeatures {
@@ -776,7 +813,10 @@ mod tests {
             trend_slope: 0.0,
             sample_count: 100,
         };
-        assert_eq!(ml.classify_workload(&memory_features), WorkloadClass::MemoryBound);
+        assert_eq!(
+            ml.classify_workload(&memory_features),
+            WorkloadClass::MemoryBound
+        );
     }
 
     #[test]
@@ -850,7 +890,12 @@ mod tests {
         let threshold = ml.get_threshold(WorkloadClass::Matmul);
         let default = WorkloadClass::Matmul.default_cv_threshold();
 
-        assert!(threshold > default, "Cold start threshold {} should be > default {}", threshold, default);
+        assert!(
+            threshold > default,
+            "Cold start threshold {} should be > default {}",
+            threshold,
+            default
+        );
     }
 
     #[test]
@@ -883,7 +928,7 @@ mod tests {
             let ffn_normal: Vec<f64> = (0..100)
                 .map(|i| 100.0 + ((i as f64 * 0.2).sin() * 18.0))
                 .collect();
-            ml.train(&ffn_normal, false).unwrap();  // Normal for FFN
+            ml.train(&ffn_normal, false).unwrap(); // Normal for FFN
         }
 
         // Matmul workload: naturally low CV (~8%)
@@ -891,13 +936,17 @@ mod tests {
             let matmul_normal: Vec<f64> = (0..100)
                 .map(|i| 100.0 + ((i as f64 * 0.1).sin() * 8.0))
                 .collect();
-            ml.train(&matmul_normal, false).unwrap();  // Normal for Matmul
+            ml.train(&matmul_normal, false).unwrap(); // Normal for Matmul
         }
 
         // Phase 2: Test that learned thresholds differ by workload
-        let ffn_threshold = ml.thresholds.get(&WorkloadClass::Ffn)
+        let ffn_threshold = ml
+            .thresholds
+            .get(&WorkloadClass::Ffn)
             .map(|t| t.cv_threshold);
-        let matmul_threshold = ml.thresholds.get(&WorkloadClass::Matmul)
+        let matmul_threshold = ml
+            .thresholds
+            .get(&WorkloadClass::Matmul)
             .map(|t| t.cv_threshold);
 
         // FFN should have higher threshold than Matmul
@@ -905,7 +954,8 @@ mod tests {
             assert!(
                 ffn_t != matmul_t,
                 "Workload-specific thresholds should differ: FFN={}, Matmul={}",
-                ffn_t, matmul_t
+                ffn_t,
+                matmul_t
             );
         }
 

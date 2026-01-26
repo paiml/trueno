@@ -1563,7 +1563,10 @@ mod tests {
                 ptx.contains(".entry gemm_tiled_unrolled"),
                 "Failed for ({m}, {n}, {k}, {tile})"
             );
-            assert!(ptx.contains("ret;"), "Missing ret for ({m}, {n}, {k}, {tile})");
+            assert!(
+                ptx.contains("ret;"),
+                "Missing ret for ({m}, {n}, {k}, {tile})"
+            );
         }
     }
 
@@ -1789,4 +1792,3 @@ mod tests {
         assert!(ptx.contains(".entry gemm_tiled_unrolled"));
     }
 }
-

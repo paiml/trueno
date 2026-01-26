@@ -94,12 +94,7 @@ pub fn matmul_q4k_f32_scalar(
 ///
 /// # Arguments
 /// Same as `matmul_q4k_f32_scalar`
-pub fn matmul_q4k_f32(
-    q4k_data: &[u8],
-    input: &[f32],
-    out_dim: usize,
-    in_dim: usize,
-) -> Vec<f32> {
+pub fn matmul_q4k_f32(q4k_data: &[u8], input: &[f32], out_dim: usize, in_dim: usize) -> Vec<f32> {
     assert_eq!(input.len(), in_dim, "Input length mismatch");
 
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
@@ -267,9 +262,8 @@ unsafe fn matmul_q4k_f32_avx2(
                     let input_base = input_offset + chunk_start + i;
                     if input_base + 8 <= in_dim {
                         // Load 8 bytes of quantized values
-                        let q_bytes = _mm_loadl_epi64(
-                            qs.as_ptr().add(q_start + i) as *const __m128i
-                        );
+                        let q_bytes =
+                            _mm_loadl_epi64(qs.as_ptr().add(q_start + i) as *const __m128i);
 
                         // Zero-extend u8 to i32: [b0, b1, ..., b7, 0, 0, ...] -> [b0, b1, ..., b7] as i32
                         let q_i32 = _mm256_cvtepu8_epi32(q_bytes);
@@ -298,9 +292,8 @@ unsafe fn matmul_q4k_f32_avx2(
                     let input_base = input_offset + chunk_start + 32 + i;
                     if input_base + 8 <= in_dim {
                         // Load 8 bytes of quantized values
-                        let q_bytes = _mm_loadl_epi64(
-                            qs.as_ptr().add(q_start + i) as *const __m128i
-                        );
+                        let q_bytes =
+                            _mm_loadl_epi64(qs.as_ptr().add(q_start + i) as *const __m128i);
 
                         // Zero-extend u8 to i32
                         let q_i32 = _mm256_cvtepu8_epi32(q_bytes);
@@ -542,9 +535,8 @@ unsafe fn compute_chunk_q4k_avx2(
                 while i + 8 <= 32 {
                     let input_base = input_offset + chunk_start + i;
                     if input_base + 8 <= in_dim {
-                        let q_bytes = _mm_loadl_epi64(
-                            qs.as_ptr().add(q_start + i) as *const __m128i
-                        );
+                        let q_bytes =
+                            _mm_loadl_epi64(qs.as_ptr().add(q_start + i) as *const __m128i);
                         let q_i32 = _mm256_cvtepu8_epi32(q_bytes);
                         let q_low = _mm256_and_si256(q_i32, low_mask);
                         let q_f32 = _mm256_cvtepi32_ps(q_low);
@@ -560,9 +552,8 @@ unsafe fn compute_chunk_q4k_avx2(
                 while i + 8 <= 32 {
                     let input_base = input_offset + chunk_start + 32 + i;
                     if input_base + 8 <= in_dim {
-                        let q_bytes = _mm_loadl_epi64(
-                            qs.as_ptr().add(q_start + i) as *const __m128i
-                        );
+                        let q_bytes =
+                            _mm_loadl_epi64(qs.as_ptr().add(q_start + i) as *const __m128i);
                         let q_i32 = _mm256_cvtepu8_epi32(q_bytes);
                         let q_high = _mm256_srli_epi32(q_i32, 4);
                         let q_f32 = _mm256_cvtepi32_ps(q_high);
@@ -655,4 +646,3 @@ pub(crate) fn compute_chunk_q4k_scalar(
         *out_val = sum;
     }
 }
-

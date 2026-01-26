@@ -446,8 +446,7 @@ impl PerformancePredictor {
             self.fit_all();
         }
 
-        self.best_model
-            .and_then(|t| self.models.get(&t))
+        self.best_model.and_then(|t| self.models.get(&t))
     }
 
     /// Predict at size
@@ -496,11 +495,7 @@ impl PerformancePredictor {
 
     /// Compare models
     pub fn compare_models(&self) -> Vec<(&ModelType, f64)> {
-        let mut comparisons: Vec<_> = self
-            .models
-            .iter()
-            .map(|(t, m)| (t, m.r_squared))
-            .collect();
+        let mut comparisons: Vec<_> = self.models.iter().map(|(t, m)| (t, m.r_squared)).collect();
 
         comparisons.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         comparisons

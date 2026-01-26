@@ -34,9 +34,9 @@ fn f022_no_infinite_features() {
 fn f023_features_in_0_1_range() {
     let features = TunerFeatures::builder()
         .model_params_b(100.0) // Very large
-        .hidden_dim(16384)     // Max
-        .batch_size(64)        // Max
-        .seq_len(32768)        // Max
+        .hidden_dim(16384) // Max
+        .batch_size(64) // Max
+        .seq_len(32768) // Max
         .build();
 
     let v = features.to_vector();

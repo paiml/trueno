@@ -237,7 +237,10 @@ fn test_metal_softmax_equivalence() {
     // Compute reference softmax
     let max_val = input.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     let exp_sum: f32 = input.iter().map(|x| (x - max_val).exp()).sum();
-    let expected: Vec<f32> = input.iter().map(|x| (x - max_val).exp() / exp_sum).collect();
+    let expected: Vec<f32> = input
+        .iter()
+        .map(|x| (x - max_val).exp() / exp_sum)
+        .collect();
 
     // Stub: Use reference as result
     let result = expected.clone();
@@ -336,7 +339,11 @@ fn test_metal_backend_detection() {
         // On macOS, Metal should generally be available
         println!(
             "Metal backend detection: {} (macOS)",
-            if available { "available" } else { "not available" }
+            if available {
+                "available"
+            } else {
+                "not available"
+            }
         );
     }
 

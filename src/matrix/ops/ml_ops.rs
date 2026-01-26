@@ -533,12 +533,14 @@ mod tests {
 
     #[test]
     fn test_embedding_lookup() {
-        let embeddings = Matrix::from_vec(4, 3, vec![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-            7.0, 8.0, 9.0,
-            10.0, 11.0, 12.0,
-        ]).unwrap();
+        let embeddings = Matrix::from_vec(
+            4,
+            3,
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+            ],
+        )
+        .unwrap();
         let result = embeddings.embedding_lookup(&[1, 3]).unwrap();
         assert_eq!(result.rows(), 2);
         assert_eq!(result.get(0, 0), Some(&4.0));
@@ -553,12 +555,15 @@ mod tests {
 
     #[test]
     fn test_max_pool2d() {
-        let input = Matrix::from_vec(4, 4, vec![
-            1.0, 2.0, 3.0, 4.0,
-            5.0, 6.0, 7.0, 8.0,
-            9.0, 10.0, 11.0, 12.0,
-            13.0, 14.0, 15.0, 16.0,
-        ]).unwrap();
+        let input = Matrix::from_vec(
+            4,
+            4,
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+                16.0,
+            ],
+        )
+        .unwrap();
         let pooled = input.max_pool2d((2, 2), (2, 2)).unwrap();
         assert_eq!(pooled.shape(), (2, 2));
         assert_eq!(pooled.get(0, 0), Some(&6.0));
@@ -567,12 +572,15 @@ mod tests {
 
     #[test]
     fn test_avg_pool2d() {
-        let input = Matrix::from_vec(4, 4, vec![
-            1.0, 2.0, 3.0, 4.0,
-            5.0, 6.0, 7.0, 8.0,
-            9.0, 10.0, 11.0, 12.0,
-            13.0, 14.0, 15.0, 16.0,
-        ]).unwrap();
+        let input = Matrix::from_vec(
+            4,
+            4,
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+                16.0,
+            ],
+        )
+        .unwrap();
         let pooled = input.avg_pool2d((2, 2), (2, 2)).unwrap();
         assert_eq!(pooled.shape(), (2, 2));
         assert!((pooled.get(0, 0).unwrap() - 3.5).abs() < 1e-5);

@@ -11,7 +11,7 @@
 //! - F081-F100: Generalization & Robustness
 
 use trueno::tuner::{
-    BrickTuner, BottleneckClass, KernelClassifier, KernelType, QuantType, ThroughputRegressor,
+    BottleneckClass, BrickTuner, KernelClassifier, KernelType, QuantType, ThroughputRegressor,
     TunerFeatures,
 };
 
@@ -425,7 +425,11 @@ fn f020_bottleneck_valid() {
             | BottleneckClass::LaunchBound
             | BottleneckClass::AttentionBound
     );
-    assert!(valid, "F020 FALSIFIED: invalid bottleneck {:?}", rec.bottleneck.class);
+    assert!(
+        valid,
+        "F020 FALSIFIED: invalid bottleneck {:?}",
+        rec.bottleneck.class
+    );
 }
 
 // ============================================================================
@@ -441,7 +445,12 @@ fn f021_features_dim_42() {
         .build();
 
     let vec = features.to_vector();
-    assert_eq!(vec.len(), 42, "F021 FALSIFIED: expected DIM=42, got {}", vec.len());
+    assert_eq!(
+        vec.len(),
+        42,
+        "F021 FALSIFIED: expected DIM=42, got {}",
+        vec.len()
+    );
 }
 
 /// F022: Feature vector must be normalized (most values in [0,1])
@@ -543,7 +552,12 @@ fn f027_bytes_per_param_positive() {
         QuantType::F32,
     ] {
         let bpp = qt.bytes_per_param();
-        assert!(bpp > 0.0, "F027 FALSIFIED: {} has bpp={}", qt.to_index(), bpp);
+        assert!(
+            bpp > 0.0,
+            "F027 FALSIFIED: {} has bpp={}",
+            qt.to_index(),
+            bpp
+        );
     }
 }
 
@@ -665,8 +679,14 @@ fn f034_seq_len_affects_vector() {
 /// F035: Quant type affects feature vector
 #[test]
 fn f035_quant_type_affects_vector() {
-    let features_q4k = TunerFeatures::builder().quant_type(QuantType::Q4K).build().to_vector();
-    let features_f16 = TunerFeatures::builder().quant_type(QuantType::F16).build().to_vector();
+    let features_q4k = TunerFeatures::builder()
+        .quant_type(QuantType::Q4K)
+        .build()
+        .to_vector();
+    let features_f16 = TunerFeatures::builder()
+        .quant_type(QuantType::F16)
+        .build()
+        .to_vector();
 
     // Different quant types should produce different vectors
     let diff: f32 = features_q4k
@@ -711,8 +731,14 @@ fn f036_features_serialize_roundtrip() {
 /// F037: SM count affects feature vector
 #[test]
 fn f037_sm_count_affects_vector() {
-    let features_low = TunerFeatures::builder().gpu_sm_count(64).build().to_vector();
-    let features_high = TunerFeatures::builder().gpu_sm_count(256).build().to_vector();
+    let features_low = TunerFeatures::builder()
+        .gpu_sm_count(64)
+        .build()
+        .to_vector();
+    let features_high = TunerFeatures::builder()
+        .gpu_sm_count(256)
+        .build()
+        .to_vector();
 
     // Different SM counts should produce different vectors
     let diff: f32 = features_low
@@ -1039,7 +1065,12 @@ fn f063_features_from_hardware() {
 
     let hw = HardwareCapability::detect();
     let features = TunerFeatures::builder()
-        .gpu_mem_bw_gbs(hw.gpu.as_ref().map(|g| g.memory_bw_gbps as f32).unwrap_or(500.0))
+        .gpu_mem_bw_gbs(
+            hw.gpu
+                .as_ref()
+                .map(|g| g.memory_bw_gbps as f32)
+                .unwrap_or(500.0),
+        )
         .build();
 
     assert!(
@@ -1058,7 +1089,11 @@ fn f064_tuner_creation_fast() {
     let elapsed = start.elapsed();
     let avg_us = elapsed.as_micros() / 100;
 
-    assert!(avg_us < 1000, "F064 FALSIFIED: tuner creation {} us >= 1ms", avg_us);
+    assert!(
+        avg_us < 1000,
+        "F064 FALSIFIED: tuner creation {} us >= 1ms",
+        avg_us
+    );
 }
 
 /// F065: Model load time < 100ms (placeholder for persistence)
@@ -1192,7 +1227,10 @@ fn f071_extractor_deterministic() {
     let vec1 = features.to_vector();
     let vec2 = features.to_vector();
 
-    assert_eq!(vec1, vec2, "F071 FALSIFIED: feature extraction not deterministic");
+    assert_eq!(
+        vec1, vec2,
+        "F071 FALSIFIED: feature extraction not deterministic"
+    );
 }
 
 /// F072: Prediction deterministic across instances
@@ -1410,7 +1448,9 @@ fn f087_concept_drift_placeholder() {
     let regressor = ThroughputRegressor::new();
     let features = TunerFeatures::builder().model_params_b(1.5).build();
 
-    let predictions: Vec<_> = (0..10).map(|_| regressor.predict(&features).predicted_tps).collect();
+    let predictions: Vec<_> = (0..10)
+        .map(|_| regressor.predict(&features).predicted_tps)
+        .collect();
 
     let variance: f32 = predictions
         .iter()
@@ -1650,7 +1690,10 @@ fn f100_complete_workflow() {
     assert!(rec.confidence_overall >= 0.0);
 
     println!("F100 PASSED: Complete workflow successful");
-    println!("  Predicted throughput: {:.1} tok/s", rec.throughput.predicted_tps);
+    println!(
+        "  Predicted throughput: {:.1} tok/s",
+        rec.throughput.predicted_tps
+    );
     println!("  Recommended kernel: {:?}", rec.kernel.top_kernel);
     println!("  Bottleneck: {:?}", rec.bottleneck);
 }
@@ -1776,7 +1819,11 @@ fn f284_bandit_arm_stats() {
     // Initial state
     assert_eq!(arm.pulls, 0);
     assert_eq!(arm.mean(), 0.0);
-    assert_eq!(arm.ucb(0, 2.0), f32::INFINITY, "Unexplored arm should have infinite UCB");
+    assert_eq!(
+        arm.ucb(0, 2.0),
+        f32::INFINITY,
+        "Unexplored arm should have infinite UCB"
+    );
 
     // After some observations
     arm.pulls = 10;
@@ -2085,7 +2132,10 @@ fn f295_phase14_integration() {
 
     println!("F295 PASSED: Phase 14 integration successful");
     println!("  Online learner updates: {}", learner.num_updates());
-    println!("  Bandit exploration rate: {:.2}", bandit.exploration_rate());
+    println!(
+        "  Bandit exploration rate: {:.2}",
+        bandit.exploration_rate()
+    );
     println!("  Best kernel: {:?}", bandit.best_kernel());
 }
 
@@ -2134,7 +2184,11 @@ fn test_online_learner_dimension_mismatch() {
     // Wrong dimension - should be ignored
     let wrong_features = vec![0.5; 10]; // Too few
     learner.observe(&wrong_features, 100.0);
-    assert_eq!(learner.num_updates(), 0, "Dimension mismatch should be ignored");
+    assert_eq!(
+        learner.num_updates(),
+        0,
+        "Dimension mismatch should be ignored"
+    );
 
     // Empty features - should be ignored
     learner.observe(&[], 100.0);
@@ -2223,9 +2277,13 @@ fn test_bottleneck_actions() {
     use trueno::tuner::BottleneckClass;
 
     assert!(!BottleneckClass::MemoryBound.recommended_action().is_empty());
-    assert!(!BottleneckClass::ComputeBound.recommended_action().is_empty());
+    assert!(!BottleneckClass::ComputeBound
+        .recommended_action()
+        .is_empty());
     assert!(!BottleneckClass::LaunchBound.recommended_action().is_empty());
-    assert!(!BottleneckClass::AttentionBound.recommended_action().is_empty());
+    assert!(!BottleneckClass::AttentionBound
+        .recommended_action()
+        .is_empty());
     assert!(!BottleneckClass::Unknown.recommended_action().is_empty());
 }
 
@@ -2281,7 +2339,12 @@ fn test_kernel_type_to_index_all() {
     ];
 
     for (expected_idx, kernel) in kernels.iter().enumerate() {
-        assert_eq!(kernel.to_index(), expected_idx, "Index mismatch for {:?}", kernel);
+        assert_eq!(
+            kernel.to_index(),
+            expected_idx,
+            "Index mismatch for {:?}",
+            kernel
+        );
     }
 }
 

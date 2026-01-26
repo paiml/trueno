@@ -9,9 +9,8 @@
 //! - Thermal-latency correlation
 
 use cbtop::{
-    ThermalAnalyzer, ThermalPrediction, ThrottleRisk,
-    CooldownRecommendation, RiskCategory,
-    analyze_thermal, assess_throttle_risk,
+    analyze_thermal, assess_throttle_risk, CooldownRecommendation, RiskCategory, ThermalAnalyzer,
+    ThermalPrediction, ThrottleRisk,
 };
 
 // =============================================================================
@@ -65,10 +64,10 @@ fn f1221_prediction_with_noise() {
 fn f1222_risk_range() {
     // Test various scenarios
     let scenarios = [
-        (60.0, 85.0, 0.0),   // Low temp, no trend
-        (80.0, 85.0, 0.5),   // High temp, slight increase
-        (84.0, 85.0, 1.0),   // Near threshold, increasing
-        (90.0, 85.0, 0.0),   // Above threshold
+        (60.0, 85.0, 0.0), // Low temp, no trend
+        (80.0, 85.0, 0.5), // High temp, slight increase
+        (84.0, 85.0, 1.0), // Near threshold, increasing
+        (90.0, 85.0, 0.0), // Above threshold
     ];
 
     for (temp, threshold, slope) in scenarios {
@@ -76,7 +75,9 @@ fn f1222_risk_range() {
         assert!(
             risk.probability >= 0.0 && risk.probability <= 1.0,
             "Risk {:.2} out of range for temp={}, slope={}",
-            risk.probability, temp, slope
+            risk.probability,
+            temp,
+            slope
         );
     }
 }
@@ -149,7 +150,9 @@ fn f1223_weak_correlation() {
 
     // Alternating pattern - should show weak/moderate correlation
     let temps = [60.0, 70.0, 60.0, 70.0, 60.0, 70.0, 60.0, 70.0, 60.0, 70.0];
-    let latencies = [100.0, 110.0, 100.0, 110.0, 100.0, 110.0, 100.0, 110.0, 100.0, 110.0];
+    let latencies = [
+        100.0, 110.0, 100.0, 110.0, 100.0, 110.0, 100.0, 110.0, 100.0, 110.0,
+    ];
 
     for (i, (&temp, &latency)) in temps.iter().zip(latencies.iter()).enumerate() {
         analyzer.add_with_latency(temp, i as f64, latency);
@@ -319,8 +322,7 @@ fn f1227_empty_analyzer() {
 /// F1228.1: Custom threshold works
 #[test]
 fn f1228_custom_threshold() {
-    let mut analyzer = ThermalAnalyzer::new(10)
-        .with_threshold(95.0);
+    let mut analyzer = ThermalAnalyzer::new(10).with_threshold(95.0);
 
     for i in 0..5 {
         analyzer.add(85.0 + i as f64, i as f64);
@@ -483,8 +485,7 @@ fn test_risk_category_names() {
 /// Test analyzer with custom cooling rate
 #[test]
 fn test_custom_cooling_rate() {
-    let mut analyzer = ThermalAnalyzer::new(10)
-        .with_cooling_rate(1.0); // 1°C/sec
+    let mut analyzer = ThermalAnalyzer::new(10).with_cooling_rate(1.0); // 1°C/sec
 
     for i in 0..5 {
         analyzer.add(90.0, i as f64);

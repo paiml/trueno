@@ -32,7 +32,8 @@ impl TcbIndexCalculator {
     /// Returns (row_offset, col_offset) in the output matrix.
     #[must_use]
     pub fn macro_tile_offset(&self, block_idx: u32) -> (u32, u32) {
-        let tiles_per_row = (self.problem_n + self.config.macro_tile.n - 1) / self.config.macro_tile.n;
+        let tiles_per_row =
+            (self.problem_n + self.config.macro_tile.n - 1) / self.config.macro_tile.n;
         let row = (block_idx / tiles_per_row) * self.config.macro_tile.m;
         let col = (block_idx % tiles_per_row) * self.config.macro_tile.n;
         (row, col)

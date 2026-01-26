@@ -24,7 +24,11 @@ pub fn matmul_q6k_f32_colmajor(
     ne0: usize, // output dimension (rows)
     ne1: usize, // input/reduction dimension (columns)
 ) -> Vec<f32> {
-    assert_eq!(input.len(), ne1, "Input length must match ne1 (input dimension)");
+    assert_eq!(
+        input.len(),
+        ne1,
+        "Input length must match ne1 (input dimension)"
+    );
 
     // Number of super-blocks per column (each column has ne0 elements = output_dim)
     let blocks_per_col = (ne0 + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;

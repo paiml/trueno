@@ -13,10 +13,15 @@ pub unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
     while i + 4 <= len {
-        vst1q_f32(result.as_mut_ptr().add(i), vaddq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i))));
+        vst1q_f32(
+            result.as_mut_ptr().add(i),
+            vaddq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i))),
+        );
         i += 4;
     }
-    for j in i..len { result[j] = a[j] + b[j]; }
+    for j in i..len {
+        result[j] = a[j] + b[j];
+    }
 }
 
 /// NEON vector subtraction.
@@ -26,10 +31,15 @@ pub unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
     while i + 4 <= len {
-        vst1q_f32(result.as_mut_ptr().add(i), vsubq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i))));
+        vst1q_f32(
+            result.as_mut_ptr().add(i),
+            vsubq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i))),
+        );
         i += 4;
     }
-    for j in i..len { result[j] = a[j] - b[j]; }
+    for j in i..len {
+        result[j] = a[j] - b[j];
+    }
 }
 
 /// NEON vector multiplication.
@@ -39,10 +49,15 @@ pub unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
     while i + 4 <= len {
-        vst1q_f32(result.as_mut_ptr().add(i), vmulq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i))));
+        vst1q_f32(
+            result.as_mut_ptr().add(i),
+            vmulq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i))),
+        );
         i += 4;
     }
-    for j in i..len { result[j] = a[j] * b[j]; }
+    for j in i..len {
+        result[j] = a[j] * b[j];
+    }
 }
 
 /// NEON vector division.
@@ -54,7 +69,10 @@ pub unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
     while i + 4 <= len {
         #[cfg(target_arch = "aarch64")]
         {
-            vst1q_f32(result.as_mut_ptr().add(i), vdivq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i))));
+            vst1q_f32(
+                result.as_mut_ptr().add(i),
+                vdivq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i))),
+            );
         }
         #[cfg(target_arch = "arm")]
         {
@@ -67,5 +85,7 @@ pub unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
         }
         i += 4;
     }
-    for j in i..len { result[j] = a[j] / b[j]; }
+    for j in i..len {
+        result[j] = a[j] / b[j];
+    }
 }

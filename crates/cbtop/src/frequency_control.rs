@@ -158,7 +158,10 @@ impl FrequencyReading {
 
     /// Get most common governor
     pub fn common_governor(&self) -> CpuGovernor {
-        self.cpus.first().map(|c| c.governor).unwrap_or(CpuGovernor::Unknown)
+        self.cpus
+            .first()
+            .map(|c| c.governor)
+            .unwrap_or(CpuGovernor::Unknown)
     }
 }
 
@@ -233,8 +236,8 @@ impl FrequencyController {
             .unwrap_or_else(|| "unknown".to_string());
         let governor = CpuGovernor::parse(&governor_str);
 
-        let available_str = read_sysfs_string(&cpu_path.join("scaling_available_governors"))
-            .unwrap_or_default();
+        let available_str =
+            read_sysfs_string(&cpu_path.join("scaling_available_governors")).unwrap_or_default();
         let available_governors: Vec<CpuGovernor> = available_str
             .split_whitespace()
             .map(CpuGovernor::parse)
@@ -307,7 +310,11 @@ impl FrequencyController {
         let variance: f64 = readings.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
             / (readings.len() - 1).max(1) as f64;
         let std_dev = variance.sqrt();
-        let cv = if mean > 0.0 { std_dev / mean * 100.0 } else { 0.0 };
+        let cv = if mean > 0.0 {
+            std_dev / mean * 100.0
+        } else {
+            0.0
+        };
 
         let min = readings.iter().copied().fold(f64::INFINITY, f64::min);
         let max = readings.iter().copied().fold(f64::NEG_INFINITY, f64::max);
@@ -455,7 +462,9 @@ fn read_sysfs_value(path: &std::path::Path) -> Option<u64> {
 
 /// Read string from sysfs
 fn read_sysfs_string(path: &std::path::Path) -> Option<String> {
-    std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|s| s.trim().to_string())
 }
 
 #[cfg(test)]

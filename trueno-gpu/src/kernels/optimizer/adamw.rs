@@ -309,7 +309,7 @@ mod tests {
 
         // Verify key operations
         assert!(ptx.contains("sqrt.rn.f32")); // sqrt for v_hat
-        assert!(ptx.contains("div.rn.f32"));  // division for adam update
+        assert!(ptx.contains("div.rn.f32")); // division for adam update
     }
 
     #[test]

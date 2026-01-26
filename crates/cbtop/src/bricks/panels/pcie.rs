@@ -2,10 +2,10 @@
 //!
 //! Displays PCIe bandwidth utilization and transfer statistics.
 
-use std::any::Any;
+use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use presentar_core::{Canvas, Point, Rect, TextStyle, Widget};
 use presentar_terminal::{BrailleGraph, GraphMode, Meter, Sparkline, Theme};
-use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
+use std::any::Any;
 
 /// PCIe generation capabilities
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,9 +19,9 @@ impl PcieGen {
     /// Theoretical max bandwidth per lane in GB/s
     pub fn bandwidth_per_lane(&self) -> f64 {
         match self {
-            Self::Gen3 => 0.985,  // ~1 GB/s
-            Self::Gen4 => 1.969,  // ~2 GB/s
-            Self::Gen5 => 3.938,  // ~4 GB/s
+            Self::Gen3 => 0.985, // ~1 GB/s
+            Self::Gen4 => 1.969, // ~2 GB/s
+            Self::Gen5 => 3.938, // ~4 GB/s
         }
     }
 
@@ -160,9 +160,16 @@ impl PciePanelBrick {
             tx_meter.layout(Rect::new(14.0, 6.0, width - 40.0, 1.0));
             tx_meter.paint(canvas);
             canvas.draw_text(
-                &format!("{} ({:.1}%)", Self::format_bandwidth(device.tx_bandwidth), tx_util),
+                &format!(
+                    "{} ({:.1}%)",
+                    Self::format_bandwidth(device.tx_bandwidth),
+                    tx_util
+                ),
                 Point::new(width - 24.0, 6.0),
-                &TextStyle { color: tx_color, ..Default::default() },
+                &TextStyle {
+                    color: tx_color,
+                    ..Default::default()
+                },
             );
 
             // RX (GPU → Host)
@@ -173,9 +180,16 @@ impl PciePanelBrick {
             rx_meter.layout(Rect::new(14.0, 7.0, width - 40.0, 1.0));
             rx_meter.paint(canvas);
             canvas.draw_text(
-                &format!("{} ({:.1}%)", Self::format_bandwidth(device.rx_bandwidth), rx_util),
+                &format!(
+                    "{} ({:.1}%)",
+                    Self::format_bandwidth(device.rx_bandwidth),
+                    rx_util
+                ),
                 Point::new(width - 24.0, 7.0),
-                &TextStyle { color: rx_color, ..Default::default() },
+                &TextStyle {
+                    color: rx_color,
+                    ..Default::default()
+                },
             );
         } else {
             canvas.draw_text("No PCIe GPU detected", Point::new(2.0, 4.0), &dim_style);
@@ -184,7 +198,11 @@ impl PciePanelBrick {
         // Bandwidth history graphs
         if !self.tx_history.is_empty() {
             canvas.draw_text("TX History:", Point::new(2.0, 9.0), &dim_style);
-            let max_bw = self.gpu_device.as_ref().map(|d| d.max_bandwidth()).unwrap_or(16.0);
+            let max_bw = self
+                .gpu_device
+                .as_ref()
+                .map(|d| d.max_bandwidth())
+                .unwrap_or(16.0);
             let mut tx_graph = BrailleGraph::new(self.tx_history.clone())
                 .with_color(self.theme.cpu_color(50.0))
                 .with_range(0.0, max_bw)
@@ -195,7 +213,11 @@ impl PciePanelBrick {
 
         if !self.rx_history.is_empty() {
             canvas.draw_text("RX History:", Point::new(2.0, 14.0), &dim_style);
-            let max_bw = self.gpu_device.as_ref().map(|d| d.max_bandwidth()).unwrap_or(16.0);
+            let max_bw = self
+                .gpu_device
+                .as_ref()
+                .map(|d| d.max_bandwidth())
+                .unwrap_or(16.0);
             let mut rx_sparkline = Sparkline::new(self.rx_history.clone())
                 .with_color(self.theme.cpu_color(50.0))
                 .with_range(0.0, max_bw);
@@ -284,8 +306,8 @@ mod tests {
             name: "GPU".to_string(),
             gen: PcieGen::Gen4,
             lanes: 16,
-            tx_bandwidth: 15.75,  // Half of max
-            rx_bandwidth: 7.875,  // Quarter of max
+            tx_bandwidth: 15.75, // Half of max
+            rx_bandwidth: 7.875, // Quarter of max
         };
         assert!((device.max_bandwidth() - 31.5).abs() < 0.1);
         assert!((device.tx_utilization() - 50.0).abs() < 1.0);

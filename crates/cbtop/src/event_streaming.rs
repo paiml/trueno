@@ -135,17 +135,20 @@ impl MetricEvent {
 
     /// Format as JSON
     pub fn to_json(&self) -> String {
-        let tags_json: Vec<String> = self.tags
+        let tags_json: Vec<String> = self
+            .tags
             .iter()
             .map(|(k, v)| format!("\"{}\":\"{}\"", k, v))
             .collect();
 
-        let fields_json: Vec<String> = self.fields
+        let fields_json: Vec<String> = self
+            .fields
             .iter()
             .map(|(k, v)| format!("\"{}\":{}", k, v))
             .collect();
 
-        let correlation = self.correlation_id
+        let correlation = self
+            .correlation_id
             .as_ref()
             .map(|id| format!(",\"correlation_id\":\"{}\"", id))
             .unwrap_or_default();
@@ -463,13 +466,8 @@ pub fn compress_data(data: &[u8]) -> Vec<u8> {
 }
 
 /// Create event from performance sample
-pub fn event_from_sample(
-    metric: &str,
-    value: f64,
-    tags: &[(&str, &str)],
-) -> MetricEvent {
-    let mut event = MetricEvent::new(metric)
-        .with_field("value", value);
+pub fn event_from_sample(metric: &str, value: f64, tags: &[(&str, &str)]) -> MetricEvent {
+    let mut event = MetricEvent::new(metric).with_field("value", value);
 
     for (key, val) in tags {
         event = event.with_tag(key, val);
@@ -527,8 +525,7 @@ mod tests {
 
     #[test]
     fn test_correlation_id() {
-        let event = MetricEvent::new("test")
-            .with_correlation_id("trace-123");
+        let event = MetricEvent::new("test").with_correlation_id("trace-123");
 
         assert_eq!(event.correlation_id, Some("trace-123".to_string()));
         assert!(event.to_json().contains("correlation_id"));
@@ -557,8 +554,7 @@ mod tests {
 
     #[test]
     fn test_streamer_send() {
-        let mut streamer = EventStreamer::new(SinkType::JsonLines)
-            .with_batch_size(5);
+        let mut streamer = EventStreamer::new(SinkType::JsonLines).with_batch_size(5);
 
         for i in 0..3 {
             let event = MetricEvent::new("test").with_field("i", i as f64);
@@ -570,8 +566,7 @@ mod tests {
 
     #[test]
     fn test_streamer_flush() {
-        let mut streamer = EventStreamer::new(SinkType::JsonLines)
-            .with_batch_size(2);
+        let mut streamer = EventStreamer::new(SinkType::JsonLines).with_batch_size(2);
 
         streamer.send(MetricEvent::new("test"));
         streamer.send(MetricEvent::new("test")); // Triggers flush

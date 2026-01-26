@@ -17,10 +17,10 @@
 mod fkr_101_debug_tests {
     use std::ffi::c_void;
     use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
+    use trueno_gpu::kernels::lz4::{LZ4_HASH_SIZE, PAGE_SIZE};
     use trueno_gpu::ptx::{
         PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxMemory, PtxModule, PtxReg, PtxType,
     };
-    use trueno_gpu::kernels::lz4::{PAGE_SIZE, LZ4_HASH_SIZE};
 
     fn cuda_available() -> bool {
         CudaContext::new(0).is_ok()
@@ -97,7 +97,10 @@ mod fkr_101_debug_tests {
     /// FKR-101-SMEM: Test debug with shared memory
     #[test]
     fn fkr_101_smem_debug_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -153,7 +156,7 @@ mod fkr_101_debug_tests {
         let config = LaunchConfig {
             grid: (1, 1, 1),
             block: (96, 1, 1), // 3 warps, same as instrumented
-            shared_mem: 0, // Static shared, not dynamic
+            shared_mem: 0,     // Static shared, not dynamic
         };
 
         let mut args: [*mut c_void; 1] = [debug_buf.as_kernel_arg()];
@@ -186,7 +189,10 @@ mod fkr_101_debug_tests {
     /// FKR-101-GLOBAL: Test debug with global memory read
     #[test]
     fn fkr_101_global_debug_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -243,7 +249,9 @@ mod fkr_101_debug_tests {
 
         // Create input buffer with test data
         let mut input_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1024).unwrap();
-        input_buf.copy_from_host(&vec![0x12345678u32; 1024]).unwrap();
+        input_buf
+            .copy_from_host(&vec![0x12345678u32; 1024])
+            .unwrap();
 
         let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
         debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
@@ -256,10 +264,7 @@ mod fkr_101_debug_tests {
             shared_mem: 0,
         };
 
-        let mut args: [*mut c_void; 2] = [
-            input_buf.as_kernel_arg(),
-            debug_buf.as_kernel_arg(),
-        ];
+        let mut args: [*mut c_void; 2] = [input_buf.as_kernel_arg(), debug_buf.as_kernel_arg()];
 
         println!("Launching kernel...");
         unsafe {
@@ -289,7 +294,10 @@ mod fkr_101_debug_tests {
     /// FKR-101-5PARAM: Test debug with 5 parameters (same as instrumented)
     #[test]
     fn fkr_101_5param_debug_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -414,7 +422,10 @@ mod fkr_101_debug_tests {
     /// FKR-101-LOADLOOP: Test debug with data loading loop
     #[test]
     fn fkr_101_loadloop_debug_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -525,7 +536,9 @@ mod fkr_101_debug_tests {
 
         // Allocate buffers
         let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
-        input_buf.copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>()).unwrap();
+        input_buf
+            .copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>())
+            .unwrap();
 
         let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 256).unwrap();
         debug_buf.copy_from_host(&vec![0u32; 256]).unwrap();
@@ -586,7 +599,10 @@ mod fkr_101_debug_tests {
     /// FKR-101-BAREBONES: Absolute minimum test matching failing kernel structure
     #[test]
     fn fkr_101_barebones_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -668,7 +684,8 @@ mod fkr_101_debug_tests {
 
         println!("Launching barebones kernel...");
         unsafe {
-            stream.launch_kernel(&mut module, "barebones", &config, &mut args)
+            stream
+                .launch_kernel(&mut module, "barebones", &config, &mut args)
                 .expect("Kernel launch");
         }
 
@@ -695,7 +712,10 @@ mod fkr_101_debug_tests {
     /// This tests if the crash is in setup or in compression loop
     #[test]
     fn fkr_101_setup_only_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -853,7 +873,9 @@ mod fkr_101_debug_tests {
         }
 
         let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
-        input_buf.copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>()).unwrap();
+        input_buf
+            .copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>())
+            .unwrap();
 
         let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4352).unwrap();
         let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1).unwrap();
@@ -879,7 +901,9 @@ mod fkr_101_debug_tests {
 
         println!("Launching setup-only kernel...");
         unsafe {
-            stream.launch_kernel(&mut module, "setup_only", &config, &mut args).expect("Launch");
+            stream
+                .launch_kernel(&mut module, "setup_only", &config, &mut args)
+                .expect("Launch");
         }
 
         let sync_result = stream.synchronize();
@@ -915,7 +939,10 @@ mod fkr_101_debug_tests {
     #[test]
     #[ignore = "LVB-003/F082: Compression loop triggers CUDA_ERROR_INVALID_ADDRESS_SPACE"]
     fn fkr_101_compress_minimal_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -1046,7 +1073,7 @@ mod fkr_101_debug_tests {
                 ctx.branch_if(too_many, "L_done");
                 let one = ctx.mov_u32_imm(1);
                 let iters_next = ctx.add_u32_reg(iters, one);
-                ctx.membar_cta();  // Before storing value computed from loaded
+                ctx.membar_cta(); // Before storing value computed from loaded
                 ctx.st_shared_u32(iter_counter_off, iters_next);
 
                 // Load state (just in_pos for now)
@@ -1059,7 +1086,7 @@ mod fkr_101_debug_tests {
                 // TEST: Use in_pos (loaded value) in address computation
 
                 // Compute address using in_pos (which is loaded from shared memory)
-                let computed_addr = ctx.add_u32_reg(warp_off, in_pos);  // warp_off + in_pos
+                let computed_addr = ctx.add_u32_reg(warp_off, in_pos); // warp_off + in_pos
 
                 // LVB-003: membar.cta BEFORE store to address computed from loaded value
                 ctx.membar_cta();
@@ -1086,7 +1113,7 @@ mod fkr_101_debug_tests {
 
                 // Just advance position
                 let in_pos_next = ctx.add_u32_reg(in_pos, one);
-                ctx.membar_cta();  // Before storing value computed from loaded
+                ctx.membar_cta(); // Before storing value computed from loaded
                 ctx.st_shared_u32(state_off, in_pos_next);
                 ctx.branch("L_compress_loop");
 
@@ -1122,7 +1149,9 @@ mod fkr_101_debug_tests {
         }
 
         let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
-        input_buf.copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>()).unwrap();
+        input_buf
+            .copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>())
+            .unwrap();
 
         let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4352).unwrap();
         let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1).unwrap();
@@ -1148,7 +1177,9 @@ mod fkr_101_debug_tests {
 
         println!("Launching compress-minimal kernel...");
         unsafe {
-            stream.launch_kernel(&mut module, "compress_minimal", &config, &mut args).expect("Launch");
+            stream
+                .launch_kernel(&mut module, "compress_minimal", &config, &mut args)
+                .expect("Launch");
         }
 
         let sync_result = stream.synchronize();
@@ -1162,7 +1193,10 @@ mod fkr_101_debug_tests {
         if let Err(e) = debug_buf.copy_to_host(&mut output) {
             eprintln!("Copy to host failed: {:?}", e);
             if sync_result.is_err() {
-                panic!("Compress-minimal test crashed during kernel: {:?}", sync_result.unwrap_err());
+                panic!(
+                    "Compress-minimal test crashed during kernel: {:?}",
+                    sync_result.unwrap_err()
+                );
             }
             panic!("Compress-minimal test crashed during copy: {:?}", e);
         }
@@ -1196,7 +1230,10 @@ mod fkr_101_debug_tests {
     /// Tests if inserting membar.cta before/after the problematic store helps.
     #[test]
     fn fkr_101_membar_workaround_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -1298,7 +1335,8 @@ mod fkr_101_debug_tests {
 
         println!("Launching membar workaround kernel...");
         unsafe {
-            stream.launch_kernel(&mut module, "membar_workaround", &config, &mut args)
+            stream
+                .launch_kernel(&mut module, "membar_workaround", &config, &mut args)
                 .expect("Kernel launch");
         }
 
@@ -1327,14 +1365,20 @@ mod fkr_101_debug_tests {
             panic!("Membar workaround crashed: {:?}", e);
         }
 
-        assert_eq!(output[0], 5, "Should have 5 markers (membar workaround succeeded!)");
+        assert_eq!(
+            output[0], 5,
+            "Should have 5 markers (membar workaround succeeded!)"
+        );
         println!("LVB-003: membar.cta WORKS! Test PASSED!");
     }
 
     /// FKR-101-FULLLOAD: Test with full load loop but no compress loop
     #[test]
     fn fkr_101_fullload_test() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -1470,7 +1514,9 @@ mod fkr_101_debug_tests {
         }
 
         let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, 4096).unwrap();
-        input_buf.copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>()).unwrap();
+        input_buf
+            .copy_from_host(&(0..4096u32).map(|i| (i % 256) as u8).collect::<Vec<_>>())
+            .unwrap();
 
         let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 64).unwrap();
         debug_buf.copy_from_host(&vec![0u32; 64]).unwrap();
@@ -1492,7 +1538,9 @@ mod fkr_101_debug_tests {
 
         println!("Launching fullload kernel...");
         unsafe {
-            stream.launch_kernel(&mut module, "fullload", &config, &mut args).expect("Launch");
+            stream
+                .launch_kernel(&mut module, "fullload", &config, &mut args)
+                .expect("Launch");
         }
 
         let sync_result = stream.synchronize();
@@ -1895,7 +1943,10 @@ mod fkr_101_debug_tests {
     #[test]
     #[ignore = "Uses buggy Lz4WarpCompressKernel - F082 confirmed"]
     fn fkr_101_debug_find_crash() {
-        if !cuda_available() { eprintln!("SKIPPED: No CUDA"); return; }
+        if !cuda_available() {
+            eprintln!("SKIPPED: No CUDA");
+            return;
+        }
         let ctx = CudaContext::new(0).expect("CUDA context");
         let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
@@ -1911,7 +1962,8 @@ mod fkr_101_debug_tests {
 
         // Allocate GPU buffers
         let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, input.len()).unwrap();
-        let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize).unwrap();
+        let mut output_buf: GpuBuffer<u8> =
+            GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize).unwrap();
         let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, NUM_PAGES as usize).unwrap();
         let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1024).unwrap();
 
@@ -1976,7 +2028,7 @@ mod fkr_101_debug_tests {
                 0x07000000 => "NO_MATCH",
                 0x08000000 => "EMIT_REMAIN",
                 _ => "UNKNOWN",
-            }
+            },
         };
 
         let count = (debug_output[0] as usize).min(100);
@@ -1988,12 +2040,18 @@ mod fkr_101_debug_tests {
         // Check sync result
         if let Err(e) = sync_result {
             println!("\n!!! SYNC FAILED: {:?}", e);
-            println!("Last marker before crash: 0x{:08X} ({})",
-                     debug_output[count], marker_names(debug_output[count]));
+            println!(
+                "Last marker before crash: 0x{:08X} ({})",
+                debug_output[count],
+                marker_names(debug_output[count])
+            );
 
             // This test is expected to crash - we want to see where
-            panic!("Crash detected after {} debug markers. Last: {}",
-                   count, marker_names(debug_output[count]));
+            panic!(
+                "Crash detected after {} debug markers. Last: {}",
+                count,
+                marker_names(debug_output[count])
+            );
         }
 
         println!("\nKernel completed successfully!");

@@ -99,7 +99,13 @@ impl LearnedThreshold {
     pub fn to_json(&self) -> String {
         format!(
             r#"{{"metric":"{}","mean":{},"std_dev":{},"cv":{},"lower_bound":{},"upper_bound":{},"sample_count":{}}}"#,
-            self.metric, self.mean, self.std_dev, self.cv, self.lower_bound, self.upper_bound, self.sample_count
+            self.metric,
+            self.mean,
+            self.std_dev,
+            self.cv,
+            self.lower_bound,
+            self.upper_bound,
+            self.sample_count
         )
     }
 }
@@ -224,7 +230,8 @@ impl ThresholdLearner {
         if data.len() < 2 {
             return 0.0;
         }
-        let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (data.len() - 1) as f64;
+        let variance =
+            data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (data.len() - 1) as f64;
         variance.sqrt()
     }
 
@@ -273,30 +280,22 @@ impl ThresholdLearner {
             ThresholdDirection::Upper => {
                 (f64::NEG_INFINITY, mean + self.warning_multiplier * std_dev)
             }
-            ThresholdDirection::Lower => {
-                (mean - self.warning_multiplier * std_dev, f64::INFINITY)
-            }
-            ThresholdDirection::Both => {
-                (
-                    mean - self.warning_multiplier * std_dev,
-                    mean + self.warning_multiplier * std_dev,
-                )
-            }
+            ThresholdDirection::Lower => (mean - self.warning_multiplier * std_dev, f64::INFINITY),
+            ThresholdDirection::Both => (
+                mean - self.warning_multiplier * std_dev,
+                mean + self.warning_multiplier * std_dev,
+            ),
         };
 
         let (lower_critical, upper_critical) = match self.direction {
             ThresholdDirection::Upper => {
                 (f64::NEG_INFINITY, mean + self.critical_multiplier * std_dev)
             }
-            ThresholdDirection::Lower => {
-                (mean - self.critical_multiplier * std_dev, f64::INFINITY)
-            }
-            ThresholdDirection::Both => {
-                (
-                    mean - self.critical_multiplier * std_dev,
-                    mean + self.critical_multiplier * std_dev,
-                )
-            }
+            ThresholdDirection::Lower => (mean - self.critical_multiplier * std_dev, f64::INFINITY),
+            ThresholdDirection::Both => (
+                mean - self.critical_multiplier * std_dev,
+                mean + self.critical_multiplier * std_dev,
+            ),
         };
 
         Some(LearnedThreshold {

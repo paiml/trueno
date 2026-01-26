@@ -9,10 +9,10 @@
 //! - Syscall traces
 //! - MicroVM status
 
-use std::any::Any;
-use std::time::{Duration, Instant};
 use crate::brick::{Brick, BrickAssertion, BrickBudget, BrickVerification};
 use crate::ring_buffer::RingBuffer;
+use std::any::Any;
+use std::time::{Duration, Instant};
 
 /// WOS kernel metrics
 #[derive(Debug, Clone)]
@@ -173,7 +173,9 @@ impl WosCollectorBrick {
             ProcessBreakdown {
                 total: last.process_count,
                 runnable: last.runnable_count,
-                sleeping: last.process_count.saturating_sub(last.runnable_count + last.zombie_count),
+                sleeping: last
+                    .process_count
+                    .saturating_sub(last.runnable_count + last.zombie_count),
                 zombie: last.zombie_count,
             }
         } else {
@@ -246,7 +248,10 @@ impl Brick for WosCollectorBrick {
 
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
-            BrickAssertion::ValueInRange { min: 0.0, max: 10000.0 }, // Process count
+            BrickAssertion::ValueInRange {
+                min: 0.0,
+                max: 10000.0,
+            }, // Process count
             BrickAssertion::max_latency_ms(10),
         ]
     }
@@ -303,7 +308,10 @@ mod tests {
         collector.collect();
 
         let breakdown = collector.process_breakdown();
-        assert_eq!(breakdown.total, breakdown.runnable + breakdown.sleeping + breakdown.zombie);
+        assert_eq!(
+            breakdown.total,
+            breakdown.runnable + breakdown.sleeping + breakdown.zombie
+        );
     }
 
     #[test]

@@ -53,10 +53,7 @@ impl TcbGeometry {
     #[must_use]
     pub fn with_alignment(m: u32, n: u32, k: u32, alignment: u32) -> Self {
         assert!(m > 0 && n > 0 && k > 0, "TCB dimensions must be non-zero");
-        assert!(
-            alignment.is_power_of_two(),
-            "Alignment must be power of 2"
-        );
+        assert!(alignment.is_power_of_two(), "Alignment must be power of 2");
         Self { m, n, k, alignment }
     }
 
@@ -167,8 +164,8 @@ impl TcbLevel {
     pub fn typical_cache_bytes(&self) -> usize {
         match self {
             TcbLevel::Macro => 32 * 1024 * 1024, // 32 MB L3
-            TcbLevel::Midi => 256 * 1024,         // 256 KB L2
-            TcbLevel::Micro => 32 * 1024,         // 32 KB L1
+            TcbLevel::Midi => 256 * 1024,        // 256 KB L2
+            TcbLevel::Micro => 32 * 1024,        // 32 KB L1
         }
     }
 }
