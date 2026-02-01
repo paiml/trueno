@@ -1034,22 +1034,28 @@ See specification section 17 for complete details.
 
 ## Stack Documentation Search
 
-Query this component's documentation and the entire Sovereign AI Stack using batuta's RAG Oracle:
+**IMPORTANT: Proactively use the batuta RAG oracle when:**
+- Looking up how other stack components use trueno primitives
+- Finding SIMD patterns for AVX2/AVX-512/NEON operations
+- Understanding GPU compute patterns with wgpu
+- Researching compression algorithms (LZ4, ZSTD)
 
 ```bash
-# Index all stack documentation (run once, persists to ~/.cache/batuta/rag/)
-batuta oracle --rag-index
-
-# Search across the entire stack
+# Search across the entire Sovereign AI Stack
 batuta oracle --rag "your question here"
 
-# Examples
-batuta oracle --rag "SIMD matrix multiplication"
-batuta oracle --rag "how to train a model"
-batuta oracle --rag "tokenization for BERT"
+# Examples for trueno development
+batuta oracle --rag "AVX-512 matrix multiplication"
+batuta oracle --rag "wgpu compute shader patterns"
+batuta oracle --rag "LZ4 SIMD compression"
+batuta oracle --rag "how does aprender use trueno tensors"
+batuta oracle --rag "realizar GPU kernel implementation"
 
-# Check index status
-batuta oracle --rag-stats
+# Reindex if needed (persists to ~/.cache/batuta/rag/)
+batuta oracle --rag-index
 ```
 
-The RAG index includes CLAUDE.md, README.md, and source files from all stack components plus Python ground truth corpora for cross-language pattern matching.
+The RAG index includes 335 documents across:
+- All Sovereign AI Stack repos (aprender, realizar, entrenar, etc.)
+- Python ground truth corpora (HuggingFace, JAX, vLLM patterns)
+- Rust ground truth corpora (TGI inference, MLOps patterns)
