@@ -112,6 +112,7 @@
 - [PMAT Quality Gates](./ecosystem/pmat.md)
 - [cbtop (Compute Block Top)](./ecosystem/cbtop.md)
 - [aprender (ML Integration)](./ecosystem/aprender.md)
+- [trueno-cuda-edge (GPU Edge Testing)](./ecosystem/trueno-cuda-edge.md)
 
 # Specifications
 
