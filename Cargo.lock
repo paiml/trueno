@@ -5476,6 +5476,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "trueno-cuda-edge",
  "trueno-gpu",
  "trueno-graph",
  "wasm-bindgen",
