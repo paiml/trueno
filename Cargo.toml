@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "xtask", "trueno-gpu", "trueno-explain", "crates/cbtop"]
+members = [".", "xtask", "trueno-gpu", "trueno-explain", "crates/cbtop", "trueno-cuda-edge"]
 exclude = []
 
 # Workspace-level lints (PMAT best practices)

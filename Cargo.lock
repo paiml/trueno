@@ -5485,6 +5485,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "trueno-cuda-edge"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "trueno-gpu",
+]
+
+[[package]]
 name = "trueno-db"
 version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
