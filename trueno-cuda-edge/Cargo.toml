@@ -25,3 +25,15 @@ full = ["cuda"]
 
 [lints]
 workspace = true
+
+[[example]]
+name = "null_fuzzer_demo"
+
+[[example]]
+name = "quant_oracle_demo"
+
+[[example]]
+name = "ptx_verifier_demo"
+
+[[example]]
+name = "falsification_report_demo"
