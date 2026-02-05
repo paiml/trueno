@@ -361,7 +361,13 @@ pmat query "backward gradient" --include-project ../entrenar
 
 # Git history search (find code by commit intent via RRF fusion)
 pmat query "fix simd alignment" -G
-pmat query "avx512 kernel" --git-history --churn
+pmat query "avx512 kernel" --git-history
+
+# Enrichment flags (combine freely)
+pmat query "matrix multiply" --churn               # git volatility (commit count, churn score)
+pmat query "compression lz4" --duplicates          # code clone detection (MinHash+LSH)
+pmat query "gpu compute" --entropy                 # pattern diversity (repetitive vs unique)
+pmat query "simd kernel" --churn --duplicates --entropy --faults -G  # full audit
 ```
 
 ## Architecture
