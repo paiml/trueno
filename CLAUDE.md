@@ -358,6 +358,10 @@ pmat query "fused q4k" --include-project ../realizar
 # Search across the stack
 pmat query "tensor operations" --include-project ../aprender
 pmat query "backward gradient" --include-project ../entrenar
+
+# Git history search (find code by commit intent via RRF fusion)
+pmat query "fix simd alignment" -G
+pmat query "avx512 kernel" --git-history --churn
 ```
 
 ## Architecture
