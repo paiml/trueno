@@ -5580,6 +5580,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "trueno-quant"
+version = "0.1.0"
+dependencies = [
+ "half",
+]
+
+[[package]]
 name = "trueno-viz"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

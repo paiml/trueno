@@ -335,6 +335,31 @@ pmat repo-score . --min-score 90
 cargo mutants --timeout 120 --minimum-pass-rate 80
 ```
 
+## Code Search (pmat query)
+
+**NEVER use grep or rg for code discovery.** Use `pmat query` instead -- it returns quality-annotated, ranked results with TDG scores and fault annotations.
+
+```bash
+# Find functions by intent
+pmat query "simd kernel" --limit 10
+
+# Find high-quality code
+pmat query "matrix multiply" --min-grade A --exclude-tests
+
+# Find with fault annotations (unwrap, panic, unsafe, etc.)
+pmat query "compression lz4" --faults
+
+# Filter by complexity
+pmat query "gpu compute" --max-complexity 10
+
+# Cross-project search (e.g., find how realizar uses trueno)
+pmat query "fused q4k" --include-project ../realizar
+
+# Search across the stack
+pmat query "tensor operations" --include-project ../aprender
+pmat query "backward gradient" --include-project ../entrenar
+```
+
 ## Architecture
 
 ### Multi-Backend Design
@@ -471,6 +496,48 @@ fn should_use_gpu(size: usize) -> bool {
     size >= GPU_MIN_SIZE && gpu_available()
 }
 ```
+
+## LAYOUT-002: Row-Major Mandate (Q4K/Q6K Kernels)
+
+**Critical for APR/GGUF integration:** Trueno provides BOTH row-major and column-major Q4K/Q6K kernels. **The Sovereign AI Stack uses ROW-MAJOR exclusively.**
+
+### Kernel Selection Guide
+
+```rust
+// ❌ WRONG - Column-major kernels (DO NOT use for APR/GGUF data)
+use trueno::backends::q4k::matmul_q4k_f32_colmajor;
+use trueno::backends::q6k::matmul_q6k_f32_colmajor;
+
+// ✅ CORRECT - Row-major kernels (ALWAYS use for APR/GGUF data)
+// Note: realizar has its own fused kernels that use trueno internally
+// For direct trueno usage, ensure data is row-major before calling
+```
+
+### Why Two Layouts Exist
+
+| Layout | Use Case | Who Uses It |
+|--------|----------|-------------|
+| **Row-major** | APR format, SafeTensors, PyTorch | aprender, realizar |
+| **Column-major** | Internal BLAS-style ops, transposed matmul | Advanced users only |
+
+### Layout Conversion (Done by aprender)
+
+Trueno does NOT handle layout conversion. Aprender's converter (`src/format/converter/write.rs`) transposes GGUF data during import:
+
+```
+GGUF (column-major) → aprender transpose → APR (row-major) → realizar → trueno kernels
+```
+
+### Garbage Output = Wrong Kernel
+
+If inference produces garbage like `"olumbia+lsi nunca/localENTS"`:
+1. Check if column-major kernel was used with row-major data
+2. Verify APR file was created via `apr import` (not raw GGUF passthrough)
+3. See `aprender/CLAUDE.md` LAYOUT-002 and `realizar/CLAUDE.md` LAYOUT-002
+
+### Fused Q4K Specification
+
+See `book/src/advanced/phase15-fused-q4k.md` for the fused dequant+dot kernel spec targeting 2x Ollama throughput.
 
 ## Testing Requirements
 
