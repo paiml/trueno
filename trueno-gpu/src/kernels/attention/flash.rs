@@ -60,7 +60,10 @@ impl AttentionKernel {
         // Auto-clamp tile sizes to input dimensions
         // Default tiles: 64, but reduce if inputs are smaller
         let tile_q = seq_len.min(64);
-        let tile_kv = seq_len.min(64);
+        // GH-5 FIX: Ensure tile_kv >= head_dim to prevent shared memory overflow
+        // The K dot product loop accesses K[local_col * head_dim + d_idx], which requires
+        // head_dim rows in K tile. Without this, we overflow when tile_kv < head_dim.
+        let tile_kv = seq_len.min(64).max(head_dim);
 
         Self {
             seq_len,
@@ -86,7 +89,9 @@ impl AttentionKernel {
     pub fn tensor_core(seq_len: u32, head_dim: u32) -> Self {
         // For Tensor Cores, use tile sizes that are multiples of 16
         let tile_q = seq_len.clamp(16, 64);
-        let tile_kv = seq_len.clamp(16, 64);
+        // GH-5 FIX: Ensure tile_kv >= head_dim to prevent shared memory overflow
+        // Same issue as new() - K dot product requires head_dim rows in K tile.
+        let tile_kv = seq_len.clamp(16, 64).max(head_dim);
 
         Self {
             seq_len,

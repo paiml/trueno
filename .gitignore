@@ -47,3 +47,10 @@ deep_context.md
 *.profraw
 *.lcov
 .pmat/project.toml
+
+# PMAT
+.pmat/backup/
+.pmat-qa/
+.pmat/context.idx/
+.pmat/workspace.idx/
+.pmat/deps-cache.json
