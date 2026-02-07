@@ -615,6 +615,66 @@ fn test_wgsl_spec_generation() {
     assert!(wgsl.contains("tile_a"));
     assert!(wgsl.contains("tile_b"));
     assert!(wgsl.contains("workgroupBarrier"));
+
+    // Verify bindings
+    assert!(wgsl.contains("@group(0) @binding(0)"));
+    assert!(wgsl.contains("@group(0) @binding(1)"));
+    assert!(wgsl.contains("@group(0) @binding(2)"));
+    assert!(wgsl.contains("@group(0) @binding(3)"));
+
+    // Verify GemmParams struct
+    assert!(wgsl.contains("struct GemmParams"));
+    assert!(wgsl.contains("m: u32"));
+    assert!(wgsl.contains("n: u32"));
+    assert!(wgsl.contains("k: u32"));
+    assert!(wgsl.contains("alpha: f32"));
+    assert!(wgsl.contains("beta: f32"));
+
+    // Verify default workgroup size (8,8,1)
+    assert!(wgsl.contains("@workgroup_size(8, 8, 1)"));
+
+    // Verify tiled K loop
+    assert!(wgsl.contains("num_tiles"));
+    assert!(wgsl.contains("var sum: f32 = 0.0"));
+
+    // Verify output store with alpha/beta
+    assert!(wgsl.contains("params.alpha * sum + params.beta"));
+
+    // Verify default tile dimensions mentioned in header comment
+    assert!(wgsl.contains("Tile: 8x8"));
+    assert!(wgsl.contains("Workgroup: 8x8x1"));
+}
+
+#[test]
+fn test_wgsl_spec_custom_dimensions() {
+    let spec = WgslMicrokernelSpec {
+        workgroup_size: (16, 16, 1),
+        tile_dim: (16, 16),
+        use_shared_memory: true,
+    };
+    let wgsl = spec.generate_wgsl();
+
+    assert!(wgsl.contains("@workgroup_size(16, 16, 1)"));
+    assert!(wgsl.contains("Tile: 16x16"));
+    assert!(wgsl.contains("Workgroup: 16x16x1"));
+
+    // Shared memory sizes should be tile_dim.0 * tile_dim.0 and tile_dim.0 * tile_dim.1
+    assert!(wgsl.contains("array<f32, 256>")); // 16*16 for tile_a
+}
+
+#[test]
+fn test_wgsl_spec_small_workgroup() {
+    let spec = WgslMicrokernelSpec {
+        workgroup_size: (4, 4, 1),
+        tile_dim: (4, 4),
+        use_shared_memory: true,
+    };
+    let wgsl = spec.generate_wgsl();
+
+    assert!(wgsl.contains("@workgroup_size(4, 4, 1)"));
+    assert!(wgsl.contains("Tile: 4x4"));
+    // tile_a_size = 4*4 = 16
+    assert!(wgsl.contains("array<f32, 16>"));
 }
 
 #[test]
