@@ -71,6 +71,18 @@ impl ExecutionGraph {
 
     /// Add an edge between two nodes.
     pub fn add_edge(&mut self, src: ExecutionNodeId, dst: ExecutionNodeId, edge_type: EdgeType) {
+        debug_assert!(
+            (src.0 as usize) < self.nodes.len(),
+            "CB-BUDGET: src node {} does not exist (graph has {} nodes)",
+            src.0,
+            self.nodes.len()
+        );
+        debug_assert!(
+            (dst.0 as usize) < self.nodes.len(),
+            "CB-BUDGET: dst node {} does not exist (graph has {} nodes)",
+            dst.0,
+            self.nodes.len()
+        );
         self.edges.push(ExecutionEdge {
             src,
             dst,
@@ -134,6 +146,8 @@ impl ExecutionGraph {
         block: (u32, u32, u32),
         shared_mem: u32,
     ) -> ExecutionNodeId {
+        debug_assert!(grid.0 > 0 && grid.1 > 0 && grid.2 > 0, "CB-BUDGET: grid dims must be > 0");
+        debug_assert!(block.0 > 0 && block.1 > 0 && block.2 > 0, "CB-BUDGET: block dims must be > 0");
         let kernel = ExecutionNode::Kernel {
             name: name.to_string(),
             ptx_hash,

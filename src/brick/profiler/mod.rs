@@ -245,7 +245,13 @@ impl BrickProfiler {
         let elapsed = timer.start.elapsed();
         let elapsed_ns = elapsed.as_nanos() as u64;
 
-        // O(1) array access
+        // O(1) array access — CB-BUDGET: bounds-check brick_id
+        debug_assert!(
+            (timer.brick_id as usize) < self.brick_stats.len(),
+            "CB-BUDGET: brick_id {} out of bounds (max {})",
+            timer.brick_id as usize,
+            self.brick_stats.len()
+        );
         let stats = &mut self.brick_stats[timer.brick_id as usize];
         stats.add_sample(elapsed_ns, elements);
 
