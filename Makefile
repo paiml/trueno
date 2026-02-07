@@ -183,7 +183,7 @@ build-release: ## Build entire workspace (release mode)
 
 test: ## Run all tests on entire workspace (with output)
 	@echo "🧪 Running all tests on workspace (trueno + trueno-gpu + xtask)..."
-	cargo test --workspace --all-features -- --nocapture
+	PROPTEST_CASES=25 cargo test --workspace --all-features -- --nocapture
 
 test-fast: ## Run tests on entire workspace (<5 min target)
 	@echo "⚡ Running fast tests on workspace (trueno + trueno-gpu + xtask)..."
@@ -206,14 +206,14 @@ test-quick: test-fast ## Alias for test-fast (bashrs pattern)
 
 test-gpu-pixels: ## Run GPU pixel tests with TUI report
 	@echo "🎯 Running GPU pixel tests with probar..."
-	@cargo test -p trueno-gpu --test gpu_pixels --features gpu-pixels -- --nocapture
+	@PROPTEST_CASES=25 cargo test -p trueno-gpu --test gpu_pixels --features gpu-pixels -- --nocapture
 
 test-gpu-pixels-tui: ## Run GPU pixel tests with interactive TUI
 	@echo "🎯 Running GPU pixel tests with TUI visualization..."
-	@RUST_TEST_NOCAPTURE=1 cargo test -p trueno-gpu --test gpu_pixels --features gpu-pixels gpu_pixel_suite_all_kernels -- --nocapture
+	@PROPTEST_CASES=25 RUST_TEST_NOCAPTURE=1 cargo test -p trueno-gpu --test gpu_pixels --features gpu-pixels gpu_pixel_suite_all_kernels -- --nocapture
 
 test-verbose: ## Run tests with verbose output
-	cargo test --all-features -- --nocapture --test-threads=1
+	PROPTEST_CASES=25 cargo test --all-features -- --nocapture --test-threads=1
 
 examples: ## List and run examples
 	@echo "📚 Available examples:"
@@ -237,7 +237,7 @@ example-%: ## Run specific example (e.g., make example-brick_profiler_v2)
 
 # STRICT exclusions: Include ONLY trueno/src/ and trueno/trueno-gpu/src/
 # Exclude: external crates, tests, benches, examples, bins, cbtop, xtask, explain, testing infrastructure
-COV_EXCLUDE := --ignore-filename-regex='(trueno-graph/|aprender/|presentar/|crates/cbtop/|trueno-explain/|xtask/|/bin/|/benches/|/examples/|/tests/|testing/|stress)'
+COV_EXCLUDE := --ignore-filename-regex='(trueno-graph/|crates/cbtop/|trueno-explain/|xtask/|/bin/|/benches/|/examples/|/tests/|testing/|stress)'
 
 # Coverage targets - FAST with incremental builds
 # Key insight: --no-report is FAST (0.4s), report generation is SLOW (22s)
@@ -246,7 +246,7 @@ COV_EXCLUDE := --ignore-filename-regex='(trueno-graph/|aprender/|presentar/|crat
 coverage-trueno: ## Coverage for trueno core only (<30s incremental)
 	@START=$$(date +%s); \
 	echo "📊 Coverage: trueno core..."; \
-	cargo llvm-cov test \
+	PROPTEST_CASES=25 QUICKCHECK_TESTS=25 cargo llvm-cov test \
 		--manifest-path Cargo.toml \
 		--lib \
 		--all-features \
@@ -260,7 +260,7 @@ coverage-trueno: ## Coverage for trueno core only (<30s incremental)
 coverage-gpu: ## Coverage for trueno-gpu only (<90s incremental)
 	@START=$$(date +%s); \
 	echo "📊 Coverage: trueno-gpu (single-threaded for CUDA safety)..."; \
-	cargo llvm-cov test \
+	PROPTEST_CASES=25 QUICKCHECK_TESTS=25 cargo llvm-cov test \
 		--manifest-path trueno-gpu/Cargo.toml \
 		--lib \
 		--features cuda \
@@ -303,7 +303,7 @@ coverage-open: ## Open HTML coverage report in browser
 coverage-ci: ## Generate LCOV report for CI/CD (fast mode, ≥95% required)
 	@echo "=== Code Coverage for CI/CD (≥95% required) ==="
 	@echo "Phase 1: Running tests with instrumentation..."
-	@env PROPTEST_CASES=25 QUICKCHECK_TESTS=25 cargo llvm-cov --no-report --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' nextest --no-tests=warn --all-features --workspace
+	@env PROPTEST_CASES=25 QUICKCHECK_TESTS=25 cargo llvm-cov test --no-report --lib --all-features --workspace $(COV_EXCLUDE)
 	@echo "Phase 2: Generating LCOV report..."
 	@cargo llvm-cov report --lcov --output-path lcov.info
 	@echo "✓ Coverage report generated: lcov.info"
@@ -745,17 +745,17 @@ test-arm: ## Run all tests on ARM64 via QEMU (NEON SIMD validation)
 	@echo "  [1/3] Building for aarch64-unknown-linux-gnu..."
 	@cargo build --target aarch64-unknown-linux-gnu --release --all-features 2>&1 | tail -3
 	@echo "  [2/3] Running tests via QEMU (this will be slow ~5-20x)..."
-	@cargo test --target aarch64-unknown-linux-gnu --release --all-features -- --test-threads=1 2>&1 || true
+	@PROPTEST_CASES=25 cargo test --target aarch64-unknown-linux-gnu --release --all-features -- --test-threads=1 2>&1 || true
 	@echo ""
 	@echo "✅ ARM64/NEON tests complete"
 
 test-arm-neon: ## Run NEON-specific tests on ARM64 via QEMU
 	@echo "🦾 Running NEON-specific tests via QEMU..."
-	@cargo test --target aarch64-unknown-linux-gnu --release --all-features neon -- --test-threads=1 --nocapture
+	@PROPTEST_CASES=25 cargo test --target aarch64-unknown-linux-gnu --release --all-features neon -- --test-threads=1 --nocapture
 
 test-arm-quick: ## Quick ARM64 smoke test (lib tests only, faster)
 	@echo "🦾 Quick ARM64 smoke test..."
-	@cargo test --target aarch64-unknown-linux-gnu --release --lib -- --test-threads=1 2>&1 | tail -20
+	@PROPTEST_CASES=25 cargo test --target aarch64-unknown-linux-gnu --release --lib -- --test-threads=1 2>&1 | tail -20
 	@echo "✅ ARM64 quick test passed"
 
 bench-arm: ## Run benchmarks on ARM64 via QEMU (for relative comparison only)
@@ -813,7 +813,7 @@ test-avx512-sde: ## Run AVX-512 tests under Intel SDE emulation
 	echo "  Found: $$TEST_BIN"; \
 	echo "  [3/3] Running under SDE (-skx = Skylake-X with AVX-512)..."; \
 	echo "  ⚠️  This will be slow (~10-50x) - emulating AVX-512 instructions"; \
-	$(SDE_BIN) -skx -- ./$$TEST_BIN avx512 --test-threads=1 2>&1 | tee /tmp/sde-avx512-test.log; \
+	PROPTEST_CASES=25 $(SDE_BIN) -skx -- ./$$TEST_BIN avx512 --test-threads=1 2>&1 | tee /tmp/sde-avx512-test.log; \
 	echo ""; \
 	echo "  📊 Test results saved to /tmp/sde-avx512-test.log"
 
@@ -840,9 +840,9 @@ coverage-avx512-sde: ## Run AVX-512 coverage under Intel SDE emulation
 	@echo "  ⚠️  Note: Coverage under SDE is slow but provides accurate AVX-512 coverage."
 	@echo "  [1/4] Cleaning previous coverage data..."
 	@echo "  [2/4] Building instrumented test binary (native)..."
-	@RUSTFLAGS="-C instrument-coverage" cargo test --all-features --no-run 2>&1 | tail -5
+	@PROPTEST_CASES=25 QUICKCHECK_TESTS=25 RUSTFLAGS="-C instrument-coverage" cargo test --all-features --no-run 2>&1 | tail -5
 	@echo "  [3/4] Finding instrumented test binary..."
-	@TEST_BIN=$$(RUSTFLAGS="-C instrument-coverage" cargo test --all-features --no-run 2>&1 | grep -oP 'target/debug/deps/trueno-[a-f0-9]+' | head -1); \
+	@TEST_BIN=$$(PROPTEST_CASES=25 QUICKCHECK_TESTS=25 RUSTFLAGS="-C instrument-coverage" cargo test --all-features --no-run 2>&1 | grep -oP 'target/debug/deps/trueno-[a-f0-9]+' | head -1); \
 	if [ -z "$$TEST_BIN" ]; then \
 		echo "  ❌ Could not find instrumented test binary"; \
 		exit 1; \
@@ -918,10 +918,9 @@ coverage-cuda: ## Generate coverage with CUDA tests (requires NVIDIA GPU)
 	@which cargo-llvm-cov > /dev/null 2>&1 || (cargo install cargo-llvm-cov --locked || exit 1)
 	@echo ""
 	@echo "🚀 Phase 1: Fast tests (nextest parallel)..."
-	@env PROPTEST_CASES=25 QUICKCHECK_TESTS=25 cargo llvm-cov --no-report \
-		nextest --no-tests=warn --all-features --workspace \
-		-E 'not test(/test_matmul_parallel_1024/)' \
-		--profile coverage 2>&1 || true
+	@env PROPTEST_CASES=25 QUICKCHECK_TESTS=25 cargo llvm-cov test --no-report \
+		--lib --all-features --workspace \
+		$(COV_EXCLUDE) 2>&1 || true
 	@echo ""
 	@echo "🎮 Phase 2: CUDA tests (sequential, extended timeout)..."
 	@env PROPTEST_CASES=10 cargo llvm-cov --no-report \

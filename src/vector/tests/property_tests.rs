@@ -5235,7 +5235,7 @@ proptest! {
         a in prop::collection::vec(-10.0f32..10.0, 2..50)
     ) {
         let mut sorted = a.clone();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.total_cmp(b));
 
         let va = Vector::from_slice(&sorted);
         let result = va.selu().unwrap();

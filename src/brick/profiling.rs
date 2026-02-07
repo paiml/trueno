@@ -25,6 +25,8 @@ use std::time::Instant;
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub fn cpu_cycles() -> u64 {
+    // SAFETY: __rdtscp reads the timestamp counter and has no safety invariants
+    // beyond requiring x86_64 (guaranteed by cfg).
     unsafe {
         let mut _aux: u32 = 0;
         core::arch::x86_64::__rdtscp(&mut _aux)
@@ -36,6 +38,7 @@ pub fn cpu_cycles() -> u64 {
 #[inline]
 pub fn cpu_cycles() -> u64 {
     let cycles: u64;
+    // SAFETY: CNTVCT_EL0 is always readable from EL0 on aarch64; no invariants.
     unsafe {
         core::arch::asm!("mrs {}, cntvct_el0", out(reg) cycles);
     }

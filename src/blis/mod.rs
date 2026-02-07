@@ -143,16 +143,22 @@ pub fn gemm_reference(
 /// Scalar reference GEMM with Jidoka validation
 ///
 /// Same as `gemm_reference` but validates outputs against known-good computation.
-pub fn gemm_reference_with_jidoka(
-    m: usize,
-    n: usize,
-    k: usize,
-    a: &[f32],
-    b: &[f32],
-    c: &mut [f32],
-    guard: &JidokaGuard,
-) -> Result<(), JidokaError> {
-    // Check inputs for NaN/Inf
+/// Validate a sampled output value for NaN/Inf (Jidoka andon cord).
+#[inline(always)]
+fn jidoka_check_output(val: f32, idx: usize, sample_rate: usize) -> Result<(), JidokaError> {
+    if idx % sample_rate == 0 {
+        if val.is_nan() {
+            return Err(JidokaError::NaNDetected { location: "output" });
+        }
+        if val.is_infinite() {
+            return Err(JidokaError::InfDetected { location: "output" });
+        }
+    }
+    Ok(())
+}
+
+/// Validate sampled input values for NaN/Inf.
+fn jidoka_check_inputs(a: &[f32], b: &[f32], guard: &JidokaGuard) -> Result<(), JidokaError> {
     for (idx, &val) in a.iter().enumerate() {
         if idx % guard.sample_rate == 0 {
             guard.check_input(val, "matrix A")?;
@@ -163,8 +169,20 @@ pub fn gemm_reference_with_jidoka(
             guard.check_input(val, "matrix B")?;
         }
     }
+    Ok(())
+}
 
-    // Compute with validation
+pub fn gemm_reference_with_jidoka(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+    guard: &JidokaGuard,
+) -> Result<(), JidokaError> {
+    jidoka_check_inputs(a, b, guard)?;
+
     for i in 0..m {
         for j in 0..n {
             let mut sum = 0.0f32;
@@ -172,17 +190,7 @@ pub fn gemm_reference_with_jidoka(
                 sum += a[i * k + p] * b[p * n + j];
             }
             let output = c[i * n + j] + sum;
-
-            // Jidoka: check output
-            if (i * n + j) % guard.sample_rate == 0 {
-                if output.is_nan() {
-                    return Err(JidokaError::NaNDetected { location: "output" });
-                }
-                if output.is_infinite() {
-                    return Err(JidokaError::InfDetected { location: "output" });
-                }
-            }
-
+            jidoka_check_output(output, i * n + j, guard.sample_rate)?;
             c[i * n + j] = output;
         }
     }
@@ -313,6 +321,102 @@ pub fn packed_b_size(kc: usize, nc: usize) -> usize {
 // Phase 4: Cache-Blocked GEMM
 // ============================================================================
 
+/// Load a tile of C into the micro workspace for accumulation.
+#[inline(always)]
+fn load_c_tile(c: &[f32], c_micro: &mut [f32], row: usize, col: usize, mr: usize, nr: usize, n: usize) {
+    c_micro.fill(0.0);
+    for jj in 0..nr {
+        for ii in 0..mr {
+            c_micro[jj * MR + ii] = c[(row + ii) * n + (col + jj)];
+        }
+    }
+}
+
+/// Store a micro tile back into C.
+#[inline(always)]
+fn store_c_tile(c: &mut [f32], c_micro: &[f32], row: usize, col: usize, mr: usize, nr: usize, n: usize) {
+    for jj in 0..nr {
+        for ii in 0..mr {
+            c[(row + ii) * n + (col + jj)] = c_micro[jj * MR + ii];
+        }
+    }
+}
+
+/// Dispatch to the best available microkernel (AVX2 ASM or scalar fallback).
+#[inline(always)]
+fn dispatch_microkernel(kc: usize, a_panel: &[f32], b_panel: &[f32], c_micro: &mut [f32], mr_block: usize, nr_block: usize) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2")
+            && is_x86_feature_detected!("fma")
+            && mr_block == MR
+            && nr_block == NR
+        {
+            // SAFETY: AVX2+FMA verified by is_x86_feature_detected!() above.
+            unsafe {
+                microkernel_8x6_true_asm(
+                    kc,
+                    a_panel.as_ptr(),
+                    b_panel.as_ptr(),
+                    c_micro.as_mut_ptr(),
+                    MR,
+                );
+            }
+            return;
+        }
+    }
+    microkernel_scalar(kc, a_panel, b_panel, c_micro, MR);
+}
+
+/// Execute microkernel tile iterations over one MC x NC x KC macro-block.
+#[allow(clippy::too_many_arguments)]
+fn compute_macroblock(
+    c: &mut [f32],
+    packed_a: &[f32],
+    packed_b: &[f32],
+    c_micro: &mut [f32],
+    ic: usize,
+    jc: usize,
+    mc_block: usize,
+    nc_block: usize,
+    kc_block: usize,
+    n: usize,
+    profiler: &mut Option<&mut BlisProfiler>,
+) {
+    let midi_start = Instant::now();
+
+    for jr in (0..nc_block).step_by(NR) {
+        let nr_block = NR.min(nc_block - jr);
+        for ir in (0..mc_block).step_by(MR) {
+            let mr_block = MR.min(mc_block - ir);
+            let micro_start = Instant::now();
+
+            let a_panel = &packed_a[(ir / MR) * MR * kc_block..];
+            let b_panel = &packed_b[(jr / NR) * NR * kc_block..];
+
+            load_c_tile(c, c_micro, ic + ir, jc + jr, mr_block, nr_block, n);
+            dispatch_microkernel(kc_block, a_panel, b_panel, c_micro, mr_block, nr_block);
+            store_c_tile(c, c_micro, ic + ir, jc + jr, mr_block, nr_block, n);
+
+            if let Some(ref mut prof) = profiler.as_deref_mut() {
+                prof.record(
+                    BlisProfileLevel::Micro,
+                    micro_start.elapsed().as_nanos() as u64,
+                    (2 * mr_block * nr_block * kc_block) as u64,
+                );
+            }
+        }
+    }
+
+    if let Some(ref mut prof) = profiler.as_deref_mut() {
+        prof.record(
+            BlisProfileLevel::Midi,
+            midi_start.elapsed().as_nanos() as u64,
+            (2 * mc_block * nc_block * kc_block) as u64,
+        );
+    }
+}
+
 /// BLIS-style blocked GEMM
 ///
 /// Implements the 5-loop BLIS algorithm (Van Zee & Van de Geijn, 2015):
@@ -321,6 +425,28 @@ pub fn packed_b_size(kc: usize, nc: usize) -> usize {
 /// Loop 3 (ic): M dimension, L1 blocking
 /// Loop 2 (jr): Microkernel columns
 /// Loop 1 (ir): Microkernel rows
+/// Validate GEMM dimension inputs (Poka-yoke).
+fn validate_gemm_dims(m: usize, n: usize, k: usize, a: &[f32], b: &[f32], c: &[f32]) -> Result<(), TruenoError> {
+    if a.len() != m * k {
+        return Err(TruenoError::InvalidInput(format!("A size mismatch: expected {}, got {}", m * k, a.len())));
+    }
+    if b.len() != k * n {
+        return Err(TruenoError::InvalidInput(format!("B size mismatch: expected {}, got {}", k * n, b.len())));
+    }
+    if c.len() != m * n {
+        return Err(TruenoError::InvalidInput(format!("C size mismatch: expected {}, got {}", m * n, c.len())));
+    }
+    Ok(())
+}
+
+/// Record a profiler event if profiler is active.
+#[inline(always)]
+fn record_prof(profiler: &mut Option<&mut BlisProfiler>, level: BlisProfileLevel, start: Instant, flops: u64) {
+    if let Some(ref mut prof) = profiler.as_deref_mut() {
+        prof.record(level, start.elapsed().as_nanos() as u64, flops);
+    }
+}
+
 pub fn gemm_blis(
     m: usize,
     n: usize,
@@ -330,190 +456,53 @@ pub fn gemm_blis(
     c: &mut [f32],
     mut profiler: Option<&mut BlisProfiler>,
 ) -> Result<(), TruenoError> {
-    // Dimension validation (Poka-yoke)
-    if a.len() != m * k {
-        return Err(TruenoError::InvalidInput(format!(
-            "A size mismatch: expected {}, got {}",
-            m * k,
-            a.len()
-        )));
-    }
-    if b.len() != k * n {
-        return Err(TruenoError::InvalidInput(format!(
-            "B size mismatch: expected {}, got {}",
-            k * n,
-            b.len()
-        )));
-    }
-    if c.len() != m * n {
-        return Err(TruenoError::InvalidInput(format!(
-            "C size mismatch: expected {}, got {}",
-            m * n,
-            c.len()
-        )));
-    }
+    validate_gemm_dims(m, n, k, a, b, c)?;
 
-    // Handle edge cases
     if m == 0 || n == 0 || k == 0 {
         return Ok(());
     }
-
-    // Small matrix: use reference implementation
     if m * n * k < 4096 {
         return gemm_reference(m, n, k, a, b, c);
     }
 
     let start = Instant::now();
 
-    // Allocate packing buffers
     let mc = MC.min(m);
     let nc = NC.min(n);
     let kc = KC.min(k);
 
     let mut packed_a = vec![0.0f32; packed_a_size(mc, kc)];
     let mut packed_b = vec![0.0f32; packed_b_size(kc, nc)];
-
-    // Workspace for microkernel output (column-major)
     let mut c_micro = vec![0.0f32; MR * NR];
 
-    // Loop 5: jc (N dimension, L3 blocking)
     for jc in (0..n).step_by(NC) {
         let nc_block = NC.min(n - jc);
 
-        // Loop 4: pc (K dimension, L2 blocking)
         for pc in (0..k).step_by(KC) {
             let kc_block = KC.min(k - pc);
 
-            // Pack B panel: B[pc:pc+kc, jc:jc+nc] -> packed_b
             let pack_start = Instant::now();
             pack_b_block(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
-            if let Some(ref mut prof) = profiler.as_deref_mut() {
-                prof.record(
-                    BlisProfileLevel::Pack,
-                    pack_start.elapsed().as_nanos() as u64,
-                    0,
-                );
-            }
+            record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
 
-            // Loop 3: ic (M dimension, L1 blocking)
             for ic in (0..m).step_by(MC) {
                 let mc_block = MC.min(m - ic);
 
-                // Pack A panel: A[ic:ic+mc, pc:pc+kc] -> packed_a
                 let pack_start = Instant::now();
                 pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
-                if let Some(ref mut prof) = profiler.as_deref_mut() {
-                    prof.record(
-                        BlisProfileLevel::Pack,
-                        pack_start.elapsed().as_nanos() as u64,
-                        0,
-                    );
-                }
+                record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
 
-                // Midi profiling
-                let midi_start = Instant::now();
-
-                // Loop 2: jr (microkernel columns)
-                for jr in (0..nc_block).step_by(NR) {
-                    let nr_block = NR.min(nc_block - jr);
-
-                    // Loop 1: ir (microkernel rows)
-                    for ir in (0..mc_block).step_by(MR) {
-                        let mr_block = MR.min(mc_block - ir);
-
-                        // Compute microkernel
-                        let micro_start = Instant::now();
-
-                        // Get packed panel pointers
-                        let a_panel = &packed_a[(ir / MR) * MR * kc_block..];
-                        let b_panel = &packed_b[(jr / NR) * NR * kc_block..];
-
-                        // Load existing C values into micro workspace for accumulation
-                        // GEMM computes C += A*B, so we always load C first
-                        c_micro.fill(0.0); // Zero padding area
-                        for jj in 0..nr_block {
-                            for ii in 0..mr_block {
-                                c_micro[jj * MR + ii] = c[(ic + ir + ii) * n + (jc + jr + jj)];
-                            }
-                        }
-
-                        // Call microkernel (use Phase 2c true ASM for 70%+ FMA utilization)
-                        #[cfg(target_arch = "x86_64")]
-                        {
-                            if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-                                if mr_block == MR && nr_block == NR {
-                                    unsafe {
-                                        // Use true inline ASM for 70%+ FMA utilization
-                                        microkernel_8x6_true_asm(
-                                            kc_block,
-                                            a_panel.as_ptr(),
-                                            b_panel.as_ptr(),
-                                            c_micro.as_mut_ptr(),
-                                            MR,
-                                        );
-                                    }
-                                } else {
-                                    microkernel_scalar(
-                                        kc_block,
-                                        a_panel,
-                                        b_panel,
-                                        &mut c_micro,
-                                        MR,
-                                    );
-                                }
-                            } else {
-                                microkernel_scalar(kc_block, a_panel, b_panel, &mut c_micro, MR);
-                            }
-                        }
-
-                        #[cfg(target_arch = "aarch64")]
-                        {
-                            // Use scalar for now; NEON kernel has different dimensions
-                            microkernel_scalar(kc_block, a_panel, b_panel, &mut c_micro, MR);
-                        }
-
-                        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-                        {
-                            microkernel_scalar(kc_block, a_panel, b_panel, &mut c_micro, MR);
-                        }
-
-                        // Store results back to C
-                        for jj in 0..nr_block {
-                            for ii in 0..mr_block {
-                                c[(ic + ir + ii) * n + (jc + jr + jj)] = c_micro[jj * MR + ii];
-                            }
-                        }
-
-                        if let Some(ref mut prof) = profiler.as_deref_mut() {
-                            let flops = 2 * mr_block * nr_block * kc_block;
-                            prof.record(
-                                BlisProfileLevel::Micro,
-                                micro_start.elapsed().as_nanos() as u64,
-                                flops as u64,
-                            );
-                        }
-                    }
-                }
-
-                if let Some(ref mut prof) = profiler.as_deref_mut() {
-                    let flops = 2 * mc_block * nc_block * kc_block;
-                    prof.record(
-                        BlisProfileLevel::Midi,
-                        midi_start.elapsed().as_nanos() as u64,
-                        flops as u64,
-                    );
-                }
+                compute_macroblock(
+                    c, &packed_a, &packed_b, &mut c_micro,
+                    ic, jc, mc_block, nc_block, kc_block, n,
+                    &mut profiler,
+                );
             }
         }
     }
 
     if let Some(prof) = profiler {
-        let flops = 2 * m * n * k;
-        prof.record(
-            BlisProfileLevel::Macro,
-            start.elapsed().as_nanos() as u64,
-            flops as u64,
-        );
+        prof.record(BlisProfileLevel::Macro, start.elapsed().as_nanos() as u64, (2 * m * n * k) as u64);
     }
 
     Ok(())
@@ -763,69 +752,52 @@ pub fn gemm_profiled(
 /// # Returns
 ///
 /// `Ok(())` on success, `Err` if dimensions mismatch
+/// Scalar transpose of a sub-region of a row-major matrix.
+#[inline(always)]
+fn transpose_region(a: &[f32], b: &mut [f32], rows: std::ops::Range<usize>, cols: std::ops::Range<usize>, src_cols: usize, dst_rows: usize) {
+    for r in rows {
+        for c in cols.clone() {
+            b[c * dst_rows + r] = a[r * src_cols + c];
+        }
+    }
+}
+
 pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(), TruenoError> {
     let expected = rows * cols;
     if a.len() != expected || b.len() != expected {
         return Err(TruenoError::InvalidInput(format!(
             "transpose size mismatch: a[{}], b[{}], expected {}",
-            a.len(),
-            b.len(),
-            expected
+            a.len(), b.len(), expected
         )));
     }
 
-    // For small matrices, use simple scalar transpose
     if expected < 64 {
-        for r in 0..rows {
-            for c in 0..cols {
-                b[c * rows + r] = a[r * cols + c];
-            }
-        }
+        transpose_region(a, b, 0..rows, 0..cols, cols, rows);
         return Ok(());
     }
 
-    // Cache-efficient blocked transpose for larger matrices
-    // 8x8 blocks to maximize cache line utilization
     const BLOCK: usize = 8;
-
-    // Process full blocks
     let row_blocks = rows / BLOCK;
     let col_blocks = cols / BLOCK;
 
     for rb in 0..row_blocks {
         for cb in 0..col_blocks {
-            let row_start = rb * BLOCK;
-            let col_start = cb * BLOCK;
-
-            // Transpose 8x8 block with manual unrolling
-            for i in 0..BLOCK {
-                for j in 0..BLOCK {
-                    let src = (row_start + i) * cols + (col_start + j);
-                    let dst = (col_start + j) * rows + (row_start + i);
-                    b[dst] = a[src];
-                }
-            }
+            let rs = rb * BLOCK;
+            let cs = cb * BLOCK;
+            transpose_region(a, b, rs..rs + BLOCK, cs..cs + BLOCK, cols, rows);
         }
     }
 
-    // Handle remaining columns (right edge)
-    let col_remainder_start = col_blocks * BLOCK;
-    if col_remainder_start < cols {
-        for r in 0..(row_blocks * BLOCK) {
-            for c in col_remainder_start..cols {
-                b[c * rows + r] = a[r * cols + c];
-            }
-        }
+    // Right edge remainder
+    let col_rem = col_blocks * BLOCK;
+    if col_rem < cols {
+        transpose_region(a, b, 0..row_blocks * BLOCK, col_rem..cols, cols, rows);
     }
 
-    // Handle remaining rows (bottom edge)
-    let row_remainder_start = row_blocks * BLOCK;
-    if row_remainder_start < rows {
-        for r in row_remainder_start..rows {
-            for c in 0..cols {
-                b[c * rows + r] = a[r * cols + c];
-            }
-        }
+    // Bottom edge remainder
+    let row_rem = row_blocks * BLOCK;
+    if row_rem < rows {
+        transpose_region(a, b, row_rem..rows, 0..cols, cols, rows);
     }
 
     Ok(())

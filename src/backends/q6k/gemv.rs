@@ -6,6 +6,42 @@
 use super::{f16_to_f32, SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
 
 /// Fused Q6_K matrix-vector multiply (scalar reference)
+/// Extract a single Q6K quantized value from packed ql/qh arrays.
+#[inline(always)]
+fn extract_q6k_scalar(ql: &[u8], qh: &[u8], idx: usize) -> i8 {
+    let ql_byte = ql[idx / 2];
+    let low4 = if idx % 2 == 0 { ql_byte & 0x0F } else { ql_byte >> 4 };
+    let qh_byte = qh[idx / 4];
+    let high2 = (qh_byte >> ((idx % 4) * 2)) & 0x03;
+    (low4 | (high2 << 4)) as i8 - 32
+}
+
+/// Scalar dot product for one Q6K super-block row.
+#[inline(always)]
+fn process_q6k_superblock_scalar(sb_data: &[u8], input: &[f32], input_offset: usize, in_dim: usize) -> f32 {
+    let ql = &sb_data[0..128];
+    let qh = &sb_data[128..192];
+    let scales = &sb_data[192..208];
+    let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
+    let mut sum = 0.0f32;
+
+    for group in 0..16 {
+        let scale = (scales[group] as i8) as f32;
+        let group_offset = group * 16;
+
+        for j in 0..16 {
+            let idx = group_offset + j;
+            let input_idx = input_offset + idx;
+            if input_idx >= in_dim {
+                continue;
+            }
+            let q6 = extract_q6k_scalar(ql, qh, idx);
+            sum += d * scale * q6 as f32 * input[input_idx];
+        }
+    }
+    sum
+}
+
 pub fn matmul_q6k_f32_scalar(
     q6k_data: &[u8],
     input: &[f32],
@@ -29,54 +65,90 @@ pub fn matmul_q6k_f32_scalar(
                 break;
             }
             let sb_data = &q6k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-
-            // Parse Q6K block: ql[128], qh[64], scales[16], d[2]
-            let ql = &sb_data[0..128];
-            let qh = &sb_data[128..192];
-            let scales = &sb_data[192..208];
-            let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
-
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
-
-            // Process 16 groups of 16 values each (256 total)
-            for group in 0..16 {
-                let scale = (scales[group] as i8) as f32;
-                let group_offset = group * 16;
-
-                for j in 0..16 {
-                    let idx = group_offset + j;
-                    let input_idx = input_offset + idx;
-                    if input_idx >= in_dim {
-                        continue;
-                    }
-
-                    // Extract 6-bit value: 4 low bits from ql, 2 high bits from qh
-                    let ql_byte = ql[idx / 2];
-                    let low4 = if idx % 2 == 0 {
-                        ql_byte & 0x0F
-                    } else {
-                        ql_byte >> 4
-                    };
-
-                    // qh is packed: 4 values per byte (2 bits each)
-                    let qh_byte = qh[idx / 4];
-                    let qh_shift = (idx % 4) * 2;
-                    let high2 = (qh_byte >> qh_shift) & 0x03;
-
-                    // Combine to 6-bit value (0-63) then center to signed (-32 to 31)
-                    let q6 = (low4 | (high2 << 4)) as i8 - 32;
-
-                    // Dequantize: d * scale * q6
-                    let dequant = d * scale * q6 as f32;
-                    sum += dequant * input[input_idx];
-                }
-            }
+            sum += process_q6k_superblock_scalar(sb_data, input, input_offset, in_dim);
         }
 
         output[out_idx] = sum;
     }
 
     output
+}
+
+/// Extract 8 Q6K quantized values from packed ql/qh arrays.
+#[inline(always)]
+fn extract_q6k_values(ql: &[u8], qh: &[u8], idx_base: usize) -> [i32; 8] {
+    let mut q6_vals = [0i32; 8];
+    for i in 0..8 {
+        let idx = idx_base + i;
+        let ql_byte = ql[idx / 2];
+        let low4 = if idx % 2 == 0 {
+            ql_byte & 0x0F
+        } else {
+            ql_byte >> 4
+        };
+        let qh_byte = qh[idx / 4];
+        let qh_shift = (idx % 4) * 2;
+        let high2 = (qh_byte >> qh_shift) & 0x03;
+        q6_vals[i] = ((low4 | (high2 << 4)) as i32) - 32;
+    }
+    q6_vals
+}
+
+/// AVX2 horizontal sum of 8 f32 lanes to a single f32.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn hsum_q6k_avx2(acc: std::arch::x86_64::__m256) -> f32 {
+    use std::arch::x86_64::*;
+    let hi128 = _mm256_extractf128_ps(acc, 1);
+    let lo128 = _mm256_castps256_ps128(acc);
+    let sum128 = _mm_add_ps(lo128, hi128);
+    let hi64 = _mm_movehl_ps(sum128, sum128);
+    let sum64 = _mm_add_ps(sum128, hi64);
+    let hi32 = _mm_shuffle_ps(sum64, sum64, 1);
+    let sum32 = _mm_add_ss(sum64, hi32);
+    _mm_cvtss_f32(sum32)
+}
+
+/// Process one Q6K super-block with AVX2, accumulating into `acc`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+unsafe fn process_q6k_superblock_avx2(
+    sb_data: &[u8],
+    input: &[f32],
+    input_offset: usize,
+    in_dim: usize,
+    acc: &mut std::arch::x86_64::__m256,
+) {
+    use std::arch::x86_64::*;
+
+    let ql = &sb_data[0..128];
+    let qh = &sb_data[128..192];
+    let scales = &sb_data[192..208];
+    let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
+    let d_vec = _mm256_set1_ps(d);
+
+    for group in 0..16 {
+        let scale = (scales[group] as i8) as f32;
+        let ds_vec = _mm256_mul_ps(d_vec, _mm256_set1_ps(scale));
+        let group_offset = group * 16;
+        let input_group = input_offset + group_offset;
+
+        for half in 0..2 {
+            let half_offset = half * 8;
+            let input_base = input_group + half_offset;
+            if input_base + 8 > in_dim {
+                continue;
+            }
+
+            let q6_vals = extract_q6k_values(ql, qh, group_offset + half_offset);
+            let q6_i32 = _mm256_loadu_si256(q6_vals.as_ptr() as *const __m256i);
+            let q6_f32 = _mm256_cvtepi32_ps(q6_i32);
+            let x = _mm256_loadu_ps(input.as_ptr().add(input_base));
+            let dequant = _mm256_mul_ps(ds_vec, q6_f32);
+            *acc = _mm256_fmadd_ps(dequant, x, *acc);
+        }
+    }
 }
 
 /// Fused Q6_K matrix-vector multiply with AVX2 SIMD
@@ -91,7 +163,6 @@ unsafe fn matmul_q6k_f32_avx2(
     out_dim: usize,
     in_dim: usize,
 ) -> Vec<f32> {
-    #[cfg(target_arch = "x86_64")]
     use std::arch::x86_64::*;
 
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
@@ -109,75 +180,11 @@ unsafe fn matmul_q6k_f32_avx2(
                 break;
             }
             let sb_data = &q6k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-
-            // Parse Q6K block
-            let ql = &sb_data[0..128];
-            let qh = &sb_data[128..192];
-            let scales = &sb_data[192..208];
-            let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
-
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
-            let d_vec = _mm256_set1_ps(d);
-
-            // Process each group of 16 values (scale is constant per group)
-            for group in 0..16 {
-                let scale = (scales[group] as i8) as f32;
-                let scale_vec = _mm256_set1_ps(scale);
-                let ds_vec = _mm256_mul_ps(d_vec, scale_vec);
-                let group_offset = group * 16;
-                let input_group = input_offset + group_offset;
-
-                // Process 8 values at a time (2 iterations per group of 16)
-                for half in 0..2 {
-                    let half_offset = half * 8;
-                    let idx_base = group_offset + half_offset;
-                    let input_base = input_group + half_offset;
-
-                    if input_base + 8 > in_dim {
-                        continue;
-                    }
-
-                    // Extract 8 quantized values
-                    // Q6 value = (ql_low4 | (qh_2bit << 4)) - 32
-                    let mut q6_vals = [0i32; 8];
-                    for i in 0..8 {
-                        let idx = idx_base + i;
-                        let ql_byte = ql[idx / 2];
-                        let low4 = if idx % 2 == 0 {
-                            ql_byte & 0x0F
-                        } else {
-                            ql_byte >> 4
-                        };
-                        let qh_byte = qh[idx / 4];
-                        let qh_shift = (idx % 4) * 2;
-                        let high2 = (qh_byte >> qh_shift) & 0x03;
-                        q6_vals[i] = ((low4 | (high2 << 4)) as i32) - 32;
-                    }
-
-                    // Load into SIMD
-                    let q6_i32 = _mm256_loadu_si256(q6_vals.as_ptr() as *const __m256i);
-                    let q6_f32 = _mm256_cvtepi32_ps(q6_i32);
-
-                    // Load input
-                    let x = _mm256_loadu_ps(input.as_ptr().add(input_base));
-
-                    // Compute: acc += (d * scale * q6) * x
-                    let dequant = _mm256_mul_ps(ds_vec, q6_f32);
-                    acc = _mm256_fmadd_ps(dequant, x, acc);
-                }
-            }
+            process_q6k_superblock_avx2(sb_data, input, input_offset, in_dim, &mut acc);
         }
 
-        // Horizontal sum
-        let hi128 = _mm256_extractf128_ps(acc, 1);
-        let lo128 = _mm256_castps256_ps128(acc);
-        let sum128 = _mm_add_ps(lo128, hi128);
-        let hi64 = _mm_movehl_ps(sum128, sum128);
-        let sum64 = _mm_add_ps(sum128, hi64);
-        let hi32 = _mm_shuffle_ps(sum64, sum64, 1);
-        let sum32 = _mm_add_ss(sum64, hi32);
-
-        output[out_idx] = _mm_cvtss_f32(sum32);
+        output[out_idx] = hsum_q6k_avx2(acc);
     }
 
     output
@@ -241,7 +248,8 @@ fn matmul_q6k_f32_parallel(
 
             s.spawn(move || {
                 if has_avx2 {
-                    // Call AVX2 kernel for this chunk
+                    // SAFETY: AVX2+FMA availability verified via is_x86_feature_detected!()
+                    // before thread::scope entry; has_avx2 captures that result.
                     unsafe {
                         compute_chunk_avx2(
                             q6k_ref,
@@ -313,66 +321,11 @@ unsafe fn compute_chunk_avx2(
                 break;
             }
             let sb_data = &q6k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-
-            let ql = &sb_data[0..128];
-            let qh = &sb_data[128..192];
-            let scales = &sb_data[192..208];
-            let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
-
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
-            let d_vec = _mm256_set1_ps(d);
-
-            for group in 0..16 {
-                let scale = (scales[group] as i8) as f32;
-                let scale_vec = _mm256_set1_ps(scale);
-                let ds_vec = _mm256_mul_ps(d_vec, scale_vec);
-                let group_offset = group * 16;
-                let input_group = input_offset + group_offset;
-
-                for half in 0..2 {
-                    let half_offset = half * 8;
-                    let idx_base = group_offset + half_offset;
-                    let input_base = input_group + half_offset;
-
-                    if input_base + 8 > in_dim {
-                        continue;
-                    }
-
-                    // Extract 8 quantized values
-                    let mut q6_vals = [0i32; 8];
-                    for i in 0..8 {
-                        let idx = idx_base + i;
-                        let ql_byte = ql[idx / 2];
-                        let low4 = if idx % 2 == 0 {
-                            ql_byte & 0x0F
-                        } else {
-                            ql_byte >> 4
-                        };
-                        let qh_byte = qh[idx / 4];
-                        let qh_shift = (idx % 4) * 2;
-                        let high2 = (qh_byte >> qh_shift) & 0x03;
-                        q6_vals[i] = ((low4 | (high2 << 4)) as i32) - 32;
-                    }
-
-                    let q6_i32 = _mm256_loadu_si256(q6_vals.as_ptr() as *const __m256i);
-                    let q6_f32 = _mm256_cvtepi32_ps(q6_i32);
-                    let x = _mm256_loadu_ps(input.as_ptr().add(input_base));
-                    let dequant = _mm256_mul_ps(ds_vec, q6_f32);
-                    acc = _mm256_fmadd_ps(dequant, x, acc);
-                }
-            }
+            process_q6k_superblock_avx2(sb_data, input, input_offset, in_dim, &mut acc);
         }
 
-        // Horizontal sum
-        let hi128 = _mm256_extractf128_ps(acc, 1);
-        let lo128 = _mm256_castps256_ps128(acc);
-        let sum128 = _mm_add_ps(lo128, hi128);
-        let hi64 = _mm_movehl_ps(sum128, sum128);
-        let sum64 = _mm_add_ps(sum128, hi64);
-        let hi32 = _mm_shuffle_ps(sum64, sum64, 1);
-        let sum32 = _mm_add_ss(sum64, hi32);
-
-        *out_val = _mm_cvtss_f32(sum32);
+        *out_val = hsum_q6k_avx2(acc);
     }
 }
 
@@ -402,41 +355,8 @@ pub(crate) fn compute_chunk_scalar(
                 break;
             }
             let sb_data = &q6k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-
-            let ql = &sb_data[0..128];
-            let qh = &sb_data[128..192];
-            let scales = &sb_data[192..208];
-            let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
-
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
-
-            for group in 0..16 {
-                let scale = (scales[group] as i8) as f32;
-                let group_offset = group * 16;
-
-                for j in 0..16 {
-                    let idx = group_offset + j;
-                    let input_idx = input_offset + idx;
-                    if input_idx >= in_dim {
-                        continue;
-                    }
-
-                    let ql_byte = ql[idx / 2];
-                    let low4 = if idx % 2 == 0 {
-                        ql_byte & 0x0F
-                    } else {
-                        ql_byte >> 4
-                    };
-
-                    let qh_byte = qh[idx / 4];
-                    let qh_shift = (idx % 4) * 2;
-                    let high2 = (qh_byte >> qh_shift) & 0x03;
-
-                    let q6 = (low4 | (high2 << 4)) as i8 - 32;
-                    let dequant = d * scale * q6 as f32;
-                    sum += dequant * input[input_idx];
-                }
-            }
+            sum += process_q6k_superblock_scalar(sb_data, input, input_offset, in_dim);
         }
 
         *out_val = sum;

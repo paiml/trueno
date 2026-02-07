@@ -232,6 +232,7 @@ impl SoftmaxOp {
         #[cfg(target_arch = "x86_64")]
         {
             if Self::is_simd_backend(backend) && is_x86_feature_detected!("avx2") {
+                // SAFETY: AVX2 availability confirmed by is_x86_feature_detected!() on preceding line.
                 return unsafe { Self::avx2_max(input) };
             }
         }
@@ -249,6 +250,7 @@ impl SoftmaxOp {
         #[cfg(target_arch = "x86_64")]
         {
             if Self::is_simd_backend(backend) && is_x86_feature_detected!("avx2") {
+                // SAFETY: AVX2 availability confirmed by is_x86_feature_detected!() on preceding line.
                 unsafe { Self::avx2_exp(input, output) };
                 return;
             }
@@ -266,6 +268,7 @@ impl SoftmaxOp {
         #[cfg(target_arch = "x86_64")]
         {
             if Self::is_simd_backend(backend) && is_x86_feature_detected!("avx2") {
+                // SAFETY: AVX2 availability confirmed by is_x86_feature_detected!() on preceding line.
                 return unsafe { Self::avx2_sum(input) };
             }
         }
@@ -280,6 +283,7 @@ impl SoftmaxOp {
         #[cfg(target_arch = "x86_64")]
         {
             if Self::is_simd_backend(backend) && is_x86_feature_detected!("avx2") {
+                // SAFETY: AVX2 availability confirmed by is_x86_feature_detected!() on preceding line.
                 unsafe { Self::avx2_scale(input, scalar, output) };
                 return;
             }
