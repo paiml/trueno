@@ -42,12 +42,18 @@ impl GpuDevice {
             .await
             .map_err(|e| format!("Failed to find GPU adapter: {}", e))?;
 
-        // Request device and queue
+        // Request device and queue with adapter's actual max buffer size
+        // Default wgpu limits cap buffers at 256MB, which is too small for
+        // 7B+ model weight matrices (e.g., FFN [18944, 3584] × f32 = 271MB)
+        let mut limits = wgpu::Limits::default();
+        limits.max_buffer_size = adapter.limits().max_buffer_size;
+        limits.max_storage_buffer_binding_size = adapter.limits().max_storage_buffer_binding_size;
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Trueno GPU Device"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
+                required_limits: limits,
                 memory_hints: wgpu::MemoryHints::Performance,
                 experimental_features: Default::default(),
                 trace: Default::default(),
