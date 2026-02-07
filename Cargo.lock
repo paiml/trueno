@@ -827,7 +827,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "toml",
- "trueno 0.14.4",
+ "trueno 0.14.5",
  "trueno-gpu",
 ]
 
@@ -5448,7 +5448,7 @@ dependencies = [
 
 [[package]]
 name = "trueno"
-version = "0.14.4"
+version = "0.14.5"
 dependencies = [
  "anyhow",
  "aprender 0.25.0",
