@@ -85,7 +85,7 @@ impl<T> ResourcePool<T> {
 
         // Get or create resource
         let resource = {
-            let mut pool = self.resources.lock().unwrap();
+            let mut pool = self.resources.lock().unwrap_or_else(|e| e.into_inner());
             pool.pop().unwrap_or_else(|| (self.factory)())
         };
 
@@ -97,7 +97,7 @@ impl<T> ResourcePool<T> {
 
     fn release(&self, resource: T) {
         {
-            let mut pool = self.resources.lock().unwrap();
+            let mut pool = self.resources.lock().unwrap_or_else(|e| e.into_inner());
             if pool.len() < self.max_resources {
                 pool.push(resource);
             }

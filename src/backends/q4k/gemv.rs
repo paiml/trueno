@@ -5,6 +5,45 @@
 
 use super::{parse_q4k_header, SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
 
+/// Scalar dot product for one Q4K super-block row.
+#[inline(always)]
+fn process_q4k_superblock_scalar(
+    sb_data: &[u8],
+    input: &[f32],
+    input_offset: usize,
+    in_dim: usize,
+) -> f32 {
+    let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
+    let qs = &sb_data[16..144];
+    let mut sum = 0.0f32;
+
+    for chunk in 0..4 {
+        let chunk_start = chunk * 64;
+        let q_start = chunk * 32;
+
+        let d1 = d * f32::from(scales[chunk * 2]);
+        let dm1 = dmin * f32::from(mins[chunk * 2]);
+        let d2 = d * f32::from(scales[chunk * 2 + 1]);
+        let dm2 = dmin * f32::from(mins[chunk * 2 + 1]);
+
+        for i in 0..32 {
+            let input_idx = input_offset + chunk_start + i;
+            if input_idx < in_dim {
+                let q_val = (qs[q_start + i] & 0x0F) as f32;
+                sum += (d1 * q_val - dm1) * input[input_idx];
+            }
+        }
+        for i in 0..32 {
+            let input_idx = input_offset + chunk_start + 32 + i;
+            if input_idx < in_dim {
+                let q_val = (qs[q_start + i] >> 4) as f32;
+                sum += (d2 * q_val - dm2) * input[input_idx];
+            }
+        }
+    }
+    sum
+}
+
 pub fn matmul_q4k_f32_scalar(
     q4k_data: &[u8],
     input: &[f32],
@@ -37,54 +76,53 @@ pub fn matmul_q4k_f32_scalar(
         for sb_idx in 0..num_blocks_per_row {
             let sb_start = row_start + sb_idx * SUPER_BLOCK_BYTES;
             let sb_data = &q4k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-
-            // Parse header
-            let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
-            let qs = &sb_data[16..144];
-
-            // Input offset for this super-block
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
-
-            // Process 4 chunks of 64 values each
-            for chunk in 0..4 {
-                let chunk_start = chunk * 64;
-                let q_start = chunk * 32;
-
-                // Scale indices for this chunk
-                let scale_idx_low = chunk * 2;
-                let scale_idx_high = chunk * 2 + 1;
-
-                let d1 = d * f32::from(scales[scale_idx_low]);
-                let dm1 = dmin * f32::from(mins[scale_idx_low]);
-                let d2 = d * f32::from(scales[scale_idx_high]);
-                let dm2 = dmin * f32::from(mins[scale_idx_high]);
-
-                // First 32 values: low nibbles
-                for i in 0..32 {
-                    let q_val = (qs[q_start + i] & 0x0F) as f32;
-                    let dequant = d1 * q_val - dm1;
-                    let input_idx = input_offset + chunk_start + i;
-                    if input_idx < in_dim {
-                        sum += dequant * input[input_idx];
-                    }
-                }
-
-                // Next 32 values: high nibbles
-                for i in 0..32 {
-                    let q_val = (qs[q_start + i] >> 4) as f32;
-                    let dequant = d2 * q_val - dm2;
-                    let input_idx = input_offset + chunk_start + 32 + i;
-                    if input_idx < in_dim {
-                        sum += dequant * input[input_idx];
-                    }
-                }
-            }
+            sum += process_q4k_superblock_scalar(sb_data, input, input_offset, in_dim);
         }
 
         output[out_idx] = sum;
     }
 
     output
+}
+
+/// Process one Q4K nibble half (low or high) with 4-way unrolled accumulation.
+#[inline(always)]
+fn process_q4k_nibble_half(
+    qs: &[u8],
+    q_start: usize,
+    input: &[f32],
+    input_base: usize,
+    in_dim: usize,
+    d_val: f32,
+    dm_val: f32,
+    shift: u8,
+    acc: &mut [f32; 4],
+) {
+    let mut i = 0;
+    while i + 3 < 32 {
+        let idx = input_base + i;
+        if idx + 3 < in_dim {
+            let q0 = ((qs[q_start + i] >> shift) & 0x0F) as f32;
+            let q1 = ((qs[q_start + i + 1] >> shift) & 0x0F) as f32;
+            let q2 = ((qs[q_start + i + 2] >> shift) & 0x0F) as f32;
+            let q3 = ((qs[q_start + i + 3] >> shift) & 0x0F) as f32;
+
+            acc[0] = (d_val * q0 - dm_val).mul_add(input[idx], acc[0]);
+            acc[1] = (d_val * q1 - dm_val).mul_add(input[idx + 1], acc[1]);
+            acc[2] = (d_val * q2 - dm_val).mul_add(input[idx + 2], acc[2]);
+            acc[3] = (d_val * q3 - dm_val).mul_add(input[idx + 3], acc[3]);
+        }
+        i += 4;
+    }
+    while i < 32 {
+        let idx = input_base + i;
+        if idx < in_dim {
+            let q_val = ((qs[q_start + i] >> shift) & 0x0F) as f32;
+            acc[0] = (d_val * q_val - dm_val).mul_add(input[idx], acc[0]);
+        }
+        i += 1;
+    }
 }
 
 /// Fused Q4_K matrix-vector multiply (optimized with 4-way unrolling)
@@ -104,95 +142,34 @@ pub fn matmul_q4k_f32(q4k_data: &[u8], input: &[f32], out_dim: usize, in_dim: us
 
     for out_idx in 0..out_dim {
         let row_start = out_idx * row_bytes;
-
-        // 4 independent accumulators for better ILP
-        let mut acc0 = 0.0f32;
-        let mut acc1 = 0.0f32;
-        let mut acc2 = 0.0f32;
-        let mut acc3 = 0.0f32;
+        let mut acc = [0.0f32; 4];
 
         for sb_idx in 0..num_blocks_per_row {
             let sb_start = row_start + sb_idx * SUPER_BLOCK_BYTES;
             let sb_data = &q4k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
 
-            // Parse header
             let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
             let qs = &sb_data[16..144];
-
-            // Input offset for this super-block
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
 
-            // Process 4 chunks, accumulating to different registers
             for chunk in 0..4 {
                 let chunk_start = chunk * 64;
                 let q_start = chunk * 32;
 
-                let scale_idx_low = chunk * 2;
-                let scale_idx_high = chunk * 2 + 1;
+                let d1 = d * f32::from(scales[chunk * 2]);
+                let dm1 = dmin * f32::from(mins[chunk * 2]);
+                let d2 = d * f32::from(scales[chunk * 2 + 1]);
+                let dm2 = dmin * f32::from(mins[chunk * 2 + 1]);
 
-                let d1 = d * f32::from(scales[scale_idx_low]);
-                let dm1 = dmin * f32::from(mins[scale_idx_low]);
-                let d2 = d * f32::from(scales[scale_idx_high]);
-                let dm2 = dmin * f32::from(mins[scale_idx_high]);
+                let base_low = input_offset + chunk_start;
+                process_q4k_nibble_half(qs, q_start, input, base_low, in_dim, d1, dm1, 0, &mut acc);
 
-                // Process low nibbles (first 32) with 4-way unroll
-                let mut i = 0;
-                while i + 3 < 32 {
-                    let input_base = input_offset + chunk_start + i;
-                    if input_base + 3 < in_dim {
-                        let q0 = (qs[q_start + i] & 0x0F) as f32;
-                        let q1 = (qs[q_start + i + 1] & 0x0F) as f32;
-                        let q2 = (qs[q_start + i + 2] & 0x0F) as f32;
-                        let q3 = (qs[q_start + i + 3] & 0x0F) as f32;
-
-                        acc0 = (d1 * q0 - dm1).mul_add(input[input_base], acc0);
-                        acc1 = (d1 * q1 - dm1).mul_add(input[input_base + 1], acc1);
-                        acc2 = (d1 * q2 - dm1).mul_add(input[input_base + 2], acc2);
-                        acc3 = (d1 * q3 - dm1).mul_add(input[input_base + 3], acc3);
-                    }
-                    i += 4;
-                }
-                // Handle remainder
-                while i < 32 {
-                    let input_idx = input_offset + chunk_start + i;
-                    if input_idx < in_dim {
-                        let q_val = (qs[q_start + i] & 0x0F) as f32;
-                        acc0 = (d1 * q_val - dm1).mul_add(input[input_idx], acc0);
-                    }
-                    i += 1;
-                }
-
-                // Process high nibbles (next 32) with 4-way unroll
-                let mut i = 0;
-                while i + 3 < 32 {
-                    let input_base = input_offset + chunk_start + 32 + i;
-                    if input_base + 3 < in_dim {
-                        let q0 = (qs[q_start + i] >> 4) as f32;
-                        let q1 = (qs[q_start + i + 1] >> 4) as f32;
-                        let q2 = (qs[q_start + i + 2] >> 4) as f32;
-                        let q3 = (qs[q_start + i + 3] >> 4) as f32;
-
-                        acc0 = (d2 * q0 - dm2).mul_add(input[input_base], acc0);
-                        acc1 = (d2 * q1 - dm2).mul_add(input[input_base + 1], acc1);
-                        acc2 = (d2 * q2 - dm2).mul_add(input[input_base + 2], acc2);
-                        acc3 = (d2 * q3 - dm2).mul_add(input[input_base + 3], acc3);
-                    }
-                    i += 4;
-                }
-                // Handle remainder
-                while i < 32 {
-                    let input_idx = input_offset + chunk_start + 32 + i;
-                    if input_idx < in_dim {
-                        let q_val = (qs[q_start + i] >> 4) as f32;
-                        acc0 = (d2 * q_val - dm2).mul_add(input[input_idx], acc0);
-                    }
-                    i += 1;
-                }
+                let base_high = input_offset + chunk_start + 32;
+                process_q4k_nibble_half(qs, q_start, input, base_high, in_dim, d2, dm2, 4, &mut acc);
             }
         }
 
-        // Combine all accumulators
-        output[out_idx] = (acc0 + acc1) + (acc2 + acc3);
+        output[out_idx] = (acc[0] + acc[1]) + (acc[2] + acc[3]);
     }
 
     output
@@ -433,6 +410,8 @@ fn matmul_q4k_f32_parallel(
 
             s.spawn(move || {
                 if has_avx2 {
+                    // SAFETY: AVX2+FMA availability verified via is_x86_feature_detected!()
+                    // before thread::scope entry; has_avx2 captures that result.
                     unsafe {
                         compute_chunk_q4k_avx2(
                             q4k_ref,
@@ -475,6 +454,85 @@ fn matmul_q4k_f32_parallel(
     matmul_q4k_f32(q4k_data, input, out_dim, in_dim)
 }
 
+/// Process one Q4K super-block row with AVX2 and accumulate into `acc`.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+unsafe fn process_q4k_superblock_avx2(
+    sb_data: &[u8],
+    input: &[f32],
+    input_offset: usize,
+    in_dim: usize,
+    low_mask: std::arch::x86_64::__m256i,
+    acc: &mut std::arch::x86_64::__m256,
+) {
+    use std::arch::x86_64::*;
+
+    let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
+    let qs = &sb_data[16..144];
+
+    for chunk_i in 0..4 {
+        let chunk_start = chunk_i * 64;
+        let q_start = chunk_i * 32;
+
+        let d1 = d * f32::from(scales[chunk_i * 2]);
+        let dm1 = dmin * f32::from(mins[chunk_i * 2]);
+        let d2 = d * f32::from(scales[chunk_i * 2 + 1]);
+        let dm2 = dmin * f32::from(mins[chunk_i * 2 + 1]);
+
+        let d1_vec = _mm256_set1_ps(d1);
+        let dm1_vec = _mm256_set1_ps(dm1);
+        let d2_vec = _mm256_set1_ps(d2);
+        let dm2_vec = _mm256_set1_ps(dm2);
+
+        // Process low nibbles (32 values) in groups of 8
+        let mut i = 0;
+        while i + 8 <= 32 {
+            let input_base = input_offset + chunk_start + i;
+            if input_base + 8 <= in_dim {
+                let q_bytes = _mm_loadl_epi64(qs.as_ptr().add(q_start + i) as *const __m128i);
+                let q_i32 = _mm256_cvtepu8_epi32(q_bytes);
+                let q_low = _mm256_and_si256(q_i32, low_mask);
+                let q_f32 = _mm256_cvtepi32_ps(q_low);
+                let x = _mm256_loadu_ps(input.as_ptr().add(input_base));
+                let dequant = _mm256_fmsub_ps(d1_vec, q_f32, dm1_vec);
+                *acc = _mm256_fmadd_ps(dequant, x, *acc);
+            }
+            i += 8;
+        }
+
+        // Process high nibbles (32 values) in groups of 8
+        let mut i = 0;
+        while i + 8 <= 32 {
+            let input_base = input_offset + chunk_start + 32 + i;
+            if input_base + 8 <= in_dim {
+                let q_bytes = _mm_loadl_epi64(qs.as_ptr().add(q_start + i) as *const __m128i);
+                let q_i32 = _mm256_cvtepu8_epi32(q_bytes);
+                let q_high = _mm256_srli_epi32(q_i32, 4);
+                let q_f32 = _mm256_cvtepi32_ps(q_high);
+                let x = _mm256_loadu_ps(input.as_ptr().add(input_base));
+                let dequant = _mm256_fmsub_ps(d2_vec, q_f32, dm2_vec);
+                *acc = _mm256_fmadd_ps(dequant, x, *acc);
+            }
+            i += 8;
+        }
+    }
+}
+
+/// AVX2 horizontal sum of 8 f32 lanes to a single f32.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn hsum_avx2(acc: std::arch::x86_64::__m256) -> f32 {
+    use std::arch::x86_64::*;
+    let hi128 = _mm256_extractf128_ps(acc, 1);
+    let lo128 = _mm256_castps256_ps128(acc);
+    let sum128 = _mm_add_ps(lo128, hi128);
+    let hi64 = _mm_movehl_ps(sum128, sum128);
+    let sum64 = _mm_add_ps(sum128, hi64);
+    let hi32 = _mm_shuffle_ps(sum64, sum64, 1);
+    let sum32 = _mm_add_ss(sum64, hi32);
+    _mm_cvtss_f32(sum32)
+}
+
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
 unsafe fn compute_chunk_q4k_avx2(
@@ -506,76 +564,11 @@ unsafe fn compute_chunk_q4k_avx2(
                 break;
             }
             let sb_data = &q4k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-
-            let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
-            let qs = &sb_data[16..144];
-
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
-
-            // Process 4 chunks of 64 values each
-            for chunk_i in 0..4 {
-                let chunk_start = chunk_i * 64;
-                let q_start = chunk_i * 32;
-
-                let scale_idx_low = chunk_i * 2;
-                let scale_idx_high = chunk_i * 2 + 1;
-
-                let d1 = d * f32::from(scales[scale_idx_low]);
-                let dm1 = dmin * f32::from(mins[scale_idx_low]);
-                let d2 = d * f32::from(scales[scale_idx_high]);
-                let dm2 = dmin * f32::from(mins[scale_idx_high]);
-
-                let d1_vec = _mm256_set1_ps(d1);
-                let dm1_vec = _mm256_set1_ps(dm1);
-                let d2_vec = _mm256_set1_ps(d2);
-                let dm2_vec = _mm256_set1_ps(dm2);
-
-                // Process low nibbles (32 values) in groups of 8
-                let mut i = 0;
-                while i + 8 <= 32 {
-                    let input_base = input_offset + chunk_start + i;
-                    if input_base + 8 <= in_dim {
-                        let q_bytes =
-                            _mm_loadl_epi64(qs.as_ptr().add(q_start + i) as *const __m128i);
-                        let q_i32 = _mm256_cvtepu8_epi32(q_bytes);
-                        let q_low = _mm256_and_si256(q_i32, low_mask);
-                        let q_f32 = _mm256_cvtepi32_ps(q_low);
-                        let x = _mm256_loadu_ps(input.as_ptr().add(input_base));
-                        let dequant = _mm256_fmsub_ps(d1_vec, q_f32, dm1_vec);
-                        acc = _mm256_fmadd_ps(dequant, x, acc);
-                    }
-                    i += 8;
-                }
-
-                // Process high nibbles (32 values) in groups of 8
-                let mut i = 0;
-                while i + 8 <= 32 {
-                    let input_base = input_offset + chunk_start + 32 + i;
-                    if input_base + 8 <= in_dim {
-                        let q_bytes =
-                            _mm_loadl_epi64(qs.as_ptr().add(q_start + i) as *const __m128i);
-                        let q_i32 = _mm256_cvtepu8_epi32(q_bytes);
-                        let q_high = _mm256_srli_epi32(q_i32, 4);
-                        let q_f32 = _mm256_cvtepi32_ps(q_high);
-                        let x = _mm256_loadu_ps(input.as_ptr().add(input_base));
-                        let dequant = _mm256_fmsub_ps(d2_vec, q_f32, dm2_vec);
-                        acc = _mm256_fmadd_ps(dequant, x, acc);
-                    }
-                    i += 8;
-                }
-            }
+            process_q4k_superblock_avx2(sb_data, input, input_offset, in_dim, low_mask, &mut acc);
         }
 
-        // Horizontal sum
-        let hi128 = _mm256_extractf128_ps(acc, 1);
-        let lo128 = _mm256_castps256_ps128(acc);
-        let sum128 = _mm_add_ps(lo128, hi128);
-        let hi64 = _mm_movehl_ps(sum128, sum128);
-        let sum64 = _mm_add_ps(sum128, hi64);
-        let hi32 = _mm_shuffle_ps(sum64, sum64, 1);
-        let sum32 = _mm_add_ss(sum64, hi32);
-
-        *out_val = _mm_cvtss_f32(sum32);
+        *out_val = hsum_avx2(acc);
     }
 }
 
@@ -605,42 +598,8 @@ pub(crate) fn compute_chunk_q4k_scalar(
                 break;
             }
             let sb_data = &q4k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-
-            let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
-            let qs = &sb_data[16..144];
-
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
-
-            for chunk_i in 0..4 {
-                let chunk_start = chunk_i * 64;
-                let q_start = chunk_i * 32;
-
-                let scale_idx_low = chunk_i * 2;
-                let scale_idx_high = chunk_i * 2 + 1;
-
-                let d1 = d * f32::from(scales[scale_idx_low]);
-                let dm1 = dmin * f32::from(mins[scale_idx_low]);
-                let d2 = d * f32::from(scales[scale_idx_high]);
-                let dm2 = dmin * f32::from(mins[scale_idx_high]);
-
-                // Low nibbles
-                for i in 0..32 {
-                    let input_idx = input_offset + chunk_start + i;
-                    if input_idx < in_dim {
-                        let q_val = (qs[q_start + i] & 0x0F) as f32;
-                        sum += (d1 * q_val - dm1) * input[input_idx];
-                    }
-                }
-
-                // High nibbles
-                for i in 0..32 {
-                    let input_idx = input_offset + chunk_start + 32 + i;
-                    if input_idx < in_dim {
-                        let q_val = (qs[q_start + i] >> 4) as f32;
-                        sum += (d2 * q_val - dm2) * input[input_idx];
-                    }
-                }
-            }
+            sum += process_q4k_superblock_scalar(sb_data, input, input_offset, in_dim);
         }
 
         *out_val = sum;

@@ -109,11 +109,15 @@ impl AlignedBuffer {
 
     /// Get the buffer as a slice.
     pub fn as_slice(&self) -> &[u8] {
+        // SAFETY: ptr is non-null and points to `self.len` bytes allocated in `new()`;
+        // the allocation lives for the lifetime of `self`.
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 
     /// Get the buffer as a mutable slice.
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
+        // SAFETY: ptr is non-null and points to `self.len` bytes allocated in `new()`;
+        // `&mut self` guarantees exclusive access.
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 
@@ -141,6 +145,8 @@ impl AlignedBuffer {
 #[cfg(not(target_arch = "wasm32"))]
 impl Drop for AlignedBuffer {
     fn drop(&mut self) {
+        // SAFETY: self.ptr was allocated with std::alloc::alloc_zeroed using self.layout
+        // in AlignedBuffer::new(); dealloc uses the matching layout.
         unsafe {
             std::alloc::dealloc(self.ptr, self.layout);
         }
@@ -330,6 +336,8 @@ pub fn prefetch_slice<T>(slice: &[T], locality: PrefetchLocality) {
     let len = std::mem::size_of_val(slice);
 
     for offset in (0..len).step_by(CACHE_LINE_SIZE) {
+        // SAFETY: ptr.add(offset) is bounded by the slice length; prefetch is
+        // a hint and does not dereference memory.
         unsafe {
             prefetch_ptr(ptr.add(offset), locality);
         }
