@@ -45,7 +45,7 @@ tier2: ## Tier 2: Full test suite for commits (ON-COMMIT)
 	@echo "  [4/7] Property tests (full cases)..."
 	@PROPTEST_CASES=25 cargo test property_ --all-features --quiet || true
 	@echo "  [5/7] Coverage analysis..."
-	@cargo llvm-cov --all-features --workspace --ignore-filename-regex '(benches/|demos/|examples/|tests/|pkg/|test_output/|docs/|xtask/)' --quiet >/dev/null 2>&1 || true
+	@cargo llvm-cov --all-features --workspace $(COV_EXCLUDE) --quiet >/dev/null 2>&1 || true
 	@COVERAGE=$$(cargo llvm-cov report --summary-only 2>/dev/null | grep "TOTAL" | awk '{print $$NF}' | sed 's/%//' || echo "0"); \
 	if [ -n "$$COVERAGE" ]; then \
 		echo "    Coverage: $$COVERAGE%"; \
@@ -321,15 +321,15 @@ coverage-check: ## Enforce 90% coverage threshold for workspace (BLOCKS on failu
 	@echo "🔒 Enforcing 90% coverage threshold for workspace..."
 	@echo ""
 	@# Check trueno core
-	@TRUENO_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "trueno-gpu|xtask|simular" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
+	@TRUENO_COV=$$(cargo llvm-cov report --summary-only $(COV_EXCLUDE) --ignore-filename-regex "trueno-gpu" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
 	if [ -z "$$TRUENO_COV" ]; then echo "❌ No coverage data. Run 'make coverage' first."; exit 1; fi; \
 	echo "trueno:     $${TRUENO_COV}%"; \
 	TRUENO_OK=$$(echo "$$TRUENO_COV >= 90" | bc -l 2>/dev/null || echo 0)
 	@# Check trueno-gpu
-	@GPU_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "trueno/src|xtask|simular" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
+	@GPU_COV=$$(cargo llvm-cov report --summary-only $(COV_EXCLUDE) --ignore-filename-regex "trueno/src" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
 	echo "trueno-gpu: $${GPU_COV:-N/A}%"
 	@# Check workspace total
-	@TOTAL_COV=$$(cargo llvm-cov report --summary-only --ignore-filename-regex "xtask|simular" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
+	@TOTAL_COV=$$(cargo llvm-cov report --summary-only $(COV_EXCLUDE) 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
 	echo "workspace:  $${TOTAL_COV}%"; \
 	echo ""; \
 	RESULT=$$(echo "$$TRUENO_COV >= 90" | bc -l 2>/dev/null || echo 0); \
