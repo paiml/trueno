@@ -78,6 +78,7 @@ impl TileStats {
 
     /// Add a sample to statistics.
     pub fn add_sample(&mut self, elapsed_ns: u64, elements: u64, flops: u64) {
+        debug_assert!(elements > 0, "CB-BUDGET: tile sample elements must be > 0");
         self.count += 1;
         self.total_ns += elapsed_ns;
         self.min_ns = self.min_ns.min(elapsed_ns);

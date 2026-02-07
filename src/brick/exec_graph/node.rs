@@ -485,6 +485,8 @@ impl PtxRegistry {
     /// - `ptx`: PTX source code
     /// - `path`: Optional file path for source correlation
     pub fn register(&mut self, name: &str, ptx: &str, path: Option<&std::path::Path>) {
+        debug_assert!(!name.is_empty(), "CB-BUDGET: kernel name must not be empty");
+        debug_assert!(!ptx.is_empty(), "CB-BUDGET: PTX source must not be empty");
         let hash = Self::hash_ptx(ptx);
         self.kernels.insert(
             hash,
@@ -634,6 +636,7 @@ impl BrickStats {
 
     /// Add a sample to statistics.
     pub fn add_sample(&mut self, elapsed_ns: u64, elements: u64) {
+        debug_assert!(elements > 0, "CB-BUDGET: elements must be > 0");
         self.count += 1;
         self.total_ns += elapsed_ns;
         self.min_ns = self.min_ns.min(elapsed_ns);
