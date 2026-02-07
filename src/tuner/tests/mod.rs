@@ -11,6 +11,8 @@
 
 mod classifiers;
 mod coverage;
+mod data_collector_coverage;
+mod evolution;
 mod feature_engineering;
 mod generalization;
 mod integration;
