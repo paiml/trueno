@@ -341,7 +341,7 @@ impl Kernel for TiledQ4KGemvKernel {
 ///
 /// # Grid Configuration
 ///
-/// - Block: 256 threads (8 warps)
+/// - Block: 128 threads (4 warps, outputs_per_block=4)
 /// - Grid: ceil(N / outputs_per_block) blocks
 /// - Shared memory: 32KB fixed (8K floats)
 #[derive(Debug, Clone)]
@@ -496,7 +496,10 @@ impl Kernel for ChunkedTiledQ4KGemvKernel {
                 let smem_offset = ctx.mul_u32_reg(loop_load_idx, four);
                 ctx.st_shared_f32(smem_offset, x_val);
 
-                ctx.add_u32_inplace(load_idx, 256);
+                // PMAT-232 FIX: stride must match actual block size (32 * outputs_per_block)
+                // Root cause: hardcoded 256 assumed 8 warps but launch config uses 4 warps (128 threads)
+                // Effect: half the input vector was NEVER loaded to shared memory → garbage FFN down
+                ctx.add_u32_inplace(load_idx, 32 * outputs_per_block);
                 ctx.branch("load_loop");
 
                 ctx.label("load_loop_end");
