@@ -774,9 +774,14 @@ impl Kernel for BatchedQ6KGemvKernel {
             .build(move |ctx| {
                 // Block = 32 threads (one warp), grid = N blocks
                 // Each block computes one output row: y[:, block_id]
+                //
+                // Uses the same Q6K dequantization as Q6KGemvKernel (single-vector):
+                // - 8 strided offsets per thread: [0, 32, 64, 96, 128, 160, 192, 224]
+                // - Proper Q6K super-block layout with half-blocks, groups, and
+                //   correct ql/qh bit combination: ql_nibble | (qh_2bits << 4) - 32
 
                 let block_id = ctx.special_reg(PtxReg::CtaIdX);
-                let lane_id = ctx.special_reg(PtxReg::TidX);
+                let thread_id = ctx.special_reg(PtxReg::TidX);
 
                 // Bounds check
                 let n_dim = ctx.load_param_u32("n_dim");
@@ -820,107 +825,119 @@ impl Kernel for BatchedQ6KGemvKernel {
                 let d_f16 = ctx.ld_global_f16(d_addr);
                 let d = ctx.cvt_f32_f16(d_f16);
 
-                // Each thread processes 8 values (256/32)
-                // Thread lane processes values: lane*8, lane*8+1, ..., lane*8+7
-                let eight = ctx.mov_u32_imm(8);
-                let thread_base_val = ctx.mul_u32_reg(lane_id, eight);
-
                 // Initialize per-thread partial sums for all M batch elements
                 let mut thread_partials = Vec::with_capacity(m as usize);
                 for _ in 0..m {
                     thread_partials.push(ctx.mov_f32_imm(0.0));
                 }
 
-                // Process 8 values per thread
-                let val_offset = ctx.mov_u32_imm(0);
+                // Process 8 values per thread at strided offsets (matching Q6KGemvKernel)
+                // Each of 32 threads handles values at: thread_id + [0, 32, 64, 96, 128, 160, 192, 224]
+                for offset in [0u32, 32, 64, 96, 128, 160, 192, 224] {
+                    let offset_reg = ctx.mov_u32_imm(offset);
+                    let val_idx = ctx.add_u32_reg(thread_id, offset_reg);
 
-                ctx.label("val_loop");
-                let val_done = ctx.setp_ge_u32(val_offset, eight);
-                ctx.branch_if(val_done, "val_loop_end");
+                    // Q6K super-block layout (from llama.cpp):
+                    // 256 values split into two 128-value halves
+                    // Each half has 4 groups of 32 values
+                    let n_idx = ctx.div_u32(val_idx, 128);
+                    let pos = ctx.rem_u32(val_idx, 128);
+                    let group = ctx.div_u32(pos, 32);
+                    let l = ctx.rem_u32(pos, 32);
+                    let is = ctx.div_u32(l, 16);
 
-                let val_idx = ctx.add_u32_reg(thread_base_val, val_offset);
+                    // scale_idx = 8 * n_idx + is + 2 * group
+                    let eight = ctx.mov_u32_imm(8);
+                    let two = ctx.mov_u32_imm(2);
+                    let n_idx_x8 = ctx.mul_u32_reg(n_idx, eight);
+                    let group_x2 = ctx.mul_u32_reg(group, two);
+                    let scale_idx_temp = ctx.add_u32_reg(n_idx_x8, is);
+                    let scale_idx = ctx.add_u32_reg(scale_idx_temp, group_x2);
 
-                // Determine which sub-block (16 values each, 16 sub-blocks total)
-                let sub_block_idx = ctx.div_u32(val_idx, 16);
-                let _sub_val_idx = ctx.rem_u32(val_idx, 16);
+                    // Load scale (signed i8 at offset 192 + scale_idx)
+                    let scales_offset = ctx.mov_u64_imm(192);
+                    let scales_base = ctx.add_u64(sb_addr, scales_offset);
+                    let scale_idx_64 = ctx.cvt_u64_u32(scale_idx);
+                    let scale_addr = ctx.add_u64(scales_base, scale_idx_64);
+                    let scale_u8 = ctx.ld_global_u8(scale_addr);
+                    let scale_u32 = ctx.cvt_u32_u8(scale_u8);
+                    let seven = ctx.mov_u32_imm(7);
+                    let sign_bit = ctx.shr_u32(scale_u32, seven);
+                    let scale_u32_f32 = ctx.cvt_f32_u32(scale_u32);
+                    let sign_bit_f32 = ctx.cvt_f32_u32(sign_bit);
+                    let twofiftysix_f32 = ctx.mov_f32_imm(256.0);
+                    let correction_f32 = ctx.mul_f32(sign_bit_f32, twofiftysix_f32);
+                    let scale_f32 = ctx.sub_f32(scale_u32_f32, correction_f32);
 
-                // Load scale for this sub-block (offset 192 + sub_block_idx)
-                let scales_offset = ctx.mov_u64_imm(192);
-                let scales_base = ctx.add_u64(sb_addr, scales_offset);
-                let sub_block_idx_64 = ctx.cvt_u64_u32(sub_block_idx);
-                let scale_addr = ctx.add_u64(scales_base, sub_block_idx_64);
-                let scale_u8 = ctx.ld_global_u8(scale_addr);
-                let scale_u32 = ctx.cvt_u32_u8(scale_u8);
+                    // ql_byte_offset = 64 * n_idx + l + 32 * (group & 1)
+                    let sixty_four = ctx.mov_u32_imm(64);
+                    let thirty_two = ctx.mov_u32_imm(32);
+                    let one = ctx.mov_u32_imm(1);
+                    let n_idx_x64 = ctx.mul_u32_reg(n_idx, sixty_four);
+                    let ql_base = ctx.add_u32_reg(n_idx_x64, l);
+                    let group_is_odd = ctx.and_u32(group, one);
+                    let ql_offset_add = ctx.mul_u32_reg(group_is_odd, thirty_two);
+                    let ql_byte_offset = ctx.add_u32_reg(ql_base, ql_offset_add);
 
-                // Convert scale to signed: if >= 128, subtract 256
-                let seven = ctx.mov_u32_imm(7);
-                let scale_sign = ctx.shr_u32(scale_u32, seven);
-                let twofiftysix_f32 = ctx.mov_f32_imm(256.0);
-                let scale_f32_raw = ctx.cvt_f32_u32(scale_u32);
-                let scale_sign_f32 = ctx.cvt_f32_u32(scale_sign);
-                let scale_correction = ctx.mul_f32(scale_sign_f32, twofiftysix_f32);
-                let scale_f32 = ctx.sub_f32(scale_f32_raw, scale_correction);
+                    // Load ql byte and extract nibble
+                    let ql_byte_offset_64 = ctx.cvt_u64_u32(ql_byte_offset);
+                    let ql_addr = ctx.add_u64(sb_addr, ql_byte_offset_64);
+                    let ql_byte = ctx.ld_global_u8(ql_addr);
+                    let ql_byte_32 = ctx.cvt_u32_u8(ql_byte);
+                    // nibble_shift = (group / 2) * 4: low nibble for groups 0,1; high for 2,3
+                    let group_div_2 = ctx.shr_u32(group, one);
+                    let four = ctx.mov_u32_imm(4);
+                    let nibble_shift = ctx.mul_u32_reg(group_div_2, four);
+                    let ql_shifted = ctx.shr_u32(ql_byte_32, nibble_shift);
+                    let mask_0xf = ctx.mov_u32_imm(0xF);
+                    let ql_nibble = ctx.and_u32(ql_shifted, mask_0xf);
 
-                // Load low 4-bit value from ql (offset 0 + val_idx / 2)
-                let ql_byte_idx = ctx.div_u32(val_idx, 2);
-                let ql_nibble_idx = ctx.rem_u32(val_idx, 2);
-                let ql_byte_idx_64 = ctx.cvt_u64_u32(ql_byte_idx);
-                let ql_addr = ctx.add_u64(sb_addr, ql_byte_idx_64);
-                let ql_packed = ctx.ld_global_u8(ql_addr);
-                let ql_packed_32 = ctx.cvt_u32_u8(ql_packed);
-                let four = ctx.mov_u32_imm(4);
-                let ql_shift = ctx.mul_u32_reg(ql_nibble_idx, four);
-                let ql_shifted = ctx.shr_u32(ql_packed_32, ql_shift);
-                let mask_4bit = ctx.mov_u32_imm(0xF);
-                let ql = ctx.and_u32(ql_shifted, mask_4bit);
+                    // qh_byte_offset = 32 * n_idx + l
+                    let n_idx_x32 = ctx.mul_u32_reg(n_idx, thirty_two);
+                    let qh_byte_offset = ctx.add_u32_reg(n_idx_x32, l);
 
-                // Load high 2-bit value from qh (offset 128 + val_idx / 4)
-                let qh_offset = ctx.mov_u64_imm(128);
-                let qh_base = ctx.add_u64(sb_addr, qh_offset);
-                let qh_byte_idx = ctx.div_u32(val_idx, 4);
-                let qh_bit_pos = ctx.rem_u32(val_idx, 4);
-                let qh_byte_idx_64 = ctx.cvt_u64_u32(qh_byte_idx);
-                let qh_addr = ctx.add_u64(qh_base, qh_byte_idx_64);
-                let qh_packed = ctx.ld_global_u8(qh_addr);
-                let qh_packed_32 = ctx.cvt_u32_u8(qh_packed);
-                let two = ctx.mov_u32_imm(2);
-                let qh_shift = ctx.mul_u32_reg(qh_bit_pos, two);
-                let qh_shifted = ctx.shr_u32(qh_packed_32, qh_shift);
-                let mask_2bit = ctx.mov_u32_imm(0x3);
-                let qh = ctx.and_u32(qh_shifted, mask_2bit);
+                    // Load qh byte (offset 128 + qh_byte_offset)
+                    let qh_base_offset = ctx.mov_u64_imm(128);
+                    let qh_base = ctx.add_u64(sb_addr, qh_base_offset);
+                    let qh_byte_offset_64 = ctx.cvt_u64_u32(qh_byte_offset);
+                    let qh_addr = ctx.add_u64(qh_base, qh_byte_offset_64);
+                    let qh_byte = ctx.ld_global_u8(qh_addr);
+                    let qh_byte_32 = ctx.cvt_u32_u8(qh_byte);
 
-                // Combine: quant = ql + 4 * qh - 32 (6-bit signed)
-                let qh_scaled = ctx.mul_u32_reg(qh, four);
-                let ql_qh = ctx.add_u32_reg(ql, qh_scaled);
-                let ql_qh_f32 = ctx.cvt_f32_u32(ql_qh);
-                let thirty_two_f32 = ctx.mov_f32_imm(32.0);
-                let quant_signed = ctx.sub_f32(ql_qh_f32, thirty_two_f32);
+                    // qh_bit_shift = 2 * group
+                    let qh_shift = ctx.mul_u32_reg(group, two);
+                    let qh_shifted = ctx.shr_u32(qh_byte_32, qh_shift);
+                    let mask_0x3 = ctx.mov_u32_imm(0x3);
+                    let qh_2bits = ctx.and_u32(qh_shifted, mask_0x3);
 
-                // Dequantize: val = d × scale × quant
-                let ds = ctx.mul_f32(d, scale_f32);
-                let dequant = ctx.mul_f32(ds, quant_signed);
+                    // Combine: quant = ql_nibble | (qh_2bits << 4) - 32
+                    let qh_shifted_up = ctx.shl_u32(qh_2bits, four);
+                    let combined = ctx.or_u32(ql_nibble, qh_shifted_up);
+                    let combined_f32 = ctx.cvt_f32_u32(combined);
+                    let thirty_two_f32 = ctx.mov_f32_imm(32.0);
+                    let quant_signed = ctx.sub_f32(combined_f32, thirty_two_f32);
 
-                // Calculate K index
-                let sb_k_base = ctx.mul_u32(sb_idx, Q6K_SUPER_BLOCK_SIZE);
-                let k_idx = ctx.add_u32_reg(sb_k_base, val_idx);
+                    // Dequantize: val = d * scale * quant
+                    let d_scale = ctx.mul_f32(d, scale_f32);
+                    let dequant = ctx.mul_f32(d_scale, quant_signed);
 
-                // Accumulate for all M batch elements
-                for batch_idx in 0..m as usize {
-                    // Load x[batch_idx, k_idx]
-                    let batch_offset = ctx.mov_u32_imm((batch_idx as u32) * self.k);
-                    let x_offset = ctx.add_u32_reg(batch_offset, k_idx);
-                    let x_offset_64 = ctx.cvt_u64_u32(x_offset);
-                    let x_bytes = ctx.mul_u64(x_offset_64, 4);
-                    let x_addr = ctx.add_u64(x_ptr, x_bytes);
-                    let x_val = ctx.ld_global_f32(x_addr);
+                    // Calculate K index
+                    let sb_k_base = ctx.mul_u32(sb_idx, Q6K_SUPER_BLOCK_SIZE);
+                    let k_idx = ctx.add_u32_reg(sb_k_base, val_idx);
 
-                    ctx.fma_f32_inplace(thread_partials[batch_idx], x_val, dequant);
+                    // Accumulate for all M batch elements
+                    for batch_idx in 0..m as usize {
+                        // Load x[batch_idx, k_idx]
+                        let batch_offset = ctx.mov_u32_imm((batch_idx as u32) * self.k);
+                        let x_offset = ctx.add_u32_reg(batch_offset, k_idx);
+                        let x_offset_64 = ctx.cvt_u64_u32(x_offset);
+                        let x_bytes = ctx.mul_u64(x_offset_64, 4);
+                        let x_addr = ctx.add_u64(x_ptr, x_bytes);
+                        let x_val = ctx.ld_global_f32(x_addr);
+
+                        ctx.fma_f32_inplace(thread_partials[batch_idx], x_val, dequant);
+                    }
                 }
-
-                ctx.add_u32_inplace(val_offset, 1);
-                ctx.branch("val_loop");
-
-                ctx.label("val_loop_end");
 
                 // Accumulate thread partials into main accumulators
                 for batch_idx in 0..m as usize {
@@ -948,7 +965,7 @@ impl Kernel for BatchedQ6KGemvKernel {
 
                 // Only lane 0 writes
                 let one_u32 = ctx.mov_u32_imm(1);
-                let is_lane0 = ctx.setp_lt_u32(lane_id, one_u32);
+                let is_lane0 = ctx.setp_lt_u32(thread_id, one_u32);
                 ctx.branch_if_not(is_lane0, "exit");
 
                 // Write M outputs: y[batch_idx, block_id]

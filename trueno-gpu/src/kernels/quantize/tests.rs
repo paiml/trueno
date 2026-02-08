@@ -2133,9 +2133,8 @@ fn test_batched_q6k_gemv_has_loops() {
     let kernel = BatchedQ6KGemvKernel::new(4096, 4096, 4);
     let ptx = kernel.emit_ptx();
 
-    // Should have super-block loop and value loop
+    // Should have super-block loop (values are compile-time unrolled, no val_loop)
     assert!(ptx.contains("sb_loop"), "Should have super-block loop");
-    assert!(ptx.contains("val_loop"), "Should have value loop");
 }
 
 #[test]
