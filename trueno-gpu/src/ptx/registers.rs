@@ -256,12 +256,16 @@ impl RegisterAllocator {
         }
 
         // Emit declarations
+        // NOTE: PTX only supports register declarations of 16-bit or wider types.
+        // 8-bit types (.u8, .s8, .b8) must be widened to their 16-bit equivalent.
+        // Values are automatically zero/sign-extended to 16 bits by the hardware.
         for (ty, regs) in by_type {
             if !regs.is_empty() {
                 let count = regs.len();
+                let decl_type = ty.register_declaration_type();
                 decls.push_str(&format!(
                     "    .reg {}  {}<{}>;\n",
-                    ty.to_ptx_string(),
+                    decl_type,
                     ty.register_prefix(),
                     count
                 ));

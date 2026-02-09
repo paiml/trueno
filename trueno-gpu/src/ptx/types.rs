@@ -128,6 +128,22 @@ impl PtxType {
     /// register declarations and instruction types match. `.reg .u32 %r<N>`
     /// declares u32 registers; using `mov.s32 %r0, ...` on them is INVALID.
     /// Fix for CUDA_ERROR_INVALID_PTX in Q8QuantizeKernel (Refs GH-219).
+    /// Get the PTX type string for register declarations.
+    ///
+    /// PTX only supports register declarations of 16-bit or wider types.
+    /// 8-bit types (.u8, .s8, .b8) are widened to their 16-bit equivalent.
+    /// Per PTX ISA: "8-bit data are stored in 16-bit registers."
+    #[must_use]
+    pub const fn register_declaration_type(self) -> &'static str {
+        match self {
+            Self::U8 => ".u16",  // 8-bit → 16-bit for register declaration
+            Self::S8 => ".s16",
+            Self::B8 => ".b16",
+            _ => self.to_ptx_string(),
+        }
+    }
+
+    /// Get the register prefix for this type
     #[must_use]
     pub const fn register_prefix(self) -> &'static str {
         match self {
