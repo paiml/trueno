@@ -27,6 +27,9 @@ mod tiled;
 
 pub use basic::Q4KGemvKernel;
 pub use batched::BatchedQ4KGemvKernel;
-pub use coalesced::{CoalescedQ4KGemvKernel, VectorizedQ4KGemvKernel, WideQ4KGemvKernel};
+pub use coalesced::{
+    CoalescedQ4KGemvKernel, MultiWarpVectorizedQ4KGemvKernel, VectorizedQ4KGemvKernel,
+    WideQ4KGemvKernel,
+};
 pub use dp4a::{Dp4aQ4KGemvKernel, TrueDp4aQ4KGemvKernel};
 pub use tiled::{ChunkedTiledQ4KGemvKernel, TiledQ4KGemvKernel};
