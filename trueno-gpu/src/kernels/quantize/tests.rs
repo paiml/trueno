@@ -1747,6 +1747,28 @@ fn test_q8_quantize_ptx_generation() {
     assert!(ptx.contains("st.global"));
 }
 
+/// Regression test: Q8QuantizeKernel uses both U32 and S32 types which share the %r prefix.
+/// Before the fix, this generated `.reg .u32 %r<11>; .reg .s32 %r<5>;` → CUDA_ERROR_INVALID_PTX.
+/// The fix merges same-prefix types into a single declaration with non-overlapping IDs.
+#[test]
+fn test_q8_quantize_no_duplicate_register_prefix() {
+    let kernel = Q8QuantizeKernel::new(3584);
+    let ptx = kernel.emit_ptx();
+
+    // Count how many times each register prefix declaration appears
+    let r_decl_count = ptx.lines().filter(|l| {
+        let trimmed = l.trim();
+        trimmed.starts_with(".reg") && trimmed.contains("%r<")
+    }).count();
+
+    // Must have exactly ONE declaration for %r registers (covering both u32 and s32)
+    assert_eq!(
+        r_decl_count, 1,
+        "Expected exactly 1 %r register declaration, got {}. PTX:\n{}",
+        r_decl_count, ptx
+    );
+}
+
 // =========================================================================
 // Q4K Q8 DOT KERNEL TESTS
 // =========================================================================
