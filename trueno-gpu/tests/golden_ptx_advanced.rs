@@ -1403,9 +1403,10 @@ fn golden_st_global_f16_instruction() {
         });
 
     let ptx = kernel.emit();
+    // PTX ISA requires st.global.b16 for half-precision stores (not st.global.f16)
     assert!(
-        ptx.contains("st.global") && ptx.contains("f16"),
-        "GOLDEN FAIL: st.global.f16 not found\nPTX:\n{}",
+        ptx.contains("st.global.b16"),
+        "GOLDEN FAIL: st.global.b16 (f16 store) not found\nPTX:\n{}",
         ptx
     );
 }

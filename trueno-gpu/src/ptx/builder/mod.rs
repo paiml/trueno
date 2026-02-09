@@ -1990,9 +1990,13 @@ impl<'a> KernelBuilder<'a> {
     }
 
     /// Store F16 to global memory
+    ///
+    /// PTX uses `.b16` (binary 16-bit) for half-precision stores, not `.f16`.
+    /// The PTX ISA does not support `st.global.f16` — only `.b16` for 16-bit stores.
+    /// This matches `ld_global_f16` which already uses `PtxType::B16`.
     pub fn st_global_f16(&mut self, addr: VirtualReg, val: VirtualReg) {
         self.instructions.push(
-            PtxInstruction::new(PtxOp::St, PtxType::F16)
+            PtxInstruction::new(PtxOp::St, PtxType::B16)
                 .src(Operand::Reg(addr))
                 .src(Operand::Reg(val))
                 .space(PtxStateSpace::Global),
