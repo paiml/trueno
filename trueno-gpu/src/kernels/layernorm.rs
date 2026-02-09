@@ -863,15 +863,16 @@ impl Kernel for BatchedVectorizedRmsNormKernel {
                 let shfl1 = ctx.shfl_down_f32(sq_sum, 1, 0xFFFF_FFFF);
                 ctx.add_f32_inplace(sq_sum, shfl1);
 
-                // Lane 0 writes to shared memory
-                let smem_base = ctx.mov_u64_imm(0);
+                // Lane 0 of each warp writes partial sum to shared memory
+                // CRITICAL: Use u32 offsets for shared memory (window-form addressing).
+                // Using u64 registers would generate generic-form addressing where
+                // values like 0, 4, 8 are NOT valid shared memory addresses.
                 let zero = ctx.mov_u32_imm(0);
                 let is_lane_zero = ctx.setp_eq_u32(lane_id, zero);
                 ctx.branch_if_not(is_lane_zero, "skip_store");
 
-                let warp_offset = ctx.mul_wide_u32_reg(warp_id, four);
-                let smem_addr = ctx.add_u64(smem_base, warp_offset);
-                ctx.st_shared_f32(smem_addr, sq_sum);
+                let warp_smem_off = ctx.mul_u32(warp_id, 4);
+                ctx.st_shared_f32(warp_smem_off, sq_sum);
 
                 ctx.label("skip_store");
                 ctx.bar_sync(0);
@@ -881,36 +882,36 @@ impl Kernel for BatchedVectorizedRmsNormKernel {
                 let is_tid_zero = ctx.setp_eq_u32(tid, zero);
                 ctx.branch_if_not(is_tid_zero, "after_final_reduce");
 
-                // Load and sum all 8 warp contributions
-                let addr0 = ctx.mov_u64_imm(0);
+                // Load and sum all 8 warp contributions (u32 shared memory offsets)
+                let addr0 = ctx.mov_u32_imm(0);
                 let s0 = ctx.ld_shared_f32(addr0);
                 ctx.add_f32_inplace(final_sum, s0);
 
-                let addr1 = ctx.mov_u64_imm(4);
+                let addr1 = ctx.mov_u32_imm(4);
                 let s1 = ctx.ld_shared_f32(addr1);
                 ctx.add_f32_inplace(final_sum, s1);
 
-                let addr2 = ctx.mov_u64_imm(8);
+                let addr2 = ctx.mov_u32_imm(8);
                 let s2 = ctx.ld_shared_f32(addr2);
                 ctx.add_f32_inplace(final_sum, s2);
 
-                let addr3 = ctx.mov_u64_imm(12);
+                let addr3 = ctx.mov_u32_imm(12);
                 let s3 = ctx.ld_shared_f32(addr3);
                 ctx.add_f32_inplace(final_sum, s3);
 
-                let addr4 = ctx.mov_u64_imm(16);
+                let addr4 = ctx.mov_u32_imm(16);
                 let s4 = ctx.ld_shared_f32(addr4);
                 ctx.add_f32_inplace(final_sum, s4);
 
-                let addr5 = ctx.mov_u64_imm(20);
+                let addr5 = ctx.mov_u32_imm(20);
                 let s5 = ctx.ld_shared_f32(addr5);
                 ctx.add_f32_inplace(final_sum, s5);
 
-                let addr6 = ctx.mov_u64_imm(24);
+                let addr6 = ctx.mov_u32_imm(24);
                 let s6 = ctx.ld_shared_f32(addr6);
                 ctx.add_f32_inplace(final_sum, s6);
 
-                let addr7 = ctx.mov_u64_imm(28);
+                let addr7 = ctx.mov_u32_imm(28);
                 let s7 = ctx.ld_shared_f32(addr7);
                 ctx.add_f32_inplace(final_sum, s7);
 
@@ -928,7 +929,7 @@ impl Kernel for BatchedVectorizedRmsNormKernel {
                 ctx.bar_sync(0);
 
                 // All threads load rms_inv and normalize
-                let smem_zero = ctx.mov_u64_imm(0);
+                let smem_zero = ctx.mov_u32_imm(0);
                 let rms_inv_shared = ctx.ld_shared_f32(smem_zero);
 
                 // Pass 2: Normalize output = input * rms_inv * gamma

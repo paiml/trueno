@@ -34,6 +34,7 @@ pub mod lz4;
 mod lz4_hash_store_test;
 mod megakernel;
 pub mod optimizer;
+mod parity_impls;
 mod persistent;
 mod quantize;
 mod softmax;
@@ -100,6 +101,7 @@ pub use quantize::{
 pub use softmax::{LongRowSoftmaxKernel, SoftmaxKernel};
 
 use crate::ptx::optimize::barrier_safety::{self, BarrierSafetyResult};
+use crate::ptx::parity::{self, ParityResult};
 use crate::ptx::{PtxKernel, PtxModule};
 
 /// Kernel trait for GPU kernels
@@ -157,6 +159,45 @@ pub trait Kernel {
             );
         }
         ptx
+    }
+}
+
+/// Trait for validating parity between a batched kernel and its single-vector counterpart.
+///
+/// # GH-219: PTX Contract Validation
+///
+/// When a batched kernel variant is created (e.g., `BatchedVectorizedRmsNormKernel`),
+/// it MUST produce identical results to the single-vector kernel for M=1.
+/// This trait enables compile-time structural validation of that contract.
+///
+/// ## What it checks
+///
+/// - Parameter count matches
+/// - Shared memory size matches
+/// - Loop structure matches (sum_loop, norm_loop, etc.)
+/// - Batched kernel uses `ctaid.y` for row dispatch
+/// - Shared memory addressed with u32 (not u64)
+pub trait KernelParity: Kernel {
+    /// The single-vector kernel type that this batched kernel must match
+    type SingleVector: Kernel;
+
+    /// Create the single-vector reference kernel for parity comparison
+    fn single_vector_reference(&self) -> Self::SingleVector;
+
+    /// Validate PTX structural parity between this batched kernel and its
+    /// single-vector counterpart.
+    fn validate_parity(&self) -> ParityResult {
+        let single = self.single_vector_reference();
+        let single_ptx = single.emit_ptx();
+        let batched_ptx = self.emit_ptx();
+        parity::validate_parity(&single_ptx, &batched_ptx, single.name(), self.name())
+    }
+
+    /// Validate that this batched kernel has correct batch dispatch patterns.
+    /// Does not require a single-vector reference.
+    fn validate_batch_dispatch(&self) -> ParityResult {
+        let ptx = self.emit_ptx();
+        parity::validate_batched_kernel(&ptx, self.name())
     }
 }
 
