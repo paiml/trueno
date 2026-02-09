@@ -117,20 +117,30 @@ impl PtxType {
     ///
     /// PTX register conventions:
     /// - %p: predicates
-    /// - %r: 32-bit integer (u32, s32)
+    /// - %r: 32-bit unsigned integer (u32)
+    /// - %ri: 32-bit signed integer (s32) — MUST be separate from %r
     /// - %rd: 64-bit integer (u64, s64)
     /// - %h: 16-bit half/bfloat
     /// - %f: 32-bit float
     /// - %fd: 64-bit double
+    ///
+    /// CRITICAL: U32 and S32 MUST use different prefixes. PTX requires that
+    /// register declarations and instruction types match. `.reg .u32 %r<N>`
+    /// declares u32 registers; using `mov.s32 %r0, ...` on them is INVALID.
+    /// Fix for CUDA_ERROR_INVALID_PTX in Q8QuantizeKernel (Refs GH-219).
     #[must_use]
     pub const fn register_prefix(self) -> &'static str {
         match self {
             Self::Pred => "%p",
-            Self::U8 | Self::S8 | Self::B8 => "%rs", // 8-bit short
-            Self::U16 | Self::S16 | Self::B16 => "%rh", // 16-bit short
-            Self::U32 | Self::S32 => "%r",           // 32-bit integer
-            Self::B32 => "%rb",                      // 32-bit bitfield (WMMA fragments)
-            Self::U64 | Self::S64 | Self::B64 => "%rd", // 64-bit
+            Self::U8 | Self::B8 => "%rs",  // 8-bit unsigned/bitfield
+            Self::S8 => "%rsi",             // 8-bit signed
+            Self::U16 | Self::B16 => "%rh", // 16-bit unsigned/bitfield
+            Self::S16 => "%rhi",            // 16-bit signed
+            Self::U32 => "%r",              // 32-bit unsigned
+            Self::S32 => "%ri",             // 32-bit signed (separate from %r!)
+            Self::B32 => "%rb",             // 32-bit bitfield (WMMA fragments)
+            Self::U64 | Self::B64 => "%rd", // 64-bit unsigned/bitfield
+            Self::S64 => "%rdi",            // 64-bit signed
             Self::F16 | Self::BF16 => "%h",
             Self::F32 | Self::V2F32 | Self::V4F32 => "%f", // f32 and vector f32 use %f registers
             Self::F64 => "%fd",
@@ -285,11 +295,13 @@ mod tests {
         assert_eq!(PtxType::F32.register_prefix(), "%f");
         assert_eq!(PtxType::F64.register_prefix(), "%fd");
         assert_eq!(PtxType::U32.register_prefix(), "%r");
-        assert_eq!(PtxType::S32.register_prefix(), "%r");
+        assert_eq!(PtxType::S32.register_prefix(), "%ri"); // Separate from %r (fix for CUDA_ERROR_INVALID_PTX)
         assert_eq!(PtxType::U64.register_prefix(), "%rd");
-        assert_eq!(PtxType::S64.register_prefix(), "%rd");
+        assert_eq!(PtxType::S64.register_prefix(), "%rdi"); // Separate from %rd
         assert_eq!(PtxType::U8.register_prefix(), "%rs");
+        assert_eq!(PtxType::S8.register_prefix(), "%rsi"); // Separate from %rs
         assert_eq!(PtxType::U16.register_prefix(), "%rh");
+        assert_eq!(PtxType::S16.register_prefix(), "%rhi"); // Separate from %rh
     }
 
     #[test]
