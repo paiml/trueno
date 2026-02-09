@@ -170,8 +170,13 @@ pub struct RegisterPressure {
 /// Per Xiao et al. [47] - prevents register spills
 #[derive(Debug, Clone)]
 pub struct RegisterAllocator {
-    /// Per-type register counters (PTX requires each type to have its own namespace)
+    /// Per-PREFIX register counters — types sharing a register prefix (e.g. U32/S32 → %r)
+    /// MUST share a counter to avoid overlapping physical register names.
+    /// Bug fix: Q8QuantizeKernel emitted `.reg .u32 %r<11>; .reg .s32 %r<5>;` → CUDA_ERROR_INVALID_PTX
     type_counters: HashMap<PtxType, u32>,
+    /// Shared prefix counters — the actual source of truth for ID allocation.
+    /// Types with the same register_prefix() share this counter.
+    prefix_counters: HashMap<&'static str, u32>,
     /// Live ranges for each virtual register (key is (type, id))
     live_ranges: HashMap<(PtxType, u32), LiveRange>,
     /// Allocated virtual registers by type
@@ -188,6 +193,7 @@ impl RegisterAllocator {
     pub fn new() -> Self {
         Self {
             type_counters: HashMap::new(),
+            prefix_counters: HashMap::new(),
             live_ranges: HashMap::new(),
             allocated: Vec::new(),
             current_instruction: 0,
@@ -195,10 +201,17 @@ impl RegisterAllocator {
         }
     }
 
-    /// Allocate a new virtual register with per-type ID
+    /// Allocate a new virtual register with per-PREFIX ID
+    ///
+    /// Types sharing a register prefix (e.g. U32/S32 → %r) share an ID counter
+    /// to prevent overlapping physical register declarations in PTX.
+    /// Bug found by: Q8QuantizeKernel using both U32 and S32 → CUDA_ERROR_INVALID_PTX
     pub fn allocate_virtual(&mut self, ty: PtxType) -> VirtualReg {
-        // Get next ID for this type (starting from 0)
-        let id = *self.type_counters.get(&ty).unwrap_or(&0);
+        // Use prefix-based counter to avoid overlapping physical register names
+        let prefix = ty.register_prefix();
+        let id = *self.prefix_counters.get(prefix).unwrap_or(&0);
+        self.prefix_counters.insert(prefix, id + 1);
+        // Also track per-type for emit_declarations grouping
         self.type_counters.insert(ty, id + 1);
 
         let vreg = VirtualReg::new(id, ty);
@@ -239,24 +252,32 @@ impl RegisterAllocator {
     }
 
     /// Generate register declarations for PTX
+    ///
+    /// Groups registers by PREFIX (not by type) to avoid redeclaring the same
+    /// register names with conflicting types. When U32 and S32 coexist (both use %r),
+    /// we emit a single declaration covering all IDs.
     #[must_use]
     pub fn emit_declarations(&self) -> String {
         let mut decls = String::new();
 
-        // Group by type
-        let mut by_type: HashMap<PtxType, Vec<&VirtualReg>> = HashMap::new();
+        // Group by register prefix to avoid duplicate declarations
+        // e.g. U32 and S32 both use %r → must emit ONE declaration covering all
+        let mut by_prefix: HashMap<&str, (PtxType, u32)> = HashMap::new();
         for vreg in &self.allocated {
-            by_type.entry(vreg.ty()).or_default().push(vreg);
+            let prefix = vreg.ty().register_prefix();
+            let entry = by_prefix.entry(prefix).or_insert((vreg.ty(), 0));
+            // Track the max ID + 1 as the count, and keep the first type seen
+            // for the declaration syntax
+            entry.1 = entry.1.max(vreg.id() + 1);
         }
 
-        // Emit declarations
-        for (ty, regs) in by_type {
-            if !regs.is_empty() {
-                let count = regs.len();
+        // Emit one declaration per prefix
+        for (prefix, (ty, count)) in &by_prefix {
+            if *count > 0 {
                 decls.push_str(&format!(
                     "    .reg {}  {}<{}>;\n",
                     ty.to_ptx_string(),
-                    ty.register_prefix(),
+                    prefix,
                     count
                 ));
             }
@@ -364,6 +385,43 @@ mod tests {
         let decls = alloc.emit_declarations();
         assert!(decls.contains(".reg .f32"));
         assert!(decls.contains(".reg .u32") || decls.contains(".reg .s32"));
+    }
+
+    /// Regression test: U32 and S32 share %r prefix. Allocating both must not
+    /// produce overlapping IDs or duplicate register prefix declarations.
+    /// Bug: Q8QuantizeKernel → `.reg .u32 %r<11>; .reg .s32 %r<5>;` → CUDA_ERROR_INVALID_PTX
+    #[test]
+    fn test_shared_prefix_u32_s32_no_overlap() {
+        let mut alloc = RegisterAllocator::new();
+
+        // Allocate 3 U32 registers: %r0, %r1, %r2
+        let u0 = alloc.allocate_virtual(PtxType::U32);
+        let u1 = alloc.allocate_virtual(PtxType::U32);
+        let u2 = alloc.allocate_virtual(PtxType::U32);
+
+        // Allocate 2 S32 registers: must NOT get %r0, %r1 (those are taken by U32)
+        let s0 = alloc.allocate_virtual(PtxType::S32);
+        let s1 = alloc.allocate_virtual(PtxType::S32);
+
+        // U32 gets IDs 0, 1, 2
+        assert_eq!(u0.id(), 0);
+        assert_eq!(u1.id(), 1);
+        assert_eq!(u2.id(), 2);
+
+        // S32 must get IDs 3, 4 (continuing from U32's counter)
+        assert_eq!(s0.id(), 3, "S32 must not overlap with U32 IDs");
+        assert_eq!(s1.id(), 4, "S32 must not overlap with U32 IDs");
+
+        // Physical names must be unique
+        assert_ne!(u0.to_ptx_string(), s0.to_ptx_string());
+        assert_eq!(s0.to_ptx_string(), "%r3");
+        assert_eq!(s1.to_ptx_string(), "%r4");
+
+        // Declarations must have exactly ONE %r declaration
+        let decls = alloc.emit_declarations();
+        let r_count = decls.lines().filter(|l| l.trim().contains("%r<")).count();
+        assert_eq!(r_count, 1, "Must have exactly 1 %r declaration, got:\n{decls}");
+        assert!(decls.contains("%r<5>"), "Must declare 5 %r regs, got:\n{decls}");
     }
 
     #[test]
