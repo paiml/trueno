@@ -580,7 +580,10 @@ mod tests {
     fn test_abs_gpu_backend_returns_error() {
         let v = Vector::from_slice_with_backend(&[1.0, -2.0, 3.0], Backend::GPU);
         let result = v.abs();
-        assert!(matches!(result, Err(TruenoError::UnsupportedBackend(Backend::GPU))));
+        assert!(matches!(
+            result,
+            Err(TruenoError::UnsupportedBackend(Backend::GPU))
+        ));
     }
 
     #[test]
@@ -597,7 +600,10 @@ mod tests {
     fn test_clamp_gpu_backend_returns_error() {
         let v = Vector::from_slice_with_backend(&[1.0, 2.0, 3.0], Backend::GPU);
         let result = v.clamp(0.0, 2.0);
-        assert!(matches!(result, Err(TruenoError::UnsupportedBackend(Backend::GPU))));
+        assert!(matches!(
+            result,
+            Err(TruenoError::UnsupportedBackend(Backend::GPU))
+        ));
     }
 
     #[test]
@@ -626,7 +632,10 @@ mod tests {
         let a = Vector::from_slice_with_backend(&[1.0, 2.0], Backend::GPU);
         let b = Vector::from_slice_with_backend(&[3.0, 4.0], Backend::GPU);
         let result = a.lerp(&b, 0.5);
-        assert!(matches!(result, Err(TruenoError::UnsupportedBackend(Backend::GPU))));
+        assert!(matches!(
+            result,
+            Err(TruenoError::UnsupportedBackend(Backend::GPU))
+        ));
     }
 
     #[test]

@@ -27,7 +27,10 @@ impl DestructionOrdering {
             return true;
         }
         let n = self.order.len();
-        self.order.iter().enumerate().all(|(i, &idx)| idx == n - 1 - i)
+        self.order
+            .iter()
+            .enumerate()
+            .all(|(i, &idx)| idx == n - 1 - i)
     }
 
     /// Returns true if this is forward creation order (FIFO).
@@ -90,11 +93,7 @@ pub enum OrderingValidation {
 pub fn validate_ordering(ordering: &DestructionOrdering, n: usize) -> OrderingValidation {
     if ordering.order.len() != n {
         return OrderingValidation::Invalid {
-            reason: format!(
-                "ordering length {} != expected {}",
-                ordering.order.len(),
-                n
-            ),
+            reason: format!("ordering length {} != expected {}", ordering.order.len(), n),
         };
     }
 

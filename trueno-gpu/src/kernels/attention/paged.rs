@@ -1198,6 +1198,11 @@ impl Kernel for BatchedIncrementalAttentionKernel {
                     ctx.add_f32_inplace(dot, other);
                 }
 
+                // PAR-118-FIX: Broadcast reduced dot product from lane 0 to all lanes.
+                // After shfl_down reduction, only lane 0 has the correct sum.
+                // All lanes need the score for softmax and V accumulation.
+                let dot = ctx.shfl_idx_f32(dot, 0, 0xFFFF_FFFF);
+
                 // Scale score
                 let score = ctx.mul_f32(dot, scale_reg);
 
@@ -1539,6 +1544,13 @@ impl Kernel for FlashDecodingChunkKernel {
                     let other = ctx.shfl_down_f32(dot, delta, 0xFFFF_FFFF);
                     ctx.add_f32_inplace(dot, other);
                 }
+
+                // PAR-118-FIX: Broadcast reduced dot product from lane 0 to all lanes.
+                // After shfl_down reduction, only lane 0 has the correct sum.
+                // All lanes need the score for softmax and V accumulation.
+                // Without this broadcast, lanes 1-31 compute exp(wrong_partial_dot)
+                // and weight V values incorrectly → garbage output.
+                let dot = ctx.shfl_idx_f32(dot, 0, 0xFFFF_FFFF);
 
                 // Scale score
                 let score = ctx.mul_f32(dot, scale_reg);

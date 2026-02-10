@@ -33,5 +33,7 @@ pub mod isolation;
 pub mod thermal;
 
 pub use gpu_detect::{detect_gpus, gpu_available, GpuCapability};
-pub use isolation::{is_worker_process, worker_task_id, IsolationConfig, WORKER_FLAG, WORKER_TASK_ID_VAR};
+pub use isolation::{
+    is_worker_process, worker_task_id, IsolationConfig, WORKER_FLAG, WORKER_TASK_ID_VAR,
+};
 pub use thermal::{evaluate_thermal, ThermalConfig};

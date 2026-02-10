@@ -42,7 +42,10 @@ fn main() {
     for fw in &frameworks {
         println!("\n   {}:", fw);
         for claim in claims_for_framework(*fw).iter().take(3) {
-            println!("   │ {} [P{}]: {}", claim.id, claim.priority, claim.description);
+            println!(
+                "   │ {} [P{}]: {}",
+                claim.id, claim.priority, claim.description
+            );
         }
     }
 
@@ -56,7 +59,10 @@ fn main() {
 
     // Simulate verification progress
     println!("\n   Initial state:");
-    println!("   │ Pending: {}", report.count_by_status(ClaimStatus::Pending));
+    println!(
+        "   │ Pending: {}",
+        report.count_by_status(ClaimStatus::Pending)
+    );
     println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
 
     // Mark some claims as verified
@@ -65,15 +71,24 @@ fn main() {
     }
 
     println!("\n   After verifying NullFuzzer (10 claims):");
-    println!("   │ Verified: {}", report.count_by_status(ClaimStatus::Verified));
-    println!("   │ Pending: {}", report.count_by_status(ClaimStatus::Pending));
+    println!(
+        "   │ Verified: {}",
+        report.count_by_status(ClaimStatus::Verified)
+    );
+    println!(
+        "   │ Pending: {}",
+        report.count_by_status(ClaimStatus::Pending)
+    );
     println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
 
     // Mark one as violated (bug found!)
     report.mark_violated("SP-001");
 
     println!("\n   After finding bug in SP-001:");
-    println!("   │ Violated: {}", report.count_by_status(ClaimStatus::Violated));
+    println!(
+        "   │ Violated: {}",
+        report.count_by_status(ClaimStatus::Violated)
+    );
     println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
 
     // Skip hardware-dependent claims
@@ -82,7 +97,10 @@ fn main() {
     }
 
     println!("\n   After skipping hardware-dependent claims:");
-    println!("   │ Skipped: {}", report.count_by_status(ClaimStatus::Skipped));
+    println!(
+        "   │ Skipped: {}",
+        report.count_by_status(ClaimStatus::Skipped)
+    );
     println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
 
     println!();
@@ -92,7 +110,10 @@ fn main() {
     println!("   ──────────────────");
 
     println!("   Is complete: {}", report.is_complete());
-    println!("   Remaining pending: {}", report.count_by_status(ClaimStatus::Pending));
+    println!(
+        "   Remaining pending: {}",
+        report.count_by_status(ClaimStatus::Pending)
+    );
 
     // Complete all remaining
     for claim in all_claims() {
@@ -130,9 +151,18 @@ fn main() {
     let grouped = report.by_framework();
     for fw in &frameworks {
         if let Some(claims) = grouped.get(fw) {
-            let verified = claims.iter().filter(|(_, s)| *s == ClaimStatus::Verified).count();
-            let violated = claims.iter().filter(|(_, s)| *s == ClaimStatus::Violated).count();
-            let skipped = claims.iter().filter(|(_, s)| *s == ClaimStatus::Skipped).count();
+            let verified = claims
+                .iter()
+                .filter(|(_, s)| *s == ClaimStatus::Verified)
+                .count();
+            let violated = claims
+                .iter()
+                .filter(|(_, s)| *s == ClaimStatus::Violated)
+                .count();
+            let skipped = claims
+                .iter()
+                .filter(|(_, s)| *s == ClaimStatus::Skipped)
+                .count();
 
             println!(
                 "   │ {:<20} ✓{:>2} verified  ✗{:>2} violated  ○{:>2} skipped",

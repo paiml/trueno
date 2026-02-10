@@ -99,10 +99,7 @@ pub fn compute_sentinel_offsets(regions: &[SharedMemoryRegion]) -> Vec<(u64, u64
 
 /// Check sentinel values against expected constants.
 #[must_use]
-pub fn check_sentinels(
-    before_value: u32,
-    after_value: u32,
-) -> Vec<BoundaryViolation> {
+pub fn check_sentinels(before_value: u32, after_value: u32) -> Vec<BoundaryViolation> {
     let mut violations = Vec::new();
     if before_value != SENTINEL_BEFORE {
         violations.push(BoundaryViolation::UnderflowCorrupted {
@@ -158,7 +155,10 @@ mod tests {
     fn check_sentinels_underflow_corrupted() {
         let violations = check_sentinels(0xBAAD_F00D, SENTINEL_AFTER);
         assert_eq!(violations.len(), 1);
-        assert!(matches!(violations[0], BoundaryViolation::UnderflowCorrupted { .. }));
+        assert!(matches!(
+            violations[0],
+            BoundaryViolation::UnderflowCorrupted { .. }
+        ));
     }
 
     #[test]

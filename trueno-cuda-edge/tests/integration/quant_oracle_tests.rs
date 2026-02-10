@@ -47,7 +47,10 @@ fn claim_34_parity_detects_violations() {
     let config = ParityConfig::new(QuantFormat::Q4K);
     let report = check_values_parity(&cpu, &gpu, &config);
 
-    assert!(!report.passed(), "Parity check must fail for large differences");
+    assert!(
+        !report.passed(),
+        "Parity check must fail for large differences"
+    );
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].index, 1);
 }
@@ -80,11 +83,15 @@ fn claim_37_boundary_includes_universal() {
 
     assert!(bounds.iter().any(|v| v.is_nan()), "Must include NaN");
     assert!(
-        bounds.iter().any(|v| v.is_infinite() && v.is_sign_positive()),
+        bounds
+            .iter()
+            .any(|v| v.is_infinite() && v.is_sign_positive()),
         "Must include positive infinity"
     );
     assert!(
-        bounds.iter().any(|v| v.is_infinite() && v.is_sign_negative()),
+        bounds
+            .iter()
+            .any(|v| v.is_infinite() && v.is_sign_negative()),
         "Must include negative infinity"
     );
     assert!(bounds.contains(&0.0), "Must include zero");

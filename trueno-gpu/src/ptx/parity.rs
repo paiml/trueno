@@ -339,10 +339,7 @@ exit:
     ret;
 "#;
         let labels = extract_loop_labels(ptx);
-        assert_eq!(
-            labels,
-            vec!["sum_loop", "sum_loop_end", "norm_loop"]
-        );
+        assert_eq!(labels, vec!["sum_loop", "sum_loop_end", "norm_loop"]);
     }
 
     #[test]

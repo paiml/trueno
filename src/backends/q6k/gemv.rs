@@ -10,7 +10,11 @@ use super::{f16_to_f32, SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
 #[inline(always)]
 fn extract_q6k_scalar(ql: &[u8], qh: &[u8], idx: usize) -> i8 {
     let ql_byte = ql[idx / 2];
-    let low4 = if idx % 2 == 0 { ql_byte & 0x0F } else { ql_byte >> 4 };
+    let low4 = if idx % 2 == 0 {
+        ql_byte & 0x0F
+    } else {
+        ql_byte >> 4
+    };
     let qh_byte = qh[idx / 4];
     let high2 = (qh_byte >> ((idx % 4) * 2)) & 0x03;
     (low4 | (high2 << 4)) as i8 - 32
@@ -18,7 +22,12 @@ fn extract_q6k_scalar(ql: &[u8], qh: &[u8], idx: usize) -> i8 {
 
 /// Scalar dot product for one Q6K super-block row.
 #[inline(always)]
-fn process_q6k_superblock_scalar(sb_data: &[u8], input: &[f32], input_offset: usize, in_dim: usize) -> f32 {
+fn process_q6k_superblock_scalar(
+    sb_data: &[u8],
+    input: &[f32],
+    input_offset: usize,
+    in_dim: usize,
+) -> f32 {
     let ql = &sb_data[0..128];
     let qh = &sb_data[128..192];
     let scales = &sb_data[192..208];

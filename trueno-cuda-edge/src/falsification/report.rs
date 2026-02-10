@@ -114,8 +114,15 @@ impl FalsificationReport {
         let mut result: HashMap<Framework, Vec<_>> = HashMap::new();
 
         for claim in claims {
-            let status = self.statuses.get(claim.id).copied().unwrap_or(ClaimStatus::Pending);
-            result.entry(claim.framework).or_default().push((claim, status));
+            let status = self
+                .statuses
+                .get(claim.id)
+                .copied()
+                .unwrap_or(ClaimStatus::Pending);
+            result
+                .entry(claim.framework)
+                .or_default()
+                .push((claim, status));
         }
 
         result

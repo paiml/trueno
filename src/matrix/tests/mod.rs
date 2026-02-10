@@ -10,8 +10,8 @@ use crate::{TruenoError, Vector};
 #[cfg(internal_matrix_tests)]
 mod internal_tests;
 
-mod property_tests;
 mod conv_property_tests;
+mod property_tests;
 
 #[test]
 fn test_matrix_new() {

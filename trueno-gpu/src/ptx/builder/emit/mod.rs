@@ -117,10 +117,7 @@ fn should_skip_type_suffix(instr: &PtxInstruction) -> bool {
         });
 
     // DP4A opcodes already include their type qualifiers (e.g., "dp4a.u32.s32")
-    let is_dp4a = matches!(
-        instr.op,
-        PtxOp::Dp4a | PtxOp::Dp4aUS | PtxOp::Dp4aS32
-    );
+    let is_dp4a = matches!(instr.op, PtxOp::Dp4a | PtxOp::Dp4aUS | PtxOp::Dp4aS32);
 
     memory::skip_type_for_memory_op(&instr.op)
         || warp::skip_type_for_warp_op(&instr.op)

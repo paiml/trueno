@@ -14,7 +14,11 @@ use trueno_cuda_edge::falsification::{
 #[test]
 fn protocol_has_50_claims() {
     let claims = all_claims();
-    assert_eq!(claims.len(), 50, "Specification requires exactly 50 falsification claims");
+    assert_eq!(
+        claims.len(),
+        50,
+        "Specification requires exactly 50 falsification claims"
+    );
 }
 
 /// All claim IDs must be unique.
@@ -25,11 +29,7 @@ fn claim_ids_unique() {
     ids.sort_unstable();
     let original_len = ids.len();
     ids.dedup();
-    assert_eq!(
-        ids.len(),
-        original_len,
-        "All claim IDs must be unique"
-    );
+    assert_eq!(ids.len(), original_len, "All claim IDs must be unique");
 }
 
 /// Framework claim counts must sum to 50.
