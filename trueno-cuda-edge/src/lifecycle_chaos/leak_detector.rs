@@ -190,7 +190,10 @@ mod tests {
             &[1, 2, 3], // context 3 is new → leaked
         );
         assert!(report.has_leaks());
-        assert!(report.leaks.iter().any(|l| matches!(l, Leak::Context { context_id: 3 })));
+        assert!(report
+            .leaks
+            .iter()
+            .any(|l| matches!(l, Leak::Context { context_id: 3 })));
     }
 
     #[test]

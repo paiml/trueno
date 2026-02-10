@@ -407,8 +407,14 @@ mod tests {
 
         // Declarations: separate .u32 %r<3> and .s32 %ri<2>
         let decls = alloc.emit_declarations();
-        assert!(decls.contains(".reg .u32  %r<3>"), "Missing u32 decl in:\n{decls}");
-        assert!(decls.contains(".reg .s32  %ri<2>"), "Missing s32 decl in:\n{decls}");
+        assert!(
+            decls.contains(".reg .u32  %r<3>"),
+            "Missing u32 decl in:\n{decls}"
+        );
+        assert!(
+            decls.contains(".reg .s32  %ri<2>"),
+            "Missing s32 decl in:\n{decls}"
+        );
     }
 
     #[test]

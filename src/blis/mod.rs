@@ -323,7 +323,15 @@ pub fn packed_b_size(kc: usize, nc: usize) -> usize {
 
 /// Load a tile of C into the micro workspace for accumulation.
 #[inline(always)]
-fn load_c_tile(c: &[f32], c_micro: &mut [f32], row: usize, col: usize, mr: usize, nr: usize, n: usize) {
+fn load_c_tile(
+    c: &[f32],
+    c_micro: &mut [f32],
+    row: usize,
+    col: usize,
+    mr: usize,
+    nr: usize,
+    n: usize,
+) {
     c_micro.fill(0.0);
     for jj in 0..nr {
         for ii in 0..mr {
@@ -334,7 +342,15 @@ fn load_c_tile(c: &[f32], c_micro: &mut [f32], row: usize, col: usize, mr: usize
 
 /// Store a micro tile back into C.
 #[inline(always)]
-fn store_c_tile(c: &mut [f32], c_micro: &[f32], row: usize, col: usize, mr: usize, nr: usize, n: usize) {
+fn store_c_tile(
+    c: &mut [f32],
+    c_micro: &[f32],
+    row: usize,
+    col: usize,
+    mr: usize,
+    nr: usize,
+    n: usize,
+) {
     for jj in 0..nr {
         for ii in 0..mr {
             c[(row + ii) * n + (col + jj)] = c_micro[jj * MR + ii];
@@ -344,7 +360,14 @@ fn store_c_tile(c: &mut [f32], c_micro: &[f32], row: usize, col: usize, mr: usiz
 
 /// Dispatch to the best available microkernel (AVX2 ASM or scalar fallback).
 #[inline(always)]
-fn dispatch_microkernel(kc: usize, a_panel: &[f32], b_panel: &[f32], c_micro: &mut [f32], mr_block: usize, nr_block: usize) {
+fn dispatch_microkernel(
+    kc: usize,
+    a_panel: &[f32],
+    b_panel: &[f32],
+    c_micro: &mut [f32],
+    mr_block: usize,
+    nr_block: usize,
+) {
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2")
@@ -426,22 +449,46 @@ fn compute_macroblock(
 /// Loop 2 (jr): Microkernel columns
 /// Loop 1 (ir): Microkernel rows
 /// Validate GEMM dimension inputs (Poka-yoke).
-fn validate_gemm_dims(m: usize, n: usize, k: usize, a: &[f32], b: &[f32], c: &[f32]) -> Result<(), TruenoError> {
+fn validate_gemm_dims(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &[f32],
+) -> Result<(), TruenoError> {
     if a.len() != m * k {
-        return Err(TruenoError::InvalidInput(format!("A size mismatch: expected {}, got {}", m * k, a.len())));
+        return Err(TruenoError::InvalidInput(format!(
+            "A size mismatch: expected {}, got {}",
+            m * k,
+            a.len()
+        )));
     }
     if b.len() != k * n {
-        return Err(TruenoError::InvalidInput(format!("B size mismatch: expected {}, got {}", k * n, b.len())));
+        return Err(TruenoError::InvalidInput(format!(
+            "B size mismatch: expected {}, got {}",
+            k * n,
+            b.len()
+        )));
     }
     if c.len() != m * n {
-        return Err(TruenoError::InvalidInput(format!("C size mismatch: expected {}, got {}", m * n, c.len())));
+        return Err(TruenoError::InvalidInput(format!(
+            "C size mismatch: expected {}, got {}",
+            m * n,
+            c.len()
+        )));
     }
     Ok(())
 }
 
 /// Record a profiler event if profiler is active.
 #[inline(always)]
-fn record_prof(profiler: &mut Option<&mut BlisProfiler>, level: BlisProfileLevel, start: Instant, flops: u64) {
+fn record_prof(
+    profiler: &mut Option<&mut BlisProfiler>,
+    level: BlisProfileLevel,
+    start: Instant,
+    flops: u64,
+) {
     if let Some(ref mut prof) = profiler.as_deref_mut() {
         prof.record(level, start.elapsed().as_nanos() as u64, flops);
     }
@@ -493,8 +540,16 @@ pub fn gemm_blis(
                 record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
 
                 compute_macroblock(
-                    c, &packed_a, &packed_b, &mut c_micro,
-                    ic, jc, mc_block, nc_block, kc_block, n,
+                    c,
+                    &packed_a,
+                    &packed_b,
+                    &mut c_micro,
+                    ic,
+                    jc,
+                    mc_block,
+                    nc_block,
+                    kc_block,
+                    n,
                     &mut profiler,
                 );
             }
@@ -502,7 +557,11 @@ pub fn gemm_blis(
     }
 
     if let Some(prof) = profiler {
-        prof.record(BlisProfileLevel::Macro, start.elapsed().as_nanos() as u64, (2 * m * n * k) as u64);
+        prof.record(
+            BlisProfileLevel::Macro,
+            start.elapsed().as_nanos() as u64,
+            (2 * m * n * k) as u64,
+        );
     }
 
     Ok(())
@@ -754,7 +813,14 @@ pub fn gemm_profiled(
 /// `Ok(())` on success, `Err` if dimensions mismatch
 /// Scalar transpose of a sub-region of a row-major matrix.
 #[inline(always)]
-fn transpose_region(a: &[f32], b: &mut [f32], rows: std::ops::Range<usize>, cols: std::ops::Range<usize>, src_cols: usize, dst_rows: usize) {
+fn transpose_region(
+    a: &[f32],
+    b: &mut [f32],
+    rows: std::ops::Range<usize>,
+    cols: std::ops::Range<usize>,
+    src_cols: usize,
+    dst_rows: usize,
+) {
     for r in rows {
         for c in cols.clone() {
             b[c * dst_rows + r] = a[r * src_cols + c];
@@ -767,7 +833,9 @@ pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(
     if a.len() != expected || b.len() != expected {
         return Err(TruenoError::InvalidInput(format!(
             "transpose size mismatch: a[{}], b[{}], expected {}",
-            a.len(), b.len(), expected
+            a.len(),
+            b.len(),
+            expected
         )));
     }
 

@@ -29,7 +29,8 @@ impl ParityConfig {
     /// Get the effective tolerance for this config.
     #[must_use]
     pub fn tolerance(&self) -> f64 {
-        self.tolerance_override.unwrap_or_else(|| self.format.tolerance())
+        self.tolerance_override
+            .unwrap_or_else(|| self.format.tolerance())
     }
 }
 

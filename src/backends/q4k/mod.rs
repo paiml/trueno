@@ -1320,12 +1320,19 @@ mod tests {
         assert_eq!(output_scalar.len(), out_dim);
         assert_eq!(output_optimized.len(), out_dim);
 
-        for (i, (s, o)) in output_scalar.iter().zip(output_optimized.iter()).enumerate() {
+        for (i, (s, o)) in output_scalar
+            .iter()
+            .zip(output_optimized.iter())
+            .enumerate()
+        {
             let diff = (s - o).abs();
             assert!(
                 diff < 1e-3,
                 "Row {}: scalar={} vs optimized={}, diff={}",
-                i, s, o, diff
+                i,
+                s,
+                o,
+                diff
             );
         }
     }
@@ -1351,7 +1358,11 @@ mod tests {
     fn test_f16_to_f32_smallest_normal() {
         // Smallest positive normal: 0x0400 = 2^(-14) ~ 6.1035e-5
         let val = f16_to_f32(0x0400);
-        assert!(val > 0.0 && val < 0.001, "Expected small normal, got {}", val);
+        assert!(
+            val > 0.0 && val < 0.001,
+            "Expected small normal, got {}",
+            val
+        );
     }
 
     /// Test f16 conversion: largest normal
@@ -1359,7 +1370,11 @@ mod tests {
     fn test_f16_to_f32_largest_normal() {
         // Largest finite f16: 0x7BFF ~ 65504
         let val = f16_to_f32(0x7BFF);
-        assert!((val - 65504.0).abs() < 100.0, "Expected ~65504, got {}", val);
+        assert!(
+            (val - 65504.0).abs() < 100.0,
+            "Expected ~65504, got {}",
+            val
+        );
     }
 
     /// Test f16 conversion: negative subnormal
@@ -1367,7 +1382,11 @@ mod tests {
     fn test_f16_to_f32_negative_subnormal() {
         // Negative smallest subnormal: 0x8001
         let val = f16_to_f32(0x8001);
-        assert!(val < 0.0 && val > -1e-4, "Expected small negative, got {}", val);
+        assert!(
+            val < 0.0 && val > -1e-4,
+            "Expected small negative, got {}",
+            val
+        );
     }
 
     /// Test parse_q4k_header with all-zero block
@@ -1453,7 +1472,7 @@ mod tests {
         q4k_data.extend_from_slice(&[0x00, 0x3C]); // d = 1.0
         q4k_data.extend_from_slice(&[0x00, 0x00]); // dmin = 0
         q4k_data.extend_from_slice(&[0x01u8; 12]); // scales = 1
-        // Use varying qs to exercise different nibble values
+                                                   // Use varying qs to exercise different nibble values
         for i in 0..128 {
             q4k_data.push(((i % 16) | (((i + 1) % 16) << 4)) as u8);
         }
@@ -1466,7 +1485,9 @@ mod tests {
         assert!(
             diff < 1e-3,
             "Scalar {} vs optimized {}, diff={}",
-            scalar[0], optimized[0], diff
+            scalar[0],
+            optimized[0],
+            diff
         );
     }
 
@@ -1513,7 +1534,11 @@ mod tests {
             assert!(
                 rel_diff < 1e-4 || diff < 1e-4,
                 "Row {}: scalar={}, dispatch={}, diff={}, rel={}",
-                i, s, d, diff, rel_diff
+                i,
+                s,
+                d,
+                diff,
+                rel_diff
             );
         }
     }
@@ -1552,7 +1577,10 @@ mod tests {
             assert!(
                 rel_diff < 1e-4 || diff < 1e-4,
                 "Row {}: scalar={}, dispatch={}, diff={}",
-                i, s, d, diff
+                i,
+                s,
+                d,
+                diff
             );
         }
     }
@@ -1589,7 +1617,10 @@ mod tests {
             assert!(
                 rel_diff < 1e-4 || diff < 1e-4,
                 "Row {}: scalar={}, dispatch={}, diff={}",
-                i, s, d, diff
+                i,
+                s,
+                d,
+                diff
             );
         }
     }

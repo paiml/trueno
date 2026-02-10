@@ -49,12 +49,18 @@ fn claim_23_leak_detector_tolerance() {
     let before = 100_000_000;
     let after = before + LEAK_TOLERANCE_BYTES - 1;
     let report = detector.analyze(before, after);
-    assert!(!report.has_leaks(), "Memory within tolerance should not report leak");
+    assert!(
+        !report.has_leaks(),
+        "Memory within tolerance should not report leak"
+    );
 
     // Just over tolerance: leak
     let after_over = before + LEAK_TOLERANCE_BYTES + 1;
     let report_over = detector.analyze(before, after_over);
-    assert!(report_over.has_leaks(), "Memory over tolerance must report leak");
+    assert!(
+        report_over.has_leaks(),
+        "Memory over tolerance must report leak"
+    );
 }
 
 /// Claim 24: Context leaks are detected
@@ -67,7 +73,10 @@ fn claim_24_context_leaks_detected() {
         &[1, 2, 3],
         &[1, 2, 3, 4], // Context 4 is new → leaked
     );
-    assert!(report.has_leaks(), "New context after test must be detected as leak");
+    assert!(
+        report.has_leaks(),
+        "New context after test must be detected as leak"
+    );
 }
 
 /// Claim 25: N contexts produce N! orderings
@@ -92,7 +101,10 @@ fn claim_25_factorial_orderings() {
 #[test]
 fn claim_26_reverse_ordering_is_lifo() {
     let ordering = DestructionOrdering::new(vec![3, 2, 1, 0]);
-    assert!(ordering.is_reverse(), "Reverse ordering must be detected as LIFO");
+    assert!(
+        ordering.is_reverse(),
+        "Reverse ordering must be detected as LIFO"
+    );
     assert!(!ordering.is_forward(), "Reverse ordering is not FIFO");
 }
 
@@ -122,14 +134,14 @@ fn claim_28_default_config_all_scenarios() {
 #[test]
 fn scenarios_have_unique_descriptions() {
     let scenarios = ChaosScenario::all();
-    let descriptions: Vec<_> = scenarios
-        .iter()
-        .map(ChaosScenario::description)
-        .collect();
+    let descriptions: Vec<_> = scenarios.iter().map(ChaosScenario::description).collect();
     for (i, a) in descriptions.iter().enumerate() {
         for (j, b) in descriptions.iter().enumerate() {
             if i != j {
-                assert_ne!(a, b, "Scenarios at indices {i} and {j} have duplicate descriptions");
+                assert_ne!(
+                    a, b,
+                    "Scenarios at indices {i} and {j} have duplicate descriptions"
+                );
             }
         }
     }
@@ -139,7 +151,10 @@ fn scenarios_have_unique_descriptions() {
 #[test]
 fn forward_ordering_is_fifo() {
     let ordering = DestructionOrdering::new(vec![0, 1, 2, 3]);
-    assert!(ordering.is_forward(), "Forward ordering must be detected as FIFO");
+    assert!(
+        ordering.is_forward(),
+        "Forward ordering must be detected as FIFO"
+    );
     assert!(!ordering.is_reverse(), "Forward ordering is not LIFO");
 }
 

@@ -146,8 +146,14 @@ impl ExecutionGraph {
         block: (u32, u32, u32),
         shared_mem: u32,
     ) -> ExecutionNodeId {
-        debug_assert!(grid.0 > 0 && grid.1 > 0 && grid.2 > 0, "CB-BUDGET: grid dims must be > 0");
-        debug_assert!(block.0 > 0 && block.1 > 0 && block.2 > 0, "CB-BUDGET: block dims must be > 0");
+        debug_assert!(
+            grid.0 > 0 && grid.1 > 0 && grid.2 > 0,
+            "CB-BUDGET: grid dims must be > 0"
+        );
+        debug_assert!(
+            block.0 > 0 && block.1 > 0 && block.2 > 0,
+            "CB-BUDGET: block dims must be > 0"
+        );
         let kernel = ExecutionNode::Kernel {
             name: name.to_string(),
             ptx_hash,

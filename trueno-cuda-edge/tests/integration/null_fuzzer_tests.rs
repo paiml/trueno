@@ -20,7 +20,10 @@ fn claim_01_non_null_ptr_rejects_zero() {
 fn claim_02_non_null_ptr_accepts_valid() {
     let valid_addr = 0x1000_u64;
     let result = NonNullDevicePtr::<u8>::new(valid_addr);
-    assert!(result.is_ok(), "NonNullDevicePtr::new(valid) must return Ok");
+    assert!(
+        result.is_ok(),
+        "NonNullDevicePtr::new(valid) must return Ok"
+    );
     assert_eq!(result.unwrap().addr(), valid_addr);
 }
 

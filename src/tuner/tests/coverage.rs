@@ -524,9 +524,7 @@ fn test_brick_profiler_print_tuner_recommendations_enabled() {
 #[test]
 fn test_suggest_experiments_memory_bound_small_batch() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(1)
-        .build();
+    let features = TunerFeatures::builder().batch_size(1).build();
 
     let bottleneck = BottleneckPrediction {
         class: BottleneckClass::MemoryBound,
@@ -538,12 +536,16 @@ fn test_suggest_experiments_memory_bound_small_batch() {
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     // Should suggest increasing batch size since batch_size < 8
     assert!(
-        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
+        suggestions
+            .iter()
+            .any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
         "Should suggest increasing batch size for memory-bound with small batch"
     );
     // Should suggest trying BatchedQ4K kernel
     assert!(
-        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::TryKernel { .. })),
+        suggestions
+            .iter()
+            .any(|s| matches!(s, ExperimentSuggestion::TryKernel { .. })),
         "Should suggest trying a kernel"
     );
 }
@@ -552,9 +554,7 @@ fn test_suggest_experiments_memory_bound_small_batch() {
 fn test_suggest_experiments_memory_bound_large_batch() {
     let tuner = BrickTuner::new();
     // batch_size_norm = 8/64 = 0.125, so batch_size = round(0.125*64) = 8
-    let features = TunerFeatures::builder()
-        .batch_size(8)
-        .build();
+    let features = TunerFeatures::builder().batch_size(8).build();
 
     let bottleneck = BottleneckPrediction {
         class: BottleneckClass::MemoryBound,
@@ -566,12 +566,16 @@ fn test_suggest_experiments_memory_bound_large_batch() {
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     // batch_size >= 8, so no batch size increase suggestion
     assert!(
-        !suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
+        !suggestions
+            .iter()
+            .any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
         "Should NOT suggest increasing batch size when already >= 8"
     );
     // But should suggest EnableMultiKvCache since batch_size > 1
     assert!(
-        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::EnableMultiKvCache { .. })),
+        suggestions
+            .iter()
+            .any(|s| matches!(s, ExperimentSuggestion::EnableMultiKvCache { .. })),
         "Should suggest multi-KV cache for batch_size > 1"
     );
 }
@@ -593,11 +597,18 @@ fn test_suggest_experiments_launch_bound_no_cuda_graphs() {
 
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     assert!(
-        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::EnableCudaGraphs)),
+        suggestions
+            .iter()
+            .any(|s| matches!(s, ExperimentSuggestion::EnableCudaGraphs)),
         "Should suggest enabling CUDA graphs"
     );
     assert!(
-        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::TryKernel { kernel: KernelType::FusedRmsNormQ4K })),
+        suggestions.iter().any(|s| matches!(
+            s,
+            ExperimentSuggestion::TryKernel {
+                kernel: KernelType::FusedRmsNormQ4K
+            }
+        )),
         "Should suggest fused kernel"
     );
 }
@@ -620,7 +631,9 @@ fn test_suggest_experiments_launch_bound_with_cuda_graphs() {
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     // Should NOT suggest CUDA graphs since already enabled
     assert!(
-        !suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::EnableCudaGraphs)),
+        !suggestions
+            .iter()
+            .any(|s| matches!(s, ExperimentSuggestion::EnableCudaGraphs)),
         "Should NOT suggest CUDA graphs when already enabled"
     );
 }
@@ -628,10 +641,7 @@ fn test_suggest_experiments_launch_bound_with_cuda_graphs() {
 #[test]
 fn test_suggest_experiments_attention_bound() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(1)
-        .seq_len(1024)
-        .build();
+    let features = TunerFeatures::builder().batch_size(1).seq_len(1024).build();
 
     let bottleneck = BottleneckPrediction {
         class: BottleneckClass::AttentionBound,
@@ -642,11 +652,18 @@ fn test_suggest_experiments_attention_bound() {
 
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     assert!(
-        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::TryKernel { kernel: KernelType::BatchedAttention })),
+        suggestions.iter().any(|s| matches!(
+            s,
+            ExperimentSuggestion::TryKernel {
+                kernel: KernelType::BatchedAttention
+            }
+        )),
         "Should suggest batched attention kernel"
     );
     assert!(
-        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::ReduceSequenceLength { .. })),
+        suggestions
+            .iter()
+            .any(|s| matches!(s, ExperimentSuggestion::ReduceSequenceLength { .. })),
         "Should suggest reducing sequence length"
     );
 }
@@ -654,9 +671,7 @@ fn test_suggest_experiments_attention_bound() {
 #[test]
 fn test_suggest_experiments_compute_bound() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(1)
-        .build();
+    let features = TunerFeatures::builder().batch_size(1).build();
 
     let bottleneck = BottleneckPrediction {
         class: BottleneckClass::ComputeBound,
@@ -668,7 +683,9 @@ fn test_suggest_experiments_compute_bound() {
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     // ComputeBound falls into the default arm with batch_size < 4
     assert!(
-        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
+        suggestions
+            .iter()
+            .any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
         "Default arm should suggest increasing batch size when < 4"
     );
 }
@@ -676,9 +693,7 @@ fn test_suggest_experiments_compute_bound() {
 #[test]
 fn test_suggest_experiments_unknown_large_batch() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().batch_size(4).build();
 
     let bottleneck = BottleneckPrediction {
         class: BottleneckClass::Unknown,
@@ -710,15 +725,16 @@ fn test_brick_tuner_render_panel() {
     let lines = tuner.render_panel(&rec);
     assert!(!lines.is_empty(), "Panel should have lines");
     // Should contain version info
-    assert!(lines[0].contains("BrickTuner"), "First line should mention BrickTuner");
+    assert!(
+        lines[0].contains("BrickTuner"),
+        "First line should mention BrickTuner"
+    );
 }
 
 #[test]
 fn test_brick_tuner_render_panel_few_suggestions() {
     let tuner = BrickTuner::new();
-    let _features = TunerFeatures::builder()
-        .batch_size(4)
-        .build();
+    let _features = TunerFeatures::builder().batch_size(4).build();
 
     let bottleneck = BottleneckPrediction {
         class: BottleneckClass::Unknown,
@@ -747,7 +763,10 @@ fn test_brick_tuner_render_panel_few_suggestions() {
 
     let lines = tuner.render_panel(&rec);
     // Should pad to 3 empty suggestion lines
-    assert!(lines.len() >= 10, "Panel should have padding for missing suggestions");
+    assert!(
+        lines.len() >= 10,
+        "Panel should have padding for missing suggestions"
+    );
 }
 
 #[test]
@@ -759,7 +778,10 @@ fn test_brick_tuner_render_compact() {
         .build();
     let rec = tuner.recommend(&features);
     let compact = tuner.render_compact(&rec);
-    assert!(compact.contains("Tuner:"), "Compact should start with 'Tuner:'");
+    assert!(
+        compact.contains("Tuner:"),
+        "Compact should start with 'Tuner:'"
+    );
     assert!(compact.contains("tok/s"), "Compact should mention tok/s");
 }
 
@@ -797,9 +819,7 @@ fn test_brick_tuner_render_comparison_poor() {
 #[test]
 fn test_brick_tuner_render_comparison_zero_actual() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(2)
-        .build();
+    let features = TunerFeatures::builder().batch_size(2).build();
     let rec = tuner.recommend(&features);
     let comparison = tuner.render_comparison(&rec, 0.0);
     assert_eq!(comparison.len(), 2);
@@ -979,7 +999,11 @@ fn test_collector_record_prediction_error_window_trimming() {
     for i in 0..60 {
         collector.record_prediction_error(100.0 + i as f32, 100.0);
     }
-    assert_eq!(collector.error_window.len(), 50, "Window should be trimmed to max size");
+    assert_eq!(
+        collector.error_window.len(),
+        50,
+        "Window should be trimmed to max size"
+    );
 }
 
 #[test]
@@ -1049,7 +1073,10 @@ fn test_collector_detect_concept_drift_stale() {
 #[test]
 fn test_collector_should_retrain_disabled() {
     let collector = TunerDataCollector::new();
-    assert!(!collector.should_retrain(), "Should not retrain when online learning disabled");
+    assert!(
+        !collector.should_retrain(),
+        "Should not retrain when online learning disabled"
+    );
 }
 
 #[test]
@@ -1059,7 +1086,10 @@ fn test_collector_mark_trained() {
         collector.error_window.push(0.20);
     }
     collector.mark_trained();
-    assert!(collector.error_window.is_empty(), "Error window should be cleared after training");
+    assert!(
+        collector.error_window.is_empty(),
+        "Error window should be cleared after training"
+    );
     assert_eq!(collector.samples_at_last_train, collector.samples.len());
 }
 
@@ -1229,7 +1259,10 @@ fn test_bottleneck_class_display() {
     assert_eq!(format!("{}", BottleneckClass::MemoryBound), "MemoryBound");
     assert_eq!(format!("{}", BottleneckClass::ComputeBound), "ComputeBound");
     assert_eq!(format!("{}", BottleneckClass::LaunchBound), "LaunchBound");
-    assert_eq!(format!("{}", BottleneckClass::AttentionBound), "AttentionBound");
+    assert_eq!(
+        format!("{}", BottleneckClass::AttentionBound),
+        "AttentionBound"
+    );
 }
 
 // =========================================================================
@@ -1256,13 +1289,21 @@ fn test_bytes_per_param_from_onehot() {
         let mut onehot = [0.0f32; 8];
         onehot[idx] = 1.0;
         let bpp = ThroughputRegressor::bytes_per_param_from_onehot(&onehot);
-        assert!(bpp > 0.0, "Bytes per param should be positive for index {}", idx);
+        assert!(
+            bpp > 0.0,
+            "Bytes per param should be positive for index {}",
+            idx
+        );
     }
 
     // All zeros: max_by returns last of equal elements (index 7) -> F32 -> 4.0
     let onehot_zeros = [0.0f32; 8];
     let bpp = ThroughputRegressor::bytes_per_param_from_onehot(&onehot_zeros);
-    assert!((bpp - 4.0).abs() < 0.001, "All-zero onehot should map to last index (F32=4.0), got {}", bpp);
+    assert!(
+        (bpp - 4.0).abs() < 0.001,
+        "All-zero onehot should map to last index (F32=4.0), got {}",
+        bpp
+    );
 }
 
 // =========================================================================
@@ -1296,10 +1337,7 @@ fn test_bottleneck_classifier_heuristic_launch_bound() {
 fn test_bottleneck_classifier_heuristic_attention_bound() {
     let classifier = BottleneckClassifier::new();
     // Long sequence -> attention bound
-    let features = TunerFeatures::builder()
-        .batch_size(4)
-        .seq_len(2048)
-        .build();
+    let features = TunerFeatures::builder().batch_size(4).seq_len(2048).build();
     let prediction = classifier.predict(&features);
     assert_eq!(prediction.class, BottleneckClass::AttentionBound);
 }
@@ -1308,10 +1346,7 @@ fn test_bottleneck_classifier_heuristic_attention_bound() {
 fn test_bottleneck_classifier_heuristic_memory_bound() {
     let classifier = BottleneckClassifier::new();
     // Normal batch size, short sequence -> memory bound
-    let features = TunerFeatures::builder()
-        .batch_size(4)
-        .seq_len(64)
-        .build();
+    let features = TunerFeatures::builder().batch_size(4).seq_len(64).build();
     let prediction = classifier.predict(&features);
     assert_eq!(prediction.class, BottleneckClass::MemoryBound);
 }
@@ -1323,9 +1358,7 @@ fn test_bottleneck_classifier_heuristic_memory_bound() {
 #[test]
 fn test_kernel_classifier_large_batch() {
     let classifier = KernelClassifier::new();
-    let features = TunerFeatures::builder()
-        .batch_size(8)
-        .build();
+    let features = TunerFeatures::builder().batch_size(8).build();
     let rec = classifier.predict(&features);
     assert_eq!(rec.top_kernel, KernelType::BatchedQ4K);
 }
@@ -1333,9 +1366,7 @@ fn test_kernel_classifier_large_batch() {
 #[test]
 fn test_kernel_classifier_medium_batch() {
     let classifier = KernelClassifier::new();
-    let features = TunerFeatures::builder()
-        .batch_size(2)
-        .build();
+    let features = TunerFeatures::builder().batch_size(2).build();
     let rec = classifier.predict(&features);
     assert_eq!(rec.top_kernel, KernelType::VectorizedQ4K);
 }
@@ -1430,7 +1461,11 @@ fn test_brick_tuner_render_comparison_good() {
     let actual_tps = rec.throughput.predicted_tps * 0.93;
     let comparison = tuner.render_comparison(&rec, actual_tps);
     assert_eq!(comparison.len(), 2);
-    assert!(comparison[1].contains("Good"), "Expected 'Good' indicator, got: {}", comparison[1]);
+    assert!(
+        comparison[1].contains("Good"),
+        "Expected 'Good' indicator, got: {}",
+        comparison[1]
+    );
 }
 
 #[test]
@@ -1445,7 +1480,11 @@ fn test_brick_tuner_render_comparison_fair() {
     let actual_tps = rec.throughput.predicted_tps * 0.85;
     let comparison = tuner.render_comparison(&rec, actual_tps);
     assert_eq!(comparison.len(), 2);
-    assert!(comparison[1].contains("Fair"), "Expected 'Fair' indicator, got: {}", comparison[1]);
+    assert!(
+        comparison[1].contains("Fair"),
+        "Expected 'Fair' indicator, got: {}",
+        comparison[1]
+    );
 }
 
 // =========================================================================
@@ -1454,7 +1493,9 @@ fn test_brick_tuner_render_comparison_fair() {
 
 #[test]
 fn test_builder_hardware_with_gpu() {
-    use crate::hardware::{CpuCapability, GpuBackend, GpuCapability, HardwareCapability, RooflineParams, SimdWidth};
+    use crate::hardware::{
+        CpuCapability, GpuBackend, GpuCapability, HardwareCapability, RooflineParams, SimdWidth,
+    };
 
     let hw = HardwareCapability {
         timestamp: "test".to_string(),
@@ -1486,9 +1527,7 @@ fn test_builder_hardware_with_gpu() {
         byte_budget: None,
     };
 
-    let features = TunerFeatures::builder()
-        .hardware(&hw)
-        .build();
+    let features = TunerFeatures::builder().hardware(&hw).build();
 
     // Memory BW: 1008 / 3000 ~ 0.336
     assert!((features.gpu_mem_bw_norm - (1008.0 / 3000.0)).abs() < 0.01);
@@ -1521,9 +1560,7 @@ fn test_builder_hardware_without_gpu() {
         byte_budget: None,
     };
 
-    let features = TunerFeatures::builder()
-        .hardware(&hw)
-        .build();
+    let features = TunerFeatures::builder().hardware(&hw).build();
 
     // No GPU: should use defaults
     // Default gpu_mem_bw_gbs = 1000.0 / 3000.0
@@ -1536,8 +1573,10 @@ fn test_builder_hardware_without_gpu() {
 
 #[test]
 fn test_feature_extractor_with_hardware_and_extract() {
-    use crate::hardware::{CpuCapability, GpuBackend, GpuCapability, HardwareCapability, RooflineParams, SimdWidth};
     use crate::brick::BrickProfiler;
+    use crate::hardware::{
+        CpuCapability, GpuBackend, GpuCapability, HardwareCapability, RooflineParams, SimdWidth,
+    };
 
     let hw = HardwareCapability {
         timestamp: "test".to_string(),
@@ -1592,8 +1631,10 @@ fn test_feature_extractor_with_hardware_and_extract() {
 
 #[test]
 fn test_calculate_efficiency_with_hardware() {
-    use crate::hardware::{CpuCapability, GpuBackend, GpuCapability, HardwareCapability, RooflineParams, SimdWidth};
     use crate::brick::BrickProfiler;
+    use crate::hardware::{
+        CpuCapability, GpuBackend, GpuCapability, HardwareCapability, RooflineParams, SimdWidth,
+    };
 
     let hw = HardwareCapability {
         timestamp: "test".to_string(),
@@ -1651,7 +1692,10 @@ fn test_calculate_efficiency_no_hardware() {
 
     let config = RunConfig::default();
     let efficiency = extractor.calculate_efficiency(&profiler, &config);
-    assert!(efficiency.is_none(), "No hardware -> no efficiency calculation");
+    assert!(
+        efficiency.is_none(),
+        "No hardware -> no efficiency calculation"
+    );
 }
 
 // =========================================================================
@@ -1745,9 +1789,9 @@ fn test_classify_bottleneck_default_memory_bound() {
     // Record mixed low-percentage bricks (no dominant category)
     // Attention < 35%, FFN < 50%, Norm < 20%
     let elapsed = std::time::Duration::from_millis(10);
-    profiler.record_elapsed("QkvProjection", elapsed, 100);  // ~25% attention
+    profiler.record_elapsed("QkvProjection", elapsed, 100); // ~25% attention
     profiler.record_elapsed("GateProjection", elapsed, 100); // ~25% FFN
-    profiler.record_elapsed("RmsNorm", elapsed, 100);        // ~25% norm... need to adjust
+    profiler.record_elapsed("RmsNorm", elapsed, 100); // ~25% norm... need to adjust
 
     // Actually: 3 equal parts means each is ~33%. Attention=33% < 35%, FFN=33% < 50%, Norm=33% > 20%
     // So this would hit LaunchBound. Let me adjust.

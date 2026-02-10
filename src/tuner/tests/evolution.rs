@@ -328,7 +328,10 @@ fn online_learner_predict_non_negative() {
     let features = TunerFeatures::builder().build();
     let vec = features.to_vector();
     let prediction = learner.predict(&vec);
-    assert!(prediction >= 0.0, "Throughput prediction must be non-negative");
+    assert!(
+        prediction >= 0.0,
+        "Throughput prediction must be non-negative"
+    );
 }
 
 #[test]
@@ -359,7 +362,11 @@ fn online_learner_observe_dimension_mismatch_ignored() {
     // Features length must be weights.len() - 1 for observe to work
     let wrong_dim = vec![1.0; 5]; // Wrong dimension
     learner.observe(&wrong_dim, 100.0);
-    assert_eq!(learner.num_updates(), 0, "Mismatched dimensions should be silently ignored");
+    assert_eq!(
+        learner.num_updates(),
+        0,
+        "Mismatched dimensions should be silently ignored"
+    );
 }
 
 #[test]
@@ -385,7 +392,10 @@ fn online_learner_observe_updates_ema_loss() {
     let vec = features.to_vector();
 
     learner.observe(&vec, 200.0);
-    assert!(learner.ema_loss() > 0.0, "EMA loss should be updated after observation");
+    assert!(
+        learner.ema_loss() > 0.0,
+        "EMA loss should be updated after observation"
+    );
 }
 
 #[test]

@@ -136,7 +136,7 @@ impl PtxType {
     #[must_use]
     pub const fn register_declaration_type(self) -> &'static str {
         match self {
-            Self::U8 => ".u16",  // 8-bit → 16-bit for register declaration
+            Self::U8 => ".u16", // 8-bit → 16-bit for register declaration
             Self::S8 => ".s16",
             Self::B8 => ".b16",
             _ => self.to_ptx_string(),
@@ -148,7 +148,7 @@ impl PtxType {
     pub const fn register_prefix(self) -> &'static str {
         match self {
             Self::Pred => "%p",
-            Self::U8 | Self::B8 => "%rs",  // 8-bit unsigned/bitfield
+            Self::U8 | Self::B8 => "%rs",   // 8-bit unsigned/bitfield
             Self::S8 => "%rsi",             // 8-bit signed
             Self::U16 | Self::B16 => "%rh", // 16-bit unsigned/bitfield
             Self::S16 => "%rhi",            // 16-bit signed

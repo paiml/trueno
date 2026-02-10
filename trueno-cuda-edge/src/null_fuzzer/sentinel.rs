@@ -157,7 +157,10 @@ mod tests {
         };
         let fuzzer = NullSentinelFuzzer::new(config);
         let retrieved = fuzzer.config();
-        assert!(matches!(retrieved.strategy, InjectionStrategy::Periodic { interval: 7 }));
+        assert!(matches!(
+            retrieved.strategy,
+            InjectionStrategy::Periodic { interval: 7 }
+        ));
         assert_eq!(retrieved.total_calls, 500);
         assert!(retrieved.fail_fast);
     }

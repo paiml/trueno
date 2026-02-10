@@ -104,7 +104,10 @@ mod tests {
     fn test_crc32_hash_different_inputs_differ() {
         let hash_a = crc32_hash(b"hello");
         let hash_b = crc32_hash(b"world");
-        assert_ne!(hash_a, hash_b, "Different inputs should produce different hashes");
+        assert_ne!(
+            hash_a, hash_b,
+            "Different inputs should produce different hashes"
+        );
     }
 
     #[test]
@@ -122,7 +125,10 @@ mod tests {
 
         let part1 = crc32_update(0, b"hello ");
         let incremental = crc32_update(part1, b"world");
-        assert_eq!(single_pass, incremental, "Incremental CRC32 must match single-pass");
+        assert_eq!(
+            single_pass, incremental,
+            "Incremental CRC32 must match single-pass"
+        );
     }
 
     #[test]
@@ -130,7 +136,10 @@ mod tests {
         // Starting from a non-zero CRC should differ from starting at 0
         let from_zero = crc32_update(0, b"test");
         let from_nonzero = crc32_update(0x1234_5678, b"test");
-        assert_ne!(from_zero, from_nonzero, "Different initial CRC should produce different result");
+        assert_ne!(
+            from_zero, from_nonzero,
+            "Different initial CRC should produce different result"
+        );
     }
 
     #[test]
@@ -182,7 +191,10 @@ mod tests {
         let ts2 = chrono_lite_now();
         let secs1: u64 = ts1.parse().expect("Should be parseable");
         let secs2: u64 = ts2.parse().expect("Should be parseable");
-        assert!(secs2 >= secs1, "Timestamps should be monotonically non-decreasing");
+        assert!(
+            secs2 >= secs1,
+            "Timestamps should be monotonically non-decreasing"
+        );
     }
 
     // =========================================================================

@@ -294,7 +294,12 @@ mod tests {
         let norm = v.norm_l2().unwrap();
         // norm = sqrt(sum(i^2 * 0.0001)) for i in 0..1024
         let expected: f32 = data.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - expected).abs() < 1e-2, "Got {} expected {}", norm, expected);
+        assert!(
+            (norm - expected).abs() < 1e-2,
+            "Got {} expected {}",
+            norm,
+            expected
+        );
     }
 
     #[test]
@@ -362,7 +367,9 @@ mod tests {
 
     #[test]
     fn test_norm_l1_large_vector() {
-        let data: Vec<f32> = (0..512).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        let data: Vec<f32> = (0..512)
+            .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
         let v = Vector::from_slice(&data);
         let norm = v.norm_l1().unwrap();
         assert!((norm - 512.0).abs() < 1e-3);
@@ -442,12 +449,11 @@ mod tests {
 
         assert!(
             linf <= l2 + 1e-5,
-            "L-inf ({}) should be <= L2 ({})", linf, l2
+            "L-inf ({}) should be <= L2 ({})",
+            linf,
+            l2
         );
-        assert!(
-            l2 <= l1 + 1e-5,
-            "L2 ({}) should be <= L1 ({})", l2, l1
-        );
+        assert!(l2 <= l1 + 1e-5, "L2 ({}) should be <= L1 ({})", l2, l1);
     }
 
     #[test]

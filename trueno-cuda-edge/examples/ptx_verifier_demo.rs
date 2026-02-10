@@ -5,9 +5,7 @@
 //!
 //! Run with: cargo run --example ptx_verifier_demo
 
-use trueno_cuda_edge::ptx_poison::{
-    default_mutators, PtxMutator, PtxVerifier, MINIMAL_VALID_PTX,
-};
+use trueno_cuda_edge::ptx_poison::{default_mutators, PtxMutator, PtxVerifier, MINIMAL_VALID_PTX};
 
 fn main() {
     println!("=== PTX Verification and Mutation Demo ===\n");
@@ -38,11 +36,26 @@ fn main() {
 
     let test_cases = [
         ("Empty source", ""),
-        ("Missing .version", ".target sm_80\n.address_size 64\n.entry k() { ret; }"),
-        ("Missing .target", ".version 7.0\n.address_size 64\n.entry k() { ret; }"),
-        ("Missing .address_size", ".version 7.0\n.target sm_80\n.entry k() { ret; }"),
-        ("Missing entry point", ".version 7.0\n.target sm_80\n.address_size 64\n"),
-        ("Unbalanced braces", ".version 7.0\n.target sm_80\n.address_size 64\n.entry k() {"),
+        (
+            "Missing .version",
+            ".target sm_80\n.address_size 64\n.entry k() { ret; }",
+        ),
+        (
+            "Missing .target",
+            ".version 7.0\n.address_size 64\n.entry k() { ret; }",
+        ),
+        (
+            "Missing .address_size",
+            ".version 7.0\n.target sm_80\n.entry k() { ret; }",
+        ),
+        (
+            "Missing entry point",
+            ".version 7.0\n.target sm_80\n.address_size 64\n",
+        ),
+        (
+            "Unbalanced braces",
+            ".version 7.0\n.target sm_80\n.address_size 64\n.entry k() {",
+        ),
     ];
 
     for (name, source) in test_cases {

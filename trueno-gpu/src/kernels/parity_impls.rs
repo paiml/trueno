@@ -258,7 +258,12 @@ mod tests {
             ),
             (
                 "BatchedRopeKernel",
-                Box::new(BatchedRopeKernel::new(NUM_HEADS_12, HEAD_DIM_128, 1, ROPE_THETA)),
+                Box::new(BatchedRopeKernel::new(
+                    NUM_HEADS_12,
+                    HEAD_DIM_128,
+                    1,
+                    ROPE_THETA,
+                )),
                 "grid_y",
             ),
             (
@@ -276,19 +281,28 @@ mod tests {
             let has_any = has_grid_y || has_m_dim;
 
             if !has_any {
-                failures.push(format!("{} missing batch dispatch (no ctaid.y or m_dim)", name));
+                failures.push(format!(
+                    "{} missing batch dispatch (no ctaid.y or m_dim)",
+                    name
+                ));
             }
 
             // Verify correct strategy
             match *expected_strategy {
                 "grid_y" => {
                     if !has_grid_y {
-                        failures.push(format!("{} expected grid_y dispatch but missing ctaid.y", name));
+                        failures.push(format!(
+                            "{} expected grid_y dispatch but missing ctaid.y",
+                            name
+                        ));
                     }
                 }
                 "register_unroll" => {
                     if !has_m_dim {
-                        failures.push(format!("{} expected register_unroll but missing m_dim", name));
+                        failures.push(format!(
+                            "{} expected register_unroll but missing m_dim",
+                            name
+                        ));
                     }
                 }
                 _ => {}

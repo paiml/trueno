@@ -5,8 +5,8 @@
 #![allow(clippy::unwrap_used, clippy::similar_names)]
 
 use trueno_cuda_edge::ptx_poison::{
-    default_mutators, MutantResult, PoisonTrapReport, PtxMutator, PtxVerificationError, PtxVerifier,
-    MINIMAL_VALID_PTX,
+    default_mutators, MutantResult, PoisonTrapReport, PtxMutator, PtxVerificationError,
+    PtxVerifier, MINIMAL_VALID_PTX,
 };
 
 /// Claim 41: 8 mutation operators are defined
@@ -116,7 +116,10 @@ fn claim_48_mutation_not_found_returns_none() {
 fn claim_49_all_mutators_have_descriptions() {
     for mutator in default_mutators() {
         let desc = mutator.description();
-        assert!(!desc.is_empty(), "Mutator {mutator:?} must have a description");
+        assert!(
+            !desc.is_empty(),
+            "Mutator {mutator:?} must have a description"
+        );
     }
 }
 

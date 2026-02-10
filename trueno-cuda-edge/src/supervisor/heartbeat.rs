@@ -119,7 +119,10 @@ mod tests {
     #[test]
     fn alive_is_healthy() {
         let monitor = GpuHealthMonitor::default();
-        assert_eq!(monitor.check_status(HeartbeatStatus::Alive), HealthAction::Healthy);
+        assert_eq!(
+            monitor.check_status(HeartbeatStatus::Alive),
+            HealthAction::Healthy
+        );
     }
 
     #[test]
@@ -152,7 +155,10 @@ mod tests {
     #[test]
     fn dead_triggers_shutdown() {
         let monitor = GpuHealthMonitor::default();
-        assert_eq!(monitor.check_status(HeartbeatStatus::Dead), HealthAction::Shutdown);
+        assert_eq!(
+            monitor.check_status(HeartbeatStatus::Dead),
+            HealthAction::Shutdown
+        );
     }
 
     #[test]

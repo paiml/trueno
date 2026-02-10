@@ -875,7 +875,10 @@ mod tests {
             assert!(
                 diff < 1e-3,
                 "Row {}: scalar={} vs dispatch={}, diff={}",
-                i, s, d, diff
+                i,
+                s,
+                d,
+                diff
             );
         }
     }
@@ -907,7 +910,11 @@ mod tests {
     fn test_f16_to_f32_smallest_normal() {
         // Smallest positive normal: 0x0400 = 2^(-14) ~ 6.1035e-5
         let val = f16_to_f32(0x0400);
-        assert!(val > 0.0 && val < 0.001, "Expected small normal, got {}", val);
+        assert!(
+            val > 0.0 && val < 0.001,
+            "Expected small normal, got {}",
+            val
+        );
     }
 
     /// Test f16 conversion: largest finite f16
@@ -915,7 +922,11 @@ mod tests {
     fn test_f16_to_f32_largest_normal() {
         // Largest finite f16: 0x7BFF ~ 65504
         let val = f16_to_f32(0x7BFF);
-        assert!((val - 65504.0).abs() < 100.0, "Expected ~65504, got {}", val);
+        assert!(
+            (val - 65504.0).abs() < 100.0,
+            "Expected ~65504, got {}",
+            val
+        );
     }
 
     /// Test f16 conversion: negative subnormal
@@ -923,7 +934,11 @@ mod tests {
     fn test_f16_to_f32_negative_subnormal() {
         // Negative smallest subnormal: 0x8001
         let val = f16_to_f32(0x8001);
-        assert!(val < 0.0 && val > -1e-4, "Expected small negative, got {}", val);
+        assert!(
+            val < 0.0 && val > -1e-4,
+            "Expected small negative, got {}",
+            val
+        );
     }
 
     /// Test f16 conversion: half value (0.5)
@@ -941,9 +956,12 @@ mod tests {
         let largest_subnormal = f16_to_f32(0x03FF);
         let smallest_normal = f16_to_f32(0x0400);
         assert!(largest_subnormal > 0.0);
-        assert!(largest_subnormal < smallest_normal,
+        assert!(
+            largest_subnormal < smallest_normal,
             "Largest subnormal {} should be less than smallest normal {}",
-            largest_subnormal, smallest_normal);
+            largest_subnormal,
+            smallest_normal
+        );
     }
 
     /// Test colmajor sparse input optimization path (x_j == 0.0 skip)
@@ -1023,7 +1041,10 @@ mod tests {
             assert!(
                 diff < 1e-3,
                 "Row {}: scalar={} vs dispatch={}, diff={}",
-                i, s, d, diff
+                i,
+                s,
+                d,
+                diff
             );
         }
     }
@@ -1117,7 +1138,7 @@ mod tests {
         q6k_data.extend_from_slice(&[0x00u8; 64]); // qh
         q6k_data.extend_from_slice(&[0x01u8; 16]); // scales
         q6k_data.extend_from_slice(&[0x00, 0x3C]); // d = 1.0
-        // Partial second block (100 bytes instead of 210)
+                                                   // Partial second block (100 bytes instead of 210)
         q6k_data.extend_from_slice(&[0x00u8; 100]);
 
         let input = vec![1.0f32; in_dim];
@@ -1193,7 +1214,9 @@ mod tests {
             assert!(
                 (output[0] - output[i]).abs() < 1e-6,
                 "Row 0 ({}) != Row {} ({})",
-                output[0], i, output[i]
+                output[0],
+                i,
+                output[i]
             );
         }
     }

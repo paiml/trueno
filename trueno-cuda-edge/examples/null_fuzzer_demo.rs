@@ -39,7 +39,11 @@ fn main() {
     println!("   Periodic (interval=10):");
     for i in [0, 5, 10, 15, 20] {
         let inject = periodic.should_inject(i);
-        println!("     Call {}: {}", i, if inject { "INJECT" } else { "normal" });
+        println!(
+            "     Call {}: {}",
+            i,
+            if inject { "INJECT" } else { "normal" }
+        );
     }
 
     println!();
@@ -91,7 +95,11 @@ fn main() {
 
     println!("   Total calls:  {}", report.total_calls);
     println!("   Injections:   {}", report.injections);
-    println!("   Caught:       {} ({:.0}%)", report.caught, report.catch_rate() * 100.0);
+    println!(
+        "   Caught:       {} ({:.0}%)",
+        report.caught,
+        report.catch_rate() * 100.0
+    );
     println!("   Crashes:      {}", report.crashes);
 
     println!("\n=== Demo Complete ===");

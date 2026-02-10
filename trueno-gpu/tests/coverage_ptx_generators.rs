@@ -7,14 +7,13 @@
 
 use trueno_gpu::kernels::{
     AttentionKernel, Batched4DGemmKernel, BatchedGemmKernel, BatchedIncrementalAttentionKernel,
-    BatchedQ4KGemvKernel, BatchedQ6KGemvKernel, ChunkedTiledQ4KGemvKernel,
-    CoalescedGemvKernel, CoalescedQ4KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ4KGemvKernel,
-    FlashDecodingChunkKernel, FlashDecodingReduceKernel, Fp16Q4KGemvKernel,
-    FusedGateUpQ4KGemvKernel, FusedRmsNormQ4KGemvKernel, GemmKernel, GemvKernel,
-    IncrementalAttentionKernel, Kernel, LongRowSoftmaxKernel, Lz4WarpCompressKernel,
-    MultiWarpIncrementalAttentionKernel, PackedDp4aQ4KQ8Kernel, Q4KGemvKernel, Q4KQ8DotKernel,
-    Q5KGemvKernel, Q5KKernel, Q6KGemvKernel, Q6KKernel, TiledQ4KGemvKernel,
-    VectorizedQ4KGemvKernel,
+    BatchedQ4KGemvKernel, BatchedQ6KGemvKernel, ChunkedTiledQ4KGemvKernel, CoalescedGemvKernel,
+    CoalescedQ4KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ4KGemvKernel, FlashDecodingChunkKernel,
+    FlashDecodingReduceKernel, Fp16Q4KGemvKernel, FusedGateUpQ4KGemvKernel,
+    FusedRmsNormQ4KGemvKernel, GemmKernel, GemvKernel, IncrementalAttentionKernel, Kernel,
+    LongRowSoftmaxKernel, Lz4WarpCompressKernel, MultiWarpIncrementalAttentionKernel,
+    PackedDp4aQ4KQ8Kernel, Q4KGemvKernel, Q4KQ8DotKernel, Q5KGemvKernel, Q5KKernel, Q6KGemvKernel,
+    Q6KKernel, TiledQ4KGemvKernel, VectorizedQ4KGemvKernel,
 };
 
 /// Helper: verify basic PTX structure

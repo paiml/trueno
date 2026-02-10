@@ -56,10 +56,7 @@ pub fn shared_memory_limit(cc: ComputeCapability) -> u64 {
 ///
 /// Returns an error if `requested_bytes` exceeds the shared memory limit
 /// for the given compute capability.
-pub fn check_allocation(
-    cc: ComputeCapability,
-    requested_bytes: u64,
-) -> crate::error::Result<()> {
+pub fn check_allocation(cc: ComputeCapability, requested_bytes: u64) -> crate::error::Result<()> {
     let limit = shared_memory_limit(cc);
     if requested_bytes > limit {
         return Err(crate::error::EdgeError::SharedMemoryOverflow {

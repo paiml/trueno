@@ -691,17 +691,14 @@ fn save_and_load_apr_round_trip() {
 fn save_apr_creates_parent_directories() {
     let dir = std::env::temp_dir().join("trueno_test_nested_dir/a/b/c");
     let path = dir.join("model.apr");
-    let _ = std::fs::remove_dir_all(
-        std::env::temp_dir().join("trueno_test_nested_dir"),
-    );
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join("trueno_test_nested_dir"));
 
     let c = make_collector_with_samples(1);
-    c.save_apr(&path).expect("save to nested dir should succeed");
+    c.save_apr(&path)
+        .expect("save to nested dir should succeed");
     assert!(path.exists());
 
-    let _ = std::fs::remove_dir_all(
-        std::env::temp_dir().join("trueno_test_nested_dir"),
-    );
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join("trueno_test_nested_dir"));
 }
 
 #[test]
@@ -911,8 +908,7 @@ fn training_sample_debug_and_clone() {
 fn training_sample_serialization_round_trip() {
     let sample = make_sample(200.0);
     let json = serde_json::to_string(&sample).expect("serialize sample");
-    let deserialized: TrainingSample =
-        serde_json::from_str(&json).expect("deserialize sample");
+    let deserialized: TrainingSample = serde_json::from_str(&json).expect("deserialize sample");
     assert_eq!(deserialized.throughput_tps, 200.0);
     assert_eq!(deserialized.hardware_id, "test-hw");
     assert!(matches!(deserialized.best_kernel, KernelType::TiledQ4K));
@@ -1023,8 +1019,7 @@ fn user_feedback_serialization_round_trip() {
         UserFeedback::None,
     ] {
         let json = serde_json::to_string(fb).expect("serialize feedback");
-        let deserialized: UserFeedback =
-            serde_json::from_str(&json).expect("deserialize feedback");
+        let deserialized: UserFeedback = serde_json::from_str(&json).expect("deserialize feedback");
         assert_eq!(*fb, deserialized);
     }
 }

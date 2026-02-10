@@ -108,7 +108,10 @@ fn test_microkernel_avx2_asm_matches_scalar() {
         assert!(
             rel_diff < 1e-4,
             "avx2_asm mismatch at {}: scalar={}, asm={}, rel_diff={}",
-            i, c_scalar[i], c_asm[i], rel_diff
+            i,
+            c_scalar[i],
+            c_asm[i],
+            rel_diff
         );
     }
 }
@@ -138,7 +141,11 @@ fn test_microkernel_avx2_asm_k_less_than_4() {
             assert!(
                 diff < 1e-4,
                 "avx2_asm k={} mismatch at {}: scalar={}, asm={}, diff={}",
-                k, i, c_scalar[i], c_asm[i], diff
+                k,
+                i,
+                c_scalar[i],
+                c_asm[i],
+                diff
             );
         }
     }
@@ -172,7 +179,11 @@ fn test_microkernel_avx2_asm_k_with_remainder() {
             assert!(
                 rel_diff < 1e-4,
                 "avx2_asm k={} mismatch at {}: scalar={}, asm={}, rel_diff={}",
-                k, i, c_scalar[i], c_asm[i], rel_diff
+                k,
+                i,
+                c_scalar[i],
+                c_asm[i],
+                rel_diff
             );
         }
     }
@@ -204,7 +215,10 @@ fn test_microkernel_avx2_asm_k_exact_multiple_of_4() {
             assert!(
                 rel_diff < 1e-4,
                 "avx2_asm k={} mismatch at {}: scalar={}, asm={}",
-                k, i, c_scalar[i], c_asm[i]
+                k,
+                i,
+                c_scalar[i],
+                c_asm[i]
             );
         }
     }
@@ -240,7 +254,10 @@ fn test_microkernel_true_asm_matches_scalar() {
         assert!(
             rel_diff < 1e-4,
             "true_asm mismatch at {}: scalar={}, asm={}, rel_diff={}",
-            i, c_scalar[i], c_asm[i], rel_diff
+            i,
+            c_scalar[i],
+            c_asm[i],
+            rel_diff
         );
     }
 }
@@ -270,7 +287,11 @@ fn test_microkernel_true_asm_k_less_than_4() {
             assert!(
                 diff < 1e-4,
                 "true_asm k={} mismatch at {}: scalar={}, asm={}, diff={}",
-                k, i, c_scalar[i], c_asm[i], diff
+                k,
+                i,
+                c_scalar[i],
+                c_asm[i],
+                diff
             );
         }
     }
@@ -303,7 +324,11 @@ fn test_microkernel_true_asm_k_with_remainder() {
             assert!(
                 rel_diff < 1e-4,
                 "true_asm k={} mismatch at {}: scalar={}, asm={}, rel_diff={}",
-                k, i, c_scalar[i], c_asm[i], rel_diff
+                k,
+                i,
+                c_scalar[i],
+                c_asm[i],
+                rel_diff
             );
         }
     }
@@ -335,7 +360,10 @@ fn test_microkernel_true_asm_k_exact_multiple_of_4() {
             assert!(
                 rel_diff < 1e-4,
                 "true_asm k={} mismatch at {}: scalar={}, asm={}",
-                k, i, c_scalar[i], c_asm[i]
+                k,
+                i,
+                c_scalar[i],
+                c_asm[i]
             );
         }
     }
@@ -364,7 +392,8 @@ fn test_microkernel_true_asm_accumulates_into_c() {
         assert!(
             (*val - 18.0).abs() < 1e-3,
             "true_asm accumulation at {}: expected 18.0, got {}",
-            i, val
+            i,
+            val
         );
     }
 }

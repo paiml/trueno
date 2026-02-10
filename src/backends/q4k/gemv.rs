@@ -165,7 +165,9 @@ pub fn matmul_q4k_f32(q4k_data: &[u8], input: &[f32], out_dim: usize, in_dim: us
                 process_q4k_nibble_half(qs, q_start, input, base_low, in_dim, d1, dm1, 0, &mut acc);
 
                 let base_high = input_offset + chunk_start + 32;
-                process_q4k_nibble_half(qs, q_start, input, base_high, in_dim, d2, dm2, 4, &mut acc);
+                process_q4k_nibble_half(
+                    qs, q_start, input, base_high, in_dim, d2, dm2, 4, &mut acc,
+                );
             }
         }
 
