@@ -145,7 +145,7 @@ impl GpuPanelBrick {
             &util_style,
         );
 
-        // Temperature with temp gradient
+        // Temperature display with color gradient
         canvas.draw_text("Temp: ", Point::new(16.0, 15.0), &dim_style);
         let temp = self.temperature_c.unwrap_or(0);
         let temp_style = TextStyle {

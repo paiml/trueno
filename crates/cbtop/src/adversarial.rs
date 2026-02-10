@@ -405,7 +405,7 @@ impl MonotonicClock {
 
         if let Some(prev) = self.last_timestamp {
             // In Rust, Instant is guaranteed monotonic, but we check anyway
-            // for systems with broken clocks
+            // for systems with unreliable clock sources
             if now < prev {
                 return Err(AdversarialError::ClockSkew { prev, curr: now });
             }

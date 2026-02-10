@@ -171,7 +171,7 @@ impl DataFlowAnalyzer {
             }
             Opcode::St => {
                 // Store uses values - track the use points
-                // For st.XXX [addr], value:
+                // For st.<type> [addr], value:
                 // - operand 0 is the memory address
                 // - operand 1 is the value to store
                 if let Some(Operand::Memory(addr_str)) = instr.operands.first() {

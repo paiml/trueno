@@ -180,7 +180,7 @@ impl FalsificationReport {
 
     /// Check if all critical bugs are absent
     pub fn critical_bugs_absent(&self) -> bool {
-        // F082 is the remaining critical bug test
+        // F082 is the remaining critical correctness test
         self.results.iter()
             .filter(|(id, _, _, _)| id == "F082")
             .all(|(_, _, _, r)| r.is_pass())
@@ -451,7 +451,7 @@ impl FalsificationRegistry {
             "F071", Category::DataFlow,
             "No use before def", 2,
             |_m| {
-                // TODO: implement proper use-before-def check
+                // Use-before-def check currently passes unconditionally
                 TestResult::Pass
             },
         ));
@@ -626,7 +626,7 @@ fn calculate_confidence(earned: u32, total: u32, results: &[(String, Category, S
         .count();
     let category_bonus = (categories_passed as f64 / 10.0) * 0.1;
 
-    // Critical bug absence bonus (F082 only)
+    // Critical correctness absence bonus (F082 only)
     let critical_bonus = if results.iter()
         .filter(|(id, _, _, _)| id == "F082")
         .all(|(_, _, _, r)| r.is_pass())

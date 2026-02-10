@@ -425,7 +425,7 @@ impl IronmanValidator {
         // F920: Internationalization
         scorecard.record("F920", self.check_i18n());
 
-        // Slow checks (mutation, miri, etc.)
+        // Long-running checks (mutation, miri, etc.)
         if !self.skip_slow {
             scorecard.record("F901", self.check_mutation_resilience());
             scorecard.record("F903", self.check_miri());

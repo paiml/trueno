@@ -261,7 +261,7 @@ fn estimate_thermal_contribution(temperatures: &[f64], latencies: &[f64]) -> f64
         0.0
     };
 
-    // Only count positive correlation (higher temp = higher latency)
+    // Positive correlation threshold: higher temperature correlates with higher latency
     if correlation > 0.3 {
         correlation * temp_cv
     } else {

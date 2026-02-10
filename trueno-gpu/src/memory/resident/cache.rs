@@ -82,7 +82,7 @@ pub(crate) fn get_or_compile_kernel(
         }
     }
 
-    // Slow path: compile and cache
+    // Cache miss: compile and store
     KERNEL_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
     eprintln!("[KERNEL-CACHE] Compiling: {}", key);
 

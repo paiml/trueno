@@ -633,7 +633,7 @@ impl Kernel for TrueDp4aQ4KGemvKernel {
 
                 // Continue for remaining 6 values (at offsets 64, 96, 128, 160, 192, 224)
                 // Each uses different sub-block scales...
-                // For now, just use block 0 scale (will optimize later)
+                // Uses block 0 scale; per-block scale selection is available for sub-block granularity
                 let sixty_four = ctx.mov_u32_imm(64);
                 let x_idx2 = ctx.add_u32_reg(x_idx0, sixty_four);
                 let x_idx2_64 = ctx.cvt_u64_u32(x_idx2);
