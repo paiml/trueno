@@ -1,4 +1,8 @@
-# Temporary coverage config - DO NOT COMMIT
-# Replaces project config during coverage runs
+# Build configuration for consistent, fast builds
 [build]
 target-dir = "/mnt/nvme-raid0/coverage/trueno"
+
+# Fast linking with mold (improves incremental build time)
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
