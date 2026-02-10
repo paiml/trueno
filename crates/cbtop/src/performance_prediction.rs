@@ -246,8 +246,18 @@ impl PerformancePredictor {
             return None;
         }
 
-        let min = self.data_points.iter().map(|p| p.size).min().unwrap();
-        let max = self.data_points.iter().map(|p| p.size).max().unwrap();
+        let min = self
+            .data_points
+            .iter()
+            .map(|p| p.size)
+            .min()
+            .expect("non-empty collection");
+        let max = self
+            .data_points
+            .iter()
+            .map(|p| p.size)
+            .max()
+            .expect("non-empty collection");
         Some((min, max))
     }
 
@@ -433,7 +443,11 @@ impl PerformancePredictor {
         let best = self
             .models
             .iter()
-            .max_by(|a, b| a.1.r_squared.partial_cmp(&b.1.r_squared).unwrap())
+            .max_by(|a, b| {
+                a.1.r_squared
+                    .partial_cmp(&b.1.r_squared)
+                    .expect("values should be comparable")
+            })
             .map(|(t, _)| *t);
 
         self.best_model = best;
@@ -497,7 +511,7 @@ impl PerformancePredictor {
     pub fn compare_models(&self) -> Vec<(&ModelType, f64)> {
         let mut comparisons: Vec<_> = self.models.iter().map(|(t, m)| (t, m.r_squared)).collect();
 
-        comparisons.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        comparisons.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("values should be comparable"));
         comparisons
     }
 

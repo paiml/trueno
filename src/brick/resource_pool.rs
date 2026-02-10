@@ -125,13 +125,17 @@ pub struct PooledResource<'a, T> {
 impl<T> std::ops::Deref for PooledResource<'_, T> {
     type Target = T;
     fn deref(&self) -> &T {
-        self.resource.as_ref().unwrap()
+        self.resource
+            .as_ref()
+            .expect("PooledResource accessed after take (bug: Drop ran before Deref)")
     }
 }
 
 impl<T> std::ops::DerefMut for PooledResource<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        self.resource.as_mut().unwrap()
+        self.resource
+            .as_mut()
+            .expect("PooledResource accessed after take (bug: Drop ran before DerefMut)")
     }
 }
 

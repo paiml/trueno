@@ -79,7 +79,7 @@ impl WgpuAnalyzer {
         // Match @workgroup_size(x), @workgroup_size(x, y), or @workgroup_size(x, y, z)
         let pattern =
             Regex::new(r"@workgroup_size\s*\(\s*(\d+)(?:\s*,\s*(\d+))?(?:\s*,\s*(\d+))?\s*\)")
-                .unwrap();
+                .expect("valid regex pattern");
 
         if let Some(caps) = pattern.captures(wgsl) {
             let x = caps.get(1).map_or(1, |m| m.as_str().parse().unwrap_or(1));
@@ -93,9 +93,9 @@ impl WgpuAnalyzer {
 
     /// Count bindings in WGSL
     fn count_bindings(&self, wgsl: &str) -> (u32, u32, u32) {
-        let storage_pattern = Regex::new(r"var<storage").unwrap();
-        let uniform_pattern = Regex::new(r"var<uniform>").unwrap();
-        let texture_pattern = Regex::new(r"texture_\w+<").unwrap();
+        let storage_pattern = Regex::new(r"var<storage").expect("valid regex pattern");
+        let uniform_pattern = Regex::new(r"var<uniform>").expect("valid regex pattern");
+        let texture_pattern = Regex::new(r"texture_\w+<").expect("valid regex pattern");
 
         let storage = storage_pattern.find_iter(wgsl).count() as u32;
         let uniform = uniform_pattern.find_iter(wgsl).count() as u32;
@@ -109,10 +109,10 @@ impl WgpuAnalyzer {
         // Arithmetic: +, -, *, /, dot, cross, etc.
         let arith_pattern =
             Regex::new(r"(\+|-|\*|/|dot|cross|normalize|length|sqrt|pow|exp|log|sin|cos|tan)")
-                .unwrap();
+                .expect("valid regex pattern");
         // Memory: load, store, array access
-        let mem_pattern =
-            Regex::new(r"(\[[\w\s+\-*/]+\]|textureLoad|textureSample|textureStore)").unwrap();
+        let mem_pattern = Regex::new(r"(\[[\w\s+\-*/]+\]|textureLoad|textureSample|textureStore)")
+            .expect("valid regex pattern");
 
         let arith = arith_pattern.find_iter(wgsl).count() as u32;
         let mem = mem_pattern.find_iter(wgsl).count() as u32;

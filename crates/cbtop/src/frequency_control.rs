@@ -129,8 +129,8 @@ impl FrequencyReading {
         self.cpus
             .iter()
             .map(|c| c.current_mhz())
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap_or(0.0)
+            .min_by(|a, b| a.partial_cmp(b).expect("values should be comparable"))
+            .expect("min of non-empty collection")
     }
 
     /// Get max frequency across cores in MHz
@@ -138,8 +138,8 @@ impl FrequencyReading {
         self.cpus
             .iter()
             .map(|c| c.current_mhz())
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
-            .unwrap_or(0.0)
+            .max_by(|a, b| a.partial_cmp(b).expect("values should be comparable"))
+            .expect("max of non-empty collection")
     }
 
     /// Get frequency variance in MHz

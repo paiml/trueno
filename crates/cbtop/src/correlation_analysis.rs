@@ -465,7 +465,7 @@ impl CorrelationAnalyzer {
                 (a.timestamp - timestamp)
                     .abs()
                     .partial_cmp(&(b.timestamp - timestamp).abs())
-                    .unwrap()
+                    .expect("values should be comparable")
             })
             .filter(|p| (p.timestamp - timestamp).abs() < self.window_sec)
     }
@@ -495,7 +495,11 @@ impl CorrelationAnalyzer {
             return None;
         }
 
-        correlations.sort_by(|a, b| b.1.abs().partial_cmp(&a.1.abs()).unwrap());
+        correlations.sort_by(|a, b| {
+            b.1.abs()
+                .partial_cmp(&a.1.abs())
+                .expect("values should be comparable")
+        });
 
         let (primary_source, correlation) = correlations[0];
         let secondary_sources: Vec<_> = correlations.into_iter().skip(1).collect();

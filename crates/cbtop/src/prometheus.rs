@@ -542,7 +542,7 @@ pub fn validate_metric_name(name: &str) -> bool {
         return false;
     }
 
-    let first = name.chars().next().unwrap();
+    let first = name.chars().next().expect("non-empty string");
     if !first.is_ascii_lowercase() && first != '_' {
         return false;
     }
