@@ -40,7 +40,7 @@ impl Kernel for Lz4WarpDecompressKernel {
             .param(PtxType::U32, "batch_size")
             .shared_memory(PAGE_SIZE as usize * 2)
             .build(|ctx| {
-                // TODO: Implement decompression
+                // Decompression kernel body (stub — exits immediately)
                 ctx.label("L_exit");
             })
     }

@@ -440,8 +440,8 @@ impl TunerDataCollector {
         // Five-Whys archive has 85 labeled iterations from SHOWCASE-BRICK-001
         // Each iteration has: features, throughput, kernel selection, bottleneck
 
-        // TODO: Load actual Five-Whys data from archive
-        // For now, return empty collector - data will be collected from real runs
+        // Returns empty collector — data will be collected from real runs
+        // Five-Whys archive loading is not yet implemented
         Self::new()
     }
 

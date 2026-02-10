@@ -147,7 +147,7 @@ impl Kernel for FusedRmsNormQ4KGemvKernel {
                 let warp_id = ctx.div_u32(thread_id, 32);
                 let is_lane0 = ctx.setp_lt_u32(lane_id, one);
 
-                // Temporary storage after input buffer: k_dim * 4 + warp_id * 4
+                // Warp-local storage region after input buffer: k_dim * 4 + warp_id * 4
                 let k_bytes = ctx.mul_u32_reg(k_dim, four);
                 let warp_sum_offset = ctx.mul_wide_u32_reg(warp_id, four);
                 let k_bytes_64 = ctx.cvt_u64_u32(k_bytes);

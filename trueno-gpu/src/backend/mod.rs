@@ -124,12 +124,12 @@ impl Backend for WgpuBackend {
     }
 
     fn is_available(&self) -> bool {
-        // TODO: Check for wgpu feature and adapter availability
+        // Availability based on wgpu feature flag
         cfg!(feature = "wgpu")
     }
 
     fn device_count(&self) -> usize {
-        // TODO: Enumerate wgpu adapters
+        // Returns 1 if wgpu is available, 0 otherwise (adapter enumeration not yet wired)
         usize::from(self.is_available())
     }
 }

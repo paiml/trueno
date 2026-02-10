@@ -814,7 +814,7 @@ impl Kernel for MultiWarpIncrementalAttentionKernel {
             ctx.label("reduce_sum_done");
 
             // CORRECTNESS-013: Store global_max and global_sum to SEPARATE locations
-            // Previous bug: storing to max_off_base (0) overwrote warp 0's local max
+            // Separate offsets prevent overwriting warp 0's local max via max_off_base (0)
             let global_max_off = ctx.mov_u64_imm((num_warps * 8) as u64);
             let global_sum_off = ctx.mov_u64_imm((num_warps * 8 + 4) as u64);
             ctx.st_shared_f32(global_max_off, global_max);

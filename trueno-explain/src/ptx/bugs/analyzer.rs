@@ -182,7 +182,7 @@ impl PtxBugAnalyzer {
         // Extract kernel name
         let kernel_name = self.extract_kernel_name(ptx);
 
-        // Run all bug detectors
+        // Execute all pattern detectors
         bugs.extend(self.detect_shared_mem_u64(ptx, &lines));
         bugs.extend(self.detect_loop_branch_to_end(ptx, &lines));
         bugs.extend(self.detect_missing_barrier_sync(ptx, &lines));

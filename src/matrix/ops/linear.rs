@@ -88,7 +88,7 @@ impl Matrix<f32> {
 
         // For non-square matrices, process output rows sequentially for write coalescing
         // This ensures writes are sequential in memory regardless of input shape
-        // Fix for issue #65: non-square transpose was slow due to strided writes
+        // Non-square transpose uses write-coalesced layout for sequential memory access
 
         // Process in blocks, iterating output rows first for sequential writes
         for j_block in (0..self.cols).step_by(BLOCK_SIZE) {

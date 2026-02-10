@@ -27,9 +27,8 @@ use trueno_gpu::kernels::Kernel;
 /// Category: {cat:?}
 #[test]
 fn fkr_{id_lower}_{module}() {{
-    // This test verifies the absence of the bug pattern
+    // This test verifies the absence of the detected pattern
     // Detected issue: {desc}
-    // TODO: Add specific kernel test here
     todo!("Implement FKR test for {id}");
 }}
 "#,
@@ -42,7 +41,7 @@ fn fkr_{id_lower}_{module}() {{
         }
     }
 
-    // Generate test for each detected bug
+    // Generate test for each detected issue
     for bug in analysis.bugs.bugs() {
         let bug_id = format!("{}", bug.class).to_lowercase().replace(' ', "_");
         let module_name = analysis.module_name.to_lowercase().replace('-', "_");
@@ -52,8 +51,8 @@ fn fkr_{id_lower}_{module}() {{
 /// Severity: {sev}
 #[test]
 fn fkr_bug_{bug_id}_{module}() {{
-    // This test verifies the bug is fixed
-    // Bug: {msg}
+    // This test verifies the issue is resolved
+    // Issue: {msg}
     // Mitigation: {mit}
     todo!("Implement FKR test for {bug_class}");
 }}

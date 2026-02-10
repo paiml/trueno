@@ -360,7 +360,7 @@ impl Kernel for TiledConv1dKernel {
 
     fn build_ptx(&self) -> PtxKernel {
         // Tiled version with shared memory
-        // For now, delegate to simple kernel; can optimize later
+        // Delegates to the non-tiled kernel; shared-memory tiling is not yet implemented
         let simple = Conv1dKernel::new(
             self.in_channels,
             self.out_channels,

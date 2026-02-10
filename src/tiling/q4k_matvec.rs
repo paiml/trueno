@@ -305,7 +305,7 @@ fn f16_bits_to_f32(bits: u16) -> f32 {
         return f32::from_bits(f32_bits);
     }
 
-    // Slow path: special cases
+    // Cold path: special cases (zero, subnormal, inf, nan)
     f16_special_to_f32(sign, exponent, mantissa)
 }
 

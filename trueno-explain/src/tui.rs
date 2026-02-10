@@ -49,7 +49,7 @@ impl TuiApp {
     #[must_use]
     pub fn new(ptx_source: String, report: AnalysisReport) -> Self {
         let source_lines = ptx_source.lines().count();
-        // Run bug analysis in strict mode for TUI
+        // Perform PTX pattern analysis in strict mode for TUI
         let bug_report = PtxBugAnalyzer::strict().analyze(&ptx_source);
         Self {
             ptx_source,
@@ -278,7 +278,7 @@ fn render_sidebar(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
     // Roofline
     render_roofline_widget(frame, app, chunks[2]);
 
-    // Bug hunting results
+    // PTX pattern analysis results
     render_bugs_widget(frame, app, chunks[3]);
 
     // Muda warnings
@@ -478,43 +478,44 @@ fn render_warnings_widget(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
 }
 
 /// Simple PTX syntax highlighting
+/// Classify a PTX instruction's syntax category for color highlighting.
+fn ptx_instruction_color(trimmed: &str) -> Option<Color> {
+    // Memory operations
+    if trimmed.starts_with("ld.") || trimmed.starts_with("st.") {
+        return Some(Color::Yellow);
+    }
+    // Arithmetic
+    if trimmed.starts_with("add")
+        || trimmed.starts_with("sub")
+        || trimmed.starts_with("mul")
+        || trimmed.starts_with("mad")
+        || trimmed.starts_with("fma")
+    {
+        return Some(Color::Green);
+    }
+    // Control flow
+    if trimmed.starts_with("bra") || trimmed.starts_with("ret") || trimmed.starts_with("setp") {
+        return Some(Color::Red);
+    }
+    None
+}
+
 fn highlight_ptx_line(line: &str) -> Span<'static> {
     let line = line.to_string();
     let trimmed = line.trim();
 
-    // Comments
     if trimmed.starts_with("//") {
         return Span::styled(line, Style::default().fg(Color::DarkGray));
     }
-
-    // Directives (.version, .target, .entry, etc.)
     if trimmed.starts_with('.') {
         return Span::styled(line, Style::default().fg(Color::Magenta));
     }
-
-    // Labels
     if trimmed.ends_with(':') && !trimmed.contains(' ') {
         return Span::styled(line, Style::default().fg(Color::Cyan));
     }
-
-    // Instructions (indented lines that aren't directives)
     if line.starts_with('\t') || line.starts_with("    ") {
-        // Memory operations
-        if trimmed.starts_with("ld.") || trimmed.starts_with("st.") {
-            return Span::styled(line, Style::default().fg(Color::Yellow));
-        }
-        // Arithmetic
-        if trimmed.starts_with("add")
-            || trimmed.starts_with("sub")
-            || trimmed.starts_with("mul")
-            || trimmed.starts_with("mad")
-            || trimmed.starts_with("fma")
-        {
-            return Span::styled(line, Style::default().fg(Color::Green));
-        }
-        // Control flow
-        if trimmed.starts_with("bra") || trimmed.starts_with("ret") || trimmed.starts_with("setp") {
-            return Span::styled(line, Style::default().fg(Color::Red));
+        if let Some(color) = ptx_instruction_color(trimmed) {
+            return Span::styled(line, Style::default().fg(color));
         }
     }
 

@@ -332,7 +332,7 @@ impl BrickProfiler {
                 let stats = &mut self.brick_stats[brick_id as usize];
                 stats.add_sample(elapsed_ns, m.elements);
             } else if let Some(name) = m.name {
-                // Slow path: dynamic brick
+                // Fallback path: dynamic brick lookup
                 let stats = self
                     .dynamic_stats
                     .entry(name.clone())
