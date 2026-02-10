@@ -648,8 +648,16 @@ impl PredictiveScheduler {
             })
             .collect();
 
-        overloaded.sort_by(|a, b| b.current_load.partial_cmp(&a.current_load).unwrap());
-        underloaded.sort_by(|a, b| a.current_load.partial_cmp(&b.current_load).unwrap());
+        overloaded.sort_by(|a, b| {
+            b.current_load
+                .partial_cmp(&a.current_load)
+                .expect("values should be comparable")
+        });
+        underloaded.sort_by(|a, b| {
+            a.current_load
+                .partial_cmp(&b.current_load)
+                .expect("values should be comparable")
+        });
 
         // Suggest migrations from overloaded to underloaded
         for (over, under) in overloaded.iter().zip(underloaded.iter()) {

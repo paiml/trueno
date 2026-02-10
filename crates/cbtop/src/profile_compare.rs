@@ -418,8 +418,12 @@ impl ProfileComparator {
         let mut improvements = Vec::new();
 
         for metric_name in &common_metrics {
-            let baseline_samples = baseline.get_metric(metric_name).unwrap();
-            let comparison_samples = comparison.get_metric(metric_name).unwrap();
+            let baseline_samples = baseline
+                .get_metric(metric_name)
+                .expect("metric should exist in baseline");
+            let comparison_samples = comparison
+                .get_metric(metric_name)
+                .expect("metric should exist in comparison");
 
             // Check minimum samples
             if baseline_samples.count() < self.config.min_samples {

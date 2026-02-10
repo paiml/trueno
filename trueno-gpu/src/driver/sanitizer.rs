@@ -540,7 +540,7 @@ impl SanitizerReport {
             return "✅ No memory violations detected".to_string();
         }
 
-        let registry = AddressRegistry::global().lock().unwrap();
+        let registry = AddressRegistry::global().lock().expect("address registry lock poisoned");
         let mut output = String::new();
 
         output.push_str(&format!(
@@ -563,7 +563,7 @@ impl SanitizerReport {
             return "✅ No memory violations detected".to_string();
         }
 
-        let registry = AddressRegistry::global().lock().unwrap();
+        let registry = AddressRegistry::global().lock().expect("address registry lock poisoned");
         let mut output = String::new();
 
         output.push_str(&format!(

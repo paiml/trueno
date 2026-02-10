@@ -37,7 +37,8 @@ impl PtxAnalyzer {
         let mut usage = RegisterUsage::default();
 
         // Match patterns like: .reg .f32 %f<24>;
-        let reg_pattern = Regex::new(r"\.reg\s+\.(\w+)\s+%\w+<(\d+)>").unwrap();
+        let reg_pattern =
+            Regex::new(r"\.reg\s+\.(\w+)\s+%\w+<(\d+)>").expect("valid regex pattern");
 
         for cap in reg_pattern.captures_iter(ptx) {
             let reg_type = &cap[1];
@@ -61,19 +62,19 @@ impl PtxAnalyzer {
         let mut pattern = MemoryPattern::default();
 
         // Count global loads
-        let global_load = Regex::new(r"ld\.global").unwrap();
+        let global_load = Regex::new(r"ld\.global").expect("valid regex pattern");
         pattern.global_loads = global_load.find_iter(ptx).count() as u32;
 
         // Count global stores
-        let global_store = Regex::new(r"st\.global").unwrap();
+        let global_store = Regex::new(r"st\.global").expect("valid regex pattern");
         pattern.global_stores = global_store.find_iter(ptx).count() as u32;
 
         // Count shared loads
-        let shared_load = Regex::new(r"ld\.shared").unwrap();
+        let shared_load = Regex::new(r"ld\.shared").expect("valid regex pattern");
         pattern.shared_loads = shared_load.find_iter(ptx).count() as u32;
 
         // Count shared stores
-        let shared_store = Regex::new(r"st\.shared").unwrap();
+        let shared_store = Regex::new(r"st\.shared").expect("valid regex pattern");
         pattern.shared_stores = shared_store.find_iter(ptx).count() as u32;
 
         // Estimate coalescing based on access patterns
@@ -83,27 +84,28 @@ impl PtxAnalyzer {
         // 3. mul.wide with small constant (stride-1 access)
         // 4. shfl instructions (warp shuffle - implicit coalescing)
         // Note: Include both x and y dimensions since 2D kernels use both
-        let tid_pattern = Regex::new(r"%tid\.[xy]|%ntid\.[xy]|%ctaid\.[xy]").unwrap();
+        let tid_pattern =
+            Regex::new(r"%tid\.[xy]|%ntid\.[xy]|%ctaid\.[xy]").expect("valid regex pattern");
         let tid_refs = tid_pattern.find_iter(ptx).count();
 
         // mad.lo often computes coalesced indices: mad.lo %r, %ctaid, %ntid, %tid
-        let mad_pattern = Regex::new(r"mad\.lo").unwrap();
+        let mad_pattern = Regex::new(r"mad\.lo").expect("valid regex pattern");
         let mad_refs = mad_pattern.find_iter(ptx).count();
 
         // mul.lo also used for index computation
-        let mul_lo_pattern = Regex::new(r"mul\.lo").unwrap();
+        let mul_lo_pattern = Regex::new(r"mul\.lo").expect("valid regex pattern");
         let mul_lo_refs = mul_lo_pattern.find_iter(ptx).count();
 
         // mul.wide with small constants indicates stride-based access
-        let stride_pattern = Regex::new(r"mul\.wide\.[us]32").unwrap();
+        let stride_pattern = Regex::new(r"mul\.wide\.[us]32").expect("valid regex pattern");
         let stride_refs = stride_pattern.find_iter(ptx).count();
 
         // Warp shuffles indicate warp-level data sharing (inherently coalesced)
-        let shfl_pattern = Regex::new(r"shfl\.(down|up|bfly|idx)").unwrap();
+        let shfl_pattern = Regex::new(r"shfl\.(down|up|bfly|idx)").expect("valid regex pattern");
         let shfl_refs = shfl_pattern.find_iter(ptx).count();
 
         // rem/div operations often used for lane computation in coalesced patterns
-        let lane_pattern = Regex::new(r"rem\.u32|div\.u32").unwrap();
+        let lane_pattern = Regex::new(r"rem\.u32|div\.u32").expect("valid regex pattern");
         let lane_refs = lane_pattern.find_iter(ptx).count();
 
         let total_accesses = pattern.global_loads + pattern.global_stores;
@@ -127,7 +129,7 @@ impl PtxAnalyzer {
     /// Count total instructions
     fn count_instructions(&self, ptx: &str) -> u32 {
         // Count lines that look like instructions (not directives or labels)
-        let instruction_pattern = Regex::new(r"^\s+(add|sub|mul|div|mad|fma|ld|st|mov|setp|bra|ret|cvt|and|or|xor|shl|shr|min|max|abs|neg|sqrt|rsqrt|sin|cos|ex2|lg2|rcp|selp|set|bar)").unwrap();
+        let instruction_pattern = Regex::new(r"^\s+(add|sub|mul|div|mad|fma|ld|st|mov|setp|bra|ret|cvt|and|or|xor|shl|shr|min|max|abs|neg|sqrt|rsqrt|sin|cos|ex2|lg2|rcp|selp|set|bar)").expect("valid regex pattern");
 
         ptx.lines()
             .filter(|line| instruction_pattern.is_match(line))
@@ -136,7 +138,7 @@ impl PtxAnalyzer {
 
     /// Extract kernel name from PTX
     fn extract_kernel_name(&self, ptx: &str) -> String {
-        let entry_pattern = Regex::new(r"\.entry\s+(\w+)").unwrap();
+        let entry_pattern = Regex::new(r"\.entry\s+(\w+)").expect("valid regex pattern");
         entry_pattern
             .captures(ptx)
             .map(|c| c[1].to_string())
@@ -146,7 +148,7 @@ impl PtxAnalyzer {
     /// Detect spills (Muda of Transport)
     fn detect_spills(&self, ptx: &str) -> Option<MudaWarning> {
         // Spills manifest as .local memory usage
-        let local_pattern = Regex::new(r"\.local").unwrap();
+        let local_pattern = Regex::new(r"\.local").expect("valid regex pattern");
         let spill_count = local_pattern.find_iter(ptx).count();
 
         if spill_count > 0 {

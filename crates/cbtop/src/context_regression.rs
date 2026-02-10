@@ -353,7 +353,10 @@ impl ContextRegressionPredictor {
             };
         }
 
-        let entries = self.baselines.get(metric).unwrap();
+        let entries = self
+            .baselines
+            .get(metric)
+            .expect("metric should exist in baselines after sufficient history check");
 
         // Compute base threshold from historical variance
         let values: Vec<f64> = entries.iter().map(|e| e.value).collect();
