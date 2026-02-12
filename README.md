@@ -135,6 +135,7 @@ Part of the Pragmatic AI Labs stack:
 - [trueno-db](https://crates.io/crates/trueno-db) - GPU-first analytics database
 - [trueno-graph](https://crates.io/crates/trueno-graph) - Graph algorithms
 - [trueno-rag](https://crates.io/crates/trueno-rag) - RAG pipeline
+- 🤖 [Coursera Hugging Face AI Development Specialization](https://www.coursera.org/specializations/hugging-face-ai-development) - Build Production AI systems with Hugging Face in Pure Rust
 
 ## License
 
