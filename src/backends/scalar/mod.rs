@@ -111,7 +111,7 @@ impl VectorBackend for ScalarBackend {
     // 3. Marked unsafe only to match VectorBackend trait interface
     unsafe fn max(a: &[f32]) -> f32 {
         let mut maximum = a[0];
-        for &val in &a[1..] {
+        for &val in a.get(1..).unwrap_or(&[]) {
             if val > maximum {
                 maximum = val;
             }
@@ -125,7 +125,7 @@ impl VectorBackend for ScalarBackend {
     // 3. Marked unsafe only to match VectorBackend trait interface
     unsafe fn min(a: &[f32]) -> f32 {
         let mut minimum = a[0];
-        for &val in &a[1..] {
+        for &val in a.get(1..).unwrap_or(&[]) {
             if val < minimum {
                 minimum = val;
             }

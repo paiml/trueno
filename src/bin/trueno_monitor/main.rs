@@ -694,7 +694,8 @@ fn init_logging() -> tracing_appender::non_blocking::WorkerGuard {
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     // Build subscriber with env filter (default: info)
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_err| EnvFilter::new("info"));
 
     tracing_subscriber::registry()
         .with(filter)
