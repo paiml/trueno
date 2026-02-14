@@ -78,6 +78,6 @@ All documentation should:
 
 The book is automatically deployed to GitHub Pages on every push to `main`:
 
-https://paiml.github.io/trueno/
+<https://paiml.github.io/trueno/>
 
 CI workflow: `.github/workflows/mdbook.yml`

@@ -236,8 +236,8 @@ example-%: ## Run specific example (e.g., make example-brick_profiler_v2)
 # =============================================================================
 
 # STRICT exclusions: Include ONLY trueno/src/ and trueno/trueno-gpu/src/
-# Exclude: binary entry points, non-core crates, benchmarks, examples, integration tests
-COV_EXCLUDE := --ignore-filename-regex='(crates/cbtop/|trueno-explain/|xtask/|/bin/|/benches/|/examples/|/tests/)'
+# Exclude: non-core crates, binary/bench/example/test entry points (CB-125-A: ≤10 patterns)
+COV_EXCLUDE := --ignore-filename-regex='(crates/|trueno-explain/|xtask/|/(bin|benches|examples|tests)/)'
 
 # Coverage targets - FAST with incremental builds
 # Key insight: --no-report is FAST (0.4s), report generation is SLOW (22s)

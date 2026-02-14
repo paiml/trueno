@@ -949,7 +949,7 @@ let mut criterion = Criterion::default()
 ///
 /// # See Also
 ///
-/// - [`add_with_backend`](Vector::add_with_backend) to force specific backend
+/// - `add_with_backend` to force specific backend
 pub fn add(&self, other: &Self) -> Result<Self> {
     // ...
 }

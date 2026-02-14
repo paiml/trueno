@@ -251,6 +251,6 @@ cargo bench --features gpu --bench gpu_reduction
 
 ## Related Documentation
 
-- [cuda-tile-behavior.md](/docs/specifications/cuda-tile-behavior.md) - Full specification
+- [cuda-tile-behavior.md](../../../docs/specifications/cuda-tile-behavior.md) - Full specification
 - [Performance Targets](../performance/targets.md) - Expected speedups
 - [Backend Selection](../architecture/backend-selection.md) - When GPU is selected
