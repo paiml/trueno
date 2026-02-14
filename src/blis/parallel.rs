@@ -6,7 +6,9 @@
 use crate::error::TruenoError;
 
 use super::compute::gemm_blis;
-use super::packing::{packed_b_size};
+#[cfg(feature = "parallel")]
+use super::packing::packed_b_size;
+#[cfg(feature = "parallel")]
 use super::{KC, MC, NC, NR};
 
 /// Heijunka (load-leveling) scheduler for parallel GEMM

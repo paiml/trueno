@@ -22,7 +22,7 @@ pub fn dequantize_q4k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
 
         let sb_data = &data[sb_start..sb_start + SUPER_BLOCK_BYTES];
         let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
-        let qs = &sb_data[16..144];
+        let qs = sb_data.get(16..144).expect("Q4_K: need ≥144 bytes for qs");
 
         let mut ys_index = out_start;
 

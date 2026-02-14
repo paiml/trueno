@@ -28,9 +28,9 @@ fn process_q6k_superblock_scalar(
     input_offset: usize,
     in_dim: usize,
 ) -> f32 {
-    let ql = &sb_data[0..128];
-    let qh = &sb_data[128..192];
-    let scales = &sb_data[192..208];
+    let ql = sb_data.get(0..128).expect("Q6_K: need ≥128 bytes for ql");
+    let qh = sb_data.get(128..192).expect("Q6_K: need ≥192 bytes for qh");
+    let scales = sb_data.get(192..208).expect("Q6_K: need ≥208 bytes for scales");
     let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
     let mut sum = 0.0f32;
 
@@ -131,9 +131,9 @@ unsafe fn process_q6k_superblock_avx2(
 ) {
     use std::arch::x86_64::*;
 
-    let ql = &sb_data[0..128];
-    let qh = &sb_data[128..192];
-    let scales = &sb_data[192..208];
+    let ql = sb_data.get(0..128).expect("Q6_K: need ≥128 bytes for ql");
+    let qh = sb_data.get(128..192).expect("Q6_K: need ≥192 bytes for qh");
+    let scales = sb_data.get(192..208).expect("Q6_K: need ≥208 bytes for scales");
     let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
     let d_vec = _mm256_set1_ps(d);
 
