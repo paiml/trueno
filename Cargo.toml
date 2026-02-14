@@ -186,7 +186,7 @@ harness = false
 
 [[bin]]
 name = "trueno-monitor"
-path = "src/bin/trueno-monitor.rs"
+path = "src/bin/trueno_monitor/main.rs"
 required-features = ["tui-monitor"]
 
 [[example]]
