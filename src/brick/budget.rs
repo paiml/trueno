@@ -37,6 +37,11 @@ impl ByteBudget {
     /// Create budget from throughput target (GB/s).
     /// 25 GB/s = 0.16µs per 4KB page
     pub fn from_throughput(gb_per_sec: f64) -> Self {
+        debug_assert!(
+            gb_per_sec > 0.0 && gb_per_sec.is_finite(),
+            "CB-BUDGET: throughput must be positive and finite, got {}",
+            gb_per_sec
+        );
         let bytes_per_sec = gb_per_sec * 1e9;
         let pages_per_sec = bytes_per_sec / 4096.0;
         Self {
