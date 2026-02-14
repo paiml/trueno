@@ -45,6 +45,7 @@ repository = "https://github.com/paiml/trueno"
 readme = "README.md"
 keywords = ["simd", "gpu", "wasm", "performance", "vectorization"]
 categories = ["algorithms", "mathematics", "science"]
+exclude = ["target/", ".profraw", ".profdata", ".vscode/", ".idea/", ".pmat", "proptest-regressions"]
 
 [package.metadata.docs.rs]
 all-features = true

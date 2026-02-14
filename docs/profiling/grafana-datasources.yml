@@ -8,8 +8,8 @@ datasources:
     access: proxy
     url: http://tempo:3200
     uid: tempo
-    isDefault: true
-    editable: true
+    isDefault: "true"
+    editable: "true"
     jsonData:
       httpMethod: GET
       tracesToLogs:
