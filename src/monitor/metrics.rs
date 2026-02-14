@@ -56,7 +56,7 @@ impl GpuThermalMetrics {
             0..=50 => "COOL",
             51..=70 => "WARM",
             71..=85 => "HOT",
-            _ => "CRITICAL",
+            86.. => "CRITICAL",
         }
     }
 }

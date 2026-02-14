@@ -325,8 +325,14 @@ impl Vector<f32> {
                         // Auto should have been resolved at creation time
                         return Err(TruenoError::UnsupportedBackend(Backend::Auto));
                     }
-                    #[allow(unreachable_patterns)]
-                    _ => ScalarBackend::scale(&self.data, scalar, &mut result_data),
+                    #[cfg(not(target_arch = "x86_64"))]
+                    Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                        ScalarBackend::scale(&self.data, scalar, &mut result_data)
+                    }
+                    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                    Backend::NEON => ScalarBackend::scale(&self.data, scalar, &mut result_data),
+                    #[cfg(not(target_arch = "wasm32"))]
+                    Backend::WasmSIMD => ScalarBackend::scale(&self.data, scalar, &mut result_data),
                 }
             }
         }
@@ -419,8 +425,18 @@ impl Vector<f32> {
                     Backend::Auto => {
                         return Err(TruenoError::UnsupportedBackend(Backend::Auto));
                     }
-                    #[allow(unreachable_patterns)]
-                    _ => ScalarBackend::fma(&self.data, &b.data, &c.data, &mut result_data),
+                    #[cfg(not(target_arch = "x86_64"))]
+                    Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                        ScalarBackend::fma(&self.data, &b.data, &c.data, &mut result_data)
+                    }
+                    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                    Backend::NEON => {
+                        ScalarBackend::fma(&self.data, &b.data, &c.data, &mut result_data)
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    Backend::WasmSIMD => {
+                        ScalarBackend::fma(&self.data, &b.data, &c.data, &mut result_data)
+                    }
                 }
             }
         }

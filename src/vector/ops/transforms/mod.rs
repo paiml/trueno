@@ -76,8 +76,14 @@ impl Vector<f32> {
                     Backend::Auto => {
                         return Err(TruenoError::UnsupportedBackend(Backend::Auto));
                     }
-                    #[allow(unreachable_patterns)]
-                    _ => ScalarBackend::abs(self.as_slice(), &mut result_data),
+                    #[cfg(not(target_arch = "x86_64"))]
+                    Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                        ScalarBackend::abs(self.as_slice(), &mut result_data)
+                    }
+                    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                    Backend::NEON => ScalarBackend::abs(self.as_slice(), &mut result_data),
+                    #[cfg(not(target_arch = "wasm32"))]
+                    Backend::WasmSIMD => ScalarBackend::abs(self.as_slice(), &mut result_data),
                 }
             }
         }
@@ -215,8 +221,18 @@ impl Vector<f32> {
                     Backend::Auto => {
                         return Err(TruenoError::UnsupportedBackend(Backend::Auto));
                     }
-                    #[allow(unreachable_patterns)]
-                    _ => ScalarBackend::clamp(self.as_slice(), min_val, max_val, &mut result_data),
+                    #[cfg(not(target_arch = "x86_64"))]
+                    Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                        ScalarBackend::clamp(self.as_slice(), min_val, max_val, &mut result_data)
+                    }
+                    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                    Backend::NEON => {
+                        ScalarBackend::clamp(self.as_slice(), min_val, max_val, &mut result_data)
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    Backend::WasmSIMD => {
+                        ScalarBackend::clamp(self.as_slice(), min_val, max_val, &mut result_data)
+                    }
                 }
             }
         }
@@ -306,8 +322,16 @@ impl Vector<f32> {
                     Backend::Auto => {
                         return Err(TruenoError::UnsupportedBackend(Backend::Auto));
                     }
-                    #[allow(unreachable_patterns)]
-                    _ => {
+                    #[cfg(not(target_arch = "x86_64"))]
+                    Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                        ScalarBackend::lerp(self.as_slice(), other.as_slice(), t, &mut result_data)
+                    }
+                    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                    Backend::NEON => {
+                        ScalarBackend::lerp(self.as_slice(), other.as_slice(), t, &mut result_data)
+                    }
+                    #[cfg(not(target_arch = "wasm32"))]
+                    Backend::WasmSIMD => {
                         ScalarBackend::lerp(self.as_slice(), other.as_slice(), t, &mut result_data)
                     }
                 }
