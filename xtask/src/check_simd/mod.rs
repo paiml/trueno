@@ -188,53 +188,91 @@ fn check_fma_feature(feature: &str, intrinsics: &HashSet<String>) -> Option<Stri
     None
 }
 
-/// Check target_feature and intrinsic violations for one unsafe SIMD function.
-fn check_target_feature_violations(
-    filepath: &Path, fn_name: &str, fn_line: usize,
-    pattern: &IntrinsicPattern, intrinsics: &[String],
+/// Check an unsafe function with SIMD intrinsics for all violation types.
+///
+/// Produces CRITICAL (missing `target_feature`), ERROR (attribute mismatch, missing FMA),
+/// and WARNING (missing SAFETY comment, missing inline) violations.
+fn check_unsafe_function_violations(
+    filepath: &Path,
     lines: &[String],
+    fn_name: &str,
+    fn_line: usize,
+    intrinsics: &HashSet<String>,
+    required_feature: &str,
 ) -> Vec<Violation> {
     let mut violations = Vec::new();
+
     let target_feature = check_target_feature_attribute(lines, fn_line);
 
-    if let Some(feature) = target_feature {
-        if let Some(msg) = check_attribute_mismatch(&feature, intrinsics) {
+    match target_feature {
+        None => {
+            // [CRITICAL] Missing #[target_feature]
             violations.push(Violation {
-                level: ViolationLevel::Error, filepath: filepath.to_path_buf(),
-                line_num: fn_line + 1, function_name: fn_name.to_string(),
-                message: msg,
-                fix_suggestion: "Correct #[target_feature] attribute to match intrinsics used".to_string(),
+                level: ViolationLevel::Critical,
+                filepath: filepath.to_path_buf(),
+                line_num: fn_line + 1, // 1-indexed
+                function_name: fn_name.to_string(),
+                message: format!(
+                    "Missing #[target_feature] attribute (uses {} SIMD intrinsics)",
+                    intrinsics.len()
+                ),
+                fix_suggestion: format!(
+                    "Add #[target_feature(enable = \"{}\")] above function",
+                    required_feature
+                ),
             });
         }
-        if let Some(msg) = check_fma_feature(&feature, intrinsics) {
-            violations.push(Violation {
-                level: ViolationLevel::Error, filepath: filepath.to_path_buf(),
-                line_num: fn_line + 1, function_name: fn_name.to_string(),
-                message: msg,
-                fix_suggestion: "Add 'fma' to target_feature: #[target_feature(enable = \"avx2,fma\")]".to_string(),
-            });
+        Some(feature) => {
+            // [ERROR] Attribute-intrinsic mismatch
+            if let Some(msg) = check_attribute_mismatch(&feature, intrinsics) {
+                violations.push(Violation {
+                    level: ViolationLevel::Error,
+                    filepath: filepath.to_path_buf(),
+                    line_num: fn_line + 1,
+                    function_name: fn_name.to_string(),
+                    message: msg,
+                    fix_suggestion:
+                        "Correct #[target_feature] attribute to match intrinsics used"
+                            .to_string(),
+                });
+            }
+
+            // [ERROR] FMA intrinsics without FMA feature
+            if let Some(msg) = check_fma_feature(&feature, intrinsics) {
+                violations.push(Violation {
+                    level: ViolationLevel::Error,
+                    filepath: filepath.to_path_buf(),
+                    line_num: fn_line + 1,
+                    function_name: fn_name.to_string(),
+                    message: msg,
+                    fix_suggestion:
+                        "Add 'fma' to target_feature: #[target_feature(enable = \"avx2,fma\")]"
+                            .to_string(),
+                });
+            }
         }
-    } else {
+    }
+
+    // [WARNING] Missing SAFETY comment
+    if !has_safety_comment(lines, fn_line) {
         violations.push(Violation {
-            level: ViolationLevel::Critical, filepath: filepath.to_path_buf(),
-            line_num: fn_line + 1, function_name: fn_name.to_string(),
-            message: format!("Missing #[target_feature] attribute (uses {} SIMD intrinsics)", intrinsics.len()),
-            fix_suggestion: format!("Add #[target_feature(enable = \"{}\")] above function", pattern.required_feature),
+            level: ViolationLevel::Warning,
+            filepath: filepath.to_path_buf(),
+            line_num: fn_line + 1,
+            function_name: fn_name.to_string(),
+            message: "Missing SAFETY comment for unsafe function with SIMD".to_string(),
+            fix_suggestion: "Add // SAFETY: comment explaining why unsafe code is correct"
+                .to_string(),
         });
     }
 
-    if !has_safety_comment(lines, fn_line) {
-        violations.push(Violation {
-            level: ViolationLevel::Warning, filepath: filepath.to_path_buf(),
-            line_num: fn_line + 1, function_name: fn_name.to_string(),
-            message: "Missing SAFETY comment for unsafe function with SIMD".to_string(),
-            fix_suggestion: "Add // SAFETY: comment explaining why unsafe code is correct".to_string(),
-        });
-    }
+    // [WARNING] Missing #[inline] attribute
     if !has_inline_attribute(lines, fn_line) {
         violations.push(Violation {
-            level: ViolationLevel::Warning, filepath: filepath.to_path_buf(),
-            line_num: fn_line + 1, function_name: fn_name.to_string(),
+            level: ViolationLevel::Warning,
+            filepath: filepath.to_path_buf(),
+            line_num: fn_line + 1,
+            function_name: fn_name.to_string(),
             message: "Missing #[inline] attribute on SIMD hot path".to_string(),
             fix_suggestion: "Add #[inline] above function for better optimization".to_string(),
         });
@@ -267,8 +305,13 @@ fn check_file(filepath: &Path, backend: &str) -> Result<Vec<Violation>> {
                 find_intrinsics_in_function(&lines, fn_line, &pattern.pattern);
 
             if !intrinsics.is_empty() {
-                violations.extend(check_target_feature_violations(
-                    filepath, &fn_name, fn_line, &pattern, &intrinsics, &lines,
+                violations.extend(check_unsafe_function_violations(
+                    filepath,
+                    &lines,
+                    &fn_name,
+                    fn_line,
+                    &intrinsics,
+                    pattern.required_feature,
                 ));
             }
 
