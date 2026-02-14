@@ -30,11 +30,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[3.0, 4.0]);
-    /// let norm = v.norm_l2().unwrap();
+    /// let norm = v.norm_l2()?;
     /// assert!((norm - 5.0).abs() < 1e-5); // sqrt(3^2 + 4^2) = 5
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Empty vectors
@@ -42,10 +45,13 @@ impl Vector<f32> {
     /// Returns 0.0 for empty vectors (consistent with the mathematical definition).
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v: Vector<f32> = Vector::from_slice(&[]);
-    /// assert_eq!(v.norm_l2().unwrap(), 0.0);
+    /// assert_eq!(v.norm_l2()?, 0.0);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn norm_l2(&self) -> Result<f32> {
         if self.as_slice().is_empty() {

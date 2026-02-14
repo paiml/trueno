@@ -26,18 +26,21 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-    /// let z = v.zscore().unwrap();
+    /// let z = v.zscore()?;
     ///
     /// // Verify mean ≈ 0
-    /// let mean = z.mean().unwrap();
+    /// let mean = z.mean()?;
     /// assert!(mean.abs() < 1e-5);
     ///
     /// // Verify stddev ≈ 1
-    /// let std = z.stddev().unwrap();
+    /// let std = z.stddev()?;
     /// assert!((std - 1.0).abs() < 1e-5);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Empty vectors
@@ -96,16 +99,19 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-    /// let normalized = v.minmax_normalize().unwrap();
+    /// let normalized = v.minmax_normalize()?;
     ///
     /// // Verify range [0, 1]
-    /// let min = normalized.min().unwrap();
-    /// let max = normalized.max().unwrap();
+    /// let min = normalized.min()?;
+    /// let max = normalized.max()?;
     /// assert!((min - 0.0).abs() < 1e-5);
     /// assert!((max - 1.0).abs() < 1e-5);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Empty vectors

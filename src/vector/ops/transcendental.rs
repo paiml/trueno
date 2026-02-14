@@ -27,11 +27,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[0.0, 1.0, 2.0]);
-    /// let result = v.exp().unwrap();
+    /// let result = v.exp()?;
     /// // result ≈ [1.0, 2.718, 7.389]
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Special Cases
@@ -135,11 +138,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, std::f32::consts::E, std::f32::consts::E.powi(2)]);
-    /// let result = v.ln().unwrap();
+    /// let result = v.ln()?;
     /// // result ≈ [0.0, 1.0, 2.0]
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Special Cases
@@ -178,11 +184,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 4.0, 8.0]);
-    /// let result = v.log2().unwrap();
+    /// let result = v.log2()?;
     /// // result ≈ [0.0, 1.0, 2.0, 3.0]
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Special Cases
@@ -220,11 +229,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 10.0, 100.0, 1000.0]);
-    /// let result = v.log10().unwrap();
+    /// let result = v.log10()?;
     /// // result ≈ [0.0, 1.0, 2.0, 3.0]
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Special Cases
@@ -262,12 +274,15 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     /// use std::f32::consts::PI;
     ///
     /// let v = Vector::from_slice(&[0.0, PI / 2.0, PI]);
-    /// let result = v.sin().unwrap();
+    /// let result = v.sin()?;
     /// // result ≈ [0.0, 1.0, 0.0]
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Special Cases
@@ -306,12 +321,15 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     /// use std::f32::consts::PI;
     ///
     /// let v = Vector::from_slice(&[0.0, PI / 2.0, PI]);
-    /// let result = v.cos().unwrap();
+    /// let result = v.cos()?;
     /// // result ≈ [1.0, 0.0, -1.0]
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Special Cases
@@ -365,12 +383,15 @@ impl Vector<f32> {
     ///
     /// # Examples
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     /// use std::f32::consts::PI;
     ///
     /// let angles = Vector::from_slice(&[0.0, PI / 4.0, -PI / 4.0]);
-    /// let result = angles.tan().unwrap();
+    /// let result = angles.tan()?;
     /// // Result: [0.0, 1.0, -1.0] (approximately)
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Use Cases
@@ -416,12 +437,15 @@ impl Vector<f32> {
     ///
     /// # Examples
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     /// use std::f32::consts::PI;
     ///
     /// let values = Vector::from_slice(&[0.0, 0.5, 1.0]);
-    /// let result = values.asin().unwrap();
+    /// let result = values.asin()?;
     /// // Result: [0.0, π/6, π/2] (approximately)
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Use Cases
@@ -462,12 +486,15 @@ impl Vector<f32> {
     ///
     /// # Examples
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     /// use std::f32::consts::PI;
     ///
     /// let values = Vector::from_slice(&[0.0, 0.5, 1.0]);
-    /// let result = values.acos().unwrap();
+    /// let result = values.acos()?;
     /// // Result: [π/2, π/3, 0.0] (approximately)
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Use Cases
@@ -510,12 +537,15 @@ impl Vector<f32> {
     ///
     /// # Examples
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     /// use std::f32::consts::PI;
     ///
     /// let values = Vector::from_slice(&[0.0, 1.0, -1.0]);
-    /// let result = values.atan().unwrap();
+    /// let result = values.atan()?;
     /// // Result: [0.0, π/4, -π/4] (approximately)
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Use Cases
@@ -548,11 +578,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[0.0, 1.0, -1.0]);
-    /// let result = v.sinh().unwrap();
+    /// let result = v.sinh()?;
     /// assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn sinh(&self) -> Result<Vector<f32>> {
         let sinh_data: Vec<f32> = self.data.iter().map(|x| x.sinh()).collect();
@@ -579,11 +612,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[0.0, 1.0, -1.0]);
-    /// let result = v.cosh().unwrap();
+    /// let result = v.cosh()?;
     /// assert!((result.as_slice()[0] - 1.0).abs() < 1e-5);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn cosh(&self) -> Result<Vector<f32>> {
         let cosh_data: Vec<f32> = self.data.iter().map(|x| x.cosh()).collect();
@@ -611,13 +647,16 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[0.0, 1.0, -1.0]);
-    /// let result = v.tanh().unwrap();
+    /// let result = v.tanh()?;
     /// assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
     /// // All values are in range (-1, 1)
     /// assert!(result.as_slice().iter().all(|&x| x > -1.0 && x < 1.0));
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn tanh(&self) -> Result<Vector<f32>> {
         if self.data.is_empty() {
@@ -722,11 +761,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[0.0, 1.0, -1.0]);
-    /// let result = v.asinh().unwrap();
+    /// let result = v.asinh()?;
     /// assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn asinh(&self) -> Result<Vector<f32>> {
         let asinh_data: Vec<f32> = self.data.iter().map(|x| x.asinh()).collect();
@@ -752,11 +794,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
-    /// let result = v.acosh().unwrap();
+    /// let result = v.acosh()?;
     /// assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn acosh(&self) -> Result<Vector<f32>> {
         let acosh_data: Vec<f32> = self.data.iter().map(|x| x.acosh()).collect();
@@ -774,11 +819,14 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[0.0, 0.5, -0.5]);
-    /// let result = v.atanh().unwrap();
+    /// let result = v.atanh()?;
     /// // atanh(0) = 0, atanh(0.5) ≈ 0.549, atanh(-0.5) ≈ -0.549
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn atanh(&self) -> Result<Vector<f32>> {
         let atanh_data: Vec<f32> = self.data.iter().map(|x| x.atanh()).collect();

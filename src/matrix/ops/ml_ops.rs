@@ -38,6 +38,7 @@ impl Matrix<f32> {
     /// # Example
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Matrix;
     ///
     /// // 5x5 input image
@@ -50,18 +51,20 @@ impl Matrix<f32> {
     ///         0.0, 0.0, 0.0, 0.0, 0.0,
     ///         0.0, 0.0, 0.0, 0.0, 0.0,
     ///     ]
-    /// ).unwrap();
+    /// )?;
     ///
     /// // 3x3 averaging kernel
     /// let kernel_val = 1.0 / 9.0;
     /// let kernel = Matrix::from_vec(
     ///     3, 3,
     ///     vec![kernel_val; 9]
-    /// ).unwrap();
+    /// )?;
     ///
-    /// let result = input.convolve2d(&kernel).unwrap();
+    /// let result = input.convolve2d(&kernel)?;
     /// assert_eq!(result.rows(), 3); // 5 - 3 + 1
     /// assert_eq!(result.cols(), 3);
+    /// # Ok(())
+    /// # }
     /// ```
     // =========================================================================
     // HOT PATH - PERFORMANCE CRITICAL
@@ -182,6 +185,7 @@ impl Matrix<f32> {
     /// # Example
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Matrix;
     ///
     /// // Create embedding table: 4 words, 3-dimensional embeddings
@@ -190,16 +194,18 @@ impl Matrix<f32> {
     ///     4.0, 5.0, 6.0,   // word 1
     ///     7.0, 8.0, 9.0,   // word 2
     ///     10.0, 11.0, 12.0 // word 3
-    /// ]).unwrap();
+    /// ])?;
     ///
     /// // Lookup embeddings for indices [1, 3, 0]
-    /// let result = embeddings.embedding_lookup(&[1, 3, 0]).unwrap();
+    /// let result = embeddings.embedding_lookup(&[1, 3, 0])?;
     ///
     /// assert_eq!(result.rows(), 3);
     /// assert_eq!(result.cols(), 3);
     /// assert_eq!(result.get(0, 0), Some(&4.0)); // word 1
     /// assert_eq!(result.get(1, 0), Some(&10.0)); // word 3
     /// assert_eq!(result.get(2, 0), Some(&1.0)); // word 0
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn embedding_lookup(&self, indices: &[usize]) -> Result<Matrix<f32>, TruenoError> {
         // Validate indices
@@ -275,17 +281,20 @@ impl Matrix<f32> {
     ///
     /// # Examples
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::matrix::Matrix;
     /// let input = Matrix::from_vec(4, 4, vec![
     ///     1.0, 2.0, 3.0, 4.0,
     ///     5.0, 6.0, 7.0, 8.0,
     ///     9.0, 10.0, 11.0, 12.0,
     ///     13.0, 14.0, 15.0, 16.0,
-    /// ]).unwrap();
-    /// let pooled = input.max_pool2d((2, 2), (2, 2)).unwrap();
+    /// ])?;
+    /// let pooled = input.max_pool2d((2, 2), (2, 2))?;
     /// assert_eq!(pooled.shape(), (2, 2));
     /// assert_eq!(pooled.get(0, 0), Some(&6.0));  // max of [1,2,5,6]
     /// assert_eq!(pooled.get(1, 1), Some(&16.0)); // max of [11,12,15,16]
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn max_pool2d(
         &self,
@@ -338,16 +347,19 @@ impl Matrix<f32> {
     ///
     /// # Examples
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::matrix::Matrix;
     /// let input = Matrix::from_vec(4, 4, vec![
     ///     1.0, 2.0, 3.0, 4.0,
     ///     5.0, 6.0, 7.0, 8.0,
     ///     9.0, 10.0, 11.0, 12.0,
     ///     13.0, 14.0, 15.0, 16.0,
-    /// ]).unwrap();
-    /// let pooled = input.avg_pool2d((2, 2), (2, 2)).unwrap();
+    /// ])?;
+    /// let pooled = input.avg_pool2d((2, 2), (2, 2))?;
     /// assert_eq!(pooled.shape(), (2, 2));
-    /// assert!((pooled.get(0, 0).unwrap() - 3.5).abs() < 1e-5);  // avg of [1,2,5,6]
+    /// assert!((pooled.get(0, 0).unwrap_or(&0.0) - 3.5).abs() < 1e-5);  // avg of [1,2,5,6]
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn avg_pool2d(
         &self,
@@ -397,11 +409,14 @@ impl Matrix<f32> {
     ///
     /// # Examples
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::matrix::Matrix;
-    /// let m = Matrix::from_vec(2, 3, vec![1.0, 5.0, 3.0, 2.0, 6.0, 4.0]).unwrap();
-    /// let (values, indices) = m.topk(2).unwrap();
+    /// let m = Matrix::from_vec(2, 3, vec![1.0, 5.0, 3.0, 2.0, 6.0, 4.0])?;
+    /// let (values, indices) = m.topk(2)?;
     /// assert_eq!(values, vec![6.0, 5.0]);
     /// assert_eq!(indices, vec![4, 1]);  // flat indices
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn topk(&self, k: usize) -> Result<(Vec<f32>, Vec<usize>), TruenoError> {
         if k == 0 {

@@ -29,22 +29,28 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[3.0, -4.0, 5.0, -2.0]);
-    /// let result = v.abs().unwrap();
+    /// let result = v.abs()?;
     ///
     /// assert_eq!(result.as_slice(), &[3.0, 4.0, 5.0, 2.0]);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Empty Vector
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v: Vector<f32> = Vector::from_slice(&[]);
-    /// let result = v.abs().unwrap();
+    /// let result = v.abs()?;
     /// assert_eq!(result.len(), 0);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn abs(&self) -> Result<Vector<f32>> {
         let mut result_data = vec![0.0; self.len()];
@@ -95,13 +101,16 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-5.0, 0.0, 5.0, 10.0, 15.0]);
-    /// let clipped = v.clip(0.0, 10.0).unwrap();
+    /// let clipped = v.clip(0.0, 10.0)?;
     ///
     /// // Values: [-5, 0, 5, 10, 15] → [0, 0, 5, 10, 10]
     /// assert_eq!(clipped.as_slice(), &[0.0, 0.0, 5.0, 10.0, 10.0]);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Invalid range
@@ -141,22 +150,28 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-5.0, 0.0, 5.0, 10.0, 15.0]);
-    /// let result = v.clamp(0.0, 10.0).unwrap();
+    /// let result = v.clamp(0.0, 10.0)?;
     ///
     /// assert_eq!(result.as_slice(), &[0.0, 0.0, 5.0, 10.0, 10.0]);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Negative Range
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let v = Vector::from_slice(&[-10.0, -5.0, 0.0, 5.0]);
-    /// let result = v.clamp(-8.0, -2.0).unwrap();
+    /// let result = v.clamp(-8.0, -2.0)?;
     /// assert_eq!(result.as_slice(), &[-8.0, -5.0, -2.0, -2.0]);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Errors
@@ -223,26 +238,32 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let a = Vector::from_slice(&[0.0, 10.0, 20.0]);
     /// let b = Vector::from_slice(&[100.0, 110.0, 120.0]);
-    /// let result = a.lerp(&b, 0.5).unwrap();
+    /// let result = a.lerp(&b, 0.5)?;
     ///
     /// assert_eq!(result.as_slice(), &[50.0, 60.0, 70.0]);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Extrapolation
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let a = Vector::from_slice(&[0.0, 10.0]);
     /// let b = Vector::from_slice(&[10.0, 20.0]);
     ///
     /// // t > 1.0 extrapolates beyond b
-    /// let result = a.lerp(&b, 2.0).unwrap();
+    /// let result = a.lerp(&b, 2.0)?;
     /// assert_eq!(result.as_slice(), &[20.0, 30.0]);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Errors
@@ -311,21 +332,27 @@ impl Vector<f32> {
     /// # Examples
     ///
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let a = Vector::from_slice(&[4.0, 9.0, 16.0, 25.0]);
-    /// let result = a.sqrt().unwrap();
+    /// let result = a.sqrt()?;
     /// assert_eq!(result.as_slice(), &[2.0, 3.0, 4.0, 5.0]);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// Negative values produce NaN:
     /// ```
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use trueno::Vector;
     ///
     /// let a = Vector::from_slice(&[-1.0, 4.0]);
-    /// let result = a.sqrt().unwrap();
+    /// let result = a.sqrt()?;
     /// assert!(result.as_slice()[0].is_nan());
     /// assert_eq!(result.as_slice()[1], 2.0);
+    /// # Ok(())
+    /// # }
     /// ```
     ///
     /// # Use Cases
