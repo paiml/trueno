@@ -85,7 +85,9 @@ let eigenvalues = eigen.eigenvalues();  // [4.0, 2.0]
 | PTX kernel build | 81 ns |
 | Launch config | 1.7 ns |
 
-**GPU Note**: GPU acceleration benefits matrix multiply only. Element-wise operations use CPU SIMD (GPU transfer overhead exceeds compute time).
+**GPU Note**: GPU acceleration benefits matrix multiply only.
+Element-wise operations use CPU SIMD
+(GPU transfer overhead exceeds compute time).
 
 ## trueno-gpu: Pure Rust CUDA
 
@@ -107,7 +109,8 @@ let ptx = softmax.emit_ptx();
 
 ## Operations
 
-**Vector**: add, sub, mul, div, dot, sum, min, max, argmin, argmax, norm_l1, norm_l2, normalize, recip, sqrt, abs, clamp
+**Vector**: add, sub, mul, div, dot, sum, min, max, argmin,
+argmax, norm_l1, norm_l2, normalize, recip, sqrt, abs, clamp
 
 **Activations**: relu, leaky_relu, elu, sigmoid, tanh, gelu, swish, softmax, log_softmax, silu
 
