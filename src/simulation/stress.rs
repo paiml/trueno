@@ -113,11 +113,14 @@ impl StressThresholds {
         }
     }
 
+    /// Maximum operation time for development (5 seconds)
+    const RELAXED_MAX_OP_TIME_MS: u64 = 5000;
+
     /// Relaxed thresholds for development
     #[must_use]
     pub const fn relaxed() -> Self {
         Self {
-            max_op_time_ms: 5000,
+            max_op_time_ms: Self::RELAXED_MAX_OP_TIME_MS,
             max_memory_bytes: 512 * 1024 * 1024,
             max_timing_variance: 1.0,
             max_failure_rate: 0.01,

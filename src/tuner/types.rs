@@ -120,7 +120,7 @@ impl KernelType {
             11 => KernelType::VectorizedRmsNorm,
             12 => KernelType::BatchedRmsNorm,
             13 => KernelType::Generic,
-            _ => KernelType::Unknown,
+            14.. => KernelType::Unknown,
         }
     }
 

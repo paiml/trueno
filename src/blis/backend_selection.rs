@@ -70,13 +70,16 @@ pub struct BackendCostModel {
     pub gpu_min_elements: usize,
 }
 
+/// Modern AVX2 CPU peak compute in GFLOP/s
+const DEFAULT_CPU_PEAK_GFLOPS: f64 = 400.0;
+
 impl Default for BackendCostModel {
     fn default() -> Self {
         Self {
-            pcie_bandwidth_gbps: 15.75,  // PCIe 3.0 x16
-            gpu_peak_tflops: 10.0,       // Mid-range GPU
-            cpu_peak_gflops: 400.0,      // Modern AVX2 CPU
-            gpu_min_elements: 1_000_000, // ~1M elements
+            pcie_bandwidth_gbps: 15.75,       // PCIe 3.0 x16
+            gpu_peak_tflops: 10.0,            // Mid-range GPU
+            cpu_peak_gflops: DEFAULT_CPU_PEAK_GFLOPS,
+            gpu_min_elements: 1_000_000,      // ~1M elements
         }
     }
 }

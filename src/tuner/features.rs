@@ -571,11 +571,14 @@ pub struct RunConfig {
     pub kernel_type: KernelType,
 }
 
+/// Default hidden dimension for 1.5B parameter model
+const DEFAULT_HIDDEN_DIM: u32 = 1536;
+
 impl Default for RunConfig {
     fn default() -> Self {
         Self {
             model_params_b: 1.5,
-            hidden_dim: 1536,
+            hidden_dim: DEFAULT_HIDDEN_DIM,
             num_layers: 28,
             num_heads: 12,
             batch_size: 1,
