@@ -10,9 +10,6 @@ use std::time::Instant;
 
 use trueno_gpu::monitor::{CudaDeviceInfo, MemoryMetrics, StressTestConfig};
 
-// Trueno compute primitives for real stress testing
-use trueno::Matrix;
-
 #[cfg(feature = "cuda")]
 use trueno_gpu::driver::CudaContext;
 
