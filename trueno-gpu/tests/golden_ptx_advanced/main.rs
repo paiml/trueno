@@ -1,0 +1,14 @@
+//! Advanced PTX Builder Golden Tests
+//!
+//! IMMUTABLE GUARDIAN - DO NOT MODIFY WITHOUT FALSIFICATION EVIDENCE
+//!
+//! These tests are LOCKED as immutable guardians of PTX correctness.
+//! To modify: First demonstrate a falsifying test case (black swan).
+//!
+//! Tests for less commonly used but important PTX operations.
+
+mod predicates_and_moves;
+mod conversions_and_registers;
+mod arithmetic_and_atomics;
+mod memory_and_bitwise;
+mod tensor_core_and_debug;
