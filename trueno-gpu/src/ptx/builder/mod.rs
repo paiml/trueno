@@ -45,8 +45,6 @@ pub use sync::PtxSync;
 use std::fmt::Write;
 
 use super::instructions::{Operand, Predicate, PtxInstruction, PtxOp};
-#[cfg(test)]
-use super::instructions::WmmaLayout;
 use super::registers::{PtxReg, RegisterAllocator, VirtualReg};
 use super::types::{PtxStateSpace, PtxType};
 use super::{validate_target, validate_version};
