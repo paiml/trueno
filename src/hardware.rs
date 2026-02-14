@@ -14,7 +14,10 @@ use std::path::Path;
 fn get_hostname() -> String {
     hostname::get()
         .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_else(|_| "unknown".to_string())
+        .unwrap_or_else(|e| {
+            eprintln!("warning: failed to get hostname: {e}");
+            "unknown".to_string()
+        })
 }
 
 /// Get hostname (WASM fallback)

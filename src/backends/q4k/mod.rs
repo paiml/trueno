@@ -93,7 +93,7 @@ pub(crate) fn parse_q4k_header(block: &[u8]) -> (f32, f32, [u8; 8], [u8; 8]) {
     let dmin = f16_to_f32(u16::from_le_bytes([block[2], block[3]]));
 
     // Unpack scales and mins (llama.cpp format)
-    let scales_bytes = &block[4..16];
+    let scales_bytes = block.get(4..16).expect("Q4_K: need ≥16 bytes for header");
     let mut scales = [0u8; 8];
     let mut mins = [0u8; 8];
 

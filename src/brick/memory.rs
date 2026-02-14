@@ -93,7 +93,7 @@ impl AlignedBuffer {
         use std::alloc::{alloc_zeroed, Layout};
 
         let layout = Layout::from_size_align(size, DIRECT_IO_ALIGNMENT)
-            .map_err(|_| TruenoError::InvalidInput("invalid alignment".into()))?;
+            .map_err(|e| TruenoError::InvalidInput(format!("invalid alignment: {e}")))?;
 
         let ptr = unsafe { alloc_zeroed(layout) };
         if ptr.is_null() {
