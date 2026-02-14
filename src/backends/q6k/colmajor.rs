@@ -5,6 +5,50 @@
 
 use super::{f16_to_f32, SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
 
+/// Extract a single Q6K quantized value from packed ql/qh arrays.
+#[inline(always)]
+fn extract_q6k_value(ql: &[u8], qh: &[u8], idx: usize) -> i8 {
+    let ql_byte = ql[idx / 2];
+    let low4 = if idx % 2 == 0 {
+        ql_byte & 0x0F
+    } else {
+        ql_byte >> 4
+    };
+    let qh_byte = qh[idx / 4];
+    let high2 = (qh_byte >> ((idx % 4) * 2)) & 0x03;
+    (low4 | (high2 << 4)) as i8 - 32
+}
+
+/// Accumulate one Q6_K superblock into output (column-major layout).
+#[inline]
+fn accumulate_q6k_superblock_colmajor(
+    sb_data: &[u8],
+    x_j: f32,
+    output: &mut [f32],
+    output_offset: usize,
+    ne0: usize,
+) {
+    let ql = sb_data.get(0..128).expect("Q6_K: need ≥128 bytes for ql");
+    let qh = sb_data.get(128..192).expect("Q6_K: need ≥192 bytes for qh");
+    let scales = sb_data.get(192..208).expect("Q6_K: need ≥208 bytes for scales");
+    let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
+
+    for group in 0..16 {
+        let scale = (scales[group] as i8) as f32;
+        let group_offset = group * 16;
+
+        for j in 0..16 {
+            let idx = group_offset + j;
+            let output_idx = output_offset + idx;
+            if output_idx >= ne0 {
+                continue;
+            }
+            let q6 = extract_q6k_value(ql, qh, idx);
+            output[output_idx] += x_j * d * scale * q6 as f32;
+        }
+    }
+}
+
 /// Fused Q6_K matrix-vector multiply for GGML column-major layout
 ///
 /// Computes: output = input @ Q6K_weight (GGML convention: y = x @ W)
@@ -30,19 +74,15 @@ pub fn matmul_q6k_f32_colmajor(
         "Input length must match ne1 (input dimension)"
     );
 
-    // Number of super-blocks per column (each column has ne0 elements = output_dim)
     let blocks_per_col = (ne0 + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
     let col_bytes = blocks_per_col * SUPER_BLOCK_BYTES;
 
     let mut output = vec![0.0f32; ne0];
 
-    // Process each input column and accumulate to outputs
-    // Column j contains weights from input[j] to all ne0 outputs
     for col_idx in 0..ne1 {
         let col_start = col_idx * col_bytes;
-        let x_j = input[col_idx]; // Input value for this column
+        let x_j = input[col_idx];
 
-        // Skip if input is zero (common in sparse activations)
         if x_j == 0.0 {
             continue;
         }
@@ -53,41 +93,8 @@ pub fn matmul_q6k_f32_colmajor(
                 break;
             }
             let sb_data = &q6k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-
-            let ql = &sb_data[0..128];
-            let qh = &sb_data[128..192];
-            let scales = &sb_data[192..208];
-            let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
-
             let output_offset = sb_idx * SUPER_BLOCK_SIZE;
-
-            for group in 0..16 {
-                let scale = (scales[group] as i8) as f32;
-                let group_offset = group * 16;
-
-                for j in 0..16 {
-                    let idx = group_offset + j;
-                    let output_idx = output_offset + idx;
-                    if output_idx >= ne0 {
-                        continue;
-                    }
-
-                    let ql_byte = ql[idx / 2];
-                    let low4 = if idx % 2 == 0 {
-                        ql_byte & 0x0F
-                    } else {
-                        ql_byte >> 4
-                    };
-
-                    let qh_byte = qh[idx / 4];
-                    let qh_shift = (idx % 4) * 2;
-                    let high2 = (qh_byte >> qh_shift) & 0x03;
-
-                    let q6 = (low4 | (high2 << 4)) as i8 - 32;
-                    let dequant = d * scale * q6 as f32;
-                    output[output_idx] += x_j * dequant;
-                }
-            }
+            accumulate_q6k_superblock_colmajor(sb_data, x_j, &mut output, output_offset, ne0);
         }
     }
 
