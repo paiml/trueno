@@ -125,4 +125,4 @@ let regressor: ThroughputRegressor = serde_json::from_str(&model_json)?;
 
 - [ML Tuner Chapter](../performance/ml-tuner.md)
 - [aprender Documentation](https://docs.rs/aprender)
-- [SHOWCASE-BRICK-001 Specification](../../../docs/specifications/showcase-brick-001.md)
+- SHOWCASE-BRICK-001 Specification (not yet published)

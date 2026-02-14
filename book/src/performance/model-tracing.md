@@ -345,4 +345,4 @@ cargo test test_f251 --lib
 
 - [BrickProfiler](./profiling.md) - Computational performance profiling
 - [ML Tuner](./ml-tuner.md) - Learned kernel selection
-- [Spec E.11](../specifications/ml-tuner-bricks.md) - Full specification
+- [Spec E.11](../../../docs/specifications/ml-tuner-bricks.md) - Full specification

@@ -305,7 +305,7 @@ fn test_whisper_transcription_rtf() {
 - [WASM Performance Best Practices](https://webassembly.org/docs/high-level-goals/)
 - [Matrix Multiplication Optimization](https://en.algorithmica.org/hpc/algorithms/matmul/)
 - [trueno SIMD Architecture](../SIMD_PERFORMANCE.md)
-- [apr-cookbook WASM Examples](../../apr-cookbook/examples/wasm/)
+- apr-cookbook WASM Examples (external, see aprender repository)
 
 ## Appendix A: Benchmark Baseline
 

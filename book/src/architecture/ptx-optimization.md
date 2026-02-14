@@ -241,7 +241,7 @@ Output:
 
 ## Specification
 
-Full specification: [cuda-tile-behavior.md](../../specifications/cuda-tile-behavior.md) (v1.4.0)
+Full specification: [cuda-tile-behavior.md](../../../docs/specifications/cuda-tile-behavior.md) (v1.4.0)
 
 ## Coverage
 
