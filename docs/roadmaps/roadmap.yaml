@@ -1,5 +1,5 @@
 roadmap_version: '1.0'
-github_enabled: true
+github_enabled: "true"
 github_repo: paiml/trueno
 roadmap:
 - id: pmat-integration-complete
@@ -708,7 +708,7 @@ roadmap:
 
     Core Concepts:
     - ComputeBrick: Token-centric, self-verifying compute unit
-    - TokenBudget: Performance budget in µs/token or tokens/sec
+    - Throughput-Budget: Performance budget in µs/token or tokens/sec
     - Five-Layer Architecture: Collectors → Analyzers → Panels → LoadGenerators
     - 200-Point Popperian Falsification Protocol
 

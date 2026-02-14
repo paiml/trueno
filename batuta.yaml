@@ -49,7 +49,7 @@ packages:
     features:
       - cuda
       - wos-kernel
-    notify_on_release: true
+    notify_on_release: "true"
 
   # PTX debugging tool
   - name: trueno-ptx-debug

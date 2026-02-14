@@ -54,3 +54,13 @@ deep_context.md
 .pmat/context.idx/
 .pmat/workspace.idx/
 .pmat/deps-cache.json
+
+# CB-500 critical patterns
+target/
+.profraw
+.profdata
+*.profdata
+.vscode/
+.idea/
+.pmat
+proptest-regressions/
