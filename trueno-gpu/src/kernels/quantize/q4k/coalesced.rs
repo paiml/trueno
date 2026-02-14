@@ -1250,7 +1250,7 @@ impl Kernel for VectorizedQ4KGemvKernel {
 ///
 /// 50% BW utilization → ~128 tok/s on RTX 4090 for 7B Q4K (Ollama parity)
 pub struct MultiWarpVectorizedQ4KGemvKernel {
-    /// K dimension (input dimension, must be multiple of 256)
+    /// K dimension (input dimension, need not be multiple of 256 — bounds-checked)
     pub k: u32,
     /// N dimension (output dimension)
     pub n: u32,
@@ -1598,60 +1598,73 @@ impl Kernel for MultiWarpVectorizedQ4KGemvKernel {
 
                 let pt = ctx.mov_f32_imm(0.0);
 
+                // GH-215 FIX: Bounds-check activation loads for non-256-aligned K.
+                // When K is not a multiple of 256, the last super-block has
+                // padding elements that would cause OOB reads into uninitialized
+                // GPU memory, producing garbage output.
+
                 // LOW nibbles
                 let lb64 = ctx.cvt_u64_u32(lb);
                 let xo = ctx.mul_u64(lb64, 4);
                 let xa = ctx.add_u64(x_ptr, xo);
-                let xv = ctx.ld_global_f32(xa);
+                let p_lb0 = ctx.setp_lt_u32(lb, k_dim);
+                let xv = ctx.ld_global_f32_predicated(xa, p_lb0, 0.0);
                 ctx.fma_f32_inplace(pt, xv, dq0);
 
                 let v = ctx.add_u32(lb, 1);
                 let v64 = ctx.cvt_u64_u32(v);
                 let xo = ctx.mul_u64(v64, 4);
                 let xa = ctx.add_u64(x_ptr, xo);
-                let xv = ctx.ld_global_f32(xa);
+                let p_lb1 = ctx.setp_lt_u32(v, k_dim);
+                let xv = ctx.ld_global_f32_predicated(xa, p_lb1, 0.0);
                 ctx.fma_f32_inplace(pt, xv, dq2);
 
                 let v = ctx.add_u32(lb, 2);
                 let v64 = ctx.cvt_u64_u32(v);
                 let xo = ctx.mul_u64(v64, 4);
                 let xa = ctx.add_u64(x_ptr, xo);
-                let xv = ctx.ld_global_f32(xa);
+                let p_lb2 = ctx.setp_lt_u32(v, k_dim);
+                let xv = ctx.ld_global_f32_predicated(xa, p_lb2, 0.0);
                 ctx.fma_f32_inplace(pt, xv, dq4);
 
                 let v = ctx.add_u32(lb, 3);
                 let v64 = ctx.cvt_u64_u32(v);
                 let xo = ctx.mul_u64(v64, 4);
                 let xa = ctx.add_u64(x_ptr, xo);
-                let xv = ctx.ld_global_f32(xa);
+                let p_lb3 = ctx.setp_lt_u32(v, k_dim);
+                let xv = ctx.ld_global_f32_predicated(xa, p_lb3, 0.0);
                 ctx.fma_f32_inplace(pt, xv, dq6);
 
                 // HIGH nibbles
                 let hb64 = ctx.cvt_u64_u32(hb);
                 let xo = ctx.mul_u64(hb64, 4);
                 let xa = ctx.add_u64(x_ptr, xo);
-                let xv = ctx.ld_global_f32(xa);
+                let p_hb0 = ctx.setp_lt_u32(hb, k_dim);
+                let xv = ctx.ld_global_f32_predicated(xa, p_hb0, 0.0);
                 ctx.fma_f32_inplace(pt, xv, dq1);
 
                 let v = ctx.add_u32(hb, 1);
                 let v64 = ctx.cvt_u64_u32(v);
                 let xo = ctx.mul_u64(v64, 4);
                 let xa = ctx.add_u64(x_ptr, xo);
-                let xv = ctx.ld_global_f32(xa);
+                let p_hb1 = ctx.setp_lt_u32(v, k_dim);
+                let xv = ctx.ld_global_f32_predicated(xa, p_hb1, 0.0);
                 ctx.fma_f32_inplace(pt, xv, dq3);
 
                 let v = ctx.add_u32(hb, 2);
                 let v64 = ctx.cvt_u64_u32(v);
                 let xo = ctx.mul_u64(v64, 4);
                 let xa = ctx.add_u64(x_ptr, xo);
-                let xv = ctx.ld_global_f32(xa);
+                let p_hb2 = ctx.setp_lt_u32(v, k_dim);
+                let xv = ctx.ld_global_f32_predicated(xa, p_hb2, 0.0);
                 ctx.fma_f32_inplace(pt, xv, dq5);
 
                 let v = ctx.add_u32(hb, 3);
                 let v64 = ctx.cvt_u64_u32(v);
                 let xo = ctx.mul_u64(v64, 4);
                 let xa = ctx.add_u64(x_ptr, xo);
-                let xv = ctx.ld_global_f32(xa);
+                let p_hb3 = ctx.setp_lt_u32(v, k_dim);
+                let xv = ctx.ld_global_f32_predicated(xa, p_hb3, 0.0);
                 ctx.fma_f32_inplace(pt, xv, dq7);
 
                 ctx.add_f32_inplace(acc, pt);

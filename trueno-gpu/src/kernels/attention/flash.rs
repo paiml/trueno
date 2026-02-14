@@ -105,10 +105,18 @@ impl AttentionKernel {
     }
 
     /// Set tile sizes for Q and KV
+    ///
+    /// `tile_kv` is clamped to `max(tile_kv, head_dim)` to prevent shared memory
+    /// OOB in the K dot product loop (GH-32).
     #[must_use]
     pub const fn with_tiles(mut self, tile_q: u32, tile_kv: u32) -> Self {
         self.tile_q = tile_q;
-        self.tile_kv = tile_kv;
+        // GH-32 FIX: Enforce tile_kv >= head_dim to prevent shared memory overflow
+        self.tile_kv = if tile_kv >= self.head_dim {
+            tile_kv
+        } else {
+            self.head_dim
+        };
         self
     }
 
@@ -280,97 +288,142 @@ impl AttentionKernel {
                 let v_tile_base = ctx.add_u64(v_base, kv_tile_offset_bytes);
 
                 // ===== Load Q tile to shared memory =====
-                // Each thread loads one element (using pre-computed q_elem_offset_bytes)
+                // Q tile: tile_q * head_dim elements, one per thread (1:1 mapping)
                 let q_addr = ctx.add_u64(q_tile_base, q_elem_offset_bytes);
                 let q_val = ctx.ld_global_f32(q_addr);
-                // Use 32-bit addressing for shared memory (not 64-bit)
                 let q_smem_offset = ctx.mul_u32(tid, 4);
                 ctx.st_shared_f32(q_smem_offset, q_val);
 
-                // ===== Load K tile to shared memory =====
-                // (k_smem_base computed before loop, use 32-bit)
-                let k_addr = ctx.add_u64(k_tile_base, q_elem_offset_bytes);
+                // ===== Load K tile to shared memory (strided cooperative loading) =====
+                // GH-32 FIX: K tile has tile_kv * head_dim elements which may exceed
+                // thread count (tile_q * head_dim). Use strided loop to load all elements.
+                let kv_total_reg = ctx.mov_u32_imm(tile_kv * head_dim);
+                let k_load_base = ctx.mov_u32_imm(0);
+
+                ctx.label("k_coop_load");
+                let k_elem_idx = ctx.add_u32_reg(k_load_base, tid);
+                let k_in_bounds = ctx.setp_lt_u32(k_elem_idx, kv_total_reg);
+                ctx.branch_if_not(k_in_bounds, "k_coop_load_end");
+
+                let k_offset = ctx.mul_wide_u32(k_elem_idx, 4);
+                let k_addr = ctx.add_u64(k_tile_base, k_offset);
                 let k_val = ctx.ld_global_f32(k_addr);
                 let k_smem_base_u32 = ctx.mov_u32_imm(k_smem_base);
-                let k_smem_offset_local = ctx.mul_u32(tid, 4);
-                let k_smem_offset = ctx.add_u32_reg(k_smem_base_u32, k_smem_offset_local);
-                ctx.st_shared_f32(k_smem_offset, k_val);
+                let k_elem_bytes = ctx.mul_u32(k_elem_idx, 4);
+                let k_smem_off = ctx.add_u32_reg(k_smem_base_u32, k_elem_bytes);
+                ctx.st_shared_f32(k_smem_off, k_val);
 
-                // ===== Load V tile to shared memory =====
-                // (v_smem_base computed before loop, use 32-bit)
-                let v_addr = ctx.add_u64(v_tile_base, q_elem_offset_bytes);
+                ctx.add_u32_inplace(k_load_base, tile_q * head_dim);
+                ctx.branch("k_coop_load");
+                ctx.label("k_coop_load_end");
+
+                // ===== Load V tile to shared memory (strided cooperative loading) =====
+                let v_load_base = ctx.mov_u32_imm(0);
+
+                ctx.label("v_coop_load");
+                let v_elem_idx = ctx.add_u32_reg(v_load_base, tid);
+                let v_in_bounds = ctx.setp_lt_u32(v_elem_idx, kv_total_reg);
+                ctx.branch_if_not(v_in_bounds, "v_coop_load_end");
+
+                let v_offset = ctx.mul_wide_u32(v_elem_idx, 4);
+                let v_addr = ctx.add_u64(v_tile_base, v_offset);
                 let v_val = ctx.ld_global_f32(v_addr);
                 let v_smem_base_u32 = ctx.mov_u32_imm(v_smem_base);
-                let v_smem_offset_local = ctx.mul_u32(tid, 4);
-                let v_smem_offset = ctx.add_u32_reg(v_smem_base_u32, v_smem_offset_local);
-                ctx.st_shared_f32(v_smem_offset, v_val);
+                let v_elem_bytes = ctx.mul_u32(v_elem_idx, 4);
+                let v_smem_off = ctx.add_u32_reg(v_smem_base_u32, v_elem_bytes);
+                ctx.st_shared_f32(v_smem_off, v_val);
+
+                ctx.add_u32_inplace(v_load_base, tile_q * head_dim);
+                ctx.branch("v_coop_load");
+                ctx.label("v_coop_load_end");
 
                 ctx.bar_sync(0);
 
-                // ===== Compute S = Q × K^T (dot product for this thread's row) =====
-                // Each thread computes attention score for its Q row
-                let s_acc = ctx.mov_f32_imm(0.0);
+                // ===== K-row loop: iterate over ALL K rows in the tile =====
+                // GH-32 FIX: Each thread computes O[local_row, local_col] by iterating
+                // over all tile_kv K rows, computing attention scores and accumulating
+                // weighted V values using online softmax (Dao et al.).
+                //
+                // Previously, local_col was conflated as both the K-row index AND the
+                // output dimension — producing one attention score per thread with no
+                // cross-thread reduction. Now local_col is purely the output dimension
+                // and k_row iterates over all K rows.
+                let k_row = ctx.mov_u32_imm(0);
+                let tile_kv_reg = ctx.mov_u32_imm(tile_kv);
 
-                // Inner loop over head_dim elements
+                ctx.label("k_row_loop_start");
+                let k_row_done = ctx.setp_ge_u32(k_row, tile_kv_reg);
+                ctx.branch_if(k_row_done, "k_row_loop_end");
+
+                // Causal masking: skip K rows where global K position > global Q position
+                if causal {
+                    let q_global_row = ctx.add_u32_reg(q_row_start, local_row);
+                    let k_global_row = ctx.add_u32_reg(kv_row_start, k_row);
+                    let causal_mask = ctx.setp_lt_u32(q_global_row, k_global_row);
+                    ctx.branch_if(causal_mask, "k_row_next");
+                }
+
+                // Compute S = Q[local_row] · K[k_row] (dot product over head_dim)
+                let s_acc = ctx.mov_f32_imm(0.0);
                 let d_idx = ctx.mov_u32_imm(0);
+                let head_dim_u32 = ctx.mov_u32_imm(head_dim);
+
                 ctx.label("dot_loop_start");
                 let d_done = ctx.setp_ge_u32(d_idx, head_dim_param);
                 ctx.branch_if(d_done, "dot_loop_end");
 
-                // Load Q[local_row, d_idx] from shared memory (32-bit addressing)
-                let head_dim_u32 = ctx.mov_u32_imm(head_dim);
+                // Load Q[local_row, d_idx] from shared memory
                 let q_row_offset = ctx.mul_u32_reg(local_row, head_dim_u32);
                 let q_elem_smem = ctx.add_u32_reg(q_row_offset, d_idx);
                 let q_elem_smem_bytes = ctx.mul_u32(q_elem_smem, 4);
                 let q_dot_val = ctx.ld_shared_f32(q_elem_smem_bytes);
 
-                // Load K[local_col, d_idx] from shared memory (32-bit addressing, K is transposed conceptually)
-                let k_col_offset = ctx.mul_u32_reg(local_col, head_dim_u32);
-                let k_elem_smem = ctx.add_u32_reg(k_col_offset, d_idx);
+                // Load K[k_row, d_idx] from shared memory
+                // GH-32 FIX: Use k_row (loop variable) as K row index, NOT local_col
+                let k_row_offset = ctx.mul_u32_reg(k_row, head_dim_u32);
+                let k_elem_smem = ctx.add_u32_reg(k_row_offset, d_idx);
                 let k_elem_smem_bytes = ctx.mul_u32(k_elem_smem, 4);
                 let k_smem_base_loop = ctx.mov_u32_imm(k_smem_base);
                 let k_elem_smem_full = ctx.add_u32_reg(k_smem_base_loop, k_elem_smem_bytes);
                 let k_dot_val = ctx.ld_shared_f32(k_elem_smem_full);
 
-                // Accumulate Q[i,d] * K[j,d] - IN-PLACE UPDATE
+                // Accumulate Q[i,d] * K[j,d]
                 ctx.fma_f32_inplace(s_acc, q_dot_val, k_dot_val);
 
-                // Increment and loop back - IN-PLACE UPDATE
                 ctx.add_u32_inplace(d_idx, 1);
                 ctx.branch("dot_loop_start");
-
                 ctx.label("dot_loop_end");
 
-                // ===== Apply scale factor =====
+                // Apply scale factor
                 let scale_reg = ctx.mov_f32_imm(scale);
                 let s_scaled = ctx.mul_f32(s_acc, scale_reg);
 
-                // ===== Online softmax update =====
-                // m_new = max(m_prev, s_scaled)
+                // Online softmax update
                 let m_new = ctx.max_f32(m_prev, s_scaled);
 
-                // scale_factor = exp(m_prev - m_new)
                 let m_diff = ctx.sub_f32(m_prev, m_new);
                 let log2_e = ctx.mov_f32_imm(std::f32::consts::LOG2_E);
                 let m_diff_scaled = ctx.mul_f32(m_diff, log2_e);
                 let scale_factor = ctx.ex2_f32(m_diff_scaled);
 
-                // p = exp(s_scaled - m_new)
                 let s_shifted = ctx.sub_f32(s_scaled, m_new);
                 let s_shifted_scaled = ctx.mul_f32(s_shifted, log2_e);
                 let p_val = ctx.ex2_f32(s_shifted_scaled);
 
-                // l_new = scale_factor * l_prev + p
                 let l_scaled = ctx.mul_f32(scale_factor, l_prev);
                 let l_new = ctx.add_f32(l_scaled, p_val);
 
-                // ===== Update output accumulator =====
-                // o_new = (scale_factor * l_prev * o_prev + p * v) / l_new
+                // Update output accumulator
+                // o_new = (scale_factor * l_prev * o_prev + p * V[k_row, local_col]) / l_new
                 let o_scaled = ctx.mul_f32(o_acc, scale_factor);
                 let o_weighted = ctx.mul_f32(o_scaled, l_prev);
 
-                // Load V value from shared memory (32-bit addressing)
-                let v_elem_smem_bytes = ctx.mul_u32(k_elem_smem, 4); // Reuse k offset calculation
+                // Load V[k_row, local_col] from shared memory
+                // GH-32 FIX: Correct V indexing — V[k_row, local_col] for output dim local_col
+                // Previously used V[local_col, last_d_idx] which was wrong.
+                let v_row_offset = ctx.mul_u32_reg(k_row, head_dim_u32);
+                let v_elem_idx = ctx.add_u32_reg(v_row_offset, local_col);
+                let v_elem_smem_bytes = ctx.mul_u32(v_elem_idx, 4);
                 let v_smem_base_loop = ctx.mov_u32_imm(v_smem_base);
                 let v_elem_smem_full = ctx.add_u32_reg(v_smem_base_loop, v_elem_smem_bytes);
                 let v_out_val = ctx.ld_shared_f32(v_elem_smem_full);
@@ -379,10 +432,15 @@ impl AttentionKernel {
                 let o_sum = ctx.add_f32(o_weighted, pv);
                 let o_new = ctx.div_f32(o_sum, l_new);
 
-                // Update running stats for next iteration - COPY TO ACCUMULATORS
+                // Update running stats for next iteration
                 ctx.mov_f32_reg(m_prev, m_new);
                 ctx.mov_f32_reg(l_prev, l_new);
                 ctx.mov_f32_reg(o_acc, o_new);
+
+                ctx.label("k_row_next");
+                ctx.add_u32_inplace(k_row, 1);
+                ctx.branch("k_row_loop_start");
+                ctx.label("k_row_loop_end");
 
                 ctx.bar_sync(1);
 

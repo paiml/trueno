@@ -1226,19 +1226,19 @@ fn test_tiled_q4k_gemv_operations() {
     let kernel = TiledQ4KGemvKernel::new(3584, 4096);
     let ptx = kernel.emit_ptx();
 
-    // Verify shared memory via generic addressing (cvta.shared approach)
-    // The kernel uses cvta.shared to get a generic address, then generic ld/st
+    // GH-37 FIX: Verify direct .shared addressing (not generic cvta.shared)
+    // The kernel uses ld.shared.f32 / st.shared.f32 with u32 offsets
     assert!(
-        ptx.contains("cvta.shared"),
-        "Should convert shared address to generic"
+        !ptx.contains("cvta.shared"),
+        "GH-37: Should NOT use cvta.shared (generic addressing removed)"
     );
     assert!(
-        ptx.contains("ld.f32"),
-        "Should have generic loads (for shared via cvta)"
+        ptx.contains("ld.shared.f32"),
+        "GH-37: Should use direct ld.shared.f32 for shared memory loads"
     );
     assert!(
-        ptx.contains("st.f32"),
-        "Should have generic stores (for shared via cvta)"
+        ptx.contains("st.shared.f32"),
+        "GH-37: Should use direct st.shared.f32 for shared memory stores"
     );
 
     // Verify barrier synchronization
