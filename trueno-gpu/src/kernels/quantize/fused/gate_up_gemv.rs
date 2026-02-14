@@ -2,7 +2,7 @@
 // PAR-077: FUSED GATE+UP Q4K GEMV KERNEL
 // =============================================================================
 
-use super::super::{Q4K_SUPER_BLOCK_BYTES, Q4K_SUPER_BLOCK_SIZE};
+use super::super::Q4K_SUPER_BLOCK_BYTES;
 use crate::kernels::Kernel;
 use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};

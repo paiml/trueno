@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false  # yamllint disable-line rule:truthy
+  cancel-in-progress: "false"
 
 jobs:
   build:

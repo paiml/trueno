@@ -1,0 +1,166 @@
+//! Global memory load/store operations for KernelBuilder.
+//!
+//! Extracted from mod.rs for PMAT File Health compliance.
+//! Contains typed global memory access: f32, u8, u16, u32, u64, vectorized v4.
+
+use crate::ptx::instructions::{Operand, PtxInstruction, PtxOp};
+use crate::ptx::registers::VirtualReg;
+use crate::ptx::types::{PtxStateSpace, PtxType};
+
+use super::KernelBuilder;
+
+impl<'a> KernelBuilder<'a> {
+    // ===== Memory Operations (vectorized - not in traits) =====
+
+    /// Load f32 from global memory (kept for compatibility - delegates to trait)
+    pub fn ld_global_f32(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::F32)
+                .space(PtxStateSpace::Global)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+        );
+        dst
+    }
+
+    /// Store f32 to global memory
+    pub fn st_global_f32(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::F32)
+                .space(PtxStateSpace::Global)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val)),
+        );
+    }
+
+    /// Load 4 consecutive f32 values from global memory (vectorized, 16-byte load)
+    ///
+    /// Returns 4 registers containing the loaded values.
+    /// Address must be 16-byte aligned for optimal performance.
+    ///
+    /// PTX: ld.global.v4.f32 {%f1, %f2, %f3, %f4}, [addr];
+    pub fn ld_global_f32_v4(&mut self, addr: VirtualReg) -> [VirtualReg; 4] {
+        let r0 = self.registers.allocate_virtual(PtxType::F32);
+        let r1 = self.registers.allocate_virtual(PtxType::F32);
+        let r2 = self.registers.allocate_virtual(PtxType::F32);
+        let r3 = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::V4F32)
+                .space(PtxStateSpace::Global)
+                .dst(Operand::Reg(r0))
+                .dst(Operand::Reg(r1))
+                .dst(Operand::Reg(r2))
+                .dst(Operand::Reg(r3))
+                .src(Operand::Reg(addr)),
+        );
+        [r0, r1, r2, r3]
+    }
+
+    /// Load u32 from global memory
+    pub fn ld_global_u32(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Load u32 from global memory into existing register (register reuse)
+    pub fn ld_global_u32_into(&mut self, dst: VirtualReg, addr: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+    }
+
+    /// Store u32 to global memory
+    pub fn st_global_u32(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U32)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+    }
+
+    /// Load u64 from global memory (PAR-118: for pointer arrays in batched attention)
+    pub fn ld_global_u64(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Store u64 to global memory
+    pub fn st_global_u64(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U64)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+    }
+
+    /// Load u8 from global memory
+    ///
+    /// NOTE: PTX does not support .u8 register types (minimum is 16-bit).
+    /// We allocate a U16 register and use ld.global.u8 which zero-extends
+    /// the loaded byte into the 16-bit register.
+    pub fn ld_global_u8(&mut self, addr: VirtualReg) -> VirtualReg {
+        // CRITICAL: PTX requires registers to be at least 16-bit
+        // ld.global.u8 zero-extends the byte into the U16 register
+        let dst = self.registers.allocate_virtual(PtxType::U16);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U8)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
+    /// Store u8 to global memory
+    ///
+    /// NOTE: PTX requires stores to come from at least a 16-bit register.
+    /// The low 8 bits of the source register are stored to the address.
+    pub fn st_global_u8(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U8)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+    }
+
+    /// Store u16 to global memory
+    pub fn st_global_u16(&mut self, addr: VirtualReg, val: VirtualReg) {
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::St, PtxType::U16)
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+    }
+
+    /// Load u16 from global memory (for f16 as raw bits)
+    pub fn ld_global_u16(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U16);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::U16)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+}

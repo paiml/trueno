@@ -3,7 +3,6 @@
 
 #![allow(dead_code)]
 
-use super::gemv::compute_chunk_q4k_scalar;
 use super::*;
 
 /// Golden Test: Fused kernel must match dequant+matmul within e = 1e-3
