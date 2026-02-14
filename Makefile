@@ -320,23 +320,15 @@ clean-coverage: coverage-clean ## Alias for coverage-clean (bashrs pattern)
 coverage-check: ## Enforce 90% coverage threshold for workspace (BLOCKS on failure)
 	@echo "🔒 Enforcing 90% coverage threshold for workspace..."
 	@echo ""
-	@# Check trueno core
-	@TRUENO_COV=$$(cargo llvm-cov report --summary-only $(COV_EXCLUDE) --ignore-filename-regex "trueno-gpu" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
-	if [ -z "$$TRUENO_COV" ]; then echo "❌ No coverage data. Run 'make coverage' first."; exit 1; fi; \
-	echo "trueno:     $${TRUENO_COV}%"; \
-	TRUENO_OK=$$(echo "$$TRUENO_COV >= 90" | bc -l 2>/dev/null || echo 0)
-	@# Check trueno-gpu
-	@GPU_COV=$$(cargo llvm-cov report --summary-only $(COV_EXCLUDE) --ignore-filename-regex "trueno/src" 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
-	echo "trueno-gpu: $${GPU_COV:-N/A}%"
-	@# Check workspace total
 	@TOTAL_COV=$$(cargo llvm-cov report --summary-only $(COV_EXCLUDE) 2>/dev/null | grep "TOTAL" | awk '{print $$4}' | sed 's/%//'); \
+	if [ -z "$$TOTAL_COV" ]; then echo "❌ No coverage data. Run 'make coverage' first."; exit 1; fi; \
 	echo "workspace:  $${TOTAL_COV}%"; \
 	echo ""; \
-	RESULT=$$(echo "$$TRUENO_COV >= 90" | bc -l 2>/dev/null || echo 0); \
+	RESULT=$$(echo "$$TOTAL_COV >= 90" | bc -l 2>/dev/null || echo 0); \
 	if [ "$$RESULT" = "1" ]; then \
-		echo "✅ trueno coverage threshold met (≥90%)"; \
+		echo "✅ Coverage threshold met (≥90%)"; \
 	else \
-		echo "❌ FAIL: trueno coverage $${TRUENO_COV}% is below 90% threshold"; exit 1; \
+		echo "❌ FAIL: coverage $${TOTAL_COV}% is below 90% threshold"; exit 1; \
 	fi
 
 lint: ## Run clippy on entire workspace (library code only, strict)
