@@ -81,8 +81,14 @@ impl Vector<f32> {
                                     Backend::WasmSIMD => WasmBackend::exp(chunk_in, chunk_out),
                                     Backend::GPU => ScalarBackend::exp(chunk_in, chunk_out),
                                     Backend::Auto => ScalarBackend::exp(chunk_in, chunk_out),
-                                    #[allow(unreachable_patterns)]
-                                    _ => ScalarBackend::exp(chunk_in, chunk_out),
+                                    #[cfg(not(target_arch = "x86_64"))]
+                                    Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                                        ScalarBackend::exp(chunk_in, chunk_out)
+                                    }
+                                    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                                    Backend::NEON => ScalarBackend::exp(chunk_in, chunk_out),
+                                    #[cfg(not(target_arch = "wasm32"))]
+                                    Backend::WasmSIMD => ScalarBackend::exp(chunk_in, chunk_out),
                                 }
                             }
                         });
@@ -113,8 +119,14 @@ impl Vector<f32> {
                         // Auto should have been resolved at creation time
                         return Err(TruenoError::UnsupportedBackend(Backend::Auto));
                     }
-                    #[allow(unreachable_patterns)]
-                    _ => ScalarBackend::exp(&self.data, &mut result_data),
+                    #[cfg(not(target_arch = "x86_64"))]
+                    Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                        ScalarBackend::exp(&self.data, &mut result_data)
+                    }
+                    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                    Backend::NEON => ScalarBackend::exp(&self.data, &mut result_data),
+                    #[cfg(not(target_arch = "wasm32"))]
+                    Backend::WasmSIMD => ScalarBackend::exp(&self.data, &mut result_data),
                 }
             }
         }

@@ -39,7 +39,7 @@ impl GpuVendor {
             0x1002 => Self::Amd,
             0x8086 => Self::Intel,
             0x106b => Self::Apple,
-            _ => Self::Unknown(id),
+            other => Self::Unknown(other),
         }
     }
 
@@ -66,7 +66,7 @@ impl std::fmt::Display for GpuVendor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Unknown(id) => write!(f, "Unknown (0x{id:04x})"),
-            _ => write!(f, "{}", self.name()),
+            Self::Nvidia | Self::Amd | Self::Intel | Self::Apple => write!(f, "{}", self.name()),
         }
     }
 }
