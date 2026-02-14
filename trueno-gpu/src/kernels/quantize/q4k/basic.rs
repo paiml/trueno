@@ -354,12 +354,16 @@ impl Kernel for Q4KGemvKernel {
                     let dequant = ctx.sub_f32(scaled, dm);
 
                     // Load activation x[sb_idx * 256 + val_idx]
+                    // GH-215 FIX: Bounds-check for non-256-aligned K dimensions.
+                    // The last super-block may address indices beyond k_dim; treat
+                    // those as 0.0 to avoid out-of-bounds GPU memory reads.
                     let sb_k_base = ctx.mul_u32(sb_idx, Q4K_SUPER_BLOCK_SIZE);
                     let x_idx = ctx.add_u32_reg(sb_k_base, val_idx);
                     let x_idx_64 = ctx.cvt_u64_u32(x_idx);
                     let x_bytes = ctx.mul_u64(x_idx_64, 4);
                     let x_addr = ctx.add_u64(x_ptr, x_bytes);
-                    let x_val = ctx.ld_global_f32(x_addr);
+                    let in_bounds = ctx.setp_lt_u32(x_idx, k_dim);
+                    let x_val = ctx.ld_global_f32_predicated(x_addr, in_bounds, 0.0);
 
                     // Accumulate: thread_partial += x_val * dequant
                     ctx.fma_f32_inplace(thread_partial, x_val, dequant);

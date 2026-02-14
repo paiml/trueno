@@ -74,9 +74,6 @@ impl Kernel for TiledQ4KGemvKernel {
                 let four = ctx.mov_u32_imm(4);
                 let outputs_per_block_reg = ctx.mov_u32_imm(outputs_per_block);
 
-                // Get shared memory base address (FIX: needed for correct addressing)
-                let smem_base = ctx.shared_base_addr();
-
                 // ================================================================
                 // PHASE 1: Cooperatively load input vector into shared memory
                 // ================================================================
@@ -92,10 +89,12 @@ impl Kernel for TiledQ4KGemvKernel {
                 let x_addr = ctx.add_u64(x_ptr, elem_offset);
                 let x_val = ctx.ld_global_f32(x_addr);
 
-                // Store to shared memory using generic addressing
-                // smem_base is a generic address from cvta.shared, so use generic st/ld
-                let smem_addr = ctx.add_u64(smem_base, elem_offset);
-                ctx.st_generic_f32(smem_addr, x_val);
+                // GH-37 FIX: Use direct .shared addressing (u32 offset) instead of
+                // generic addressing (cvta.shared.u64 + ld/st). Direct .shared is
+                // more efficient: fewer registers, no cvta instruction, hardware
+                // knows the address space.
+                let smem_offset = ctx.mul_u32_reg(loop_idx, four);
+                ctx.st_shared_f32(smem_offset, x_val);
 
                 ctx.add_u32_inplace(idx, 32 * outputs_per_block); // stride by block size
                 ctx.branch("load_loop");
@@ -263,12 +262,11 @@ impl Kernel for TiledQ4KGemvKernel {
                     let dequant = ctx.sub_f32(scaled, dm);
 
                     // Load activation from SHARED MEMORY (the key optimization!)
-                    // Using generic addressing (smem_base from cvta.shared)
+                    // GH-37 FIX: Use direct .shared addressing (u32 offset, ld.shared.f32)
                     let sb_k_base = ctx.mul_u32(sb_idx, Q4K_SUPER_BLOCK_SIZE);
                     let x_idx = ctx.add_u32_reg(sb_k_base, val_idx);
-                    let x_smem_offset = ctx.mul_wide_u32_reg(x_idx, four);
-                    let x_smem_addr = ctx.add_u64(smem_base, x_smem_offset);
-                    let x_cached = ctx.ld_generic_f32(x_smem_addr);
+                    let x_smem_offset = ctx.mul_u32_reg(x_idx, four);
+                    let x_cached = ctx.ld_shared_f32(x_smem_offset);
 
                     ctx.fma_f32_inplace(thread_partial, x_cached, dequant);
                 }
