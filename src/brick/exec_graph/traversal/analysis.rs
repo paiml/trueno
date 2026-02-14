@@ -24,7 +24,9 @@ impl ExecutionGraph {
             ExecutionNode::Brick { timing_ns, .. } => *timing_ns,
             ExecutionNode::Kernel { timing_ns, .. } => timing_ns.unwrap_or(0),
             ExecutionNode::Transfer { timing_ns, .. } => timing_ns.unwrap_or(0),
-            _ => 0,
+            ExecutionNode::Function { .. }
+            | ExecutionNode::Layer { .. }
+            | ExecutionNode::AsyncTask { .. } => 0,
         }
     }
 

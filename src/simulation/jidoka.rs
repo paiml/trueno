@@ -217,7 +217,9 @@ impl JidokaGuard {
                     });
                 }
             }
-            _ => {} // Other conditions handled by compare methods
+            JidokaCondition::BackendDivergence { .. }
+            | JidokaCondition::PerformanceRegression { .. }
+            | JidokaCondition::DeterminismFailure => {} // Handled by compare methods
         }
         Ok(())
     }

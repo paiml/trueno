@@ -231,9 +231,8 @@ fn check_unsafe_function_violations(
                     line_num: fn_line + 1,
                     function_name: fn_name.to_string(),
                     message: msg,
-                    fix_suggestion:
-                        "Correct #[target_feature] attribute to match intrinsics used"
-                            .to_string(),
+                    fix_suggestion: "Correct #[target_feature] attribute to match intrinsics used"
+                        .to_string(),
                 });
             }
 
@@ -333,11 +332,21 @@ fn print_violation_group(violations: &[&Violation], icon: &str, label: &str, col
     let sep = "=".repeat(60);
     if color_red {
         println!("{}", sep.red());
-        println!("{}", format!("{icon} {label} ({})", violations.len()).red().bold());
+        println!(
+            "{}",
+            format!("{icon} {label} ({})", violations.len())
+                .red()
+                .bold()
+        );
         println!("{}", sep.red());
     } else {
         println!("{}", sep.yellow());
-        println!("{}", format!("{icon} {label} ({})", violations.len()).yellow().bold());
+        println!(
+            "{}",
+            format!("{icon} {label} ({})", violations.len())
+                .yellow()
+                .bold()
+        );
         println!("{}", sep.yellow());
     }
     println!();
@@ -367,13 +376,22 @@ fn print_summary(critical: &[&Violation], errors: &[&Violation], warnings: &[&Vi
     println!();
 
     if !critical.is_empty() {
-        println!("  {} CRITICAL - Compiler CANNOT emit SIMD instructions", critical.len());
+        println!(
+            "  {} CRITICAL - Compiler CANNOT emit SIMD instructions",
+            critical.len()
+        );
     }
     if !errors.is_empty() {
-        println!("  {} ERRORS - Incorrect or incompatible attributes", errors.len());
+        println!(
+            "  {} ERRORS - Incorrect or incompatible attributes",
+            errors.len()
+        );
     }
     if !warnings.is_empty() {
-        println!("  {} WARNINGS - Best practices not followed", warnings.len());
+        println!(
+            "  {} WARNINGS - Best practices not followed",
+            warnings.len()
+        );
     }
     println!();
 }
@@ -400,14 +418,26 @@ pub fn run() -> Result<()> {
     }
 
     if all_violations.is_empty() {
-        println!("{}", "PASS: All SIMD property checks passed!".green().bold());
+        println!(
+            "{}",
+            "PASS: All SIMD property checks passed!".green().bold()
+        );
         println!();
         return Ok(());
     }
 
-    let critical: Vec<_> = all_violations.iter().filter(|v| v.level == ViolationLevel::Critical).collect();
-    let errors: Vec<_> = all_violations.iter().filter(|v| v.level == ViolationLevel::Error).collect();
-    let warnings: Vec<_> = all_violations.iter().filter(|v| v.level == ViolationLevel::Warning).collect();
+    let critical: Vec<_> = all_violations
+        .iter()
+        .filter(|v| v.level == ViolationLevel::Critical)
+        .collect();
+    let errors: Vec<_> = all_violations
+        .iter()
+        .filter(|v| v.level == ViolationLevel::Error)
+        .collect();
+    let warnings: Vec<_> = all_violations
+        .iter()
+        .filter(|v| v.level == ViolationLevel::Warning)
+        .collect();
 
     print_violation_group(&critical, "CRITICAL", "CRITICAL VIOLATIONS", true);
     print_violation_group(&errors, "ERROR", "ERRORS", true);
@@ -415,14 +445,20 @@ pub fn run() -> Result<()> {
     print_summary(&critical, &errors, &warnings);
 
     if !critical.is_empty() || !errors.is_empty() {
-        anyhow::bail!("SIMD validation failed: {} critical, {} errors", critical.len(), errors.len());
+        anyhow::bail!(
+            "SIMD validation failed: {} critical, {} errors",
+            critical.len(),
+            errors.len()
+        );
     }
 
-    println!("{}", "COMMIT ALLOWED - Only warnings present".green().bold());
+    println!(
+        "{}",
+        "COMMIT ALLOWED - Only warnings present".green().bold()
+    );
     println!();
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests;

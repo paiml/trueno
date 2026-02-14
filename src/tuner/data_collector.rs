@@ -648,8 +648,7 @@ impl TunerDataCollector {
                 // Weight accepted samples higher (duplicate them)
                 let weight = match feedback {
                     UserFeedback::Accepted => 2,
-                    UserFeedback::Alternative => 1, // Still use, but normal weight
-                    _ => 1,
+                    UserFeedback::Alternative | UserFeedback::Rejected | UserFeedback::None => 1,
                 };
 
                 Some((0..weight).map(|_| (s.features.clone(), s.throughput_tps)))

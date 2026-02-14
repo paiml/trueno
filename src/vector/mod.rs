@@ -99,7 +99,7 @@ where
     pub fn from_slice_with_backend(data: &[T], backend: Backend) -> Self {
         let resolved_backend = match backend {
             Backend::Auto => crate::select_best_available_backend(),
-            _ => backend,
+            other => other,
         };
 
         Self {
@@ -158,7 +158,7 @@ impl Vector<f32> {
         // Resolve backend
         let resolved_backend = match backend {
             Backend::Auto => crate::select_best_available_backend(),
-            _ => backend,
+            other => other,
         };
 
         // For now, use standard Vec allocation which typically provides good alignment

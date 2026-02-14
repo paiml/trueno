@@ -88,7 +88,8 @@ pub fn hash_keys_batch_with_backend(keys: &[&str], backend: Backend) -> Vec<u64>
             hash_keys_scalar(keys)
         }
         Backend::AVX2 | Backend::AVX512 => hash_keys_avx2_or_scalar(keys),
-        _ => hash_keys_scalar(keys),
+        Backend::Scalar | Backend::SSE2 | Backend::AVX | Backend::NEON
+        | Backend::WasmSIMD | Backend::GPU => hash_keys_scalar(keys),
     }
 }
 
