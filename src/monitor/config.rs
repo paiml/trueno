@@ -17,11 +17,18 @@ pub struct MonitorConfig {
     pub background_collection: bool,
 }
 
+/// 60 seconds of history at 100ms polling interval
+const DEFAULT_HISTORY_SIZE: usize = 600;
+/// 60 seconds of history at 50ms high-frequency polling
+const HIGH_FREQ_HISTORY_SIZE: usize = 1200;
+/// 60 seconds of history at 500ms low-overhead polling
+const LOW_OVERHEAD_HISTORY_SIZE: usize = 120;
+
 impl Default for MonitorConfig {
     fn default() -> Self {
         Self {
             poll_interval: Duration::from_millis(100),
-            history_size: 600, // 60 seconds at 100ms
+            history_size: DEFAULT_HISTORY_SIZE,
             background_collection: false,
         }
     }
@@ -33,7 +40,7 @@ impl MonitorConfig {
     pub fn high_frequency() -> Self {
         Self {
             poll_interval: Duration::from_millis(50),
-            history_size: 1200,
+            history_size: HIGH_FREQ_HISTORY_SIZE,
             background_collection: true,
         }
     }
@@ -43,7 +50,7 @@ impl MonitorConfig {
     pub fn low_overhead() -> Self {
         Self {
             poll_interval: Duration::from_millis(500),
-            history_size: 120,
+            history_size: LOW_OVERHEAD_HISTORY_SIZE,
             background_collection: false,
         }
     }
