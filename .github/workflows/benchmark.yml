@@ -63,7 +63,7 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "All benchmarks within 15% of baseline." >> $GITHUB_STEP_SUMMARY
           fi
-        continue-on-error: true  # yamllint disable-line rule:truthy
+        continue-on-error: "true"
 
       - name: Save baseline (main branch only)
         if: github.ref == 'refs/heads/main'

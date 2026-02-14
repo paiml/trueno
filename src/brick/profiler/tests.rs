@@ -1,6 +1,7 @@
 //! Tests for the brick profiler module.
 
 use super::*;
+use crate::brick::exec_graph::ExecutionNode;
 
 // ========================================================================
 // TileStats Tests

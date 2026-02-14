@@ -1,5 +1,4 @@
 use super::super::super::super::*;
-use crate::Backend;
 
 // Dot product tests
 #[test]
