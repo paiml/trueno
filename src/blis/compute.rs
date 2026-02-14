@@ -1,0 +1,267 @@
+//! Core BLIS compute routines: microkernel dispatch, macroblock execution,
+//! and the cache-blocked GEMM main loop.
+//!
+//! Implements the 5-loop BLIS algorithm (Van Zee & Van de Geijn, 2015):
+//! - Loop 5 (jc): N dimension, L3 blocking
+//! - Loop 4 (pc): K dimension, L2 blocking
+//! - Loop 3 (ic): M dimension, L1 blocking
+//! - Loop 2 (jr): Microkernel columns
+//! - Loop 1 (ir): Microkernel rows
+
+use std::time::Instant;
+
+use crate::error::TruenoError;
+
+use super::microkernels::microkernel_scalar;
+#[cfg(target_arch = "x86_64")]
+use super::microkernels::microkernel_8x6_true_asm;
+use super::packing::{pack_a_block, pack_b_block, packed_a_size, packed_b_size};
+use super::profiler::{BlisProfileLevel, BlisProfiler};
+use super::reference::gemm_reference;
+use super::{KC, MC, MR, NC, NR};
+
+/// Load a tile of C into the micro workspace for accumulation.
+#[inline(always)]
+fn load_c_tile(
+    c: &[f32],
+    c_micro: &mut [f32],
+    row: usize,
+    col: usize,
+    mr: usize,
+    nr: usize,
+    n: usize,
+) {
+    c_micro.fill(0.0);
+    for jj in 0..nr {
+        for ii in 0..mr {
+            c_micro[jj * MR + ii] = c[(row + ii) * n + (col + jj)];
+        }
+    }
+}
+
+/// Store a micro tile back into C.
+#[inline(always)]
+fn store_c_tile(
+    c: &mut [f32],
+    c_micro: &[f32],
+    row: usize,
+    col: usize,
+    mr: usize,
+    nr: usize,
+    n: usize,
+) {
+    for jj in 0..nr {
+        for ii in 0..mr {
+            c[(row + ii) * n + (col + jj)] = c_micro[jj * MR + ii];
+        }
+    }
+}
+
+/// Dispatch to the best available microkernel (AVX2 ASM or scalar fallback).
+#[inline(always)]
+fn dispatch_microkernel(
+    kc: usize,
+    a_panel: &[f32],
+    b_panel: &[f32],
+    c_micro: &mut [f32],
+    mr_block: usize,
+    nr_block: usize,
+) {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_x86_feature_detected!("avx2")
+            && is_x86_feature_detected!("fma")
+            && mr_block == MR
+            && nr_block == NR
+        {
+            // SAFETY: AVX2+FMA verified by is_x86_feature_detected!() above.
+            unsafe {
+                microkernel_8x6_true_asm(
+                    kc,
+                    a_panel.as_ptr(),
+                    b_panel.as_ptr(),
+                    c_micro.as_mut_ptr(),
+                    MR,
+                );
+            }
+            return;
+        }
+    }
+    microkernel_scalar(kc, a_panel, b_panel, c_micro, MR);
+}
+
+/// Execute microkernel tile iterations over one MC x NC x KC macro-block.
+#[allow(clippy::too_many_arguments)]
+fn compute_macroblock(
+    c: &mut [f32],
+    packed_a: &[f32],
+    packed_b: &[f32],
+    c_micro: &mut [f32],
+    ic: usize,
+    jc: usize,
+    mc_block: usize,
+    nc_block: usize,
+    kc_block: usize,
+    n: usize,
+    profiler: &mut Option<&mut BlisProfiler>,
+) {
+    let midi_start = Instant::now();
+
+    for jr in (0..nc_block).step_by(NR) {
+        let nr_block = NR.min(nc_block - jr);
+        for ir in (0..mc_block).step_by(MR) {
+            let mr_block = MR.min(mc_block - ir);
+            let micro_start = Instant::now();
+
+            let a_panel = &packed_a[(ir / MR) * MR * kc_block..];
+            let b_panel = &packed_b[(jr / NR) * NR * kc_block..];
+
+            load_c_tile(c, c_micro, ic + ir, jc + jr, mr_block, nr_block, n);
+            dispatch_microkernel(kc_block, a_panel, b_panel, c_micro, mr_block, nr_block);
+            store_c_tile(c, c_micro, ic + ir, jc + jr, mr_block, nr_block, n);
+
+            if let Some(ref mut prof) = profiler.as_deref_mut() {
+                prof.record(
+                    BlisProfileLevel::Micro,
+                    micro_start.elapsed().as_nanos() as u64,
+                    (2 * mr_block * nr_block * kc_block) as u64,
+                );
+            }
+        }
+    }
+
+    if let Some(ref mut prof) = profiler.as_deref_mut() {
+        prof.record(
+            BlisProfileLevel::Midi,
+            midi_start.elapsed().as_nanos() as u64,
+            (2 * mc_block * nc_block * kc_block) as u64,
+        );
+    }
+}
+
+/// Validate GEMM dimension inputs (Poka-yoke).
+fn validate_gemm_dims(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &[f32],
+) -> Result<(), TruenoError> {
+    if a.len() != m * k {
+        return Err(TruenoError::InvalidInput(format!(
+            "A size mismatch: expected {}, got {}",
+            m * k,
+            a.len()
+        )));
+    }
+    if b.len() != k * n {
+        return Err(TruenoError::InvalidInput(format!(
+            "B size mismatch: expected {}, got {}",
+            k * n,
+            b.len()
+        )));
+    }
+    if c.len() != m * n {
+        return Err(TruenoError::InvalidInput(format!(
+            "C size mismatch: expected {}, got {}",
+            m * n,
+            c.len()
+        )));
+    }
+    Ok(())
+}
+
+/// Record a profiler event if profiler is active.
+#[inline(always)]
+fn record_prof(
+    profiler: &mut Option<&mut BlisProfiler>,
+    level: BlisProfileLevel,
+    start: Instant,
+    flops: u64,
+) {
+    if let Some(ref mut prof) = profiler.as_deref_mut() {
+        prof.record(level, start.elapsed().as_nanos() as u64, flops);
+    }
+}
+
+/// BLIS-style blocked GEMM
+///
+/// Implements the 5-loop BLIS algorithm (Van Zee & Van de Geijn, 2015):
+/// Loop 5 (jc): N dimension, L3 blocking
+/// Loop 4 (pc): K dimension, L2 blocking
+/// Loop 3 (ic): M dimension, L1 blocking
+/// Loop 2 (jr): Microkernel columns
+/// Loop 1 (ir): Microkernel rows
+pub fn gemm_blis(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+    mut profiler: Option<&mut BlisProfiler>,
+) -> Result<(), TruenoError> {
+    validate_gemm_dims(m, n, k, a, b, c)?;
+
+    if m == 0 || n == 0 || k == 0 {
+        return Ok(());
+    }
+    if m * n * k < 4096 {
+        return gemm_reference(m, n, k, a, b, c);
+    }
+
+    let start = Instant::now();
+
+    let mc = MC.min(m);
+    let nc = NC.min(n);
+    let kc = KC.min(k);
+
+    let mut packed_a = vec![0.0f32; packed_a_size(mc, kc)];
+    let mut packed_b = vec![0.0f32; packed_b_size(kc, nc)];
+    let mut c_micro = vec![0.0f32; MR * NR];
+
+    for jc in (0..n).step_by(NC) {
+        let nc_block = NC.min(n - jc);
+
+        for pc in (0..k).step_by(KC) {
+            let kc_block = KC.min(k - pc);
+
+            let pack_start = Instant::now();
+            pack_b_block(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
+            record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
+
+            for ic in (0..m).step_by(MC) {
+                let mc_block = MC.min(m - ic);
+
+                let pack_start = Instant::now();
+                pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
+                record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
+
+                compute_macroblock(
+                    c,
+                    &packed_a,
+                    &packed_b,
+                    &mut c_micro,
+                    ic,
+                    jc,
+                    mc_block,
+                    nc_block,
+                    kc_block,
+                    n,
+                    &mut profiler,
+                );
+            }
+        }
+    }
+
+    if let Some(prof) = profiler {
+        prof.record(
+            BlisProfileLevel::Macro,
+            start.elapsed().as_nanos() as u64,
+            (2 * m * n * k) as u64,
+        );
+    }
+
+    Ok(())
+}
