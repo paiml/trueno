@@ -186,10 +186,10 @@ impl TiledQ4KMatvec {
     #[inline]
     fn scalar_superblock_dot(&self, sb_data: &[u8], input: &[f32]) -> f32 {
         // Read header (hot path optimized)
-        let d = f16_to_f32(&sb_data[0..2]);
-        let dmin = f16_to_f32(&sb_data[2..4]);
-        let scales = &sb_data[4..16];
-        let qs = &sb_data[16..144];
+        let d = f16_to_f32(sb_data.get(0..2).expect("Q4_K: need ≥2 bytes for d"));
+        let dmin = f16_to_f32(sb_data.get(2..4).expect("Q4_K: need ≥4 bytes for dmin"));
+        let scales = sb_data.get(4..16).expect("Q4_K: need ≥16 bytes for scales");
+        let qs = sb_data.get(16..144).expect("Q4_K: need ≥144 bytes for qs");
 
         // Precompute all scale/min pairs upfront
         let scale_mins = precompute_scales_mins(scales);

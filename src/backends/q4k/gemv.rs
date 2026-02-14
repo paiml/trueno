@@ -14,7 +14,7 @@ fn process_q4k_superblock_scalar(
     in_dim: usize,
 ) -> f32 {
     let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
-    let qs = &sb_data[16..144];
+    let qs = sb_data.get(16..144).expect("Q4_K: need ≥144 bytes for qs");
     let mut sum = 0.0f32;
 
     for chunk in 0..4 {
@@ -149,7 +149,7 @@ pub fn matmul_q4k_f32(q4k_data: &[u8], input: &[f32], out_dim: usize, in_dim: us
             let sb_data = &q4k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
 
             let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
-            let qs = &sb_data[16..144];
+            let qs = sb_data.get(16..144).expect("Q4_K: need ≥144 bytes for qs");
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
 
             for chunk in 0..4 {
@@ -212,7 +212,7 @@ unsafe fn matmul_q4k_f32_avx2(
 
             // Parse header
             let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
-            let qs = &sb_data[16..144];
+            let qs = sb_data.get(16..144).expect("Q4_K: need ≥144 bytes for qs");
 
             let input_offset = sb_idx * SUPER_BLOCK_SIZE;
 
@@ -470,7 +470,7 @@ unsafe fn process_q4k_superblock_avx2(
     use std::arch::x86_64::*;
 
     let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
-    let qs = &sb_data[16..144];
+    let qs = sb_data.get(16..144).expect("Q4_K: need ≥144 bytes for qs");
 
     for chunk_i in 0..4 {
         let chunk_start = chunk_i * 64;
