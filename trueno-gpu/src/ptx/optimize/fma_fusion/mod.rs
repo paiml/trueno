@@ -143,13 +143,12 @@ fn try_fuse_mul_add(
 
     // Check each source operand of the add to see if it's a fusable mul result
     for (src_idx, src) in add_instr.srcs.iter().enumerate() {
-        let mul_result = match src {
-            Operand::Reg(r) => r,
-            _ => continue,
+        let Operand::Reg(mul_result) = src else {
+            continue;
         };
 
         if let Some(pair) =
-            try_fuse_source(add_instr, src_idx, mul_result, instructions, use_counts, definitions)
+            try_fuse_source(add_instr, src_idx, *mul_result, instructions, use_counts, definitions)
         {
             return Some(pair);
         }
@@ -162,17 +161,17 @@ fn try_fuse_mul_add(
 fn try_fuse_source(
     add_instr: &PtxInstruction,
     src_idx: usize,
-    mul_result: &VirtualReg,
+    mul_result: VirtualReg,
     instructions: &[PtxInstruction],
     use_counts: &HashMap<VirtualReg, usize>,
     definitions: &HashMap<VirtualReg, usize>,
 ) -> Option<(PtxInstruction, usize)> {
     // Register must have exactly one use (in this add)
-    if use_counts.get(mul_result) != Some(&1) {
+    if use_counts.get(&mul_result) != Some(&1) {
         return None;
     }
 
-    let &def_idx = definitions.get(mul_result)?;
+    let &def_idx = definitions.get(&mul_result)?;
     let mul_instr = &instructions[def_idx];
 
     // Validate the defining instruction is a compatible mul
