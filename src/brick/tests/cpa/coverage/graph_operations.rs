@@ -236,3 +236,275 @@ fn test_c031_to_tree_node_function() {
     // Just verify it doesn't panic
     assert!(!format!("{:?}", tree).is_empty());
 }
+
+// ========================
+// Slowest Kernel Tests
+// ========================
+
+#[test]
+fn test_slowest_kernel_empty_graph() {
+    let graph = ExecutionGraph::new();
+    assert!(graph.slowest_kernel().is_none());
+}
+
+#[test]
+fn test_slowest_kernel_no_bricks() {
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::Layer { index: 0 });
+    graph.add_node(ExecutionNode::Function {
+        name: "func".into(),
+        file: None,
+        line: None,
+    });
+    assert!(graph.slowest_kernel().is_none());
+}
+
+#[test]
+fn test_slowest_kernel_brick_without_launches() {
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::Brick {
+        id: BrickId::RmsNorm,
+        timing_ns: 5000,
+        elements: 100,
+    });
+    // Brick exists but has no Launches edges
+    assert!(graph.slowest_kernel().is_none());
+}
+
+#[test]
+fn test_slowest_kernel_single_brick_with_kernel() {
+    let mut graph = ExecutionGraph::new();
+    let brick_id = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::QkvProjection,
+        timing_ns: 3000,
+        elements: 100,
+    });
+    let kernel_id = graph.add_node(ExecutionNode::Kernel {
+        name: "matmul".into(),
+        grid: (1, 1, 1),
+        block: (32, 1, 1),
+        shared_mem: 1024,
+        timing_ns: Some(2000),
+        arithmetic_intensity: None,
+        achieved_tflops: None,
+        ptx_hash: 0,
+    });
+    graph.add_edge(brick_id, kernel_id, EdgeType::Launches);
+
+    let result = graph.slowest_kernel();
+    assert!(result.is_some());
+    let (id, _node, timing) = result.unwrap();
+    assert_eq!(id, brick_id);
+    assert_eq!(timing, 3000);
+}
+
+#[test]
+fn test_slowest_kernel_multiple_bricks() {
+    let mut graph = ExecutionGraph::new();
+
+    let brick1 = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::RmsNorm,
+        timing_ns: 1000,
+        elements: 50,
+    });
+    let kernel1 = graph.add_node(ExecutionNode::Kernel {
+        name: "norm".into(),
+        grid: (1, 1, 1),
+        block: (32, 1, 1),
+        shared_mem: 512,
+        timing_ns: Some(800),
+        arithmetic_intensity: None,
+        achieved_tflops: None,
+        ptx_hash: 0,
+    });
+    graph.add_edge(brick1, kernel1, EdgeType::Launches);
+
+    let brick2 = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::QkvProjection,
+        timing_ns: 5000,
+        elements: 200,
+    });
+    let kernel2 = graph.add_node(ExecutionNode::Kernel {
+        name: "matmul".into(),
+        grid: (4, 1, 1),
+        block: (256, 1, 1),
+        shared_mem: 4096,
+        timing_ns: Some(4000),
+        arithmetic_intensity: None,
+        achieved_tflops: None,
+        ptx_hash: 0,
+    });
+    graph.add_edge(brick2, kernel2, EdgeType::Launches);
+
+    let result = graph.slowest_kernel();
+    assert!(result.is_some());
+    let (id, _node, timing) = result.unwrap();
+    assert_eq!(id, brick2); // brick2 is slower
+    assert_eq!(timing, 5000);
+}
+
+// ========================
+// Tree Node All-Variant Tests
+// ========================
+
+#[test]
+#[cfg(feature = "presentar-tui")]
+fn test_to_tree_node_empty_graph() {
+    let graph = ExecutionGraph::new();
+    let tree = graph.to_tree_node();
+    assert!(!format!("{:?}", tree).is_empty());
+}
+
+#[test]
+#[cfg(feature = "presentar-tui")]
+fn test_to_tree_node_multiple_roots() {
+    let mut graph = ExecutionGraph::new();
+    // Two disconnected nodes = two roots
+    graph.add_node(ExecutionNode::Layer { index: 0 });
+    graph.add_node(ExecutionNode::Layer { index: 1 });
+
+    let tree = graph.to_tree_node();
+    assert!(!format!("{:?}", tree).is_empty());
+}
+
+#[test]
+#[cfg(feature = "presentar-tui")]
+fn test_to_tree_node_all_node_types() {
+    let mut graph = ExecutionGraph::new();
+
+    let layer = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let brick = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::RmsNorm,
+        timing_ns: 1000,
+        elements: 100,
+    });
+    let kernel = graph.add_node(ExecutionNode::Kernel {
+        name: "matmul_kernel".into(),
+        grid: (4, 1, 1),
+        block: (256, 1, 1),
+        shared_mem: 2048,
+        timing_ns: Some(500),
+        arithmetic_intensity: Some(2.5),
+        achieved_tflops: Some(1.2),
+        ptx_hash: 0,
+    });
+    let func = graph.add_node(ExecutionNode::Function {
+        name: "forward".into(),
+        file: Some("model.rs".into()),
+        line: Some(42),
+    });
+    let func_no_loc = graph.add_node(ExecutionNode::Function {
+        name: "helper".into(),
+        file: None,
+        line: None,
+    });
+    let transfer = graph.add_node(ExecutionNode::Transfer {
+        src: "host".into(),
+        dst: "device".into(),
+        bytes: 4096,
+        direction: TransferDirection::H2D,
+        timing_ns: Some(200),
+    });
+    let transfer_no_timing = graph.add_node(ExecutionNode::Transfer {
+        src: "device".into(),
+        dst: "host".into(),
+        bytes: 2048,
+        direction: TransferDirection::D2H,
+        timing_ns: None,
+    });
+    let async_task = graph.add_node(ExecutionNode::AsyncTask {
+        name: "prefetch".into(),
+        poll_count: 5,
+        yield_count: 2,
+        total_poll_ns: 1500,
+    });
+    let async_zero = graph.add_node(ExecutionNode::AsyncTask {
+        name: "idle_task".into(),
+        poll_count: 0,
+        yield_count: 0,
+        total_poll_ns: 0,
+    });
+
+    // Connect: layer -> brick -> kernel
+    graph.add_edge(layer, brick, EdgeType::Sequence);
+    graph.add_edge(brick, kernel, EdgeType::Launches);
+    graph.add_edge(layer, func, EdgeType::Sequence);
+    graph.add_edge(layer, func_no_loc, EdgeType::Sequence);
+    graph.add_edge(layer, transfer, EdgeType::Sequence);
+    graph.add_edge(layer, transfer_no_timing, EdgeType::Sequence);
+    graph.add_edge(layer, async_task, EdgeType::Sequence);
+    graph.add_edge(layer, async_zero, EdgeType::Sequence);
+
+    let tree = graph.to_tree_node();
+    let debug = format!("{:?}", tree);
+    assert!(!debug.is_empty());
+}
+
+// ========================
+// Critical Path Coverage
+// ========================
+
+#[test]
+fn test_critical_path_empty_graph() {
+    let graph = ExecutionGraph::new();
+    let (path, total) = graph.critical_path();
+    assert!(path.is_empty());
+    assert_eq!(total, 0);
+}
+
+#[test]
+fn test_critical_path_linear_chain() {
+    let mut graph = ExecutionGraph::new();
+    let n1 = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::RmsNorm,
+        timing_ns: 100,
+        elements: 10,
+    });
+    let n2 = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::QkvProjection,
+        timing_ns: 200,
+        elements: 20,
+    });
+    let n3 = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::Activation,
+        timing_ns: 50,
+        elements: 10,
+    });
+
+    graph.add_edge(n1, n2, EdgeType::Sequence);
+    graph.add_edge(n2, n3, EdgeType::Sequence);
+
+    let (path, total) = graph.critical_path();
+    assert!(!path.is_empty());
+    assert!(total > 0);
+}
+
+// ========================
+// ASCII Tree Coverage
+// ========================
+
+#[test]
+fn test_to_ascii_tree_with_all_node_types() {
+    let mut graph = ExecutionGraph::new();
+    let layer = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let brick = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::RmsNorm,
+        timing_ns: 1000,
+        elements: 100,
+    });
+    let kernel = graph.add_node(ExecutionNode::Kernel {
+        name: "matmul".into(),
+        grid: (1, 1, 1),
+        block: (32, 1, 1),
+        shared_mem: 512,
+        timing_ns: Some(800),
+        arithmetic_intensity: None,
+        achieved_tflops: None,
+        ptx_hash: 0,
+    });
+    graph.add_edge(layer, brick, EdgeType::Sequence);
+    graph.add_edge(brick, kernel, EdgeType::Launches);
+
+    let ascii = graph.to_ascii_tree();
+    assert!(!ascii.is_empty());
+}

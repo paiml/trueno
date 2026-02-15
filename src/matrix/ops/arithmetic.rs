@@ -401,4 +401,98 @@ mod tests {
         let result = Matrix::batched_matmul(&a, &b, 2, 2, 2, 2).unwrap();
         assert_eq!(result, a); // A × I = A
     }
+
+    #[test]
+    fn test_batched_matmul_a_size_mismatch() {
+        let a = vec![1.0, 2.0, 3.0]; // Wrong size: should be 2*2*2=8
+        let b = vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0];
+        let result = Matrix::batched_matmul(&a, &b, 2, 2, 2, 2);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn test_batched_matmul_b_size_mismatch() {
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let b = vec![1.0, 0.0]; // Wrong size: should be 2*2*2=8
+        let result = Matrix::batched_matmul(&a, &b, 2, 2, 2, 2);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn test_batched_matmul_single_batch() {
+        // Single batch 3x2 @ 2x4 = 3x4
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]; // 3x2
+        let b = vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0]; // 2x4
+        let result = Matrix::batched_matmul(&a, &b, 1, 3, 2, 4).unwrap();
+        assert_eq!(result.len(), 12); // 3x4
+    }
+
+    #[test]
+    fn test_batched_matmul_4d_basic() {
+        // batch=1, heads=1, m=2, k=2, n=2
+        let a = vec![1.0, 2.0, 3.0, 4.0]; // 2x2
+        let b = vec![1.0, 0.0, 0.0, 1.0]; // identity
+        let result = Matrix::batched_matmul_4d(&a, &b, 1, 1, 2, 2, 2).unwrap();
+        assert_eq!(result, a);
+    }
+
+    #[test]
+    fn test_batched_matmul_4d_a_size_mismatch() {
+        let a = vec![1.0]; // Wrong: should be 2*2*3*4=48
+        let b: Vec<f32> = (0..80).map(|x| x as f32 * 0.1).collect();
+        let result = Matrix::batched_matmul_4d(&a, &b, 2, 2, 3, 4, 5);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn test_batched_matmul_4d_b_size_mismatch() {
+        let a: Vec<f32> = (0..48).map(|x| x as f32 * 0.1).collect();
+        let b = vec![1.0]; // Wrong: should be 2*2*4*5=80
+        let result = Matrix::batched_matmul_4d(&a, &b, 2, 2, 3, 4, 5);
+        assert!(matches!(result, Err(TruenoError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn test_batched_matmul_4d_multi_head() {
+        // batch=1, heads=4, m=2, k=2, n=2 (like attention heads)
+        let total = 4 * 2 * 2; // 16 elements for A
+        let a: Vec<f32> = (0..total).map(|_| 1.0).collect();
+        let b: Vec<f32> = (0..total).map(|_| 1.0).collect();
+        let result = Matrix::batched_matmul_4d(&a, &b, 1, 4, 2, 2, 2).unwrap();
+        assert_eq!(result.len(), total);
+        // Each element should be 2.0 (dot product of two 1.0 vectors of length 2)
+        for val in &result {
+            assert!((*val - 2.0).abs() < 1e-5);
+        }
+    }
+
+    #[test]
+    fn test_matmul_vector_matrix_path() {
+        // 1×K @ K×N triggers the vector-matrix fast path
+        let a = Matrix::from_vec(1, 4, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        let b = Matrix::from_vec(4, 3, vec![
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0,
+            1.0, 1.0, 1.0,
+        ]).unwrap();
+        let result = a.matmul(&b).unwrap();
+        assert_eq!(result.rows(), 1);
+        assert_eq!(result.cols(), 3);
+        // [1*1+2*0+3*0+4*1, 1*0+2*1+3*0+4*1, 1*0+2*0+3*1+4*1] = [5, 6, 7]
+        assert!((result.get(0, 0).unwrap() - 5.0).abs() < 1e-5);
+        assert!((result.get(0, 1).unwrap() - 6.0).abs() < 1e-5);
+        assert!((result.get(0, 2).unwrap() - 7.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_matmul_vector_matrix_with_zeros() {
+        // Test that zero elements in the vector skip computation
+        let a = Matrix::from_vec(1, 3, vec![0.0, 2.0, 0.0]).unwrap();
+        let b = Matrix::from_vec(3, 2, vec![100.0, 200.0, 3.0, 4.0, 500.0, 600.0]).unwrap();
+        let result = a.matmul(&b).unwrap();
+        // Only the second row of B contributes: [2*3, 2*4] = [6, 8]
+        assert!((result.get(0, 0).unwrap() - 6.0).abs() < 1e-5);
+        assert!((result.get(0, 1).unwrap() - 8.0).abs() < 1e-5);
+    }
 }

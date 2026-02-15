@@ -321,3 +321,109 @@ fn test_brick_id_count() {
     assert_eq!(BrickId::COUNT, 15);
     assert_eq!(BrickCategory::COUNT, 4);
 }
+
+// ========================================================================
+// Reporting coverage tests
+// ========================================================================
+
+#[test]
+fn test_profiler_summary_with_data() {
+    use std::time::Duration;
+    let mut profiler = BrickProfiler::new();
+    profiler.enable();
+
+    profiler.record_elapsed("RmsNorm", Duration::from_micros(100), 50);
+    profiler.record_elapsed("RmsNorm", Duration::from_micros(200), 50);
+    profiler.record_elapsed("Embedding", Duration::from_micros(50), 10);
+
+    let summary = profiler.summary();
+    assert!(summary.contains("Brick Profiler Summary"));
+    assert!(summary.contains("RmsNorm"));
+    assert!(summary.contains("Category Breakdown"));
+}
+
+#[test]
+fn test_profiler_summary_empty() {
+    let profiler = BrickProfiler::new();
+    let summary = profiler.summary();
+    assert!(summary.contains("Brick Profiler Summary"));
+    assert!(summary.contains("Total: 0 tokens"));
+}
+
+#[test]
+fn test_profiler_print_category_stats() {
+    use std::time::Duration;
+    let mut profiler = BrickProfiler::new();
+    profiler.enable();
+
+    profiler.record_elapsed("RmsNorm", Duration::from_micros(100), 50);
+    profiler.record_elapsed("QkvProjection", Duration::from_micros(200), 50);
+
+    // Just verify it doesn't panic
+    profiler.print_category_stats();
+}
+
+#[test]
+fn test_profiler_print_category_stats_empty() {
+    let profiler = BrickProfiler::new();
+    // Empty profiler - all categories have count 0
+    profiler.print_category_stats();
+}
+
+#[test]
+fn test_profiler_to_json_structure() {
+    use std::time::Duration;
+    let mut profiler = BrickProfiler::new();
+    profiler.enable();
+
+    profiler.record_elapsed("RmsNorm", Duration::from_micros(100), 50);
+
+    let json = profiler.to_json();
+    assert!(json.contains("\"total_tokens\":"));
+    assert!(json.contains("\"total_ns\":"));
+    assert!(json.contains("\"total_throughput\":"));
+    assert!(json.contains("\"bricks\":["));
+    assert!(json.contains("\"name\":\"RmsNorm\""));
+}
+
+#[test]
+fn test_profiler_to_json_with_dynamic_brick() {
+    use std::time::Duration;
+    let mut profiler = BrickProfiler::new();
+    profiler.enable();
+
+    profiler.record_elapsed("CustomOp", Duration::from_micros(500), 100);
+
+    let json = profiler.to_json();
+    assert!(json.contains("\"name\":\"CustomOp\""));
+    assert!(json.contains("\"count\":1"));
+}
+
+#[test]
+fn test_profiler_write_json() {
+    use std::time::Duration;
+    let mut profiler = BrickProfiler::new();
+    profiler.enable();
+    profiler.record_elapsed("RmsNorm", Duration::from_micros(100), 50);
+
+    let tmp = std::env::temp_dir().join("trueno_test_profiler.json");
+    profiler.write_json(&tmp).unwrap();
+    let content = std::fs::read_to_string(&tmp).unwrap();
+    assert!(content.contains("\"total_tokens\":"));
+    std::fs::remove_file(&tmp).ok();
+}
+
+#[test]
+fn test_profiler_tile_summary_empty() {
+    let profiler = BrickProfiler::new();
+    let summary = profiler.tile_summary();
+    assert!(summary.contains("Tile Profiling Summary"));
+}
+
+#[test]
+fn test_profiler_tile_stats_to_json_empty() {
+    let profiler = BrickProfiler::new();
+    let json = profiler.tile_stats_to_json();
+    assert!(json.contains("\"tile_profiling_enabled\":"));
+    assert!(json.contains("\"tiles\":[]"));
+}

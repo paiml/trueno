@@ -1,5 +1,6 @@
-//! Tests for Coalesced Q4K, DP4A Q4K, True DP4A Q4K, Q8 Quantize, Q4K Q8 Dot,
-//! Packed DP4A Q4K Q8, and Batched Q4K kernels.
+//! Tests for Coalesced Q4K, DP4A Q4K, True DP4A Q4K, Multi-Warp Vectorized Q4K,
+//! MWV DP4A Q4K, Wide Q4K, Q8 Quantize, Q4K Q8 Dot, Packed DP4A Q4K Q8, and
+//! Batched Q4K kernels.
 
 use super::super::super::*;
 
@@ -80,6 +81,118 @@ fn test_true_dp4a_q4k_gemv_ptx_generation() {
 
     assert!(ptx.contains(".visible .entry true_dp4a_q4k_gemv"));
     assert!(ptx.contains("dp4a"));
+}
+
+// =========================================================================
+// MULTI-WARP VECTORIZED Q4K GEMV KERNEL TESTS
+// =========================================================================
+
+#[test]
+fn test_mwv_q4k_gemv_kernel_name() {
+    let kernel = MultiWarpVectorizedQ4KGemvKernel::new(3584, 4096);
+    assert_eq!(kernel.name(), "mwv_q4k_gemv");
+}
+
+#[test]
+fn test_mwv_q4k_gemv_config() {
+    let kernel = MultiWarpVectorizedQ4KGemvKernel::new(3584, 4096);
+    assert_eq!(kernel.k, 3584);
+    assert_eq!(kernel.n, 4096);
+    assert_eq!(kernel.num_warps, 4);
+}
+
+#[test]
+fn test_mwv_q4k_gemv_ptx_generation() {
+    let kernel = MultiWarpVectorizedQ4KGemvKernel::new(3584, 4096);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains(".visible .entry mwv_q4k_gemv"));
+    assert!(ptx.contains("ld.global"));
+    assert!(ptx.contains("shfl"));
+}
+
+#[test]
+fn test_mwv_q4k_gemv_shared_memory() {
+    let kernel = MultiWarpVectorizedQ4KGemvKernel::new(3584, 4096);
+    let ptx = kernel.emit_ptx();
+
+    // 4 warps → needs shared memory for cross-warp reduction
+    assert!(ptx.contains(".shared"));
+}
+
+// =========================================================================
+// MWV DP4A Q4K GEMV KERNEL TESTS
+// =========================================================================
+
+#[test]
+fn test_mwv_dp4a_q4k_gemv_kernel_name() {
+    let kernel = MwvDp4aQ4KGemvKernel::new(3584, 4096);
+    assert_eq!(kernel.name(), "mwv_dp4a_q4k_gemv");
+}
+
+#[test]
+fn test_mwv_dp4a_q4k_gemv_config() {
+    let kernel = MwvDp4aQ4KGemvKernel::new(3584, 4096);
+    assert_eq!(kernel.k, 3584);
+    assert_eq!(kernel.n, 4096);
+    assert_eq!(kernel.num_warps, 3);
+}
+
+#[test]
+fn test_mwv_dp4a_q4k_gemv_ptx_generation() {
+    let kernel = MwvDp4aQ4KGemvKernel::new(3584, 4096);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains(".visible .entry mwv_dp4a_q4k_gemv"));
+    // Uses DP4A integer dot products for Q8_1 activations
+    assert!(ptx.contains("dp4a"));
+    assert!(ptx.contains("ld.global"));
+}
+
+#[test]
+fn test_mwv_dp4a_q4k_gemv_shared_memory() {
+    let kernel = MwvDp4aQ4KGemvKernel::new(3584, 4096);
+    let ptx = kernel.emit_ptx();
+
+    // 3 warps → needs shared memory for cross-warp reduction
+    assert!(ptx.contains(".shared"));
+}
+
+// =========================================================================
+// WIDE Q4K GEMV KERNEL TESTS
+// =========================================================================
+
+#[test]
+fn test_wide_q4k_gemv_kernel_name() {
+    let kernel = WideQ4KGemvKernel::new(3584, 4096);
+    assert_eq!(kernel.name(), "wide_q4k_gemv");
+}
+
+#[test]
+fn test_wide_q4k_gemv_config() {
+    let kernel = WideQ4KGemvKernel::new(3584, 4096);
+    assert_eq!(kernel.k, 3584);
+    assert_eq!(kernel.n, 4096);
+    assert_eq!(kernel.num_warps, 8);
+}
+
+#[test]
+fn test_wide_q4k_gemv_ptx_generation() {
+    let kernel = WideQ4KGemvKernel::new(3584, 4096);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains(".visible .entry wide_q4k_gemv"));
+    assert!(ptx.contains("ld.global"));
+    assert!(ptx.contains("shfl"));
+}
+
+#[test]
+fn test_wide_q4k_gemv_shared_memory() {
+    let kernel = WideQ4KGemvKernel::new(3584, 4096);
+    let ptx = kernel.emit_ptx();
+
+    // 8 warps (256 threads) → needs shared memory for cross-warp reduction
+    assert!(ptx.contains(".shared"));
 }
 
 // =========================================================================
