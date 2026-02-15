@@ -51,7 +51,7 @@ pub(crate) fn ui(f: &mut Frame, app: &App) {
         1 => render_memory_tab(f, app, chunks[1]),
         2 => render_stress::render_dataflow_tab(f, app, chunks[1]),
         3 => render_stress::render_stress_tab(f, app, chunks[1]),
-        _ => {}
+        4.. => {} // No tab at this index; ignore
     }
 
     // Footer
