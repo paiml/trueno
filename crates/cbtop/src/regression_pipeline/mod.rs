@@ -15,394 +15,18 @@
 //! H₀: Pipeline cannot detect regressions within 60 seconds
 //! Test: Run pipeline with known regression, verify detection and timing
 
+mod analysis;
+mod metrics;
+mod types;
+
+pub use analysis::{MetricRegression, RegressionAnalysis};
+pub use metrics::{BenchmarkMetric, BenchmarkResults};
+pub use types::{
+    GitRef, PipelineConfig, PipelineError, PipelineResult, PipelineStatus, StatusCheck,
+};
+
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-
-/// Result type for pipeline operations
-pub type PipelineResult<T> = Result<T, PipelineError>;
-
-/// Errors in pipeline operations
-#[derive(Debug, Clone, PartialEq)]
-pub enum PipelineError {
-    /// Git operation failed
-    GitError { reason: String },
-    /// Benchmark execution failed
-    BenchmarkFailed { reason: String },
-    /// Baseline not found
-    BaselineNotFound { commit: String },
-    /// Invalid configuration
-    InvalidConfig { reason: String },
-    /// Timeout waiting for results
-    Timeout { timeout_sec: u64 },
-    /// PR status update failed
-    StatusUpdateFailed { reason: String },
-    /// Artifact storage failed
-    ArtifactError { reason: String },
-}
-
-impl std::fmt::Display for PipelineError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::GitError { reason } => write!(f, "Git error: {}", reason),
-            Self::BenchmarkFailed { reason } => write!(f, "Benchmark failed: {}", reason),
-            Self::BaselineNotFound { commit } => write!(f, "Baseline not found for {}", commit),
-            Self::InvalidConfig { reason } => write!(f, "Invalid config: {}", reason),
-            Self::Timeout { timeout_sec } => write!(f, "Timeout after {}s", timeout_sec),
-            Self::StatusUpdateFailed { reason } => write!(f, "Status update failed: {}", reason),
-            Self::ArtifactError { reason } => write!(f, "Artifact error: {}", reason),
-        }
-    }
-}
-
-impl std::error::Error for PipelineError {}
-
-/// Pipeline execution status
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PipelineStatus {
-    /// Pipeline not started
-    Pending,
-    /// Pipeline is running
-    Running,
-    /// Pipeline completed successfully (no regressions)
-    Passed,
-    /// Pipeline completed with warnings (minor regressions)
-    Warning,
-    /// Pipeline failed (significant regressions)
-    Failed,
-    /// Pipeline was cancelled
-    Cancelled,
-    /// Pipeline encountered an error
-    Error,
-}
-
-impl PipelineStatus {
-    /// Check if status is terminal
-    pub fn is_terminal(&self) -> bool {
-        matches!(
-            self,
-            Self::Passed | Self::Warning | Self::Failed | Self::Cancelled | Self::Error
-        )
-    }
-
-    /// Get status name for GitHub
-    pub fn github_state(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Running => "pending",
-            Self::Passed => "success",
-            Self::Warning => "success",
-            Self::Failed => "failure",
-            Self::Cancelled => "error",
-            Self::Error => "error",
-        }
-    }
-}
-
-/// Git reference type
-#[derive(Debug, Clone)]
-pub enum GitRef {
-    /// Branch name
-    Branch(String),
-    /// Commit SHA
-    Commit(String),
-    /// Tag name
-    Tag(String),
-    /// Pull request number
-    PullRequest(u64),
-}
-
-impl GitRef {
-    /// Get ref string for git commands
-    pub fn as_ref_str(&self) -> String {
-        match self {
-            Self::Branch(name) => name.clone(),
-            Self::Commit(sha) => sha.clone(),
-            Self::Tag(name) => format!("refs/tags/{}", name),
-            Self::PullRequest(num) => format!("refs/pull/{}/head", num),
-        }
-    }
-}
-
-/// Configuration for the regression pipeline
-#[derive(Debug, Clone)]
-pub struct PipelineConfig {
-    /// Base branch for comparison (default: main)
-    pub base_branch: String,
-    /// Benchmark command to run
-    pub benchmark_command: String,
-    /// Working directory
-    pub work_dir: String,
-    /// Maximum execution time in seconds
-    pub timeout_sec: u64,
-    /// Regression threshold (percent)
-    pub regression_threshold_percent: f64,
-    /// Warning threshold (percent)
-    pub warning_threshold_percent: f64,
-    /// GitHub token for status updates (optional)
-    pub github_token: Option<String>,
-    /// Repository name (owner/repo)
-    pub repository: Option<String>,
-    /// Artifact storage path
-    pub artifact_path: String,
-    /// Number of benchmark iterations
-    pub iterations: u32,
-    /// Warmup iterations
-    pub warmup_iterations: u32,
-}
-
-impl Default for PipelineConfig {
-    fn default() -> Self {
-        Self {
-            base_branch: "main".to_string(),
-            benchmark_command: "cargo bench --no-fail-fast".to_string(),
-            work_dir: ".".to_string(),
-            timeout_sec: 600,
-            regression_threshold_percent: 5.0,
-            warning_threshold_percent: 2.0,
-            github_token: None,
-            repository: None,
-            artifact_path: "./benchmark-artifacts".to_string(),
-            iterations: 10,
-            warmup_iterations: 3,
-        }
-    }
-}
-
-/// Benchmark result for a single metric
-#[derive(Debug, Clone)]
-pub struct BenchmarkMetric {
-    /// Metric name
-    pub name: String,
-    /// Sample values
-    pub samples: Vec<f64>,
-    /// Unit of measurement
-    pub unit: String,
-}
-
-impl BenchmarkMetric {
-    /// Create new benchmark metric
-    pub fn new(name: impl Into<String>, samples: Vec<f64>, unit: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            samples,
-            unit: unit.into(),
-        }
-    }
-
-    /// Get mean value
-    pub fn mean(&self) -> f64 {
-        if self.samples.is_empty() {
-            return 0.0;
-        }
-        self.samples.iter().sum::<f64>() / self.samples.len() as f64
-    }
-
-    /// Get standard deviation
-    pub fn std_dev(&self) -> f64 {
-        if self.samples.len() < 2 {
-            return 0.0;
-        }
-        let mean = self.mean();
-        let variance = self.samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
-            / (self.samples.len() - 1) as f64;
-        variance.sqrt()
-    }
-
-    /// Get coefficient of variation
-    pub fn cv(&self) -> f64 {
-        let mean = self.mean();
-        if mean.abs() < 1e-10 {
-            return 0.0;
-        }
-        (self.std_dev() / mean) * 100.0
-    }
-}
-
-/// Results from a benchmark run
-#[derive(Debug, Clone)]
-pub struct BenchmarkResults {
-    /// Git commit SHA
-    pub commit: String,
-    /// Branch name
-    pub branch: String,
-    /// Timestamp
-    pub timestamp_ns: u64,
-    /// Benchmark metrics
-    pub metrics: Vec<BenchmarkMetric>,
-    /// Total execution time in milliseconds
-    pub duration_ms: u64,
-    /// Host information
-    pub host: String,
-}
-
-impl BenchmarkResults {
-    /// Create new benchmark results
-    pub fn new(commit: impl Into<String>, branch: impl Into<String>) -> Self {
-        Self {
-            commit: commit.into(),
-            branch: branch.into(),
-            timestamp_ns: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as u64)
-                .unwrap_or(0),
-            metrics: Vec::new(),
-            duration_ms: 0,
-            host: hostname(),
-        }
-    }
-
-    /// Add a metric
-    pub fn add_metric(&mut self, metric: BenchmarkMetric) {
-        self.metrics.push(metric);
-    }
-
-    /// Get metric by name
-    pub fn get_metric(&self, name: &str) -> Option<&BenchmarkMetric> {
-        self.metrics.iter().find(|m| m.name == name)
-    }
-}
-
-/// Get hostname
-fn hostname() -> String {
-    std::env::var("HOSTNAME")
-        .or_else(|_| std::env::var("HOST"))
-        .unwrap_or_else(|_| "unknown".to_string())
-}
-
-/// Comparison result for a single metric
-#[derive(Debug, Clone)]
-pub struct MetricRegression {
-    /// Metric name
-    pub name: String,
-    /// Baseline mean
-    pub baseline_mean: f64,
-    /// Current mean
-    pub current_mean: f64,
-    /// Percent change
-    pub percent_change: f64,
-    /// Whether this is a regression
-    pub is_regression: bool,
-    /// Whether this is a warning
-    pub is_warning: bool,
-    /// Unit
-    pub unit: String,
-}
-
-impl MetricRegression {
-    /// Create from two metrics
-    pub fn from_metrics(
-        baseline: &BenchmarkMetric,
-        current: &BenchmarkMetric,
-        regression_threshold: f64,
-        warning_threshold: f64,
-    ) -> Self {
-        let baseline_mean = baseline.mean();
-        let current_mean = current.mean();
-
-        let percent_change = if baseline_mean.abs() > 1e-10 {
-            ((current_mean - baseline_mean) / baseline_mean) * 100.0
-        } else {
-            0.0
-        };
-
-        // For latency-like metrics (lower is better), positive change is regression
-        // For throughput-like metrics (higher is better), negative change is regression
-        let is_latency_metric = baseline.name.contains("latency")
-            || baseline.name.contains("time")
-            || baseline.name.contains("duration");
-
-        let regression_change = if is_latency_metric {
-            percent_change // Increase is bad
-        } else {
-            -percent_change // Decrease is bad
-        };
-
-        Self {
-            name: baseline.name.clone(),
-            baseline_mean,
-            current_mean,
-            percent_change,
-            is_regression: regression_change >= regression_threshold,
-            is_warning: regression_change >= warning_threshold
-                && regression_change < regression_threshold,
-            unit: baseline.unit.clone(),
-        }
-    }
-}
-
-/// Complete regression analysis result
-#[derive(Debug, Clone)]
-pub struct RegressionAnalysis {
-    /// Baseline results
-    pub baseline: BenchmarkResults,
-    /// Current results
-    pub current: BenchmarkResults,
-    /// Per-metric regressions
-    pub regressions: Vec<MetricRegression>,
-    /// Overall status
-    pub status: PipelineStatus,
-    /// Analysis duration in milliseconds
-    pub analysis_duration_ms: u64,
-    /// Summary message
-    pub summary: String,
-}
-
-impl RegressionAnalysis {
-    /// Count significant regressions
-    pub fn regression_count(&self) -> usize {
-        self.regressions.iter().filter(|r| r.is_regression).count()
-    }
-
-    /// Count warnings
-    pub fn warning_count(&self) -> usize {
-        self.regressions.iter().filter(|r| r.is_warning).count()
-    }
-
-    /// Count improvements
-    pub fn improvement_count(&self) -> usize {
-        self.regressions
-            .iter()
-            .filter(|r| !r.is_regression && !r.is_warning && r.percent_change.abs() > 1.0)
-            .filter(|r| {
-                // Check if change is improvement
-                let is_latency = r.name.contains("latency") || r.name.contains("time");
-                if is_latency {
-                    r.percent_change < 0.0 // Decrease is good
-                } else {
-                    r.percent_change > 0.0 // Increase is good
-                }
-            })
-            .count()
-    }
-
-    /// Get worst regression
-    pub fn worst_regression(&self) -> Option<&MetricRegression> {
-        self.regressions
-            .iter()
-            .filter(|r| r.is_regression)
-            .max_by(|a, b| {
-                a.percent_change
-                    .abs()
-                    .partial_cmp(&b.percent_change.abs())
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-    }
-}
-
-/// PR status check result
-#[derive(Debug, Clone)]
-pub struct StatusCheck {
-    /// Check name
-    pub name: String,
-    /// Status state
-    pub state: PipelineStatus,
-    /// Description
-    pub description: String,
-    /// Target URL for details
-    pub target_url: Option<String>,
-    /// Context (e.g., "cbtop/regression")
-    pub context: String,
-}
 
 /// CI/CD regression detection pipeline
 #[derive(Debug)]
@@ -505,12 +129,12 @@ impl RegressionPipeline {
         results.add_metric(BenchmarkMetric::new(
             "latency_p50",
             vec![100.0, 102.0, 98.0, 101.0, 99.0],
-            "μs",
+            "\u{03bc}s",
         ));
         results.add_metric(BenchmarkMetric::new(
             "latency_p99",
             vec![200.0, 210.0, 195.0, 205.0, 198.0],
-            "μs",
+            "\u{03bc}s",
         ));
         results.add_metric(BenchmarkMetric::new(
             "throughput",
@@ -694,13 +318,13 @@ impl RegressionPipeline {
 
         for regression in &analysis.regressions {
             let status = if regression.is_regression {
-                "❌ Regression"
+                "\u{274c} Regression"
             } else if regression.is_warning {
-                "⚠️ Warning"
+                "\u{26a0}\u{fe0f} Warning"
             } else if regression.percent_change.abs() > 1.0 {
-                "✅ Improved"
+                "\u{2705} Improved"
             } else {
-                "➖ Stable"
+                "\u{2796} Stable"
             };
 
             report.push_str(&format!(
