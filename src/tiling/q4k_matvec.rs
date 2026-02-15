@@ -234,6 +234,7 @@ impl TiledQ4KMatvec {
 
     /// Get tiling statistics for profiling
     #[must_use]
+    #[allow(clippy::cast_precision_loss)] // Matrix dimensions ≤ 2^24; precision loss acceptable for profiling stats
     pub fn stats(&self) -> TilingStats {
         let bytes_per_row = self.superblocks_per_row() * Q4K_SUPERBLOCK_BYTES;
         let total_weight_bytes = self.m * bytes_per_row;

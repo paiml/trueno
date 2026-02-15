@@ -348,6 +348,7 @@ impl TunerFeaturesBuilder {
     }
 
     /// Set hardware capability (auto-fills GPU features)
+    #[allow(clippy::cast_precision_loss)] // GPU bandwidth/TFLOPS values fit in f32 (practical max ~10K)
     pub fn hardware(mut self, hw: &HardwareCapability) -> Self {
         if let Some(gpu) = &hw.gpu {
             self.gpu_mem_bw_gbs = Some(gpu.memory_bw_gbps as f32);
@@ -505,6 +506,7 @@ impl FeatureExtractor {
     }
 
     /// Calculate efficiency from profiler data
+    #[allow(clippy::cast_precision_loss)] // GPU bandwidth values fit in f32 mantissa for roofline calc
     pub fn calculate_efficiency(
         &self,
         profiler: &BrickProfiler,
@@ -524,6 +526,7 @@ impl FeatureExtractor {
     /// Classify bottleneck from profiler brick breakdown.
     ///
     /// PAR-200: Uses category_stats() for efficient aggregation.
+    #[allow(clippy::cast_precision_loss)] // Percentages are 0-100; precision loss negligible
     pub fn classify_bottleneck(&self, profiler: &BrickProfiler) -> BottleneckClass {
         let cats = profiler.category_stats();
         let total_ns = profiler.total_ns();
