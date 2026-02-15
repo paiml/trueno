@@ -68,7 +68,7 @@ fn h003_cpu_device_creation() {
     let cpu = CpuDevice::new();
     assert_eq!(cpu.device_type(), DeviceType::Cpu);
     assert_eq!(cpu.device_id(), DeviceId::cpu());
-    assert!(cpu.core_count > 0);
+    assert!(cpu.compute_unit_count() > 0);
 }
 
 #[test]
