@@ -3,7 +3,6 @@
 use crate::driver::{CudaContext, CudaStream};
 use crate::memory::resident::{reset_transfer_counters, GpuResidentTensor};
 
-use super::cuda_ctx;
 
 #[test]
 fn test_batched_multihead_attention_basic() {
