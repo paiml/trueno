@@ -1,3 +1,5 @@
+mod smooth_activations;
+
 use super::super::super::*;
 use proptest::prelude::*;
 
