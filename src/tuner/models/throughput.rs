@@ -1,61 +1,13 @@
-//! ML Models for Tuner
-//!
-//! Throughput regressor, kernel classifier, and bottleneck classifier implementations.
+//! Throughput regressor model for ML tuner.
 
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "ml-tuner")]
-use aprender::{
-    tree::{RandomForestClassifier, RandomForestRegressor},
-    Matrix, Vector,
-};
+use aprender::{tree::RandomForestRegressor, Matrix, Vector};
 
-use super::error::TunerError;
-use super::features::TunerFeatures;
-use super::types::{BottleneckClass, KernelType};
-
-// ============================================================================
-// Prediction Results
-// ============================================================================
-
-/// Throughput prediction result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ThroughputPrediction {
-    /// Predicted tokens per second
-    pub predicted_tps: f32,
-    /// Confidence (0-1)
-    pub confidence: f32,
-    /// Top contributing features
-    pub top_features: Vec<(String, f32)>,
-}
-
-/// Kernel recommendation result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KernelRecommendation {
-    /// Top recommended kernel
-    pub top_kernel: KernelType,
-    /// Confidence (0-1)
-    pub confidence: f32,
-    /// Alternative kernels with probabilities
-    pub alternatives: Vec<(KernelType, f32)>,
-}
-
-/// Bottleneck prediction result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BottleneckPrediction {
-    /// Predicted bottleneck class
-    pub class: BottleneckClass,
-    /// Confidence (0-1)
-    pub confidence: f32,
-    /// Human-readable explanation
-    pub explanation: String,
-    /// Recommended action
-    pub recommended_action: String,
-}
-
-// ============================================================================
-// ThroughputRegressor
-// ============================================================================
+use super::super::error::TunerError;
+use super::super::features::TunerFeatures;
+use super::ThroughputPrediction;
 
 /// Simple linear regression model for throughput prediction.
 ///
@@ -292,7 +244,7 @@ impl ThroughputRegressor {
     ///
     /// For memory-bound LLM inference (decode phase):
     /// max_tps = memory_bw_bytes_per_sec / bytes_per_token
-    /// bytes_per_token = model_params × bytes_per_param / batch_size
+    /// bytes_per_token = model_params x bytes_per_param / batch_size
     pub fn compute_roofline_bound(features: &TunerFeatures) -> f32 {
         // Denormalize model params: normalized = (log10(b) + 1) / 3
         // log10(b) = normalized * 3 - 1
@@ -335,194 +287,5 @@ impl ThroughputRegressor {
             .unwrap_or(2); // Default to Q4K if ambiguous
 
         bytes_per_param[idx]
-    }
-}
-
-// ============================================================================
-// KernelClassifier
-// ============================================================================
-
-/// Kernel classifier using simple rule-based logic.
-///
-/// With `ml-tuner` feature: uses aprender::RandomForestClassifier (SHOWCASE-BRICK-001)
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct KernelClassifier {
-    /// Kernel accuracy on validation (for confidence)
-    accuracy: f32,
-    /// RandomForest classifier when ml-tuner feature is enabled
-    #[cfg(feature = "ml-tuner")]
-    #[serde(skip)]
-    rf_classifier: Option<RandomForestClassifier>,
-}
-
-impl KernelClassifier {
-    pub fn new() -> Self {
-        Self {
-            accuracy: 0.85,
-            #[cfg(feature = "ml-tuner")]
-            rf_classifier: None,
-        }
-    }
-
-    /// Create a classifier with aprender RandomForest (ml-tuner feature)
-    #[cfg(feature = "ml-tuner")]
-    pub fn with_random_forest(n_estimators: usize) -> Self {
-        Self {
-            accuracy: 0.85,
-            rf_classifier: Some(RandomForestClassifier::new(n_estimators)),
-        }
-    }
-
-    /// Train the classifier using aprender RandomForest (ml-tuner feature)
-    ///
-    /// Labels should be kernel type indices (0=TiledQ4K, 1=CoalescedQ4K, etc.)
-    #[cfg(feature = "ml-tuner")]
-    pub fn train(&mut self, data: &[(TunerFeatures, u32)]) -> Result<(), TunerError> {
-        if data.len() < 10 {
-            return Err(TunerError::InsufficientData(data.len()));
-        }
-
-        // Convert to aprender format (Matrix<f32> for features, &[usize] for labels)
-        let n_samples = data.len();
-        let n_features = TunerFeatures::DIM;
-        let mut x_data = Vec::with_capacity(n_samples * n_features);
-        let mut y_data: Vec<usize> = Vec::with_capacity(n_samples);
-
-        for (features, label) in data {
-            x_data.extend(features.to_vector());
-            y_data.push(*label as usize);
-        }
-
-        let x_matrix = Matrix::from_vec(n_samples, n_features, x_data)
-            .map_err(|e| TunerError::TrainingFailed(e.to_string()))?;
-
-        let rf = self
-            .rf_classifier
-            .get_or_insert_with(|| RandomForestClassifier::new(50));
-        rf.fit(&x_matrix, &y_data)
-            .map_err(|e| TunerError::TrainingFailed(e.to_string()))?;
-
-        // Calculate accuracy on training data
-        let predictions = rf.predict(&x_matrix);
-        let mut correct = 0;
-        for (i, (_, label)) in data.iter().enumerate() {
-            if predictions[i] as u32 == *label {
-                correct += 1;
-            }
-        }
-        self.accuracy = correct as f32 / data.len() as f32;
-
-        Ok(())
-    }
-
-    /// Predict best kernel based on features
-    pub fn predict(&self, features: &TunerFeatures) -> KernelRecommendation {
-        // Rule-based kernel selection from SHOWCASE-BRICK-001 learnings
-        let batch_size = (features.batch_size_norm * 64.0).round() as u32;
-        let seq_len = (2.0_f32.powf(features.seq_len_log * 15.0)).round() as u32;
-
-        // Determine best Q4K variant based on batch size
-        let (top_kernel, confidence) = if batch_size >= 4 {
-            // M >= 4: Use batched kernels
-            (KernelType::BatchedQ4K, 0.90)
-        } else if batch_size >= 2 {
-            // M = 2-3: Vectorized is good
-            (KernelType::VectorizedQ4K, 0.85)
-        } else {
-            // M = 1: Coalesced or Vectorized
-            if features.cuda_graphs > 0.5 {
-                (KernelType::VectorizedQ4K, 0.88)
-            } else {
-                (KernelType::CoalescedQ4K, 0.82)
-            }
-        };
-
-        // Check for attention-bound cases
-        let attention_kernel = if seq_len > 128 {
-            KernelType::MultiWarpAttention
-        } else {
-            KernelType::IncrementalAttention
-        };
-
-        // Build alternatives
-        let alternatives = vec![
-            (KernelType::VectorizedQ4K, 0.85),
-            (KernelType::CoalescedQ4K, 0.75),
-            (attention_kernel, 0.70),
-        ]
-        .into_iter()
-        .filter(|(k, _)| *k != top_kernel)
-        .take(2)
-        .collect();
-
-        KernelRecommendation {
-            top_kernel,
-            confidence,
-            alternatives,
-        }
-    }
-}
-
-// ============================================================================
-// BottleneckClassifier
-// ============================================================================
-
-/// Bottleneck classifier using heuristics from profiler data.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct BottleneckClassifier {
-    /// Classification accuracy
-    accuracy: f32,
-}
-
-impl BottleneckClassifier {
-    pub fn new() -> Self {
-        Self { accuracy: 0.90 }
-    }
-
-    /// Predict bottleneck from features
-    pub fn predict(&self, features: &TunerFeatures) -> BottleneckPrediction {
-        // Use already-computed bottleneck if available
-        if let Some(class) = features.bottleneck_class {
-            return BottleneckPrediction {
-                class,
-                confidence: 0.95,
-                explanation: format!("Bottleneck classified from profiler data: {}", class),
-                recommended_action: class.recommended_action().to_string(),
-            };
-        }
-
-        // Heuristic classification based on features
-        let batch_size = (features.batch_size_norm * 64.0).round() as u32;
-        let seq_len = (2.0_f32.powf(features.seq_len_log * 15.0)).round() as u32;
-
-        let (class, confidence, explanation) = if batch_size == 1 && features.cuda_graphs < 0.5 {
-            (
-                BottleneckClass::LaunchBound,
-                0.75,
-                "Single sequence without CUDA graphs: kernel launch overhead may dominate".into(),
-            )
-        } else if seq_len > 512 {
-            (
-                BottleneckClass::AttentionBound,
-                0.80,
-                format!(
-                    "Long sequence (len={}) likely makes attention the bottleneck",
-                    seq_len
-                ),
-            )
-        } else {
-            (
-                BottleneckClass::MemoryBound,
-                0.85,
-                "Q4K GEMV is typically memory-bound for LLM inference".into(),
-            )
-        };
-
-        BottleneckPrediction {
-            class,
-            confidence,
-            explanation,
-            recommended_action: class.recommended_action().to_string(),
-        }
     }
 }
