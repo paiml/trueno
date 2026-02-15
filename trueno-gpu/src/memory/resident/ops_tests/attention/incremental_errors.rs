@@ -4,7 +4,6 @@
 use crate::driver::{CudaContext, CudaStream};
 use crate::memory::resident::GpuResidentTensor;
 
-use super::cuda_ctx;
 
 // ============================================================================
 // PMAT-018: Additional attention.rs coverage tests
