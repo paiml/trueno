@@ -25,7 +25,7 @@ fn test_c001_compute_assertion_equiv() {
 fn test_c002_compute_brick_assert_equiv() {
     let brick = ComputeBrick::new(AddOp::new(4)).assert_equiv(Backend::Scalar);
     // Verify assertion was added
-    assert!(!brick.assertions.is_empty());
+    assert!(!brick.get_assertions().is_empty());
 }
 
 /// C003: BrickId Display trait
