@@ -1,0 +1,65 @@
+[meta]
+version = "1.0"
+last_updated = "2026-02-15"
+
+# CB-515: Catch-all `_ => {}` in key event handlers and HTTP header parsers
+# These are intentional no-ops for unrecognized inputs, not concrete return values.
+# Tracked: https://github.com/paiml/paiml-mcp-agent-toolkit/issues/207
+[suppressions.CB-515]
+[[suppressions.CB-515.rules]]
+file = "src/bin/trueno_monitor/main.rs"
+lines = [603]
+reason = "Key event handler: _ => {} correctly ignores unmapped KeyCode variants"
+
+[[suppressions.CB-515.rules]]
+file = "src/brick/connection/mod.rs"
+lines = [172]
+reason = "HTTP header parser: _ => {} correctly ignores unknown header parameters"
+
+# CB-519: Quantize/dequantize roundtrip tests intentionally use both operations
+# Tracked: https://github.com/paiml/paiml-mcp-agent-toolkit/issues/208
+[suppressions.CB-519]
+[[suppressions.CB-519.rules]]
+file = "src/backends/q4k/dequant.rs"
+lines = [11]
+reason = "Roundtrip test: must call both quantize+dequantize to verify accuracy"
+
+[[suppressions.CB-519.rules]]
+pattern = "src/brick/quant_ops/**"
+reason = "Quantization test module: roundtrip tests require both operations"
+
+# CB-520: Constructor calls in thread::spawn initialization loops
+# Tracked: https://github.com/paiml/paiml-mcp-agent-toolkit/issues/209
+[suppressions.CB-520]
+[[suppressions.CB-520.rules]]
+file = "src/bin/trueno_monitor/main.rs"
+lines = [315, 394]
+reason = "Thread spawn loop: constructors run once per worker during init, not in hot path"
+
+# CB-521: Hash functions and quantized tensor math flagged as binary parsing
+# Tracked: https://github.com/paiml/paiml-mcp-agent-toolkit/issues/210
+[suppressions.CB-521]
+[[suppressions.CB-521.rules]]
+file = "src/tiling/q4k_matvec.rs"
+lines = [287]
+reason = "Q4K quantization math: extracting scale/min from packed blocks, not binary parsing"
+
+[[suppressions.CB-521.rules]]
+file = "src/hash/mod.rs"
+lines = [52]
+reason = "FxHash computation: bitwise hash function, not binary format parsing"
+
+# CB-508: Raw `as` casts with explicit #[allow(clippy::cast_*)] + SAFETY comments
+# Tracked: https://github.com/paiml/paiml-mcp-agent-toolkit/issues/211
+[suppressions.CB-508]
+[[suppressions.CB-508.rules]]
+file = "src/tiling/q4k_matvec.rs"
+reason = "Casts annotated with #[allow(clippy::cast_*)] and SAFETY comments"
+
+[[suppressions.CB-508.rules]]
+file = "src/tuner/features.rs"
+reason = "Casts annotated with #[allow(clippy::cast_*)] and SAFETY comments"
+
+[[suppressions.CB-508.rules]]
+file = "src/tuner/evolution.rs"
+reason = "Casts annotated with #[allow(clippy::cast_*)] and SAFETY comments"
