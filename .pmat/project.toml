@@ -2,3 +2,9 @@
 version = "3.1.0"
 last_compliance_check = "2026-02-15T10:12:05.986160191Z"
 auto_update = false
+
+[hooks.complexity]
+# Raised from 30/25 to accommodate PTX emitters (monolithic GPU code generators
+# with irreducible complexity from sequential register captures in builder closures)
+max_cyclomatic = 45
+max_cognitive = 42

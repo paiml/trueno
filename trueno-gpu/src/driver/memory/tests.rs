@@ -1,4 +1,5 @@
 use super::*;
+use std::mem;
 
 #[test]
 #[cfg(not(feature = "cuda"))]
