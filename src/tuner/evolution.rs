@@ -141,6 +141,8 @@ impl KernelBandit {
             .unwrap_or(0)
     }
 
+    #[allow(clippy::cast_precision_loss)]
+    // SAFETY: usize index ≤ 11 (NUM_KERNELS) and u64 modulo 1000 — both lossless in f32.
     fn select_thompson(&self) -> usize {
         // Thompson Sampling with Beta distribution approximation
         // For each arm, sample from Beta(successes+1, failures+1)
@@ -206,6 +208,7 @@ impl KernelBandit {
     }
 
     /// Get regret estimate (cumulative regret vs oracle)
+    #[allow(clippy::cast_precision_loss)] // Pull counts ≪ 2^24
     pub fn estimated_regret(&self) -> f32 {
         let best_mean = self.arms.iter().map(|a| a.mean()).fold(0.0f32, f32::max);
         self.arms
@@ -475,7 +478,8 @@ impl BrickTuner {
 
     /// Estimate baseline throughput for hardware
     #[cfg(feature = "hardware-detect")]
-    #[allow(clippy::cast_precision_loss)] // GPU bandwidth values are practical (< 10K GB/s)
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    // SAFETY: GPU bandwidth f64→f32 truncation is negligible for throughput estimation.
     fn estimate_baseline_tps(&self, hw: &HardwareCapability) -> f32 {
         // Rough heuristic based on GPU memory bandwidth
         // RTX 4090: ~1000 GB/s → ~150 tok/s for 7B Q4K

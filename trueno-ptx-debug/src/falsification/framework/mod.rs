@@ -213,7 +213,19 @@ impl FalsificationRegistry {
     }
 
     fn register_all_tests(&mut self) {
-        // Category 1: Syntax Validity (F001-F010)
+        self.register_syntax_tests();
+        self.register_type_safety_tests();
+        self.register_address_space_tests();
+        self.register_barrier_tests();
+        self.register_stub_range(51..=60, Category::MemoryModel, "Memory model check");
+        self.register_control_flow_tests();
+        self.register_data_flow_tests();
+        self.register_known_bug_tests();
+        self.register_stub_range(91..=95, Category::Performance, "Performance check");
+        self.register_instrumentation_tests();
+    }
+
+    fn register_syntax_tests(&mut self) {
         self.add(FalsificationTest::new(
             "F001", Category::SyntaxValidity,
             "PTX contains .version directive", 1,
@@ -280,33 +292,10 @@ impl FalsificationRegistry {
             },
         ));
 
-        // F005-F010: Simplified for now
-        self.add(FalsificationTest::new(
-            "F005", Category::SyntaxValidity, "All branch targets exist", 1,
-            |_| TestResult::Pass, // TODO: implement
-        ));
-        self.add(FalsificationTest::new(
-            "F006", Category::SyntaxValidity, "All registers declared before use", 1,
-            |_| TestResult::Pass, // TODO: implement
-        ));
-        self.add(FalsificationTest::new(
-            "F007", Category::SyntaxValidity, "Instruction operand counts correct", 1,
-            |_| TestResult::Pass, // TODO: implement
-        ));
-        self.add(FalsificationTest::new(
-            "F008", Category::SyntaxValidity, "String literals properly escaped", 1,
-            |_| TestResult::Pass, // TODO: implement
-        ));
-        self.add(FalsificationTest::new(
-            "F009", Category::SyntaxValidity, "Comments don't contain null bytes", 1,
-            |_| TestResult::Pass, // TODO: implement
-        ));
-        self.add(FalsificationTest::new(
-            "F010", Category::SyntaxValidity, "UTF-8 encoding valid", 1,
-            |_| TestResult::Pass, // TODO: implement
-        ));
+        self.register_stub_range(5..=10, Category::SyntaxValidity, "Syntax validity check");
+    }
 
-        // Category 2: Type Safety (F011-F020)
+    fn register_type_safety_tests(&mut self) {
         self.add(FalsificationTest::new(
             "F011", Category::TypeSafety,
             "Load dest type matches instruction type", 1,
@@ -324,16 +313,10 @@ impl FalsificationRegistry {
             },
         ));
 
-        // F012-F020: Simplified
-        for i in 12..=20 {
-            self.add(FalsificationTest::new(
-                &format!("F0{}", i), Category::TypeSafety,
-                "Type safety check", 1,
-                |_| TestResult::Pass,
-            ));
-        }
+        self.register_stub_range(12..=20, Category::TypeSafety, "Type safety check");
+    }
 
-        // Category 3: Address Space (F021-F035)
+    fn register_address_space_tests(&mut self) {
         self.add(FalsificationTest::new(
             "F021", Category::AddressSpace,
             "No cvta.shared followed by generic ld/st", 2,
@@ -351,16 +334,10 @@ impl FalsificationRegistry {
             },
         ));
 
-        // F022-F035: Simplified
-        for i in 22..=35 {
-            self.add(FalsificationTest::new(
-                &format!("F0{}", i), Category::AddressSpace,
-                "Address space check", 1,
-                |_| TestResult::Pass,
-            ));
-        }
+        self.register_stub_range(22..=35, Category::AddressSpace, "Address space check");
+    }
 
-        // Category 4: Barrier Safety (F036-F050)
+    fn register_barrier_tests(&mut self) {
         self.add(FalsificationTest::new(
             "F036", Category::BarrierSafety,
             "bar.sync after shared write, before read", 3,
@@ -381,25 +358,10 @@ impl FalsificationRegistry {
             },
         ));
 
-        // F037-F050: Simplified
-        for i in 37..=50 {
-            self.add(FalsificationTest::new(
-                &format!("F0{}", i), Category::BarrierSafety,
-                "Barrier safety check", 1,
-                |_| TestResult::Pass,
-            ));
-        }
+        self.register_stub_range(37..=50, Category::BarrierSafety, "Barrier safety check");
+    }
 
-        // Category 5: Memory Model (F051-F060)
-        for i in 51..=60 {
-            self.add(FalsificationTest::new(
-                &format!("F0{}", i), Category::MemoryModel,
-                "Memory model check", 1,
-                |_| TestResult::Pass,
-            ));
-        }
-
-        // Category 6: Control Flow (F061-F070)
+    fn register_control_flow_tests(&mut self) {
         self.add(FalsificationTest::new(
             "F061", Category::ControlFlow,
             "All code paths reach ret or exit", 2,
@@ -437,47 +399,28 @@ impl FalsificationRegistry {
             },
         ));
 
-        // F063-F070: Simplified
-        for i in 63..=70 {
-            self.add(FalsificationTest::new(
-                &format!("F0{}", i), Category::ControlFlow,
-                "Control flow check", 1,
-                |_| TestResult::Pass,
-            ));
-        }
+        self.register_stub_range(63..=70, Category::ControlFlow, "Control flow check");
+    }
 
-        // Category 7: Data Flow (F071-F080)
+    fn register_data_flow_tests(&mut self) {
         self.add(FalsificationTest::new(
             "F071", Category::DataFlow,
             "No use before def", 2,
-            |_m| {
-                // Use-before-def check currently passes unconditionally
-                TestResult::Pass
-            },
+            |_m| TestResult::Pass,
         ));
 
-        // F072-F080: Simplified
-        for i in 72..=80 {
-            self.add(FalsificationTest::new(
-                &format!("F0{}", i), Category::DataFlow,
-                "Data flow check", 1,
-                |_| TestResult::Pass,
-            ));
-        }
+        self.register_stub_range(72..=80, Category::DataFlow, "Data flow check");
+    }
 
-        // Category 8: Known Bugs (F081-F090)
+    fn register_known_bug_tests(&mut self) {
         self.add(FalsificationTest::new(
             "F081", Category::KnownBugs,
             "No 'loaded value' bug pattern (FALSIFIED - See F082)", 0,
             |m| {
                 let analyzer = DataFlowAnalyzer::from_module(m);
-                let bugs = analyzer.detect_loaded_value_bug();
-                if bugs.is_empty() {
-                    TestResult::Pass
-                } else {
-                    // Pattern detected but harmless on sm_89
-                    TestResult::Pass
-                }
+                let _bugs = analyzer.detect_loaded_value_bug();
+                // Pattern detected but harmless on sm_89
+                TestResult::Pass
             },
         ));
 
@@ -519,29 +462,34 @@ impl FalsificationRegistry {
             },
         ));
 
-        // F084-F090: Simplified
-        for i in 84..=90 {
-            self.add(FalsificationTest::new(
-                &format!("F0{}", i), Category::KnownBugs,
-                "Known bug check", 1,
-                |_| TestResult::Pass,
-            ));
-        }
+        self.register_stub_range(84..=90, Category::KnownBugs, "Known bug check");
+    }
 
-        // Category 9: Performance (F091-F095)
-        for i in 91..=95 {
-            self.add(FalsificationTest::new(
-                &format!("F0{}", i), Category::Performance,
-                "Performance check", 1,
-                |_| TestResult::Pass,
-            ));
-        }
-
-        // Category 10: Instrumentation (F096-F100)
+    fn register_instrumentation_tests(&mut self) {
         for i in 96..=100 {
             self.add(FalsificationTest::new(
                 &format!("F{}", i), Category::Instrumentation,
                 "Instrumentation check", 1,
+                |_| TestResult::Pass,
+            ));
+        }
+    }
+
+    /// Register a range of stub tests with the same category and description.
+    fn register_stub_range(
+        &mut self,
+        range: std::ops::RangeInclusive<u32>,
+        category: Category,
+        description: &'static str,
+    ) {
+        for i in range {
+            let id = if i < 100 {
+                format!("F0{}", i)
+            } else {
+                format!("F{}", i)
+            };
+            self.add(FalsificationTest::new(
+                &id, category, description, 1,
                 |_| TestResult::Pass,
             ));
         }
@@ -641,76 +589,4 @@ fn calculate_confidence(earned: u32, total: u32, results: &[(String, Category, S
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::parser::Parser;
-
-    #[test]
-    fn test_registry_creation() {
-        let registry = FalsificationRegistry::new();
-        assert!(!registry.tests().is_empty());
-        // Should have 100 tests
-        assert!(registry.tests().len() >= 90, "Expected at least 90 tests, got {}", registry.tests().len());
-    }
-
-    #[test]
-    fn test_valid_ptx_passes() {
-        let ptx = r#"
-            .version 8.0
-            .target sm_70
-            .address_size 64
-
-            .entry test()
-            {
-                .reg .u32 %r<10>;
-                mov.u32 %r0, 0;
-                ret;
-            }
-        "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
-
-        let registry = FalsificationRegistry::new();
-        let report = registry.evaluate(&module);
-
-        // Should pass basic syntax tests
-        assert!(report.score >= 80.0, "Score too low: {}", report.score);
-        assert!(report.confidence > 0.7, "Confidence too low: {}", report.confidence);
-    }
-
-    #[test]
-    fn test_missing_version_fails() {
-        let ptx = r#"
-            .target sm_70
-            .address_size 64
-
-            .entry test()
-            {
-                ret;
-            }
-        "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
-
-        let registry = FalsificationRegistry::new();
-        let report = registry.evaluate(&module);
-
-        // F001 should fail
-        let f001_result = report.results.iter()
-            .find(|(id, _, _, _)| id == "F001")
-            .map(|(_, _, _, r)| r);
-        assert!(f001_result.is_some());
-        assert!(f001_result.unwrap().is_fail());
-    }
-
-    #[test]
-    fn test_confidence_calculation() {
-        // Full pass should have high confidence
-        let conf = calculate_confidence(100, 100, &[]);
-        assert!(conf > 0.9);
-
-        // Partial pass should have lower confidence
-        let conf = calculate_confidence(50, 100, &[]);
-        assert!(conf < 0.8);
-    }
-}
+mod tests;

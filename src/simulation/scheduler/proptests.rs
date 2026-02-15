@@ -21,7 +21,7 @@ proptest! {
         cycle in 0u32..100,
         master_seed in any::<u64>()
     ) {
-        let backend = match backend_idx {
+        let backend = match backend_idx % 8 {
             0 => Backend::Scalar,
             1 => Backend::SSE2,
             2 => Backend::AVX,
@@ -29,7 +29,9 @@ proptest! {
             4 => Backend::AVX512,
             5 => Backend::NEON,
             6 => Backend::WasmSIMD,
-            _ => Backend::GPU,
+            7 => Backend::GPU,
+            // SAFETY: unreachable — modulo 8 produces 0..=7
+            _ => unreachable!(),
         };
 
         let seed1 = compute_seed(backend, size, cycle, master_seed);
