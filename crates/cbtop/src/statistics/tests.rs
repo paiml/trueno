@@ -114,3 +114,4 @@ fn test_nan_handling() {
     let samples = vec![1.0, f64::NAN, 3.0, f64::INFINITY, 5.0];
     let analysis = StatisticalAnalysis::from_samples_default(&samples).unwrap();
     assert!(analysis.mean.is_finite());
+}

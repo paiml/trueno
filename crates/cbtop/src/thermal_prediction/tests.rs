@@ -152,3 +152,4 @@ fn test_sliding_window() {
     // Oldest sample (60.0) should be gone
     let (min, _) = analyzer.temperature_range().unwrap();
     assert_eq!(min, 65.0);
+}

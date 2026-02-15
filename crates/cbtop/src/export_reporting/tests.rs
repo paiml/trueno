@@ -110,3 +110,4 @@ fn test_comparison_builder() {
         .build();
 
     assert!(output.contains("# Compare"));
+}

@@ -125,3 +125,4 @@ fn test_export_model() {
     let export = predictor.export_model(ModelType::Linear).unwrap();
     assert!(export.contains("linear"));
     assert!(export.contains("r_squared"));
+}

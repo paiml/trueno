@@ -1,4 +1,5 @@
     use super::*;
+    use std::time::{Duration, Instant};
 
     fn create_test_scheduler() -> PredictiveScheduler {
         let config = PredictiveSchedulerConfig::default();

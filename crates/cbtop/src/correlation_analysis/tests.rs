@@ -86,3 +86,4 @@ fn test_recommend_isolation() {
 
     // With no data, should recommend none
     assert_eq!(rec.action, IsolationAction::None);
+}

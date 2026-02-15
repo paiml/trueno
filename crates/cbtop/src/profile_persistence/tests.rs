@@ -89,3 +89,4 @@ fn test_templates() {
 
     let stress = templates::stress_test();
     assert_eq!(stress.load_intensity, 1.0);
+}

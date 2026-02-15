@@ -181,3 +181,4 @@ fn test_throughput_tracking() {
 
     // Throughput should be > 0
     assert!(batcher.stats().total_tokens == 10);
+}

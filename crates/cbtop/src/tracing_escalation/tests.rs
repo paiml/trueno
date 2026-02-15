@@ -65,3 +65,4 @@ fn test_escalation_reason() {
         Some(EscalationReason::EfficiencyLow)
     );
     assert_eq!(escalation.escalation_reason(10.0, 50.0), None);
+}

@@ -86,3 +86,4 @@ fn test_trend_detection() {
     let trend = predictor.detect_trend("metric").unwrap();
     assert!(trend.slope_per_day > 0.0);
     assert_eq!(trend.direction, "increasing");
+}

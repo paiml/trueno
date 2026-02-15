@@ -151,3 +151,4 @@ fn test_escape_influx() {
     assert_eq!(escape_influx("hello world"), "hello\\ world");
     assert_eq!(escape_influx("key=value"), "key\\=value");
     assert_eq!(escape_influx("a,b,c"), "a\\,b\\,c");
+}

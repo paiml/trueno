@@ -79,3 +79,4 @@ fn test_verification_attempt_tracking() {
     assert_eq!(attempt.passed_count(), 2);
     assert_eq!(attempt.failed_count(), 1);
     assert!(attempt.has_falsification());
+}
