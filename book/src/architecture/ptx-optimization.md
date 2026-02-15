@@ -249,6 +249,6 @@ Full specification: [cuda-tile-behavior.md](../../../docs/specifications/cuda-ti
 |--------|----------|
 | `fma_fusion.rs` | 93.75% |
 | `loop_split.rs` | 99.80% |
-| `tko.rs` | 94.29% |
+| `tko/mod.rs` | 94.29% |
 | `tile_validation.rs` | 88.64% |
 | **Total** | **94.28%** |

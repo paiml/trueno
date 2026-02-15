@@ -96,4 +96,4 @@ If future benchmarks show measurable occupancy loss from register pressure:
 - [PTX ISA Documentation](https://docs.nvidia.com/cuda/parallel-thread-execution/)
 - [Architecture Doc](../../book/src/architecture/ptx-register-allocation.md)
 - [Example](../../trueno-gpu/examples/register_allocation.rs)
-- [Register Implementation](../../trueno-gpu/src/ptx/registers.rs)
+- [Register Implementation](../../trueno-gpu/src/ptx/registers/mod.rs)

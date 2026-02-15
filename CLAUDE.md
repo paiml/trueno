@@ -436,7 +436,7 @@ trueno-gpu/                 # CUDA sub-crate (Pure Rust PTX generation)
 │   │   ├── mod.rs          # PTX module builder
 │   │   ├── builder.rs      # Fluent PTX kernel API
 │   │   ├── instructions.rs # PTX ISA instruction emission
-│   │   ├── registers.rs    # Register allocation with liveness
+│   │   ├── registers/       # Register allocation with liveness
 │   │   └── types.rs        # PTX types (f32, f16, u32, etc.)
 │   ├── kernels/            # Pre-built optimized kernels
 │   │   ├── gemm.rs         # Matrix multiplication (naive, tiled, tensor core)
