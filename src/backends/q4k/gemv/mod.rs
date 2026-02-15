@@ -1,0 +1,159 @@
+//! Row-major Q4_K matrix-vector multiplication.
+//!
+//! This module implements row-major GEMV where weights are stored row-first.
+//! Includes scalar, AVX2-optimized, and parallel dispatch implementations.
+
+mod scalar;
+
+#[cfg(target_arch = "x86_64")]
+mod avx2;
+
+use super::{SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
+
+// Re-export public API (preserves exact public surface)
+pub use scalar::{matmul_q4k_f32, matmul_q4k_f32_scalar};
+
+// Re-export crate-internal API (used by sibling test modules)
+#[allow(unused_imports)]
+pub(crate) use scalar::compute_chunk_q4k_scalar;
+
+/// Runtime dispatch for Q4K matmul - uses AVX2 if available, otherwise scalar
+#[inline]
+pub fn matmul_q4k_f32_dispatch(
+    q4k_data: &[u8],
+    input: &[f32],
+    out_dim: usize,
+    in_dim: usize,
+) -> Vec<f32> {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // For large matmuls (total work >= ~8M ops), use parallel execution
+        // This catches FFN layers (8960x1536) and lm_head (151936x1536)
+        // Also catches ffn_down (1536x8960) where out_dim is small but in_dim is large
+        let total_work = out_dim * in_dim;
+        if total_work >= 8_000_000 {
+            return matmul_q4k_f32_parallel(q4k_data, input, out_dim, in_dim);
+        }
+
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            // SAFETY: We just verified AVX2 + FMA are available
+            return unsafe { avx2::matmul_q4k_f32_avx2(q4k_data, input, out_dim, in_dim) };
+        }
+    }
+
+    // Fallback to scalar with 4-way unroll
+    scalar::matmul_q4k_f32(q4k_data, input, out_dim, in_dim)
+}
+
+/// Fused Q4_K matrix-vector multiply for GGML column-major layout
+///
+/// Computes: output = input @ Q4K_weight (GGML convention: y = x @ W)
+/// where weight is stored in Q4_K format with GGML column-major super-block organization.
+///
+/// # GGML Column-Major Layout (PMAT-103)
+///
+/// For a weight tensor with shape [ne0, ne1] in GGML notation:
+/// - ne0 is the output dimension (rows)
+/// - ne1 is the input/reduction dimension (columns)
+/// - Elements are stored column-major: W[i,j] at offset i + j*ne0
+/// - Each column j (length ne0) contains weights from input[j] to all outputs
+/// - Super-blocks are organized by columns: column j uses super-blocks [j*blocks_per_col, (j+1)*blocks_per_col)
+///
+/// This matches GGUF tensor storage and enables fused kernel execution without transposition.
+///
+/// # Arguments
+/// * `q4k_data` - Raw Q4K bytes in GGML column-major layout [ne0, ne1]
+/// * `input` - F32 input vector [ne1] (input/reduction dimension)
+/// * `ne0` - Size of output dimension (rows in GGML, output size)
+/// * `ne1` - Size of input/reduction dimension (columns in GGML, input size)
+///
+/// # Returns
+/// F32 output vector [ne0]
+///
+/// # Example
+/// ```rust,ignore
+/// // GGUF ffn_gate: shape [intermediate_dim, hidden_dim] = [8960, 1536]
+/// // Computes: intermediate = hidden @ ffn_gate
+/// let output = matmul_q4k_f32_colmajor(&q4k_bytes, &hidden, 8960, 1536);
+/// // output has 8960 elements
+/// ```
+
+// ============================================================================
+// Parallel Execution Helpers
+// ============================================================================
+
+#[cfg(target_arch = "x86_64")]
+fn matmul_q4k_f32_parallel(
+    q4k_data: &[u8],
+    input: &[f32],
+    out_dim: usize,
+    in_dim: usize,
+) -> Vec<f32> {
+    use std::thread;
+
+    // Use fewer threads with larger chunks for better cache efficiency
+    let num_threads = thread::available_parallelism()
+        .map(|p| p.get())
+        .unwrap_or(4)
+        .min(12);
+
+    let chunk_size = (out_dim + num_threads - 1) / num_threads;
+    let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
+
+    let mut output = vec![0.0f32; out_dim];
+    let has_avx2 = is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma");
+
+    thread::scope(|s| {
+        let input_ref = input;
+        let q4k_ref = q4k_data;
+        let chunks: Vec<_> = output.chunks_mut(chunk_size).enumerate().collect();
+
+        for (chunk_idx, chunk) in chunks {
+            let start_row = chunk_idx * chunk_size;
+
+            s.spawn(move || {
+                if has_avx2 {
+                    // SAFETY: AVX2+FMA availability verified via is_x86_feature_detected!()
+                    // before thread::scope entry; has_avx2 captures that result.
+                    unsafe {
+                        avx2::compute_chunk_q4k_avx2(
+                            q4k_ref,
+                            input_ref,
+                            chunk,
+                            start_row,
+                            out_dim,
+                            in_dim,
+                            num_blocks_per_row,
+                            row_bytes,
+                        );
+                    }
+                } else {
+                    scalar::compute_chunk_q4k_scalar(
+                        q4k_ref,
+                        input_ref,
+                        chunk,
+                        start_row,
+                        out_dim,
+                        in_dim,
+                        num_blocks_per_row,
+                        row_bytes,
+                    );
+                }
+            });
+        }
+    });
+
+    output
+}
+
+/// Fallback for non-x86_64
+#[cfg(not(target_arch = "x86_64"))]
+fn matmul_q4k_f32_parallel(
+    q4k_data: &[u8],
+    input: &[f32],
+    out_dim: usize,
+    in_dim: usize,
+) -> Vec<f32> {
+    scalar::matmul_q4k_f32(q4k_data, input, out_dim, in_dim)
+}
