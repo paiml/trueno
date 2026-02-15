@@ -123,29 +123,44 @@ impl<'a> Lexer<'a> {
             if c.is_whitespace() {
                 self.advance();
             } else if c == '/' {
-                if self.peek_at(1) == Some('/') {
-                    // Line comment
-                    while let Some(c) = self.peek() {
-                        self.advance();
-                        if c == '\n' {
-                            break;
-                        }
-                    }
-                } else if self.peek_at(1) == Some('*') {
-                    // Block comment
-                    self.advance(); // skip /
-                    self.advance(); // skip *
-                    while let Some(c) = self.peek() {
-                        self.advance();
-                        if c == '*' && self.peek() == Some('/') {
-                            self.advance();
-                            break;
-                        }
-                    }
-                } else {
+                if !self.skip_comment() {
                     break;
                 }
             } else {
+                break;
+            }
+        }
+    }
+
+    /// Skip a comment starting at current position. Returns true if a comment was skipped.
+    fn skip_comment(&mut self) -> bool {
+        if self.peek_at(1) == Some('/') {
+            self.skip_line_comment();
+            true
+        } else if self.peek_at(1) == Some('*') {
+            self.skip_block_comment();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn skip_line_comment(&mut self) {
+        while let Some(c) = self.peek() {
+            self.advance();
+            if c == '\n' {
+                break;
+            }
+        }
+    }
+
+    fn skip_block_comment(&mut self) {
+        self.advance(); // skip /
+        self.advance(); // skip *
+        while let Some(c) = self.peek() {
+            self.advance();
+            if c == '*' && self.peek() == Some('/') {
+                self.advance();
                 break;
             }
         }
@@ -228,23 +243,20 @@ impl<'a> Lexer<'a> {
     }
 
     fn classify_directive(&self, text: &str) -> TokenKind {
-        if text.starts_with(".entry") {
-            TokenKind::Entry
-        } else if text.starts_with(".func") {
-            TokenKind::Func
-        } else if text.starts_with(".reg") {
-            TokenKind::Reg
-        } else if text.starts_with(".shared") {
-            TokenKind::Shared
-        } else if text.starts_with(".local") {
-            TokenKind::Local
-        } else if text.starts_with(".global") {
-            TokenKind::Global
-        } else if text.starts_with(".param") {
-            TokenKind::Param
-        } else {
-            TokenKind::Directive
-        }
+        const DIRECTIVE_MAP: &[(&str, TokenKind)] = &[
+            (".entry", TokenKind::Entry),
+            (".func", TokenKind::Func),
+            (".reg", TokenKind::Reg),
+            (".shared", TokenKind::Shared),
+            (".local", TokenKind::Local),
+            (".global", TokenKind::Global),
+            (".param", TokenKind::Param),
+        ];
+
+        DIRECTIVE_MAP
+            .iter()
+            .find(|(prefix, _)| text.starts_with(prefix))
+            .map_or(TokenKind::Directive, |(_, kind)| *kind)
     }
 
     fn read_register(&mut self, location: SourceLocation) -> Result<Token, ParseError> {
@@ -294,75 +306,71 @@ impl<'a> Lexer<'a> {
     fn read_number(&mut self, location: SourceLocation) -> Result<Token, ParseError> {
         let start = self.pos;
 
-        // Handle negative sign
         if self.peek() == Some('-') {
             self.advance();
         }
 
-        // Handle hex prefix
-        if self.peek() == Some('0') {
-            self.advance();
-            if matches!(self.peek(), Some('x' | 'X')) {
-                self.advance();
-                while let Some(c) = self.peek() {
-                    if c.is_ascii_hexdigit() {
-                        self.advance();
-                    } else {
-                        break;
-                    }
-                }
-                return Ok(Token {
-                    kind: TokenKind::Integer,
-                    text: self.source[start..self.pos].to_string(),
-                    location,
-                });
-            }
+        if let Some(tok) = self.try_read_hex(start, &location) {
+            return Ok(tok);
         }
 
-        // Read integer part
-        while let Some(c) = self.peek() {
-            if c.is_ascii_digit() {
-                self.advance();
-            } else {
-                break;
-            }
-        }
+        self.advance_while(|c| c.is_ascii_digit());
 
-        // Check for float
-        let mut is_float = false;
-        if self.peek() == Some('.') {
-            is_float = true;
-            self.advance();
-            while let Some(c) = self.peek() {
-                if c.is_ascii_digit() {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
-        }
-
-        // Check for exponent
-        if matches!(self.peek(), Some('e' | 'E')) {
-            is_float = true;
-            self.advance();
-            if matches!(self.peek(), Some('+' | '-')) {
-                self.advance();
-            }
-            while let Some(c) = self.peek() {
-                if c.is_ascii_digit() {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
-        }
+        let is_float = self.read_fractional_part() | self.read_exponent_part();
 
         Ok(Token {
             kind: if is_float { TokenKind::Float } else { TokenKind::Integer },
             text: self.source[start..self.pos].to_string(),
             location,
         })
+    }
+
+    fn try_read_hex(&mut self, start: usize, location: &SourceLocation) -> Option<Token> {
+        if self.peek() != Some('0') {
+            return None;
+        }
+        self.advance();
+        if !matches!(self.peek(), Some('x' | 'X')) {
+            return None;
+        }
+        self.advance();
+        self.advance_while(|c| c.is_ascii_hexdigit());
+        Some(Token {
+            kind: TokenKind::Integer,
+            text: self.source[start..self.pos].to_string(),
+            location: *location,
+        })
+    }
+
+    fn read_fractional_part(&mut self) -> bool {
+        if self.peek() != Some('.') {
+            return false;
+        }
+        self.advance();
+        self.advance_while(|c| c.is_ascii_digit());
+        true
+    }
+
+    fn read_exponent_part(&mut self) -> bool {
+        if !matches!(self.peek(), Some('e' | 'E')) {
+            return false;
+        }
+        self.advance();
+        if matches!(self.peek(), Some('+' | '-')) {
+            self.advance();
+        }
+        self.advance_while(|c| c.is_ascii_digit());
+        true
+    }
+
+    fn advance_while(&mut self, predicate: impl Fn(char) -> bool) {
+        while let Some(c) = self.peek() {
+            if predicate(c) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
     }
 
     fn read_identifier_or_instruction(&mut self, location: SourceLocation) -> Result<Token, ParseError> {
@@ -440,103 +448,5 @@ impl<'a> Lexer<'a> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod tests;
 
-    #[test]
-    fn lex_directives() {
-        let ptx = ".version 8.0\n.target sm_70\n.address_size 64";
-        let mut lexer = Lexer::new(ptx);
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Directive);
-        assert!(tok.text.contains(".version"), "Expected .version, got: {}", tok.text);
-        assert!(tok.text.contains("8.0"), "Expected 8.0, got: {}", tok.text);
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Directive);
-        assert!(tok.text.contains(".target"), "Expected .target, got: {}", tok.text);
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Directive);
-        assert!(tok.text.contains(".address_size"), "Expected .address_size, got: {}", tok.text);
-    }
-
-    #[test]
-    fn lex_entry_keyword() {
-        let ptx = ".entry test_kernel";
-        let mut lexer = Lexer::new(ptx);
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Entry);
-    }
-
-    #[test]
-    fn lex_registers() {
-        let ptx = "%r0 %rd1 %f2";
-        let mut lexer = Lexer::new(ptx);
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Identifier);
-        assert_eq!(tok.text, "%r0");
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Identifier);
-        assert_eq!(tok.text, "%rd1");
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Identifier);
-        assert_eq!(tok.text, "%f2");
-    }
-
-    #[test]
-    fn lex_instructions() {
-        let ptx = "ld.shared.u32 %r0, [%r1]";
-        let mut lexer = Lexer::new(ptx);
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Instruction);
-        assert!(tok.text.starts_with("ld"));
-    }
-
-    #[test]
-    fn lex_numbers() {
-        let ptx = "42 0x1234 3.14";
-        let mut lexer = Lexer::new(ptx);
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Integer);
-        assert_eq!(tok.text, "42");
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Integer);
-        assert_eq!(tok.text, "0x1234");
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Float);
-        assert_eq!(tok.text, "3.14");
-    }
-
-    #[test]
-    fn lex_comments() {
-        let ptx = "mov.u32 %r0, 0 // comment\nmov.u32 %r1, 1";
-        let mut lexer = Lexer::new(ptx);
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Instruction);
-
-        // Comment should be skipped
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Instruction);
-    }
-
-    #[test]
-    fn lex_labels() {
-        let ptx = "loop_start:";
-        let mut lexer = Lexer::new(ptx);
-
-        let tok = lexer.next_token().unwrap();
-        assert_eq!(tok.kind, TokenKind::Label);
-        assert!(tok.text.contains("loop_start"));
-    }
-}
