@@ -14,6 +14,10 @@ use crate::error::Result;
 #[cfg(feature = "cuda")]
 use crate::kernels::Kernel;
 
+/// Default CUDA workgroup size for batched attention kernels.
+#[cfg(feature = "cuda")]
+const CUDA_WORKGROUP_SIZE: u32 = 256;
+
 // ============================================================================
 // Helper Functions for Batched Attention
 // ============================================================================
@@ -41,7 +45,7 @@ pub(super) fn interleaved_to_batched_all(
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
-    let threads = 256u32;
+    let threads = CUDA_WORKGROUP_SIZE;
     let blocks = (total_size as u32 + threads - 1) / threads;
     let config = LaunchConfig {
         grid: (blocks, 1, 1),
@@ -92,7 +96,7 @@ pub(super) fn batched_transpose_all(
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
-    let threads = 256u32;
+    let threads = CUDA_WORKGROUP_SIZE;
     let elems_per_batch = rows * cols;
     let blocks_x = (elems_per_batch + threads - 1) / threads;
     let config = LaunchConfig {
@@ -231,7 +235,7 @@ pub(super) fn batched_scale_all(
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
-    let threads = 256u32;
+    let threads = CUDA_WORKGROUP_SIZE;
     let blocks = (n + threads - 1) / threads;
     let config = LaunchConfig {
         grid: (blocks, 1, 1),
@@ -338,7 +342,7 @@ pub(super) fn batched_to_interleaved_all(
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
-    let threads = 256u32;
+    let threads = CUDA_WORKGROUP_SIZE;
     let blocks = (total_size as u32 + threads - 1) / threads;
     let config = LaunchConfig {
         grid: (blocks, 1, 1),
@@ -387,7 +391,7 @@ pub(super) fn transpose_matrix(
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
-    let threads = 256u32;
+    let threads = CUDA_WORKGROUP_SIZE;
     let total = rows * cols;
     let blocks = (total + threads - 1) / threads;
     let config = LaunchConfig {
@@ -441,7 +445,7 @@ pub(super) fn extract_single_head(
     let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
-    let threads = 256u32;
+    let threads = CUDA_WORKGROUP_SIZE;
     let blocks = (output_size as u32 + threads - 1) / threads;
     let config = LaunchConfig {
         grid: (blocks, 1, 1),
@@ -492,7 +496,7 @@ pub(super) fn copy_head_to_output(
     let stream = CudaStream::new(ctx)?;
 
     let input_size = (seq_len * head_dim) as usize;
-    let threads = 256u32;
+    let threads = CUDA_WORKGROUP_SIZE;
     let blocks = (input_size as u32 + threads - 1) / threads;
     let config = LaunchConfig {
         grid: (blocks, 1, 1),
