@@ -158,9 +158,7 @@ impl BrickProfiler {
     pub fn new() -> Self {
         Self {
             brick_stats: std::array::from_fn(|i| {
-                // Safety: i < BrickId::COUNT by construction
-                let brick_id = unsafe { std::mem::transmute::<u8, BrickId>(i as u8) };
-                BrickStats::new(brick_id.name())
+                BrickStats::new(BrickId::ALL[i].name())
             }),
             dynamic_stats: std::collections::HashMap::new(),
             pending: Vec::new(),
@@ -376,8 +374,7 @@ impl BrickProfiler {
         let mut result = [CategoryStats::default(); BrickCategory::COUNT];
 
         for (i, stats) in self.brick_stats.iter().enumerate() {
-            // Safety: i < BrickId::COUNT by construction
-            let brick_id = unsafe { std::mem::transmute::<u8, BrickId>(i as u8) };
+            let brick_id = BrickId::ALL[i];
             let cat = brick_id.category() as usize;
             result[cat].total_ns += stats.total_ns;
             result[cat].total_elements += stats.total_elements;

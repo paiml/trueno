@@ -17,13 +17,7 @@ impl BrickProfiler {
         println!("│            Category Breakdown (PAR-200)                 │");
         println!("├─────────────────────────────────────────────────────────┤");
         for (i, cat_stats) in cats.iter().enumerate() {
-            debug_assert!(
-                i < 16,
-                "CB-BUDGET: category index {} exceeds max BrickCategory variants",
-                i
-            );
-            // SAFETY: i < BrickCategory::COUNT guaranteed by category_stats() array size
-            let cat = unsafe { std::mem::transmute::<u8, BrickCategory>(i as u8) };
+            let cat = BrickCategory::ALL[i];
             if cat_stats.count > 0 {
                 println!(
                     "│ {:12} {:8.2}µs avg {:6.1}% [{:5} samples]        │",
@@ -56,8 +50,7 @@ impl BrickProfiler {
         // Add known bricks with non-zero counts
         for (i, stats) in self.brick_stats.iter().enumerate() {
             if stats.count > 0 {
-                // Safety: i < BrickId::COUNT
-                let brick_id = unsafe { std::mem::transmute::<u8, BrickId>(i as u8) };
+                let brick_id = BrickId::ALL[i];
                 all_stats.push((brick_id.name(), stats));
             }
         }
@@ -90,8 +83,7 @@ impl BrickProfiler {
         let cats = self.category_stats();
         for (i, cat_stats) in cats.iter().enumerate() {
             if cat_stats.count > 0 {
-                // Safety: i < BrickCategory::COUNT
-                let cat = unsafe { std::mem::transmute::<u8, BrickCategory>(i as u8) };
+                let cat = BrickCategory::ALL[i];
                 report.push_str(&format!(
                     "  {:12} {:8.2}µs avg ({:5.1}%)\n",
                     cat.name(),
@@ -136,8 +128,7 @@ impl BrickProfiler {
         // Add known bricks with non-zero counts
         for (i, stats) in self.brick_stats.iter().enumerate() {
             if stats.count > 0 {
-                // Safety: i < BrickId::COUNT
-                let brick_id = unsafe { std::mem::transmute::<u8, BrickId>(i as u8) };
+                let brick_id = BrickId::ALL[i];
                 all_stats.push((brick_id.name(), stats));
             }
         }
