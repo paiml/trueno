@@ -52,7 +52,7 @@ ctx.label("loop_end");
 | `src/kernels/quantize.rs:233` | K-loop exits after 1 block | *(Fixed: loops back correctly)* | **Resolved** |
 | `src/kernels/quantize.rs:226` | No-op shuffle (should broadcast) | *(Fixed: uses shfl_idx)* | **Resolved** |
 | `src/kernels/softmax.rs:215` | Max-reduce incomplete | *(Fixed: full tree reduction)* | **Resolved** |
-| `src/ptx/registers.rs:216` | Register allocation inaccurate | `// Simplified - actual would check overlaps` | **Medium** - Suboptimal codegen |
+| `src/ptx/registers/mod.rs:216` | Register allocation inaccurate | `// Simplified - actual would check overlaps` | **Medium** - Suboptimal codegen |
 
 ### 1.3 PARITY-040: WMMA Infrastructure Investigation
 
@@ -961,7 +961,7 @@ fn test_falsify_kloop_correctness() {
 - [x] Fix `softmax.rs` max-reduce (complete reduction) - **Fixed: full tree reduction with stride halving**
 - [x] Fix `softmax.rs` sum-reduce (complete reduction) - **Fixed: matching tree reduction**
 - [x] Add `shr_u32_inplace` method to PTX builder - **Added for stride halving**
-- [ ] Remove remaining `// Simplified` comments in `registers.rs`
+- [ ] Remove remaining `// Simplified` comments in `registers/mod.rs`
 
 ### 11.2 Phase 2: Unit Tests
 

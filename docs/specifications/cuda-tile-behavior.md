@@ -152,7 +152,7 @@ let joined = kernel.join_tokens(&[token1, token2, token3]);
 
 ### 3.2 Two-Level Memory Hierarchy (TensorView + PartitionView)
 
-**Current State**: ✅ **IMPLEMENTED** in `src/backends/gpu/tensor_view.rs` and `partition_view.rs`
+**Current State**: ✅ **IMPLEMENTED** in `src/backends/gpu/tensor_view.rs` and `partition_view/mod.rs`
 
 **NVIDIA Reference** (CUDA Tile IR 13.1):
 ```mlir
@@ -174,7 +174,7 @@ pub struct TensorView<T> {
     ndim: usize,           // Active dimensions (1-4)
 }
 
-/// Level 2: Tiling strategy over TensorView (src/backends/gpu/partition_view.rs)
+/// Level 2: Tiling strategy over TensorView (src/backends/gpu/partition_view/mod.rs)
 pub struct PartitionView<T> {
     tensor: TensorView<T>,
     tile_shape: [usize; 4],  // Shape of each tile
@@ -548,7 +548,7 @@ fn emit_warp_reduce_sum(&mut self, reg: Register) -> Register {
 - [x] Scalar unrolling for auto-vectorization
 
 ### Phase 2: Memory Hierarchy (v0.9.0) - COMPLETED ✅
-- [x] TensorView + PartitionView abstractions (`src/backends/gpu/tensor_view.rs`, `partition_view.rs`)
+- [x] TensorView + PartitionView abstractions (`src/backends/gpu/tensor_view.rs`, `partition_view/mod.rs`)
 - [x] Tiled reduction with CPU fallback (`src/backends/gpu/tiled_reduction.rs`)
 - [x] Stride-aware memory coalescing (via TensorView strides)
 - [x] Edge tile detection (`TileInfo::is_edge`)
@@ -556,7 +556,7 @@ fn emit_warp_reduce_sum(&mut self, reg: Register) -> Register {
 
 ### Phase 3: NVIDIA CUDA Tile IR Alignment (v0.11.0) - IN PROGRESS ✅
 Based on NVIDIA CUDA Tile IR (CUDA Toolkit 13.1). Implementation in `trueno-gpu`:
-- [x] Token-based memory ordering (TKO) - `trueno-gpu/src/ptx/optimize/tko.rs` ✅
+- [x] Token-based memory ordering (TKO) - `trueno-gpu/src/ptx/optimize/tko/mod.rs` ✅
 - [x] Loop splitting pass - `trueno-gpu/src/ptx/optimize/loop_split.rs` ✅
 - [x] FMA fusion pass - `trueno-gpu/src/ptx/optimize/fma_fusion.rs` ✅
 - [x] Tile validation - `trueno-gpu/src/ptx/optimize/tile_validation.rs` ✅
