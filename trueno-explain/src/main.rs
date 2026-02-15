@@ -188,7 +188,6 @@ fn main() -> ExitCode {
     }
 }
 
-#[allow(clippy::too_many_lines)]
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Commands::Ptx {
@@ -198,144 +197,35 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             inner,
             json,
             ..
-        } => {
-            let ptx = generate_kernel_ptx(&kernel, rows, cols, inner)?;
-            let analyzer = PtxAnalyzer::new();
-            let report = analyzer.analyze(&ptx)?;
-
-            let format = if json {
-                OutputFormat::Json
-            } else {
-                OutputFormat::Text
-            };
-            output::write_report(&report, format)?;
-        }
+        } => run_ptx(&kernel, rows, cols, inner, json),
 
         Commands::Tui {
             kernel,
             rows,
             cols,
             inner,
-        } => {
-            let ptx = generate_kernel_ptx(&kernel, rows, cols, inner)?;
-            let analyzer = PtxAnalyzer::new();
-            let report = analyzer.analyze(&ptx)?;
-            run_tui(ptx, report)?;
-        }
+        } => run_tui_mode(&kernel, rows, cols, inner),
 
         Commands::Simd {
             function,
             arch,
             json,
-        } => {
-            let simd_arch = match arch.to_lowercase().as_str() {
-                "sse2" => SimdArch::Sse2,
-                "avx" | "avx2" => SimdArch::Avx2,
-                "avx512" | "avx-512" => SimdArch::Avx512,
-                "neon" => SimdArch::Neon,
-                _ => {
-                    return Err(format!(
-                        "Unknown SIMD architecture: {}. Available: sse2, avx2, avx512, neon",
-                        arch
-                    )
-                    .into());
-                }
-            };
+        } => run_simd(&function, &arch, json),
 
-            // For now, analyze sample assembly or placeholder
-            // In future, will integrate with objdump/llvm-objdump for real binaries
-            let sample_asm = format!(
-                "; Sample x86-64 assembly for function: {}\n\
-                 ; Target architecture: {:?}\n\
-                 ; Use --asm-file to analyze actual disassembly\n",
-                function, simd_arch
-            );
-
-            let analyzer = SimdAnalyzer::new(simd_arch);
-            let report = analyzer.analyze(&sample_asm)?;
-
-            let format = if json {
-                OutputFormat::Json
-            } else {
-                OutputFormat::Text
-            };
-            output::write_report(&report, format)?;
-        }
-
-        Commands::Wgpu { shader, json } => {
-            // Read WGSL shader file
-            let wgsl = std::fs::read_to_string(&shader)
-                .map_err(|e| format!("Failed to read shader file '{}': {}", shader, e))?;
-
-            let analyzer = WgpuAnalyzer::new();
-            let report = analyzer.analyze(&wgsl)?;
-
-            let format = if json {
-                OutputFormat::Json
-            } else {
-                OutputFormat::Text
-            };
-            output::write_report(&report, format)?;
-        }
+        Commands::Wgpu { shader, json } => run_wgpu(&shader, json),
 
         Commands::Compare {
             kernel_a,
             kernel_b,
             json,
-        } => {
-            // Analyze both kernels
-            let ptx_a = generate_kernel_ptx(&kernel_a, 1024, 1024, 1024)?;
-            let ptx_b = generate_kernel_ptx(&kernel_b, 1024, 1024, 1024)?;
-
-            let analyzer = PtxAnalyzer::new();
-            let report_a = analyzer.analyze(&ptx_a)?;
-            let report_b = analyzer.analyze(&ptx_b)?;
-
-            // Compare
-            let comparison = compare_analyses(&report_a, &report_b);
-
-            // Output
-            if json {
-                println!("{}", format_comparison_json(&comparison));
-            } else {
-                print!("{}", format_comparison_text(&comparison));
-            }
-        }
+        } => run_compare(&kernel_a, &kernel_b, json),
 
         Commands::Diff {
             kernel,
             baseline,
             fail_on_regression,
             json,
-        } => {
-            // Load baseline from JSON file
-            let baseline_json = std::fs::read_to_string(&baseline)
-                .map_err(|e| format!("Failed to read baseline file '{}': {}", baseline, e))?;
-            let baseline_report: trueno_explain::AnalysisReport =
-                serde_json::from_str(&baseline_json)
-                    .map_err(|e| format!("Failed to parse baseline JSON: {}", e))?;
-
-            // Analyze current kernel
-            let ptx = generate_kernel_ptx(&kernel, 1024, 1024, 1024)?;
-            let analyzer = PtxAnalyzer::new();
-            let current_report = analyzer.analyze(&ptx)?;
-
-            // Compare reports
-            let thresholds = DiffThresholds::default();
-            let diff_report = compare_reports(&baseline_report, &current_report, &thresholds);
-
-            // Output results
-            if json {
-                println!("{}", format_diff_json(&diff_report));
-            } else {
-                print!("{}", format_diff_text(&diff_report));
-            }
-
-            // Exit with error if regression detected and --fail-on-regression is set
-            if fail_on_regression && diff_report.has_regression {
-                return Err("Regression detected".into());
-            }
-        }
+        } => run_diff(&kernel, &baseline, fail_on_regression, json),
 
         Commands::Bugs {
             kernel,
@@ -345,33 +235,180 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             strict,
             fail_on_bugs,
             json,
-        } => {
-            let ptx = generate_kernel_ptx(&kernel, rows, cols, inner)?;
+        } => run_bugs(&kernel, rows, cols, inner, strict, fail_on_bugs, json),
+    }
+}
 
-            let analyzer = if strict {
-                PtxBugAnalyzer::strict()
-            } else {
-                PtxBugAnalyzer::new()
-            };
+fn run_ptx(
+    kernel: &str,
+    rows: u32,
+    cols: u32,
+    inner: u32,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let ptx = generate_kernel_ptx(kernel, rows, cols, inner)?;
+    let analyzer = PtxAnalyzer::new();
+    let report = analyzer.analyze(&ptx)?;
 
-            let bug_report = analyzer.analyze(&ptx);
+    let format = if json {
+        OutputFormat::Json
+    } else {
+        OutputFormat::Text
+    };
+    output::write_report(&report, format)?;
+    Ok(())
+}
 
-            if json {
-                println!("{}", serde_json::to_string_pretty(&bug_report)?);
-            } else {
-                print!("{}", bug_report.format_report());
-            }
+fn run_tui_mode(
+    kernel: &str,
+    rows: u32,
+    cols: u32,
+    inner: u32,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let ptx = generate_kernel_ptx(kernel, rows, cols, inner)?;
+    let analyzer = PtxAnalyzer::new();
+    let report = analyzer.analyze(&ptx)?;
+    run_tui(ptx, report)?;
+    Ok(())
+}
 
-            // Exit with error if critical bugs found and --fail-on-bugs is set
-            if fail_on_bugs {
-                let critical_count = bug_report.count_by_severity(BugSeverity::Critical);
-                if critical_count > 0 {
-                    return Err(format!("{} critical bug(s) found", critical_count).into());
-                }
-            }
+fn run_simd(
+    function: &str,
+    arch: &str,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let simd_arch = match arch.to_lowercase().as_str() {
+        "sse2" => SimdArch::Sse2,
+        "avx" | "avx2" => SimdArch::Avx2,
+        "avx512" | "avx-512" => SimdArch::Avx512,
+        "neon" => SimdArch::Neon,
+        _ => {
+            return Err(format!(
+                "Unknown SIMD architecture: {}. Available: sse2, avx2, avx512, neon",
+                arch
+            )
+            .into());
         }
+    };
+
+    let sample_asm = format!(
+        "; Sample x86-64 assembly for function: {}\n\
+         ; Target architecture: {:?}\n\
+         ; Use --asm-file to analyze actual disassembly\n",
+        function, simd_arch
+    );
+
+    let analyzer = SimdAnalyzer::new(simd_arch);
+    let report = analyzer.analyze(&sample_asm)?;
+
+    let format = if json {
+        OutputFormat::Json
+    } else {
+        OutputFormat::Text
+    };
+    output::write_report(&report, format)?;
+    Ok(())
+}
+
+fn run_wgpu(shader: &str, json: bool) -> Result<(), Box<dyn std::error::Error>> {
+    let wgsl = std::fs::read_to_string(shader)
+        .map_err(|e| format!("Failed to read shader file '{}': {}", shader, e))?;
+
+    let analyzer = WgpuAnalyzer::new();
+    let report = analyzer.analyze(&wgsl)?;
+
+    let format = if json {
+        OutputFormat::Json
+    } else {
+        OutputFormat::Text
+    };
+    output::write_report(&report, format)?;
+    Ok(())
+}
+
+fn run_compare(
+    kernel_a: &str,
+    kernel_b: &str,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let ptx_a = generate_kernel_ptx(kernel_a, 1024, 1024, 1024)?;
+    let ptx_b = generate_kernel_ptx(kernel_b, 1024, 1024, 1024)?;
+
+    let analyzer = PtxAnalyzer::new();
+    let report_a = analyzer.analyze(&ptx_a)?;
+    let report_b = analyzer.analyze(&ptx_b)?;
+
+    let comparison = compare_analyses(&report_a, &report_b);
+
+    if json {
+        println!("{}", format_comparison_json(&comparison));
+    } else {
+        print!("{}", format_comparison_text(&comparison));
+    }
+    Ok(())
+}
+
+fn run_diff(
+    kernel: &str,
+    baseline: &str,
+    fail_on_regression: bool,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let baseline_json = std::fs::read_to_string(baseline)
+        .map_err(|e| format!("Failed to read baseline file '{}': {}", baseline, e))?;
+    let baseline_report: trueno_explain::AnalysisReport = serde_json::from_str(&baseline_json)
+        .map_err(|e| format!("Failed to parse baseline JSON: {}", e))?;
+
+    let ptx = generate_kernel_ptx(kernel, 1024, 1024, 1024)?;
+    let analyzer = PtxAnalyzer::new();
+    let current_report = analyzer.analyze(&ptx)?;
+
+    let thresholds = DiffThresholds::default();
+    let diff_report = compare_reports(&baseline_report, &current_report, &thresholds);
+
+    if json {
+        println!("{}", format_diff_json(&diff_report));
+    } else {
+        print!("{}", format_diff_text(&diff_report));
     }
 
+    if fail_on_regression && diff_report.has_regression {
+        return Err("Regression detected".into());
+    }
+    Ok(())
+}
+
+fn run_bugs(
+    kernel: &str,
+    rows: u32,
+    cols: u32,
+    inner: u32,
+    strict: bool,
+    fail_on_bugs: bool,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let ptx = generate_kernel_ptx(kernel, rows, cols, inner)?;
+
+    let analyzer = if strict {
+        PtxBugAnalyzer::strict()
+    } else {
+        PtxBugAnalyzer::new()
+    };
+
+    let bug_report = analyzer.analyze(&ptx);
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&bug_report)?);
+    } else {
+        print!("{}", bug_report.format_report());
+    }
+
+    if fail_on_bugs {
+        let critical_count = bug_report.count_by_severity(BugSeverity::Critical);
+        if critical_count > 0 {
+            return Err(format!("{} critical bug(s) found", critical_count).into());
+        }
+    }
     Ok(())
 }
 
