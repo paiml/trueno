@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **LZ4 Compression Kernel** - GPU-accelerated LZ4 compression
+  - `Lz4WarpCompressKernel`: Warp-per-page architecture (32 threads per 4KB page)
+  - `Lz4WarpDecompressKernel`: Corresponding decompression kernel
+  - CPU reference implementation for testing (`lz4_compress_block`, `lz4_decompress_block`)
+  - Dual backend: NVIDIA PTX + WebGPU WGSL generation
+  - Zero-page detection with parallel OR reduction
+  - 200:1 compression ratio for zero pages, 15-30:1 for typical data
+
+### Documentation
+
+- Added LZ4 compression example (`cargo run -p trueno-gpu --example lz4_compression`)
+- Added LZ4 compression chapter to book (`api-reference/lz4-compression.md`)
+
+## [0.14.5] - 2026-02-15
+
+### Fixed
+
+- **Coverage Restored to 97%** after GH-219 file-splitting kaizen
+  - 51 new tests added to cover relocated code
+  - Makefile rewrite: unified `make coverage` handles both crates, exclusions, and combined report
+  - Removed stale `coverage-gpu` and `coverage-all` targets
+
+### Infrastructure
+
+- Makefile overhaul: single `make coverage` command replaces previous multi-target approach
+- Coverage uses inline `CARGO_PROFILE_*` env vars (no more config.toml backup/restore dance)
+
+## [0.14.4] - 2026-02-10
+
+### Changed
+
+- **GH-219 File Health Kaizen** — massive refactoring for maintainability
+  - 60+ file splits into directory modules using `mod.rs` pattern
+  - Zero files >500 lines (down from 17 files >1000 lines)
+  - `property_tests.rs` split into 8 focused modules
+  - `matrix/tests.rs` split into 4 modules
+  - All 58 remaining large files split into directory modules
+
+### Quality
+
+- All 4600+ tests passing after refactoring (zero regressions)
+- Module structure follows Rust idiom: `foo.rs` → `foo/mod.rs` + submodules
+
+## [0.14.3] - 2026-02-01
+
+### Fixed
+
+- Clippy lint fixes across SIMD backends
+- WASM SIMD128 compatibility improvements
+- Minor documentation corrections
+
 ## [0.14.2] - 2026-01-25
 
 ### Fixed
@@ -36,23 +91,6 @@ All trueno ecosystem crates updated to use trueno 0.14:
 
 - Pre-commit hooks enforce 90% coverage threshold
 - All 4294 tests passing (2421 trueno + 1873 trueno-gpu)
-
-## [Unreleased]
-
-### Added
-
-- **LZ4 Compression Kernel** - GPU-accelerated LZ4 compression
-  - `Lz4WarpCompressKernel`: Warp-per-page architecture (32 threads per 4KB page)
-  - `Lz4WarpDecompressKernel`: Corresponding decompression kernel
-  - CPU reference implementation for testing (`lz4_compress_block`, `lz4_decompress_block`)
-  - Dual backend: NVIDIA PTX + WebGPU WGSL generation
-  - Zero-page detection with parallel OR reduction
-  - 200:1 compression ratio for zero pages, 15-30:1 for typical data
-
-### Documentation
-
-- Added LZ4 compression example (`cargo run -p trueno-gpu --example lz4_compression`)
-- Added LZ4 compression chapter to book (`api-reference/lz4-compression.md`)
 
 ## [0.13.0] - 2026-01-16
 

@@ -38,19 +38,18 @@ open target/coverage/html/index.html
 The coverage report shows per-crate metrics:
 
 ```
-trueno:     92.44%  (core library)
-trueno-gpu: 93.12%  (GPU/CUDA backend)
+trueno:     ~98%  (core library)
+trueno-gpu: ~98%  (GPU/CUDA backend)
 ```
 
 ### Technical Notes
 
-Coverage instrumentation requires disabling the mold linker:
+Coverage instrumentation uses inline environment variables to override the linker:
 
 ```bash
-# The Makefile handles this automatically:
-# 1. Backs up ~/.cargo/config.toml
-# 2. Runs tests with llvm-cov
-# 3. Restores config
+# The Makefile handles this automatically via
+# CARGO_PROFILE_DEV_LINKER and CARGO_PROFILE_TEST_LINKER
+# env vars — no config.toml backup/restore needed.
 ```
 
 ## Smoke Tests (TRUENO-SPEC-013)

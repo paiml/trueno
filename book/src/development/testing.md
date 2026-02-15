@@ -29,30 +29,23 @@ make test-verbose
 
 ### Coverage Commands
 
-Trueno provides multiple coverage targets for different use cases:
+There is a single coverage command that handles everything:
 
 | Command | Description | Time |
 |---------|-------------|------|
-| `make coverage` | Fast tests (excludes slow GPU batch) | ~70 seconds |
-| `make coverage-gpu` | GPU tests only (WGPU + CUDA) | Variable |
-| `make coverage-all` | Combined: fast + GPU tests | Longer |
+| `make coverage` | Full coverage (trueno + trueno-gpu, CUDA if available) | ~45 seconds |
 
 ```bash
-# Standard coverage (fast, ~85%)
+# Run coverage (the ONLY allowed command)
 make coverage
 
-# GPU-specific coverage (WGPU + CUDA tests)
-make coverage-gpu
-
-# Full coverage (fast tests + GPU tests sequentially)
-make coverage-all
-
-# View coverage summary
-make coverage-summary
-
-# Open HTML report in browser
-make coverage-open
+# This generates:
+# - LCOV report at lcov.info
+# - HTML report at target/coverage/html/index.html
+# - TOTAL coverage percentage (currently 97%+)
 ```
+
+Never use `cargo llvm-cov` directly or install `cargo-tarpaulin`. See [Extreme TDD](./extreme-tdd.md) for details on the coverage mandate.
 
 ### Coverage Targets
 
@@ -171,8 +164,8 @@ GPU tests require special handling due to hardware dependencies:
 # Check if GPU is available
 cargo test --all-features test_gpu_backend_available_check
 
-# Run GPU-specific tests
-make coverage-gpu
+# GPU tests are included in the standard coverage run
+make coverage
 
 # GPU tests use shared device pattern for faster execution
 # See: src/backends/gpu/batch.rs
