@@ -163,6 +163,7 @@ harness = false
 
 [[bench]]
 name = "gpu_ops"
+path = "benches/gpu_ops/main.rs"
 harness = false
 required-features = ["gpu"]
 
