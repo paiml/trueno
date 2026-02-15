@@ -3,7 +3,7 @@
 //! CPU cycle counters, cached time service, and page fault detection.
 //! Based on Phase 11: E.9 patterns.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 // ============================================================================
@@ -62,8 +62,8 @@ static CACHED_NANOS: AtomicU64 = AtomicU64::new(0);
 /// Epoch instant for cached time calculation.
 static EPOCH: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
-/// Flag to track if time service is initialized.
-static TIME_SERVICE_INIT: AtomicBool = AtomicBool::new(false);
+/// Guard ensuring the time service background thread is spawned at most once.
+static TIME_SERVICE_INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
 
 /// Initialize the cached time service (call once at startup).
 ///
@@ -77,21 +77,19 @@ static TIME_SERVICE_INIT: AtomicBool = AtomicBool::new(false);
 /// let ns = trueno::brick::cached_nanos();
 /// ```
 pub fn init_time_service() {
-    if TIME_SERVICE_INIT.swap(true, Ordering::SeqCst) {
-        return; // Already initialized
-    }
+    TIME_SERVICE_INIT.get_or_init(|| {
+        let epoch = *EPOCH.get_or_init(Instant::now);
+        CACHED_NANOS.store(0, Ordering::Relaxed);
 
-    let epoch = *EPOCH.get_or_init(Instant::now);
-    CACHED_NANOS.store(0, Ordering::Relaxed);
-
-    std::thread::Builder::new()
-        .name("trueno-time-service".into())
-        .spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_micros(100)); // 100µs precision
-            let elapsed = epoch.elapsed().as_nanos() as u64;
-            CACHED_NANOS.store(elapsed, Ordering::Relaxed);
-        })
-        .expect("Failed to spawn time service thread");
+        std::thread::Builder::new()
+            .name("trueno-time-service".into())
+            .spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_micros(100));
+                let elapsed = epoch.elapsed().as_nanos() as u64;
+                CACHED_NANOS.store(elapsed, Ordering::Relaxed);
+            })
+            .expect("Failed to spawn time service thread");
+    });
 }
 
 /// Get cached time in nanoseconds since epoch (NO SYSCALL, ~1ns overhead).
@@ -107,7 +105,7 @@ pub fn cached_nanos() -> u64 {
 #[inline]
 pub fn cached_nanos_or_now() -> u64 {
     let cached = CACHED_NANOS.load(Ordering::Relaxed);
-    if cached == 0 && !TIME_SERVICE_INIT.load(Ordering::Relaxed) {
+    if cached == 0 && TIME_SERVICE_INIT.get().is_none() {
         // Fall back to syscall if time service not initialized
         EPOCH.get_or_init(Instant::now).elapsed().as_nanos() as u64
     } else {
