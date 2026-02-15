@@ -97,3 +97,4 @@ fn test_workload_similarity() {
 
     let sim = characterizer.workload_similarity(&a, &b);
     assert!(sim > 0.99); // Identical features
+}

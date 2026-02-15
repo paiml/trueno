@@ -110,3 +110,4 @@ fn test_validation_summary() {
     assert_eq!(summary.total, 2);
     assert_eq!(summary.passed, 2);
     assert_eq!(summary.failed, 0);
+}

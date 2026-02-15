@@ -109,3 +109,4 @@ fn test_history() {
     }
 
     assert_eq!(tracker.history().len(), 5);
+}

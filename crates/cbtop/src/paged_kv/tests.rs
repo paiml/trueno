@@ -210,3 +210,4 @@ fn test_blocks_needed_calculation() {
     let mut cache4 = PagedKvCache::new(100, 16, 32, 128);
     cache4.allocate(SeqId(1), 17).unwrap();
     assert_eq!(cache4.used_block_count(), 2);
+}

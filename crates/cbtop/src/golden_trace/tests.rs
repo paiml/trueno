@@ -150,3 +150,4 @@ fn test_toml_serialization() {
 
     let parsed = GoldenTrace::from_toml(&toml).unwrap();
     assert_eq!(parsed.name, "toml_test");
+}

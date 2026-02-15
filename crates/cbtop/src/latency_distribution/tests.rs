@@ -99,3 +99,4 @@ fn test_percentile_ordering() {
     assert!(dist.p50 <= dist.p90);
     assert!(dist.p90 <= dist.p99);
     assert!(dist.p99 <= dist.p999);
+}

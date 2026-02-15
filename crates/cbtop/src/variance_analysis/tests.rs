@@ -146,3 +146,4 @@ fn test_cv_calculation() {
     let samples2 = vec![10.0, 20.0, 10.0, 20.0];
     let cv2 = calculate_cv(&samples2);
     assert!(cv2 > 0.0); // Has variance
+}

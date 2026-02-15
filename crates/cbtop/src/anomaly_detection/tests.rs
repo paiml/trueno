@@ -89,3 +89,4 @@ fn test_report_generation() {
 
     let report = detector.analyze();
     assert_eq!(report.total_points, 30);
+}

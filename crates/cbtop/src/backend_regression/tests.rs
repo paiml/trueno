@@ -158,3 +158,4 @@ fn test_summary() {
 
     assert_eq!(summary.measurement_count, 2);
     assert_eq!(summary.backend_count, 2);
+}

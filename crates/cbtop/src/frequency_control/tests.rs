@@ -67,3 +67,4 @@ fn test_frequency_variance() {
 
     assert!(variance.is_stable());
     assert_eq!(variance.range_mhz(), 200.0);
+}

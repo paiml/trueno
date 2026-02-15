@@ -143,3 +143,4 @@ fn test_expected_ppl_delta() {
     assert!(QuantFormat::Q4_K.expected_ppl_delta() < QuantFormat::Q4_0.expected_ppl_delta());
     // Q8_0 should have very low perplexity delta
     assert!(QuantFormat::Q8_0.expected_ppl_delta() < 0.1);
+}

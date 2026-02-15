@@ -148,3 +148,4 @@ fn test_fuzz_target_config() {
     assert_eq!(config.iterations, 1000);
     assert_eq!(config.timeout_secs, 30);
     assert_eq!(config.seed, Some(42));
+}

@@ -118,3 +118,4 @@ fn test_metric_def() {
 
     assert_eq!(def.format_help(), "# HELP test_metric A test metric");
     assert_eq!(def.format_type(), "# TYPE test_metric gauge");
+}

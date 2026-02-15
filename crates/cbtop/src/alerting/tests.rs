@@ -110,3 +110,4 @@ fn test_delivery_result() {
     let failure = DeliveryResult::failure("email", "connection refused");
     assert!(!failure.success);
     assert!(failure.error.is_some());
+}
