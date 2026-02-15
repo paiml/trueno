@@ -288,7 +288,14 @@ impl App {
             export_report: false,
         });
 
-        // Reset peaks for new stress test
+        self.reset_stress_peaks();
+        self.spawn_cpu_stress_workers();
+        self.spawn_mem_stress_worker();
+        #[cfg(feature = "cuda")]
+        self.spawn_gpu_stress_workers();
+    }
+
+    fn reset_stress_peaks(&mut self) {
         self.peak_cpu_ops = 0;
         self.peak_mem_ops = 0;
         self.peak_gpu_ops = 0;
@@ -298,12 +305,12 @@ impl App {
         self.cpu_ops_history = vec![0; 60];
         self.mem_ops_history = vec![0; 60];
         self.gpu_ops_history = vec![0; 60];
-        self.stress_report = None; // Clear previous report
+        self.stress_report = None;
+    }
 
-        // Spawn CPU stress workers using trueno SIMD (AVX-512)
-        // Use fewer workers with larger matrices for better cache utilization
-        let num_workers = (num_cpus::get() / 4).max(1); // 1 worker per 4 cores
-        let matrix_size = 512; // 512x512 = 262K elements, fits in L3
+    fn spawn_cpu_stress_workers(&mut self) {
+        let num_workers = (num_cpus::get() / 4).max(1);
+        let matrix_size = 512;
 
         for worker_id in 0..num_workers {
             let running = Arc::new(AtomicBool::new(true));
@@ -313,8 +320,6 @@ impl App {
             let o = ops_count.clone();
 
             let thread = thread::spawn(move || {
-                // Create matrices for SIMD matmul stress
-                // 512x512 matmul = 512^3 = 134M FLOPs per operation
                 let n = matrix_size;
                 let data_a: Vec<f32> = (0..n * n)
                     .map(|i| ((i + worker_id) % 1000) as f32 * 0.001)
@@ -326,11 +331,8 @@ impl App {
                 let a = Matrix::from_vec(n, n, data_a).expect("stress test matrix A creation");
                 let b = Matrix::from_vec(n, n, data_b).expect("stress test matrix B creation");
 
-                // Stress loop: continuous matmul using AVX-512
                 while r.load(Ordering::Relaxed) {
-                    // Matrix multiply uses SIMD backend (AVX-512 on Threadripper)
                     let _c = a.matmul(&b);
-                    // 512^3 * 2 FLOPs (mul + add) = 268M FLOPs per matmul
                     o.fetch_add((n * n * n * 2) as u64, Ordering::Relaxed);
                 }
             });
@@ -341,9 +343,55 @@ impl App {
                 thread: Some(thread),
             });
         }
+    }
 
-        // Spawn memory stress worker
-        {
+    fn spawn_mem_stress_worker(&mut self) {
+        let running = Arc::new(AtomicBool::new(true));
+        let ops_count = Arc::new(AtomicU64::new(0));
+
+        let r = running.clone();
+        let o = ops_count.clone();
+
+        let thread = thread::spawn(move || {
+            let mut buffers: Vec<Vec<u8>> = Vec::new();
+            let chunk_size = 64 * 1024 * 1024;
+
+            while r.load(Ordering::Relaxed) {
+                if buffers.len() < 8 {
+                    let mut buf = vec![0u8; chunk_size];
+                    for i in (0..buf.len()).step_by(4096) {
+                        buf[i] = (i & 0xFF) as u8;
+                    }
+                    buffers.push(buf);
+                    o.fetch_add(chunk_size as u64 / 4096, Ordering::Relaxed);
+                } else {
+                    for buf in &mut buffers {
+                        for i in (0..buf.len()).step_by(4096) {
+                            buf[i] = buf[i].wrapping_add(1);
+                        }
+                        o.fetch_add(buf.len() as u64 / 4096, Ordering::Relaxed);
+                    }
+                    if buffers.len() > 4 {
+                        buffers.pop();
+                    }
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+        });
+
+        self.mem_worker = Some(StressWorker {
+            running,
+            ops_count,
+            thread: Some(thread),
+        });
+    }
+
+    #[cfg(feature = "cuda")]
+    fn spawn_gpu_stress_workers(&mut self) {
+        use trueno_gpu::driver::{CudaContext, GpuBuffer};
+
+        let num_gpus = self.gpus.len();
+        for gpu_idx in 0..num_gpus {
             let running = Arc::new(AtomicBool::new(true));
             let ops_count = Arc::new(AtomicU64::new(0));
 
@@ -351,112 +399,43 @@ impl App {
             let o = ops_count.clone();
 
             let thread = thread::spawn(move || {
-                // Memory stress: allocate and touch memory
-                let mut buffers: Vec<Vec<u8>> = Vec::new();
-                let chunk_size = 64 * 1024 * 1024; // 64MB chunks
+                if let Ok(ctx) = CudaContext::new(gpu_idx as i32) {
+                    let n: usize = 64 * 1024 * 1024;
+                    let data: Vec<f32> = (0..n).map(|i| (i % 10000) as f32 * 0.0001).collect();
 
-                while r.load(Ordering::Relaxed) {
-                    // Allocate
-                    if buffers.len() < 8 {
-                        let mut buf = vec![0u8; chunk_size];
-                        // Touch every page
-                        for i in (0..buf.len()).step_by(4096) {
-                            buf[i] = (i & 0xFF) as u8;
-                        }
-                        buffers.push(buf);
-                        o.fetch_add(chunk_size as u64 / 4096, Ordering::Relaxed);
-                    } else {
-                        // Read/write existing buffers
-                        for buf in &mut buffers {
-                            for i in (0..buf.len()).step_by(4096) {
-                                buf[i] = buf[i].wrapping_add(1);
-                            }
-                            o.fetch_add(buf.len() as u64 / 4096, Ordering::Relaxed);
-                        }
-                        // Occasionally free and reallocate
-                        if buffers.len() > 4 {
-                            buffers.pop();
+                    let mut buffers: Vec<GpuBuffer<f32>> = Vec::new();
+                    for _ in 0..4 {
+                        if let Ok(buf) = GpuBuffer::<f32>::new(&ctx, n) {
+                            buffers.push(buf);
                         }
                     }
-                    thread::sleep(Duration::from_millis(10));
+
+                    if buffers.len() >= 2 {
+                        let mut result = vec![0.0f32; n];
+
+                        while r.load(Ordering::Relaxed) {
+                            for buf in &mut buffers {
+                                let _ = buf.copy_from_host(&data);
+                            }
+                            let _ = buffers[0].copy_to_host(&mut result);
+                            let bytes_transferred = (buffers.len() + 1) * n * 4;
+                            o.fetch_add(bytes_transferred as u64, Ordering::Relaxed);
+                        }
+                    }
                 }
             });
 
-            self.mem_worker = Some(StressWorker {
+            self.gpu_workers.push(StressWorker {
                 running,
                 ops_count,
                 thread: Some(thread),
             });
-        }
-
-        // Spawn GPU stress workers (one per GPU)
-        // Uses large buffers to saturate PCIe and VRAM
-        #[cfg(feature = "cuda")]
-        {
-            use trueno_gpu::driver::{CudaContext, GpuBuffer};
-
-            let num_gpus = self.gpus.len();
-            for gpu_idx in 0..num_gpus {
-                let running = Arc::new(AtomicBool::new(true));
-                let ops_count = Arc::new(AtomicU64::new(0));
-
-                let r = running.clone();
-                let o = ops_count.clone();
-
-                let thread = thread::spawn(move || {
-                    // Create CUDA context for this GPU
-                    if let Ok(ctx) = CudaContext::new(gpu_idx as i32) {
-                        // Allocate large GPU buffers for stress test
-                        // 64M elements * 4 bytes = 256MB per buffer
-                        // 4 buffers = 1GB VRAM usage (4% of 24GB RTX 4090)
-                        let n: usize = 64 * 1024 * 1024; // 64M elements = 256MB
-                        let data: Vec<f32> = (0..n).map(|i| (i % 10000) as f32 * 0.0001).collect();
-
-                        // Allocate multiple buffers to use more VRAM
-                        let mut buffers: Vec<GpuBuffer<f32>> = Vec::new();
-                        for _ in 0..4 {
-                            if let Ok(buf) = GpuBuffer::<f32>::new(&ctx, n) {
-                                buffers.push(buf);
-                            }
-                        }
-
-                        if buffers.len() >= 2 {
-                            let mut result = vec![0.0f32; n];
-
-                            // GPU stress loop: saturate PCIe bandwidth
-                            while r.load(Ordering::Relaxed) {
-                                // H2D transfers to all buffers
-                                for buf in &mut buffers {
-                                    let _ = buf.copy_from_host(&data);
-                                }
-
-                                // D2H transfer from first buffer
-                                let _ = buffers[0].copy_to_host(&mut result);
-
-                                // Count bytes transferred:
-                                // H2D: 4 buffers * 256MB = 1GB
-                                // D2H: 1 buffer * 256MB = 256MB
-                                // Total: 1.25GB per iteration
-                                let bytes_transferred = (buffers.len() + 1) * n * 4;
-                                o.fetch_add(bytes_transferred as u64, Ordering::Relaxed);
-                            }
-                        }
-                    }
-                });
-
-                self.gpu_workers.push(StressWorker {
-                    running,
-                    ops_count,
-                    thread: Some(thread),
-                });
-            }
         }
     }
 
     fn stop_stress(&mut self) {
         self.stress_running = false;
 
-        // Calculate duration before clearing
         let duration_secs = self
             .stress_start
             .map(|s| s.elapsed().as_secs())
@@ -471,7 +450,17 @@ impl App {
             "Stopping stress test"
         );
 
-        // Signal all workers to stop
+        self.signal_all_workers_stop();
+        self.join_all_workers();
+        self.generate_stress_report(duration_secs, cpu_worker_count, gpu_worker_count);
+
+        self.cpu_workers.clear();
+        self.mem_worker = None;
+        self.gpu_workers.clear();
+        self.stress_config = None;
+    }
+
+    fn signal_all_workers_stop(&self) {
         for worker in &self.cpu_workers {
             worker.running.store(false, Ordering::Relaxed);
         }
@@ -481,8 +470,9 @@ impl App {
         for worker in &self.gpu_workers {
             worker.running.store(false, Ordering::Relaxed);
         }
+    }
 
-        // Wait for threads to finish
+    fn join_all_workers(&mut self) {
         for worker in &mut self.cpu_workers {
             if let Some(thread) = worker.thread.take() {
                 let _ = thread.join();
@@ -498,8 +488,14 @@ impl App {
                 let _ = thread.join();
             }
         }
+    }
 
-        // Generate stress test report (renacer integration)
+    fn generate_stress_report(
+        &mut self,
+        duration_secs: u64,
+        cpu_worker_count: usize,
+        gpu_worker_count: usize,
+    ) {
         let verdict =
             if self.peak_cpu_util > 95.0 && (gpu_worker_count == 0 || self.peak_vram_util > 10.0) {
                 StressTestVerdict::Pass
@@ -537,7 +533,6 @@ impl App {
             recommendations: recommendations.clone(),
         });
 
-        // Log stress test report
         info!(
             duration_secs,
             verdict = %verdict,
@@ -552,12 +547,6 @@ impl App {
         for rec in &recommendations {
             warn!(recommendation = %rec, "Stress test recommendation");
         }
-
-        // Clear workers
-        self.cpu_workers.clear();
-        self.mem_worker = None;
-        self.gpu_workers.clear();
-        self.stress_config = None;
     }
 }
 
@@ -611,7 +600,7 @@ fn handle_key_event(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
         KeyCode::BackTab => app.prev_tab(),
         KeyCode::Left => app.prev_tab(),
         KeyCode::Right => app.next_tab(),
-        _ => {}
+        _ => {} // Ignore unmapped keys
     }
     false
 }
@@ -624,7 +613,7 @@ fn run_event_loop(
     let mut last_tick = Instant::now();
 
     loop {
-        terminal.draw(|f| render::ui(f, &app))?;
+        terminal.draw(|f| render::ui(f, app))?;
 
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
         if event::poll(timeout)? {

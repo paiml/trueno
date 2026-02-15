@@ -305,7 +305,7 @@ impl ExecutionGraph {
                         Some((_, _, t)) if *timing_ns > *t => {
                             slowest = Some((node_id, node, *timing_ns))
                         }
-                        _ => {}
+                        Some(_) => {} // Keep existing slowest
                     }
                 }
             }
