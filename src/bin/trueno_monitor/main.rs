@@ -37,6 +37,14 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use tracing::{debug, info, warn};
+
+/// Matrix dimension used for CPU stress test workloads.
+const STRESS_TEST_MATRIX_SIZE: usize = 512;
+/// Approximate FLOPs per matrix multiply: 2 * N^3 for NxN matrices.
+const STRESS_TEST_FLOPS_PER_MATMUL: u64 =
+    2 * (STRESS_TEST_MATRIX_SIZE as u64)
+        * (STRESS_TEST_MATRIX_SIZE as u64)
+        * (STRESS_TEST_MATRIX_SIZE as u64);
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use trueno_gpu::monitor::{
@@ -270,7 +278,7 @@ impl App {
         info!(
             cpu_workers = num_workers,
             matrix_size = "512x512",
-            flops_per_matmul = 512 * 512 * 512 * 2,
+            flops_per_matmul = STRESS_TEST_FLOPS_PER_MATMUL,
             gpu_count = self.gpus.len(),
             gpu_buffer_size = "256MB x 4",
             "Starting stress test with trueno SIMD/CUDA"
@@ -310,7 +318,7 @@ impl App {
 
     fn spawn_cpu_stress_workers(&mut self) {
         let num_workers = (num_cpus::get() / 4).max(1);
-        let matrix_size = 512;
+        let matrix_size = STRESS_TEST_MATRIX_SIZE;
 
         for worker_id in 0..num_workers {
             let running = Arc::new(AtomicBool::new(true));
