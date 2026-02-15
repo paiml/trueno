@@ -232,3 +232,75 @@ fn test_all_transform_kernel_variants() {
         assert!(k8.emit_ptx().contains(".version"));
     }
 }
+
+// ============================================================================
+// Name and PTX Generation Tests (moved from inline transform.rs tests)
+// ============================================================================
+
+#[test]
+fn test_transpose_kernel_name() {
+    let kernel = TransposeKernel::new(64, 128);
+    assert_eq!(kernel.name(), "transpose");
+}
+
+#[test]
+fn test_transpose_ptx_generation() {
+    let kernel = TransposeKernel::new(64, 128);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains(".entry transpose"));
+    assert!(ptx.contains(".param .u32 rows"));
+    assert!(ptx.contains(".param .u32 cols"));
+}
+
+#[test]
+fn test_interleaved_to_batched_kernel_name() {
+    let kernel = InterleavedToBatchedKernel::new(512, 32, 64);
+    assert_eq!(kernel.name(), "interleaved_to_batched");
+}
+
+#[test]
+fn test_batched_to_interleaved_kernel_name() {
+    let kernel = BatchedToInterleavedKernel::new(512, 32, 64);
+    assert_eq!(kernel.name(), "batched_to_interleaved");
+}
+
+#[test]
+fn test_extract_single_head_kernel_name() {
+    let kernel = ExtractSingleHeadKernel::new(512, 32, 64);
+    assert_eq!(kernel.name(), "extract_single_head");
+}
+
+#[test]
+fn test_copy_single_head_kernel_name() {
+    let kernel = CopySingleHeadKernel::new(512, 32, 64);
+    assert_eq!(kernel.name(), "copy_single_head");
+}
+
+#[test]
+fn test_batched_transpose_kernel_name() {
+    let kernel = BatchedTransposeKernel::new(32, 64, 64);
+    assert_eq!(kernel.name(), "batched_transpose");
+}
+
+#[test]
+fn test_batched_scale_kernel_name() {
+    let kernel = BatchedScaleKernel::new(65536);
+    assert_eq!(kernel.name(), "batched_scale");
+}
+
+#[test]
+fn test_batched_softmax_kernel_name() {
+    let kernel = BatchedSoftmaxKernel::new(1024, 64);
+    assert_eq!(kernel.name(), "batched_softmax");
+}
+
+#[test]
+fn test_batched_softmax_ptx_generation() {
+    let kernel = BatchedSoftmaxKernel::new(1024, 64);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains(".entry batched_softmax"));
+    assert!(ptx.contains("shfl.sync.down"));
+    assert!(ptx.contains("ex2.approx.f32"));
+}

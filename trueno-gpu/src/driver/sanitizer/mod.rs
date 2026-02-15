@@ -290,29 +290,8 @@ impl SanitizerParser {
 
     fn parse_violation(lines: &[&str]) -> Option<MemoryViolation> {
         let first_line = lines.first()?;
+        let violation_type = Self::classify_violation(first_line);
 
-        // Parse violation type from first line
-        // Example: "========= Invalid __shared__ read of size 4 bytes"
-        let violation_type = if first_line.contains("__shared__ read") {
-            let size = Self::extract_size(first_line).unwrap_or(4);
-            MemoryViolationType::InvalidSharedRead { size }
-        } else if first_line.contains("__shared__ write") {
-            let size = Self::extract_size(first_line).unwrap_or(4);
-            MemoryViolationType::InvalidSharedWrite { size }
-        } else if first_line.contains("__global__ read") {
-            let size = Self::extract_size(first_line).unwrap_or(4);
-            MemoryViolationType::InvalidGlobalRead { size }
-        } else if first_line.contains("__global__ write") {
-            let size = Self::extract_size(first_line).unwrap_or(4);
-            MemoryViolationType::InvalidGlobalWrite { size }
-        } else if first_line.contains("misaligned") {
-            MemoryViolationType::MisalignedAccess { addr: 0 }
-        } else {
-            MemoryViolationType::Other(first_line.to_string())
-        };
-
-        // Parse kernel name and offset from second line
-        // Example: "=========     at lz4_compress_warp+0x2160"
         let mut kernel_name = String::from("unknown");
         let mut sass_offset = 0u64;
         let mut thread = (0u32, 0u32, 0u32);
@@ -320,39 +299,16 @@ impl SanitizerParser {
         let mut address = 0u64;
 
         for line in lines.iter().skip(1).take(10) {
-            if line.contains(" at ") && line.contains("+0x") {
-                // Parse "at kernel_name+0xOFFSET"
-                if let Some(at_pos) = line.find(" at ") {
-                    let rest = &line[at_pos + 4..];
-                    if let Some(plus_pos) = rest.find("+0x") {
-                        kernel_name = rest[..plus_pos].trim().to_string();
-                        let hex_str = &rest[plus_pos + 3..];
-                        let hex_end = hex_str
-                            .find(|c: char| !c.is_ascii_hexdigit())
-                            .unwrap_or(hex_str.len());
-                        sass_offset = u64::from_str_radix(&hex_str[..hex_end], 16).unwrap_or(0);
-                    }
-                }
+            if let Some((name, offset)) = Self::parse_kernel_location(line) {
+                kernel_name = name;
+                sass_offset = offset;
             }
-
-            if line.contains("by thread") {
-                // Parse "by thread (0,0,0) in block (0,0,0)"
-                if let Some(parsed) = Self::parse_thread_block(line) {
-                    thread = parsed.0;
-                    block = parsed.1;
-                }
+            if let Some(parsed) = Self::parse_thread_block(line) {
+                thread = parsed.0;
+                block = parsed.1;
             }
-
-            if line.contains("Address 0x") {
-                // Parse "Address 0xXXXX is misaligned"
-                if let Some(addr_pos) = line.find("Address 0x") {
-                    let hex_start = addr_pos + 10;
-                    let rest = &line[hex_start..];
-                    let hex_end = rest
-                        .find(|c: char| !c.is_ascii_hexdigit())
-                        .unwrap_or(rest.len());
-                    address = u64::from_str_radix(&rest[..hex_end], 16).unwrap_or(0);
-                }
+            if let Some(addr) = Self::parse_address(line) {
+                address = addr;
             }
         }
 
@@ -363,8 +319,49 @@ impl SanitizerParser {
             thread,
             block,
             address,
-            raw_message: lines.iter().take(5).map(|s| *s).collect::<Vec<_>>().join("\n"),
+            raw_message: lines.iter().take(5).copied().collect::<Vec<_>>().join("\n"),
         })
+    }
+
+    /// Classify violation type from the first line of a sanitizer error.
+    fn classify_violation(line: &str) -> MemoryViolationType {
+        if line.contains("__shared__ read") {
+            MemoryViolationType::InvalidSharedRead { size: Self::extract_size(line).unwrap_or(4) }
+        } else if line.contains("__shared__ write") {
+            MemoryViolationType::InvalidSharedWrite { size: Self::extract_size(line).unwrap_or(4) }
+        } else if line.contains("__global__ read") {
+            MemoryViolationType::InvalidGlobalRead { size: Self::extract_size(line).unwrap_or(4) }
+        } else if line.contains("__global__ write") {
+            MemoryViolationType::InvalidGlobalWrite { size: Self::extract_size(line).unwrap_or(4) }
+        } else if line.contains("misaligned") {
+            MemoryViolationType::MisalignedAccess { addr: 0 }
+        } else {
+            MemoryViolationType::Other(line.to_string())
+        }
+    }
+
+    /// Parse "at kernel_name+0xOFFSET" from a sanitizer line.
+    fn parse_kernel_location(line: &str) -> Option<(String, u64)> {
+        let at_pos = line.find(" at ")?;
+        let rest = &line[at_pos + 4..];
+        let plus_pos = rest.find("+0x")?;
+        let kernel_name = rest[..plus_pos].trim().to_string();
+        let hex_str = &rest[plus_pos + 3..];
+        let hex_end = hex_str
+            .find(|c: char| !c.is_ascii_hexdigit())
+            .unwrap_or(hex_str.len());
+        let offset = u64::from_str_radix(&hex_str[..hex_end], 16).unwrap_or(0);
+        Some((kernel_name, offset))
+    }
+
+    /// Parse "Address 0xXXXX" from a sanitizer line.
+    fn parse_address(line: &str) -> Option<u64> {
+        let addr_pos = line.find("Address 0x")?;
+        let rest = &line[addr_pos + 10..];
+        let hex_end = rest
+            .find(|c: char| !c.is_ascii_hexdigit())
+            .unwrap_or(rest.len());
+        Some(u64::from_str_radix(&rest[..hex_end], 16).unwrap_or(0))
     }
 
     fn extract_size(line: &str) -> Option<usize> {
@@ -632,104 +629,5 @@ pub fn run_with_sanitizer(args: &[&str]) -> Result<SanitizerReport, std::io::Err
     })
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_address_registry() {
-        let mut registry = AddressRegistry::new();
-
-        // Register a buffer
-        registry.register("input_buf", 0x7f00000000, 4096, "f32", 4);
-
-        // Test lookup at start
-        let info = registry.lookup(0x7f00000000).unwrap();
-        assert_eq!(info.name, "input_buf");
-
-        // Test lookup in middle
-        let info = registry.lookup(0x7f00000100).unwrap();
-        assert_eq!(info.name, "input_buf");
-        assert_eq!(info.element_index_of(0x7f00000100), Some(64)); // 256 bytes / 4 = 64
-
-        // Test lookup outside
-        assert!(registry.lookup(0x8000000000).is_none());
-    }
-
-    #[test]
-    fn test_format_address() {
-        let mut registry = AddressRegistry::new();
-        registry.register("weights", 0x7f00000000, 1024 * 4, "f32", 4);
-
-        // Element-aligned access
-        let formatted = registry.format_address(0x7f00000010);
-        assert!(formatted.contains("weights[4]"));
-
-        // Non-element-aligned access
-        let formatted = registry.format_address(0x7f00000011);
-        assert!(formatted.contains("weights[4]+1"));
-
-        // Unknown address
-        let formatted = registry.format_address(0x1);
-        assert!(formatted.contains("unknown"));
-    }
-
-    #[test]
-    fn test_parse_sanitizer_output() {
-        let output = r#"
-========= COMPUTE-SANITIZER
-========= Invalid __shared__ read of size 4 bytes
-=========     at lz4_compress_warp+0x2160
-=========     by thread (0,0,0) in block (0,0,0)
-=========     Address 0x1 is misaligned
-========= ERROR SUMMARY: 1 error
-"#;
-
-        let violations = SanitizerParser::parse(output);
-        assert_eq!(violations.len(), 1);
-
-        let v = &violations[0];
-        assert_eq!(v.kernel_name, "lz4_compress_warp");
-        assert_eq!(v.sass_offset, 0x2160);
-        assert_eq!(v.thread, (0, 0, 0));
-        assert_eq!(v.block, (0, 0, 0));
-        assert_eq!(v.address, 0x1);
-
-        match &v.violation_type {
-            MemoryViolationType::InvalidSharedRead { size } => assert_eq!(*size, 4),
-            _ => panic!("Expected InvalidSharedRead"),
-        }
-    }
-
-    #[test]
-    fn test_ptx_source_map() {
-        let ptx = r#"
-.version 8.0
-.target sm_89
-.entry test_kernel() {
-    mov.u32 %r0, 0;
-L_loop:
-    add.u32 %r0, %r0, 1;
-    bra L_loop;
-L_end:
-    ret;
-}
-"#;
-
-        let map = PtxSourceMap::new(ptx);
-
-        // Check label parsing
-        assert!(map.label_lines.contains_key("L_loop"));
-        assert!(map.label_lines.contains_key("L_end"));
-
-        // Check context retrieval
-        let context = map.context_around_label("L_loop", 2);
-        assert!(context.is_some());
-        let ctx = context.unwrap();
-        assert!(ctx.contains("L_loop:"));
-    }
-}
+mod tests;

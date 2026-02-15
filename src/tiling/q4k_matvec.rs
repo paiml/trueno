@@ -78,6 +78,9 @@ impl TiledQ4KMatvec {
     /// Goal: Keep working set in L2 (256KB typical)
     /// Working set = midi_tile.m rows × K × sizeof(Q4K) + K × sizeof(f32)
     #[must_use]
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    // SAFETY: k ≤ 2^24 for practical matrix dims so usize→f32 is lossless;
+    //         result of f32 multiply is non-negative and fits in usize.
     pub fn optimal_parallel_rows(&self, l2_bytes: usize) -> usize {
         // Q4K: 144 bytes per 256 elements = 0.5625 bytes/element
         let row_bytes = (self.k as f32 * 0.5625) as usize;
@@ -351,6 +354,8 @@ fn f16_special_to_f32(sign: u16, exponent: u16, mantissa: u16) -> f32 {
 /// The scales array is always 12 bytes, so we use unchecked access after
 /// validating at the entry point.
 #[inline(always)]
+#[allow(clippy::cast_precision_loss)]
+// SAFETY: scale and min are 6-bit values (0–63) stored in u32; lossless in f32.
 pub fn extract_scale_min_6bit(scales: &[u8], idx: usize) -> (f32, f32) {
     debug_assert!(scales.len() >= 12, "scales array must be at least 12 bytes");
     debug_assert!(idx < 8, "idx must be < 8");

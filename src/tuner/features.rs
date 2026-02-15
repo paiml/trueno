@@ -348,7 +348,8 @@ impl TunerFeaturesBuilder {
     }
 
     /// Set hardware capability (auto-fills GPU features)
-    #[allow(clippy::cast_precision_loss)] // GPU bandwidth/TFLOPS values fit in f32 (practical max ~10K)
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    // SAFETY: GPU bandwidth/TFLOPS values fit in f32 (practical max ~10K); f64→f32 truncation negligible.
     pub fn hardware(mut self, hw: &HardwareCapability) -> Self {
         if let Some(gpu) = &hw.gpu {
             self.gpu_mem_bw_gbs = Some(gpu.memory_bw_gbps as f32);
@@ -360,6 +361,9 @@ impl TunerFeaturesBuilder {
     }
 
     /// Build the feature vector with normalization
+    #[allow(clippy::cast_precision_loss)]
+    // SAFETY: All u32 values are model hyperparams (hidden_dim ≤ 16384, layers ≤ 128,
+    //         heads ≤ 128, vocab ≤ 1M, batch ≤ 64, seq_len ≤ 32768) — well within f32 mantissa.
     pub fn build(self) -> TunerFeatures {
         let batch_size = self.batch_size.unwrap_or(1);
         let kv_caches = self.kv_caches.unwrap_or(batch_size);
@@ -506,7 +510,8 @@ impl FeatureExtractor {
     }
 
     /// Calculate efficiency from profiler data
-    #[allow(clippy::cast_precision_loss)] // GPU bandwidth values fit in f32 mantissa for roofline calc
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    // SAFETY: GPU bandwidth f64→f32 truncation is negligible for roofline efficiency calculation.
     pub fn calculate_efficiency(
         &self,
         profiler: &BrickProfiler,
@@ -526,7 +531,8 @@ impl FeatureExtractor {
     /// Classify bottleneck from profiler brick breakdown.
     ///
     /// PAR-200: Uses category_stats() for efficient aggregation.
-    #[allow(clippy::cast_precision_loss)] // Percentages are 0-100; precision loss negligible
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    // SAFETY: percentage() returns f64 in 0–100; f64→f32 truncation is negligible for threshold comparisons.
     pub fn classify_bottleneck(&self, profiler: &BrickProfiler) -> BottleneckClass {
         let cats = profiler.category_stats();
         let total_ns = profiler.total_ns();
