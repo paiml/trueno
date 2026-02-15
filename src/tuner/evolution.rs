@@ -53,6 +53,7 @@ pub struct KernelArm {
 
 impl KernelArm {
     /// Get mean reward
+    #[allow(clippy::cast_precision_loss)] // Pull counts ≪ 2^24
     pub fn mean(&self) -> f32 {
         if self.pulls == 0 {
             0.0
@@ -62,6 +63,7 @@ impl KernelArm {
     }
 
     /// Get UCB score (Upper Confidence Bound)
+    #[allow(clippy::cast_precision_loss)] // Pull counts ≪ 2^24
     pub fn ucb(&self, total_pulls: u32, c: f32) -> f32 {
         if self.pulls == 0 {
             f32::INFINITY // Unexplored arms have infinite UCB
@@ -125,6 +127,7 @@ impl KernelBandit {
         KernelType::from_index(idx)
     }
 
+    #[allow(clippy::cast_precision_loss)] // Index/count values ≪ 2^24; modulo bounds ensure safe range
     fn select_ucb(&self) -> usize {
         self.arms
             .iter()
@@ -193,6 +196,7 @@ impl KernelBandit {
     }
 
     /// Get exploration rate (fraction of pulls that were exploratory)
+    #[allow(clippy::cast_precision_loss)] // Pull counts ≪ 2^24
     pub fn exploration_rate(&self) -> f32 {
         if self.total_pulls == 0 {
             return 1.0;
@@ -395,6 +399,7 @@ impl BrickTuner {
     /// Runs micro-benchmarks and trains a local model.
     /// Typically completes in < 30 seconds.
     #[cfg(feature = "hardware-detect")]
+    #[allow(clippy::cast_precision_loss)] // Batch sizes and model params fit in f32 for throughput estimation
     pub fn calibrate(&mut self) -> Result<CalibrationResult, super::error::TunerError> {
         use std::time::Instant;
 
@@ -470,6 +475,7 @@ impl BrickTuner {
 
     /// Estimate baseline throughput for hardware
     #[cfg(feature = "hardware-detect")]
+    #[allow(clippy::cast_precision_loss)] // GPU bandwidth values are practical (< 10K GB/s)
     fn estimate_baseline_tps(&self, hw: &HardwareCapability) -> f32 {
         // Rough heuristic based on GPU memory bandwidth
         // RTX 4090: ~1000 GB/s → ~150 tok/s for 7B Q4K
@@ -514,6 +520,7 @@ impl BrickTuner {
     }
 
     /// Get kernel recommendation using bandit (exploration mode)
+    #[allow(clippy::cast_precision_loss)] // Hash modulo 1000 ensures value fits in f32
     pub fn recommend_kernel_with_exploration(
         &self,
         features: &TunerFeatures,
