@@ -205,8 +205,7 @@ impl BrickProfiler {
             .enumerate()
             .filter(|(_, s)| s.count > 0)
             .map(|(i, _)| {
-                // Safety: i < BrickId::COUNT
-                let brick_id = unsafe { std::mem::transmute::<u8, BrickId>(i as u8) };
+                let brick_id = BrickId::ALL[i];
                 brick_id.name().to_string()
             })
             .collect();

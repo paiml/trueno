@@ -118,6 +118,27 @@ impl BrickId {
     /// Number of well-known brick types.
     pub const COUNT: usize = 15;
 
+    /// All BrickId variants in order, for safe index-based iteration.
+    ///
+    /// Eliminates need for `transmute::<u8, BrickId>` in array initialization.
+    pub const ALL: [BrickId; Self::COUNT] = [
+        Self::RmsNorm,
+        Self::LayerNorm,
+        Self::QkvProjection,
+        Self::RopeEmbedding,
+        Self::AttentionScore,
+        Self::AttentionSoftmax,
+        Self::AttentionOutput,
+        Self::OutputProjection,
+        Self::GateProjection,
+        Self::UpProjection,
+        Self::Activation,
+        Self::DownProjection,
+        Self::Embedding,
+        Self::LmHead,
+        Self::Sampling,
+    ];
+
     /// Validate that a raw u8 is within the BrickId range.
     #[inline]
     pub fn validate_index(index: usize) -> bool {
@@ -220,6 +241,14 @@ pub enum BrickCategory {
 impl BrickCategory {
     /// Number of categories.
     pub const COUNT: usize = 4;
+
+    /// All BrickCategory variants in order, for safe index-based iteration.
+    pub const ALL: [BrickCategory; Self::COUNT] = [
+        Self::Norm,
+        Self::Attention,
+        Self::Ffn,
+        Self::Other,
+    ];
 
     /// Get the string name of this category.
     #[inline]
