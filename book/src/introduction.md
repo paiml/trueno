@@ -127,7 +127,7 @@ All benchmarks validated with:
 
 Trueno is built with **EXTREME TDD** methodology:
 
-- **>90% test coverage** (verified with `cargo llvm-cov`)
+- **97%+ test coverage** (verified with `make coverage`, 4600+ tests)
 - **Property-based testing** (commutativity, associativity, distributivity)
 - **Backend equivalence tests** (scalar vs SIMD vs GPU produce identical results)
 - **Mutation testing** (>80% mutation kill rate with `cargo mutants`)
@@ -185,15 +185,15 @@ Trueno follows five core principles:
 
 Trueno is under active development at **Pragmatic AI Labs**:
 
-- **Current Version**: 0.1.0 (Phase 1: Vector operations)
+- **Current Version**: 0.14.5 (15 phases delivered: vectors, matrices, SIMD, GPU, BLIS GEMM, quantization, attention, LZ4, and more)
+- **Tests**: 4600+ tests across trueno and trueno-gpu
+- **Coverage**: 97%+ line coverage
 - **License**: MIT/Apache-2.0 dual-licensed
 - **Repository**: [github.com/paiml/trueno](https://github.com/paiml/trueno)
 - **Issues**: [github.com/paiml/trueno/issues](https://github.com/paiml/trueno/issues)
 
 **Scope:**
-- **Trueno**: Compute primitives (vectors, matrices, SIMD, GPU) - NumPy equivalent
-- **Aprender**: ML framework with autograd and training - PyTorch equivalent
+- **Trueno**: Compute primitives (vectors, matrices, SIMD, GPU, quantization kernels) — NumPy equivalent
+- **Aprender**: ML framework with autograd and training — PyTorch equivalent
 
 Trueno is the compute backend for higher-level ML libraries. For neural networks and training, see [aprender](https://github.com/paiml/aprender).
-
-Join us in building the future of safe, high-performance compute!
