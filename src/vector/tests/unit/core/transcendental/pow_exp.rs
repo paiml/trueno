@@ -152,3 +152,46 @@ fn test_exp_backend_auto_unsupported() {
         other => panic!("Expected UnsupportedBackend(Auto), got {:?}", other),
     }
 }
+
+#[test]
+fn test_exp_backend_gpu_unsupported() {
+    let v = Vector {
+        data: vec![1.0, 2.0, 3.0],
+        backend: Backend::GPU,
+    };
+    let result = v.exp();
+    assert!(result.is_err(), "exp() should error for Backend::GPU");
+    match result.unwrap_err() {
+        TruenoError::UnsupportedBackend(Backend::GPU) => {}
+        other => panic!("Expected UnsupportedBackend(GPU), got {:?}", other),
+    }
+}
+
+#[test]
+fn test_exp_parallel_large_vector() {
+    // Test the parallel threshold path (100K+ elements)
+    let n = 100_001;
+    let v = Vector::from_slice(&vec![0.0f32; n]);
+    let result = v.exp().unwrap();
+    assert_eq!(result.len(), n);
+    // e^0 = 1.0 for all elements
+    for &val in result.as_slice() {
+        assert!((val - 1.0).abs() < 1e-5);
+    }
+}
+
+#[test]
+fn test_exp_parallel_values_correct() {
+    // Verify parallel path produces correct results
+    let n = 100_001;
+    let data: Vec<f32> = (0..n).map(|i| (i % 10) as f32 * 0.1).collect();
+    let v = Vector::from_slice(&data);
+    let result = v.exp().unwrap();
+    assert_eq!(result.len(), n);
+    // Spot check first few values
+    for i in 0..10 {
+        let expected = data[i].exp();
+        assert!((result.as_slice()[i] - expected).abs() < 1e-4,
+            "exp({}) = {} vs {}", data[i], result.as_slice()[i], expected);
+    }
+}

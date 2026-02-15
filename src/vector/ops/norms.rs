@@ -473,4 +473,269 @@ mod tests {
         assert!(linf <= l2 + 1e-4, "L-inf <= L2 failed");
         assert!(l2 <= l1 + 1e-4, "L2 <= L1 failed");
     }
+
+    // =========================================================================
+    // Backend dispatch: SSE2, AVX2, NEON, WASM, GPU, Auto
+    // =========================================================================
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_norm_l2_sse2_backend() {
+        let v = Vector::from_slice_with_backend(&[3.0, 4.0], Backend::SSE2);
+        let norm = v.norm_l2().unwrap();
+        assert!((norm - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_norm_l2_avx2_backend() {
+        if !is_x86_feature_detected!("avx2") {
+            return;
+        }
+        let data: Vec<f32> = (0..16).map(|i| i as f32).collect();
+        let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+        let norm = v.norm_l2().unwrap();
+        let expected: f32 = data.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!((norm - expected).abs() < 1e-3);
+    }
+
+    #[test]
+    fn test_norm_l2_neon_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, 4.0], Backend::NEON);
+        let norm = v.norm_l2().unwrap();
+        assert!((norm - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l2_wasm_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, 4.0], Backend::WasmSIMD);
+        let norm = v.norm_l2().unwrap();
+        assert!((norm - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l2_gpu_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, 4.0], Backend::GPU);
+        let norm = v.norm_l2().unwrap();
+        assert!((norm - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l2_auto_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, 4.0], Backend::Auto);
+        let norm = v.norm_l2().unwrap();
+        assert!((norm - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_norm_l1_sse2_backend() {
+        let v = Vector::from_slice_with_backend(&[3.0, -4.0, 5.0], Backend::SSE2);
+        let norm = v.norm_l1().unwrap();
+        assert!((norm - 12.0).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_norm_l1_avx2_backend() {
+        if !is_x86_feature_detected!("avx2") {
+            return;
+        }
+        let data: Vec<f32> = (0..16).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+        let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+        let norm = v.norm_l1().unwrap();
+        assert!((norm - 16.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_norm_l1_neon_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, -4.0, 5.0], Backend::NEON);
+        let norm = v.norm_l1().unwrap();
+        assert!((norm - 12.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l1_wasm_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, -4.0, 5.0], Backend::WasmSIMD);
+        let norm = v.norm_l1().unwrap();
+        assert!((norm - 12.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l1_gpu_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, -4.0, 5.0], Backend::GPU);
+        let norm = v.norm_l1().unwrap();
+        assert!((norm - 12.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l1_auto_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, -4.0, 5.0], Backend::Auto);
+        let norm = v.norm_l1().unwrap();
+        assert!((norm - 12.0).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_norm_linf_sse2_backend() {
+        let v = Vector::from_slice_with_backend(&[3.0, -7.0, 5.0, -2.0], Backend::SSE2);
+        let norm = v.norm_linf().unwrap();
+        assert!((norm - 7.0).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn test_norm_linf_avx2_backend() {
+        if !is_x86_feature_detected!("avx2") {
+            return;
+        }
+        let mut data: Vec<f32> = (0..16).map(|i| i as f32).collect();
+        data[10] = -99.0;
+        let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+        let norm = v.norm_linf().unwrap();
+        assert!((norm - 99.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_norm_linf_neon_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, -7.0, 5.0], Backend::NEON);
+        let norm = v.norm_linf().unwrap();
+        assert!((norm - 7.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_linf_wasm_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, -7.0, 5.0], Backend::WasmSIMD);
+        let norm = v.norm_linf().unwrap();
+        assert!((norm - 7.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_linf_gpu_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, -7.0, 5.0], Backend::GPU);
+        let norm = v.norm_linf().unwrap();
+        assert!((norm - 7.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_linf_auto_backend_fallback() {
+        let v = Vector::from_slice_with_backend(&[3.0, -7.0, 5.0], Backend::Auto);
+        let norm = v.norm_linf().unwrap();
+        assert!((norm - 7.0).abs() < 1e-5);
+    }
+
+    // =========================================================================
+    // Backend equivalence: all backends produce same results
+    // =========================================================================
+
+    #[test]
+    fn test_norm_l2_backend_equivalence() {
+        let data: Vec<f32> = (0..100).map(|i| ((i as f32) * 0.13).sin()).collect();
+        let scalar = Vector::from_slice_with_backend(&data, Backend::Scalar).norm_l2().unwrap();
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            let sse2 = Vector::from_slice_with_backend(&data, Backend::SSE2).norm_l2().unwrap();
+            assert!((scalar - sse2).abs() < 1e-3, "L2 Scalar vs SSE2: {} vs {}", scalar, sse2);
+
+            if is_x86_feature_detected!("avx2") {
+                let avx2 = Vector::from_slice_with_backend(&data, Backend::AVX2).norm_l2().unwrap();
+                assert!((scalar - avx2).abs() < 1e-3, "L2 Scalar vs AVX2: {} vs {}", scalar, avx2);
+            }
+        }
+    }
+
+    #[test]
+    fn test_norm_l1_backend_equivalence() {
+        let data: Vec<f32> = (0..100).map(|i| ((i as f32) * 0.17).cos()).collect();
+        let scalar = Vector::from_slice_with_backend(&data, Backend::Scalar).norm_l1().unwrap();
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            let sse2 = Vector::from_slice_with_backend(&data, Backend::SSE2).norm_l1().unwrap();
+            assert!((scalar - sse2).abs() < 1e-3, "L1 Scalar vs SSE2: {} vs {}", scalar, sse2);
+
+            if is_x86_feature_detected!("avx2") {
+                let avx2 = Vector::from_slice_with_backend(&data, Backend::AVX2).norm_l1().unwrap();
+                assert!((scalar - avx2).abs() < 1e-3, "L1 Scalar vs AVX2: {} vs {}", scalar, avx2);
+            }
+        }
+    }
+
+    #[test]
+    fn test_norm_linf_backend_equivalence() {
+        let data: Vec<f32> = (0..100).map(|i| ((i as f32) * 0.23).sin()).collect();
+        let scalar = Vector::from_slice_with_backend(&data, Backend::Scalar).norm_linf().unwrap();
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            let sse2 = Vector::from_slice_with_backend(&data, Backend::SSE2).norm_linf().unwrap();
+            assert!((scalar - sse2).abs() < 1e-5, "Linf Scalar vs SSE2: {} vs {}", scalar, sse2);
+
+            if is_x86_feature_detected!("avx2") {
+                let avx2 = Vector::from_slice_with_backend(&data, Backend::AVX2).norm_linf().unwrap();
+                assert!((scalar - avx2).abs() < 1e-5, "Linf Scalar vs AVX2: {} vs {}", scalar, avx2);
+            }
+        }
+    }
+
+    // =========================================================================
+    // Non-aligned sizes for SIMD remainder handling
+    // =========================================================================
+
+    #[test]
+    fn test_norm_l2_non_aligned_sizes_all() {
+        for size in [1, 2, 3, 5, 7, 9, 13, 15, 17, 31, 33] {
+            let data: Vec<f32> = (0..size).map(|i| (i as f32 + 1.0) * 0.1).collect();
+            let v = Vector::from_slice(&data);
+            let norm = v.norm_l2().unwrap();
+            let expected: f32 = data.iter().map(|x| x * x).sum::<f32>().sqrt();
+            assert!((norm - expected).abs() < 1e-3, "L2 norm mismatch for size {}: {} vs {}", size, norm, expected);
+        }
+    }
+
+    #[test]
+    fn test_norm_l1_non_aligned_sizes_all() {
+        for size in [1, 2, 3, 5, 7, 9, 13, 15, 17, 31, 33] {
+            let data: Vec<f32> = (0..size).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
+            let v = Vector::from_slice(&data);
+            let norm = v.norm_l1().unwrap();
+            assert!((norm - size as f32).abs() < 1e-3, "L1 norm mismatch for size {}", size);
+        }
+    }
+
+    #[test]
+    fn test_norm_linf_non_aligned_sizes_all() {
+        for size in [1, 2, 3, 5, 7, 9, 13, 15, 17, 31, 33] {
+            let data: Vec<f32> = (0..size).map(|i| i as f32 + 1.0).collect();
+            let v = Vector::from_slice(&data);
+            let norm = v.norm_linf().unwrap();
+            assert!((norm - size as f32).abs() < 1e-5, "Linf norm mismatch for size {}", size);
+        }
+    }
+
+    // =========================================================================
+    // Scalar backend explicit tests
+    // =========================================================================
+
+    #[test]
+    fn test_norm_l2_scalar_backend() {
+        let v = Vector::from_slice_with_backend(&[3.0, 4.0], Backend::Scalar);
+        let norm = v.norm_l2().unwrap();
+        assert!((norm - 5.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_l1_scalar_backend() {
+        let v = Vector::from_slice_with_backend(&[3.0, -4.0, 5.0], Backend::Scalar);
+        let norm = v.norm_l1().unwrap();
+        assert!((norm - 12.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_norm_linf_scalar_backend() {
+        let v = Vector::from_slice_with_backend(&[3.0, -7.0, 5.0, -2.0], Backend::Scalar);
+        let norm = v.norm_linf().unwrap();
+        assert!((norm - 7.0).abs() < 1e-5);
+    }
 }

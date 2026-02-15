@@ -428,3 +428,166 @@ fn test_falsify_eviction_priority_monotonic() {
         prev_priority = priority;
     }
 }
+
+// =========================================================================
+// Additional Coverage Tests
+// =========================================================================
+
+#[test]
+fn test_kv_cache_manager_single_slot() {
+    let mut mgr = KvCacheManager::new(1);
+    assert_eq!(mgr.capacity(), 1);
+    assert_eq!(mgr.valid_count(), 0);
+
+    let idx = mgr.allocate(0, 99, 3, 7).unwrap();
+    assert_eq!(idx, 0);
+    assert_eq!(mgr.valid_count(), 1);
+
+    // Cannot allocate more
+    assert!(mgr.allocate(1, 100, 0, 0).is_none());
+
+    // Evict the only slot
+    let evicted = mgr.evict_lru();
+    assert_eq!(evicted, Some(0));
+    assert_eq!(mgr.valid_count(), 0);
+
+    // Allocate again into the freed slot
+    let idx2 = mgr.allocate(1, 100, 0, 0).unwrap();
+    assert_eq!(idx2, 0);
+}
+
+#[test]
+fn test_kv_cache_manager_evict_all_same_step() {
+    let mut mgr = KvCacheManager::new(3);
+
+    // All allocated at step 0 (same time)
+    mgr.allocate(0, 10, 0, 0);
+    mgr.allocate(1, 20, 0, 0);
+    mgr.allocate(2, 30, 0, 0);
+
+    // All have same priority, should evict first found (index 0)
+    let evicted = mgr.evict_lru();
+    assert_eq!(evicted, Some(0));
+    assert_eq!(mgr.valid_count(), 2);
+}
+
+#[test]
+fn test_kv_cache_slot_eviction_priority_saturating() {
+    let mut slot = KvCacheSlotInfo::new(0, 0, 0, 0);
+    slot.touch(u64::MAX);
+
+    // current_step < last_access: saturating_sub returns 0
+    assert_eq!(slot.eviction_priority(0), 0);
+    assert_eq!(slot.eviction_priority(100), 0);
+}
+
+#[test]
+fn test_kv_cache_manager_allocate_with_layer_head() {
+    let mut mgr = KvCacheManager::new(2);
+
+    let idx = mgr.allocate(5, 42, 12, 8).unwrap();
+    let slot = mgr.access(idx).unwrap();
+    assert_eq!(slot.position, 5);
+    assert_eq!(slot.token_id, 42);
+    assert_eq!(slot.layer, 12);
+    assert_eq!(slot.head, 8);
+    assert!(slot.valid);
+}
+
+#[test]
+fn test_kv_cache_manager_evict_realloc_cycle() {
+    let mut mgr = KvCacheManager::new(2);
+
+    // Fill, evict, refill multiple times
+    for round in 0..3 {
+        let base = round * 2;
+        mgr.allocate(base as u32, base as u32, 0, 0);
+        mgr.step();
+        mgr.allocate((base + 1) as u32, (base + 1) as u32, 0, 0);
+        assert_eq!(mgr.valid_count(), 2);
+
+        // Evict both
+        mgr.evict_lru();
+        mgr.evict_lru();
+        assert_eq!(mgr.valid_count(), 0);
+    }
+}
+
+#[test]
+fn test_sequential_batch_orderer_interleaved_one() {
+    let orderer = SequentialBatchOrderer::interleaved(1);
+    let order: Vec<_> = orderer.collect();
+    assert_eq!(order, vec![0]);
+}
+
+#[test]
+fn test_sequential_batch_orderer_interleaved_two() {
+    let orderer = SequentialBatchOrderer::interleaved(2);
+    let order: Vec<_> = orderer.collect();
+    // mid=1, loop i=0: push 0, push 1
+    assert_eq!(order, vec![0, 1]);
+}
+
+#[test]
+fn test_sequential_batch_orderer_interleaved_three() {
+    let orderer = SequentialBatchOrderer::interleaved(3);
+    let order: Vec<_> = orderer.collect();
+    // mid=1, loop i=0: push 0, push 1, then odd: push 2
+    assert_eq!(order.len(), 3);
+    let mut sorted = order;
+    sorted.sort();
+    assert_eq!(sorted, vec![0, 1, 2]);
+}
+
+#[test]
+fn test_sequential_batch_orderer_reversed_empty() {
+    let orderer = SequentialBatchOrderer::reversed(0);
+    let order: Vec<_> = orderer.collect();
+    assert!(order.is_empty());
+}
+
+#[test]
+fn test_sequential_batch_orderer_reversed_single() {
+    let mut orderer = SequentialBatchOrderer::reversed(1);
+    assert_eq!(orderer.remaining(), 1);
+    assert_eq!(orderer.next_batch(), Some(0));
+    assert_eq!(orderer.next_batch(), None);
+    assert!(orderer.is_done());
+}
+
+#[test]
+fn test_sequential_batch_orderer_reset_after_done() {
+    let mut orderer = SequentialBatchOrderer::new(2);
+    // Exhaust
+    orderer.next_batch();
+    orderer.next_batch();
+    assert!(orderer.is_done());
+    assert_eq!(orderer.remaining(), 0);
+
+    // Reset and iterate again
+    orderer.reset();
+    assert!(!orderer.is_done());
+    assert_eq!(orderer.remaining(), 2);
+    assert_eq!(orderer.next_batch(), Some(0));
+    assert_eq!(orderer.next_batch(), Some(1));
+    assert_eq!(orderer.next_batch(), None);
+}
+
+#[test]
+fn test_kv_cache_slot_clone() {
+    let slot = KvCacheSlotInfo::new(10, 20, 3, 5);
+    let cloned = slot.clone();
+    assert_eq!(cloned.position, 10);
+    assert_eq!(cloned.token_id, 20);
+    assert_eq!(cloned.layer, 3);
+    assert_eq!(cloned.head, 5);
+    assert!(cloned.valid);
+}
+
+#[test]
+fn test_sequential_batch_orderer_clone() {
+    let mut orderer = SequentialBatchOrderer::new(4);
+    orderer.next_batch(); // advance position to 1
+    let cloned = orderer.clone();
+    assert_eq!(cloned.remaining(), 3);
+}

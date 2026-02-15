@@ -62,3 +62,64 @@ fn test_heijunka_balanced_partition() {
     let total: usize = partitions_uneven.iter().map(|r| r.len()).sum();
     assert_eq!(total, 256); // All rows covered
 }
+
+#[test]
+fn test_heijunka_single_thread() {
+    let scheduler = HeijunkaScheduler {
+        num_threads: 1,
+        variance_threshold: 0.05,
+    };
+    let partitions = scheduler.partition_m(100, MC);
+    assert_eq!(partitions.len(), 1);
+    assert_eq!(partitions[0], 0..100);
+}
+
+#[test]
+fn test_heijunka_more_threads_than_blocks() {
+    let scheduler = HeijunkaScheduler {
+        num_threads: 8,
+        variance_threshold: 0.05,
+    };
+    // m=MC means 1 block but 8 threads — some threads get nothing
+    let partitions = scheduler.partition_m(MC, MC);
+    assert!(!partitions.is_empty());
+    let total: usize = partitions.iter().map(|r| r.len()).sum();
+    assert_eq!(total, MC);
+}
+
+#[test]
+fn test_heijunka_default() {
+    let scheduler = HeijunkaScheduler::default();
+    assert!(scheduler.num_threads >= 1);
+    assert!((scheduler.variance_threshold - 0.05).abs() < 1e-6);
+}
+
+#[test]
+fn test_gemm_blis_parallel_small_matrix() {
+    // Small matrix falls through to sequential gemm_blis
+    let m = 10;
+    let n = 10;
+    let k = 10;
+    let a: Vec<f32> = (0..m * k).map(|i| i as f32).collect();
+    let b: Vec<f32> = vec![0.0; k * n];
+    // Identity-like: b[i*n+i] = 1.0
+    let mut b_mut = b;
+    for i in 0..k.min(n) {
+        b_mut[i * n + i] = 1.0;
+    }
+    let mut c = vec![0.0; m * n];
+
+    gemm_blis_parallel(m, n, k, &a, &b_mut, &mut c).unwrap();
+    // First row of C should match first row of A (for k<=n)
+    for j in 0..k.min(n) {
+        assert!((c[j] - a[j]).abs() < 1e-3, "c[{}] = {}, a[{}] = {}", j, c[j], j, a[j]);
+    }
+}
+
+#[test]
+fn test_gemm_blis_parallel_dimension_mismatch() {
+    let mut c = vec![0.0; 4];
+    // a.len() = 3 != m*k = 2*2 = 4
+    let result = gemm_blis_parallel(2, 2, 2, &[1.0, 2.0, 3.0], &[1.0; 4], &mut c);
+    assert!(result.is_err());
+}

@@ -357,3 +357,476 @@ impl BrickStats {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // PtxRegistry Tests
+    // =========================================================================
+
+    #[test]
+    fn test_ptx_registry_new_is_empty() {
+        let reg = PtxRegistry::new();
+        assert!(reg.is_empty());
+        assert_eq!(reg.len(), 0);
+    }
+
+    #[test]
+    fn test_ptx_registry_register_and_lookup() {
+        let mut reg = PtxRegistry::new();
+        let ptx = ".version 8.0\n.entry gemm_tiled {}";
+        reg.register("gemm_tiled", ptx, None);
+
+        assert_eq!(reg.len(), 1);
+        assert!(!reg.is_empty());
+
+        let hash = PtxRegistry::hash_ptx(ptx);
+        assert_eq!(reg.lookup(hash), Some(ptx));
+        assert_eq!(reg.lookup_name(hash), Some("gemm_tiled"));
+        assert_eq!(reg.lookup_path(hash), None);
+    }
+
+    #[test]
+    fn test_ptx_registry_register_with_path() {
+        let mut reg = PtxRegistry::new();
+        let ptx = ".version 8.0\n.entry softmax {}";
+        let path = std::path::Path::new("/src/kernels/softmax.ptx");
+        reg.register("softmax", ptx, Some(path));
+
+        let hash = PtxRegistry::hash_ptx(ptx);
+        assert_eq!(reg.lookup_path(hash), Some(path));
+    }
+
+    #[test]
+    fn test_ptx_registry_lookup_missing() {
+        let reg = PtxRegistry::new();
+        assert_eq!(reg.lookup(12345), None);
+        assert_eq!(reg.lookup_name(12345), None);
+        assert_eq!(reg.lookup_path(12345), None);
+    }
+
+    #[test]
+    fn test_ptx_registry_hashes() {
+        let mut reg = PtxRegistry::new();
+        reg.register("k1", "ptx_source_1", None);
+        reg.register("k2", "ptx_source_2", None);
+
+        let hashes: Vec<u64> = reg.hashes().collect();
+        assert_eq!(hashes.len(), 2);
+    }
+
+    #[test]
+    fn test_ptx_registry_hash_deterministic() {
+        let ptx = "some ptx source code";
+        let h1 = PtxRegistry::hash_ptx(ptx);
+        let h2 = PtxRegistry::hash_ptx(ptx);
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn test_ptx_registry_hash_different_inputs() {
+        let h1 = PtxRegistry::hash_ptx("kernel_a");
+        let h2 = PtxRegistry::hash_ptx("kernel_b");
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn test_ptx_registry_overwrite_same_hash() {
+        let mut reg = PtxRegistry::new();
+        let ptx = "same_source";
+        reg.register("name1", ptx, None);
+        reg.register("name2", ptx, None);
+        // Same PTX hash overwrites
+        assert_eq!(reg.len(), 1);
+        let hash = PtxRegistry::hash_ptx(ptx);
+        assert_eq!(reg.lookup_name(hash), Some("name2"));
+    }
+
+    // =========================================================================
+    // CategoryStats Tests
+    // =========================================================================
+
+    #[test]
+    fn test_category_stats_default() {
+        let stats = CategoryStats::default();
+        assert_eq!(stats.total_ns, 0);
+        assert_eq!(stats.total_elements, 0);
+        assert_eq!(stats.count, 0);
+    }
+
+    #[test]
+    fn test_category_stats_avg_us_zero_count() {
+        let stats = CategoryStats::default();
+        assert_eq!(stats.avg_us(), 0.0);
+    }
+
+    #[test]
+    fn test_category_stats_avg_us() {
+        let stats = CategoryStats {
+            total_ns: 10_000,
+            total_elements: 0,
+            count: 2,
+        };
+        // 10_000 ns / 2 / 1000 = 5.0 us
+        assert!((stats.avg_us() - 5.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_category_stats_throughput_zero_ns() {
+        let stats = CategoryStats::default();
+        assert_eq!(stats.throughput(), 0.0);
+    }
+
+    #[test]
+    fn test_category_stats_throughput() {
+        let stats = CategoryStats {
+            total_ns: 1_000_000_000, // 1 second
+            total_elements: 1_000,
+            count: 1,
+        };
+        // 1000 elements / 1s = 1000 elem/s
+        assert!((stats.throughput() - 1_000.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_category_stats_percentage_zero_total() {
+        let stats = CategoryStats {
+            total_ns: 500,
+            total_elements: 0,
+            count: 1,
+        };
+        assert_eq!(stats.percentage(0), 0.0);
+    }
+
+    #[test]
+    fn test_category_stats_percentage() {
+        let stats = CategoryStats {
+            total_ns: 250,
+            total_elements: 0,
+            count: 1,
+        };
+        // 100.0 * 250 / 1000 = 25.0%
+        assert!((stats.percentage(1000) - 25.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_category_stats_percentage_full() {
+        let stats = CategoryStats {
+            total_ns: 1000,
+            total_elements: 0,
+            count: 1,
+        };
+        assert!((stats.percentage(1000) - 100.0).abs() < 1e-10);
+    }
+
+    // =========================================================================
+    // BrickStats Tests
+    // =========================================================================
+
+    #[test]
+    fn test_brick_stats_new() {
+        let stats = BrickStats::new("test_brick");
+        assert_eq!(stats.name, "test_brick");
+        assert_eq!(stats.count, 0);
+        assert_eq!(stats.total_ns, 0);
+        assert_eq!(stats.min_ns, u64::MAX);
+        assert_eq!(stats.max_ns, 0);
+        assert_eq!(stats.total_elements, 0);
+        assert_eq!(stats.total_bytes, 0);
+        assert_eq!(stats.total_compressed_bytes, 0);
+        assert_eq!(stats.bottleneck, BrickBottleneck::Unknown);
+        assert_eq!(stats.total_cycles, 0);
+        assert_eq!(stats.min_cycles, u64::MAX);
+        assert_eq!(stats.max_cycles, 0);
+    }
+
+    #[test]
+    fn test_brick_stats_add_sample() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample(1000, 50);
+        assert_eq!(stats.count, 1);
+        assert_eq!(stats.total_ns, 1000);
+        assert_eq!(stats.min_ns, 1000);
+        assert_eq!(stats.max_ns, 1000);
+        assert_eq!(stats.total_elements, 50);
+
+        stats.add_sample(500, 25);
+        assert_eq!(stats.count, 2);
+        assert_eq!(stats.total_ns, 1500);
+        assert_eq!(stats.min_ns, 500);
+        assert_eq!(stats.max_ns, 1000);
+        assert_eq!(stats.total_elements, 75);
+
+        stats.add_sample(2000, 100);
+        assert_eq!(stats.count, 3);
+        assert_eq!(stats.min_ns, 500);
+        assert_eq!(stats.max_ns, 2000);
+    }
+
+    #[test]
+    fn test_brick_stats_add_sample_with_cycles() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample_with_cycles(1000, 50, 3000);
+        assert_eq!(stats.count, 1);
+        assert_eq!(stats.total_cycles, 3000);
+        assert_eq!(stats.min_cycles, 3000);
+        assert_eq!(stats.max_cycles, 3000);
+
+        stats.add_sample_with_cycles(500, 25, 1500);
+        assert_eq!(stats.total_cycles, 4500);
+        assert_eq!(stats.min_cycles, 1500);
+        assert_eq!(stats.max_cycles, 3000);
+    }
+
+    #[test]
+    fn test_brick_stats_cycles_per_element_zero() {
+        let stats = BrickStats::new("op");
+        assert_eq!(stats.cycles_per_element(), 0.0);
+    }
+
+    #[test]
+    fn test_brick_stats_cycles_per_element() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample_with_cycles(1000, 100, 500);
+        // 500 cycles / 100 elements = 5.0
+        assert!((stats.cycles_per_element() - 5.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_brick_stats_avg_cycles_zero() {
+        let stats = BrickStats::new("op");
+        assert_eq!(stats.avg_cycles(), 0.0);
+    }
+
+    #[test]
+    fn test_brick_stats_avg_cycles() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample_with_cycles(1000, 50, 300);
+        stats.add_sample_with_cycles(1000, 50, 500);
+        // (300 + 500) / 2 = 400.0
+        assert!((stats.avg_cycles() - 400.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_brick_stats_estimated_ipc_zero() {
+        let stats = BrickStats::new("op");
+        assert_eq!(stats.estimated_ipc(), 0.0);
+    }
+
+    #[test]
+    fn test_brick_stats_estimated_ipc() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample_with_cycles(1000, 200, 100);
+        // IPC = elements / cycles = 200 / 100 = 2.0
+        assert!((stats.estimated_ipc() - 2.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_brick_stats_diagnose_insufficient_data() {
+        let stats = BrickStats::new("op");
+        assert_eq!(stats.diagnose_from_cycles(), "insufficient data");
+    }
+
+    #[test]
+    fn test_brick_stats_diagnose_insufficient_data_zero_cycles() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample(1000, 50);
+        // total_cycles = 0
+        assert_eq!(stats.diagnose_from_cycles(), "insufficient data");
+    }
+
+    #[test]
+    fn test_brick_stats_diagnose_insufficient_data_zero_ns() {
+        let mut stats = BrickStats::new("op");
+        stats.total_cycles = 100;
+        // total_ns = 0
+        assert_eq!(stats.diagnose_from_cycles(), "insufficient data");
+    }
+
+    #[test]
+    fn test_brick_stats_diagnose_memory_bound() {
+        let mut stats = BrickStats::new("op");
+        // IPC < 0.5 means memory-bound
+        // IPC = elements / cycles, so set elements=10, cycles=100 => IPC = 0.1
+        stats.total_elements = 10;
+        stats.total_cycles = 100;
+        stats.total_ns = 50; // ns_per_cycle = 0.5 (doesn't matter, ipc<0.5 catches first)
+        assert_eq!(
+            stats.diagnose_from_cycles(),
+            "memory-bound (low IPC, likely cache misses)"
+        );
+    }
+
+    #[test]
+    fn test_brick_stats_diagnose_compute_bound() {
+        let mut stats = BrickStats::new("op");
+        // IPC > 2.0 means compute-bound
+        // elements=300, cycles=100 => IPC = 3.0
+        stats.total_elements = 300;
+        stats.total_cycles = 100;
+        stats.total_ns = 33; // ns_per_cycle = 0.33
+        assert_eq!(stats.diagnose_from_cycles(), "compute-bound (efficient)");
+    }
+
+    #[test]
+    fn test_brick_stats_diagnose_throttled() {
+        let mut stats = BrickStats::new("op");
+        // IPC between 0.5 and 2.0, ns_per_cycle > 1.0 => throttled
+        // elements=100, cycles=100 => IPC=1.0
+        // ns=200, cycles=100 => ns_per_cycle=2.0
+        stats.total_elements = 100;
+        stats.total_cycles = 100;
+        stats.total_ns = 200;
+        assert_eq!(
+            stats.diagnose_from_cycles(),
+            "throttled or context-switched"
+        );
+    }
+
+    #[test]
+    fn test_brick_stats_diagnose_balanced() {
+        let mut stats = BrickStats::new("op");
+        // IPC between 0.5 and 2.0, ns_per_cycle <= 1.0 => balanced
+        // elements=100, cycles=100 => IPC=1.0
+        // ns=50, cycles=100 => ns_per_cycle=0.5
+        stats.total_elements = 100;
+        stats.total_cycles = 100;
+        stats.total_ns = 50;
+        assert_eq!(stats.diagnose_from_cycles(), "balanced");
+    }
+
+    #[test]
+    fn test_brick_stats_add_sample_with_bytes() {
+        let mut stats = BrickStats::new("compress");
+        stats.add_sample_with_bytes(1000, 1, 4096, 1024);
+        assert_eq!(stats.count, 1);
+        assert_eq!(stats.total_bytes, 4096);
+        assert_eq!(stats.total_compressed_bytes, 1024);
+        assert_eq!(stats.total_elements, 1);
+
+        stats.add_sample_with_bytes(2000, 1, 8192, 2048);
+        assert_eq!(stats.total_bytes, 12288);
+        assert_eq!(stats.total_compressed_bytes, 3072);
+    }
+
+    #[test]
+    fn test_brick_stats_compression_ratio_no_data() {
+        let stats = BrickStats::new("op");
+        assert!((stats.compression_ratio() - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_brick_stats_compression_ratio() {
+        let mut stats = BrickStats::new("compress");
+        stats.add_sample_with_bytes(1000, 1, 4096, 1024);
+        // 4096 / 1024 = 4.0
+        assert!((stats.compression_ratio() - 4.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_brick_stats_throughput_gbps_zero_ns() {
+        let stats = BrickStats::new("op");
+        assert_eq!(stats.throughput_gbps(), 0.0);
+    }
+
+    #[test]
+    fn test_brick_stats_throughput_gbps() {
+        let mut stats = BrickStats::new("op");
+        stats.total_bytes = 1_000_000_000; // 1 GB
+        stats.total_ns = 1_000_000_000; // 1 second
+        // 1 GB / 1s = 1.0 GB/s
+        assert!((stats.throughput_gbps() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_brick_stats_set_get_bottleneck() {
+        let mut stats = BrickStats::new("op");
+        assert_eq!(stats.get_bottleneck(), BrickBottleneck::Unknown);
+
+        stats.set_bottleneck(BrickBottleneck::Memory);
+        assert_eq!(stats.get_bottleneck(), BrickBottleneck::Memory);
+
+        stats.set_bottleneck(BrickBottleneck::Compute);
+        assert_eq!(stats.get_bottleneck(), BrickBottleneck::Compute);
+    }
+
+    #[test]
+    fn test_brick_stats_avg_us_zero_count() {
+        let stats = BrickStats::new("op");
+        assert_eq!(stats.avg_us(), 0.0);
+    }
+
+    #[test]
+    fn test_brick_stats_avg_us() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample(2000, 10);
+        stats.add_sample(4000, 10);
+        // total_ns=6000, count=2 => 6000/2/1000 = 3.0 us
+        assert!((stats.avg_us() - 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_brick_stats_throughput_zero_ns() {
+        let stats = BrickStats::new("op");
+        assert_eq!(stats.throughput(), 0.0);
+    }
+
+    #[test]
+    fn test_brick_stats_throughput() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample(1_000_000_000, 500); // 1 second, 500 elements
+        // 500 / 1.0 = 500.0 elem/s
+        assert!((stats.throughput() - 500.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_brick_stats_tokens_per_sec() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample(1_000_000_000, 42);
+        // tokens_per_sec is alias for throughput
+        assert!((stats.tokens_per_sec() - stats.throughput()).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_brick_stats_min_us_no_samples() {
+        let stats = BrickStats::new("op");
+        // min_ns = u64::MAX → returns 0.0
+        assert_eq!(stats.min_us(), 0.0);
+    }
+
+    #[test]
+    fn test_brick_stats_min_us() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample(5000, 1);
+        stats.add_sample(3000, 1);
+        // min_ns = 3000 => 3.0 us
+        assert!((stats.min_us() - 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_brick_stats_max_us() {
+        let mut stats = BrickStats::new("op");
+        stats.add_sample(5000, 1);
+        stats.add_sample(3000, 1);
+        // max_ns = 5000 => 5.0 us
+        assert!((stats.max_us() - 5.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_brick_stats_max_us_no_samples() {
+        let stats = BrickStats::new("op");
+        // max_ns = 0 => 0.0 us
+        assert_eq!(stats.max_us(), 0.0);
+    }
+
+    #[test]
+    fn test_brick_stats_default() {
+        let stats = BrickStats::default();
+        assert!(stats.name.is_empty());
+        assert_eq!(stats.count, 0);
+        assert_eq!(stats.total_ns, 0);
+        assert_eq!(stats.bottleneck, BrickBottleneck::Unknown);
+    }
+}
+
