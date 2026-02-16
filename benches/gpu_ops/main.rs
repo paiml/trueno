@@ -11,6 +11,7 @@
 #![cfg(feature = "gpu")]
 
 mod activation_benches;
+mod activation_nonlinear_benches;
 mod matrix_benches;
 mod softmax_benches;
 mod vector_benches;
@@ -26,10 +27,10 @@ criterion_group!(
     activation_benches::bench_gpu_leaky_relu,
     activation_benches::bench_gpu_elu,
     activation_benches::bench_gpu_clip,
-    activation_benches::bench_gpu_sigmoid,
-    activation_benches::bench_gpu_tanh,
-    activation_benches::bench_gpu_swish,
-    activation_benches::bench_gpu_gelu,
+    activation_nonlinear_benches::bench_gpu_sigmoid,
+    activation_nonlinear_benches::bench_gpu_tanh,
+    activation_nonlinear_benches::bench_gpu_swish,
+    activation_nonlinear_benches::bench_gpu_gelu,
     softmax_benches::bench_gpu_softmax,
     softmax_benches::bench_gpu_log_softmax
 );
