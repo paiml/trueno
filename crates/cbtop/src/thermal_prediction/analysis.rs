@@ -1,13 +1,40 @@
-//! Thermal diagnostic methods: risk assessment, cooldown, correlation, variance.
+//! Thermal analysis methods for ThermalAnalyzer.
 
 use super::regression;
 use super::types::{
-    CooldownRecommendation, ThermalCorrelation, ThermalVariance, ThrottleRisk,
+    CooldownRecommendation, ThermalCorrelation, ThermalPrediction, ThermalVariance, ThrottleRisk,
 };
 use super::MIN_SAMPLES_FOR_ANALYSIS;
-use super::ThermalAnalyzer;
+
+use super::analyzer::ThermalAnalyzer;
 
 impl ThermalAnalyzer {
+    /// Calculate trend slope using linear regression
+    pub fn calculate_trend(&self) -> Option<f64> {
+        if !self.has_sufficient_samples() {
+            return None;
+        }
+        let (slope, _, _) = regression::ols_fit(&self.time_temp_pairs())?;
+        Some(slope)
+    }
+
+    /// Predict temperature at future time
+    pub fn predict_trend(&self, horizon_sec: f64) -> Option<ThermalPrediction> {
+        if !self.has_sufficient_samples() {
+            return None;
+        }
+        let (trend_slope, _, confidence) = regression::ols_fit(&self.time_temp_pairs())?;
+        let current_temp = self.current_temperature()?;
+
+        Some(ThermalPrediction {
+            predicted_temp_c: current_temp + trend_slope * horizon_sec,
+            horizon_sec,
+            trend_slope,
+            confidence,
+            sample_count: self.samples().len(),
+        })
+    }
+
     /// Calculate throttle risk
     pub fn throttle_risk(&self) -> Option<ThrottleRisk> {
         let current_temp = self.current_temperature()?;
@@ -15,7 +42,7 @@ impl ThermalAnalyzer {
 
         Some(ThrottleRisk::assess(
             current_temp,
-            self.throttle_threshold_c,
+            self.throttle_threshold_c(),
             trend_slope,
             10.0,
         ))
@@ -24,28 +51,28 @@ impl ThermalAnalyzer {
     /// Get recommended cooldown
     pub fn recommended_cooldown(&self) -> Option<CooldownRecommendation> {
         let current_temp = self.current_temperature()?;
-        let target_temp = self.throttle_threshold_c - 10.0;
+        let target_temp = self.throttle_threshold_c() - 10.0;
 
         if current_temp <= target_temp {
             return Some(CooldownRecommendation {
                 duration_sec: 0.0,
                 target_temp_c: target_temp,
                 current_temp_c: current_temp,
-                cooling_rate: self.default_cooling_rate,
+                cooling_rate: self.default_cooling_rate(),
             });
         }
 
         Some(CooldownRecommendation::calculate(
             current_temp,
             target_temp,
-            self.default_cooling_rate,
+            self.default_cooling_rate(),
         ))
     }
 
     /// Calculate thermal-latency correlation
     pub fn correlation_to_latency(&self) -> Option<ThermalCorrelation> {
         let paired: Vec<(f64, f64)> = self
-            .samples
+            .samples()
             .iter()
             .filter_map(|s| s.latency_us.map(|l| (s.temperature_c, l)))
             .collect();
