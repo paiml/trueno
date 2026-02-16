@@ -1,5 +1,22 @@
 use super::*;
 
+/// Build a [`MetricEvent`] for testing with the given measurement name,
+/// tag pairs, and field pairs.
+fn make_test_event(
+    measurement: &str,
+    tags: &[(&str, &str)],
+    fields: &[(&str, f64)],
+) -> MetricEvent {
+    let mut event = MetricEvent::new(measurement);
+    for &(k, v) in tags {
+        event = event.with_tag(k, v);
+    }
+    for &(k, v) in fields {
+        event = event.with_field(k, v);
+    }
+    event
+}
+
 #[test]
 fn test_sink_type_names() {
     assert_eq!(SinkType::InfluxDb.name(), "influxdb");
@@ -9,9 +26,7 @@ fn test_sink_type_names() {
 
 #[test]
 fn test_metric_event_creation() {
-    let event = MetricEvent::new("cpu_usage")
-        .with_tag("host", "server1")
-        .with_field("value", 85.5);
+    let event = make_test_event("cpu_usage", &[("host", "server1")], &[("value", 85.5)]);
 
     assert_eq!(event.measurement, "cpu_usage");
     assert_eq!(event.tags.get("host"), Some(&"server1".to_string()));
@@ -20,9 +35,7 @@ fn test_metric_event_creation() {
 
 #[test]
 fn test_influx_line_protocol() {
-    let event = MetricEvent::new("cpu")
-        .with_tag("host", "server1")
-        .with_field("usage", 85.5)
+    let event = make_test_event("cpu", &[("host", "server1")], &[("usage", 85.5)])
         .with_timestamp(1234567890000000000);
 
     let line = event.to_influx_line();
@@ -33,9 +46,7 @@ fn test_influx_line_protocol() {
 
 #[test]
 fn test_event_json() {
-    let event = MetricEvent::new("test")
-        .with_tag("env", "prod")
-        .with_field("value", 42.0);
+    let event = make_test_event("test", &[("env", "prod")], &[("value", 42.0)]);
 
     let json = event.to_json();
     assert!(json.contains("\"measurement\":\"test\""));
@@ -64,8 +75,8 @@ fn test_event_batch() {
 #[test]
 fn test_batch_influx_format() {
     let mut batch = EventBatch::new(1);
-    batch.add(MetricEvent::new("cpu").with_field("value", 50.0));
-    batch.add(MetricEvent::new("mem").with_field("value", 70.0));
+    batch.add(make_test_event("cpu", &[], &[("value", 50.0)]));
+    batch.add(make_test_event("mem", &[], &[("value", 70.0)]));
 
     let output = batch.to_influx_batch();
     assert!(output.contains("cpu"));
@@ -77,8 +88,7 @@ fn test_streamer_send() {
     let mut streamer = EventStreamer::new(SinkType::JsonLines).with_batch_size(5);
 
     for i in 0..3 {
-        let event = MetricEvent::new("test").with_field("i", i as f64);
-        streamer.send(event);
+        streamer.send(make_test_event("test", &[], &[("i", i as f64)]));
     }
 
     assert_eq!(streamer.pending_count(), 3);

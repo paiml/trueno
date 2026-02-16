@@ -2,8 +2,43 @@
 
 use std::cmp::Ordering;
 
-use super::analysis::{EffectSize};
+use super::analysis::EffectSize;
 use super::helpers::{normal_cdf, percentile};
+
+// ---------------------------------------------------------------------------
+// Shared helpers extracted to eliminate repeated data-transformation patterns
+// ---------------------------------------------------------------------------
+
+/// Compute sample count (as f64), mean, and Bessel-corrected variance.
+///
+/// Returns `(n, mean, variance)` where `n = samples.len() as f64`.
+/// Callers are responsible for ensuring `samples.len() >= 2` when the
+/// variance value matters (single-element slices yield `variance = 0.0`).
+fn sample_stats(samples: &[f64]) -> (f64, f64, f64) {
+    let n = samples.len() as f64;
+    let mean = samples.iter().sum::<f64>() / n;
+    let divisor = (n - 1.0).max(1.0);
+    let var = samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / divisor;
+    (n, mean, var)
+}
+
+/// Two-tailed p-value from an absolute z (or t) statistic using the normal
+/// approximation.  Used by both Welch's t-test and Mann-Whitney U.
+fn two_tailed_p(abs_stat: f64) -> f64 {
+    2.0 * (1.0 - normal_cdf(abs_stat))
+}
+
+/// Filter non-finite values and return a sorted `Vec<f64>`.
+///
+/// Returns `None` when the resulting vector is empty.
+fn sort_finite(samples: &[f64]) -> Option<Vec<f64>> {
+    let mut v: Vec<f64> = samples.iter().copied().filter(|x| x.is_finite()).collect();
+    if v.is_empty() {
+        return None;
+    }
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
+    Some(v)
+}
 
 /// Result of statistical comparison between two samples
 #[derive(Debug, Clone)]
@@ -29,14 +64,8 @@ impl ComparisonResult {
             return None;
         }
 
-        let n1 = sample1.len() as f64;
-        let n2 = sample2.len() as f64;
-
-        let mean1 = sample1.iter().sum::<f64>() / n1;
-        let mean2 = sample2.iter().sum::<f64>() / n2;
-
-        let var1 = sample1.iter().map(|x| (x - mean1).powi(2)).sum::<f64>() / (n1 - 1.0);
-        let var2 = sample2.iter().map(|x| (x - mean2).powi(2)).sum::<f64>() / (n2 - 1.0);
+        let (n1, mean1, var1) = sample_stats(sample1);
+        let (n2, mean2, var2) = sample_stats(sample2);
 
         let se1 = var1 / n1;
         let se2 = var2 / n2;
@@ -51,9 +80,7 @@ impl ComparisonResult {
         // Welch-Satterthwaite degrees of freedom
         let df = (se1 + se2).powi(2) / (se1.powi(2) / (n1 - 1.0) + se2.powi(2) / (n2 - 1.0));
 
-        // Approximate p-value using normal distribution for large df
-        let p_value = 2.0 * (1.0 - normal_cdf(t.abs()));
-
+        let p_value = two_tailed_p(t.abs());
         let effect_size = EffectSize::cohens_d(sample1, sample2)?;
 
         Some(Self {
@@ -141,7 +168,7 @@ impl MannWhitneyResult {
         } else {
             0.0
         };
-        let p_value = 2.0 * (1.0 - normal_cdf(z.abs()));
+        let p_value = two_tailed_p(z.abs());
 
         // Rank-biserial correlation as effect size
         let effect_size = 1.0 - (2.0 * u) / (n1 * n2) as f64;
@@ -180,17 +207,7 @@ impl OutlierFilter {
 
     /// Create outlier filter with custom multiplier
     pub fn with_multiplier(samples: &[f64], multiplier: f64) -> Option<Self> {
-        if samples.is_empty() {
-            return None;
-        }
-
-        let mut sorted: Vec<f64> = samples.iter().copied().filter(|x| x.is_finite()).collect();
-
-        if sorted.is_empty() {
-            return None;
-        }
-
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
+        let sorted = sort_finite(samples)?;
 
         let q1 = percentile(&sorted, 0.25);
         let q3 = percentile(&sorted, 0.75);

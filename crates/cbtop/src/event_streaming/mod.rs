@@ -14,9 +14,32 @@
 //! See `tests/event_streaming_f1351.rs` for falsification tests.
 
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Schema version for event format
 pub const SCHEMA_VERSION: u32 = 1;
+
+/// Return the current wall-clock time as nanoseconds since the Unix epoch.
+///
+/// Falls back to `0` if the system clock is before the epoch (should never
+/// happen in practice).
+#[inline]
+fn now_nanos() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
+}
+
+/// Format a slice of events by applying `formatter` to each element and
+/// joining the results with newlines.
+fn format_events<T, F: Fn(&T) -> String>(events: &[T], formatter: F) -> String {
+    events
+        .iter()
+        .map(formatter)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 /// Default batch size
 pub const DEFAULT_BATCH_SIZE: usize = 100;
@@ -66,16 +89,11 @@ pub struct MetricEvent {
 impl MetricEvent {
     /// Create new event
     pub fn new(measurement: &str) -> Self {
-        let timestamp_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0);
-
         Self {
             measurement: measurement.to_string(),
             tags: HashMap::new(),
             fields: HashMap::new(),
-            timestamp_ns,
+            timestamp_ns: now_nanos(),
             correlation_id: None,
             schema_version: SCHEMA_VERSION,
         }
@@ -186,15 +204,10 @@ pub struct EventBatch {
 impl EventBatch {
     /// Create new batch
     pub fn new(batch_id: u64) -> Self {
-        let created_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0);
-
         Self {
             events: Vec::new(),
             batch_id,
-            created_ns,
+            created_ns: now_nanos(),
         }
     }
 
@@ -215,20 +228,12 @@ impl EventBatch {
 
     /// Format as InfluxDB batch
     pub fn to_influx_batch(&self) -> String {
-        self.events
-            .iter()
-            .map(|e| e.to_influx_line())
-            .collect::<Vec<_>>()
-            .join("\n")
+        format_events(&self.events, MetricEvent::to_influx_line)
     }
 
     /// Format as JSON Lines
     pub fn to_json_lines(&self) -> String {
-        self.events
-            .iter()
-            .map(|e| e.to_json())
-            .collect::<Vec<_>>()
-            .join("\n")
+        format_events(&self.events, MetricEvent::to_json)
     }
 }
 
@@ -378,12 +383,7 @@ impl EventStreamer {
 
         if result {
             self.health.events_written += self.current_batch.len() as u64;
-            self.health.last_write_ns = Some(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_nanos() as u64)
-                    .unwrap_or(0),
-            );
+            self.health.last_write_ns = Some(now_nanos());
 
             // Start new batch
             self.batch_counter += 1;
