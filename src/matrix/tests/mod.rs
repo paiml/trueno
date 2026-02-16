@@ -1,5 +1,5 @@
 use super::*;
-use crate::{TruenoError, Vector};
+use crate::Vector;
 
 // ===== Internal Implementation Tests (DISABLED - PMAT-018) =====
 // These tests referenced internal methods (matmul_naive, matmul_simd, microkernels)

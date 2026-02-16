@@ -18,3 +18,4 @@ mod microkernel;
 mod numerical;
 mod packing;
 mod profiler_heijunka;
+mod validate_and_parallel;

@@ -1,7 +1,6 @@
 //! TileStats and BrickProfiler core tests.
 
 use super::super::*;
-use crate::brick::exec_graph::{BrickBottleneck, ExecutionNode};
 
 // ========================================================================
 // TileStats Tests
