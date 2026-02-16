@@ -103,74 +103,128 @@ pub fn batched_multihead_attention(
     let debug_attn = std::env::var("WHISPER_DEBUG_ATTN").is_ok();
 
     for h in 0..n_heads {
-        // Extract head h from Q, K, V
-        let q_h = extract_single_head(ctx, q, h, seq_len, n_heads, head_dim)?;
-        let k_h = extract_single_head(ctx, k, h, seq_len, n_heads, head_dim)?;
-        let v_h = extract_single_head(ctx, v, h, seq_len, n_heads, head_dim)?;
-
-        if debug_attn && h == 0 {
-            let q_host = q_h.peek_host()?;
-            let k_host = k_h.peek_host()?;
-            let v_host = v_h.peek_host()?;
-            eprintln!(
-                "[DEBUG-ATTN] head 0: Q_h mean={:.6}, K_h mean={:.6}, V_h mean={:.6}",
-                q_host.iter().sum::<f32>() / q_host.len() as f32,
-                k_host.iter().sum::<f32>() / k_host.len() as f32,
-                v_host.iter().sum::<f32>() / v_host.len() as f32
-            );
-        }
-
-        // Transpose K_h: [seq_len, head_dim] -> [head_dim, seq_len]
-        let kt_h = transpose_matrix(ctx, &k_h.buffer, seq_len, head_dim)?;
-        let kt_tensor = GpuResidentTensor::from_buffer_internal(kt_h, 1);
-
-        // Q_h @ K_h^T: [seq_len, head_dim] @ [head_dim, seq_len] = [seq_len, seq_len]
-        let scores_h = q_h.matmul(ctx, &kt_tensor, seq_len, seq_len, head_dim)?;
-
-        if debug_attn && h == 0 {
-            let scores_host = scores_h.peek_host()?;
-            eprintln!(
-                "[DEBUG-ATTN] head 0: scores mean={:.6}, max={:.6}",
-                scores_host.iter().sum::<f32>() / scores_host.len() as f32,
-                scores_host
-                    .iter()
-                    .cloned()
-                    .fold(f32::NEG_INFINITY, f32::max)
-            );
-        }
-
-        // Scale and softmax
-        let scaled_h = scores_h.scale(ctx, scale)?;
-        let attn_h = scaled_h.softmax(ctx, seq_len)?;
-
-        if debug_attn && h == 0 {
-            let attn_host = attn_h.peek_host()?;
-            // Check first row sums to ~1
-            let first_row_sum: f32 = attn_host[..seq_len as usize].iter().sum();
-            eprintln!(
-                "[DEBUG-ATTN] head 0: attn first_row_sum={:.6}, mean={:.6}",
-                first_row_sum,
-                attn_host.iter().sum::<f32>() / attn_host.len() as f32
-            );
-        }
-
-        // Attn @ V_h: [seq_len, seq_len] @ [seq_len, head_dim] = [seq_len, head_dim]
-        let out_h = attn_h.matmul(ctx, &v_h, seq_len, head_dim, seq_len)?;
-
-        if debug_attn && h == 0 {
-            let out_host = out_h.peek_host()?;
-            eprintln!(
-                "[DEBUG-ATTN] head 0: out mean={:.6}, std={:.6}",
-                out_host.iter().sum::<f32>() / out_host.len() as f32,
-                (out_host.iter().map(|v| v.powi(2)).sum::<f32>() / out_host.len() as f32).sqrt()
-            );
-        }
+        let out_h = compute_single_head_attention(
+            ctx, q, k, v, h, seq_len, n_heads, head_dim, scale, debug_attn,
+        )?;
 
         // Copy out_h to output at head h position
         copy_head_to_output(ctx, &output_buffer, &out_h, h, seq_len, n_heads, head_dim)?;
     }
 
     Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
+}
+
+/// Compute attention for a single head.
+///
+/// Extracts Q_h, K_h, V_h, then computes softmax(Q_h @ K_h^T / sqrt(d_k)) @ V_h.
+#[cfg(feature = "cuda")]
+fn compute_single_head_attention(
+    ctx: &CudaContext,
+    q: &GpuResidentTensor<f32>,
+    k: &GpuResidentTensor<f32>,
+    v: &GpuResidentTensor<f32>,
+    h: u32,
+    seq_len: u32,
+    n_heads: u32,
+    head_dim: u32,
+    scale: f32,
+    debug_attn: bool,
+) -> Result<GpuResidentTensor<f32>> {
+    // Extract head h from Q, K, V
+    let q_h = extract_single_head(ctx, q, h, seq_len, n_heads, head_dim)?;
+    let k_h = extract_single_head(ctx, k, h, seq_len, n_heads, head_dim)?;
+    let v_h = extract_single_head(ctx, v, h, seq_len, n_heads, head_dim)?;
+
+    if debug_attn && h == 0 {
+        debug_head_inputs(&q_h, &k_h, &v_h)?;
+    }
+
+    // Transpose K_h: [seq_len, head_dim] -> [head_dim, seq_len]
+    let kt_h = transpose_matrix(ctx, &k_h.buffer, seq_len, head_dim)?;
+    let kt_tensor = GpuResidentTensor::from_buffer_internal(kt_h, 1);
+
+    // Q_h @ K_h^T: [seq_len, head_dim] @ [head_dim, seq_len] = [seq_len, seq_len]
+    let scores_h = q_h.matmul(ctx, &kt_tensor, seq_len, seq_len, head_dim)?;
+
+    if debug_attn && h == 0 {
+        debug_scores(&scores_h)?;
+    }
+
+    // Scale and softmax
+    let scaled_h = scores_h.scale(ctx, scale)?;
+    let attn_h = scaled_h.softmax(ctx, seq_len)?;
+
+    if debug_attn && h == 0 {
+        debug_attention_weights(&attn_h, seq_len)?;
+    }
+
+    // Attn @ V_h: [seq_len, seq_len] @ [seq_len, head_dim] = [seq_len, head_dim]
+    let out_h = attn_h.matmul(ctx, &v_h, seq_len, head_dim, seq_len)?;
+
+    if debug_attn && h == 0 {
+        debug_head_output(&out_h)?;
+    }
+
+    Ok(out_h)
+}
+
+/// Debug: print mean of Q, K, V head tensors.
+#[cfg(feature = "cuda")]
+fn debug_head_inputs(
+    q_h: &GpuResidentTensor<f32>,
+    k_h: &GpuResidentTensor<f32>,
+    v_h: &GpuResidentTensor<f32>,
+) -> Result<()> {
+    let q_host = q_h.peek_host()?;
+    let k_host = k_h.peek_host()?;
+    let v_host = v_h.peek_host()?;
+    eprintln!(
+        "[DEBUG-ATTN] head 0: Q_h mean={:.6}, K_h mean={:.6}, V_h mean={:.6}",
+        q_host.iter().sum::<f32>() / q_host.len() as f32,
+        k_host.iter().sum::<f32>() / k_host.len() as f32,
+        v_host.iter().sum::<f32>() / v_host.len() as f32
+    );
+    Ok(())
+}
+
+/// Debug: print score statistics.
+#[cfg(feature = "cuda")]
+fn debug_scores(scores_h: &GpuResidentTensor<f32>) -> Result<()> {
+    let scores_host = scores_h.peek_host()?;
+    eprintln!(
+        "[DEBUG-ATTN] head 0: scores mean={:.6}, max={:.6}",
+        scores_host.iter().sum::<f32>() / scores_host.len() as f32,
+        scores_host
+            .iter()
+            .cloned()
+            .fold(f32::NEG_INFINITY, f32::max)
+    );
+    Ok(())
+}
+
+/// Debug: print attention weight statistics.
+#[cfg(feature = "cuda")]
+fn debug_attention_weights(attn_h: &GpuResidentTensor<f32>, seq_len: u32) -> Result<()> {
+    let attn_host = attn_h.peek_host()?;
+    let first_row_sum: f32 = attn_host[..seq_len as usize].iter().sum();
+    eprintln!(
+        "[DEBUG-ATTN] head 0: attn first_row_sum={:.6}, mean={:.6}",
+        first_row_sum,
+        attn_host.iter().sum::<f32>() / attn_host.len() as f32
+    );
+    Ok(())
+}
+
+/// Debug: print output head statistics.
+#[cfg(feature = "cuda")]
+fn debug_head_output(out_h: &GpuResidentTensor<f32>) -> Result<()> {
+    let out_host = out_h.peek_host()?;
+    eprintln!(
+        "[DEBUG-ATTN] head 0: out mean={:.6}, std={:.6}",
+        out_host.iter().sum::<f32>() / out_host.len() as f32,
+        (out_host.iter().map(|v| v.powi(2)).sum::<f32>() / out_host.len() as f32).sqrt()
+    );
+    Ok(())
 }
 
 /// Batched multi-head attention optimized for all heads in parallel (WAPR-PERF-008)

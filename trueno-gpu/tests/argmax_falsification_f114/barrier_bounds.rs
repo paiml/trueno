@@ -1,12 +1,35 @@
 //! F114 Tests 1-2: Barrier Safety and Bounds Verification (static PTX analysis)
 
-use std::ffi::c_void;
-use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchConfig};
-use trueno_gpu::kernels::{ArgMaxFinalKernel, ArgMaxKernel, Kernel};
+use trueno_gpu::kernels::{ArgMaxKernel, Kernel};
 
 // =========================================================================
 // F114-TEST-1: Barrier Safety (PARITY-114)
 // =========================================================================
+
+/// Check if the first non-empty, non-comment line after a `bra exit` contains
+/// `bar.sync` without being an `exit:` label. Returns true if such a
+/// divergence pattern is found at the given line index.
+fn has_exit_before_barrier(lines: &[&str], bra_exit_idx: usize) -> bool {
+    for j in (bra_exit_idx + 1)..lines.len() {
+        let next = lines[j].trim();
+        if next.is_empty() || next.starts_with("//") {
+            continue;
+        }
+        return !next.starts_with("exit:") && next.contains("bar.sync");
+    }
+    false
+}
+
+/// Scan all `bra exit` sites in the PTX and return true if any of them
+/// have a barrier-divergence pattern.
+fn detect_barrier_divergence(lines: &[&str]) -> bool {
+    for (i, line) in lines.iter().enumerate() {
+        if line.contains("bra exit") && has_exit_before_barrier(lines, i) {
+            return true;
+        }
+    }
+    false
+}
 
 /// F114-TEST-1: Verify all threads reach bar.sync in reduction phase
 ///
@@ -39,26 +62,8 @@ fn f114_test1_barrier_safety() {
 
     // Verify no early exit before barriers
     let lines: Vec<&str> = ptx.lines().collect();
-    let mut found_exit_before_barrier = false;
-
-    for (i, line) in lines.iter().enumerate() {
-        let line_str: &str = *line;
-        if line_str.contains("bra exit") {
-            // Check if next non-empty line is bar.sync
-            for j in (i + 1)..lines.len() {
-                let next = lines[j].trim();
-                if !next.is_empty() && !next.starts_with("//") {
-                    if !next.starts_with("exit:") && next.contains("bar.sync") {
-                        found_exit_before_barrier = true;
-                    }
-                    break;
-                }
-            }
-        }
-    }
-
     assert!(
-        !found_exit_before_barrier,
+        !detect_barrier_divergence(&lines),
         "PARITY-114: Found potential barrier divergence"
     );
     println!("  PASSED - No barrier divergence detected");

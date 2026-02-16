@@ -78,110 +78,113 @@ impl Default for DiffThresholds {
     }
 }
 
-/// Compare two analysis reports
-#[must_use]
-pub fn compare_reports(
+/// Classify severity based on a value exceeding warning/critical thresholds.
+/// Returns the severity and whether this constitutes a regression (critical).
+fn classify_severity(value: f32, warning_threshold: f32, critical_threshold: f32) -> Severity {
+    if value > critical_threshold {
+        Severity::Critical
+    } else if value > warning_threshold {
+        Severity::Warning
+    } else {
+        Severity::Info
+    }
+}
+
+/// Compare a percent-change metric (registers, instructions) between baseline and current.
+/// Pushes a `Change` if the difference is significant. Returns true if a critical regression.
+fn compare_percent_metric(
+    metric: &str,
+    baseline_val: f32,
+    current_val: f32,
+    warning_threshold: f32,
+    critical_threshold: f32,
+    changes: &mut Vec<Change>,
+) -> bool {
+    if baseline_val <= 0.0 {
+        return false;
+    }
+    let percent = (current_val - baseline_val) / baseline_val * 100.0;
+    if percent.abs() <= 0.1 {
+        return false;
+    }
+    let severity = classify_severity(percent, warning_threshold, critical_threshold);
+    let is_critical = severity == Severity::Critical;
+    changes.push(Change {
+        metric: metric.to_string(),
+        baseline: baseline_val,
+        current: current_val,
+        percent_change: percent,
+        severity,
+    });
+    is_critical
+}
+
+/// Compare occupancy (absolute percentage-point drop). Returns true if critical regression.
+fn compare_occupancy(
     baseline: &AnalysisReport,
     current: &AnalysisReport,
     thresholds: &DiffThresholds,
-) -> DiffReport {
-    let mut changes = Vec::new();
-    let mut has_regression = false;
-
-    // Compare register usage
-    let baseline_regs = baseline.registers.total() as f32;
-    let current_regs = current.registers.total() as f32;
-    if baseline_regs > 0.0 {
-        let percent = (current_regs - baseline_regs) / baseline_regs * 100.0;
-        if percent.abs() > 0.1 {
-            let severity = if percent > thresholds.register_increase_critical {
-                has_regression = true;
-                Severity::Critical
-            } else if percent > thresholds.register_increase_warning {
-                Severity::Warning
-            } else {
-                Severity::Info
-            };
-            changes.push(Change {
-                metric: "register_count".to_string(),
-                baseline: baseline_regs,
-                current: current_regs,
-                percent_change: percent,
-                severity,
-            });
-        }
-    }
-
-    // Compare instruction count
-    let baseline_inst = baseline.instruction_count as f32;
-    let current_inst = current.instruction_count as f32;
-    if baseline_inst > 0.0 {
-        let percent = (current_inst - baseline_inst) / baseline_inst * 100.0;
-        if percent.abs() > 0.1 {
-            let severity = if percent > thresholds.instruction_increase_critical {
-                has_regression = true;
-                Severity::Critical
-            } else if percent > thresholds.instruction_increase_warning {
-                Severity::Warning
-            } else {
-                Severity::Info
-            };
-            changes.push(Change {
-                metric: "instruction_count".to_string(),
-                baseline: baseline_inst,
-                current: current_inst,
-                percent_change: percent,
-                severity,
-            });
-        }
-    }
-
-    // Compare estimated occupancy
+    changes: &mut Vec<Change>,
+) -> bool {
     let baseline_occ = baseline.estimated_occupancy * 100.0;
     let current_occ = current.estimated_occupancy * 100.0;
     let occ_diff = baseline_occ - current_occ; // Positive = regression (drop)
-    if occ_diff.abs() > 0.1 {
-        let severity = if occ_diff >= thresholds.occupancy_decrease_critical {
-            has_regression = true;
-            Severity::Critical
-        } else if occ_diff >= thresholds.occupancy_decrease_warning {
-            Severity::Warning
-        } else {
-            Severity::Info
-        };
-        changes.push(Change {
-            metric: "estimated_occupancy".to_string(),
-            baseline: baseline_occ,
-            current: current_occ,
-            percent_change: -occ_diff, // Negative change = regression
-            severity,
-        });
+    if occ_diff.abs() <= 0.1 {
+        return false;
     }
+    // Occupancy uses >= (absolute pp thresholds) unlike percent metrics which use >
+    let severity = if occ_diff >= thresholds.occupancy_decrease_critical {
+        Severity::Critical
+    } else if occ_diff >= thresholds.occupancy_decrease_warning {
+        Severity::Warning
+    } else {
+        Severity::Info
+    };
+    let is_critical = severity == Severity::Critical;
+    changes.push(Change {
+        metric: "estimated_occupancy".to_string(),
+        baseline: baseline_occ,
+        current: current_occ,
+        percent_change: -occ_diff, // Negative change = regression
+        severity,
+    });
+    is_critical
+}
 
-    // Compare warning counts
+/// Compare warning counts between baseline and current.
+fn compare_warning_counts(
+    baseline: &AnalysisReport,
+    current: &AnalysisReport,
+    thresholds: &DiffThresholds,
+    changes: &mut Vec<Change>,
+) {
     let baseline_warns = baseline.warnings.len() as u32;
     let current_warns = current.warnings.len() as u32;
-    if current_warns > baseline_warns {
-        let increase = current_warns - baseline_warns;
-        let severity = if increase >= thresholds.warning_count_increase {
-            Severity::Warning
-        } else {
-            Severity::Info
-        };
-        changes.push(Change {
-            metric: "muda_warnings".to_string(),
-            baseline: baseline_warns as f32,
-            current: current_warns as f32,
-            percent_change: if baseline_warns > 0 {
-                (increase as f32 / baseline_warns as f32) * 100.0
-            } else {
-                100.0
-            },
-            severity,
-        });
+    if current_warns <= baseline_warns {
+        return;
     }
+    let increase = current_warns - baseline_warns;
+    let severity = if increase >= thresholds.warning_count_increase {
+        Severity::Warning
+    } else {
+        Severity::Info
+    };
+    let percent_change = if baseline_warns > 0 {
+        (increase as f32 / baseline_warns as f32) * 100.0
+    } else {
+        100.0
+    };
+    changes.push(Change {
+        metric: "muda_warnings".to_string(),
+        baseline: baseline_warns as f32,
+        current: current_warns as f32,
+        percent_change,
+        severity,
+    });
+}
 
-    // Generate summary
+/// Generate a human-readable summary from the list of changes.
+fn build_summary(changes: &[Change]) -> String {
     let critical_count = changes
         .iter()
         .filter(|c| c.severity == Severity::Critical)
@@ -191,7 +194,7 @@ pub fn compare_reports(
         .filter(|c| c.severity == Severity::Warning)
         .count();
 
-    let summary = if critical_count > 0 {
+    if critical_count > 0 {
         format!(
             "{} critical regression(s), {} warning(s)",
             critical_count, warning_count
@@ -202,7 +205,46 @@ pub fn compare_reports(
         "No significant changes detected".to_string()
     } else {
         format!("{} minor change(s)", changes.len())
-    };
+    }
+}
+
+/// Compare two analysis reports
+#[must_use]
+pub fn compare_reports(
+    baseline: &AnalysisReport,
+    current: &AnalysisReport,
+    thresholds: &DiffThresholds,
+) -> DiffReport {
+    let mut changes = Vec::new();
+
+    // Compare register usage
+    let reg_critical = compare_percent_metric(
+        "register_count",
+        baseline.registers.total() as f32,
+        current.registers.total() as f32,
+        thresholds.register_increase_warning,
+        thresholds.register_increase_critical,
+        &mut changes,
+    );
+
+    // Compare instruction count
+    let inst_critical = compare_percent_metric(
+        "instruction_count",
+        baseline.instruction_count as f32,
+        current.instruction_count as f32,
+        thresholds.instruction_increase_warning,
+        thresholds.instruction_increase_critical,
+        &mut changes,
+    );
+
+    // Compare estimated occupancy
+    let occ_critical = compare_occupancy(baseline, current, thresholds, &mut changes);
+
+    // Compare warning counts
+    compare_warning_counts(baseline, current, thresholds, &mut changes);
+
+    let has_regression = reg_critical || inst_critical || occ_critical;
+    let summary = build_summary(&changes);
 
     DiffReport {
         name: current.name.clone(),

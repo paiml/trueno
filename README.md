@@ -5,7 +5,7 @@
 **Multi-Target High-Performance Compute Library**
 
 [![CI](https://github.com/paiml/trueno/actions/workflows/ci.yml/badge.svg)](https://github.com/paiml/trueno/actions)
-[![Coverage](https://img.shields.io/badge/coverage-94.4%25-brightgreen)](https://github.com/paiml/trueno)
+[![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/paiml/trueno)
 [![Crates.io](https://img.shields.io/crates/v/trueno.svg)](https://crates.io/crates/trueno)
 
 </div>
@@ -26,10 +26,10 @@
 
 ```toml
 [dependencies]
-trueno = "0.11"
+trueno = "0.14"
 
 # Optional: GPU support for large matrices
-trueno = { version = "0.11", features = ["gpu"] }
+trueno = { version = "0.14", features = ["gpu"] }
 
 # Optional: Pure Rust CUDA PTX generation
 trueno-gpu = "0.4"
@@ -139,6 +139,36 @@ Part of the Pragmatic AI Labs stack:
 - [trueno-graph](https://crates.io/crates/trueno-graph) - Graph algorithms
 - [trueno-rag](https://crates.io/crates/trueno-rag) - RAG pipeline
 - 🤖 [Coursera Hugging Face AI Development Specialization](https://www.coursera.org/specializations/hugging-face-ai-development) - Build Production AI systems with Hugging Face in Pure Rust
+
+## Usage
+
+Add trueno to your `Cargo.toml`:
+
+```toml
+[dependencies]
+trueno = "0.14"
+```
+
+Then use it in your code:
+
+```rust
+use trueno::Vector;
+
+let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
+let b = Vector::from_slice(&[4.0, 5.0, 6.0]);
+let result = a.add(&b).unwrap();
+```
+
+The library auto-selects the best SIMD backend at runtime. No configuration needed.
+
+## Contributing
+
+Contributions are welcome. Please ensure:
+
+1. All tests pass: `cargo test --all-features`
+2. Coverage stays above 90%: `make coverage`
+3. No clippy warnings: `cargo clippy --all-features -- -D warnings`
+4. Code is formatted: `cargo fmt`
 
 ## License
 

@@ -1,7 +1,5 @@
 //! Additional Q4K scalar coverage tests and AVX2 GEMV coverage tests.
 
-#![allow(dead_code)]
-
 mod scalar_coverage;
 mod f16_and_parsing;
 #[cfg(target_arch = "x86_64")]
