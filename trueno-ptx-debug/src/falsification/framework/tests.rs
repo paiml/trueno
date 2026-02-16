@@ -1,3 +1,4 @@
+use super::registry::calculate_confidence;
 use super::*;
 use crate::parser::Parser;
 

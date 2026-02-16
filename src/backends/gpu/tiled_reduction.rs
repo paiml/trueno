@@ -117,7 +117,7 @@ pub fn tiled_reduce_2d<Op: ReduceOp>(data: &[f32], width: usize, height: usize) 
 ///
 /// Mirrors the GPU shared memory load pattern: each thread loads one element,
 /// out-of-bounds threads keep the identity value.
-fn load_tile<Op: ReduceOp>(
+fn load_tile(
     tile: &mut [[f32; TILE_SIZE]; TILE_SIZE],
     data: &[f32],
     width: usize,
@@ -191,7 +191,7 @@ fn reduce_tile<Op: ReduceOp>(
     tile_y: usize,
 ) -> f32 {
     let mut tile = [[Op::identity(); TILE_SIZE]; TILE_SIZE];
-    load_tile::<Op>(&mut tile, data, width, height, tile_x * TILE_SIZE, tile_y * TILE_SIZE);
+    load_tile(&mut tile, data, width, height, tile_x * TILE_SIZE, tile_y * TILE_SIZE);
     reduce_rows::<Op>(&mut tile);
     reduce_columns::<Op>(&mut tile);
     tile[0][0]

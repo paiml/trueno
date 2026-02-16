@@ -8,6 +8,61 @@ use super::types::{
     HostState, RemoteAgentConfig, RemoteError, RemoteResult,
 };
 
+/// Compute aggregated metrics (throughput, latency_p50, latency_p99) from benchmark results.
+///
+/// Returns `(throughput, latency_p50, latency_p99)` aggregated according to the strategy.
+fn compute_metrics(benchmarks: &[HostBenchmark], strategy: AggregationStrategy) -> (f64, f64, f64) {
+    let throughputs: Vec<f64> = benchmarks.iter().map(|b| b.throughput_ops).collect();
+    let latencies_p50: Vec<f64> = benchmarks.iter().map(|b| b.latency_p50_us).collect();
+    let latencies_p99: Vec<f64> = benchmarks.iter().map(|b| b.latency_p99_us).collect();
+
+    match strategy {
+        AggregationStrategy::GeometricMean => {
+            // Geometric mean for throughput
+            let log_sum: f64 = throughputs.iter().map(|v| v.ln()).sum();
+            let throughput = (log_sum / throughputs.len() as f64).exp();
+            // Arithmetic mean for latency p50
+            let latency_p50 = latencies_p50.iter().sum::<f64>() / latencies_p50.len() as f64;
+            // Max for latency p99 (worst case)
+            let latency_p99 = latencies_p99.iter().copied().fold(0.0_f64, f64::max);
+            (throughput, latency_p50, latency_p99)
+        }
+        AggregationStrategy::Median => {
+            (
+                sorted_median(&throughputs),
+                sorted_median(&latencies_p50),
+                sorted_median(&latencies_p99),
+            )
+        }
+        AggregationStrategy::Minimum => {
+            (
+                fold_metric(&throughputs, f64::INFINITY, f64::min),
+                fold_metric(&latencies_p50, f64::INFINITY, f64::min),
+                fold_metric(&latencies_p99, f64::INFINITY, f64::min),
+            )
+        }
+        AggregationStrategy::Maximum => {
+            (
+                fold_metric(&throughputs, 0.0, f64::max),
+                fold_metric(&latencies_p50, 0.0, f64::max),
+                fold_metric(&latencies_p99, 0.0, f64::max),
+            )
+        }
+    }
+}
+
+/// Compute median of a slice by sorting a copy.
+fn sorted_median(values: &[f64]) -> f64 {
+    let mut sorted: Vec<f64> = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    sorted[sorted.len() / 2]
+}
+
+/// Fold a slice of f64 values with an initial accumulator and binary operation.
+fn fold_metric(values: &[f64], init: f64, op: fn(f64, f64) -> f64) -> f64 {
+    values.iter().copied().fold(init, op)
+}
+
 /// Remote agent for distributed benchmark collection
 #[derive(Debug)]
 pub struct RemoteAgent {
@@ -277,96 +332,16 @@ impl RemoteAgent {
             return (0.0, 0.0, 0.0, 0, failure_count);
         }
 
-        match self.config.aggregation {
-            AggregationStrategy::GeometricMean => {
-                // Geometric mean for throughput
-                let log_sum: f64 = benchmarks.iter().map(|b| b.throughput_ops.ln()).sum();
-                let throughput_geomean = (log_sum / benchmarks.len() as f64).exp();
+        let (throughput, latency_p50, latency_p99) =
+            compute_metrics(benchmarks, self.config.aggregation);
 
-                // Arithmetic mean for latency p50
-                let latency_p50_mean = benchmarks.iter().map(|b| b.latency_p50_us).sum::<f64>()
-                    / benchmarks.len() as f64;
-
-                // Max for latency p99 (worst case)
-                let latency_p99_max = benchmarks
-                    .iter()
-                    .map(|b| b.latency_p99_us)
-                    .fold(0.0_f64, |a, b| a.max(b));
-
-                (
-                    throughput_geomean,
-                    latency_p50_mean,
-                    latency_p99_max,
-                    benchmarks.len(),
-                    failure_count,
-                )
-            }
-            AggregationStrategy::Median => {
-                let mut throughputs: Vec<f64> =
-                    benchmarks.iter().map(|b| b.throughput_ops).collect();
-                let mut latencies_p50: Vec<f64> =
-                    benchmarks.iter().map(|b| b.latency_p50_us).collect();
-                let mut latencies_p99: Vec<f64> =
-                    benchmarks.iter().map(|b| b.latency_p99_us).collect();
-
-                throughputs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                latencies_p50
-                    .sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                latencies_p99
-                    .sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-
-                let mid = benchmarks.len() / 2;
-                (
-                    throughputs[mid],
-                    latencies_p50[mid],
-                    latencies_p99[mid],
-                    benchmarks.len(),
-                    failure_count,
-                )
-            }
-            AggregationStrategy::Minimum => {
-                let throughput = benchmarks
-                    .iter()
-                    .map(|b| b.throughput_ops)
-                    .fold(f64::INFINITY, f64::min);
-                let latency_p50 = benchmarks
-                    .iter()
-                    .map(|b| b.latency_p50_us)
-                    .fold(f64::INFINITY, f64::min);
-                let latency_p99 = benchmarks
-                    .iter()
-                    .map(|b| b.latency_p99_us)
-                    .fold(f64::INFINITY, f64::min);
-                (
-                    throughput,
-                    latency_p50,
-                    latency_p99,
-                    benchmarks.len(),
-                    failure_count,
-                )
-            }
-            AggregationStrategy::Maximum => {
-                let throughput = benchmarks
-                    .iter()
-                    .map(|b| b.throughput_ops)
-                    .fold(0.0_f64, f64::max);
-                let latency_p50 = benchmarks
-                    .iter()
-                    .map(|b| b.latency_p50_us)
-                    .fold(0.0_f64, f64::max);
-                let latency_p99 = benchmarks
-                    .iter()
-                    .map(|b| b.latency_p99_us)
-                    .fold(0.0_f64, f64::max);
-                (
-                    throughput,
-                    latency_p50,
-                    latency_p99,
-                    benchmarks.len(),
-                    failure_count,
-                )
-            }
-        }
+        (
+            throughput,
+            latency_p50,
+            latency_p99,
+            benchmarks.len(),
+            failure_count,
+        )
     }
 
     /// Add result to history with size limit

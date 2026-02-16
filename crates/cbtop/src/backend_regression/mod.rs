@@ -214,8 +214,8 @@ impl BackendRegressionDetector {
         let mut sizes_with_overhead = Vec::new();
 
         for m in &measurements {
-            let transfer = m.transfer_time_us.unwrap();
-            let compute = m.compute_time_us.unwrap();
+            let transfer = m.transfer_time_us.expect("transfer_time_us MUST be set for GPU measurements");
+            let compute = m.compute_time_us.expect("compute_time_us MUST be set for GPU measurements");
             total_transfer += transfer;
             total_compute += compute;
 
@@ -256,7 +256,7 @@ impl BackendRegressionDetector {
         // Find best by throughput
         let best = candidates
             .iter()
-            .max_by(|a, b| a.throughput.partial_cmp(&b.throughput).unwrap())?;
+            .max_by(|a, b| a.throughput.partial_cmp(&b.throughput).expect("throughput MUST be comparable (no NaN)"))?;
 
         // Calculate confidence based on efficiency
         let confidence = (best.efficiency_percent / 100.0).clamp(0.0, 1.0);

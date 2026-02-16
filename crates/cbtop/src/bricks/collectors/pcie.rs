@@ -99,7 +99,7 @@ impl Brick for PcieCollectorBrick {
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
             BrickAssertion::custom("width_valid", |b| {
-                let s = b.downcast_ref::<PcieCollectorBrick>().unwrap();
+                let s = b.downcast_ref::<PcieCollectorBrick>().expect("brick MUST be PcieCollectorBrick");
                 s.history.back().map_or(true, |m| m.max_width <= 16)
             }),
             BrickAssertion::max_latency_ms(10), // Filesystem scan can be slow

@@ -17,6 +17,38 @@ use super::super::cache::get_or_compile_kernel;
 #[cfg(feature = "cuda")]
 use super::super::GpuResidentTensor;
 
+/// Compile (or fetch from cache), lock, launch, and return.
+///
+/// Centralizes the repeated boilerplate of:
+/// 1. `get_or_compile_kernel` (cache lookup / PTX JIT)
+/// 2. Locking the `Arc<Mutex<CudaModule>>`
+/// 3. Unsafe `stream.launch_kernel`
+///
+/// # Safety
+///
+/// Caller must guarantee that `args` contains valid device pointers whose
+/// types and count match the kernel signature identified by `kernel_name`.
+#[cfg(feature = "cuda")]
+fn launch_cached_kernel(
+    ctx: &CudaContext,
+    stream: &CudaStream,
+    cache_key: &str,
+    ptx: &str,
+    kernel_name: &str,
+    config: &LaunchConfig,
+    args: &mut [*mut std::ffi::c_void],
+) -> Result<()> {
+    let module_arc = get_or_compile_kernel(ctx, cache_key, ptx)?;
+    let mut module = module_arc.lock().map_err(|e| {
+        crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
+    })?;
+    // SAFETY: Caller guarantees args are valid pointers matching kernel signature.
+    unsafe {
+        stream.launch_kernel(&mut module, kernel_name, config, args)?;
+    }
+    Ok(())
+}
+
 #[cfg(feature = "cuda")]
 impl GpuResidentTensor<f32> {
     /// Row-wise softmax (stays on GPU)
@@ -59,7 +91,6 @@ impl GpuResidentTensor<f32> {
             let kernel = SoftmaxKernel::new(row_size as u32);
             let ptx = kernel.emit_ptx();
             let cache_key = format!("softmax:{}", row_size);
-            let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
             let config = LaunchConfig {
                 grid: (seq_len, 1, 1),
@@ -73,20 +104,14 @@ impl GpuResidentTensor<f32> {
                 std::ptr::addr_of!(row_size_val) as *mut _,
             ];
 
-            {
-                let mut module = module_arc.lock().map_err(|e| {
-                    crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-                })?;
-                unsafe {
-                    stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-                }
-            }
+            launch_cached_kernel(
+                ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            )?;
         } else {
             // Use long row softmax for rows > 32 elements (cached)
             let kernel = LongRowSoftmaxKernel::new(row_size as u32);
             let ptx = kernel.emit_ptx();
             let cache_key = format!("softmax_long_row:{}", row_size);
-            let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
             // 256 threads per block (8 warps), one block per row
             // Shared memory: 8 warp maxes + 8 warp sums + 2 global = 72 bytes
@@ -102,14 +127,9 @@ impl GpuResidentTensor<f32> {
                 std::ptr::addr_of!(row_size_val) as *mut _,
             ];
 
-            {
-                let mut module = module_arc.lock().map_err(|e| {
-                    crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-                })?;
-                unsafe {
-                    stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-                }
-            }
+            launch_cached_kernel(
+                ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            )?;
         }
 
         stream.synchronize()?;
@@ -154,7 +174,6 @@ impl GpuResidentTensor<f32> {
             let kernel = SoftmaxKernel::new(row_size as u32);
             let ptx = kernel.emit_ptx();
             let cache_key = format!("softmax:{}", row_size);
-            let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
             let config = LaunchConfig {
                 grid: (seq_len, 1, 1),
@@ -168,20 +187,14 @@ impl GpuResidentTensor<f32> {
                 std::ptr::addr_of!(row_size_val) as *mut _,
             ];
 
-            {
-                let mut module = module_arc.lock().map_err(|e| {
-                    crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-                })?;
-                unsafe {
-                    stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-                }
-            }
+            launch_cached_kernel(
+                ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            )?;
         } else {
             // Use long row softmax for rows > 32 elements (cached)
             let kernel = LongRowSoftmaxKernel::new(row_size as u32);
             let ptx = kernel.emit_ptx();
             let cache_key = format!("softmax_long_row:{}", row_size);
-            let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
             // 256 threads per block (8 warps), one block per row
             let config = LaunchConfig {
@@ -196,14 +209,9 @@ impl GpuResidentTensor<f32> {
                 std::ptr::addr_of!(row_size_val) as *mut _,
             ];
 
-            {
-                let mut module = module_arc.lock().map_err(|e| {
-                    crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-                })?;
-                unsafe {
-                    stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-                }
-            }
+            launch_cached_kernel(
+                ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            )?;
         }
         // NO SYNC - caller controls synchronization for graph capture
 
@@ -241,7 +249,6 @@ impl GpuResidentTensor<f32> {
         let kernel = ResidualAddKernel::new(n as u32);
         let ptx = kernel.emit_ptx();
         let cache_key = format!("residual_add:{}", n);
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
         let stream = CudaStream::new(ctx)?;
 
         // Configure launch
@@ -266,15 +273,9 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        // Launch kernel (lock the cached module)
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        launch_cached_kernel(
+            ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
         stream.synchronize()?;
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -314,7 +315,6 @@ impl GpuResidentTensor<f32> {
         let kernel = ResidualAddKernel::new(n as u32);
         let ptx = kernel.emit_ptx();
         let cache_key = format!("residual_add:{}", n);
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
         // Configure launch
         let threads = 256u32;
@@ -338,15 +338,9 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        // Launch kernel (lock the cached module)
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        launch_cached_kernel(
+            ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
         // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -399,7 +393,6 @@ impl GpuResidentTensor<f32> {
             "interleaved_to_batched:{}:{}:{}",
             seq_len, n_heads, head_dim
         );
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
         let threads = 256u32;
         let blocks = (total_elems as u32 + threads - 1) / threads;
@@ -417,14 +410,9 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(output_ptr) as *mut _,
         ];
 
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        launch_cached_kernel(
+            ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
         // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -443,7 +431,6 @@ impl GpuResidentTensor<f32> {
         let kernel = ScaleKernel::new(n as u32);
         let ptx = kernel.emit_ptx();
         let cache_key = format!("scale:{}", n);
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
         let stream = CudaStream::new(ctx)?;
 
         // Configure launch
@@ -467,15 +454,9 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        // Launch kernel (lock the cached module)
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        launch_cached_kernel(
+            ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
         stream.synchronize()?;
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))

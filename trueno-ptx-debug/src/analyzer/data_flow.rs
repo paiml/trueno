@@ -399,7 +399,7 @@ mod tests {
         let mut parser = Parser::new(ptx).unwrap();
         let module = parser.parse().unwrap();
 
-        let analyzer = DataFlowAnalyzer::from_module(&module);
+        let _analyzer = DataFlowAnalyzer::from_module(&module);
         // The analyzer should track value sources
         // Note: The exact register names depend on parser output
         // This test verifies the analyzer runs without error

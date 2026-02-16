@@ -215,7 +215,7 @@ impl HeadlessBenchmark {
 
         // Calculate percentiles on original data (for accurate p95/p99)
         let mut sorted = latencies.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).expect("latency values MUST be comparable (no NaN)"));
 
         let percentile = |p: f64| -> f64 {
             let idx = (p * (sorted.len() - 1) as f64).round() as usize;
@@ -241,7 +241,7 @@ impl HeadlessBenchmark {
         }
 
         let mut sorted = data.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        sorted.sort_by(|a, b| a.partial_cmp(b).expect("data values MUST be comparable (no NaN)"));
 
         let n = sorted.len();
         let q1_idx = n / 4;

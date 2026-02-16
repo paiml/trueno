@@ -18,6 +18,45 @@ use crate::kernels::Kernel;
 #[cfg(feature = "cuda")]
 const CUDA_WORKGROUP_SIZE: u32 = 256;
 
+/// Compile (or fetch from cache), launch, and synchronize a CUDA kernel.
+///
+/// This helper consolidates the repeated boilerplate of kernel cache lookup,
+/// module lock acquisition, unsafe kernel launch, and stream synchronization
+/// that every compute helper in this module needs.
+///
+/// # Safety contract (upheld internally)
+///
+/// The caller is responsible for ensuring that `args` matches the kernel ABI
+/// and that all GPU buffers referenced by `args` are valid for the launch
+/// `config` dimensions. The `unsafe` launch is encapsulated here so that
+/// each call-site does not need its own `unsafe` block.
+#[cfg(feature = "cuda")]
+fn compile_and_launch(
+    ctx: &CudaContext,
+    cache_key: &str,
+    ptx: &str,
+    kernel_name: &str,
+    config: &LaunchConfig,
+    args: &mut [*mut std::ffi::c_void],
+) -> Result<()> {
+    let module_arc = get_or_compile_kernel(ctx, cache_key, ptx)?;
+    let stream = CudaStream::new(ctx)?;
+
+    {
+        let mut module = module_arc
+            .lock()
+            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
+        // SAFETY: Caller guarantees that args match the kernel ABI and that all
+        // referenced GPU buffers are valid for the given launch configuration.
+        unsafe {
+            stream.launch_kernel(&mut module, kernel_name, config, args)?;
+        }
+    }
+    stream.synchronize()?;
+
+    Ok(())
+}
+
 /// Batched GEMM: [batch, m, k] @ [batch, k, n] -> [batch, m, n]
 #[cfg(feature = "cuda")]
 pub(in super::super) fn batched_gemm(
@@ -53,8 +92,6 @@ pub(in super::super) fn batched_gemm(
     };
 
     let ptx = kernel.emit_ptx();
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-    let stream = CudaStream::new(ctx)?;
 
     // WAPR-PERF-011: WMMA uses warps (32 threads), naive uses tile blocks
     let (blocks_x, blocks_y, threads_x, threads_y, shared_mem) = if wmma_mode {
@@ -89,17 +126,7 @@ pub(in super::super) fn batched_gemm(
         std::ptr::addr_of!(k) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch with validated dimensions. a has batch*m*k elements,
-        // b has batch*k*n elements, output has batch*m*n elements. Args match kernel ABI.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
-    stream.synchronize()?;
+    compile_and_launch(ctx, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
 
     Ok(GpuResidentTensor::from_buffer_internal(output, 1))
 }
@@ -119,8 +146,6 @@ pub(in super::super) fn batched_scale_all(
     let kernel = BatchedScaleKernel::new(n);
     let ptx = kernel.emit_ptx();
     let cache_key = format!("batched_scale:{}", n);
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-    let stream = CudaStream::new(ctx)?;
 
     let threads = CUDA_WORKGROUP_SIZE;
     let blocks = (n + threads - 1) / threads;
@@ -140,17 +165,7 @@ pub(in super::super) fn batched_scale_all(
         std::ptr::addr_of!(n) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch with n-element input and output buffers.
-        // scale is passed by pointer to match kernel parameter layout.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
-    stream.synchronize()?;
+    compile_and_launch(ctx, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
 
     Ok(GpuResidentTensor::from_buffer_internal(output, 1))
 }
@@ -171,8 +186,6 @@ pub(in super::super) fn batched_softmax_all(
     let kernel = BatchedSoftmaxKernel::new(total_rows, row_size);
     let ptx = kernel.emit_ptx();
     let cache_key = format!("batched_softmax:{}:{}", total_rows, row_size);
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-    let stream = CudaStream::new(ctx)?;
 
     // One warp (32 threads) per row
     let config = LaunchConfig {
@@ -191,17 +204,7 @@ pub(in super::super) fn batched_softmax_all(
         std::ptr::addr_of!(row_size) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch with total_rows*row_size element buffers.
-        // One warp per row with 72 bytes shared memory for warp reductions.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
-    stream.synchronize()?;
+    compile_and_launch(ctx, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
 
     Ok(GpuResidentTensor::from_buffer_internal(output, 1))
 }
@@ -221,8 +224,6 @@ pub(in super::super) fn transpose_matrix(
     let transpose = TransposeKernel::new(rows, cols);
     let ptx = transpose.emit_ptx();
     let cache_key = format!("transpose:{}x{}", rows, cols);
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-    let stream = CudaStream::new(ctx)?;
 
     let threads = CUDA_WORKGROUP_SIZE;
     let total = rows * cols;
@@ -243,17 +244,7 @@ pub(in super::super) fn transpose_matrix(
         std::ptr::addr_of!(cols) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch for matrix transpose. input and output both have
-        // rows*cols elements. Args pass dimensions for index computation.
-        unsafe {
-            stream.launch_kernel(&mut module, transpose.name(), &config, &mut args)?;
-        }
-    }
-    stream.synchronize()?;
+    compile_and_launch(ctx, &cache_key, &ptx, transpose.name(), &config, &mut args)?;
 
     Ok(output)
 }
@@ -275,8 +266,6 @@ pub(in super::super) fn extract_single_head(
     let kernel = ExtractSingleHeadKernel::new(seq_len, n_heads, head_dim);
     let ptx = kernel.emit_ptx();
     let cache_key = format!("extract_head:{}:{}:{}", seq_len, n_heads, head_dim);
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-    let stream = CudaStream::new(ctx)?;
 
     let threads = CUDA_WORKGROUP_SIZE;
     let blocks = (output_size as u32 + threads - 1) / threads;
@@ -295,17 +284,7 @@ pub(in super::super) fn extract_single_head(
         std::ptr::addr_of!(head_idx) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch extracting head_idx from interleaved input
-        // (seq_len * n_heads * head_dim elements) into output (seq_len * head_dim elements).
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
-    stream.synchronize()?;
+    compile_and_launch(ctx, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
 
     Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
 }
@@ -325,8 +304,6 @@ pub(in super::super) fn copy_head_to_output(
     let kernel = CopySingleHeadKernel::new(seq_len, n_heads, head_dim);
     let ptx = kernel.emit_ptx();
     let cache_key = format!("copy_head:{}:{}:{}", seq_len, n_heads, head_dim);
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-    let stream = CudaStream::new(ctx)?;
 
     let input_size = (seq_len * head_dim) as usize;
     let threads = CUDA_WORKGROUP_SIZE;
@@ -346,18 +323,7 @@ pub(in super::super) fn copy_head_to_output(
         std::ptr::addr_of!(head_idx) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch copying head_output (seq_len * head_dim elements) into
-        // the interleaved output buffer at head_idx position. Output buffer is
-        // seq_len * n_heads * head_dim elements total.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
-    stream.synchronize()?;
+    compile_and_launch(ctx, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
 
     Ok(())
 }
