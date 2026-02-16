@@ -1,19 +1,19 @@
     use super::*;
 
-    /// Generate sinusoidal test samples: `base + sin(i * freq) * amplitude`.
-    fn sinusoidal_samples(count: usize, base: f64, freq: f64, amplitude: f64) -> Vec<f64> {
+    /// Generate sinusoidal samples around a mean with given amplitude.
+    fn sine_samples(mean: f64, amplitude: f64, count: usize, freq: f64) -> Vec<f64> {
         (0..count)
-            .map(|i| base + (i as f64 * freq).sin() * amplitude)
+            .map(|i| mean + (i as f64 * freq).sin() * amplitude)
             .collect()
     }
 
-    /// Generate linear test samples: `base + i * step`.
-    fn linear_samples(count: usize, base: f64, step: f64) -> Vec<f64> {
-        (0..count).map(|i| base + i as f64 * step).collect()
+    /// Generate low-variance "normal" samples (near-linear ramp).
+    fn steady_samples(count: usize) -> Vec<f64> {
+        (0..count).map(|i| 100.0 + (i as f64 * 0.01)).collect()
     }
 
-    /// Build a `TimeSeriesFeatures` with given CV and autocorrelation; other fields defaulted.
-    fn features_with(cv: f64, autocorr: f64) -> TimeSeriesFeatures {
+    /// Build a TimeSeriesFeatures with given CV and autocorrelation.
+    fn features(cv: f64, autocorr: f64) -> TimeSeriesFeatures {
         TimeSeriesFeatures {
             mean: 100.0,
             std_dev: cv,
@@ -26,49 +26,44 @@
         }
     }
 
-    /// Train the model `n` times with the given samples.
-    fn train_n(ml: &mut AdaptiveThresholdMl, samples: &[f64], is_anomaly: bool, n: usize) {
-        for _ in 0..n {
-            ml.train(samples, is_anomaly).unwrap();
-        }
+    /// Build an AdaptiveThresholdMl with custom min_training_samples and min_confidence.
+    fn ml_with(min_samples: usize, min_confidence: f64) -> AdaptiveThresholdMl {
+        AdaptiveThresholdMl::new(MlThresholdConfig {
+            min_training_samples: min_samples,
+            min_confidence,
+            ..Default::default()
+        })
     }
 
     #[test]
     fn test_time_series_features() {
-        let values = sinusoidal_samples(100, 100.0, 0.1, 10.0);
-        let features = TimeSeriesFeatures::extract(&values).unwrap();
+        let values = sine_samples(100.0, 10.0, 100, 0.1);
+        let feat = TimeSeriesFeatures::extract(&values).unwrap();
 
-        assert!(features.mean > 95.0 && features.mean < 105.0);
-        assert!(features.std_dev > 0.0);
-        assert!(features.cv > 0.0 && features.cv < 20.0);
-        assert_eq!(features.sample_count, 100);
+        assert!(feat.mean > 95.0 && feat.mean < 105.0);
+        assert!(feat.std_dev > 0.0);
+        assert!(feat.cv > 0.0 && feat.cv < 20.0);
+        assert_eq!(feat.sample_count, 100);
     }
 
     #[test]
     fn test_feature_extraction_insufficient_data() {
-        let values = vec![1.0, 2.0, 3.0];
-        assert!(TimeSeriesFeatures::extract(&values).is_none());
+        assert!(TimeSeriesFeatures::extract(&[1.0, 2.0, 3.0]).is_none());
     }
 
     #[test]
     fn test_workload_class_defaults() {
-        assert!(
-            WorkloadClass::Matmul.default_cv_threshold()
-                < WorkloadClass::Ffn.default_cv_threshold()
-        );
-        assert!(
-            WorkloadClass::ComputeBound.default_cv_threshold()
-                < WorkloadClass::MemoryBound.default_cv_threshold()
-        );
+        assert!(WorkloadClass::Matmul.default_cv_threshold() < WorkloadClass::Ffn.default_cv_threshold());
+        assert!(WorkloadClass::ComputeBound.default_cv_threshold() < WorkloadClass::MemoryBound.default_cv_threshold());
     }
 
     #[test]
     fn test_learned_threshold_update() {
         let mut threshold = LearnedWorkloadThreshold::new(WorkloadClass::Matmul);
-        let features = features_with(8.0, 0.5);
+        let feat = features(8.0, 0.5);
 
         for _ in 0..10 {
-            threshold.update(&features, false);
+            threshold.update(&feat, false);
         }
 
         assert!(threshold.training_samples > 0);
@@ -77,87 +72,66 @@
 
     #[test]
     fn test_adaptive_threshold_detection() {
-        let config = MlThresholdConfig::default();
-        let ml = AdaptiveThresholdMl::new(config);
+        let ml = AdaptiveThresholdMl::new(MlThresholdConfig::default());
 
-        // Low-variance samples (should be normal)
-        let normal_values = linear_samples(100, 100.0, 0.01);
-        let result = ml.detect_anomaly(&normal_values).unwrap();
+        let result = ml.detect_anomaly(&steady_samples(100)).unwrap();
         assert!(!result.is_anomaly);
 
-        // High-variance samples (should be anomalous)
-        let anomalous_values = sinusoidal_samples(100, 100.0, 0.5, 50.0);
-        let result = ml.detect_anomaly(&anomalous_values).unwrap();
+        let anomalous = sine_samples(100.0, 50.0, 100, 0.5);
+        let result = ml.detect_anomaly(&anomalous).unwrap();
         assert!(result.score > 0.5);
     }
 
     #[test]
     fn test_adaptive_threshold_training() {
-        let config = MlThresholdConfig {
-            min_training_samples: 5,
-            min_confidence: 0.1,
-            ..Default::default()
-        };
-        let mut ml = AdaptiveThresholdMl::new(config);
+        let mut ml = ml_with(5, 0.1);
 
-        let normal = linear_samples(50, 100.0, 0.02);
-        train_n(&mut ml, &normal, false, 10);
+        let normal = steady_samples(50);
+        for _ in 0..10 {
+            ml.train(&normal, false).unwrap();
+        }
 
-        let anomalous = linear_samples(50, 100.0, 2.0);
-        train_n(&mut ml, &anomalous, true, 5);
+        let anomalous: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64 * 2.0)).collect();
+        for _ in 0..5 {
+            ml.train(&anomalous, true).unwrap();
+        }
 
         assert!(!ml.learned_workloads().is_empty());
 
         let metrics = ml.get_metrics();
-        assert!(
-            metrics.true_positives
-                + metrics.false_positives
-                + metrics.true_negatives
-                + metrics.false_negatives
-                > 0
-        );
+        assert!(metrics.true_positives + metrics.false_positives + metrics.true_negatives + metrics.false_negatives > 0);
     }
 
     #[test]
     fn test_workload_classification() {
-        let config = MlThresholdConfig::default();
-        let ml = AdaptiveThresholdMl::new(config);
+        let ml = AdaptiveThresholdMl::new(MlThresholdConfig::default());
 
         // Low CV, high autocorrelation -> ComputeBound
-        assert_eq!(
-            ml.classify_workload(&features_with(5.0, 0.8)),
-            WorkloadClass::ComputeBound
-        );
-
+        assert_eq!(ml.classify_workload(&features(5.0, 0.8)), WorkloadClass::ComputeBound);
         // High CV, low autocorrelation -> MemoryBound
-        assert_eq!(
-            ml.classify_workload(&features_with(25.0, 0.1)),
-            WorkloadClass::MemoryBound
-        );
+        assert_eq!(ml.classify_workload(&features(25.0, 0.1)), WorkloadClass::MemoryBound);
     }
 
     #[test]
     fn test_drift_detection() {
-        let config = MlThresholdConfig::default();
-        let mut ml = AdaptiveThresholdMl::new(config);
+        let mut ml = AdaptiveThresholdMl::new(MlThresholdConfig::default());
 
-        let normal = linear_samples(100, 100.0, 0.01);
-        train_n(&mut ml, &normal, false, 20);
+        let normal = steady_samples(100);
+        for _ in 0..20 {
+            ml.train(&normal, false).unwrap();
+        }
 
-        // Similar samples (no drift)
-        let similar = linear_samples(100, 100.5, 0.01);
+        let similar: Vec<f64> = (0..100).map(|i| 100.5 + (i as f64 * 0.01)).collect();
         let drift = ml.check_drift(&similar).unwrap();
         assert!(drift.is_none() || drift.unwrap() < 3.0);
 
-        // Very different samples
-        let drifted = linear_samples(100, 200.0, 5.0);
+        let drifted: Vec<f64> = (0..100).map(|i| 200.0 + (i as f64 * 5.0)).collect();
         let _drift = ml.check_drift(&drifted).unwrap();
     }
 
     #[test]
     fn test_classification_metrics() {
         let mut metrics = ClassificationMetrics::default();
-
         metrics.true_positives = 80;
         metrics.false_positives = 10;
         metrics.true_negatives = 90;
@@ -173,8 +147,10 @@
         let config = MlThresholdConfig::default();
         let mut ml1 = AdaptiveThresholdMl::new(config.clone());
 
-        let samples = linear_samples(100, 100.0, 0.05);
-        train_n(&mut ml1, &samples, false, 50);
+        let samples = steady_samples(100);
+        for _ in 0..50 {
+            ml1.train(&samples, false).unwrap();
+        }
 
         let state = ml1.export_state();
         assert!(!state.is_empty());
@@ -186,21 +162,14 @@
 
     #[test]
     fn test_cold_start_conservative() {
-        let config = MlThresholdConfig {
+        let ml = AdaptiveThresholdMl::new(MlThresholdConfig {
             cold_start_multiplier: 1.5,
             ..Default::default()
-        };
-        let ml = AdaptiveThresholdMl::new(config);
+        });
 
         let threshold = ml.get_threshold(WorkloadClass::Matmul);
         let default = WorkloadClass::Matmul.default_cv_threshold();
-
-        assert!(
-            threshold > default,
-            "Cold start threshold {} should be > default {}",
-            threshold,
-            default
-        );
+        assert!(threshold > default, "Cold start threshold {threshold} should be > default {default}");
     }
 
     #[test]
@@ -209,10 +178,7 @@
         assert!(err.to_string().contains("5"));
         assert!(err.to_string().contains("10"));
 
-        let err = MlThresholdError::DriftDetected {
-            metric: "latency".to_string(),
-            drift_score: 4.5,
-        };
+        let err = MlThresholdError::DriftDetected { metric: "latency".to_string(), drift_score: 4.5 };
         assert!(err.to_string().contains("latency"));
         assert!(err.to_string().contains("4.5"));
     }
@@ -220,46 +186,26 @@
     // FKR-050: ML thresholds reduce false positives
     #[test]
     fn test_fkr_050_precision_improvement() {
-        let config = MlThresholdConfig {
-            min_training_samples: 10,
-            min_confidence: 0.3,
-            ..Default::default()
-        };
-        let mut ml = AdaptiveThresholdMl::new(config);
+        let mut ml = ml_with(10, 0.3);
 
-        // Phase 1: Train with labeled data
-        let ffn_normal = sinusoidal_samples(100, 100.0, 0.2, 18.0);
-        train_n(&mut ml, &ffn_normal, false, 50);
-
-        let matmul_normal = sinusoidal_samples(100, 100.0, 0.1, 8.0);
-        train_n(&mut ml, &matmul_normal, false, 50);
-
-        // Phase 2: Test that learned thresholds differ by workload
-        let ffn_threshold = ml
-            .thresholds
-            .get(&WorkloadClass::Ffn)
-            .map(|t| t.cv_threshold);
-        let matmul_threshold = ml
-            .thresholds
-            .get(&WorkloadClass::Matmul)
-            .map(|t| t.cv_threshold);
-
-        if let (Some(ffn_t), Some(matmul_t)) = (ffn_threshold, matmul_threshold) {
-            assert!(
-                ffn_t != matmul_t,
-                "Workload-specific thresholds should differ: FFN={}, Matmul={}",
-                ffn_t,
-                matmul_t
-            );
+        // FFN workload: naturally high CV (~18%)
+        for _ in 0..50 {
+            ml.train(&sine_samples(100.0, 18.0, 100, 0.2), false).unwrap();
         }
 
-        // Phase 3: Verify false positive rate is low after training
-        let metrics = ml.get_metrics();
-        let fpr = metrics.false_positive_rate();
+        // Matmul workload: naturally low CV (~8%)
+        for _ in 0..50 {
+            ml.train(&sine_samples(100.0, 8.0, 100, 0.1), false).unwrap();
+        }
 
-        assert!(
-            fpr < 0.20,
-            "False positive rate {} should be < 20% with learned thresholds",
-            fpr
-        );
+        // Verify workload-specific thresholds differ
+        let ffn_t = ml.thresholds.get(&WorkloadClass::Ffn).map(|t| t.cv_threshold);
+        let matmul_t = ml.thresholds.get(&WorkloadClass::Matmul).map(|t| t.cv_threshold);
+
+        if let (Some(ft), Some(mt)) = (ffn_t, matmul_t) {
+            assert!(ft != mt, "Workload thresholds should differ: FFN={ft}, Matmul={mt}");
+        }
+
+        let fpr = ml.get_metrics().false_positive_rate();
+        assert!(fpr < 0.20, "False positive rate {fpr} should be < 20%");
     }
