@@ -6,16 +6,15 @@ pub(crate) fn calculate_jitter(samples: &[f64]) -> f64 {
         return 0.0;
     }
 
-    // Calculate differences between consecutive samples
     let diffs: Vec<f64> = samples.windows(2).map(|w| (w[1] - w[0]).abs()).collect();
 
     if diffs.is_empty() {
         return 0.0;
     }
 
-    // Jitter is the standard deviation of the differences
     let mean_diff = diffs.iter().sum::<f64>() / diffs.len() as f64;
-    let variance = diffs.iter().map(|d| (d - mean_diff).powi(2)).sum::<f64>() / diffs.len() as f64;
+    let variance =
+        diffs.iter().map(|d| (d - mean_diff).powi(2)).sum::<f64>() / diffs.len() as f64;
 
     variance.sqrt()
 }
@@ -23,12 +22,11 @@ pub(crate) fn calculate_jitter(samples: &[f64]) -> f64 {
 /// Calculate skewness and kurtosis
 pub(crate) fn calculate_moments(samples: &[f64], mean: f64, std_dev: f64) -> (f64, f64) {
     if samples.len() < 4 || std_dev == 0.0 {
-        return (0.0, 3.0); // Return normal distribution values
+        return (0.0, 3.0);
     }
 
     let n = samples.len() as f64;
 
-    // Calculate third and fourth moments
     let mut m3 = 0.0;
     let mut m4 = 0.0;
 
@@ -38,13 +36,10 @@ pub(crate) fn calculate_moments(samples: &[f64], mean: f64, std_dev: f64) -> (f6
         m4 += z.powi(4);
     }
 
-    // Sample skewness (Fisher's definition)
     let skewness = (n / ((n - 1.0) * (n - 2.0))) * m3;
 
-    // Sample excess kurtosis (Fisher's definition)
     let kurtosis = ((n * (n + 1.0)) / ((n - 1.0) * (n - 2.0) * (n - 3.0))) * m4
         - (3.0 * (n - 1.0).powi(2)) / ((n - 2.0) * (n - 3.0));
 
-    // Return kurtosis + 3 (excess kurtosis + 3 = kurtosis)
     (skewness, kurtosis + 3.0)
 }
