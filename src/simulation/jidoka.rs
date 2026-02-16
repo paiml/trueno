@@ -403,6 +403,114 @@ mod tests {
         assert!(display2.contains("divergence"));
     }
 
+    // ================================================================
+    // Coverage tests for JidokaError Display — missing variants
+    // ================================================================
+
+    #[test]
+    fn test_jidoka_error_display_inf_detected() {
+        let err = JidokaError::InfDetected {
+            context: "matmul_output".to_string(),
+            indices: vec![1, 3],
+        };
+        let display = format!("{err}");
+        assert!(
+            display.contains("Infinity"),
+            "Display should contain 'Infinity', got: {display}"
+        );
+        assert!(
+            display.contains("matmul_output"),
+            "Display should contain context, got: {display}"
+        );
+        assert!(
+            display.contains("[1, 3]"),
+            "Display should contain indices, got: {display}"
+        );
+    }
+
+    #[test]
+    fn test_jidoka_error_display_performance_regression() {
+        let err = JidokaError::PerformanceRegression {
+            context: "avx2_dot_product".to_string(),
+            regression_pct: 15.75,
+            threshold_pct: 5.0,
+        };
+        let display = format!("{err}");
+        assert!(
+            display.contains("Performance regression"),
+            "Display should contain 'Performance regression', got: {display}"
+        );
+        assert!(
+            display.contains("avx2_dot_product"),
+            "Display should contain context, got: {display}"
+        );
+        assert!(
+            display.contains("15.75"),
+            "Display should contain regression_pct, got: {display}"
+        );
+        assert!(
+            display.contains("5.00"),
+            "Display should contain threshold_pct, got: {display}"
+        );
+    }
+
+    #[test]
+    fn test_jidoka_error_display_determinism_failure() {
+        let err = JidokaError::DeterminismFailure {
+            context: "sse2_vs_avx2".to_string(),
+            first_diff_index: 42,
+        };
+        let display = format!("{err}");
+        assert!(
+            display.contains("Determinism failure"),
+            "Display should contain 'Determinism failure', got: {display}"
+        );
+        assert!(
+            display.contains("sse2_vs_avx2"),
+            "Display should contain context, got: {display}"
+        );
+        assert!(
+            display.contains("42"),
+            "Display should contain first_diff_index, got: {display}"
+        );
+    }
+
+    #[test]
+    fn test_jidoka_error_is_std_error() {
+        // Verify the std::error::Error impl works for all variants
+        let errors: Vec<Box<dyn std::error::Error>> = vec![
+            Box::new(JidokaError::NanDetected {
+                context: "a".to_string(),
+                indices: vec![],
+            }),
+            Box::new(JidokaError::InfDetected {
+                context: "b".to_string(),
+                indices: vec![],
+            }),
+            Box::new(JidokaError::BackendDivergence {
+                context: "c".to_string(),
+                max_diff: 0.0,
+                tolerance: 0.0,
+            }),
+            Box::new(JidokaError::PerformanceRegression {
+                context: "d".to_string(),
+                regression_pct: 0.0,
+                threshold_pct: 0.0,
+            }),
+            Box::new(JidokaError::DeterminismFailure {
+                context: "e".to_string(),
+                first_diff_index: 0,
+            }),
+        ];
+        // All variants should produce non-empty Display output via Error trait
+        for err in &errors {
+            assert!(
+                !err.to_string().is_empty(),
+                "Error::to_string() should produce non-empty output"
+            );
+        }
+    }
+
     #[test]
     fn test_empty_output_checks() {
         let guard = JidokaGuard::nan_guard("empty_test");

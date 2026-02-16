@@ -155,4 +155,96 @@ mod tests {
         assert_eq!(session.peak_memory_bytes, 2000);
         assert!((session.avg_hit_rate - 0.85).abs() < 0.01);
     }
+
+    // ================================================================
+    // Coverage tests for has_high_eviction_rate (0% → 100%)
+    // ================================================================
+
+    #[test]
+    fn test_high_eviction_rate_empty_session() {
+        let session = KvCacheSessionTrace::default();
+        // Empty steps → early return false
+        assert!(!session.has_high_eviction_rate());
+    }
+
+    #[test]
+    fn test_high_eviction_rate_no_evictions() {
+        let mut session = KvCacheSessionTrace::default();
+        for i in 0..10 {
+            session.add_step(KvCacheStateTrace {
+                step: i,
+                evictions_this_step: 0,
+                ..Default::default()
+            });
+        }
+        // 0/10 = 0% eviction rate → false
+        assert!(!session.has_high_eviction_rate());
+    }
+
+    #[test]
+    fn test_high_eviction_rate_at_boundary() {
+        // Exactly 10% eviction rate: 1 out of 10 steps has evictions.
+        // 1/10 = 0.1, but the check is strictly > 0.1, so this is false.
+        let mut session = KvCacheSessionTrace::default();
+        for i in 0..10 {
+            session.add_step(KvCacheStateTrace {
+                step: i,
+                evictions_this_step: if i == 0 { 1 } else { 0 },
+                ..Default::default()
+            });
+        }
+        assert!(!session.has_high_eviction_rate());
+    }
+
+    #[test]
+    fn test_high_eviction_rate_just_above_boundary() {
+        // 2 out of 10 steps have evictions = 20% > 10% → true
+        let mut session = KvCacheSessionTrace::default();
+        for i in 0..10 {
+            session.add_step(KvCacheStateTrace {
+                step: i,
+                evictions_this_step: if i < 2 { 1 } else { 0 },
+                ..Default::default()
+            });
+        }
+        assert!(session.has_high_eviction_rate());
+    }
+
+    #[test]
+    fn test_high_eviction_rate_all_evictions() {
+        // Every step has evictions → 100% > 10% → true
+        let mut session = KvCacheSessionTrace::default();
+        for i in 0..5 {
+            session.add_step(KvCacheStateTrace {
+                step: i,
+                evictions_this_step: 3,
+                ..Default::default()
+            });
+        }
+        assert!(session.has_high_eviction_rate());
+    }
+
+    #[test]
+    fn test_high_eviction_rate_single_step_with_eviction() {
+        // 1 step with evictions out of 1 total = 100% → true
+        let mut session = KvCacheSessionTrace::default();
+        session.add_step(KvCacheStateTrace {
+            step: 0,
+            evictions_this_step: 1,
+            ..Default::default()
+        });
+        assert!(session.has_high_eviction_rate());
+    }
+
+    #[test]
+    fn test_high_eviction_rate_single_step_without_eviction() {
+        // 1 step with 0 evictions out of 1 total = 0% → false
+        let mut session = KvCacheSessionTrace::default();
+        session.add_step(KvCacheStateTrace {
+            step: 0,
+            evictions_this_step: 0,
+            ..Default::default()
+        });
+        assert!(!session.has_high_eviction_rate());
+    }
 }
