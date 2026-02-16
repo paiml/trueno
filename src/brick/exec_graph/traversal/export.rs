@@ -137,6 +137,88 @@ fn build_ascii_tree(
     }
 }
 
+/// Map an `ExecutionNode` to its DOT label text and style attribute string.
+fn node_to_dot_label(node: &ExecutionNode) -> (String, &'static str) {
+    match node {
+        ExecutionNode::Layer { index } => (
+            format!("Layer {}", index),
+            "style=filled,fillcolor=lightblue",
+        ),
+        ExecutionNode::Brick { id, timing_ns, .. } => (
+            format!("{}\\n{:.1}µs", id.name(), *timing_ns as f64 / 1000.0),
+            "style=filled,fillcolor=lightgreen",
+        ),
+        ExecutionNode::Kernel {
+            name, grid, block, ..
+        } => (
+            format!("{}\\n<<<{},{},{}>>>", name, grid.0, block.0, block.1),
+            "style=filled,fillcolor=lightyellow",
+        ),
+        ExecutionNode::Function { name, file, line } => {
+            let loc = match (file, line) {
+                (Some(f), Some(l)) => format!("\\n{}:{}", f, l),
+                (None, _) | (_, None) => String::new(),
+            };
+            (
+                format!("{}{}", name, loc),
+                "style=filled,fillcolor=lightgray",
+            )
+        }
+        ExecutionNode::Transfer {
+            src,
+            dst,
+            bytes,
+            direction,
+            ..
+        } => {
+            let dir = match direction {
+                TransferDirection::H2D => "H2D",
+                TransferDirection::D2H => "D2H",
+                TransferDirection::D2D => "D2D",
+            };
+            (
+                format!("{}\\n{}->{}\\n{:.1}MB", dir, src, dst, *bytes as f64 / 1e6),
+                "style=filled,fillcolor=lightsalmon",
+            )
+        }
+        ExecutionNode::AsyncTask {
+            name,
+            poll_count,
+            yield_count,
+            total_poll_ns,
+        } => {
+            let efficiency = if *poll_count > 0 {
+                100.0 / *poll_count as f64
+            } else {
+                0.0
+            };
+            (
+                format!(
+                    "{}\\npolls:{} yields:{}\\n{:.1}µs ({:.0}%)",
+                    name,
+                    poll_count,
+                    yield_count,
+                    *total_poll_ns as f64 / 1000.0,
+                    efficiency
+                ),
+                "style=filled,fillcolor=lightcyan",
+            )
+        }
+    }
+}
+
+/// Map an `EdgeType` to its DOT style attribute string.
+fn edge_to_dot_style(edge_type: &EdgeType) -> &'static str {
+    match edge_type {
+        EdgeType::Calls => "style=solid",
+        EdgeType::Contains => "style=dashed",
+        EdgeType::Launches => "style=bold,color=red",
+        EdgeType::Sequence => "style=dotted",
+        EdgeType::DependsOn => "style=solid,color=blue",
+        EdgeType::Transfer { .. } => "style=bold,color=orange",
+    }
+}
+
 impl ExecutionGraph {
     /// Export to DOT format for Graphviz visualization.
     pub fn to_dot(&self) -> String {
@@ -151,72 +233,7 @@ impl ExecutionGraph {
 
         // Add nodes with styling based on type
         for (i, node) in self.nodes.iter().enumerate() {
-            let (label, style) = match node {
-                ExecutionNode::Layer { index } => (
-                    format!("Layer {}", index),
-                    "style=filled,fillcolor=lightblue",
-                ),
-                ExecutionNode::Brick { id, timing_ns, .. } => (
-                    format!("{}\\n{:.1}µs", id.name(), *timing_ns as f64 / 1000.0),
-                    "style=filled,fillcolor=lightgreen",
-                ),
-                ExecutionNode::Kernel {
-                    name, grid, block, ..
-                } => (
-                    format!("{}\\n<<<{},{},{}>>>", name, grid.0, block.0, block.1),
-                    "style=filled,fillcolor=lightyellow",
-                ),
-                ExecutionNode::Function { name, file, line } => {
-                    let loc = match (file, line) {
-                        (Some(f), Some(l)) => format!("\\n{}:{}", f, l),
-                        (None, _) | (_, None) => String::new(),
-                    };
-                    (
-                        format!("{}{}", name, loc),
-                        "style=filled,fillcolor=lightgray",
-                    )
-                }
-                ExecutionNode::Transfer {
-                    src,
-                    dst,
-                    bytes,
-                    direction,
-                    ..
-                } => {
-                    let dir = match direction {
-                        TransferDirection::H2D => "H2D",
-                        TransferDirection::D2H => "D2H",
-                        TransferDirection::D2D => "D2D",
-                    };
-                    (
-                        format!("{}\\n{}->{}\\n{:.1}MB", dir, src, dst, *bytes as f64 / 1e6),
-                        "style=filled,fillcolor=lightsalmon",
-                    )
-                }
-                ExecutionNode::AsyncTask {
-                    name,
-                    poll_count,
-                    yield_count,
-                    total_poll_ns,
-                } => {
-                    let efficiency = if *poll_count > 0 {
-                        100.0 / *poll_count as f64
-                    } else {
-                        0.0
-                    };
-                    (
-                        format!(
-                            "{}\\npolls:{} yields:{}\\n{:.1}µs ({:.0}%)",
-                            name,
-                            poll_count,
-                            yield_count,
-                            *total_poll_ns as f64 / 1000.0,
-                            efficiency
-                        ),
-                        "style=filled,fillcolor=lightcyan",
-                    )
-                }
-            };
+            let (label, style) = node_to_dot_label(node);
             dot.push_str(&format!("  n{} [label=\"{}\",{}];\n", i, label, style));
         }
 
@@ -224,14 +241,7 @@ impl ExecutionGraph {
 
         // Add edges with styling based on type
         for edge in &self.edges {
-            let style = match edge.edge_type {
-                EdgeType::Calls => "style=solid",
-                EdgeType::Contains => "style=dashed",
-                EdgeType::Launches => "style=bold,color=red",
-                EdgeType::Sequence => "style=dotted",
-                EdgeType::DependsOn => "style=solid,color=blue",
-                EdgeType::Transfer { .. } => "style=bold,color=orange",
-            };
+            let style = edge_to_dot_style(&edge.edge_type);
             dot.push_str(&format!(
                 "  n{} -> n{} [{}];\n",
                 edge.src.0, edge.dst.0, style

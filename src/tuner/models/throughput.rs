@@ -122,7 +122,7 @@ impl ThroughputRegressor {
             }
 
             // Update weights
-            let n = data.len() as f32;
+            let n = data.len().max(1) as f32;
             for (i, g) in gradients.iter().enumerate() {
                 self.weights[i] -= learning_rate * g / n;
             }
@@ -134,7 +134,7 @@ impl ThroughputRegressor {
             let predicted = self.predict_raw(&features.to_vector());
             total_ape += ((predicted - target) / target.max(1.0)).abs();
         }
-        self.mape = total_ape / data.len() as f32;
+        self.mape = total_ape / data.len().max(1) as f32;
         self.sample_count = data.len();
 
         Ok(())
@@ -179,7 +179,7 @@ impl ThroughputRegressor {
             let pred = predictions.as_slice()[i];
             total_ape += ((pred - target) / target.max(1.0)).abs();
         }
-        self.mape = total_ape / data.len() as f32;
+        self.mape = total_ape / data.len().max(1) as f32;
         self.sample_count = data.len();
 
         Ok(())

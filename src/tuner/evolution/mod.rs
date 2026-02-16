@@ -137,7 +137,7 @@ impl BrickTuner {
             let predicted = learner.predict(&features.to_vector());
             total_error += ((predicted - target) / target).abs();
         }
-        let local_mape = total_error / samples.len() as f32;
+        let local_mape = total_error / samples.len().max(1) as f32;
         self.throughput.mape = local_mape;
 
         let improvement_pct = ((pretrained_mape - local_mape) / pretrained_mape * 100.0).max(0.0);
