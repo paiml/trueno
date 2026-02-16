@@ -88,7 +88,7 @@ pub(crate) fn step_check_runnable(
         if !has_main_function(example)? {
             errors.push(format!(
                 "{}: missing main() function",
-                example.file_name().unwrap().to_str().unwrap()
+                example.file_name().unwrap_or_default().to_str().unwrap_or("unknown")
             ));
             continue;
         }

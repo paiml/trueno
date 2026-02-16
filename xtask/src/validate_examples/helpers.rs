@@ -116,13 +116,13 @@ pub(crate) fn is_markdown_file(path: &Path) -> bool {
 
 /// Validate snake_case naming
 pub(crate) fn validate_snake_case(name: &str) -> bool {
-    let regex = Regex::new(r"^[a-z][a-z0-9_]*$").unwrap();
+    let regex = Regex::new(r"^[a-z][a-z0-9_]*$").expect("invariant: regex pattern is valid");
     regex.is_match(name)
 }
 
 /// Check if content contains a main function (pure function on string content)
 pub(crate) fn contains_main_function(content: &str) -> bool {
-    let main_regex = Regex::new(r"fn\s+main\s*\(").unwrap();
+    let main_regex = Regex::new(r"fn\s+main\s*\(").expect("invariant: regex pattern is valid");
     main_regex.is_match(content)
 }
 
