@@ -159,13 +159,6 @@ fn act_gelu(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> {
 fn act_swish(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> {
     v.swish()
 }
-fn act_softmax(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> {
-    v.softmax()
-}
-fn act_log_softmax(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> {
-    v.log_softmax()
-}
-
 // ========== Softmax ==========
 
 #[test]
