@@ -2,21 +2,20 @@
 
 use std::collections::VecDeque;
 
-use super::regression;
-use super::types::{ThermalPrediction, ThermalSample};
+use super::types::ThermalSample;
 use super::{DEFAULT_THROTTLE_THRESHOLD_C, MIN_SAMPLES_FOR_ANALYSIS};
 
 /// Thermal trend analyzer with sliding window
 #[derive(Debug)]
 pub struct ThermalAnalyzer {
     /// Sample buffer (sliding window)
-    pub(super) samples: VecDeque<ThermalSample>,
+    samples: VecDeque<ThermalSample>,
     /// Maximum buffer size
     max_samples: usize,
     /// Throttle threshold temperature
-    pub(super) throttle_threshold_c: f64,
+    throttle_threshold_c: f64,
     /// Default cooling rate (degrees C/sec) for recommendations
-    pub(super) default_cooling_rate: f64,
+    default_cooling_rate: f64,
 }
 
 impl ThermalAnalyzer {
@@ -107,37 +106,21 @@ impl ThermalAnalyzer {
     }
 
     /// Collect (timestamp, temperature) pairs for regression.
-    fn time_temp_pairs(&self) -> Vec<(f64, f64)> {
+    pub(crate) fn time_temp_pairs(&self) -> Vec<(f64, f64)> {
         self.samples
             .iter()
             .map(|s| (s.timestamp_sec, s.temperature_c))
             .collect()
     }
 
-    /// Calculate trend slope using linear regression
-    pub fn calculate_trend(&self) -> Option<f64> {
-        if !self.has_sufficient_samples() {
-            return None;
-        }
-        let (slope, _, _) = regression::ols_fit(&self.time_temp_pairs())?;
-        Some(slope)
+    /// Get throttle threshold
+    pub(crate) fn throttle_threshold_c(&self) -> f64 {
+        self.throttle_threshold_c
     }
 
-    /// Predict temperature at future time
-    pub fn predict_trend(&self, horizon_sec: f64) -> Option<ThermalPrediction> {
-        if !self.has_sufficient_samples() {
-            return None;
-        }
-        let (trend_slope, _, confidence) = regression::ols_fit(&self.time_temp_pairs())?;
-        let current_temp = self.current_temperature()?;
-
-        Some(ThermalPrediction {
-            predicted_temp_c: current_temp + trend_slope * horizon_sec,
-            horizon_sec,
-            trend_slope,
-            confidence,
-            sample_count: self.samples.len(),
-        })
+    /// Get default cooling rate
+    pub(crate) fn default_cooling_rate(&self) -> f64 {
+        self.default_cooling_rate
     }
 
     /// Clear all samples
