@@ -145,31 +145,32 @@ class BenchmarkComparator:
 
         print(f"✅ Compared {len(self.comparison)} operations")
 
+    @staticmethod
+    def _classify_entry(data: Dict) -> Tuple[bool, bool, bool, bool]:
+        """Classify a single comparison entry.
+
+        Returns (has_numpy, within_20pct, faster_numpy, faster_pytorch).
+        """
+        numpy_ratio = data.get("trueno_vs_numpy")
+        pytorch_ratio = data.get("trueno_vs_pytorch")
+        has_numpy = numpy_ratio is not None
+        within = has_numpy and 0.8 <= numpy_ratio <= 1.2
+        faster_np = has_numpy and numpy_ratio < 1.0
+        faster_pt = pytorch_ratio is not None and pytorch_ratio < 1.0
+        return has_numpy, within, faster_np, faster_pt
+
     def _compute_summary_stats(self) -> Dict:
         """Compute aggregate comparison statistics across all operations and sizes."""
-        within_20_percent = 0
-        faster_than_numpy = 0
-        faster_than_pytorch = 0
-        total_comparisons = 0
-
-        for sizes in self.comparison.values():
-            for data in sizes.values():
-                if data["trueno_vs_numpy"] is not None:
-                    total_comparisons += 1
-                    ratio = data["trueno_vs_numpy"]
-                    if 0.8 <= ratio <= 1.2:
-                        within_20_percent += 1
-                    if ratio < 1.0:
-                        faster_than_numpy += 1
-                if data["trueno_vs_pytorch"] is not None:
-                    if data["trueno_vs_pytorch"] < 1.0:
-                        faster_than_pytorch += 1
-
+        entries = [
+            self._classify_entry(data)
+            for sizes in self.comparison.values()
+            for data in sizes.values()
+        ]
         return {
-            "within_20_percent": within_20_percent,
-            "faster_than_numpy": faster_than_numpy,
-            "faster_than_pytorch": faster_than_pytorch,
-            "total_comparisons": total_comparisons,
+            "total_comparisons": sum(has for has, _, _, _ in entries),
+            "within_20_percent": sum(w for _, w, _, _ in entries),
+            "faster_than_numpy": sum(fn for _, _, fn, _ in entries),
+            "faster_than_pytorch": sum(fp for _, _, _, fp in entries),
         }
 
     @staticmethod
