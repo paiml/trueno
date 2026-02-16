@@ -8,59 +8,51 @@ use super::types::{
     HostState, RemoteAgentConfig, RemoteError, RemoteResult,
 };
 
+/// Extract three metric vectors (throughput, latency_p50, latency_p99) from benchmarks.
+fn extract_metric_triple(benchmarks: &[HostBenchmark]) -> [Vec<f64>; 3] {
+    let extractors: [fn(&HostBenchmark) -> f64; 3] = [
+        |b| b.throughput_ops,
+        |b| b.latency_p50_us,
+        |b| b.latency_p99_us,
+    ];
+    extractors.map(|f| benchmarks.iter().map(f).collect())
+}
+
 /// Compute aggregated metrics (throughput, latency_p50, latency_p99) from benchmark results.
-///
-/// Returns `(throughput, latency_p50, latency_p99)` aggregated according to the strategy.
 fn compute_metrics(benchmarks: &[HostBenchmark], strategy: AggregationStrategy) -> (f64, f64, f64) {
-    let throughputs: Vec<f64> = benchmarks.iter().map(|b| b.throughput_ops).collect();
-    let latencies_p50: Vec<f64> = benchmarks.iter().map(|b| b.latency_p50_us).collect();
-    let latencies_p99: Vec<f64> = benchmarks.iter().map(|b| b.latency_p99_us).collect();
+    let [throughputs, latencies_p50, latencies_p99] = extract_metric_triple(benchmarks);
+
+    let apply = |vals: &[f64], init: f64, op: fn(f64, f64) -> f64| -> f64 {
+        vals.iter().copied().fold(init, op)
+    };
 
     match strategy {
         AggregationStrategy::GeometricMean => {
-            // Geometric mean for throughput
             let log_sum: f64 = throughputs.iter().map(|v| v.ln()).sum();
             let throughput = (log_sum / throughputs.len() as f64).exp();
-            // Arithmetic mean for latency p50
             let latency_p50 = latencies_p50.iter().sum::<f64>() / latencies_p50.len() as f64;
-            // Max for latency p99 (worst case)
-            let latency_p99 = latencies_p99.iter().copied().fold(0.0_f64, f64::max);
+            let latency_p99 = apply(&latencies_p99, 0.0, f64::max);
             (throughput, latency_p50, latency_p99)
         }
         AggregationStrategy::Median => {
-            (
-                sorted_median(&throughputs),
-                sorted_median(&latencies_p50),
-                sorted_median(&latencies_p99),
-            )
+            let median = |v: &[f64]| {
+                let mut s: Vec<f64> = v.to_vec();
+                s.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                s[s.len() / 2]
+            };
+            (median(&throughputs), median(&latencies_p50), median(&latencies_p99))
         }
-        AggregationStrategy::Minimum => {
-            (
-                fold_metric(&throughputs, f64::INFINITY, f64::min),
-                fold_metric(&latencies_p50, f64::INFINITY, f64::min),
-                fold_metric(&latencies_p99, f64::INFINITY, f64::min),
-            )
-        }
-        AggregationStrategy::Maximum => {
-            (
-                fold_metric(&throughputs, 0.0, f64::max),
-                fold_metric(&latencies_p50, 0.0, f64::max),
-                fold_metric(&latencies_p99, 0.0, f64::max),
-            )
-        }
+        AggregationStrategy::Minimum => (
+            apply(&throughputs, f64::INFINITY, f64::min),
+            apply(&latencies_p50, f64::INFINITY, f64::min),
+            apply(&latencies_p99, f64::INFINITY, f64::min),
+        ),
+        AggregationStrategy::Maximum => (
+            apply(&throughputs, 0.0, f64::max),
+            apply(&latencies_p50, 0.0, f64::max),
+            apply(&latencies_p99, 0.0, f64::max),
+        ),
     }
-}
-
-/// Compute median of a slice by sorting a copy.
-fn sorted_median(values: &[f64]) -> f64 {
-    let mut sorted: Vec<f64> = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    sorted[sorted.len() / 2]
-}
-
-/// Fold a slice of f64 values with an initial accumulator and binary operation.
-fn fold_metric(values: &[f64], init: f64, op: fn(f64, f64) -> f64) -> f64 {
-    values.iter().copied().fold(init, op)
 }
 
 /// Remote agent for distributed benchmark collection
@@ -298,26 +290,24 @@ impl RemoteAgent {
         })
     }
 
-    /// Extract string value from simple JSON
-    pub(crate) fn extract_json_string(&self, json: &str, key: &str) -> Option<String> {
+    /// Find the raw value substring after a JSON key (shared by string/number extraction).
+    fn json_value_after_key<'a>(json: &'a str, key: &str) -> Option<&'a str> {
         let pattern = format!(r#""{}":"#, key);
         let start = json.find(&pattern)? + pattern.len();
-        let rest = &json[start..];
+        Some(&json[start..])
+    }
 
-        if let Some(unquoted) = rest.strip_prefix('"') {
-            let end = unquoted.find('"')?;
-            Some(unquoted[..end].to_string())
-        } else {
-            None
-        }
+    /// Extract string value from simple JSON
+    pub(crate) fn extract_json_string(&self, json: &str, key: &str) -> Option<String> {
+        let rest = Self::json_value_after_key(json, key)?;
+        let unquoted = rest.strip_prefix('"')?;
+        let end = unquoted.find('"')?;
+        Some(unquoted[..end].to_string())
     }
 
     /// Extract number value from simple JSON
     pub(crate) fn extract_json_number(&self, json: &str, key: &str) -> Option<f64> {
-        let pattern = format!(r#""{}":"#, key);
-        let start = json.find(&pattern)? + pattern.len();
-        let rest = &json[start..];
-
+        let rest = Self::json_value_after_key(json, key)?;
         let end = rest.find([',', '}']).unwrap_or(rest.len());
         rest[..end].trim().parse().ok()
     }
@@ -362,25 +352,18 @@ impl RemoteAgent {
         &self.config
     }
 
+    /// Filter hosts by a predicate on their config.
+    fn filter_hosts(&self, pred: impl Fn(&HostConfig) -> bool) -> Vec<&HostState> {
+        self.hosts.values().filter(|h| pred(&h.config)).collect()
+    }
+
     /// Filter hosts by label
     pub fn hosts_with_label(&self, key: &str, value: &str) -> Vec<&HostState> {
-        self.hosts
-            .values()
-            .filter(|h| {
-                h.config
-                    .labels
-                    .get(key)
-                    .map(|v| v == value)
-                    .unwrap_or(false)
-            })
-            .collect()
+        self.filter_hosts(|c| c.labels.get(key).map(|v| v == value).unwrap_or(false))
     }
 
     /// Filter hosts by architecture
     pub fn hosts_with_arch(&self, arch: &str) -> Vec<&HostState> {
-        self.hosts
-            .values()
-            .filter(|h| h.config.architecture.as_deref() == Some(arch))
-            .collect()
+        self.filter_hosts(|c| c.architecture.as_deref() == Some(arch))
     }
 }
