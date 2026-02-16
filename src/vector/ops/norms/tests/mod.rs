@@ -1,20 +1,13 @@
-use super::*;
-use crate::Backend;
+use crate::{Backend, Result, Vector};
 
-mod edge_cases;
 mod backend;
+mod edge_cases;
 
 type NormMethod = fn(&Vector<f32>) -> Result<f32>;
 
 fn norm_l1(v: &Vector<f32>) -> Result<f32> { v.norm_l1() }
 fn norm_l2(v: &Vector<f32>) -> Result<f32> { v.norm_l2() }
 fn norm_linf(v: &Vector<f32>) -> Result<f32> { v.norm_linf() }
-
-fn assert_norm(norm_fn: NormMethod, data: &[f32], expected: f32, tol: f32) {
-    let v = Vector::from_slice(data);
-    let result = norm_fn(&v).unwrap();
-    assert!((result - expected).abs() <= tol, "expected {expected} got {result}");
-}
 
 fn assert_norm_with_backend(
     norm_fn: NormMethod, data: &[f32], expected: f32, tol: f32, backend: Backend,
@@ -53,15 +46,6 @@ fn assert_norm_non_aligned(
         let expected = make_expected(&data);
         assert!((result - expected).abs() < tol, "size {size}: {result} vs {expected}");
     }
-}
-
-fn assert_norm_ordering(data: &[f32]) {
-    let v = Vector::from_slice(data);
-    let l1 = v.norm_l1().unwrap();
-    let l2 = v.norm_l2().unwrap();
-    let linf = v.norm_linf().unwrap();
-    assert!(linf <= l2 + 1e-4, "L-inf ({linf}) should be <= L2 ({l2})");
-    assert!(l2 <= l1 + 1e-4, "L2 ({l2}) should be <= L1 ({l1})");
 }
 
 fn norm_specs() -> [(NormMethod, &'static str, &'static [f32], f32); 3] {

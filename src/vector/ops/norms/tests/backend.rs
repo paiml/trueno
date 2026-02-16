@@ -1,5 +1,4 @@
 use super::*;
-use crate::Backend;
 
 #[test]
 #[cfg(target_arch = "x86_64")]
