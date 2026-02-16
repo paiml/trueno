@@ -3,15 +3,6 @@
 //! Enhanced latency distribution analysis with tail latency detection,
 //! jitter calculation, and histogram statistics for identifying performance anomalies.
 //!
-//! # Motivation
-//!
-//! While PMAT-024 provides confidence intervals, detailed latency distribution
-//! analysis is needed for:
-//! - Detecting bimodal distributions indicating cache misses
-//! - Identifying P99.9 tail latency spikes
-//! - Calculating jitter (latency variance) for stability assessment
-//! - Histogram bucket analysis for distribution shape
-//!
 //! # Components
 //!
 //! | Component | Formula | Use Case |
@@ -21,7 +12,15 @@
 //! | Bimodality Coefficient | (skewness² + 1) / kurtosis | Distribution shape |
 //! | Histogram Entropy | -Σ(p × log(p)) | Distribution uniformity |
 
+mod classification;
+mod histogram;
+mod moments;
+
+pub use classification::{DistributionShape, TailSeverity};
+pub use histogram::{HistogramBucket, LatencyHistogram};
+
 use crate::statistics::percentile;
+use moments::{calculate_jitter, calculate_moments};
 
 /// Latency distribution analysis result
 #[derive(Debug, Clone)]
@@ -58,110 +57,6 @@ pub struct LatencyDistribution {
     pub kurtosis: f64,
     /// Outlier ratio (% beyond 3σ)
     pub outlier_ratio: f64,
-}
-
-/// Histogram bucket for latency distribution
-#[derive(Debug, Clone)]
-pub struct HistogramBucket {
-    /// Lower bound of bucket (inclusive)
-    pub lower: f64,
-    /// Upper bound of bucket (exclusive)
-    pub upper: f64,
-    /// Count of samples in bucket
-    pub count: usize,
-    /// Percentage of total samples
-    pub percentage: f64,
-}
-
-/// Latency histogram with statistical properties
-#[derive(Debug, Clone)]
-pub struct LatencyHistogram {
-    /// Histogram buckets
-    pub buckets: Vec<HistogramBucket>,
-    /// Total number of samples
-    pub total_samples: usize,
-    /// Shannon entropy (0-1 normalized)
-    pub entropy: f64,
-    /// Index of the mode bucket (most frequent)
-    pub mode_bucket: usize,
-    /// Number of buckets
-    pub bucket_count: usize,
-}
-
-/// Tail latency severity classification
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TailSeverity {
-    /// Excellent: P99/P50 < 2
-    Excellent,
-    /// Good: P99/P50 < 3
-    Good,
-    /// Warning: P99/P50 < 5
-    Warning,
-    /// Critical: P99/P50 >= 5
-    Critical,
-}
-
-impl TailSeverity {
-    /// Classify based on tail ratio
-    pub fn from_ratio(ratio: f64) -> Self {
-        if ratio < 2.0 {
-            TailSeverity::Excellent
-        } else if ratio < 3.0 {
-            TailSeverity::Good
-        } else if ratio < 5.0 {
-            TailSeverity::Warning
-        } else {
-            TailSeverity::Critical
-        }
-    }
-
-    /// Get human-readable name
-    pub fn name(&self) -> &'static str {
-        match self {
-            TailSeverity::Excellent => "excellent",
-            TailSeverity::Good => "good",
-            TailSeverity::Warning => "warning",
-            TailSeverity::Critical => "critical",
-        }
-    }
-}
-
-/// Distribution shape classification
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DistributionShape {
-    /// Unimodal (single peak)
-    Unimodal,
-    /// Bimodal (two peaks) - often indicates cache hit/miss
-    Bimodal,
-    /// Multimodal (multiple peaks)
-    Multimodal,
-    /// Uniform (flat)
-    Uniform,
-}
-
-impl DistributionShape {
-    /// Classify based on bimodality coefficient and entropy
-    pub fn classify(bimodality_coeff: f64, entropy: f64) -> Self {
-        if entropy > 0.95 {
-            DistributionShape::Uniform
-        } else if bimodality_coeff > 0.555 {
-            DistributionShape::Bimodal
-        } else if bimodality_coeff > 0.7 {
-            DistributionShape::Multimodal
-        } else {
-            DistributionShape::Unimodal
-        }
-    }
-
-    /// Get name
-    pub fn name(&self) -> &'static str {
-        match self {
-            DistributionShape::Unimodal => "unimodal",
-            DistributionShape::Bimodal => "bimodal",
-            DistributionShape::Multimodal => "multimodal",
-            DistributionShape::Uniform => "uniform",
-        }
-    }
 }
 
 impl LatencyDistribution {
@@ -202,8 +97,6 @@ impl LatencyDistribution {
         let (skewness, kurtosis) = calculate_moments(samples, mean, std_dev);
 
         // Bimodality coefficient: (skewness² + 1) / kurtosis
-        // For normal distribution: BC ≈ 0.333
-        // BC > 0.555 suggests bimodal distribution
         let bimodality_coefficient = if kurtosis > 0.0 {
             (skewness.powi(2) + 1.0) / kurtosis
         } else {
@@ -273,170 +166,6 @@ impl LatencyDistribution {
         )
     }
 }
-
-impl LatencyHistogram {
-    /// Build histogram from samples with specified bucket count
-    pub fn build(samples: &[f64], bucket_count: usize) -> Self {
-        if samples.is_empty() || bucket_count == 0 {
-            return Self {
-                buckets: Vec::new(),
-                total_samples: 0,
-                entropy: 0.0,
-                mode_bucket: 0,
-                bucket_count: 0,
-            };
-        }
-
-        let min = samples.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max = samples.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-
-        // Handle case where all values are identical
-        let range = max - min;
-        let bucket_width = if range > 0.0 {
-            range / bucket_count as f64
-        } else {
-            1.0
-        };
-
-        // Initialize buckets
-        let mut buckets: Vec<HistogramBucket> = (0..bucket_count)
-            .map(|i| {
-                let lower = min + i as f64 * bucket_width;
-                let upper = if i == bucket_count - 1 {
-                    max + f64::EPSILON // Include max in last bucket
-                } else {
-                    min + (i + 1) as f64 * bucket_width
-                };
-                HistogramBucket {
-                    lower,
-                    upper,
-                    count: 0,
-                    percentage: 0.0,
-                }
-            })
-            .collect();
-
-        // Count samples per bucket
-        for &sample in samples {
-            let bucket_idx = if range > 0.0 {
-                ((sample - min) / bucket_width).floor() as usize
-            } else {
-                0
-            };
-            let idx = bucket_idx.min(bucket_count - 1);
-            buckets[idx].count += 1;
-        }
-
-        // Calculate percentages
-        let total = samples.len();
-        for bucket in &mut buckets {
-            bucket.percentage = bucket.count as f64 / total as f64 * 100.0;
-        }
-
-        // Find mode bucket
-        let mode_bucket = buckets
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, b)| b.count)
-            .map(|(i, _)| i)
-            .unwrap_or(0);
-
-        // Calculate entropy
-        let entropy = calculate_entropy(&buckets, total);
-
-        Self {
-            buckets,
-            total_samples: total,
-            entropy,
-            mode_bucket,
-            bucket_count,
-        }
-    }
-
-    /// Get the mode (most frequent) bucket
-    pub fn mode(&self) -> Option<&HistogramBucket> {
-        self.buckets.get(self.mode_bucket)
-    }
-
-    /// Verify bucket counts sum to total
-    pub fn verify_counts(&self) -> bool {
-        let sum: usize = self.buckets.iter().map(|b| b.count).sum();
-        sum == self.total_samples
-    }
-}
-
-/// Calculate jitter (inter-packet delay variation)
-fn calculate_jitter(samples: &[f64]) -> f64 {
-    if samples.len() < 2 {
-        return 0.0;
-    }
-
-    // Calculate differences between consecutive samples
-    let diffs: Vec<f64> = samples.windows(2).map(|w| (w[1] - w[0]).abs()).collect();
-
-    if diffs.is_empty() {
-        return 0.0;
-    }
-
-    // Jitter is the standard deviation of the differences
-    let mean_diff = diffs.iter().sum::<f64>() / diffs.len() as f64;
-    let variance = diffs.iter().map(|d| (d - mean_diff).powi(2)).sum::<f64>() / diffs.len() as f64;
-
-    variance.sqrt()
-}
-
-/// Calculate skewness and kurtosis
-fn calculate_moments(samples: &[f64], mean: f64, std_dev: f64) -> (f64, f64) {
-    if samples.len() < 4 || std_dev == 0.0 {
-        return (0.0, 3.0); // Return normal distribution values
-    }
-
-    let n = samples.len() as f64;
-
-    // Calculate third and fourth moments
-    let mut m3 = 0.0;
-    let mut m4 = 0.0;
-
-    for &x in samples {
-        let z = (x - mean) / std_dev;
-        m3 += z.powi(3);
-        m4 += z.powi(4);
-    }
-
-    // Sample skewness (Fisher's definition)
-    let skewness = (n / ((n - 1.0) * (n - 2.0))) * m3;
-
-    // Sample excess kurtosis (Fisher's definition)
-    let kurtosis = ((n * (n + 1.0)) / ((n - 1.0) * (n - 2.0) * (n - 3.0))) * m4
-        - (3.0 * (n - 1.0).powi(2)) / ((n - 2.0) * (n - 3.0));
-
-    // Return kurtosis + 3 (excess kurtosis + 3 = kurtosis)
-    (skewness, kurtosis + 3.0)
-}
-
-/// Calculate Shannon entropy of histogram (normalized 0-1)
-fn calculate_entropy(buckets: &[HistogramBucket], total: usize) -> f64 {
-    if total == 0 || buckets.is_empty() {
-        return 0.0;
-    }
-
-    let mut entropy = 0.0;
-    for bucket in buckets {
-        if bucket.count > 0 {
-            let p = bucket.count as f64 / total as f64;
-            entropy -= p * p.ln();
-        }
-    }
-
-    // Normalize by max entropy (uniform distribution)
-    let max_entropy = (buckets.len() as f64).ln();
-    if max_entropy > 0.0 {
-        entropy / max_entropy
-    } else {
-        0.0
-    }
-}
-
 
 #[cfg(test)]
 mod tests;

@@ -41,9 +41,9 @@ impl LatencyHistogram {
             };
         }
 
-        let (min, max) = super::min_max(samples);
+        let min = samples.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max = samples.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
-        // Handle case where all values are identical
         let range = max - min;
         let bucket_width = if range > 0.0 {
             range / bucket_count as f64
@@ -51,12 +51,11 @@ impl LatencyHistogram {
             1.0
         };
 
-        // Initialize buckets
         let mut buckets: Vec<HistogramBucket> = (0..bucket_count)
             .map(|i| {
                 let lower = min + i as f64 * bucket_width;
                 let upper = if i == bucket_count - 1 {
-                    max + f64::EPSILON // Include max in last bucket
+                    max + f64::EPSILON
                 } else {
                     min + (i + 1) as f64 * bucket_width
                 };
@@ -69,7 +68,6 @@ impl LatencyHistogram {
             })
             .collect();
 
-        // Count samples per bucket
         for &sample in samples {
             let bucket_idx = if range > 0.0 {
                 ((sample - min) / bucket_width).floor() as usize
@@ -80,13 +78,11 @@ impl LatencyHistogram {
             buckets[idx].count += 1;
         }
 
-        // Calculate percentages
         let total = samples.len();
         for bucket in &mut buckets {
             bucket.percentage = bucket.count as f64 / total as f64 * 100.0;
         }
 
-        // Find mode bucket
         let mode_bucket = buckets
             .iter()
             .enumerate()
@@ -94,8 +90,7 @@ impl LatencyHistogram {
             .map(|(i, _)| i)
             .unwrap_or(0);
 
-        // Calculate entropy
-        let entropy = calculate_entropy(&buckets, total);
+        let entropy = shannon_entropy(&buckets, total);
 
         Self {
             buckets,
@@ -119,7 +114,7 @@ impl LatencyHistogram {
 }
 
 /// Calculate Shannon entropy of histogram (normalized 0-1)
-fn calculate_entropy(buckets: &[HistogramBucket], total: usize) -> f64 {
+fn shannon_entropy(buckets: &[HistogramBucket], total: usize) -> f64 {
     if total == 0 || buckets.is_empty() {
         return 0.0;
     }
@@ -132,7 +127,6 @@ fn calculate_entropy(buckets: &[HistogramBucket], total: usize) -> f64 {
         }
     }
 
-    // Normalize by max entropy (uniform distribution)
     let max_entropy = (buckets.len() as f64).ln();
     if max_entropy > 0.0 {
         entropy / max_entropy
