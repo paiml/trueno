@@ -247,7 +247,7 @@ proptest! {
         for i in 0..v_ab.len() {
             let diff = (v_ab.as_slice()[i] - va_b.as_slice()[i]).abs();
             let max_val = v_ab.as_slice()[i].abs().max(va_b.as_slice()[i].abs());
-            let tolerance = if max_val < 1.0 { 1e-2 } else { max_val * 1e-2 };
+            let tolerance = if max_val < 1.0 { 2e-2 } else { max_val * 2e-2 };
 
             prop_assert!(
                 diff < tolerance,

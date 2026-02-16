@@ -46,6 +46,91 @@ impl Default for ContextRegressionPredictor {
     }
 }
 
+/// Compute the mean of values extracted from baseline entries via a field accessor.
+fn entries_mean(entries: &[BaselineEntry], field: impl Fn(&BaselineEntry) -> f64) -> f64 {
+    let sum: f64 = entries.iter().map(&field).sum();
+    sum / entries.len() as f64
+}
+
+/// Compute a context adjustment: scale the difference between current and historical
+/// average by a divisor and factor, optionally clamping negative values to zero.
+fn context_adjustment(current: f64, historical_avg: f64, scale: f64, factor: f64, clamp_positive: bool) -> f64 {
+    let diff = current - historical_avg;
+    let scaled = diff * scale;
+    if clamp_positive { scaled.max(0.0) * factor } else { scaled * factor }
+}
+
+/// Simple linear regression result.
+struct LinearFit {
+    slope: f64,
+    r_squared: f64,
+}
+
+/// Compute simple linear regression (slope and R-squared) for (x, y) pairs
+/// extracted from baseline entries. Returns `None` if the data is degenerate.
+fn linear_regression(
+    entries: &[BaselineEntry],
+    x_fn: impl Fn(&BaselineEntry) -> f64,
+    y_fn: impl Fn(&BaselineEntry) -> f64,
+) -> Option<LinearFit> {
+    let n = entries.len() as f64;
+    let mut sum_x = 0.0_f64;
+    let mut sum_y = 0.0_f64;
+    let mut sum_xy = 0.0_f64;
+    let mut sum_xx = 0.0_f64;
+
+    for entry in entries {
+        let x = x_fn(entry);
+        let y = y_fn(entry);
+        sum_x += x;
+        sum_y += y;
+        sum_xy += x * y;
+        sum_xx += x * x;
+    }
+
+    let denom = n * sum_xx - sum_x * sum_x;
+    if denom.abs() < 1e-10 {
+        return None;
+    }
+
+    let slope = (n * sum_xy - sum_x * sum_y) / denom;
+    let intercept = (sum_y - slope * sum_x) / n;
+
+    // Compute R-squared
+    let mean_y = sum_y / n;
+    let mut ss_res = 0.0;
+    let mut ss_tot = 0.0;
+    for entry in entries {
+        let x = x_fn(entry);
+        let y_pred = slope * x + intercept;
+        let y = y_fn(entry);
+        ss_res += (y - y_pred).powi(2);
+        ss_tot += (y - mean_y).powi(2);
+    }
+    let r_squared = if ss_tot > 0.0 {
+        1.0 - ss_res / ss_tot
+    } else {
+        0.0
+    };
+
+    Some(LinearFit { slope, r_squared })
+}
+
+/// Compute the coefficient of variation (%) of a slice of f64 values.
+/// Returns a default CV if the mean is near zero.
+fn coefficient_of_variation(values: &[f64]) -> f64 {
+    let n = values.len();
+    if n < 2 {
+        return 5.0;
+    }
+    let mean = values.iter().sum::<f64>() / n as f64;
+    if mean.abs() <= 1e-10 {
+        return 5.0;
+    }
+    let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1).max(1) as f64;
+    (variance.sqrt() / mean.abs()) * 100.0
+}
+
 impl ContextRegressionPredictor {
     /// Create new predictor
     pub fn new() -> Self {
@@ -130,44 +215,43 @@ impl ContextRegressionPredictor {
             .get(metric)
             .expect("metric should exist in baselines after sufficient history check");
 
-        // Compute base threshold from historical variance
+        // Compute base threshold from historical variance (coefficient of variation)
         let values: Vec<f64> = entries.iter().map(|e| e.value).collect();
-        let mean = values.iter().sum::<f64>() / values.len() as f64;
-        let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>()
-            / (values.len() - 1).max(1) as f64;
-        let std_dev = variance.sqrt();
-        let cv = if mean.abs() > 1e-10 {
-            (std_dev / mean.abs()) * 100.0
-        } else {
-            5.0
-        };
+        let cv = coefficient_of_variation(&values);
 
-        // Base threshold: 2σ + min margin
+        // Base threshold: 2*CV + min margin
         let base_percent = (cv * 2.0).max(self.min_margin);
 
         // Temperature adjustment: warmer = more variance expected
-        let avg_temp: f64 =
-            entries.iter().map(|e| e.context.cpu_temp_c).sum::<f64>() / entries.len() as f64;
-        let temp_diff = current_context.cpu_temp_c - avg_temp;
-        let temp_adjustment = (temp_diff / 10.0) * self.temp_factor;
+        let avg_temp = entries_mean(entries, |e| e.context.cpu_temp_c);
+        let temp_adjustment = context_adjustment(
+            current_context.cpu_temp_c,
+            avg_temp,
+            1.0 / 10.0,
+            self.temp_factor,
+            false,
+        );
 
         // Memory adjustment: higher pressure = more variance
-        let avg_mem: f64 = entries
-            .iter()
-            .map(|e| e.context.memory_percent)
-            .sum::<f64>()
-            / entries.len() as f64;
-        let mem_diff = current_context.memory_percent - avg_mem;
-        let memory_adjustment = (mem_diff / 10.0).max(0.0) * self.memory_factor;
+        let avg_mem = entries_mean(entries, |e| e.context.memory_percent);
+        let memory_adjustment = context_adjustment(
+            current_context.memory_percent,
+            avg_mem,
+            1.0 / 10.0,
+            self.memory_factor,
+            true,
+        );
 
         // Frequency adjustment: lower frequency = expect slower
-        let avg_freq_util: f64 = entries
-            .iter()
-            .map(|e| e.context.freq_utilization())
-            .sum::<f64>()
-            / entries.len() as f64;
-        let freq_diff = avg_freq_util - current_context.freq_utilization();
-        let freq_adjustment = (freq_diff * 10.0).max(0.0) * self.freq_factor;
+        // Direction is reversed (historical - current), so we swap current/historical
+        let avg_freq_util = entries_mean(entries, |e| e.context.freq_utilization());
+        let freq_adjustment = context_adjustment(
+            avg_freq_util,
+            current_context.freq_utilization(),
+            10.0,
+            self.freq_factor,
+            true,
+        );
 
         // Cache adjustment: cold cache = expect slower
         let cache_adjustment = if !current_context.cache_warm {
@@ -206,58 +290,24 @@ impl ContextRegressionPredictor {
             return None;
         }
 
-        // Simple linear regression: value vs time
-        let n = entries.len() as f64;
-        let mut sum_x = 0.0;
-        let mut sum_y = 0.0;
-        let mut sum_xy = 0.0;
-        let mut sum_xx = 0.0;
-
         let base_time = entries.first()?.context.timestamp;
-        for entry in entries {
-            let x = (entry.context.timestamp - base_time) as f64 / 86400.0; // days
-            let y = entry.value;
-            sum_x += x;
-            sum_y += y;
-            sum_xy += x * y;
-            sum_xx += x * x;
-        }
+        let fit = linear_regression(
+            entries,
+            |e| (e.context.timestamp - base_time) as f64 / 86400.0,
+            |e| e.value,
+        )?;
 
-        let denom = n * sum_xx - sum_x * sum_x;
-        if denom.abs() < 1e-10 {
-            return None;
-        }
-
-        let slope = (n * sum_xy - sum_x * sum_y) / denom;
-        let intercept = (sum_y - slope * sum_x) / n;
-
-        // Compute R²
-        let mean_y = sum_y / n;
-        let mut ss_res = 0.0;
-        let mut ss_tot = 0.0;
-        for entry in entries {
-            let x = (entry.context.timestamp - base_time) as f64 / 86400.0;
-            let y_pred = slope * x + intercept;
-            ss_res += (entry.value - y_pred).powi(2);
-            ss_tot += (entry.value - mean_y).powi(2);
-        }
-        let r_squared = if ss_tot > 0.0 {
-            1.0 - ss_res / ss_tot
-        } else {
-            0.0
-        };
-
-        let direction = if slope > 0.1 {
+        let direction = if fit.slope > 0.1 {
             "increasing"
-        } else if slope < -0.1 {
+        } else if fit.slope < -0.1 {
             "decreasing"
         } else {
             "stable"
         };
 
         Some(Trend {
-            slope_per_day: slope,
-            r_squared,
+            slope_per_day: fit.slope,
+            r_squared: fit.r_squared,
             direction,
         })
     }
@@ -273,7 +323,7 @@ impl ContextRegressionPredictor {
 
         let entries = self.baselines.get(metric);
         let baseline_mean = entries
-            .map(|e| e.iter().map(|x| x.value).sum::<f64>() / e.len() as f64)
+            .map(|e| entries_mean(e, |x| x.value))
             .unwrap_or(current_value);
 
         let percent_change = if baseline_mean.abs() > 1e-10 {
