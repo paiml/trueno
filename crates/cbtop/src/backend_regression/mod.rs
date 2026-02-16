@@ -97,6 +97,26 @@ impl BackendRegressionDetector {
         self.measurements.len()
     }
 
+    /// Collect unique values from measurements via an extractor.
+    fn unique<T: Eq + std::hash::Hash + Copy>(&self, f: impl Fn(&BackendMeasurement) -> T) -> Vec<T> {
+        self.measurements.iter().map(f).collect::<HashSet<_>>().into_iter().collect()
+    }
+
+    /// Collect unique values from measurements matching a workload.
+    fn unique_for<T: Eq + std::hash::Hash + Copy>(
+        &self,
+        workload: WorkloadType,
+        f: impl Fn(&BackendMeasurement) -> T,
+    ) -> Vec<T> {
+        self.measurements
+            .iter()
+            .filter(|m| m.workload == workload)
+            .map(f)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
     /// Compare two backends for a specific workload/size
     pub fn compare_backends(
         &self,
@@ -290,23 +310,8 @@ impl BackendRegressionDetector {
 
     /// Get all comparisons for a workload
     pub fn compare_all_backends(&self, workload: WorkloadType) -> Vec<BackendComparison> {
-        let sizes: Vec<usize> = self
-            .measurements
-            .iter()
-            .filter(|m| m.workload == workload)
-            .map(|m| m.size)
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
-
-        let backends: Vec<Backend> = self
-            .measurements
-            .iter()
-            .filter(|m| m.workload == workload)
-            .map(|m| m.backend)
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
+        let sizes = self.unique_for(workload, |m| m.size);
+        let backends = self.unique_for(workload, |m| m.backend);
 
         let mut comparisons = Vec::new();
 
@@ -329,54 +334,23 @@ impl BackendRegressionDetector {
 
     /// Detect all regressions
     pub fn detect_regressions(&self) -> Vec<BackendComparison> {
-        let workloads: Vec<WorkloadType> = self
-            .measurements
-            .iter()
-            .map(|m| m.workload)
-            .collect::<HashSet<_>>()
+        self.unique(|m| m.workload)
             .into_iter()
-            .collect();
-
-        let mut regressions = Vec::new();
-
-        for workload in workloads {
-            let comparisons = self.compare_all_backends(workload);
-            for cmp in comparisons {
-                if cmp.is_regression {
-                    regressions.push(cmp);
-                }
-            }
-        }
-
-        regressions
+            .flat_map(|w| self.compare_all_backends(w))
+            .filter(|cmp| cmp.is_regression)
+            .collect()
     }
 
     /// Generate summary report
     pub fn summary(&self) -> BackendSummary {
-        let workloads: Vec<WorkloadType> = self
-            .measurements
-            .iter()
-            .map(|m| m.workload)
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
-
-        let backends: Vec<Backend> = self
-            .measurements
-            .iter()
-            .map(|m| m.backend)
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
-
+        let workloads = self.unique(|m| m.workload);
+        let backends = self.unique(|m| m.backend);
         let regressions = self.detect_regressions();
 
-        let mut all_cliffs = Vec::new();
-        for backend in &backends {
-            for workload in &workloads {
-                all_cliffs.extend(self.detect_size_cliffs(*backend, *workload));
-            }
-        }
+        let all_cliffs: Vec<_> = backends
+            .iter()
+            .flat_map(|b| workloads.iter().flat_map(move |w| self.detect_size_cliffs(*b, *w)))
+            .collect();
 
         BackendSummary {
             measurement_count: self.measurements.len(),
