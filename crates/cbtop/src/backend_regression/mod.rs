@@ -114,8 +114,16 @@ impl BackendRegressionDetector {
     }
 
     /// Collect unique values from measurements via an extractor.
-    pub(crate) fn unique<T: Eq + std::hash::Hash + Copy>(&self, f: impl Fn(&BackendMeasurement) -> T) -> Vec<T> {
-        self.measurements.iter().map(f).collect::<HashSet<_>>().into_iter().collect()
+    pub(crate) fn unique<T: Eq + std::hash::Hash + Copy>(
+        &self,
+        f: impl Fn(&BackendMeasurement) -> T,
+    ) -> Vec<T> {
+        self.measurements
+            .iter()
+            .map(f)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect()
     }
 
     /// Collect unique values from measurements matching a workload.

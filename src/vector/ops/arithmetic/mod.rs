@@ -448,6 +448,5 @@ impl Vector<f32> {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

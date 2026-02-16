@@ -8,6 +8,5 @@
 //! - Cooldown recommendations
 //! - Thermal-latency correlation
 
-
-mod thermal_tests;
 mod additional_tests;
+mod thermal_tests;

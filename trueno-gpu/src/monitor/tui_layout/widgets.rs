@@ -147,7 +147,10 @@ impl SparklineWidget {
             return String::new();
         }
 
-        let blocks = ['\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}', '\u{2588}'];
+        let blocks = [
+            '\u{2581}', '\u{2582}', '\u{2583}', '\u{2584}', '\u{2585}', '\u{2586}', '\u{2587}',
+            '\u{2588}',
+        ];
 
         let (min, max) = if self.auto_scale {
             let min = self.data.iter().copied().fold(f64::INFINITY, f64::min);

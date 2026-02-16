@@ -13,9 +13,7 @@ mod metrics;
 mod panels;
 mod render;
 
-pub use hardware::{
-    DiskMetrics, HardwareInfo, LoadMetrics, MemoryBreakdown, NetworkMetrics,
-};
+pub use hardware::{DiskMetrics, HardwareInfo, LoadMetrics, MemoryBreakdown, NetworkMetrics};
 pub use panels::ActivePanel;
 
 use std::time::{Duration, Instant};

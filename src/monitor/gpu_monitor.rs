@@ -3,9 +3,7 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
 
-use super::{
-    GpuDeviceInfo, GpuMemoryMetrics, GpuMetrics, MonitorConfig, MonitorError,
-};
+use super::{GpuDeviceInfo, GpuMemoryMetrics, GpuMetrics, MonitorConfig, MonitorError};
 
 /// GPU Monitor for real-time metrics collection (TRUENO-SPEC-010)
 ///

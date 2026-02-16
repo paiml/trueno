@@ -181,7 +181,12 @@ fn test_exp_parallel_values_correct() {
     // Spot check first few values
     for i in 0..10 {
         let expected = data[i].exp();
-        assert!((result.as_slice()[i] - expected).abs() < 1e-4,
-            "exp({}) = {} vs {}", data[i], result.as_slice()[i], expected);
+        assert!(
+            (result.as_slice()[i] - expected).abs() < 1e-4,
+            "exp({}) = {} vs {}",
+            data[i],
+            result.as_slice()[i],
+            expected
+        );
     }
 }

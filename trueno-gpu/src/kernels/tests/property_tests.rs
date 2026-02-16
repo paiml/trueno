@@ -1,5 +1,4 @@
 /// Property tests for kernel builders (TRUENO-SPEC-014 TASK-011)
-
 use super::*;
 use proptest::prelude::*;
 

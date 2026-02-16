@@ -1,8 +1,6 @@
 //! context_regression_f1311 - Part 1
 
-use cbtop::{
-    ContextRegressionPredictor, SystemContext, DEFAULT_COLD_START_MARGIN,
-};
+use cbtop::{ContextRegressionPredictor, SystemContext, DEFAULT_COLD_START_MARGIN};
 
 // =============================================================================
 // F1311: Baseline Recording Tests
@@ -289,4 +287,3 @@ fn f1318_stale_baseline() {
     let threshold = predictor.compute_threshold("latency", &new_context);
     assert!(threshold.final_percent > 0.0);
 }
-

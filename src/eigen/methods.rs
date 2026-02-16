@@ -1,7 +1,7 @@
 //! Public API methods and iterator for `SymmetricEigen`.
 
-use crate::{Matrix, TruenoError, Vector, Backend};
 use super::SymmetricEigen;
+use crate::{Backend, Matrix, TruenoError, Vector};
 
 impl SymmetricEigen {
     /// Returns the eigenvalues in descending order

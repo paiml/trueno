@@ -7,8 +7,8 @@
 //!
 //! Tests for less commonly used but important PTX operations.
 
-mod predicates_and_moves;
-mod conversions_and_registers;
 mod arithmetic_and_atomics;
+mod conversions_and_registers;
 mod memory_and_bitwise;
+mod predicates_and_moves;
 mod tensor_core_and_debug;

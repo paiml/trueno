@@ -1,2 +1,2 @@
-mod simd_quant;
 mod exec_graph;
+mod simd_quant;

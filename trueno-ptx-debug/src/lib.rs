@@ -42,14 +42,14 @@
 #![allow(clippy::format_push_string)]
 #![allow(missing_docs)]
 
-pub mod parser;
 pub mod analyzer;
 pub mod bugs;
 pub mod falsification;
 pub mod output;
+pub mod parser;
 
 // Re-export key types
-pub use parser::{PtxModule, Lexer, Parser, ParseError};
-pub use analyzer::{TypeChecker, ControlFlowAnalyzer, DataFlowAnalyzer, AddressSpaceValidator};
+pub use analyzer::{AddressSpaceValidator, ControlFlowAnalyzer, DataFlowAnalyzer, TypeChecker};
 pub use bugs::{BugClass, BugRegistry, Severity};
 pub use falsification::{FalsificationRegistry, FalsificationReport, TestResult};
+pub use parser::{Lexer, ParseError, Parser, PtxModule};

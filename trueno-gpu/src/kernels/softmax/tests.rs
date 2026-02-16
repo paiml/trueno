@@ -157,8 +157,7 @@ fn test_shared_max_reduce_loop_iterates() {
 
     // The PTX should contain a branch back to max_reduce_loop
     // If it only branches to max_reduce_done, the reduction is incomplete
-    let has_loop_back =
-        ptx.contains("bra max_reduce_loop") || ptx.contains("bra\tmax_reduce_loop");
+    let has_loop_back = ptx.contains("bra max_reduce_loop") || ptx.contains("bra\tmax_reduce_loop");
 
     assert!(
         has_loop_back,
@@ -198,8 +197,7 @@ fn test_shared_sum_reduce_implemented() {
     // Should have: sum_reduce_loop label, branch back, and sum_reduce_done label
     let has_sum_loop = ptx.contains("sum_reduce_loop");
     let has_sum_done = ptx.contains("sum_reduce_done");
-    let has_loop_back =
-        ptx.contains("bra sum_reduce_loop") || ptx.contains("bra\tsum_reduce_loop");
+    let has_loop_back = ptx.contains("bra sum_reduce_loop") || ptx.contains("bra\tsum_reduce_loop");
 
     assert!(
         has_sum_loop && has_sum_done && has_loop_back,

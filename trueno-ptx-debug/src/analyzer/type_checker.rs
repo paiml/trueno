@@ -1,9 +1,9 @@
 //! Type Checker - validates register types match operation requirements
 
-use std::collections::HashMap;
-use crate::parser::{PtxModule, Instruction, Operand, SourceLocation};
-use crate::parser::types::{PtxType, Opcode};
 use crate::bugs::Severity;
+use crate::parser::types::{Opcode, PtxType};
+use crate::parser::{Instruction, Operand, PtxModule, SourceLocation};
+use std::collections::HashMap;
 
 /// Type error
 #[derive(Debug, Clone)]
@@ -269,7 +269,11 @@ mod tests {
         let errors = checker.analyze(&module);
 
         // Should have no errors - u32 register with u32 load
-        assert!(errors.is_empty(), "F011: Type mismatch errors: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "F011: Type mismatch errors: {:?}",
+            errors
+        );
     }
 
     // F017: Predicate registers used correctly
@@ -295,6 +299,10 @@ mod tests {
         let mut checker = TypeChecker::new();
         let errors = checker.analyze(&module);
 
-        assert!(errors.is_empty(), "F017: Predicate usage errors: {:?}", errors);
+        assert!(
+            errors.is_empty(),
+            "F017: Predicate usage errors: {:?}",
+            errors
+        );
     }
 }

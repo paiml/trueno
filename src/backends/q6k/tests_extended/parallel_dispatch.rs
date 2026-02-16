@@ -84,7 +84,10 @@ fn test_q6k_parallel_dispatch_matches_scalar() {
         assert!(
             diff < tol,
             "Row {}: scalar={}, dispatch={}, diff={}",
-            i, scalar[i], dispatch[i], diff
+            i,
+            scalar[i],
+            dispatch[i],
+            diff
         );
     }
 }
@@ -116,7 +119,10 @@ fn test_q6k_parallel_dispatch_prime_outdim() {
         assert!(
             diff < tol,
             "Row {}: scalar={}, dispatch={}, diff={}",
-            i, scalar[i], dispatch[i], diff
+            i,
+            scalar[i],
+            dispatch[i],
+            diff
         );
     }
 }
@@ -146,7 +152,10 @@ fn test_q6k_parallel_dispatch_few_rows_large_indim() {
         assert!(
             diff < tol,
             "Row {}: scalar={}, dispatch={}, diff={}",
-            i, scalar[i], dispatch[i], diff
+            i,
+            scalar[i],
+            dispatch[i],
+            diff
         );
     }
 }
@@ -176,7 +185,10 @@ fn test_q6k_parallel_dispatch_exact_threshold() {
         assert!(
             diff < tol,
             "Row {}: scalar={}, dispatch={}, diff={}",
-            i, scalar[i], dispatch[i], diff
+            i,
+            scalar[i],
+            dispatch[i],
+            diff
         );
     }
 }
@@ -205,7 +217,10 @@ fn test_q6k_dispatch_just_below_threshold() {
         assert!(
             diff < tol,
             "Row {}: scalar={}, dispatch={}, diff={}",
-            i, scalar[i], dispatch[i], diff
+            i,
+            scalar[i],
+            dispatch[i],
+            diff
         );
     }
 }
@@ -233,7 +248,9 @@ fn test_q6k_parallel_dispatch_single_row() {
     assert!(
         diff < tol,
         "scalar={}, dispatch={}, diff={}",
-        scalar[0], dispatch[0], diff
+        scalar[0],
+        dispatch[0],
+        diff
     );
 }
 
@@ -281,7 +298,10 @@ fn test_q6k_public_api_parallel_route() {
         assert!(
             diff < tol,
             "Row {}: scalar={}, public_api={}, diff={}",
-            i, scalar[i], result[i], diff
+            i,
+            scalar[i],
+            result[i],
+            diff
         );
     }
 }

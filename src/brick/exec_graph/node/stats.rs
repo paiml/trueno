@@ -735,7 +735,7 @@ mod tests {
         let mut stats = BrickStats::new("op");
         stats.total_bytes = 1_000_000_000; // 1 GB
         stats.total_ns = 1_000_000_000; // 1 second
-        // 1 GB / 1s = 1.0 GB/s
+                                        // 1 GB / 1s = 1.0 GB/s
         assert!((stats.throughput_gbps() - 1.0).abs() < 1e-5);
     }
 
@@ -776,7 +776,7 @@ mod tests {
     fn test_brick_stats_throughput() {
         let mut stats = BrickStats::new("op");
         stats.add_sample(1_000_000_000, 500); // 1 second, 500 elements
-        // 500 / 1.0 = 500.0 elem/s
+                                              // 500 / 1.0 = 500.0 elem/s
         assert!((stats.throughput() - 500.0).abs() < 1e-5);
     }
 
@@ -829,4 +829,3 @@ mod tests {
         assert_eq!(stats.bottleneck, BrickBottleneck::Unknown);
     }
 }
-

@@ -1,10 +1,5 @@
 //! wgpu and CUDA backend implementations for GPU monitoring
 
-#[cfg(any(
-    all(feature = "gpu", not(target_arch = "wasm32")),
-    feature = "cuda-monitor"
-))]
-use super::{GpuBackend, GpuDeviceInfo, GpuVendor};
 #[cfg(feature = "cuda-monitor")]
 use super::GpuMemoryMetrics;
 #[cfg(any(
@@ -12,6 +7,11 @@ use super::GpuMemoryMetrics;
     feature = "cuda-monitor"
 ))]
 use super::MonitorError;
+#[cfg(any(
+    all(feature = "gpu", not(target_arch = "wasm32")),
+    feature = "cuda-monitor"
+))]
+use super::{GpuBackend, GpuDeviceInfo, GpuVendor};
 
 // ============================================================================
 // wgpu Backend Implementation
@@ -19,9 +19,7 @@ use super::MonitorError;
 
 /// Query device info from wgpu adapter
 #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
-pub(crate) fn query_wgpu_device_info(
-    device_index: u32,
-) -> Result<GpuDeviceInfo, MonitorError> {
+pub(crate) fn query_wgpu_device_info(device_index: u32) -> Result<GpuDeviceInfo, MonitorError> {
     use crate::backends::gpu::runtime;
 
     runtime::block_on(async {
@@ -58,11 +56,9 @@ pub(crate) fn query_wgpu_device_info(
         // Use max buffer size as a proxy for VRAM (not exact but gives an idea)
         let vram_estimate = limits.max_buffer_size;
 
-        Ok(
-            GpuDeviceInfo::new(device_index, info.name, vendor, backend)
-                .with_vram(vram_estimate)
-                .with_driver_version(format!("{:?}", info.driver_info)),
-        )
+        Ok(GpuDeviceInfo::new(device_index, info.name, vendor, backend)
+            .with_vram(vram_estimate)
+            .with_driver_version(format!("{:?}", info.driver_info)))
     })
 }
 

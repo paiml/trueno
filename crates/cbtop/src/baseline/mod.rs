@@ -23,6 +23,5 @@ pub use types::{
     TGI_BASELINE, TRITON_BASELINE, VLLM_BASELINE,
 };
 
-
 #[cfg(test)]
 mod tests;

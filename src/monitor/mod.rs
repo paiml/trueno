@@ -52,7 +52,6 @@ pub use config::{MonitorConfig, MonitorError};
 pub use gpu_monitor::GpuMonitor;
 pub use memory::GpuMemoryMetrics;
 pub use metrics::{
-    GpuClockMetrics, GpuMetrics, GpuPcieMetrics, GpuPowerMetrics, GpuThermalMetrics,
-    GpuUtilization,
+    GpuClockMetrics, GpuMetrics, GpuPcieMetrics, GpuPowerMetrics, GpuThermalMetrics, GpuUtilization,
 };
 pub use types::{GpuBackend, GpuDeviceInfo, GpuVendor};

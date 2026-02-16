@@ -325,9 +325,9 @@ fn test_record_kernel_launch_with_metrics() {
         (16, 1, 1),
         (256, 1, 1),
         8192,
-        1500,   // timing_ns
-        4.5,    // arithmetic_intensity
-        1.2,    // achieved_tflops
+        1500, // timing_ns
+        4.5,  // arithmetic_intensity
+        1.2,  // achieved_tflops
     );
 
     graph.pop_scope();
@@ -340,7 +340,9 @@ fn test_record_kernel_launch_with_metrics() {
 
     // Should have a Launches edge from scope to kernel
     let edges: Vec<_> = graph.outgoing_edges(scope).collect();
-    assert!(edges.iter().any(|e| e.dst == kernel_id && e.edge_type == EdgeType::Launches));
+    assert!(edges
+        .iter()
+        .any(|e| e.dst == kernel_id && e.edge_type == EdgeType::Launches));
 }
 
 /// Test record_transfer.
@@ -349,13 +351,8 @@ fn test_record_transfer_in_scope() {
     let mut graph = ExecutionGraph::new();
     let scope = graph.push_scope(ExecutionNode::Layer { index: 0 });
 
-    let transfer_id = graph.record_transfer(
-        "host",
-        "gpu0",
-        1_048_576,
-        TransferDirection::H2D,
-        Some(250),
-    );
+    let transfer_id =
+        graph.record_transfer("host", "gpu0", 1_048_576, TransferDirection::H2D, Some(250));
 
     graph.pop_scope();
 
@@ -366,7 +363,9 @@ fn test_record_transfer_in_scope() {
 
     // Should have Contains edge from scope
     let edges: Vec<_> = graph.outgoing_edges(scope).collect();
-    assert!(edges.iter().any(|e| e.dst == transfer_id && e.edge_type == EdgeType::Contains));
+    assert!(edges
+        .iter()
+        .any(|e| e.dst == transfer_id && e.edge_type == EdgeType::Contains));
 }
 
 /// Test add_dependency (DependsOn edge).
@@ -611,10 +610,21 @@ fn test_to_tree_node_transfer_no_timing() {
         transfer_node.label
     );
     // Info should show bytes but no timing
-    let info = transfer_node.info.as_ref().expect("Transfer should have info");
-    assert!(info.contains("4096B"), "Info should contain byte count: {}", info);
+    let info = transfer_node
+        .info
+        .as_ref()
+        .expect("Transfer should have info");
+    assert!(
+        info.contains("4096B"),
+        "Info should contain byte count: {}",
+        info
+    );
     // No timing means no µs suffix
-    assert!(!info.contains("µs"), "No timing should mean no µs in info: {}", info);
+    assert!(
+        !info.contains("µs"),
+        "No timing should mean no µs in info: {}",
+        info
+    );
 }
 
 /// to_tree_node: Transfer node with timing_ns = Some (cover timing branch).
@@ -634,9 +644,20 @@ fn test_to_tree_node_transfer_with_timing() {
 
     let tree = graph.to_tree_node();
     let transfer_node = &tree.children[0];
-    let info = transfer_node.info.as_ref().expect("Transfer should have info");
-    assert!(info.contains("µs"), "Timing present should include µs: {}", info);
-    assert!(info.contains("1048576B"), "Info should contain byte count: {}", info);
+    let info = transfer_node
+        .info
+        .as_ref()
+        .expect("Transfer should have info");
+    assert!(
+        info.contains("µs"),
+        "Timing present should include µs: {}",
+        info
+    );
+    assert!(
+        info.contains("1048576B"),
+        "Info should contain byte count: {}",
+        info
+    );
 }
 
 /// to_tree_node: AsyncTask with poll_count = 0 (cover 0% efficiency branch).
@@ -656,9 +677,16 @@ fn test_to_tree_node_async_task_zero_polls() {
     let tree = graph.to_tree_node();
     let async_child = &tree.children[0];
     assert_eq!(async_child.label, "idle_task");
-    let info = async_child.info.as_ref().expect("AsyncTask should have info");
+    let info = async_child
+        .info
+        .as_ref()
+        .expect("AsyncTask should have info");
     assert!(info.contains("polls:0"), "Should show 0 polls: {}", info);
-    assert!(info.contains("0% eff"), "Should show 0% efficiency: {}", info);
+    assert!(
+        info.contains("0% eff"),
+        "Should show 0% efficiency: {}",
+        info
+    );
 }
 
 /// to_tree_node: AsyncTask with nonzero polls (cover normal efficiency).
@@ -678,10 +706,21 @@ fn test_to_tree_node_async_task_nonzero_polls() {
     let tree = graph.to_tree_node();
     let async_child = &tree.children[0];
     assert_eq!(async_child.label, "worker");
-    let info = async_child.info.as_ref().expect("AsyncTask should have info");
+    let info = async_child
+        .info
+        .as_ref()
+        .expect("AsyncTask should have info");
     assert!(info.contains("polls:4"), "Should show poll count: {}", info);
-    assert!(info.contains("yields:2"), "Should show yield count: {}", info);
-    assert!(info.contains("25% eff"), "Should show 25% efficiency: {}", info);
+    assert!(
+        info.contains("yields:2"),
+        "Should show yield count: {}",
+        info
+    );
+    assert!(
+        info.contains("25% eff"),
+        "Should show 25% efficiency: {}",
+        info
+    );
 }
 
 /// to_tree_node: Function with file and line (cover Some/Some branch).
@@ -788,8 +827,16 @@ fn test_to_tree_node_brick_with_info() {
     let brick_child = &tree.children[0];
     assert_eq!(brick_child.label, "QkvProjection");
     let info = brick_child.info.as_ref().expect("Brick should have info");
-    assert!(info.contains("50.0µs"), "Brick info should show timing: {}", info);
-    assert!(info.contains("4096 elem"), "Brick info should show elements: {}", info);
+    assert!(
+        info.contains("50.0µs"),
+        "Brick info should show timing: {}",
+        info
+    );
+    assert!(
+        info.contains("4096 elem"),
+        "Brick info should show elements: {}",
+        info
+    );
 }
 
 /// to_tree_node: Kernel node with info (cover Kernel branch in build_node).
@@ -814,8 +861,16 @@ fn test_to_tree_node_kernel_with_info() {
     let kernel_child = &tree.children[0];
     assert_eq!(kernel_child.label, "gemm_tiled");
     let info = kernel_child.info.as_ref().expect("Kernel should have info");
-    assert!(info.contains("<<<16,256,1>>>"), "Kernel info should show launch config: {}", info);
-    assert!(info.contains("smem=8192B"), "Kernel info should show shared mem: {}", info);
+    assert!(
+        info.contains("<<<16,256,1>>>"),
+        "Kernel info should show launch config: {}",
+        info
+    );
+    assert!(
+        info.contains("smem=8192B"),
+        "Kernel info should show shared mem: {}",
+        info
+    );
 }
 
 /// to_tree_node: D2D transfer direction (cover D2D direction variant).

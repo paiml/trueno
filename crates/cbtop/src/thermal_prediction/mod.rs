@@ -19,8 +19,8 @@
 //!
 //! See `tests/thermal_prediction_f1221.rs` for falsification tests.
 
-mod analyzer;
 mod analysis;
+mod analyzer;
 mod regression;
 mod types;
 
@@ -52,7 +52,6 @@ pub fn analyze_thermal(
 pub fn assess_throttle_risk(current_temp: f64, threshold: f64, trend_slope: f64) -> ThrottleRisk {
     ThrottleRisk::assess(current_temp, threshold, trend_slope, 10.0)
 }
-
 
 #[cfg(test)]
 mod tests;

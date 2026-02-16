@@ -12,9 +12,9 @@ use std::time::Instant;
 
 use crate::error::TruenoError;
 
-use super::microkernels::microkernel_scalar;
 #[cfg(target_arch = "x86_64")]
 use super::microkernels::microkernel_8x6_true_asm;
+use super::microkernels::microkernel_scalar;
 use super::packing::{pack_a_block, pack_b_block, packed_a_size, packed_b_size};
 use super::profiler::{BlisProfileLevel, BlisProfiler};
 use super::reference::gemm_reference;

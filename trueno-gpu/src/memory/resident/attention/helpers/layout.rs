@@ -57,7 +57,13 @@ pub(in super::super) fn interleaved_to_batched_all(
     ];
 
     compile_lock_launch(
-        ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        ctx,
+        &stream,
+        &cache_key,
+        &ptx,
+        kernel.name(),
+        &config,
+        &mut args,
     )?;
     stream.synchronize()?;
 
@@ -104,7 +110,13 @@ pub(in super::super) fn batched_transpose_all(
     ];
 
     compile_lock_launch(
-        ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        ctx,
+        &stream,
+        &cache_key,
+        &ptx,
+        kernel.name(),
+        &config,
+        &mut args,
     )?;
     stream.synchronize()?;
 
@@ -150,7 +162,13 @@ pub(in super::super) fn batched_to_interleaved_all(
     ];
 
     compile_lock_launch(
-        ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        ctx,
+        &stream,
+        &cache_key,
+        &ptx,
+        kernel.name(),
+        &config,
+        &mut args,
     )?;
     stream.synchronize()?;
 

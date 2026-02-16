@@ -1,8 +1,6 @@
 //! performance_prediction_f1251 - Part 2
 
-use cbtop::{
-    FittedModel, ModelType, PerformancePredictor, Prediction, MIN_SAMPLES_FOR_FIT,
-};
+use cbtop::{FittedModel, ModelType, PerformancePredictor, Prediction, MIN_SAMPLES_FOR_FIT};
 
 // =============================================================================
 // F1259: Prediction Tests

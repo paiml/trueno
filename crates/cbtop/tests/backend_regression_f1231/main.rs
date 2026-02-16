@@ -8,5 +8,5 @@
 //! - Best backend recommendation
 //! - Transfer overhead analysis
 
-mod regression_core;
 mod config_and_additional;
+mod regression_core;

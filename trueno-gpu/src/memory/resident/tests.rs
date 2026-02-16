@@ -71,8 +71,8 @@ fn test_gpu_resident_tensor_uninit() {
     reset_transfer_counters();
 
     // Create uninitialized tensor (no transfer)
-    let tensor: GpuResidentTensor<f32> = GpuResidentTensor::new_uninit(&ctx, 16)
-        .expect("Failed to create uninit GpuResidentTensor");
+    let tensor: GpuResidentTensor<f32> =
+        GpuResidentTensor::new_uninit(&ctx, 16).expect("Failed to create uninit GpuResidentTensor");
 
     // No transfers for uninitialized buffer
     assert_eq!(tensor.h2d_transfers(), 0);

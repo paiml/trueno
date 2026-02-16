@@ -336,4 +336,3 @@ fn test_validation_results_multiple_steps() {
     assert!(results.steps[2].success);
     assert!(results.has_failures());
 }
-

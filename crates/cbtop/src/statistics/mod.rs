@@ -27,6 +27,5 @@ pub use analysis::{EffectCategory, EffectSize, StatisticalAnalysis};
 pub use comparison::{ComparisonResult, MannWhitneyResult, OutlierFilter};
 pub use helpers::{bootstrap_ci, percentile, trimmed_mean};
 
-
 #[cfg(test)]
 mod tests;

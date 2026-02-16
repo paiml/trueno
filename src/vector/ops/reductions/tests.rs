@@ -338,14 +338,10 @@ fn test_dot_scalar_backend() {
 #[test]
 #[cfg(target_arch = "x86_64")]
 fn test_dot_sse2_backend() {
-    let a = Vector::from_slice_with_backend(
-        &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-        Backend::SSE2,
-    );
-    let b = Vector::from_slice_with_backend(
-        &[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        Backend::SSE2,
-    );
+    let a =
+        Vector::from_slice_with_backend(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], Backend::SSE2);
+    let b =
+        Vector::from_slice_with_backend(&[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], Backend::SSE2);
     let result = a.dot(&b).unwrap();
     assert!((result - 36.0).abs() < 1e-6); // sum 1..8 = 36
 }

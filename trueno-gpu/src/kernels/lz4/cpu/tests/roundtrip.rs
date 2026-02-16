@@ -9,8 +9,7 @@ fn test_f001_roundtrip_hello() {
     let mut decompressed = [0u8; 64];
 
     let comp_size = lz4_compress_block(input, &mut compressed).unwrap();
-    let decomp_size =
-        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..decomp_size], input.as_slice());
@@ -23,8 +22,7 @@ fn test_f001_roundtrip_zeros() {
     let mut decompressed = [0u8; 256];
 
     let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size =
-        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..], &input[..]);
@@ -40,8 +38,7 @@ fn test_f001_roundtrip_repeated_pattern() {
     let mut decompressed = [0u8; 512];
 
     let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size =
-        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..], &input[..]);
@@ -49,14 +46,12 @@ fn test_f001_roundtrip_repeated_pattern() {
 
 #[test]
 fn test_f001_roundtrip_text() {
-    let input =
-        b"The quick brown fox jumps over the lazy dog. The quick brown fox jumps again!";
+    let input = b"The quick brown fox jumps over the lazy dog. The quick brown fox jumps again!";
     let mut compressed = [0u8; 256];
     let mut decompressed = [0u8; 256];
 
     let comp_size = lz4_compress_block(input, &mut compressed).unwrap();
-    let decomp_size =
-        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..decomp_size], input.as_slice());
@@ -74,8 +69,7 @@ fn test_f001_roundtrip_page_size() {
     let mut decompressed = [0u8; PAGE_SIZE as usize];
 
     let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size =
-        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
 
     assert_eq!(decomp_size, PAGE_SIZE as usize);
     assert_eq!(&decompressed[..], &input[..]);
@@ -122,8 +116,7 @@ fn test_f003_empty_page() {
     let mut decompressed = [0u8; 32];
 
     let comp_size = lz4_compress_block(&[], &mut compressed).unwrap();
-    let decomp_size =
-        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
 
     assert_eq!(comp_size, 0);
     assert_eq!(decomp_size, 0);

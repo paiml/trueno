@@ -12,15 +12,15 @@
 //! - `PreciseRopeKernel`: High-precision for theta=1M (Qwen2.5)
 //! - `PreciseRopeIndirectKernel`: Precise + CUDA Graph compatible
 
-mod standard;
-mod neox;
 mod batched;
+mod neox;
 mod precise;
+mod standard;
 
-pub use standard::{RopeKernel, RopeIndirectKernel};
-pub use neox::{RopeNeoxKernel, RopeNeoxIndirectKernel};
 pub use batched::BatchedRopeKernel;
-pub use precise::{PreciseRopeKernel, PreciseRopeIndirectKernel};
+pub use neox::{RopeNeoxIndirectKernel, RopeNeoxKernel};
+pub use precise::{PreciseRopeIndirectKernel, PreciseRopeKernel};
+pub use standard::{RopeIndirectKernel, RopeKernel};
 
 #[cfg(test)]
 mod tests;

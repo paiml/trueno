@@ -8,6 +8,5 @@
 //! - Tiling recommendations
 //! - Bandwidth prediction
 
-
-mod cache_tests;
 mod analysis_tests;
+mod cache_tests;

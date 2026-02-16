@@ -1,8 +1,8 @@
 //! profile_persistence_f1201 - Part 1
 
 use cbtop::{
-    ProfileBackend as BackendConfig, ProfileConfig, ProfileError,
-    ProfileManager, ProfileOverlay, ProfileWorkload as WorkloadConfig,
+    ProfileBackend as BackendConfig, ProfileConfig, ProfileError, ProfileManager, ProfileOverlay,
+    ProfileWorkload as WorkloadConfig,
 };
 use tempfile::TempDir;
 
@@ -257,4 +257,3 @@ fn f1207_name_length_limits() {
     let max_name = "a".repeat(64);
     assert!(ProfileConfig::new(&max_name).is_ok());
 }
-

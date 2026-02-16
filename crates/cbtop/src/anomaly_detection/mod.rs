@@ -22,6 +22,5 @@ pub use types::{
     DEFAULT_ZSCORE_THRESHOLD, MIN_SAMPLES_FOR_DETECTION,
 };
 
-
 #[cfg(test)]
 mod tests;

@@ -261,6 +261,5 @@ pub fn cuda_device_count() -> Result<usize, GpuError> {
 // Tests (EXTREME TDD)
 // ============================================================================
 
-
 #[cfg(test)]
 mod tests;

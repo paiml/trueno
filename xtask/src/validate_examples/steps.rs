@@ -88,7 +88,11 @@ pub(crate) fn step_check_runnable(
         if !has_main_function(example)? {
             errors.push(format!(
                 "{}: missing main() function",
-                example.file_name().unwrap_or_default().to_str().unwrap_or("unknown")
+                example
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or("unknown")
             ));
             continue;
         }
@@ -179,7 +183,8 @@ pub(crate) fn step_check_book_references(
 
     // Extract referenced examples from markdown
     let mut referenced = HashSet::new();
-    let example_ref_regex = Regex::new(r"examples/([a-z_]+)\.rs").expect("invariant: regex pattern is valid");
+    let example_ref_regex =
+        Regex::new(r"examples/([a-z_]+)\.rs").expect("invariant: regex pattern is valid");
 
     for md_file in md_files {
         let content = fs::read_to_string(&md_file)

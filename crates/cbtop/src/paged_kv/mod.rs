@@ -24,6 +24,5 @@ pub use types::{
     SequenceInfo,
 };
 
-
 #[cfg(test)]
 mod tests;

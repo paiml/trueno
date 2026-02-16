@@ -218,6 +218,5 @@ impl Brick for LoadControlPanelBrick {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

@@ -4,8 +4,8 @@
 //! including full panels, compact status bars, and prediction comparisons.
 
 use super::super::helpers::pad_right;
-use super::TunerRecommendation;
 use super::BrickTuner;
+use super::TunerRecommendation;
 
 impl BrickTuner {
     /// Print recommendations to console (TUI-friendly)

@@ -209,10 +209,8 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![4.0, 5.0, 6.0];
 
-        let trace_ab =
-            QuantizationErrorTrace::compute(BrickId::RmsNorm, 0, &a, &b, QuantType::F32);
-        let trace_ba =
-            QuantizationErrorTrace::compute(BrickId::RmsNorm, 0, &b, &a, QuantType::F32);
+        let trace_ab = QuantizationErrorTrace::compute(BrickId::RmsNorm, 0, &a, &b, QuantType::F32);
+        let trace_ba = QuantizationErrorTrace::compute(BrickId::RmsNorm, 0, &b, &a, QuantType::F32);
 
         assert!(
             (trace_ab.cosine_similarity - trace_ba.cosine_similarity).abs() < 1e-6,

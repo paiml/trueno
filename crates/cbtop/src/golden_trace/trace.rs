@@ -5,9 +5,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use super::types::{
-    GoldenTraceError, GoldenTraceResult, SyscallBreakdownDelta, TraceMetrics,
-};
+use super::types::{GoldenTraceError, GoldenTraceResult, SyscallBreakdownDelta, TraceMetrics};
 
 /// Golden trace containing baseline metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -359,6 +359,5 @@ impl ComputeOp for DotQ6KOp {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

@@ -57,8 +57,7 @@ fn test_fused_q4k_golden_parity() {
     }
 
     // Golden parity check: |fused - reference| < 1e-3
-    for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate()
-    {
+    for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate() {
         let diff = (fused - reference).abs();
         assert!(
             diff < 1e-3,

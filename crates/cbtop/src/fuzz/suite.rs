@@ -1,7 +1,7 @@
 //! Fuzz suite, target config, and summary types
 
-use std::collections::HashMap;
 use super::types::FuzzResult;
+use std::collections::HashMap;
 
 /// Fuzz target configuration
 #[derive(Debug, Clone)]

@@ -272,11 +272,7 @@ fn run_tui_mode(
     Ok(())
 }
 
-fn run_simd(
-    function: &str,
-    arch: &str,
-    json: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn run_simd(function: &str, arch: &str, json: bool) -> Result<(), Box<dyn std::error::Error>> {
     let simd_arch = match arch.to_lowercase().as_str() {
         "sse2" => SimdArch::Sse2,
         "avx" | "avx2" => SimdArch::Avx2,

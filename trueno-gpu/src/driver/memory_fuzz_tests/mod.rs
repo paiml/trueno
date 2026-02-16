@@ -12,9 +12,9 @@ use super::memory::GpuBuffer;
 use crate::GpuError;
 use proptest::prelude::*;
 
-mod basic_operations;
 mod adversarial;
 mod async_and_stress;
+mod basic_operations;
 
 proptest! {
     #[test]

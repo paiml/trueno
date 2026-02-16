@@ -251,6 +251,5 @@ pub(super) fn write_instruction(instr: &PtxInstruction, out: &mut String) {
     emit_standard_body(instr, out);
 }
 
-
 #[cfg(test)]
 mod tests;

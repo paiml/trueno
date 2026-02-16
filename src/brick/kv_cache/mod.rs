@@ -240,6 +240,5 @@ impl Iterator for SequentialBatchOrderer {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

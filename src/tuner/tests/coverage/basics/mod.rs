@@ -1,2 +1,2 @@
-mod features_errors;
 mod collector_profiler;
+mod features_errors;

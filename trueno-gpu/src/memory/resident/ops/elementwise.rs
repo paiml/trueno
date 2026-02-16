@@ -89,7 +89,13 @@ impl GpuResidentTensor<f32> {
             ];
 
             launch_cached_kernel(
-                ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+                ctx,
+                &stream,
+                &cache_key,
+                &ptx,
+                kernel.name(),
+                &config,
+                &mut args,
             )?;
         } else {
             // Use long row softmax for rows > 32 elements (cached)
@@ -112,7 +118,13 @@ impl GpuResidentTensor<f32> {
             ];
 
             launch_cached_kernel(
-                ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+                ctx,
+                &stream,
+                &cache_key,
+                &ptx,
+                kernel.name(),
+                &config,
+                &mut args,
             )?;
         }
 
@@ -172,7 +184,13 @@ impl GpuResidentTensor<f32> {
             ];
 
             launch_cached_kernel(
-                ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+                ctx,
+                stream,
+                &cache_key,
+                &ptx,
+                kernel.name(),
+                &config,
+                &mut args,
             )?;
         } else {
             // Use long row softmax for rows > 32 elements (cached)
@@ -194,7 +212,13 @@ impl GpuResidentTensor<f32> {
             ];
 
             launch_cached_kernel(
-                ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+                ctx,
+                stream,
+                &cache_key,
+                &ptx,
+                kernel.name(),
+                &config,
+                &mut args,
             )?;
         }
         // NO SYNC - caller controls synchronization for graph capture
@@ -258,7 +282,13 @@ impl GpuResidentTensor<f32> {
         ];
 
         launch_cached_kernel(
-            ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            ctx,
+            &stream,
+            &cache_key,
+            &ptx,
+            kernel.name(),
+            &config,
+            &mut args,
         )?;
         stream.synchronize()?;
 
@@ -323,7 +353,13 @@ impl GpuResidentTensor<f32> {
         ];
 
         launch_cached_kernel(
-            ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            ctx,
+            stream,
+            &cache_key,
+            &ptx,
+            kernel.name(),
+            &config,
+            &mut args,
         )?;
         // NO SYNC - caller controls synchronization for graph capture
 
@@ -395,7 +431,13 @@ impl GpuResidentTensor<f32> {
         ];
 
         launch_cached_kernel(
-            ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            ctx,
+            stream,
+            &cache_key,
+            &ptx,
+            kernel.name(),
+            &config,
+            &mut args,
         )?;
         // NO SYNC - caller controls synchronization for graph capture
 
@@ -439,7 +481,13 @@ impl GpuResidentTensor<f32> {
         ];
 
         launch_cached_kernel(
-            ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            ctx,
+            &stream,
+            &cache_key,
+            &ptx,
+            kernel.name(),
+            &config,
+            &mut args,
         )?;
         stream.synchronize()?;
 

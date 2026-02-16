@@ -163,6 +163,5 @@ impl super::Kernel for BiasActivationKernel {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

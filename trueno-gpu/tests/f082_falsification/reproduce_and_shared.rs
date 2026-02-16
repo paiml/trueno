@@ -95,9 +95,7 @@ L_skip:
 
                 if output[4] == 0xF082DEAD {
                     println!("  UNEXPECTED: F082 pattern WORKS in minimal kernel!");
-                    println!(
-                        "  -> F082 may be triggered by kernel complexity, not this pattern"
-                    );
+                    println!("  -> F082 may be triggered by kernel complexity, not this pattern");
                 } else {
                     println!("  Data mismatch - got {:08X} at index 4", output[4]);
                 }

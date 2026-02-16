@@ -306,7 +306,6 @@ pub fn is_idempotent(first: &[SplittableCondition], second: &[SplittableConditio
     first.len() == second.len()
 }
 
-
 #[cfg(test)]
 mod tests;
 

@@ -482,5 +482,3 @@ fn test_f233_async_task_profiler() {
     let profiler = AsyncTaskProfiler::default();
     assert_eq!(profiler.poll_count, 0);
 }
-
-

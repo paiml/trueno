@@ -14,10 +14,10 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-mod null_fuzzer_tests;
-mod shmem_prober_tests;
-mod lifecycle_chaos_tests;
-mod quant_oracle_tests;
-mod ptx_poison_tests;
-mod supervisor_tests;
 mod falsification_tests;
+mod lifecycle_chaos_tests;
+mod null_fuzzer_tests;
+mod ptx_poison_tests;
+mod quant_oracle_tests;
+mod shmem_prober_tests;
+mod supervisor_tests;

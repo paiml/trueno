@@ -128,6 +128,5 @@ pub fn ggml_type_to_format(ggml_type: u32) -> Option<QuantFormat> {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

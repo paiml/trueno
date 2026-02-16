@@ -448,6 +448,5 @@ impl WorkloadCharacterizer {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

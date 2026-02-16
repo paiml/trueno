@@ -22,6 +22,5 @@ pub use types::{
     DEFAULT_COLD_START_MARGIN, DEFAULT_STALENESS_SEC, MIN_SAMPLES_FOR_CONTEXT,
 };
 
-
 #[cfg(test)]
 mod tests;

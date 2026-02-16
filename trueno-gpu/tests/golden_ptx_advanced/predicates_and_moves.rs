@@ -2,9 +2,7 @@
 //!
 //! IMMUTABLE GUARDIAN - DO NOT MODIFY WITHOUT FALSIFICATION EVIDENCE
 
-use trueno_gpu::ptx::{
-    PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxMemory, PtxType,
-};
+use trueno_gpu::ptx::{PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxMemory, PtxType};
 
 // ============================================================================
 // VECTOR LOAD/STORE OPERATIONS - Golden Tests

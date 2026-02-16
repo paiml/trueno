@@ -484,6 +484,5 @@ pub fn full_validate(project_root: impl AsRef<Path>) -> IronmanScorecard {
         .validate()
 }
 
-
 #[cfg(test)]
 mod tests;

@@ -303,8 +303,7 @@ fn test_exp_avx2_backend() {
 
 #[test]
 fn test_sin_scalar_backend() {
-    let v =
-        Vector::from_slice_with_backend(&[0.0, std::f32::consts::FRAC_PI_2], Backend::Scalar);
+    let v = Vector::from_slice_with_backend(&[0.0, std::f32::consts::FRAC_PI_2], Backend::Scalar);
     let result = v.sin().unwrap();
     assert!((result.as_slice()[0] - 0.0).abs() < 1e-6);
     assert!((result.as_slice()[1] - 1.0).abs() < 1e-6);
@@ -436,9 +435,20 @@ fn test_tanh_avx512_backend() {
     let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
     let result = v.tanh().unwrap();
     for (i, &val) in result.as_slice().iter().enumerate() {
-        assert!(val >= -1.0 && val <= 1.0, "tanh AVX512 out of range at {}: {}", i, val);
+        assert!(
+            val >= -1.0 && val <= 1.0,
+            "tanh AVX512 out of range at {}: {}",
+            i,
+            val
+        );
         let expected = data[i].tanh();
-        assert!((val - expected).abs() < 1e-3, "tanh AVX512 mismatch at {}: {} vs {}", i, val, expected);
+        assert!(
+            (val - expected).abs() < 1e-3,
+            "tanh AVX512 mismatch at {}: {} vs {}",
+            i,
+            val,
+            expected
+        );
     }
 }
 
@@ -485,8 +495,13 @@ fn test_exp_avx512_backend() {
     for (i, &val) in result.as_slice().iter().enumerate() {
         let expected = data[i].exp();
         // AVX-512 exp uses polynomial approximation — allow 5% relative error
-        assert!((val - expected).abs() / expected.max(1e-6) < 0.05,
-            "exp AVX512 mismatch at {}: {} vs {}", i, val, expected);
+        assert!(
+            (val - expected).abs() / expected.max(1e-6) < 0.05,
+            "exp AVX512 mismatch at {}: {} vs {}",
+            i,
+            val,
+            expected
+        );
     }
 }
 
@@ -500,13 +515,21 @@ fn test_tanh_avx512_non_aligned() {
     }
     // 19 elements: 16 in SIMD loop + 3 remainder
     for size in [17, 19, 23, 31, 33] {
-        let data: Vec<f32> = (0..size).map(|i| (i as f32 - size as f32 / 2.0) * 0.2).collect();
+        let data: Vec<f32> = (0..size)
+            .map(|i| (i as f32 - size as f32 / 2.0) * 0.2)
+            .collect();
         let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
         let result = v.tanh().unwrap();
         for (i, &val) in result.as_slice().iter().enumerate() {
             let expected = data[i].tanh();
-            assert!((val - expected).abs() < 1e-3,
-                "tanh AVX512 non-aligned size={} mismatch at {}: {} vs {}", size, i, val, expected);
+            assert!(
+                (val - expected).abs() < 1e-3,
+                "tanh AVX512 non-aligned size={} mismatch at {}: {} vs {}",
+                size,
+                i,
+                val,
+                expected
+            );
         }
     }
 }

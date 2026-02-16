@@ -129,7 +129,14 @@ pub(crate) fn run_bench(
 
     // Handle comparison mode
     if let Some(backends_str) = compare {
-        return run_comparison_bench(&backends_str, workload, size, duration, output_format, output);
+        return run_comparison_bench(
+            &backends_str,
+            workload,
+            size,
+            duration,
+            output_format,
+            output,
+        );
     }
 
     // Single benchmark
@@ -138,7 +145,13 @@ pub(crate) fn run_bench(
 
     // Check for regression if baseline provided
     if let Some(baseline_path) = baseline {
-        return run_regression_check(&result, &baseline_path, fail_on_regression, output_format, output);
+        return run_regression_check(
+            &result,
+            &baseline_path,
+            fail_on_regression,
+            output_format,
+            output,
+        );
     }
 
     // Output result

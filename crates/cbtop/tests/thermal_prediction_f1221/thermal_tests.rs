@@ -276,4 +276,3 @@ fn f1226_new_samples_included() {
     // Predictions should be different
     assert!((pred1.trend_slope - pred2.trend_slope).abs() > 0.1);
 }
-

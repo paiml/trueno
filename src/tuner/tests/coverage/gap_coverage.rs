@@ -105,7 +105,6 @@ mod calibrate_tests {
         assert!(result.local_mape >= 0.0);
         assert!(tuner.version().contains("calibrated"));
     }
-
 }
 
 // ============================================================================
@@ -334,7 +333,11 @@ mod crc32_table_tests {
             hashes.insert(hash);
         }
         // All 16 low-nibble values should produce distinct hashes
-        assert_eq!(hashes.len(), 16, "All low-nibble bytes should produce unique CRC32");
+        assert_eq!(
+            hashes.len(),
+            16,
+            "All low-nibble bytes should produce unique CRC32"
+        );
     }
 
     #[test]
@@ -344,7 +347,11 @@ mod crc32_table_tests {
             for b in [0x00, 0x55, 0xAA, 0xFF] {
                 let single = crc32_hash(&[a, b]);
                 let inc = crc32_update(crc32_update(0, &[a]), &[b]);
-                assert_eq!(single, inc, "Incremental CRC32 must match single-pass for [{:#04x}, {:#04x}]", a, b);
+                assert_eq!(
+                    single, inc,
+                    "Incremental CRC32 must match single-pass for [{:#04x}, {:#04x}]",
+                    a, b
+                );
             }
         }
     }
@@ -357,7 +364,11 @@ mod crc32_table_tests {
             let hash = crc32_hash(&[i << 4]);
             hashes.insert(hash);
         }
-        assert_eq!(hashes.len(), 16, "All high-nibble bytes should produce unique CRC32");
+        assert_eq!(
+            hashes.len(),
+            16,
+            "All high-nibble bytes should produce unique CRC32"
+        );
     }
 }
 
@@ -374,7 +385,10 @@ mod record_tests {
         let profiler = make_profiler_with_tokens(100, 1_000_000); // 100 tokens in 1ms
         let config = RunConfig::default();
         let result = collector.record(&profiler, &config, KernelType::VectorizedQ4K);
-        assert!(result.is_some(), "record should return Some when profiler has tokens");
+        assert!(
+            result.is_some(),
+            "record should return Some when profiler has tokens"
+        );
         assert_eq!(collector.len(), 1);
     }
 
@@ -724,7 +738,10 @@ mod throughput_train_tests {
         let data = make_training_data(20);
         regressor.train(&data).expect("training should succeed");
         assert!(regressor.mape >= 0.0);
-        assert!(regressor.mape < 10.0, "MAPE should be reasonable after training");
+        assert!(
+            regressor.mape < 10.0,
+            "MAPE should be reasonable after training"
+        );
     }
 
     #[test]

@@ -354,6 +354,5 @@ pub fn default_hardware_path() -> std::path::PathBuf {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

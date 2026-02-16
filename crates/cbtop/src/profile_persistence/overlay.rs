@@ -1,8 +1,6 @@
 //! CLI overlay and profile templates.
 
-use super::config::{
-    default_threads, BackendConfig, ProfileConfig, WorkloadConfig,
-};
+use super::config::{default_threads, BackendConfig, ProfileConfig, WorkloadConfig};
 
 /// CLI overlay for merging profile with command-line arguments
 #[derive(Debug, Clone, Default)]

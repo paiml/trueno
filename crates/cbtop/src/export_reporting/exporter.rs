@@ -3,9 +3,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use super::types::{
-    BenchmarkReport, ComparisonReport, ExportFormat,
-};
+use super::types::{BenchmarkReport, ComparisonReport, ExportFormat};
 
 /// Report exporter
 #[derive(Debug)]

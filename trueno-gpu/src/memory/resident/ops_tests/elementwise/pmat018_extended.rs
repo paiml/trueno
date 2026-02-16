@@ -74,7 +74,9 @@ fn test_ops_layer_norm_larger_batch() {
     let gamma = upload(&ctx, &vec![1.0f32; hidden as usize]);
     let beta = upload(&ctx, &vec![0.0f32; hidden as usize]);
 
-    let output = input.layer_norm(&ctx, &gamma, &beta, hidden, batch).unwrap();
+    let output = input
+        .layer_norm(&ctx, &gamma, &beta, hidden, batch)
+        .unwrap();
     assert_eq!(output.len(), (hidden * batch) as usize);
 }
 

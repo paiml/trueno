@@ -4,7 +4,6 @@
 use crate::driver::{CudaContext, CudaStream};
 use crate::memory::resident::GpuResidentTensor;
 
-
 // ============================================================================
 // PMAT-018: Additional attention.rs coverage tests
 // ============================================================================
@@ -284,7 +283,15 @@ fn test_incremental_attention_with_stream_q_error() {
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
     let result = incremental_attention_gpu_with_stream(
-        &ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream,
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
     );
     assert!(result.is_err());
 }
@@ -314,7 +321,15 @@ fn test_incremental_attention_with_stream_k_cache_error() {
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
     let result = incremental_attention_gpu_with_stream(
-        &ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream,
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
     );
     assert!(result.is_err());
 }
@@ -344,7 +359,15 @@ fn test_incremental_attention_with_stream_v_cache_error() {
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
     let result = incremental_attention_gpu_with_stream(
-        &ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream,
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
     );
     assert!(result.is_err());
 }
@@ -373,7 +396,15 @@ fn test_incremental_attention_with_stream_seq_exceeds_max() {
     let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
 
     let result = incremental_attention_gpu_with_stream(
-        &ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream,
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
     );
     assert!(result.is_err());
 }
@@ -403,7 +434,15 @@ fn test_incremental_attention_with_stream_empty_seq() {
 
     // Empty sequence should return zeros
     let output = incremental_attention_gpu_with_stream(
-        &ctx, &q, &k, &v, n_heads, head_dim, seq_len, max_seq_len, &stream,
+        &ctx,
+        &q,
+        &k,
+        &v,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
     )
     .unwrap();
     assert_eq!(output.len(), d_model);
@@ -430,7 +469,14 @@ fn test_kv_cache_scatter_cache_size_error() {
     let new_tensor = GpuResidentTensor::from_host(&ctx, &new_kv).unwrap();
 
     let result = kv_cache_scatter_gpu(
-        &ctx, &new_tensor, &mut cache, 3, n_heads, head_dim, max_seq_len, &stream,
+        &ctx,
+        &new_tensor,
+        &mut cache,
+        3,
+        n_heads,
+        head_dim,
+        max_seq_len,
+        &stream,
     );
     assert!(result.is_err());
 }
@@ -457,7 +503,14 @@ fn test_kv_cache_scatter_position_exceeds_max() {
     let new_tensor = GpuResidentTensor::from_host(&ctx, &new_kv).unwrap();
 
     let result = kv_cache_scatter_gpu(
-        &ctx, &new_tensor, &mut cache, position, n_heads, head_dim, max_seq_len, &stream,
+        &ctx,
+        &new_tensor,
+        &mut cache,
+        position,
+        n_heads,
+        head_dim,
+        max_seq_len,
+        &stream,
     );
     assert!(result.is_err());
 }

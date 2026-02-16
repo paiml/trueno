@@ -19,6 +19,5 @@ mod types;
 pub use predictor::PerformancePredictor;
 pub use types::{DataPoint, FittedModel, ModelType, Prediction, MIN_SAMPLES_FOR_FIT};
 
-
 #[cfg(test)]
 mod tests;

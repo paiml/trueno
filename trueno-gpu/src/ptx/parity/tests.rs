@@ -421,7 +421,9 @@ fn test_validate_parity_u64_shared_memory_on_single_kernel() {
         u64_violations
     );
     // One message should mention single kernel, the other batched
-    assert!(u64_violations.iter().any(|v| v.message.contains("test_batched")));
+    assert!(u64_violations
+        .iter()
+        .any(|v| v.message.contains("test_batched")));
     assert!(u64_violations.iter().any(|v| v.message.contains("'test'")));
 }
 
@@ -536,7 +538,10 @@ fn test_extract_shared_memory_bytes_various_sizes() {
         Some(0)
     );
     // No smem keyword
-    assert_eq!(extract_shared_memory_bytes("    .shared .align 16 .b8 buf[32];"), None);
+    assert_eq!(
+        extract_shared_memory_bytes("    .shared .align 16 .b8 buf[32];"),
+        None
+    );
     // Malformed
     assert_eq!(extract_shared_memory_bytes("    .shared smem[abc];"), None);
 }
@@ -550,7 +555,11 @@ exit:
     ret;
 "#;
     let labels = extract_loop_labels(ptx);
-    assert!(labels.is_empty(), "Expected no loop labels, got: {:?}", labels);
+    assert!(
+        labels.is_empty(),
+        "Expected no loop labels, got: {:?}",
+        labels
+    );
 }
 
 #[test]

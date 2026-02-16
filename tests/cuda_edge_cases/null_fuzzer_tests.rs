@@ -2,7 +2,9 @@
 // F1: Null Pointer Sentinel Fuzzer -- Device Memory Safety
 // ============================================================================
 
-use trueno_cuda_edge::null_fuzzer::{InjectionStrategy, NonNullDevicePtr, NullFuzzerConfig, NullSentinelFuzzer};
+use trueno_cuda_edge::null_fuzzer::{
+    InjectionStrategy, NonNullDevicePtr, NullFuzzerConfig, NullSentinelFuzzer,
+};
 
 /// Verify NonNullDevicePtr enforces non-null constraint at construction.
 /// Critical for trueno's GPU memory allocation wrappers.

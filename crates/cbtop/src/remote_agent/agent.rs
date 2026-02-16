@@ -221,8 +221,8 @@ impl RemoteAgent {
         let stdout = &result.stdout;
 
         let host = json::extract_json_string(stdout, "host")?;
-        let arch = json::extract_json_string(stdout, "arch")
-            .unwrap_or_else(|| "unknown".to_string());
+        let arch =
+            json::extract_json_string(stdout, "arch").unwrap_or_else(|| "unknown".to_string());
         let throughput = json::extract_json_number(stdout, "throughput")?;
         let latency_p50 = json::extract_json_number(stdout, "latency_p50")?;
         let latency_p99 = json::extract_json_number(stdout, "latency_p99")?;

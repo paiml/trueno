@@ -1,8 +1,6 @@
 //! F1231-F1235: Core backend regression tests
 
-use cbtop::{
-    Backend, BackendMeasurement, BackendRegressionDetector, BackendWorkload,
-};
+use cbtop::{Backend, BackendMeasurement, BackendRegressionDetector, BackendWorkload};
 
 // =============================================================================
 // F1231: Backend Comparison Tests

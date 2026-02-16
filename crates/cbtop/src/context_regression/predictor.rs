@@ -54,10 +54,20 @@ fn entries_mean(entries: &[BaselineEntry], field: impl Fn(&BaselineEntry) -> f64
 
 /// Compute a context adjustment: scale the difference between current and historical
 /// average by a divisor and factor, optionally clamping negative values to zero.
-fn context_adjustment(current: f64, historical_avg: f64, scale: f64, factor: f64, clamp_positive: bool) -> f64 {
+fn context_adjustment(
+    current: f64,
+    historical_avg: f64,
+    scale: f64,
+    factor: f64,
+    clamp_positive: bool,
+) -> f64 {
     let diff = current - historical_avg;
     let scaled = diff * scale;
-    if clamp_positive { scaled.max(0.0) * factor } else { scaled * factor }
+    if clamp_positive {
+        scaled.max(0.0) * factor
+    } else {
+        scaled * factor
+    }
 }
 
 /// Simple linear regression result.

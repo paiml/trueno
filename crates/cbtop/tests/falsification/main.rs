@@ -17,6 +17,6 @@
 //! - F161-F180: Integration
 //! - F181-F200: Jidoka (Built-in Quality)
 
-mod core_invariants;
 mod budget_and_collectors;
+mod core_invariants;
 mod quality_and_integration;

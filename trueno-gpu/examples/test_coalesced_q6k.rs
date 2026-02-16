@@ -22,7 +22,11 @@ fn init_cuda() -> Option<CudaContext> {
     }
 }
 
-fn generate_and_load_module(ctx: &CudaContext, n: u32, k: u32) -> Option<(CudaModule, CoalescedQ6KGemvKernel)> {
+fn generate_and_load_module(
+    ctx: &CudaContext,
+    n: u32,
+    k: u32,
+) -> Option<(CudaModule, CoalescedQ6KGemvKernel)> {
     println!(
         "[2/7] Generating CoalescedQ6KGemvKernel PTX (N={}, K={})...",
         n, k

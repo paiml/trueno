@@ -17,7 +17,7 @@
 //! - Error handling and edge cases
 //! - Mathematical properties and invariants
 
-mod vector_ops;
-mod matrix_ops;
 mod backend_tests;
+mod matrix_ops;
 mod smoke_performance;
+mod vector_ops;

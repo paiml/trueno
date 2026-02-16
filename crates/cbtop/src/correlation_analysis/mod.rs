@@ -22,6 +22,5 @@ pub use types::{
     IsolationAction, IsolationRecommendation, PerformanceSample, SystemSnapshot,
 };
 
-
 #[cfg(test)]
 mod tests;

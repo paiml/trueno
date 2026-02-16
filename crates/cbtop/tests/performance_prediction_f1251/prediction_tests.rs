@@ -1,8 +1,6 @@
 //! performance_prediction_f1251 - Part 1
 
-use cbtop::{
-    DataPoint, FittedModel, ModelType, PerformancePredictor, MIN_SAMPLES_FOR_FIT,
-};
+use cbtop::{DataPoint, FittedModel, ModelType, PerformancePredictor, MIN_SAMPLES_FOR_FIT};
 
 // =============================================================================
 // F1251: Data Point Tests
@@ -283,4 +281,3 @@ fn f1258_compare_models() {
         assert!(comparisons[0].1 >= comparisons[1].1);
     }
 }
-

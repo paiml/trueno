@@ -11,9 +11,9 @@
 //! - F081-F100: Generalization & Robustness
 //! - F280-F295: Phase 14 ML-Tuner Evolution
 
-mod model_accuracy;
 mod feature_engineering;
-mod training_data_quality;
-mod integration_correctness;
 mod generalization_robustness;
+mod integration_correctness;
+mod model_accuracy;
 mod phase14_evolution;
+mod training_data_quality;

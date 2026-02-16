@@ -10,6 +10,6 @@
 #[cfg(feature = "cuda")]
 mod global_computed_addr;
 #[cfg(feature = "cuda")]
-mod reproduce_and_shared;
-#[cfg(feature = "cuda")]
 mod membar_fix;
+#[cfg(feature = "cuda")]
+mod reproduce_and_shared;

@@ -38,8 +38,7 @@ fn test_avx2_large_matrix_mul() {
     let scalar_output = matmul_q4k_f32(&q4k_data, &input, out_dim, in_dim);
     let dispatch_output = matmul_q4k_f32_dispatch(&q4k_data, &input, out_dim, in_dim);
 
-    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
-    {
+    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
         let diff = (scalar - dispatch).abs();
         let rel_diff = if scalar.abs() > 1e-6 {
             diff / scalar.abs()
@@ -138,8 +137,7 @@ fn test_avx2_non_aligned_dimensions() {
     assert_eq!(scalar_output.len(), out_dim);
     assert_eq!(dispatch_output.len(), out_dim);
 
-    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
-    {
+    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
         let diff = (scalar - dispatch).abs();
         let rel_diff = if scalar.abs() > 1e-6 {
             diff / scalar.abs()

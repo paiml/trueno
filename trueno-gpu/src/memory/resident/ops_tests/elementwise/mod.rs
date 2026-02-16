@@ -34,6 +34,6 @@ macro_rules! cuda_ctx {
     };
 }
 
-mod softmax_add_scale;
 mod layernorm_gelu_bias;
 mod pmat018_extended;
+mod softmax_add_scale;

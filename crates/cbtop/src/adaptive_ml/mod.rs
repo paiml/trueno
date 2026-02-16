@@ -233,6 +233,5 @@ pub const DEFAULT_MIN_CONFIDENCE: f64 = 0.7;
 /// Default drift z-score threshold
 pub const DEFAULT_DRIFT_ZSCORE: f64 = 3.0;
 
-
 #[cfg(test)]
 mod tests;

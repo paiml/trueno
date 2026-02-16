@@ -89,7 +89,16 @@ fn run_transpose_step(
         std::ptr::addr_of!(cols) as *mut _,
     ];
 
-    unsafe { launch_and_sync(stream, &mut module, transpose.name(), &config, &mut args, "TransposeKernel")? };
+    unsafe {
+        launch_and_sync(
+            stream,
+            &mut module,
+            transpose.name(),
+            &config,
+            &mut args,
+            "TransposeKernel",
+        )?
+    };
 
     // Read back and verify
     println!("Step 3: Verify transpose result...");
@@ -124,7 +133,10 @@ fn run_gemm_step(
     n: u32,
     k: u32,
 ) -> Result<GpuBuffer<f32>, ()> {
-    println!("Step 4: GemmKernel [{}x{}] @ [{}x{}] = [{}x{}]...", m, k, k, n, m, n);
+    println!(
+        "Step 4: GemmKernel [{}x{}] @ [{}x{}] = [{}x{}]...",
+        m, k, k, n, m, n
+    );
     let c_buf: GpuBuffer<f32> = GpuBuffer::new(ctx, (m * n) as usize).expect("Alloc C failed");
 
     let gemm = GemmKernel::naive(m, n, k);
@@ -165,7 +177,16 @@ fn run_gemm_step(
         std::ptr::addr_of!(k_val) as *mut _,
     ];
 
-    unsafe { launch_and_sync(stream, &mut module, gemm.name(), &config, &mut args, "GemmKernel")? };
+    unsafe {
+        launch_and_sync(
+            stream,
+            &mut module,
+            gemm.name(),
+            &config,
+            &mut args,
+            "GemmKernel",
+        )?
+    };
     Ok(c_buf)
 }
 
@@ -204,7 +225,16 @@ fn run_scale_step(
         std::ptr::addr_of!(scale_n) as *mut _,
     ];
 
-    unsafe { launch_and_sync(stream, &mut module, scale_kernel.name(), &config, &mut args, "Scale kernel")? };
+    unsafe {
+        launch_and_sync(
+            stream,
+            &mut module,
+            scale_kernel.name(),
+            &config,
+            &mut args,
+            "Scale kernel",
+        )?
+    };
     Ok(scale_out_buf)
 }
 
@@ -218,7 +248,10 @@ fn run_softmax_step(
     sm_row_size: u32,
 ) -> Result<(), ()> {
     let sm_total = (sm_rows * sm_row_size) as usize;
-    println!("Step 6: Softmax [{} rows x {} cols]...", sm_rows, sm_row_size);
+    println!(
+        "Step 6: Softmax [{} rows x {} cols]...",
+        sm_rows, sm_row_size
+    );
 
     let sm_out_buf: GpuBuffer<f32> = GpuBuffer::new(ctx, sm_total).expect("Alloc softmax out");
 
@@ -247,7 +280,16 @@ fn run_softmax_step(
         std::ptr::addr_of!(sm_row_size_val) as *mut _,
     ];
 
-    unsafe { launch_and_sync(stream, &mut module, sm_kernel.name(), &config, &mut args, "Softmax kernel")? };
+    unsafe {
+        launch_and_sync(
+            stream,
+            &mut module,
+            sm_kernel.name(),
+            &config,
+            &mut args,
+            "Softmax kernel",
+        )?
+    };
     Ok(())
 }
 

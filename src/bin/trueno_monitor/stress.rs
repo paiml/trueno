@@ -16,10 +16,10 @@ use super::types::*;
 use super::STRESS_TEST_MATRIX_SIZE;
 
 /// Matrix dimension used for CPU stress test workloads.
-const STRESS_TEST_FLOPS_PER_MATMUL: u64 =
-    2 * (STRESS_TEST_MATRIX_SIZE as u64)
-        * (STRESS_TEST_MATRIX_SIZE as u64)
-        * (STRESS_TEST_MATRIX_SIZE as u64);
+const STRESS_TEST_FLOPS_PER_MATMUL: u64 = 2
+    * (STRESS_TEST_MATRIX_SIZE as u64)
+    * (STRESS_TEST_MATRIX_SIZE as u64)
+    * (STRESS_TEST_MATRIX_SIZE as u64);
 
 impl App {
     pub(crate) fn toggle_stress(&mut self) {

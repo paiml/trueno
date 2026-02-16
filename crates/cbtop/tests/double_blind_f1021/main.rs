@@ -2,6 +2,5 @@
 //!
 //! Popperian falsification criteria for double-blind verification per §36.2.
 
-
-mod verification_tests;
 mod additional_tests;
+mod verification_tests;

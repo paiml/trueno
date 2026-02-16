@@ -1,8 +1,6 @@
 //! Golden GEMM kernel generator tests.
 
-use trueno_gpu::kernels::{
-    Batched4DGemmKernel, BatchedGemmKernel, GemmKernel, Kernel,
-};
+use trueno_gpu::kernels::{Batched4DGemmKernel, BatchedGemmKernel, GemmKernel, Kernel};
 
 #[test]
 fn golden_gemm_naive_kernel_structure() {

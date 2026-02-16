@@ -18,6 +18,6 @@
 //! # This is what `make coverage` does - always use make coverage
 //! ```
 
-mod simd_canary;
 mod gpu_canary;
 mod hardware_report;
+mod simd_canary;

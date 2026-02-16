@@ -1,9 +1,6 @@
 //! thermal_prediction_f1221 - Part 2
 
-use cbtop::{
-    analyze_thermal, RiskCategory, ThermalAnalyzer,
-    ThermalPrediction,
-};
+use cbtop::{analyze_thermal, RiskCategory, ThermalAnalyzer, ThermalPrediction};
 
 // =============================================================================
 // F1227: Insufficient Data Handling Tests

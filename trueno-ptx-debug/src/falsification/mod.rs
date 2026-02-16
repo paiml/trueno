@@ -10,4 +10,6 @@
 mod framework;
 mod tests;
 
-pub use framework::{FalsificationRegistry, FalsificationReport, FalsificationTest, TestResult, Category};
+pub use framework::{
+    Category, FalsificationRegistry, FalsificationReport, FalsificationTest, TestResult,
+};

@@ -14,6 +14,5 @@
 //! | F711 | Scale domain validation | Domain(10, 0) | Returns Err |
 //! | F719 | Builder immutability | Reuse builder | Independent instances |
 
-
-mod grammar_tests;
 mod dsl_tests;
+mod grammar_tests;

@@ -261,4 +261,3 @@ fn f1107_bootstrap_single() {
     assert!((lower - 5.0).abs() < 0.01);
     assert!((upper - 5.0).abs() < 0.01);
 }
-

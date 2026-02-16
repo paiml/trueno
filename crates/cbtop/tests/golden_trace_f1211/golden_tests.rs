@@ -1,8 +1,7 @@
 //! golden_trace_f1211 - Part 1
 
 use cbtop::{
-    GoldenComparator, GoldenTrace, TraceMetrics,
-    TraceSyscallBreakdown as SyscallBreakdown,
+    GoldenComparator, GoldenTrace, TraceMetrics, TraceSyscallBreakdown as SyscallBreakdown,
 };
 
 // =============================================================================
@@ -271,4 +270,3 @@ fn f1216_max_delta() {
     let delta = current.percentage_diff(&baseline);
     assert!((delta.max_delta() - 100.0).abs() < 0.1);
 }
-

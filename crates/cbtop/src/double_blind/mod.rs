@@ -255,6 +255,5 @@ impl VerificationSession {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

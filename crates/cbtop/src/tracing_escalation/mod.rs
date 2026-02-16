@@ -21,10 +21,7 @@ mod manager;
 mod types;
 
 pub use manager::{OtlpSpanAttributes, TracingEscalation};
-pub use types::{
-    EscalationReason, EscalationThresholds, SyscallBreakdown, TraceResult,
-};
-
+pub use types::{EscalationReason, EscalationThresholds, SyscallBreakdown, TraceResult};
 
 #[cfg(test)]
 mod tests;

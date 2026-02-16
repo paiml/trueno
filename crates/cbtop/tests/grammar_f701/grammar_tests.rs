@@ -1,8 +1,8 @@
 //! grammar_f701 - Part 1
 
 use cbtop::{
-    ByteSize, CompositionMode, ComputeBlock, ComputeBlockBuilder, DataTransform, ExecutionStrategy, GrammarError,
-    LinearResourceScale, LogResourceScale, ResourceMapping, WorkloadSpec,
+    ByteSize, CompositionMode, ComputeBlock, ComputeBlockBuilder, DataTransform, ExecutionStrategy,
+    GrammarError, LinearResourceScale, LogResourceScale, ResourceMapping, WorkloadSpec,
 };
 
 // ============================================================================
@@ -275,4 +275,3 @@ fn f719_builder_default_is_empty() {
     let result = builder.build();
     assert!(matches!(result, Err(GrammarError::MissingWorkload)));
 }
-

@@ -115,9 +115,15 @@ fn bench_vecmat_multiply() {
         let color = color_for_gflops(gflops, expected);
         println!(
             "  {}x{}x{} {:>20} {:>6.1}ms {:>5.1} GFLOPS {} {}{}",
-            m, k, n, desc, time, gflops,
+            m,
+            k,
+            n,
+            desc,
+            time,
+            gflops,
             bar(gflops, 15.0, 15),
-            color, RESET
+            color,
+            RESET
         );
     }
 }
@@ -148,9 +154,14 @@ fn bench_general_matmul() {
         let color = color_for_gflops(gflops, expected);
         println!(
             "  {}x{}x{} {:>8.1}ms {:>5.1} GFLOPS {} {}{}",
-            m, k, n, time, gflops,
+            m,
+            k,
+            n,
+            time,
+            gflops,
             bar(gflops, 10.0, 20),
-            color, RESET
+            color,
+            RESET
         );
     }
 }
@@ -181,9 +192,13 @@ fn bench_transpose() {
         };
         println!(
             "  {}x{} {:>8.1}ms {:>5.1} GB/s {} {}{}",
-            rows, cols, time_ms, gb_per_sec,
+            rows,
+            cols,
+            time_ms,
+            gb_per_sec,
             bar(gb_per_sec, 20.0, 20),
-            color, RESET
+            color,
+            RESET
         );
     }
 }
@@ -227,9 +242,12 @@ fn bench_activations() {
         };
         println!(
             "  {:>10} {:>8.1}us {:>6.1}M elem/s {} {}{}",
-            name, time_us, throughput,
+            name,
+            time_us,
+            throughput,
             bar(throughput, 200.0, 15),
-            color, RESET
+            color,
+            RESET
         );
     }
 }
@@ -260,9 +278,12 @@ fn bench_memory_alloc() {
         };
         println!(
             "  {:>3}MB alloc {:>8.1}ms {:>5.1} GB/s {} {}{}",
-            size_mb, time_ms, gb_per_sec,
+            size_mb,
+            time_ms,
+            gb_per_sec,
             bar(gb_per_sec, 50.0, 15),
-            color, RESET
+            color,
+            RESET
         );
     }
 }

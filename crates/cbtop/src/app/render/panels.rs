@@ -7,7 +7,9 @@ use presentar_core::{Canvas, Point, TextStyle};
 use presentar_terminal::direct::DirectTerminalCanvas;
 use presentar_terminal::Theme;
 
-use crate::app::hardware::{DiskMetrics, HardwareInfo, LoadMetrics, MemoryBreakdown, NetworkMetrics};
+use crate::app::hardware::{
+    DiskMetrics, HardwareInfo, LoadMetrics, MemoryBreakdown, NetworkMetrics,
+};
 use crate::app::CbtopApp;
 
 impl CbtopApp {

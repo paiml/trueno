@@ -222,11 +222,7 @@ fn test_ld_global_f16_to_f32_predicated_with_store() {
     let ptx = kernel.emit();
 
     // Verify complete instruction sequence
-    assert!(
-        ptx.contains("@%p"),
-        "Expected predicate guard in: {}",
-        ptx
-    );
+    assert!(ptx.contains("@%p"), "Expected predicate guard in: {}", ptx);
     assert!(
         ptx.contains("ld.global"),
         "Expected global load in: {}",

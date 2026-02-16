@@ -39,8 +39,8 @@ fn make_collector_with_samples(n: usize) -> TunerDataCollector {
 }
 
 mod constructors_and_basics;
-mod json_and_training;
-mod feedback_and_errors;
 mod drift_and_retrain;
+mod feedback_and_errors;
+mod json_and_training;
 mod persistence;
 mod structs_and_edge_cases;

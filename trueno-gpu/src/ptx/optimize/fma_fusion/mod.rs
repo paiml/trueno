@@ -147,9 +147,14 @@ fn try_fuse_mul_add(
             continue;
         };
 
-        if let Some(pair) =
-            try_fuse_source(add_instr, src_idx, *mul_result, instructions, use_counts, definitions)
-        {
+        if let Some(pair) = try_fuse_source(
+            add_instr,
+            src_idx,
+            *mul_result,
+            instructions,
+            use_counts,
+            definitions,
+        ) {
             return Some(pair);
         }
     }

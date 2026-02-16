@@ -144,7 +144,10 @@ impl PtxBugAnalyzer {
         for (i, line) in lines.iter().enumerate() {
             let line = line.trim();
             if let Some(label_caps) = label_pattern.captures(line) {
-                let label = label_caps.get(1).expect("invariant: capture group exists").as_str();
+                let label = label_caps
+                    .get(1)
+                    .expect("invariant: capture group exists")
+                    .as_str();
                 if scan_empty_loop(lines, i, label, &branch_pattern) {
                     bugs.push(PtxBug {
                         class: PtxBugClass::EmptyLoopBody,
@@ -233,9 +236,9 @@ impl PtxBugAnalyzer {
 }
 
 const COMPUTE_OPS: &[&str] = &[
-    "add.", "sub.", "mul.", "div.", "fma.", "mad.", "ld.", "st.", "cvt.",
-    "mov.", "setp.", "and.", "or.", "xor.", "shl.", "shr.", "min.", "max.",
-    "abs.", "neg.", "rcp.", "sqrt.", "rsqrt.", "sin.", "cos.", "ex2.", "lg2.",
+    "add.", "sub.", "mul.", "div.", "fma.", "mad.", "ld.", "st.", "cvt.", "mov.", "setp.", "and.",
+    "or.", "xor.", "shl.", "shr.", "min.", "max.", "abs.", "neg.", "rcp.", "sqrt.", "rsqrt.",
+    "sin.", "cos.", "ex2.", "lg2.",
 ];
 
 /// Returns `true` if the line is empty or a comment (should be skipped in analysis).
@@ -255,9 +258,11 @@ fn is_end_label(line: &str) -> bool {
 
 /// If the line is a branch instruction, returns the branch target label.
 fn branch_target<'a>(line: &'a str, branch_re: &Regex) -> Option<&'a str> {
-    branch_re
-        .captures(line)
-        .map(|caps| caps.get(1).expect("invariant: capture group exists").as_str())
+    branch_re.captures(line).map(|caps| {
+        caps.get(1)
+            .expect("invariant: capture group exists")
+            .as_str()
+    })
 }
 
 /// Scan forward from a label to determine if a loop body is empty (no compute ops).

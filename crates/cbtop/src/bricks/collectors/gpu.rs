@@ -92,7 +92,9 @@ impl Brick for GpuCollectorBrick {
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
             BrickAssertion::custom("memory_valid", |b| {
-                let s = b.downcast_ref::<GpuCollectorBrick>().expect("brick MUST be GpuCollectorBrick");
+                let s = b
+                    .downcast_ref::<GpuCollectorBrick>()
+                    .expect("brick MUST be GpuCollectorBrick");
                 s.history
                     .back()
                     .map_or(true, |m| m.memory_used_mb <= m.memory_total_mb)

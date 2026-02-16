@@ -14,6 +14,6 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-mod null_and_shmem;
 mod lifecycle_and_quant;
+mod null_and_shmem;
 mod ptx_and_supervisor;

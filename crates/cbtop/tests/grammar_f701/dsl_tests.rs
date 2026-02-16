@@ -1,10 +1,9 @@
 //! grammar_f701 - Part 2
 
 use cbtop::{
-    CompositionMode, ComputeBlock, DataTransform, DataType,
-    Dimensions, ExecutionContext, ExecutionPolicy, ExecutionStrategy, GpuDevice, GrammarError,
-    LinearResourceScale, Operation, QosLevel, ResourceMapping, ResourceScale, SimdWidth,
-    StrategyLayer, TensorSpec, WorkloadSpec,
+    CompositionMode, ComputeBlock, DataTransform, DataType, Dimensions, ExecutionContext,
+    ExecutionPolicy, ExecutionStrategy, GpuDevice, GrammarError, LinearResourceScale, Operation,
+    QosLevel, ResourceMapping, ResourceScale, SimdWidth, StrategyLayer, TensorSpec, WorkloadSpec,
 };
 
 // ============================================================================

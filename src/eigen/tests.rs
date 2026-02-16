@@ -356,3 +356,176 @@ mod proptest_tests {
         }
     }
 }
+
+// =========================================================================
+// GPU Tests - Exercise compute_gpu path for large symmetric matrices
+// =========================================================================
+
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+mod gpu_tests {
+    use super::*;
+
+    /// Test compute_gpu via public API with a diagonal matrix large enough to
+    /// exceed GPU_THRESHOLD (n >= 1000).
+    /// Diagonal matrices have known eigenvalues (the diagonal elements).
+    #[test]
+    fn test_symmetric_eigen_gpu_diagonal() {
+        use crate::backends::gpu::GpuBackend;
+
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test_symmetric_eigen_gpu_diagonal");
+            return;
+        }
+
+        // n=1000 triggers the GPU path (GPU_THRESHOLD = 1000)
+        let n = 1000;
+        let mut data = vec![0.0f32; n * n];
+        // Set diagonal: eigenvalues are n, n-1, ..., 1
+        for i in 0..n {
+            data[i * n + i] = (n - i) as f32;
+        }
+
+        let m = Matrix::from_vec(n, n, data).expect("valid matrix");
+        let eigen = SymmetricEigen::new(&m).expect("GPU eigendecomposition should succeed");
+
+        let values = eigen.eigenvalues();
+        assert_eq!(values.len(), n);
+
+        // Eigenvalues should be in descending order
+        for i in 1..values.len() {
+            assert!(
+                values[i - 1] >= values[i] - 1e-3,
+                "eigenvalues not descending at index {}: {} < {}",
+                i,
+                values[i - 1],
+                values[i]
+            );
+        }
+
+        // For a diagonal matrix, eigenvalues should be the diagonal elements
+        // The largest should be n=1000, the smallest should be 1
+        assert!(
+            (values[0] - n as f32).abs() < 1.0,
+            "largest eigenvalue should be ~{}, got {}",
+            n,
+            values[0]
+        );
+        assert!(
+            (values[n - 1] - 1.0).abs() < 1.0,
+            "smallest eigenvalue should be ~1.0, got {}",
+            values[n - 1]
+        );
+    }
+
+    /// Test compute_gpu with scaled identity plus small perturbation.
+    /// This converges very quickly (1 sweep) since the matrix is nearly diagonal.
+    #[test]
+    fn test_symmetric_eigen_gpu_near_diagonal() {
+        use crate::backends::gpu::GpuBackend;
+
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test_symmetric_eigen_gpu_near_diagonal");
+            return;
+        }
+
+        // n=1000 triggers GPU path
+        let n = 1000;
+        let mut data = vec![0.0f32; n * n];
+
+        // Nearly diagonal: strong diagonal dominance ensures fast convergence.
+        // Diagonal = i+1, tiny off-diagonal perturbation every 100 elements.
+        for i in 0..n {
+            data[i * n + i] = (i + 1) as f32;
+        }
+        // Add small off-diagonal blocks every 100 elements for non-trivial structure
+        for block in 0..10 {
+            let base = block * 100;
+            if base + 1 < n {
+                data[base * n + (base + 1)] = 0.001;
+                data[(base + 1) * n + base] = 0.001;
+            }
+        }
+
+        let m = Matrix::from_vec(n, n, data).expect("valid matrix");
+        let eigen = SymmetricEigen::new(&m).expect("GPU eigendecomposition should succeed");
+
+        let values = eigen.eigenvalues();
+        assert_eq!(values.len(), n);
+
+        // Eigenvalues should be in descending order
+        for i in 1..values.len() {
+            assert!(
+                values[i - 1] >= values[i] - 1e-2,
+                "eigenvalues not descending at index {}: {} < {}",
+                i,
+                values[i - 1],
+                values[i]
+            );
+        }
+
+        // Trace should be preserved: sum of eigenvalues = sum of diagonal = n*(n+1)/2
+        let trace_expected = (n * (n + 1)) as f32 / 2.0;
+        let trace_actual: f32 = values.iter().sum();
+        assert!(
+            (trace_actual - trace_expected).abs() / trace_expected < 0.01,
+            "trace mismatch: expected {}, got {}",
+            trace_expected,
+            trace_actual
+        );
+
+        // Largest eigenvalue should be ~1000
+        assert!(
+            (values[0] - 1000.0).abs() < 1.0,
+            "largest eigenvalue should be ~1000, got {}",
+            values[0]
+        );
+    }
+
+    /// Test compute_gpu directly by calling the private method.
+    #[test]
+    fn test_compute_gpu_direct() {
+        use crate::backends::gpu::GpuBackend;
+
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test_compute_gpu_direct");
+            return;
+        }
+
+        // Use a small symmetric matrix to test the direct compute_gpu method
+        // (it internally falls back to CPU for n < 64, but still exercises compute_gpu dispatch)
+        let n = 3;
+        let data = vec![4.0, 2.0, 0.0, 2.0, 5.0, 3.0, 0.0, 3.0, 6.0];
+
+        let m = Matrix::from_vec(n, n, data).expect("valid matrix");
+
+        // Call compute_gpu directly (it will use the CPU fallback path inside
+        // GpuDevice::symmetric_eigen since n < 64, but this still exercises the
+        // compute_gpu wrapper in eigen/mod.rs)
+        let result = SymmetricEigen::compute_gpu(&m);
+        assert!(result.is_ok(), "compute_gpu failed: {:?}", result.err());
+
+        let eigen = result.unwrap();
+        let values = eigen.eigenvalues();
+        assert_eq!(values.len(), 3);
+
+        // Eigenvalues should be in descending order
+        assert!(values[0] >= values[1]);
+        assert!(values[1] >= values[2]);
+
+        // The matrix [[4,2,0],[2,5,3],[0,3,6]] has eigenvalues approximately:
+        // 8.86, 4.38, 1.76 (trace = 15)
+        let trace: f32 = values.iter().sum();
+        assert!(
+            (trace - 15.0).abs() < 0.1,
+            "eigenvalue sum should equal trace (15), got {}",
+            trace
+        );
+
+        // Backend should be GPU
+        assert!(
+            matches!(eigen.backend(), crate::Backend::GPU),
+            "expected GPU backend, got {:?}",
+            eigen.backend()
+        );
+    }
+}

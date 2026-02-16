@@ -77,6 +77,5 @@ pub fn alert_from_anomaly(
     .with_threshold(expected)
 }
 
-
 #[cfg(test)]
 mod tests;

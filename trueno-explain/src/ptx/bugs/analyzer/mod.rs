@@ -219,7 +219,6 @@ impl PtxBugAnalyzer {
                 .to_string()
         })
     }
-
 }
 
 mod detectors;

@@ -194,7 +194,6 @@ pub fn validate(instructions: &[PtxInstruction]) -> Result<()> {
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests;
 

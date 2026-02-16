@@ -276,6 +276,5 @@ pub const DEFAULT_MEMORY_LIMIT_BYTES: usize = 100 * 1024 * 1024;
 /// Default skew threshold (percent)
 pub const DEFAULT_SKEW_THRESHOLD_PERCENT: f64 = 40.0;
 
-
 #[cfg(test)]
 mod tests;

@@ -120,7 +120,13 @@ fn launch_incremental_attention_kernel(
     ];
 
     compile_lock_launch(
-        ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        ctx,
+        stream,
+        &cache_key,
+        &ptx,
+        kernel.name(),
+        &config,
+        &mut args,
     )?;
 
     Ok(())
@@ -167,8 +173,15 @@ pub fn incremental_attention_gpu(
     seq_len: u32,
     max_seq_len: u32,
 ) -> Result<GpuResidentTensor<f32>> {
-    let params =
-        validate_incremental_attention(q, k_cache, v_cache, n_heads, head_dim, seq_len, max_seq_len)?;
+    let params = validate_incremental_attention(
+        q,
+        k_cache,
+        v_cache,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+    )?;
 
     // Handle empty sequence (no attention needed)
     if seq_len == 0 {
@@ -181,7 +194,16 @@ pub fn incremental_attention_gpu(
     let stream = CudaStream::new(ctx)?;
 
     launch_incremental_attention_kernel(
-        ctx, q, k_cache, v_cache, &output, n_heads, head_dim, seq_len, max_seq_len, &stream,
+        ctx,
+        q,
+        k_cache,
+        v_cache,
+        &output,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
     )?;
 
     // WAPR-PERF-014: MUST sync before returning since stream goes out of scope
@@ -217,8 +239,15 @@ pub fn incremental_attention_gpu_with_stream(
     max_seq_len: u32,
     stream: &CudaStream,
 ) -> Result<GpuResidentTensor<f32>> {
-    let params =
-        validate_incremental_attention(q, k_cache, v_cache, n_heads, head_dim, seq_len, max_seq_len)?;
+    let params = validate_incremental_attention(
+        q,
+        k_cache,
+        v_cache,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+    )?;
 
     // Handle empty sequence
     if seq_len == 0 {
@@ -230,7 +259,16 @@ pub fn incremental_attention_gpu_with_stream(
     let output = GpuBuffer::new(ctx, params.q_expected)?;
 
     launch_incremental_attention_kernel(
-        ctx, q, k_cache, v_cache, &output, n_heads, head_dim, seq_len, max_seq_len, stream,
+        ctx,
+        q,
+        k_cache,
+        v_cache,
+        &output,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        stream,
     )?;
 
     // NO SYNC - uses caller's stream for pipelining
@@ -262,8 +300,15 @@ pub fn incremental_attention_gpu_async(
     seq_len: u32,
     max_seq_len: u32,
 ) -> Result<(GpuResidentTensor<f32>, CudaStream)> {
-    let params =
-        validate_incremental_attention(q, k_cache, v_cache, n_heads, head_dim, seq_len, max_seq_len)?;
+    let params = validate_incremental_attention(
+        q,
+        k_cache,
+        v_cache,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+    )?;
 
     // Handle empty sequence
     if seq_len == 0 {
@@ -278,7 +323,16 @@ pub fn incremental_attention_gpu_async(
     let stream = CudaStream::new(ctx)?;
 
     launch_incremental_attention_kernel(
-        ctx, q, k_cache, v_cache, &output, n_heads, head_dim, seq_len, max_seq_len, &stream,
+        ctx,
+        q,
+        k_cache,
+        v_cache,
+        &output,
+        n_heads,
+        head_dim,
+        seq_len,
+        max_seq_len,
+        &stream,
     )?;
 
     // NO SYNC - caller controls synchronization (Point 149)
@@ -381,7 +435,13 @@ pub fn kv_cache_scatter_gpu(
     ];
 
     compile_lock_launch(
-        ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        ctx,
+        stream,
+        &cache_key,
+        &ptx,
+        kernel.name(),
+        &config,
+        &mut args,
     )?;
 
     // NO SYNC - caller chains operations (Point 149)
