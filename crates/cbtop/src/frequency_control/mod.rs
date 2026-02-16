@@ -34,31 +34,34 @@ pub enum CpuGovernor {
     Unknown,
 }
 
+/// Governor spec: (variant, string name).
+const GOVERNOR_SPECS: &[(CpuGovernor, &str)] = &[
+    (CpuGovernor::Performance, "performance"),
+    (CpuGovernor::Powersave, "powersave"),
+    (CpuGovernor::Ondemand, "ondemand"),
+    (CpuGovernor::Conservative, "conservative"),
+    (CpuGovernor::Schedutil, "schedutil"),
+    (CpuGovernor::Userspace, "userspace"),
+];
+
 impl CpuGovernor {
     /// Get governor name
     pub fn name(&self) -> &'static str {
-        match self {
-            Self::Performance => "performance",
-            Self::Powersave => "powersave",
-            Self::Ondemand => "ondemand",
-            Self::Conservative => "conservative",
-            Self::Schedutil => "schedutil",
-            Self::Userspace => "userspace",
-            Self::Unknown => "unknown",
-        }
+        GOVERNOR_SPECS
+            .iter()
+            .find(|(v, _)| v == self)
+            .map(|(_, n)| *n)
+            .unwrap_or("unknown")
     }
 
     /// Parse from string
     pub fn parse(s: &str) -> Self {
-        match s.trim().to_lowercase().as_str() {
-            "performance" => Self::Performance,
-            "powersave" => Self::Powersave,
-            "ondemand" => Self::Ondemand,
-            "conservative" => Self::Conservative,
-            "schedutil" => Self::Schedutil,
-            "userspace" => Self::Userspace,
-            _ => Self::Unknown,
-        }
+        let lower = s.trim().to_lowercase();
+        GOVERNOR_SPECS
+            .iter()
+            .find(|(_, n)| *n == lower)
+            .map(|(v, _)| *v)
+            .unwrap_or(Self::Unknown)
     }
 
     /// Check if deterministic (fixed frequency)
@@ -126,25 +129,26 @@ impl FrequencyReading {
 
     /// Get min frequency across cores in MHz
     pub fn min_mhz(&self) -> f64 {
-        self.cpus
-            .iter()
-            .map(|c| c.current_mhz())
-            .min_by(|a, b| a.partial_cmp(b).expect("values should be comparable"))
-            .expect("min of non-empty collection")
+        self.extremum_mhz(f64::min)
     }
 
     /// Get max frequency across cores in MHz
     pub fn max_mhz(&self) -> f64 {
-        self.cpus
-            .iter()
-            .map(|c| c.current_mhz())
-            .max_by(|a, b| a.partial_cmp(b).expect("values should be comparable"))
-            .expect("max of non-empty collection")
+        self.extremum_mhz(f64::max)
     }
 
     /// Get frequency variance in MHz
     pub fn variance_mhz(&self) -> f64 {
         self.max_mhz() - self.min_mhz()
+    }
+
+    /// Shared extremum helper (min or max across core frequencies).
+    fn extremum_mhz(&self, cmp: fn(f64, f64) -> f64) -> f64 {
+        self.cpus
+            .iter()
+            .map(|c| c.current_mhz())
+            .reduce(cmp)
+            .expect("non-empty collection")
     }
 
     /// Check if all cores have same governor
@@ -379,17 +383,11 @@ impl FrequencyLock {
     pub fn try_lock(controller: &FrequencyController) -> Self {
         let reading = controller.read_all_frequencies();
 
-        let original_governors: Vec<(usize, CpuGovernor)> = reading
+        let (original_governors, original_frequencies): (Vec<_>, Vec<_>) = reading
             .cpus
             .iter()
-            .map(|c| (c.cpu_id, c.governor))
-            .collect();
-
-        let original_frequencies: Vec<(usize, u64)> = reading
-            .cpus
-            .iter()
-            .map(|c| (c.cpu_id, c.current_khz))
-            .collect();
+            .map(|c| ((c.cpu_id, c.governor), (c.cpu_id, c.current_khz)))
+            .unzip();
 
         let mut lock = Self {
             original_governors,
@@ -412,11 +410,7 @@ impl FrequencyLock {
     /// Try to set performance governor on all CPUs
     fn try_set_performance(&self) -> bool {
         for (cpu_id, _) in &self.original_governors {
-            let path = self
-                .sysfs_path
-                .join(format!("cpu{}/cpufreq/scaling_governor", cpu_id));
-
-            if std::fs::write(&path, "performance").is_err() {
+            if std::fs::write(governor_path(&self.sysfs_path, *cpu_id), "performance").is_err() {
                 return false;
             }
         }
@@ -437,11 +431,7 @@ impl Drop for FrequencyLock {
 
         // Restore original governors
         for (cpu_id, governor) in &self.original_governors {
-            let path = self
-                .sysfs_path
-                .join(format!("cpu{}/cpufreq/scaling_governor", cpu_id));
-
-            let _ = std::fs::write(&path, governor.name());
+            let _ = std::fs::write(governor_path(&self.sysfs_path, *cpu_id), governor.name());
         }
     }
 }
@@ -453,18 +443,24 @@ fn num_cpus() -> usize {
         .unwrap_or(1)
 }
 
+/// Read and trim a sysfs file. Returns None on I/O error.
+fn read_sysfs_trimmed(path: &std::path::Path) -> Option<String> {
+    std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
+}
+
 /// Read u64 value from sysfs
 fn read_sysfs_value(path: &std::path::Path) -> Option<u64> {
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|s| s.trim().parse().ok())
+    read_sysfs_trimmed(path).and_then(|s| s.parse().ok())
 }
 
 /// Read string from sysfs
 fn read_sysfs_string(path: &std::path::Path) -> Option<String> {
-    std::fs::read_to_string(path)
-        .ok()
-        .map(|s| s.trim().to_string())
+    read_sysfs_trimmed(path)
+}
+
+/// Build sysfs governor path for a given CPU.
+fn governor_path(sysfs_path: &std::path::Path, cpu_id: usize) -> PathBuf {
+    sysfs_path.join(format!("cpu{cpu_id}/cpufreq/scaling_governor"))
 }
 
 
