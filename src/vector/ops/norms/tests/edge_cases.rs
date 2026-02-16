@@ -1,18 +1,10 @@
-use crate::{Result, Vector};
+use super::*;
 
-type NormMethod = fn(&Vector<f32>) -> Result<f32>;
-
-fn norm_l1(v: &Vector<f32>) -> Result<f32> { v.norm_l1() }
-fn norm_l2(v: &Vector<f32>) -> Result<f32> { v.norm_l2() }
-fn norm_linf(v: &Vector<f32>) -> Result<f32> { v.norm_linf() }
-
-/// Unified edge-case + large-vector table for all three norms.
 fn edge_cases() -> Vec<(NormMethod, &'static str, Vec<f32>, f32)> {
     let l2_large: Vec<f32> = (0..1024).map(|i| (i as f32) * 0.01).collect();
     let l2_large_exp = l2_large.iter().map(|x| x * x).sum::<f32>().sqrt();
 
     vec![
-        // --- L2 ---
         (norm_l2, "l2-pythagorean", vec![3.0, 4.0], 5.0),
         (norm_l2, "l2-empty", vec![], 0.0),
         (norm_l2, "l2-unit", vec![1.0, 0.0, 0.0], 1.0),
@@ -22,7 +14,6 @@ fn edge_cases() -> Vec<(NormMethod, &'static str, Vec<f32>, f32)> {
         (norm_l2, "l2-mixed", vec![3.0, -4.0, 0.0], 5.0),
         (norm_l2, "l2-5elem", vec![1.0, 2.0, 3.0, 4.0, 5.0], (1.0 + 4.0 + 9.0 + 16.0 + 25.0_f32).sqrt()),
         (norm_l2, "l2-large", l2_large, l2_large_exp),
-        // --- L1 ---
         (norm_l1, "l1-basic", vec![3.0, -4.0, 5.0], 12.0),
         (norm_l1, "l1-empty", vec![], 0.0),
         (norm_l1, "l1-single-neg", vec![-7.0], 7.0),
@@ -31,7 +22,6 @@ fn edge_cases() -> Vec<(NormMethod, &'static str, Vec<f32>, f32)> {
         (norm_l1, "l1-all-neg", vec![-1.0, -2.0, -3.0], 6.0),
         (norm_l1, "l1-non-aligned", vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0], 28.0),
         (norm_l1, "l1-large", (0..512).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect(), 512.0),
-        // --- Linf ---
         (norm_linf, "linf-basic", vec![3.0, -7.0, 5.0, -2.0], 7.0),
         (norm_linf, "linf-empty", vec![], 0.0),
         (norm_linf, "linf-all-neg", vec![-1.0, -5.0, -3.0], 5.0),
