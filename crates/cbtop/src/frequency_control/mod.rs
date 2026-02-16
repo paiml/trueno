@@ -88,14 +88,19 @@ pub struct CpuFrequencyInfo {
 }
 
 impl CpuFrequencyInfo {
+    /// Convert kHz to MHz.
+    fn khz_to_mhz(khz: u64) -> f64 {
+        khz as f64 / 1_000.0
+    }
+
     /// Get current frequency in MHz
     pub fn current_mhz(&self) -> f64 {
-        self.current_khz as f64 / 1000.0
+        Self::khz_to_mhz(self.current_khz)
     }
 
     /// Get current frequency in GHz
     pub fn current_ghz(&self) -> f64 {
-        self.current_khz as f64 / 1_000_000.0
+        Self::khz_to_mhz(self.current_khz) / 1_000.0
     }
 
     /// Get frequency utilization (current / max)
@@ -104,6 +109,45 @@ impl CpuFrequencyInfo {
             self.current_khz as f64 / self.max_khz as f64
         } else {
             1.0
+        }
+    }
+
+    /// Build a mock CpuFrequencyInfo for testing.
+    fn mock(cpu_id: usize, frequency_khz: u64, governor: CpuGovernor) -> Self {
+        Self {
+            cpu_id,
+            current_khz: frequency_khz,
+            min_khz: 800_000,
+            max_khz: 4_000_000,
+            governor,
+            available_governors: vec![CpuGovernor::Performance, CpuGovernor::Powersave],
+        }
+    }
+
+    /// Read CpuFrequencyInfo from sysfs for the given CPU.
+    fn from_sysfs(cpu_id: usize, sysfs_path: &std::path::Path) -> Self {
+        let cpu_path = sysfs_path.join(format!("cpu{cpu_id}/cpufreq"));
+
+        let read_khz = |name: &str| read_sysfs_value(&cpu_path.join(name)).unwrap_or(0);
+
+        let governor = read_sysfs_string(&cpu_path.join("scaling_governor"))
+            .map(|s| CpuGovernor::parse(&s))
+            .unwrap_or(CpuGovernor::Unknown);
+
+        let available_governors: Vec<CpuGovernor> =
+            read_sysfs_string(&cpu_path.join("scaling_available_governors"))
+                .unwrap_or_default()
+                .split_whitespace()
+                .map(CpuGovernor::parse)
+                .collect();
+
+        Self {
+            cpu_id,
+            current_khz: read_khz("scaling_cur_freq"),
+            min_khz: read_khz("scaling_min_freq"),
+            max_khz: read_khz("scaling_max_freq"),
+            governor,
+            available_governors,
         }
     }
 }
@@ -218,42 +262,10 @@ impl FrequencyController {
 
     /// Read frequency for single CPU
     pub fn read_cpu_frequency(&self, cpu_id: usize) -> Option<CpuFrequencyInfo> {
-        if self.mock_mode {
-            return Some(CpuFrequencyInfo {
-                cpu_id,
-                current_khz: self.mock_frequency,
-                min_khz: 800_000,
-                max_khz: 4_000_000,
-                governor: self.mock_governor,
-                available_governors: vec![CpuGovernor::Performance, CpuGovernor::Powersave],
-            });
-        }
-
-        // Read from sysfs
-        let cpu_path = self.sysfs_path.join(format!("cpu{}/cpufreq", cpu_id));
-
-        let current_khz = read_sysfs_value(&cpu_path.join("scaling_cur_freq")).unwrap_or(0);
-        let min_khz = read_sysfs_value(&cpu_path.join("scaling_min_freq")).unwrap_or(0);
-        let max_khz = read_sysfs_value(&cpu_path.join("scaling_max_freq")).unwrap_or(0);
-
-        let governor_str = read_sysfs_string(&cpu_path.join("scaling_governor"))
-            .unwrap_or_else(|| "unknown".to_string());
-        let governor = CpuGovernor::parse(&governor_str);
-
-        let available_str =
-            read_sysfs_string(&cpu_path.join("scaling_available_governors")).unwrap_or_default();
-        let available_governors: Vec<CpuGovernor> = available_str
-            .split_whitespace()
-            .map(CpuGovernor::parse)
-            .collect();
-
-        Some(CpuFrequencyInfo {
-            cpu_id,
-            current_khz,
-            min_khz,
-            max_khz,
-            governor,
-            available_governors,
+        Some(if self.mock_mode {
+            CpuFrequencyInfo::mock(cpu_id, self.mock_frequency, self.mock_governor)
+        } else {
+            CpuFrequencyInfo::from_sysfs(cpu_id, &self.sysfs_path)
         })
     }
 
@@ -288,49 +300,18 @@ impl FrequencyController {
             return false;
         }
 
-        reading.cpus[0]
-            .available_governors
-            .contains(&CpuGovernor::Userspace)
-            || reading.cpus[0]
-                .available_governors
-                .contains(&CpuGovernor::Performance)
+        let govs = &reading.cpus[0].available_governors;
+        govs.contains(&CpuGovernor::Userspace) || govs.contains(&CpuGovernor::Performance)
     }
 
     /// Measure frequency variance over time
     pub fn measure_variance(&self, samples: usize, interval_ms: u64) -> FrequencyVariance {
         let mut readings = Vec::with_capacity(samples);
-
         for _ in 0..samples {
-            let reading = self.read_all_frequencies();
-            readings.push(reading.average_mhz());
+            readings.push(self.read_all_frequencies().average_mhz());
             std::thread::sleep(std::time::Duration::from_millis(interval_ms));
         }
-
-        if readings.is_empty() {
-            return FrequencyVariance::default();
-        }
-
-        let mean: f64 = readings.iter().sum::<f64>() / readings.len() as f64;
-        let variance: f64 = readings.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
-            / (readings.len() - 1).max(1) as f64;
-        let std_dev = variance.sqrt();
-        let cv = if mean > 0.0 {
-            std_dev / mean * 100.0
-        } else {
-            0.0
-        };
-
-        let min = readings.iter().copied().fold(f64::INFINITY, f64::min);
-        let max = readings.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-
-        FrequencyVariance {
-            mean_mhz: mean,
-            std_dev_mhz: std_dev,
-            cv_percent: cv,
-            min_mhz: min,
-            max_mhz: max,
-            sample_count: readings.len(),
-        }
+        FrequencyVariance::from_samples(&readings)
     }
 }
 
@@ -352,6 +333,26 @@ pub struct FrequencyVariance {
 }
 
 impl FrequencyVariance {
+    /// Compute variance statistics from a set of frequency samples (MHz).
+    pub fn from_samples(readings: &[f64]) -> Self {
+        if readings.is_empty() {
+            return Self::default();
+        }
+        let n = readings.len() as f64;
+        let mean = readings.iter().sum::<f64>() / n;
+        let var = readings.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0).max(1.0);
+        let std_dev = var.sqrt();
+        let cv = if mean > 0.0 { std_dev / mean * 100.0 } else { 0.0 };
+        Self {
+            mean_mhz: mean,
+            std_dev_mhz: std_dev,
+            cv_percent: cv,
+            min_mhz: readings.iter().copied().fold(f64::INFINITY, f64::min),
+            max_mhz: readings.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+            sample_count: readings.len(),
+        }
+    }
+
     /// Check if variance is acceptable (<3% CV)
     pub fn is_stable(&self) -> bool {
         self.cv_percent < 3.0
