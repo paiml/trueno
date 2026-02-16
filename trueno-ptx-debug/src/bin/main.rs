@@ -81,7 +81,18 @@ EXAMPLES:
 "#);
 }
 
-fn cmd_analyze(args: &[String]) -> Result<(), String> {
+/// Parsed arguments for the `analyze` subcommand.
+struct AnalyzeArgs {
+    file_path: String,
+    #[allow(dead_code)]
+    run_falsify: bool,
+    min_score: f64,
+    html_output: Option<String>,
+    json_output: bool,
+}
+
+/// Parse the CLI arguments for the `analyze` subcommand.
+fn parse_analyze_args(args: &[String]) -> Result<AnalyzeArgs, String> {
     if args.is_empty() {
         return Err("Missing PTX file argument".into());
     }
@@ -117,20 +128,71 @@ fn cmd_analyze(args: &[String]) -> Result<(), String> {
         i += 1;
     }
 
-    let file_path = file_path.ok_or("Missing PTX file argument")?;
+    Ok(AnalyzeArgs {
+        file_path: file_path.ok_or("Missing PTX file argument")?,
+        run_falsify,
+        min_score,
+        html_output,
+        json_output,
+    })
+}
 
-    // Read PTX file
-    let ptx_source = fs::read_to_string(&file_path)
-        .map_err(|e| format!("Failed to read {}: {}", file_path, e))?;
+/// Print analysis results as JSON.
+fn print_json_report(result: &AnalysisResult, report: &trueno_ptx_debug::falsification::FalsificationReport) {
+    println!("{{");
+    println!("  \"module\": \"{}\",", result.module_name);
+    println!("  \"score\": {:.1},", result.falsification_score);
+    println!("  \"confidence\": {:.2},", result.confidence);
+    println!("  \"earned_points\": {},", report.earned_points);
+    println!("  \"total_points\": {},", report.total_points);
+    println!("  \"critical_bugs_absent\": {}", report.critical_bugs_absent());
+    println!("}}");
+}
 
-    // Parse PTX
+/// Print analysis results as human-readable text.
+fn print_text_report(result: &AnalysisResult, report: &trueno_ptx_debug::falsification::FalsificationReport) {
+    println!("PTX Analysis Report: {}", result.module_name);
+    println!("=========================================");
+    println!("Score: {:.1}/100", result.falsification_score);
+    println!("Confidence: {:.1}%", result.confidence * 100.0);
+    println!("Points: {}/{}", report.earned_points, report.total_points);
+    println!();
+
+    let failed = report.failed_tests();
+    if failed.is_empty() {
+        println!("All tests passed!");
+    } else {
+        println!("Failed tests ({}):", failed.len());
+        for (id, category, desc, _result) in failed {
+            println!("  {} [{}]: {}", id, category, desc);
+        }
+    }
+}
+
+/// Determine the process exit code from the analysis results.
+fn exit_for_score(report: &trueno_ptx_debug::falsification::FalsificationReport, score: f64, min_score: f64) {
+    if report.has_critical_bugs() {
+        process::exit(3);
+    } else if score < min_score {
+        process::exit(2);
+    } else if score < 90.0 {
+        process::exit(1);
+    }
+}
+
+fn cmd_analyze(args: &[String]) -> Result<(), String> {
+    let opts = parse_analyze_args(args)?;
+
+    // Read and parse PTX file
+    let ptx_source = fs::read_to_string(&opts.file_path)
+        .map_err(|e| format!("Failed to read {}: {}", opts.file_path, e))?;
     let mut parser = Parser::new(&ptx_source)
         .map_err(|e| format!("Parse error: {}", e))?;
     let module = parser.parse()
         .map_err(|e| format!("Parse error: {}", e))?;
 
     // Extract module name from file path
-    let module_name = std::path::Path::new(&file_path)
+    let module_name = std::path::Path::new(&opts.file_path)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
@@ -138,61 +200,26 @@ fn cmd_analyze(args: &[String]) -> Result<(), String> {
 
     // Run analysis
     let registry = FalsificationRegistry::new();
-    let report = if run_falsify {
-        registry.evaluate(&module)
-    } else {
-        // Quick analysis - just critical tests
-        registry.evaluate(&module)
-    };
-
+    let report = registry.evaluate(&module);
     let bugs = BugRegistry::new();
     let result = AnalysisResult::new(&module_name, report.clone(), bugs);
 
     // Output results
-    if json_output {
-        println!("{{");
-        println!("  \"module\": \"{}\",", result.module_name);
-        println!("  \"score\": {:.1},", result.falsification_score);
-        println!("  \"confidence\": {:.2},", result.confidence);
-        println!("  \"earned_points\": {},", report.earned_points);
-        println!("  \"total_points\": {},", report.total_points);
-        println!("  \"critical_bugs_absent\": {}", report.critical_bugs_absent());
-        println!("}}");
+    if opts.json_output {
+        print_json_report(&result, &report);
     } else {
-        println!("PTX Analysis Report: {}", module_name);
-        println!("=========================================");
-        println!("Score: {:.1}/100", result.falsification_score);
-        println!("Confidence: {:.1}%", result.confidence * 100.0);
-        println!("Points: {}/{}", report.earned_points, report.total_points);
-        println!();
-
-        let failed = report.failed_tests();
-        if failed.is_empty() {
-            println!("All tests passed!");
-        } else {
-            println!("Failed tests ({}):", failed.len());
-            for (id, category, desc, _result) in failed {
-                println!("  {} [{}]: {}", id, category, desc);
-            }
-        }
+        print_text_report(&result, &report);
     }
 
     // Write HTML report if requested
-    if let Some(html_path) = html_output {
+    if let Some(html_path) = opts.html_output {
         let html = generate_html_report(&result);
         fs::write(&html_path, html)
             .map_err(|e| format!("Failed to write {}: {}", html_path, e))?;
         println!("\nHTML report written to: {}", html_path);
     }
 
-    // Exit code based on score
-    if report.has_critical_bugs() {
-        process::exit(3);
-    } else if result.falsification_score < min_score {
-        process::exit(2);
-    } else if result.falsification_score < 90.0 {
-        process::exit(1);
-    }
+    exit_for_score(&report, result.falsification_score, opts.min_score);
 
     Ok(())
 }

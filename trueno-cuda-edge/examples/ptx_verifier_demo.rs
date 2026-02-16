@@ -12,7 +12,16 @@ fn main() {
 
     let verifier = PtxVerifier::new();
 
-    // 1. Valid PTX Verification
+    demo_valid_ptx_verification(&verifier);
+    demo_structural_error_detection(&verifier);
+    demo_mutation_operators();
+    demo_mutation_application();
+    demo_barrier_removal();
+
+    println!("\n=== Demo Complete ===");
+}
+
+fn demo_valid_ptx_verification(verifier: &PtxVerifier) {
     println!("1. Valid PTX Verification");
     println!("   ───────────────────────");
     println!("   Source:");
@@ -29,8 +38,9 @@ fn main() {
     }
 
     println!();
+}
 
-    // 2. Structural Error Detection
+fn demo_structural_error_detection(verifier: &PtxVerifier) {
     println!("2. Structural Error Detection");
     println!("   ───────────────────────────");
 
@@ -59,24 +69,29 @@ fn main() {
     ];
 
     for (name, source) in test_cases {
-        let errors = verifier.check_all(source);
-        if errors.is_empty() {
-            println!("   {} → ✓ No errors", name);
-        } else {
-            print!("   {} → ✗ ", name);
-            for (i, e) in errors.iter().enumerate() {
-                if i > 0 {
-                    print!(", ");
-                }
-                print!("{}", e);
-            }
-            println!();
-        }
+        print_verification_result(verifier, name, source);
     }
 
     println!();
+}
 
-    // 3. Mutation Operators
+fn print_verification_result(verifier: &PtxVerifier, name: &str, source: &str) {
+    let errors = verifier.check_all(source);
+    if errors.is_empty() {
+        println!("   {} → ✓ No errors", name);
+    } else {
+        print!("   {} → ✗ ", name);
+        for (i, e) in errors.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}", e);
+        }
+        println!();
+    }
+}
+
+fn demo_mutation_operators() {
     println!("3. Mutation Operators");
     println!("   ───────────────────");
 
@@ -87,8 +102,9 @@ fn main() {
     }
 
     println!();
+}
 
-    // 4. Mutation Application
+fn demo_mutation_application() {
     println!("4. Mutation Application");
     println!("   ─────────────────────");
 
@@ -110,8 +126,9 @@ fn main() {
     }
 
     println!();
+}
 
-    // 5. Barrier Removal
+fn demo_barrier_removal() {
     println!("5. Barrier Removal (Synchronization Bug Injection)");
     println!("   ─────────────────────────────────────────────────");
 
@@ -137,6 +154,4 @@ fn main() {
             println!("   │ {}", line);
         }
     }
-
-    println!("\n=== Demo Complete ===");
 }

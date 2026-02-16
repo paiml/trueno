@@ -256,7 +256,7 @@ impl<'a> Lexer<'a> {
         DIRECTIVE_MAP
             .iter()
             .find(|(prefix, _)| text.starts_with(prefix))
-            .map_or(TokenKind::Directive, |(_, kind)| *kind)
+            .map_or(TokenKind::Directive, |(_, kind)| kind.clone())
     }
 
     fn read_register(&mut self, location: SourceLocation) -> Result<Token, ParseError> {
@@ -338,7 +338,7 @@ impl<'a> Lexer<'a> {
         Some(Token {
             kind: TokenKind::Integer,
             text: self.source[start..self.pos].to_string(),
-            location: *location,
+            location: location.clone(),
         })
     }
 
