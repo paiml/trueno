@@ -2,61 +2,104 @@
 
 use super::*;
 
+use crate::memory::resident::{
+    clear_kernel_cache, forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig,
+};
+
+/// Build uniform `GpuEncoderBlockWeights` where every weight matrix element
+/// is `weight_val` and every bias element is `bias_val`.
+fn build_uniform_weights(
+    ctx: &crate::driver::CudaContext,
+    d_model: usize,
+    ffn_dim: usize,
+    weight_val: f32,
+    bias_val: f32,
+) -> GpuEncoderBlockWeights {
+    let t = |val: f32, len: usize| GpuResidentTensor::from_host(ctx, &vec![val; len]).unwrap();
+    GpuEncoderBlockWeights {
+        ln1_gamma: t(1.0, d_model),
+        ln1_beta: t(0.0, d_model),
+        w_q: t(weight_val, d_model * d_model),
+        b_q: t(bias_val, d_model),
+        w_k: t(weight_val, d_model * d_model),
+        b_k: t(bias_val, d_model),
+        w_v: t(weight_val, d_model * d_model),
+        b_v: t(bias_val, d_model),
+        w_o: t(weight_val, d_model * d_model),
+        b_o: t(bias_val, d_model),
+        ln2_gamma: t(1.0, d_model),
+        ln2_beta: t(0.0, d_model),
+        ffn_up_w: t(weight_val, d_model * ffn_dim),
+        ffn_up_b: t(bias_val, ffn_dim),
+        ffn_down_w: t(weight_val, ffn_dim * d_model),
+        ffn_down_b: t(bias_val, d_model),
+    }
+}
+
+/// Build `GpuEncoderBlockWeights` with sequential weight values (for varied-input tests).
+fn build_sequential_weights(
+    ctx: &crate::driver::CudaContext,
+    d_model: usize,
+    ffn_dim: usize,
+    scale: f32,
+    bias_val: f32,
+) -> GpuEncoderBlockWeights {
+    let seq = |len: usize| -> Vec<f32> { (0..len).map(|i| (i as f32) * scale).collect() };
+    let t_const = |val: f32, len: usize| GpuResidentTensor::from_host(ctx, &vec![val; len]).unwrap();
+    let t_seq = |len: usize| GpuResidentTensor::from_host(ctx, &seq(len)).unwrap();
+    GpuEncoderBlockWeights {
+        ln1_gamma: t_const(1.0, d_model),
+        ln1_beta: t_const(0.0, d_model),
+        w_q: t_seq(d_model * d_model),
+        b_q: t_const(bias_val, d_model),
+        w_k: t_seq(d_model * d_model),
+        b_k: t_const(bias_val, d_model),
+        w_v: t_seq(d_model * d_model),
+        b_v: t_const(bias_val, d_model),
+        w_o: t_seq(d_model * d_model),
+        b_o: t_const(bias_val, d_model),
+        ln2_gamma: t_const(1.0, d_model),
+        ln2_beta: t_const(0.0, d_model),
+        ffn_up_w: t_seq(d_model * ffn_dim),
+        ffn_up_b: t_const(bias_val, ffn_dim),
+        ffn_down_w: t_seq(ffn_dim * d_model),
+        ffn_down_b: t_const(bias_val, d_model),
+    }
+}
+
+/// Build sequential input data of given size.
+fn build_input(
+    ctx: &crate::driver::CudaContext,
+    seq_len: usize,
+    d_model: usize,
+    gen: impl Fn(usize) -> f32,
+) -> GpuResidentTensor<f32> {
+    let data: Vec<f32> = (0..(seq_len * d_model)).map(|i| gen(i)).collect();
+    GpuResidentTensor::from_host(ctx, &data).unwrap()
+}
+
 // ============================================================================
 // Forward Encoder Block Output Shape Tests
 // ============================================================================
 
 #[test]
 fn test_forward_encoder_block_gpu_verifies_output_shape() {
-    use crate::memory::resident::{
-        clear_kernel_cache, forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig,
-    };
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
     let d_model = 32usize;
-    let n_heads = 2u32;
     let ffn_dim = 64usize;
     let seq_len = 8usize;
 
-    let config = GpuEncoderConfig {
-        d_model: d_model as u32,
-        n_heads,
-        ffn_dim: ffn_dim as u32,
-    };
-
-    let weights = GpuEncoderBlockWeights {
-        ln1_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
-        ln1_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_q: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * d_model]).unwrap(),
-        b_q: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_k: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * d_model]).unwrap(),
-        b_k: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_v: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * d_model]).unwrap(),
-        b_v: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_o: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * d_model]).unwrap(),
-        b_o: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        ln2_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
-        ln2_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        ffn_up_w: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * ffn_dim]).unwrap(),
-        ffn_up_b: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; ffn_dim]).unwrap(),
-        ffn_down_w: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; ffn_dim * d_model]).unwrap(),
-        ffn_down_b: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-    };
-
-    // Input with different sequence length
-    let input_data: Vec<f32> = (0..(seq_len * d_model))
-        .map(|i| (i as f32) * 0.01)
-        .collect();
-    let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
+    let config = GpuEncoderConfig { d_model: d_model as u32, n_heads: 2, ffn_dim: ffn_dim as u32 };
+    let weights = build_uniform_weights(&ctx, d_model, ffn_dim, 0.01, 0.0);
+    let input = build_input(&ctx, seq_len, d_model, |i| (i as f32) * 0.01);
 
     let output = forward_encoder_block_gpu(&ctx, &input, &weights, &config).unwrap();
 
-    // Verify output shape is correct
     assert_eq!(output.len(), seq_len * d_model);
     assert!(output.is_device_resident());
 
-    // Verify output contains valid values
     let mut output_copy = output;
     let host_output = output_copy.to_host().unwrap();
     assert!(host_output.iter().all(|v| v.is_finite()));
@@ -64,47 +107,16 @@ fn test_forward_encoder_block_gpu_verifies_output_shape() {
 
 #[test]
 fn test_forward_encoder_block_gpu_with_different_n_heads() {
-    use crate::memory::resident::{
-        clear_kernel_cache, forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig,
-    };
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
-    // Use 4 heads instead of 2 to exercise different head_dim calculation
     let d_model = 32usize;
-    let n_heads = 4u32;
     let ffn_dim = 128usize;
     let seq_len = 4usize;
 
-    let config = GpuEncoderConfig {
-        d_model: d_model as u32,
-        n_heads,
-        ffn_dim: ffn_dim as u32,
-    };
-
-    let weights = GpuEncoderBlockWeights {
-        ln1_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
-        ln1_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_q: GpuResidentTensor::from_host(&ctx, &vec![0.02f32; d_model * d_model]).unwrap(),
-        b_q: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_k: GpuResidentTensor::from_host(&ctx, &vec![0.02f32; d_model * d_model]).unwrap(),
-        b_k: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_v: GpuResidentTensor::from_host(&ctx, &vec![0.02f32; d_model * d_model]).unwrap(),
-        b_v: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_o: GpuResidentTensor::from_host(&ctx, &vec![0.02f32; d_model * d_model]).unwrap(),
-        b_o: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        ln2_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
-        ln2_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        ffn_up_w: GpuResidentTensor::from_host(&ctx, &vec![0.02f32; d_model * ffn_dim]).unwrap(),
-        ffn_up_b: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; ffn_dim]).unwrap(),
-        ffn_down_w: GpuResidentTensor::from_host(&ctx, &vec![0.02f32; ffn_dim * d_model]).unwrap(),
-        ffn_down_b: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-    };
-
-    let input_data: Vec<f32> = (0..(seq_len * d_model))
-        .map(|i| (i as f32) * 0.01)
-        .collect();
-    let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
+    let config = GpuEncoderConfig { d_model: d_model as u32, n_heads: 4, ffn_dim: ffn_dim as u32 };
+    let weights = build_uniform_weights(&ctx, d_model, ffn_dim, 0.02, 0.0);
+    let input = build_input(&ctx, seq_len, d_model, |i| (i as f32) * 0.01);
 
     let output = forward_encoder_block_gpu(&ctx, &input, &weights, &config).unwrap();
     assert_eq!(output.len(), seq_len * d_model);
@@ -116,84 +128,16 @@ fn test_forward_encoder_block_gpu_with_different_n_heads() {
 
 #[test]
 fn test_forward_encoder_block_with_varied_input_values() {
-    use crate::memory::resident::{
-        clear_kernel_cache, forward_encoder_block_gpu, GpuEncoderBlockWeights, GpuEncoderConfig,
-    };
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
     let d_model = 16usize;
-    let n_heads = 2u32;
     let ffn_dim = 32usize;
     let seq_len = 4usize;
 
-    let config = GpuEncoderConfig {
-        d_model: d_model as u32,
-        n_heads,
-        ffn_dim: ffn_dim as u32,
-    };
-
-    // Create weights with varying values (not all uniform)
-    let weights = GpuEncoderBlockWeights {
-        ln1_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
-        ln1_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_q: GpuResidentTensor::from_host(
-            &ctx,
-            &(0..d_model * d_model)
-                .map(|i| (i as f32) * 0.001)
-                .collect::<Vec<_>>(),
-        )
-        .unwrap(),
-        b_q: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
-        w_k: GpuResidentTensor::from_host(
-            &ctx,
-            &(0..d_model * d_model)
-                .map(|i| (i as f32) * 0.001)
-                .collect::<Vec<_>>(),
-        )
-        .unwrap(),
-        b_k: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
-        w_v: GpuResidentTensor::from_host(
-            &ctx,
-            &(0..d_model * d_model)
-                .map(|i| (i as f32) * 0.001)
-                .collect::<Vec<_>>(),
-        )
-        .unwrap(),
-        b_v: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
-        w_o: GpuResidentTensor::from_host(
-            &ctx,
-            &(0..d_model * d_model)
-                .map(|i| (i as f32) * 0.001)
-                .collect::<Vec<_>>(),
-        )
-        .unwrap(),
-        b_o: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
-        ln2_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
-        ln2_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        ffn_up_w: GpuResidentTensor::from_host(
-            &ctx,
-            &(0..d_model * ffn_dim)
-                .map(|i| (i as f32) * 0.001)
-                .collect::<Vec<_>>(),
-        )
-        .unwrap(),
-        ffn_up_b: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; ffn_dim]).unwrap(),
-        ffn_down_w: GpuResidentTensor::from_host(
-            &ctx,
-            &(0..ffn_dim * d_model)
-                .map(|i| (i as f32) * 0.001)
-                .collect::<Vec<_>>(),
-        )
-        .unwrap(),
-        ffn_down_b: GpuResidentTensor::from_host(&ctx, &vec![0.1f32; d_model]).unwrap(),
-    };
-
-    // Input with varied values
-    let input_data: Vec<f32> = (0..(seq_len * d_model))
-        .map(|i| ((i % 10) as f32) * 0.1 - 0.5)
-        .collect();
-    let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
+    let config = GpuEncoderConfig { d_model: d_model as u32, n_heads: 2, ffn_dim: ffn_dim as u32 };
+    let weights = build_sequential_weights(&ctx, d_model, ffn_dim, 0.001, 0.1);
+    let input = build_input(&ctx, seq_len, d_model, |i| ((i % 10) as f32) * 0.1 - 0.5);
 
     let output = forward_encoder_block_gpu(&ctx, &input, &weights, &config).unwrap();
     assert_eq!(output.len(), seq_len * d_model);
@@ -205,34 +149,14 @@ fn test_forward_encoder_block_with_varied_input_values() {
 
 #[test]
 fn test_gpu_encoder_block_weights_field_sizes() {
-    use crate::memory::resident::clear_kernel_cache;
-    use crate::memory::resident::GpuEncoderBlockWeights;
     clear_kernel_cache();
     let ctx = cuda_ctx!();
 
     let d_model = 32usize;
     let ffn_dim = 64usize;
 
-    let weights = GpuEncoderBlockWeights {
-        ln1_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
-        ln1_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_q: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * d_model]).unwrap(),
-        b_q: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_k: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * d_model]).unwrap(),
-        b_k: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_v: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * d_model]).unwrap(),
-        b_v: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        w_o: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * d_model]).unwrap(),
-        b_o: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        ln2_gamma: GpuResidentTensor::from_host(&ctx, &vec![1.0f32; d_model]).unwrap(),
-        ln2_beta: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-        ffn_up_w: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; d_model * ffn_dim]).unwrap(),
-        ffn_up_b: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; ffn_dim]).unwrap(),
-        ffn_down_w: GpuResidentTensor::from_host(&ctx, &vec![0.01f32; ffn_dim * d_model]).unwrap(),
-        ffn_down_b: GpuResidentTensor::from_host(&ctx, &vec![0.0f32; d_model]).unwrap(),
-    };
+    let weights = build_uniform_weights(&ctx, d_model, ffn_dim, 0.01, 0.0);
 
-    // Verify all field sizes match expected dimensions
     assert_eq!(weights.ln1_gamma.len(), d_model);
     assert_eq!(weights.ln1_beta.len(), d_model);
     assert_eq!(weights.w_q.len(), d_model * d_model);

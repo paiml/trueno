@@ -11,7 +11,7 @@ use crate::error::Result;
 use crate::kernels::Kernel;
 
 #[cfg(feature = "cuda")]
-use super::super::super::cache::get_or_compile_kernel;
+use super::super::super::cache::compile_lock_launch;
 #[cfg(feature = "cuda")]
 use super::super::super::GpuResidentTensor;
 
@@ -46,7 +46,6 @@ impl GpuResidentTensor<f32> {
         let kernel = LayerNormKernel::new(hidden_size);
         let ptx = kernel.emit_ptx();
         let cache_key = format!("layer_norm:{}", hidden_size);
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
         let stream = CudaStream::new(ctx)?;
 
         // Launch one warp per row - always use 32 threads for warp shuffle reduction
@@ -73,14 +72,9 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(batch_size) as *mut _,
         ];
 
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        compile_lock_launch(
+            ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
         stream.synchronize()?;
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -115,7 +109,6 @@ impl GpuResidentTensor<f32> {
         let kernel = LayerNormKernel::new(hidden_size);
         let ptx = kernel.emit_ptx();
         let cache_key = format!("layer_norm:{}", hidden_size);
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
         // Launch one warp per row - always use 32 threads for warp shuffle reduction
         // The kernel handles bounds checking internally for hidden_size < 32
@@ -141,14 +134,9 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(batch_size) as *mut _,
         ];
 
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        compile_lock_launch(
+            ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
         // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -169,7 +157,6 @@ impl GpuResidentTensor<f32> {
         let kernel = GeluKernel::new(n as u32);
         let ptx = kernel.emit_ptx();
         let cache_key = format!("gelu:{}", n);
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
         let stream = CudaStream::new(ctx)?;
 
         let threads = 256u32;
@@ -190,14 +177,9 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        compile_lock_launch(
+            ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
         stream.synchronize()?;
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -224,7 +206,6 @@ impl GpuResidentTensor<f32> {
         let kernel = GeluKernel::new(n as u32);
         let ptx = kernel.emit_ptx();
         let cache_key = format!("gelu:{}", n);
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
         let threads = 256u32;
         let blocks = ((n as u32) + threads - 1) / threads;
@@ -244,14 +225,9 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        compile_lock_launch(
+            ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
         // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))

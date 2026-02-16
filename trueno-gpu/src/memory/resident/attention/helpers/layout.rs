@@ -4,7 +4,7 @@
 //! and batched transpose operations.
 
 #[cfg(feature = "cuda")]
-use super::super::super::cache::get_or_compile_kernel;
+use super::super::super::cache::compile_lock_launch;
 #[cfg(feature = "cuda")]
 use super::super::super::GpuResidentTensor;
 #[cfg(feature = "cuda")]
@@ -38,7 +38,6 @@ pub(in super::super) fn interleaved_to_batched_all(
         "interleaved_to_batched:{}:{}:{}",
         seq_len, n_heads, head_dim
     );
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
     let threads = CUDA_WORKGROUP_SIZE;
@@ -57,16 +56,9 @@ pub(in super::super) fn interleaved_to_batched_all(
         std::ptr::addr_of!(output_ptr) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch with validated buffer sizes and correct argument layout.
-        // input_ptr and output_ptr point to valid GPU allocations of total_size elements.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
+    compile_lock_launch(
+        ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+    )?;
     stream.synchronize()?;
 
     Ok(GpuResidentTensor::from_buffer_internal(output, 1))
@@ -89,7 +81,6 @@ pub(in super::super) fn batched_transpose_all(
     let kernel = BatchedTransposeKernel::new(batch, rows, cols);
     let ptx = kernel.emit_ptx();
     let cache_key = format!("batched_transpose:{}:{}:{}", batch, rows, cols);
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
     let threads = CUDA_WORKGROUP_SIZE;
@@ -112,16 +103,9 @@ pub(in super::super) fn batched_transpose_all(
         std::ptr::addr_of!(cols) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch with validated buffer sizes. input and output are
-        // batch*rows*cols elements. Args match the BatchedTransposeKernel parameter layout.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
+    compile_lock_launch(
+        ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+    )?;
     stream.synchronize()?;
 
     Ok(GpuResidentTensor::from_buffer_internal(output, 1))
@@ -147,7 +131,6 @@ pub(in super::super) fn batched_to_interleaved_all(
         "batched_to_interleaved:{}:{}:{}",
         seq_len, n_heads, head_dim
     );
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
     let stream = CudaStream::new(ctx)?;
 
     let threads = CUDA_WORKGROUP_SIZE;
@@ -166,16 +149,9 @@ pub(in super::super) fn batched_to_interleaved_all(
         std::ptr::addr_of!(output_ptr) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch converting batched [n_heads, seq_len, head_dim] to
-        // interleaved [seq_len, n_heads * head_dim]. Both buffers are total_size elements.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
+    compile_lock_launch(
+        ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+    )?;
     stream.synchronize()?;
 
     Ok(GpuResidentTensor::from_buffer_internal(output, 1))
