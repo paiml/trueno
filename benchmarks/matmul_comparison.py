@@ -78,6 +78,57 @@ def run_trueno_benchmark(size: int) -> Dict:
         return None
 
 
+def _benchmark_size(size: int, iterations: int, results: Dict):
+    """Run numpy and trueno benchmarks for a single matrix size."""
+    print(f"\n📊 Matrix Size: {size}×{size}")
+
+    print(f"   Running NumPy benchmark ({iterations} iterations)...", end=" ", flush=True)
+    np_results = benchmark_numpy_matmul(size, iterations)
+    print(f"✓ {np_results['mean_ms']:.4f} ms")
+    results["numpy"][str(size)] = np_results
+
+    print(f"   Running Trueno benchmark...", end=" ", flush=True)
+    trueno_results = run_trueno_benchmark(size)
+    if trueno_results:
+        print(f"✓ {trueno_results['mean_ms']:.4f} ms")
+        results["trueno"][str(size)] = trueno_results
+        speedup = np_results["mean_ms"] / trueno_results["mean_ms"]
+        status = "✓" if speedup > 0.8 else "⚠️"
+        print(f"   {status} Trueno vs NumPy: {speedup:.2f}x (Target: ≥1.0x)")
+    else:
+        print("⚠️  Skipped (benchmark not found)")
+
+
+def _format_summary_row(size: int, results: Dict) -> str:
+    """Format a single row of the summary table."""
+    size_str = str(size)
+    np_time = results["numpy"][size_str]["mean_ms"]
+    if size_str in results["trueno"]:
+        trueno_time = results["trueno"][size_str]["mean_ms"]
+        speedup = np_time / trueno_time
+        status = "✓ On Track" if speedup >= 0.8 else "⚠️  Behind"
+        return f"│ {size:>4}×{size:<2} │  {np_time:>10.4f}  │  {trueno_time:>10.4f}  │   {speedup:>5.2f}x  │ {status:^11} │"
+    return f"│ {size:>4}×{size:<2} │  {np_time:>10.4f}  │      N/A     │     -     │     N/A     │"
+
+
+def _print_summary_table(sizes: List[int], results: Dict):
+    """Print the summary comparison table."""
+    print("\n" + "=" * 80)
+    print("SUMMARY: Matmul Performance (Issue #10 Progress)")
+    print("=" * 80)
+    print("\n┌────────┬──────────────┬──────────────┬───────────┬─────────────┐")
+    print("│  Size  │  NumPy (ms)  │ Trueno (ms)  │  Speedup  │   Status    │")
+    print("├────────┼──────────────┼──────────────┼───────────┼─────────────┤")
+    for size in sizes:
+        if str(size) in results["numpy"]:
+            print(_format_summary_row(size, results))
+    print("└────────┴──────────────┴──────────────┴───────────┴─────────────┘")
+    print("\n📝 Notes:")
+    print("   - Target: Trueno ≥0.8× NumPy speed (accounting for pure Rust vs optimized BLAS)")
+    print("   - Phase 1 Goal: 1.5-2× speedup via cache-aware blocking")
+    print("   - Phase 2 Goal: Full parity via optional BLAS backend")
+
+
 def main():
     """Main entry point"""
     print("=" * 80)
@@ -85,65 +136,15 @@ def main():
     print("Issue #10: Cache-Aware Blocking Performance Validation")
     print("=" * 80)
 
-    # Test sizes matching Issue #10 benchmarks
     sizes = [32, 64, 128, 256, 512]
     iterations = 100
-
     results = {"numpy": {}, "trueno": {}}
 
     for size in sizes:
-        print(f"\n📊 Matrix Size: {size}×{size}")
+        _benchmark_size(size, iterations, results)
 
-        # NumPy benchmark
-        print(f"   Running NumPy benchmark ({iterations} iterations)...", end=" ", flush=True)
-        np_results = benchmark_numpy_matmul(size, iterations)
-        print(f"✓ {np_results['mean_ms']:.4f} ms")
+    _print_summary_table(sizes, results)
 
-        results["numpy"][str(size)] = np_results
-
-        # Trueno benchmark (if available)
-        print(f"   Running Trueno benchmark...", end=" ", flush=True)
-        trueno_results = run_trueno_benchmark(size)
-        if trueno_results:
-            print(f"✓ {trueno_results['mean_ms']:.4f} ms")
-            results["trueno"][str(size)] = trueno_results
-
-            # Calculate speedup
-            speedup = np_results["mean_ms"] / trueno_results["mean_ms"]
-            status = "✓" if speedup > 0.8 else "⚠️"
-            print(f"   {status} Trueno vs NumPy: {speedup:.2f}x (Target: ≥1.0x)")
-        else:
-            print("⚠️  Skipped (benchmark not found)")
-
-    # Summary
-    print("\n" + "=" * 80)
-    print("SUMMARY: Matmul Performance (Issue #10 Progress)")
-    print("=" * 80)
-
-    print("\n┌────────┬──────────────┬──────────────┬───────────┬─────────────┐")
-    print("│  Size  │  NumPy (ms)  │ Trueno (ms)  │  Speedup  │   Status    │")
-    print("├────────┼──────────────┼──────────────┼───────────┼─────────────┤")
-
-    for size in sizes:
-        size_str = str(size)
-        if size_str in results["numpy"]:
-            np_time = results["numpy"][size_str]["mean_ms"]
-            if size_str in results["trueno"]:
-                trueno_time = results["trueno"][size_str]["mean_ms"]
-                speedup = np_time / trueno_time
-                status = "✓ On Track" if speedup >= 0.8 else "⚠️  Behind"
-                print(f"│ {size:>4}×{size:<2} │  {np_time:>10.4f}  │  {trueno_time:>10.4f}  │   {speedup:>5.2f}x  │ {status:^11} │")
-            else:
-                print(f"│ {size:>4}×{size:<2} │  {np_time:>10.4f}  │      N/A     │     -     │     N/A     │")
-
-    print("└────────┴──────────────┴──────────────┴───────────┴─────────────┘")
-
-    print("\n📝 Notes:")
-    print("   - Target: Trueno ≥0.8× NumPy speed (accounting for pure Rust vs optimized BLAS)")
-    print("   - Phase 1 Goal: 1.5-2× speedup via cache-aware blocking")
-    print("   - Phase 2 Goal: Full parity via optional BLAS backend")
-
-    # Save results
     output_file = "benchmarks/matmul_results.json"
     with open(output_file, "w") as f:
         json.dump(results, f, indent=2)

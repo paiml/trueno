@@ -267,6 +267,57 @@ fn lz4_try_match(input: &[u8], in_pos: usize, match_pos: usize) -> Option<(usize
     Some((offset, match_len))
 }
 
+/// State for the LZ4 compression loop.
+struct Lz4CompressState {
+    hash_table: [u32; LZ4_HASH_SIZE as usize],
+    in_pos: usize,
+    out_pos: usize,
+    anchor: usize,
+}
+
+impl Lz4CompressState {
+    fn new() -> Self {
+        Self {
+            hash_table: [0u32; LZ4_HASH_SIZE as usize],
+            in_pos: 0,
+            out_pos: 0,
+            anchor: 0,
+        }
+    }
+
+    /// Process one position in the compression loop.
+    /// Returns `true` if the main loop should continue, `false` to break.
+    fn step(&mut self, input: &[u8], output: &mut [u8]) -> Result<bool, &'static str> {
+        let h = lz4_hash_at(input, self.in_pos);
+        let match_pos = self.hash_table[h as usize] as usize;
+        self.hash_table[h as usize] = self.in_pos as u32;
+
+        if let Some((offset, match_len)) = lz4_try_match(input, self.in_pos, match_pos) {
+            let literals = &input[self.anchor..self.in_pos];
+            lz4_encode_sequence(output, &mut self.out_pos, literals, offset as u16, match_len)?;
+            self.in_pos += match_len;
+            self.anchor = self.in_pos;
+        } else {
+            self.in_pos += 1;
+        }
+
+        Ok(self.in_pos + 5 <= input.len())
+    }
+
+    /// Flush any remaining literal bytes after the main loop.
+    fn flush_trailing_literals(
+        &mut self,
+        input: &[u8],
+        output: &mut [u8],
+    ) -> Result<(), &'static str> {
+        if self.anchor < input.len() {
+            let literals = &input[self.anchor..];
+            lz4_encode_sequence(output, &mut self.out_pos, literals, 0, 0)?;
+        }
+        Ok(())
+    }
+}
+
 /// LZ4 compress a block (CPU reference implementation)
 ///
 /// Returns compressed size, or error if compression fails.
@@ -275,41 +326,21 @@ pub fn lz4_compress_block(input: &[u8], output: &mut [u8]) -> Result<usize, &'st
         return Ok(0);
     }
 
-    let mut hash_table = [0u32; LZ4_HASH_SIZE as usize];
-    let mut in_pos = 0usize;
-    let mut out_pos = 0usize;
-    let mut anchor = 0usize;
+    let mut state = Lz4CompressState::new();
 
     if input.len() < LZ4_MIN_MATCH as usize {
-        lz4_encode_sequence(output, &mut out_pos, input, 0, 0)?;
-        return Ok(out_pos);
+        lz4_encode_sequence(output, &mut state.out_pos, input, 0, 0)?;
+        return Ok(state.out_pos);
     }
 
-    while in_pos + LZ4_MIN_MATCH as usize <= input.len() {
-        let h = lz4_hash_at(input, in_pos);
-        let match_pos = hash_table[h as usize] as usize;
-        hash_table[h as usize] = in_pos as u32;
-
-        if let Some((offset, match_len)) = lz4_try_match(input, in_pos, match_pos) {
-            let literals = &input[anchor..in_pos];
-            lz4_encode_sequence(output, &mut out_pos, literals, offset as u16, match_len)?;
-            in_pos += match_len;
-            anchor = in_pos;
-        } else {
-            in_pos += 1;
-        }
-
-        if in_pos + 5 > input.len() {
+    while state.in_pos + LZ4_MIN_MATCH as usize <= input.len() {
+        if !state.step(input, output)? {
             break;
         }
     }
 
-    if anchor < input.len() {
-        let literals = &input[anchor..];
-        lz4_encode_sequence(output, &mut out_pos, literals, 0, 0)?;
-    }
-
-    Ok(out_pos)
+    state.flush_trailing_literals(input, output)?;
+    Ok(state.out_pos)
 }
 
 
