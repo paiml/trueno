@@ -179,7 +179,7 @@ pub(crate) fn step_check_book_references(
 
     // Extract referenced examples from markdown
     let mut referenced = HashSet::new();
-    let example_ref_regex = Regex::new(r"examples/([a-z_]+)\.rs").unwrap();
+    let example_ref_regex = Regex::new(r"examples/([a-z_]+)\.rs").expect("invariant: regex pattern is valid");
 
     for md_file in md_files {
         let content = fs::read_to_string(&md_file)
