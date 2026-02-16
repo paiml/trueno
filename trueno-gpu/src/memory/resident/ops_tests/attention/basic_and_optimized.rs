@@ -20,7 +20,7 @@ fn make_qkv(
     ctx: &CudaContext,
     cfg: &AttnConfig,
     gen: fn(usize) -> f32,
-) -> (GpuResidentTensor, GpuResidentTensor, GpuResidentTensor) {
+) -> (GpuResidentTensor<f32>, GpuResidentTensor<f32>, GpuResidentTensor<f32>) {
     let n = cfg.total_len();
     let q_data: Vec<f32> = (0..n).map(|i| gen(i)).collect();
     let k_data: Vec<f32> = (0..n).map(|i| gen(i) + 0.01).collect();
@@ -37,7 +37,7 @@ fn make_qkv_custom(
     q_len: usize,
     k_len: usize,
     v_len: usize,
-) -> (GpuResidentTensor, GpuResidentTensor, GpuResidentTensor) {
+) -> (GpuResidentTensor<f32>, GpuResidentTensor<f32>, GpuResidentTensor<f32>) {
     let q = GpuResidentTensor::from_host(ctx, &vec![1.0; q_len]).unwrap();
     let k = GpuResidentTensor::from_host(ctx, &vec![1.0; k_len]).unwrap();
     let v = GpuResidentTensor::from_host(ctx, &vec![1.0; v_len]).unwrap();
