@@ -35,6 +35,84 @@ pub(crate) fn run_headless(
     Ok(())
 }
 
+/// Write output string to a file or stdout.
+fn write_output(
+    output_str: &str,
+    path: Option<&std::path::Path>,
+    log_destination: bool,
+) -> Result<(), CbtopError> {
+    if let Some(p) = path {
+        std::fs::write(p, output_str).map_err(|e| CbtopError::Io(e.to_string()))?;
+        if log_destination {
+            eprintln!("Results written to: {}", p.display());
+        }
+    } else {
+        println!("{}", output_str);
+    }
+    Ok(())
+}
+
+/// Create a `HeadlessBenchmark` from parsed string parameters.
+fn create_benchmark(
+    backend: &str,
+    workload: &str,
+    size: usize,
+    duration: u64,
+) -> HeadlessBenchmark {
+    HeadlessBenchmark::new(
+        parse_backend(backend),
+        parse_workload(workload),
+        size,
+        std::time::Duration::from_secs(duration),
+    )
+}
+
+/// Run comparison mode: benchmark multiple backends and output comparison.
+fn run_comparison_bench(
+    backends_str: &str,
+    workload: &str,
+    size: usize,
+    duration: u64,
+    output_format: cbtop::headless::OutputFormat,
+    output: Option<std::path::PathBuf>,
+) -> Result<(), CbtopError> {
+    let backends: Vec<&str> = backends_str.split(',').collect();
+    let mut results = Vec::new();
+
+    for b in backends {
+        let benchmark = create_benchmark(b.trim(), workload, size, duration);
+        let result = benchmark.run()?;
+        results.push((b.trim().to_string(), result));
+    }
+
+    let comparison = BenchmarkResult::compare(&results);
+    let output_str = comparison.format(output_format);
+    write_output(&output_str, output.as_deref(), false)
+}
+
+/// Run a single benchmark and check for regression against a baseline file.
+fn run_regression_check(
+    result: &BenchmarkResult,
+    baseline_path: &std::path::Path,
+    fail_on_regression: f64,
+    output_format: cbtop::headless::OutputFormat,
+    output: Option<std::path::PathBuf>,
+) -> Result<(), CbtopError> {
+    let baseline_str =
+        std::fs::read_to_string(baseline_path).map_err(|e| CbtopError::Io(e.to_string()))?;
+    let baseline_result: BenchmarkResult =
+        serde_json::from_str(&baseline_str).map_err(|e| CbtopError::Config(e.to_string()))?;
+
+    let regression = result.check_regression(&baseline_result, fail_on_regression);
+    let output_str = regression.format(output_format);
+    write_output(&output_str, output.as_deref(), false)?;
+
+    if regression.is_regression {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_bench(
     backend: &str,
@@ -51,75 +129,21 @@ pub(crate) fn run_bench(
 
     // Handle comparison mode
     if let Some(backends_str) = compare {
-        let backends: Vec<&str> = backends_str.split(',').collect();
-        let mut results = Vec::new();
-
-        for b in backends {
-            let benchmark = HeadlessBenchmark::new(
-                parse_backend(b.trim()),
-                parse_workload(workload),
-                size,
-                std::time::Duration::from_secs(duration),
-            );
-            let result = benchmark.run()?;
-            results.push((b.trim().to_string(), result));
-        }
-
-        // Output comparison
-        let comparison = BenchmarkResult::compare(&results);
-        let output_str = comparison.format(output_format);
-
-        if let Some(path) = output {
-            std::fs::write(&path, &output_str).map_err(|e| CbtopError::Io(e.to_string()))?;
-        } else {
-            println!("{}", output_str);
-        }
-
-        return Ok(());
+        return run_comparison_bench(&backends_str, workload, size, duration, output_format, output);
     }
 
     // Single benchmark
-    let benchmark = HeadlessBenchmark::new(
-        parse_backend(backend),
-        parse_workload(workload),
-        size,
-        std::time::Duration::from_secs(duration),
-    );
-
+    let benchmark = create_benchmark(backend, workload, size, duration);
     let result = benchmark.run()?;
 
     // Check for regression if baseline provided
     if let Some(baseline_path) = baseline {
-        let baseline_str =
-            std::fs::read_to_string(&baseline_path).map_err(|e| CbtopError::Io(e.to_string()))?;
-        let baseline_result: BenchmarkResult =
-            serde_json::from_str(&baseline_str).map_err(|e| CbtopError::Config(e.to_string()))?;
-
-        let regression = result.check_regression(&baseline_result, fail_on_regression);
-
-        let output_str = regression.format(output_format);
-        if let Some(path) = output {
-            std::fs::write(&path, &output_str).map_err(|e| CbtopError::Io(e.to_string()))?;
-        } else {
-            println!("{}", output_str);
-        }
-
-        if regression.is_regression {
-            std::process::exit(1);
-        }
-        return Ok(());
+        return run_regression_check(&result, &baseline_path, fail_on_regression, output_format, output);
     }
 
     // Output result
     let output_str = result.format(output_format);
-    if let Some(path) = output {
-        std::fs::write(&path, &output_str).map_err(|e| CbtopError::Io(e.to_string()))?;
-        eprintln!("Results written to: {}", path.display());
-    } else {
-        println!("{}", output_str);
-    }
-
-    Ok(())
+    write_output(&output_str, output.as_deref(), true)
 }
 
 /// Run optimization subcommands (OPT-005)

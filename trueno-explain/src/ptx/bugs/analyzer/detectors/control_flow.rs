@@ -238,6 +238,28 @@ const COMPUTE_OPS: &[&str] = &[
     "abs.", "neg.", "rcp.", "sqrt.", "rsqrt.", "sin.", "cos.", "ex2.", "lg2.",
 ];
 
+/// Returns `true` if the line is empty or a comment (should be skipped in analysis).
+fn is_skip_line(line: &str) -> bool {
+    line.is_empty() || line.starts_with("//")
+}
+
+/// Returns `true` if the line contains a PTX compute operation.
+fn has_compute_op(line: &str) -> bool {
+    COMPUTE_OPS.iter().any(|op| line.contains(op))
+}
+
+/// Returns `true` if the line is a loop-end label (e.g. `some_end:` or `LOOP_END:`).
+fn is_end_label(line: &str) -> bool {
+    line.ends_with(':') && (line.contains("_end") || line.contains("END"))
+}
+
+/// If the line is a branch instruction, returns the branch target label.
+fn branch_target<'a>(line: &'a str, branch_re: &Regex) -> Option<&'a str> {
+    branch_re
+        .captures(line)
+        .map(|caps| caps.get(1).expect("invariant: capture group exists").as_str())
+}
+
 /// Scan forward from a label to determine if a loop body is empty (no compute ops).
 fn scan_empty_loop(lines: &[&str], start: usize, label: &str, branch_re: &Regex) -> bool {
     let mut has_computation = false;
@@ -245,20 +267,17 @@ fn scan_empty_loop(lines: &[&str], start: usize, label: &str, branch_re: &Regex)
 
     for j in (start + 1)..lines.len().min(start + 21) {
         let inner = lines[j].trim();
-        if inner.is_empty() || inner.starts_with("//") {
+        if is_skip_line(inner) {
             continue;
         }
-        if COMPUTE_OPS.iter().any(|op| inner.contains(op)) {
+        if has_compute_op(inner) {
             has_computation = true;
         }
-        if let Some(br_caps) = branch_re.captures(inner) {
-            let target = br_caps.get(1).expect("invariant: capture group exists").as_str();
-            if target == label {
-                found_back_edge = true;
-                break;
-            }
+        if branch_target(inner, branch_re) == Some(label) {
+            found_back_edge = true;
+            break;
         }
-        if inner.ends_with(':') && (inner.contains("_end") || inner.contains("END")) {
+        if is_end_label(inner) {
             break;
         }
     }

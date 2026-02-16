@@ -52,31 +52,19 @@ where
     (time_ms, gflops)
 }
 
-fn main() {
-    println!(
-        "\n{}{}═══════════════════════════════════════════════════════════════{}",
-        BOLD, CYAN, RESET
-    );
-    println!(
-        "{}{}                    TRUENO PERFORMANCE DASHBOARD                {}",
-        BOLD, CYAN, RESET
-    );
-    println!(
-        "{}{}═══════════════════════════════════════════════════════════════{}\n",
-        BOLD, CYAN, RESET
-    );
-
-    // ═══════════════════════════════════════════════════════════════
-    // VECTOR OPERATIONS
-    // ═══════════════════════════════════════════════════════════════
-    println!("{}{}▶ VECTOR OPERATIONS{}", BOLD, CYAN, RESET);
+fn print_section_header(title: &str) {
+    println!("\n{}{}▶ {}{}", BOLD, CYAN, title, RESET);
     println!(
         "{}─────────────────────────────────────────────────────────────────{}",
         DIM, RESET
     );
+}
+
+fn bench_vector_ops() {
+    print_section_header("VECTOR OPERATIONS");
 
     let sizes = [1024, 4096, 16384, 65536, 262144];
-    let expected_gflops = 15.0; // Expect ~15 GFLOPS for vector ops
+    let expected_gflops = 15.0;
 
     for &size in &sizes {
         let a: Vec<f32> = (0..size).map(|i| (i as f32) * 0.001).collect();
@@ -99,18 +87,10 @@ fn main() {
             RESET
         );
     }
+}
 
-    // ═══════════════════════════════════════════════════════════════
-    // MATRIX-VECTOR OPERATIONS (1×K @ K×N pattern)
-    // ═══════════════════════════════════════════════════════════════
-    println!(
-        "\n{}{}▶ VECTOR-MATRIX MULTIPLY (ML inference pattern){}",
-        BOLD, CYAN, RESET
-    );
-    println!(
-        "{}─────────────────────────────────────────────────────────────────{}",
-        DIM, RESET
-    );
+fn bench_vecmat_multiply() {
+    print_section_header("VECTOR-MATRIX MULTIPLY (ML inference pattern)");
 
     let patterns = [
         (1, 384, 51865, "Whisper vocab projection"),
@@ -134,27 +114,16 @@ fn main() {
         let expected = if n > 10000 { 8.0 } else { 5.0 };
         let color = color_for_gflops(gflops, expected);
         println!(
-            "  {}×{}×{} {:>20} {:>6.1}ms {:>5.1} GFLOPS {} {}{}",
-            m,
-            k,
-            n,
-            desc,
-            time,
-            gflops,
+            "  {}x{}x{} {:>20} {:>6.1}ms {:>5.1} GFLOPS {} {}{}",
+            m, k, n, desc, time, gflops,
             bar(gflops, 15.0, 15),
-            color,
-            RESET
+            color, RESET
         );
     }
+}
 
-    // ═══════════════════════════════════════════════════════════════
-    // GENERAL MATRIX MULTIPLY
-    // ═══════════════════════════════════════════════════════════════
-    println!("\n{}{}▶ GENERAL MATRIX MULTIPLY{}", BOLD, CYAN, RESET);
-    println!(
-        "{}─────────────────────────────────────────────────────────────────{}",
-        DIM, RESET
-    );
+fn bench_general_matmul() {
+    print_section_header("GENERAL MATRIX MULTIPLY");
 
     let sizes = [
         (64, 64, 64),
@@ -175,29 +144,19 @@ fn main() {
             let _ = ma.matmul(&mb);
         });
 
-        let expected = 2.0; // General matmul is typically slower
+        let expected = 2.0;
         let color = color_for_gflops(gflops, expected);
         println!(
-            "  {}×{}×{} {:>8.1}ms {:>5.1} GFLOPS {} {}{}",
-            m,
-            k,
-            n,
-            time,
-            gflops,
+            "  {}x{}x{} {:>8.1}ms {:>5.1} GFLOPS {} {}{}",
+            m, k, n, time, gflops,
             bar(gflops, 10.0, 20),
-            color,
-            RESET
+            color, RESET
         );
     }
+}
 
-    // ═══════════════════════════════════════════════════════════════
-    // TRANSPOSE OPERATIONS
-    // ═══════════════════════════════════════════════════════════════
-    println!("\n{}{}▶ TRANSPOSE OPERATIONS{}", BOLD, CYAN, RESET);
-    println!(
-        "{}─────────────────────────────────────────────────────────────────{}",
-        DIM, RESET
-    );
+fn bench_transpose() {
+    print_section_header("TRANSPOSE OPERATIONS");
 
     let sizes = [(384, 51865), (768, 50257), (1024, 1024), (2048, 2048)];
 
@@ -221,28 +180,16 @@ fn main() {
             RED
         };
         println!(
-            "  {}×{} {:>8.1}ms {:>5.1} GB/s {} {}{}",
-            rows,
-            cols,
-            time_ms,
-            gb_per_sec,
+            "  {}x{} {:>8.1}ms {:>5.1} GB/s {} {}{}",
+            rows, cols, time_ms, gb_per_sec,
             bar(gb_per_sec, 20.0, 20),
-            color,
-            RESET
+            color, RESET
         );
     }
+}
 
-    // ═══════════════════════════════════════════════════════════════
-    // ACTIVATION FUNCTIONS
-    // ═══════════════════════════════════════════════════════════════
-    println!(
-        "\n{}{}▶ ACTIVATION FUNCTIONS (vector size: 65536){}",
-        BOLD, CYAN, RESET
-    );
-    println!(
-        "{}─────────────────────────────────────────────────────────────────{}",
-        DIM, RESET
-    );
+fn bench_activations() {
+    print_section_header("ACTIVATION FUNCTIONS (vector size: 65536)");
 
     let size = 65536;
     let data: Vec<f32> = (0..size).map(|i| ((i as f32) * 0.01).sin()).collect();
@@ -269,7 +216,7 @@ fn main() {
         }
         let elapsed = start.elapsed();
         let time_us = elapsed.as_secs_f64() * 1_000_000.0 / 50.0;
-        let throughput = size as f64 / time_us; // elements per microsecond
+        let throughput = size as f64 / time_us;
 
         let color = if throughput > 100.0 {
             GREEN
@@ -279,24 +226,16 @@ fn main() {
             RED
         };
         println!(
-            "  {:>10} {:>8.1}μs {:>6.1}M elem/s {} {}{}",
-            name,
-            time_us,
-            throughput,
+            "  {:>10} {:>8.1}us {:>6.1}M elem/s {} {}{}",
+            name, time_us, throughput,
             bar(throughput, 200.0, 15),
-            color,
-            RESET
+            color, RESET
         );
     }
+}
 
-    // ═══════════════════════════════════════════════════════════════
-    // MEMORY ALLOCATION OVERHEAD
-    // ═══════════════════════════════════════════════════════════════
-    println!("\n{}{}▶ MEMORY ALLOCATION OVERHEAD{}", BOLD, CYAN, RESET);
-    println!(
-        "{}─────────────────────────────────────────────────────────────────{}",
-        DIM, RESET
-    );
+fn bench_memory_alloc() {
+    print_section_header("MEMORY ALLOCATION OVERHEAD");
 
     let sizes_mb = [1, 10, 50, 100];
 
@@ -321,18 +260,34 @@ fn main() {
         };
         println!(
             "  {:>3}MB alloc {:>8.1}ms {:>5.1} GB/s {} {}{}",
-            size_mb,
-            time_ms,
-            gb_per_sec,
+            size_mb, time_ms, gb_per_sec,
             bar(gb_per_sec, 50.0, 15),
-            color,
-            RESET
+            color, RESET
         );
     }
+}
 
-    // ═══════════════════════════════════════════════════════════════
-    // SUMMARY
-    // ═══════════════════════════════════════════════════════════════
+fn main() {
+    println!(
+        "\n{}{}═══════════════════════════════════════════════════════════════{}",
+        BOLD, CYAN, RESET
+    );
+    println!(
+        "{}{}                    TRUENO PERFORMANCE DASHBOARD                {}",
+        BOLD, CYAN, RESET
+    );
+    println!(
+        "{}{}═══════════════════════════════════════════════════════════════{}\n",
+        BOLD, CYAN, RESET
+    );
+
+    bench_vector_ops();
+    bench_vecmat_multiply();
+    bench_general_matmul();
+    bench_transpose();
+    bench_activations();
+    bench_memory_alloc();
+
     println!(
         "\n{}{}═══════════════════════════════════════════════════════════════{}",
         BOLD, CYAN, RESET

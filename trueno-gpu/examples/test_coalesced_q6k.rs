@@ -7,33 +7,28 @@ use trueno_gpu::driver::{CudaContext, CudaModule, CudaStream, GpuBuffer, LaunchC
 use trueno_gpu::kernels::{CoalescedQ6KGemvKernel, Kernel};
 use trueno_gpu::ptx::PtxModule;
 
-fn main() {
-    println!("\n╔══════════════════════════════════════════════════════╗");
-    println!("║   trueno-gpu: CoalescedQ6KGemvKernel CUDA Test       ║");
-    println!("╚══════════════════════════════════════════════════════╝\n");
-
-    // Initialize CUDA
+fn init_cuda() -> Option<CudaContext> {
     println!("[1/7] Initializing CUDA...");
-    let ctx = match CudaContext::new(0) {
-        Ok(c) => c,
+    match CudaContext::new(0) {
+        Ok(c) => {
+            let device_name = c.device_name().unwrap_or_else(|_| "Unknown".to_string());
+            println!("       ✓ GPU: {}", device_name);
+            Some(c)
+        }
         Err(e) => {
             eprintln!("Failed to create CUDA context: {}", e);
-            return;
+            None
         }
-    };
-    let device_name = ctx.device_name().unwrap_or_else(|_| "Unknown".to_string());
-    println!("       ✓ GPU: {}", device_name);
+    }
+}
 
-    // Create kernel for small dimensions (N=4, K=256 = 1 super-block)
-    let n: u32 = 4;
-    let k: u32 = 256;
+fn generate_and_load_module(ctx: &CudaContext, n: u32, k: u32) -> Option<(CudaModule, CoalescedQ6KGemvKernel)> {
     println!(
         "[2/7] Generating CoalescedQ6KGemvKernel PTX (N={}, K={})...",
         n, k
     );
     let kernel = CoalescedQ6KGemvKernel::new(k, n);
 
-    // Generate PTX with proper module wrapper
     let ptx = PtxModule::new()
         .version(8, 0)
         .target("sm_86")
@@ -46,32 +41,62 @@ fn main() {
         ptx.lines().count()
     );
 
-    // Load module
     println!("[3/7] JIT compiling PTX...");
-    let mut module = match CudaModule::from_ptx(&ctx, &ptx) {
-        Ok(m) => m,
+    match CudaModule::from_ptx(ctx, &ptx) {
+        Ok(m) => {
+            println!("       ✓ Module compiled");
+            Some((m, kernel))
+        }
         Err(e) => {
             eprintln!("Failed to load PTX module: {}", e);
             eprintln!("\nPTX dump (first 100 lines):");
             for (i, line) in ptx.lines().take(100).enumerate() {
                 eprintln!("{:4}: {}", i + 1, line);
             }
-            return;
+            None
         }
-    };
-    println!("       ✓ Module compiled");
+    }
+}
 
-    // Create stream
+fn create_stream(ctx: &CudaContext) -> Option<CudaStream> {
     println!("[4/7] Creating stream...");
-    let stream = match CudaStream::new(&ctx) {
-        Ok(s) => s,
+    match CudaStream::new(ctx) {
+        Ok(s) => {
+            println!("       ✓ Stream created");
+            Some(s)
+        }
         Err(e) => {
             eprintln!("Failed to create stream: {}", e);
-            return;
+            None
         }
-    };
-    println!("       ✓ Stream created");
+    }
+}
 
+fn build_q6k_weights(n: u32, n_super_blocks: usize) -> Vec<u8> {
+    let weights_size = n as usize * n_super_blocks * 210;
+    let mut weights_data = vec![0u8; weights_size];
+    for row in 0..n as usize {
+        let row_offset = row * 210;
+        // Set d (f16) at offset 208 to 1.0
+        // 1.0f16 = 0x3C00 in little-endian
+        weights_data[row_offset + 208] = 0x00;
+        weights_data[row_offset + 209] = 0x3C;
+        // Set all scales to 1 (small positive value)
+        for i in 0..16 {
+            weights_data[row_offset + 192 + i] = 1;
+        }
+    }
+    weights_data
+}
+
+struct GpuBuffers {
+    weights: GpuBuffer<u8>,
+    input: GpuBuffer<f32>,
+    output: GpuBuffer<f32>,
+    output_size: usize,
+}
+
+fn allocate_buffers(ctx: &CudaContext, n: u32, k: u32) -> Option<GpuBuffers> {
     // Q6_K format: 210 bytes per super-block (256 elements)
     // Layout: ql[128] + qh[64] + scales[16] + d[2] = 210 bytes
     let n_super_blocks = (k as usize + 255) / 256;
@@ -87,51 +112,52 @@ fn main() {
     println!("       Input: {} floats", input_size);
     println!("       Output: {} floats", output_size);
 
-    // Create test data with non-zero values
-    // Set d to 1.0f16, scales to small values, and quants to mid-range
-    let mut weights_data = vec![0u8; weights_size];
-    for row in 0..n as usize {
-        let row_offset = row * 210;
-        // Set d (f16) at offset 208 to 1.0
-        // 1.0f16 = 0x3C00 in little-endian
-        weights_data[row_offset + 208] = 0x00;
-        weights_data[row_offset + 209] = 0x3C;
-        // Set all scales to 1 (small positive value)
-        for i in 0..16 {
-            weights_data[row_offset + 192 + i] = 1;
-        }
-    }
+    let weights_data = build_q6k_weights(n, n_super_blocks);
     let input_data = vec![1.0f32; input_size];
 
-    // Allocate and upload
-    let weights_buf: GpuBuffer<u8> = match GpuBuffer::from_host(&ctx, &weights_data) {
+    let weights = match GpuBuffer::from_host(ctx, &weights_data) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("Failed to allocate weights buffer: {}", e);
-            return;
+            return None;
         }
     };
-    let input_buf: GpuBuffer<f32> = match GpuBuffer::from_host(&ctx, &input_data) {
+    let input = match GpuBuffer::from_host(ctx, &input_data) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("Failed to allocate input buffer: {}", e);
-            return;
+            return None;
         }
     };
-    let output_buf: GpuBuffer<f32> = match GpuBuffer::new(&ctx, output_size) {
+    let output = match GpuBuffer::new(ctx, output_size) {
         Ok(b) => b,
         Err(e) => {
             eprintln!("Failed to allocate output buffer: {}", e);
-            return;
+            return None;
         }
     };
     println!("       ✓ Buffers allocated");
 
-    // Build kernel args
+    Some(GpuBuffers {
+        weights,
+        input,
+        output,
+        output_size,
+    })
+}
+
+fn launch_and_verify(
+    stream: &CudaStream,
+    module: &mut CudaModule,
+    kernel: &CoalescedQ6KGemvKernel,
+    buffers: &GpuBuffers,
+    n: u32,
+    k: u32,
+) -> Option<Vec<f32>> {
     println!("[6/7] Launching kernel...");
-    let mut output_ptr = output_buf.as_ptr();
-    let mut weights_ptr = weights_buf.as_ptr();
-    let mut input_ptr = input_buf.as_ptr();
+    let mut output_ptr = buffers.output.as_ptr();
+    let mut weights_ptr = buffers.weights.as_ptr();
+    let mut input_ptr = buffers.input.as_ptr();
     let mut k_val = k;
     let mut n_val = n;
 
@@ -154,16 +180,15 @@ fn main() {
 
     let start = std::time::Instant::now();
     unsafe {
-        match stream.launch_kernel(&mut module, kernel.name(), &config, &mut args) {
+        match stream.launch_kernel(module, kernel.name(), &config, &mut args) {
             Ok(()) => println!("       ✓ Kernel launched"),
             Err(e) => {
                 eprintln!("Failed to launch kernel: {}", e);
-                return;
+                return None;
             }
         }
     }
 
-    // Synchronize
     match stream.synchronize() {
         Ok(()) => {
             let elapsed = start.elapsed();
@@ -171,21 +196,51 @@ fn main() {
         }
         Err(e) => {
             eprintln!("❌ Stream sync failed: {}", e);
-            return;
+            return None;
         }
     }
 
-    // Read back results
     println!("[7/7] Verifying...");
-    let mut output = vec![0.0f32; output_size];
-    match output_buf.copy_to_host(&mut output) {
-        Ok(()) => println!("       ✓ Results copied back"),
+    let mut output = vec![0.0f32; buffers.output_size];
+    match buffers.output.copy_to_host(&mut output) {
+        Ok(()) => {
+            println!("       ✓ Results copied back");
+            Some(output)
+        }
         Err(e) => {
             eprintln!("Failed to copy results: {}", e);
-            return;
+            None
         }
     }
+}
 
-    println!("\n✓ SUCCESS! CoalescedQ6KGemvKernel executed without errors.");
-    println!("Output[0..{}]: {:?}", output.len(), &output);
+fn main() {
+    println!("\n╔══════════════════════════════════════════════════════╗");
+    println!("║   trueno-gpu: CoalescedQ6KGemvKernel CUDA Test       ║");
+    println!("╚══════════════════════════════════════════════════════╝\n");
+
+    let n: u32 = 4;
+    let k: u32 = 256;
+
+    let ctx = match init_cuda() {
+        Some(c) => c,
+        None => return,
+    };
+    let (mut module, kernel) = match generate_and_load_module(&ctx, n, k) {
+        Some(pair) => pair,
+        None => return,
+    };
+    let stream = match create_stream(&ctx) {
+        Some(s) => s,
+        None => return,
+    };
+    let buffers = match allocate_buffers(&ctx, n, k) {
+        Some(b) => b,
+        None => return,
+    };
+
+    if let Some(output) = launch_and_verify(&stream, &mut module, &kernel, &buffers, n, k) {
+        println!("\n✓ SUCCESS! CoalescedQ6KGemvKernel executed without errors.");
+        println!("Output[0..{}]: {:?}", output.len(), &output);
+    }
 }
