@@ -200,7 +200,7 @@ impl TunerFeaturesBuilder {
             // Normalized static features
             model_params_b: self
                 .model_params_b
-                .map(|p| (p.log10() + 1.0) / 3.0) // log10(0.1)=-1, log10(100)=2 → [0, 1]
+                .map(|p| (p.max(f32::EPSILON).log10() + 1.0) / 3.0) // log10(0.1)=-1, log10(100)=2 → [0, 1]
                 .unwrap_or(0.0)
                 .clamp(0.0, 1.0),
             hidden_dim_norm: (hidden_dim / 16384.0).clamp(0.0, 1.0),
