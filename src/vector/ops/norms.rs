@@ -17,7 +17,76 @@ use crate::backends::wasm::WasmBackend;
 use crate::backends::VectorBackend;
 use crate::{Backend, Result, Vector};
 
+/// Function pointer type for norm backend operations.
+///
+/// All norm operations (`norm_l1`, `norm_l2`, `norm_linf`) share the same
+/// `unsafe fn(&[f32]) -> f32` signature in [`VectorBackend`], enabling a single
+/// dispatch helper to route to the correct SIMD/scalar implementation.
+type NormFn = unsafe fn(&[f32]) -> f32;
+
+/// Per-backend function pointers for a single norm operation.
+///
+/// Constructed by each public norm method and passed to
+/// [`Vector::dispatch_norm`] to eliminate the repeated match block.
+struct NormDispatch {
+    scalar: NormFn,
+    #[cfg(target_arch = "x86_64")]
+    sse2: NormFn,
+    #[cfg(target_arch = "x86_64")]
+    avx2: NormFn,
+    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+    neon: NormFn,
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+    neon_fallback: NormFn,
+    #[cfg(target_arch = "wasm32")]
+    wasm: NormFn,
+    #[cfg(not(target_arch = "wasm32"))]
+    wasm_fallback: NormFn,
+}
+
 impl Vector<f32> {
+    /// Dispatch a norm operation to the appropriate backend.
+    ///
+    /// This is an internal helper that centralises the platform-specific match
+    /// block shared by all norm methods, keeping the public API surface clean
+    /// while avoiding code duplication.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure the `NormDispatch` function pointers originate from
+    /// valid [`VectorBackend`] implementations.
+    fn dispatch_norm(&self, fns: &NormDispatch) -> Result<f32> {
+        if self.as_slice().is_empty() {
+            return Ok(0.0);
+        }
+
+        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
+        let result = unsafe {
+            match self.backend() {
+                Backend::Scalar => (fns.scalar)(self.as_slice()),
+                #[cfg(target_arch = "x86_64")]
+                Backend::SSE2 | Backend::AVX => (fns.sse2)(self.as_slice()),
+                #[cfg(target_arch = "x86_64")]
+                Backend::AVX2 | Backend::AVX512 => (fns.avx2)(self.as_slice()),
+                #[cfg(not(target_arch = "x86_64"))]
+                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
+                    (fns.scalar)(self.as_slice())
+                }
+                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                Backend::NEON => (fns.neon)(self.as_slice()),
+                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+                Backend::NEON => (fns.neon_fallback)(self.as_slice()),
+                #[cfg(target_arch = "wasm32")]
+                Backend::WasmSIMD => (fns.wasm)(self.as_slice()),
+                #[cfg(not(target_arch = "wasm32"))]
+                Backend::WasmSIMD => (fns.wasm_fallback)(self.as_slice()),
+                Backend::GPU | Backend::Auto => (fns.scalar)(self.as_slice()),
+            }
+        };
+
+        Ok(result)
+    }
+
     /// L2 norm (Euclidean norm)
     ///
     /// Computes the Euclidean length of the vector: sqrt(sum(a\[i\]^2)).
@@ -54,35 +123,21 @@ impl Vector<f32> {
     /// # }
     /// ```
     pub fn norm_l2(&self) -> Result<f32> {
-        if self.as_slice().is_empty() {
-            return Ok(0.0);
-        }
-
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        let result = unsafe {
-            match self.backend() {
-                Backend::Scalar => ScalarBackend::norm_l2(self.as_slice()),
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => Sse2Backend::norm_l2(self.as_slice()),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => Avx2Backend::norm_l2(self.as_slice()),
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::norm_l2(self.as_slice())
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => NeonBackend::norm_l2(self.as_slice()),
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => ScalarBackend::norm_l2(self.as_slice()),
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => WasmBackend::norm_l2(self.as_slice()),
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => ScalarBackend::norm_l2(self.as_slice()),
-                Backend::GPU | Backend::Auto => ScalarBackend::norm_l2(self.as_slice()),
-            }
-        };
-
-        Ok(result)
+        self.dispatch_norm(&NormDispatch {
+            scalar: ScalarBackend::norm_l2,
+            #[cfg(target_arch = "x86_64")]
+            sse2: Sse2Backend::norm_l2,
+            #[cfg(target_arch = "x86_64")]
+            avx2: Avx2Backend::norm_l2,
+            #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+            neon: NeonBackend::norm_l2,
+            #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+            neon_fallback: ScalarBackend::norm_l2,
+            #[cfg(target_arch = "wasm32")]
+            wasm: WasmBackend::norm_l2,
+            #[cfg(not(target_arch = "wasm32"))]
+            wasm_fallback: ScalarBackend::norm_l2,
+        })
     }
 
     /// Compute the L1 norm (Manhattan norm) of the vector
@@ -116,35 +171,21 @@ impl Vector<f32> {
     /// assert_eq!(v.norm_l1().unwrap(), 0.0);
     /// ```
     pub fn norm_l1(&self) -> Result<f32> {
-        if self.as_slice().is_empty() {
-            return Ok(0.0);
-        }
-
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        let result = unsafe {
-            match self.backend() {
-                Backend::Scalar => ScalarBackend::norm_l1(self.as_slice()),
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => Sse2Backend::norm_l1(self.as_slice()),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => Avx2Backend::norm_l1(self.as_slice()),
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::norm_l1(self.as_slice())
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => NeonBackend::norm_l1(self.as_slice()),
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => ScalarBackend::norm_l1(self.as_slice()),
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => WasmBackend::norm_l1(self.as_slice()),
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => ScalarBackend::norm_l1(self.as_slice()),
-                Backend::GPU | Backend::Auto => ScalarBackend::norm_l1(self.as_slice()),
-            }
-        };
-
-        Ok(result)
+        self.dispatch_norm(&NormDispatch {
+            scalar: ScalarBackend::norm_l1,
+            #[cfg(target_arch = "x86_64")]
+            sse2: Sse2Backend::norm_l1,
+            #[cfg(target_arch = "x86_64")]
+            avx2: Avx2Backend::norm_l1,
+            #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+            neon: NeonBackend::norm_l1,
+            #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+            neon_fallback: ScalarBackend::norm_l1,
+            #[cfg(target_arch = "wasm32")]
+            wasm: WasmBackend::norm_l1,
+            #[cfg(not(target_arch = "wasm32"))]
+            wasm_fallback: ScalarBackend::norm_l1,
+        })
     }
 
     /// Compute the L∞ norm (infinity norm / max norm) of the vector
@@ -178,36 +219,21 @@ impl Vector<f32> {
     /// assert_eq!(v.norm_linf().unwrap(), 0.0);
     /// ```
     pub fn norm_linf(&self) -> Result<f32> {
-        if self.as_slice().is_empty() {
-            return Ok(0.0);
-        }
-
-        // Use optimized SIMD backend for single-pass abs+max
-        // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants
-        let max_abs = unsafe {
-            match self.backend() {
-                Backend::Scalar => ScalarBackend::norm_linf(self.as_slice()),
-                #[cfg(target_arch = "x86_64")]
-                Backend::SSE2 | Backend::AVX => Sse2Backend::norm_linf(self.as_slice()),
-                #[cfg(target_arch = "x86_64")]
-                Backend::AVX2 | Backend::AVX512 => Avx2Backend::norm_linf(self.as_slice()),
-                #[cfg(not(target_arch = "x86_64"))]
-                Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512 => {
-                    ScalarBackend::norm_linf(self.as_slice())
-                }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-                Backend::NEON => ScalarBackend::norm_linf(self.as_slice()), // NEON fallback
-                #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-                Backend::NEON => ScalarBackend::norm_linf(self.as_slice()),
-                #[cfg(target_arch = "wasm32")]
-                Backend::WasmSIMD => ScalarBackend::norm_linf(self.as_slice()), // WASM fallback
-                #[cfg(not(target_arch = "wasm32"))]
-                Backend::WasmSIMD => ScalarBackend::norm_linf(self.as_slice()),
-                Backend::GPU | Backend::Auto => ScalarBackend::norm_linf(self.as_slice()),
-            }
-        };
-
-        Ok(max_abs)
+        self.dispatch_norm(&NormDispatch {
+            scalar: ScalarBackend::norm_linf,
+            #[cfg(target_arch = "x86_64")]
+            sse2: Sse2Backend::norm_linf,
+            #[cfg(target_arch = "x86_64")]
+            avx2: Avx2Backend::norm_linf,
+            #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+            neon: NeonBackend::norm_linf,
+            #[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+            neon_fallback: ScalarBackend::norm_linf,
+            #[cfg(target_arch = "wasm32")]
+            wasm: WasmBackend::norm_linf,
+            #[cfg(not(target_arch = "wasm32"))]
+            wasm_fallback: ScalarBackend::norm_linf,
+        })
     }
 }
 
