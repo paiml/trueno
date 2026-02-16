@@ -198,35 +198,37 @@ pub fn clear_kernel_cache() {}
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_kernel_cache_stats_initial() {
+    /// Reset stats and assert both hits and misses are zero.
+    fn assert_clean_stats() {
         reset_kernel_cache_stats();
         assert_eq!(kernel_cache_hits(), 0);
         assert_eq!(kernel_cache_misses(), 0);
+    }
+
+    #[test]
+    fn test_kernel_cache_stats_initial() {
+        assert_clean_stats();
     }
 
     #[test]
     fn test_clear_kernel_cache() {
         // Just verify it doesn't panic
         clear_kernel_cache();
-        assert_eq!(kernel_cache_hits(), 0);
-        assert_eq!(kernel_cache_misses(), 0);
+        assert_clean_stats();
     }
 
     /// Test kernel_cache_hits returns expected value after reset
     #[test]
     fn test_kernel_cache_hits_after_reset() {
         reset_kernel_cache_stats();
-        let hits = kernel_cache_hits();
-        assert_eq!(hits, 0);
+        assert_eq!(kernel_cache_hits(), 0);
     }
 
     /// Test kernel_cache_misses returns expected value after reset
     #[test]
     fn test_kernel_cache_misses_after_reset() {
         reset_kernel_cache_stats();
-        let misses = kernel_cache_misses();
-        assert_eq!(misses, 0);
+        assert_eq!(kernel_cache_misses(), 0);
     }
 
     /// Test reset_kernel_cache_stats is idempotent
@@ -235,8 +237,7 @@ mod tests {
         reset_kernel_cache_stats();
         reset_kernel_cache_stats();
         reset_kernel_cache_stats();
-        assert_eq!(kernel_cache_hits(), 0);
-        assert_eq!(kernel_cache_misses(), 0);
+        assert_clean_stats();
     }
 
     /// Test clear_kernel_cache is idempotent
@@ -245,24 +246,17 @@ mod tests {
         clear_kernel_cache();
         clear_kernel_cache();
         clear_kernel_cache();
-        assert_eq!(kernel_cache_hits(), 0);
-        assert_eq!(kernel_cache_misses(), 0);
+        assert_clean_stats();
     }
 
     /// Test that stats remain consistent after multiple operations
     #[test]
     fn test_stats_consistency() {
-        reset_kernel_cache_stats();
-        let h1 = kernel_cache_hits();
-        let m1 = kernel_cache_misses();
-        assert_eq!(h1, 0);
-        assert_eq!(m1, 0);
+        assert_clean_stats();
 
         clear_kernel_cache();
-        let h2 = kernel_cache_hits();
-        let m2 = kernel_cache_misses();
-        assert_eq!(h2, 0);
-        assert_eq!(m2, 0);
+        assert_eq!(kernel_cache_hits(), 0);
+        assert_eq!(kernel_cache_misses(), 0);
     }
 }
 
@@ -271,14 +265,35 @@ mod tests {
 mod cuda_tests {
     use super::*;
 
+    /// Reset stats and assert both hits and misses are zero.
+    fn assert_clean_stats() {
+        reset_kernel_cache_stats();
+        assert_eq!(kernel_cache_hits(), 0);
+        assert_eq!(kernel_cache_misses(), 0);
+    }
+
+    /// Lock the cache and assert it is empty.
+    fn assert_cache_empty() {
+        with_cache_lock(|guard| {
+            assert!(guard.is_empty(), "Cache should be empty");
+        });
+    }
+
+    /// Acquire the global cache lock and pass the guard to `f`.
+    fn with_cache_lock<F, R>(f: F) -> R
+    where
+        F: FnOnce(&std::sync::MutexGuard<'_, HashMap<String, Arc<Mutex<CudaModule>>>>) -> R,
+    {
+        let cache = get_kernel_cache();
+        let guard = cache.lock().expect("Cache lock should not be poisoned");
+        f(&guard)
+    }
+
     /// Test get_kernel_cache returns a valid cache
     #[test]
     fn test_get_kernel_cache_returns_valid_cache() {
-        let cache = get_kernel_cache();
-        // Verify we can acquire the lock
-        let guard = cache.lock().expect("Cache lock should not be poisoned");
-        // Cache should be a valid HashMap (may or may not be empty depending on other tests)
-        drop(guard);
+        // Verify we can acquire the lock; cache may or may not be empty
+        with_cache_lock(|_guard| {});
     }
 
     /// Test get_kernel_cache is idempotent (returns same static reference)
@@ -293,34 +308,22 @@ mod cuda_tests {
     /// Test cache lock can be acquired and released multiple times
     #[test]
     fn test_cache_lock_reentrant() {
-        let cache = get_kernel_cache();
-        {
-            let _guard1 = cache.lock().expect("First lock should succeed");
-        }
-        {
-            let _guard2 = cache.lock().expect("Second lock should succeed");
-        }
-        {
-            let _guard3 = cache.lock().expect("Third lock should succeed");
-        }
+        with_cache_lock(|_| {});
+        with_cache_lock(|_| {});
+        with_cache_lock(|_| {});
     }
 
     /// Test clear_kernel_cache clears the actual cache
     #[test]
     fn test_clear_kernel_cache_clears_hashmap() {
-        // Clear any existing state
         clear_kernel_cache();
-
-        // Verify cache is empty
-        let cache = get_kernel_cache();
-        let guard = cache.lock().expect("Lock should succeed");
-        assert!(guard.is_empty(), "Cache should be empty after clear");
+        assert_cache_empty();
     }
 
     /// Test CUDA hit/miss counters can be atomically incremented
     #[test]
     fn test_atomic_counter_operations() {
-        reset_kernel_cache_stats();
+        assert_clean_stats();
 
         // Manually increment the counters to test atomic operations
         KERNEL_CACHE_HITS.fetch_add(5, std::sync::atomic::Ordering::Relaxed);
@@ -330,15 +333,13 @@ mod cuda_tests {
         assert_eq!(kernel_cache_misses(), 3);
 
         // Reset should clear both
-        reset_kernel_cache_stats();
-        assert_eq!(kernel_cache_hits(), 0);
-        assert_eq!(kernel_cache_misses(), 0);
+        assert_clean_stats();
     }
 
     /// Test stats counters work correctly with concurrent-style increments
     #[test]
     fn test_counter_concurrent_increments() {
-        reset_kernel_cache_stats();
+        assert_clean_stats();
 
         // Simulate concurrent increments
         for _ in 0..100 {
@@ -362,8 +363,7 @@ mod cuda_tests {
         // Note: Due to static initialization, this may not always hit the None path
         // but it should still not panic
         clear_kernel_cache();
-        assert_eq!(kernel_cache_hits(), 0);
-        assert_eq!(kernel_cache_misses(), 0);
+        assert_clean_stats();
     }
 
     /// Test cache can store and retrieve entries directly
@@ -371,14 +371,9 @@ mod cuda_tests {
     fn test_cache_hashmap_operations() {
         clear_kernel_cache();
 
-        let cache = get_kernel_cache();
-
         // We can't easily create a CudaModule without a real context,
         // but we can verify the cache structure is sound by checking
         // it's a HashMap that accepts our key type
-        {
-            let guard = cache.lock().expect("Lock should succeed");
-            assert!(guard.is_empty());
-        }
+        assert_cache_empty();
     }
 }
