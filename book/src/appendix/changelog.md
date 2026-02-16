@@ -22,6 +22,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added LZ4 compression example (`cargo run -p trueno-gpu --example lz4_compression`)
 - Added LZ4 compression chapter to book (`api-reference/lz4-compression.md`)
 
+## [0.14.6] - 2026-02-16
+
+### Changed
+
+- **PMAT Cognitive Complexity Kaizen** — systematic reduction across 30+ files
+  - All functions now below maximum threshold (25); was 51 violations, now 0 max-threshold violations
+  - Complexity violations reduced from 51 total to 12 (all in recommended 20-24 range)
+  - Python scripts: `compare_results.py` (110→1), `analyze_traces.py` (53→1), `check_regression.py` (30→1), `check_simd_attributes.py` (35→8)
+  - Rust library: `batched_multihead_attention` (61→24), `barrier_safety::analyze` (49→15), `reduce_tile` (25→5), `parse_analyze_args` (29→12)
+  - Rust examples: 10+ example files refactored with extracted helpers
+  - PMAT dead_code violation fixed (removed `#![allow(dead_code)]` from q4k tests)
+
+### Quality
+
+- PMAT quality gate violations: 51 → 21 (59% reduction)
+- Zero dead code violations, zero SATD, zero security, zero duplicates
+- README updated: coverage badge 97%, version 0.14, added Usage + Contributing sections
+
 ## [0.14.5] - 2026-02-15
 
 ### Fixed
