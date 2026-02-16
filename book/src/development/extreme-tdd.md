@@ -1,14 +1,14 @@
 # Extreme TDD
 
-Trueno follows an **Extreme TDD** methodology where test coverage is a non-negotiable quality gate, not a nice-to-have metric. Every commit must maintain 90%+ line coverage, and the project currently sits at **97%+** across both crates.
+Trueno follows an **Extreme TDD** methodology where test coverage is a non-negotiable quality gate, not a nice-to-have metric. Every commit must maintain 90%+ line coverage, and the project currently sits at **95%+** across both crates.
 
 ## Coverage Mandate
 
 | Metric | Floor | Current |
 |--------|-------|---------|
-| Line coverage (overall) | 90% | 97%+ |
-| trueno (core library) | 90% | ~98% |
-| trueno-gpu (CUDA/PTX) | 90% | ~98% |
+| Line coverage (overall) | 90% | 95%+ |
+| trueno (core library) | 90% | ~96% |
+| trueno-gpu (CUDA/PTX) | 90% | ~96% |
 | New code | 100% | - |
 
 The 90% floor is **automatically enforced** by a pre-commit hook. If coverage drops below 90%, the commit is blocked:

@@ -185,9 +185,9 @@ Trueno follows five core principles:
 
 Trueno is under active development at **Pragmatic AI Labs**:
 
-- **Current Version**: 0.14.5 (15 phases delivered: vectors, matrices, SIMD, GPU, BLIS GEMM, quantization, attention, LZ4, and more)
-- **Tests**: 4600+ tests across trueno and trueno-gpu
-- **Coverage**: 97%+ line coverage
+- **Current Version**: 0.14.6 (15 phases delivered: vectors, matrices, SIMD, GPU, BLIS GEMM, quantization, attention, LZ4, and more)
+- **Tests**: 4800+ tests across trueno and trueno-gpu
+- **Coverage**: 95%+ line coverage (TDG grade: A+)
 - **License**: MIT/Apache-2.0 dual-licensed
 - **Repository**: [github.com/paiml/trueno](https://github.com/paiml/trueno)
 - **Issues**: [github.com/paiml/trueno/issues](https://github.com/paiml/trueno/issues)

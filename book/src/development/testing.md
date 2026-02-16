@@ -42,7 +42,7 @@ make coverage
 # This generates:
 # - LCOV report at lcov.info
 # - HTML report at target/coverage/html/index.html
-# - TOTAL coverage percentage (currently 97%+)
+# - TOTAL coverage percentage (currently 95%+)
 ```
 
 Never use `cargo llvm-cov` directly or install `cargo-tarpaulin`. See [Extreme TDD](./extreme-tdd.md) for details on the coverage mandate.
