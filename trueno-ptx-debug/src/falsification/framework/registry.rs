@@ -392,7 +392,7 @@ impl Default for FalsificationRegistry {
 ///
 /// Based on Popper's degree of corroboration - more severe tests
 /// survived = higher confidence
-fn calculate_confidence(
+pub(super) fn calculate_confidence(
     earned: u32,
     total: u32,
     results: &[(String, Category, String, TestResult)],

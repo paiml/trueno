@@ -87,7 +87,7 @@ fn extract_shared_memory_bytes(ptx: &str) -> Option<u32> {
     ptx.lines()
         .map(str::trim)
         .filter(|line| line.contains(".shared") && line.contains("smem["))
-        .find_map(|line| parse_smem_size(line))
+        .find_map(parse_smem_size)
 }
 
 /// Parse the size from a `smem[SIZE]` declaration.

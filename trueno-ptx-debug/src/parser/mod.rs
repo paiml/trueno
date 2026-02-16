@@ -15,6 +15,40 @@ pub use ast::{
 pub use types::{PtxType, AddressSpace, SmTarget, Opcode, Modifier};
 pub use error::ParseError;
 
+/// Match a text string against `contains` patterns and return the first matching value.
+///
+/// Each arm is `[pattern1, pattern2, ...] => value` where patterns are string literals
+/// checked via `str::contains`. Any matching pattern in the bracket group triggers the
+/// arm (logical OR). The final `default` argument is returned when no arm matches.
+///
+/// Single-pattern arms use `["pattern"] => value`.
+///
+/// Returns the value directly (not wrapped in `Result`).
+macro_rules! match_contains {
+    ($text:expr, $default:expr, $( [ $( $pattern:expr ),+ ] => $value:expr ),+ $(,)?) => {{
+        let __text = $text;
+        $(
+            if $( __text.contains($pattern) )||+ {
+                $value
+            } else
+        )+
+        { $default }
+    }};
+}
+
+/// Match an exact string against a lookup table and return the corresponding value.
+///
+/// Each arm is `literal => value`. The final `default` argument is returned when
+/// no literal matches.
+macro_rules! match_str_lookup {
+    ($text:expr, $default:expr, $( $lit:expr => $value:expr ),+ $(,)?) => {
+        match $text {
+            $( $lit => $value, )+
+            _ => $default,
+        }
+    };
+}
+
 /// PTX Parser - constructs AST from token stream
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -90,32 +124,22 @@ impl<'a> Parser<'a> {
 
     fn parse_target_directive(&self) -> Result<SmTarget, ParseError> {
         let text = &self.current.text;
-        if text.contains("sm_70") {
-            Ok(SmTarget::Sm70)
-        } else if text.contains("sm_75") {
-            Ok(SmTarget::Sm75)
-        } else if text.contains("sm_80") {
-            Ok(SmTarget::Sm80)
-        } else if text.contains("sm_86") {
-            Ok(SmTarget::Sm86)
-        } else if text.contains("sm_89") {
-            Ok(SmTarget::Sm89)
-        } else if text.contains("sm_90") {
-            Ok(SmTarget::Sm90)
-        } else {
-            Ok(SmTarget::Unknown)
-        }
+        Ok(match_contains!(text, SmTarget::Unknown,
+            ["sm_70"] => SmTarget::Sm70,
+            ["sm_75"] => SmTarget::Sm75,
+            ["sm_80"] => SmTarget::Sm80,
+            ["sm_86"] => SmTarget::Sm86,
+            ["sm_89"] => SmTarget::Sm89,
+            ["sm_90"] => SmTarget::Sm90,
+        ))
     }
 
     fn parse_address_size_directive(&self) -> Result<u8, ParseError> {
         let text = &self.current.text;
-        if text.contains("64") {
-            Ok(64)
-        } else if text.contains("32") {
-            Ok(32)
-        } else {
-            Ok(0)
-        }
+        Ok(match_contains!(text, 0,
+            ["64"] => 64,
+            ["32"] => 32,
+        ))
     }
 
     fn parse_kernel(&mut self) -> Result<KernelDef, ParseError> {
@@ -189,19 +213,13 @@ impl<'a> Parser<'a> {
     }
 
     fn extract_reg_type_and_name(&self, text: &str) -> (PtxType, String) {
-        let ty = if text.contains(".b64") || text.contains(".u64") {
-            PtxType::B64
-        } else if text.contains(".b32") || text.contains(".u32") {
-            PtxType::U32
-        } else if text.contains(".f32") {
-            PtxType::F32
-        } else if text.contains(".f64") {
-            PtxType::F64
-        } else if text.contains(".pred") {
-            PtxType::Pred
-        } else {
-            PtxType::B32
-        };
+        let ty = match_contains!(text, PtxType::B32,
+            [".b64", ".u64"] => PtxType::B64,
+            [".b32", ".u32"] => PtxType::U32,
+            [".f32"]         => PtxType::F32,
+            [".f64"]         => PtxType::F64,
+            [".pred"]        => PtxType::Pred,
+        );
 
         // Extract register name (starts with %)
         let name = text.split_whitespace()
@@ -256,29 +274,31 @@ impl<'a> Parser<'a> {
             .collect();
 
         let opcode = match parts.first().copied() {
-            Some("ld") => Opcode::Ld,
-            Some("st") => Opcode::St,
-            Some("mov") => Opcode::Mov,
-            Some("add") => Opcode::Add,
-            Some("sub") => Opcode::Sub,
-            Some("mul") => Opcode::Mul,
-            Some("mad") => Opcode::Mad,
-            Some("fma") => Opcode::Fma,
-            Some("cvta") => Opcode::Cvta,
-            Some("cvt") => Opcode::Cvt,
-            Some("setp") => Opcode::Setp,
-            Some("bra") => Opcode::Bra,
-            Some("bar") => Opcode::Bar,
-            Some("atom") => Opcode::Atom,
-            Some("ret") => Opcode::Ret,
-            Some("exit") => Opcode::Exit,
-            Some("and") => Opcode::And,
-            Some("or") => Opcode::Or,
-            Some("xor") => Opcode::Xor,
-            Some("shl") => Opcode::Shl,
-            Some("shr") => Opcode::Shr,
-            Some("membar") => Opcode::MemBar,
-            _ => Opcode::Unknown,
+            Some(s) => match_str_lookup!(s, Opcode::Unknown,
+                "ld"     => Opcode::Ld,
+                "st"     => Opcode::St,
+                "mov"    => Opcode::Mov,
+                "add"    => Opcode::Add,
+                "sub"    => Opcode::Sub,
+                "mul"    => Opcode::Mul,
+                "mad"    => Opcode::Mad,
+                "fma"    => Opcode::Fma,
+                "cvta"   => Opcode::Cvta,
+                "cvt"    => Opcode::Cvt,
+                "setp"   => Opcode::Setp,
+                "bra"    => Opcode::Bra,
+                "bar"    => Opcode::Bar,
+                "atom"   => Opcode::Atom,
+                "ret"    => Opcode::Ret,
+                "exit"   => Opcode::Exit,
+                "and"    => Opcode::And,
+                "or"     => Opcode::Or,
+                "xor"    => Opcode::Xor,
+                "shl"    => Opcode::Shl,
+                "shr"    => Opcode::Shr,
+                "membar" => Opcode::MemBar,
+            ),
+            None => Opcode::Unknown,
         };
 
         let modifiers = parts.iter().skip(1)
@@ -289,27 +309,26 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_modifier(&self, s: &str) -> Modifier {
-        match s {
+        match_str_lookup!(s, Modifier::Other(s.to_string()),
             "shared" => Modifier::Shared,
             "global" => Modifier::Global,
-            "local" => Modifier::Local,
-            "const" => Modifier::Const,
-            "param" => Modifier::Param,
-            "u32" => Modifier::U32,
-            "u64" => Modifier::U64,
-            "s32" => Modifier::S32,
-            "s64" => Modifier::S64,
-            "f32" => Modifier::F32,
-            "f64" => Modifier::F64,
-            "b32" => Modifier::B32,
-            "b64" => Modifier::B64,
-            "sync" => Modifier::Sync,
-            "cta" => Modifier::Cta,
-            "gl" => Modifier::Gl,
-            "add" => Modifier::AtomicAdd,
-            "cas" => Modifier::AtomicCas,
-            _ => Modifier::Other(s.to_string()),
-        }
+            "local"  => Modifier::Local,
+            "const"  => Modifier::Const,
+            "param"  => Modifier::Param,
+            "u32"    => Modifier::U32,
+            "u64"    => Modifier::U64,
+            "s32"    => Modifier::S32,
+            "s64"    => Modifier::S64,
+            "f32"    => Modifier::F32,
+            "f64"    => Modifier::F64,
+            "b32"    => Modifier::B32,
+            "b64"    => Modifier::B64,
+            "sync"   => Modifier::Sync,
+            "cta"    => Modifier::Cta,
+            "gl"     => Modifier::Gl,
+            "add"    => Modifier::AtomicAdd,
+            "cas"    => Modifier::AtomicCas,
+        )
     }
 
     fn parse_operands(&self, text: &str) -> Vec<Operand> {

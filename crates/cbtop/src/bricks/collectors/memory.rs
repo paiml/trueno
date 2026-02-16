@@ -87,7 +87,7 @@ impl Brick for MemoryCollectorBrick {
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
             BrickAssertion::custom("mem_total_positive", |b| {
-                let s = b.downcast_ref::<MemoryCollectorBrick>().unwrap();
+                let s = b.downcast_ref::<MemoryCollectorBrick>().expect("brick MUST be MemoryCollectorBrick");
                 s.history.back().map_or(true, |m| m.total_kb > 0)
             }),
             BrickAssertion::max_latency_ms(2),

@@ -134,7 +134,7 @@ fn format_bug_list(bugs: &crate::bugs::BugRegistry) -> String {
 mod tests {
     use super::*;
     use crate::bugs::BugRegistry;
-    use crate::falsification::{FalsificationRegistry, FalsificationReport};
+    use crate::falsification::FalsificationRegistry;
     use crate::parser::Parser;
 
     #[test]
