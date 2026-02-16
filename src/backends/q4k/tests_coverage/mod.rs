@@ -5,3 +5,4 @@ mod f16_and_parsing;
 #[cfg(target_arch = "x86_64")]
 mod avx2_dispatch;
 mod boundary_mutation;
+mod parallel_dispatch;
