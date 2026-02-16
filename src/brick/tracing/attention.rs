@@ -50,7 +50,7 @@ impl AttentionWeightTrace {
         let entropy = weights
             .iter()
             .filter(|&&w| w > 1e-10)
-            .map(|&w| -w * w.ln())
+            .map(|&w| -w * w.max(f32::EPSILON).ln())
             .sum();
 
         Self {

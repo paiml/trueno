@@ -78,7 +78,7 @@ impl QuantizationErrorTrace {
         let signal_power = norm_r / n as f64;
         let noise_power = sum_sq_error / n as f64;
         let snr_db = if noise_power > 1e-10 {
-            (10.0 * (signal_power / noise_power).log10()) as f32
+            (10.0 * (signal_power / noise_power).max(f64::EPSILON).log10()) as f32
         } else {
             f32::INFINITY
         };

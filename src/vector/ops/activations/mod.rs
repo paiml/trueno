@@ -203,7 +203,7 @@ impl Vector<f32> {
 
         // Compute log of sum of exponentials
         let sum_exp: f32 = exp_vals.iter().sum();
-        let log_sum_exp = sum_exp.ln();
+        let log_sum_exp = sum_exp.max(f32::EPSILON).ln();
 
         // log_softmax(x)[i] = x[i] - max - log_sum_exp
         let data: Vec<f32> = self

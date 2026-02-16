@@ -209,13 +209,13 @@ impl TunerFeaturesBuilder {
             head_dim_norm: (self.head_dim.unwrap_or(128) as f32 / 256.0).clamp(0.0, 1.0),
             vocab_size_log: self
                 .vocab_size
-                .map(|v| (v as f32).log10() / 6.0) // log10(1M)=6
+                .map(|v| (v.max(1) as f32).log10() / 6.0) // log10(1M)=6
                 .unwrap_or(0.0)
                 .clamp(0.0, 1.0),
             batch_size_norm: (batch_size_f / 64.0).clamp(0.0, 1.0),
             seq_len_log: self
                 .seq_len
-                .map(|s| (s as f32).log2() / 15.0) // log2(32K)≈15
+                .map(|s| (s.max(1) as f32).log2() / 15.0) // log2(32K)≈15
                 .unwrap_or(0.0)
                 .clamp(0.0, 1.0),
             cuda_graphs: if self.cuda_graphs { 1.0 } else { 0.0 },
