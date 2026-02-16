@@ -331,134 +331,73 @@ mod tests {
     }
 
     // =========================================================================
-    // Backend dispatch (parametric across all norms x backends)
+    // Norm spec table — (method, name, basic_data, expected) for loop-based tests
+    // =========================================================================
+
+    fn norm_specs() -> [(NormMethod, &'static str, &'static [f32], f32); 3] {
+        [
+            (norm_l1, "l1", &[3.0, -4.0, 5.0], 12.0),
+            (norm_l2, "l2", &[3.0, 4.0, 0.0, 0.0], 5.0),
+            (norm_linf, "linf", &[3.0, -7.0, 5.0, -2.0], 7.0),
+        ]
+    }
+
+    // =========================================================================
+    // Backend dispatch — all norms x all backends in single tests
     // =========================================================================
 
     #[test]
     #[cfg(target_arch = "x86_64")]
-    fn test_norm_l2_sse2_backend() { assert_norm_with_backend(norm_l2, &[3.0, 4.0], 5.0, 1e-5, Backend::SSE2); }
-
-    #[test]
-    #[cfg(target_arch = "x86_64")]
-    fn test_norm_l2_avx2_backend() {
-        if !is_x86_feature_detected!("avx2") { return; }
-        let data: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        let expected: f32 = data.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert_norm_with_backend(norm_l2, &data, expected, 1e-3, Backend::AVX2);
-    }
-
-    #[test]
-    fn test_norm_l2_fallback_backends() {
-        for &b in &[Backend::NEON, Backend::WasmSIMD, Backend::GPU, Backend::Auto] {
-            assert_norm_with_backend(norm_l2, &[3.0, 4.0], 5.0, 1e-5, b);
+    fn test_all_norms_sse2_backend() {
+        for (method, name, data, expected) in norm_specs() {
+            assert_norm_with_backend(method, data, expected, 1e-5, Backend::SSE2);
+            let _ = name;
         }
     }
 
     #[test]
     #[cfg(target_arch = "x86_64")]
-    fn test_norm_l1_sse2_backend() { assert_norm_with_backend(norm_l1, &[3.0, -4.0, 5.0], 12.0, 1e-5, Backend::SSE2); }
-
-    #[test]
-    #[cfg(target_arch = "x86_64")]
-    fn test_norm_l1_avx2_backend() {
+    fn test_all_norms_avx2_backend() {
         if !is_x86_feature_detected!("avx2") { return; }
-        let data: Vec<f32> = (0..16).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
-        assert_norm_with_backend(norm_l1, &data, 16.0, 1e-4, Backend::AVX2);
-    }
-
-    #[test]
-    fn test_norm_l1_fallback_backends() {
-        for &b in &[Backend::NEON, Backend::WasmSIMD, Backend::GPU, Backend::Auto] {
-            assert_norm_with_backend(norm_l1, &[3.0, -4.0, 5.0], 12.0, 1e-5, b);
+        for (method, _name, data, expected) in norm_specs() {
+            assert_norm_with_backend(method, data, expected, 1e-3, Backend::AVX2);
         }
     }
 
     #[test]
-    #[cfg(target_arch = "x86_64")]
-    fn test_norm_linf_sse2_backend() { assert_norm_with_backend(norm_linf, &[3.0, -7.0, 5.0, -2.0], 7.0, 1e-5, Backend::SSE2); }
-
-    #[test]
-    #[cfg(target_arch = "x86_64")]
-    fn test_norm_linf_avx2_backend() {
-        if !is_x86_feature_detected!("avx2") { return; }
-        let mut data: Vec<f32> = (0..16).map(|i| i as f32).collect();
-        data[10] = -99.0;
-        assert_norm_with_backend(norm_linf, &data, 99.0, 1e-4, Backend::AVX2);
-    }
-
-    #[test]
-    fn test_norm_linf_fallback_backends() {
-        for &b in &[Backend::NEON, Backend::WasmSIMD, Backend::GPU, Backend::Auto] {
-            assert_norm_with_backend(norm_linf, &[3.0, -7.0, 5.0], 7.0, 1e-5, b);
+    fn test_all_norms_fallback_backends() {
+        for (method, _name, data, expected) in norm_specs() {
+            for &b in &[Backend::NEON, Backend::WasmSIMD, Backend::GPU, Backend::Auto, Backend::Scalar] {
+                assert_norm_with_backend(method, data, expected, 1e-5, b);
+            }
         }
     }
 
     // =========================================================================
-    // Backend equivalence (parametric)
+    // Backend equivalence — all norms in single test
     // =========================================================================
 
     #[test]
-    fn test_norm_l2_backend_equivalence() {
+    fn test_all_norms_backend_equivalence() {
         let data: Vec<f32> = (0..100).map(|i| ((i as f32) * 0.13).sin()).collect();
-        assert_norm_backend_equivalence(norm_l2, &data, 1e-3);
-    }
-
-    #[test]
-    fn test_norm_l1_backend_equivalence() {
-        let data: Vec<f32> = (0..100).map(|i| ((i as f32) * 0.17).cos()).collect();
-        assert_norm_backend_equivalence(norm_l1, &data, 1e-3);
-    }
-
-    #[test]
-    fn test_norm_linf_backend_equivalence() {
-        let data: Vec<f32> = (0..100).map(|i| ((i as f32) * 0.23).sin()).collect();
-        assert_norm_backend_equivalence(norm_linf, &data, 1e-5);
+        for (method, _name, _, _) in norm_specs() {
+            assert_norm_backend_equivalence(method, &data, 1e-3);
+        }
     }
 
     // =========================================================================
-    // Non-aligned sizes (parametric)
+    // Non-aligned sizes — all norms in single test
     // =========================================================================
 
     #[test]
-    fn test_norm_l2_non_aligned_sizes_all() {
-        assert_norm_non_aligned(
-            norm_l2,
-            |sz| (0..sz).map(|i| (i as f32 + 1.0) * 0.1).collect(),
-            |d| d.iter().map(|x| x * x).sum::<f32>().sqrt(),
-            1e-3,
-        );
+    fn test_all_norms_non_aligned_sizes() {
+        let norms: [(NormMethod, fn(usize) -> Vec<f32>, fn(&[f32]) -> f32); 3] = [
+            (norm_l2, |sz| (0..sz).map(|i| (i as f32 + 1.0) * 0.1).collect(), |d| d.iter().map(|x| x * x).sum::<f32>().sqrt()),
+            (norm_l1, |sz| (0..sz).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect(), |d| d.len() as f32),
+            (norm_linf, |sz| (0..sz).map(|i| i as f32 + 1.0).collect(), |d| d.len() as f32),
+        ];
+        for (method, make_data, make_expected) in norms {
+            assert_norm_non_aligned(method, make_data, make_expected, 1e-3);
+        }
     }
-
-    #[test]
-    fn test_norm_l1_non_aligned_sizes_all() {
-        assert_norm_non_aligned(
-            norm_l1,
-            |sz| (0..sz).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect(),
-            |d| d.len() as f32,
-            1e-3,
-        );
-    }
-
-    #[test]
-    fn test_norm_linf_non_aligned_sizes_all() {
-        assert_norm_non_aligned(
-            norm_linf,
-            |sz| (0..sz).map(|i| i as f32 + 1.0).collect(),
-            |d| d.len() as f32,
-            1e-5,
-        );
-    }
-
-    // =========================================================================
-    // Scalar backend explicit (parametric)
-    // =========================================================================
-
-    #[test]
-    fn test_norm_l2_scalar_backend() { assert_norm_with_backend(norm_l2, &[3.0, 4.0], 5.0, 1e-5, Backend::Scalar); }
-
-    #[test]
-    fn test_norm_l1_scalar_backend() { assert_norm_with_backend(norm_l1, &[3.0, -4.0, 5.0], 12.0, 1e-5, Backend::Scalar); }
-
-    #[test]
-    fn test_norm_linf_scalar_backend() { assert_norm_with_backend(norm_linf, &[3.0, -7.0, 5.0, -2.0], 7.0, 1e-5, Backend::Scalar); }
 }
