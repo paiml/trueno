@@ -73,7 +73,7 @@ impl TunerDataCollector {
 
         // Compute mean error
         let mean_error: f32 =
-            self.error_window.iter().sum::<f32>() / self.error_window.len() as f32;
+            self.error_window.iter().sum::<f32>() / self.error_window.len().max(1) as f32;
 
         // Compute staleness score (0.0 = fresh, 1.0 = stale)
         let staleness_score =

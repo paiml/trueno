@@ -228,7 +228,7 @@ impl Vector<f32> {
                 diff * diff
             })
             .sum::<f32>()
-            / self.len() as f32;
+            / self.len().max(1) as f32;
 
         // Compute inverse standard deviation for numerical stability
         let inv_std = 1.0 / (variance + eps).sqrt();
@@ -283,7 +283,7 @@ impl Vector<f32> {
                 diff * diff
             })
             .sum::<f32>()
-            / self.len() as f32;
+            / self.len().max(1) as f32;
 
         let inv_std = 1.0 / (variance + eps).sqrt();
 

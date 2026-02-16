@@ -79,7 +79,7 @@ impl KernelClassifier {
                 correct += 1;
             }
         }
-        self.accuracy = correct as f32 / data.len() as f32;
+        self.accuracy = correct as f32 / data.len().max(1) as f32;
 
         Ok(())
     }

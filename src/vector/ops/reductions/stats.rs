@@ -271,7 +271,7 @@ impl Vector<f32> {
         let mean_x = self.mean()?;
         let mean_y = other.mean()?;
         let dot_xy = self.dot(other)?;
-        let mean_xy = dot_xy / self.len() as f32;
+        let mean_xy = dot_xy / self.len().max(1) as f32;
 
         // Cov(X,Y) = E[XY] - μx·μy
         Ok(mean_xy - mean_x * mean_y)
