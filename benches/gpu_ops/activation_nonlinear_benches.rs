@@ -14,107 +14,96 @@ fn make_narrow_data(size: usize) -> Vec<f32> {
         .collect()
 }
 
-/// Macro to generate a GPU-vs-Scalar activation benchmark.
-macro_rules! bench_activation {
-    (
-        $(#[$meta:meta])*
-        fn $fn_name:ident, group = $group:expr,
-        data = $data_fn:ident,
-        gpu  = |$gpu:ident, $gdata:ident| $gpu_expr:expr,
-        scalar = |$sdata:ident| $scalar_expr:expr $(,)?
-    ) => {
-        $(#[$meta])*
-        pub fn $fn_name(c: &mut Criterion) {
-            if !GpuBackend::is_available() {
-                eprintln!("GPU not available, skipping GPU benchmarks");
-                return;
-            }
+/// Run a GPU-vs-Scalar activation benchmark over standard sizes.
+fn run_bench(
+    c: &mut Criterion,
+    name: &str,
+    data_fn: fn(usize) -> Vec<f32>,
+    gpu_op: &dyn Fn(&mut GpuBackend, &[f32]) -> Vec<f32>,
+    scalar_op: &dyn Fn(&[f32]) -> Vec<f32>,
+) {
+    if !GpuBackend::is_available() {
+        eprintln!("GPU not available, skipping GPU benchmarks");
+        return;
+    }
 
-            let mut group = c.benchmark_group($group);
+    let mut group = c.benchmark_group(name);
 
-            for size in BENCH_SIZES.iter() {
-                group.throughput(Throughput::Elements(*size as u64));
+    for &size in BENCH_SIZES.iter() {
+        group.throughput(Throughput::Elements(size as u64));
 
-                group.bench_with_input(
-                    BenchmarkId::new("GPU", size),
-                    size,
-                    |bencher, &size| {
-                        let $gdata = $data_fn(size);
-                        let mut $gpu = GpuBackend::new();
+        group.bench_with_input(BenchmarkId::new("GPU", size), &size, |bencher, &size| {
+            let data = data_fn(size);
+            let mut gpu = GpuBackend::new();
+            bencher.iter(|| black_box(gpu_op(&mut gpu, &data)));
+        });
 
-                        bencher.iter(|| {
-                            black_box($gpu_expr);
-                        });
-                    },
-                );
+        group.bench_with_input(
+            BenchmarkId::new("Scalar", size),
+            &size,
+            |bencher, &size| {
+                let data = data_fn(size);
+                bencher.iter(|| black_box(scalar_op(&data)));
+            },
+        );
+    }
 
-                group.bench_with_input(
-                    BenchmarkId::new("Scalar", size),
-                    size,
-                    |bencher, &size| {
-                        let $sdata = $data_fn(size);
-
-                        bencher.iter(|| {
-                            black_box($scalar_expr);
-                        });
-                    },
-                );
-            }
-
-            group.finish();
-        }
-    };
+    group.finish();
 }
 
-bench_activation! {
-    /// Benchmark GPU sigmoid activation vs scalar baseline
-    fn bench_gpu_sigmoid, group = "gpu_sigmoid",
-    data = make_narrow_data,
-    gpu    = |gpu, data| gpu.sigmoid(&data).unwrap(),
-    scalar = |data| {
-        let result: Vec<f32> = data.iter().map(|&x| 1.0 / (1.0 + (-x).exp())).collect();
-        result
-    },
+/// Benchmark GPU sigmoid activation vs scalar baseline
+pub fn bench_gpu_sigmoid(c: &mut Criterion) {
+    run_bench(
+        c,
+        "gpu_sigmoid",
+        make_narrow_data,
+        &|gpu, data| gpu.sigmoid(data).unwrap(),
+        &|data| data.iter().map(|&x| 1.0 / (1.0 + (-x).exp())).collect(),
+    );
 }
 
-bench_activation! {
-    /// Benchmark GPU tanh activation vs scalar baseline
-    fn bench_gpu_tanh, group = "gpu_tanh",
-    data = make_narrow_data,
-    gpu    = |gpu, data| gpu.tanh(&data).unwrap(),
-    scalar = |data| {
-        let result: Vec<f32> = data.iter().map(|&x| x.tanh()).collect();
-        result
-    },
+/// Benchmark GPU tanh activation vs scalar baseline
+pub fn bench_gpu_tanh(c: &mut Criterion) {
+    run_bench(
+        c,
+        "gpu_tanh",
+        make_narrow_data,
+        &|gpu, data| gpu.tanh(data).unwrap(),
+        &|data| data.iter().map(|&x| x.tanh()).collect(),
+    );
 }
 
-bench_activation! {
-    /// Benchmark GPU swish activation vs scalar baseline
-    fn bench_gpu_swish, group = "gpu_swish",
-    data = make_narrow_data,
-    gpu    = |gpu, data| gpu.swish(&data).unwrap(),
-    scalar = |data| {
-        let result: Vec<f32> = data.iter().map(|&x| x / (1.0 + (-x).exp())).collect();
-        result
-    },
+/// Benchmark GPU swish activation vs scalar baseline
+pub fn bench_gpu_swish(c: &mut Criterion) {
+    run_bench(
+        c,
+        "gpu_swish",
+        make_narrow_data,
+        &|gpu, data| gpu.swish(data).unwrap(),
+        &|data| {
+            data.iter()
+                .map(|&x| x / (1.0 + (-x).exp()))
+                .collect()
+        },
+    );
 }
 
-bench_activation! {
-    /// Benchmark GPU GELU activation vs scalar baseline
-    fn bench_gpu_gelu, group = "gpu_gelu",
-    data = make_narrow_data,
-    gpu    = |gpu, data| gpu.gelu(&data).unwrap(),
-    scalar = |data| {
-        const SQRT_2_OVER_PI: f32 = 0.7978846;
-        const COEFF: f32 = 0.044715;
-        let result: Vec<f32> = data
-            .iter()
-            .map(|&x| {
-                let x_cubed = x * x * x;
-                let inner = SQRT_2_OVER_PI * (x + COEFF * x_cubed);
-                0.5 * x * (1.0 + inner.tanh())
-            })
-            .collect();
-        result
-    },
+/// Benchmark GPU GELU activation vs scalar baseline
+pub fn bench_gpu_gelu(c: &mut Criterion) {
+    run_bench(
+        c,
+        "gpu_gelu",
+        make_narrow_data,
+        &|gpu, data| gpu.gelu(data).unwrap(),
+        &|data| {
+            const SQRT_2_OVER_PI: f32 = 0.7978846;
+            const COEFF: f32 = 0.044715;
+            data.iter()
+                .map(|&x| {
+                    let inner = SQRT_2_OVER_PI * (x + COEFF * x * x * x);
+                    0.5 * x * (1.0 + inner.tanh())
+                })
+                .collect()
+        },
+    );
 }
