@@ -43,7 +43,7 @@ pub fn bootstrap_ci(samples: &[f64], confidence_level: f64, iterations: usize) -
     let ci_upper = bootstrap_means
         .get(upper_idx.min(iterations - 1))
         .copied()
-        .unwrap_or(*bootstrap_means.last().unwrap());
+        .unwrap_or(*bootstrap_means.last().unwrap_or(&0.0));
 
     (ci_lower, ci_upper)
 }

@@ -341,7 +341,7 @@ Score: {}/100 (Grade: {})
 
         let best = comparisons
             .iter()
-            .max_by(|a, b| a.gflops.partial_cmp(&b.gflops).unwrap())
+            .max_by(|a, b| a.gflops.partial_cmp(&b.gflops).unwrap_or(std::cmp::Ordering::Equal))
             .map(|c| c.backend.clone())
             .unwrap_or_default();
 
