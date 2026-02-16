@@ -13,9 +13,9 @@ use super::stream::CudaStream;
 use super::types::LaunchConfig;
 use std::ffi::c_void;
 
-mod driver_and_context;
-mod streams;
-mod gpu_buffer;
 mod cuda_graph_tests;
+mod driver_and_context;
+mod gpu_buffer;
 mod module_tests;
+mod streams;
 mod stress_and_advanced;

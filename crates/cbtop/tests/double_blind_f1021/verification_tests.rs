@@ -283,4 +283,3 @@ fn f1028_unfalsified_with_failing_score_rejects() {
     let decision = session.make_decision(Role::System).unwrap();
     assert!(matches!(decision, ReleaseDecision::Rejected { .. }));
 }
-

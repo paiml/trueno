@@ -338,7 +338,10 @@ fn test_backend_availability_mutual_exclusion() {
     // On any given platform, certain backends should be mutually exclusive.
     // Metal is only available on macOS, Vulkan is never available (placeholder).
     let vulkan = VulkanBackend;
-    assert!(!vulkan.is_available(), "Vulkan placeholder is never available");
+    assert!(
+        !vulkan.is_available(),
+        "Vulkan placeholder is never available"
+    );
 
     #[cfg(not(target_os = "macos"))]
     {

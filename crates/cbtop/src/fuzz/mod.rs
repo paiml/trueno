@@ -17,13 +17,13 @@
 //!
 //! F1081-F1095: Input validation and error path testing
 
-mod types;
-mod suite;
 mod edge_cases;
+mod suite;
+mod types;
 
-pub use types::*;
-pub use suite::*;
 pub use edge_cases::*;
+pub use suite::*;
+pub use types::*;
 
 #[cfg(test)]
 mod tests;

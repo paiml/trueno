@@ -76,10 +76,10 @@ const DEFAULT_CPU_PEAK_GFLOPS: f64 = 400.0;
 impl Default for BackendCostModel {
     fn default() -> Self {
         Self {
-            pcie_bandwidth_gbps: 15.75,       // PCIe 3.0 x16
-            gpu_peak_tflops: 10.0,            // Mid-range GPU
+            pcie_bandwidth_gbps: 15.75, // PCIe 3.0 x16
+            gpu_peak_tflops: 10.0,      // Mid-range GPU
             cpu_peak_gflops: DEFAULT_CPU_PEAK_GFLOPS,
-            gpu_min_elements: 1_000_000,      // ~1M elements
+            gpu_min_elements: 1_000_000, // ~1M elements
         }
     }
 }

@@ -315,6 +315,5 @@ impl fmt::Display for ContinuousBatcher {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

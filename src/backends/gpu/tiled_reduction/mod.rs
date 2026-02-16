@@ -75,10 +75,7 @@ impl ReduceOp for MinOp {
 /// 3. Combine partial results
 pub fn tiled_reduce_2d<Op: ReduceOp>(data: &[f32], width: usize, height: usize) -> f32 {
     let partial = collect_tile_results::<Op>(data, width, height);
-    partial
-        .iter()
-        .copied()
-        .fold(Op::identity(), Op::combine)
+    partial.iter().copied().fold(Op::identity(), Op::combine)
 }
 
 /// Convenience function for tiled sum reduction
@@ -108,11 +105,7 @@ pub fn tiled_reduce_partial<Op: ReduceOp>(data: &[f32], width: usize, height: us
 }
 
 /// Shared implementation: reduce each tile and return partial results.
-fn collect_tile_results<Op: ReduceOp>(
-    data: &[f32],
-    width: usize,
-    height: usize,
-) -> Vec<f32> {
+fn collect_tile_results<Op: ReduceOp>(data: &[f32], width: usize, height: usize) -> Vec<f32> {
     if data.is_empty() || width == 0 || height == 0 {
         return vec![Op::identity()];
     }

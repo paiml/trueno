@@ -1,8 +1,10 @@
 //! REQ-001 through REQ-005: Parser, detectors, and framework tests
 
+use trueno_ptx_debug::analyzer::{
+    AddressSpaceValidator, ControlFlowAnalyzer, DataFlowAnalyzer, TypeChecker,
+};
+use trueno_ptx_debug::falsification::{Category, FalsificationRegistry, TestResult};
 use trueno_ptx_debug::parser::Parser;
-use trueno_ptx_debug::falsification::{FalsificationRegistry, TestResult, Category};
-use trueno_ptx_debug::analyzer::{TypeChecker, ControlFlowAnalyzer, DataFlowAnalyzer, AddressSpaceValidator};
 
 /// REQ-001: Parse valid PTX (unit tests pass)
 ///
@@ -85,7 +87,10 @@ fn req001_parse_valid_ptx() {
         );
     }
 
-    println!("REQ-001 PASSED: Parser handles valid PTX ({} samples)", valid_ptx_samples.len());
+    println!(
+        "REQ-001 PASSED: Parser handles valid PTX ({} samples)",
+        valid_ptx_samples.len()
+    );
 }
 
 /// REQ-002: F021 Generic Address Corruption detection

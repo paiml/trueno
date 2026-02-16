@@ -80,16 +80,17 @@ mod tests {
     #[test]
     fn test_crc32_table_length() {
         let table = crc32_table();
-        assert_eq!(table.len(), 256, "CRC32 table must have exactly 256 entries");
+        assert_eq!(
+            table.len(),
+            256,
+            "CRC32 table must have exactly 256 entries"
+        );
     }
 
     #[test]
     fn test_crc32_table_first_entry_is_zero() {
         let table = crc32_table();
-        assert_eq!(
-            table[0], 0x0000_0000,
-            "CRC32 table[0] must be 0 (identity)"
-        );
+        assert_eq!(table[0], 0x0000_0000, "CRC32 table[0] must be 0 (identity)");
     }
 
     #[test]
@@ -100,8 +101,14 @@ mod tests {
         assert_eq!(table[2], 0xEE0E_612C, "table[2] mismatch for IEEE CRC32");
         assert_eq!(table[3], 0x9909_51BA, "table[3] mismatch for IEEE CRC32");
         assert_eq!(table[4], 0x076D_C419, "table[4] mismatch for IEEE CRC32");
-        assert_eq!(table[128], 0xEDB8_8320, "table[128] must equal the polynomial");
-        assert_eq!(table[255], 0x2D02_EF8D, "table[255] mismatch for IEEE CRC32");
+        assert_eq!(
+            table[128], 0xEDB8_8320,
+            "table[128] must equal the polynomial"
+        );
+        assert_eq!(
+            table[255], 0x2D02_EF8D,
+            "table[255] mismatch for IEEE CRC32"
+        );
     }
 
     #[test]

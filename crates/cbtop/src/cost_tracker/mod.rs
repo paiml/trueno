@@ -490,6 +490,5 @@ impl CostTracker {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

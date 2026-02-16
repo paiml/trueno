@@ -1,9 +1,9 @@
 //! Address Space Validator - validates correct address space usage
 
-use std::collections::HashSet;
-use crate::parser::{PtxModule, Statement, Instruction, Operand, SourceLocation};
-use crate::parser::types::{Opcode, Modifier};
 use crate::bugs::Severity;
+use crate::parser::types::{Modifier, Opcode};
+use crate::parser::{Instruction, Operand, PtxModule, SourceLocation, Statement};
+use std::collections::HashSet;
 
 /// Bug: Generic addressing of shared memory
 #[derive(Debug, Clone)]
@@ -133,12 +133,16 @@ impl AddressSpaceValidator {
                         }
 
                         // Detect cvta.shared inside loop
-                        if in_loop && instr.opcode == Opcode::Cvta && self.has_shared_modifier(instr) {
+                        if in_loop
+                            && instr.opcode == Opcode::Cvta
+                            && self.has_shared_modifier(instr)
+                        {
                             bugs.push(GenericSharedBug {
                                 location: instr.location.clone(),
                                 instruction: instr.clone(),
                                 severity: Severity::High,
-                                fix: "Move cvta.shared outside loop to reduce register pressure".into(),
+                                fix: "Move cvta.shared outside loop to reduce register pressure"
+                                    .into(),
                             });
                         }
                     }
@@ -151,15 +155,24 @@ impl AddressSpaceValidator {
     }
 
     fn has_shared_modifier(&self, instr: &Instruction) -> bool {
-        instr.modifiers.iter().any(|m| matches!(m, Modifier::Shared))
+        instr
+            .modifiers
+            .iter()
+            .any(|m| matches!(m, Modifier::Shared))
     }
 
     fn has_space_modifier(&self, instr: &Instruction) -> bool {
-        instr.modifiers.iter().any(|m| m.as_address_space().is_some())
+        instr
+            .modifiers
+            .iter()
+            .any(|m| m.as_address_space().is_some())
     }
 
     fn has_u64_modifier(&self, instr: &Instruction) -> bool {
-        instr.modifiers.iter().any(|m| matches!(m, Modifier::U64 | Modifier::B64))
+        instr
+            .modifiers
+            .iter()
+            .any(|m| matches!(m, Modifier::U64 | Modifier::B64))
     }
 
     fn uses_generic_shared_reg(&self, operand: &Operand) -> bool {
@@ -206,7 +219,10 @@ mod tests {
         let mut validator = AddressSpaceValidator::new();
         let bugs = validator.detect_generic_shared_access(&module);
 
-        assert!(bugs.is_empty(), "F021: Should have no generic shared access bugs");
+        assert!(
+            bugs.is_empty(),
+            "F021: Should have no generic shared access bugs"
+        );
     }
 
     // F023: Direct .shared addressing preferred
@@ -231,6 +247,9 @@ mod tests {
         let mut validator = AddressSpaceValidator::new();
         let bugs = validator.detect_generic_shared_access(&module);
 
-        assert!(bugs.is_empty(), "F023: Direct shared addressing should not trigger bugs");
+        assert!(
+            bugs.is_empty(),
+            "F023: Direct shared addressing should not trigger bugs"
+        );
     }
 }

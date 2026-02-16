@@ -78,7 +78,11 @@ impl TiledQ4KMatvec {
     /// Goal: Keep working set in L2 (256KB typical)
     /// Working set = midi_tile.m rows × K × sizeof(Q4K) + K × sizeof(f32)
     #[must_use]
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     // SAFETY: k ≤ 2^24 for practical matrix dims so usize→f32 is lossless;
     //         result of f32 multiply is non-negative and fits in usize.
     pub fn optimal_parallel_rows(&self, l2_bytes: usize) -> usize {

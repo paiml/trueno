@@ -65,11 +65,7 @@ fn demo_sample_claims() {
 fn print_report_status(report: &FalsificationReport, label: &str, statuses: &[ClaimStatus]) {
     println!("\n   {}:", label);
     for status in statuses {
-        println!(
-            "   │ {:?}: {}",
-            status,
-            report.count_by_status(*status)
-        );
+        println!("   │ {:?}: {}", status, report.count_by_status(*status));
     }
     println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
 }

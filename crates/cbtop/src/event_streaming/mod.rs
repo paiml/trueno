@@ -34,11 +34,7 @@ fn now_nanos() -> u64 {
 /// Format a slice of events by applying `formatter` to each element and
 /// joining the results with newlines.
 fn format_events<T, F: Fn(&T) -> String>(events: &[T], formatter: F) -> String {
-    events
-        .iter()
-        .map(formatter)
-        .collect::<Vec<_>>()
-        .join("\n")
+    events.iter().map(formatter).collect::<Vec<_>>().join("\n")
 }
 
 /// Default batch size
@@ -475,7 +471,6 @@ pub fn event_from_sample(metric: &str, value: f64, tags: &[(&str, &str)]) -> Met
 
     event
 }
-
 
 #[cfg(test)]
 mod tests;

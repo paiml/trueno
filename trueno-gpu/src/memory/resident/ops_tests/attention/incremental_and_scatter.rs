@@ -3,7 +3,6 @@
 use crate::driver::{CudaContext, CudaStream};
 use crate::memory::resident::GpuResidentTensor;
 
-
 #[test]
 fn test_incremental_attention_gpu() {
     use crate::memory::resident::clear_kernel_cache;

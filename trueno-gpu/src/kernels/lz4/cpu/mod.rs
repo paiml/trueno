@@ -139,7 +139,11 @@ pub fn lz4_encode_sequence(
 }
 
 /// Read an LZ4 extended length (sequence of 255-byte continuations).
-fn lz4_read_extended_len(input: &[u8], in_pos: &mut usize, base: usize) -> Result<usize, &'static str> {
+fn lz4_read_extended_len(
+    input: &[u8],
+    in_pos: &mut usize,
+    base: usize,
+) -> Result<usize, &'static str> {
     let mut len = base;
     loop {
         if *in_pos >= input.len() {
@@ -157,8 +161,11 @@ fn lz4_read_extended_len(input: &[u8], in_pos: &mut usize, base: usize) -> Resul
 
 /// Copy literal bytes from input to output during decompression.
 fn lz4_copy_literals(
-    input: &[u8], output: &mut [u8],
-    in_pos: &mut usize, out_pos: &mut usize, literal_len: usize,
+    input: &[u8],
+    output: &mut [u8],
+    in_pos: &mut usize,
+    out_pos: &mut usize,
+    literal_len: usize,
 ) -> Result<(), &'static str> {
     if *in_pos + literal_len > input.len() {
         return Err("Truncated literals");
@@ -174,7 +181,11 @@ fn lz4_copy_literals(
 }
 
 /// Read and validate a match offset during decompression.
-fn lz4_read_match_offset(input: &[u8], in_pos: &mut usize, out_pos: usize) -> Result<usize, &'static str> {
+fn lz4_read_match_offset(
+    input: &[u8],
+    in_pos: &mut usize,
+    out_pos: usize,
+) -> Result<usize, &'static str> {
     if *in_pos + 2 > input.len() {
         return Err("Truncated match offset");
     }
@@ -190,7 +201,12 @@ fn lz4_read_match_offset(input: &[u8], in_pos: &mut usize, out_pos: usize) -> Re
 }
 
 /// Copy overlapping match bytes from earlier in output buffer.
-fn lz4_copy_match(output: &mut [u8], out_pos: &mut usize, offset: usize, match_len: usize) -> Result<(), &'static str> {
+fn lz4_copy_match(
+    output: &mut [u8],
+    out_pos: &mut usize,
+    offset: usize,
+    match_len: usize,
+) -> Result<(), &'static str> {
     if *out_pos + match_len > output.len() {
         return Err("Output buffer overflow (match)");
     }
@@ -204,8 +220,10 @@ fn lz4_copy_match(output: &mut [u8], out_pos: &mut usize, offset: usize, match_l
 
 /// Decode one LZ4 sequence (literals + match) from input.
 fn lz4_decode_sequence(
-    input: &[u8], output: &mut [u8],
-    in_pos: &mut usize, out_pos: &mut usize,
+    input: &[u8],
+    output: &mut [u8],
+    in_pos: &mut usize,
+    out_pos: &mut usize,
 ) -> Result<bool, &'static str> {
     let token = input[*in_pos];
     *in_pos += 1;
@@ -294,7 +312,13 @@ impl Lz4CompressState {
 
         if let Some((offset, match_len)) = lz4_try_match(input, self.in_pos, match_pos) {
             let literals = &input[self.anchor..self.in_pos];
-            lz4_encode_sequence(output, &mut self.out_pos, literals, offset as u16, match_len)?;
+            lz4_encode_sequence(
+                output,
+                &mut self.out_pos,
+                literals,
+                offset as u16,
+                match_len,
+            )?;
             self.in_pos += match_len;
             self.anchor = self.in_pos;
         } else {
@@ -342,7 +366,6 @@ pub fn lz4_compress_block(input: &[u8], output: &mut [u8]) -> Result<usize, &'st
     state.flush_trailing_literals(input, output)?;
     Ok(state.out_pos)
 }
-
 
 #[cfg(test)]
 mod tests;

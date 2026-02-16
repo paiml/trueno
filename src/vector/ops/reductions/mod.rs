@@ -25,7 +25,6 @@ use crate::backends::VectorBackend;
 use crate::vector::Vector;
 use crate::{dispatch_reduction, Backend, Result, TruenoError};
 
-
 impl Vector<f32> {
     /// Dot product
     ///

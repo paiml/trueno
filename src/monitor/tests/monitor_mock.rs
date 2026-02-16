@@ -42,8 +42,8 @@ fn h0_mon_101_monitor_collect() {
 
 #[test]
 fn h0_mon_102_monitor_history_buffer() {
-    let info = GpuDeviceInfo::new(0, "Mock GPU", GpuVendor::Nvidia, GpuBackend::Vulkan)
-        .with_vram(1024);
+    let info =
+        GpuDeviceInfo::new(0, "Mock GPU", GpuVendor::Nvidia, GpuBackend::Vulkan).with_vram(1024);
 
     // Small history size to test ring buffer
     let config = MonitorConfig {
@@ -67,8 +67,8 @@ fn h0_mon_102_monitor_history_buffer() {
 
 #[test]
 fn h0_mon_103_monitor_latest() {
-    let info = GpuDeviceInfo::new(0, "Mock GPU", GpuVendor::Nvidia, GpuBackend::Vulkan)
-        .with_vram(1024);
+    let info =
+        GpuDeviceInfo::new(0, "Mock GPU", GpuVendor::Nvidia, GpuBackend::Vulkan).with_vram(1024);
     let config = MonitorConfig::default();
     let monitor = GpuMonitor::mock(info, config);
 
@@ -83,8 +83,8 @@ fn h0_mon_103_monitor_latest() {
 
 #[test]
 fn h0_mon_104_monitor_clear_history() {
-    let info = GpuDeviceInfo::new(0, "Mock GPU", GpuVendor::Nvidia, GpuBackend::Vulkan)
-        .with_vram(1024);
+    let info =
+        GpuDeviceInfo::new(0, "Mock GPU", GpuVendor::Nvidia, GpuBackend::Vulkan).with_vram(1024);
     let config = MonitorConfig::default();
     let monitor = GpuMonitor::mock(info, config);
 

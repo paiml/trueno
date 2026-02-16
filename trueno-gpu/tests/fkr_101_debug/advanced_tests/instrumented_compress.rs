@@ -374,8 +374,7 @@ fn fkr_101_debug_find_crash() {
 
     // Allocate GPU buffers
     let mut input_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, input.len()).unwrap();
-    let mut output_buf: GpuBuffer<u8> =
-        GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize).unwrap();
+    let mut output_buf: GpuBuffer<u8> = GpuBuffer::new(&ctx, (NUM_PAGES * 4352) as usize).unwrap();
     let mut sizes_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, NUM_PAGES as usize).unwrap();
     let mut debug_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1024).unwrap();
 

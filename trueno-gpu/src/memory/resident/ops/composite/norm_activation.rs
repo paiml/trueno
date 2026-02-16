@@ -73,7 +73,13 @@ impl GpuResidentTensor<f32> {
         ];
 
         compile_lock_launch(
-            ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            ctx,
+            &stream,
+            &cache_key,
+            &ptx,
+            kernel.name(),
+            &config,
+            &mut args,
         )?;
         stream.synchronize()?;
 
@@ -135,7 +141,13 @@ impl GpuResidentTensor<f32> {
         ];
 
         compile_lock_launch(
-            ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            ctx,
+            stream,
+            &cache_key,
+            &ptx,
+            kernel.name(),
+            &config,
+            &mut args,
         )?;
         // NO SYNC - caller controls synchronization for graph capture
 
@@ -178,7 +190,13 @@ impl GpuResidentTensor<f32> {
         ];
 
         compile_lock_launch(
-            ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            ctx,
+            &stream,
+            &cache_key,
+            &ptx,
+            kernel.name(),
+            &config,
+            &mut args,
         )?;
         stream.synchronize()?;
 
@@ -226,7 +244,13 @@ impl GpuResidentTensor<f32> {
         ];
 
         compile_lock_launch(
-            ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+            ctx,
+            stream,
+            &cache_key,
+            &ptx,
+            kernel.name(),
+            &config,
+            &mut args,
         )?;
         // NO SYNC - caller controls synchronization for graph capture
 

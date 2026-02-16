@@ -455,4 +455,3 @@ impl PtxInstruction {
 
 #[cfg(test)]
 mod tests;
-

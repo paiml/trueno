@@ -3,9 +3,7 @@
 use std::collections::HashMap;
 
 use super::core::ExecutionGraph;
-use crate::brick::exec_graph::node::{
-    EdgeType, ExecutionNode, TransferDirection,
-};
+use crate::brick::exec_graph::node::{EdgeType, ExecutionNode, TransferDirection};
 
 /// Build parent-child relationship map and identify root nodes.
 fn build_children_map(

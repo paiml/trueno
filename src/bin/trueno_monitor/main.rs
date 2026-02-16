@@ -265,8 +265,7 @@ fn init_logging() -> tracing_appender::non_blocking::WorkerGuard {
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     // Build subscriber with env filter (default: info)
-    let filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_err| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_err| EnvFilter::new("info"));
 
     tracing_subscriber::registry()
         .with(filter)
@@ -310,7 +309,10 @@ fn handle_key_event(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
 }
 
 /// Poll for a key event and handle it. Returns true if the app should quit.
-fn poll_and_handle_key(app: &mut App, timeout: Duration) -> Result<bool, Box<dyn std::error::Error>> {
+fn poll_and_handle_key(
+    app: &mut App,
+    timeout: Duration,
+) -> Result<bool, Box<dyn std::error::Error>> {
     if !event::poll(timeout)? {
         return Ok(false);
     }

@@ -3,9 +3,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use super::types::{
-    EscalationReason, EscalationThresholds, SyscallBreakdown, TraceResult,
-};
+use super::types::{EscalationReason, EscalationThresholds, SyscallBreakdown, TraceResult};
 
 /// Rate limiter for trace storm prevention
 #[derive(Debug)]

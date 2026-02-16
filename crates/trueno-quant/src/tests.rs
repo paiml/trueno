@@ -28,7 +28,10 @@ fn assert_roundtrip_within_range(
 ) {
     let error = max_abs_error(original, dequantized);
     let threshold = data_range(original) * fraction;
-    assert!(error < threshold, "{label} roundtrip error {error} exceeds threshold {threshold}");
+    assert!(
+        error < threshold,
+        "{label} roundtrip error {error} exceeds threshold {threshold}"
+    );
 }
 
 #[test]
@@ -55,7 +58,10 @@ fn test_q6k_roundtrip() {
     let quantized = quantize_q6_k(&data);
     assert_eq!(quantized.len(), 210);
     let dequantized = dequantize_q6_k_to_f32(&quantized, 256);
-    assert!(max_abs_error(&data, &dequantized) < 1.0, "Q6K roundtrip error too high");
+    assert!(
+        max_abs_error(&data, &dequantized) < 1.0,
+        "Q6K roundtrip error too high"
+    );
 }
 
 #[test]
@@ -82,7 +88,10 @@ fn test_transpose_q4k() {
 fn test_f16_min_normal() {
     let f16_val = half::f16::from_f32(F16_MIN_NORMAL);
     let roundtrip = f16_val.to_f32();
-    assert!(roundtrip > 0.0, "F16_MIN_NORMAL should be positive after f16 roundtrip");
+    assert!(
+        roundtrip > 0.0,
+        "F16_MIN_NORMAL should be positive after f16 roundtrip"
+    );
     assert!(roundtrip < 1e-4, "F16_MIN_NORMAL should be small");
 }
 

@@ -117,8 +117,8 @@ fn test_lru_eviction() {
 
 #[test]
 fn test_longest_first_eviction() {
-    let mut cache = PagedKvCache::new(100, 16, 32, 128)
-        .with_eviction_strategy(EvictionStrategy::LongestFirst);
+    let mut cache =
+        PagedKvCache::new(100, 16, 32, 128).with_eviction_strategy(EvictionStrategy::LongestFirst);
 
     cache.allocate(SeqId(1), 16).unwrap();
     cache.allocate(SeqId(2), 64).unwrap(); // Longest

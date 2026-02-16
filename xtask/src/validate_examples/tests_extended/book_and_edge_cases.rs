@@ -311,4 +311,3 @@ fn test_step_result_with_long_error() {
     assert!(!results.steps[0].success);
     assert!(results.steps[0].error.is_some());
 }
-

@@ -57,24 +57,66 @@ impl BackendTolerance {
     pub fn for_backends(&self, a: Backend, b: Backend) -> f32 {
         match (a, b) {
             (Backend::Scalar, Backend::Scalar) => 0.0,
-            (Backend::Scalar, Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512
-                | Backend::NEON | Backend::WasmSIMD | Backend::Auto)
-            | (Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512
-                | Backend::NEON | Backend::WasmSIMD | Backend::Auto, Backend::Scalar) => {
-                self.scalar_vs_simd
-            }
+            (
+                Backend::Scalar,
+                Backend::SSE2
+                | Backend::AVX
+                | Backend::AVX2
+                | Backend::AVX512
+                | Backend::NEON
+                | Backend::WasmSIMD
+                | Backend::Auto,
+            )
+            | (
+                Backend::SSE2
+                | Backend::AVX
+                | Backend::AVX2
+                | Backend::AVX512
+                | Backend::NEON
+                | Backend::WasmSIMD
+                | Backend::Auto,
+                Backend::Scalar,
+            ) => self.scalar_vs_simd,
             (Backend::GPU, Backend::GPU) => self.gpu_vs_gpu,
-            (Backend::GPU, Backend::Scalar | Backend::SSE2 | Backend::AVX | Backend::AVX2
-                | Backend::AVX512 | Backend::NEON | Backend::WasmSIMD | Backend::Auto)
-            | (Backend::Scalar | Backend::SSE2 | Backend::AVX | Backend::AVX2
-                | Backend::AVX512 | Backend::NEON | Backend::WasmSIMD | Backend::Auto, Backend::GPU) => {
-                self.simd_vs_gpu
-            }
+            (
+                Backend::GPU,
+                Backend::Scalar
+                | Backend::SSE2
+                | Backend::AVX
+                | Backend::AVX2
+                | Backend::AVX512
+                | Backend::NEON
+                | Backend::WasmSIMD
+                | Backend::Auto,
+            )
+            | (
+                Backend::Scalar
+                | Backend::SSE2
+                | Backend::AVX
+                | Backend::AVX2
+                | Backend::AVX512
+                | Backend::NEON
+                | Backend::WasmSIMD
+                | Backend::Auto,
+                Backend::GPU,
+            ) => self.simd_vs_gpu,
             // SIMD vs SIMD (all remaining non-Scalar, non-GPU combinations)
-            (Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512
-                | Backend::NEON | Backend::WasmSIMD | Backend::Auto,
-             Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512
-                | Backend::NEON | Backend::WasmSIMD | Backend::Auto) => self.scalar_vs_simd,
+            (
+                Backend::SSE2
+                | Backend::AVX
+                | Backend::AVX2
+                | Backend::AVX512
+                | Backend::NEON
+                | Backend::WasmSIMD
+                | Backend::Auto,
+                Backend::SSE2
+                | Backend::AVX
+                | Backend::AVX2
+                | Backend::AVX512
+                | Backend::NEON
+                | Backend::WasmSIMD
+                | Backend::Auto,
+            ) => self.scalar_vs_simd,
         }
     }
 }

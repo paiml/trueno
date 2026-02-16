@@ -1,9 +1,9 @@
 //! GPU dot product operations
 
+use super::super::GpuDevice;
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 use crate::backends::gpu::runtime;
 use crate::backends::gpu::shaders;
-use super::super::GpuDevice;
 
 impl GpuDevice {
     /// Execute dot product on GPU (sync, native only)

@@ -2,7 +2,9 @@
 // F4: Quantization Parity Oracle -- SIMD/GPU Numerical Accuracy
 // ============================================================================
 
-use trueno_cuda_edge::quant_oracle::{check_values_parity, BoundaryValueGenerator, ParityConfig, QuantFormat};
+use trueno_cuda_edge::quant_oracle::{
+    check_values_parity, BoundaryValueGenerator, ParityConfig, QuantFormat,
+};
 
 /// Test format-specific tolerances for trueno's quantization.
 #[test]

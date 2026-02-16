@@ -11,11 +11,8 @@ use std::fmt;
 mod execution;
 mod stats;
 
-pub use execution::{
-    EdgeType, ExecutionEdge, ExecutionNode, ExecutionNodeId, TransferDirection,
-};
+pub use execution::{EdgeType, ExecutionEdge, ExecutionNode, ExecutionNodeId, TransferDirection};
 pub use stats::{BrickStats, CategoryStats, PtxRegistry};
-
 
 // ============================================================================
 // BrickProfiler: FOUNDATIONAL Real-Time Per-Brick Timing (PAR-073)
@@ -243,12 +240,8 @@ impl BrickCategory {
     pub const COUNT: usize = 4;
 
     /// All BrickCategory variants in order, for safe index-based iteration.
-    pub const ALL: [BrickCategory; Self::COUNT] = [
-        Self::Norm,
-        Self::Attention,
-        Self::Ffn,
-        Self::Other,
-    ];
+    pub const ALL: [BrickCategory; Self::COUNT] =
+        [Self::Norm, Self::Attention, Self::Ffn, Self::Other];
 
     /// Get the string name of this category.
     #[inline]

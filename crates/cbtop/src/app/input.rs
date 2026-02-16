@@ -7,9 +7,9 @@ use crossterm::event::KeyCode;
 use crate::bricks::generators::SimdLoadBrick;
 use crate::config::{ComputeBackend, WorkloadType};
 
+use super::hardware::LoadMetrics;
 use super::panels::ActivePanel;
 use super::CbtopApp;
-use super::hardware::LoadMetrics;
 
 impl CbtopApp {
     /// Run one iteration of real compute load

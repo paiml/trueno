@@ -470,12 +470,12 @@ mod tests {
     fn test_matmul_vector_matrix_path() {
         // 1×K @ K×N triggers the vector-matrix fast path
         let a = Matrix::from_vec(1, 4, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
-        let b = Matrix::from_vec(4, 3, vec![
-            1.0, 0.0, 0.0,
-            0.0, 1.0, 0.0,
-            0.0, 0.0, 1.0,
-            1.0, 1.0, 1.0,
-        ]).unwrap();
+        let b = Matrix::from_vec(
+            4,
+            3,
+            vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0],
+        )
+        .unwrap();
         let result = a.matmul(&b).unwrap();
         assert_eq!(result.rows(), 1);
         assert_eq!(result.cols(), 3);
@@ -494,5 +494,164 @@ mod tests {
         // Only the second row of B contributes: [2*3, 2*4] = [6, 8]
         assert!((result.get(0, 0).unwrap() - 6.0).abs() < 1e-5);
         assert!((result.get(0, 1).unwrap() - 8.0).abs() < 1e-5);
+    }
+}
+
+#[cfg(test)]
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+mod gpu_tests {
+    use super::*;
+
+    /// Test matmul_gpu via public API with matrices large enough to exceed
+    /// GPU_THRESHOLD (all dimensions >= 500).
+    /// Uses identity multiplication: A * I = A.
+    #[test]
+    fn test_matmul_gpu_identity() {
+        use crate::backends::gpu::GpuBackend;
+
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test_matmul_gpu_identity");
+            return;
+        }
+
+        let n = 500; // Meets GPU_THRESHOLD for all three dimensions
+
+        // Create a simple test matrix: A[i,j] = (i*n + j) mod 100 * 0.01
+        let a_data: Vec<f32> = (0..n * n).map(|i| (i % 100) as f32 * 0.01).collect();
+
+        // Identity matrix
+        let mut i_data = vec![0.0f32; n * n];
+        for i in 0..n {
+            i_data[i * n + i] = 1.0;
+        }
+
+        let a = Matrix::from_vec(n, n, a_data.clone()).expect("valid matrix A");
+        let identity = Matrix::from_vec(n, n, i_data).expect("valid identity matrix");
+
+        let result = a.matmul(&identity).expect("matmul should succeed");
+
+        assert_eq!(result.rows(), n);
+        assert_eq!(result.cols(), n);
+
+        // A * I = A: sample verification (check corners and center)
+        let check_indices = [
+            (0, 0),
+            (0, n - 1),
+            (n - 1, 0),
+            (n - 1, n - 1),
+            (n / 2, n / 2),
+        ];
+        for &(r, c) in &check_indices {
+            let expected = a_data[r * n + c];
+            let actual = *result.get(r, c).unwrap();
+            assert!(
+                (actual - expected).abs() < 1e-2,
+                "A*I mismatch at ({},{}): gpu={}, expected={}",
+                r,
+                c,
+                actual,
+                expected
+            );
+        }
+    }
+
+    /// Test matmul_gpu with all-ones matrices: result should be all-K.
+    #[test]
+    fn test_matmul_gpu_ones() {
+        use crate::backends::gpu::GpuBackend;
+
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test_matmul_gpu_ones");
+            return;
+        }
+
+        let m = 500;
+        let k = 500;
+        let n = 500;
+
+        let a = Matrix::from_vec(m, k, vec![1.0f32; m * k]).expect("valid matrix A");
+        let b = Matrix::from_vec(k, n, vec![1.0f32; k * n]).expect("valid matrix B");
+
+        let result = a.matmul(&b).expect("matmul should succeed");
+
+        assert_eq!(result.rows(), m);
+        assert_eq!(result.cols(), n);
+
+        // Each element of C should be K (dot product of K ones with K ones)
+        let expected = k as f32;
+        for i in 0..10 {
+            for j in 0..10 {
+                assert!(
+                    (result.get(i, j).unwrap() - expected).abs() < 1.0,
+                    "C[{},{}] = {}, expected {}",
+                    i,
+                    j,
+                    result.get(i, j).unwrap(),
+                    expected
+                );
+            }
+        }
+    }
+
+    /// Test matmul_gpu directly via the private helper method.
+    #[test]
+    fn test_matmul_gpu_direct() {
+        use crate::backends::gpu::GpuBackend;
+
+        if !GpuBackend::is_available() {
+            eprintln!("GPU not available, skipping test_matmul_gpu_direct");
+            return;
+        }
+
+        // Small matrix for direct private method test
+        let a = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).expect("valid A");
+        let b = Matrix::from_vec(3, 2, vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).expect("valid B");
+
+        let result = a.matmul_gpu(&b).expect("matmul_gpu should succeed");
+
+        assert_eq!(result.rows(), 2);
+        assert_eq!(result.cols(), 2);
+
+        // C = A * B
+        // C[0,0] = 1*7 + 2*9 + 3*11 = 7 + 18 + 33 = 58
+        // C[0,1] = 1*8 + 2*10 + 3*12 = 8 + 20 + 36 = 64
+        // C[1,0] = 4*7 + 5*9 + 6*11 = 28 + 45 + 66 = 139
+        // C[1,1] = 4*8 + 5*10 + 6*12 = 32 + 50 + 72 = 154
+        assert!(
+            (result.get(0, 0).unwrap() - 58.0).abs() < 1e-2,
+            "Expected 58.0, got {}",
+            result.get(0, 0).unwrap()
+        );
+        assert!(
+            (result.get(0, 1).unwrap() - 64.0).abs() < 1e-2,
+            "Expected 64.0, got {}",
+            result.get(0, 1).unwrap()
+        );
+        assert!(
+            (result.get(1, 0).unwrap() - 139.0).abs() < 1e-2,
+            "Expected 139.0, got {}",
+            result.get(1, 0).unwrap()
+        );
+        assert!(
+            (result.get(1, 1).unwrap() - 154.0).abs() < 1e-2,
+            "Expected 154.0, got {}",
+            result.get(1, 1).unwrap()
+        );
+    }
+
+    /// Test matmul_gpu returns error when GPU is unavailable.
+    #[test]
+    fn test_matmul_gpu_not_available_path() {
+        use crate::backends::gpu::GpuBackend;
+
+        // This test verifies the GpuBackend::is_available() check in matmul_gpu
+        // If GPU IS available, the function should succeed; test the full path
+        if !GpuBackend::is_available() {
+            // If GPU is not available, matmul_gpu should return an error
+            let a = Matrix::from_vec(2, 2, vec![1.0; 4]).unwrap();
+            let b = Matrix::from_vec(2, 2, vec![1.0; 4]).unwrap();
+            let result = a.matmul_gpu(&b);
+            assert!(result.is_err(), "matmul_gpu should fail without GPU");
+        }
     }
 }

@@ -412,4 +412,3 @@ fn test_f210_wake_skip_needs_wake() {
     state.remove_pending(1);
     assert!(!state.needs_wake());
 }
-

@@ -5,8 +5,23 @@ fn test_matvec_all_fallback_backends() {
     let mat = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
     let vec_data = [1.0, 2.0, 3.0];
     let expected = [14.0, 32.0];
-    for &backend in &[Backend::Scalar, Backend::NEON, Backend::WasmSIMD, Backend::GPU, Backend::Auto] {
-        assert_matvec_backend(2, 3, mat.clone(), &vec_data, &expected, backend, 1e-6, &format!("matvec {backend:?}"));
+    for &backend in &[
+        Backend::Scalar,
+        Backend::NEON,
+        Backend::WasmSIMD,
+        Backend::GPU,
+        Backend::Auto,
+    ] {
+        assert_matvec_backend(
+            2,
+            3,
+            mat.clone(),
+            &vec_data,
+            &expected,
+            backend,
+            1e-6,
+            &format!("matvec {backend:?}"),
+        );
     }
 }
 
@@ -17,11 +32,29 @@ fn test_matvec_simd_backends() {
     let vec_data = [1.0, 2.0, 3.0];
     let expected = [14.0, 32.0];
     for &backend in &[Backend::SSE2, Backend::AVX] {
-        assert_matvec_backend(2, 3, mat.clone(), &vec_data, &expected, backend, 1e-6, &format!("matvec {backend:?}"));
+        assert_matvec_backend(
+            2,
+            3,
+            mat.clone(),
+            &vec_data,
+            &expected,
+            backend,
+            1e-6,
+            &format!("matvec {backend:?}"),
+        );
     }
     if is_x86_feature_detected!("avx2") {
         for &backend in &[Backend::AVX2, Backend::AVX512] {
-            assert_matvec_backend(2, 3, mat.clone(), &vec_data, &expected, backend, 1e-6, &format!("matvec {backend:?}"));
+            assert_matvec_backend(
+                2,
+                3,
+                mat.clone(),
+                &vec_data,
+                &expected,
+                backend,
+                1e-6,
+                &format!("matvec {backend:?}"),
+            );
         }
     }
 }
@@ -41,7 +74,12 @@ fn test_matvec_backend_equivalence() {
     for &backend in &[Backend::SSE2, Backend::AVX] {
         let m = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), backend);
         let result = m.matvec(&v).unwrap();
-        for (i, (&got, &exp)) in result.as_slice().iter().zip(expected.as_slice().iter()).enumerate() {
+        for (i, (&got, &exp)) in result
+            .as_slice()
+            .iter()
+            .zip(expected.as_slice().iter())
+            .enumerate()
+        {
             assert!(
                 (got - exp).abs() < 1e-4,
                 "Scalar vs {backend:?} mismatch at [{i}]: {got} vs {exp}",
@@ -53,8 +91,11 @@ fn test_matvec_backend_equivalence() {
         for &backend in &[Backend::AVX2, Backend::AVX512] {
             let m = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), backend);
             let result = m.matvec(&v).unwrap();
-            for (i, (&got, &exp)) in
-                result.as_slice().iter().zip(expected.as_slice().iter()).enumerate()
+            for (i, (&got, &exp)) in result
+                .as_slice()
+                .iter()
+                .zip(expected.as_slice().iter())
+                .enumerate()
             {
                 assert!(
                     (got - exp).abs() < 1e-4,
@@ -72,7 +113,13 @@ fn test_matvec_non_aligned_dimensions() {
     let mat_data: Vec<f32> = (0..rows * cols).map(|i| (i + 1) as f32).collect();
     let vec_data: Vec<f32> = (0..cols).map(|i| (i + 1) as f32).collect();
 
-    for &backend in &[Backend::Scalar, Backend::GPU, Backend::Auto, Backend::NEON, Backend::WasmSIMD] {
+    for &backend in &[
+        Backend::Scalar,
+        Backend::GPU,
+        Backend::Auto,
+        Backend::NEON,
+        Backend::WasmSIMD,
+    ] {
         let m = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), backend);
         let v = Vector::from_slice(&vec_data);
         let result = m.matvec(&v).unwrap();
@@ -100,7 +147,12 @@ fn test_matvec_non_aligned_simd_backends() {
     for &backend in &[Backend::SSE2, Backend::AVX] {
         let m = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), backend);
         let result = m.matvec(&v).unwrap();
-        for (i, (&got, &exp)) in result.as_slice().iter().zip(expected.as_slice().iter()).enumerate() {
+        for (i, (&got, &exp)) in result
+            .as_slice()
+            .iter()
+            .zip(expected.as_slice().iter())
+            .enumerate()
+        {
             assert!(
                 (got - exp).abs() < 1e-3,
                 "non-aligned Scalar vs {backend:?} at [{i}]: {got} vs {exp}",
@@ -111,7 +163,12 @@ fn test_matvec_non_aligned_simd_backends() {
     if is_x86_feature_detected!("avx2") {
         let m_avx2 = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), Backend::AVX2);
         let result = m_avx2.matvec(&v).unwrap();
-        for (i, (&got, &exp)) in result.as_slice().iter().zip(expected.as_slice().iter()).enumerate() {
+        for (i, (&got, &exp)) in result
+            .as_slice()
+            .iter()
+            .zip(expected.as_slice().iter())
+            .enumerate()
+        {
             assert!(
                 (got - exp).abs() < 1e-3,
                 "non-aligned Scalar vs AVX2 at [{i}]: {got} vs {exp}",
@@ -124,17 +181,29 @@ fn test_matvec_non_aligned_simd_backends() {
 fn test_matvec_large_matrix_all_backends() {
     let rows = 10;
     let cols = 64;
-    let mat_data: Vec<f32> = (0..rows * cols).map(|i| ((i % 17) as f32) * 0.1 - 0.8).collect();
+    let mat_data: Vec<f32> = (0..rows * cols)
+        .map(|i| ((i % 17) as f32) * 0.1 - 0.8)
+        .collect();
     let vec_data: Vec<f32> = (0..cols).map(|i| ((i % 13) as f32) * 0.2 - 1.2).collect();
 
     let m_scalar = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), Backend::Scalar);
     let v = Vector::from_slice(&vec_data);
     let expected = m_scalar.matvec(&v).unwrap();
 
-    for backend in [Backend::GPU, Backend::Auto, Backend::NEON, Backend::WasmSIMD] {
+    for backend in [
+        Backend::GPU,
+        Backend::Auto,
+        Backend::NEON,
+        Backend::WasmSIMD,
+    ] {
         let m = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), backend);
         let result = m.matvec(&v).unwrap();
-        for (i, (&got, &exp)) in result.as_slice().iter().zip(expected.as_slice().iter()).enumerate() {
+        for (i, (&got, &exp)) in result
+            .as_slice()
+            .iter()
+            .zip(expected.as_slice().iter())
+            .enumerate()
+        {
             assert!(
                 (got - exp).abs() < 1e-3,
                 "large Scalar vs {backend:?} at [{i}]: {got} vs {exp}",

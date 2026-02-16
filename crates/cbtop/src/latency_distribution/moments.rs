@@ -13,8 +13,7 @@ pub(crate) fn calculate_jitter(samples: &[f64]) -> f64 {
     }
 
     let mean_diff = diffs.iter().sum::<f64>() / diffs.len() as f64;
-    let variance =
-        diffs.iter().map(|d| (d - mean_diff).powi(2)).sum::<f64>() / diffs.len() as f64;
+    let variance = diffs.iter().map(|d| (d - mean_diff).powi(2)).sum::<f64>() / diffs.len() as f64;
 
     variance.sqrt()
 }

@@ -141,8 +141,8 @@ fn identify_loop_labels(lines: &[&str], ptx: &str) -> (HashSet<String>, HashSet<
         let trimmed = line.trim();
         if trimmed.ends_with(':') && !trimmed.starts_with('.') && !trimmed.contains("exit") {
             let label = trimmed.trim_end_matches(':').to_string();
-            let has_back_branch = ptx.contains(&format!("bra {};", label))
-                || ptx.contains(&format!("bra {}", label));
+            let has_back_branch =
+                ptx.contains(&format!("bra {};", label)) || ptx.contains(&format!("bra {}", label));
             if has_back_branch {
                 loop_end_labels.insert(format!("{}_end", label));
                 loop_end_labels.insert(format!("{}_done", label));

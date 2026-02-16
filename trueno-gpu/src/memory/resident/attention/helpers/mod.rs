@@ -13,8 +13,8 @@ mod layout;
 
 #[cfg(feature = "cuda")]
 pub(super) use compute::{
-    batched_gemm, batched_scale_all, batched_softmax_all, copy_head_to_output,
-    extract_single_head, transpose_matrix,
+    batched_gemm, batched_scale_all, batched_softmax_all, copy_head_to_output, extract_single_head,
+    transpose_matrix,
 };
 #[cfg(feature = "cuda")]
 pub(super) use layout::{

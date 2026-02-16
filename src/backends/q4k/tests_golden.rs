@@ -72,8 +72,7 @@ fn test_golden_vector_q4k_matmul_vs_dequant() {
     let mut max_rel_error = 0.0f32;
     let mut max_abs_error = 0.0f32;
 
-    for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate()
-    {
+    for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate() {
         let abs_error = (fused - reference).abs();
         let rel_error = if reference.abs() > 1e-6 {
             abs_error / reference.abs()
@@ -223,8 +222,7 @@ fn test_golden_vector_uniform_input() {
     let dequantized = dequantize_q4k_to_f32(&q4k_data, total_elements);
     let reference_output = matmul_f32_naive(&dequantized, &input, out_dim, in_dim);
 
-    for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate()
-    {
+    for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate() {
         let rel_error = if reference.abs() > 1e-6 {
             (fused - reference).abs() / reference.abs()
         } else {

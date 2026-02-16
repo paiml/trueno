@@ -402,4 +402,3 @@ pub fn compute_efficiency(achieved_gflops: f64, theoretical_gflops: f64) -> f64 
 
 #[cfg(test)]
 mod tests;
-

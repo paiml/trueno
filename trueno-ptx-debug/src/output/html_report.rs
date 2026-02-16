@@ -8,7 +8,8 @@ pub fn generate_html_report(analysis: &AnalysisResult) -> String {
     let test_rows = format_test_rows(&analysis.falsification_report);
     let bug_list = format_bug_list(&analysis.bugs);
 
-    format!(r#"<!DOCTYPE html>
+    format!(
+        r#"<!DOCTYPE html>
 <html>
 <head>
     <title>PTX Analysis Report - {module_name}</title>
@@ -76,9 +77,13 @@ pub fn generate_html_report(analysis: &AnalysisResult) -> String {
 </html>"#,
         module_name = analysis.module_name,
         score = analysis.falsification_score,
-        score_class = if analysis.falsification_score >= 90.0 { "score-good" }
-            else if analysis.falsification_score >= 70.0 { "score-warning" }
-            else { "score-bad" },
+        score_class = if analysis.falsification_score >= 90.0 {
+            "score-good"
+        } else if analysis.falsification_score >= 70.0 {
+            "score-warning"
+        } else {
+            "score-bad"
+        },
         confidence = analysis.confidence * 100.0,
         earned = analysis.falsification_report.earned_points,
         total = analysis.falsification_report.total_points,
@@ -89,7 +94,9 @@ pub fn generate_html_report(analysis: &AnalysisResult) -> String {
 }
 
 fn format_test_rows(report: &crate::falsification::FalsificationReport) -> String {
-    report.results.iter()
+    report
+        .results
+        .iter()
         .map(|(id, category, description, result)| {
             let (class, result_text, evidence) = match result {
                 TestResult::Pass => ("pass", "PASS", String::new()),
@@ -110,7 +117,9 @@ fn format_bug_list(bugs: &crate::bugs::BugRegistry) -> String {
         return "<p>No bugs detected.</p>".to_string();
     }
 
-    let items: Vec<_> = bugs.bugs().iter()
+    let items: Vec<_> = bugs
+        .bugs()
+        .iter()
         .map(|bug| {
             format!(
                 "<li class=\"{}\"><strong>{}:</strong> {} at {}</li>",

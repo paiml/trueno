@@ -262,7 +262,11 @@ impl GpuDevice {
     }
 
     /// Helper: Compute exp(input[i] - max_val)
-    pub(super) async fn compute_exp_subtract(&self, input: &[f32], max_val: f32) -> Result<Vec<f32>, String> {
+    pub(super) async fn compute_exp_subtract(
+        &self,
+        input: &[f32],
+        max_val: f32,
+    ) -> Result<Vec<f32>, String> {
         #[repr(C)]
         #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
         struct MaxValue {

@@ -131,8 +131,13 @@ fn test_transpose_large_with_remainder() {
     // Verify: b[c * rows + r] == a[r * cols + c]
     for r in 0..rows {
         for c in 0..cols {
-            assert_eq!(b[c * rows + r], a[r * cols + c],
-                "transpose mismatch at ({}, {})", r, c);
+            assert_eq!(
+                b[c * rows + r],
+                a[r * cols + c],
+                "transpose mismatch at ({}, {})",
+                r,
+                c
+            );
         }
     }
 }

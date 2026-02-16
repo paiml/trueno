@@ -41,8 +41,7 @@ fn test_embedding_lookup_basic() {
 
 #[test]
 fn test_embedding_lookup_single_index() {
-    let embeddings =
-        Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    let embeddings = Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
 
     let result = embeddings.embedding_lookup(&[1]).unwrap();
 
@@ -54,8 +53,7 @@ fn test_embedding_lookup_single_index() {
 
 #[test]
 fn test_embedding_lookup_repeated_indices() {
-    let embeddings =
-        Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    let embeddings = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
 
     // Same index can appear multiple times
     let result = embeddings.embedding_lookup(&[0, 0, 1, 0]).unwrap();
@@ -70,8 +68,7 @@ fn test_embedding_lookup_repeated_indices() {
 
 #[test]
 fn test_embedding_lookup_empty_indices() {
-    let embeddings =
-        Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    let embeddings = Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
 
     let result = embeddings.embedding_lookup(&[]).unwrap();
 
@@ -81,8 +78,7 @@ fn test_embedding_lookup_empty_indices() {
 
 #[test]
 fn test_embedding_lookup_out_of_bounds() {
-    let embeddings =
-        Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    let embeddings = Matrix::from_vec(3, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
 
     // Index 5 is out of bounds for 3-row table
     let result = embeddings.embedding_lookup(&[0, 5, 1]);
@@ -94,8 +90,7 @@ fn test_embedding_lookup_out_of_bounds() {
 
 #[test]
 fn test_embedding_lookup_sparse() {
-    let embeddings =
-        Matrix::from_vec(4, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).unwrap();
+    let embeddings = Matrix::from_vec(4, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).unwrap();
 
     // Lookup with repeated indices
     let (result, unique) = embeddings
@@ -247,8 +242,7 @@ fn test_batched_matmul_4d_basic() {
         1.0, 0.0, 0.0, 1.0, // Head 1 (identity)
     ];
 
-    let result =
-        Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n).unwrap();
+    let result = Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n).unwrap();
 
     assert_eq!(result.len(), batch * heads * m * n);
 
@@ -280,10 +274,9 @@ fn test_batched_matmul_4d_attention_pattern() {
         .map(|i| (i as f32) * 0.01)
         .collect();
 
-    let result = Matrix::batched_matmul_4d(
-        &q_data, &kt_data, batch, heads, seq_len, head_dim, seq_len,
-    )
-    .unwrap();
+    let result =
+        Matrix::batched_matmul_4d(&q_data, &kt_data, batch, heads, seq_len, head_dim, seq_len)
+            .unwrap();
 
     // Output should be [batch, heads, seq, seq] = 1 * 2 * 4 * 4 = 32 elements
     assert_eq!(result.len(), batch * heads * seq_len * seq_len);
@@ -300,8 +293,7 @@ fn test_batched_matmul_4d_a_size_mismatch() {
     let a_data = vec![1.0; 50]; // Wrong size
     let b_data = vec![1.0; batch * heads * k * n];
 
-    let result =
-        Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n);
+    let result = Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
@@ -320,8 +312,7 @@ fn test_batched_matmul_4d_b_size_mismatch() {
     let a_data = vec![1.0; batch * heads * m * k];
     let b_data = vec![1.0; 50]; // Wrong size
 
-    let result =
-        Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n);
+    let result = Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()

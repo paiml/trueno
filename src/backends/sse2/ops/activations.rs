@@ -129,9 +129,8 @@ pub unsafe fn gelu(a: &[f32], result: &mut [f32]) {
     }
     for j in i..len {
         let x = a[j];
-        result[j] = 0.5
-            * x
-            * (1.0 + ((0.797_884_56 * (x + 0.044_715 * x * x * x)) as f64).tanh() as f32);
+        result[j] =
+            0.5 * x * (1.0 + ((0.797_884_56 * (x + 0.044_715 * x * x * x)) as f64).tanh() as f32);
     }
 }
 

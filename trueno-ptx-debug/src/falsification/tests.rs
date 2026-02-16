@@ -5,8 +5,8 @@
 
 #[cfg(test)]
 mod category_tests {
-    use crate::parser::Parser;
     use crate::falsification::FalsificationRegistry;
+    use crate::parser::Parser;
 
     // Test suite for the falsification framework
 
@@ -107,7 +107,9 @@ mod category_tests {
         let report = registry.evaluate(&module);
 
         // F081 should fail for this buggy code
-        let f081_result = report.results.iter()
+        let f081_result = report
+            .results
+            .iter()
             .find(|(id, _, _, _)| id == "F081")
             .map(|(_, _, _, r)| r);
 
@@ -147,7 +149,9 @@ mod category_tests {
         let report = registry.evaluate(&module);
 
         // F036 should pass for properly synchronized code
-        let f036_result = report.results.iter()
+        let f036_result = report
+            .results
+            .iter()
             .find(|(id, _, _, _)| id == "F036")
             .map(|(_, _, _, r)| r);
 
@@ -174,10 +178,12 @@ mod category_tests {
         let report = registry.evaluate(&module);
 
         // Verify we have tests in all categories
-        let categories: std::collections::HashSet<_> = report.results.iter()
-            .map(|(_, cat, _, _)| *cat)
-            .collect();
+        let categories: std::collections::HashSet<_> =
+            report.results.iter().map(|(_, cat, _, _)| *cat).collect();
 
-        assert!(categories.len() >= 8, "Should have tests in at least 8 categories");
+        assert!(
+            categories.len() >= 8,
+            "Should have tests in at least 8 categories"
+        );
     }
 }

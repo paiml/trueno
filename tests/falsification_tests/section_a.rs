@@ -1,7 +1,9 @@
 //! Section A: Backend Selection (Claims 1-15) + Backend Tolerance Tests
 
 use trueno::simulation::{BackendCategory, BackendSelector, BackendTolerance};
-use trueno::{select_backend_for_operation, select_best_available_backend, Backend, OperationType, Vector};
+use trueno::{
+    select_backend_for_operation, select_best_available_backend, Backend, OperationType, Vector,
+};
 
 // =============================================================================
 // SECTION A: Backend Selection (Claims 1-15)

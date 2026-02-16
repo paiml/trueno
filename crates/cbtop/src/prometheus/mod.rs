@@ -18,11 +18,9 @@ mod types;
 
 pub use registry::MetricsRegistry;
 pub use types::{
-    CounterValue, GaugeValue, HistogramBuckets, HistogramValue, Labels, MetricDef, MetricType,
-    escape_label_value, validate_metric_name, DEFAULT_BUCKETS,
-    DEFAULT_MAX_LABELS,
+    escape_label_value, validate_metric_name, CounterValue, GaugeValue, HistogramBuckets,
+    HistogramValue, Labels, MetricDef, MetricType, DEFAULT_BUCKETS, DEFAULT_MAX_LABELS,
 };
-
 
 #[cfg(test)]
 mod tests;

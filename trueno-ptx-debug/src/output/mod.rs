@@ -2,11 +2,11 @@
 //!
 //! Generates reports and test files from analysis results.
 
-mod html_report;
 mod fkr_generator;
+mod html_report;
 
-pub use html_report::generate_html_report;
 pub use fkr_generator::generate_fkr_tests;
+pub use html_report::generate_html_report;
 
 use crate::bugs::BugRegistry;
 use crate::falsification::FalsificationReport;

@@ -302,6 +302,5 @@ impl SoftmaxKernel {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

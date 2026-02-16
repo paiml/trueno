@@ -1,9 +1,7 @@
 //! Backend comparison, cliff detection, and recommendation logic.
 
 use super::analysis::{BackendSummary, TransferAnalysis};
-use super::types::{
-    Backend, BackendComparison, BackendRecommendation, SizeCliff, WorkloadType,
-};
+use super::types::{Backend, BackendComparison, BackendRecommendation, SizeCliff, WorkloadType};
 use super::BackendRegressionDetector;
 
 impl BackendRegressionDetector {
@@ -112,8 +110,12 @@ impl BackendRegressionDetector {
         let mut sizes_with_overhead = Vec::new();
 
         for m in &measurements {
-            let transfer = m.transfer_time_us.expect("transfer_time_us MUST be set for GPU measurements");
-            let compute = m.compute_time_us.expect("compute_time_us MUST be set for GPU measurements");
+            let transfer = m
+                .transfer_time_us
+                .expect("transfer_time_us MUST be set for GPU measurements");
+            let compute = m
+                .compute_time_us
+                .expect("compute_time_us MUST be set for GPU measurements");
             total_transfer += transfer;
             total_compute += compute;
 
@@ -151,9 +153,11 @@ impl BackendRegressionDetector {
             return None;
         }
 
-        let best = candidates
-            .iter()
-            .max_by(|a, b| a.throughput.partial_cmp(&b.throughput).expect("throughput MUST be comparable (no NaN)"))?;
+        let best = candidates.iter().max_by(|a, b| {
+            a.throughput
+                .partial_cmp(&b.throughput)
+                .expect("throughput MUST be comparable (no NaN)")
+        })?;
 
         let confidence = (best.efficiency_percent / 100.0).clamp(0.0, 1.0);
 
@@ -224,7 +228,11 @@ impl BackendRegressionDetector {
 
         let all_cliffs: Vec<_> = backends
             .iter()
-            .flat_map(|b| workloads.iter().flat_map(move |w| self.detect_size_cliffs(*b, *w)))
+            .flat_map(|b| {
+                workloads
+                    .iter()
+                    .flat_map(move |w| self.detect_size_cliffs(*b, *w))
+            })
             .collect();
 
         BackendSummary {

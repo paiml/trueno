@@ -1,7 +1,7 @@
 //! PTX Lexer - Tokenization of PTX source code
 
-use super::error::ParseError;
 use super::ast::SourceLocation;
+use super::error::ParseError;
 
 /// Token kinds for PTX lexing
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -185,14 +185,70 @@ impl<'a> Lexer<'a> {
         };
 
         match c {
-            '{' => { self.advance(); Ok(Token { kind: TokenKind::LBrace, text: "{".into(), location }) }
-            '}' => { self.advance(); Ok(Token { kind: TokenKind::RBrace, text: "}".into(), location }) }
-            '(' => { self.advance(); Ok(Token { kind: TokenKind::LParen, text: "(".into(), location }) }
-            ')' => { self.advance(); Ok(Token { kind: TokenKind::RParen, text: ")".into(), location }) }
-            '[' => { self.advance(); Ok(Token { kind: TokenKind::LBracket, text: "[".into(), location }) }
-            ']' => { self.advance(); Ok(Token { kind: TokenKind::RBracket, text: "]".into(), location }) }
-            ',' => { self.advance(); Ok(Token { kind: TokenKind::Comma, text: ",".into(), location }) }
-            ';' => { self.advance(); Ok(Token { kind: TokenKind::Semicolon, text: ";".into(), location }) }
+            '{' => {
+                self.advance();
+                Ok(Token {
+                    kind: TokenKind::LBrace,
+                    text: "{".into(),
+                    location,
+                })
+            }
+            '}' => {
+                self.advance();
+                Ok(Token {
+                    kind: TokenKind::RBrace,
+                    text: "}".into(),
+                    location,
+                })
+            }
+            '(' => {
+                self.advance();
+                Ok(Token {
+                    kind: TokenKind::LParen,
+                    text: "(".into(),
+                    location,
+                })
+            }
+            ')' => {
+                self.advance();
+                Ok(Token {
+                    kind: TokenKind::RParen,
+                    text: ")".into(),
+                    location,
+                })
+            }
+            '[' => {
+                self.advance();
+                Ok(Token {
+                    kind: TokenKind::LBracket,
+                    text: "[".into(),
+                    location,
+                })
+            }
+            ']' => {
+                self.advance();
+                Ok(Token {
+                    kind: TokenKind::RBracket,
+                    text: "]".into(),
+                    location,
+                })
+            }
+            ',' => {
+                self.advance();
+                Ok(Token {
+                    kind: TokenKind::Comma,
+                    text: ",".into(),
+                    location,
+                })
+            }
+            ';' => {
+                self.advance();
+                Ok(Token {
+                    kind: TokenKind::Semicolon,
+                    text: ";".into(),
+                    location,
+                })
+            }
             '.' => self.read_directive(location),
             '%' => self.read_register(location),
             '@' => self.read_predicate(location),
@@ -200,7 +256,11 @@ impl<'a> Lexer<'a> {
             _ if c.is_alphabetic() || c == '_' => self.read_identifier_or_instruction(location),
             _ => {
                 self.advance();
-                Ok(Token { kind: TokenKind::Unknown, text: c.to_string(), location })
+                Ok(Token {
+                    kind: TokenKind::Unknown,
+                    text: c.to_string(),
+                    location,
+                })
             }
         }
     }
@@ -233,13 +293,21 @@ impl<'a> Lexer<'a> {
                 }
                 self.advance();
             }
-            format!("{} {}", directive_name, self.source[value_start..self.pos].trim())
+            format!(
+                "{} {}",
+                directive_name,
+                self.source[value_start..self.pos].trim()
+            )
         } else {
             directive_name.to_string()
         };
 
         let kind = self.classify_directive(&text);
-        Ok(Token { kind, text, location })
+        Ok(Token {
+            kind,
+            text,
+            location,
+        })
     }
 
     fn classify_directive(&self, text: &str) -> TokenKind {
@@ -319,7 +387,11 @@ impl<'a> Lexer<'a> {
         let is_float = self.read_fractional_part() | self.read_exponent_part();
 
         Ok(Token {
-            kind: if is_float { TokenKind::Float } else { TokenKind::Integer },
+            kind: if is_float {
+                TokenKind::Float
+            } else {
+                TokenKind::Integer
+            },
             text: self.source[start..self.pos].to_string(),
             location,
         })
@@ -373,7 +445,10 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn read_identifier_or_instruction(&mut self, location: SourceLocation) -> Result<Token, ParseError> {
+    fn read_identifier_or_instruction(
+        &mut self,
+        location: SourceLocation,
+    ) -> Result<Token, ParseError> {
         let start = self.pos;
 
         while let Some(c) = self.peek() {
@@ -412,7 +487,11 @@ impl<'a> Lexer<'a> {
             }
 
             let full_text = if operand_start < self.pos {
-                format!("{} {}", &self.source[start..instr_end], self.source[operand_start..self.pos].trim())
+                format!(
+                    "{} {}",
+                    &self.source[start..instr_end],
+                    self.source[operand_start..self.pos].trim()
+                )
             } else {
                 self.source[start..instr_end].to_string()
             };
@@ -432,21 +511,55 @@ impl<'a> Lexer<'a> {
     }
 
     fn is_instruction(&self, text: &str) -> bool {
-        matches!(text,
-            "ld" | "st" | "mov" | "add" | "sub" | "mul" | "div" | "rem" |
-            "mad" | "fma" | "neg" | "abs" | "min" | "max" |
-            "and" | "or" | "xor" | "not" | "shl" | "shr" |
-            "setp" | "selp" | "cvt" | "cvta" |
-            "bra" | "call" | "ret" | "exit" |
-            "bar" | "membar" | "atom" | "red" |
-            "tex" | "tld4" | "suld" | "sust" |
-            "shfl" | "vote" | "match" |
-            "mma" | "wmma" | "ldmatrix" |
-            "cp" | "prefetch" | "prefetchu"
+        matches!(
+            text,
+            "ld" | "st"
+                | "mov"
+                | "add"
+                | "sub"
+                | "mul"
+                | "div"
+                | "rem"
+                | "mad"
+                | "fma"
+                | "neg"
+                | "abs"
+                | "min"
+                | "max"
+                | "and"
+                | "or"
+                | "xor"
+                | "not"
+                | "shl"
+                | "shr"
+                | "setp"
+                | "selp"
+                | "cvt"
+                | "cvta"
+                | "bra"
+                | "call"
+                | "ret"
+                | "exit"
+                | "bar"
+                | "membar"
+                | "atom"
+                | "red"
+                | "tex"
+                | "tld4"
+                | "suld"
+                | "sust"
+                | "shfl"
+                | "vote"
+                | "match"
+                | "mma"
+                | "wmma"
+                | "ldmatrix"
+                | "cp"
+                | "prefetch"
+                | "prefetchu"
         )
     }
 }
 
 #[cfg(test)]
 mod tests;
-

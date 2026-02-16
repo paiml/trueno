@@ -97,36 +97,21 @@ fn test_avx512_sigmoid() {
 #[test]
 fn test_avx512_gelu() {
     avx512_test(|| {
-        assert_unary_transform(
-            &[0.0, 1.0],
-            &[0.0, 0.841_192],
-            1e-3,
-            Avx512Backend::gelu,
-        );
+        assert_unary_transform(&[0.0, 1.0], &[0.0, 0.841_192], 1e-3, Avx512Backend::gelu);
     });
 }
 
 #[test]
 fn test_avx512_swish() {
     avx512_test(|| {
-        assert_unary_transform(
-            &[0.0, 1.0],
-            &[0.0, 0.731_059],
-            1e-3,
-            Avx512Backend::swish,
-        );
+        assert_unary_transform(&[0.0, 1.0], &[0.0, 0.731_059], 1e-3, Avx512Backend::swish);
     });
 }
 
 #[test]
 fn test_avx512_tanh() {
     avx512_test(|| {
-        assert_unary_transform(
-            &[0.0, 1.0],
-            &[0.0, 0.761_594_2],
-            1e-3,
-            Avx512Backend::tanh,
-        );
+        assert_unary_transform(&[0.0, 1.0], &[0.0, 0.761_594_2], 1e-3, Avx512Backend::tanh);
     });
 }
 

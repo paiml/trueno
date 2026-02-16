@@ -30,6 +30,5 @@ pub const DEFAULT_KEYFRAME_INTERVAL: usize = 10;
 /// Default max query memory (bytes)
 pub const DEFAULT_MAX_QUERY_MEMORY: usize = 50 * 1024 * 1024;
 
-
 #[cfg(test)]
 mod tests;

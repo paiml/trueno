@@ -2,7 +2,7 @@
 
 mod registry;
 
-pub use registry::{BugRegistry, BugClass, BugPattern};
+pub use registry::{BugClass, BugPattern, BugRegistry};
 
 /// Severity levels for bugs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

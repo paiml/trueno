@@ -14,6 +14,6 @@ macro_rules! cuda_ctx {
     };
 }
 
-mod kv_cache;
-mod encoder_block;
 mod decoder_config;
+mod encoder_block;
+mod kv_cache;

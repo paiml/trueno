@@ -5,7 +5,9 @@ use super::*;
 fn test_matvec_parallel_large_matrix() {
     let rows = 4096;
     let cols = 16;
-    let mat_data: Vec<f32> = (0..rows * cols).map(|i| ((i % 100) as f32) * 0.01).collect();
+    let mat_data: Vec<f32> = (0..rows * cols)
+        .map(|i| ((i % 100) as f32) * 0.01)
+        .collect();
     let vec_data: Vec<f32> = (0..cols).map(|i| (i as f32) * 0.1 + 1.0).collect();
 
     let m_scalar = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), Backend::Scalar);
@@ -13,9 +15,7 @@ fn test_matvec_parallel_large_matrix() {
     let result = m_scalar.matvec(&v).unwrap();
     assert_eq!(result.as_slice().len(), rows);
 
-    let row0: f32 = (0..cols)
-        .map(|j| mat_data[j] * vec_data[j])
-        .sum();
+    let row0: f32 = (0..cols).map(|j| mat_data[j] * vec_data[j]).sum();
     assert!(
         (result.as_slice()[0] - row0).abs() < 1e-2,
         "parallel row 0: got {} expected {row0}",
@@ -28,7 +28,9 @@ fn test_matvec_parallel_large_matrix() {
 fn test_matvec_parallel_with_simd_backends() {
     let rows = 4096;
     let cols = 32;
-    let mat_data: Vec<f32> = (0..rows * cols).map(|i| ((i % 50) as f32) * 0.02 - 0.5).collect();
+    let mat_data: Vec<f32> = (0..rows * cols)
+        .map(|i| ((i % 50) as f32) * 0.02 - 0.5)
+        .collect();
     let vec_data: Vec<f32> = (0..cols).map(|i| (i as f32) * 0.1).collect();
     let v = Vector::from_slice(&vec_data);
 

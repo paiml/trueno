@@ -15,11 +15,11 @@ use trueno_gpu::kernels::{
     GemmKernel, Kernel, Q5KKernel, Q6KKernel, QuantizeKernel, SoftmaxKernel,
 };
 
-mod shared_memory;
 mod barrier_sync;
-mod loop_branch;
-mod register_and_entry;
-mod real_kernels;
-mod severity_and_reporting;
 mod coverage_tracking;
 mod extended_detectors;
+mod loop_branch;
+mod real_kernels;
+mod register_and_entry;
+mod severity_and_reporting;
+mod shared_memory;

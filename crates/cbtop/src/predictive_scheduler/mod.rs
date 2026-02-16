@@ -22,6 +22,5 @@ pub use types::{
     WorkloadSpec,
 };
 
-
 #[cfg(test)]
 mod tests;

@@ -488,4 +488,3 @@ fn test_builder_all_options() {
     let vec = features.to_vector();
     assert_eq!(vec.len(), TunerFeatures::DIM);
 }
-

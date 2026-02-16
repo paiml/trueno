@@ -278,6 +278,5 @@ impl Kernel for Batched4DGemmKernel {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

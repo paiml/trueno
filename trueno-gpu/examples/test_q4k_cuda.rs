@@ -22,7 +22,11 @@ fn init_cuda() -> Option<CudaContext> {
     }
 }
 
-fn generate_and_load_module(ctx: &CudaContext, n: u32, k: u32) -> Option<(CudaModule, Q4KGemvKernel)> {
+fn generate_and_load_module(
+    ctx: &CudaContext,
+    n: u32,
+    k: u32,
+) -> Option<(CudaModule, Q4KGemvKernel)> {
     println!("[2/7] Generating Q4KGemvKernel PTX (N={}, K={})...", n, k);
     let kernel = Q4KGemvKernel::new(n, k);
 

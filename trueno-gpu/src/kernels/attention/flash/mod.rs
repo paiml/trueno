@@ -163,4 +163,3 @@ impl Kernel for AttentionKernel {
         }
     }
 }
-

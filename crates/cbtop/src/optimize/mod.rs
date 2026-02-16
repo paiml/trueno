@@ -40,8 +40,8 @@ pub use validator::{OptimizationValidator, ValidationResult};
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::stats::{cv, mean, std_dev, t_test};
+    use super::*;
 
     #[test]
     fn test_mean() {

@@ -1,9 +1,9 @@
 //! GPU matrix multiplication operations
 
+use super::super::GpuDevice;
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 use crate::backends::gpu::runtime;
 use crate::backends::gpu::shaders;
-use super::super::GpuDevice;
 
 impl GpuDevice {
     /// Execute matrix multiplication on GPU (sync, native only)

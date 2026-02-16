@@ -51,7 +51,10 @@ impl PtxType {
 
     /// Is this a signed type
     pub fn is_signed(&self) -> bool {
-        matches!(self, PtxType::S8 | PtxType::S16 | PtxType::S32 | PtxType::S64)
+        matches!(
+            self,
+            PtxType::S8 | PtxType::S16 | PtxType::S32 | PtxType::S64
+        )
     }
 
     /// Is this a floating point type
@@ -61,7 +64,10 @@ impl PtxType {
 
     /// Is this a 64-bit type
     pub fn is_64bit(&self) -> bool {
-        matches!(self, PtxType::S64 | PtxType::U64 | PtxType::B64 | PtxType::F64)
+        matches!(
+            self,
+            PtxType::S64 | PtxType::U64 | PtxType::B64 | PtxType::F64
+        )
     }
 }
 
@@ -171,9 +177,14 @@ impl SmTarget {
 
     /// Does this target support Tensor Cores
     pub fn has_tensor_cores(&self) -> bool {
-        matches!(self,
-            SmTarget::Sm70 | SmTarget::Sm75 | SmTarget::Sm80 |
-            SmTarget::Sm86 | SmTarget::Sm89 | SmTarget::Sm90
+        matches!(
+            self,
+            SmTarget::Sm70
+                | SmTarget::Sm75
+                | SmTarget::Sm80
+                | SmTarget::Sm86
+                | SmTarget::Sm89
+                | SmTarget::Sm90
         )
     }
 }
@@ -288,7 +299,10 @@ pub enum Opcode {
 impl Opcode {
     /// Is this a load instruction
     pub fn is_load(&self) -> bool {
-        matches!(self, Opcode::Ld | Opcode::Tex | Opcode::Tld4 | Opcode::Suld | Opcode::LdMatrix)
+        matches!(
+            self,
+            Opcode::Ld | Opcode::Tex | Opcode::Tld4 | Opcode::Suld | Opcode::LdMatrix
+        )
     }
 
     /// Is this a store instruction
@@ -308,7 +322,10 @@ impl Opcode {
 
     /// Is this a branch instruction
     pub fn is_branch(&self) -> bool {
-        matches!(self, Opcode::Bra | Opcode::Call | Opcode::Ret | Opcode::Exit)
+        matches!(
+            self,
+            Opcode::Bra | Opcode::Call | Opcode::Ret | Opcode::Exit
+        )
     }
 }
 
@@ -441,7 +458,10 @@ mod tests {
 
     #[test]
     fn test_modifier_conversion() {
-        assert_eq!(Modifier::Shared.as_address_space(), Some(AddressSpace::Shared));
+        assert_eq!(
+            Modifier::Shared.as_address_space(),
+            Some(AddressSpace::Shared)
+        );
         assert_eq!(Modifier::U32.as_type(), Some(PtxType::U32));
     }
 }

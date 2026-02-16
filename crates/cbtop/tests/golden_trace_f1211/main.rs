@@ -8,6 +8,5 @@
 //! - Regression detection
 //! - Export/import functionality
 
-
-mod golden_tests;
 mod additional_tests;
+mod golden_tests;

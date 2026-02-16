@@ -2,18 +2,18 @@
 //!
 //! Provides lexing and parsing of PTX source code into a typed AST.
 
-mod lexer;
 mod ast;
-pub mod types;
 mod error;
+mod lexer;
+pub mod types;
 
-pub use lexer::{Lexer, Token, TokenKind};
 pub use ast::{
-    PtxModule, KernelDef, FunctionDef, GlobalDecl, Param, RegisterDecl, SharedMemDecl,
-    Statement, Instruction, Directive, Operand, Predicate, SourceLocation,
+    Directive, FunctionDef, GlobalDecl, Instruction, KernelDef, Operand, Param, Predicate,
+    PtxModule, RegisterDecl, SharedMemDecl, SourceLocation, Statement,
 };
-pub use types::{PtxType, AddressSpace, SmTarget, Opcode, Modifier};
 pub use error::ParseError;
+pub use lexer::{Lexer, Token, TokenKind};
+pub use types::{AddressSpace, Modifier, Opcode, PtxType, SmTarget};
 
 /// Match a text string against `contains` patterns and return the first matching value.
 ///
@@ -62,7 +62,11 @@ impl<'a> Parser<'a> {
         let mut lexer = Lexer::new(source);
         let current = lexer.next_token()?;
         let peek = lexer.next_token()?;
-        Ok(Self { lexer, current, peek })
+        Ok(Self {
+            lexer,
+            current,
+            peek,
+        })
     }
 
     /// Parse the PTX source into a module
@@ -222,7 +226,8 @@ impl<'a> Parser<'a> {
         );
 
         // Extract register name (starts with %)
-        let name = text.split_whitespace()
+        let name = text
+            .split_whitespace()
             .find(|s| s.starts_with('%'))
             .map(|s| s.trim_end_matches(|c: char| !c.is_alphanumeric() && c != '%' && c != '_'))
             .unwrap_or("%unknown")
@@ -236,18 +241,24 @@ impl<'a> Parser<'a> {
         self.advance()?;
 
         // Parse shared memory declaration
-        let name = text.split_whitespace()
+        let name = text
+            .split_whitespace()
             .find(|s| !s.starts_with('.'))
             .unwrap_or("unknown")
             .to_string();
 
-        let size = text.split('[')
+        let size = text
+            .split('[')
             .nth(1)
             .and_then(|s| s.split(']').next())
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
-        Ok(SharedMemDecl { name, size, ty: PtxType::B8 })
+        Ok(SharedMemDecl {
+            name,
+            size,
+            ty: PtxType::B8,
+        })
     }
 
     fn parse_instruction(&mut self) -> Result<Instruction, ParseError> {
@@ -268,7 +279,9 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_opcode(&self, text: &str) -> (Opcode, Vec<Modifier>) {
-        let parts: Vec<&str> = text.split_whitespace().next()
+        let parts: Vec<&str> = text
+            .split_whitespace()
+            .next()
             .unwrap_or("")
             .split('.')
             .collect();
@@ -301,7 +314,9 @@ impl<'a> Parser<'a> {
             None => Opcode::Unknown,
         };
 
-        let modifiers = parts.iter().skip(1)
+        let modifiers = parts
+            .iter()
+            .skip(1)
             .map(|&m| self.parse_modifier(m))
             .collect();
 
@@ -336,7 +351,8 @@ impl<'a> Parser<'a> {
         let mut operands = Vec::new();
 
         // Skip the opcode part
-        let operand_part = text.split_whitespace()
+        let operand_part = text
+            .split_whitespace()
             .skip(1)
             .collect::<Vec<_>>()
             .join(" ");
@@ -402,7 +418,11 @@ mod tests {
         "#;
         let mut parser = Parser::new(ptx).unwrap();
         let module = parser.parse().unwrap();
-        assert_ne!(module.target, SmTarget::Unknown, "F002: Missing .target directive");
+        assert_ne!(
+            module.target,
+            SmTarget::Unknown,
+            "F002: Missing .target directive"
+        );
     }
 
     // F003: address_size is 32 or 64
@@ -415,8 +435,10 @@ mod tests {
         "#;
         let mut parser = Parser::new(ptx).unwrap();
         let module = parser.parse().unwrap();
-        assert!(module.address_size == 32 || module.address_size == 64,
-            "F003: address_size must be 32 or 64");
+        assert!(
+            module.address_size == 32 || module.address_size == 64,
+            "F003: address_size must be 32 or 64"
+        );
     }
 
     // Test parsing a simple kernel
@@ -444,7 +466,10 @@ mod tests {
         assert_eq!(module.version, (8, 0));
         assert_eq!(module.target, SmTarget::Sm70);
         assert_eq!(module.address_size, 64);
-        assert!(!module.kernels.is_empty(), "Should have at least one kernel");
+        assert!(
+            !module.kernels.is_empty(),
+            "Should have at least one kernel"
+        );
     }
 
     // Test parsing instructions
@@ -469,7 +494,9 @@ mod tests {
         let module = parser.parse().unwrap();
 
         let kernel = &module.kernels[0];
-        let instructions: Vec<_> = kernel.body.iter()
+        let instructions: Vec<_> = kernel
+            .body
+            .iter()
             .filter_map(|s| match s {
                 Statement::Instruction(i) => Some(i),
                 _ => None,

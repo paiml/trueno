@@ -40,7 +40,10 @@ fn assert_activation_in_range(
     let v = Vector::from_slice_with_backend(data, backend);
     let result = activation_fn(&v).unwrap();
     for &val in result.as_slice() {
-        assert!(val >= lo && val <= hi, "{label} {backend:?} out of range [{lo}, {hi}]: {val}");
+        assert!(
+            val >= lo && val <= hi,
+            "{label} {backend:?} out of range [{lo}, {hi}]: {val}"
+        );
     }
 }
 
@@ -65,32 +68,51 @@ fn assert_activation_at(
 
 /// Assert backend equivalence: compare Scalar result with SSE2 and AVX2.
 #[cfg(target_arch = "x86_64")]
-fn assert_backend_equivalence(
-    data: &[f32],
-    activation_fn: ActFn,
-    tolerance: f32,
-    label: &str,
-) {
+fn assert_backend_equivalence(data: &[f32], activation_fn: ActFn, tolerance: f32, label: &str) {
     let scalar = activation_fn(&Vector::from_slice_with_backend(data, Backend::Scalar)).unwrap();
     for &backend in &[Backend::SSE2] {
         let other = activation_fn(&Vector::from_slice_with_backend(data, backend)).unwrap();
-        for (i, (&s, &x)) in scalar.as_slice().iter().zip(other.as_slice().iter()).enumerate() {
-            assert!((s - x).abs() < tolerance, "Scalar vs {backend:?} {label} mismatch at {i}: {s} vs {x}");
+        for (i, (&s, &x)) in scalar
+            .as_slice()
+            .iter()
+            .zip(other.as_slice().iter())
+            .enumerate()
+        {
+            assert!(
+                (s - x).abs() < tolerance,
+                "Scalar vs {backend:?} {label} mismatch at {i}: {s} vs {x}"
+            );
         }
     }
     if is_x86_feature_detected!("avx2") {
         let avx2 = activation_fn(&Vector::from_slice_with_backend(data, Backend::AVX2)).unwrap();
-        for (i, (&s, &x)) in scalar.as_slice().iter().zip(avx2.as_slice().iter()).enumerate() {
-            assert!((s - x).abs() < tolerance, "Scalar vs AVX2 {label} mismatch at {i}: {s} vs {x}");
+        for (i, (&s, &x)) in scalar
+            .as_slice()
+            .iter()
+            .zip(avx2.as_slice().iter())
+            .enumerate()
+        {
+            assert!(
+                (s - x).abs() < tolerance,
+                "Scalar vs AVX2 {label} mismatch at {i}: {s} vs {x}"
+            );
         }
     }
 }
 
 // Activation adapters: wrap method calls as fn pointers for helpers.
-fn act_relu(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> { v.relu() }
-fn act_sigmoid(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> { v.sigmoid() }
-fn act_gelu(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> { v.gelu() }
-fn act_swish(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> { v.swish() }
+fn act_relu(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> {
+    v.relu()
+}
+fn act_sigmoid(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> {
+    v.sigmoid()
+}
+fn act_gelu(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> {
+    v.gelu()
+}
+fn act_swish(v: &Vector<f32>) -> Result<Vector<f32>, TruenoError> {
+    v.swish()
+}
 
 /// Activation spec for parametric tests: (adapter, label, zero_output).
 fn activation_specs() -> [(ActFn, &'static str, f32); 4] {

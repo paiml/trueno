@@ -6,12 +6,14 @@
 //! - Data Flow Analyzer: Tracks value propagation, detects "loaded value" bug
 //! - Address Space Validator: Validates correct address space usage
 
-mod type_checker;
+mod address_space;
 mod control_flow;
 mod data_flow;
-mod address_space;
+mod type_checker;
 
-pub use type_checker::TypeChecker;
-pub use control_flow::{ControlFlowAnalyzer, ControlFlowGraph, CfgNode, BarrierViolation};
-pub use data_flow::{DataFlowAnalyzer, ValueSource, UsePoint, LoadedValueBug, ComputedAddrFromLoadedBug};
 pub use address_space::{AddressSpaceValidator, GenericSharedBug};
+pub use control_flow::{BarrierViolation, CfgNode, ControlFlowAnalyzer, ControlFlowGraph};
+pub use data_flow::{
+    ComputedAddrFromLoadedBug, DataFlowAnalyzer, LoadedValueBug, UsePoint, ValueSource,
+};
+pub use type_checker::TypeChecker;

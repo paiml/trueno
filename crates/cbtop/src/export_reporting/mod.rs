@@ -20,10 +20,8 @@ mod types;
 pub use builder::ReportBuilder;
 pub use exporter::ReportExporter;
 pub use types::{
-    BenchmarkMetric, BenchmarkReport, ComparisonEntry, ComparisonReport,
-    ExportFormat, ReportType,
+    BenchmarkMetric, BenchmarkReport, ComparisonEntry, ComparisonReport, ExportFormat, ReportType,
 };
-
 
 #[cfg(test)]
 mod tests;

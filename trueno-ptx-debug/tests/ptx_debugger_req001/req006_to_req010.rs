@@ -1,8 +1,8 @@
 //! REQ-006 through REQ-010: CFG, type checker, consistency, categories, confidence
 
+use trueno_ptx_debug::analyzer::{ControlFlowAnalyzer, TypeChecker};
+use trueno_ptx_debug::falsification::{Category, FalsificationRegistry, TestResult};
 use trueno_ptx_debug::parser::Parser;
-use trueno_ptx_debug::falsification::{FalsificationRegistry, TestResult, Category};
-use trueno_ptx_debug::analyzer::{TypeChecker, ControlFlowAnalyzer};
 
 /// REQ-006: Control flow analysis builds valid CFG
 ///
@@ -77,10 +77,7 @@ fn req007_type_checker() {
     let errors = checker.analyze(&module);
 
     // Clean PTX should have no type errors
-    println!(
-        "REQ-007 PASSED: Type checker ran ({} errors)",
-        errors.len()
-    );
+    println!("REQ-007 PASSED: Type checker ran ({} errors)", errors.len());
 }
 
 /// REQ-008: Score calculation is consistent
@@ -157,11 +154,8 @@ fn req009_category_coverage() {
     let report = registry.evaluate(&module);
 
     // Check all categories are represented
-    let categories_in_report: std::collections::HashSet<Category> = report
-        .results
-        .iter()
-        .map(|(_, cat, _, _)| *cat)
-        .collect();
+    let categories_in_report: std::collections::HashSet<Category> =
+        report.results.iter().map(|(_, cat, _, _)| *cat).collect();
 
     let expected_categories = Category::all();
     for cat in expected_categories {
@@ -274,7 +268,10 @@ fn test_report_methods() {
 
     // Test report methods
     let passed_categories = report.categories_with_all_tests_passed();
-    assert!(passed_categories >= 0, "Should have non-negative passed categories");
+    assert!(
+        passed_categories >= 0,
+        "Should have non-negative passed categories"
+    );
 
     let critical_absent = report.critical_bugs_absent();
     // Should be true for clean PTX

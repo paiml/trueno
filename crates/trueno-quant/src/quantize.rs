@@ -12,10 +12,7 @@ use crate::{f32_to_f16, F16_MIN_NORMAL};
 ///
 /// Returns (sub_scales, sub_mins) for 8 sub-blocks of 32 elements each.
 /// `quant_max` is the maximum quantized value (15 for Q4_K, 31 for Q5_K).
-pub(crate) fn compute_sub_block_stats(
-    padded: &[f32; 256],
-    quant_max: f32,
-) -> ([f32; 8], [f32; 8]) {
+pub(crate) fn compute_sub_block_stats(padded: &[f32; 256], quant_max: f32) -> ([f32; 8], [f32; 8]) {
     const SUB_BLOCK_SIZE: usize = 32;
     let mut sub_scales = [0.0f32; 8];
     let mut sub_mins = [0.0f32; 8];

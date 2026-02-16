@@ -140,13 +140,19 @@ impl GgufLoader {
             return Err(GgufError::InvalidMagic(magic));
         }
 
-        let version = u32::from_le_bytes(data[4..8].try_into().expect("invariant: slice is 4 bytes"));
+        let version =
+            u32::from_le_bytes(data[4..8].try_into().expect("invariant: slice is 4 bytes"));
         if !(2..=3).contains(&version) {
             return Err(GgufError::UnsupportedVersion(version));
         }
 
-        let tensor_count = u64::from_le_bytes(data[8..16].try_into().expect("invariant: slice is 8 bytes"));
-        let metadata_kv_count = u64::from_le_bytes(data[16..24].try_into().expect("invariant: slice is 8 bytes"));
+        let tensor_count =
+            u64::from_le_bytes(data[8..16].try_into().expect("invariant: slice is 8 bytes"));
+        let metadata_kv_count = u64::from_le_bytes(
+            data[16..24]
+                .try_into()
+                .expect("invariant: slice is 8 bytes"),
+        );
 
         self.header = Some(GgufHeader {
             magic,

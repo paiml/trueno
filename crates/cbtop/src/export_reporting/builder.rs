@@ -4,8 +4,7 @@ use std::collections::HashMap;
 
 use super::exporter::ReportExporter;
 use super::types::{
-    BenchmarkMetric, BenchmarkReport, ComparisonEntry, ComparisonReport,
-    ExportFormat, ReportType,
+    BenchmarkMetric, BenchmarkReport, ComparisonEntry, ComparisonReport, ExportFormat, ReportType,
 };
 
 /// Report builder for fluent API

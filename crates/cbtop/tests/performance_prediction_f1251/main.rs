@@ -2,6 +2,5 @@
 //!
 //! F1251-F1260: Performance prediction falsification tests
 
-
-mod prediction_tests;
 mod additional_tests;
+mod prediction_tests;

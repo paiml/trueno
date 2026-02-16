@@ -271,6 +271,5 @@ impl ConnectionState {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

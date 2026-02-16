@@ -1,9 +1,9 @@
 //! Data Flow Analyzer - value propagation and loaded value bug detection
 
-use std::collections::{HashMap, HashSet};
-use crate::parser::{PtxModule, KernelDef, Statement, Instruction, Operand, SourceLocation};
-use crate::parser::types::{Opcode, AddressSpace};
 use crate::bugs::Severity;
+use crate::parser::types::{AddressSpace, Opcode};
+use crate::parser::{Instruction, KernelDef, Operand, PtxModule, SourceLocation, Statement};
+use std::collections::{HashMap, HashSet};
 
 /// Source of a value
 #[derive(Debug, Clone)]
@@ -129,10 +129,13 @@ impl DataFlowAnalyzer {
                 // Load defines a register with value from memory
                 if let Some(Operand::Register(dest)) = instr.operands.first() {
                     let space = self.get_address_space(instr);
-                    self.value_sources.insert(dest.clone(), ValueSource::Load {
-                        space,
-                        location: instr.location.clone(),
-                    });
+                    self.value_sources.insert(
+                        dest.clone(),
+                        ValueSource::Load {
+                            space,
+                            location: instr.location.clone(),
+                        },
+                    );
                 }
             }
             Opcode::Mov => {
@@ -141,21 +144,29 @@ impl DataFlowAnalyzer {
                     (instr.operands.first(), instr.operands.get(1))
                 {
                     let source = match src {
-                        Operand::Register(src_reg) => {
-                            self.value_sources.get(src_reg).cloned()
-                                .unwrap_or(ValueSource::Unknown)
-                        }
+                        Operand::Register(src_reg) => self
+                            .value_sources
+                            .get(src_reg)
+                            .cloned()
+                            .unwrap_or(ValueSource::Unknown),
                         Operand::Immediate(val) => ValueSource::Constant(*val),
                         _ => ValueSource::Unknown,
                     };
                     self.value_sources.insert(dest.clone(), source);
                 }
             }
-            Opcode::Add | Opcode::Sub | Opcode::Mul | Opcode::And | Opcode::Or |
-            Opcode::Shl | Opcode::Shr => {
+            Opcode::Add
+            | Opcode::Sub
+            | Opcode::Mul
+            | Opcode::And
+            | Opcode::Or
+            | Opcode::Shl
+            | Opcode::Shr => {
                 // Computation defines register with computed value
                 if let Some(Operand::Register(dest)) = instr.operands.first() {
-                    let inputs: Vec<String> = instr.operands.iter()
+                    let inputs: Vec<String> = instr
+                        .operands
+                        .iter()
                         .skip(1)
                         .filter_map(|op| {
                             if let Operand::Register(reg) = op {
@@ -166,7 +177,8 @@ impl DataFlowAnalyzer {
                         })
                         .collect();
 
-                    self.value_sources.insert(dest.clone(), ValueSource::Computed { inputs });
+                    self.value_sources
+                        .insert(dest.clone(), ValueSource::Computed { inputs });
                 }
             }
             Opcode::St => {
@@ -178,24 +190,30 @@ impl DataFlowAnalyzer {
                     // Extract register from memory operand like [%r0] or [%r0+offset]
                     let addr_reg = self.extract_register_from_memory(addr_str);
                     if let Some(reg) = addr_reg {
-                        self.def_use_chains.entry(reg.clone()).or_default().push(UsePoint {
-                            instruction: instr.clone(),
-                            operand_index: 0,
-                            location: instr.location.clone(),
-                            is_store_data: false,
-                            is_store_addr: true,
-                        });
+                        self.def_use_chains
+                            .entry(reg.clone())
+                            .or_default()
+                            .push(UsePoint {
+                                instruction: instr.clone(),
+                                operand_index: 0,
+                                location: instr.location.clone(),
+                                is_store_data: false,
+                                is_store_addr: true,
+                            });
                     }
                 }
 
                 if let Some(Operand::Register(val_reg)) = instr.operands.get(1) {
-                    self.def_use_chains.entry(val_reg.clone()).or_default().push(UsePoint {
-                        instruction: instr.clone(),
-                        operand_index: 1,
-                        location: instr.location.clone(),
-                        is_store_data: true,
-                        is_store_addr: false,
-                    });
+                    self.def_use_chains
+                        .entry(val_reg.clone())
+                        .or_default()
+                        .push(UsePoint {
+                            instruction: instr.clone(),
+                            operand_index: 1,
+                            location: instr.location.clone(),
+                            is_store_data: true,
+                            is_store_addr: false,
+                        });
                 }
             }
             _ => {}
@@ -228,7 +246,11 @@ impl DataFlowAnalyzer {
         let mut bugs = Vec::new();
 
         for (reg, source) in &self.value_sources {
-            if let ValueSource::Load { space: AddressSpace::Shared, location } = source {
+            if let ValueSource::Load {
+                space: AddressSpace::Shared,
+                location,
+            } = source
+            {
                 // Find all stores that use this register as data operand
                 for use_point in self.def_use_chains.get(reg).unwrap_or(&vec![]) {
                     if use_point.is_store_data_operand() {
@@ -237,7 +259,8 @@ impl DataFlowAnalyzer {
                             store_location: use_point.location.clone(),
                             register: reg.clone(),
                             severity: Severity::Low,
-                            mitigation: "Hypothesis F081 falsified on sm_89. This pattern is safe.".into(),
+                            mitigation: "Hypothesis F081 falsified on sm_89. This pattern is safe."
+                                .into(),
                         });
                     }
                 }
@@ -257,7 +280,13 @@ impl DataFlowAnalyzer {
         // Track which registers come from ld.shared
         let mut shared_loaded_regs: HashSet<String> = HashSet::new();
         for (reg, source) in &self.value_sources {
-            if matches!(source, ValueSource::Load { space: AddressSpace::Shared, .. }) {
+            if matches!(
+                source,
+                ValueSource::Load {
+                    space: AddressSpace::Shared,
+                    ..
+                }
+            ) {
                 shared_loaded_regs.insert(reg.clone());
             }
         }
@@ -269,7 +298,9 @@ impl DataFlowAnalyzer {
             changed = false;
             for (reg, source) in &self.value_sources {
                 if let ValueSource::Computed { inputs } = source {
-                    if !tainted_regs.contains(reg) && inputs.iter().any(|i| tainted_regs.contains(i)) {
+                    if !tainted_regs.contains(reg)
+                        && inputs.iter().any(|i| tainted_regs.contains(i))
+                    {
                         tainted_regs.insert(reg.clone());
                         changed = true;
                     }
@@ -298,7 +329,11 @@ impl DataFlowAnalyzer {
         bugs
     }
 
-    fn find_original_load_location(&self, reg: &str, shared_loaded_regs: &HashSet<String>) -> Option<SourceLocation> {
+    fn find_original_load_location(
+        &self,
+        reg: &str,
+        shared_loaded_regs: &HashSet<String>,
+    ) -> Option<SourceLocation> {
         // If this register is directly from a load, return that location
         if let Some(ValueSource::Load { location, .. }) = self.value_sources.get(reg) {
             return Some(location.clone());
@@ -350,7 +385,10 @@ mod tests {
         let analyzer = DataFlowAnalyzer::from_module(&module);
         let bugs = analyzer.detect_loaded_value_bug();
 
-        assert!(bugs.is_empty(), "F081: Should have no loaded value bugs when using constant");
+        assert!(
+            bugs.is_empty(),
+            "F081: Should have no loaded value bugs when using constant"
+        );
     }
 
     // F082: No computed-address-from-loaded pattern
@@ -377,7 +415,10 @@ mod tests {
         let analyzer = DataFlowAnalyzer::from_module(&module);
         let bugs = analyzer.detect_computed_addr_from_loaded();
 
-        assert!(bugs.is_empty(), "F082: Should have no computed-addr bugs when using constant");
+        assert!(
+            bugs.is_empty(),
+            "F082: Should have no computed-addr bugs when using constant"
+        );
     }
 
     // F071: No use before def

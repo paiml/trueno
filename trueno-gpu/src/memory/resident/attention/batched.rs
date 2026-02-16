@@ -186,11 +186,7 @@ fn maybe_debug_head_inputs(
 
 /// Conditionally debug-print score statistics (only for head 0).
 #[cfg(feature = "cuda")]
-fn maybe_debug_scores(
-    debug_attn: bool,
-    h: u32,
-    scores_h: &GpuResidentTensor<f32>,
-) -> Result<()> {
+fn maybe_debug_scores(debug_attn: bool, h: u32, scores_h: &GpuResidentTensor<f32>) -> Result<()> {
     if !(debug_attn && h == 0) {
         return Ok(());
     }
@@ -229,11 +225,7 @@ fn maybe_debug_attention_weights(
 
 /// Conditionally debug-print output head statistics (only for head 0).
 #[cfg(feature = "cuda")]
-fn maybe_debug_head_output(
-    debug_attn: bool,
-    h: u32,
-    out_h: &GpuResidentTensor<f32>,
-) -> Result<()> {
+fn maybe_debug_head_output(debug_attn: bool, h: u32, out_h: &GpuResidentTensor<f32>) -> Result<()> {
     if !(debug_attn && h == 0) {
         return Ok(());
     }

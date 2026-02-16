@@ -2,8 +2,8 @@
 
 use std::fmt;
 
-use super::Brick;
 use super::widget::Color;
+use super::Brick;
 
 // ============================================================================
 // ComputeBrick Scoring Framework (§29 of compute-block-tui-cbtop.md)

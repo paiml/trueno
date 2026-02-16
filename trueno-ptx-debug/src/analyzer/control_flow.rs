@@ -1,9 +1,9 @@
 //! Control Flow Analyzer - CFG construction and barrier analysis
 
-use std::collections::{HashMap, HashSet};
-use crate::parser::{PtxModule, KernelDef, Statement, Instruction, SourceLocation};
-use crate::parser::types::Opcode;
 use crate::bugs::Severity;
+use crate::parser::types::Opcode;
+use crate::parser::{Instruction, KernelDef, PtxModule, SourceLocation, Statement};
+use std::collections::{HashMap, HashSet};
 
 /// Node ID for CFG nodes
 pub type NodeId = usize;
@@ -60,7 +60,8 @@ impl ControlFlowGraph {
             }
         }
 
-        self.nodes.iter()
+        self.nodes
+            .iter()
             .filter(|n| !reachable.contains(&n.id))
             .map(|n| n.id)
             .collect()
@@ -174,14 +175,24 @@ impl ControlFlowAnalyzer {
             match stmt {
                 Statement::Label(label) => {
                     if !current_instructions.is_empty() || current_label.is_some() {
-                        flush_block(&mut nodes, &mut label_to_node, &mut current_label, &mut current_instructions);
+                        flush_block(
+                            &mut nodes,
+                            &mut label_to_node,
+                            &mut current_label,
+                            &mut current_instructions,
+                        );
                     }
                     current_label = Some(label.clone());
                 }
                 Statement::Instruction(instr) => {
                     current_instructions.push(instr.clone());
                     if instr.opcode.is_branch() {
-                        flush_block(&mut nodes, &mut label_to_node, &mut current_label, &mut current_instructions);
+                        flush_block(
+                            &mut nodes,
+                            &mut label_to_node,
+                            &mut current_label,
+                            &mut current_instructions,
+                        );
                     }
                 }
                 _ => {}
@@ -190,7 +201,12 @@ impl ControlFlowAnalyzer {
 
         // Add final block if any
         if !current_instructions.is_empty() || current_label.is_some() {
-            flush_block(&mut nodes, &mut label_to_node, &mut current_label, &mut current_instructions);
+            flush_block(
+                &mut nodes,
+                &mut label_to_node,
+                &mut current_label,
+                &mut current_instructions,
+            );
         }
 
         // Create empty entry node if needed
@@ -212,7 +228,15 @@ impl ControlFlowAnalyzer {
         for i in 0..node_count {
             let last_instr = nodes[i].instructions.last().cloned();
             let last_opcode = last_instr.as_ref().map(|instr| &instr.opcode);
-            collect_edges_for_node(i, last_opcode, last_instr.as_ref(), node_count, &label_to_node, &mut edges, &mut exits);
+            collect_edges_for_node(
+                i,
+                last_opcode,
+                last_instr.as_ref(),
+                node_count,
+                &label_to_node,
+                &mut edges,
+                &mut exits,
+            );
         }
 
         // Apply edges
@@ -242,7 +266,9 @@ impl ControlFlowAnalyzer {
 
                 for instr in &node.instructions {
                     // Check for shared memory operations
-                    let is_shared = instr.modifiers.iter()
+                    let is_shared = instr
+                        .modifiers
+                        .iter()
                         .any(|m| matches!(m, crate::parser::types::Modifier::Shared));
 
                     if instr.opcode == Opcode::St && is_shared {
@@ -251,7 +277,9 @@ impl ControlFlowAnalyzer {
                         if let Some(ref write_loc) = last_shared_write {
                             // Check if there's a barrier between write and read
                             // Simplified: just check if bar.sync appears
-                            let has_barrier = node.instructions.iter()
+                            let has_barrier = node
+                                .instructions
+                                .iter()
                                 .any(|i| matches!(i.opcode, Opcode::Bar));
 
                             if !has_barrier {
@@ -259,7 +287,8 @@ impl ControlFlowAnalyzer {
                                     write_loc: write_loc.clone(),
                                     read_loc: instr.location.clone(),
                                     severity: Severity::High,
-                                    message: "Missing barrier between shared memory write and read".into(),
+                                    message: "Missing barrier between shared memory write and read"
+                                        .into(),
                                 });
                             }
                         }
@@ -332,7 +361,11 @@ mod tests {
         let cfg = analyzer.build_cfg(&module.kernels[0]);
         let unreachable = cfg.find_unreachable();
 
-        assert!(unreachable.is_empty(), "F062: Found unreachable code: {:?}", unreachable);
+        assert!(
+            unreachable.is_empty(),
+            "F062: Found unreachable code: {:?}",
+            unreachable
+        );
     }
 
     // F036: bar.sync after shared write, before read
@@ -359,6 +392,9 @@ mod tests {
         let _ = analyzer.build_cfg(&module.kernels[0]);
         let violations = analyzer.analyze_barriers(&module);
 
-        assert!(violations.is_empty(), "F036: Should have no barrier violations with proper sync");
+        assert!(
+            violations.is_empty(),
+            "F036: Should have no barrier violations with proper sync"
+        );
     }
 }

@@ -22,6 +22,6 @@
 mod helpers;
 mod scalar_baselines;
 mod simd_validation;
+mod summary;
 #[cfg(feature = "gpu")]
 mod wgpu_validation;
-mod summary;

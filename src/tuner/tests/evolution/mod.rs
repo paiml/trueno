@@ -484,5 +484,3 @@ fn online_learner_is_converging_initially_true() {
     // EMA loss is 0.0 < 0.15 threshold
     assert!(learner.is_converging());
 }
-
-

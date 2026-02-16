@@ -157,9 +157,7 @@ impl BrickProfiler {
     /// Create a new profiler (disabled by default for zero overhead).
     pub fn new() -> Self {
         Self {
-            brick_stats: std::array::from_fn(|i| {
-                BrickStats::new(BrickId::ALL[i].name())
-            }),
+            brick_stats: std::array::from_fn(|i| BrickStats::new(BrickId::ALL[i].name())),
             dynamic_stats: std::collections::HashMap::new(),
             pending: Vec::new(),
             sync_mode: SyncMode::Deferred,

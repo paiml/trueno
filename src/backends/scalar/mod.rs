@@ -479,6 +479,5 @@ impl VectorBackend for ScalarBackend {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

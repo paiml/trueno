@@ -48,8 +48,7 @@ fn test_golden_q6k_scalar_vs_dispatch() {
     assert_eq!(scalar_output.len(), dispatch_output.len());
     let mut max_abs_error = 0.0f32;
 
-    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
-    {
+    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
         let abs_error = (scalar - dispatch).abs();
         max_abs_error = max_abs_error.max(abs_error);
 
@@ -98,8 +97,7 @@ fn test_golden_q6k_colmajor_consistency() {
         .collect();
 
     let colmajor_output = matmul_q6k_f32_colmajor(&q6k_data, &input, out_dim, in_dim);
-    let colmajor_dispatch =
-        matmul_q6k_f32_colmajor_dispatch(&q6k_data, &input, out_dim, in_dim);
+    let colmajor_dispatch = matmul_q6k_f32_colmajor_dispatch(&q6k_data, &input, out_dim, in_dim);
 
     assert_eq!(colmajor_output.len(), colmajor_dispatch.len());
     for (i, (base, dispatch)) in colmajor_output
@@ -141,8 +139,7 @@ fn test_golden_q6k_max_quant_values() {
     let scalar_output = matmul_q6k_f32_scalar(&q6k_data, &input, out_dim, in_dim);
     let dispatch_output = matmul_q6k_f32_dispatch(&q6k_data, &input, out_dim, in_dim);
 
-    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
-    {
+    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
         assert!(
             scalar.is_finite() && dispatch.is_finite(),
             "Row {}: max values should produce finite output",
@@ -188,8 +185,7 @@ fn test_golden_q6k_alternating_scales() {
     let scalar_output = matmul_q6k_f32_scalar(&q6k_data, &input, out_dim, in_dim);
     let dispatch_output = matmul_q6k_f32_dispatch(&q6k_data, &input, out_dim, in_dim);
 
-    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
-    {
+    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
         let diff = (scalar - dispatch).abs();
         assert!(
             diff < 1e-4,
@@ -240,8 +236,7 @@ fn test_golden_q6k_large_simd() {
     let dispatch_output = matmul_q6k_f32_dispatch(&q6k_data, &input, out_dim, in_dim);
 
     let mut max_rel_error = 0.0f32;
-    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate()
-    {
+    for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
         let abs_error = (scalar - dispatch).abs();
         let rel_error = if scalar.abs() > 1e-6 {
             abs_error / scalar.abs()

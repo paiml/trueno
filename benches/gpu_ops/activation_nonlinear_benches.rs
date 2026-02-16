@@ -38,14 +38,10 @@ fn run_bench(
             bencher.iter(|| black_box(gpu_op(&mut gpu, &data)));
         });
 
-        group.bench_with_input(
-            BenchmarkId::new("Scalar", size),
-            &size,
-            |bencher, &size| {
-                let data = data_fn(size);
-                bencher.iter(|| black_box(scalar_op(&data)));
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("Scalar", size), &size, |bencher, &size| {
+            let data = data_fn(size);
+            bencher.iter(|| black_box(scalar_op(&data)));
+        });
     }
 
     group.finish();
@@ -80,11 +76,7 @@ pub fn bench_gpu_swish(c: &mut Criterion) {
         "gpu_swish",
         make_narrow_data,
         &|gpu, data| gpu.swish(data).unwrap(),
-        &|data| {
-            data.iter()
-                .map(|&x| x / (1.0 + (-x).exp()))
-                .collect()
-        },
+        &|data| data.iter().map(|&x| x / (1.0 + (-x).exp())).collect(),
     );
 }
 

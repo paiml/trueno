@@ -78,10 +78,9 @@ fn test_process_outputs() {
 
 #[test]
 fn test_preemption() {
-    let mut batcher =
-        ContinuousBatcher::new(64, 4096).with_policy(SchedulingPolicy::Priority {
-            preempt_enabled: true,
-        });
+    let mut batcher = ContinuousBatcher::new(64, 4096).with_policy(SchedulingPolicy::Priority {
+        preempt_enabled: true,
+    });
 
     // Add and schedule requests
     for i in 0..5 {

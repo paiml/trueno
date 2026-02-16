@@ -273,7 +273,13 @@ mod tests {
     }
 
     /// Execute attention and assert output length and finiteness.
-    fn assert_attention_ok(op: &AttentionOp, q: Vec<f32>, k: Vec<f32>, v: Vec<f32>, expected_len: usize) -> Vec<f32> {
+    fn assert_attention_ok(
+        op: &AttentionOp,
+        q: Vec<f32>,
+        k: Vec<f32>,
+        v: Vec<f32>,
+        expected_len: usize,
+    ) -> Vec<f32> {
         let output = op.execute((q, k, v), Backend::Scalar).unwrap();
         assert_eq!(output.len(), expected_len);
         for val in &output {
@@ -572,5 +578,206 @@ mod tests {
         let k: Vec<f32> = (0..51).map(|i| ((i % 5) as f32) * 0.2).collect();
         let v: Vec<f32> = (0..51).map(|i| (i as f32) * 0.01).collect();
         assert_attention_ok(&op, q, k, v, 17);
+    }
+
+    // =========================================================================
+    // simd_dot coverage: AVX2 path with every remainder size (Refs CB-130)
+    // =========================================================================
+
+    /// Verify simd_dot with vectors of exactly `n` elements where each element
+    /// is a known value, checking against a scalar reference implementation.
+    fn assert_dot_scalar_ref(n: usize) {
+        let a: Vec<f32> = (0..n).map(|i| (i as f32) * 0.3 + 1.0).collect();
+        let b: Vec<f32> = (0..n).map(|i| (i as f32) * 0.7 - 0.5).collect();
+        let expected: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let result = AttentionOp::simd_dot(&a, &b);
+        assert!(
+            (result - expected).abs() < 1e-2 * expected.abs().max(1.0),
+            "n={n}: dot={result}, expected={expected}"
+        );
+    }
+
+    #[test]
+    fn test_simd_dot_avx2_remainder_0() {
+        // 32 elements: exactly 4 AVX2 chunks, 0 remainder
+        assert_dot_scalar_ref(32);
+    }
+
+    #[test]
+    fn test_simd_dot_avx2_remainder_1() {
+        // 33 elements: 4 AVX2 chunks + 1 remainder
+        assert_dot_scalar_ref(33);
+    }
+
+    #[test]
+    fn test_simd_dot_avx2_remainder_2() {
+        // 34 elements: 4 AVX2 chunks + 2 remainder
+        assert_dot_scalar_ref(34);
+    }
+
+    #[test]
+    fn test_simd_dot_avx2_remainder_3() {
+        // 35 elements: 4 AVX2 chunks + 3 remainder
+        assert_dot_scalar_ref(35);
+    }
+
+    #[test]
+    fn test_simd_dot_avx2_remainder_4() {
+        // 36 elements: 4 AVX2 chunks + 4 remainder
+        assert_dot_scalar_ref(36);
+    }
+
+    #[test]
+    fn test_simd_dot_avx2_remainder_5() {
+        // 37 elements: 4 AVX2 chunks + 5 remainder
+        assert_dot_scalar_ref(37);
+    }
+
+    #[test]
+    fn test_simd_dot_avx2_remainder_6() {
+        // 38 elements: 4 AVX2 chunks + 6 remainder
+        assert_dot_scalar_ref(38);
+    }
+
+    #[test]
+    fn test_simd_dot_avx2_remainder_7() {
+        // 39 elements: 4 AVX2 chunks + 7 remainder
+        assert_dot_scalar_ref(39);
+    }
+
+    #[test]
+    fn test_simd_dot_large_128() {
+        // 128 elements: 16 AVX2 chunks, exercises sustained SIMD loop
+        assert_dot_scalar_ref(128);
+    }
+
+    #[test]
+    fn test_simd_dot_large_1024() {
+        // 1024 elements: 128 AVX2 chunks, large vector stress test
+        assert_dot_scalar_ref(1024);
+    }
+
+    #[test]
+    fn test_simd_dot_large_1024_plus_5() {
+        // 1029 elements: 128 AVX2 chunks + 5 remainder, large + non-aligned
+        assert_dot_scalar_ref(1029);
+    }
+
+    #[test]
+    fn test_simd_dot_known_identity() {
+        // Unit vector dot product = 1.0
+        let n = 64;
+        let a: Vec<f32> = {
+            let mut v = vec![0.0; n];
+            v[0] = 1.0;
+            v
+        };
+        let b = a.clone();
+        let result = AttentionOp::simd_dot(&a, &b);
+        assert!((result - 1.0).abs() < 1e-6, "identity dot = {result}");
+    }
+
+    #[test]
+    fn test_simd_dot_alternating_signs() {
+        // Alternating +1/-1 should cancel to 0 for even length
+        let n = 64;
+        let a: Vec<f32> = (0..n)
+            .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
+        let b = vec![1.0; n];
+        let result = AttentionOp::simd_dot(&a, &b);
+        assert!((result).abs() < 1e-5, "alternating dot = {result}");
+    }
+
+    #[test]
+    fn test_simd_dot_large_values() {
+        // Large values should still compute correctly
+        let a = vec![1000.0; 16];
+        let b = vec![1000.0; 16];
+        let expected = 1000.0 * 1000.0 * 16.0;
+        let result = AttentionOp::simd_dot(&a, &b);
+        assert!(
+            (result - expected).abs() < 1.0,
+            "large dot = {result}, expected = {expected}"
+        );
+    }
+
+    #[test]
+    fn test_simd_dot_mixed_positive_negative() {
+        // 10 elements: 1 AVX2 chunk (8) + 2 remainder, with mixed signs
+        let a = vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0, 9.0, -10.0];
+        let b = vec![10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
+        let expected: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let result = AttentionOp::simd_dot(&a, &b);
+        assert!(
+            (result - expected).abs() < 1e-3,
+            "mixed dot = {result}, expected = {expected}"
+        );
+    }
+
+    #[test]
+    fn test_simd_dot_very_small_values() {
+        let a = vec![1e-10; 16];
+        let b = vec![1e-10; 16];
+        let expected = 1e-20 * 16.0;
+        let result = AttentionOp::simd_dot(&a, &b);
+        assert!(
+            (result - expected).abs() < 1e-24,
+            "small dot = {result}, expected = {expected}"
+        );
+    }
+
+    // =========================================================================
+    // Full attention execute path with head_dim sizes that stress simd_dot
+    // =========================================================================
+
+    #[test]
+    fn test_attention_head_dim_64_multi_seq() {
+        // head_dim=64 (8 AVX2 chunks exactly): realistic transformer config
+        let op = AttentionOp::self_attention(4, 64);
+        let q = vec![0.1; 4 * 64];
+        let k = vec![0.1; 4 * 64];
+        let v = vec![1.0; 4 * 64];
+        let output = assert_attention_ok(&op, q, k, v, 4 * 64);
+        // Uniform input => uniform softmax => output = mean of V rows = 1.0
+        for val in &output {
+            assert!((val - 1.0).abs() < 1e-4, "expected ~1.0, got {val}");
+        }
+    }
+
+    #[test]
+    fn test_attention_head_dim_128() {
+        // head_dim=128 (16 AVX2 chunks): large head dimension
+        let op = AttentionOp::new(2, 3, 128);
+        let q: Vec<f32> = (0..2 * 128).map(|i| (i as f32) * 0.001).collect();
+        let k: Vec<f32> = (0..3 * 128).map(|i| ((i % 7) as f32) * 0.01).collect();
+        let v: Vec<f32> = (0..3 * 128).map(|i| (i as f32) * 0.005).collect();
+        assert_attention_ok(&op, q, k, v, 2 * 128);
+    }
+
+    #[test]
+    fn test_attention_head_dim_33() {
+        // head_dim=33: 4 AVX2 chunks + 1 remainder element in simd_dot
+        let op = AttentionOp::new(2, 2, 33);
+        let q = vec![0.5; 2 * 33];
+        let k = vec![0.5; 2 * 33];
+        let v = vec![2.0; 2 * 33];
+        let output = assert_attention_ok(&op, q, k, v, 2 * 33);
+        for val in &output {
+            assert!((val - 2.0).abs() < 1e-4, "expected ~2.0, got {val}");
+        }
+    }
+
+    #[test]
+    fn test_attention_head_dim_7() {
+        // head_dim=7: 0 AVX2 chunks, all remainder (exercises pure remainder path)
+        let op = AttentionOp::self_attention(2, 7);
+        let q = vec![1.0; 2 * 7];
+        let k = vec![1.0; 2 * 7];
+        let v = vec![3.0; 2 * 7];
+        let output = assert_attention_ok(&op, q, k, v, 2 * 7);
+        for val in &output {
+            assert!((val - 3.0).abs() < 1e-4, "expected ~3.0, got {val}");
+        }
     }
 }

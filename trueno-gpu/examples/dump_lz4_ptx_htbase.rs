@@ -17,7 +17,11 @@ fn is_rd11_setup(line: &str) -> bool {
 }
 
 fn print_line_range(ptx: &str, start: usize, end: usize) {
-    println!("\n=== Lines {}-{} (around hash table access) ===", start + 1, end);
+    println!(
+        "\n=== Lines {}-{} (around hash table access) ===",
+        start + 1,
+        end
+    );
     let lines: Vec<&str> = ptx.lines().collect();
     for i in start..end.min(lines.len()) {
         println!("{:4}: {}", i + 1, lines[i]);
@@ -34,6 +38,10 @@ fn main() {
     print_matching(&ptx, "\n=== Looking for 4096 (PAGE_SIZE) ===", |line| {
         line.contains("4096")
     });
-    print_matching(&ptx, "\n=== Looking for smem_base (%rd11) setup ===", is_rd11_setup);
+    print_matching(
+        &ptx,
+        "\n=== Looking for smem_base (%rd11) setup ===",
+        is_rd11_setup,
+    );
     print_line_range(&ptx, 880, 920);
 }

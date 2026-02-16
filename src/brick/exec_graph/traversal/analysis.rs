@@ -3,9 +3,7 @@
 use std::collections::HashMap;
 
 use super::core::ExecutionGraph;
-use crate::brick::exec_graph::node::{
-    EdgeType, ExecutionNode, ExecutionNodeId, TransferDirection,
-};
+use crate::brick::exec_graph::node::{EdgeType, ExecutionNode, ExecutionNodeId, TransferDirection};
 
 impl ExecutionGraph {
     // ========================

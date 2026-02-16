@@ -225,12 +225,7 @@ mod tests {
         for (backend, name) in backends {
             let err = TruenoError::UnsupportedBackend(backend);
             let msg = err.to_string();
-            assert!(
-                msg.contains(name),
-                "Expected '{}' in '{}'",
-                name,
-                msg
-            );
+            assert!(msg.contains(name), "Expected '{}' in '{}'", name, msg);
         }
     }
 

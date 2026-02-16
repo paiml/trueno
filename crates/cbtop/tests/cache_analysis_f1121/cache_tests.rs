@@ -271,4 +271,3 @@ fn f1124_double_precision() {
     // f64 should be exactly 2x f32
     assert_eq!(ws_f64, ws_f32 * 2);
 }
-

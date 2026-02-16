@@ -23,6 +23,5 @@ pub use types::{
     GoldenTraceError, GoldenTraceResult, SyscallBreakdown, SyscallBreakdownDelta, TraceMetrics,
 };
 
-
 #[cfg(test)]
 mod tests;

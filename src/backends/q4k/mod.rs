@@ -112,6 +112,6 @@ pub(crate) fn parse_q4k_header(block: &[u8]) -> (f32, f32, [u8; 8], [u8; 8]) {
 #[cfg(test)]
 mod tests_core;
 #[cfg(test)]
-mod tests_golden;
-#[cfg(test)]
 mod tests_coverage;
+#[cfg(test)]
+mod tests_golden;

@@ -8,6 +8,5 @@
 //! - CLI overlay merging
 //! - Export/import functionality
 
-
-mod persistence_tests;
 mod additional_tests;
+mod persistence_tests;

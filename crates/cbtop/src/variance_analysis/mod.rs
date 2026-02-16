@@ -448,6 +448,5 @@ fn generate_recommendations(
     recs
 }
 
-
 #[cfg(test)]
 mod tests;

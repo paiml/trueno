@@ -362,7 +362,10 @@ fn test_json_parsing() {
         json::extract_json_number(json_str, "throughput"),
         Some(1000000.0)
     );
-    assert_eq!(json::extract_json_number(json_str, "latency_p50"), Some(50.0));
+    assert_eq!(
+        json::extract_json_number(json_str, "latency_p50"),
+        Some(50.0)
+    );
     assert_eq!(
         json::extract_json_number(json_str, "memory"),
         Some(1073741824.0)

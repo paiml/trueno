@@ -185,3 +185,173 @@ fn save_apr_returns_io_error_for_invalid_path() {
     let err = format!("{}", result.unwrap_err());
     assert!(err.contains("I/O error"));
 }
+
+// ============================================================================
+// record_and_persist() and load_or_create() -- requires hardware-detect
+//
+// These tests share a single cache file (determined by cache_path()), so they
+// are combined into one sequential test to avoid parallel race conditions.
+// ============================================================================
+
+#[cfg(feature = "hardware-detect")]
+#[test]
+fn record_and_persist_and_load_or_create_full_lifecycle() {
+    use std::io::Write;
+
+    let cache_path = TunerDataCollector::cache_path();
+
+    // ------------------------------------------------------------------
+    // Phase 1: load_or_create falls back to new when no cache exists
+    // ------------------------------------------------------------------
+    let _ = std::fs::remove_file(&cache_path);
+    assert!(
+        !cache_path.exists(),
+        "pre-clean: cache file should not exist"
+    );
+
+    let collector = TunerDataCollector::load_or_create();
+    assert!(
+        collector.is_empty(),
+        "load_or_create should return empty when no cache"
+    );
+
+    // ------------------------------------------------------------------
+    // Phase 2: load_or_create falls back to new on corrupt cache
+    // ------------------------------------------------------------------
+    if let Some(parent) = cache_path.parent() {
+        std::fs::create_dir_all(parent).expect("create parent dir");
+    }
+    {
+        let mut file = std::fs::File::create(&cache_path).expect("create corrupt file");
+        file.write_all(b"GARBAGE_DATA_NOT_APR")
+            .expect("write garbage");
+    }
+    assert!(cache_path.exists(), "corrupt file should exist");
+
+    let collector = TunerDataCollector::load_or_create();
+    assert!(
+        collector.is_empty(),
+        "load_or_create should fall back to new on corrupt cache"
+    );
+
+    // ------------------------------------------------------------------
+    // Phase 3: record_and_persist writes sample and saves to cache
+    // ------------------------------------------------------------------
+    let _ = std::fs::remove_file(&cache_path);
+
+    let mut profiler = BrickProfiler::new();
+    profiler.enable();
+    // Record 100 tokens over 1ms (= 100_000 tok/s)
+    profiler.record_elapsed("TestBrick", std::time::Duration::from_millis(1), 100);
+
+    let config = RunConfig::default();
+    let mut collector = TunerDataCollector::new();
+
+    let result = collector.record_and_persist(&profiler, &config, KernelType::TiledQ4K);
+    assert!(result.is_ok(), "record_and_persist should succeed");
+    assert_eq!(
+        collector.len(),
+        1,
+        "collector should have one sample after record_and_persist"
+    );
+
+    // Verify file was written and is loadable
+    assert!(
+        cache_path.exists(),
+        "cache file should exist after record_and_persist"
+    );
+    let loaded = TunerDataCollector::load_apr(&cache_path).expect("load after persist");
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(
+        loaded.samples()[0].throughput_tps,
+        collector.samples()[0].throughput_tps
+    );
+
+    // ------------------------------------------------------------------
+    // Phase 4: record_and_persist appends a second sample
+    // ------------------------------------------------------------------
+    collector
+        .record_and_persist(&profiler, &config, KernelType::CoalescedQ4K)
+        .expect("second record_and_persist");
+    assert_eq!(collector.len(), 2, "collector should have two samples");
+
+    let loaded = TunerDataCollector::load_apr(&cache_path).expect("load after second persist");
+    assert_eq!(loaded.len(), 2, "persisted file should have two samples");
+
+    // ------------------------------------------------------------------
+    // Phase 5: load_or_create loads the persisted data
+    // ------------------------------------------------------------------
+    let loaded = TunerDataCollector::load_or_create();
+    assert_eq!(
+        loaded.len(),
+        2,
+        "load_or_create should load the 2 persisted samples"
+    );
+    assert_eq!(
+        loaded.samples()[0].throughput_tps,
+        collector.samples()[0].throughput_tps
+    );
+    assert_eq!(
+        loaded.samples()[1].throughput_tps,
+        collector.samples()[1].throughput_tps
+    );
+
+    // ------------------------------------------------------------------
+    // Phase 6: load_or_create returns data with correct default state
+    // ------------------------------------------------------------------
+    assert!(!loaded.is_online_learning_enabled());
+    assert_eq!(loaded.retrain_threshold, 100);
+    assert!(loaded.feedback.is_empty());
+    assert!(loaded.error_window.is_empty());
+
+    // ------------------------------------------------------------------
+    // Cleanup: remove cache file so we don't leave test artifacts
+    // ------------------------------------------------------------------
+    let _ = std::fs::remove_file(&cache_path);
+}
+
+// ============================================================================
+// cache_path() and hardware_id() -- requires hardware-detect feature
+// ============================================================================
+
+#[cfg(feature = "hardware-detect")]
+#[test]
+fn cache_path_returns_valid_path_with_hardware_id() {
+    let path = TunerDataCollector::cache_path();
+    // Path should end with .apr extension
+    assert!(
+        path.extension().map_or(false, |ext| ext == "apr"),
+        "cache path should have .apr extension: {:?}",
+        path
+    );
+    // Path should contain "trueno" directory
+    let path_str = path.to_string_lossy();
+    assert!(
+        path_str.contains("trueno"),
+        "cache path should contain 'trueno': {}",
+        path_str
+    );
+    // Filename should contain hardware ID prefix
+    let filename = path.file_name().unwrap().to_string_lossy();
+    assert!(
+        filename.starts_with("training_data_"),
+        "filename should start with 'training_data_': {}",
+        filename
+    );
+}
+
+#[cfg(feature = "hardware-detect")]
+#[test]
+fn hardware_id_returns_stable_hex_string() {
+    let id1 = TunerDataCollector::hardware_id();
+    let id2 = TunerDataCollector::hardware_id();
+    // Should be deterministic
+    assert_eq!(id1, id2, "hardware_id should be stable across calls");
+    // Should be 8 hex characters
+    assert_eq!(id1.len(), 8, "hardware_id should be 8 hex chars: {}", id1);
+    assert!(
+        id1.chars().all(|c| c.is_ascii_hexdigit()),
+        "hardware_id should be hex: {}",
+        id1
+    );
+}

@@ -112,7 +112,14 @@ fn test_gemm_blis_parallel_small_matrix() {
     gemm_blis_parallel(m, n, k, &a, &b_mut, &mut c).unwrap();
     // First row of C should match first row of A (for k<=n)
     for j in 0..k.min(n) {
-        assert!((c[j] - a[j]).abs() < 1e-3, "c[{}] = {}, a[{}] = {}", j, c[j], j, a[j]);
+        assert!(
+            (c[j] - a[j]).abs() < 1e-3,
+            "c[{}] = {}, a[{}] = {}",
+            j,
+            c[j],
+            j,
+            a[j]
+        );
     }
 }
 

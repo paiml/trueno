@@ -433,19 +433,13 @@ impl ProfileComparator {
             return 0.0;
         }
 
-        let pooled_var =
-            ((n1 - 1.0) * a.variance() + (n2 - 1.0) * b.variance()) / (n1 + n2 - 2.0);
+        let pooled_var = ((n1 - 1.0) * a.variance() + (n2 - 1.0) * b.variance()) / (n1 + n2 - 2.0);
 
         pooled_var.sqrt()
     }
 
     /// Calculate confidence interval for the difference in means
-    fn confidence_interval(
-        &self,
-        a: &MetricSamples,
-        b: &MetricSamples,
-        alpha: f64,
-    ) -> (f64, f64) {
+    fn confidence_interval(&self, a: &MetricSamples, b: &MetricSamples, alpha: f64) -> (f64, f64) {
         let mean_diff = b.mean() - a.mean();
         let se = ((a.variance() / a.count() as f64) + (b.variance() / b.count() as f64)).sqrt();
 

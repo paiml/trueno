@@ -366,3 +366,153 @@ fn test_to_ascii_tree_nested_launches() {
     assert!(tree.contains("kernel_a"));
     assert!(tree.contains("kernel_b"));
 }
+
+// ================================================================
+// node_to_dot_label: Function partial location coverage
+// ================================================================
+
+/// Function with file but no line — (Some, None) branch in node_to_dot_label.
+#[test]
+fn test_to_dot_function_file_no_line() {
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::Function {
+        name: "partial_func".into(),
+        file: Some("module.rs".into()),
+        line: None,
+    });
+
+    let dot = graph.to_dot();
+    // (Some, None) should produce empty loc string — no file:line in label
+    assert!(dot.contains("partial_func"));
+    assert!(
+        !dot.contains("module.rs"),
+        "Function with file but no line should not show file in DOT label"
+    );
+}
+
+/// Function with no file but has line — (None, Some) branch in node_to_dot_label.
+#[test]
+fn test_to_dot_function_no_file_has_line() {
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::Function {
+        name: "orphan_func".into(),
+        file: None,
+        line: Some(99),
+    });
+
+    let dot = graph.to_dot();
+    assert!(dot.contains("orphan_func"));
+    // (None, Some(99)) should produce empty loc string
+    assert!(
+        !dot.contains(":99"),
+        "Function with no file should not show :99 in DOT label"
+    );
+}
+
+// ================================================================
+// to_ascii_tree: Function partial location coverage in ASCII tree
+// ================================================================
+
+/// ASCII tree: Function with file but no line.
+#[test]
+fn test_to_ascii_tree_function_file_no_line() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let func = graph.add_node(ExecutionNode::Function {
+        name: "setup".into(),
+        file: Some("config.rs".into()),
+        line: None,
+    });
+    graph.add_edge(root, func, EdgeType::Contains);
+
+    let tree = graph.to_ascii_tree();
+    assert!(tree.contains("setup"));
+    // (Some, None) branch: empty location string
+    assert!(
+        !tree.contains("config.rs"),
+        "Function with file but no line should not show file: {}",
+        tree
+    );
+}
+
+/// ASCII tree: Function with no file but has line.
+#[test]
+fn test_to_ascii_tree_function_no_file_has_line() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let func = graph.add_node(ExecutionNode::Function {
+        name: "teardown".into(),
+        file: None,
+        line: Some(55),
+    });
+    graph.add_edge(root, func, EdgeType::Contains);
+
+    let tree = graph.to_ascii_tree();
+    assert!(tree.contains("teardown"));
+    assert!(
+        !tree.contains(":55"),
+        "Function with no file should not show line number: {}",
+        tree
+    );
+}
+
+// ================================================================
+// node_to_dot_label: AsyncTask zero polls (0% efficiency) in DOT
+// ================================================================
+
+/// Verify DOT output for AsyncTask with zero polls shows 0% efficiency.
+#[test]
+fn test_to_dot_async_task_zero_polls_efficiency() {
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::AsyncTask {
+        name: "zero_poll_task".into(),
+        poll_count: 0,
+        yield_count: 0,
+        total_poll_ns: 0,
+    });
+
+    let dot = graph.to_dot();
+    assert!(dot.contains("zero_poll_task"));
+    assert!(dot.contains("polls:0"));
+    assert!(
+        dot.contains("0%"),
+        "Zero polls should show 0% efficiency in DOT: {}",
+        dot
+    );
+}
+
+/// Verify DOT output for AsyncTask with nonzero polls shows correct efficiency.
+#[test]
+fn test_to_dot_async_task_nonzero_polls_efficiency() {
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::AsyncTask {
+        name: "busy_task".into(),
+        poll_count: 4,
+        yield_count: 2,
+        total_poll_ns: 8000,
+    });
+
+    let dot = graph.to_dot();
+    assert!(dot.contains("busy_task"));
+    assert!(dot.contains("polls:4"));
+    assert!(dot.contains("yields:2"));
+    // 100.0 / 4 = 25%
+    assert!(
+        dot.contains("25%"),
+        "4 polls should show 25% efficiency: {}",
+        dot
+    );
+}
+
+// ================================================================
+// to_tree_node: empty graph (Empty Graph branch)
+// ================================================================
+
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_empty_graph() {
+    let graph = ExecutionGraph::new();
+    let tree = graph.to_tree_node();
+    assert_eq!(tree.label, "Empty Graph");
+    assert!(tree.children.is_empty());
+}

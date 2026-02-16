@@ -50,10 +50,8 @@ fn test_quantized_weights() {
 fn test_quant_stats() {
     let mut stats = QuantStats::new();
 
-    let weights1 =
-        QuantizedWeights::new(QuantFormat::Q4_K, vec![0u8; 1000], (100, 100), "layer1");
-    let weights2 =
-        QuantizedWeights::new(QuantFormat::Q8_0, vec![0u8; 2000], (100, 100), "layer2");
+    let weights1 = QuantizedWeights::new(QuantFormat::Q4_K, vec![0u8; 1000], (100, 100), "layer1");
+    let weights2 = QuantizedWeights::new(QuantFormat::Q8_0, vec![0u8; 2000], (100, 100), "layer2");
 
     stats.add_layer(&weights1);
     stats.add_layer(&weights2);

@@ -7,7 +7,10 @@ use super::super::GpuDevice;
 
 impl GpuDevice {
     /// Helper: Parallel max reduction
-    pub(in crate::backends::gpu::device) async fn reduce_max(&self, input: &[f32]) -> Result<f32, String> {
+    pub(in crate::backends::gpu::device) async fn reduce_max(
+        &self,
+        input: &[f32],
+    ) -> Result<f32, String> {
         let len = input.len();
         let workgroup_size = 256;
         let num_workgroups = (len as u32).div_ceil(workgroup_size);
@@ -169,7 +172,10 @@ impl GpuDevice {
     }
 
     /// Helper: Parallel sum reduction
-    pub(in crate::backends::gpu::device) async fn reduce_sum(&self, input: &[f32]) -> Result<f32, String> {
+    pub(in crate::backends::gpu::device) async fn reduce_sum(
+        &self,
+        input: &[f32],
+    ) -> Result<f32, String> {
         let len = input.len();
         let workgroup_size = 256;
         let num_workgroups = (len as u32).div_ceil(workgroup_size);

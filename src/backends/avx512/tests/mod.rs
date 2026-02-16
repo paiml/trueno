@@ -110,5 +110,3 @@ fn assert_reduction_usize(expected: usize, op: unsafe fn(&[f32]) -> usize) {
     let result = unsafe { op(&a) };
     assert_eq!(result, expected);
 }
-
-

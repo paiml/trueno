@@ -487,6 +487,5 @@ fn select_x86_backend_for_operation(op_type: OperationType) -> Backend {
     Backend::Scalar
 }
 
-
 #[cfg(test)]
 mod tests;

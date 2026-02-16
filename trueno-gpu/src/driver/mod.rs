@@ -71,10 +71,10 @@ mod memory;
 #[allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr)]
 mod module;
 #[cfg(feature = "cuda")]
+pub mod sanitizer;
+#[cfg(feature = "cuda")]
 #[allow(clippy::borrow_as_ptr)]
 mod stream;
-#[cfg(feature = "cuda")]
-pub mod sanitizer;
 
 // Re-export for use without cuda feature (types only)
 mod types;

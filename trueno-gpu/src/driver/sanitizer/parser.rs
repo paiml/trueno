@@ -72,13 +72,21 @@ impl SanitizerParser {
     /// Classify violation type from the first line of a sanitizer error.
     fn classify_violation(line: &str) -> MemoryViolationType {
         if line.contains("__shared__ read") {
-            MemoryViolationType::InvalidSharedRead { size: Self::extract_size(line).unwrap_or(4) }
+            MemoryViolationType::InvalidSharedRead {
+                size: Self::extract_size(line).unwrap_or(4),
+            }
         } else if line.contains("__shared__ write") {
-            MemoryViolationType::InvalidSharedWrite { size: Self::extract_size(line).unwrap_or(4) }
+            MemoryViolationType::InvalidSharedWrite {
+                size: Self::extract_size(line).unwrap_or(4),
+            }
         } else if line.contains("__global__ read") {
-            MemoryViolationType::InvalidGlobalRead { size: Self::extract_size(line).unwrap_or(4) }
+            MemoryViolationType::InvalidGlobalRead {
+                size: Self::extract_size(line).unwrap_or(4),
+            }
         } else if line.contains("__global__ write") {
-            MemoryViolationType::InvalidGlobalWrite { size: Self::extract_size(line).unwrap_or(4) }
+            MemoryViolationType::InvalidGlobalWrite {
+                size: Self::extract_size(line).unwrap_or(4),
+            }
         } else if line.contains("misaligned") {
             MemoryViolationType::MisalignedAccess { addr: 0 }
         } else {
