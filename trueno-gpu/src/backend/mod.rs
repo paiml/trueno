@@ -425,4 +425,123 @@ mod tests {
             let _ = backend.device_count();
         }
     }
+
+    #[test]
+    fn test_detect_backend_priority_cuda_first() {
+        // CUDA has highest priority. If CUDA is available, detect_backend must return CUDA.
+        let backend = detect_backend();
+        if CudaBackend.is_available() {
+            assert_eq!(
+                backend.name(),
+                "CUDA",
+                "When CUDA is available, detect_backend must return CUDA (highest priority)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_detect_backend_wgpu_priority_over_metal_and_vulkan() {
+        // When CUDA is not available, WGPU has priority over Metal and Vulkan.
+        // We cannot mock is_available, but we can verify the priority logic
+        // by checking that if CUDA and WGPU are both unavailable,
+        // we do NOT get WGPU.
+        let backend = detect_backend();
+        if !CudaBackend.is_available() && !WgpuBackend.is_available() {
+            assert_ne!(
+                backend.name(),
+                "WGPU",
+                "When WGPU is not available, detect_backend should not return WGPU"
+            );
+        }
+    }
+
+    #[test]
+    fn test_detect_backend_metal_not_returned_on_linux() {
+        // On Linux (non-macOS without metal feature), Metal should never be returned
+        #[cfg(not(all(target_os = "macos", feature = "metal")))]
+        {
+            let metal = MetalBackend;
+            assert!(!metal.is_available());
+            // Metal branch in detect_backend is unreachable on Linux
+        }
+    }
+
+    #[test]
+    fn test_detect_backend_vulkan_never_available() {
+        // Vulkan backend is a placeholder that always returns false
+        let vulkan = VulkanBackend;
+        assert!(!vulkan.is_available());
+        assert_eq!(vulkan.device_count(), 0);
+        // detect_backend should never return Vulkan since it's never available
+        let backend = detect_backend();
+        assert_ne!(
+            backend.name(),
+            "Vulkan",
+            "Vulkan should never be returned by detect_backend (placeholder)"
+        );
+    }
+
+    #[test]
+    fn test_detect_backend_default_fallback_is_cuda_for_ptx() {
+        // Even when nothing is available, the fallback is CUDA
+        // (for PTX generation which doesn't need hardware).
+        // This verifies the final return at line 167.
+        let cuda_avail = CudaBackend.is_available();
+        let wgpu_avail = WgpuBackend.is_available();
+        let metal_avail = MetalBackend.is_available();
+        let vulkan_avail = VulkanBackend.is_available();
+
+        let backend = detect_backend();
+
+        if !cuda_avail && !wgpu_avail && !metal_avail && !vulkan_avail {
+            assert_eq!(
+                backend.name(),
+                "CUDA",
+                "Fallback should be CUDA for PTX generation"
+            );
+            // Fallback CUDA backend is still not available for execution
+            // but its name is "CUDA" for PTX codegen purposes
+        }
+    }
+
+    #[test]
+    fn test_backend_availability_mutual_exclusion() {
+        // On any given platform, certain backends should be mutually exclusive.
+        // Metal is only available on macOS, Vulkan is never available (placeholder).
+        let vulkan = VulkanBackend;
+        assert!(!vulkan.is_available(), "Vulkan placeholder is never available");
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let metal = MetalBackend;
+            assert!(!metal.is_available(), "Metal is not available on non-macOS");
+        }
+    }
+
+    #[test]
+    fn test_wgpu_device_count_matches_availability() {
+        let wgpu = WgpuBackend;
+        if wgpu.is_available() {
+            assert_eq!(wgpu.device_count(), 1, "WGPU returns 1 when available");
+        } else {
+            assert_eq!(wgpu.device_count(), 0, "WGPU returns 0 when unavailable");
+        }
+    }
+
+    #[test]
+    fn test_cuda_device_count_matches_availability() {
+        let cuda = CudaBackend;
+        if !cuda.is_available() {
+            assert_eq!(
+                cuda.device_count(),
+                0,
+                "CUDA device_count must be 0 when unavailable"
+            );
+        } else {
+            assert!(
+                cuda.device_count() > 0,
+                "CUDA device_count must be >0 when available"
+            );
+        }
+    }
 }

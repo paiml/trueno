@@ -376,6 +376,118 @@ fn test_avx512_rounding() {
     });
 }
 
+// ========== Large-Array Tests (exercise main SIMD loop, not just remainder) ==========
+
+#[test]
+fn test_avx512_exp_large() {
+    avx512_test(|| {
+        // 48 elements: 3 full iterations (16 elements each)
+        let a: Vec<f32> = (0..48).map(|i| i as f32 * 0.1).collect();
+        let mut result = vec![0.0; 48];
+        unsafe {
+            Avx512Backend::exp(&a, &mut result);
+        }
+        for (i, &val) in result.iter().enumerate() {
+            let expected = a[i].exp();
+            // AVX-512 exp uses polynomial approximation — allow 5% relative error
+            assert!((val - expected).abs() / expected.max(1e-6) < 0.05,
+                "exp large mismatch at {}: {} vs {}", i, val, expected);
+        }
+    });
+}
+
+#[test]
+fn test_avx512_exp_non_aligned() {
+    avx512_test(|| {
+        // 19 elements: 1 full SIMD iteration + 3 remainder
+        for size in [17, 19, 23, 31, 33] {
+            let a: Vec<f32> = (0..size).map(|i| i as f32 * 0.1).collect();
+            let mut result = vec![0.0; size];
+            unsafe {
+                Avx512Backend::exp(&a, &mut result);
+            }
+            for (i, &val) in result.iter().enumerate() {
+                let expected = a[i].exp();
+                // AVX-512 exp uses polynomial approximation — allow 5% relative error
+                assert!((val - expected).abs() / expected.max(1e-6) < 0.05,
+                    "exp non-aligned size={} mismatch at {}: {} vs {}", size, i, val, expected);
+            }
+        }
+    });
+}
+
+#[test]
+fn test_avx512_relu_large() {
+    avx512_test(|| {
+        let a: Vec<f32> = (-24..24).map(|i| i as f32).collect();
+        let mut result = vec![0.0; 48];
+        unsafe {
+            Avx512Backend::relu(&a, &mut result);
+        }
+        for (i, &val) in result.iter().enumerate() {
+            let expected = a[i].max(0.0);
+            assert!((val - expected).abs() < 1e-6, "relu large mismatch at {}", i);
+        }
+    });
+}
+
+#[test]
+fn test_avx512_tanh_large() {
+    avx512_test(|| {
+        let a: Vec<f32> = (-24..24).map(|i| i as f32 * 0.2).collect();
+        let mut result = vec![0.0; 48];
+        unsafe {
+            Avx512Backend::tanh(&a, &mut result);
+        }
+        for (i, &val) in result.iter().enumerate() {
+            let expected = a[i].tanh();
+            assert!((val - expected).abs() < 1e-3, "tanh large mismatch at {}: {} vs {}", i, val, expected);
+        }
+    });
+}
+
+#[test]
+fn test_avx512_sigmoid_large() {
+    avx512_test(|| {
+        let a: Vec<f32> = (-16..16).map(|i| i as f32 * 0.5).collect();
+        let mut result = vec![0.0; 32];
+        unsafe {
+            Avx512Backend::sigmoid(&a, &mut result);
+        }
+        for (i, &val) in result.iter().enumerate() {
+            assert!(val >= 0.0 && val <= 1.0, "sigmoid out of range at {}: {}", i, val);
+            let expected = 1.0 / (1.0 + (-a[i]).exp());
+            assert!((val - expected).abs() < 1e-4, "sigmoid large mismatch at {}: {} vs {}", i, val, expected);
+        }
+    });
+}
+
+#[test]
+fn test_avx512_gelu_large() {
+    avx512_test(|| {
+        let a: Vec<f32> = (-16..16).map(|i| i as f32 * 0.3).collect();
+        let mut result = vec![0.0; 32];
+        unsafe {
+            Avx512Backend::gelu(&a, &mut result);
+        }
+        // gelu(0) should be 0
+        assert!((result[16]).abs() < 1e-4);
+    });
+}
+
+#[test]
+fn test_avx512_swish_large() {
+    avx512_test(|| {
+        let a: Vec<f32> = (-16..16).map(|i| i as f32 * 0.3).collect();
+        let mut result = vec![0.0; 32];
+        unsafe {
+            Avx512Backend::swish(&a, &mut result);
+        }
+        // swish(0) should be 0
+        assert!((result[16]).abs() < 1e-4);
+    });
+}
+
 #[test]
 fn test_avx512_backend_equivalence() {
     avx512_test(|| {

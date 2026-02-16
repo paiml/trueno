@@ -912,3 +912,78 @@ fn test_swish_non_aligned_sizes() {
         assert_eq!(result.as_slice().len(), size);
     }
 }
+
+// ========== AVX-512 Backend Dispatch for Activations ==========
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_relu_avx512_backend() {
+    if !is_x86_feature_detected!("avx512f") {
+        return;
+    }
+    // 32 elements = 2 full AVX-512 iterations (16 f32s each)
+    let data: Vec<f32> = (-16..16).map(|i| i as f32).collect();
+    let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
+    let result = v.relu().unwrap();
+    for (i, &val) in result.as_slice().iter().enumerate() {
+        let expected = data[i].max(0.0);
+        assert!((val - expected).abs() < 1e-6, "relu AVX512 mismatch at {}: {} vs {}", i, val, expected);
+    }
+}
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_sigmoid_avx512_backend() {
+    if !is_x86_feature_detected!("avx512f") {
+        return;
+    }
+    let data: Vec<f32> = (-16..16).map(|i| i as f32 * 0.5).collect();
+    let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
+    let result = v.sigmoid().unwrap();
+    for &val in result.as_slice() {
+        assert!(val >= 0.0 && val <= 1.0, "sigmoid AVX512 out of range: {}", val);
+    }
+}
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_gelu_avx512_backend() {
+    if !is_x86_feature_detected!("avx512f") {
+        return;
+    }
+    let data: Vec<f32> = (-8..8).map(|i| i as f32 * 0.5).collect();
+    let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
+    let result = v.gelu().unwrap();
+    assert!((result.as_slice()[8] - 0.0).abs() < 1e-5);
+}
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_swish_avx512_backend() {
+    if !is_x86_feature_detected!("avx512f") {
+        return;
+    }
+    let data: Vec<f32> = (-8..8).map(|i| i as f32 * 0.5).collect();
+    let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
+    let result = v.swish().unwrap();
+    assert!((result.as_slice()[8] - 0.0).abs() < 1e-5);
+}
+
+// ========== AVX-512 Non-Aligned Sizes ==========
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_relu_avx512_non_aligned() {
+    if !is_x86_feature_detected!("avx512f") {
+        return;
+    }
+    for size in [17, 19, 23, 31, 33] {
+        let data: Vec<f32> = (0..size).map(|i| (i as f32) - (size as f32 / 2.0)).collect();
+        let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
+        let result = v.relu().unwrap();
+        for (i, &val) in result.as_slice().iter().enumerate() {
+            let expected = data[i].max(0.0);
+            assert!((val - expected).abs() < 1e-6, "relu AVX512 size={} mismatch at {}", size, i);
+        }
+    }
+}

@@ -564,4 +564,135 @@ mod tests {
         // tokens = seq_len * head_dim = 1 * 64 = 64
         assert_eq!(op.tokens(&input), 64);
     }
+
+    // =========================================================================
+    // simd_dot coverage — AVX2 remainder and various non-aligned sizes
+    // =========================================================================
+
+    /// 9 elements: 1 AVX2 chunk (8) + 1 remainder.
+    #[test]
+    fn test_simd_dot_avx2_one_remainder() {
+        let a: Vec<f32> = (1..=9).map(|x| x as f32).collect();
+        let b = vec![1.0f32; 9];
+        let dot = AttentionOp::simd_dot(&a, &b);
+        // sum(1..=9) = 45
+        assert!((dot - 45.0).abs() < 1e-3);
+    }
+
+    /// 10 elements: 1 AVX2 chunk (8) + 2 remainder.
+    #[test]
+    fn test_simd_dot_avx2_two_remainder() {
+        let a: Vec<f32> = (1..=10).map(|x| x as f32).collect();
+        let b = vec![1.0f32; 10];
+        let dot = AttentionOp::simd_dot(&a, &b);
+        // sum(1..=10) = 55
+        assert!((dot - 55.0).abs() < 1e-3);
+    }
+
+    /// 15 elements: 1 AVX2 chunk (8) + 7 remainder.
+    #[test]
+    fn test_simd_dot_avx2_seven_remainder() {
+        let a: Vec<f32> = (1..=15).map(|x| x as f32).collect();
+        let b = vec![1.0f32; 15];
+        let dot = AttentionOp::simd_dot(&a, &b);
+        // sum(1..=15) = 120
+        assert!((dot - 120.0).abs() < 1e-3);
+    }
+
+    /// 24 elements: 3 AVX2 chunks (24) + 0 remainder.
+    #[test]
+    fn test_simd_dot_avx2_exact_three_chunks() {
+        let a: Vec<f32> = (1..=24).map(|x| x as f32).collect();
+        let b = vec![1.0f32; 24];
+        let dot = AttentionOp::simd_dot(&a, &b);
+        // sum(1..=24) = 300
+        assert!((dot - 300.0).abs() < 1e-2);
+    }
+
+    /// 7 elements: 0 AVX2 chunks + 7 scalar, tests scalar path exclusively
+    /// (on AVX2 hardware: 0 SIMD chunks, all remainder).
+    #[test]
+    fn test_simd_dot_below_avx2_width() {
+        let a = vec![2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let b = vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+        let dot = AttentionOp::simd_dot(&a, &b);
+        // sum = 2+3+4+5+6+7+8 = 35
+        assert!((dot - 35.0).abs() < 1e-5);
+    }
+
+    /// 5 elements: 0 AVX2 chunks + 5 scalar remainder.
+    #[test]
+    fn test_simd_dot_five_elements() {
+        let a = vec![1.0, 1.0, 1.0, 1.0, 1.0];
+        let b = vec![2.0, 2.0, 2.0, 2.0, 2.0];
+        let dot = AttentionOp::simd_dot(&a, &b);
+        // 5 * 2 = 10
+        assert!((dot - 10.0).abs() < 1e-5);
+    }
+
+    /// 6 elements: 0 AVX2 chunks + 6 scalar remainder.
+    #[test]
+    fn test_simd_dot_six_elements() {
+        let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let b = vec![1.0; 6];
+        let dot = AttentionOp::simd_dot(&a, &b);
+        // sum(1..=6) = 21
+        assert!((dot - 21.0).abs() < 1e-5);
+    }
+
+    /// Large vector (64 elements) to exercise multiple AVX2 iterations.
+    #[test]
+    fn test_simd_dot_large_64_elements() {
+        let a: Vec<f32> = (1..=64).map(|x| x as f32).collect();
+        let b = vec![1.0f32; 64];
+        let dot = AttentionOp::simd_dot(&a, &b);
+        // sum(1..=64) = 64*65/2 = 2080
+        assert!((dot - 2080.0).abs() < 1e-1);
+    }
+
+    /// Orthogonal vectors should give dot product of 0.
+    #[test]
+    fn test_simd_dot_orthogonal() {
+        let a = vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let dot = AttentionOp::simd_dot(&a, &b);
+        assert!(dot.abs() < 1e-10);
+    }
+
+    /// Full attention execute with head_dim=9 (not AVX2-aligned) exercises
+    /// simd_dot remainder handling through the full attention pipeline.
+    #[test]
+    fn test_attention_execute_non_aligned_head_dim() {
+        let op = AttentionOp::self_attention(2, 9); // head_dim=9: not multiple of 8
+
+        let q = vec![1.0f32; 2 * 9]; // 2x9
+        let k = vec![1.0f32; 2 * 9]; // 2x9
+        let v = vec![1.0f32; 2 * 9]; // 2x9
+
+        let output = op.execute((q, k, v), Backend::Scalar).unwrap();
+        assert_eq!(output.len(), 18);
+
+        // Uniform Q/K → uniform softmax → uniform weighted V → V rows averaged
+        for val in &output {
+            assert!(val.is_finite());
+            // With uniform Q/K, softmax is [0.5, 0.5], output = mean of V rows = 1.0
+            assert!((val - 1.0).abs() < 1e-4);
+        }
+    }
+
+    /// Full attention with head_dim=17 (2 AVX2 chunks + 1 remainder).
+    #[test]
+    fn test_attention_execute_head_dim_17() {
+        let op = AttentionOp::new(1, 3, 17);
+
+        let q: Vec<f32> = (0..17).map(|i| (i as f32) * 0.1).collect();
+        let k: Vec<f32> = (0..3 * 17).map(|i| ((i % 5) as f32) * 0.2).collect();
+        let v: Vec<f32> = (0..3 * 17).map(|i| (i as f32) * 0.01).collect();
+
+        let output = op.execute((q, k, v), Backend::Scalar).unwrap();
+        assert_eq!(output.len(), 17);
+        for val in &output {
+            assert!(val.is_finite());
+        }
+    }
 }

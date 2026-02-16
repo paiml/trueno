@@ -2,4 +2,5 @@
 
 mod basics;
 mod experiments;
+mod gap_coverage;
 mod online_learning;

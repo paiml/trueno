@@ -1,5 +1,5 @@
 use super::*;
-use crate::{TruenoError, Vector};
+use crate::Vector;
 
 // =========================================================================
 // Additional coverage tests for untested paths

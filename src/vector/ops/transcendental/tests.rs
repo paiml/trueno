@@ -391,3 +391,122 @@ fn test_tanh_atanh_inverse() {
         assert!((orig - rt).abs() < 1e-4);
     }
 }
+
+// ========== Backend Dispatch Coverage for tanh ==========
+
+#[test]
+fn test_tanh_scalar_backend() {
+    let v = Vector::from_slice_with_backend(&[0.0, 1.0, -1.0], Backend::Scalar);
+    let result = v.tanh().unwrap();
+    assert!((result.as_slice()[0] - 0.0).abs() < 1e-6);
+    assert!((result.as_slice()[1] - 0.7616).abs() < 1e-3);
+}
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_tanh_sse2_backend() {
+    let v = Vector::from_slice_with_backend(&[0.0, 1.0, -1.0, 2.0], Backend::SSE2);
+    let result = v.tanh().unwrap();
+    assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+    assert!((result.as_slice()[1] - 0.7616).abs() < 1e-3);
+}
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_tanh_avx2_backend() {
+    if !is_x86_feature_detected!("avx2") {
+        return;
+    }
+    let data: Vec<f32> = (-16..16).map(|i| i as f32 * 0.25).collect();
+    let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
+    let result = v.tanh().unwrap();
+    for &val in result.as_slice() {
+        assert!(val >= -1.0 && val <= 1.0, "tanh AVX2 out of range: {}", val);
+    }
+}
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_tanh_avx512_backend() {
+    if !is_x86_feature_detected!("avx512f") {
+        return;
+    }
+    // Use 32+ elements to exercise the main SIMD loop (16 elements per iteration)
+    let data: Vec<f32> = (-20..20).map(|i| i as f32 * 0.25).collect();
+    let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
+    let result = v.tanh().unwrap();
+    for (i, &val) in result.as_slice().iter().enumerate() {
+        assert!(val >= -1.0 && val <= 1.0, "tanh AVX512 out of range at {}: {}", i, val);
+        let expected = data[i].tanh();
+        assert!((val - expected).abs() < 1e-3, "tanh AVX512 mismatch at {}: {} vs {}", i, val, expected);
+    }
+}
+
+#[test]
+fn test_tanh_neon_backend_fallback() {
+    let v = Vector::from_slice_with_backend(&[0.0, 1.0, -1.0], Backend::NEON);
+    let result = v.tanh().unwrap();
+    assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+}
+
+#[test]
+fn test_tanh_wasm_backend_fallback() {
+    let v = Vector::from_slice_with_backend(&[0.0, 1.0], Backend::WasmSIMD);
+    let result = v.tanh().unwrap();
+    assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+}
+
+#[test]
+fn test_tanh_gpu_backend_fallback() {
+    let v = Vector::from_slice_with_backend(&[0.0, 1.0], Backend::GPU);
+    let result = v.tanh().unwrap();
+    assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+}
+
+#[test]
+fn test_tanh_auto_backend_fallback() {
+    let v = Vector::from_slice_with_backend(&[0.0, 1.0], Backend::Auto);
+    let result = v.tanh().unwrap();
+    assert!((result.as_slice()[0] - 0.0).abs() < 1e-5);
+}
+
+// ========== Exp backend dispatch coverage ==========
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_exp_avx512_backend() {
+    if !is_x86_feature_detected!("avx512f") {
+        return;
+    }
+    // 32 elements = 2 full AVX-512 iterations (16 f32s each)
+    let data: Vec<f32> = (0..32).map(|i| i as f32 * 0.1).collect();
+    let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
+    let result = v.exp().unwrap();
+    for (i, &val) in result.as_slice().iter().enumerate() {
+        let expected = data[i].exp();
+        // AVX-512 exp uses polynomial approximation — allow 5% relative error
+        assert!((val - expected).abs() / expected.max(1e-6) < 0.05,
+            "exp AVX512 mismatch at {}: {} vs {}", i, val, expected);
+    }
+}
+
+// ========== Non-aligned AVX-512 remainder handling ==========
+
+#[test]
+#[cfg(target_arch = "x86_64")]
+fn test_tanh_avx512_non_aligned() {
+    if !is_x86_feature_detected!("avx512f") {
+        return;
+    }
+    // 19 elements: 16 in SIMD loop + 3 remainder
+    for size in [17, 19, 23, 31, 33] {
+        let data: Vec<f32> = (0..size).map(|i| (i as f32 - size as f32 / 2.0) * 0.2).collect();
+        let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
+        let result = v.tanh().unwrap();
+        for (i, &val) in result.as_slice().iter().enumerate() {
+            let expected = data[i].tanh();
+            assert!((val - expected).abs() < 1e-3,
+                "tanh AVX512 non-aligned size={} mismatch at {}: {} vs {}", size, i, val, expected);
+        }
+    }
+}
