@@ -48,7 +48,7 @@ fn main() {
 }
 
 fn print_usage() {
-    println!(r#"trueno-ptx-debug - Pure Rust PTX debugging and static analysis tool
+    println!(r"trueno-ptx-debug - Pure Rust PTX debugging and static analysis tool
 
 USAGE:
     trueno-ptx-debug <COMMAND> [OPTIONS]
@@ -78,7 +78,7 @@ EXAMPLES:
     trueno-ptx-debug analyze kernel.ptx --falsify
     trueno-ptx-debug analyze kernel.ptx --min-score 90 --html report.html
     trueno-ptx-debug gen-fkr kernel.ptx -o tests/kernel_fkr.rs
-"#);
+");
 }
 
 /// Parsed arguments for the `analyze` subcommand.
@@ -89,6 +89,45 @@ struct AnalyzeArgs {
     min_score: f64,
     html_output: Option<String>,
     json_output: bool,
+}
+
+/// Consume the next positional argument from `args[i+1]`, returning an error
+/// if the slice is exhausted.  Returns the new index and the consumed value.
+fn consume_valued_option(args: &[String], i: usize, flag: &str) -> Result<(usize, String), String> {
+    let next = i + 1;
+    if next >= args.len() {
+        return Err(format!("{} requires a value", flag));
+    }
+    Ok((next, args[next].clone()))
+}
+
+/// Apply a single CLI token to the in-progress `AnalyzeArgs` builder.
+/// Returns the (possibly advanced) index after consuming the token.
+fn apply_analyze_flag(
+    args: &[String],
+    i: usize,
+    run_falsify: &mut bool,
+    min_score: &mut f64,
+    html_output: &mut Option<String>,
+    json_output: &mut bool,
+    file_path: &mut Option<String>,
+) -> Result<usize, String> {
+    match args[i].as_str() {
+        "--falsify" => { *run_falsify = true; Ok(i) }
+        "--json"    => { *json_output = true; Ok(i) }
+        "--min-score" => {
+            let (next, val) = consume_valued_option(args, i, "--min-score")?;
+            *min_score = val.parse().map_err(|_| "Invalid min-score value".to_string())?;
+            Ok(next)
+        }
+        "--html" => {
+            let (next, val) = consume_valued_option(args, i, "--html")?;
+            *html_output = Some(val);
+            Ok(next)
+        }
+        arg if !arg.starts_with('-') => { *file_path = Some(arg.to_string()); Ok(i) }
+        arg => Err(format!("Unknown option: {}", arg)),
+    }
 }
 
 /// Parse the CLI arguments for the `analyze` subcommand.
@@ -105,26 +144,12 @@ fn parse_analyze_args(args: &[String]) -> Result<AnalyzeArgs, String> {
 
     let mut i = 0;
     while i < args.len() {
-        match args[i].as_str() {
-            "--falsify" => run_falsify = true,
-            "--min-score" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err("--min-score requires a value".into());
-                }
-                min_score = args[i].parse().map_err(|_| "Invalid min-score value")?;
-            }
-            "--html" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err("--html requires a file path".into());
-                }
-                html_output = Some(args[i].clone());
-            }
-            "--json" => json_output = true,
-            arg if !arg.starts_with('-') => file_path = Some(arg.to_string()),
-            arg => return Err(format!("Unknown option: {}", arg)),
-        }
+        i = apply_analyze_flag(
+            args, i,
+            &mut run_falsify, &mut min_score,
+            &mut html_output, &mut json_output,
+            &mut file_path,
+        )?;
         i += 1;
     }
 
@@ -182,33 +207,13 @@ fn exit_for_score(report: &trueno_ptx_debug::falsification::FalsificationReport,
 
 fn cmd_analyze(args: &[String]) -> Result<(), String> {
     let opts = parse_analyze_args(args)?;
-
-    // Read and parse PTX file
-    let ptx_source = fs::read_to_string(&opts.file_path)
-        .map_err(|e| format!("Failed to read {}: {}", opts.file_path, e))?;
-    let mut parser = Parser::new(&ptx_source)
-        .map_err(|e| format!("Parse error: {}", e))?;
-    let module = parser.parse()
-        .map_err(|e| format!("Parse error: {}", e))?;
-
-    // Extract module name from file path
-    let module_name = std::path::Path::new(&opts.file_path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("unknown")
-        .to_string();
-
-    // Run analysis
-    let registry = FalsificationRegistry::new();
-    let report = registry.evaluate(&module);
-    let bugs = BugRegistry::new();
-    let result = AnalysisResult::new(&module_name, report.clone(), bugs);
+    let result = analyze_ptx_file(&opts.file_path)?;
 
     // Output results
     if opts.json_output {
-        print_json_report(&result, &report);
+        print_json_report(&result, &result.falsification_report);
     } else {
-        print_text_report(&result, &report);
+        print_text_report(&result, &result.falsification_report);
     }
 
     // Write HTML report if requested
@@ -219,12 +224,38 @@ fn cmd_analyze(args: &[String]) -> Result<(), String> {
         println!("\nHTML report written to: {}", html_path);
     }
 
-    exit_for_score(&report, result.falsification_score, opts.min_score);
+    exit_for_score(&result.falsification_report, result.falsification_score, opts.min_score);
 
     Ok(())
 }
 
-fn cmd_gen_fkr(args: &[String]) -> Result<(), String> {
+/// Parsed arguments for the `gen-fkr` subcommand.
+struct GenFkrArgs {
+    file_path: String,
+    output_file: Option<String>,
+}
+
+/// Apply a single CLI token to the in-progress `GenFkrArgs` builder.
+/// Returns the (possibly advanced) index after consuming the token.
+fn apply_gen_fkr_flag(
+    args: &[String],
+    i: usize,
+    output_file: &mut Option<String>,
+    file_path: &mut Option<String>,
+) -> Result<usize, String> {
+    match args[i].as_str() {
+        "-o" => {
+            let (next, val) = consume_valued_option(args, i, "-o")?;
+            *output_file = Some(val);
+            Ok(next)
+        }
+        arg if !arg.starts_with('-') => { *file_path = Some(arg.to_string()); Ok(i) }
+        arg => Err(format!("Unknown option: {}", arg)),
+    }
+}
+
+/// Parse the CLI arguments for the `gen-fkr` subcommand.
+fn parse_gen_fkr_args(args: &[String]) -> Result<GenFkrArgs, String> {
     if args.is_empty() {
         return Err("Missing PTX file argument".into());
     }
@@ -234,56 +265,54 @@ fn cmd_gen_fkr(args: &[String]) -> Result<(), String> {
 
     let mut i = 0;
     while i < args.len() {
-        match args[i].as_str() {
-            "-o" => {
-                i += 1;
-                if i >= args.len() {
-                    return Err("-o requires a file path".into());
-                }
-                output_file = Some(args[i].clone());
-            }
-            arg if !arg.starts_with('-') => file_path = Some(arg.to_string()),
-            arg => return Err(format!("Unknown option: {}", arg)),
-        }
+        i = apply_gen_fkr_flag(args, i, &mut output_file, &mut file_path)?;
         i += 1;
     }
 
-    let file_path = file_path.ok_or("Missing PTX file argument")?;
+    Ok(GenFkrArgs {
+        file_path: file_path.ok_or("Missing PTX file argument")?,
+        output_file,
+    })
+}
 
-    // Read PTX file
-    let ptx_source = fs::read_to_string(&file_path)
+/// Read a PTX file, parse it, run analysis, and return the result.
+fn analyze_ptx_file(file_path: &str) -> Result<AnalysisResult, String> {
+    let ptx_source = fs::read_to_string(file_path)
         .map_err(|e| format!("Failed to read {}: {}", file_path, e))?;
 
-    // Parse PTX
     let mut parser = Parser::new(&ptx_source)
         .map_err(|e| format!("Parse error: {}", e))?;
     let module = parser.parse()
         .map_err(|e| format!("Parse error: {}", e))?;
 
-    // Extract module name
-    let module_name = std::path::Path::new(&file_path)
+    let module_name = std::path::Path::new(file_path)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
         .to_string();
 
-    // Run analysis
     let registry = FalsificationRegistry::new();
     let report = registry.evaluate(&module);
     let bugs = BugRegistry::new();
-    let result = AnalysisResult::new(&module_name, report, bugs);
+    Ok(AnalysisResult::new(&module_name, report, bugs))
+}
 
-    // Generate FKR tests
-    let fkr_tests = generate_fkr_tests(&result);
-
-    // Output
-    if let Some(output_path) = output_file {
-        fs::write(&output_path, &fkr_tests)
-            .map_err(|e| format!("Failed to write {}: {}", output_path, e))?;
-        println!("FKR tests written to: {}", output_path);
-    } else {
-        println!("{}", fkr_tests);
+/// Write generated content to a file, or print to stdout if no path is given.
+fn write_or_print(content: &str, output_path: Option<String>, label: &str) -> Result<(), String> {
+    match output_path {
+        Some(path) => {
+            fs::write(&path, content)
+                .map_err(|e| format!("Failed to write {}: {}", path, e))?;
+            println!("{} written to: {}", label, path);
+        }
+        None => println!("{}", content),
     }
-
     Ok(())
+}
+
+fn cmd_gen_fkr(args: &[String]) -> Result<(), String> {
+    let opts = parse_gen_fkr_args(args)?;
+    let result = analyze_ptx_file(&opts.file_path)?;
+    let fkr_tests = generate_fkr_tests(&result);
+    write_or_print(&fkr_tests, opts.output_file, "FKR tests")
 }

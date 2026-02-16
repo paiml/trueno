@@ -199,7 +199,8 @@ def compare_benchmarks(
     return passed, report
 
 
-def main():
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build and return the argument parser for the regression checker."""
     parser = argparse.ArgumentParser(
         description='Check benchmark performance regressions'
     )
@@ -224,41 +225,45 @@ def main():
         default=0.02,
         help='Warning threshold (default: 0.02 = 2%%)'
     )
+    return parser
 
+
+def read_file_or_exit(file_path: str, label: str) -> str:
+    """Read a file and return its contents, or exit with an error message."""
+    try:
+        with open(file_path, 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"Error: {label} file not found: {file_path}", file=sys.stderr)
+        sys.exit(1)
+
+
+def read_current_input(current_path: Optional[str]) -> str:
+    """Read current benchmark data from a file or stdin."""
+    if current_path:
+        return read_file_or_exit(current_path, "Current")
+    return sys.stdin.read()
+
+
+def parse_and_validate(text: str, label: str) -> Dict[str, float]:
+    """Parse criterion output and exit if no benchmarks are found."""
+    results = parse_criterion_output(text)
+    if not results:
+        print(f"Error: No benchmarks found in {label}", file=sys.stderr)
+        sys.exit(1)
+    return results
+
+
+def main():
+    parser = build_arg_parser()
     args = parser.parse_args()
 
-    # Read baseline
-    try:
-        with open(args.baseline, 'r') as f:
-            baseline_text = f.read()
-    except FileNotFoundError:
-        print(f"Error: Baseline file not found: {args.baseline}", file=sys.stderr)
-        sys.exit(1)
+    baseline_text = read_file_or_exit(args.baseline, "Baseline")
+    current_text = read_current_input(args.current)
 
-    # Read current
-    if args.current:
-        try:
-            with open(args.current, 'r') as f:
-                current_text = f.read()
-        except FileNotFoundError:
-            print(f"Error: Current file not found: {args.current}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        current_text = sys.stdin.read()
+    baseline = parse_and_validate(baseline_text, "baseline")
+    current = parse_and_validate(current_text, "current")
 
-    # Parse both
-    baseline = parse_criterion_output(baseline_text)
-    current = parse_criterion_output(current_text)
-
-    if not baseline:
-        print("Error: No benchmarks found in baseline", file=sys.stderr)
-        sys.exit(1)
-
-    if not current:
-        print("Error: No benchmarks found in current", file=sys.stderr)
-        sys.exit(1)
-
-    # Compare
     passed, report = compare_benchmarks(
         baseline,
         current,
@@ -267,7 +272,6 @@ def main():
     )
 
     print(report)
-
     sys.exit(0 if passed else 1)
 
 

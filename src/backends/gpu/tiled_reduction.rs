@@ -113,6 +113,70 @@ pub fn tiled_reduce_2d<Op: ReduceOp>(data: &[f32], width: usize, height: usize) 
         .fold(Op::identity(), Op::combine)
 }
 
+/// Load data into a tile with bounds checking.
+///
+/// Mirrors the GPU shared memory load pattern: each thread loads one element,
+/// out-of-bounds threads keep the identity value.
+fn load_tile<Op: ReduceOp>(
+    tile: &mut [[f32; TILE_SIZE]; TILE_SIZE],
+    data: &[f32],
+    width: usize,
+    height: usize,
+    start_x: usize,
+    start_y: usize,
+) {
+    // Index-based loops are intentional — we need indices for global position
+    // calculation, early exit on bounds, and dual-array access.
+    #[allow(clippy::needless_range_loop)]
+    for ly in 0..TILE_SIZE {
+        let gy = start_y + ly;
+        if gy >= height {
+            break;
+        }
+        #[allow(clippy::needless_range_loop)]
+        for lx in 0..TILE_SIZE {
+            let gx = start_x + lx;
+            if gx >= width {
+                break;
+            }
+            tile[ly][lx] = data[gy * width + gx];
+        }
+    }
+}
+
+/// Row reduction (horizontal): 16 -> 8 -> 4 -> 2 -> 1 per row.
+///
+/// Index-based loops mirror GPU shader structure for validation.
+fn reduce_rows<Op: ReduceOp>(tile: &mut [[f32; TILE_SIZE]; TILE_SIZE]) {
+    #[allow(clippy::needless_range_loop)]
+    for ly in 0..TILE_SIZE {
+        for lx in 0..8 {
+            tile[ly][lx] = Op::combine(tile[ly][lx], tile[ly][lx + 8]);
+        }
+        for lx in 0..4 {
+            tile[ly][lx] = Op::combine(tile[ly][lx], tile[ly][lx + 4]);
+        }
+        for lx in 0..2 {
+            tile[ly][lx] = Op::combine(tile[ly][lx], tile[ly][lx + 2]);
+        }
+        tile[ly][0] = Op::combine(tile[ly][0], tile[ly][1]);
+    }
+}
+
+/// Column reduction (vertical): 16 -> 8 -> 4 -> 2 -> 1 on column 0.
+fn reduce_columns<Op: ReduceOp>(tile: &mut [[f32; TILE_SIZE]; TILE_SIZE]) {
+    for ly in 0..8 {
+        tile[ly][0] = Op::combine(tile[ly][0], tile[ly + 8][0]);
+    }
+    for ly in 0..4 {
+        tile[ly][0] = Op::combine(tile[ly][0], tile[ly + 4][0]);
+    }
+    for ly in 0..2 {
+        tile[ly][0] = Op::combine(tile[ly][0], tile[ly + 2][0]);
+    }
+    tile[0][0] = Op::combine(tile[0][0], tile[1][0]);
+}
+
 /// Reduce a single 16×16 tile using tree reduction pattern
 ///
 /// This mirrors the GPU shared memory reduction:
@@ -126,70 +190,10 @@ fn reduce_tile<Op: ReduceOp>(
     tile_x: usize,
     tile_y: usize,
 ) -> f32 {
-    // Simulated shared memory tile (16×16)
     let mut tile = [[Op::identity(); TILE_SIZE]; TILE_SIZE];
-
-    // Load data into tile (bounds-checked)
-    let start_y = tile_y * TILE_SIZE;
-    let start_x = tile_x * TILE_SIZE;
-
-    // Index-based loops are intentional here - we need indices for:
-    // - Calculating global positions (gy, gx)
-    // - Early exit on bounds check
-    // - Accessing both data array and tile array
-    #[allow(clippy::needless_range_loop)]
-    for ly in 0..TILE_SIZE {
-        let gy = start_y + ly;
-        if gy >= height {
-            break;
-        }
-        #[allow(clippy::needless_range_loop)]
-        for lx in 0..TILE_SIZE {
-            let gx = start_x + lx;
-            if gx >= width {
-                break;
-            }
-            let idx = gy * width + gx;
-            tile[ly][lx] = data[idx];
-        }
-    }
-
-    // Row reduction (horizontal): 16 -> 8 -> 4 -> 2 -> 1
-    // Index-based loops mirror GPU shader structure for validation
-    #[allow(clippy::needless_range_loop)]
-    for ly in 0..TILE_SIZE {
-        // Step 1: 16 -> 8
-        for lx in 0..8 {
-            tile[ly][lx] = Op::combine(tile[ly][lx], tile[ly][lx + 8]);
-        }
-        // Step 2: 8 -> 4
-        for lx in 0..4 {
-            tile[ly][lx] = Op::combine(tile[ly][lx], tile[ly][lx + 4]);
-        }
-        // Step 3: 4 -> 2
-        for lx in 0..2 {
-            tile[ly][lx] = Op::combine(tile[ly][lx], tile[ly][lx + 2]);
-        }
-        // Step 4: 2 -> 1
-        tile[ly][0] = Op::combine(tile[ly][0], tile[ly][1]);
-    }
-
-    // Column reduction (vertical): 16 -> 8 -> 4 -> 2 -> 1
-    // Step 1: 16 -> 8
-    for ly in 0..8 {
-        tile[ly][0] = Op::combine(tile[ly][0], tile[ly + 8][0]);
-    }
-    // Step 2: 8 -> 4
-    for ly in 0..4 {
-        tile[ly][0] = Op::combine(tile[ly][0], tile[ly + 4][0]);
-    }
-    // Step 3: 4 -> 2
-    for ly in 0..2 {
-        tile[ly][0] = Op::combine(tile[ly][0], tile[ly + 2][0]);
-    }
-    // Step 4: 2 -> 1
-    tile[0][0] = Op::combine(tile[0][0], tile[1][0]);
-
+    load_tile::<Op>(&mut tile, data, width, height, tile_x * TILE_SIZE, tile_y * TILE_SIZE);
+    reduce_rows::<Op>(&mut tile);
+    reduce_columns::<Op>(&mut tile);
     tile[0][0]
 }
 

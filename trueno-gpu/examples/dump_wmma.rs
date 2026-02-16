@@ -1,16 +1,10 @@
 use trueno_gpu::kernels::{GemmKernel, Kernel};
 
-fn main() {
-    let kernel = GemmKernel::wmma_fp16(64, 64, 64);
-    let ptx = kernel.emit_ptx();
+fn is_wmma_related(line: &str) -> bool {
+    line.contains("cvta") || line.contains("wmma.load") || line.contains("shared_base")
+}
 
-    // Print lines with cvta to verify the fix
-    for (i, line) in ptx.lines().enumerate() {
-        if line.contains("cvta") || line.contains("wmma.load") || line.contains("shared_base") {
-            println!("{:4}: {}", i + 1, line);
-        }
-    }
-
+fn print_wmma_section(ptx: &str) {
     println!("\n=== Full WMMA section ===");
     let mut in_wmma = false;
     for line in ptx.lines() {
@@ -24,4 +18,17 @@ fn main() {
             }
         }
     }
+}
+
+fn main() {
+    let kernel = GemmKernel::wmma_fp16(64, 64, 64);
+    let ptx = kernel.emit_ptx();
+
+    for (i, line) in ptx.lines().enumerate() {
+        if is_wmma_related(line) {
+            println!("{:4}: {}", i + 1, line);
+        }
+    }
+
+    print_wmma_section(&ptx);
 }

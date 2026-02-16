@@ -31,6 +31,44 @@ fn attention_kernel_ptx(causal: bool) -> String {
         .emit()
 }
 
+/// Compute attention scores for a single query row.
+fn compute_row_scores(
+    q: &[f32],
+    k: &[f32],
+    row: usize,
+    seq_len: usize,
+    head_dim: usize,
+    scale: f32,
+    causal: bool,
+) -> Vec<f32> {
+    let mut scores = vec![0.0f32; seq_len];
+    for j in 0..seq_len {
+        scores[j] = if causal && j > row {
+            f32::NEG_INFINITY
+        } else {
+            let mut dot = 0.0f32;
+            for d in 0..head_dim {
+                dot += q[row * head_dim + d] * k[j * head_dim + d];
+            }
+            dot * scale
+        };
+    }
+    scores
+}
+
+/// Apply softmax normalization in-place.
+fn softmax_inplace(scores: &mut [f32]) {
+    let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let mut sum_exp = 0.0f32;
+    for s in scores.iter_mut() {
+        *s = (*s - max_score).exp();
+        sum_exp += *s;
+    }
+    for s in scores.iter_mut() {
+        *s /= sum_exp;
+    }
+}
+
 /// CPU reference implementation for verification
 fn cpu_attention(
     q: &[f32],
@@ -44,35 +82,9 @@ fn cpu_attention(
     let mut output = vec![0.0f32; seq_len * head_dim];
 
     for i in 0..seq_len {
-        // Compute attention scores for row i
-        let mut scores = vec![0.0f32; seq_len];
-        let mut max_score = f32::NEG_INFINITY;
+        let mut scores = compute_row_scores(q, k, i, seq_len, head_dim, scale, causal);
+        softmax_inplace(&mut scores);
 
-        for j in 0..seq_len {
-            if causal && j > i {
-                scores[j] = f32::NEG_INFINITY;
-            } else {
-                // Dot product Q[i] . K[j]
-                let mut dot = 0.0f32;
-                for d in 0..head_dim {
-                    dot += q[i * head_dim + d] * k[j * head_dim + d];
-                }
-                scores[j] = dot * scale;
-            }
-            max_score = max_score.max(scores[j]);
-        }
-
-        // Softmax
-        let mut sum_exp = 0.0f32;
-        for j in 0..seq_len {
-            scores[j] = (scores[j] - max_score).exp();
-            sum_exp += scores[j];
-        }
-        for j in 0..seq_len {
-            scores[j] /= sum_exp;
-        }
-
-        // Weighted sum of V
         for d in 0..head_dim {
             let mut val = 0.0f32;
             for j in 0..seq_len {

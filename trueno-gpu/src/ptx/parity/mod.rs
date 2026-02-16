@@ -84,21 +84,17 @@ fn count_params(ptx: &str) -> usize {
 /// Extract shared memory declaration size from PTX
 /// Looks for `.shared .align N .b8 smem[SIZE];`
 fn extract_shared_memory_bytes(ptx: &str) -> Option<u32> {
-    for line in ptx.lines() {
-        let trimmed = line.trim();
-        if trimmed.contains(".shared") && trimmed.contains("smem[") {
-            // Parse smem[SIZE]
-            if let Some(start) = trimmed.find("smem[") {
-                let after = &trimmed[start + 5..];
-                if let Some(end) = after.find(']') {
-                    if let Ok(size) = after[..end].parse::<u32>() {
-                        return Some(size);
-                    }
-                }
-            }
-        }
-    }
-    None
+    ptx.lines()
+        .map(str::trim)
+        .filter(|line| line.contains(".shared") && line.contains("smem["))
+        .find_map(|line| parse_smem_size(line))
+}
+
+/// Parse the size from a `smem[SIZE]` declaration.
+fn parse_smem_size(line: &str) -> Option<u32> {
+    let after = &line[line.find("smem[")? + 5..];
+    let end = after.find(']')?;
+    after[..end].parse().ok()
 }
 
 /// Extract loop labels from PTX (e.g., sum_loop, norm_loop, etc.)

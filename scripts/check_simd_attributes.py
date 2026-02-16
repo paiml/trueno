@@ -61,23 +61,38 @@ def _intrin(lines: list[str], start: int, pat: re.Pattern) -> set[str]:
     return res
 
 
+def _feat_mismatch(ins: set[str], ft: str | None) -> str | None:
+    """Return feature-mismatch message, or None if features are correct."""
+    if not ft:
+        return "no target_feature"
+    if any(i.startswith("_mm512_") for i in ins) and "avx512" not in ft:
+        return "need avx512f"
+    if any(i.startswith("_mm256_") for i in ins) and ft == "sse2":
+        return "need avx2"
+    if ins & _FMA and "fma" not in ft:
+        return "need fma"
+    return None
+
+
+def _annotation_warnings(lines: list[str], ln: int, path: str, nm: str) -> list[Issue]:
+    """Check for missing SAFETY comment and inline attribute."""
+    warns = []
+    if not _above(lines, ln, _SAFE, 10):
+        warns.append(Issue(False, path, ln + 1, nm, "no SAFETY"))
+    if not _above(lines, ln, _INL):
+        warns.append(Issue(False, path, ln + 1, nm, "no inline"))
+    return warns
+
+
 def _chk(lines: list[str], ln: int, nm: str, be: Backend, pat: re.Pattern) -> list[Issue]:
     ins = _intrin(lines, ln, pat)
     if not ins:
         return []
-    iss, ft = [], _feat(lines, ln)
-    if not ft:
-        iss.append(Issue(True, be.path, ln + 1, nm, "no target_feature"))
-    elif any(i.startswith("_mm512_") for i in ins) and "avx512" not in ft:
-        iss.append(Issue(True, be.path, ln + 1, nm, "need avx512f"))
-    elif any(i.startswith("_mm256_") for i in ins) and ft == "sse2":
-        iss.append(Issue(True, be.path, ln + 1, nm, "need avx2"))
-    elif ins & _FMA and "fma" not in ft:
-        iss.append(Issue(True, be.path, ln + 1, nm, "need fma"))
-    if not _above(lines, ln, _SAFE, 10):
-        iss.append(Issue(False, be.path, ln + 1, nm, "no SAFETY"))
-    if not _above(lines, ln, _INL):
-        iss.append(Issue(False, be.path, ln + 1, nm, "no inline"))
+    iss = []
+    mismatch = _feat_mismatch(ins, _feat(lines, ln))
+    if mismatch:
+        iss.append(Issue(True, be.path, ln + 1, nm, mismatch))
+    iss.extend(_annotation_warnings(lines, ln, be.path, nm))
     return iss
 
 
@@ -92,18 +107,23 @@ def _file(be: Backend) -> list[Issue]:
     return iss
 
 
+def _print_section(label: str, items: list[Issue], limit: int = 0) -> None:
+    """Print a labeled section of issues, optionally capping displayed count."""
+    if not items:
+        return
+    print(f"\n{label} ({len(items)}):")
+    shown = items[:limit] if limit else items
+    for i in shown:
+        print(f"  {i.path}:{i.line} {i.fn}() - {i.msg}")
+    remaining = len(items) - len(shown)
+    if remaining > 0:
+        print(f"  +{remaining} more")
+
+
 def _out(iss: list[Issue]) -> int:
     c, w = [i for i in iss if i.crit], [i for i in iss if not i.crit]
-    if c:
-        print(f"\nCRITICAL ({len(c)}):")
-        for i in c:
-            print(f"  {i.path}:{i.line} {i.fn}() - {i.msg}")
-    if w:
-        print(f"\nWARN ({len(w)}):")
-        for i in w[:5]:
-            print(f"  {i.path}:{i.line} {i.fn}() - {i.msg}")
-        if len(w) > 5:
-            print(f"  +{len(w) - 5} more")
+    _print_section("CRITICAL", c)
+    _print_section("WARN", w, limit=5)
     print(f"\n{len(c)} critical, {len(w)} warn")
     return 1 if c else 0
 
