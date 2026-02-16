@@ -10,7 +10,7 @@ fn ramp_f32(size: usize, scale: f32, offset: f32) -> Vec<f32> {
 
 /// Upload f32 data to GPU, panicking on failure.
 fn upload(ctx: &CudaContext, data: &[f32]) -> GpuResidentTensor<f32> {
-    GpuResidentTensor::from_host(ctx, data).unwrap()
+    GpuResidentTensor::from_host(ctx, data).expect("GPU upload failed in test")
 }
 
 /// Standard test preamble: clear kernel cache and create CUDA context.

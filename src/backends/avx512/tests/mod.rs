@@ -111,36 +111,4 @@ fn assert_reduction_usize(expected: usize, op: unsafe fn(&[f32]) -> usize) {
     assert_eq!(result, expected);
 }
 
-/// Helper: test a scalar norm reduction (small input, known expected).
-fn assert_norm_reduction(input: &[f32], expected: f32, tol: f32, op: unsafe fn(&[f32]) -> f32) {
-    let result = unsafe { op(input) };
-    assert!((result - expected).abs() < tol, "expected {expected}, got {result}");
-}
-
-/// Helper: test a large activation function where f(0) == 0 at the midpoint.
-fn assert_activation_zero_at_origin(op: unsafe fn(&[f32], &mut [f32]), label: &str) {
-    let a: Vec<f32> = (-16..16).map(|i| i as f32 * 0.3).collect();
-    let mut result = vec![0.0; 32];
-    // SAFETY: test-only; result matches input length
-    unsafe { op(&a, &mut result) };
-    assert!((result[16]).abs() < 1e-4, "{label}(0) should be 0, got {}", result[16]);
-}
-
-/// Helper: test that AVX-512 and scalar backends produce equivalent binary op results.
-fn assert_backend_equiv(
-    a: &[f32], b: &[f32],
-    avx_op: unsafe fn(&[f32], &[f32], &mut [f32]),
-    scalar_op: unsafe fn(&[f32], &[f32], &mut [f32]),
-    label: &str,
-) {
-    let mut avx_result = vec![0.0; a.len()];
-    let mut scalar_result = vec![0.0; a.len()];
-    unsafe {
-        avx_op(a, b, &mut avx_result);
-        scalar_op(a, b, &mut scalar_result);
-    }
-    for i in 0..a.len() {
-        assert!((avx_result[i] - scalar_result[i]).abs() < 1e-5, "{label} mismatch at {i}");
-    }
-}
 
