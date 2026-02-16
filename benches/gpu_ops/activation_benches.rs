@@ -19,115 +19,92 @@ fn make_positive_data(size: usize) -> Vec<f32> {
     (0..size).map(|i| (i as f32) * 0.5).collect()
 }
 
-/// Macro to generate a GPU-vs-Scalar activation benchmark.
-///
-/// Eliminates the repeated DataTransformation boilerplate: GPU availability
-/// guard, benchmark group creation, size iteration, data generation,
-/// GPU bench arm, scalar bench arm, and group finish.
-macro_rules! bench_activation {
-    (
-        $(#[$meta:meta])*
-        fn $fn_name:ident, group = $group:expr,
-        data = $data_fn:ident,
-        gpu  = |$gpu:ident, $gdata:ident| $gpu_expr:expr,
-        scalar = |$sdata:ident| $scalar_expr:expr $(,)?
-    ) => {
-        $(#[$meta])*
-        pub fn $fn_name(c: &mut Criterion) {
-            if !GpuBackend::is_available() {
-                eprintln!("GPU not available, skipping GPU benchmarks");
-                return;
-            }
+/// Run a GPU-vs-Scalar activation benchmark over standard sizes.
+fn run_bench(
+    c: &mut Criterion,
+    name: &str,
+    data_fn: fn(usize) -> Vec<f32>,
+    gpu_op: &dyn Fn(&mut GpuBackend, &[f32]) -> Vec<f32>,
+    scalar_op: &dyn Fn(&[f32]) -> Vec<f32>,
+) {
+    if !GpuBackend::is_available() {
+        eprintln!("GPU not available, skipping GPU benchmarks");
+        return;
+    }
 
-            let mut group = c.benchmark_group($group);
+    let mut group = c.benchmark_group(name);
 
-            for size in BENCH_SIZES.iter() {
-                group.throughput(Throughput::Elements(*size as u64));
+    for &size in BENCH_SIZES.iter() {
+        group.throughput(Throughput::Elements(size as u64));
 
-                group.bench_with_input(
-                    BenchmarkId::new("GPU", size),
-                    size,
-                    |bencher, &size| {
-                        let $gdata = $data_fn(size);
-                        let mut $gpu = GpuBackend::new();
+        group.bench_with_input(BenchmarkId::new("GPU", size), &size, |bencher, &size| {
+            let data = data_fn(size);
+            let mut gpu = GpuBackend::new();
+            bencher.iter(|| black_box(gpu_op(&mut gpu, &data)));
+        });
 
-                        bencher.iter(|| {
-                            black_box($gpu_expr);
-                        });
-                    },
-                );
+        group.bench_with_input(
+            BenchmarkId::new("Scalar", size),
+            &size,
+            |bencher, &size| {
+                let data = data_fn(size);
+                bencher.iter(|| black_box(scalar_op(&data)));
+            },
+        );
+    }
 
-                group.bench_with_input(
-                    BenchmarkId::new("Scalar", size),
-                    size,
-                    |bencher, &size| {
-                        let $sdata = $data_fn(size);
-
-                        bencher.iter(|| {
-                            black_box($scalar_expr);
-                        });
-                    },
-                );
-            }
-
-            group.finish();
-        }
-    };
+    group.finish();
 }
 
-bench_activation! {
-    /// Benchmark GPU ReLU activation vs scalar baseline
-    ///
-    /// Tests GPU acceleration for element-wise operations.
-    /// GPU threshold: >100K elements (OpComplexity::Low)
-    fn bench_gpu_relu, group = "gpu_relu",
-    data = make_centered_data,
-    gpu    = |gpu, data| gpu.relu(&data).unwrap(),
-    scalar = |data| {
-        let result: Vec<f32> = data.iter().map(|&x| x.max(0.0)).collect();
-        result
-    },
+/// Benchmark GPU ReLU activation vs scalar baseline
+pub fn bench_gpu_relu(c: &mut Criterion) {
+    run_bench(
+        c,
+        "gpu_relu",
+        make_centered_data,
+        &|gpu, data| gpu.relu(data).unwrap(),
+        &|data| data.iter().map(|&x| x.max(0.0)).collect(),
+    );
 }
 
-bench_activation! {
-    /// Benchmark GPU leaky ReLU activation vs scalar baseline
-    fn bench_gpu_leaky_relu, group = "gpu_leaky_relu",
-    data = make_centered_data,
-    gpu    = |gpu, data| gpu.leaky_relu(&data, 0.01).unwrap(),
-    scalar = |data| {
-        let negative_slope = 0.01_f32;
-        let result: Vec<f32> = data
-            .iter()
-            .map(|&x| if x > 0.0 { x } else { negative_slope * x })
-            .collect();
-        result
-    },
+/// Benchmark GPU leaky ReLU activation vs scalar baseline
+pub fn bench_gpu_leaky_relu(c: &mut Criterion) {
+    run_bench(
+        c,
+        "gpu_leaky_relu",
+        make_centered_data,
+        &|gpu, data| gpu.leaky_relu(data, 0.01).unwrap(),
+        &|data| {
+            let s = 0.01_f32;
+            data.iter()
+                .map(|&x| if x > 0.0 { x } else { s * x })
+                .collect()
+        },
+    );
 }
 
-bench_activation! {
-    /// Benchmark GPU ELU activation vs scalar baseline
-    fn bench_gpu_elu, group = "gpu_elu",
-    data = make_centered_data,
-    gpu    = |gpu, data| gpu.elu(&data, 1.0).unwrap(),
-    scalar = |data| {
-        let alpha = 1.0_f32;
-        let result: Vec<f32> = data
-            .iter()
-            .map(|&x| if x > 0.0 { x } else { alpha * (x.exp() - 1.0) })
-            .collect();
-        result
-    },
+/// Benchmark GPU ELU activation vs scalar baseline
+pub fn bench_gpu_elu(c: &mut Criterion) {
+    run_bench(
+        c,
+        "gpu_elu",
+        make_centered_data,
+        &|gpu, data| gpu.elu(data, 1.0).unwrap(),
+        &|data| {
+            data.iter()
+                .map(|&x| if x > 0.0 { x } else { x.exp() - 1.0 })
+                .collect()
+        },
+    );
 }
 
-bench_activation! {
-    /// Benchmark GPU clip operation vs scalar baseline
-    fn bench_gpu_clip, group = "gpu_clip",
-    data = make_positive_data,
-    gpu    = |gpu, data| gpu.clip(&data, 100.0, 5000.0).unwrap(),
-    scalar = |data| {
-        let (min_val, max_val) = (100.0_f32, 5000.0_f32);
-        let result: Vec<f32> = data.iter().map(|&x| x.max(min_val).min(max_val)).collect();
-        result
-    },
+/// Benchmark GPU clip operation vs scalar baseline
+pub fn bench_gpu_clip(c: &mut Criterion) {
+    run_bench(
+        c,
+        "gpu_clip",
+        make_positive_data,
+        &|gpu, data| gpu.clip(data, 100.0, 5000.0).unwrap(),
+        &|data| data.iter().map(|&x| x.max(100.0).min(5000.0)).collect(),
+    );
 }
-
