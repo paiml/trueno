@@ -17,11 +17,8 @@ Output:
 """
 
 import json
-import os
-import glob
 from pathlib import Path
 from typing import Dict, List, Tuple
-import statistics
 
 
 class BenchmarkComparator:
@@ -88,7 +85,7 @@ class BenchmarkComparator:
         """Load Python (NumPy/PyTorch) benchmark results"""
         print(f"Loading Python benchmark results from {python_file}...")
 
-        if not os.path.exists(python_file):
+        if not Path(python_file).exists():
             print(f"⚠️  Python results not found at {python_file}")
             print("   Run: python benchmarks/python_comparison.py")
             return
