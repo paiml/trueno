@@ -98,70 +98,62 @@ class BenchmarkComparator:
 
         print(f"✅ Loaded Python results for {len(self.python_results.get('numpy', {}))} operations")
 
+    def _find_best_backend(self, backends_data: Dict) -> Tuple[str, float]:
+        """Find the backend with the lowest mean time."""
+        best_backend = None
+        best_time = float("inf")
+        for backend, data in backends_data.items():
+            if data["mean_ns"] < best_time:
+                best_time = data["mean_ns"]
+                best_backend = backend
+        return best_backend, best_time
+
+    def _get_python_time(self, framework: str, op_name: str, size: str):
+        """Get the mean_ns for a given Python framework, operation, and size."""
+        framework_data = self.python_results.get(framework, {})
+        if op_name in framework_data and size in framework_data[op_name]:
+            return framework_data[op_name][size]["mean_ns"]
+        return None
+
+    def _build_comparison_entry(self, best_backend, best_time, numpy_time, pytorch_time) -> Dict:
+        """Build a single comparison entry dict."""
+        return {
+            "trueno_backend": best_backend,
+            "trueno_mean_ns": best_time,
+            "numpy_mean_ns": numpy_time,
+            "pytorch_mean_ns": pytorch_time,
+            "trueno_vs_numpy": best_time / numpy_time if numpy_time else None,
+            "trueno_vs_pytorch": best_time / pytorch_time if pytorch_time else None,
+        }
+
     def compare_results(self):
         """Compare Trueno vs NumPy vs PyTorch"""
         print("\nComparing results...")
 
-        # For each operation, compare Trueno (best backend) vs NumPy vs PyTorch
         for op_name in self.trueno_results.keys():
             if op_name not in self.comparison:
                 self.comparison[op_name] = {}
 
             for size in self.trueno_results[op_name].keys():
                 backends_data = self.trueno_results[op_name][size]
-
-                # Find best Trueno backend (lowest mean time)
-                best_backend = None
-                best_time = float("inf")
-                for backend, data in backends_data.items():
-                    if data["mean_ns"] < best_time:
-                        best_time = data["mean_ns"]
-                        best_backend = backend
-
-                # Get NumPy and PyTorch times
-                numpy_time = None
-                pytorch_time = None
-
-                if op_name in self.python_results.get("numpy", {}):
-                    if size in self.python_results["numpy"][op_name]:
-                        numpy_time = self.python_results["numpy"][op_name][size]["mean_ns"]
-
-                if op_name in self.python_results.get("pytorch_cpu", {}):
-                    if size in self.python_results["pytorch_cpu"][op_name]:
-                        pytorch_time = self.python_results["pytorch_cpu"][op_name][size]["mean_ns"]
-
-                # Store comparison
-                self.comparison[op_name][size] = {
-                    "trueno_backend": best_backend,
-                    "trueno_mean_ns": best_time,
-                    "numpy_mean_ns": numpy_time,
-                    "pytorch_mean_ns": pytorch_time,
-                    "trueno_vs_numpy": best_time / numpy_time if numpy_time else None,
-                    "trueno_vs_pytorch": best_time / pytorch_time if pytorch_time else None,
-                }
+                best_backend, best_time = self._find_best_backend(backends_data)
+                numpy_time = self._get_python_time("numpy", op_name, size)
+                pytorch_time = self._get_python_time("pytorch_cpu", op_name, size)
+                self.comparison[op_name][size] = self._build_comparison_entry(
+                    best_backend, best_time, numpy_time, pytorch_time
+                )
 
         print(f"✅ Compared {len(self.comparison)} operations")
 
-    def generate_markdown_report(self, output_file: str = "benchmarks/comparison_report.md"):
-        """Generate markdown comparison report"""
-        print(f"\nGenerating markdown report: {output_file}...")
-
-        lines = []
-        lines.append("# Trueno vs NumPy vs PyTorch - Performance Comparison")
-        lines.append("")
-        lines.append("**Goal**: Validate that Trueno is within 20% of NumPy/PyTorch for 1D operations")
-        lines.append("")
-        lines.append("## Summary")
-        lines.append("")
-
-        # Calculate overall statistics
+    def _compute_summary_stats(self) -> Dict:
+        """Compute aggregate comparison statistics across all operations and sizes."""
         within_20_percent = 0
         faster_than_numpy = 0
         faster_than_pytorch = 0
         total_comparisons = 0
 
-        for op_name, sizes in self.comparison.items():
-            for size, data in sizes.items():
+        for sizes in self.comparison.values():
+            for data in sizes.values():
                 if data["trueno_vs_numpy"] is not None:
                     total_comparisons += 1
                     ratio = data["trueno_vs_numpy"]
@@ -169,85 +161,115 @@ class BenchmarkComparator:
                         within_20_percent += 1
                     if ratio < 1.0:
                         faster_than_numpy += 1
-
                 if data["trueno_vs_pytorch"] is not None:
                     if data["trueno_vs_pytorch"] < 1.0:
                         faster_than_pytorch += 1
 
-        if total_comparisons > 0:
-            percent_within_20 = (within_20_percent / total_comparisons) * 100
-            percent_faster_numpy = (faster_than_numpy / total_comparisons) * 100
-            percent_faster_pytorch = (faster_than_pytorch / total_comparisons) * 100
+        return {
+            "within_20_percent": within_20_percent,
+            "faster_than_numpy": faster_than_numpy,
+            "faster_than_pytorch": faster_than_pytorch,
+            "total_comparisons": total_comparisons,
+        }
 
-            lines.append(f"- **Within 20% of NumPy**: {within_20_percent}/{total_comparisons} ({percent_within_20:.1f}%)")
-            lines.append(f"- **Faster than NumPy**: {faster_than_numpy}/{total_comparisons} ({percent_faster_numpy:.1f}%)")
-            lines.append(f"- **Faster than PyTorch**: {faster_than_pytorch}/{total_comparisons} ({percent_faster_pytorch:.1f}%)")
-            lines.append("")
+    @staticmethod
+    def _format_report_header() -> List[str]:
+        """Generate the report header lines."""
+        return [
+            "# Trueno vs NumPy vs PyTorch - Performance Comparison",
+            "",
+            "**Goal**: Validate that Trueno is within 20% of NumPy/PyTorch for 1D operations",
+            "",
+            "## Summary",
+            "",
+        ]
 
-            # Determine if we pass the v0.3.0 gate
-            if percent_within_20 >= 80:
-                lines.append("✅ **v0.3.0 SUCCESS CRITERIA MET**: >80% of operations within 20% of NumPy")
-            else:
-                lines.append("❌ **v0.3.0 CRITERIA NOT MET**: Need >80% within 20% (currently {:.1f}%)".format(percent_within_20))
-            lines.append("")
+    @staticmethod
+    def _format_summary_section(stats: Dict) -> List[str]:
+        """Format the summary statistics section of the report."""
+        total = stats["total_comparisons"]
+        if total == 0:
+            return []
 
-        # Detailed results per operation
+        lines = []
+        percent_within_20 = (stats["within_20_percent"] / total) * 100
+        percent_faster_numpy = (stats["faster_than_numpy"] / total) * 100
+        percent_faster_pytorch = (stats["faster_than_pytorch"] / total) * 100
+
+        lines.append(f"- **Within 20% of NumPy**: {stats['within_20_percent']}/{total} ({percent_within_20:.1f}%)")
+        lines.append(f"- **Faster than NumPy**: {stats['faster_than_numpy']}/{total} ({percent_faster_numpy:.1f}%)")
+        lines.append(f"- **Faster than PyTorch**: {stats['faster_than_pytorch']}/{total} ({percent_faster_pytorch:.1f}%)")
+        lines.append("")
+
+        if percent_within_20 >= 80:
+            lines.append("✅ **v0.3.0 SUCCESS CRITERIA MET**: >80% of operations within 20% of NumPy")
+        else:
+            lines.append("❌ **v0.3.0 CRITERIA NOT MET**: Need >80% within 20% (currently {:.1f}%)".format(percent_within_20))
+        lines.append("")
+
+        return lines
+
+    @staticmethod
+    def _format_time_ns(ns) -> str:
+        """Format a time value in nanoseconds to a human-readable string."""
+        if ns is None:
+            return "-"
+        if ns < 1000:
+            return f"{ns:.1f} ns"
+        elif ns < 1_000_000:
+            return f"{ns/1000:.2f} µs"
+        else:
+            return f"{ns/1_000_000:.2f} ms"
+
+    @staticmethod
+    def _format_ratio(ratio) -> str:
+        """Format a performance ratio as a human-readable comparison string."""
+        if ratio is None:
+            return "-"
+        if ratio < 1.0:
+            return f"✅ {1/ratio:.2f}x faster"
+        elif ratio <= 1.2:
+            return f"✓ {ratio:.2f}x (within 20%)"
+        else:
+            return f"⚠️ {ratio:.2f}x slower"
+
+    def _format_operation_table(self, op_name: str) -> List[str]:
+        """Format the comparison table for a single operation."""
+        lines = [
+            f"### {op_name}",
+            "",
+            "| Size | Trueno (best) | NumPy | PyTorch | Trueno vs NumPy | Trueno vs PyTorch |",
+            "|------|---------------|-------|---------|-----------------|-------------------|",
+        ]
+
+        for size in ["100", "1000", "10000", "100000", "1000000"]:
+            if size not in self.comparison[op_name]:
+                continue
+            data = self.comparison[op_name][size]
+            trueno_str = f"{self._format_time_ns(data['trueno_mean_ns'])} ({data['trueno_backend']})"
+            numpy_str = self._format_time_ns(data["numpy_mean_ns"])
+            pytorch_str = self._format_time_ns(data["pytorch_mean_ns"])
+            ratio_numpy_str = self._format_ratio(data["trueno_vs_numpy"])
+            ratio_pytorch_str = self._format_ratio(data["trueno_vs_pytorch"])
+            lines.append(f"| {size:>6} | {trueno_str} | {numpy_str} | {pytorch_str} | {ratio_numpy_str} | {ratio_pytorch_str} |")
+
+        lines.append("")
+        return lines
+
+    def generate_markdown_report(self, output_file: str = "benchmarks/comparison_report.md"):
+        """Generate markdown comparison report"""
+        print(f"\nGenerating markdown report: {output_file}...")
+
+        lines = self._format_report_header()
+        stats = self._compute_summary_stats()
+        lines.extend(self._format_summary_section(stats))
+
         lines.append("## Detailed Results")
         lines.append("")
 
         for op_name in sorted(self.comparison.keys()):
-            lines.append(f"### {op_name}")
-            lines.append("")
-            lines.append("| Size | Trueno (best) | NumPy | PyTorch | Trueno vs NumPy | Trueno vs PyTorch |")
-            lines.append("|------|---------------|-------|---------|-----------------|-------------------|")
+            lines.extend(self._format_operation_table(op_name))
 
-            for size in ["100", "1000", "10000", "100000", "1000000"]:
-                if size not in self.comparison[op_name]:
-                    continue
-
-                data = self.comparison[op_name][size]
-                trueno_time = data["trueno_mean_ns"]
-                numpy_time = data["numpy_mean_ns"]
-                pytorch_time = data["pytorch_mean_ns"]
-                backend = data["trueno_backend"]
-
-                # Format times
-                def format_time(ns):
-                    if ns is None:
-                        return "-"
-                    if ns < 1000:
-                        return f"{ns:.1f} ns"
-                    elif ns < 1_000_000:
-                        return f"{ns/1000:.2f} µs"
-                    else:
-                        return f"{ns/1_000_000:.2f} ms"
-
-                trueno_str = f"{format_time(trueno_time)} ({backend})"
-                numpy_str = format_time(numpy_time)
-                pytorch_str = format_time(pytorch_time)
-
-                # Calculate ratios
-                ratio_numpy = data["trueno_vs_numpy"]
-                ratio_pytorch = data["trueno_vs_pytorch"]
-
-                def format_ratio(ratio):
-                    if ratio is None:
-                        return "-"
-                    if ratio < 1.0:
-                        return f"✅ {1/ratio:.2f}x faster"
-                    elif ratio <= 1.2:
-                        return f"✓ {ratio:.2f}x (within 20%)"
-                    else:
-                        return f"⚠️ {ratio:.2f}x slower"
-
-                ratio_numpy_str = format_ratio(ratio_numpy)
-                ratio_pytorch_str = format_ratio(ratio_pytorch)
-
-                lines.append(f"| {size:>6} | {trueno_str} | {numpy_str} | {pytorch_str} | {ratio_numpy_str} | {ratio_pytorch_str} |")
-
-            lines.append("")
-
-        # Write file
         with open(output_file, "w") as f:
             f.write("\n".join(lines))
 
