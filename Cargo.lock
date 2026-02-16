@@ -827,7 +827,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "toml",
- "trueno 0.14.5",
+ "trueno 0.14.6",
  "trueno-gpu",
 ]
 
@@ -5448,7 +5448,7 @@ dependencies = [
 
 [[package]]
 name = "trueno"
-version = "0.14.5"
+version = "0.14.6"
 dependencies = [
  "anyhow",
  "aprender 0.25.0",
@@ -5577,6 +5577,14 @@ dependencies = [
  "tokio",
  "trueno 0.14.3",
  "trueno-db",
+]
+
+[[package]]
+name = "trueno-ptx-debug"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

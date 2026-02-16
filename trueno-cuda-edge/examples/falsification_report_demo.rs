@@ -8,38 +8,48 @@ use trueno_cuda_edge::falsification::{
     all_claims, claims_for_framework, ClaimStatus, FalsificationReport, Framework,
 };
 
+const FRAMEWORKS: [Framework; 6] = [
+    Framework::NullFuzzer,
+    Framework::ShmemProber,
+    Framework::LifecycleChaos,
+    Framework::QuantOracle,
+    Framework::PtxPoison,
+    Framework::Supervisor,
+];
+
 fn main() {
     println!("=== Falsification Protocol Demo ===\n");
 
-    // 1. Protocol Overview
+    demo_protocol_overview();
+    demo_sample_claims();
+    let report = demo_report_tracking();
+    demo_violated_claims(&report);
+    demo_framework_summary(&report);
+
+    println!("\n=== Demo Complete ===");
+}
+
+fn demo_protocol_overview() {
     println!("1. Protocol Overview");
     println!("   ──────────────────");
 
     let claims = all_claims();
     println!("   Total claims: {}", claims.len());
 
-    let frameworks = [
-        Framework::NullFuzzer,
-        Framework::ShmemProber,
-        Framework::LifecycleChaos,
-        Framework::QuantOracle,
-        Framework::PtxPoison,
-        Framework::Supervisor,
-    ];
-
     println!("\n   Claims by framework:");
-    for fw in &frameworks {
+    for fw in &FRAMEWORKS {
         let count = claims_for_framework(*fw).len();
         println!("   │ {:<20} {:>2} claims", format!("{}", fw), count);
     }
 
     println!();
+}
 
-    // 2. Sample Claims
+fn demo_sample_claims() {
     println!("2. Sample Claims (first 3 per framework)");
     println!("   ──────────────────────────────────────");
 
-    for fw in &frameworks {
+    for fw in &FRAMEWORKS {
         println!("\n   {}:", fw);
         for claim in claims_for_framework(*fw).iter().take(3) {
             println!(
@@ -50,58 +60,52 @@ fn main() {
     }
 
     println!();
+}
 
-    // 3. Report Tracking
+fn print_report_status(report: &FalsificationReport, label: &str, statuses: &[ClaimStatus]) {
+    println!("\n   {}:", label);
+    for status in statuses {
+        println!(
+            "   │ {:?}: {}",
+            status,
+            report.count_by_status(*status)
+        );
+    }
+    println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
+}
+
+fn demo_report_tracking() -> FalsificationReport {
     println!("3. Report Tracking");
     println!("   ─────────────────");
 
     let mut report = FalsificationReport::new();
 
-    // Simulate verification progress
-    println!("\n   Initial state:");
-    println!(
-        "   │ Pending: {}",
-        report.count_by_status(ClaimStatus::Pending)
-    );
-    println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
+    print_report_status(&report, "Initial state", &[ClaimStatus::Pending]);
 
-    // Mark some claims as verified
     for claim in claims_for_framework(Framework::NullFuzzer) {
         report.mark_verified(claim.id);
     }
-
-    println!("\n   After verifying NullFuzzer (10 claims):");
-    println!(
-        "   │ Verified: {}",
-        report.count_by_status(ClaimStatus::Verified)
+    print_report_status(
+        &report,
+        "After verifying NullFuzzer (10 claims)",
+        &[ClaimStatus::Verified, ClaimStatus::Pending],
     );
-    println!(
-        "   │ Pending: {}",
-        report.count_by_status(ClaimStatus::Pending)
-    );
-    println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
 
-    // Mark one as violated (bug found!)
     report.mark_violated("SP-001");
-
-    println!("\n   After finding bug in SP-001:");
-    println!(
-        "   │ Violated: {}",
-        report.count_by_status(ClaimStatus::Violated)
+    print_report_status(
+        &report,
+        "After finding bug in SP-001",
+        &[ClaimStatus::Violated],
     );
-    println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
 
-    // Skip hardware-dependent claims
     for claim in ["LC-005", "LC-006", "LC-007", "LC-008"] {
         report.mark_skipped(claim);
     }
-
-    println!("\n   After skipping hardware-dependent claims:");
-    println!(
-        "   │ Skipped: {}",
-        report.count_by_status(ClaimStatus::Skipped)
+    print_report_status(
+        &report,
+        "After skipping hardware-dependent claims",
+        &[ClaimStatus::Skipped],
     );
-    println!("   │ Coverage: {:.1}%", report.coverage() * 100.0);
 
     println!();
 
@@ -115,7 +119,6 @@ fn main() {
         report.count_by_status(ClaimStatus::Pending)
     );
 
-    // Complete all remaining
     for claim in all_claims() {
         if report.status(claim.id) == Some(ClaimStatus::Pending) {
             report.mark_verified(claim.id);
@@ -128,7 +131,10 @@ fn main() {
 
     println!();
 
-    // 5. Violated Claims Report
+    report
+}
+
+fn demo_violated_claims(report: &FalsificationReport) {
     println!("5. Violated Claims Report");
     println!("   ────────────────────────");
 
@@ -143,13 +149,14 @@ fn main() {
     }
 
     println!();
+}
 
-    // 6. Framework Summary
+fn demo_framework_summary(report: &FalsificationReport) {
     println!("6. Framework Summary");
     println!("   ───────────────────");
 
     let grouped = report.by_framework();
-    for fw in &frameworks {
+    for fw in &FRAMEWORKS {
         if let Some(claims) = grouped.get(fw) {
             let verified = claims
                 .iter()
@@ -173,6 +180,4 @@ fn main() {
             );
         }
     }
-
-    println!("\n=== Demo Complete ===");
 }

@@ -37,7 +37,27 @@ fn main() {
     println!("  trueno GPU Monitoring Demo (TRUENO-SPEC-010)");
     println!("=================================================\n");
 
-    // Phase 1: Check available backends
+    phase1_backend_detection();
+    phase2_device_enumeration();
+    phase3_memory_monitoring();
+    phase4_gpu_monitor_history();
+
+    println!("Phase 5: Vendor Identification");
+    println!("------------------------------");
+    demonstrate_vendor_identification();
+    println!();
+
+    println!("Phase 6: Backend Capabilities");
+    println!("-----------------------------");
+    demonstrate_backend_capabilities();
+    println!();
+
+    println!("=================================================");
+    println!("  Demo complete!");
+    println!("=================================================");
+}
+
+fn phase1_backend_detection() {
     println!("Phase 1: Backend Detection");
     println!("--------------------------");
 
@@ -65,51 +85,47 @@ fn main() {
         println!("       Run with: --features cuda-monitor");
     }
     println!();
+}
 
-    // Phase 2: Enumerate devices
+fn phase2_device_enumeration() {
     println!("Phase 2: Device Enumeration");
     println!("---------------------------");
 
-    // Try CUDA first (most accurate)
     #[cfg(feature = "cuda-monitor")]
     {
         println!("\n  CUDA Devices (native driver API):");
-        match trueno::enumerate_cuda_devices() {
-            Ok(devices) => {
-                for dev in &devices {
-                    print_device_info(dev, "    ");
-                }
-                if devices.is_empty() {
-                    println!("    No CUDA devices found");
-                }
-            }
-            Err(e) => {
-                println!("    CUDA enumeration failed: {}", e);
-            }
-        }
+        print_enumeration_result(trueno::enumerate_cuda_devices(), "CUDA");
     }
 
-    // Then try wgpu (cross-platform)
     #[cfg(feature = "gpu")]
     {
         println!("\n  wgpu Devices (cross-platform):");
-        match GpuDeviceInfo::enumerate() {
-            Ok(devices) => {
-                for dev in &devices {
-                    print_device_info(dev, "    ");
-                }
-                if devices.is_empty() {
-                    println!("    No wgpu devices found");
-                }
-            }
-            Err(e) => {
-                println!("    wgpu enumeration failed: {}", e);
-            }
-        }
+        print_enumeration_result(GpuDeviceInfo::enumerate(), "wgpu");
     }
     println!();
+}
 
-    // Phase 3: Real-time memory monitoring
+#[allow(dead_code)]
+fn print_enumeration_result(
+    result: Result<Vec<GpuDeviceInfo>, impl std::fmt::Display>,
+    label: &str,
+) {
+    match result {
+        Ok(devices) => {
+            for dev in &devices {
+                print_device_info(dev, "    ");
+            }
+            if devices.is_empty() {
+                println!("    No {} devices found", label);
+            }
+        }
+        Err(e) => {
+            println!("    {} enumeration failed: {}", label, e);
+        }
+    }
+}
+
+fn phase3_memory_monitoring() {
     println!("Phase 3: Real-Time Memory Monitoring");
     println!("------------------------------------");
 
@@ -117,63 +133,23 @@ fn main() {
     {
         println!("\n  CUDA Memory (cuMemGetInfo):");
         match trueno::query_cuda_memory(0) {
-            Ok(mem) => {
-                print_memory_metrics(&mem, "    ");
-            }
-            Err(e) => {
-                println!("    CUDA memory query failed: {}", e);
-            }
+            Ok(mem) => print_memory_metrics(&mem, "    "),
+            Err(e) => println!("    CUDA memory query failed: {}", e),
         }
     }
     println!();
+}
 
-    // Phase 4: GpuMonitor with history
+fn phase4_gpu_monitor_history() {
     println!("Phase 4: GpuMonitor with History Buffer");
     println!("---------------------------------------");
 
     #[cfg(feature = "gpu")]
     {
         match GpuMonitor::new(0, MonitorConfig::default()) {
-            Ok(monitor) => {
-                println!("  Monitor created for: {}", monitor.device_info().name);
-                println!(
-                    "  Config: poll_interval={:?}, history_size={}",
-                    monitor.config().poll_interval,
-                    monitor.config().history_size
-                );
-
-                // Collect a few samples
-                println!("\n  Collecting 5 samples...");
-                for i in 0..5 {
-                    match monitor.collect() {
-                        Ok(metrics) => {
-                            println!(
-                                "    Sample {}: memory={} bytes, age={:?}",
-                                i + 1,
-                                metrics.memory.total,
-                                metrics.age()
-                            );
-                        }
-                        Err(e) => {
-                            println!("    Sample {} failed: {}", i + 1, e);
-                        }
-                    }
-                    std::thread::sleep(Duration::from_millis(100));
-                }
-
-                println!("\n  History buffer: {} samples", monitor.sample_count());
-
-                // Get latest
-                if let Ok(latest) = monitor.latest() {
-                    println!("  Latest sample age: {:?}", latest.age());
-                }
-            }
-            Err(MonitorError::NoDevice) => {
-                println!("  No GPU device available");
-            }
-            Err(e) => {
-                println!("  Monitor creation failed: {}", e);
-            }
+            Ok(monitor) => run_monitor_collection(&monitor),
+            Err(MonitorError::NoDevice) => println!("  No GPU device available"),
+            Err(e) => println!("  Monitor creation failed: {}", e),
         }
     }
     #[cfg(not(feature = "gpu"))]
@@ -181,22 +157,40 @@ fn main() {
         println!("  GpuMonitor requires --features gpu");
     }
     println!();
+}
 
-    // Phase 5: Vendor identification
-    println!("Phase 5: Vendor Identification");
-    println!("------------------------------");
-    demonstrate_vendor_identification();
-    println!();
+#[cfg(feature = "gpu")]
+fn run_monitor_collection(monitor: &GpuMonitor) {
+    println!("  Monitor created for: {}", monitor.device_info().name);
+    println!(
+        "  Config: poll_interval={:?}, history_size={}",
+        monitor.config().poll_interval,
+        monitor.config().history_size
+    );
 
-    // Phase 6: Backend capabilities
-    println!("Phase 6: Backend Capabilities");
-    println!("-----------------------------");
-    demonstrate_backend_capabilities();
-    println!();
+    println!("\n  Collecting 5 samples...");
+    for i in 0..5 {
+        match monitor.collect() {
+            Ok(metrics) => {
+                println!(
+                    "    Sample {}: memory={} bytes, age={:?}",
+                    i + 1,
+                    metrics.memory.total,
+                    metrics.age()
+                );
+            }
+            Err(e) => {
+                println!("    Sample {} failed: {}", i + 1, e);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
 
-    println!("=================================================");
-    println!("  Demo complete!");
-    println!("=================================================");
+    println!("\n  History buffer: {} samples", monitor.sample_count());
+
+    if let Ok(latest) = monitor.latest() {
+        println!("  Latest sample age: {:?}", latest.age());
+    }
 }
 
 #[allow(dead_code)]

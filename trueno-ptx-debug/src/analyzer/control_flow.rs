@@ -85,6 +85,77 @@ pub struct ControlFlowAnalyzer {
     cfg: Option<ControlFlowGraph>,
 }
 
+/// Finalize the current basic block, pushing it onto `nodes` and registering
+/// its label (if any) in `label_to_node`. Returns `None` as the new
+/// `current_label` value so callers can do `current_label = flush_block(...)`.
+fn flush_block(
+    nodes: &mut Vec<CfgNode>,
+    label_to_node: &mut HashMap<String, NodeId>,
+    current_label: &mut Option<String>,
+    instructions: &mut Vec<Instruction>,
+) {
+    let node_id = nodes.len();
+    if let Some(ref label) = *current_label {
+        label_to_node.insert(label.clone(), node_id);
+    }
+    nodes.push(CfgNode {
+        id: node_id,
+        label: current_label.take(),
+        instructions: std::mem::take(instructions),
+        successors: Vec::new(),
+        predecessors: Vec::new(),
+    });
+}
+
+/// Collect branch-target edges for a `bra` instruction.
+fn collect_branch_edges(
+    instr: &Instruction,
+    src: NodeId,
+    label_to_node: &HashMap<String, NodeId>,
+    edges: &mut Vec<(NodeId, NodeId)>,
+) {
+    for op in &instr.operands {
+        if let crate::parser::Operand::Label(target) = op {
+            if let Some(&target_id) = label_to_node.get(target) {
+                edges.push((src, target_id));
+            }
+        }
+    }
+}
+
+/// Determine edges and exit nodes for each basic block in the second pass.
+fn collect_edges_for_node(
+    node_idx: NodeId,
+    last_opcode: Option<&Opcode>,
+    last_instr: Option<&Instruction>,
+    node_count: usize,
+    label_to_node: &HashMap<String, NodeId>,
+    edges: &mut Vec<(NodeId, NodeId)>,
+    exits: &mut Vec<NodeId>,
+) {
+    match last_opcode {
+        Some(Opcode::Bra) => {
+            if let Some(instr) = last_instr {
+                collect_branch_edges(instr, node_idx, label_to_node, edges);
+            }
+            // Also fallthrough if conditional
+            if node_idx + 1 < node_count {
+                edges.push((node_idx, node_idx + 1));
+            }
+        }
+        Some(Opcode::Ret | Opcode::Exit) => {
+            exits.push(node_idx);
+        }
+        _ => {
+            if node_idx + 1 < node_count {
+                edges.push((node_idx, node_idx + 1));
+            } else {
+                exits.push(node_idx);
+            }
+        }
+    }
+}
+
 impl ControlFlowAnalyzer {
     /// Create a new control flow analyzer
     pub fn new() -> Self {
@@ -102,38 +173,15 @@ impl ControlFlowAnalyzer {
         for stmt in &kernel.body {
             match stmt {
                 Statement::Label(label) => {
-                    // End current block and start new one
                     if !current_instructions.is_empty() || current_label.is_some() {
-                        let node_id = nodes.len();
-                        if let Some(ref label) = current_label {
-                            label_to_node.insert(label.clone(), node_id);
-                        }
-                        nodes.push(CfgNode {
-                            id: node_id,
-                            label: current_label.take(),
-                            instructions: std::mem::take(&mut current_instructions),
-                            successors: Vec::new(),
-                            predecessors: Vec::new(),
-                        });
+                        flush_block(&mut nodes, &mut label_to_node, &mut current_label, &mut current_instructions);
                     }
                     current_label = Some(label.clone());
                 }
                 Statement::Instruction(instr) => {
                     current_instructions.push(instr.clone());
-
-                    // Branch/ret/exit ends a basic block
                     if instr.opcode.is_branch() {
-                        let node_id = nodes.len();
-                        if let Some(ref label) = current_label {
-                            label_to_node.insert(label.clone(), node_id);
-                        }
-                        nodes.push(CfgNode {
-                            id: node_id,
-                            label: current_label.take(),
-                            instructions: std::mem::take(&mut current_instructions),
-                            successors: Vec::new(),
-                            predecessors: Vec::new(),
-                        });
+                        flush_block(&mut nodes, &mut label_to_node, &mut current_label, &mut current_instructions);
                     }
                 }
                 _ => {}
@@ -142,17 +190,7 @@ impl ControlFlowAnalyzer {
 
         // Add final block if any
         if !current_instructions.is_empty() || current_label.is_some() {
-            let node_id = nodes.len();
-            if let Some(ref label) = current_label {
-                label_to_node.insert(label.clone(), node_id);
-            }
-            nodes.push(CfgNode {
-                id: node_id,
-                label: current_label,
-                instructions: current_instructions,
-                successors: Vec::new(),
-                predecessors: Vec::new(),
-            });
+            flush_block(&mut nodes, &mut label_to_node, &mut current_label, &mut current_instructions);
         }
 
         // Create empty entry node if needed
@@ -173,36 +211,8 @@ impl ControlFlowAnalyzer {
 
         for i in 0..node_count {
             let last_instr = nodes[i].instructions.last().cloned();
-
-            match last_instr.as_ref().map(|instr| &instr.opcode) {
-                Some(Opcode::Bra) => {
-                    // Find branch target
-                    if let Some(ref instr) = last_instr {
-                        for op in &instr.operands {
-                            if let crate::parser::Operand::Label(target) = op {
-                                if let Some(&target_id) = label_to_node.get(target) {
-                                    edges.push((i, target_id));
-                                }
-                            }
-                        }
-                    }
-                    // Also fallthrough if conditional
-                    if i + 1 < node_count {
-                        edges.push((i, i + 1));
-                    }
-                }
-                Some(Opcode::Ret | Opcode::Exit) => {
-                    exits.push(i);
-                }
-                _ => {
-                    // Fallthrough to next block
-                    if i + 1 < node_count {
-                        edges.push((i, i + 1));
-                    } else {
-                        exits.push(i);
-                    }
-                }
-            }
+            let last_opcode = last_instr.as_ref().map(|instr| &instr.opcode);
+            collect_edges_for_node(i, last_opcode, last_instr.as_ref(), node_count, &label_to_node, &mut edges, &mut exits);
         }
 
         // Apply edges

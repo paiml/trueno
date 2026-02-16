@@ -2,8 +2,6 @@
 //!
 //! Run: `cargo run -p trueno-explain --example deep_bug_hunt`
 
-#![allow(clippy::too_many_lines)]
-
 use std::collections::HashMap;
 use trueno_explain::{BugSeverity, PtxBugAnalyzer};
 use trueno_gpu::kernels::{
@@ -11,13 +9,41 @@ use trueno_gpu::kernels::{
     Q6KKernel, QuantizeKernel, SoftmaxKernel,
 };
 
+struct BugTally {
+    total: usize,
+    p0: usize,
+    p1: usize,
+    p2: usize,
+    by_class: HashMap<String, usize>,
+}
+
+impl BugTally {
+    fn new() -> Self {
+        Self {
+            total: 0,
+            p0: 0,
+            p1: 0,
+            p2: 0,
+            by_class: HashMap::new(),
+        }
+    }
+}
+
 fn main() {
     println!("\n╔══════════════════════════════════════════════════════════════════════════════╗");
     println!("║                    DEEP PTX BUG HUNT (STRICT MODE, NO WHITELIST)              ║");
     println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
 
-    // Generate ALL kernel variants
-    let kernels: Vec<(&str, String)> = vec![
+    let kernels = generate_all_kernels();
+
+    let tally = run_strict_analysis(&kernels);
+    print_strict_summary(&tally, kernels.len());
+
+    run_production_analysis(&kernels);
+}
+
+fn generate_all_kernels() -> Vec<(&'static str, String)> {
+    vec![
         // GEMM variants
         ("gemm_naive_32", GemmKernel::naive(32, 32, 32).emit_ptx()),
         ("gemm_naive_64", GemmKernel::naive(64, 64, 64).emit_ptx()),
@@ -96,98 +122,103 @@ fn main() {
             "bias_activation_gelu_4096",
             BiasActivationKernel::new(4096, 256).with_gelu().emit_ptx(),
         ),
-    ];
+    ]
+}
 
-    let mut total_bugs = 0;
-    let mut p0_bugs = 0;
-    let mut p1_bugs = 0;
-    let mut p2_bugs = 0;
-    let mut bugs_by_class: HashMap<String, usize> = HashMap::new();
+fn analyze_and_print_kernel(
+    analyzer: &PtxBugAnalyzer,
+    name: &str,
+    ptx: &str,
+    tally: &mut BugTally,
+) {
+    let result = analyzer.analyze(ptx);
 
-    // STRICT MODE - NO WHITELIST - catch EVERYTHING
-    let analyzer = PtxBugAnalyzer::strict();
+    let p0 = result.count_by_severity(BugSeverity::Critical);
+    let p1 = result.count_by_severity(BugSeverity::High);
+    let p2 = result.count_by_severity(BugSeverity::Medium);
 
-    for (name, ptx) in &kernels {
-        let result = analyzer.analyze(ptx);
+    tally.total += result.bugs.len();
+    tally.p0 += p0;
+    tally.p1 += p1;
+    tally.p2 += p2;
 
-        let p0 = result.count_by_severity(BugSeverity::Critical);
-        let p1 = result.count_by_severity(BugSeverity::High);
-        let p2 = result.count_by_severity(BugSeverity::Medium);
-
-        total_bugs += result.bugs.len();
-        p0_bugs += p0;
-        p1_bugs += p1;
-        p2_bugs += p2;
-
-        for bug in &result.bugs {
-            *bugs_by_class
-                .entry(bug.class.code().to_string())
-                .or_insert(0) += 1;
-        }
-
-        if result.has_bugs() {
-            let icon = if p0 > 0 {
-                "🔴"
-            } else if p1 > 0 {
-                "🟡"
-            } else {
-                "🟠"
-            };
-            println!(
-                "{} {} - {} bugs ({} P0, {} P1, {} P2)",
-                icon,
-                name,
-                result.bugs.len(),
-                p0,
-                p1,
-                p2
-            );
-            for bug in &result.bugs {
-                println!(
-                    "   └─ [{}] {}: {}",
-                    bug.class.severity(),
-                    bug.class.code(),
-                    bug.message
-                );
-                if let Some(fix) = &bug.fix {
-                    println!("      Fix: {}", fix);
-                }
-            }
-        } else {
-            println!("✅ {} - CLEAN", name);
-        }
+    for bug in &result.bugs {
+        *tally
+            .by_class
+            .entry(bug.class.code().to_string())
+            .or_insert(0) += 1;
     }
 
+    if result.has_bugs() {
+        let icon = if p0 > 0 {
+            "🔴"
+        } else if p1 > 0 {
+            "🟡"
+        } else {
+            "🟠"
+        };
+        println!(
+            "{} {} - {} bugs ({} P0, {} P1, {} P2)",
+            icon,
+            name,
+            result.bugs.len(),
+            p0,
+            p1,
+            p2
+        );
+        for bug in &result.bugs {
+            println!(
+                "   └─ [{}] {}: {}",
+                bug.class.severity(),
+                bug.class.code(),
+                bug.message
+            );
+            if let Some(fix) = &bug.fix {
+                println!("      Fix: {}", fix);
+            }
+        }
+    } else {
+        println!("✅ {} - CLEAN", name);
+    }
+}
+
+fn run_strict_analysis(kernels: &[(&str, String)]) -> BugTally {
+    let analyzer = PtxBugAnalyzer::strict();
+    let mut tally = BugTally::new();
+
+    for (name, ptx) in kernels {
+        analyze_and_print_kernel(&analyzer, name, ptx, &mut tally);
+    }
+
+    tally
+}
+
+fn print_strict_summary(tally: &BugTally, kernel_count: usize) {
     println!("\n══════════════════════════════════════════════════════════════════════════════");
-    println!("SUMMARY: {} kernels analyzed", kernels.len());
+    println!("SUMMARY: {} kernels analyzed", kernel_count);
     println!("══════════════════════════════════════════════════════════════════════════════");
-    println!("  Total bugs: {}", total_bugs);
-    println!("  🔴 P0 Critical: {}", p0_bugs);
-    println!("  🟡 P1 High: {}", p1_bugs);
-    println!("  🟠 P2 Medium: {}", p2_bugs);
+    println!("  Total bugs: {}", tally.total);
+    println!("  🔴 P0 Critical: {}", tally.p0);
+    println!("  🟡 P1 High: {}", tally.p1);
+    println!("  🟠 P2 Medium: {}", tally.p2);
 
     println!("\nBUGS BY CLASS:");
-    let mut sorted_bugs: Vec<_> = bugs_by_class.iter().collect();
+    let mut sorted_bugs: Vec<_> = tally.by_class.iter().collect();
     sorted_bugs.sort_by(|a, b| b.1.cmp(a.1));
     for (class, count) in sorted_bugs {
         println!("  {:25} : {}", class, count);
     }
 
-    if p0_bugs > 0 {
+    if tally.p0 > 0 {
         println!(
             "\n⚠️  CRITICAL: {} P0 bugs found - these need immediate attention!",
-            p0_bugs
+            tally.p0
         );
     }
+}
 
-    // =========================================================================
-    // PRODUCTION MODE - With Performance Whitelist
-    // =========================================================================
-    println!("\n╔══════════════════════════════════════════════════════════════════════════════╗");
-    println!("║                    PRODUCTION MODE (WITH PERFORMANCE WHITELIST)              ║");
-    println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
-
-    let prod_analyzer = PtxBugAnalyzer::strict()
+fn build_production_analyzer() -> PtxBugAnalyzer {
+    PtxBugAnalyzer::strict()
         .with_whitelist(
             "gemm_tensor_core*",
             trueno_explain::PtxBugClass::HighRegisterPressure,
@@ -232,12 +263,20 @@ fn main() {
             "q6k*",
             trueno_explain::PtxBugClass::HighRegisterPressure,
             "Q6_K dequantization requires registers",
-        );
+        )
+}
+
+fn run_production_analysis(kernels: &[(&str, String)]) {
+    println!("\n╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║                    PRODUCTION MODE (WITH PERFORMANCE WHITELIST)              ║");
+    println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+
+    let prod_analyzer = build_production_analyzer();
 
     let mut prod_bugs = 0;
     let mut prod_p0 = 0;
 
-    for (name, ptx) in &kernels {
+    for (name, ptx) in kernels {
         let result = prod_analyzer.analyze(ptx);
         let p0 = result.count_by_severity(BugSeverity::Critical);
         prod_bugs += result.bugs.len();
