@@ -36,7 +36,7 @@ impl KernelArm {
         if self.pulls == 0 {
             f32::INFINITY // Unexplored arms have infinite UCB
         } else {
-            self.mean() + c * (2.0 * (total_pulls as f32).ln() / self.pulls as f32).sqrt()
+            self.mean() + c * (2.0 * (total_pulls.max(1) as f32).ln() / self.pulls as f32).sqrt()
         }
     }
 }

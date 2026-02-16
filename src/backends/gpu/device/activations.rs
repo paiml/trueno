@@ -234,7 +234,7 @@ impl GpuDevice {
         let sum_exp = self.reduce_sum(&exp_vals).await?;
 
         // Pass 4: Compute log_softmax = x - max - log(sum_exp)
-        let log_sum_exp = sum_exp.ln();
+        let log_sum_exp = sum_exp.max(f32::EPSILON).ln();
 
         #[repr(C)]
         #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
