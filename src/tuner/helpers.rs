@@ -74,7 +74,75 @@ mod tests {
     use super::*;
 
     // =========================================================================
-    // CRC32 Tests
+    // CRC32 Table Tests
+    // =========================================================================
+
+    #[test]
+    fn test_crc32_table_length() {
+        let table = crc32_table();
+        assert_eq!(table.len(), 256, "CRC32 table must have exactly 256 entries");
+    }
+
+    #[test]
+    fn test_crc32_table_first_entry_is_zero() {
+        let table = crc32_table();
+        assert_eq!(
+            table[0], 0x0000_0000,
+            "CRC32 table[0] must be 0 (identity)"
+        );
+    }
+
+    #[test]
+    fn test_crc32_table_known_entries() {
+        // Well-known CRC32 IEEE (0xEDB88320 reflected polynomial) table values
+        let table = crc32_table();
+        assert_eq!(table[1], 0x7707_3096, "table[1] mismatch for IEEE CRC32");
+        assert_eq!(table[2], 0xEE0E_612C, "table[2] mismatch for IEEE CRC32");
+        assert_eq!(table[3], 0x9909_51BA, "table[3] mismatch for IEEE CRC32");
+        assert_eq!(table[4], 0x076D_C419, "table[4] mismatch for IEEE CRC32");
+        assert_eq!(table[128], 0xEDB8_8320, "table[128] must equal the polynomial");
+        assert_eq!(table[255], 0x2D02_EF8D, "table[255] mismatch for IEEE CRC32");
+    }
+
+    #[test]
+    fn test_crc32_table_no_duplicate_nonzero_entries() {
+        let table = crc32_table();
+        // Every nonzero entry should be unique (CRC32 table is a permutation-like mapping)
+        let mut seen = std::collections::HashSet::new();
+        for (i, &val) in table.iter().enumerate() {
+            if val != 0 {
+                assert!(
+                    seen.insert(val),
+                    "Duplicate nonzero entry 0x{:08X} at index {}",
+                    val,
+                    i
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_crc32_table_polynomial_property() {
+        // For the IEEE polynomial 0xEDB88320, table[128] == polynomial
+        // because 128 == 0x80 (only MSB set), after 8 iterations of the
+        // reflected algorithm, the result is the polynomial itself.
+        let table = crc32_table();
+        assert_eq!(
+            table[128], 0xEDB8_8320,
+            "table[128] must equal the reflected CRC32 polynomial"
+        );
+    }
+
+    #[test]
+    fn test_crc32_table_is_const_deterministic() {
+        // Calling crc32_table() twice must produce identical results
+        let table1 = crc32_table();
+        let table2 = crc32_table();
+        assert_eq!(table1, table2, "crc32_table() must be deterministic");
+    }
+
+    // =========================================================================
+    // CRC32 Hash Tests
     // =========================================================================
 
     #[test]
