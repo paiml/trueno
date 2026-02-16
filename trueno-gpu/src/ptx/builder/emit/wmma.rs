@@ -193,215 +193,190 @@ mod tests {
     use crate::ptx::registers::VirtualReg;
     use crate::ptx::types::PtxType;
 
-    fn make_instr(op: PtxOp, ty: PtxType) -> PtxInstruction {
+    const INDENT: &str = "    ";
+
+    fn regs(start: u32, count: u32, ty: PtxType) -> Vec<Operand> {
+        (start..start + count).map(|i| Operand::Reg(VirtualReg::new(i, ty))).collect()
+    }
+
+    fn ptr_reg(id: u32) -> Operand { Operand::Reg(VirtualReg::new(id, PtxType::U64)) }
+
+    fn wmma_instr(
+        op: PtxOp, ty: PtxType, dsts: Vec<Operand>, srcs: Vec<Operand>, label: Option<&str>,
+    ) -> PtxInstruction {
         PtxInstruction {
             op,
             ty,
             src_type: None,
             dst: None,
-            dsts: vec![],
-            srcs: vec![],
-            label: None,
+            dsts,
+            srcs,
+            label: label.map(String::from),
             predicate: None,
             state_space: None,
             rounding: None,
         }
     }
 
-    fn vreg(id: u32, ty: PtxType) -> VirtualReg {
-        VirtualReg::new(id, ty)
+    fn assert_contains_all(result: &str, patterns: &[&str]) {
+        for pat in patterns {
+            assert!(result.contains(pat), "missing '{pat}' in: {result}");
+        }
     }
 
-    // === is_wmma_op tests ===
+    // === is_wmma_op ===
 
     #[test]
     fn test_is_wmma_op_all_variants() {
-        assert!(is_wmma_op(&PtxOp::WmmaLoadA));
-        assert!(is_wmma_op(&PtxOp::WmmaLoadB));
-        assert!(is_wmma_op(&PtxOp::WmmaLoadC));
-        assert!(is_wmma_op(&PtxOp::WmmaMma));
-        assert!(is_wmma_op(&PtxOp::WmmaStoreD));
+        for op in [PtxOp::WmmaLoadA, PtxOp::WmmaLoadB, PtxOp::WmmaLoadC, PtxOp::WmmaMma, PtxOp::WmmaStoreD] {
+            assert!(is_wmma_op(&op));
+        }
+        for op in [PtxOp::Add, PtxOp::Ld, PtxOp::Mul, PtxOp::Bra] {
+            assert!(!is_wmma_op(&op));
+        }
     }
 
-    #[test]
-    fn test_is_wmma_op_non_wmma() {
-        assert!(!is_wmma_op(&PtxOp::Add));
-        assert!(!is_wmma_op(&PtxOp::Ld));
-        assert!(!is_wmma_op(&PtxOp::Mul));
-        assert!(!is_wmma_op(&PtxOp::Bra));
-    }
-
-    // === emit_wmma_load tests ===
+    // === emit_wmma_load ===
 
     #[test]
     fn test_emit_wmma_load_a_default() {
-        let mut instr = make_instr(PtxOp::WmmaLoadA, PtxType::F16);
-        instr.dsts = (0..8)
-            .map(|i| Operand::Reg(vreg(i, PtxType::F16)))
-            .collect();
-        instr.srcs = vec![Operand::Reg(vreg(100, PtxType::U64)), Operand::ImmU64(16)];
-        let result = emit_wmma_load("    ".to_string(), &instr, "a");
-        assert!(result.contains("wmma.load.a.sync.aligned"));
-        assert!(result.contains(".m16n16k16.row.f16"));
+        let instr = wmma_instr(
+            PtxOp::WmmaLoadA, PtxType::F16,
+            regs(0, 8, PtxType::F16),
+            vec![ptr_reg(100), Operand::ImmU64(16)],
+            None,
+        );
+        assert_contains_all(&emit_wmma_load(INDENT.into(), &instr, "a"),
+            &["wmma.load.a.sync.aligned", ".m16n16k16.row.f16"]);
     }
 
     #[test]
     fn test_emit_wmma_load_b_with_label() {
-        let mut instr = make_instr(PtxOp::WmmaLoadB, PtxType::F16);
-        instr.label = Some("m16n16k16.col.f16.stride.32".to_string());
-        instr.dsts = (0..8)
-            .map(|i| Operand::Reg(vreg(i, PtxType::F16)))
-            .collect();
-        instr.srcs = vec![Operand::Reg(vreg(100, PtxType::U64))];
-        let result = emit_wmma_load("    ".to_string(), &instr, "b");
-        assert!(result.contains("wmma.load.b.sync.aligned"));
-        assert!(result.contains(".m16n16k16.col.f16"));
-        assert!(result.contains("32"));
+        let instr = wmma_instr(
+            PtxOp::WmmaLoadB, PtxType::F16,
+            regs(0, 8, PtxType::F16),
+            vec![ptr_reg(100)],
+            Some("m16n16k16.col.f16.stride.32"),
+        );
+        assert_contains_all(&emit_wmma_load(INDENT.into(), &instr, "b"),
+            &["wmma.load.b.sync.aligned", ".m16n16k16.col.f16", "32"]);
     }
 
     #[test]
     fn test_emit_wmma_load_c() {
-        let mut instr = make_instr(PtxOp::WmmaLoadC, PtxType::F32);
-        instr.label = Some("m16n16k16.row.f32".to_string());
-        instr.dsts = (0..8)
-            .map(|i| Operand::Reg(vreg(i, PtxType::F32)))
-            .collect();
-        instr.srcs = vec![Operand::Reg(vreg(100, PtxType::U64)), Operand::ImmU64(16)];
-        let result = emit_wmma_load("    ".to_string(), &instr, "c");
-        assert!(result.contains("wmma.load.c.sync.aligned"));
-        assert!(result.contains(".m16n16k16.row.f32"));
+        let instr = wmma_instr(
+            PtxOp::WmmaLoadC, PtxType::F32,
+            regs(0, 8, PtxType::F32),
+            vec![ptr_reg(100), Operand::ImmU64(16)],
+            Some("m16n16k16.row.f32"),
+        );
+        assert_contains_all(&emit_wmma_load(INDENT.into(), &instr, "c"),
+            &["wmma.load.c.sync.aligned", ".m16n16k16.row.f32"]);
     }
 
     #[test]
     fn test_emit_wmma_load_partial_label() {
-        // Label with fewer than 3 parts
-        let mut instr = make_instr(PtxOp::WmmaLoadA, PtxType::F16);
-        instr.label = Some("m16n16k16".to_string()); // Only 1 part
-        instr.dsts = (0..8)
-            .map(|i| Operand::Reg(vreg(i, PtxType::F16)))
-            .collect();
-        instr.srcs = vec![Operand::Reg(vreg(100, PtxType::U64))];
-        let result = emit_wmma_load("    ".to_string(), &instr, "a");
-        // Should fall back to default .m16n16k16.row.f16
-        assert!(result.contains(".m16n16k16.row.f16"));
+        let instr = wmma_instr(
+            PtxOp::WmmaLoadA, PtxType::F16,
+            regs(0, 8, PtxType::F16),
+            vec![ptr_reg(100)],
+            Some("m16n16k16"),
+        );
+        assert_contains_all(&emit_wmma_load(INDENT.into(), &instr, "a"),
+            &[".m16n16k16.row.f16"]);
     }
 
     #[test]
     fn test_emit_wmma_load_no_srcs() {
-        let mut instr = make_instr(PtxOp::WmmaLoadA, PtxType::F16);
-        instr.dsts = (0..8)
-            .map(|i| Operand::Reg(vreg(i, PtxType::F16)))
-            .collect();
-        // No sources
-        let result = emit_wmma_load("    ".to_string(), &instr, "a");
-        // Should still produce valid output with default stride
-        assert!(result.contains("wmma.load.a"));
-        assert!(result.contains("16"));
+        let instr = wmma_instr(PtxOp::WmmaLoadA, PtxType::F16, regs(0, 8, PtxType::F16), vec![], None);
+        assert_contains_all(&emit_wmma_load(INDENT.into(), &instr, "a"), &["wmma.load.a", "16"]);
     }
 
-    // === emit_wmma_mma tests ===
+    // === emit_wmma_mma ===
 
     #[test]
     fn test_emit_wmma_mma_default() {
-        let mut instr = make_instr(PtxOp::WmmaMma, PtxType::F32);
-        instr.dsts = (0..8)
-            .map(|i| Operand::Reg(vreg(i, PtxType::F32)))
-            .collect();
-        // A (8) + B (8) + C (8) = 24 source registers
-        instr.srcs = (0..24)
-            .map(|i| Operand::Reg(vreg(100 + i, PtxType::F16)))
-            .collect();
-        let result = emit_wmma_mma("    ".to_string(), &instr);
-        assert!(result.contains("wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32"));
+        let instr = wmma_instr(
+            PtxOp::WmmaMma, PtxType::F32,
+            regs(0, 8, PtxType::F32),
+            regs(100, 24, PtxType::F16),
+            None,
+        );
+        assert_contains_all(&emit_wmma_mma(INDENT.into(), &instr),
+            &["wmma.mma.sync.aligned.m16n16k16.row.col.f32.f32"]);
     }
 
     #[test]
     fn test_emit_wmma_mma_with_label() {
-        let mut instr = make_instr(PtxOp::WmmaMma, PtxType::F16);
-        instr.label = Some("m8n8k4.row.row.f16.f16".to_string());
-        instr.dsts = (0..4)
-            .map(|i| Operand::Reg(vreg(i, PtxType::F16)))
-            .collect();
-        instr.srcs = (0..12)
-            .map(|i| Operand::Reg(vreg(100 + i, PtxType::F16)))
-            .collect();
-        let result = emit_wmma_mma("    ".to_string(), &instr);
-        assert!(result.contains("wmma.mma.sync.aligned.m8n8k4.row.row.f16.f16"));
+        let instr = wmma_instr(
+            PtxOp::WmmaMma, PtxType::F16,
+            regs(0, 4, PtxType::F16),
+            regs(100, 12, PtxType::F16),
+            Some("m8n8k4.row.row.f16.f16"),
+        );
+        assert_contains_all(&emit_wmma_mma(INDENT.into(), &instr),
+            &["wmma.mma.sync.aligned.m8n8k4.row.row.f16.f16"]);
     }
 
     #[test]
     fn test_emit_wmma_mma_partial_srcs() {
-        // Fewer than 24 sources
-        let mut instr = make_instr(PtxOp::WmmaMma, PtxType::F32);
-        instr.dsts = (0..8)
-            .map(|i| Operand::Reg(vreg(i, PtxType::F32)))
-            .collect();
-        instr.srcs = (0..16)
-            .map(|i| Operand::Reg(vreg(100 + i, PtxType::F16)))
-            .collect();
-        let result = emit_wmma_mma("    ".to_string(), &instr);
-        // Should handle fewer sources gracefully
-        assert!(result.contains("wmma.mma.sync.aligned"));
+        let instr = wmma_instr(
+            PtxOp::WmmaMma, PtxType::F32,
+            regs(0, 8, PtxType::F32),
+            regs(100, 16, PtxType::F16),
+            None,
+        );
+        assert_contains_all(&emit_wmma_mma(INDENT.into(), &instr), &["wmma.mma.sync.aligned"]);
     }
 
-    // === emit_wmma_store tests ===
+    // === emit_wmma_store ===
+
+    fn store_srcs(ptr: u32, frag_count: u32, frag_ty: PtxType, stride: u64) -> Vec<Operand> {
+        std::iter::once(ptr_reg(ptr))
+            .chain(regs(1, frag_count, frag_ty))
+            .chain(std::iter::once(Operand::ImmU64(stride)))
+            .collect()
+    }
 
     #[test]
     fn test_emit_wmma_store_default() {
-        let mut instr = make_instr(PtxOp::WmmaStoreD, PtxType::F32);
-        // [ptr], {8 regs}, stride
-        instr.srcs = std::iter::once(Operand::Reg(vreg(0, PtxType::U64)))
-            .chain((1..9).map(|i| Operand::Reg(vreg(i, PtxType::F32))))
-            .chain(std::iter::once(Operand::ImmU64(16)))
-            .collect();
-        let result = emit_wmma_store("    ".to_string(), &instr);
-        assert!(result.contains("wmma.store.d.sync.aligned"));
-        assert!(result.contains(".m16n16k16.row.f32"));
+        let instr = wmma_instr(PtxOp::WmmaStoreD, PtxType::F32, vec![], store_srcs(0, 8, PtxType::F32, 16), None);
+        assert_contains_all(&emit_wmma_store(INDENT.into(), &instr),
+            &["wmma.store.d.sync.aligned", ".m16n16k16.row.f32"]);
     }
 
     #[test]
     fn test_emit_wmma_store_with_label() {
-        let mut instr = make_instr(PtxOp::WmmaStoreD, PtxType::F32);
-        instr.label = Some("m16n16k16.col.f32.stride.32".to_string());
-        instr.srcs = std::iter::once(Operand::Reg(vreg(0, PtxType::U64)))
-            .chain((1..9).map(|i| Operand::Reg(vreg(i, PtxType::F32))))
-            .chain(std::iter::once(Operand::ImmU64(32)))
-            .collect();
-        let result = emit_wmma_store("    ".to_string(), &instr);
-        assert!(result.contains(".m16n16k16.col.f32"));
+        let instr = wmma_instr(
+            PtxOp::WmmaStoreD, PtxType::F32, vec![],
+            store_srcs(0, 8, PtxType::F32, 32),
+            Some("m16n16k16.col.f32.stride.32"),
+        );
+        assert_contains_all(&emit_wmma_store(INDENT.into(), &instr), &[".m16n16k16.col.f32"]);
     }
 
     #[test]
     fn test_emit_wmma_store_partial_label() {
-        // Label with fewer than 3 parts
-        let mut instr = make_instr(PtxOp::WmmaStoreD, PtxType::F32);
-        instr.label = Some("m8n8k4".to_string());
-        instr.srcs = std::iter::once(Operand::Reg(vreg(0, PtxType::U64)))
-            .chain((1..5).map(|i| Operand::Reg(vreg(i, PtxType::F32))))
-            .chain(std::iter::once(Operand::ImmU64(16)))
-            .collect();
-        let result = emit_wmma_store("    ".to_string(), &instr);
-        // Should fall back to default .m16n16k16.row.f32
-        assert!(result.contains(".m16n16k16.row.f32"));
+        let instr = wmma_instr(
+            PtxOp::WmmaStoreD, PtxType::F32, vec![],
+            store_srcs(0, 4, PtxType::F32, 16),
+            Some("m8n8k4"),
+        );
+        assert_contains_all(&emit_wmma_store(INDENT.into(), &instr), &[".m16n16k16.row.f32"]);
     }
 
     #[test]
     fn test_emit_wmma_store_stride_from_label() {
-        // No sources at all, should get stride from label
-        let mut instr = make_instr(PtxOp::WmmaStoreD, PtxType::F32);
-        instr.label = Some("m16n16k16.row.f32.stride.64".to_string());
-        instr.srcs = vec![];
-        let result = emit_wmma_store("    ".to_string(), &instr);
-        assert!(result.contains("64"));
+        let instr = wmma_instr(
+            PtxOp::WmmaStoreD, PtxType::F32, vec![], vec![],
+            Some("m16n16k16.row.f32.stride.64"),
+        );
+        assert_contains_all(&emit_wmma_store(INDENT.into(), &instr), &["64"]);
     }
 
     #[test]
     fn test_emit_wmma_store_empty_srcs() {
-        // Edge case: empty sources
-        let mut instr = make_instr(PtxOp::WmmaStoreD, PtxType::F32);
-        instr.srcs = vec![];
-        let result = emit_wmma_store("    ".to_string(), &instr);
-        // Should produce something, even if minimal
-        assert!(result.contains("wmma.store.d"));
+        let instr = wmma_instr(PtxOp::WmmaStoreD, PtxType::F32, vec![], vec![], None);
+        assert_contains_all(&emit_wmma_store(INDENT.into(), &instr), &["wmma.store.d"]);
     }
 }
