@@ -38,8 +38,9 @@ open target/coverage/html/index.html
 The coverage report shows per-crate metrics:
 
 ```
-trueno:     ~98%  (core library)
-trueno-gpu: ~98%  (GPU/CUDA backend)
+trueno:     ~96%  (core library)
+trueno-gpu: ~96%  (GPU/CUDA backend)
+TOTAL:      95.7% combined
 ```
 
 ### Technical Notes

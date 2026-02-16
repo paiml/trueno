@@ -29,11 +29,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - TDG critical defect fixed (`.unwrap()` → `.expect()` in GPU test helpers)
   - TDG average: A+ (95.3/100), zero critical defects, zero file-level entropy violations
 
+### Testing
+
+- **94 new coverage gap tests** targeting highest-impact uncovered functions
+  - `crc32_table`: 6 tests (lookup table validation, polynomial property, determinism)
+  - `exec_graph`: 12 tests (to_tree_node all node types, to_csr sparse export, slowest_kernel)
+  - `kv_cache`: 7 tests (has_high_eviction_rate boundary, empty, threshold)
+  - `jidoka`: 4 tests (Display impl for InfDetected, PerformanceRegression, DeterminismFailure)
+  - `matvec`: 23 tests (all 9 backend dispatch arms, parallel path, edge cases)
+  - `relu`: 27 tests (all 9 backend dispatch arms, parallel path, special floats)
+  - `q4k parallel`: 7 tests (threshold boundary, prime outdim, single row, zero input)
+  - `q6k parallel`: 8 tests (threshold boundary, prime outdim, public API route)
+- Total tests: 4800+ (up from 4600+)
+- Coverage: 95.7% line coverage
+
 ### Documentation
 
 - Added LZ4 compression example (`cargo run -p trueno-gpu --example lz4_compression`)
 - Added LZ4 compression chapter to book (`api-reference/lz4-compression.md`)
-- Removed stale `make coverage-gpu` reference from testing chapter
+- Updated book: version, test count, coverage numbers, removed stale `make coverage-gpu` reference
 
 ## [0.14.6] - 2026-02-16
 
