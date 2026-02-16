@@ -13,6 +13,128 @@ use crate::driver::{CudaContext, CudaStream, GpuBuffer, LaunchConfig};
 use crate::error::Result;
 
 // ============================================================================
+// Validation and launch helpers (reduce cognitive complexity)
+// ============================================================================
+
+/// Validated parameters for incremental attention kernel launch.
+#[cfg(feature = "cuda")]
+struct IncrementalAttentionParams {
+    q_expected: usize,
+}
+
+/// Validate Q, K/V cache, and seq_len parameters for incremental attention.
+///
+/// Returns `q_expected` (= n_heads * head_dim) on success.
+#[cfg(feature = "cuda")]
+fn validate_incremental_attention(
+    q: &GpuResidentTensor<f32>,
+    k_cache: &GpuResidentTensor<f32>,
+    v_cache: &GpuResidentTensor<f32>,
+    n_heads: u32,
+    head_dim: u32,
+    seq_len: u32,
+    max_seq_len: u32,
+) -> Result<IncrementalAttentionParams> {
+    let q_expected = (n_heads * head_dim) as usize;
+    if q.len() != q_expected {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "Q has {} elements, expected {} (n_heads={}, head_dim={})",
+            q.len(),
+            q_expected,
+            n_heads,
+            head_dim
+        )));
+    }
+
+    let cache_expected = (n_heads * max_seq_len * head_dim) as usize;
+    if k_cache.len() != cache_expected {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "K cache has {} elements, expected {} (n_heads={}, max_seq_len={}, head_dim={})",
+            k_cache.len(),
+            cache_expected,
+            n_heads,
+            max_seq_len,
+            head_dim
+        )));
+    }
+    if v_cache.len() != cache_expected {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "V cache has {} elements, expected {}",
+            v_cache.len(),
+            cache_expected
+        )));
+    }
+
+    if seq_len > max_seq_len {
+        return Err(crate::GpuError::InvalidParameter(format!(
+            "seq_len ({}) exceeds max_seq_len ({})",
+            seq_len, max_seq_len
+        )));
+    }
+
+    Ok(IncrementalAttentionParams { q_expected })
+}
+
+/// Launch the incremental attention kernel on the given stream.
+///
+/// Handles module lock acquisition, argument marshalling, and kernel dispatch.
+#[cfg(feature = "cuda")]
+fn launch_incremental_attention_kernel(
+    ctx: &CudaContext,
+    q: &GpuResidentTensor<f32>,
+    k_cache: &GpuResidentTensor<f32>,
+    v_cache: &GpuResidentTensor<f32>,
+    output: &GpuBuffer<f32>,
+    n_heads: u32,
+    head_dim: u32,
+    seq_len: u32,
+    max_seq_len: u32,
+    stream: &CudaStream,
+) -> Result<()> {
+    use crate::kernels::{IncrementalAttentionKernel, Kernel};
+
+    let kernel = IncrementalAttentionKernel::new(max_seq_len, head_dim, n_heads);
+    let ptx = kernel.emit_ptx();
+    let cache_key = format!(
+        "incremental_attention:{}:{}:{}",
+        max_seq_len, head_dim, n_heads
+    );
+    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+
+    let config = LaunchConfig {
+        grid: (n_heads, 1, 1),
+        block: (32, 1, 1), // One warp
+        shared_mem: 0,
+    };
+
+    let q_ptr = q.as_ptr();
+    let k_ptr = k_cache.as_ptr();
+    let v_ptr = v_cache.as_ptr();
+    let out_ptr = output.as_ptr();
+    let seq_len_val = seq_len;
+
+    let mut args: [*mut std::ffi::c_void; 5] = [
+        std::ptr::addr_of!(q_ptr) as *mut _,
+        std::ptr::addr_of!(k_ptr) as *mut _,
+        std::ptr::addr_of!(v_ptr) as *mut _,
+        std::ptr::addr_of!(out_ptr) as *mut _,
+        std::ptr::addr_of!(seq_len_val) as *mut _,
+    ];
+
+    let mut module = module_arc
+        .lock()
+        .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
+    // SAFETY: Kernel launch with validated buffer sizes. q_ptr has n_heads*head_dim
+    // elements, k_ptr/v_ptr have n_heads*max_seq_len*head_dim elements, out_ptr has
+    // n_heads*head_dim elements. seq_len_val <= max_seq_len validated by caller.
+    unsafe {
+        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
+    }
+
+    Ok(())
+}
+
+// ============================================================================
 // Incremental Attention (Autoregressive Decoder)
 // ============================================================================
 
@@ -53,102 +175,22 @@ pub fn incremental_attention_gpu(
     seq_len: u32,
     max_seq_len: u32,
 ) -> Result<GpuResidentTensor<f32>> {
-    use crate::kernels::{IncrementalAttentionKernel, Kernel};
-
-    // Validate Q size: [n_heads, head_dim]
-    let q_expected = (n_heads * head_dim) as usize;
-    if q.len() != q_expected {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "Q has {} elements, expected {} (n_heads={}, head_dim={})",
-            q.len(),
-            q_expected,
-            n_heads,
-            head_dim
-        )));
-    }
-
-    // Validate K/V cache size: [n_heads, max_seq_len, head_dim]
-    let cache_expected = (n_heads * max_seq_len * head_dim) as usize;
-    if k_cache.len() != cache_expected {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "K cache has {} elements, expected {} (n_heads={}, max_seq_len={}, head_dim={})",
-            k_cache.len(),
-            cache_expected,
-            n_heads,
-            max_seq_len,
-            head_dim
-        )));
-    }
-    if v_cache.len() != cache_expected {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "V cache has {} elements, expected {}",
-            v_cache.len(),
-            cache_expected
-        )));
-    }
-
-    // Validate seq_len <= max_seq_len
-    if seq_len > max_seq_len {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "seq_len ({}) exceeds max_seq_len ({})",
-            seq_len, max_seq_len
-        )));
-    }
+    let params =
+        validate_incremental_attention(q, k_cache, v_cache, n_heads, head_dim, seq_len, max_seq_len)?;
 
     // Handle empty sequence (no attention needed)
     if seq_len == 0 {
-        // Return zeros
-        let zeros = vec![0.0f32; q_expected];
+        let zeros = vec![0.0f32; params.q_expected];
         return GpuResidentTensor::from_host(ctx, &zeros);
     }
 
     // Allocate output: [n_heads, head_dim]
-    let output = GpuBuffer::new(ctx, q_expected)?;
-
-    // Build and cache kernel
-    let kernel = IncrementalAttentionKernel::new(max_seq_len, head_dim, n_heads);
-    let ptx = kernel.emit_ptx();
-    let cache_key = format!(
-        "incremental_attention:{}:{}:{}",
-        max_seq_len, head_dim, n_heads
-    );
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+    let output = GpuBuffer::new(ctx, params.q_expected)?;
     let stream = CudaStream::new(ctx)?;
 
-    // Launch config: one block per head, one warp per block
-    let config = LaunchConfig {
-        grid: (n_heads, 1, 1),
-        block: (32, 1, 1), // One warp
-        shared_mem: 0,
-    };
-
-    // Prepare kernel arguments
-    let q_ptr = q.as_ptr();
-    let k_ptr = k_cache.as_ptr();
-    let v_ptr = v_cache.as_ptr();
-    let out_ptr = output.as_ptr();
-    let seq_len_val = seq_len;
-
-    let mut args: [*mut std::ffi::c_void; 5] = [
-        std::ptr::addr_of!(q_ptr) as *mut _,
-        std::ptr::addr_of!(k_ptr) as *mut _,
-        std::ptr::addr_of!(v_ptr) as *mut _,
-        std::ptr::addr_of!(out_ptr) as *mut _,
-        std::ptr::addr_of!(seq_len_val) as *mut _,
-    ];
-
-    // Launch kernel (lock the cached module)
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch with validated buffer sizes. q_ptr has n_heads*head_dim
-        // elements, k_ptr/v_ptr have n_heads*max_seq_len*head_dim elements, out_ptr has
-        // n_heads*head_dim elements. seq_len_val <= max_seq_len validated above.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
+    launch_incremental_attention_kernel(
+        ctx, q, k_cache, v_cache, &output, n_heads, head_dim, seq_len, max_seq_len, &stream,
+    )?;
 
     // WAPR-PERF-014: MUST sync before returning since stream goes out of scope
     // Without sync, kernel may not complete before output is used (UB!)
@@ -183,92 +225,21 @@ pub fn incremental_attention_gpu_with_stream(
     max_seq_len: u32,
     stream: &CudaStream,
 ) -> Result<GpuResidentTensor<f32>> {
-    use crate::kernels::{IncrementalAttentionKernel, Kernel};
-
-    // Validate Q size: [n_heads, head_dim]
-    let q_expected = (n_heads * head_dim) as usize;
-    if q.len() != q_expected {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "Q has {} elements, expected {} (n_heads={}, head_dim={})",
-            q.len(),
-            q_expected,
-            n_heads,
-            head_dim
-        )));
-    }
-
-    // Validate K/V cache size: [n_heads, max_seq_len, head_dim]
-    let cache_expected = (n_heads * max_seq_len * head_dim) as usize;
-    if k_cache.len() != cache_expected {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "K cache has {} elements, expected {}",
-            k_cache.len(),
-            cache_expected
-        )));
-    }
-    if v_cache.len() != cache_expected {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "V cache has {} elements, expected {}",
-            v_cache.len(),
-            cache_expected
-        )));
-    }
-
-    if seq_len > max_seq_len {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "seq_len ({}) exceeds max_seq_len ({})",
-            seq_len, max_seq_len
-        )));
-    }
+    let params =
+        validate_incremental_attention(q, k_cache, v_cache, n_heads, head_dim, seq_len, max_seq_len)?;
 
     // Handle empty sequence
     if seq_len == 0 {
-        let zeros = vec![0.0f32; q_expected];
+        let zeros = vec![0.0f32; params.q_expected];
         return GpuResidentTensor::from_host(ctx, &zeros);
     }
 
     // Allocate output
-    let output = GpuBuffer::new(ctx, q_expected)?;
+    let output = GpuBuffer::new(ctx, params.q_expected)?;
 
-    // Build and cache kernel
-    let kernel = IncrementalAttentionKernel::new(max_seq_len, head_dim, n_heads);
-    let ptx = kernel.emit_ptx();
-    let cache_key = format!(
-        "incremental_attention:{}:{}:{}",
-        max_seq_len, head_dim, n_heads
-    );
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-
-    let config = LaunchConfig {
-        grid: (n_heads, 1, 1),
-        block: (32, 1, 1),
-        shared_mem: 0,
-    };
-
-    let q_ptr = q.as_ptr();
-    let k_ptr = k_cache.as_ptr();
-    let v_ptr = v_cache.as_ptr();
-    let out_ptr = output.as_ptr();
-    let seq_len_val = seq_len;
-
-    let mut args: [*mut std::ffi::c_void; 5] = [
-        std::ptr::addr_of!(q_ptr) as *mut _,
-        std::ptr::addr_of!(k_ptr) as *mut _,
-        std::ptr::addr_of!(v_ptr) as *mut _,
-        std::ptr::addr_of!(out_ptr) as *mut _,
-        std::ptr::addr_of!(seq_len_val) as *mut _,
-    ];
-
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch with validated buffer sizes (same invariants as
-        // incremental_attention_gpu). Uses caller-provided stream for pipelining.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
+    launch_incremental_attention_kernel(
+        ctx, q, k_cache, v_cache, &output, n_heads, head_dim, seq_len, max_seq_len, stream,
+    )?;
 
     // NO SYNC - uses caller's stream for pipelining
     Ok(GpuResidentTensor::from_buffer_internal(output, 1))
@@ -299,87 +270,24 @@ pub fn incremental_attention_gpu_async(
     seq_len: u32,
     max_seq_len: u32,
 ) -> Result<(GpuResidentTensor<f32>, CudaStream)> {
-    use crate::kernels::{IncrementalAttentionKernel, Kernel};
-
-    // Validate Q size: [n_heads, head_dim]
-    let q_expected = (n_heads * head_dim) as usize;
-    if q.len() != q_expected {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "Q has {} elements, expected {} (n_heads={}, head_dim={})",
-            q.len(),
-            q_expected,
-            n_heads,
-            head_dim
-        )));
-    }
-
-    // Validate K/V cache size: [n_heads, max_seq_len, head_dim]
-    let cache_expected = (n_heads * max_seq_len * head_dim) as usize;
-    if k_cache.len() != cache_expected || v_cache.len() != cache_expected {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "K/V cache size mismatch: expected {} (n_heads={}, max_seq_len={}, head_dim={})",
-            cache_expected, n_heads, max_seq_len, head_dim
-        )));
-    }
-
-    if seq_len > max_seq_len {
-        return Err(crate::GpuError::InvalidParameter(format!(
-            "seq_len ({}) exceeds max_seq_len ({})",
-            seq_len, max_seq_len
-        )));
-    }
+    let params =
+        validate_incremental_attention(q, k_cache, v_cache, n_heads, head_dim, seq_len, max_seq_len)?;
 
     // Handle empty sequence
     if seq_len == 0 {
-        let zeros = vec![0.0f32; q_expected];
+        let zeros = vec![0.0f32; params.q_expected];
         let output = GpuResidentTensor::from_host(ctx, &zeros)?;
         let stream = CudaStream::new(ctx)?;
         return Ok((output, stream));
     }
 
     // Allocate output
-    let output = GpuBuffer::new(ctx, q_expected)?;
-
-    // Build and cache kernel
-    let kernel = IncrementalAttentionKernel::new(max_seq_len, head_dim, n_heads);
-    let ptx = kernel.emit_ptx();
-    let cache_key = format!(
-        "incremental_attention:{}:{}:{}",
-        max_seq_len, head_dim, n_heads
-    );
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
+    let output = GpuBuffer::new(ctx, params.q_expected)?;
     let stream = CudaStream::new(ctx)?;
 
-    let config = LaunchConfig {
-        grid: (n_heads, 1, 1),
-        block: (32, 1, 1),
-        shared_mem: 0,
-    };
-
-    let q_ptr = q.as_ptr();
-    let k_ptr = k_cache.as_ptr();
-    let v_ptr = v_cache.as_ptr();
-    let out_ptr = output.as_ptr();
-    let seq_len_val = seq_len;
-
-    let mut args: [*mut std::ffi::c_void; 5] = [
-        std::ptr::addr_of!(q_ptr) as *mut _,
-        std::ptr::addr_of!(k_ptr) as *mut _,
-        std::ptr::addr_of!(v_ptr) as *mut _,
-        std::ptr::addr_of!(out_ptr) as *mut _,
-        std::ptr::addr_of!(seq_len_val) as *mut _,
-    ];
-
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch with validated buffer sizes (same invariants as
-        // incremental_attention_gpu). Caller controls synchronization via returned stream.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
+    launch_incremental_attention_kernel(
+        ctx, q, k_cache, v_cache, &output, n_heads, head_dim, seq_len, max_seq_len, &stream,
+    )?;
 
     // NO SYNC - caller controls synchronization (Point 149)
     Ok((GpuResidentTensor::from_buffer_internal(output, 1), stream))

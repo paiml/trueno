@@ -35,38 +35,44 @@ fn main() {
 }
 
 #[cfg(feature = "cuda")]
-fn run_cuda_demo() {
-    use trueno_gpu::driver::CudaContext;
-    use trueno_gpu::monitor::{
-        cuda_device_count, cuda_monitoring_available, CudaDeviceInfo, CudaMemoryInfo,
-    };
+fn phase_check_availability() -> bool {
+    use trueno_gpu::monitor::cuda_monitoring_available;
 
-    // Phase 1: Check CUDA availability
     println!("Phase 1: CUDA Availability Check");
     println!("---------------------------------");
 
     if !cuda_monitoring_available() {
         println!("  [ERROR] CUDA not available.");
         println!("  Check that NVIDIA driver is installed and GPU is present.");
-        return;
+        return false;
     }
     println!("  [OK] CUDA driver detected");
+    true
+}
 
-    // Phase 2: Device count
+#[cfg(feature = "cuda")]
+fn phase_device_count() -> bool {
+    use trueno_gpu::monitor::cuda_device_count;
+
     println!("\nPhase 2: Device Count");
     println!("---------------------");
 
     match cuda_device_count() {
         Ok(count) => {
             println!("  Found {} CUDA device(s)", count);
+            true
         }
         Err(e) => {
             println!("  [ERROR] Failed to get device count: {}", e);
-            return;
+            false
         }
     }
+}
 
-    // Phase 3: Enumerate devices
+#[cfg(feature = "cuda")]
+fn phase_enumerate_devices() {
+    use trueno_gpu::monitor::CudaDeviceInfo;
+
     println!("\nPhase 3: Device Enumeration");
     println!("---------------------------");
 
@@ -89,8 +95,12 @@ fn run_cuda_demo() {
             println!("  [ERROR] Device enumeration failed: {}", e);
         }
     }
+}
 
-    // Phase 4: Query individual device
+#[cfg(feature = "cuda")]
+fn phase_query_device() {
+    use trueno_gpu::monitor::CudaDeviceInfo;
+
     println!("\nPhase 4: Query Device 0");
     println!("-----------------------");
 
@@ -105,8 +115,13 @@ fn run_cuda_demo() {
             println!("  [ERROR] Query failed: {}", e);
         }
     }
+}
 
-    // Phase 5: Memory information (requires context)
+#[cfg(feature = "cuda")]
+fn phase_memory_info() {
+    use trueno_gpu::driver::CudaContext;
+    use trueno_gpu::monitor::CudaMemoryInfo;
+
     println!("\nPhase 5: Real-Time Memory Info");
     println!("------------------------------");
 
@@ -127,8 +142,13 @@ fn run_cuda_demo() {
             println!("  [ERROR] Context creation failed: {}", e);
         }
     }
+}
 
-    // Phase 6: Memory under load simulation
+#[cfg(feature = "cuda")]
+fn phase_memory_monitoring() {
+    use trueno_gpu::driver::CudaContext;
+    use trueno_gpu::monitor::CudaMemoryInfo;
+
     println!("\nPhase 6: Memory Monitoring Over Time");
     println!("------------------------------------");
 
@@ -156,6 +176,22 @@ fn run_cuda_demo() {
             println!("  [ERROR] Context creation failed: {}", e);
         }
     }
+}
+
+#[cfg(feature = "cuda")]
+fn run_cuda_demo() {
+    if !phase_check_availability() {
+        return;
+    }
+
+    if !phase_device_count() {
+        return;
+    }
+
+    phase_enumerate_devices();
+    phase_query_device();
+    phase_memory_info();
+    phase_memory_monitoring();
 
     println!("\n================================================");
     println!("  Demo complete!");

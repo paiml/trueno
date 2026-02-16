@@ -309,6 +309,17 @@ fn handle_key_event(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
     false
 }
 
+/// Poll for a key event and handle it. Returns true if the app should quit.
+fn poll_and_handle_key(app: &mut App, timeout: Duration) -> Result<bool, Box<dyn std::error::Error>> {
+    if !event::poll(timeout)? {
+        return Ok(false);
+    }
+    match event::read()? {
+        Event::Key(key) => Ok(handle_key_event(app, key)),
+        _ => Ok(false),
+    }
+}
+
 fn run_event_loop(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     app: &mut App,
@@ -320,12 +331,8 @@ fn run_event_loop(
         terminal.draw(|f| render::ui(f, app))?;
 
         let timeout = tick_rate.saturating_sub(last_tick.elapsed());
-        if event::poll(timeout)? {
-            if let Event::Key(key) = event::read()? {
-                if handle_key_event(app, key) {
-                    break;
-                }
-            }
+        if poll_and_handle_key(app, timeout)? {
+            break;
         }
 
         if last_tick.elapsed() >= tick_rate {

@@ -135,9 +135,7 @@ fn compute_single_head_attention(
     let k_h = extract_single_head(ctx, k, h, seq_len, n_heads, head_dim)?;
     let v_h = extract_single_head(ctx, v, h, seq_len, n_heads, head_dim)?;
 
-    if debug_attn && h == 0 {
-        debug_head_inputs(&q_h, &k_h, &v_h)?;
-    }
+    maybe_debug_head_inputs(debug_attn, h, &q_h, &k_h, &v_h)?;
 
     // Transpose K_h: [seq_len, head_dim] -> [head_dim, seq_len]
     let kt_h = transpose_matrix(ctx, &k_h.buffer, seq_len, head_dim)?;
@@ -146,35 +144,34 @@ fn compute_single_head_attention(
     // Q_h @ K_h^T: [seq_len, head_dim] @ [head_dim, seq_len] = [seq_len, seq_len]
     let scores_h = q_h.matmul(ctx, &kt_tensor, seq_len, seq_len, head_dim)?;
 
-    if debug_attn && h == 0 {
-        debug_scores(&scores_h)?;
-    }
+    maybe_debug_scores(debug_attn, h, &scores_h)?;
 
     // Scale and softmax
     let scaled_h = scores_h.scale(ctx, scale)?;
     let attn_h = scaled_h.softmax(ctx, seq_len)?;
 
-    if debug_attn && h == 0 {
-        debug_attention_weights(&attn_h, seq_len)?;
-    }
+    maybe_debug_attention_weights(debug_attn, h, &attn_h, seq_len)?;
 
     // Attn @ V_h: [seq_len, seq_len] @ [seq_len, head_dim] = [seq_len, head_dim]
     let out_h = attn_h.matmul(ctx, &v_h, seq_len, head_dim, seq_len)?;
 
-    if debug_attn && h == 0 {
-        debug_head_output(&out_h)?;
-    }
+    maybe_debug_head_output(debug_attn, h, &out_h)?;
 
     Ok(out_h)
 }
 
-/// Debug: print mean of Q, K, V head tensors.
+/// Conditionally debug-print mean of Q, K, V head tensors (only for head 0).
 #[cfg(feature = "cuda")]
-fn debug_head_inputs(
+fn maybe_debug_head_inputs(
+    debug_attn: bool,
+    h: u32,
     q_h: &GpuResidentTensor<f32>,
     k_h: &GpuResidentTensor<f32>,
     v_h: &GpuResidentTensor<f32>,
 ) -> Result<()> {
+    if !(debug_attn && h == 0) {
+        return Ok(());
+    }
     let q_host = q_h.peek_host()?;
     let k_host = k_h.peek_host()?;
     let v_host = v_h.peek_host()?;
@@ -187,9 +184,16 @@ fn debug_head_inputs(
     Ok(())
 }
 
-/// Debug: print score statistics.
+/// Conditionally debug-print score statistics (only for head 0).
 #[cfg(feature = "cuda")]
-fn debug_scores(scores_h: &GpuResidentTensor<f32>) -> Result<()> {
+fn maybe_debug_scores(
+    debug_attn: bool,
+    h: u32,
+    scores_h: &GpuResidentTensor<f32>,
+) -> Result<()> {
+    if !(debug_attn && h == 0) {
+        return Ok(());
+    }
     let scores_host = scores_h.peek_host()?;
     eprintln!(
         "[DEBUG-ATTN] head 0: scores mean={:.6}, max={:.6}",
@@ -202,9 +206,17 @@ fn debug_scores(scores_h: &GpuResidentTensor<f32>) -> Result<()> {
     Ok(())
 }
 
-/// Debug: print attention weight statistics.
+/// Conditionally debug-print attention weight statistics (only for head 0).
 #[cfg(feature = "cuda")]
-fn debug_attention_weights(attn_h: &GpuResidentTensor<f32>, seq_len: u32) -> Result<()> {
+fn maybe_debug_attention_weights(
+    debug_attn: bool,
+    h: u32,
+    attn_h: &GpuResidentTensor<f32>,
+    seq_len: u32,
+) -> Result<()> {
+    if !(debug_attn && h == 0) {
+        return Ok(());
+    }
     let attn_host = attn_h.peek_host()?;
     let first_row_sum: f32 = attn_host[..seq_len as usize].iter().sum();
     eprintln!(
@@ -215,9 +227,16 @@ fn debug_attention_weights(attn_h: &GpuResidentTensor<f32>, seq_len: u32) -> Res
     Ok(())
 }
 
-/// Debug: print output head statistics.
+/// Conditionally debug-print output head statistics (only for head 0).
 #[cfg(feature = "cuda")]
-fn debug_head_output(out_h: &GpuResidentTensor<f32>) -> Result<()> {
+fn maybe_debug_head_output(
+    debug_attn: bool,
+    h: u32,
+    out_h: &GpuResidentTensor<f32>,
+) -> Result<()> {
+    if !(debug_attn && h == 0) {
+        return Ok(());
+    }
     let out_host = out_h.peek_host()?;
     eprintln!(
         "[DEBUG-ATTN] head 0: out mean={:.6}, std={:.6}",

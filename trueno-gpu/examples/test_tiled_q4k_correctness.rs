@@ -59,12 +59,66 @@ fn create_valid_q4k_block(d: f32, dmin: f32, scale: u8, min_val: u8) -> [u8; 144
     block
 }
 
+/// Build Q4_K weight data for the given dimensions.
+fn build_q4k_weights(n: u32, k: u32) -> Vec<u8> {
+    let n_super_blocks = (k as usize + 255) / 256;
+    let weights_size = n as usize * n_super_blocks * 144;
+
+    let mut weights_data = Vec::with_capacity(weights_size);
+    for row in 0..n {
+        for sb in 0..n_super_blocks {
+            let d = 0.1 * (1.0 + (row % 4) as f32 * 0.25);
+            let dmin = 0.05 * (1.0 + (sb % 3) as f32 * 0.1);
+            let block = create_valid_q4k_block(d, dmin, 3, 1);
+            weights_data.extend_from_slice(&block);
+        }
+    }
+    weights_data
+}
+
+/// Classify output values into NaN, Inf, and OK buckets.
+fn classify_outputs(output: &[f32]) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
+    let mut nan_outputs = Vec::new();
+    let mut inf_outputs = Vec::new();
+    let mut ok_outputs = Vec::new();
+
+    for (i, &val) in output.iter().enumerate() {
+        if val.is_nan() {
+            nan_outputs.push(i);
+        } else if val.is_infinite() {
+            inf_outputs.push(i);
+        } else {
+            ok_outputs.push(i);
+        }
+    }
+    (nan_outputs, inf_outputs, ok_outputs)
+}
+
+/// Print NaN diagnostic details and first OK values.
+fn print_nan_diagnostics(nan_outputs: &[usize], ok_outputs: &[usize], output: &[f32]) {
+    if nan_outputs.len() <= 32 {
+        println!("  NaN indices: {:?}", nan_outputs);
+    } else {
+        let mod4: Vec<usize> = nan_outputs.iter().map(|x| x % 4).collect();
+        let unique_mod4: std::collections::HashSet<_> = mod4.iter().collect();
+        println!(
+            "  NaN indices mod 4: {:?} (unique: {:?})",
+            &mod4[..mod4.len().min(16)],
+            unique_mod4
+        );
+    }
+
+    if !ok_outputs.is_empty() {
+        let first_ok_vals: Vec<f32> = ok_outputs.iter().take(8).map(|&i| output[i]).collect();
+        println!("  First OK values: {:?}", first_ok_vals);
+    }
+}
+
 fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
     println!("\n--- Correctness Test N={}, K={} ---", n, k);
 
     let kernel = TiledQ4KGemvKernel::new(n, k);
 
-    // Generate PTX
     let ptx = PtxModule::new()
         .version(8, 0)
         .target("sm_89")
@@ -72,31 +126,12 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
         .add_kernel(kernel.build_ptx())
         .emit();
 
-    // Load module
     let mut module =
         CudaModule::from_ptx(ctx, &ptx).map_err(|e| format!("PTX compile failed: {}", e))?;
-
     let stream = CudaStream::new(ctx).map_err(|e| format!("Stream failed: {}", e))?;
 
-    // Create valid Q4_K weights
-    let n_super_blocks = (k as usize + 255) / 256;
-    let weights_size = n as usize * n_super_blocks * 144;
-
-    // Create weight data with valid Q4_K super-blocks
-    let mut weights_data = Vec::with_capacity(weights_size);
-    for row in 0..n {
-        for sb in 0..n_super_blocks {
-            // Use different d, dmin values per row/block to create variation
-            let d = 0.1 * (1.0 + (row % 4) as f32 * 0.25);
-            let dmin = 0.05 * (1.0 + (sb % 3) as f32 * 0.1);
-            let block = create_valid_q4k_block(d, dmin, 3, 1);
-            weights_data.extend_from_slice(&block);
-        }
-    }
-
-    // Input vector: all 1.0
+    let weights_data = build_q4k_weights(n, k);
     let input_data = vec![1.0f32; k as usize];
-
     let shared_mem_bytes = k as usize * 4;
 
     let weights_buf: GpuBuffer<u8> = GpuBuffer::from_host(ctx, &weights_data)
@@ -106,7 +141,6 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
     let output_buf: GpuBuffer<f32> =
         GpuBuffer::new(ctx, n as usize).map_err(|e| format!("Output alloc failed: {}", e))?;
 
-    // Build args
     let mut output_ptr = output_buf.as_ptr();
     let mut weights_ptr = weights_buf.as_ptr();
     let mut input_ptr = input_buf.as_ptr();
@@ -143,20 +177,7 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
         .copy_to_host(&mut output)
         .map_err(|e| format!("D2H failed: {}", e))?;
 
-    // Check for NaN and report which outputs are affected
-    let mut nan_outputs = Vec::new();
-    let mut inf_outputs = Vec::new();
-    let mut ok_outputs = Vec::new();
-
-    for (i, &val) in output.iter().enumerate() {
-        if val.is_nan() {
-            nan_outputs.push(i);
-        } else if val.is_infinite() {
-            inf_outputs.push(i);
-        } else {
-            ok_outputs.push(i);
-        }
-    }
+    let (nan_outputs, inf_outputs, ok_outputs) = classify_outputs(&output);
 
     println!("  Total outputs: {}", n);
     println!(
@@ -172,32 +193,11 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
     println!("  Inf outputs: {}", inf_outputs.len());
 
     if !nan_outputs.is_empty() {
-        // Show pattern of NaN outputs
-        if nan_outputs.len() <= 32 {
-            println!("  NaN indices: {:?}", nan_outputs);
-        } else {
-            // Check for pattern
-            let mod4: Vec<usize> = nan_outputs.iter().map(|x| x % 4).collect();
-            let unique_mod4: std::collections::HashSet<_> = mod4.iter().collect();
-            println!(
-                "  NaN indices mod 4: {:?} (unique: {:?})",
-                &mod4[..mod4.len().min(16)],
-                unique_mod4
-            );
-        }
-
-        // Show first few OK values
-        if !ok_outputs.is_empty() {
-            let first_ok_vals: Vec<f32> = ok_outputs.iter().take(8).map(|&i| output[i]).collect();
-            println!("  First OK values: {:?}", first_ok_vals);
-        }
-
+        print_nan_diagnostics(&nan_outputs, &ok_outputs, &output);
         return Ok(false);
     }
 
-    // Show first few output values
     println!("  First 8 outputs: {:?}", &output[..8.min(n as usize)]);
-
     Ok(true)
 }
 

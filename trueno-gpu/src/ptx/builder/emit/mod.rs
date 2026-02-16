@@ -37,58 +37,73 @@ pub(crate) use operand::{
     write_operand,
 };
 
-/// Emit a single instruction as PTX (allocating version)
-pub(crate) fn emit_instruction(instr: &PtxInstruction) -> String {
-    let mut s = String::new();
+/// Try to emit a label line, returning `Some(label_line)` if the instruction is a label.
+fn try_emit_label(instr: &PtxInstruction) -> Option<String> {
+    let label = instr.label.as_ref()?;
+    if label.ends_with(':') {
+        Some(format!("{}:\n", &label[..label.len() - 1]))
+    } else {
+        None
+    }
+}
 
-    // Handle labels
-    if let Some(label) = &instr.label {
-        if label.ends_with(':') {
-            return format!("{}:\n", &label[..label.len() - 1]);
+/// Build the predicate prefix string for an instruction.
+fn build_predicate_prefix(instr: &PtxInstruction) -> String {
+    match &instr.predicate {
+        Some(pred) => {
+            let neg = if pred.negated { "!" } else { "" };
+            format!("    @{}{} ", neg, pred.reg.to_ptx_string())
         }
+        None => "    ".to_string(),
+    }
+}
+
+/// Dispatch a WMMA op to the appropriate emitter.
+fn emit_wmma_dispatch(s: String, instr: &PtxInstruction) -> String {
+    match instr.op {
+        PtxOp::WmmaLoadA => wmma::emit_wmma_load(s, instr, "a"),
+        PtxOp::WmmaLoadB => wmma::emit_wmma_load(s, instr, "b"),
+        PtxOp::WmmaLoadC => wmma::emit_wmma_load(s, instr, "c"),
+        PtxOp::WmmaMma => wmma::emit_wmma_mma(s, instr),
+        PtxOp::WmmaStoreD => wmma::emit_wmma_store(s, instr),
+        _ => s,
+    }
+}
+
+/// Emit opcode, type suffix, operands, and terminating semicolon.
+fn emit_standard_body(instr: &PtxInstruction, out: &mut String) {
+    emit_opcode(instr, out);
+
+    if !should_skip_type_suffix(instr) {
+        out.push_str(instr.ty.to_ptx_string());
     }
 
-    // Build predicate prefix
-    let prefix = if let Some(pred) = &instr.predicate {
-        let neg = if pred.negated { "!" } else { "" };
-        format!("    @{}{} ", neg, pred.reg.to_ptx_string())
-    } else {
-        "    ".to_string()
-    };
-    s.push_str(&prefix);
+    out.push(' ');
+    write_destinations(instr, out);
+    write_sources(instr, out);
+    out.push_str(";\n");
+}
 
-    // Handle early-return control ops (bra, ret, bar, membar)
+/// Emit a single instruction as PTX (allocating version)
+pub(crate) fn emit_instruction(instr: &PtxInstruction) -> String {
+    if let Some(label_line) = try_emit_label(instr) {
+        return label_line;
+    }
+
+    let prefix = build_predicate_prefix(instr);
+    let mut s = prefix.clone();
+
     if control::is_early_return_op(&instr.op) {
         if let Some(result) = control::emit_control_opcode(instr, &prefix) {
             return result;
         }
     }
 
-    // Handle WMMA ops (complex formatting, early return)
     if wmma::is_wmma_op(&instr.op) {
-        return match instr.op {
-            PtxOp::WmmaLoadA => wmma::emit_wmma_load(s, instr, "a"),
-            PtxOp::WmmaLoadB => wmma::emit_wmma_load(s, instr, "b"),
-            PtxOp::WmmaLoadC => wmma::emit_wmma_load(s, instr, "c"),
-            PtxOp::WmmaMma => wmma::emit_wmma_mma(s, instr),
-            PtxOp::WmmaStoreD => wmma::emit_wmma_store(s, instr),
-            _ => s,
-        };
+        return emit_wmma_dispatch(s, instr);
     }
 
-    emit_opcode(instr, &mut s);
-
-    // Type suffix (skip for certain ops)
-    if !should_skip_type_suffix(instr) {
-        s.push_str(instr.ty.to_ptx_string());
-    }
-
-    s.push(' ');
-
-    write_destinations(instr, &mut s);
-    write_sources(instr, &mut s);
-
-    s.push_str(";\n");
+    emit_standard_body(instr, &mut s);
     s
 }
 
@@ -189,49 +204,51 @@ fn write_predicate_prefix(instr: &PtxInstruction, out: &mut String) {
     }
 }
 
-/// Write a single instruction directly to a String buffer (zero intermediate allocations)
-pub(super) fn write_instruction(instr: &PtxInstruction, out: &mut String) {
-    // Handle labels
+/// Try to write a label line directly to the output buffer.
+/// Returns `true` if a label was written (caller should return early).
+fn try_write_label(instr: &PtxInstruction, out: &mut String) -> bool {
     if let Some(label) = &instr.label {
         if label.ends_with(':') {
             let _ = writeln!(out, "{}:", &label[..label.len() - 1]);
-            return;
+            return true;
         }
+    }
+    false
+}
+
+/// Try to handle an early-return control op in the write path.
+/// Returns `true` if the op was fully handled (caller should return early).
+fn try_write_control_op(instr: &PtxInstruction, out: &mut String) -> bool {
+    if !control::is_early_return_op(&instr.op) {
+        return false;
+    }
+    let prefix = build_predicate_prefix(instr);
+    if let Some(result) = control::emit_control_opcode(instr, &prefix) {
+        // Skip prefix portion — already written by write_predicate_prefix
+        out.push_str(&result[prefix.len()..]);
+        return true;
+    }
+    false
+}
+
+/// Write a single instruction directly to a String buffer (zero intermediate allocations)
+pub(super) fn write_instruction(instr: &PtxInstruction, out: &mut String) {
+    if try_write_label(instr, out) {
+        return;
     }
 
     write_predicate_prefix(instr, out);
 
-    // Handle early-return control ops
-    if control::is_early_return_op(&instr.op) {
-        let prefix = if let Some(pred) = &instr.predicate {
-            let neg = if pred.negated { "!" } else { "" };
-            format!("    @{}{} ", neg, pred.reg)
-        } else {
-            "    ".to_string()
-        };
-        if let Some(result) = control::emit_control_opcode(instr, &prefix) {
-            out.push_str(&result[prefix.len()..]); // Skip prefix, already written
-            return;
-        }
+    if try_write_control_op(instr, out) {
+        return;
     }
 
-    // Handle WMMA ops (complex formatting)
     if wmma::is_wmma_op(&instr.op) {
         out.push_str(&emit_instruction(instr));
         return;
     }
 
-    emit_opcode(instr, out);
-
-    // Type suffix
-    if !should_skip_type_suffix(instr) {
-        out.push_str(instr.ty.to_ptx_string());
-    }
-
-    out.push(' ');
-    write_destinations(instr, out);
-    write_sources(instr, out);
-    out.push_str(";\n");
+    emit_standard_body(instr, out);
 }
 
 
