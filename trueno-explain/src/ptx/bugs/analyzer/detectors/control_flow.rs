@@ -137,73 +137,15 @@ impl PtxBugAnalyzer {
         lines: &[&str],
     ) -> Vec<PtxBug> {
         let mut bugs = Vec::new();
-
-        // Find loop patterns: label followed by branch back to same label
         let label_pattern = Regex::new(r"^(\w+):$").expect("invariant: regex pattern is valid");
         let branch_pattern = Regex::new(r"^\s*(?:@%\w+\s+)?bra\s+(\w+);")
             .expect("invariant: regex pattern is valid");
 
-        let mut i = 0;
-        while i < lines.len() {
-            let line = lines[i].trim();
-
-            // Check if this is a loop label
+        for (i, line) in lines.iter().enumerate() {
+            let line = line.trim();
             if let Some(label_caps) = label_pattern.captures(line) {
-                let label = label_caps
-                    .get(1)
-                    .expect("invariant: capture group exists")
-                    .as_str();
-
-                // Look for the loop body and back-edge
-                let mut j = i + 1;
-                let mut has_computation = false;
-                let mut loop_end = None;
-
-                while j < lines.len() && j < i + 20 {
-                    // Limit search to 20 lines
-                    let inner = lines[j].trim();
-
-                    // Skip comments and empty lines
-                    if inner.is_empty() || inner.starts_with("//") {
-                        j += 1;
-                        continue;
-                    }
-
-                    // Check if this line does computation
-                    let compute_ops = [
-                        "add.", "sub.", "mul.", "div.", "fma.", "mad.", "ld.", "st.", "cvt.",
-                        "mov.", "setp.", "and.", "or.", "xor.", "shl.", "shr.", "min.", "max.",
-                        "abs.", "neg.", "rcp.", "sqrt.", "rsqrt.", "sin.", "cos.", "ex2.", "lg2.",
-                    ];
-                    for op in &compute_ops {
-                        if inner.contains(op) {
-                            has_computation = true;
-                            break;
-                        }
-                    }
-
-                    // Check for branch back to loop label
-                    if let Some(br_caps) = branch_pattern.captures(inner) {
-                        let target = br_caps
-                            .get(1)
-                            .expect("invariant: capture group exists")
-                            .as_str();
-                        if target == label {
-                            loop_end = Some(j);
-                            break;
-                        }
-                    }
-
-                    // Check for end label (loop_end, _end suffix)
-                    if inner.ends_with(':') && (inner.contains("_end") || inner.contains("END")) {
-                        break;
-                    }
-
-                    j += 1;
-                }
-
-                // If we found a loop back-edge but no computation
-                if loop_end.is_some() && !has_computation {
+                let label = label_caps.get(1).expect("invariant: capture group exists").as_str();
+                if scan_empty_loop(lines, i, label, &branch_pattern) {
                     bugs.push(PtxBug {
                         class: PtxBugClass::EmptyLoopBody,
                         line: i + 1,
@@ -214,7 +156,6 @@ impl PtxBugAnalyzer {
                     });
                 }
             }
-            i += 1;
         }
 
         bugs
@@ -289,4 +230,38 @@ impl PtxBugAnalyzer {
 
         bugs
     }
+}
+
+const COMPUTE_OPS: &[&str] = &[
+    "add.", "sub.", "mul.", "div.", "fma.", "mad.", "ld.", "st.", "cvt.",
+    "mov.", "setp.", "and.", "or.", "xor.", "shl.", "shr.", "min.", "max.",
+    "abs.", "neg.", "rcp.", "sqrt.", "rsqrt.", "sin.", "cos.", "ex2.", "lg2.",
+];
+
+/// Scan forward from a label to determine if a loop body is empty (no compute ops).
+fn scan_empty_loop(lines: &[&str], start: usize, label: &str, branch_re: &Regex) -> bool {
+    let mut has_computation = false;
+    let mut found_back_edge = false;
+
+    for j in (start + 1)..lines.len().min(start + 21) {
+        let inner = lines[j].trim();
+        if inner.is_empty() || inner.starts_with("//") {
+            continue;
+        }
+        if COMPUTE_OPS.iter().any(|op| inner.contains(op)) {
+            has_computation = true;
+        }
+        if let Some(br_caps) = branch_re.captures(inner) {
+            let target = br_caps.get(1).expect("invariant: capture group exists").as_str();
+            if target == label {
+                found_back_edge = true;
+                break;
+            }
+        }
+        if inner.ends_with(':') && (inner.contains("_end") || inner.contains("END")) {
+            break;
+        }
+    }
+
+    found_back_edge && !has_computation
 }
