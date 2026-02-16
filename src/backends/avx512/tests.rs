@@ -12,57 +12,137 @@ where
     }
 }
 
+/// Helper: test a binary element-wise op (`a OP b => expected` for all elements).
+fn assert_binary_op(
+    a_val: f32,
+    b_val: f32,
+    expected: f32,
+    op: unsafe fn(&[f32], &[f32], &mut [f32]),
+) {
+    let a = vec![a_val; 32];
+    let b = vec![b_val; 32];
+    let mut result = vec![0.0; 32];
+    // SAFETY: test-only; vectors are identically sized, backend selected by caller
+    unsafe { op(&a, &b, &mut result) };
+    assert!(
+        result.iter().all(|&x| (x - expected).abs() < 1e-6),
+        "expected all {expected}, got {:?}",
+        &result[..4]
+    );
+}
+
+/// Helper: test a unary transform against per-element expected values.
+fn assert_unary_transform(
+    input: &[f32],
+    expected: &[f32],
+    tol: f32,
+    op: unsafe fn(&[f32], &mut [f32]),
+) {
+    let mut result = vec![0.0; input.len()];
+    // SAFETY: test-only; result matches input length
+    unsafe { op(input, &mut result) };
+    for (i, (&val, &exp)) in result.iter().zip(expected.iter()).enumerate() {
+        assert!(
+            (val - exp).abs() < tol,
+            "mismatch at {i}: got {val}, expected {exp}"
+        );
+    }
+}
+
+/// Helper: test a unary transform on a large array against a scalar reference function.
+/// `input_gen` produces the input, `reference_fn` computes the expected scalar result.
+fn assert_unary_large(
+    input: Vec<f32>,
+    tol: f32,
+    op: unsafe fn(&[f32], &mut [f32]),
+    reference_fn: fn(f32) -> f32,
+    label: &str,
+) {
+    let mut result = vec![0.0; input.len()];
+    // SAFETY: test-only; result matches input length
+    unsafe { op(&input, &mut result) };
+    for (i, &val) in result.iter().enumerate() {
+        let expected = reference_fn(input[i]);
+        assert!(
+            (val - expected).abs() < tol,
+            "{label} large mismatch at {i}: {val} vs {expected}"
+        );
+    }
+}
+
+/// Helper: test a unary transform on a large array using relative error tolerance.
+fn assert_unary_large_relative(
+    input: Vec<f32>,
+    rel_tol: f32,
+    op: unsafe fn(&[f32], &mut [f32]),
+    reference_fn: fn(f32) -> f32,
+    label: &str,
+) {
+    let mut result = vec![0.0; input.len()];
+    // SAFETY: test-only; result matches input length
+    unsafe { op(&input, &mut result) };
+    for (i, &val) in result.iter().enumerate() {
+        let expected = reference_fn(input[i]);
+        assert!(
+            (val - expected).abs() / expected.max(1e-6) < rel_tol,
+            "{label} mismatch at {i}: {val} vs {expected}"
+        );
+    }
+}
+
+/// Helper: test a scalar reduction on sequential 1..=32 input.
+fn assert_reduction_f32(expected: f32, tol: f32, op: unsafe fn(&[f32]) -> f32) {
+    let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
+    let result = unsafe { op(&a) };
+    assert!(
+        (result - expected).abs() < tol,
+        "expected {expected}, got {result}"
+    );
+}
+
+/// Helper: test an index-returning reduction on sequential 1..=32 input.
+fn assert_reduction_usize(expected: usize, op: unsafe fn(&[f32]) -> usize) {
+    let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
+    let result = unsafe { op(&a) };
+    assert_eq!(result, expected);
+}
+
+/// Helper: test a large activation function where f(0) == 0 at the midpoint.
+fn assert_activation_zero_at_origin(op: unsafe fn(&[f32], &mut [f32]), label: &str) {
+    let a: Vec<f32> = (-16..16).map(|i| i as f32 * 0.3).collect();
+    let mut result = vec![0.0; 32];
+    // SAFETY: test-only; result matches input length
+    unsafe { op(&a, &mut result) };
+    assert!(
+        (result[16]).abs() < 1e-4,
+        "{label}(0) should be 0, got {}",
+        result[16]
+    );
+}
+
+// ========== Binary Element-Wise Operations ==========
+
 #[test]
 fn test_avx512_add() {
-    avx512_test(|| {
-        let a = vec![1.0; 32];
-        let b = vec![2.0; 32];
-        let mut result = vec![0.0; 32];
-        unsafe {
-            Avx512Backend::add(&a, &b, &mut result);
-        }
-        assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-6));
-    });
+    avx512_test(|| assert_binary_op(1.0, 2.0, 3.0, Avx512Backend::add));
 }
 
 #[test]
 fn test_avx512_sub() {
-    avx512_test(|| {
-        let a = vec![5.0; 32];
-        let b = vec![2.0; 32];
-        let mut result = vec![0.0; 32];
-        unsafe {
-            Avx512Backend::sub(&a, &b, &mut result);
-        }
-        assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-6));
-    });
+    avx512_test(|| assert_binary_op(5.0, 2.0, 3.0, Avx512Backend::sub));
 }
 
 #[test]
 fn test_avx512_mul() {
-    avx512_test(|| {
-        let a = vec![2.0; 32];
-        let b = vec![3.0; 32];
-        let mut result = vec![0.0; 32];
-        unsafe {
-            Avx512Backend::mul(&a, &b, &mut result);
-        }
-        assert!(result.iter().all(|&x| (x - 6.0).abs() < 1e-6));
-    });
+    avx512_test(|| assert_binary_op(2.0, 3.0, 6.0, Avx512Backend::mul));
 }
 
 #[test]
 fn test_avx512_div() {
-    avx512_test(|| {
-        let a = vec![6.0; 32];
-        let b = vec![2.0; 32];
-        let mut result = vec![0.0; 32];
-        unsafe {
-            Avx512Backend::div(&a, &b, &mut result);
-        }
-        assert!(result.iter().all(|&x| (x - 3.0).abs() < 1e-6));
-    });
+    avx512_test(|| assert_binary_op(6.0, 2.0, 3.0, Avx512Backend::div));
 }
+
+// ========== Scalar Reductions ==========
 
 #[test]
 fn test_avx512_dot() {
@@ -77,57 +157,35 @@ fn test_avx512_dot() {
 
 #[test]
 fn test_avx512_sum() {
-    avx512_test(|| {
-        let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
-        let result = unsafe { Avx512Backend::sum(&a) };
-        assert!((result - 528.0).abs() < 1e-3);
-    });
+    avx512_test(|| assert_reduction_f32(528.0, 1e-3, Avx512Backend::sum));
 }
 
 #[test]
 fn test_avx512_max() {
-    avx512_test(|| {
-        let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
-        let result = unsafe { Avx512Backend::max(&a) };
-        assert!((result - 32.0).abs() < 1e-6);
-    });
+    avx512_test(|| assert_reduction_f32(32.0, 1e-6, Avx512Backend::max));
 }
 
 #[test]
 fn test_avx512_min() {
-    avx512_test(|| {
-        let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
-        let result = unsafe { Avx512Backend::min(&a) };
-        assert!((result - 1.0).abs() < 1e-6);
-    });
+    avx512_test(|| assert_reduction_f32(1.0, 1e-6, Avx512Backend::min));
 }
 
 #[test]
 fn test_avx512_argmax() {
-    avx512_test(|| {
-        let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
-        let result = unsafe { Avx512Backend::argmax(&a) };
-        assert_eq!(result, 31);
-    });
+    avx512_test(|| assert_reduction_usize(31, Avx512Backend::argmax));
 }
 
 #[test]
 fn test_avx512_argmin() {
-    avx512_test(|| {
-        let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
-        let result = unsafe { Avx512Backend::argmin(&a) };
-        assert_eq!(result, 0);
-    });
+    avx512_test(|| assert_reduction_usize(0, Avx512Backend::argmin));
 }
 
 #[test]
 fn test_avx512_sum_kahan() {
-    avx512_test(|| {
-        let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
-        let result = unsafe { Avx512Backend::sum_kahan(&a) };
-        assert!((result - 528.0).abs() < 1e-3);
-    });
+    avx512_test(|| assert_reduction_f32(528.0, 1e-3, Avx512Backend::sum_kahan));
 }
+
+// ========== Norms ==========
 
 #[test]
 fn test_avx512_norm_l2() {
@@ -156,6 +214,8 @@ fn test_avx512_norm_linf() {
     });
 }
 
+// ========== Unary Transforms (small) ==========
+
 #[test]
 fn test_avx512_scale() {
     avx512_test(|| {
@@ -171,12 +231,12 @@ fn test_avx512_scale() {
 #[test]
 fn test_avx512_abs() {
     avx512_test(|| {
-        let a = vec![-1.0, 2.0, -3.0, 4.0];
-        let mut result = vec![0.0; 4];
-        unsafe {
-            Avx512Backend::abs(&a, &mut result);
-        }
-        assert_eq!(result, vec![1.0, 2.0, 3.0, 4.0]);
+        assert_unary_transform(
+            &[-1.0, 2.0, -3.0, 4.0],
+            &[1.0, 2.0, 3.0, 4.0],
+            1e-6,
+            Avx512Backend::abs,
+        );
     });
 }
 
@@ -222,104 +282,91 @@ fn test_avx512_fma() {
 #[test]
 fn test_avx512_relu() {
     avx512_test(|| {
-        let a = vec![-1.0, 0.0, 1.0, 2.0];
-        let mut result = vec![0.0; 4];
-        unsafe {
-            Avx512Backend::relu(&a, &mut result);
-        }
-        assert_eq!(result, vec![0.0, 0.0, 1.0, 2.0]);
+        assert_unary_transform(
+            &[-1.0, 0.0, 1.0, 2.0],
+            &[0.0, 0.0, 1.0, 2.0],
+            1e-6,
+            Avx512Backend::relu,
+        );
     });
 }
 
 #[test]
 fn test_avx512_exp() {
     avx512_test(|| {
-        let a = vec![0.0, 1.0];
-        let mut result = vec![0.0; 2];
-        unsafe {
-            Avx512Backend::exp(&a, &mut result);
-        }
-        assert!((result[0] - 1.0).abs() < 1e-4);
-        assert!((result[1] - std::f32::consts::E).abs() < 1e-3);
+        assert_unary_transform(
+            &[0.0, 1.0],
+            &[1.0, std::f32::consts::E],
+            1e-3,
+            Avx512Backend::exp,
+        );
     });
 }
 
 #[test]
 fn test_avx512_sigmoid() {
     avx512_test(|| {
-        let a = vec![0.0];
-        let mut result = vec![0.0; 1];
-        unsafe {
-            Avx512Backend::sigmoid(&a, &mut result);
-        }
-        assert!((result[0] - 0.5).abs() < 1e-5);
+        assert_unary_transform(&[0.0], &[0.5], 1e-5, Avx512Backend::sigmoid);
     });
 }
 
 #[test]
 fn test_avx512_gelu() {
     avx512_test(|| {
-        let a = vec![0.0, 1.0];
-        let mut result = vec![0.0; 2];
-        unsafe {
-            Avx512Backend::gelu(&a, &mut result);
-        }
-        assert!((result[0]).abs() < 1e-5);
-        assert!((result[1] - 0.841_192).abs() < 1e-3);
+        assert_unary_transform(
+            &[0.0, 1.0],
+            &[0.0, 0.841_192],
+            1e-3,
+            Avx512Backend::gelu,
+        );
     });
 }
 
 #[test]
 fn test_avx512_swish() {
     avx512_test(|| {
-        let a = vec![0.0, 1.0];
-        let mut result = vec![0.0; 2];
-        unsafe {
-            Avx512Backend::swish(&a, &mut result);
-        }
-        assert!((result[0]).abs() < 1e-5);
-        assert!((result[1] - 0.731_059).abs() < 1e-3);
+        assert_unary_transform(
+            &[0.0, 1.0],
+            &[0.0, 0.731_059],
+            1e-3,
+            Avx512Backend::swish,
+        );
     });
 }
 
 #[test]
 fn test_avx512_tanh() {
     avx512_test(|| {
-        let a = vec![0.0, 1.0];
-        let mut result = vec![0.0; 2];
-        unsafe {
-            Avx512Backend::tanh(&a, &mut result);
-        }
-        assert!((result[0]).abs() < 1e-5);
-        assert!((result[1] - 0.761_594_2).abs() < 1e-3);
+        assert_unary_transform(
+            &[0.0, 1.0],
+            &[0.0, 0.761_594_2],
+            1e-3,
+            Avx512Backend::tanh,
+        );
     });
 }
 
 #[test]
 fn test_avx512_sqrt() {
     avx512_test(|| {
-        let a = vec![4.0, 9.0, 16.0];
-        let mut result = vec![0.0; 3];
-        unsafe {
-            Avx512Backend::sqrt(&a, &mut result);
-        }
-        assert!((result[0] - 2.0).abs() < 1e-5);
-        assert!((result[1] - 3.0).abs() < 1e-5);
-        assert!((result[2] - 4.0).abs() < 1e-5);
+        assert_unary_transform(
+            &[4.0, 9.0, 16.0],
+            &[2.0, 3.0, 4.0],
+            1e-5,
+            Avx512Backend::sqrt,
+        );
     });
 }
 
 #[test]
 fn test_avx512_recip() {
     avx512_test(|| {
-        let a = vec![2.0, 4.0, 5.0];
-        let mut result = vec![0.0; 3];
-        unsafe {
-            Avx512Backend::recip(&a, &mut result);
-        }
-        assert!((result[0] - 0.5).abs() < 1e-5);
-        assert!((result[1] - 0.25).abs() < 1e-5);
-        assert!((result[2] - 0.2).abs() < 1e-5);
+        assert_unary_transform(
+            &[2.0, 4.0, 5.0],
+            &[0.5, 0.25, 0.2],
+            1e-5,
+            Avx512Backend::recip,
+        );
     });
 }
 
@@ -382,36 +429,24 @@ fn test_avx512_rounding() {
 fn test_avx512_exp_large() {
     avx512_test(|| {
         // 48 elements: 3 full iterations (16 elements each)
-        let a: Vec<f32> = (0..48).map(|i| i as f32 * 0.1).collect();
-        let mut result = vec![0.0; 48];
-        unsafe {
-            Avx512Backend::exp(&a, &mut result);
-        }
-        for (i, &val) in result.iter().enumerate() {
-            let expected = a[i].exp();
-            // AVX-512 exp uses polynomial approximation — allow 5% relative error
-            assert!((val - expected).abs() / expected.max(1e-6) < 0.05,
-                "exp large mismatch at {}: {} vs {}", i, val, expected);
-        }
+        let input: Vec<f32> = (0..48).map(|i| i as f32 * 0.1).collect();
+        assert_unary_large_relative(input, 0.05, Avx512Backend::exp, f32::exp, "exp");
     });
 }
 
 #[test]
 fn test_avx512_exp_non_aligned() {
     avx512_test(|| {
-        // 19 elements: 1 full SIMD iteration + 3 remainder
+        // Non-aligned sizes: 1 full SIMD iteration + remainder
         for size in [17, 19, 23, 31, 33] {
-            let a: Vec<f32> = (0..size).map(|i| i as f32 * 0.1).collect();
-            let mut result = vec![0.0; size];
-            unsafe {
-                Avx512Backend::exp(&a, &mut result);
-            }
-            for (i, &val) in result.iter().enumerate() {
-                let expected = a[i].exp();
-                // AVX-512 exp uses polynomial approximation — allow 5% relative error
-                assert!((val - expected).abs() / expected.max(1e-6) < 0.05,
-                    "exp non-aligned size={} mismatch at {}: {} vs {}", size, i, val, expected);
-            }
+            let input: Vec<f32> = (0..size).map(|i| i as f32 * 0.1).collect();
+            assert_unary_large_relative(
+                input,
+                0.05,
+                Avx512Backend::exp,
+                f32::exp,
+                &format!("exp non-aligned size={size}"),
+            );
         }
     });
 }
@@ -419,30 +454,16 @@ fn test_avx512_exp_non_aligned() {
 #[test]
 fn test_avx512_relu_large() {
     avx512_test(|| {
-        let a: Vec<f32> = (-24..24).map(|i| i as f32).collect();
-        let mut result = vec![0.0; 48];
-        unsafe {
-            Avx512Backend::relu(&a, &mut result);
-        }
-        for (i, &val) in result.iter().enumerate() {
-            let expected = a[i].max(0.0);
-            assert!((val - expected).abs() < 1e-6, "relu large mismatch at {}", i);
-        }
+        let input: Vec<f32> = (-24..24).map(|i| i as f32).collect();
+        assert_unary_large(input, 1e-6, Avx512Backend::relu, |x| x.max(0.0), "relu");
     });
 }
 
 #[test]
 fn test_avx512_tanh_large() {
     avx512_test(|| {
-        let a: Vec<f32> = (-24..24).map(|i| i as f32 * 0.2).collect();
-        let mut result = vec![0.0; 48];
-        unsafe {
-            Avx512Backend::tanh(&a, &mut result);
-        }
-        for (i, &val) in result.iter().enumerate() {
-            let expected = a[i].tanh();
-            assert!((val - expected).abs() < 1e-3, "tanh large mismatch at {}: {} vs {}", i, val, expected);
-        }
+        let input: Vec<f32> = (-24..24).map(|i| i as f32 * 0.2).collect();
+        assert_unary_large(input, 1e-3, Avx512Backend::tanh, f32::tanh, "tanh");
     });
 }
 
@@ -464,28 +485,12 @@ fn test_avx512_sigmoid_large() {
 
 #[test]
 fn test_avx512_gelu_large() {
-    avx512_test(|| {
-        let a: Vec<f32> = (-16..16).map(|i| i as f32 * 0.3).collect();
-        let mut result = vec![0.0; 32];
-        unsafe {
-            Avx512Backend::gelu(&a, &mut result);
-        }
-        // gelu(0) should be 0
-        assert!((result[16]).abs() < 1e-4);
-    });
+    avx512_test(|| assert_activation_zero_at_origin(Avx512Backend::gelu, "gelu"));
 }
 
 #[test]
 fn test_avx512_swish_large() {
-    avx512_test(|| {
-        let a: Vec<f32> = (-16..16).map(|i| i as f32 * 0.3).collect();
-        let mut result = vec![0.0; 32];
-        unsafe {
-            Avx512Backend::swish(&a, &mut result);
-        }
-        // swish(0) should be 0
-        assert!((result[16]).abs() < 1e-4);
-    });
+    avx512_test(|| assert_activation_zero_at_origin(Avx512Backend::swish, "swish"));
 }
 
 #[test]
