@@ -17,10 +17,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Zero-page detection with parallel OR reduction
   - 200:1 compression ratio for zero pages, 15-30:1 for typical data
 
+### Changed
+
+- **PMAT Entropy Kaizen** — eliminated all file-level DataTransformation violations
+  - Activation benchmarks: replaced macros with higher-order `run_bench()` function
+  - `latency_distribution`: split into histogram/moments/classification sub-modules
+  - `tiled_reduction`: converted to directory module with stride-halving loops
+  - `thermal_prediction`: extracted shared OLS/Pearson regression helpers
+  - `norms/tests`: split into edge_cases + backend sub-modules
+  - Removed dead test helpers from avx512/tests
+  - TDG critical defect fixed (`.unwrap()` → `.expect()` in GPU test helpers)
+  - TDG average: A+ (95.3/100), zero critical defects, zero file-level entropy violations
+
 ### Documentation
 
 - Added LZ4 compression example (`cargo run -p trueno-gpu --example lz4_compression`)
 - Added LZ4 compression chapter to book (`api-reference/lz4-compression.md`)
+- Removed stale `make coverage-gpu` reference from testing chapter
 
 ## [0.14.6] - 2026-02-16
 

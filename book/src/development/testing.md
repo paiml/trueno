@@ -239,10 +239,7 @@ default-filter = "not test(/test_matmul_parallel_1024/) and not test(/batch::tes
    # Look at the detailed breakdown
    ```
 
-2. For GPU code, run GPU-specific coverage:
-   ```bash
-   make coverage-gpu
-   ```
+2. For GPU code, coverage is included in the unified `make coverage` command (handles both crates automatically)
 
 ### Tests Timing Out
 
