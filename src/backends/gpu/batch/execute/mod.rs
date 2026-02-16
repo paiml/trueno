@@ -95,6 +95,16 @@ impl GpuCommandBatch {
             sender.send(result).ok();
         });
 
+        // Drive GPU work to completion — wgpu requires explicit polling
+        // for map_async callbacks to fire
+        self.device
+            .device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .map_err(|e| format!("GPU poll failed: {:?}", e))?;
+
         // Wait for mapping to complete
         receiver
             .receive()
