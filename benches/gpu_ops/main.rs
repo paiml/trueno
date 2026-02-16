@@ -10,9 +10,10 @@
 
 #![cfg(feature = "gpu")]
 
-mod vector_benches;
 mod activation_benches;
-mod matrix_softmax_benches;
+mod matrix_benches;
+mod softmax_benches;
+mod vector_benches;
 
 use criterion::{criterion_group, criterion_main};
 
@@ -20,7 +21,7 @@ criterion_group!(
     benches,
     vector_benches::bench_gpu_vec_add,
     vector_benches::bench_gpu_dot,
-    matrix_softmax_benches::bench_gpu_matmul,
+    matrix_benches::bench_gpu_matmul,
     activation_benches::bench_gpu_relu,
     activation_benches::bench_gpu_leaky_relu,
     activation_benches::bench_gpu_elu,
@@ -29,7 +30,7 @@ criterion_group!(
     activation_benches::bench_gpu_tanh,
     activation_benches::bench_gpu_swish,
     activation_benches::bench_gpu_gelu,
-    matrix_softmax_benches::bench_gpu_softmax,
-    matrix_softmax_benches::bench_gpu_log_softmax
+    softmax_benches::bench_gpu_softmax,
+    softmax_benches::bench_gpu_log_softmax
 );
 criterion_main!(benches);
