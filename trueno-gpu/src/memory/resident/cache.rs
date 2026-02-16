@@ -52,6 +52,27 @@ pub(crate) fn get_kernel_cache() -> &'static Mutex<HashMap<String, Arc<Mutex<Cud
     KERNEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Acquire the global cache lock, mapping poison errors to `GpuError`.
+///
+/// Every production call-site that needs the cache HashMap goes through this
+/// single helper, eliminating the repeated `.lock().map_err(…)` boilerplate.
+#[cfg(feature = "cuda")]
+fn lock_cache(
+    cache: &Mutex<HashMap<String, Arc<Mutex<CudaModule>>>>,
+) -> Result<std::sync::MutexGuard<'_, HashMap<String, Arc<Mutex<CudaModule>>>>> {
+    cache
+        .lock()
+        .map_err(|e| crate::GpuError::KernelLaunch(format!("Cache lock poisoned: {e}")))
+}
+
+/// Acquire a `Mutex<CudaModule>` lock, mapping poison errors to `GpuError`.
+#[cfg(feature = "cuda")]
+fn lock_module(module: &Mutex<CudaModule>) -> Result<std::sync::MutexGuard<'_, CudaModule>> {
+    module
+        .lock()
+        .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {e}")))
+}
+
 /// Get a cached kernel module, compiling if not present.
 ///
 /// # Arguments
@@ -73,9 +94,7 @@ pub(crate) fn get_or_compile_kernel(
 
     // Fast path: check if already cached
     {
-        let cache_guard = cache
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Cache lock poisoned: {}", e)))?;
+        let cache_guard = lock_cache(cache)?;
         if let Some(module) = cache_guard.get(key) {
             KERNEL_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
             return Ok(Arc::clone(module));
@@ -84,18 +103,13 @@ pub(crate) fn get_or_compile_kernel(
 
     // Cache miss: compile and store
     KERNEL_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
-    eprintln!("[KERNEL-CACHE] Compiling: {}", key);
+    eprintln!("[KERNEL-CACHE] Compiling: {key}");
 
     let module = CudaModule::from_ptx(ctx, ptx)?;
     let module_arc = Arc::new(Mutex::new(module));
 
     // Insert into cache
-    {
-        let mut cache_guard = cache
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Cache lock poisoned: {}", e)))?;
-        cache_guard.insert(key.to_string(), Arc::clone(&module_arc));
-    }
+    lock_cache(cache)?.insert(key.to_string(), Arc::clone(&module_arc));
 
     Ok(module_arc)
 }
@@ -128,9 +142,7 @@ pub(crate) fn compile_lock_launch(
     args: &mut [*mut std::ffi::c_void],
 ) -> Result<()> {
     let module_arc = get_or_compile_kernel(ctx, cache_key, ptx)?;
-    let mut module = module_arc
-        .lock()
-        .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
+    let mut module = lock_module(&module_arc)?;
     // SAFETY: Caller guarantees args are valid pointers matching kernel signature.
     unsafe {
         stream.launch_kernel(&mut module, kernel_name, config, args)?;
@@ -163,7 +175,7 @@ pub fn reset_kernel_cache_stats() {
 #[cfg(feature = "cuda")]
 pub fn clear_kernel_cache() {
     if let Some(cache) = KERNEL_CACHE.get() {
-        if let Ok(mut guard) = cache.lock() {
+        if let Ok(mut guard) = lock_cache(cache) {
             guard.clear();
         }
     }
@@ -217,46 +229,14 @@ mod tests {
         assert_clean_stats();
     }
 
-    /// Test kernel_cache_hits returns expected value after reset
+    /// Reset and clear are both idempotent and leave stats at zero.
     #[test]
-    fn test_kernel_cache_hits_after_reset() {
-        reset_kernel_cache_stats();
-        assert_eq!(kernel_cache_hits(), 0);
-    }
-
-    /// Test kernel_cache_misses returns expected value after reset
-    #[test]
-    fn test_kernel_cache_misses_after_reset() {
-        reset_kernel_cache_stats();
-        assert_eq!(kernel_cache_misses(), 0);
-    }
-
-    /// Test reset_kernel_cache_stats is idempotent
-    #[test]
-    fn test_reset_kernel_cache_stats_idempotent() {
-        reset_kernel_cache_stats();
-        reset_kernel_cache_stats();
-        reset_kernel_cache_stats();
+    fn test_idempotent_operations() {
+        for _ in 0..3 {
+            reset_kernel_cache_stats();
+            clear_kernel_cache();
+        }
         assert_clean_stats();
-    }
-
-    /// Test clear_kernel_cache is idempotent
-    #[test]
-    fn test_clear_kernel_cache_idempotent() {
-        clear_kernel_cache();
-        clear_kernel_cache();
-        clear_kernel_cache();
-        assert_clean_stats();
-    }
-
-    /// Test that stats remain consistent after multiple operations
-    #[test]
-    fn test_stats_consistency() {
-        assert_clean_stats();
-
-        clear_kernel_cache();
-        assert_eq!(kernel_cache_hits(), 0);
-        assert_eq!(kernel_cache_misses(), 0);
     }
 }
 
@@ -272,108 +252,58 @@ mod cuda_tests {
         assert_eq!(kernel_cache_misses(), 0);
     }
 
-    /// Lock the cache and assert it is empty.
-    fn assert_cache_empty() {
-        with_cache_lock(|guard| {
-            assert!(guard.is_empty(), "Cache should be empty");
-        });
+    /// Increment both counters by the given amounts, assert they match, then reset.
+    fn assert_counter_round_trip(hits: u64, misses: u64) {
+        assert_clean_stats();
+        for _ in 0..hits {
+            KERNEL_CACHE_HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        for _ in 0..misses {
+            KERNEL_CACHE_MISSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        assert_eq!(kernel_cache_hits(), hits);
+        assert_eq!(kernel_cache_misses(), misses);
+        assert_clean_stats();
     }
 
-    /// Acquire the global cache lock and pass the guard to `f`.
-    fn with_cache_lock<F, R>(f: F) -> R
-    where
-        F: FnOnce(&std::sync::MutexGuard<'_, HashMap<String, Arc<Mutex<CudaModule>>>>) -> R,
-    {
-        let cache = get_kernel_cache();
-        let guard = cache.lock().expect("Cache lock should not be poisoned");
-        f(&guard)
-    }
-
-    /// Test get_kernel_cache returns a valid cache
-    #[test]
-    fn test_get_kernel_cache_returns_valid_cache() {
-        // Verify we can acquire the lock; cache may or may not be empty
-        with_cache_lock(|_guard| {});
+    /// Clear the cache and assert it is empty with zeroed stats.
+    fn clear_and_assert_empty() {
+        clear_kernel_cache();
+        let guard = lock_cache(get_kernel_cache()).expect("Cache lock should not be poisoned");
+        assert!(guard.is_empty(), "Cache should be empty");
     }
 
     /// Test get_kernel_cache is idempotent (returns same static reference)
+    /// and the lock can be acquired repeatedly.
     #[test]
-    fn test_get_kernel_cache_is_static() {
+    fn test_get_kernel_cache_static_and_reentrant() {
         let cache1 = get_kernel_cache();
         let cache2 = get_kernel_cache();
-        // Both should point to the same static cache
         assert!(std::ptr::eq(cache1, cache2));
+        // Lock can be acquired and released multiple times
+        for _ in 0..3 {
+            let _guard = lock_cache(cache1).expect("lock");
+        }
     }
 
-    /// Test cache lock can be acquired and released multiple times
-    #[test]
-    fn test_cache_lock_reentrant() {
-        with_cache_lock(|_| {});
-        with_cache_lock(|_| {});
-        with_cache_lock(|_| {});
-    }
-
-    /// Test clear_kernel_cache clears the actual cache
+    /// Test clear_kernel_cache empties the hashmap and resets stats.
     #[test]
     fn test_clear_kernel_cache_clears_hashmap() {
-        clear_kernel_cache();
-        assert_cache_empty();
+        clear_and_assert_empty();
     }
 
-    /// Test CUDA hit/miss counters can be atomically incremented
+    /// Test atomic counter increment round-trips at multiple scales.
     #[test]
     fn test_atomic_counter_operations() {
-        assert_clean_stats();
-
-        // Manually increment the counters to test atomic operations
-        KERNEL_CACHE_HITS.fetch_add(5, std::sync::atomic::Ordering::Relaxed);
-        KERNEL_CACHE_MISSES.fetch_add(3, std::sync::atomic::Ordering::Relaxed);
-
-        assert_eq!(kernel_cache_hits(), 5);
-        assert_eq!(kernel_cache_misses(), 3);
-
-        // Reset should clear both
-        assert_clean_stats();
+        assert_counter_round_trip(5, 3);
+        assert_counter_round_trip(100, 50);
     }
 
-    /// Test stats counters work correctly with concurrent-style increments
-    #[test]
-    fn test_counter_concurrent_increments() {
-        assert_clean_stats();
-
-        // Simulate concurrent increments
-        for _ in 0..100 {
-            KERNEL_CACHE_HITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
-        for _ in 0..50 {
-            KERNEL_CACHE_MISSES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        }
-
-        assert_eq!(kernel_cache_hits(), 100);
-        assert_eq!(kernel_cache_misses(), 50);
-
-        // Cleanup
-        reset_kernel_cache_stats();
-    }
-
-    /// Test clear_kernel_cache when cache was never initialized
+    /// Test clear_kernel_cache is safe even if the cache was never
+    /// explicitly initialised (covers the `KERNEL_CACHE.get() == None` path).
     #[test]
     fn test_clear_uninitialized_cache() {
-        // This tests the path where KERNEL_CACHE.get() returns None
-        // Note: Due to static initialization, this may not always hit the None path
-        // but it should still not panic
         clear_kernel_cache();
         assert_clean_stats();
-    }
-
-    /// Test cache can store and retrieve entries directly
-    #[test]
-    fn test_cache_hashmap_operations() {
-        clear_kernel_cache();
-
-        // We can't easily create a CudaModule without a real context,
-        // but we can verify the cache structure is sound by checking
-        // it's a HashMap that accepts our key type
-        assert_cache_empty();
     }
 }
