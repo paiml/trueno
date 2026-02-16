@@ -243,80 +243,63 @@ pub fn tiled_reduce_partial<Op: ReduceOp>(data: &[f32], width: usize, height: us
 mod tests {
     use super::*;
 
+    /// Assert a reduction operation yields the expected value.
+    fn assert_reduce(data: &[f32], w: usize, h: usize, op: fn(&[f32], usize, usize) -> f32, expected: f32) {
+        let result = op(data, w, h);
+        assert!((result - expected).abs() < 1e-5, "result={result}, expected={expected}");
+    }
+
+    /// Assert tiled sum of iota(1..=w*h) equals expected triangle number.
+    fn assert_iota_sum(w: usize, h: usize) {
+        let n = w * h;
+        let data: Vec<f32> = (1..=n).map(|x| x as f32).collect();
+        let sum = tiled_sum_2d(&data, w, h);
+        let expected = (n * (n + 1)) / 2;
+        assert!(
+            (sum - expected as f32).abs() < 1e-2,
+            "{w}x{h}: sum={sum}, expected={expected}"
+        );
+    }
+
     #[test]
     fn test_tiled_sum_small() {
-        // 4×4 data (single tile, partial)
-        let data: Vec<f32> = (1..=16).map(|x| x as f32).collect();
-        let sum = tiled_sum_2d(&data, 4, 4);
-        let expected: f32 = (1..=16).sum::<i32>() as f32;
-        assert!(
-            (sum - expected).abs() < 1e-5,
-            "sum={sum}, expected={expected}"
-        );
+        assert_iota_sum(4, 4);
     }
 
     #[test]
     fn test_tiled_sum_exact_tile() {
-        // Exactly 16×16 = 256 elements
-        let data: Vec<f32> = (1..=256).map(|x| x as f32).collect();
-        let sum = tiled_sum_2d(&data, 16, 16);
-        let expected: f32 = (1..=256).sum::<i32>() as f32;
-        assert!(
-            (sum - expected).abs() < 1e-3,
-            "sum={sum}, expected={expected}"
-        );
+        assert_iota_sum(16, 16);
     }
 
     #[test]
     fn test_tiled_sum_multiple_tiles() {
-        // 32×32 = 1024 elements (4 tiles: 2×2)
-        let data: Vec<f32> = (1..=1024).map(|x| x as f32).collect();
-        let sum = tiled_sum_2d(&data, 32, 32);
-        let expected: f32 = (1..=1024).sum::<i32>() as f32;
-        assert!(
-            (sum - expected).abs() < 1e-2,
-            "sum={sum}, expected={expected}"
-        );
+        assert_iota_sum(32, 32);
     }
 
     #[test]
     fn test_tiled_sum_non_aligned() {
-        // 20×20 = 400 elements (partial tiles)
-        let data: Vec<f32> = (1..=400).map(|x| x as f32).collect();
-        let sum = tiled_sum_2d(&data, 20, 20);
-        let expected: f32 = (1..=400).sum::<i32>() as f32;
-        assert!(
-            (sum - expected).abs() < 1e-2,
-            "sum={sum}, expected={expected}"
-        );
+        assert_iota_sum(20, 20);
     }
 
     #[test]
     fn test_tiled_max() {
-        let data: Vec<f32> = vec![1.0, 5.0, 3.0, 9.0, 2.0, 7.0, 8.0, 4.0, 6.0];
-        let max = tiled_max_2d(&data, 3, 3);
-        assert!((max - 9.0).abs() < 1e-5);
+        assert_reduce(&[1.0, 5.0, 3.0, 9.0, 2.0, 7.0, 8.0, 4.0, 6.0], 3, 3, tiled_max_2d, 9.0);
     }
 
     #[test]
     fn test_tiled_max_large() {
         let data: Vec<f32> = (1..=256).map(|x| x as f32).collect();
-        let max = tiled_max_2d(&data, 16, 16);
-        assert!((max - 256.0).abs() < 1e-5);
+        assert_reduce(&data, 16, 16, tiled_max_2d, 256.0);
     }
 
     #[test]
     fn test_tiled_min() {
-        let data: Vec<f32> = vec![5.0, 3.0, 7.0, 1.0, 9.0, 2.0, 8.0, 4.0, 6.0];
-        let min = tiled_min_2d(&data, 3, 3);
-        assert!((min - 1.0).abs() < 1e-5);
+        assert_reduce(&[5.0, 3.0, 7.0, 1.0, 9.0, 2.0, 8.0, 4.0, 6.0], 3, 3, tiled_min_2d, 1.0);
     }
 
     #[test]
     fn test_tiled_min_negative() {
-        let data: Vec<f32> = vec![-5.0, 3.0, -7.0, 1.0, -9.0, 2.0, 8.0, -4.0, 6.0];
-        let min = tiled_min_2d(&data, 3, 3);
-        assert!((min - (-9.0)).abs() < 1e-5);
+        assert_reduce(&[-5.0, 3.0, -7.0, 1.0, -9.0, 2.0, 8.0, -4.0, 6.0], 3, 3, tiled_min_2d, -9.0);
     }
 
     #[test]
@@ -365,48 +348,21 @@ mod tests {
 
     #[test]
     fn test_equivalence_with_simple_sum() {
-        // Verify tiled sum matches simple iteration
-        let data: Vec<f32> = (1..=1000).map(|x| x as f32).collect();
-        let tiled = tiled_sum_2d(&data, 50, 20);
-        let simple: f32 = data.iter().sum();
-        let rel_err = (tiled - simple).abs() / simple;
-        assert!(rel_err < 1e-5, "rel_err={rel_err}");
+        assert_iota_sum(50, 20);
     }
 
     #[test]
     fn test_tile_boundaries() {
-        // Test that tile boundaries are handled correctly
-        // 17×17 = 289 elements (needs 2×2 tiles)
-        let data: Vec<f32> = (1..=289).map(|x| x as f32).collect();
-        let sum = tiled_sum_2d(&data, 17, 17);
-        let expected: f32 = (1..=289).sum::<i32>() as f32;
-        assert!(
-            (sum - expected).abs() < 1e-2,
-            "sum={sum}, expected={expected}"
-        );
+        assert_iota_sum(17, 17);
     }
 
     #[test]
     fn test_wide_matrix() {
-        // 100×5 matrix (many columns, few rows)
-        let data: Vec<f32> = (1..=500).map(|x| x as f32).collect();
-        let sum = tiled_sum_2d(&data, 100, 5);
-        let expected: f32 = (1..=500).sum::<i32>() as f32;
-        assert!(
-            (sum - expected).abs() < 1e-2,
-            "sum={sum}, expected={expected}"
-        );
+        assert_iota_sum(100, 5);
     }
 
     #[test]
     fn test_tall_matrix() {
-        // 5×100 matrix (few columns, many rows)
-        let data: Vec<f32> = (1..=500).map(|x| x as f32).collect();
-        let sum = tiled_sum_2d(&data, 5, 100);
-        let expected: f32 = (1..=500).sum::<i32>() as f32;
-        assert!(
-            (sum - expected).abs() < 1e-2,
-            "sum={sum}, expected={expected}"
-        );
+        assert_iota_sum(5, 100);
     }
 }
