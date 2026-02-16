@@ -20,6 +20,7 @@
 //! See `tests/thermal_prediction_f1221.rs` for falsification tests.
 
 mod analyzer;
+mod diagnostics;
 mod regression;
 mod types;
 
