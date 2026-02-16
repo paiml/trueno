@@ -133,38 +133,28 @@ fn test_exp_empty() {
 }
 
 #[test]
-fn test_exp_backend_auto_unsupported() {
-    // EXTREME TDD: Kill mutant that deletes Backend::Auto match arm
-    // Direct construction bypasses normal backend resolution (testing defensive code)
+fn test_exp_backend_auto_falls_through_to_scalar() {
+    // dispatch_unary_op! routes Auto to ScalarBackend (consistent with all other ops)
     let v = Vector {
         data: vec![1.0, 2.0, 3.0],
         backend: Backend::Auto,
     };
 
-    let result = v.exp();
-
-    // Should return UnsupportedBackend error, not fall through to wildcard
-    assert!(result.is_err(), "exp() should error for Backend::Auto");
-    match result.unwrap_err() {
-        TruenoError::UnsupportedBackend(Backend::Auto) => {
-            // Expected error
-        }
-        other => panic!("Expected UnsupportedBackend(Auto), got {:?}", other),
-    }
+    let result = v.exp().unwrap();
+    assert!((result.as_slice()[0] - 1.0_f32.exp()).abs() < 1e-6);
+    assert!((result.as_slice()[1] - 2.0_f32.exp()).abs() < 1e-6);
+    assert!((result.as_slice()[2] - 3.0_f32.exp()).abs() < 1e-6);
 }
 
 #[test]
-fn test_exp_backend_gpu_unsupported() {
+fn test_exp_backend_gpu_falls_through_to_scalar() {
+    // dispatch_unary_op! routes GPU to ScalarBackend (consistent with all other ops)
     let v = Vector {
         data: vec![1.0, 2.0, 3.0],
         backend: Backend::GPU,
     };
-    let result = v.exp();
-    assert!(result.is_err(), "exp() should error for Backend::GPU");
-    match result.unwrap_err() {
-        TruenoError::UnsupportedBackend(Backend::GPU) => {}
-        other => panic!("Expected UnsupportedBackend(GPU), got {:?}", other),
-    }
+    let result = v.exp().unwrap();
+    assert!((result.as_slice()[0] - 1.0_f32.exp()).abs() < 1e-6);
 }
 
 #[test]
