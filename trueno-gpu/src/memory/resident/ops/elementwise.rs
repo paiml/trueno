@@ -13,21 +13,13 @@ use crate::error::Result;
 use crate::kernels::{Kernel, LongRowSoftmaxKernel, ScaleKernel, SoftmaxKernel};
 
 #[cfg(feature = "cuda")]
-use super::super::cache::get_or_compile_kernel;
+use super::super::cache::compile_lock_launch;
 #[cfg(feature = "cuda")]
 use super::super::GpuResidentTensor;
 
 /// Compile (or fetch from cache), lock, launch, and return.
 ///
-/// Centralizes the repeated boilerplate of:
-/// 1. `get_or_compile_kernel` (cache lookup / PTX JIT)
-/// 2. Locking the `Arc<Mutex<CudaModule>>`
-/// 3. Unsafe `stream.launch_kernel`
-///
-/// # Safety
-///
-/// Caller must guarantee that `args` contains valid device pointers whose
-/// types and count match the kernel signature identified by `kernel_name`.
+/// Thin wrapper around `cache::compile_lock_launch` for local call-site brevity.
 #[cfg(feature = "cuda")]
 fn launch_cached_kernel(
     ctx: &CudaContext,
@@ -38,15 +30,7 @@ fn launch_cached_kernel(
     config: &LaunchConfig,
     args: &mut [*mut std::ffi::c_void],
 ) -> Result<()> {
-    let module_arc = get_or_compile_kernel(ctx, cache_key, ptx)?;
-    let mut module = module_arc.lock().map_err(|e| {
-        crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-    })?;
-    // SAFETY: Caller guarantees args are valid pointers matching kernel signature.
-    unsafe {
-        stream.launch_kernel(&mut module, kernel_name, config, args)?;
-    }
-    Ok(())
+    compile_lock_launch(ctx, stream, cache_key, ptx, kernel_name, config, args)
 }
 
 #[cfg(feature = "cuda")]

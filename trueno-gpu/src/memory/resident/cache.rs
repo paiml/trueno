@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 #[cfg(feature = "cuda")]
-use crate::driver::{CudaContext, CudaModule};
+use crate::driver::{CudaContext, CudaModule, CudaStream, LaunchConfig};
 #[cfg(feature = "cuda")]
 use crate::error::Result;
 
@@ -98,6 +98,44 @@ pub(crate) fn get_or_compile_kernel(
     }
 
     Ok(module_arc)
+}
+
+/// Compile (or fetch from cache), lock the module, and launch the kernel.
+///
+/// This centralises the repeated resource-management boilerplate that every
+/// CUDA operation needs:
+///
+/// 1. `get_or_compile_kernel` — cache lookup / PTX JIT compilation
+/// 2. `module_arc.lock()` — acquire the `Mutex<CudaModule>`
+/// 3. `stream.launch_kernel` — unsafe dispatch
+///
+/// By housing this in `cache.rs` the pattern is written once and all call
+/// sites across `elementwise`, `gemm`, `norm_activation`, `linear_bias`,
+/// `layout`, and `incremental` can delegate to it.
+///
+/// # Safety
+///
+/// The caller must guarantee that `args` contains valid device pointers whose
+/// types and count match the kernel signature identified by `kernel_name`.
+#[cfg(feature = "cuda")]
+pub(crate) fn compile_lock_launch(
+    ctx: &CudaContext,
+    stream: &CudaStream,
+    cache_key: &str,
+    ptx: &str,
+    kernel_name: &str,
+    config: &LaunchConfig,
+    args: &mut [*mut std::ffi::c_void],
+) -> Result<()> {
+    let module_arc = get_or_compile_kernel(ctx, cache_key, ptx)?;
+    let mut module = module_arc
+        .lock()
+        .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
+    // SAFETY: Caller guarantees args are valid pointers matching kernel signature.
+    unsafe {
+        stream.launch_kernel(&mut module, kernel_name, config, args)?;
+    }
+    Ok(())
 }
 
 /// Get kernel cache hit count

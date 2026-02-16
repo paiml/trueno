@@ -4,7 +4,7 @@
 //! the full KV cache, with synchronous, external-stream, and async variants.
 
 #[cfg(feature = "cuda")]
-use super::super::cache::get_or_compile_kernel;
+use super::super::cache::compile_lock_launch;
 #[cfg(feature = "cuda")]
 use super::super::GpuResidentTensor;
 #[cfg(feature = "cuda")]
@@ -99,8 +99,6 @@ fn launch_incremental_attention_kernel(
         "incremental_attention:{}:{}:{}",
         max_seq_len, head_dim, n_heads
     );
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-
     let config = LaunchConfig {
         grid: (n_heads, 1, 1),
         block: (32, 1, 1), // One warp
@@ -121,15 +119,9 @@ fn launch_incremental_attention_kernel(
         std::ptr::addr_of!(seq_len_val) as *mut _,
     ];
 
-    let mut module = module_arc
-        .lock()
-        .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-    // SAFETY: Kernel launch with validated buffer sizes. q_ptr has n_heads*head_dim
-    // elements, k_ptr/v_ptr have n_heads*max_seq_len*head_dim elements, out_ptr has
-    // n_heads*head_dim elements. seq_len_val <= max_seq_len validated by caller.
-    unsafe {
-        stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-    }
+    compile_lock_launch(
+        ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+    )?;
 
     Ok(())
 }
@@ -370,8 +362,6 @@ pub fn kv_cache_scatter_gpu(
     let kernel = KvCacheScatterKernel::new(n_heads, head_dim, max_seq_len);
     let ptx = kernel.emit_ptx();
     let cache_key = format!("kv_scatter:{}:{}:{}", n_heads, head_dim, max_seq_len);
-    let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
-
     // Launch config: one block per head, head_dim threads per block
     let config = LaunchConfig {
         grid: (n_heads, 1, 1),
@@ -390,17 +380,9 @@ pub fn kv_cache_scatter_gpu(
         std::ptr::addr_of!(max_seq_len) as *mut _,
     ];
 
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Kernel launch scattering src (n_heads*head_dim elements) into cache
-        // (n_heads*max_seq_len*head_dim elements) at position pos. pos < max_seq_len
-        // validated above. One block per head with head_dim threads.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-        }
-    }
+    compile_lock_launch(
+        ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+    )?;
 
     // NO SYNC - caller chains operations (Point 149)
     Ok(())

@@ -15,7 +15,7 @@ use crate::error::Result;
 use crate::kernels::{GemmKernel, Kernel};
 
 #[cfg(feature = "cuda")]
-use super::super::cache::get_or_compile_kernel;
+use super::super::cache::compile_lock_launch;
 #[cfg(feature = "cuda")]
 use super::super::GpuResidentTensor;
 
@@ -120,7 +120,6 @@ impl GpuResidentTensor<f32> {
         };
 
         let ptx = kernel.emit_ptx();
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
         let stream = CudaStream::new(ctx)?;
 
         // Prepare arguments
@@ -140,15 +139,9 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(k_val) as *mut _,
         ];
 
-        // Launch kernel (lock the cached module)
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        compile_lock_launch(
+            ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
         stream.synchronize()?;
 
         // Return result as GPU-resident tensor (no host transfer!)
@@ -252,7 +245,6 @@ impl GpuResidentTensor<f32> {
         };
 
         let ptx = kernel.emit_ptx();
-        let module_arc = get_or_compile_kernel(ctx, &cache_key, &ptx)?;
 
         // Prepare arguments
         let a_ptr = self.as_ptr();
@@ -271,15 +263,10 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(k_val) as *mut _,
         ];
 
-        // Launch kernel using caller's stream (lock the cached module)
-        {
-            let mut module = module_arc.lock().map_err(|e| {
-                crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e))
-            })?;
-            unsafe {
-                stream.launch_kernel(&mut module, kernel.name(), &config, &mut args)?;
-            }
-        }
+        // Launch kernel using caller's stream
+        compile_lock_launch(
+            ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args,
+        )?;
 
         // NO SYNC - caller controls synchronization for pipelining
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))

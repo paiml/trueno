@@ -71,31 +71,66 @@ pub enum GpuClass {
     Unknown,
 }
 
+/// Per-variant specification for a GPU class.
+struct GpuSpec {
+    /// Display label (e.g. "A10 (24GB)")
+    label: &'static str,
+    /// Expected throughput range (min, max) in tok/s
+    throughput: (u32, u32),
+    /// VRAM size in GB
+    vram_gb: u32,
+}
+
+/// Single source of truth for all GPU class specifications.
+///
+/// Adding a new GPU class only requires adding one entry here (plus the enum variant
+/// and a `from_name` match arm), eliminating the previous 4 separate match blocks.
+const fn gpu_spec(class: &GpuClass) -> GpuSpec {
+    match class {
+        GpuClass::A10 => GpuSpec {
+            label: "A10 (24GB)",
+            throughput: (350, 450),
+            vram_gb: 24,
+        },
+        GpuClass::A100 => GpuSpec {
+            label: "A100 (40/80GB)",
+            throughput: (800, 1200),
+            vram_gb: 80, // Using 80GB variant
+        },
+        GpuClass::H100 => GpuSpec {
+            label: "H100 (80GB)",
+            throughput: (1800, 2400),
+            vram_gb: 80,
+        },
+        GpuClass::Rtx4090 => GpuSpec {
+            label: "RTX 4090 (24GB)",
+            throughput: (300, 400),
+            vram_gb: 24,
+        },
+        GpuClass::Rtx3090 => GpuSpec {
+            label: "RTX 3090 (24GB)",
+            throughput: (200, 300),
+            vram_gb: 24,
+        },
+        GpuClass::Unknown => GpuSpec {
+            label: "Unknown GPU",
+            throughput: (100, 500), // Conservative estimate
+            vram_gb: 8,
+        },
+    }
+}
+
 impl GpuClass {
     /// Expected throughput range (min, max) in tok/s.
     ///
     /// From cbtop spec §21.7.
     pub fn expected_throughput(&self) -> (u32, u32) {
-        match self {
-            GpuClass::A10 => (350, 450),
-            GpuClass::A100 => (800, 1200),
-            GpuClass::H100 => (1800, 2400),
-            GpuClass::Rtx4090 => (300, 400),
-            GpuClass::Rtx3090 => (200, 300),
-            GpuClass::Unknown => (100, 500), // Conservative estimate
-        }
+        gpu_spec(self).throughput
     }
 
     /// VRAM size in GB.
     pub fn vram_gb(&self) -> u32 {
-        match self {
-            GpuClass::A10 => 24,
-            GpuClass::A100 => 80, // Using 80GB variant
-            GpuClass::H100 => 80,
-            GpuClass::Rtx4090 => 24,
-            GpuClass::Rtx3090 => 24,
-            GpuClass::Unknown => 8,
-        }
+        gpu_spec(self).vram_gb
     }
 
     /// Detect GPU class from GPU name string.
@@ -122,14 +157,7 @@ impl GpuClass {
 
 impl fmt::Display for GpuClass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            GpuClass::A10 => write!(f, "A10 (24GB)"),
-            GpuClass::A100 => write!(f, "A100 (40/80GB)"),
-            GpuClass::H100 => write!(f, "H100 (80GB)"),
-            GpuClass::Rtx4090 => write!(f, "RTX 4090 (24GB)"),
-            GpuClass::Rtx3090 => write!(f, "RTX 3090 (24GB)"),
-            GpuClass::Unknown => write!(f, "Unknown GPU"),
-        }
+        write!(f, "{}", gpu_spec(self).label)
     }
 }
 
@@ -151,44 +179,89 @@ pub enum ThroughputGrade {
     A,
 }
 
+/// Per-grade specification for throughput grading.
+struct GradeSpec {
+    /// Minimum percentage threshold to earn this grade
+    threshold: f64,
+    /// Short letter label
+    label: &'static str,
+    /// Human-readable description
+    description: &'static str,
+}
+
+/// Ordered from highest to lowest grade for `from_percentage` lookup.
+const GRADE_SPECS: [(ThroughputGrade, GradeSpec); 5] = [
+    (
+        ThroughputGrade::A,
+        GradeSpec {
+            threshold: 100.0,
+            label: "A",
+            description: "Excellent - meets or exceeds baseline",
+        },
+    ),
+    (
+        ThroughputGrade::B,
+        GradeSpec {
+            threshold: 80.0,
+            label: "B",
+            description: "Good - 80%+ of baseline",
+        },
+    ),
+    (
+        ThroughputGrade::C,
+        GradeSpec {
+            threshold: 60.0,
+            label: "C",
+            description: "Fair - 60%+ of baseline",
+        },
+    ),
+    (
+        ThroughputGrade::D,
+        GradeSpec {
+            threshold: 40.0,
+            label: "D",
+            description: "Poor - 40%+ of baseline",
+        },
+    ),
+    (
+        ThroughputGrade::F,
+        GradeSpec {
+            threshold: 0.0,
+            label: "F",
+            description: "Failing - below 40% of baseline",
+        },
+    ),
+];
+
+/// Look up the spec for a given grade variant.
+fn grade_spec(grade: &ThroughputGrade) -> &'static GradeSpec {
+    &GRADE_SPECS
+        .iter()
+        .find(|(g, _)| g == grade)
+        .expect("all variants present in GRADE_SPECS")
+        .1
+}
+
 impl ThroughputGrade {
     /// Calculate grade from actual throughput vs baseline.
     pub fn from_percentage(percentage: f64) -> Self {
-        if percentage >= 100.0 {
-            ThroughputGrade::A
-        } else if percentage >= 80.0 {
-            ThroughputGrade::B
-        } else if percentage >= 60.0 {
-            ThroughputGrade::C
-        } else if percentage >= 40.0 {
-            ThroughputGrade::D
-        } else {
-            ThroughputGrade::F
-        }
+        GRADE_SPECS
+            .iter()
+            .find(|(_, spec)| percentage >= spec.threshold)
+            .map(|(grade, _)| *grade)
+            .unwrap_or(ThroughputGrade::F)
     }
 
     /// Get threshold percentage for this grade.
     pub fn threshold(&self) -> f64 {
-        match self {
-            ThroughputGrade::A => 100.0,
-            ThroughputGrade::B => 80.0,
-            ThroughputGrade::C => 60.0,
-            ThroughputGrade::D => 40.0,
-            ThroughputGrade::F => 0.0,
-        }
+        grade_spec(self).threshold
     }
 }
 
 impl fmt::Display for ThroughputGrade {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (grade, desc) = match self {
-            ThroughputGrade::A => ("A", "Excellent - meets or exceeds baseline"),
-            ThroughputGrade::B => ("B", "Good - 80%+ of baseline"),
-            ThroughputGrade::C => ("C", "Fair - 60%+ of baseline"),
-            ThroughputGrade::D => ("D", "Poor - 40%+ of baseline"),
-            ThroughputGrade::F => ("F", "Failing - below 40% of baseline"),
-        };
-        write!(f, "{} ({})", grade, desc)
+        let spec = grade_spec(self);
+        write!(f, "{} ({})", spec.label, spec.description)
     }
 }
 
@@ -207,18 +280,75 @@ pub enum SmHealth {
     Critical,
 }
 
+/// Per-variant specification for SM health status.
+struct SmHealthSpec {
+    /// Minimum SM utilization to qualify (exclusive for Saturated, inclusive otherwise)
+    min_util: u8,
+    /// Whether the threshold comparison is strict greater-than
+    exclusive: bool,
+    /// Display label (e.g. "OPTIMAL (80-95%)")
+    label: &'static str,
+}
+
+/// Ordered from highest to lowest threshold for `from_utilization` lookup.
+const SM_HEALTH_SPECS: [(SmHealth, SmHealthSpec); 4] = [
+    (
+        SmHealth::Saturated,
+        SmHealthSpec {
+            min_util: 95,
+            exclusive: true,
+            label: "SATURATED (>95%)",
+        },
+    ),
+    (
+        SmHealth::Optimal,
+        SmHealthSpec {
+            min_util: 80,
+            exclusive: false,
+            label: "OPTIMAL (80-95%)",
+        },
+    ),
+    (
+        SmHealth::Moderate,
+        SmHealthSpec {
+            min_util: 50,
+            exclusive: false,
+            label: "MODERATE (50-80%)",
+        },
+    ),
+    (
+        SmHealth::Critical,
+        SmHealthSpec {
+            min_util: 0,
+            exclusive: false,
+            label: "CRITICAL (<50%)",
+        },
+    ),
+];
+
+/// Look up the spec for a given SM health variant.
+fn sm_health_spec(health: &SmHealth) -> &'static SmHealthSpec {
+    &SM_HEALTH_SPECS
+        .iter()
+        .find(|(h, _)| h == health)
+        .expect("all variants present in SM_HEALTH_SPECS")
+        .1
+}
+
 impl SmHealth {
     /// Calculate SM health from utilization percentage.
     pub fn from_utilization(sm_util: u8) -> Self {
-        if sm_util > 95 {
-            SmHealth::Saturated
-        } else if sm_util >= 80 {
-            SmHealth::Optimal
-        } else if sm_util >= 50 {
-            SmHealth::Moderate
-        } else {
-            SmHealth::Critical
-        }
+        SM_HEALTH_SPECS
+            .iter()
+            .find(|(_, spec)| {
+                if spec.exclusive {
+                    sm_util > spec.min_util
+                } else {
+                    sm_util >= spec.min_util
+                }
+            })
+            .map(|(health, _)| *health)
+            .unwrap_or(SmHealth::Critical)
     }
 
     /// Is this health status acceptable for production?
@@ -229,12 +359,7 @@ impl SmHealth {
 
 impl fmt::Display for SmHealth {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SmHealth::Saturated => write!(f, "SATURATED (>95%)"),
-            SmHealth::Optimal => write!(f, "OPTIMAL (80-95%)"),
-            SmHealth::Moderate => write!(f, "MODERATE (50-80%)"),
-            SmHealth::Critical => write!(f, "CRITICAL (<50%)"),
-        }
+        write!(f, "{}", sm_health_spec(self).label)
     }
 }
 

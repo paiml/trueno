@@ -1,5 +1,29 @@
 use super::*;
 
+/// Returns the expected backend when AVX-512 is excluded (memory-bound/mixed ops).
+#[cfg(target_arch = "x86_64")]
+fn expected_non_avx512_backend() -> Backend {
+    if is_x86_feature_detected!("avx2") {
+        Backend::AVX2
+    } else if is_x86_feature_detected!("avx") {
+        Backend::AVX
+    } else if is_x86_feature_detected!("sse2") {
+        Backend::SSE2
+    } else {
+        Backend::Scalar
+    }
+}
+
+/// Returns the expected backend for compute-bound ops (allows AVX-512).
+#[cfg(target_arch = "x86_64")]
+fn expected_compute_backend() -> Backend {
+    if is_x86_feature_detected!("avx512f") {
+        Backend::AVX512
+    } else {
+        expected_non_avx512_backend()
+    }
+}
+
 #[test]
 fn test_backend_enum() {
     assert_eq!(Backend::Scalar, Backend::Scalar);
@@ -238,17 +262,7 @@ fn test_select_backend_for_memory_bound_prefers_avx2() {
 
     // Should prefer AVX2 over AVX-512 for memory-bound operations
     // (Based on AVX-512 performance analysis showing 0.67-1.01x scalar)
-    if is_x86_feature_detected!("avx2") {
-        assert_eq!(backend, Backend::AVX2);
-    } else if is_x86_feature_detected!("avx") {
-        assert_eq!(backend, Backend::AVX);
-    } else if is_x86_feature_detected!("sse2") {
-        assert_eq!(backend, Backend::SSE2);
-    } else {
-        assert_eq!(backend, Backend::Scalar);
-    }
-
-    // Critical: Should NEVER return AVX-512 for memory-bound
+    assert_eq!(backend, expected_non_avx512_backend());
     assert_ne!(backend, Backend::AVX512);
 }
 
@@ -258,17 +272,7 @@ fn test_select_backend_for_compute_bound_allows_avx512() {
     let backend = select_backend_for_operation(OperationType::ComputeBound);
 
     // Should prefer AVX-512 for compute-bound operations where it excels (7-14x scalar)
-    if is_x86_feature_detected!("avx512f") {
-        assert_eq!(backend, Backend::AVX512);
-    } else if is_x86_feature_detected!("avx2") {
-        assert_eq!(backend, Backend::AVX2);
-    } else if is_x86_feature_detected!("avx") {
-        assert_eq!(backend, Backend::AVX);
-    } else if is_x86_feature_detected!("sse2") {
-        assert_eq!(backend, Backend::SSE2);
-    } else {
-        assert_eq!(backend, Backend::Scalar);
-    }
+    assert_eq!(backend, expected_compute_backend());
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -277,17 +281,7 @@ fn test_select_backend_for_mixed_prefers_avx2() {
     let backend = select_backend_for_operation(OperationType::Mixed);
 
     // Mixed operations should default to AVX2 for safety (avoid AVX-512 thermal throttling)
-    if is_x86_feature_detected!("avx2") {
-        assert_eq!(backend, Backend::AVX2);
-    } else if is_x86_feature_detected!("avx") {
-        assert_eq!(backend, Backend::AVX);
-    } else if is_x86_feature_detected!("sse2") {
-        assert_eq!(backend, Backend::SSE2);
-    } else {
-        assert_eq!(backend, Backend::Scalar);
-    }
-
-    // Should NOT return AVX-512 for mixed operations (safety first)
+    assert_eq!(backend, expected_non_avx512_backend());
     assert_ne!(backend, Backend::AVX512);
 }
 
@@ -298,9 +292,7 @@ fn test_default_backend_selection_avoids_avx512() {
     let default_backend = select_best_available_backend();
 
     // Even on CPUs with AVX-512, default selection should prefer AVX2
-    if is_x86_feature_detected!("avx2") {
-        assert_eq!(default_backend, Backend::AVX2);
-    }
+    assert_eq!(default_backend, expected_non_avx512_backend());
 
     // Verify AVX-512 is NOT returned by default
     assert_ne!(default_backend, Backend::AVX512);
@@ -318,14 +310,9 @@ fn test_backend_selection_consistency() {
     // Compute-bound may differ (allows AVX-512)
     let compute_backend = select_backend_for_operation(OperationType::ComputeBound);
 
-    // If AVX-512 is available, compute backend should be different
-    if is_x86_feature_detected!("avx512f") {
-        assert_ne!(compute_backend, memory_backend);
-        assert_eq!(compute_backend, Backend::AVX512);
-    } else {
-        // Without AVX-512, all should be the same
-        assert_eq!(compute_backend, memory_backend);
-    }
+    // Compute uses expected_compute_backend, memory uses expected_non_avx512_backend
+    assert_eq!(compute_backend, expected_compute_backend());
+    assert_eq!(memory_backend, expected_non_avx512_backend());
 }
 
 #[cfg(not(target_arch = "x86_64"))]

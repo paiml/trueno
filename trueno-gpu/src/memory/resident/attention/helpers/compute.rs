@@ -4,7 +4,7 @@
 //! and head extraction/copy operations.
 
 #[cfg(feature = "cuda")]
-use super::super::super::cache::get_or_compile_kernel;
+use super::super::super::cache::compile_lock_launch;
 #[cfg(feature = "cuda")]
 use super::super::super::GpuResidentTensor;
 #[cfg(feature = "cuda")]
@@ -20,16 +20,9 @@ const CUDA_WORKGROUP_SIZE: u32 = 256;
 
 /// Compile (or fetch from cache), launch, and synchronize a CUDA kernel.
 ///
-/// This helper consolidates the repeated boilerplate of kernel cache lookup,
-/// module lock acquisition, unsafe kernel launch, and stream synchronization
-/// that every compute helper in this module needs.
-///
-/// # Safety contract (upheld internally)
-///
-/// The caller is responsible for ensuring that `args` matches the kernel ABI
-/// and that all GPU buffers referenced by `args` are valid for the launch
-/// `config` dimensions. The `unsafe` launch is encapsulated here so that
-/// each call-site does not need its own `unsafe` block.
+/// Thin wrapper around `cache::compile_lock_launch` that creates its own
+/// stream and synchronizes after launch. Every compute helper in this
+/// module delegates to this function.
 #[cfg(feature = "cuda")]
 fn compile_and_launch(
     ctx: &CudaContext,
@@ -39,21 +32,9 @@ fn compile_and_launch(
     config: &LaunchConfig,
     args: &mut [*mut std::ffi::c_void],
 ) -> Result<()> {
-    let module_arc = get_or_compile_kernel(ctx, cache_key, ptx)?;
     let stream = CudaStream::new(ctx)?;
-
-    {
-        let mut module = module_arc
-            .lock()
-            .map_err(|e| crate::GpuError::KernelLaunch(format!("Module lock poisoned: {}", e)))?;
-        // SAFETY: Caller guarantees that args match the kernel ABI and that all
-        // referenced GPU buffers are valid for the given launch configuration.
-        unsafe {
-            stream.launch_kernel(&mut module, kernel_name, config, args)?;
-        }
-    }
+    compile_lock_launch(ctx, &stream, cache_key, ptx, kernel_name, config, args)?;
     stream.synchronize()?;
-
     Ok(())
 }
 
