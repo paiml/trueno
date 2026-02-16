@@ -15,6 +15,8 @@
 //! Test: Connect to 3+ hosts with different architectures, verify metric aggregation
 
 mod agent;
+mod json;
+mod metrics;
 mod types;
 
 pub use agent::RemoteAgent;

@@ -343,29 +343,28 @@ fn test_remote_error_display() {
 
 #[test]
 fn test_json_parsing() {
-    let config = RemoteAgentConfig::default();
-    let agent = RemoteAgent::new(config);
+    use super::json;
 
-    let json = r#"{"host":"server1","arch":"x86_64","throughput":1000000,"latency_p50":50,"latency_p99":200,"memory":1073741824}"#;
+    let json_str = r#"{"host":"server1","arch":"x86_64","throughput":1000000,"latency_p50":50,"latency_p99":200,"memory":1073741824}"#;
 
     // Test string extraction
     assert_eq!(
-        agent.extract_json_string(json, "host"),
+        json::extract_json_string(json_str, "host"),
         Some("server1".to_string())
     );
     assert_eq!(
-        agent.extract_json_string(json, "arch"),
+        json::extract_json_string(json_str, "arch"),
         Some("x86_64".to_string())
     );
 
     // Test number extraction
     assert_eq!(
-        agent.extract_json_number(json, "throughput"),
+        json::extract_json_number(json_str, "throughput"),
         Some(1000000.0)
     );
-    assert_eq!(agent.extract_json_number(json, "latency_p50"), Some(50.0));
+    assert_eq!(json::extract_json_number(json_str, "latency_p50"), Some(50.0));
     assert_eq!(
-        agent.extract_json_number(json, "memory"),
+        json::extract_json_number(json_str, "memory"),
         Some(1073741824.0)
     );
 }
