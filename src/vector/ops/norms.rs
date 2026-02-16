@@ -200,35 +200,25 @@ mod tests {
     }
 
     // =========================================================================
-    // L2 norm: edge cases
+    // L2 norm: edge cases (table-driven)
     // =========================================================================
 
     #[test]
-    fn test_norm_l2_pythagorean() { assert_norm(norm_l2, &[3.0, 4.0], 5.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l2_empty() { assert_norm(norm_l2, &[], 0.0, 0.0); }
-
-    #[test]
-    fn test_norm_l2_unit() { assert_norm(norm_l2, &[1.0, 0.0, 0.0], 1.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l2_single_element() { assert_norm(norm_l2, &[7.0], 7.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l2_single_negative() { assert_norm(norm_l2, &[-5.0], 5.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l2_all_zeros() { assert_norm(norm_l2, &[0.0, 0.0, 0.0, 0.0], 0.0, 0.0); }
-
-    #[test]
-    fn test_norm_l2_mixed_positive_negative() { assert_norm(norm_l2, &[3.0, -4.0, 0.0], 5.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l2_known_identity() { assert_norm(norm_l2, &[0.0, 0.0, 1.0], 1.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l2_non_aligned_size() {
+    fn test_norm_l2_edge_cases() {
+        let cases: &[(&[f32], f32)] = &[
+            (&[3.0, 4.0], 5.0),                  // pythagorean
+            (&[], 0.0),                           // empty
+            (&[1.0, 0.0, 0.0], 1.0),             // unit vector
+            (&[7.0], 7.0),                        // single element
+            (&[-5.0], 5.0),                       // single negative
+            (&[0.0, 0.0, 0.0, 0.0], 0.0),        // all zeros
+            (&[3.0, -4.0, 0.0], 5.0),            // mixed signs
+            (&[0.0, 0.0, 1.0], 1.0),             // unit at end
+        ];
+        for (data, expected) in cases {
+            assert_norm(norm_l2, data, *expected, 1e-5);
+        }
+        // Non-aligned: sqrt(1+4+9+16+25)
         let expected = (1.0 + 4.0 + 9.0 + 16.0 + 25.0_f32).sqrt();
         assert_norm(norm_l2, &[1.0, 2.0, 3.0, 4.0, 5.0], expected, 1e-5);
     }
@@ -244,34 +234,28 @@ mod tests {
     fn test_norm_l2_very_small_values() {
         let v = Vector::from_slice(&[1e-20, 1e-20, 1e-20]);
         let norm = v.norm_l2().unwrap();
-        assert!(norm > 0.0, "Norm of small values should be positive");
-        assert!(norm < 1e-10, "Norm should be very small");
+        assert!(norm > 0.0 && norm < 1e-10);
     }
 
     // =========================================================================
-    // L1 norm: edge cases
+    // L1 norm: edge cases (table-driven)
     // =========================================================================
 
     #[test]
-    fn test_norm_l1_basic() { assert_norm(norm_l1, &[3.0, -4.0, 5.0], 12.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l1_empty() { assert_norm(norm_l1, &[], 0.0, 0.0); }
-
-    #[test]
-    fn test_norm_l1_single_element() { assert_norm(norm_l1, &[-7.0], 7.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l1_all_zeros() { assert_norm(norm_l1, &[0.0, 0.0, 0.0], 0.0, 0.0); }
-
-    #[test]
-    fn test_norm_l1_all_positive() { assert_norm(norm_l1, &[1.0, 2.0, 3.0, 4.0], 10.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l1_all_negative() { assert_norm(norm_l1, &[-1.0, -2.0, -3.0], 6.0, 1e-5); }
-
-    #[test]
-    fn test_norm_l1_non_aligned_size() { assert_norm(norm_l1, &[1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0], 28.0, 1e-5); }
+    fn test_norm_l1_edge_cases() {
+        let cases: &[(&[f32], f32)] = &[
+            (&[3.0, -4.0, 5.0], 12.0),           // basic
+            (&[], 0.0),                           // empty
+            (&[-7.0], 7.0),                       // single negative
+            (&[0.0, 0.0, 0.0], 0.0),             // all zeros
+            (&[1.0, 2.0, 3.0, 4.0], 10.0),       // all positive
+            (&[-1.0, -2.0, -3.0], 6.0),          // all negative
+            (&[1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0], 28.0), // non-aligned
+        ];
+        for (data, expected) in cases {
+            assert_norm(norm_l1, data, *expected, 1e-5);
+        }
+    }
 
     #[test]
     fn test_norm_l1_large_vector() {
@@ -280,35 +264,26 @@ mod tests {
     }
 
     // =========================================================================
-    // L-infinity norm: edge cases
+    // L-infinity norm: edge cases (table-driven)
     // =========================================================================
 
     #[test]
-    fn test_norm_linf_basic() { assert_norm(norm_linf, &[3.0, -7.0, 5.0, -2.0], 7.0, 1e-5); }
-
-    #[test]
-    fn test_norm_linf_empty() { assert_norm(norm_linf, &[], 0.0, 0.0); }
-
-    #[test]
-    fn test_norm_linf_all_negative() { assert_norm(norm_linf, &[-1.0, -5.0, -3.0], 5.0, 1e-5); }
-
-    #[test]
-    fn test_norm_linf_single_element() { assert_norm(norm_linf, &[-42.0], 42.0, 1e-5); }
-
-    #[test]
-    fn test_norm_linf_all_zeros() { assert_norm(norm_linf, &[0.0, 0.0, 0.0], 0.0, 0.0); }
-
-    #[test]
-    fn test_norm_linf_max_at_end() { assert_norm(norm_linf, &[1.0, 2.0, 3.0, 100.0], 100.0, 1e-5); }
-
-    #[test]
-    fn test_norm_linf_max_at_beginning() { assert_norm(norm_linf, &[-100.0, 2.0, 3.0, 4.0], 100.0, 1e-5); }
-
-    #[test]
-    fn test_norm_linf_all_equal() { assert_norm(norm_linf, &[5.0, 5.0, 5.0, 5.0], 5.0, 1e-5); }
-
-    #[test]
-    fn test_norm_linf_non_aligned_size() { assert_norm(norm_linf, &[1.0, -9.0, 3.0, -4.0, 5.0], 9.0, 1e-5); }
+    fn test_norm_linf_edge_cases() {
+        let cases: &[(&[f32], f32)] = &[
+            (&[3.0, -7.0, 5.0, -2.0], 7.0),     // basic
+            (&[], 0.0),                           // empty
+            (&[-1.0, -5.0, -3.0], 5.0),          // all negative
+            (&[-42.0], 42.0),                     // single element
+            (&[0.0, 0.0, 0.0], 0.0),             // all zeros
+            (&[1.0, 2.0, 3.0, 100.0], 100.0),    // max at end
+            (&[-100.0, 2.0, 3.0, 4.0], 100.0),   // max at beginning
+            (&[5.0, 5.0, 5.0, 5.0], 5.0),        // all equal
+            (&[1.0, -9.0, 3.0, -4.0, 5.0], 9.0), // non-aligned
+        ];
+        for (data, expected) in cases {
+            assert_norm(norm_linf, data, *expected, 1e-5);
+        }
+    }
 
     #[test]
     fn test_norm_linf_large_vector() {
