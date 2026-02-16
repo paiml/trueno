@@ -425,3 +425,475 @@ fn test_add_weighted_edge() {
     assert_eq!(edges.len(), 1);
     assert!((edges[0].weight - 3.5).abs() < 1e-5);
 }
+
+// ========================================================================
+// to_csr tests — gated by `execution-graph` feature (export.rs:257)
+// ========================================================================
+
+/// to_csr on empty graph produces an empty CsrGraph.
+#[cfg(feature = "execution-graph")]
+#[test]
+fn test_to_csr_empty_graph() {
+    let graph = ExecutionGraph::new();
+    let csr = graph.to_csr();
+    assert_eq!(csr.num_edges(), 0);
+}
+
+/// to_csr with single node and no edges.
+#[cfg(feature = "execution-graph")]
+#[test]
+fn test_to_csr_single_node_no_edges() {
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::Layer { index: 0 });
+
+    let csr = graph.to_csr();
+    // Single node but no edges
+    assert_eq!(csr.num_edges(), 0);
+}
+
+/// to_csr preserves edge structure (edges map correctly).
+#[cfg(feature = "execution-graph")]
+#[test]
+fn test_to_csr_with_edges() {
+    let mut graph = ExecutionGraph::new();
+    let layer = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let brick = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::RmsNorm,
+        timing_ns: 5000,
+        elements: 2048,
+    });
+    let kernel = graph.add_node(ExecutionNode::Kernel {
+        name: "rmsnorm_kernel".into(),
+        ptx_hash: 0xABCD,
+        grid: (4, 1, 1),
+        block: (128, 1, 1),
+        shared_mem: 1024,
+        timing_ns: None,
+        arithmetic_intensity: None,
+        achieved_tflops: None,
+    });
+
+    graph.add_edge(layer, brick, EdgeType::Contains);
+    graph.add_edge(brick, kernel, EdgeType::Launches);
+
+    let csr = graph.to_csr();
+    // Should have 2 edges
+    assert_eq!(csr.num_edges(), 2);
+}
+
+/// to_csr sets node names from ExecutionNode::name().
+#[cfg(feature = "execution-graph")]
+#[test]
+fn test_to_csr_node_names() {
+    use trueno_graph::NodeId;
+
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::Layer { index: 0 });
+    graph.add_node(ExecutionNode::Brick {
+        id: BrickId::QkvProjection,
+        timing_ns: 3000,
+        elements: 1024,
+    });
+    graph.add_node(ExecutionNode::Kernel {
+        name: "matmul_kernel".into(),
+        ptx_hash: 0x1234,
+        grid: (8, 1, 1),
+        block: (256, 1, 1),
+        shared_mem: 4096,
+        timing_ns: Some(2000),
+        arithmetic_intensity: Some(3.5),
+        achieved_tflops: Some(1.0),
+    });
+
+    // Need edges for CsrGraph to include nodes
+    let n0 = ExecutionNodeId(0);
+    let n1 = ExecutionNodeId(1);
+    let n2 = ExecutionNodeId(2);
+    graph.add_edge(n0, n1, EdgeType::Contains);
+    graph.add_edge(n1, n2, EdgeType::Launches);
+
+    let csr = graph.to_csr();
+
+    // Verify node names are set
+    assert_eq!(csr.get_node_name(NodeId(0)), Some("Layer0"));
+    assert_eq!(csr.get_node_name(NodeId(1)), Some("QkvProjection"));
+    assert_eq!(csr.get_node_name(NodeId(2)), Some("matmul_kernel"));
+}
+
+/// to_csr with weighted edges preserves edge weights.
+#[cfg(feature = "execution-graph")]
+#[test]
+fn test_to_csr_weighted_edges() {
+    let mut graph = ExecutionGraph::new();
+    let a = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let b = graph.add_node(ExecutionNode::Layer { index: 1 });
+
+    graph.add_weighted_edge(a, b, EdgeType::Sequence, 7.5);
+
+    let csr = graph.to_csr();
+    assert_eq!(csr.num_edges(), 1);
+}
+
+/// to_csr with all node types (Transfer, Function, AsyncTask).
+#[cfg(feature = "execution-graph")]
+#[test]
+fn test_to_csr_all_node_types() {
+    let mut graph = ExecutionGraph::new();
+    let layer = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let func = graph.add_node(ExecutionNode::Function {
+        name: "forward".into(),
+        file: Some("model.rs".into()),
+        line: Some(42),
+    });
+    let transfer = graph.add_node(ExecutionNode::Transfer {
+        src: "host".into(),
+        dst: "gpu0".into(),
+        bytes: 1_000_000,
+        direction: TransferDirection::H2D,
+        timing_ns: Some(500),
+    });
+    let async_task = graph.add_node(ExecutionNode::AsyncTask {
+        name: "prefetch".into(),
+        poll_count: 3,
+        yield_count: 1,
+        total_poll_ns: 2000,
+    });
+
+    graph.add_edge(layer, func, EdgeType::Contains);
+    graph.add_edge(func, transfer, EdgeType::Sequence);
+    graph.add_edge(func, async_task, EdgeType::Sequence);
+
+    let csr = graph.to_csr();
+    assert_eq!(csr.num_edges(), 3);
+}
+
+// ========================================================================
+// to_tree_node tests — gated by `presentar-tui` feature (export.rs:280)
+// Cover missing branches: Transfer without timing, AsyncTask with 0 polls,
+// Function with partial file/line, single root, children traversal.
+// ========================================================================
+
+/// to_tree_node: single root produces that node directly (not wrapped).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_single_root_layer() {
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::Layer { index: 3 });
+    let tree = graph.to_tree_node();
+    assert_eq!(tree.label, "Layer 3");
+    assert!(tree.children.is_empty());
+}
+
+/// to_tree_node: Transfer node with timing_ns = None (cover the unwrap_or_default branch).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_transfer_no_timing() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let transfer = graph.add_node(ExecutionNode::Transfer {
+        src: "gpu0".into(),
+        dst: "host".into(),
+        bytes: 4096,
+        direction: TransferDirection::D2H,
+        timing_ns: None,
+    });
+    graph.add_edge(root, transfer, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    assert_eq!(tree.label, "Layer 0");
+    assert_eq!(tree.children.len(), 1);
+
+    let transfer_node = &tree.children[0];
+    // Transfer label should contain D2H direction
+    assert!(
+        transfer_node.label.contains("D2H"),
+        "Transfer label should contain direction: {}",
+        transfer_node.label
+    );
+    // Info should show bytes but no timing
+    let info = transfer_node.info.as_ref().expect("Transfer should have info");
+    assert!(info.contains("4096B"), "Info should contain byte count: {}", info);
+    // No timing means no µs suffix
+    assert!(!info.contains("µs"), "No timing should mean no µs in info: {}", info);
+}
+
+/// to_tree_node: Transfer node with timing_ns = Some (cover timing branch).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_transfer_with_timing() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let transfer = graph.add_node(ExecutionNode::Transfer {
+        src: "host".into(),
+        dst: "gpu0".into(),
+        bytes: 1_048_576,
+        direction: TransferDirection::H2D,
+        timing_ns: Some(5000),
+    });
+    graph.add_edge(root, transfer, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let transfer_node = &tree.children[0];
+    let info = transfer_node.info.as_ref().expect("Transfer should have info");
+    assert!(info.contains("µs"), "Timing present should include µs: {}", info);
+    assert!(info.contains("1048576B"), "Info should contain byte count: {}", info);
+}
+
+/// to_tree_node: AsyncTask with poll_count = 0 (cover 0% efficiency branch).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_async_task_zero_polls() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let async_node = graph.add_node(ExecutionNode::AsyncTask {
+        name: "idle_task".into(),
+        poll_count: 0,
+        yield_count: 0,
+        total_poll_ns: 0,
+    });
+    graph.add_edge(root, async_node, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let async_child = &tree.children[0];
+    assert_eq!(async_child.label, "idle_task");
+    let info = async_child.info.as_ref().expect("AsyncTask should have info");
+    assert!(info.contains("polls:0"), "Should show 0 polls: {}", info);
+    assert!(info.contains("0% eff"), "Should show 0% efficiency: {}", info);
+}
+
+/// to_tree_node: AsyncTask with nonzero polls (cover normal efficiency).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_async_task_nonzero_polls() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let async_node = graph.add_node(ExecutionNode::AsyncTask {
+        name: "worker".into(),
+        poll_count: 4,
+        yield_count: 2,
+        total_poll_ns: 8000,
+    });
+    graph.add_edge(root, async_node, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let async_child = &tree.children[0];
+    assert_eq!(async_child.label, "worker");
+    let info = async_child.info.as_ref().expect("AsyncTask should have info");
+    assert!(info.contains("polls:4"), "Should show poll count: {}", info);
+    assert!(info.contains("yields:2"), "Should show yield count: {}", info);
+    assert!(info.contains("25% eff"), "Should show 25% efficiency: {}", info);
+}
+
+/// to_tree_node: Function with file and line (cover Some/Some branch).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_function_with_location() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let func = graph.add_node(ExecutionNode::Function {
+        name: "forward_pass".into(),
+        file: Some("model.rs".into()),
+        line: Some(42),
+    });
+    graph.add_edge(root, func, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let func_child = &tree.children[0];
+    assert!(
+        func_child.label.contains("forward_pass"),
+        "Function label: {}",
+        func_child.label
+    );
+    assert!(
+        func_child.label.contains("model.rs:42"),
+        "Function should include file:line: {}",
+        func_child.label
+    );
+    // Function nodes have no info (None branch)
+    assert!(func_child.info.is_none());
+}
+
+/// to_tree_node: Function with no file/line (cover None/None branch).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_function_no_location() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let func = graph.add_node(ExecutionNode::Function {
+        name: "dispatch".into(),
+        file: None,
+        line: None,
+    });
+    graph.add_edge(root, func, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let func_child = &tree.children[0];
+    assert_eq!(func_child.label, "dispatch");
+    assert!(func_child.info.is_none());
+}
+
+/// to_tree_node: Function with file but no line (cover Some/None branch).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_function_file_no_line() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let func = graph.add_node(ExecutionNode::Function {
+        name: "init".into(),
+        file: Some("setup.rs".into()),
+        line: None,
+    });
+    graph.add_edge(root, func, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let func_child = &tree.children[0];
+    // (Some(f), None) should result in empty location string
+    assert_eq!(func_child.label, "init");
+    assert!(!func_child.label.contains("setup.rs"));
+}
+
+/// to_tree_node: Function with no file but has line (cover None/Some branch).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_function_no_file_has_line() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let func = graph.add_node(ExecutionNode::Function {
+        name: "cleanup".into(),
+        file: None,
+        line: Some(99),
+    });
+    graph.add_edge(root, func, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let func_child = &tree.children[0];
+    // (None, Some) should result in empty location string
+    assert_eq!(func_child.label, "cleanup");
+}
+
+/// to_tree_node: Brick node with info (cover Brick branch in build_node).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_brick_with_info() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let brick = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::QkvProjection,
+        timing_ns: 50_000,
+        elements: 4096,
+    });
+    graph.add_edge(root, brick, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let brick_child = &tree.children[0];
+    assert_eq!(brick_child.label, "QkvProjection");
+    let info = brick_child.info.as_ref().expect("Brick should have info");
+    assert!(info.contains("50.0µs"), "Brick info should show timing: {}", info);
+    assert!(info.contains("4096 elem"), "Brick info should show elements: {}", info);
+}
+
+/// to_tree_node: Kernel node with info (cover Kernel branch in build_node).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_kernel_with_info() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let kernel = graph.add_node(ExecutionNode::Kernel {
+        name: "gemm_tiled".into(),
+        ptx_hash: 0xDEAD,
+        grid: (16, 1, 1),
+        block: (256, 1, 1),
+        shared_mem: 8192,
+        timing_ns: Some(1500),
+        arithmetic_intensity: Some(4.0),
+        achieved_tflops: Some(2.0),
+    });
+    graph.add_edge(root, kernel, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let kernel_child = &tree.children[0];
+    assert_eq!(kernel_child.label, "gemm_tiled");
+    let info = kernel_child.info.as_ref().expect("Kernel should have info");
+    assert!(info.contains("<<<16,256,1>>>"), "Kernel info should show launch config: {}", info);
+    assert!(info.contains("smem=8192B"), "Kernel info should show shared mem: {}", info);
+}
+
+/// to_tree_node: D2D transfer direction (cover D2D direction variant).
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_transfer_d2d() {
+    let mut graph = ExecutionGraph::new();
+    let root = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let transfer = graph.add_node(ExecutionNode::Transfer {
+        src: "gpu0".into(),
+        dst: "gpu1".into(),
+        bytes: 2048,
+        direction: TransferDirection::D2D,
+        timing_ns: Some(300),
+    });
+    graph.add_edge(root, transfer, EdgeType::Contains);
+
+    let tree = graph.to_tree_node();
+    let transfer_child = &tree.children[0];
+    assert!(
+        transfer_child.label.contains("D2D"),
+        "Transfer label should contain D2D: {}",
+        transfer_child.label
+    );
+}
+
+/// to_tree_node: multiple roots wraps in synthetic "Execution Graph" root.
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_three_roots_synthetic() {
+    let mut graph = ExecutionGraph::new();
+    graph.add_node(ExecutionNode::Layer { index: 0 });
+    graph.add_node(ExecutionNode::Layer { index: 1 });
+    graph.add_node(ExecutionNode::Layer { index: 2 });
+
+    let tree = graph.to_tree_node();
+    assert_eq!(tree.label, "Execution Graph");
+    assert_eq!(tree.children.len(), 3);
+    assert_eq!(tree.children[0].label, "Layer 0");
+    assert_eq!(tree.children[1].label, "Layer 1");
+    assert_eq!(tree.children[2].label, "Layer 2");
+}
+
+/// to_tree_node: deep hierarchy with children traversal.
+#[cfg(feature = "presentar-tui")]
+#[test]
+fn test_to_tree_node_deep_hierarchy_children() {
+    let mut graph = ExecutionGraph::new();
+
+    let layer = graph.add_node(ExecutionNode::Layer { index: 0 });
+    let brick = graph.add_node(ExecutionNode::Brick {
+        id: BrickId::RmsNorm,
+        timing_ns: 10_000,
+        elements: 512,
+    });
+    let kernel = graph.add_node(ExecutionNode::Kernel {
+        name: "norm_kernel".into(),
+        ptx_hash: 0xFF,
+        grid: (2, 1, 1),
+        block: (64, 1, 1),
+        shared_mem: 256,
+        timing_ns: None,
+        arithmetic_intensity: None,
+        achieved_tflops: None,
+    });
+
+    graph.add_edge(layer, brick, EdgeType::Contains);
+    graph.add_edge(brick, kernel, EdgeType::Launches);
+
+    let tree = graph.to_tree_node();
+    assert_eq!(tree.label, "Layer 0");
+    assert_eq!(tree.children.len(), 1);
+
+    let brick_child = &tree.children[0];
+    assert_eq!(brick_child.label, "RmsNorm");
+    assert_eq!(brick_child.children.len(), 1);
+
+    let kernel_child = &brick_child.children[0];
+    assert_eq!(kernel_child.label, "norm_kernel");
+    assert!(kernel_child.children.is_empty());
+}
