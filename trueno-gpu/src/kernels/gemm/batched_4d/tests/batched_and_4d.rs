@@ -206,7 +206,7 @@ fn test_batched_4d_gemm_as_module() {
 
     // Verify module structure
     assert!(ptx.contains(".version 8.0"));
-    assert!(ptx.contains(".target sm_89"));
+    assert!(ptx.contains(".target sm_70"));
     assert!(ptx.contains(".address_size 64"));
     assert!(ptx.contains(".entry batched_4d_gemm"));
 }

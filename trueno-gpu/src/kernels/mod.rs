@@ -113,14 +113,24 @@ pub trait Kernel {
     /// Build PTX kernel
     fn build_ptx(&self) -> PtxKernel;
 
-    /// Get PTX module containing this kernel
-    /// Uses sm_89 for RTX 4090 (Ada Lovelace) compatibility
-    fn as_module(&self) -> PtxModule {
+    /// Get PTX module containing this kernel with specified compute target
+    fn as_module_for_target(&self, target: &str) -> PtxModule {
         PtxModule::new()
             .version(8, 0)
-            .target("sm_89")
+            .target(target)
             .address_size(64)
             .add_kernel(self.build_ptx())
+    }
+
+    /// Get PTX module containing this kernel
+    /// Uses sm_70 (Volta) as minimum baseline for broad compatibility
+    fn as_module(&self) -> PtxModule {
+        self.as_module_for_target("sm_70")
+    }
+
+    /// Emit PTX source for a specific compute capability
+    fn emit_ptx_for_target(&self, target: &str) -> String {
+        self.as_module_for_target(target).emit()
     }
 
     /// Emit PTX source

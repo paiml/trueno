@@ -222,7 +222,7 @@ fn test_bias_activation_ptx_generation() {
     let ptx = kernel.emit_ptx();
 
     assert!(ptx.contains(".version 8.0"), "Missing PTX version");
-    assert!(ptx.contains(".target sm_89"), "Missing target");
+    assert!(ptx.contains(".target sm_70"), "Missing target");
     assert!(
         ptx.contains(".visible .entry bias_activation"),
         "Missing entry point"

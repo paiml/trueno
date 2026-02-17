@@ -213,7 +213,7 @@ fn test_tiled_unrolled_emits_valid_ptx() {
     let ptx = kernel.emit_ptx();
 
     assert!(ptx.contains(".version 8.0"));
-    assert!(ptx.contains(".target sm_89"));
+    assert!(ptx.contains(".target sm_70"));
     assert!(ptx.contains(".address_size 64"));
     assert!(ptx.contains(".visible .entry gemm_tiled_unrolled"));
     assert!(ptx.contains(".param .u64 a_ptr"));
@@ -458,7 +458,21 @@ fn test_as_module_for_tiled_unrolled() {
     let ptx = module.emit();
 
     assert!(ptx.contains(".version 8.0"));
-    assert!(ptx.contains(".target sm_89"));
+    assert!(ptx.contains(".target sm_70"));
     assert!(ptx.contains(".address_size 64"));
     assert!(ptx.contains(".entry gemm_tiled_unrolled"));
+}
+
+#[test]
+fn test_tiled_gemm_barriers_use_correct_ids() {
+    let kernel = GemmKernel::tiled(64, 64, 64, 16);
+    let ptx = kernel.emit_ptx();
+    assert!(
+        ptx.contains("bar.sync 0;"),
+        "tiled GEMM must contain bar.sync 0 (before inner loop)"
+    );
+    assert!(
+        ptx.contains("bar.sync 1;"),
+        "tiled GEMM must contain bar.sync 1 (after inner loop)"
+    );
 }

@@ -104,7 +104,7 @@ fn test_f060_module_emission() {
     let module = kernel.as_module();
     let ptx = module.emit();
     assert!(ptx.contains(".version 8.0"));
-    assert!(ptx.contains(".target sm_89"));
+    assert!(ptx.contains(".target sm_70"));
 }
 
 #[test]
