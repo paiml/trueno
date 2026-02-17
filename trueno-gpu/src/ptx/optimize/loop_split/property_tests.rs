@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::ptx::types::PtxType;
 use proptest::prelude::*;

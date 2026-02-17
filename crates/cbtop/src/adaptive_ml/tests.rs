@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// Generate sinusoidal samples around a mean with given amplitude.

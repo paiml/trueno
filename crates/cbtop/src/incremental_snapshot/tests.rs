@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn create_test_snapshot(
