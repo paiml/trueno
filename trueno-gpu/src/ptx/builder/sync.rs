@@ -28,8 +28,11 @@ pub trait PtxSync: KernelBuilderCore {
 
     /// Synchronize all threads in the block
     fn bar_sync(&mut self, id: u32) {
-        self.instructions_mut()
-            .push(PtxInstruction::new(PtxOp::Bar, PtxType::U32).src(Operand::ImmI64(id as i64)));
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::Bar, PtxType::U32)
+                .label(format!("sync {id}"))
+                .src(Operand::ImmI64(id as i64)),
+        );
     }
 
     /// Memory fence (CTA scope)
@@ -275,6 +278,26 @@ mod tests {
 
         assert_eq!(builder.instructions.len(), 1);
         assert_eq!(builder.instructions[0].op, PtxOp::Bar);
+        assert_eq!(
+            builder.instructions[0].label.as_deref(),
+            Some("sync 0"),
+            "bar_sync(0) must set label to 'sync 0' for correct PTX emission"
+        );
+    }
+
+    #[test]
+    fn test_bar_sync_nonzero_id() {
+        let mut builder = MockBuilder::new();
+
+        builder.bar_sync(1);
+
+        assert_eq!(builder.instructions.len(), 1);
+        assert_eq!(builder.instructions[0].op, PtxOp::Bar);
+        assert_eq!(
+            builder.instructions[0].label.as_deref(),
+            Some("sync 1"),
+            "bar_sync(1) must set label to 'sync 1' for correct PTX emission"
+        );
     }
 
     #[test]

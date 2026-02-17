@@ -85,7 +85,7 @@ proptest! {
 
         // Verify consistent structure regardless of dimensions
         prop_assert!(ptx.contains(".version 8.0"), "Must have version 8.0");
-        prop_assert!(ptx.contains(".target sm_89"), "Must target sm_89 for RTX 4090");
+        prop_assert!(ptx.contains(".target sm_70"), "Must target sm_70 baseline");
         prop_assert!(ptx.contains(".address_size 64"), "Must use 64-bit addresses");
         prop_assert!(ptx.contains("ret;"), "Must have return statement");
     }

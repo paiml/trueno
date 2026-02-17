@@ -21,7 +21,7 @@ impl Kernel for UnsafeMockKernel {
 
     fn emit_ptx(&self) -> String {
         r#".version 8.0
-.target sm_89
+.target sm_70
 .address_size 64
 
 .visible .entry unsafe_mock_kernel() {
@@ -222,7 +222,7 @@ fn test_as_module_structure() {
     let module = kernel.as_module();
     let ptx = module.emit();
     assert!(ptx.contains(".version 8.0"));
-    assert!(ptx.contains(".target sm_89"));
+    assert!(ptx.contains(".target sm_70"));
     assert!(ptx.contains(".address_size 64"));
 }
 
@@ -286,7 +286,7 @@ fn test_emit_ptx_validity() {
 fn test_validate_error_format() {
     let unsafe_ptx = r#"
 .version 8.0
-.target sm_89
+.target sm_70
 .address_size 64
 
 .visible .entry test() {
