@@ -79,10 +79,20 @@ pub const CUDA_ERROR_DEINITIALIZED: CUresult = 4;
 pub const CUDA_ERROR_NO_DEVICE: CUresult = 100;
 /// Invalid device
 pub const CUDA_ERROR_INVALID_DEVICE: CUresult = 101;
+/// Invalid device kernel image
+pub const CUDA_ERROR_INVALID_IMAGE: CUresult = 200;
+/// Invalid CUDA context (not current on this thread)
+pub const CUDA_ERROR_INVALID_CONTEXT: CUresult = 201;
+/// No binary for GPU (PTX JIT failed for this architecture)
+pub const CUDA_ERROR_NO_BINARY_FOR_GPU: CUresult = 209;
 /// Invalid PTX
 pub const CUDA_ERROR_INVALID_PTX: CUresult = 218;
+/// Illegal instruction encountered
+pub const CUDA_ERROR_ILLEGAL_INSTRUCTION: CUresult = 715;
 /// Function not found
 pub const CUDA_ERROR_NOT_FOUND: CUresult = 500;
+/// Operation not ready
+pub const CUDA_ERROR_NOT_READY: CUresult = 600;
 
 // ============================================================================
 // CUDA Stream Flags
@@ -448,8 +458,13 @@ pub fn cuda_error_string(code: CUresult) -> &'static str {
         CUDA_ERROR_DEINITIALIZED => "CUDA_ERROR_DEINITIALIZED",
         CUDA_ERROR_NO_DEVICE => "CUDA_ERROR_NO_DEVICE",
         CUDA_ERROR_INVALID_DEVICE => "CUDA_ERROR_INVALID_DEVICE",
+        CUDA_ERROR_INVALID_IMAGE => "CUDA_ERROR_INVALID_IMAGE",
+        CUDA_ERROR_INVALID_CONTEXT => "CUDA_ERROR_INVALID_CONTEXT",
+        CUDA_ERROR_NO_BINARY_FOR_GPU => "CUDA_ERROR_NO_BINARY_FOR_GPU",
         CUDA_ERROR_INVALID_PTX => "CUDA_ERROR_INVALID_PTX",
         CUDA_ERROR_NOT_FOUND => "CUDA_ERROR_NOT_FOUND",
+        CUDA_ERROR_NOT_READY => "CUDA_ERROR_NOT_READY",
+        CUDA_ERROR_ILLEGAL_INSTRUCTION => "CUDA_ERROR_ILLEGAL_INSTRUCTION",
         _ => "CUDA_ERROR_UNKNOWN",
     }
 }
