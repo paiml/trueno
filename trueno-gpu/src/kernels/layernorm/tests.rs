@@ -430,3 +430,106 @@ fn test_batched_vectorized_rmsnorm_barrier_sync() {
         "Should have barrier synchronization"
     );
 }
+
+// =========================================================================
+// GH-280: Per-Head RMSNorm kernel tests (Qwen3 QK normalization)
+// =========================================================================
+
+#[test]
+fn test_per_head_rmsnorm_kernel_name() {
+    let kernel = PerHeadRmsNormKernel::new(128, 32);
+    assert_eq!(kernel.name(), "per_head_rmsnorm");
+}
+
+#[test]
+fn test_per_head_rmsnorm_defaults() {
+    let kernel = PerHeadRmsNormKernel::new(128, 32);
+    assert_eq!(kernel.head_dim, 128);
+    assert_eq!(kernel.num_heads, 32);
+    assert!((kernel.epsilon - 1e-6).abs() < 1e-10);
+}
+
+#[test]
+fn test_per_head_rmsnorm_with_epsilon() {
+    let kernel = PerHeadRmsNormKernel::new(128, 32).with_epsilon(1e-5);
+    assert!((kernel.epsilon - 1e-5).abs() < 1e-10);
+}
+
+#[test]
+fn test_per_head_rmsnorm_ptx_generation() {
+    let kernel = PerHeadRmsNormKernel::new(128, 32).with_epsilon(1e-6);
+    let ptx = kernel.emit_ptx();
+
+    // Verify kernel entry point
+    assert!(
+        ptx.contains(".entry per_head_rmsnorm"),
+        "Should have per_head_rmsnorm entry"
+    );
+
+    // Verify parameters
+    assert!(ptx.contains(".param .u64 input_ptr"), "Should have input_ptr");
+    assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
+    assert!(ptx.contains(".param .u64 gamma_ptr"), "Should have gamma_ptr");
+
+    // Verify per-head dispatch via blockIdx.x
+    assert!(ptx.contains("ctaid.x"), "Should use ctaid.x for head index");
+
+    // Verify warp shuffle for reduction
+    assert!(
+        ptx.contains("shfl.sync") || ptx.contains("shfl."),
+        "Should have shfl for warp reduction"
+    );
+
+    // Verify rsqrt
+    assert!(ptx.contains("rsqrt"), "Should have rsqrt for normalization");
+}
+
+#[test]
+fn test_per_head_rmsnorm_no_shared_memory() {
+    let kernel = PerHeadRmsNormKernel::new(128, 32);
+    let ptx_kernel = kernel.build_ptx();
+
+    // Single-warp kernel uses warp shuffle, no shared memory
+    assert_eq!(
+        ptx_kernel.shared_memory_bytes(),
+        0,
+        "Per-head RMSNorm should not use shared memory"
+    );
+}
+
+#[test]
+fn test_per_head_rmsnorm_memory_ops() {
+    let kernel = PerHeadRmsNormKernel::new(128, 32);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains("ld.global"), "Should have global loads");
+    assert!(ptx.contains("st.global"), "Should have global stores");
+}
+
+#[test]
+fn test_per_head_rmsnorm_qwen3_q_config() {
+    // Qwen3-8B Q projection: 32 heads, head_dim=128
+    let kernel = PerHeadRmsNormKernel::new(128, 32).with_epsilon(1e-6);
+    let ptx = kernel.emit_ptx();
+    assert!(!ptx.is_empty());
+    assert!(ptx.contains(".entry"));
+}
+
+#[test]
+fn test_per_head_rmsnorm_qwen3_k_config() {
+    // Qwen3-8B K projection: 8 KV heads, head_dim=128
+    let kernel = PerHeadRmsNormKernel::new(128, 8).with_epsilon(1e-6);
+    let ptx = kernel.emit_ptx();
+    assert!(!ptx.is_empty());
+    assert!(ptx.contains(".entry"));
+}
+
+#[test]
+fn test_per_head_rmsnorm_various_head_dims() {
+    for head_dim in [64, 128, 256] {
+        let kernel = PerHeadRmsNormKernel::new(head_dim, 16);
+        let ptx = kernel.emit_ptx();
+        assert!(!ptx.is_empty());
+        assert!(ptx.contains(".entry"));
+    }
+}

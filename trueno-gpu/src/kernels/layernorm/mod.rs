@@ -9,11 +9,13 @@
 #![allow(clippy::too_many_lines)]
 
 mod batched;
+mod per_head_rmsnorm;
 mod rmsnorm;
 #[cfg(test)]
 mod tests;
 
 pub use batched::{BatchedVectorizedRmsNormKernel, PreciseRmsNormKernel};
+pub use per_head_rmsnorm::PerHeadRmsNormKernel;
 pub use rmsnorm::{RmsNormKernel, VectorizedRmsNormKernel};
 
 use super::Kernel;
