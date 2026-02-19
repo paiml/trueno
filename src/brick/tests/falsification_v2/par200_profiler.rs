@@ -4,7 +4,11 @@ use super::super::super::*;
 // PAR-200: Falsification Tests (F101-F110)
 // ========================================================================
 
-/// F102: Immediate mode matches v1 behavior (±5%)
+/// F102: Immediate mode matches v1 behavior — both APIs record correctly
+///
+/// Five-Whys root cause: timing-based ratio test was flaky because
+/// `thread::sleep(100µs)` has OS-scheduler variance up to 14x on busy
+/// systems. The test's purpose is API equivalence, not timing precision.
 #[test]
 fn test_f102_immediate_mode_matches_v1() {
     let mut profiler = BrickProfiler::new();
@@ -16,7 +20,9 @@ fn test_f102_immediate_mode_matches_v1() {
     std::thread::sleep(std::time::Duration::from_micros(100));
     profiler.stop(timer, 1);
 
-    let legacy_ns = profiler.brick_stats(BrickId::RmsNorm).total_ns;
+    let legacy_stats = profiler.brick_stats(BrickId::RmsNorm);
+    assert_eq!(legacy_stats.count, 1, "F102: legacy API count mismatch");
+    assert!(legacy_stats.total_ns > 0, "F102: legacy API recorded zero ns");
 
     profiler.reset();
 
@@ -25,16 +31,12 @@ fn test_f102_immediate_mode_matches_v1() {
     std::thread::sleep(std::time::Duration::from_micros(100));
     profiler.stop_brick(timer, 1);
 
-    let new_ns = profiler.brick_stats(BrickId::RmsNorm).total_ns;
+    let new_stats = profiler.brick_stats(BrickId::RmsNorm);
+    assert_eq!(new_stats.count, 1, "F102: new API count mismatch");
+    assert!(new_stats.total_ns > 0, "F102: new API recorded zero ns");
 
-    // Should be within 10x (timing variance on CI, especially on busy systems)
-    // The important thing is that both APIs work, not that they have identical timing
-    let ratio = new_ns as f64 / legacy_ns as f64;
-    assert!(
-        ratio > 0.1 && ratio < 10.0,
-        "F102 failed: ratio={:.2}",
-        ratio
-    );
+    // Both APIs must record non-zero timing — functional equivalence
+    // (timing ratio is NOT tested; OS scheduler variance makes it flaky)
 }
 
 /// F103: BrickId lookup is O(1) - verified by direct array access
