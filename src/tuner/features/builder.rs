@@ -166,7 +166,41 @@ impl TunerFeaturesBuilder {
     #[allow(clippy::cast_precision_loss)]
     // SAFETY: All u32 values are model hyperparams (hidden_dim ≤ 16384, layers ≤ 128,
     //         heads ≤ 128, vocab ≤ 1M, batch ≤ 64, seq_len ≤ 32768) — well within f32 mantissa.
+    /// Build features, panicking if raw inputs violate physical constraints.
+    ///
+    /// Use `try_build()` for fallible construction.
     pub fn build(self) -> TunerFeatures {
+        self.try_build()
+            .expect("TunerFeatures: invalid raw input (see try_build for details)")
+    }
+
+    /// Build features, returning Err if raw inputs violate physical constraints.
+    ///
+    /// F024: model_params_b, gpu_mem_bw, gpu_compute must be non-negative.
+    pub fn try_build(self) -> Result<TunerFeatures, crate::tuner::TunerError> {
+        // F024: Pre-normalization validation — physical quantities must be non-negative
+        if let Some(p) = self.model_params_b {
+            if p < 0.0 {
+                return Err(crate::tuner::TunerError::InvalidFeature(
+                    format!("model_params_b must be non-negative, got {p}"),
+                ));
+            }
+        }
+        if let Some(bw) = self.gpu_mem_bw_gbs {
+            if bw < 0.0 {
+                return Err(crate::tuner::TunerError::InvalidFeature(
+                    format!("gpu_mem_bw_gbs must be non-negative, got {bw}"),
+                ));
+            }
+        }
+        if let Some(tf) = self.gpu_compute_tflops {
+            if tf < 0.0 {
+                return Err(crate::tuner::TunerError::InvalidFeature(
+                    format!("gpu_compute_tflops must be non-negative, got {tf}"),
+                ));
+            }
+        }
+
         let batch_size = self.batch_size.unwrap_or(1);
         let kv_caches = self.kv_caches.unwrap_or(batch_size);
 
@@ -196,7 +230,7 @@ impl TunerFeaturesBuilder {
         // Theoretical efficiency starts at 0 (unknown until measured)
         let theoretical_efficiency = 0.0;
 
-        TunerFeatures {
+        Ok(TunerFeatures {
             // Normalized static features
             model_params_b: self
                 .model_params_b
@@ -241,6 +275,6 @@ impl TunerFeaturesBuilder {
             measured_tps: self.measured_tps,
             best_kernel_id: None,
             bottleneck_class: None,
-        }
+        })
     }
 }

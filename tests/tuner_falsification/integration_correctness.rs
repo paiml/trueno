@@ -240,21 +240,23 @@ fn f074_builder_chain() {
 /// F075: Error messages are helpful
 #[test]
 fn f075_error_messages() {
-    let features = TunerFeatures::builder().model_params_b(-1.0).build();
+    // F024-aware: try_build() rejects negative model_params_b at construction time
+    let result = TunerFeatures::builder().model_params_b(-1.0).try_build();
 
-    let result = features.validate();
-    if let Err(e) = result {
-        let msg = format!("{}", e);
-        // Accept any descriptive error message
-        assert!(
-            msg.contains("model_params")
-                || msg.contains("negative")
-                || msg.contains("invalid")
-                || msg.contains("Invalid")
-                || msg.contains("NaN"),
-            "F075 FALSIFIED: error message not helpful: {}",
-            msg
-        );
+    match result {
+        Err(e) => {
+            let msg = format!("{}", e);
+            assert!(
+                msg.contains("model_params")
+                    || msg.contains("negative")
+                    || msg.contains("non-negative")
+                    || msg.contains("invalid")
+                    || msg.contains("Invalid"),
+                "F075 FALSIFIED: error message not helpful: {}",
+                msg
+            );
+        }
+        Ok(_) => panic!("F075 FALSIFIED: negative model_params_b should have been rejected"),
     }
 }
 
