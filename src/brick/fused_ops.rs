@@ -224,9 +224,11 @@ impl FusedGateUpOp {
     }
 
     /// SiLU activation: x * sigmoid(x)
+    ///
+    /// ONE PATH: Delegates to `crate::activations::silu_scalar` (UCBD §4).
     #[inline]
-    pub(crate) fn silu(x: f32) -> f32 {
-        x / (1.0 + (-x).exp())
+    pub fn silu(x: f32) -> f32 {
+        crate::activations::silu_scalar(x)
     }
 }
 

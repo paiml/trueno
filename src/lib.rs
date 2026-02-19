@@ -66,6 +66,7 @@
 //! assert_eq!(result.as_slice(), &[6.0, 8.0, 10.0, 12.0]);
 //! ```
 
+pub mod activations;
 pub mod backends;
 pub mod blis;
 pub mod brick;
@@ -82,6 +83,10 @@ pub mod tiling;
 pub mod tuner;
 pub mod vector;
 
+// Canonical scalar activation functions (UCBD §4, trueno #103)
+pub use activations::{
+    f16_to_f32, f32_to_f16, gelu_scalar, relu_scalar, sigmoid_scalar, silu_scalar, tanh_scalar,
+};
 pub use eigen::SymmetricEigen;
 pub use error::{Result, TruenoError};
 pub use hash::{hash_bytes, hash_key, hash_keys_batch, hash_keys_batch_with_backend};
