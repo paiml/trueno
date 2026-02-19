@@ -5479,6 +5479,7 @@ dependencies = [
  "trueno-cuda-edge",
  "trueno-gpu",
  "trueno-graph",
+ "trueno-quant",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
