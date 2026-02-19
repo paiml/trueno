@@ -58,12 +58,12 @@ fn f023_validation_accepts_valid() {
 /// F024: Feature validation must reject invalid inputs
 #[test]
 fn f024_validation_rejects_invalid() {
-    let features = TunerFeatures::builder()
+    let result = TunerFeatures::builder()
         .model_params_b(-1.0) // Invalid: negative
-        .build();
+        .try_build();
 
     assert!(
-        features.validate().is_err(),
+        result.is_err(),
         "F024 FALSIFIED: negative model_params_b accepted"
     );
 }
