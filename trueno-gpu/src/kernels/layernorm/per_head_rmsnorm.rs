@@ -67,9 +67,9 @@ impl Kernel for PerHeadRmsNormKernel {
         // Block: (32, 1, 1) — one warp
         // Each thread handles head_dim/32 elements within its head
         PtxKernel::new("per_head_rmsnorm")
-            .param(PtxType::U64, "input_ptr")  // [num_heads * head_dim]
+            .param(PtxType::U64, "input_ptr") // [num_heads * head_dim]
             .param(PtxType::U64, "output_ptr") // [num_heads * head_dim]
-            .param(PtxType::U64, "gamma_ptr")  // [head_dim] shared across heads
+            .param(PtxType::U64, "gamma_ptr") // [head_dim] shared across heads
             .shared_memory(0) // Warp shuffle, no shared memory
             .build(|ctx| {
                 let tid = ctx.special_reg(PtxReg::TidX);

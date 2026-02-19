@@ -70,6 +70,7 @@ pub mod backends;
 pub mod blis;
 pub mod brick;
 pub mod chaos;
+pub mod contracts;
 pub mod eigen;
 pub mod error;
 pub mod hardware;

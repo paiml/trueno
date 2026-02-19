@@ -467,9 +467,18 @@ fn test_per_head_rmsnorm_ptx_generation() {
     );
 
     // Verify parameters
-    assert!(ptx.contains(".param .u64 input_ptr"), "Should have input_ptr");
-    assert!(ptx.contains(".param .u64 output_ptr"), "Should have output_ptr");
-    assert!(ptx.contains(".param .u64 gamma_ptr"), "Should have gamma_ptr");
+    assert!(
+        ptx.contains(".param .u64 input_ptr"),
+        "Should have input_ptr"
+    );
+    assert!(
+        ptx.contains(".param .u64 output_ptr"),
+        "Should have output_ptr"
+    );
+    assert!(
+        ptx.contains(".param .u64 gamma_ptr"),
+        "Should have gamma_ptr"
+    );
 
     // Verify per-head dispatch via blockIdx.x
     assert!(ptx.contains("ctaid.x"), "Should use ctaid.x for head index");

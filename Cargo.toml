@@ -78,6 +78,7 @@ ratatui = { version = "0.29", optional = true }
 crossterm = { version = "0.28", optional = true }
 # Stress test reporting types compatible with renacer (TRUENO-SPEC-025)
 # Note: renacer 0.9.1 has compilation issue; using compatible local types instead
+trueno-quant = { version = "0.1", path = "crates/trueno-quant" }
 num_cpus = "1.17.0"
 anyhow = "1.0.100"
 # Hardware capability detection (PMAT-447)
