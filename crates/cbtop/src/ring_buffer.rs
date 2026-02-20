@@ -137,15 +137,10 @@ impl RingBuffer<f64> {
         sorted[idx]
     }
 
-    /// Calculate standard deviation
+    /// Calculate standard deviation (delegates to batuta-common).
     pub fn std_dev(&self) -> f64 {
-        if self.len() < 2 {
-            return 0.0;
-        }
-        let mean = self.mean();
-        let variance: f64 = self.data.iter().map(|x| (x - mean).powi(2)).sum::<f64>()
-            / (self.data.len() - 1) as f64;
-        variance.sqrt()
+        let data: Vec<f64> = self.data.iter().copied().collect();
+        batuta_common::math::std_dev(&data)
     }
 }
 
