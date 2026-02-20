@@ -143,7 +143,11 @@ pub fn f16_to_f32(bits: u16) -> f32 {
 
     // exponent == 31: Inf or NaN
     if mantissa == 0 {
-        if sign == 1 { f32::NEG_INFINITY } else { f32::INFINITY }
+        if sign == 1 {
+            f32::NEG_INFINITY
+        } else {
+            f32::INFINITY
+        }
     } else {
         f32::NAN
     }

@@ -181,23 +181,23 @@ impl TunerFeaturesBuilder {
         // F024: Pre-normalization validation — physical quantities must be non-negative
         if let Some(p) = self.model_params_b {
             if p < 0.0 {
-                return Err(crate::tuner::TunerError::InvalidFeature(
-                    format!("model_params_b must be non-negative, got {p}"),
-                ));
+                return Err(crate::tuner::TunerError::InvalidFeature(format!(
+                    "model_params_b must be non-negative, got {p}"
+                )));
             }
         }
         if let Some(bw) = self.gpu_mem_bw_gbs {
             if bw < 0.0 {
-                return Err(crate::tuner::TunerError::InvalidFeature(
-                    format!("gpu_mem_bw_gbs must be non-negative, got {bw}"),
-                ));
+                return Err(crate::tuner::TunerError::InvalidFeature(format!(
+                    "gpu_mem_bw_gbs must be non-negative, got {bw}"
+                )));
             }
         }
         if let Some(tf) = self.gpu_compute_tflops {
             if tf < 0.0 {
-                return Err(crate::tuner::TunerError::InvalidFeature(
-                    format!("gpu_compute_tflops must be non-negative, got {tf}"),
-                ));
+                return Err(crate::tuner::TunerError::InvalidFeature(format!(
+                    "gpu_compute_tflops must be non-negative, got {tf}"
+                )));
             }
         }
 

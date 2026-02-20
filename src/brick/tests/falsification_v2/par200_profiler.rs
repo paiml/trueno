@@ -22,7 +22,10 @@ fn test_f102_immediate_mode_matches_v1() {
 
     let legacy_stats = profiler.brick_stats(BrickId::RmsNorm);
     assert_eq!(legacy_stats.count, 1, "F102: legacy API count mismatch");
-    assert!(legacy_stats.total_ns > 0, "F102: legacy API recorded zero ns");
+    assert!(
+        legacy_stats.total_ns > 0,
+        "F102: legacy API recorded zero ns"
+    );
 
     profiler.reset();
 
