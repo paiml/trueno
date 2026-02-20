@@ -32,6 +32,9 @@ pollster = "0.4"
 # CLI parsing
 clap = { version = "4", features = ["derive"] }
 
+# Batuta shared utilities (format_bytes, sys info)
+batuta-common = { path = "../../../batuta-common" }
+
 # Error handling
 anyhow = "1"
 thiserror = "1"

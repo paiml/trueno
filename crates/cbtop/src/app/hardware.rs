@@ -25,8 +25,8 @@ impl HardwareInfo {
         // Detect SIMD capability
         let simd_type = Self::detect_simd();
 
-        // Try to get CPU model from /proc/cpuinfo
-        let cpu_model = Self::read_cpu_model().unwrap_or_else(|| "Unknown CPU".to_string());
+        // Get CPU model via batuta-common
+        let cpu_model = batuta_common::sys::get_cpu_info();
 
         // Try to get GPU name
         let gpu_name = Self::detect_gpu();
@@ -70,95 +70,94 @@ impl HardwareInfo {
         }
     }
 
-    fn read_cpu_model() -> Option<String> {
-        #[cfg(target_os = "linux")]
-        {
-            let contents = std::fs::read_to_string("/proc/cpuinfo").ok()?;
-            for line in contents.lines() {
-                if line.starts_with("model name") {
-                    return line.split(':').nth(1).map(|s| s.trim().to_string());
-                }
-            }
-        }
-        #[cfg(target_os = "macos")]
-        {
-            // Use sysctl on macOS
-            let output = std::process::Command::new("sysctl")
-                .args(["-n", "machdep.cpu.brand_string"])
-                .output()
-                .ok()?;
-            return String::from_utf8(output.stdout)
-                .ok()
-                .map(|s| s.trim().to_string());
-        }
-        None
-    }
-
     fn detect_gpu() -> Option<String> {
         #[cfg(target_os = "linux")]
         {
-            // Try nvidia-smi first
-            if let Ok(output) = std::process::Command::new("nvidia-smi")
-                .args(["--query-gpu=name", "--format=csv,noheader"])
-                .output()
-            {
-                if output.status.success() {
-                    return String::from_utf8(output.stdout)
-                        .ok()
-                        .map(|s| s.lines().next().unwrap_or("").trim().to_string())
-                        .filter(|s| !s.is_empty());
-                }
-            }
+            return Self::detect_gpu_linux();
         }
         #[cfg(target_os = "macos")]
         {
-            // Use system_profiler on macOS
-            if let Ok(output) = std::process::Command::new("system_profiler")
-                .args(["SPDisplaysDataType"])
-                .output()
-            {
-                if output.status.success() {
-                    let text = String::from_utf8_lossy(&output.stdout);
-                    for line in text.lines() {
-                        if line.contains("Chipset Model:") {
-                            return line.split(':').nth(1).map(|s| s.trim().to_string());
-                        }
-                    }
-                }
-            }
+            return Self::detect_gpu_macos();
         }
-        None
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            None
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn detect_gpu_linux() -> Option<String> {
+        let output = std::process::Command::new("nvidia-smi")
+            .args(["--query-gpu=name", "--format=csv,noheader"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8(output.stdout)
+            .ok()
+            .map(|s| s.lines().next().unwrap_or("").trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    #[cfg(target_os = "macos")]
+    fn detect_gpu_macos() -> Option<String> {
+        let output = std::process::Command::new("system_profiler")
+            .args(["SPDisplaysDataType"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        text.lines()
+            .find(|line| line.contains("Chipset Model:"))
+            .and_then(|line| line.split(':').nth(1))
+            .map(|s| s.trim().to_string())
     }
 
     fn read_memory_gb() -> f64 {
         #[cfg(target_os = "linux")]
         {
-            if let Ok(contents) = std::fs::read_to_string("/proc/meminfo") {
-                for line in contents.lines() {
-                    if line.starts_with("MemTotal:") {
-                        if let Some(kb_str) = line.split_whitespace().nth(1) {
-                            if let Ok(kb) = kb_str.parse::<u64>() {
-                                return kb as f64 / 1_048_576.0;
-                            }
-                        }
-                    }
-                }
-            }
+            return Self::read_memory_gb_linux();
         }
         #[cfg(target_os = "macos")]
         {
-            if let Ok(output) = std::process::Command::new("sysctl")
-                .args(["-n", "hw.memsize"])
-                .output()
-            {
-                if let Ok(bytes_str) = String::from_utf8(output.stdout) {
-                    if let Ok(bytes) = bytes_str.trim().parse::<u64>() {
-                        return bytes as f64 / 1_073_741_824.0;
-                    }
-                }
-            }
+            return Self::read_memory_gb_macos();
         }
-        0.0
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        {
+            0.0
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn read_memory_gb_linux() -> f64 {
+        let contents = match std::fs::read_to_string("/proc/meminfo") {
+            Ok(c) => c,
+            Err(_) => return 0.0,
+        };
+        contents
+            .lines()
+            .find(|line| line.starts_with("MemTotal:"))
+            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|kb_str| kb_str.parse::<u64>().ok())
+            .map_or(0.0, |kb| kb as f64 / 1_048_576.0)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn read_memory_gb_macos() -> f64 {
+        let output = match std::process::Command::new("sysctl")
+            .args(["-n", "hw.memsize"])
+            .output()
+        {
+            Ok(o) => o,
+            Err(_) => return 0.0,
+        };
+        String::from_utf8(output.stdout)
+            .ok()
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .map_or(0.0, |bytes| bytes as f64 / 1_073_741_824.0)
     }
 }
 
@@ -243,15 +242,7 @@ pub struct DiskMetrics {
 impl DiskMetrics {
     /// Format bytes as human-readable
     pub fn format_bytes(bytes: u64) -> String {
-        if bytes >= 1_099_511_627_776 {
-            format!("{:.1}T", bytes as f64 / 1_099_511_627_776.0)
-        } else if bytes >= 1_073_741_824 {
-            format!("{:.1}G", bytes as f64 / 1_073_741_824.0)
-        } else if bytes >= 1_048_576 {
-            format!("{:.1}M", bytes as f64 / 1_048_576.0)
-        } else {
-            format!("{:.1}K", bytes as f64 / 1024.0)
-        }
+        batuta_common::fmt::format_bytes_compact(bytes)
     }
 }
 
