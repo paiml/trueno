@@ -612,6 +612,10 @@ dependencies = [
 [[package]]
 name = "batuta-common"
 version = "0.1.0"
+dependencies = [
+ "lz4_flex",
+ "zstd",
+]
 
 [[package]]
 name = "bincode"

@@ -8,15 +8,9 @@ pub(crate) fn mean(samples: &[f64]) -> f64 {
     samples.iter().sum::<f64>() / samples.len() as f64
 }
 
-/// Calculate standard deviation of samples
+/// Calculate standard deviation of samples (delegates to batuta-common).
 pub(crate) fn std_dev(samples: &[f64]) -> f64 {
-    if samples.len() < 2 {
-        return 0.0;
-    }
-    let m = mean(samples);
-    let variance =
-        samples.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (samples.len() - 1) as f64;
-    variance.sqrt()
+    batuta_common::math::std_dev(samples)
 }
 
 /// Calculate coefficient of variation (%)
