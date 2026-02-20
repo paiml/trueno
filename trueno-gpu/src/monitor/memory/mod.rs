@@ -270,10 +270,7 @@ impl MemoryMetrics {
     /// Get swap usage percentage (0.0-100.0)
     #[must_use]
     pub fn swap_usage_percent(&self) -> f64 {
-        if self.swap_total_bytes == 0 {
-            return 0.0;
-        }
-        (self.swap_used_bytes as f64 / self.swap_total_bytes as f64) * 100.0
+        batuta_common::math::usage_percent(self.swap_used_bytes, self.swap_total_bytes)
     }
 
     /// Get RAM used in GB
