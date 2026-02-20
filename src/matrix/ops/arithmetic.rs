@@ -506,18 +506,11 @@ mod tests {
     fn test_matmul_wasm_tiled_small_no_simd() {
         // n=3 < simd_width(8), so only the remainder path executes.
         // 2x4 @ 4x3 = 2x3
-        let a = Matrix::from_vec(
-            2,
-            4,
-            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-        )
-        .unwrap();
+        let a = Matrix::from_vec(2, 4, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).unwrap();
         let b = Matrix::from_vec(
             4,
             3,
-            vec![
-                1.0, 0.0, 2.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1.0, 0.0, 2.0, 0.0,
-            ],
+            vec![1.0, 0.0, 2.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1.0, 0.0, 2.0, 0.0],
         )
         .unwrap();
         let mut result = Matrix::zeros(2, 3);
@@ -642,12 +635,15 @@ mod tests {
     fn test_matmul_wasm_tiled_identity() {
         // Multiplying by identity should return the original matrix.
         // 4x4 identity, n=4 < 8 so only remainder path.
-        let a = Matrix::from_vec(4, 4, vec![
-            1.0, 2.0, 3.0, 4.0,
-            5.0, 6.0, 7.0, 8.0,
-            9.0, 10.0, 11.0, 12.0,
-            13.0, 14.0, 15.0, 16.0,
-        ]).unwrap();
+        let a = Matrix::from_vec(
+            4,
+            4,
+            vec![
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+                16.0,
+            ],
+        )
+        .unwrap();
         let identity = Matrix::identity(4);
         let mut result = Matrix::zeros(4, 4);
         a.matmul_wasm_tiled(&identity, &mut result).unwrap();
