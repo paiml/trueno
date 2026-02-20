@@ -610,6 +610,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "batuta-common"
+version = "0.1.0"
+
+[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -812,6 +816,7 @@ name = "cbtop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "batuta-common",
  "chrono",
  "clap",
  "crossterm",
