@@ -495,6 +495,193 @@ mod tests {
         assert!((result.get(0, 0).unwrap() - 6.0).abs() < 1e-5);
         assert!((result.get(0, 1).unwrap() - 8.0).abs() < 1e-5);
     }
+
+    // =========================================================================
+    // matmul_wasm_tiled tests
+    // =========================================================================
+    // These tests call the private WASM-tiled matmul directly (not behind
+    // #[cfg(target_arch = "wasm32")]) to achieve coverage on non-WASM hosts.
+
+    #[test]
+    fn test_matmul_wasm_tiled_small_no_simd() {
+        // n=3 < simd_width(8), so only the remainder path executes.
+        // 2x4 @ 4x3 = 2x3
+        let a = Matrix::from_vec(
+            2,
+            4,
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+        )
+        .unwrap();
+        let b = Matrix::from_vec(
+            4,
+            3,
+            vec![
+                1.0, 0.0, 2.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1.0, 0.0, 2.0, 0.0,
+            ],
+        )
+        .unwrap();
+        let mut result = Matrix::zeros(2, 3);
+        a.matmul_wasm_tiled(&b, &mut result).unwrap();
+
+        // Row 0: [1*1+2*0+3*2+4*0, 1*0+2*1+3*0+4*2, 1*2+2*0+3*1+4*0] = [7, 10, 5]
+        assert!((result.get(0, 0).unwrap() - 7.0).abs() < 1e-5);
+        assert!((result.get(0, 1).unwrap() - 10.0).abs() < 1e-5);
+        assert!((result.get(0, 2).unwrap() - 5.0).abs() < 1e-5);
+
+        // Row 1: [5*1+6*0+7*2+8*0, 5*0+6*1+7*0+8*2, 5*2+6*0+7*1+8*0] = [19, 22, 17]
+        assert!((result.get(1, 0).unwrap() - 19.0).abs() < 1e-5);
+        assert!((result.get(1, 1).unwrap() - 22.0).abs() < 1e-5);
+        assert!((result.get(1, 2).unwrap() - 17.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_matmul_wasm_tiled_exact_simd_width() {
+        // n=8 exactly equals simd_width, so the SIMD path handles all columns
+        // and the remainder path has zero iterations.
+        // 2x3 @ 3x8 = 2x8
+        let a = Matrix::from_vec(2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let b_data: Vec<f32> = (1..=24).map(|x| x as f32).collect(); // 3x8
+        let b = Matrix::from_vec(3, 8, b_data).unwrap();
+        let mut result = Matrix::zeros(2, 8);
+        a.matmul_wasm_tiled(&b, &mut result).unwrap();
+
+        // Verify against naive matmul
+        let mut expected = Matrix::zeros(2, 8);
+        a.matmul_naive(&b, &mut expected).unwrap();
+        for i in 0..2 {
+            for j in 0..8 {
+                assert!(
+                    (result.get(i, j).unwrap() - expected.get(i, j).unwrap()).abs() < 1e-4,
+                    "Mismatch at ({}, {}): wasm_tiled={}, naive={}",
+                    i,
+                    j,
+                    result.get(i, j).unwrap(),
+                    expected.get(i, j).unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_matmul_wasm_tiled_simd_plus_remainder() {
+        // n=11 => n_simd=8 (SIMD path handles columns 0..8),
+        // remainder path handles columns 8..11. Both paths exercise.
+        // 3x4 @ 4x11 = 3x11
+        let a_data: Vec<f32> = (1..=12).map(|x| x as f32).collect();
+        let a = Matrix::from_vec(3, 4, a_data).unwrap();
+        let b_data: Vec<f32> = (1..=44).map(|x| x as f32 * 0.1).collect();
+        let b = Matrix::from_vec(4, 11, b_data).unwrap();
+        let mut result = Matrix::zeros(3, 11);
+        a.matmul_wasm_tiled(&b, &mut result).unwrap();
+
+        // Verify against naive
+        let mut expected = Matrix::zeros(3, 11);
+        a.matmul_naive(&b, &mut expected).unwrap();
+        for i in 0..3 {
+            for j in 0..11 {
+                assert!(
+                    (result.get(i, j).unwrap() - expected.get(i, j).unwrap()).abs() < 1e-3,
+                    "Mismatch at ({}, {}): wasm_tiled={}, naive={}",
+                    i,
+                    j,
+                    result.get(i, j).unwrap(),
+                    expected.get(i, j).unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_matmul_wasm_tiled_multiple_simd_blocks() {
+        // n=16 => two full SIMD blocks (0..8 and 8..16), no remainder.
+        // 2x2 @ 2x16 = 2x16
+        let a = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        let b_data: Vec<f32> = (1..=32).map(|x| x as f32).collect();
+        let b = Matrix::from_vec(2, 16, b_data).unwrap();
+        let mut result = Matrix::zeros(2, 16);
+        a.matmul_wasm_tiled(&b, &mut result).unwrap();
+
+        let mut expected = Matrix::zeros(2, 16);
+        a.matmul_naive(&b, &mut expected).unwrap();
+        for i in 0..2 {
+            for j in 0..16 {
+                assert!(
+                    (result.get(i, j).unwrap() - expected.get(i, j).unwrap()).abs() < 1e-3,
+                    "Mismatch at ({}, {})",
+                    i,
+                    j,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_matmul_wasm_tiled_single_row() {
+        // m=1, n=10 => SIMD block 0..8 + remainder 8..10
+        // 1x5 @ 5x10 = 1x10
+        let a = Matrix::from_vec(1, 5, vec![1.0, 2.0, 3.0, 4.0, 5.0]).unwrap();
+        let b_data: Vec<f32> = (1..=50).map(|x| x as f32 * 0.1).collect();
+        let b = Matrix::from_vec(5, 10, b_data).unwrap();
+        let mut result = Matrix::zeros(1, 10);
+        a.matmul_wasm_tiled(&b, &mut result).unwrap();
+
+        let mut expected = Matrix::zeros(1, 10);
+        a.matmul_naive(&b, &mut expected).unwrap();
+        for j in 0..10 {
+            assert!(
+                (result.get(0, j).unwrap() - expected.get(0, j).unwrap()).abs() < 1e-3,
+                "Mismatch at col {}: wasm_tiled={}, naive={}",
+                j,
+                result.get(0, j).unwrap(),
+                expected.get(0, j).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn test_matmul_wasm_tiled_identity() {
+        // Multiplying by identity should return the original matrix.
+        // 4x4 identity, n=4 < 8 so only remainder path.
+        let a = Matrix::from_vec(4, 4, vec![
+            1.0, 2.0, 3.0, 4.0,
+            5.0, 6.0, 7.0, 8.0,
+            9.0, 10.0, 11.0, 12.0,
+            13.0, 14.0, 15.0, 16.0,
+        ]).unwrap();
+        let identity = Matrix::identity(4);
+        let mut result = Matrix::zeros(4, 4);
+        a.matmul_wasm_tiled(&identity, &mut result).unwrap();
+
+        assert_eq!(result.as_slice(), a.as_slice());
+    }
+
+    #[test]
+    fn test_matmul_wasm_tiled_large_mixed() {
+        // Larger test: 5x10 @ 10x19 = 5x19
+        // n=19 => n_simd=16, remainder 16..19
+        // Exercises multiple SIMD blocks (0..8, 8..16) plus remainder (16..19).
+        let a_data: Vec<f32> = (0..50).map(|x| (x as f32) * 0.1).collect();
+        let a = Matrix::from_vec(5, 10, a_data).unwrap();
+        let b_data: Vec<f32> = (0..190).map(|x| (x as f32) * 0.01).collect();
+        let b = Matrix::from_vec(10, 19, b_data).unwrap();
+        let mut result = Matrix::zeros(5, 19);
+        a.matmul_wasm_tiled(&b, &mut result).unwrap();
+
+        let mut expected = Matrix::zeros(5, 19);
+        a.matmul_naive(&b, &mut expected).unwrap();
+        for i in 0..5 {
+            for j in 0..19 {
+                assert!(
+                    (result.get(i, j).unwrap() - expected.get(i, j).unwrap()).abs() < 1e-2,
+                    "Mismatch at ({}, {}): wasm_tiled={}, naive={}",
+                    i,
+                    j,
+                    result.get(i, j).unwrap(),
+                    expected.get(i, j).unwrap()
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
