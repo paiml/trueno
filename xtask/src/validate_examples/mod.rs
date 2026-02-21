@@ -6,7 +6,7 @@
 //! - Have module documentation
 //! - Are runnable (complete with main function)
 //! - Are referenced in the book
-//! - Follow snake_case naming conventions
+//! - Follow `snake_case` naming conventions
 
 mod helpers;
 mod results;

@@ -73,7 +73,7 @@ impl HardwareInfo {
     fn detect_gpu() -> Option<String> {
         #[cfg(target_os = "linux")]
         {
-            return Self::detect_gpu_linux();
+            Self::detect_gpu_linux()
         }
         #[cfg(target_os = "macos")]
         {
@@ -119,7 +119,7 @@ impl HardwareInfo {
     fn read_memory_gb() -> f64 {
         #[cfg(target_os = "linux")]
         {
-            return Self::read_memory_gb_linux();
+            Self::read_memory_gb_linux()
         }
         #[cfg(target_os = "macos")]
         {

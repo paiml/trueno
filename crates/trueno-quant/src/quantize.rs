@@ -1,4 +1,4 @@
-//! K-Quant quantization functions (Q4_K, Q5_K, Q6_K)
+//! K-Quant quantization functions (`Q4_K`, `Q5_K`, `Q6_K`)
 //!
 //! Shared helpers and all quantize functions extracted from lib.rs.
 
@@ -10,8 +10,8 @@ use crate::{f32_to_f16, F16_MIN_NORMAL};
 
 /// Compute per-sub-block scale and min values from padded data.
 ///
-/// Returns (sub_scales, sub_mins) for 8 sub-blocks of 32 elements each.
-/// `quant_max` is the maximum quantized value (15 for Q4_K, 31 for Q5_K).
+/// Returns (`sub_scales`, `sub_mins`) for 8 sub-blocks of 32 elements each.
+/// `quant_max` is the maximum quantized value (15 for `Q4_K`, 31 for `Q5_K`).
 pub(crate) fn compute_sub_block_stats(padded: &[f32; 256], quant_max: f32) -> ([f32; 8], [f32; 8]) {
     const SUB_BLOCK_SIZE: usize = 32;
     let mut sub_scales = [0.0f32; 8];
@@ -84,7 +84,7 @@ pub(crate) fn write_kquant_header(
     result.extend_from_slice(&scales_packed);
 }
 
-/// Quantize a single value: (value + min_val) / scale, clamped to [0, max_q].
+/// Quantize a single value: (value + `min_val`) / scale, clamped to [0, `max_q`].
 #[inline]
 pub(crate) fn quantize_one(value: f32, min_val: f32, scale: f32, max_q: f32) -> u8 {
     if scale > 1e-10 {
@@ -98,14 +98,15 @@ pub(crate) fn quantize_one(value: f32, min_val: f32, scale: f32, max_q: f32) -> 
 // Q4_K Quantization
 // ============================================================================
 
-/// Quantize F32 data to Q4_K format (llama.cpp/candle compatible)
+/// Quantize F32 data to `Q4_K` format (llama.cpp/candle compatible)
 ///
-/// Q4_K format: 256 elements per super-block, 144 bytes per block
+/// `Q4_K` format: 256 elements per super-block, 144 bytes per block
 /// Layout: d (2B) + dmin (2B) + scales (12B) + qs (128B)
 ///
 /// Value packing (candle/llama.cpp layout):
 /// - For each 64-value chunk: 32 bytes store low nibbles first, then high nibbles
 /// - Low nibbles use scale[is], high nibbles use scale[is+1]
+#[must_use] 
 pub fn quantize_q4_k(data: &[f32]) -> Vec<u8> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 144;
@@ -114,7 +115,7 @@ pub fn quantize_q4_k(data: &[f32]) -> Vec<u8> {
         return vec![];
     }
 
-    let num_blocks = (data.len() + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let num_blocks = data.len().div_ceil(SUPER_BLOCK_SIZE);
     let mut result = Vec::with_capacity(num_blocks * SUPER_BLOCK_BYTES);
 
     for block_idx in 0..num_blocks {
@@ -151,9 +152,10 @@ pub fn quantize_q4_k(data: &[f32]) -> Vec<u8> {
     result
 }
 
-/// Quantize F32 matrix to Q4_K format with proper row layout
+/// Quantize F32 matrix to `Q4_K` format with proper row layout
 ///
 /// Processes each row independently to maintain row-major layout.
+#[must_use] 
 pub fn quantize_q4_k_matrix(data: &[f32], shape: &[usize]) -> Vec<u8> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 144;
@@ -165,7 +167,7 @@ pub fn quantize_q4_k_matrix(data: &[f32], shape: &[usize]) -> Vec<u8> {
     let rows = shape[0];
     let cols = shape[1];
 
-    let super_blocks_per_row = (cols + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let super_blocks_per_row = cols.div_ceil(SUPER_BLOCK_SIZE);
     let padded_cols = super_blocks_per_row * SUPER_BLOCK_SIZE;
 
     let mut result = Vec::with_capacity(rows * super_blocks_per_row * SUPER_BLOCK_BYTES);
@@ -189,10 +191,11 @@ pub fn quantize_q4_k_matrix(data: &[f32], shape: &[usize]) -> Vec<u8> {
 // Q5_K Quantization
 // ============================================================================
 
-/// Quantize F32 data to Q5_K format
+/// Quantize F32 data to `Q5_K` format
 ///
-/// Q5_K: 256 elements per super-block, 176 bytes per block
+/// `Q5_K`: 256 elements per super-block, 176 bytes per block
 /// Layout: d (2B) + dmin (2B) + scales (12B) + qh (32B) + qs (128B)
+#[must_use] 
 pub fn quantize_q5_k(data: &[f32]) -> Vec<u8> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 176;
@@ -201,7 +204,7 @@ pub fn quantize_q5_k(data: &[f32]) -> Vec<u8> {
         return vec![];
     }
 
-    let num_blocks = (data.len() + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let num_blocks = data.len().div_ceil(SUPER_BLOCK_SIZE);
     let mut result = Vec::with_capacity(num_blocks * SUPER_BLOCK_BYTES);
 
     for block_idx in 0..num_blocks {
@@ -236,7 +239,7 @@ pub fn quantize_q5_k(data: &[f32]) -> Vec<u8> {
     result
 }
 
-/// Pack Q5_K high bits: extract bit 4 from each value into 32 bytes.
+/// Pack `Q5_K` high bits: extract bit 4 from each value into 32 bytes.
 fn pack_q5k_high_bits(q5_vals: &[u8; 256]) -> [u8; 32] {
     let mut qh = [0u8; 32];
     for i in 0..32 {
@@ -249,7 +252,7 @@ fn pack_q5k_high_bits(q5_vals: &[u8; 256]) -> [u8; 32] {
     qh
 }
 
-/// Pack Q5_K low nibbles: combine pairs of 4-bit values into 128 bytes.
+/// Pack `Q5_K` low nibbles: combine pairs of 4-bit values into 128 bytes.
 fn pack_q5k_low_nibbles(q5_vals: &[u8; 256]) -> [u8; 128] {
     let mut qs = [0u8; 128];
     for j in 0..8 {
@@ -262,7 +265,8 @@ fn pack_q5k_low_nibbles(q5_vals: &[u8; 256]) -> [u8; 128] {
     qs
 }
 
-/// Quantize F32 matrix to Q5_K format with proper row layout
+/// Quantize F32 matrix to `Q5_K` format with proper row layout
+#[must_use] 
 pub fn quantize_q5_k_matrix(data: &[f32], shape: &[usize]) -> Vec<u8> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 176;
@@ -273,7 +277,7 @@ pub fn quantize_q5_k_matrix(data: &[f32], shape: &[usize]) -> Vec<u8> {
 
     let rows = shape[0];
     let cols = shape[1];
-    let super_blocks_per_row = (cols + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let super_blocks_per_row = cols.div_ceil(SUPER_BLOCK_SIZE);
     let padded_cols = super_blocks_per_row * SUPER_BLOCK_SIZE;
 
     let mut result = Vec::with_capacity(rows * super_blocks_per_row * SUPER_BLOCK_BYTES);
@@ -297,12 +301,13 @@ pub fn quantize_q5_k_matrix(data: &[f32], shape: &[usize]) -> Vec<u8> {
 // Q6_K Quantization
 // ============================================================================
 
-/// Quantize F32 data to Q6_K format (candle/GGUF compatible)
+/// Quantize F32 data to `Q6_K` format (candle/GGUF compatible)
 ///
-/// Q6_K format: 256-element super-blocks
+/// `Q6_K` format: 256-element super-blocks
 /// Each super block: ql (128 bytes) + qh (64 bytes) + scales (16 bytes) + d (f16) = 210 bytes
 /// - 6-bit values stored split: low 4 bits in ql, high 2 bits in qh
 /// - 16 sub-blocks of 16 elements each, with int8 scale per sub-block
+#[must_use] 
 pub fn quantize_q6_k(data: &[f32]) -> Vec<u8> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 210;
@@ -311,7 +316,7 @@ pub fn quantize_q6_k(data: &[f32]) -> Vec<u8> {
         return vec![];
     }
 
-    let num_blocks = (data.len() + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let num_blocks = data.len().div_ceil(SUPER_BLOCK_SIZE);
     let mut result = Vec::with_capacity(num_blocks * SUPER_BLOCK_BYTES);
 
     for block_idx in 0..num_blocks {
@@ -338,7 +343,7 @@ pub fn quantize_q6_k(data: &[f32]) -> Vec<u8> {
     result
 }
 
-/// Compute Q6_K global scale and per-sub-block int8 scales.
+/// Compute `Q6_K` global scale and per-sub-block int8 scales.
 fn compute_q6k_scales(padded: &[f32; 256]) -> (f32, [i8; 16]) {
     let mut sub_scales = [0.0f32; 16];
     for (j, sub_block) in padded.chunks(16).enumerate().take(16) {
@@ -365,7 +370,7 @@ fn compute_q6k_scales(padded: &[f32; 256]) -> (f32, [i8; 16]) {
     (d, scales_i8)
 }
 
-/// Quantize 256 padded values to 6-bit Q6_K format.
+/// Quantize 256 padded values to 6-bit `Q6_K` format.
 fn quantize_q6k_values(padded: &[f32; 256], d: f32, scales_i8: &[i8; 16]) -> [u8; 256] {
     let mut q6_vals = [0u8; 256];
     for j in 0..16 {
@@ -384,7 +389,7 @@ fn quantize_q6k_values(padded: &[f32; 256], d: f32, scales_i8: &[i8; 16]) -> [u8
     q6_vals
 }
 
-/// Pack 256 Q6_K values into ql (128 bytes) and qh (64 bytes) candle/GGUF layout.
+/// Pack 256 `Q6_K` values into ql (128 bytes) and qh (64 bytes) candle/GGUF layout.
 fn pack_q6k_bits(q6_vals: &[u8; 256]) -> ([u8; 128], [u8; 64]) {
     let mut ql = [0u8; 128];
     let mut qh = [0u8; 64];
@@ -413,7 +418,8 @@ fn pack_q6k_bits(q6_vals: &[u8; 256]) -> ([u8; 128], [u8; 64]) {
     (ql, qh)
 }
 
-/// Quantize F32 matrix to Q6_K format with proper row layout
+/// Quantize F32 matrix to `Q6_K` format with proper row layout
+#[must_use] 
 pub fn quantize_q6_k_matrix(data: &[f32], shape: &[usize]) -> Vec<u8> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 210;
@@ -424,7 +430,7 @@ pub fn quantize_q6_k_matrix(data: &[f32], shape: &[usize]) -> Vec<u8> {
 
     let rows = shape[0];
     let cols = shape[1];
-    let super_blocks_per_row = (cols + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let super_blocks_per_row = cols.div_ceil(SUPER_BLOCK_SIZE);
     let padded_cols = super_blocks_per_row * SUPER_BLOCK_SIZE;
 
     let mut result = Vec::with_capacity(rows * super_blocks_per_row * SUPER_BLOCK_BYTES);

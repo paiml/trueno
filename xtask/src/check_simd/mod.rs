@@ -1,12 +1,12 @@
 /// SIMD Attribute Checker - Pre-commit validation
 ///
 /// Validates SIMD code properties to ensure correctness and performance:
-/// 1. [CRITICAL] Missing #[target_feature] attributes
+/// 1. [CRITICAL] Missing #[`target_feature`] attributes
 /// 2. [ERROR] Attribute-intrinsic mismatch
 /// 3. [WARNING] Missing SAFETY comments
 /// 4. [WARNING] Missing #[inline] attributes
 ///
-/// Bug instances found: 104 functions missing #[target_feature]
+/// Bug instances found: 104 functions missing #[`target_feature`]
 /// Performance impact: 5.9x slower to missing 21x speedup potential
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -77,7 +77,7 @@ fn is_fma_intrinsic(intrinsic: &str) -> bool {
     )
 }
 
-/// Check if #[target_feature] attribute exists within 15 lines before function
+/// Check if #[`target_feature`] attribute exists within 15 lines before function
 fn check_target_feature_attribute(lines: &[String], fn_line: usize) -> Option<String> {
     let target_feature_re =
         Regex::new(r#"#\[target_feature\(enable\s*=\s*"([^"]+)"\)\]"#).expect("Invalid regex");
@@ -128,8 +128,8 @@ fn find_intrinsics_in_function(
     let mut fn_end = fn_start;
 
     for (offset, line) in lines[fn_start..].iter().enumerate() {
-        brace_count += line.matches('{').count() as i32;
-        brace_count -= line.matches('}').count() as i32;
+        brace_count += i32::try_from(line.matches('{').count()).unwrap_or(i32::MAX);
+        brace_count -= i32::try_from(line.matches('}').count()).unwrap_or(i32::MAX);
 
         // Collect intrinsics
         for cap in pattern.captures_iter(line) {
@@ -160,15 +160,11 @@ fn check_attribute_mismatch(feature: &str, intrinsics: &HashSet<String>) -> Opti
     }
 
     if has_avx2 && feature == "sse2" {
-        return Some(format!(
-            "Using AVX2 intrinsics but attribute is 'sse2' (should be 'avx2')"
-        ));
+        return Some("Using AVX2 intrinsics but attribute is 'sse2' (should be 'avx2')".to_string());
     }
 
     if !has_avx512 && feature.contains("avx512f") {
-        return Some(format!(
-            "Attribute is 'avx512f' but no AVX-512 intrinsics found"
-        ));
+        return Some("Attribute is 'avx512f' but no AVX-512 intrinsics found".to_string());
     }
 
     None
@@ -282,15 +278,14 @@ fn check_unsafe_function_violations(
 
 /// Check a single backend file for SIMD violations
 fn check_file(filepath: &Path, backend: &str) -> Result<Vec<Violation>> {
-    let pattern = match get_intrinsic_patterns(backend) {
-        Some(p) => p,
-        None => return Ok(vec![]),
+    let Some(pattern) = get_intrinsic_patterns(backend) else {
+        return Ok(vec![]);
     };
 
     let content = std::fs::read_to_string(filepath)
         .with_context(|| format!("Failed to read {}", filepath.display()))?;
 
-    let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+    let lines: Vec<String> = content.lines().map(std::string::ToString::to_string).collect();
     let unsafe_fn_re = Regex::new(r"^\s*unsafe\s+fn\s+(\w+)").expect("Invalid regex");
 
     let mut violations = Vec::new();
@@ -353,9 +348,8 @@ fn print_violation_group(violations: &[&Violation], icon: &str, label: &str, col
 
     for v in violations.iter().take(10) {
         println!(
-            "  {} - {}",
-            format!("{}:{}", v.filepath.display(), v.line_num),
-            format!("{}()", v.function_name)
+            "  {}:{} - {}()",
+            v.filepath.display(), v.line_num, v.function_name
         );
         println!("     Problem: {}", v.message);
         println!("     Fix: {}", v.fix_suggestion);

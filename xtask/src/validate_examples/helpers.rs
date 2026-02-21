@@ -49,17 +49,17 @@ pub(crate) fn collect_examples(examples_dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 /// Find all markdown files in directory
-pub(crate) fn find_markdown_files(dir: &Path) -> Result<Vec<PathBuf>> {
+pub(crate) fn find_markdown_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
 
-    for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(dir).into_iter().filter_map(std::result::Result::ok) {
         let path = entry.path();
         if is_markdown_file(path) {
             files.push(path.to_path_buf());
         }
     }
 
-    Ok(files)
+    files
 }
 
 /// Check if a file has module documentation
@@ -90,7 +90,7 @@ pub(crate) fn extract_file_names(paths: &[PathBuf]) -> Vec<String> {
         .iter()
         .filter_map(|p| p.file_name())
         .filter_map(|n| n.to_str())
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 
@@ -100,7 +100,7 @@ pub(crate) fn extract_file_stems(paths: &[PathBuf]) -> Vec<String> {
         .iter()
         .filter_map(|p| p.file_stem())
         .filter_map(|n| n.to_str())
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 
@@ -114,7 +114,7 @@ pub(crate) fn is_markdown_file(path: &Path) -> bool {
     path.extension().and_then(|s| s.to_str()) == Some("md")
 }
 
-/// Validate snake_case naming
+/// Validate `snake_case` naming
 pub(crate) fn validate_snake_case(name: &str) -> bool {
     let regex = Regex::new(r"^[a-z][a-z0-9_]*$").expect("invariant: regex pattern is valid");
     regex.is_match(name)

@@ -270,8 +270,8 @@ fn scan_empty_loop(lines: &[&str], start: usize, label: &str, branch_re: &Regex)
     let mut has_computation = false;
     let mut found_back_edge = false;
 
-    for j in (start + 1)..lines.len().min(start + 21) {
-        let inner = lines[j].trim();
+    for inner_line in lines.iter().skip(start + 1).take(20) {
+        let inner = inner_line.trim();
         if is_skip_line(inner) {
             continue;
         }

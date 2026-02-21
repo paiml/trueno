@@ -29,7 +29,7 @@ fn test_find_markdown_files_empty_dir() {
     let book_dir = temp.path().join("book");
     fs::create_dir(&book_dir).unwrap();
 
-    let md_files = find_markdown_files(&book_dir).unwrap();
+    let md_files = find_markdown_files(&book_dir);
     assert!(md_files.is_empty());
 }
 
@@ -215,7 +215,7 @@ fn test_find_markdown_files_single_file() {
     fs::create_dir(&book_dir).unwrap();
     fs::File::create(book_dir.join("single.md")).unwrap();
 
-    let md_files = find_markdown_files(&book_dir).unwrap();
+    let md_files = find_markdown_files(&book_dir);
     assert_eq!(md_files.len(), 1);
 }
 

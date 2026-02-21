@@ -68,7 +68,7 @@ fn test_find_markdown_files_nested() {
     fs::File::create(ch2.join("part2.md")).unwrap();
     fs::File::create(ch2.join("README.txt")).unwrap(); // Not markdown
 
-    let md_files = find_markdown_files(&book_dir).unwrap();
+    let md_files = find_markdown_files(&book_dir);
     assert_eq!(md_files.len(), 4); // Should find all 4 .md files
 }
 

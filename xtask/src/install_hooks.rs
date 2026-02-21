@@ -1,7 +1,7 @@
 /// Git hooks installer - Pure Rust implementation
 ///
 /// Installs pre-commit hooks for Trueno development that enforce:
-/// - SIMD attribute validation (prevents missing #[target_feature])
+/// - SIMD attribute validation (prevents missing #[`target_feature`])
 /// - Prevents commits causing 5.9x-21x performance degradation
 use anyhow::{Context, Result};
 use colored::Colorize;
