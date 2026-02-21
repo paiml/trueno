@@ -301,6 +301,6 @@ This demonstrates:
 ## References
 
 - [PTX ISA Documentation](https://docs.nvidia.com/cuda/parallel-thread-execution/)
-- [CUDA Occupancy Calculator](https://docs.nvidia.com/cuda/cuda-occupancy-calculator/)
+- [CUDA Occupancy Calculator](https://developer.nvidia.com/cuda-occupancy-calculator)
 - [GitHub Issue #66: Liveness-Based Register Reuse](https://github.com/paiml/trueno/issues/66)
 - Example: `trueno-gpu/examples/register_allocation.rs`
