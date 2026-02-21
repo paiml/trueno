@@ -160,7 +160,9 @@ fn check_attribute_mismatch(feature: &str, intrinsics: &HashSet<String>) -> Opti
     }
 
     if has_avx2 && feature == "sse2" {
-        return Some("Using AVX2 intrinsics but attribute is 'sse2' (should be 'avx2')".to_string());
+        return Some(
+            "Using AVX2 intrinsics but attribute is 'sse2' (should be 'avx2')".to_string(),
+        );
     }
 
     if !has_avx512 && feature.contains("avx512f") {
@@ -285,7 +287,10 @@ fn check_file(filepath: &Path, backend: &str) -> Result<Vec<Violation>> {
     let content = std::fs::read_to_string(filepath)
         .with_context(|| format!("Failed to read {}", filepath.display()))?;
 
-    let lines: Vec<String> = content.lines().map(std::string::ToString::to_string).collect();
+    let lines: Vec<String> = content
+        .lines()
+        .map(std::string::ToString::to_string)
+        .collect();
     let unsafe_fn_re = Regex::new(r"^\s*unsafe\s+fn\s+(\w+)").expect("Invalid regex");
 
     let mut violations = Vec::new();
@@ -349,7 +354,9 @@ fn print_violation_group(violations: &[&Violation], icon: &str, label: &str, col
     for v in violations.iter().take(10) {
         println!(
             "  {}:{} - {}()",
-            v.filepath.display(), v.line_num, v.function_name
+            v.filepath.display(),
+            v.line_num,
+            v.function_name
         );
         println!("     Problem: {}", v.message);
         println!("     Fix: {}", v.fix_suggestion);

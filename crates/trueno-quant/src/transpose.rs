@@ -8,7 +8,7 @@ use crate::quantize::{quantize_q4_k_matrix, quantize_q6_k_matrix};
 /// GGUF stores weights as [cols, rows] in column-major order.
 /// APR requires [rows, cols] in row-major order.
 /// This function dequantizes, transposes, and re-quantizes.
-#[must_use] 
+#[must_use]
 pub fn transpose_q4k_for_matmul(data: &[u8], shape: &[usize]) -> (Vec<u8>, Vec<usize>) {
     if shape.len() != 2 {
         return (data.to_vec(), shape.to_vec());
@@ -34,7 +34,7 @@ pub fn transpose_q4k_for_matmul(data: &[u8], shape: &[usize]) -> (Vec<u8>, Vec<u
 }
 
 /// Transpose Q5K tensor from GGUF column-major to APR row-major layout
-#[must_use] 
+#[must_use]
 pub fn transpose_q5k_for_matmul(data: &[u8], shape: &[usize]) -> (Vec<u8>, Vec<usize>) {
     if shape.len() != 2 {
         return (data.to_vec(), shape.to_vec());
@@ -61,7 +61,7 @@ pub fn transpose_q5k_for_matmul(data: &[u8], shape: &[usize]) -> (Vec<u8>, Vec<u
 }
 
 /// Transpose Q6K tensor from GGUF column-major to APR row-major layout
-#[must_use] 
+#[must_use]
 pub fn transpose_q6k_for_matmul(data: &[u8], shape: &[usize]) -> (Vec<u8>, Vec<usize>) {
     if shape.len() != 2 {
         return (data.to_vec(), shape.to_vec());

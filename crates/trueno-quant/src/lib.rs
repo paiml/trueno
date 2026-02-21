@@ -93,14 +93,14 @@ pub const Q6_K_BLOCK_BYTES: usize = 210;
 
 /// Convert f32 to f16 (using half crate)
 #[inline]
-#[must_use] 
+#[must_use]
 pub fn f32_to_f16(value: f32) -> u16 {
     half::f16::from_f32(value).to_bits()
 }
 
 /// Convert f16 to f32 (using half crate)
 #[inline]
-#[must_use] 
+#[must_use]
 pub fn f16_to_f32(bits: u16) -> f32 {
     half::f16::from_bits(bits).to_f32()
 }
