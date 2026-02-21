@@ -137,7 +137,7 @@ fn test_find_markdown_files() {
     fs::File::create(src_dir.join("chapter1.md")).unwrap();
     fs::File::create(src_dir.join("not_md.txt")).unwrap();
 
-    let md_files = find_markdown_files(&book_dir).unwrap();
+    let md_files = find_markdown_files(&book_dir);
     assert_eq!(md_files.len(), 2);
     assert!(md_files.iter().all(|p| p.extension().unwrap() == "md"));
 }

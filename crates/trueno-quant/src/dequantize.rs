@@ -1,13 +1,14 @@
-//! K-Quant dequantization functions (Q4_K, Q5_K, Q6_K)
+//! K-Quant dequantization functions (`Q4_K`, `Q5_K`, `Q6_K`)
 
 use crate::{f16_to_f32, F16_MIN_NORMAL};
 
-/// Dequantize Q4_K bytes to F32
+/// Dequantize `Q4_K` bytes to F32
+#[must_use] 
 pub fn dequantize_q4_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 144;
 
-    let num_blocks = (num_elements + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let num_blocks = num_elements.div_ceil(SUPER_BLOCK_SIZE);
     let mut result = vec![0.0f32; num_blocks * SUPER_BLOCK_SIZE];
 
     for sb_idx in 0..num_blocks {
@@ -42,7 +43,7 @@ fn sanitize_f16_scale(lo: u8, hi: u8) -> f32 {
     }
 }
 
-/// Unpack Q4_K 12-byte packed scales into 8 scale + 8 min values.
+/// Unpack `Q4_K` 12-byte packed scales into 8 scale + 8 min values.
 fn unpack_q4k_scales(scales_bytes: &[u8]) -> ([u8; 8], [u8; 8]) {
     let mut scales = [0u8; 8];
     let mut mins = [0u8; 8];
@@ -55,7 +56,7 @@ fn unpack_q4k_scales(scales_bytes: &[u8]) -> ([u8; 8], [u8; 8]) {
     (scales, mins)
 }
 
-/// Dequantize one Q4_K block (256 values) from packed nibbles.
+/// Dequantize one `Q4_K` block (256 values) from packed nibbles.
 fn dequantize_q4k_block(
     d: f32,
     dmin: f32,
@@ -74,23 +75,24 @@ fn dequantize_q4k_block(
 
         for l in 0..32 {
             let byte = qs[chunk * 32 + l];
-            output[ys_index] = scale_lo * (byte & 0x0F) as f32 - min_lo;
+            output[ys_index] = scale_lo * f32::from(byte & 0x0F) - min_lo;
             ys_index += 1;
         }
         for l in 0..32 {
             let byte = qs[chunk * 32 + l];
-            output[ys_index] = scale_hi * ((byte >> 4) & 0x0F) as f32 - min_hi;
+            output[ys_index] = scale_hi * f32::from((byte >> 4) & 0x0F) - min_hi;
             ys_index += 1;
         }
     }
 }
 
-/// Dequantize Q5_K bytes to F32
+/// Dequantize `Q5_K` bytes to F32
+#[must_use] 
 pub fn dequantize_q5_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 176;
 
-    let num_blocks = (num_elements + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let num_blocks = num_elements.div_ceil(SUPER_BLOCK_SIZE);
     let mut result = vec![0.0f32; num_blocks * SUPER_BLOCK_SIZE];
 
     for sb_idx in 0..num_blocks {
@@ -140,12 +142,13 @@ pub fn dequantize_q5_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
     result
 }
 
-/// Dequantize Q6_K bytes to F32
+/// Dequantize `Q6_K` bytes to F32
+#[must_use] 
 pub fn dequantize_q6_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 210;
 
-    let num_blocks = (num_elements + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+    let num_blocks = num_elements.div_ceil(SUPER_BLOCK_SIZE);
     let mut result = vec![0.0f32; num_blocks * SUPER_BLOCK_SIZE];
 
     for sb_idx in 0..num_blocks {

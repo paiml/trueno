@@ -2,7 +2,7 @@
 //!
 //! Shattered from monolithic bugs.rs into:
 //! - `types` - Bug severity, classification, and report types
-//! - `analyzer` - PtxBugAnalyzer implementation
+//! - `analyzer` - `PtxBugAnalyzer` implementation
 //! - `coverage` - PTX coverage tracking
 //!
 //! Bug Classes (from probar `gpu_pixels`):

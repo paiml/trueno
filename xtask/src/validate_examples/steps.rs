@@ -104,7 +104,7 @@ pub(crate) fn step_check_runnable(
             .ok_or_else(|| anyhow!("Invalid example filename"))?;
 
         match run_example_with_timeout(example_name, project_root, TIMEOUT_SECS) {
-            Ok(_) => {} // Success
+            Ok(()) => {} // Success
             Err(e) => {
                 errors.push(format!("{}: {}", example_name, e));
             }
@@ -141,26 +141,22 @@ fn run_example_with_timeout(
     let start = std::time::Instant::now();
 
     loop {
-        match child.try_wait()? {
-            Some(status) => {
-                if !status.success() {
-                    let mut stderr = Vec::new();
-                    if let Some(mut pipe) = child.stderr.take() {
-                        let _ = pipe.read_to_end(&mut stderr);
-                    }
-                    let stderr_str = String::from_utf8_lossy(&stderr);
-                    bail!("exited with error: {}", stderr_str);
+        if let Some(status) = child.try_wait()? {
+            if !status.success() {
+                let mut stderr = Vec::new();
+                if let Some(mut pipe) = child.stderr.take() {
+                    let _ = pipe.read_to_end(&mut stderr);
                 }
-                return Ok(());
+                let stderr_str = String::from_utf8_lossy(&stderr);
+                bail!("exited with error: {}", stderr_str);
             }
-            None => {
-                if start.elapsed() > timeout {
-                    let _ = child.kill();
-                    bail!("timed out after {}s", timeout_secs);
-                }
-                std::thread::sleep(Duration::from_millis(100));
-            }
+            return Ok(());
         }
+        if start.elapsed() > timeout {
+            let _ = child.kill();
+            bail!("timed out after {}s", timeout_secs);
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
 }
 
@@ -179,7 +175,7 @@ pub(crate) fn step_check_book_references(
         extract_file_stems(examples).into_iter().collect();
 
     // Find all markdown files in book
-    let md_files = find_markdown_files(book_dir)?;
+    let md_files = find_markdown_files(book_dir);
 
     // Extract referenced examples from markdown
     let mut referenced = HashSet::new();
@@ -215,7 +211,7 @@ pub(crate) fn step_check_book_references(
     Ok(())
 }
 
-/// Step 6: Verify snake_case naming conventions
+/// Step 6: Verify `snake_case` naming conventions
 pub(crate) fn step_check_naming_conventions(examples: &[std::path::PathBuf]) -> Result<()> {
     let mut invalid_names = Vec::new();
 

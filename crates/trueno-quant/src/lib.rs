@@ -1,7 +1,7 @@
 //! K-Quantization formats for GGUF/APR model weights (Toyota Way: ONE source of truth)
 //!
 //! This crate provides quantization functions for converting F32 data to
-//! K-quantization formats (Q4_K, Q5_K, Q6_K). This is the ONLY implementation
+//! K-quantization formats (`Q4_K`, `Q5_K`, `Q6_K`). This is the ONLY implementation
 //! in the Sovereign AI Stack - aprender and realizar import from here.
 //!
 //! ## Stack Architecture (Toyota Way)
@@ -30,9 +30,9 @@
 //!
 //! ## Format Specifications
 //!
-//! - Q4_K: 256-element super-blocks, 144 bytes (4.5 bits/weight)
-//! - Q5_K: 256-element super-blocks, 176 bytes (5.5 bits/weight)
-//! - Q6_K: 256-element super-blocks, 210 bytes (6.5 bits/weight)
+//! - `Q4_K`: 256-element super-blocks, 144 bytes (4.5 bits/weight)
+//! - `Q5_K`: 256-element super-blocks, 176 bytes (5.5 bits/weight)
+//! - `Q6_K`: 256-element super-blocks, 210 bytes (6.5 bits/weight)
 //!
 //! ## Usage
 //!
@@ -69,22 +69,22 @@ pub use transpose::{transpose_q4k_for_matmul, transpose_q5k_for_matmul, transpos
 /// Prevents NaN on round-trip through f16 encoding
 pub const F16_MIN_NORMAL: f32 = 6.1e-5;
 
-/// Q4_K super-block size (elements per block)
+/// `Q4_K` super-block size (elements per block)
 pub const Q4_K_BLOCK_SIZE: usize = 256;
 
-/// Q4_K super-block byte size
+/// `Q4_K` super-block byte size
 pub const Q4_K_BLOCK_BYTES: usize = 144;
 
-/// Q5_K super-block size (elements per block)
+/// `Q5_K` super-block size (elements per block)
 pub const Q5_K_BLOCK_SIZE: usize = 256;
 
-/// Q5_K super-block byte size
+/// `Q5_K` super-block byte size
 pub const Q5_K_BLOCK_BYTES: usize = 176;
 
-/// Q6_K super-block size (elements per block)
+/// `Q6_K` super-block size (elements per block)
 pub const Q6_K_BLOCK_SIZE: usize = 256;
 
-/// Q6_K super-block byte size
+/// `Q6_K` super-block byte size
 pub const Q6_K_BLOCK_BYTES: usize = 210;
 
 // ============================================================================
@@ -93,12 +93,14 @@ pub const Q6_K_BLOCK_BYTES: usize = 210;
 
 /// Convert f32 to f16 (using half crate)
 #[inline]
+#[must_use] 
 pub fn f32_to_f16(value: f32) -> u16 {
     half::f16::from_f32(value).to_bits()
 }
 
 /// Convert f16 to f32 (using half crate)
 #[inline]
+#[must_use] 
 pub fn f16_to_f32(bits: u16) -> f32 {
     half::f16::from_bits(bits).to_f32()
 }

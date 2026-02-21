@@ -28,7 +28,7 @@ impl ValidationResults {
         print!("Step {}/6: {}... ", number, name);
 
         match f() {
-            Ok(_) => {
+            Ok(()) => {
                 println!("{}", "✓".green());
                 self.steps.push(StepResult {
                     number,

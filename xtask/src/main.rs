@@ -15,15 +15,12 @@ mod validate_examples;
 use anyhow::{bail, Result};
 use std::env;
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     let args: Vec<String> = env::args().collect();
 
-    match run_command(&args) {
-        Ok(()) => Ok(()),
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
-        }
+    if let Err(e) = run_command(&args) {
+        eprintln!("Error: {}", e);
+        std::process::exit(1);
     }
 }
 
