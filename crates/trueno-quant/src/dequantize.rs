@@ -3,7 +3,7 @@
 use crate::{f16_to_f32, F16_MIN_NORMAL};
 
 /// Dequantize `Q4_K` bytes to F32
-#[must_use] 
+#[must_use]
 pub fn dequantize_q4_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 144;
@@ -87,7 +87,7 @@ fn dequantize_q4k_block(
 }
 
 /// Dequantize `Q5_K` bytes to F32
-#[must_use] 
+#[must_use]
 pub fn dequantize_q5_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 176;
@@ -143,7 +143,7 @@ pub fn dequantize_q5_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
 }
 
 /// Dequantize `Q6_K` bytes to F32
-#[must_use] 
+#[must_use]
 pub fn dequantize_q6_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
     const SUPER_BLOCK_SIZE: usize = 256;
     const SUPER_BLOCK_BYTES: usize = 210;
