@@ -15,7 +15,7 @@ categories = ["algorithms", "mathematics", "science"]
 # ComputeBrick is available from trueno crate directly
 # Users: `use trueno::brick::{ComputeBrick, ComputeBackend};`
 thiserror = "2.0"
-batuta-common = { path = "../../batuta-common" }
+batuta-common = "0.1"
 # Dynamic library loading for libcuda.so/nvcuda.dll
 # OWN THE STACK: We write our own CUDA FFI in driver/sys.rs (~400 lines)
 # Citation: RustBelt [1] proves Rust's type system safely encapsulates unsafe FFI
