@@ -284,7 +284,8 @@ impl ThroughputRegressor {
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _)| i)
-            .unwrap_or(2); // Default to Q4K if ambiguous
+            // N-07 (Meyer DbC): default to Q4_0 (idx 0) if ambiguous, not Q4K.
+            .unwrap_or(0);
 
         bytes_per_param[idx]
     }
