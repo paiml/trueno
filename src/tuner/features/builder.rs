@@ -177,8 +177,8 @@ impl TunerFeaturesBuilder {
     /// Build features, returning Err if raw inputs violate physical constraints.
     ///
     /// F024: model_params_b, gpu_mem_bw, gpu_compute must be non-negative.
-    pub fn try_build(self) -> Result<TunerFeatures, crate::tuner::TunerError> {
-        // F024: Pre-normalization validation — physical quantities must be non-negative
+    /// F024: Pre-normalization validation — physical quantities must be non-negative.
+    fn validate_non_negative(&self) -> Result<(), crate::tuner::TunerError> {
         if let Some(p) = self.model_params_b {
             if p < 0.0 {
                 return Err(crate::tuner::TunerError::InvalidFeature(format!(
@@ -200,6 +200,11 @@ impl TunerFeaturesBuilder {
                 )));
             }
         }
+        Ok(())
+    }
+
+    pub fn try_build(self) -> Result<TunerFeatures, crate::tuner::TunerError> {
+        self.validate_non_negative()?;
 
         let batch_size = self.batch_size.unwrap_or(1);
         let kv_caches = self.kv_caches.unwrap_or(batch_size);
@@ -216,7 +221,8 @@ impl TunerFeaturesBuilder {
         }
 
         // Calculate derived features
-        let hidden_dim = self.hidden_dim.unwrap_or(1536) as f32;
+        // C-14 (Meyer DbC): 0 = unknown, no architecture-specific magic number.
+        let hidden_dim = self.hidden_dim.unwrap_or(0) as f32;
         let batch_size_f = batch_size as f32;
         let quant_bytes = self
             .quant_type
