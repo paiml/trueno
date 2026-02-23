@@ -244,9 +244,10 @@ impl TunerFeaturesBuilder {
                 .unwrap_or(0.0)
                 .clamp(0.0, 1.0),
             hidden_dim_norm: (hidden_dim / 16384.0).clamp(0.0, 1.0),
-            num_layers_norm: (self.num_layers.unwrap_or(28) as f32 / 128.0).clamp(0.0, 1.0),
-            num_heads_norm: (self.num_heads.unwrap_or(12) as f32 / 128.0).clamp(0.0, 1.0),
-            head_dim_norm: (self.head_dim.unwrap_or(128) as f32 / 256.0).clamp(0.0, 1.0),
+            // N-07 (Meyer DbC): 0 when unknown — no model-specific defaults.
+            num_layers_norm: (self.num_layers.unwrap_or(0) as f32 / 128.0).clamp(0.0, 1.0),
+            num_heads_norm: (self.num_heads.unwrap_or(0) as f32 / 128.0).clamp(0.0, 1.0),
+            head_dim_norm: (self.head_dim.unwrap_or(0) as f32 / 256.0).clamp(0.0, 1.0),
             vocab_size_log: self
                 .vocab_size
                 .map(|v| (v.max(1) as f32).log10() / 6.0) // log10(1M)=6
