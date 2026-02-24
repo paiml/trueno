@@ -257,3 +257,48 @@ fn falsify_em_005_value_correctness() {
     assert_eq!(result.get(2, 0), Some(&0.0));
     assert_eq!(result.get(2, 3), Some(&3.0));
 }
+
+// ============================================================================
+// FALSIFY-EMB-005: Non-zero embeddings
+// Contract: embedding table with non-zero values produces non-zero output
+//
+// Five-Whys (PMAT-354):
+//   Why 1: trueno had 0 FALSIFY-EMB-* tests
+//   Why 2: EMB contract covers algebra, not just lookup mechanics
+//   Why 3: EMB-005 (non-zero) was only tested in aprender
+//   Why 4: no cross-stack EMB mapping existed before PMAT-354
+//   Why 5: embedding_lookup was treated as "just slicing" — no algebra tests
+// ============================================================================
+
+#[test]
+fn falsify_emb_005_non_zero_output() {
+    // Non-zero embedding table must produce non-zero lookup results
+    let data: Vec<f32> = (0..200).map(|i| (i as f32 * 0.37).sin()).collect();
+    let table = Matrix::from_vec(10, 20, data).unwrap();
+    let indices = vec![3, 7, 1];
+
+    let result = table.embedding_lookup(&indices).unwrap();
+
+    // At least some output values must be non-zero (not a degenerate table)
+    let l2_norm: f32 = result.data.iter().map(|v| v * v).sum::<f32>().sqrt();
+    assert!(
+        l2_norm > 1e-6,
+        "FALSIFIED EMB-005: embedding lookup produced all-zero output (L2={l2_norm})"
+    );
+}
+
+#[test]
+fn falsify_emb_005_per_row_non_zero() {
+    // Each looked-up row should be non-zero when the source row is non-zero
+    let data: Vec<f32> = (1..=60).map(|i| i as f32).collect();
+    let table = Matrix::from_vec(5, 12, data).unwrap();
+
+    for idx in 0..5 {
+        let result = table.embedding_lookup(&[idx]).unwrap();
+        let row_l2: f32 = result.data.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!(
+            row_l2 > 1e-6,
+            "FALSIFIED EMB-005: row {idx} is all-zero (L2={row_l2})"
+        );
+    }
+}
