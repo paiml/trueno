@@ -371,3 +371,57 @@ fn falsify_sm_005_numerical_stability() {
         );
     }
 }
+
+/// FALSIFY-SM-006: Identical elements → uniform distribution
+///
+/// Contract: softmax([c, c, ..., c]) = [1/n, 1/n, ..., 1/n]
+#[test]
+fn falsify_sm_006_identical_elements_uniform() {
+    for n in [2, 4, 8, 16] {
+        let v = Vector::from_vec(vec![5.0; n]);
+        let probs = v.softmax().unwrap();
+        let expected = 1.0 / n as f32;
+
+        for (i, &p) in probs.as_slice().iter().enumerate() {
+            assert!(
+                (p - expected).abs() < 1e-6,
+                "FALSIFIED SM-006: n={n} probs[{i}] = {p}, expected {expected}"
+            );
+        }
+    }
+}
+
+/// FALSIFY-SM-007: Translation invariance — σ(x + c) = σ(x) for any scalar c
+///
+/// Five-Whys (PMAT-354):
+///   Why 1: SM-INV-003 (translation invariance) had ZERO coverage in any repo
+///   Why 2: the max-subtraction trick IMPLEMENTS this property but nobody tests it
+///   Why 3: shift invariance is "obviously true" from the mathematical definition
+///   Why 4: no mapping from proof obligation SM-INV-003 to any FALSIFY test
+///   Why 5: the property is foundational to numerical stability but untested
+///
+/// Contract: σ(x + c·1) = σ(x) for any scalar c.
+/// This is the mathematical basis for the max-subtraction stability trick.
+#[test]
+fn falsify_sm_007_translation_invariance() {
+    let base = Vector::from_vec(vec![1.0, 3.0, -2.0, 0.5]);
+    let base_probs = base.softmax().unwrap();
+
+    // Shift by various constants — result must be identical
+    for c in [100.0, -100.0, 0.0, 42.0, -999.0, 1e6] {
+        let shifted = Vector::from_vec(vec![1.0 + c, 3.0 + c, -2.0 + c, 0.5 + c]);
+        let shifted_probs = shifted.softmax().unwrap();
+
+        for (i, (&orig, &shift)) in base_probs
+            .as_slice()
+            .iter()
+            .zip(shifted_probs.as_slice().iter())
+            .enumerate()
+        {
+            assert!(
+                (orig - shift).abs() < 1e-5,
+                "FALSIFIED SM-007: σ(x+{c})[{i}] = {shift} != σ(x)[{i}] = {orig}"
+            );
+        }
+    }
+}
