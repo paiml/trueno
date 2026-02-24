@@ -485,3 +485,52 @@ fn falsify_sm_009_single_element() {
         );
     }
 }
+
+// ========================================================================
+// FALSIFY-SM proptest variants: random-vector falsification
+//
+// These complement the deterministic FALSIFY-SM-001..009 tests above with
+// proptest-driven randomised inputs for higher coverage confidence.
+// ========================================================================
+
+mod softmax_proptest_falsify {
+    use super::*;
+    use proptest::prelude::*;
+
+    // FALSIFY-SM-001-prop: Normalization for random vectors
+    //
+    // Contract: |Σ σ(x)_i - 1.0| < ε for any input vector
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(500))]
+        #[test]
+        fn falsify_sm_001_prop_sums_to_one(
+            logits in proptest::collection::vec(-100.0_f32..100.0, 2..64),
+        ) {
+            let v = Vector::from_vec(logits);
+            let probs = v.softmax().unwrap();
+            let sum: f32 = probs.as_slice().iter().sum();
+            prop_assert!(
+                (sum - 1.0).abs() < 1e-4,
+                "FALSIFIED SM-001-prop: sum={} for {} elements", sum, probs.len()
+            );
+        }
+    }
+
+    // FALSIFY-SM-002-prop: Positivity for random vectors
+    //
+    // Contract: σ(x)_i > 0 and is finite for all i
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(500))]
+        #[test]
+        fn falsify_sm_002_prop_positive(
+            logits in proptest::collection::vec(-500.0_f32..500.0, 2..32),
+        ) {
+            let v = Vector::from_vec(logits.clone());
+            let probs = v.softmax().unwrap();
+            for (i, &p) in probs.as_slice().iter().enumerate() {
+                prop_assert!(p >= 0.0, "FALSIFIED SM-002-prop: probs[{}]={} negative (n={})", i, p, logits.len());
+                prop_assert!(p.is_finite(), "FALSIFIED SM-002-prop: probs[{}]={} non-finite", i, p);
+            }
+        }
+    }
+}
