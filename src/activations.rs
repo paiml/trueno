@@ -276,4 +276,114 @@ mod tests {
     fn test_f16_zero() {
         assert_eq!(f16_to_f32(0), 0.0);
     }
+
+    // =========================================================================
+    // FALSIFY-GE: gelu-kernel-v1.yaml contract (trueno gelu_scalar)
+    //
+    // Five-Whys (PMAT-354):
+    //   Why 1: trueno had basic gelu tests but zero FALSIFY-GE-* tests
+    //   Why 2: tests checked 2 values (zero, large), not mathematical invariants
+    //   Why 3: no mapping from gelu-kernel-v1.yaml to trueno test names
+    //   Why 4: trueno predates the provable-contracts YAML convention
+    //   Why 5: GELU was "obviously correct" (tanh approximation is textbook)
+    //
+    // References:
+    //   - provable-contracts/contracts/gelu-kernel-v1.yaml
+    //   - Hendrycks & Gimpel (2016) "Gaussian Error Linear Units (GELUs)"
+    // =========================================================================
+
+    /// FALSIFY-GE-001: Non-negativity — GELU(x) >= 0 for all x > 0
+    #[test]
+    fn falsify_ge_001_non_negativity() {
+        let test_values = [
+            0.001, 0.01, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 100.0, 1e6,
+        ];
+        for &x in &test_values {
+            let y = gelu_scalar(x);
+            assert!(
+                y >= 0.0,
+                "FALSIFIED GE-001: GELU({x}) = {y} < 0 for positive input"
+            );
+        }
+    }
+
+    /// FALSIFY-GE-002: Monotonicity — GELU(x) > GELU(y) when x > y > 0
+    #[test]
+    fn falsify_ge_002_positive_monotonicity() {
+        let values: Vec<f32> = vec![0.01, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0];
+        for window in values.windows(2) {
+            let (y_lo, y_hi) = (gelu_scalar(window[0]), gelu_scalar(window[1]));
+            assert!(
+                y_hi > y_lo,
+                "FALSIFIED GE-002: GELU({}) = {} not > GELU({}) = {}",
+                window[1], y_hi, window[0], y_lo
+            );
+        }
+    }
+
+    /// FALSIFY-GE-003: Zero preservation — GELU(0) = 0
+    #[test]
+    fn falsify_ge_003_zero_preservation() {
+        let y = gelu_scalar(0.0);
+        assert!(
+            y.abs() < 1e-7,
+            "FALSIFIED GE-003: GELU(0) = {y}, expected 0"
+        );
+    }
+
+    /// FALSIFY-GE-005: Tanh approximation vs exact CDF — |diff| < 0.005
+    ///
+    /// Exact GELU: x * Phi(x) where Phi is the standard normal CDF.
+    /// We approximate Phi via Abramowitz & Stegun erf formula (max error 1.5e-7).
+    #[test]
+    fn falsify_ge_005_tanh_approx_accuracy() {
+        // Abramowitz & Stegun erf approximation (7.1.26), max |error| < 1.5e-7
+        fn erf_approx(x: f32) -> f32 {
+            let sign = x.signum();
+            let x = x.abs();
+            let t = 1.0 / (1.0 + 0.327_591_1 * x);
+            let t2 = t * t;
+            let t3 = t2 * t;
+            let t4 = t3 * t;
+            let t5 = t4 * t;
+            let poly = 0.254_829_592 * t - 0.284_496_736 * t2 + 1.421_413_741 * t3
+                - 1.453_152_027 * t4 + 1.061_405_429 * t5;
+            sign * (1.0 - poly * (-x * x).exp())
+        }
+
+        fn gelu_exact(x: f32) -> f32 {
+            let phi = 0.5 * (1.0 + erf_approx(x / std::f32::consts::SQRT_2));
+            x * phi
+        }
+
+        let test_values: Vec<f32> = (-100..=100).map(|i| i as f32 * 0.1).collect();
+        for &x in &test_values {
+            let approx = gelu_scalar(x);
+            let exact = gelu_exact(x);
+            let diff = (approx - exact).abs();
+            assert!(
+                diff < 0.005,
+                "FALSIFIED GE-005: |GELU_approx({x}) - GELU_exact({x})| = {diff} >= 0.005"
+            );
+        }
+    }
+
+    /// FALSIFY-GE-006: Large input stability — GELU(x) ≈ x for large x, ≈ 0 for large -x
+    #[test]
+    fn falsify_ge_006_large_input_stability() {
+        for &x in &[10.0_f32, 50.0, 100.0, 1000.0] {
+            let y = gelu_scalar(x);
+            assert!(
+                (y - x).abs() < 0.01,
+                "FALSIFIED GE-006: GELU({x}) = {y}, expected ≈ {x}"
+            );
+        }
+        for &x in &[-10.0_f32, -50.0, -100.0, -1000.0] {
+            let y = gelu_scalar(x);
+            assert!(
+                y.abs() < 0.01,
+                "FALSIFIED GE-006: GELU({x}) = {y}, expected ≈ 0"
+            );
+        }
+    }
 }
