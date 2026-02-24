@@ -259,6 +259,95 @@ fn falsify_em_005_value_correctness() {
 }
 
 // ============================================================================
+// FALSIFY-EMB-001: Lookup determinism
+// Contract: same table + same indices = same output, always
+//
+// Five-Whys (PMAT-354):
+//   Why 1: trueno had EMB-005 but no EMB-001 (determinism is in embedding-algebra-v1)
+//   Why 2: EM-003 tests determinism for lookup, but EMB-001 is the algebra contract
+//   Why 3: EMB-001 was only tested in aprender
+//   Why 4: trueno treated embedding as "just lookup" — no algebra coverage
+//   Why 5: nobody mapped embedding-algebra-v1 claims to trueno tests
+// ============================================================================
+
+#[test]
+fn falsify_emb_001_lookup_determinism() {
+    let data: Vec<f32> = (0..200).map(|i| (i as f32 * 0.37).sin()).collect();
+    let table = Matrix::from_vec(10, 20, data).unwrap();
+    let indices = vec![3, 7, 1, 9, 0, 5];
+
+    let result1 = table.embedding_lookup(&indices).unwrap();
+    let result2 = table.embedding_lookup(&indices).unwrap();
+
+    assert_eq!(
+        result1.data, result2.data,
+        "FALSIFIED EMB-001: identical lookup produced different results"
+    );
+}
+
+// ============================================================================
+// FALSIFY-EMB-002: Shape preservation
+// Contract: embed(token_id).shape = [d_model] for any valid token_id
+// ============================================================================
+
+#[test]
+fn falsify_emb_002_shape_preservation() {
+    let dims = [4, 16, 64, 128];
+    for &d_model in &dims {
+        let table = Matrix::from_vec(50, d_model, vec![1.0; 50 * d_model]).unwrap();
+
+        for &token_id in &[0, 25, 49] {
+            let result = table.embedding_lookup(&[token_id]).unwrap();
+            assert_eq!(
+                result.cols(),
+                d_model,
+                "FALSIFIED EMB-002: embed({token_id}).cols={}, expected d_model={d_model}",
+                result.cols()
+            );
+            assert_eq!(
+                result.rows(),
+                1,
+                "FALSIFIED EMB-002: embed({token_id}).rows={}, expected 1",
+                result.rows()
+            );
+        }
+    }
+}
+
+// ============================================================================
+// FALSIFY-EMB-004: Vocabulary bounds — OOB IDs rejected
+// Contract: token_id >= vocab_size produces error, not panic/garbage
+// ============================================================================
+
+#[test]
+fn falsify_emb_004_vocabulary_bounds() {
+    let vocab_size = 10;
+    let table = Matrix::from_vec(vocab_size, 4, vec![1.0; 40]).unwrap();
+
+    // At the boundary: vocab_size-1 is valid
+    let result = table.embedding_lookup(&[vocab_size - 1]);
+    assert!(
+        result.is_ok(),
+        "FALSIFIED EMB-004: valid index {} rejected",
+        vocab_size - 1
+    );
+
+    // Past the boundary: vocab_size is invalid
+    let result = table.embedding_lookup(&[vocab_size]);
+    assert!(
+        result.is_err(),
+        "FALSIFIED EMB-004: OOB index {vocab_size} was not rejected"
+    );
+
+    // Way past the boundary
+    let result = table.embedding_lookup(&[999]);
+    assert!(
+        result.is_err(),
+        "FALSIFIED EMB-004: OOB index 999 was not rejected"
+    );
+}
+
+// ============================================================================
 // FALSIFY-EMB-005: Non-zero embeddings
 // Contract: embedding table with non-zero values produces non-zero output
 //
