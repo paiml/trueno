@@ -780,4 +780,163 @@ mod tests {
             assert!((val - 3.0).abs() < 1e-4, "expected ~3.0, got {val}");
         }
     }
+
+    // =========================================================================
+    // FALSIFY-ATT: attention-kernel-v1.yaml contract (trueno AttentionOp)
+    //
+    // Five-Whys (PMAT-354):
+    //   Why 1: trueno had 50+ attention unit tests but zero FALSIFY-ATT-* tests
+    //   Why 2: unit tests verify shapes/finiteness, not mathematical invariants
+    //   Why 3: no mapping from attention-kernel-v1.yaml to trueno test names
+    //   Why 4: trueno predates the provable-contracts YAML convention
+    //   Why 5: attention was "obviously correct" (standard formula)
+    //
+    // References:
+    //   - provable-contracts/contracts/attention-kernel-v1.yaml
+    //   - Vaswani et al. (2017) "Attention Is All You Need"
+    // =========================================================================
+
+    /// FALSIFY-ATT-001: Weight normalization — each softmax row sums to 1.0
+    ///
+    /// Contract: Σ_j softmax(QK^T/√d_k)_{ij} = 1 for all i
+    #[test]
+    fn falsify_att_001_weight_normalization() {
+        let test_rows: Vec<Vec<f32>> = vec![
+            vec![1.0, 2.0, 3.0, 4.0],
+            vec![-5.0, 0.0, 5.0, 10.0],
+            vec![1000.0, 1001.0, 1002.0],
+            vec![1e-7, 1e-7, 1e-7],
+            vec![0.0; 8],
+            vec![-100.0, 100.0],
+        ];
+
+        for values in &test_rows {
+            let mut scores = values.clone();
+            AttentionOp::simd_softmax_row(&mut scores);
+            let sum: f32 = scores.iter().sum();
+            assert!(
+                (sum - 1.0).abs() < 1e-5,
+                "FALSIFIED ATT-001: softmax row sum = {sum}, expected 1.0 for input {values:?}"
+            );
+        }
+    }
+
+    /// FALSIFY-ATT-002: Output convexity — output rows are convex combinations of V rows
+    ///
+    /// Contract: min_j(V[j][d]) ≤ output[i][d] ≤ max_j(V[j][d]) for all i, d
+    #[test]
+    fn falsify_att_002_output_convexity() {
+        let seq_len = 2;
+        let kv_seq_len = 3;
+        let head_dim = 4;
+        let op = AttentionOp::new(seq_len, kv_seq_len, head_dim);
+
+        let q = vec![1.0, 0.5, -0.3, 0.8, -1.0, 0.2, 0.7, -0.5];
+        let k = vec![0.3, -0.7, 1.0, 0.2, -0.5, 0.8, 0.1, -0.3, 0.6, -0.1, 0.4, 0.9];
+        let v = vec![2.0, -3.0, 5.0, 1.0, -1.0, 4.0, -2.0, 7.0, 3.0, 0.0, -4.0, 6.0];
+
+        let output = op.execute((q, k, v.clone()), Backend::Scalar).unwrap();
+
+        for qi in 0..seq_len {
+            for d in 0..head_dim {
+                let out_val = output[qi * head_dim + d];
+
+                let v_col_min = (0..kv_seq_len)
+                    .map(|ki| v[ki * head_dim + d])
+                    .fold(f32::INFINITY, f32::min);
+                let v_col_max = (0..kv_seq_len)
+                    .map(|ki| v[ki * head_dim + d])
+                    .fold(f32::NEG_INFINITY, f32::max);
+
+                assert!(
+                    out_val >= v_col_min - 1e-5 && out_val <= v_col_max + 1e-5,
+                    "FALSIFIED ATT-002: output[{qi}][{d}] = {out_val} outside V column [{v_col_min}, {v_col_max}]"
+                );
+            }
+        }
+    }
+
+    /// FALSIFY-ATT-003: Scaling factor — uses 1/√d_k not 1/d_k
+    ///
+    /// Contract: scale = 1/√d_k
+    #[test]
+    fn falsify_att_003_scaling_factor() {
+        for d_k in [4, 8, 16, 32, 64, 128] {
+            let op = AttentionOp::self_attention(1, d_k);
+            let expected = 1.0 / (d_k as f32).sqrt();
+            assert!(
+                (op.scale - expected).abs() < 1e-6,
+                "FALSIFIED ATT-003: scale = {}, expected 1/√{d_k} = {expected}",
+                op.scale
+            );
+            // Verify it's NOT the wrong 1/d_k scaling
+            if d_k > 1 {
+                let wrong = 1.0 / d_k as f32;
+                assert!(
+                    (op.scale - wrong).abs() > 1e-6,
+                    "FALSIFIED ATT-003: scale matches wrong 1/{d_k} = {wrong}",
+                );
+            }
+        }
+    }
+
+    /// FALSIFY-ATT-005: Weights bounded — all attention weights in [0, 1)
+    ///
+    /// Contract: 0 < attn_{ij} < 1 for all i,j in exact arithmetic.
+    /// In f32, exp(-200) underflows to 0.0 so we test w >= 0 and w < 1.
+    /// For moderate inputs (max gap < 80), strict w > 0 holds.
+    #[test]
+    fn falsify_att_005_weights_bounded() {
+        // Moderate-range inputs where exp() doesn't underflow to 0
+        let test_rows: Vec<Vec<f32>> = vec![
+            vec![1.0, 2.0, 3.0, 4.0, 5.0],
+            vec![-5.0, 0.0, 5.0],
+            vec![0.0, 0.0, 0.0, 0.0],
+            vec![1e-10, 1e-10],
+            vec![-10.0, -10.0, -10.0],
+            vec![20.0, 20.5, 21.0],
+        ];
+
+        for values in &test_rows {
+            let mut scores = values.clone();
+            AttentionOp::simd_softmax_row(&mut scores);
+            for (j, &w) in scores.iter().enumerate() {
+                assert!(
+                    w > 0.0,
+                    "FALSIFIED ATT-005: weight[{j}] = {w} not > 0 for input {values:?}"
+                );
+                assert!(
+                    w < 1.0,
+                    "FALSIFIED ATT-005: weight[{j}] = {w} not < 1 for input {values:?} (m >= 2)"
+                );
+            }
+        }
+    }
+
+    /// FALSIFY-ATT-002b: Convexity with uniform V — output must equal V
+    ///
+    /// If all V rows are identical, output = V regardless of Q, K
+    #[test]
+    fn falsify_att_002b_uniform_v_identity() {
+        let op = AttentionOp::new(2, 4, 8);
+        let q: Vec<f32> = (0..16).map(|i| (i as f32) * 0.37).collect();
+        let k: Vec<f32> = (0..32).map(|i| (i as f32) * 0.13).collect();
+        // All 4 V rows are identical: [1, 2, 3, 4, 5, 6, 7, 8]
+        let v_row = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let v: Vec<f32> = v_row.iter().copied().cycle().take(32).collect();
+
+        let output = op.execute((q, k, v), Backend::Scalar).unwrap();
+
+        for qi in 0..2 {
+            for d in 0..8 {
+                let diff = (output[qi * 8 + d] - v_row[d]).abs();
+                assert!(
+                    diff < 1e-5,
+                    "FALSIFIED ATT-002: uniform V output[{qi}][{d}] = {}, expected {}",
+                    output[qi * 8 + d],
+                    v_row[d]
+                );
+            }
+        }
+    }
 }
