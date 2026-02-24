@@ -386,6 +386,55 @@ mod tests {
             );
         }
     }
+
+    mod ge_proptest_falsify {
+        use super::*;
+        use proptest::prelude::*;
+
+        // GE-001-prop: non-negativity for positive x
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(500))]
+            #[test]
+            fn falsify_ge_001_prop_non_negativity(x in 0.0_f32..1000.0) {
+                let y = gelu_scalar(x);
+                prop_assert!(y >= 0.0, "FALSIFIED GE-001-prop: gelu({x}) = {y} < 0");
+            }
+        }
+
+        // GE-002-prop: monotonicity for positive pairs
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(300))]
+            #[test]
+            fn falsify_ge_002_prop_monotonic_positive(
+                a in 0.001_f32..100.0,
+                b in 0.001_f32..100.0,
+            ) {
+                if a != b {
+                    let (lo, hi) = if a < b { (a, b) } else { (b, a) };
+                    let y_lo = gelu_scalar(lo);
+                    let y_hi = gelu_scalar(hi);
+                    prop_assert!(
+                        y_hi > y_lo,
+                        "FALSIFIED GE-002-prop: gelu({hi})={y_hi} not > gelu({lo})={y_lo}"
+                    );
+                }
+            }
+        }
+
+        // GE-006-prop: large input stability
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(200))]
+            #[test]
+            fn falsify_ge_006_prop_large_positive(x in 10.0_f32..500.0) {
+                let y = gelu_scalar(x);
+                prop_assert!(
+                    (y - x).abs() < 0.01,
+                    "FALSIFIED GE-006-prop: |gelu({x}) - {x}| = {}",
+                    (y - x).abs()
+                );
+            }
+        }
+    }
 }
 
 // =========================================================================
