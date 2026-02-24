@@ -425,3 +425,63 @@ fn falsify_sm_007_translation_invariance() {
         }
     }
 }
+
+/// FALSIFY-SM-008: SIMD equivalence — scalar vs auto backend within ULP
+///
+/// Five-Whys (PMAT-354):
+///   Why 1: YAML SM-004 specifies SIMD equivalence but was mapped to "bounded"
+///   Why 2: naming mismatch — we used SM-004 for SM-BND-001 (bounded)
+///   Why 3: scalar vs SIMD parity was assumed correct
+///   Why 4: no explicit comparison test existed
+///   Why 5: trueno's backend dispatch was tested for correctness, not equivalence
+///
+/// Contract: |softmax_auto(x) - softmax_scalar(x)| < 8 ULP
+#[test]
+fn falsify_sm_008_simd_scalar_equivalence() {
+    let test_inputs: Vec<Vec<f32>> = vec![
+        vec![1.0, 2.0, 3.0, 4.0, 5.0],
+        vec![-10.0, 0.0, 10.0],
+        vec![100.0, 100.0, 100.0, 100.0],
+        (0..32).map(|i| (i as f32 * 0.7).sin()).collect(),
+        (0..128).map(|i| i as f32 - 64.0).collect(),
+        vec![-500.0, 0.0, 500.0],
+    ];
+
+    for (idx, input) in test_inputs.iter().enumerate() {
+        let v_scalar = Vector::from_slice_with_backend(input, Backend::Scalar);
+        let v_auto = Vector::from_vec(input.clone()); // Auto selects best SIMD
+
+        let scalar_probs = v_scalar.softmax().unwrap();
+        let auto_probs = v_auto.softmax().unwrap();
+
+        for (i, (&s, &a)) in scalar_probs
+            .as_slice()
+            .iter()
+            .zip(auto_probs.as_slice().iter())
+            .enumerate()
+        {
+            let diff = (s - a).abs();
+            let ulp_bound = 8.0 * f32::EPSILON * s.abs().max(a.abs()).max(f32::MIN_POSITIVE);
+            assert!(
+                diff <= ulp_bound,
+                "FALSIFIED SM-008: case {idx}[{i}] scalar={s} vs auto={a}, diff={diff} > {ulp_bound}"
+            );
+        }
+    }
+}
+
+/// FALSIFY-SM-009: Single element boundary — softmax([x]) = [1.0]
+///
+/// Contract: YAML SM-005 = softmax of a single element is always 1.0.
+#[test]
+fn falsify_sm_009_single_element() {
+    for x in [0.0f32, 1.0, -1.0, 100.0, -100.0, f32::MIN_POSITIVE, 1e30] {
+        let v = Vector::from_vec(vec![x]);
+        let probs = v.softmax().unwrap();
+        assert!(
+            (probs.as_slice()[0] - 1.0).abs() < 1e-6,
+            "FALSIFIED SM-009: softmax([{x}]) = {}, expected 1.0",
+            probs.as_slice()[0]
+        );
+    }
+}
