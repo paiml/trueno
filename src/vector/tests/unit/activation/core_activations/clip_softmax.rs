@@ -231,3 +231,143 @@ fn test_log_softmax_single_element() {
         log_probs.data[0]
     );
 }
+
+// ========================================================================
+// FALSIFY-SM: softmax-kernel-v1.yaml contract falsification
+//
+// Five-Whys (PMAT-354):
+//   Why 1: trueno had 7 softmax tests but 0 FALSIFY-SM-* tagged tests
+//   Why 2: existing tests verify behavior, not provable-contract YAML claims
+//   Why 3: trueno's softmax predates softmax-kernel-v1.yaml
+//   Why 4: no cross-repo YAML→test naming convention existed
+//   Why 5: softmax was "obviously correct" so no formal contracts
+//
+// References:
+//   - provable-contracts/contracts/softmax-kernel-v1.yaml
+//   - Bridle (1990) "Training Stochastic Model Recognition Algorithms"
+// ========================================================================
+
+/// FALSIFY-SM-001: Output sums to 1 (partition of unity)
+///
+/// Contract: |Σ σ(x)_i - 1.0| < ε (tolerance 1e-6)
+#[test]
+fn falsify_sm_001_sums_to_one() {
+    let test_cases: Vec<Vec<f32>> = vec![
+        vec![1.0, 2.0, 3.0],
+        vec![-10.0, 0.0, 10.0],
+        vec![100.0, 101.0, 102.0],
+        vec![0.001, 0.002, 0.003],
+        (0..100).map(|i| (i as f32 * 0.37).sin() * 5.0).collect(),
+    ];
+
+    for (idx, logits) in test_cases.iter().enumerate() {
+        let v = Vector::from_vec(logits.clone());
+        let probs = v.softmax().unwrap();
+        let sum: f32 = probs.as_slice().iter().sum();
+        assert!(
+            (sum - 1.0).abs() < 1e-5,
+            "FALSIFIED SM-001: case {idx} sum={sum}, expected 1.0"
+        );
+    }
+}
+
+/// FALSIFY-SM-002: All outputs strictly positive
+///
+/// Contract: σ(x)_i > 0 for all i
+#[test]
+fn falsify_sm_002_strictly_positive() {
+    let logits: Vec<f32> = (0..50).map(|i| (i as f32 - 25.0) * 2.0).collect();
+    let v = Vector::from_vec(logits);
+    let probs = v.softmax().unwrap();
+
+    for (i, &p) in probs.as_slice().iter().enumerate() {
+        assert!(
+            p > 0.0,
+            "FALSIFIED SM-002: probs[{i}] = {p} is not strictly positive"
+        );
+    }
+}
+
+/// FALSIFY-SM-003: Order preservation (argmax invariant)
+///
+/// Contract: argmax(σ(x)) = argmax(x)
+#[test]
+fn falsify_sm_003_order_preservation() {
+    let test_cases: Vec<Vec<f32>> = vec![
+        vec![1.0, 5.0, 3.0],
+        vec![-100.0, 0.0, -50.0],
+        vec![0.001, 0.002, 0.001],
+    ];
+
+    for (idx, logits) in test_cases.iter().enumerate() {
+        let input_argmax = logits
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .map(|(i, _)| i)
+            .unwrap();
+
+        let v = Vector::from_vec(logits.clone());
+        let probs = v.softmax().unwrap();
+        let output_argmax = probs
+            .as_slice()
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .map(|(i, _)| i)
+            .unwrap();
+
+        assert_eq!(
+            input_argmax, output_argmax,
+            "FALSIFIED SM-003: case {idx} argmax changed from {input_argmax} to {output_argmax}"
+        );
+    }
+}
+
+/// FALSIFY-SM-004: Each output bounded in (0, 1)
+///
+/// Contract: 0 < σ(x)_i < 1 for all i (when n > 1)
+#[test]
+fn falsify_sm_004_bounded_zero_one() {
+    let logits: Vec<f32> = (0..20).map(|i| (i as f32 * 1.7).sin() * 10.0).collect();
+    let v = Vector::from_vec(logits);
+    let probs = v.softmax().unwrap();
+
+    for (i, &p) in probs.as_slice().iter().enumerate() {
+        assert!(
+            p > 0.0 && p < 1.0,
+            "FALSIFIED SM-004: probs[{i}] = {p} not in (0, 1)"
+        );
+    }
+}
+
+/// FALSIFY-SM-005: Numerical stability with extreme values
+///
+/// Contract: softmax must not produce NaN or Inf even for large/small inputs
+#[test]
+fn falsify_sm_005_numerical_stability() {
+    let extreme_cases: Vec<Vec<f32>> = vec![
+        vec![1000.0, 1001.0, 1002.0],         // Large positive
+        vec![-1000.0, -999.0, -998.0],         // Large negative
+        vec![-500.0, 0.0, 500.0],              // Huge range
+        vec![f32::MIN_POSITIVE, 1.0, 80.0],    // Near-zero to large
+    ];
+
+    for (idx, logits) in extreme_cases.iter().enumerate() {
+        let v = Vector::from_vec(logits.clone());
+        let probs = v.softmax().unwrap();
+
+        for (i, &p) in probs.as_slice().iter().enumerate() {
+            assert!(
+                p.is_finite(),
+                "FALSIFIED SM-005: case {idx} probs[{i}] = {p} is not finite"
+            );
+        }
+
+        let sum: f32 = probs.as_slice().iter().sum();
+        assert!(
+            (sum - 1.0).abs() < 1e-4,
+            "FALSIFIED SM-005: case {idx} sum={sum} after extreme inputs"
+        );
+    }
+}
