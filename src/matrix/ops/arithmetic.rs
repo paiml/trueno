@@ -678,6 +678,102 @@ mod tests {
             }
         }
     }
+
+    // =========================================================================
+    // FALSIFY-MM: matmul-kernel-v1.yaml contract (trueno Matrix::matmul)
+    //
+    // Five-Whys (PMAT-354):
+    //   Why 1: trueno had 10+ matmul tests but zero FALSIFY-MM-* tests
+    //   Why 2: unit tests verify known products, not mathematical invariants
+    //   Why 3: no mapping from matmul-kernel-v1.yaml to trueno test names
+    //   Why 4: trueno predates the provable-contracts YAML convention
+    //   Why 5: matmul was "obviously correct" (standard GEMM)
+    //
+    // References:
+    //   - provable-contracts/contracts/matmul-kernel-v1.yaml
+    // =========================================================================
+
+    /// FALSIFY-MM-001: Shape correctness — matmul(A[m,p], B[p,n]) = [m,n]
+    #[test]
+    fn falsify_mm_001_shape_correctness() {
+        for &(m, p, n) in &[(1, 1, 1), (2, 3, 4), (16, 32, 8), (1, 100, 1), (64, 1, 64)] {
+            let a = Matrix::from_vec(m, p, vec![1.0; m * p]).unwrap();
+            let b = Matrix::from_vec(p, n, vec![1.0; p * n]).unwrap();
+            let c = a.matmul(&b).unwrap();
+            assert_eq!(
+                (c.rows(), c.cols()),
+                (m, n),
+                "FALSIFIED MM-001: matmul([{m},{p}], [{p},{n}]) shape = [{},{}], expected [{m},{n}]",
+                c.rows(),
+                c.cols()
+            );
+        }
+    }
+
+    /// FALSIFY-MM-005: Identity matrix — matmul(A, I) = A
+    #[test]
+    fn falsify_mm_005_identity_matrix() {
+        let a = Matrix::from_vec(3, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+            .unwrap();
+        let eye =
+            Matrix::from_vec(3, 3, vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).unwrap();
+
+        let ai = a.matmul(&eye).unwrap();
+        let ia = eye.matmul(&a).unwrap();
+
+        for i in 0..3 {
+            for j in 0..3 {
+                let expected = a.get(i, j).unwrap();
+                assert!(
+                    (*ai.get(i, j).unwrap() - expected).abs() < 1e-6,
+                    "FALSIFIED MM-005: (A*I)[{i},{j}] = {}, expected {expected}",
+                    ai.get(i, j).unwrap()
+                );
+                assert!(
+                    (*ia.get(i, j).unwrap() - expected).abs() < 1e-6,
+                    "FALSIFIED MM-005: (I*A)[{i},{j}] = {}, expected {expected}",
+                    ia.get(i, j).unwrap()
+                );
+            }
+        }
+    }
+
+    /// FALSIFY-MM-002: Numerical accuracy — known product verified
+    #[test]
+    fn falsify_mm_002_numerical_accuracy() {
+        let a = Matrix::from_vec(2, 2, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+        let b = Matrix::from_vec(2, 2, vec![5.0, 6.0, 7.0, 8.0]).unwrap();
+        let c = a.matmul(&b).unwrap();
+
+        let expected = [19.0, 22.0, 43.0, 50.0];
+        for (i, &exp) in expected.iter().enumerate() {
+            let row = i / 2;
+            let col = i % 2;
+            let val = *c.get(row, col).unwrap();
+            assert!(
+                (val - exp).abs() < 1e-5,
+                "FALSIFIED MM-002: C[{row},{col}] = {val}, expected {exp}"
+            );
+        }
+    }
+
+    /// FALSIFY-MM-002b: matmul(zeros, B) = zeros
+    #[test]
+    fn falsify_mm_002b_zero_annihilation() {
+        let zero = Matrix::from_vec(3, 4, vec![0.0; 12]).unwrap();
+        let b = Matrix::from_vec(4, 2, vec![1.0; 8]).unwrap();
+        let c = zero.matmul(&b).unwrap();
+
+        for i in 0..3 {
+            for j in 0..2 {
+                let val = *c.get(i, j).unwrap();
+                assert!(
+                    val.abs() < 1e-10,
+                    "FALSIFIED MM-002b: zeros*B [{i},{j}] = {val}, expected 0"
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -837,4 +933,5 @@ mod gpu_tests {
             assert!(result.is_err(), "matmul_gpu should fail without GPU");
         }
     }
+
 }
