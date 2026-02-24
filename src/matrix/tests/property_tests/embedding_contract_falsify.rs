@@ -391,3 +391,81 @@ fn falsify_emb_005_per_row_non_zero() {
         );
     }
 }
+
+// ============================================================================
+// PROPTEST FALSIFY: Embedding property-based falsification per YAML directives
+//
+// Five-Whys (PMAT-354, Phase 8):
+//   Why 1: YAML calls for "proptest with random..." for EM and EMB claims
+//   Why 2: trueno had 12 EM + 5 EMB deterministic tests but zero proptest
+//   Why 3: deterministic tests cover hand-picked exemplars, not input space
+//   Why 4: proptest generates adversarial edge cases for matrix ops
+//   Why 5: Popperian falsification demands maximally adversarial generation
+// ============================================================================
+
+mod proptest_falsify {
+    use super::*;
+    use proptest::prelude::*;
+
+    // FALSIFY-EM-001-prop: Shape correctness for random dimensions
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+        #[test]
+        fn falsify_em_001_prop_output_shape(
+            vocab in 10_usize..200,
+            d_model in prop::sample::select(vec![4_usize, 16, 32, 64]),
+            num_tokens in 1_usize..20,
+        ) {
+            let data: Vec<f32> = (0..vocab * d_model)
+                .map(|i| (i as f32 * 0.13).sin())
+                .collect();
+            let table = Matrix::from_vec(vocab, d_model, data).unwrap();
+            let indices: Vec<usize> = (0..num_tokens).map(|i| i % vocab).collect();
+            let result = table.embedding_lookup(&indices).unwrap();
+            prop_assert_eq!(result.rows(), num_tokens,
+                "FALSIFIED EM-001-prop: rows={} != n_tokens={}", result.rows(), num_tokens);
+            prop_assert_eq!(result.cols(), d_model,
+                "FALSIFIED EM-001-prop: cols={} != d_model={}", result.cols(), d_model);
+        }
+    }
+
+    // FALSIFY-EMB-001-prop: Lookup determinism for random indices
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(200))]
+        #[test]
+        fn falsify_emb_001_prop_determinism(
+            idx in 0_usize..99,
+        ) {
+            let data: Vec<f32> = (0..100 * 32)
+                .map(|i| (i as f32 * 0.37).sin())
+                .collect();
+            let table = Matrix::from_vec(100, 32, data).unwrap();
+            let r1 = table.embedding_lookup(&[idx]).unwrap();
+            let r2 = table.embedding_lookup(&[idx]).unwrap();
+            prop_assert_eq!(r1.data, r2.data,
+                "FALSIFIED EMB-001-prop: lookup({}) non-deterministic", idx);
+        }
+    }
+
+    // FALSIFY-EMB-004-prop: Vocabulary bounds for random vocab sizes
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+        #[test]
+        fn falsify_emb_004_prop_bounds(
+            vocab in 5_usize..100,
+        ) {
+            let data: Vec<f32> = (0..vocab * 8)
+                .map(|i| (i as f32 * 0.1).cos())
+                .collect();
+            let table = Matrix::from_vec(vocab, 8, data).unwrap();
+
+            // Last valid index succeeds
+            let valid = table.embedding_lookup(&[vocab - 1]);
+            prop_assert!(valid.is_ok(), "FALSIFIED EMB-004-prop: valid idx {} rejected", vocab - 1);
+
+            // First OOB index fails
+            let oob = table.embedding_lookup(&[vocab]);
+            prop_assert!(oob.is_err(), "FALSIFIED EMB-004-prop: OOB idx {} not rejected", vocab);
+        }
+    }
+}
