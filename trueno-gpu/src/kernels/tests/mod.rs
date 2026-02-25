@@ -18,4 +18,5 @@ fn test_softmax_kernel_builds() {
 
 mod barrier_safety;
 mod coverage_tests;
+mod fusion_contract_falsify;
 mod property_tests;
