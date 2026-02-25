@@ -41,6 +41,7 @@ mod dequant;
 mod gemv;
 
 // Re-exports
+#[allow(deprecated)]
 pub use colmajor::{matmul_q4k_f32_colmajor, matmul_q4k_f32_colmajor_dispatch};
 pub use dequant::dequantize_q4k_to_f32;
 pub use gemv::{matmul_q4k_f32, matmul_q4k_f32_dispatch, matmul_q4k_f32_scalar};

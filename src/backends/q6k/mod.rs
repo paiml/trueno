@@ -13,6 +13,7 @@ mod colmajor;
 mod gemv;
 
 // Re-exports
+#[allow(deprecated)]
 pub use colmajor::{matmul_q6k_f32_colmajor, matmul_q6k_f32_colmajor_dispatch};
 pub use gemv::{matmul_q6k_f32, matmul_q6k_f32_dispatch, matmul_q6k_f32_scalar};
 

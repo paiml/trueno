@@ -64,6 +64,7 @@ fn accumulate_q6k_superblock_colmajor(
 ///
 /// # Returns
 /// F32 output vector [ne0]
+#[deprecated(since = "0.15.0", note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary.")]
 pub fn matmul_q6k_f32_colmajor(
     q6k_data: &[u8],
     input: &[f32],
@@ -107,6 +108,7 @@ pub fn matmul_q6k_f32_colmajor(
 ///
 /// Uses scalar implementation for correctness.
 /// Critical for lm_head which is typically 151936 x 1536 (233M elements).
+#[deprecated(since = "0.15.0", note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary.")]
 #[inline]
 pub fn matmul_q6k_f32_colmajor_dispatch(
     q6k_data: &[u8],
@@ -114,5 +116,6 @@ pub fn matmul_q6k_f32_colmajor_dispatch(
     ne0: usize,
     ne1: usize,
 ) -> Vec<f32> {
+    #[allow(deprecated)]
     matmul_q6k_f32_colmajor(q6k_data, input, ne0, ne1)
 }
