@@ -204,6 +204,17 @@ unsafe fn matmul_q6k_f32_avx2(
 }
 
 /// Runtime dispatch for Q6K matmul - uses AVX2 if available
+///
+/// # Contract (GH-279)
+///
+/// Preconditions validated via `debug_assert!` (zero-cost in release):
+/// - `q6k_data.len() >= contracts::Q6_K.expected_bytes(out_dim, in_dim)`
+/// - `input.len() == in_dim`
+///
+/// These guarantee that inner-loop `expect()` calls on super-block sub-slices
+/// are unreachable: each super-block is sliced to exactly `SUPER_BLOCK_BYTES`
+/// (210), and all sub-accesses (`get(0..128)`, `get(128..192)`, `get(192..208)`)
+/// fit within that.
 #[inline]
 pub fn matmul_q6k_f32_dispatch(
     q6k_data: &[u8],
@@ -211,6 +222,19 @@ pub fn matmul_q6k_f32_dispatch(
     out_dim: usize,
     in_dim: usize,
 ) -> Vec<f32> {
+    // GH-279: Contract validation at dispatch boundary.
+    // Inner expect() calls are defense-in-depth — provably unreachable when
+    // this precondition holds, because every sb_data slice is SUPER_BLOCK_BYTES.
+    debug_assert_eq!(input.len(), in_dim, "Q6K dispatch: input length mismatch");
+    debug_assert!(
+        q6k_data.len() >= crate::contracts::Q6_K.expected_bytes(out_dim, in_dim),
+        "Q6K dispatch: buffer too small: {} bytes for [{}, {}] (need {})",
+        q6k_data.len(),
+        out_dim,
+        in_dim,
+        crate::contracts::Q6_K.expected_bytes(out_dim, in_dim),
+    );
+
     // For large matmuls (total work >= ~8M ops), use parallel execution
     // This catches FFN layers (8960x1536) and lm_head (151936x1536)
     // Also catches ffn_down (1536x8960) where out_dim is small but in_dim is large

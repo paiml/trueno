@@ -18,6 +18,16 @@ pub use scalar::{matmul_q4k_f32, matmul_q4k_f32_scalar};
 pub(crate) use scalar::compute_chunk_q4k_scalar;
 
 /// Runtime dispatch for Q4K matmul - uses AVX2 if available, otherwise scalar
+///
+/// # Contract (GH-279)
+///
+/// Preconditions validated via `debug_assert!` (zero-cost in release):
+/// - `q4k_data.len() >= contracts::Q4_K.expected_bytes(out_dim, in_dim)`
+/// - `input.len() == in_dim`
+///
+/// These guarantee that inner-loop `expect()` calls on super-block sub-slices
+/// are unreachable: each super-block is sliced to exactly `SUPER_BLOCK_BYTES`
+/// (144), and all sub-accesses (`get(4..16)`, `get(16..144)`) fit within that.
 #[inline]
 pub fn matmul_q4k_f32_dispatch(
     q4k_data: &[u8],
@@ -25,6 +35,19 @@ pub fn matmul_q4k_f32_dispatch(
     out_dim: usize,
     in_dim: usize,
 ) -> Vec<f32> {
+    // GH-279: Contract validation at dispatch boundary.
+    // Inner expect() calls are defense-in-depth — provably unreachable when
+    // this precondition holds, because every sb_data slice is SUPER_BLOCK_BYTES.
+    debug_assert_eq!(input.len(), in_dim, "Q4K dispatch: input length mismatch");
+    debug_assert!(
+        q4k_data.len() >= crate::contracts::Q4_K.expected_bytes(out_dim, in_dim),
+        "Q4K dispatch: buffer too small: {} bytes for [{}, {}] (need {})",
+        q4k_data.len(),
+        out_dim,
+        in_dim,
+        crate::contracts::Q4_K.expected_bytes(out_dim, in_dim),
+    );
+
     #[cfg(target_arch = "x86_64")]
     {
         // For large matmuls (total work >= ~8M ops), use parallel execution
