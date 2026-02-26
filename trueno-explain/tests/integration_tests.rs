@@ -67,7 +67,7 @@ fn f008_json_flag_valid_json() {
 /// F011: Analyze vector_add reports <20 registers for f32
 #[test]
 fn f011_vector_add_low_register_usage() {
-    let ptx = include_str!("../data/vector_add.ptx");
+    let ptx = include_str!("../data/vector_add.ptx.data");
     let analyzer = PtxAnalyzer::new();
     let report = analyzer.analyze(ptx).unwrap();
 
@@ -77,7 +77,7 @@ fn f011_vector_add_low_register_usage() {
 /// F019: Occupancy calculation matches expected range
 #[test]
 fn f019_occupancy_calculation() {
-    let ptx = include_str!("../data/vector_add.ptx");
+    let ptx = include_str!("../data/vector_add.ptx.data");
     let analyzer = PtxAnalyzer::new();
     let report = analyzer.analyze(ptx).unwrap();
 

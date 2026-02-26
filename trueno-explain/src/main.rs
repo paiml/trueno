@@ -374,7 +374,7 @@ fn generate_kernel_ptx(
     let ptx = match kernel.to_lowercase().as_str() {
         "vector_add" => {
             // Simple vector add PTX
-            include_str!("../data/vector_add.ptx").to_string()
+            include_str!("../data/vector_add.ptx.data").to_string()
         }
         "gemm_naive" => {
             let kernel = GemmKernel::naive(m, n, k);
