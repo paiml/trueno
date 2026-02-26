@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-02-26
+
+### Changed
+- Minor version bump for PAIML Sovereign AI Stack coordinated release
+- Updated workspace lints and CI configurations
+
 ## [0.9.0] - 2025-12-30
 
 ### Added
