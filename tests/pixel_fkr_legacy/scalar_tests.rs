@@ -13,10 +13,7 @@ fn scalar_pixel_fkr_rmsnorm() {
 
     // Verify output properties
     assert_eq!(result.len(), 4096);
-    assert!(
-        result.iter().all(|v| v.is_finite()),
-        "Non-finite value in RMS norm"
-    );
+    assert!(result.iter().all(|v| v.is_finite()), "Non-finite value in RMS norm");
 
     println!(
         "scalar_pixel_fkr_rmsnorm: {} elements, max={:.6}",
@@ -38,10 +35,7 @@ fn scalar_pixel_fkr_silu() {
     // SiLU(x) should be bounded for bounded input
     for (i, (xi, yi)) in x.iter().zip(result.iter()).enumerate() {
         if *xi > 0.0 {
-            assert!(
-                *yi > 0.0,
-                "SiLU should be positive for positive input at {i}"
-            );
+            assert!(*yi > 0.0, "SiLU should be positive for positive input at {i}");
         }
     }
 
@@ -61,17 +55,11 @@ fn scalar_pixel_fkr_softmax() {
 
     // Sum should be 1.0
     let sum: f32 = result.iter().sum();
-    assert!(
-        (sum - 1.0).abs() < 1e-5,
-        "Softmax sum should be 1.0, got {sum}"
-    );
+    assert!((sum - 1.0).abs() < 1e-5, "Softmax sum should be 1.0, got {sum}");
 
     // All values should be in (0, 1)
     for (i, v) in result.iter().enumerate() {
-        assert!(
-            *v > 0.0 && *v <= 1.0,
-            "Softmax value at {i} out of range: {v}"
-        );
+        assert!(*v > 0.0 && *v <= 1.0, "Softmax value at {i} out of range: {v}");
     }
 
     println!("scalar_pixel_fkr_softmax: sum={:.6}", sum);
@@ -88,10 +76,7 @@ fn scalar_pixel_fkr_rope() {
 
     // Verify output dimensions
     assert_eq!(result.len(), 512);
-    assert!(
-        result.iter().all(|v| v.is_finite()),
-        "Non-finite in RoPE output"
-    );
+    assert!(result.iter().all(|v| v.is_finite()), "Non-finite in RoPE output");
 
     // RoPE should preserve norm approximately
     let input_norm: f32 = x.iter().map(|v| v * v).sum::<f32>().sqrt();
@@ -102,10 +87,7 @@ fn scalar_pixel_fkr_rope() {
         "RoPE norm ratio too far from 1.0: {norm_ratio}"
     );
 
-    println!(
-        "scalar_pixel_fkr_rope: input_norm={:.4}, output_norm={:.4}",
-        input_norm, output_norm
-    );
+    println!("scalar_pixel_fkr_rope: input_norm={:.4}, output_norm={:.4}", input_norm, output_norm);
 }
 
 /// scalar-pixel-fkr test: Causal Mask
@@ -140,10 +122,7 @@ fn scalar_pixel_fkr_causal_mask() {
         }
     }
 
-    println!(
-        "scalar_pixel_fkr_causal_mask: {}x{} verified",
-        seq_len, seq_len
-    );
+    println!("scalar_pixel_fkr_causal_mask: {}x{} verified", seq_len, seq_len);
 }
 
 /// scalar-pixel-fkr test: Q4_K dequantization
@@ -164,13 +143,7 @@ fn scalar_pixel_fkr_q4k_dequant() {
 
     // With 4-bit values [0,15], zero_point=8, scale=0.1
     // Range should be approximately (-8*0.1, (15-8)*0.1) = (-0.8, 0.7)
-    assert!(
-        min_val >= -1.0 && max_val <= 1.0,
-        "Dequant range: [{min_val}, {max_val}]"
-    );
+    assert!(min_val >= -1.0 && max_val <= 1.0, "Dequant range: [{min_val}, {max_val}]");
 
-    println!(
-        "scalar_pixel_fkr_q4k_dequant: range=[{:.3}, {:.3}]",
-        min_val, max_val
-    );
+    println!("scalar_pixel_fkr_q4k_dequant: range=[{:.3}, {:.3}]", min_val, max_val);
 }

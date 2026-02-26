@@ -23,11 +23,7 @@ pub struct BackendTolerance {
 
 impl Default for BackendTolerance {
     fn default() -> Self {
-        Self {
-            scalar_vs_simd: 0.0,
-            simd_vs_gpu: 1e-5,
-            gpu_vs_gpu: 1e-6,
-        }
+        Self { scalar_vs_simd: 0.0, simd_vs_gpu: 1e-5, gpu_vs_gpu: 1e-6 }
     }
 }
 
@@ -35,21 +31,13 @@ impl BackendTolerance {
     /// Strict tolerance for exact comparisons
     #[must_use]
     pub const fn strict() -> Self {
-        Self {
-            scalar_vs_simd: 0.0,
-            simd_vs_gpu: 0.0,
-            gpu_vs_gpu: 0.0,
-        }
+        Self { scalar_vs_simd: 0.0, simd_vs_gpu: 0.0, gpu_vs_gpu: 0.0 }
     }
 
     /// Relaxed tolerance for approximate comparisons
     #[must_use]
     pub const fn relaxed() -> Self {
-        Self {
-            scalar_vs_simd: 1e-6,
-            simd_vs_gpu: 1e-4,
-            gpu_vs_gpu: 1e-5,
-        }
+        Self { scalar_vs_simd: 1e-6, simd_vs_gpu: 1e-4, gpu_vs_gpu: 1e-5 }
     }
 
     /// Get tolerance for comparing two backends
@@ -135,10 +123,7 @@ pub struct BackendSelector {
 
 impl Default for BackendSelector {
     fn default() -> Self {
-        Self {
-            gpu_threshold: 100_000,
-            parallel_threshold: 1_000,
-        }
+        Self { gpu_threshold: 100_000, parallel_threshold: 1_000 }
     }
 }
 
@@ -146,10 +131,7 @@ impl BackendSelector {
     /// Create a new backend selector with custom thresholds
     #[must_use]
     pub const fn new(gpu_threshold: usize, parallel_threshold: usize) -> Self {
-        Self {
-            gpu_threshold,
-            parallel_threshold,
-        }
+        Self { gpu_threshold, parallel_threshold }
     }
 
     /// Get the GPU threshold
@@ -259,10 +241,7 @@ impl HeijunkaScheduler {
             }
         }
 
-        Self {
-            queue,
-            backends: backends.clone(),
-        }
+        Self { queue, backends: backends.clone() }
     }
 
     /// Get the next test from the queue

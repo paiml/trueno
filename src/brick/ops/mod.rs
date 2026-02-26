@@ -37,10 +37,7 @@ impl ComputeOp for DotOp {
     fn execute(&self, input: Self::Input, _backend: Backend) -> Result<Self::Output, TruenoError> {
         let (a, b) = input;
         if a.len() != b.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: a.len(),
-                actual: b.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: a.len(), actual: b.len() });
         }
         // Simple scalar implementation for now
         let sum: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
@@ -81,10 +78,7 @@ impl ComputeOp for AddOp {
     fn execute(&self, input: Self::Input, _backend: Backend) -> Result<Self::Output, TruenoError> {
         let (a, b) = input;
         if a.len() != b.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: a.len(),
-                actual: b.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: a.len(), actual: b.len() });
         }
         Ok(a.iter().zip(b.iter()).map(|(x, y)| x + y).collect())
     }
@@ -129,16 +123,10 @@ impl ComputeOp for MatmulOp {
         let expected_b = self.k * self.n;
 
         if a.len() != expected_a {
-            return Err(TruenoError::SizeMismatch {
-                expected: expected_a,
-                actual: a.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: expected_a, actual: a.len() });
         }
         if b.len() != expected_b {
-            return Err(TruenoError::SizeMismatch {
-                expected: expected_b,
-                actual: b.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: expected_b, actual: b.len() });
         }
 
         // SIMD-optimized matrix multiplication via Matrix type

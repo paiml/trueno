@@ -34,10 +34,7 @@ fn main() {
     println!("   Micro-tile: {} (M×N×K with alignment)", micro_tile);
     println!("   Total elements: {}", micro_tile.total_elements());
     println!("   Total FLOPs: {}", micro_tile.total_flops());
-    println!(
-        "   Arithmetic intensity: {:.2} FLOP/byte",
-        micro_tile.arithmetic_intensity()
-    );
+    println!("   Arithmetic intensity: {:.2} FLOP/byte", micro_tile.arithmetic_intensity());
     println!("   Q4_K aligned: {}", micro_tile.is_q4k_aligned());
 
     // AVX-512 aligned geometry
@@ -45,10 +42,7 @@ fn main() {
     println!("\n   AVX-512 tile: {}", avx512_tile);
     println!("   A tile bytes: {} KB", avx512_tile.a_tile_bytes() / 1024);
     println!("   B tile bytes: {} KB", avx512_tile.b_tile_bytes() / 1024);
-    println!(
-        "   Fits in L1 (32KB): {}",
-        avx512_tile.fits_in_cache(32 * 1024)
-    );
+    println!("   Fits in L1 (32KB): {}", avx512_tile.fits_in_cache(32 * 1024));
 
     // =========================================================================
     // 2. TilingConfig: Complete hierarchical configuration
@@ -88,20 +82,14 @@ fn main() {
     for tile_idx in 0..4 {
         let (row, col) = calc.macro_tile_offset(tile_idx);
         let is_boundary = calc.is_boundary_tile(tile_idx);
-        println!(
-            "     Tile {}: offset ({}, {}), boundary: {}",
-            tile_idx, row, col, is_boundary
-        );
+        println!("     Tile {}: offset ({}, {}), boundary: {}", tile_idx, row, col, is_boundary);
     }
 
     // Boundary handling
     let small_calc = TcbIndexCalculator::new(config.clone(), 100, 100, 256);
     let (actual_m, actual_n) = small_calc.actual_tile_dims(0);
     println!("\n   Boundary handling (100×100 problem):");
-    println!(
-        "     First tile is boundary: {}",
-        small_calc.is_boundary_tile(0)
-    );
+    println!("     First tile is boundary: {}", small_calc.is_boundary_tile(0));
     println!("     Actual dimensions: {}×{}", actual_m, actual_n);
 
     // =========================================================================
@@ -112,32 +100,17 @@ fn main() {
 
     // Goto algorithm panel packing
     println!("   Panel-major packing (Goto algorithm):");
-    println!(
-        "     pack_a_index(row=0, col=0, mr=4, kc=256) = {}",
-        pack_a_index(0, 0, 4, 256, 64)
-    );
-    println!(
-        "     pack_a_index(row=1, col=0, mr=4, kc=256) = {}",
-        pack_a_index(1, 0, 4, 256, 64)
-    );
-    println!(
-        "     pack_a_index(row=0, col=1, mr=4, kc=256) = {}",
-        pack_a_index(0, 1, 4, 256, 64)
-    );
+    println!("     pack_a_index(row=0, col=0, mr=4, kc=256) = {}", pack_a_index(0, 0, 4, 256, 64));
+    println!("     pack_a_index(row=1, col=0, mr=4, kc=256) = {}", pack_a_index(1, 0, 4, 256, 64));
+    println!("     pack_a_index(row=0, col=1, mr=4, kc=256) = {}", pack_a_index(0, 1, 4, 256, 64));
     println!(
         "     pack_a_index(row=4, col=0, mr=4, kc=256) = {} (next panel)",
         pack_a_index(4, 0, 4, 256, 64)
     );
 
     println!("\n   Panel B packing:");
-    println!(
-        "     pack_b_index(row=0, col=0, nr=8, kc=64) = {}",
-        pack_b_index(0, 0, 8, 64, 64)
-    );
-    println!(
-        "     pack_b_index(row=1, col=0, nr=8, kc=64) = {}",
-        pack_b_index(1, 0, 8, 64, 64)
-    );
+    println!("     pack_b_index(row=0, col=0, nr=8, kc=64) = {}", pack_b_index(0, 0, 8, 64, 64));
+    println!("     pack_b_index(row=1, col=0, nr=8, kc=64) = {}", pack_b_index(1, 0, 8, 64, 64));
     println!(
         "     pack_b_index(row=0, col=8, nr=8, kc=64) = {} (next panel)",
         pack_b_index(0, 8, 8, 64, 64)
@@ -147,12 +120,7 @@ fn main() {
     println!("\n   XOR swizzling for bank conflict avoidance:");
     for idx in [0, 32, 64, 96] {
         let swizzled = swizzle_index(idx);
-        println!(
-            "     idx {} → swizzled {} (bank {})",
-            idx,
-            swizzled,
-            swizzled % 32
-        );
+        println!("     idx {} → swizzled {} (bank {})", idx, swizzled, swizzled % 32);
     }
 
     // =========================================================================
@@ -164,40 +132,22 @@ fn main() {
     println!("   Q4_K format constants:");
     println!("     Superblock size: {} elements", Q4K_SUPERBLOCK_SIZE);
     println!("     Superblock bytes: {} bytes", Q4K_SUPERBLOCK_BYTES);
-    println!(
-        "     Compression ratio: {:.2}x vs f32",
-        (256.0 * 4.0) / Q4K_SUPERBLOCK_BYTES as f32
-    );
+    println!("     Compression ratio: {:.2}x vs f32", (256.0 * 4.0) / Q4K_SUPERBLOCK_BYTES as f32);
 
     let matvec = TiledQ4KMatvec::new(4096, 4096);
     println!("\n   4096×4096 Q4_K MatVec:");
     println!("     Superblocks per row: {}", matvec.superblocks_per_row());
     println!("     Total superblocks: {}", matvec.total_superblocks());
-    println!(
-        "     Weight offset for row 100: {} bytes",
-        matvec.weight_row_offset(100)
-    );
-    println!(
-        "     Optimal parallel rows (256KB L2): {}",
-        matvec.optimal_parallel_rows(256 * 1024)
-    );
+    println!("     Weight offset for row 100: {} bytes", matvec.weight_row_offset(100));
+    println!("     Optimal parallel rows (256KB L2): {}", matvec.optimal_parallel_rows(256 * 1024));
 
     let stats = matvec.stats();
     println!("\n   Statistics:");
-    println!(
-        "     Weight bytes: {:.2} MB",
-        stats.total_weight_bytes as f64 / (1024.0 * 1024.0)
-    );
+    println!("     Weight bytes: {:.2} MB", stats.total_weight_bytes as f64 / (1024.0 * 1024.0));
     println!("     Input bytes: {} KB", stats.input_bytes / 1024);
     println!("     Output bytes: {} KB", stats.output_bytes / 1024);
-    println!(
-        "     Arithmetic ops: {:.0}M",
-        stats.arithmetic_ops as f64 / 1_000_000.0
-    );
-    println!(
-        "     Arithmetic intensity: {:.2} FLOP/byte",
-        stats.arithmetic_intensity
-    );
+    println!("     Arithmetic ops: {:.0}M", stats.arithmetic_ops as f64 / 1_000_000.0);
+    println!("     Arithmetic intensity: {:.2} FLOP/byte", stats.arithmetic_intensity);
 
     // =========================================================================
     // 6. Prefetch optimization
@@ -221,18 +171,9 @@ fn main() {
     );
 
     println!("\n   Cache level typical sizes:");
-    println!(
-        "     L1 (Micro): {} KB",
-        TcbLevel::Micro.typical_cache_bytes() / 1024
-    );
-    println!(
-        "     L2 (Midi): {} KB",
-        TcbLevel::Midi.typical_cache_bytes() / 1024
-    );
-    println!(
-        "     L3 (Macro): {} MB",
-        TcbLevel::Macro.typical_cache_bytes() / (1024 * 1024)
-    );
+    println!("     L1 (Micro): {} KB", TcbLevel::Micro.typical_cache_bytes() / 1024);
+    println!("     L2 (Midi): {} KB", TcbLevel::Midi.typical_cache_bytes() / 1024);
+    println!("     L3 (Macro): {} MB", TcbLevel::Macro.typical_cache_bytes() / (1024 * 1024));
 
     // =========================================================================
     // 7. Configuration comparison
@@ -277,10 +218,7 @@ fn compare_backends() {
         "\n   {:20} {:>10} {:>10} {:>10} {:>12}",
         "Backend", "Micro M", "Micro N", "Alignment", "AI (FLOP/B)"
     );
-    println!(
-        "   {:─<20} {:─>10} {:─>10} {:─>10} {:─>12}",
-        "", "", "", "", ""
-    );
+    println!("   {:─<20} {:─>10} {:─>10} {:─>10} {:─>12}", "", "", "", "", "");
 
     for config in &configs {
         println!(

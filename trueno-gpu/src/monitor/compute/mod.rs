@@ -105,8 +105,7 @@ impl ComputeMetrics {
 
     /// Clear completed kernels
     pub fn clear_completed_kernels(&mut self) {
-        self.active_kernels
-            .retain(|k| k.status != KernelStatus::Completed);
+        self.active_kernels.retain(|k| k.status != KernelStatus::Completed);
     }
 }
 

@@ -44,18 +44,12 @@ pub struct StrategicBuffer {
 impl StrategicBuffer {
     /// Create a new buffer with the given strategy.
     pub fn new(strategy: ReserveStrategy) -> Self {
-        Self {
-            data: Vec::new(),
-            strategy,
-        }
+        Self { data: Vec::new(), strategy }
     }
 
     /// Create with initial capacity.
     pub fn with_capacity(capacity: usize, strategy: ReserveStrategy) -> Self {
-        Self {
-            data: Vec::with_capacity(reserve_capacity(capacity, strategy)),
-            strategy,
-        }
+        Self { data: Vec::with_capacity(reserve_capacity(capacity, strategy)), strategy }
     }
 
     /// Ensure capacity for additional bytes.

@@ -324,11 +324,7 @@ fn test_falsify_kv_cache_valid_count_invariant() {
 
     // Can't go negative
     mgr.evict_lru();
-    assert_eq!(
-        mgr.valid_count(),
-        0,
-        "FALSIFICATION FAILED: valid_count should not go negative"
-    );
+    assert_eq!(mgr.valid_count(), 0, "FALSIFICATION FAILED: valid_count should not go negative");
 }
 
 /// FALSIFICATION TEST: LRU eviction must evict oldest-accessed slot
@@ -358,17 +354,11 @@ fn test_falsify_lru_eviction_order() {
 
     // First eviction should be idx1 (oldest not accessed)
     let evicted1 = mgr.evict_lru().unwrap();
-    assert_eq!(
-        evicted1, idx1,
-        "FALSIFICATION FAILED: First eviction should be idx1 (step 1)"
-    );
+    assert_eq!(evicted1, idx1, "FALSIFICATION FAILED: First eviction should be idx1 (step 1)");
 
     // Second eviction should be idx3 (next oldest)
     let evicted2 = mgr.evict_lru().unwrap();
-    assert_eq!(
-        evicted2, idx3,
-        "FALSIFICATION FAILED: Second eviction should be idx3 (step 3)"
-    );
+    assert_eq!(evicted2, idx3, "FALSIFICATION FAILED: Second eviction should be idx3 (step 3)");
 }
 
 /// FALSIFICATION TEST: SequentialBatchOrderer must cover all indices

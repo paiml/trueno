@@ -5,18 +5,10 @@ use trueno::tuner::{KernelType, QuantType, TunerFeatures};
 /// F021: TunerFeatures dimension must be 42
 #[test]
 fn f021_features_dim_42() {
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let vec = features.to_vector();
-    assert_eq!(
-        vec.len(),
-        42,
-        "F021 FALSIFIED: expected DIM=42, got {}",
-        vec.len()
-    );
+    assert_eq!(vec.len(), 42, "F021 FALSIFIED: expected DIM=42, got {}", vec.len());
 }
 
 /// F022: Feature vector must be normalized (most values in [0,1])
@@ -43,16 +35,10 @@ fn f022_features_normalized() {
 /// F023: Feature validation must pass for valid inputs
 #[test]
 fn f023_validation_accepts_valid() {
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .hidden_dim(1536)
-        .batch_size(4)
-        .build();
+    let features =
+        TunerFeatures::builder().model_params_b(1.5).hidden_dim(1536).batch_size(4).build();
 
-    assert!(
-        features.validate().is_ok(),
-        "F023 FALSIFIED: valid features rejected"
-    );
+    assert!(features.validate().is_ok(), "F023 FALSIFIED: valid features rejected");
 }
 
 /// F024: Feature validation must reject invalid inputs
@@ -62,10 +48,7 @@ fn f024_validation_rejects_invalid() {
         .model_params_b(-1.0) // Invalid: negative
         .try_build();
 
-    assert!(
-        result.is_err(),
-        "F024 FALSIFIED: negative model_params_b accepted"
-    );
+    assert!(result.is_err(), "F024 FALSIFIED: negative model_params_b accepted");
 }
 
 /// F025: QuantType one-hot encoding must be valid
@@ -110,20 +93,9 @@ fn f026_kernel_onehot_valid() {
 /// F027: Bytes per param must be positive
 #[test]
 fn f027_bytes_per_param_positive() {
-    for qt in [
-        QuantType::Q4_0,
-        QuantType::Q4K,
-        QuantType::Q8_0,
-        QuantType::F16,
-        QuantType::F32,
-    ] {
+    for qt in [QuantType::Q4_0, QuantType::Q4K, QuantType::Q8_0, QuantType::F16, QuantType::F32] {
         let bpp = qt.bytes_per_param();
-        assert!(
-            bpp > 0.0,
-            "F027 FALSIFIED: {} has bpp={}",
-            qt.to_index(),
-            bpp
-        );
+        assert!(bpp > 0.0, "F027 FALSIFIED: {} has bpp={}", qt.to_index(), bpp);
     }
 }
 
@@ -135,12 +107,7 @@ fn f028_builder_defaults() {
 
     // Should not have NaN or Inf
     for (i, &v) in vec.iter().enumerate() {
-        assert!(
-            v.is_finite(),
-            "F028 FALSIFIED: feature[{}] is not finite: {}",
-            i,
-            v
-        );
+        assert!(v.is_finite(), "F028 FALSIFIED: feature[{}] is not finite: {}", i, v);
     }
 }
 
@@ -183,11 +150,7 @@ fn f031_cuda_graphs_binary() {
 
         let cuda_graphs_idx = 9;
         let val = vec[cuda_graphs_idx];
-        assert!(
-            val == 0.0 || val == 1.0,
-            "F031 FALSIFIED: cuda_graphs feature {} not binary",
-            val
-        );
+        assert!(val == 0.0 || val == 1.0, "F031 FALSIFIED: cuda_graphs feature {} not binary", val);
     }
 }
 
@@ -229,37 +192,20 @@ fn f034_seq_len_affects_vector() {
     let features_long = TunerFeatures::builder().seq_len(4096).build().to_vector();
 
     // Seq len should change at least one feature
-    let diff: f32 = features_short
-        .iter()
-        .zip(features_long.iter())
-        .map(|(a, b)| (a - b).abs())
-        .sum();
+    let diff: f32 =
+        features_short.iter().zip(features_long.iter()).map(|(a, b)| (a - b).abs()).sum();
 
-    assert!(
-        diff > 0.01,
-        "F034 FALSIFIED: seq_len doesn't affect feature vector (diff={})",
-        diff
-    );
+    assert!(diff > 0.01, "F034 FALSIFIED: seq_len doesn't affect feature vector (diff={})", diff);
 }
 
 /// F035: Quant type affects feature vector
 #[test]
 fn f035_quant_type_affects_vector() {
-    let features_q4k = TunerFeatures::builder()
-        .quant_type(QuantType::Q4K)
-        .build()
-        .to_vector();
-    let features_f16 = TunerFeatures::builder()
-        .quant_type(QuantType::F16)
-        .build()
-        .to_vector();
+    let features_q4k = TunerFeatures::builder().quant_type(QuantType::Q4K).build().to_vector();
+    let features_f16 = TunerFeatures::builder().quant_type(QuantType::F16).build().to_vector();
 
     // Different quant types should produce different vectors
-    let diff: f32 = features_q4k
-        .iter()
-        .zip(features_f16.iter())
-        .map(|(a, b)| (a - b).abs())
-        .sum();
+    let diff: f32 = features_q4k.iter().zip(features_f16.iter()).map(|(a, b)| (a - b).abs()).sum();
 
     assert!(
         diff > 0.01,
@@ -284,34 +230,18 @@ fn f036_features_serialize_roundtrip() {
     let restored_vec = restored.to_vector();
 
     for (i, (a, b)) in orig_vec.iter().zip(restored_vec.iter()).enumerate() {
-        assert!(
-            (a - b).abs() < 0.001,
-            "F036 FALSIFIED: feature[{}] mismatch: {} vs {}",
-            i,
-            a,
-            b
-        );
+        assert!((a - b).abs() < 0.001, "F036 FALSIFIED: feature[{}] mismatch: {} vs {}", i, a, b);
     }
 }
 
 /// F037: SM count affects feature vector
 #[test]
 fn f037_sm_count_affects_vector() {
-    let features_low = TunerFeatures::builder()
-        .gpu_sm_count(64)
-        .build()
-        .to_vector();
-    let features_high = TunerFeatures::builder()
-        .gpu_sm_count(256)
-        .build()
-        .to_vector();
+    let features_low = TunerFeatures::builder().gpu_sm_count(64).build().to_vector();
+    let features_high = TunerFeatures::builder().gpu_sm_count(256).build().to_vector();
 
     // Different SM counts should produce different vectors
-    let diff: f32 = features_low
-        .iter()
-        .zip(features_high.iter())
-        .map(|(a, b)| (a - b).abs())
-        .sum();
+    let diff: f32 = features_low.iter().zip(features_high.iter()).map(|(a, b)| (a - b).abs()).sum();
 
     assert!(
         diff > 0.01,

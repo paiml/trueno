@@ -136,10 +136,7 @@ impl BlisProfiler {
 
     /// Create an enabled profiler
     pub fn enabled() -> Self {
-        Self {
-            enabled: true,
-            ..Self::default()
-        }
+        Self { enabled: true, ..Self::default() }
     }
 
     /// Record timing for a level
@@ -230,11 +227,8 @@ mod tests {
 
     #[test]
     fn test_kaizen_metrics_gflops() {
-        let m = KaizenMetrics {
-            flops: 1_000_000_000,
-            time_ns: 1_000_000_000,
-            ..Default::default()
-        };
+        let m =
+            KaizenMetrics { flops: 1_000_000_000, time_ns: 1_000_000_000, ..Default::default() };
         assert!((m.gflops() - 1.0).abs() < 1e-10);
     }
 
@@ -287,11 +281,8 @@ mod tests {
 
     #[test]
     fn test_blis_level_stats_gflops() {
-        let s = BlisLevelStats {
-            total_ns: 1_000_000_000,
-            flops: 1_000_000_000,
-            ..Default::default()
-        };
+        let s =
+            BlisLevelStats { total_ns: 1_000_000_000, flops: 1_000_000_000, ..Default::default() };
         assert!((s.gflops() - 1.0).abs() < 1e-10);
     }
 

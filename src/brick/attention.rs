@@ -58,12 +58,7 @@ impl AttentionOp {
     /// * `head_dim` - Dimension per head
     #[must_use]
     pub fn new(seq_len: usize, kv_seq_len: usize, head_dim: usize) -> Self {
-        Self {
-            seq_len,
-            kv_seq_len,
-            head_dim,
-            scale: 1.0 / (head_dim as f32).sqrt(),
-        }
+        Self { seq_len, kv_seq_len, head_dim, scale: 1.0 / (head_dim as f32).sqrt() }
     }
 
     /// Create for self-attention (seq_len == kv_seq_len).
@@ -190,16 +185,10 @@ impl ComputeOp for AttentionOp {
         let expected_kv = self.kv_seq_len * self.head_dim;
 
         if q.len() != expected_q {
-            return Err(TruenoError::SizeMismatch {
-                expected: expected_q,
-                actual: q.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: expected_q, actual: q.len() });
         }
         if k.len() != expected_kv || v.len() != expected_kv {
-            return Err(TruenoError::SizeMismatch {
-                expected: expected_kv,
-                actual: k.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: expected_kv, actual: k.len() });
         }
 
         // Allocate output
@@ -252,10 +241,7 @@ mod tests {
     /// Assert simd_dot of two slices equals expected within tolerance.
     fn assert_dot(a: &[f32], b: &[f32], expected: f32) {
         let dot = AttentionOp::simd_dot(a, b);
-        assert!(
-            (dot - expected).abs() < 1e-3,
-            "dot={dot}, expected={expected}"
-        );
+        assert!((dot - expected).abs() < 1e-3, "dot={dot}, expected={expected}");
     }
 
     /// Assert simd_dot of [1..=n] · [1.0; n] equals n*(n+1)/2.
@@ -683,9 +669,7 @@ mod tests {
     fn test_simd_dot_alternating_signs() {
         // Alternating +1/-1 should cancel to 0 for even length
         let n = 64;
-        let a: Vec<f32> = (0..n)
-            .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
-            .collect();
+        let a: Vec<f32> = (0..n).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
         let b = vec![1.0; n];
         let result = AttentionOp::simd_dot(&a, &b);
         assert!((result).abs() < 1e-5, "alternating dot = {result}");
@@ -698,10 +682,7 @@ mod tests {
         let b = vec![1000.0; 16];
         let expected = 1000.0 * 1000.0 * 16.0;
         let result = AttentionOp::simd_dot(&a, &b);
-        assert!(
-            (result - expected).abs() < 1.0,
-            "large dot = {result}, expected = {expected}"
-        );
+        assert!((result - expected).abs() < 1.0, "large dot = {result}, expected = {expected}");
     }
 
     #[test]
@@ -711,10 +692,7 @@ mod tests {
         let b = vec![10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
         let expected: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let result = AttentionOp::simd_dot(&a, &b);
-        assert!(
-            (result - expected).abs() < 1e-3,
-            "mixed dot = {result}, expected = {expected}"
-        );
+        assert!((result - expected).abs() < 1e-3, "mixed dot = {result}, expected = {expected}");
     }
 
     #[test]
@@ -723,10 +701,7 @@ mod tests {
         let b = vec![1e-10; 16];
         let expected = 1e-20 * 16.0;
         let result = AttentionOp::simd_dot(&a, &b);
-        assert!(
-            (result - expected).abs() < 1e-24,
-            "small dot = {result}, expected = {expected}"
-        );
+        assert!((result - expected).abs() < 1e-24, "small dot = {result}, expected = {expected}");
     }
 
     // =========================================================================
@@ -843,9 +818,8 @@ mod tests {
             for d in 0..head_dim {
                 let out_val = output[qi * head_dim + d];
 
-                let v_col_min = (0..kv_seq_len)
-                    .map(|ki| v[ki * head_dim + d])
-                    .fold(f32::INFINITY, f32::min);
+                let v_col_min =
+                    (0..kv_seq_len).map(|ki| v[ki * head_dim + d]).fold(f32::INFINITY, f32::min);
                 let v_col_max = (0..kv_seq_len)
                     .map(|ki| v[ki * head_dim + d])
                     .fold(f32::NEG_INFINITY, f32::max);

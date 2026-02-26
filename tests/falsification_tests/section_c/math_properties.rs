@@ -7,12 +7,8 @@ use trueno::Vector;
 #[test]
 fn test_c031_add_commutativity() {
     let mut rng = SimRng::new(31);
-    let a: Vec<f32> = (0..1000)
-        .map(|_| rng.gen_f64() as f32 * 200.0 - 100.0)
-        .collect();
-    let b: Vec<f32> = (0..1000)
-        .map(|_| rng.gen_f64() as f32 * 200.0 - 100.0)
-        .collect();
+    let a: Vec<f32> = (0..1000).map(|_| rng.gen_f64() as f32 * 200.0 - 100.0).collect();
+    let b: Vec<f32> = (0..1000).map(|_| rng.gen_f64() as f32 * 200.0 - 100.0).collect();
 
     let vec_a = Vector::from_slice(&a);
     let vec_b = Vector::from_slice(&b);
@@ -20,12 +16,7 @@ fn test_c031_add_commutativity() {
     let result_ab = vec_a.add(&vec_b).expect("add failed");
     let result_ba = vec_b.add(&vec_a).expect("add failed");
 
-    for (i, (ab, ba)) in result_ab
-        .as_slice()
-        .iter()
-        .zip(result_ba.as_slice().iter())
-        .enumerate()
-    {
+    for (i, (ab, ba)) in result_ab.as_slice().iter().zip(result_ba.as_slice().iter()).enumerate() {
         assert_eq!(
             ab.to_bits(),
             ba.to_bits(),
@@ -50,12 +41,7 @@ fn test_c032_add_associativity() {
     let ab_c = ab.add(&c).expect("add failed");
 
     // Check within floating-point tolerance
-    for (i, (l, r)) in a_bc
-        .as_slice()
-        .iter()
-        .zip(ab_c.as_slice().iter())
-        .enumerate()
-    {
+    for (i, (l, r)) in a_bc.as_slice().iter().zip(ab_c.as_slice().iter()).enumerate() {
         let diff = (l - r).abs();
         assert!(
             diff < 1e-6,
@@ -68,12 +54,8 @@ fn test_c032_add_associativity() {
 #[test]
 fn test_c033_mul_commutativity() {
     let mut rng = SimRng::new(33);
-    let a: Vec<f32> = (0..1000)
-        .map(|_| rng.gen_f64() as f32 * 20.0 - 10.0)
-        .collect();
-    let b: Vec<f32> = (0..1000)
-        .map(|_| rng.gen_f64() as f32 * 20.0 - 10.0)
-        .collect();
+    let a: Vec<f32> = (0..1000).map(|_| rng.gen_f64() as f32 * 20.0 - 10.0).collect();
+    let b: Vec<f32> = (0..1000).map(|_| rng.gen_f64() as f32 * 20.0 - 10.0).collect();
 
     let vec_a = Vector::from_slice(&a);
     let vec_b = Vector::from_slice(&b);
@@ -81,12 +63,7 @@ fn test_c033_mul_commutativity() {
     let result_ab = vec_a.mul(&vec_b).expect("mul failed");
     let result_ba = vec_b.mul(&vec_a).expect("mul failed");
 
-    for (i, (ab, ba)) in result_ab
-        .as_slice()
-        .iter()
-        .zip(result_ba.as_slice().iter())
-        .enumerate()
-    {
+    for (i, (ab, ba)) in result_ab.as_slice().iter().zip(result_ba.as_slice().iter()).enumerate() {
         assert_eq!(
             ab.to_bits(),
             ba.to_bits(),
@@ -117,17 +94,12 @@ fn test_c035_dot_positive_semidefinite() {
     let mut rng = SimRng::new(35);
 
     for _ in 0..1000 {
-        let a: Vec<f32> = (0..100)
-            .map(|_| rng.gen_f64() as f32 * 200.0 - 100.0)
-            .collect();
+        let a: Vec<f32> = (0..100).map(|_| rng.gen_f64() as f32 * 200.0 - 100.0).collect();
         let vec_a = Vector::from_slice(&a);
 
         let dot_aa = vec_a.dot(&vec_a).expect("dot failed");
 
-        assert!(
-            dot_aa >= 0.0,
-            "C-035 FALSIFIED: dot(a, a) = {dot_aa} is negative"
-        );
+        assert!(dot_aa >= 0.0, "C-035 FALSIFIED: dot(a, a) = {dot_aa} is negative");
     }
 }
 
@@ -232,11 +204,7 @@ fn test_c038_tanh_range() {
 /// C-039: softmax(x) sums to 1.0 within 1e-5
 #[test]
 fn test_c039_softmax_sum() {
-    let inputs = vec![
-        vec![1.0f32, 2.0, 3.0],
-        vec![0.0, 0.0, 0.0],
-        vec![-1.0, 0.0, 1.0],
-    ];
+    let inputs = vec![vec![1.0f32, 2.0, 3.0], vec![0.0, 0.0, 0.0], vec![-1.0, 0.0, 1.0]];
 
     for input in inputs {
         let vec_input = Vector::from_slice(&input);

@@ -38,12 +38,7 @@ impl BrickProfiler {
             return;
         }
         let checksum = fnv1a_f32_checksum(output);
-        let trace = KernelChecksum {
-            name: name.to_string(),
-            layer_idx,
-            position,
-            checksum,
-        };
+        let trace = KernelChecksum { name: name.to_string(), layer_idx, position, checksum };
         self.kernel_checksums.push(trace);
     }
 

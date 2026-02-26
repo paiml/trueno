@@ -63,11 +63,7 @@ impl App {
         let mut cpu = CpuDevice::new();
         let _ = cpu.refresh();
 
-        info!(
-            cpu_name = cpu.device_name(),
-            cores = num_cpus::get(),
-            "CPU detected"
-        );
+        info!(cpu_name = cpu.device_name(), cores = num_cpus::get(), "CPU detected");
 
         // Try to enumerate real CUDA GPUs
         let cuda_available = cuda_monitoring_available();
@@ -216,8 +212,7 @@ impl App {
             self.mem_ops_history.remove(0);
             self.mem_ops_history.push(self.mem_ops_per_sec / 1_000_000);
             self.gpu_ops_history.remove(0);
-            self.gpu_ops_history
-                .push(self.gpu_ops_per_sec / 1_000_000_000); // G FLOPS
+            self.gpu_ops_history.push(self.gpu_ops_per_sec / 1_000_000_000); // G FLOPS
 
             // Track peak utilization for stress report
             let cpu_util = self.cpu.compute_utilization().unwrap_or(0.0);
@@ -228,11 +223,7 @@ impl App {
             if ram_util > self.peak_ram_util {
                 self.peak_ram_util = ram_util;
             }
-            let vram_util = self
-                .gpus
-                .iter()
-                .map(|g| g.vram_percent)
-                .fold(0.0_f64, f64::max);
+            let vram_util = self.gpus.iter().map(|g| g.vram_percent).fold(0.0_f64, f64::max);
             if vram_util > self.peak_vram_util {
                 self.peak_vram_util = vram_util;
             }
@@ -287,9 +278,7 @@ fn init_logging() -> tracing_appender::non_blocking::WorkerGuard {
 
 /// Get log directory path (~/.trueno)
 fn dirs_log_path() -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".trueno")
+    dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")).join(".trueno")
 }
 
 /// Returns true if the app should quit
@@ -373,11 +362,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     run_event_loop(&mut terminal, &mut app)?;
 
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
 
     info!("Trueno Monitor shutdown complete");

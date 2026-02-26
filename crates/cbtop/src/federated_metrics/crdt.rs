@@ -52,22 +52,14 @@ pub struct LwwRegister<T: Clone> {
 
 impl<T: Clone + Default> Default for LwwRegister<T> {
     fn default() -> Self {
-        Self {
-            value: T::default(),
-            timestamp: 0,
-            writer: String::new(),
-        }
+        Self { value: T::default(), timestamp: 0, writer: String::new() }
     }
 }
 
 impl<T: Clone> LwwRegister<T> {
     /// Create a new register with initial value
     pub fn new(value: T, timestamp: u64, writer: impl Into<String>) -> Self {
-        Self {
-            value,
-            timestamp,
-            writer: writer.into(),
-        }
+        Self { value, timestamp, writer: writer.into() }
     }
 
     /// Update value if timestamp is newer
@@ -110,10 +102,7 @@ pub struct OrSet<T: Clone + Eq + std::hash::Hash> {
 
 impl<T: Clone + Eq + std::hash::Hash> Default for OrSet<T> {
     fn default() -> Self {
-        Self {
-            elements: HashMap::new(),
-            tombstones: HashMap::new(),
-        }
+        Self { elements: HashMap::new(), tombstones: HashMap::new() }
     }
 }
 
@@ -142,8 +131,7 @@ impl<T: Clone + Eq + std::hash::Hash> OrSet<T> {
     pub fn contains(&self, element: &T) -> bool {
         if let Some(tags) = self.elements.get(element) {
             let tombstones = self.tombstones.get(element);
-            tags.iter()
-                .any(|tag| tombstones.map_or(true, |ts| !ts.contains(tag)))
+            tags.iter().any(|tag| tombstones.map_or(true, |ts| !ts.contains(tag)))
         } else {
             false
         }

@@ -55,29 +55,13 @@ fn test_falsify_graph_consistency() {
     let n2 = graph.add_node(ExecutionNode::Layer { index: 1 });
     graph.add_edge(n1, n2, EdgeType::Sequence);
 
-    assert_eq!(
-        graph.num_nodes(),
-        2,
-        "FALSIFICATION FAILED: node count mismatch"
-    );
-    assert_eq!(
-        graph.num_edges(),
-        1,
-        "FALSIFICATION FAILED: edge count mismatch"
-    );
+    assert_eq!(graph.num_nodes(), 2, "FALSIFICATION FAILED: node count mismatch");
+    assert_eq!(graph.num_edges(), 1, "FALSIFICATION FAILED: edge count mismatch");
 
     // Clear and verify
     graph.clear();
-    assert_eq!(
-        graph.num_nodes(),
-        0,
-        "FALSIFICATION FAILED: clear did not reset nodes"
-    );
-    assert_eq!(
-        graph.num_edges(),
-        0,
-        "FALSIFICATION FAILED: clear did not reset edges"
-    );
+    assert_eq!(graph.num_nodes(), 0, "FALSIFICATION FAILED: clear did not reset nodes");
+    assert_eq!(graph.num_edges(), 0, "FALSIFICATION FAILED: clear did not reset edges");
 }
 
 /// FALSIFICATION TEST: BrickStats min/max tracking

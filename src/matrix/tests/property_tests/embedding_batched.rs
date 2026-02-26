@@ -93,9 +93,7 @@ fn test_embedding_lookup_sparse() {
     let embeddings = Matrix::from_vec(4, 2, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]).unwrap();
 
     // Lookup with repeated indices
-    let (result, unique) = embeddings
-        .embedding_lookup_sparse(&[1, 3, 1, 0, 3])
-        .unwrap();
+    let (result, unique) = embeddings.embedding_lookup_sparse(&[1, 3, 1, 0, 3]).unwrap();
 
     assert_eq!(result.rows(), 5);
     assert_eq!(result.cols(), 2);
@@ -198,10 +196,7 @@ fn test_batched_matmul_a_size_mismatch() {
 
     let result = Matrix::batched_matmul(&a_data, &b_data, batch, m, k, n);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("A data size mismatch"));
+    assert!(result.unwrap_err().to_string().contains("A data size mismatch"));
 }
 
 #[test]
@@ -216,10 +211,7 @@ fn test_batched_matmul_b_size_mismatch() {
 
     let result = Matrix::batched_matmul(&a_data, &b_data, batch, m, k, n);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("B data size mismatch"));
+    assert!(result.unwrap_err().to_string().contains("B data size mismatch"));
 }
 
 #[test]
@@ -267,12 +259,10 @@ fn test_batched_matmul_4d_attention_pattern() {
     let seq_len = 4;
     let head_dim = 8;
 
-    let q_data: Vec<f32> = (0..batch * heads * seq_len * head_dim)
-        .map(|i| (i as f32) * 0.01)
-        .collect();
-    let kt_data: Vec<f32> = (0..batch * heads * head_dim * seq_len)
-        .map(|i| (i as f32) * 0.01)
-        .collect();
+    let q_data: Vec<f32> =
+        (0..batch * heads * seq_len * head_dim).map(|i| (i as f32) * 0.01).collect();
+    let kt_data: Vec<f32> =
+        (0..batch * heads * head_dim * seq_len).map(|i| (i as f32) * 0.01).collect();
 
     let result =
         Matrix::batched_matmul_4d(&q_data, &kt_data, batch, heads, seq_len, head_dim, seq_len)
@@ -295,10 +285,7 @@ fn test_batched_matmul_4d_a_size_mismatch() {
 
     let result = Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("A data size mismatch"));
+    assert!(result.unwrap_err().to_string().contains("A data size mismatch"));
 }
 
 #[test]
@@ -314,8 +301,5 @@ fn test_batched_matmul_4d_b_size_mismatch() {
 
     let result = Matrix::batched_matmul_4d(&a_data, &b_data, batch, heads, m, k, n);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("B data size mismatch"));
+    assert!(result.unwrap_err().to_string().contains("B data size mismatch"));
 }

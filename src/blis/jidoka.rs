@@ -26,30 +26,19 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum JidokaError {
     /// Numerical deviation beyond acceptable threshold
-    NumericalDeviation {
-        computed: f32,
-        expected: f32,
-        relative_error: f32,
-    },
+    NumericalDeviation { computed: f32, expected: f32, relative_error: f32 },
     /// NaN detected in computation
     NaNDetected { location: &'static str },
     /// Infinity detected in computation
     InfDetected { location: &'static str },
     /// Dimension mismatch
-    DimensionMismatch {
-        expected: (usize, usize, usize),
-        actual: (usize, usize, usize),
-    },
+    DimensionMismatch { expected: (usize, usize, usize), actual: (usize, usize, usize) },
 }
 
 impl std::fmt::Display for JidokaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NumericalDeviation {
-                computed,
-                expected,
-                relative_error,
-            } => {
+            Self::NumericalDeviation { computed, expected, relative_error } => {
                 write!(
                     f,
                     "Jidoka: numerical deviation - computed={}, expected={}, error={}",
@@ -63,11 +52,7 @@ impl std::fmt::Display for JidokaError {
                 write!(f, "Jidoka: Inf detected at {}", location)
             }
             Self::DimensionMismatch { expected, actual } => {
-                write!(
-                    f,
-                    "Jidoka: dimension mismatch - expected {:?}, got {:?}",
-                    expected, actual
-                )
+                write!(f, "Jidoka: dimension mismatch - expected {:?}, got {:?}", expected, actual)
             }
         }
     }
@@ -99,11 +84,7 @@ impl Default for JidokaGuard {
 impl JidokaGuard {
     /// Create a strict guard for testing (checks every output)
     pub fn strict() -> Self {
-        Self {
-            epsilon: 1e-6,
-            check_special: true,
-            sample_rate: 1,
-        }
+        Self { epsilon: 1e-6, check_special: true, sample_rate: 1 }
     }
 
     /// Validate a computed value against expected
@@ -123,11 +104,7 @@ impl JidokaGuard {
         let relative_error = abs_diff / max_abs;
 
         if relative_error > self.epsilon {
-            return Err(JidokaError::NumericalDeviation {
-                computed,
-                expected,
-                relative_error,
-            });
+            return Err(JidokaError::NumericalDeviation { computed, expected, relative_error });
         }
 
         Ok(())
@@ -194,10 +171,7 @@ mod tests {
     fn test_validate_deviation() {
         let guard = JidokaGuard::strict();
         let result = guard.validate(1.0, 2.0);
-        assert!(matches!(
-            result,
-            Err(JidokaError::NumericalDeviation { .. })
-        ));
+        assert!(matches!(result, Err(JidokaError::NumericalDeviation { .. })));
     }
 
     #[test]
@@ -222,17 +196,11 @@ mod tests {
         let err = JidokaError::InfDetected { location: "test" };
         assert!(format!("{}", err).contains("Inf"));
 
-        let err = JidokaError::NumericalDeviation {
-            computed: 1.0,
-            expected: 2.0,
-            relative_error: 0.5,
-        };
+        let err =
+            JidokaError::NumericalDeviation { computed: 1.0, expected: 2.0, relative_error: 0.5 };
         assert!(format!("{}", err).contains("deviation"));
 
-        let err = JidokaError::DimensionMismatch {
-            expected: (1, 2, 3),
-            actual: (4, 5, 6),
-        };
+        let err = JidokaError::DimensionMismatch { expected: (1, 2, 3), actual: (4, 5, 6) };
         assert!(format!("{}", err).contains("mismatch"));
     }
 }

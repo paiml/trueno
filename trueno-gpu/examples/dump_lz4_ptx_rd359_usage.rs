@@ -2,10 +2,7 @@ use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
 
 fn is_write_to_rd359(line: &str) -> bool {
     let trimmed = line.trim();
-    trimmed
-        .split_whitespace()
-        .nth(1)
-        .is_some_and(|operand| operand.starts_with("%rd359"))
+    trimmed.split_whitespace().nth(1).is_some_and(|operand| operand.starts_with("%rd359"))
 }
 
 fn check_rd359_in_loop(lines: &[&str]) {
@@ -19,11 +16,8 @@ fn check_rd359_in_loop(lines: &[&str]) {
             in_loop = false;
         }
         if in_loop && line.contains("%rd359") {
-            let suffix = if is_write_to_rd359(line) {
-                " <-- WRITES TO %rd359!"
-            } else {
-                " (reads)"
-            };
+            let suffix =
+                if is_write_to_rd359(line) { " <-- WRITES TO %rd359!" } else { " (reads)" };
             println!("{:4}: {}{}", i + 1, line, suffix);
         }
     }

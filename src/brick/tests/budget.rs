@@ -82,10 +82,7 @@ fn test_token_result_map() {
 fn test_compute_assertion_equiv_with_tolerance() {
     let assertion = ComputeAssertion::equiv_with_tolerance(Backend::Scalar, 1e-3);
     match assertion {
-        ComputeAssertion::Equivalence {
-            baseline,
-            tolerance,
-        } => {
+        ComputeAssertion::Equivalence { baseline, tolerance } => {
             assert_eq!(baseline, Backend::Scalar);
             assert!((tolerance - 1e-3).abs() < 1e-10);
         }
@@ -204,9 +201,7 @@ fn test_compute_brick_clone() {
 
 #[test]
 fn test_compute_brick_debug() {
-    let brick = ComputeBrick::new(DotOp::new(4))
-        .assert_finite()
-        .backend(Backend::Avx2);
+    let brick = ComputeBrick::new(DotOp::new(4)).assert_finite().backend(Backend::Avx2);
 
     let debug_str = format!("{:?}", brick);
     assert!(debug_str.contains("ComputeBrick"));
@@ -216,9 +211,7 @@ fn test_compute_brick_debug() {
 
 #[test]
 fn test_brick_layer_with_named() {
-    let layer = BrickLayer::new()
-        .with_named("attention", 10_000.0)
-        .with_named("ffn", 5_000.0);
+    let layer = BrickLayer::new().with_named("attention", 10_000.0).with_named("ffn", 5_000.0);
 
     assert_eq!(layer.bricks().len(), 2);
     assert!((layer.throughput_ceiling() - 5_000.0).abs() < 1.0);
@@ -278,9 +271,7 @@ fn test_compute_brick_run_zero_tokens() {
 
 #[test]
 fn test_brick_verification_is_valid() {
-    let brick = ComputeBrick::new(DotOp::new(4))
-        .assert_finite()
-        .assert_bounds(-1000.0, 1000.0);
+    let brick = ComputeBrick::new(DotOp::new(4)).assert_finite().assert_bounds(-1000.0, 1000.0);
 
     let verification = brick.verify();
     assert!(verification.is_valid());

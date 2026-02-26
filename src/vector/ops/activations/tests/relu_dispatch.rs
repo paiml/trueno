@@ -33,14 +33,7 @@ fn test_relu_sse2_backend_comprehensive() {
 #[cfg(target_arch = "x86_64")]
 fn test_relu_avx_backend_comprehensive() {
     let data: Vec<f32> = (-20..20).map(|i| i as f32 * 0.5).collect();
-    assert_activation_elementwise(
-        &data,
-        Backend::AVX,
-        act_relu,
-        |x| x.max(0.0),
-        1e-6,
-        "relu AVX",
-    );
+    assert_activation_elementwise(&data, Backend::AVX, act_relu, |x| x.max(0.0), 1e-6, "relu AVX");
 }
 
 #[test]
@@ -106,14 +99,7 @@ fn test_relu_wasm_fallback_backend() {
 #[test]
 fn test_relu_gpu_backend() {
     let data = [-3.0, -1.0, 0.0, 1.0, 3.0];
-    assert_activation_elementwise(
-        &data,
-        Backend::GPU,
-        act_relu,
-        |x| x.max(0.0),
-        1e-6,
-        "relu GPU",
-    );
+    assert_activation_elementwise(&data, Backend::GPU, act_relu, |x| x.max(0.0), 1e-6, "relu GPU");
 }
 
 #[test]
@@ -141,11 +127,8 @@ fn test_relu_backend_equivalence_comprehensive() {
     for &backend in &[Backend::SSE2, Backend::AVX] {
         let v = Vector::from_slice_with_backend(&data, backend);
         let result = v.relu().unwrap();
-        for (i, (&got, &exp)) in result
-            .as_slice()
-            .iter()
-            .zip(expected.as_slice().iter())
-            .enumerate()
+        for (i, (&got, &exp)) in
+            result.as_slice().iter().zip(expected.as_slice().iter()).enumerate()
         {
             assert!(
                 (got - exp).abs() < 1e-6,
@@ -158,11 +141,8 @@ fn test_relu_backend_equivalence_comprehensive() {
         for &backend in &[Backend::AVX2, Backend::AVX512] {
             let v = Vector::from_slice_with_backend(&data, backend);
             let result = v.relu().unwrap();
-            for (i, (&got, &exp)) in result
-                .as_slice()
-                .iter()
-                .zip(expected.as_slice().iter())
-                .enumerate()
+            for (i, (&got, &exp)) in
+                result.as_slice().iter().zip(expected.as_slice().iter()).enumerate()
             {
                 assert!(
                     (got - exp).abs() < 1e-6,
@@ -172,19 +152,11 @@ fn test_relu_backend_equivalence_comprehensive() {
         }
     }
 
-    for &backend in &[
-        Backend::NEON,
-        Backend::WasmSIMD,
-        Backend::GPU,
-        Backend::Auto,
-    ] {
+    for &backend in &[Backend::NEON, Backend::WasmSIMD, Backend::GPU, Backend::Auto] {
         let v = Vector::from_slice_with_backend(&data, backend);
         let result = v.relu().unwrap();
-        for (i, (&got, &exp)) in result
-            .as_slice()
-            .iter()
-            .zip(expected.as_slice().iter())
-            .enumerate()
+        for (i, (&got, &exp)) in
+            result.as_slice().iter().zip(expected.as_slice().iter()).enumerate()
         {
             assert!(
                 (got - exp).abs() < 1e-6,
@@ -199,26 +171,14 @@ fn test_relu_backend_equivalence_comprehensive() {
 #[test]
 fn test_relu_non_aligned_sizes_per_backend() {
     let sizes = [1, 2, 3, 5, 7, 9, 11, 15, 17, 31, 33, 63, 65];
-    let backends = [
-        Backend::Scalar,
-        Backend::NEON,
-        Backend::WasmSIMD,
-        Backend::GPU,
-        Backend::Auto,
-    ];
+    let backends = [Backend::Scalar, Backend::NEON, Backend::WasmSIMD, Backend::GPU, Backend::Auto];
 
     for &size in &sizes {
-        let data: Vec<f32> = (0..size)
-            .map(|i| (i as f32) - (size as f32 / 2.0))
-            .collect();
+        let data: Vec<f32> = (0..size).map(|i| (i as f32) - (size as f32 / 2.0)).collect();
         for &backend in &backends {
             let v = Vector::from_slice_with_backend(&data, backend);
             let result = v.relu().unwrap();
-            assert_eq!(
-                result.as_slice().len(),
-                size,
-                "relu {backend:?} size={size}"
-            );
+            assert_eq!(result.as_slice().len(), size, "relu {backend:?} size={size}");
             for (i, &val) in result.as_slice().iter().enumerate() {
                 let exp = data[i].max(0.0);
                 assert!(
@@ -235,9 +195,7 @@ fn test_relu_non_aligned_sizes_per_backend() {
 fn test_relu_non_aligned_sizes_simd_backends() {
     let sizes = [1, 3, 5, 7, 9, 11, 15, 17, 31, 33, 63, 65];
     for &size in &sizes {
-        let data: Vec<f32> = (0..size)
-            .map(|i| (i as f32) - (size as f32 / 2.0))
-            .collect();
+        let data: Vec<f32> = (0..size).map(|i| (i as f32) - (size as f32 / 2.0)).collect();
 
         for &backend in &[Backend::SSE2, Backend::AVX] {
             let v = Vector::from_slice_with_backend(&data, backend);
@@ -271,13 +229,9 @@ fn test_relu_non_aligned_sizes_simd_backends() {
 
 #[test]
 fn test_relu_single_element_backends() {
-    for &backend in &[
-        Backend::Scalar,
-        Backend::NEON,
-        Backend::WasmSIMD,
-        Backend::GPU,
-        Backend::Auto,
-    ] {
+    for &backend in
+        &[Backend::Scalar, Backend::NEON, Backend::WasmSIMD, Backend::GPU, Backend::Auto]
+    {
         let v_neg = Vector::from_slice_with_backend(&[-1.0], backend);
         assert!(
             (v_neg.relu().unwrap().as_slice()[0] - 0.0).abs() < 1e-6,
@@ -300,14 +254,7 @@ fn test_relu_single_element_backends() {
 
 #[test]
 fn test_relu_special_float_values() {
-    let data = [
-        f32::INFINITY,
-        f32::NEG_INFINITY,
-        f32::MIN,
-        f32::MAX,
-        f32::EPSILON,
-        -f32::EPSILON,
-    ];
+    let data = [f32::INFINITY, f32::NEG_INFINITY, f32::MIN, f32::MAX, f32::EPSILON, -f32::EPSILON];
     let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
     let result = v.relu().unwrap();
     assert_eq!(result.as_slice()[0], f32::INFINITY); // relu(+inf) = +inf
@@ -333,18 +280,13 @@ fn test_relu_nan_handling() {
 #[cfg(feature = "parallel")]
 fn test_relu_parallel_large_vector() {
     let size = 500_000;
-    let data: Vec<f32> = (0..size)
-        .map(|i| (i as f32) - (size as f32 / 2.0))
-        .collect();
+    let data: Vec<f32> = (0..size).map(|i| (i as f32) - (size as f32 / 2.0)).collect();
     let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
     let result = v.relu().unwrap();
     assert_eq!(result.as_slice().len(), size);
     for (i, &val) in result.as_slice().iter().enumerate() {
         let exp = data[i].max(0.0);
-        assert!(
-            (val - exp).abs() < 1e-6,
-            "relu parallel [{i}]: got {val} expected {exp}",
-        );
+        assert!((val - exp).abs() < 1e-6, "relu parallel [{i}]: got {val} expected {exp}",);
     }
 }
 
@@ -352,17 +294,13 @@ fn test_relu_parallel_large_vector() {
 #[cfg(feature = "parallel")]
 fn test_relu_parallel_boundary() {
     let size = 499_999;
-    let data: Vec<f32> = (0..size)
-        .map(|i| (i as f32) - (size as f32 / 2.0))
-        .collect();
+    let data: Vec<f32> = (0..size).map(|i| (i as f32) - (size as f32 / 2.0)).collect();
     let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
     let result = v.relu().unwrap();
     assert_eq!(result.as_slice().len(), size);
 
     let size = 500_000;
-    let data: Vec<f32> = (0..size)
-        .map(|i| (i as f32) - (size as f32 / 2.0))
-        .collect();
+    let data: Vec<f32> = (0..size).map(|i| (i as f32) - (size as f32 / 2.0)).collect();
     let v = Vector::from_slice_with_backend(&data, Backend::Scalar);
     let result = v.relu().unwrap();
     assert_eq!(result.as_slice().len(), size);
@@ -379,33 +317,19 @@ fn test_relu_parallel_with_simd_backends() {
 
     let v_sse = Vector::from_slice_with_backend(&data, Backend::SSE2);
     let result_sse = v_sse.relu().unwrap();
-    for (i, (&got, &exp)) in result_sse
-        .as_slice()
-        .iter()
-        .zip(expected.as_slice().iter())
-        .enumerate()
-        .take(100)
+    for (i, (&got, &exp)) in
+        result_sse.as_slice().iter().zip(expected.as_slice().iter()).enumerate().take(100)
     {
-        assert!(
-            (got - exp).abs() < 1e-6,
-            "relu parallel Scalar vs SSE2 [{i}]: {got} vs {exp}",
-        );
+        assert!((got - exp).abs() < 1e-6, "relu parallel Scalar vs SSE2 [{i}]: {got} vs {exp}",);
     }
 
     if is_x86_feature_detected!("avx2") {
         let v_avx2 = Vector::from_slice_with_backend(&data, Backend::AVX2);
         let result_avx2 = v_avx2.relu().unwrap();
-        for (i, (&got, &exp)) in result_avx2
-            .as_slice()
-            .iter()
-            .zip(expected.as_slice().iter())
-            .enumerate()
-            .take(100)
+        for (i, (&got, &exp)) in
+            result_avx2.as_slice().iter().zip(expected.as_slice().iter()).enumerate().take(100)
         {
-            assert!(
-                (got - exp).abs() < 1e-6,
-                "relu parallel Scalar vs AVX2 [{i}]: {got} vs {exp}",
-            );
+            assert!((got - exp).abs() < 1e-6, "relu parallel Scalar vs AVX2 [{i}]: {got} vs {exp}",);
         }
     }
 }

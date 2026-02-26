@@ -30,9 +30,8 @@ impl BrickTuner {
     /// Returns `~/.cache/trueno/tuner_model_v{VERSION}.apr`
     #[cfg(feature = "hardware-detect")]
     pub fn cache_path() -> std::path::PathBuf {
-        let cache_dir = dirs::cache_dir()
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
-            .join("trueno");
+        let cache_dir =
+            dirs::cache_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join("trueno");
 
         // Create directory if it doesn't exist
         let _ = std::fs::create_dir_all(&cache_dir);
@@ -85,25 +84,21 @@ impl BrickTuner {
         let mut file = std::fs::File::create(path).map_err(|e| TunerError::Io(e.to_string()))?;
 
         // Write magic
-        file.write_all(&Self::APR_MAGIC)
-            .map_err(|e| TunerError::Io(e.to_string()))?;
+        file.write_all(&Self::APR_MAGIC).map_err(|e| TunerError::Io(e.to_string()))?;
 
         // Write metadata length
         let len = json_bytes.len() as u32;
-        file.write_all(&len.to_le_bytes())
-            .map_err(|e| TunerError::Io(e.to_string()))?;
+        file.write_all(&len.to_le_bytes()).map_err(|e| TunerError::Io(e.to_string()))?;
 
         // Write JSON metadata
-        file.write_all(json_bytes)
-            .map_err(|e| TunerError::Io(e.to_string()))?;
+        file.write_all(json_bytes).map_err(|e| TunerError::Io(e.to_string()))?;
 
         // Calculate and write CRC32
         let mut crc = 0u32;
         crc = crc32_update(crc, &Self::APR_MAGIC);
         crc = crc32_update(crc, &len.to_le_bytes());
         crc = crc32_update(crc, json_bytes);
-        file.write_all(&crc.to_le_bytes())
-            .map_err(|e| TunerError::Io(e.to_string()))?;
+        file.write_all(&crc.to_le_bytes()).map_err(|e| TunerError::Io(e.to_string()))?;
 
         Ok(())
     }
@@ -116,30 +111,24 @@ impl BrickTuner {
 
         // Read and verify magic
         let mut magic = [0u8; 4];
-        file.read_exact(&mut magic)
-            .map_err(|e| TunerError::Io(e.to_string()))?;
+        file.read_exact(&mut magic).map_err(|e| TunerError::Io(e.to_string()))?;
 
         if magic != Self::APR_MAGIC {
-            return Err(TunerError::InvalidFormat(
-                "Invalid APR magic bytes".to_string(),
-            ));
+            return Err(TunerError::InvalidFormat("Invalid APR magic bytes".to_string()));
         }
 
         // Read metadata length
         let mut len_bytes = [0u8; 4];
-        file.read_exact(&mut len_bytes)
-            .map_err(|e| TunerError::Io(e.to_string()))?;
+        file.read_exact(&mut len_bytes).map_err(|e| TunerError::Io(e.to_string()))?;
         let len = u32::from_le_bytes(len_bytes) as usize;
 
         // Read JSON metadata
         let mut json_bytes = vec![0u8; len];
-        file.read_exact(&mut json_bytes)
-            .map_err(|e| TunerError::Io(e.to_string()))?;
+        file.read_exact(&mut json_bytes).map_err(|e| TunerError::Io(e.to_string()))?;
 
         // Read and verify CRC32
         let mut crc_bytes = [0u8; 4];
-        file.read_exact(&mut crc_bytes)
-            .map_err(|e| TunerError::Io(e.to_string()))?;
+        file.read_exact(&mut crc_bytes).map_err(|e| TunerError::Io(e.to_string()))?;
         let stored_crc = u32::from_le_bytes(crc_bytes);
 
         let mut computed_crc = 0u32;
@@ -148,9 +137,7 @@ impl BrickTuner {
         computed_crc = crc32_update(computed_crc, &json_bytes);
 
         if stored_crc != computed_crc {
-            return Err(TunerError::InvalidFormat(
-                "CRC32 checksum mismatch".to_string(),
-            ));
+            return Err(TunerError::InvalidFormat("CRC32 checksum mismatch".to_string()));
         }
 
         // Parse JSON

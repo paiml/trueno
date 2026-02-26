@@ -36,11 +36,7 @@ fn test_valid_ptx_passes() {
 
     // Should pass basic syntax tests
     assert!(report.score >= 80.0, "Score too low: {}", report.score);
-    assert!(
-        report.confidence > 0.7,
-        "Confidence too low: {}",
-        report.confidence
-    );
+    assert!(report.confidence > 0.7, "Confidence too low: {}", report.confidence);
 }
 
 #[test]
@@ -61,11 +57,8 @@ fn test_missing_version_fails() {
     let report = registry.evaluate(&module);
 
     // F001 should fail
-    let f001_result = report
-        .results
-        .iter()
-        .find(|(id, _, _, _)| id == "F001")
-        .map(|(_, _, _, r)| r);
+    let f001_result =
+        report.results.iter().find(|(id, _, _, _)| id == "F001").map(|(_, _, _, r)| r);
     assert!(f001_result.is_some());
     assert!(f001_result.unwrap().is_fail());
 }

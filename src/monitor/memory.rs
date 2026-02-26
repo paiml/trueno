@@ -17,12 +17,7 @@ impl GpuMemoryMetrics {
     /// Create new memory metrics
     #[must_use]
     pub const fn new(total: u64, used: u64, free: u64) -> Self {
-        Self {
-            total,
-            used,
-            free,
-            allocations: 0,
-        }
+        Self { total, used, free, allocations: 0 }
     }
 
     /// Calculate usage percentage (0.0 - 100.0)

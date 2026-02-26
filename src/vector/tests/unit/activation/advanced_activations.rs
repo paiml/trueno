@@ -75,11 +75,7 @@ fn test_gelu_large_negative() {
     let result = v.gelu().unwrap();
 
     for &val in result.as_slice() {
-        assert!(
-            val.abs() < 0.001,
-            "gelu should approach 0 for large negative inputs, got {}",
-            val
-        );
+        assert!(val.abs() < 0.001, "gelu should approach 0 for large negative inputs, got {}", val);
     }
 }
 

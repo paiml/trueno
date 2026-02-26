@@ -47,10 +47,7 @@ fn assert_unary_transform(
     // SAFETY: test-only; result matches input length
     unsafe { op(input, &mut result) };
     for (i, (&val, &exp)) in result.iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (val - exp).abs() < tol,
-            "mismatch at {i}: got {val}, expected {exp}"
-        );
+        assert!((val - exp).abs() < tol, "mismatch at {i}: got {val}, expected {exp}");
     }
 }
 
@@ -67,10 +64,7 @@ fn assert_unary_large(
     unsafe { op(&input, &mut result) };
     for (i, &val) in result.iter().enumerate() {
         let expected = reference_fn(input[i]);
-        assert!(
-            (val - expected).abs() < tol,
-            "{label} large mismatch at {i}: {val} vs {expected}"
-        );
+        assert!((val - expected).abs() < tol, "{label} large mismatch at {i}: {val} vs {expected}");
     }
 }
 
@@ -100,10 +94,7 @@ fn assert_reduction_f32(expected: f32, tol: f32, op: unsafe fn(&[f32]) -> f32) {
     let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
     // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
     let result = unsafe { op(&a) };
-    assert!(
-        (result - expected).abs() < tol,
-        "expected {expected}, got {result}"
-    );
+    assert!((result - expected).abs() < tol, "expected {expected}, got {result}");
 }
 
 /// Helper: test an index-returning reduction on sequential 1..=32 input.

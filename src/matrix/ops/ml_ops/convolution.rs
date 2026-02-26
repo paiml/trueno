@@ -208,9 +208,8 @@ mod gpu_tests {
         let kernel_cols = 3;
 
         // Fill input with sequential values for easy verification
-        let input_data: Vec<f32> = (0..input_rows * input_cols)
-            .map(|i| (i % 100) as f32 * 0.1)
-            .collect();
+        let input_data: Vec<f32> =
+            (0..input_rows * input_cols).map(|i| (i % 100) as f32 * 0.1).collect();
 
         // Identity-like kernel: center element = 1.0, rest = 0.0
         let mut kernel_data = vec![0.0f32; kernel_rows * kernel_cols];
@@ -221,9 +220,7 @@ mod gpu_tests {
         let kernel = Matrix::from_vec(kernel_rows, kernel_cols, kernel_data.clone())
             .expect("valid kernel matrix");
 
-        let result = input
-            .convolve2d(&kernel)
-            .expect("convolve2d should succeed");
+        let result = input.convolve2d(&kernel).expect("convolve2d should succeed");
 
         assert_eq!(result.rows(), 100);
         assert_eq!(result.cols(), 100);
@@ -276,9 +273,7 @@ mod gpu_tests {
         let kernel =
             Matrix::from_vec(kernel_rows, kernel_cols, kernel_data).expect("valid kernel matrix");
 
-        let result = input
-            .convolve2d(&kernel)
-            .expect("convolve2d should succeed");
+        let result = input.convolve2d(&kernel).expect("convolve2d should succeed");
 
         assert_eq!(result.rows(), 101);
         assert_eq!(result.cols(), 101);
@@ -311,9 +306,8 @@ mod gpu_tests {
         let kernel_cols = 3;
 
         // Horizontal gradient: each row is constant, increases per row
-        let input_data: Vec<f32> = (0..input_rows * input_cols)
-            .map(|i| (i / input_cols) as f32)
-            .collect();
+        let input_data: Vec<f32> =
+            (0..input_rows * input_cols).map(|i| (i / input_cols) as f32).collect();
 
         // Vertical edge detection kernel (Sobel-like simplified)
         let kernel_data = vec![-1.0, 0.0, 1.0, -2.0, 0.0, 2.0, -1.0, 0.0, 1.0];
@@ -323,9 +317,7 @@ mod gpu_tests {
         let kernel = Matrix::from_vec(kernel_rows, kernel_cols, kernel_data.clone())
             .expect("valid kernel matrix");
 
-        let result = input
-            .convolve2d(&kernel)
-            .expect("convolve2d should succeed");
+        let result = input.convolve2d(&kernel).expect("convolve2d should succeed");
 
         // Verify against scalar reference
         let expected = reference_convolve2d(

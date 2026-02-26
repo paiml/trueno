@@ -42,10 +42,7 @@ fn main() {
 
     // Print per-brick stats
     println!("Per-Brick Timing:");
-    println!(
-        "{:20} {:>10} {:>10} {:>8}",
-        "Brick", "Avg (µs)", "Total (µs)", "Count"
-    );
+    println!("{:20} {:>10} {:>10} {:>8}", "Brick", "Avg (µs)", "Total (µs)", "Count");
     println!("{}", "-".repeat(52));
 
     for brick_id in [
@@ -69,20 +66,13 @@ fn main() {
 
     // Print category breakdown
     println!("\nCategory Breakdown:");
-    println!(
-        "{:12} {:>10} {:>8} {:>10}",
-        "Category", "Avg (µs)", "Pct", "Samples"
-    );
+    println!("{:12} {:>10} {:>8} {:>10}", "Category", "Avg (µs)", "Pct", "Samples");
     println!("{}", "-".repeat(44));
 
     let cats = profiler.category_stats();
     let total = profiler.total_ns();
 
-    for cat in [
-        BrickCategory::Norm,
-        BrickCategory::Attention,
-        BrickCategory::Ffn,
-    ] {
+    for cat in [BrickCategory::Norm, BrickCategory::Attention, BrickCategory::Ffn] {
         let cs = &cats[cat as usize];
         if cs.count > 0 {
             println!(

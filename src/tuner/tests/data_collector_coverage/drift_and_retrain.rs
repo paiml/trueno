@@ -251,11 +251,7 @@ fn auto_retrain_marks_trained_on_success() {
             .model_params_b(1.0 + (i as f32) * 0.1)
             .hidden_dim(2048)
             .batch_size((i as u32) % 16 + 1)
-            .quant_type(if i % 2 == 0 {
-                QuantType::Q4K
-            } else {
-                QuantType::Q8_0
-            })
+            .quant_type(if i % 2 == 0 { QuantType::Q4K } else { QuantType::Q8_0 })
             .build();
         c.samples.push(TrainingSample {
             features,

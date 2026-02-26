@@ -31,17 +31,12 @@ fn test_fused_qkv_op_execute_small() {
     let op = FusedQKVOp::new(hidden_size, num_heads, num_kv_heads);
 
     // Identity-like weights for testing
-    let q_weight = vec![
-        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
-    ];
+    let q_weight =
+        vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0];
     let k_weight = q_weight.clone();
     let v_weight = q_weight.clone();
 
-    let weights = FusedQKVWeights {
-        q_weight,
-        k_weight,
-        v_weight,
-    };
+    let weights = FusedQKVWeights { q_weight, k_weight, v_weight };
 
     let x = vec![1.0, 2.0, 3.0, 4.0];
     let (q, k, v) = op.execute((x.clone(), weights), Backend::Scalar).unwrap();
@@ -70,11 +65,7 @@ fn test_fused_qkv_op_size_mismatch() {
 fn test_fused_qkv_op_tokens() {
     // hidden=1024, kv_dim=256 (GQA with 4 heads, 2 kv_heads)
     let op = FusedQKVOp::new(1024, 4, 2);
-    let weights = FusedQKVWeights {
-        q_weight: vec![],
-        k_weight: vec![],
-        v_weight: vec![],
-    };
+    let weights = FusedQKVWeights { q_weight: vec![], k_weight: vec![], v_weight: vec![] };
     let tokens = op.tokens(&(vec![], weights));
     // Q (1024) + K (512) + V (512) = 2048
     assert_eq!(tokens, 1024 + 512 + 512);
@@ -122,10 +113,7 @@ fn test_fused_gate_up_op_execute_small() {
         0.5, 0.5, // up[2] = 0.5 * (x[0] + x[1])
     ];
 
-    let weights = FusedGateUpWeights {
-        gate_weight,
-        up_weight,
-    };
+    let weights = FusedGateUpWeights { gate_weight, up_weight };
 
     let x = vec![2.0, 3.0];
     let output = op.execute((x, weights), Backend::Scalar).unwrap();
@@ -142,10 +130,7 @@ fn test_fused_gate_up_op_execute_small() {
 #[test]
 fn test_fused_gate_up_op_size_mismatch() {
     let op = FusedGateUpOp::new(4, 8);
-    let weights = FusedGateUpWeights {
-        gate_weight: vec![0.0; 32],
-        up_weight: vec![0.0; 32],
-    };
+    let weights = FusedGateUpWeights { gate_weight: vec![0.0; 32], up_weight: vec![0.0; 32] };
     let x = vec![1.0, 2.0, 3.0]; // Wrong size (should be 4)
 
     let result = op.execute((x, weights), Backend::Scalar);
@@ -155,10 +140,7 @@ fn test_fused_gate_up_op_size_mismatch() {
 #[test]
 fn test_fused_gate_up_op_tokens() {
     let op = FusedGateUpOp::new(1024, 4096);
-    let weights = FusedGateUpWeights {
-        gate_weight: vec![],
-        up_weight: vec![],
-    };
+    let weights = FusedGateUpWeights { gate_weight: vec![], up_weight: vec![] };
     let tokens = op.tokens(&(vec![], weights));
     assert_eq!(tokens, 4096);
 }
@@ -195,9 +177,7 @@ fn test_fused_ops_brick_layer() {
     let qkv_brick = ComputeBrick::new(FusedQKVOp::new(1024, 8, 8)).budget_tok_per_sec(100_000.0);
     let ffn_brick = ComputeBrick::new(FusedGateUpOp::new(1024, 4096)).budget_tok_per_sec(50_000.0); // FFN is typically slower
 
-    let layer = BrickLayer::new()
-        .with_brick(&qkv_brick)
-        .with_brick(&ffn_brick);
+    let layer = BrickLayer::new().with_brick(&qkv_brick).with_brick(&ffn_brick);
 
     // Throughput ceiling should be the FFN (bottleneck)
     assert!((layer.throughput_ceiling() - 50_000.0).abs() < 1.0);
@@ -219,10 +199,7 @@ fn test_fused_qkv_weights_clone() {
 
 #[test]
 fn test_fused_gate_up_weights_clone() {
-    let weights = FusedGateUpWeights {
-        gate_weight: vec![1.0, 2.0],
-        up_weight: vec![3.0, 4.0],
-    };
+    let weights = FusedGateUpWeights { gate_weight: vec![1.0, 2.0], up_weight: vec![3.0, 4.0] };
     let cloned = weights.clone();
     assert_eq!(cloned.gate_weight, weights.gate_weight);
     assert_eq!(cloned.up_weight, weights.up_weight);
@@ -248,21 +225,14 @@ fn test_fused_gate_up_op_clone() {
 
 #[test]
 fn test_fused_qkv_weights_debug() {
-    let weights = FusedQKVWeights {
-        q_weight: vec![1.0],
-        k_weight: vec![2.0],
-        v_weight: vec![3.0],
-    };
+    let weights = FusedQKVWeights { q_weight: vec![1.0], k_weight: vec![2.0], v_weight: vec![3.0] };
     let debug_str = format!("{:?}", weights);
     assert!(debug_str.contains("FusedQKVWeights"));
 }
 
 #[test]
 fn test_fused_gate_up_weights_debug() {
-    let weights = FusedGateUpWeights {
-        gate_weight: vec![1.0],
-        up_weight: vec![2.0],
-    };
+    let weights = FusedGateUpWeights { gate_weight: vec![1.0], up_weight: vec![2.0] };
     let debug_str = format!("{:?}", weights);
     assert!(debug_str.contains("FusedGateUpWeights"));
 }
@@ -446,11 +416,7 @@ fn test_brick_timer_debug() {
 
 #[test]
 fn test_brick_sample_clone() {
-    let sample = BrickSample {
-        brick_id: 42,
-        elapsed_ns: 1000,
-        elements: 5,
-    };
+    let sample = BrickSample { brick_id: 42, elapsed_ns: 1000, elements: 5 };
     let cloned = sample;
     assert_eq!(cloned.brick_id, 42);
     assert_eq!(cloned.elapsed_ns, 1000);

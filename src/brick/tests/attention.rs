@@ -56,10 +56,7 @@ fn test_attention_op_dimension_validation() {
     let op = AttentionOp::new(2, 3, 4);
 
     // Wrong Q size
-    let result = op.execute(
-        (vec![0.0; 4], vec![0.0; 12], vec![0.0; 12]),
-        Backend::Scalar,
-    );
+    let result = op.execute((vec![0.0; 4], vec![0.0; 12], vec![0.0; 12]), Backend::Scalar);
     assert!(result.is_err());
 
     // Wrong K size
@@ -143,10 +140,7 @@ fn falsify_att_005_weights_bounded() {
         AttentionOp::simd_softmax_row(&mut scores);
         for (i, &w) in scores.iter().enumerate() {
             // Note: weights can be 0.0 due to f32 exp() underflow for extreme inputs
-            assert!(
-                w >= 0.0,
-                "FALSIFIED ATT-005: weight[{i}] = {w} < 0 (input: {scores_input:?})"
-            );
+            assert!(w >= 0.0, "FALSIFIED ATT-005: weight[{i}] = {w} < 0 (input: {scores_input:?})");
             assert!(
                 w <= 1.0 + 1e-6,
                 "FALSIFIED ATT-005: weight[{i}] = {w} > 1 (input: {scores_input:?})"
@@ -173,12 +167,8 @@ fn falsify_att_002_output_convexity() {
     for i in 0..3 {
         for d in 0..4 {
             let out_val = result[i * 4 + d];
-            let v_col_min = (0..3)
-                .map(|j| v[j * 4 + d])
-                .fold(f32::INFINITY, f32::min);
-            let v_col_max = (0..3)
-                .map(|j| v[j * 4 + d])
-                .fold(f32::NEG_INFINITY, f32::max);
+            let v_col_min = (0..3).map(|j| v[j * 4 + d]).fold(f32::INFINITY, f32::min);
+            let v_col_max = (0..3).map(|j| v[j * 4 + d]).fold(f32::NEG_INFINITY, f32::max);
 
             assert!(
                 out_val >= v_col_min - 1e-4 && out_val <= v_col_max + 1e-4,
@@ -297,9 +287,8 @@ mod att_proptest_falsify {
 
 #[test]
 fn test_compute_brick_run() {
-    let brick = ComputeBrick::new(DotOp::new(4))
-        .budget_tok_per_sec(1_000_000.0)
-        .backend(Backend::Scalar);
+    let brick =
+        ComputeBrick::new(DotOp::new(4)).budget_tok_per_sec(1_000_000.0).backend(Backend::Scalar);
 
     let a = vec![1.0, 2.0, 3.0, 4.0];
     let b = vec![5.0, 6.0, 7.0, 8.0];
@@ -312,9 +301,7 @@ fn test_compute_brick_run() {
 
 #[test]
 fn test_compute_brick_verify() {
-    let brick = ComputeBrick::new(DotOp::new(4))
-        .assert_finite()
-        .assert_bounds(-1000.0, 1000.0);
+    let brick = ComputeBrick::new(DotOp::new(4)).assert_finite().assert_bounds(-1000.0, 1000.0);
 
     let verification = brick.verify();
     assert!(verification.is_valid());
@@ -334,9 +321,7 @@ fn test_brick_layer() {
 
     let add_brick = ComputeBrick::new(AddOp::new(100)).budget_tok_per_sec(30_000.0); // Bottleneck
 
-    let layer = BrickLayer::new()
-        .with_brick(&dot_brick)
-        .with_brick(&add_brick);
+    let layer = BrickLayer::new().with_brick(&dot_brick).with_brick(&add_brick);
 
     assert!((layer.throughput_ceiling() - 30_000.0).abs() < 1.0);
     assert_eq!(layer.bottleneck(), Some("add"));

@@ -20,11 +20,7 @@ fn golden_shr_u32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("shr.b32"),
-        "GOLDEN FAIL: shr.b32 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("shr.b32"), "GOLDEN FAIL: shr.b32 not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -36,11 +32,7 @@ fn golden_shr_u32_imm_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("shr.b32"),
-        "GOLDEN FAIL: shr.b32 imm not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("shr.b32"), "GOLDEN FAIL: shr.b32 imm not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -53,11 +45,7 @@ fn golden_shl_u32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("shl.b32"),
-        "GOLDEN FAIL: shl.b32 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("shl.b32"), "GOLDEN FAIL: shl.b32 not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -69,11 +57,7 @@ fn golden_shl_u32_imm_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("shl.b32"),
-        "GOLDEN FAIL: shl.b32 imm not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("shl.b32"), "GOLDEN FAIL: shl.b32 imm not found\nPTX:\n{}", ptx);
 }
 
 // ============================================================================
@@ -90,11 +74,7 @@ fn golden_or_u32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("or.b32"),
-        "GOLDEN FAIL: or.b32 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("or.b32"), "GOLDEN FAIL: or.b32 not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -108,11 +88,7 @@ fn golden_or_u32_into_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("or.b32"),
-        "GOLDEN FAIL: or.b32 into not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("or.b32"), "GOLDEN FAIL: or.b32 into not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -124,11 +100,7 @@ fn golden_and_u32_imm_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("and.b32"),
-        "GOLDEN FAIL: and.b32 imm not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("and.b32"), "GOLDEN FAIL: and.b32 imm not found\nPTX:\n{}", ptx);
 }
 
 // ============================================================================
@@ -148,11 +120,7 @@ fn golden_selp_u32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("selp.u32"),
-        "GOLDEN FAIL: selp.u32 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("selp.u32"), "GOLDEN FAIL: selp.u32 not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -168,11 +136,7 @@ fn golden_selp_f32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("selp.f32"),
-        "GOLDEN FAIL: selp.f32 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("selp.f32"), "GOLDEN FAIL: selp.f32 not found\nPTX:\n{}", ptx);
 }
 
 // ============================================================================
@@ -188,11 +152,7 @@ fn golden_shr_u32_inplace_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("shr.b32"),
-        "GOLDEN FAIL: shr.b32 inplace not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("shr.b32"), "GOLDEN FAIL: shr.b32 inplace not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -205,11 +165,7 @@ fn golden_max_f32_inplace_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("max.f32"),
-        "GOLDEN FAIL: max.f32 inplace not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("max.f32"), "GOLDEN FAIL: max.f32 inplace not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -239,11 +195,7 @@ fn golden_add_u32_reg_inplace_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("add.u32"),
-        "GOLDEN FAIL: add.u32 reg inplace not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("add.u32"), "GOLDEN FAIL: add.u32 reg inplace not found\nPTX:\n{}", ptx);
 }
 
 // ============================================================================
@@ -260,11 +212,7 @@ fn golden_mov_f32_reg_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("mov.f32"),
-        "GOLDEN FAIL: mov.f32 reg not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("mov.f32"), "GOLDEN FAIL: mov.f32 reg not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -277,11 +225,7 @@ fn golden_mov_u32_reg_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("mov.u32"),
-        "GOLDEN FAIL: mov.u32 reg not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("mov.u32"), "GOLDEN FAIL: mov.u32 reg not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -294,11 +238,7 @@ fn golden_mov_u64_reg_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("mov.u64"),
-        "GOLDEN FAIL: mov.u64 reg not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("mov.u64"), "GOLDEN FAIL: mov.u64 reg not found\nPTX:\n{}", ptx);
 }
 
 // ============================================================================
@@ -394,11 +334,7 @@ fn golden_min_s32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("min.s32"),
-        "GOLDEN FAIL: min.s32 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("min.s32"), "GOLDEN FAIL: min.s32 not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -411,11 +347,7 @@ fn golden_max_s32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("max.s32"),
-        "GOLDEN FAIL: max.s32 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("max.s32"), "GOLDEN FAIL: max.s32 not found\nPTX:\n{}", ptx);
 }
 
 // ============================================================================
@@ -430,11 +362,7 @@ fn golden_const_f32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("mov.f32"),
-        "GOLDEN FAIL: const_f32 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("mov.f32"), "GOLDEN FAIL: const_f32 not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -445,11 +373,7 @@ fn golden_const_u32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("mov.u32"),
-        "GOLDEN FAIL: const_u32 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("mov.u32"), "GOLDEN FAIL: const_u32 not found\nPTX:\n{}", ptx);
 }
 
 // ============================================================================
@@ -458,12 +382,10 @@ fn golden_const_u32_instruction() {
 
 #[test]
 fn golden_shared_ptr_instruction() {
-    let kernel = PtxKernel::new("test_shared_ptr")
-        .shared_memory(256)
-        .build(|ctx| {
-            let _ptr = ctx.shared_ptr();
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_shared_ptr").shared_memory(256).build(|ctx| {
+        let _ptr = ctx.shared_ptr();
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     assert!(

@@ -47,9 +47,7 @@ fn main() {
         GpuBuffer::new(&ctx, 3).expect("Failed to allocate output buffer");
 
     let init_val = [0xBAD_BADu32; 3];
-    output_buf
-        .copy_from_host(&init_val)
-        .expect("Failed to init output");
+    output_buf.copy_from_host(&init_val).expect("Failed to init output");
 
     let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("Failed to load PTX");
     println!("\nModule loaded successfully");
@@ -76,9 +74,7 @@ fn main() {
 
     // Read results
     let mut results = [0u32; 3];
-    output_buf
-        .copy_to_host(&mut results)
-        .expect("Failed to copy results");
+    output_buf.copy_to_host(&mut results).expect("Failed to copy results");
 
     println!();
     println!("=== RESULTS ===");
@@ -93,10 +89,7 @@ fn main() {
         );
     }
 
-    let all_ok = results
-        .iter()
-        .enumerate()
-        .all(|(i, &r)| r == 0xDEAD0000 + (i as u32 + 1) * 0x100);
+    let all_ok = results.iter().enumerate().all(|(i, &r)| r == 0xDEAD0000 + (i as u32 + 1) * 0x100);
     if all_ok {
         println!("\nSUCCESS: All warps stored and loaded correctly!");
     } else {

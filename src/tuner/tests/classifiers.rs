@@ -5,15 +5,9 @@ use super::super::*;
 // Bottleneck classification tests
 #[test]
 fn test_bottleneck_recommended_action() {
-    assert!(BottleneckClass::MemoryBound
-        .recommended_action()
-        .contains("batch size"));
-    assert!(BottleneckClass::LaunchBound
-        .recommended_action()
-        .contains("CUDA graphs"));
-    assert!(BottleneckClass::AttentionBound
-        .recommended_action()
-        .contains("Flash Decoding"));
+    assert!(BottleneckClass::MemoryBound.recommended_action().contains("batch size"));
+    assert!(BottleneckClass::LaunchBound.recommended_action().contains("CUDA graphs"));
+    assert!(BottleneckClass::AttentionBound.recommended_action().contains("Flash Decoding"));
 }
 
 // Kernel classifier tests
@@ -112,10 +106,7 @@ fn test_bottleneck_display() {
     assert_eq!(format!("{}", BottleneckClass::MemoryBound), "MemoryBound");
     assert_eq!(format!("{}", BottleneckClass::ComputeBound), "ComputeBound");
     assert_eq!(format!("{}", BottleneckClass::LaunchBound), "LaunchBound");
-    assert_eq!(
-        format!("{}", BottleneckClass::AttentionBound),
-        "AttentionBound"
-    );
+    assert_eq!(format!("{}", BottleneckClass::AttentionBound), "AttentionBound");
 }
 
 #[test]
@@ -149,10 +140,7 @@ fn test_bottleneck_classifier() {
     let features = TunerFeatures::builder().batch_size(4).build();
     let pred = classifier.predict(&features);
     // Default prediction should be MemoryBound for inference
-    assert!(matches!(
-        pred.class,
-        BottleneckClass::MemoryBound | BottleneckClass::Unknown
-    ));
+    assert!(matches!(pred.class, BottleneckClass::MemoryBound | BottleneckClass::Unknown));
 }
 
 #[test]

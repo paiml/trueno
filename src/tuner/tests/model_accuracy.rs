@@ -23,21 +23,14 @@ fn f001_throughput_prediction_reasonable() {
 
 #[test]
 fn f010_prediction_latency_under_1ms() {
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let tuner = BrickTuner::new();
     let start = Instant::now();
     let _rec = tuner.recommend(&features);
     let elapsed = start.elapsed();
 
-    assert!(
-        elapsed.as_millis() < 1,
-        "Prediction took {}ms",
-        elapsed.as_millis()
-    );
+    assert!(elapsed.as_millis() < 1, "Prediction took {}ms", elapsed.as_millis());
 }
 
 #[test]
@@ -67,18 +60,10 @@ fn f015_batch_size_monotonic() {
 fn f019_cuda_graphs_benefit_predicted() {
     let regressor = ThroughputRegressor::new();
 
-    let pred_no_graph = regressor.predict(
-        &TunerFeatures::builder()
-            .batch_size(1)
-            .cuda_graphs(false)
-            .build(),
-    );
-    let pred_with_graph = regressor.predict(
-        &TunerFeatures::builder()
-            .batch_size(1)
-            .cuda_graphs(true)
-            .build(),
-    );
+    let pred_no_graph =
+        regressor.predict(&TunerFeatures::builder().batch_size(1).cuda_graphs(false).build());
+    let pred_with_graph =
+        regressor.predict(&TunerFeatures::builder().batch_size(1).cuda_graphs(true).build());
 
     // CUDA graphs should predict higher throughput
     assert!(

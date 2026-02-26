@@ -25,10 +25,7 @@ impl TunerDataCollector {
 
     /// Get feedback for a sample
     pub fn get_feedback(&self, sample_index: usize) -> UserFeedback {
-        self.feedback
-            .get(sample_index)
-            .copied()
-            .unwrap_or(UserFeedback::None)
+        self.feedback.get(sample_index).copied().unwrap_or(UserFeedback::None)
     }
 
     /// Record prediction error for concept drift detection
@@ -38,11 +35,7 @@ impl TunerDataCollector {
         }
 
         // Compute relative error (0.0 = perfect, 1.0 = 100% error)
-        let error = if actual > 0.0 {
-            ((predicted - actual) / actual).abs().min(1.0)
-        } else {
-            1.0
-        };
+        let error = if actual > 0.0 { ((predicted - actual) / actual).abs().min(1.0) } else { 1.0 };
 
         // Add to sliding window
         self.error_window.push(error);
@@ -55,10 +48,7 @@ impl TunerDataCollector {
 
     /// Detect concept drift based on prediction error trends
     pub fn detect_concept_drift(&self) -> ConceptDriftStatus {
-        let samples_since_training = self
-            .samples
-            .len()
-            .saturating_sub(self.samples_at_last_train);
+        let samples_since_training = self.samples.len().saturating_sub(self.samples_at_last_train);
 
         // Not enough data for drift detection
         if self.error_window.len() < 10 {
@@ -120,10 +110,7 @@ impl TunerDataCollector {
             return false;
         }
 
-        let samples_since = self
-            .samples
-            .len()
-            .saturating_sub(self.samples_at_last_train);
+        let samples_since = self.samples.len().saturating_sub(self.samples_at_last_train);
 
         // Retrain if we have enough new samples
         if samples_since >= self.retrain_threshold {
@@ -146,21 +133,10 @@ impl TunerDataCollector {
         let drift = self.detect_concept_drift();
 
         // Count feedback types
-        let accepted_count = self
-            .feedback
-            .iter()
-            .filter(|f| **f == UserFeedback::Accepted)
-            .count();
-        let rejected_count = self
-            .feedback
-            .iter()
-            .filter(|f| **f == UserFeedback::Rejected)
-            .count();
-        let alternative_count = self
-            .feedback
-            .iter()
-            .filter(|f| **f == UserFeedback::Alternative)
-            .count();
+        let accepted_count = self.feedback.iter().filter(|f| **f == UserFeedback::Accepted).count();
+        let rejected_count = self.feedback.iter().filter(|f| **f == UserFeedback::Rejected).count();
+        let alternative_count =
+            self.feedback.iter().filter(|f| **f == UserFeedback::Alternative).count();
 
         TrainingStats {
             total_samples: self.samples.len(),

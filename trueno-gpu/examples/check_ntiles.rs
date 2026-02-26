@@ -23,17 +23,13 @@ fn main() {
     println!("\n=== Value Analysis ===");
 
     // The n_tiles register should have value 2 (k=64, tile=32)
-    let mov_2_count = ptx
-        .lines()
-        .filter(|l: &&str| l.contains("mov.u32") && l.trim().ends_with(", 2;"))
-        .count();
+    let mov_2_count =
+        ptx.lines().filter(|l: &&str| l.contains("mov.u32") && l.trim().ends_with(", 2;")).count();
     println!("mov.u32 ..., 2; occurrences: {}", mov_2_count);
 
     // Check for potential bugs - if n_tiles is 1 instead of 2
-    let mov_1_count = ptx
-        .lines()
-        .filter(|l: &&str| l.contains("mov.u32") && l.trim().ends_with(", 1;"))
-        .count();
+    let mov_1_count =
+        ptx.lines().filter(|l: &&str| l.contains("mov.u32") && l.trim().ends_with(", 1;")).count();
     println!("mov.u32 ..., 1; occurrences: {}", mov_1_count);
 
     // Print all mov.u32 lines

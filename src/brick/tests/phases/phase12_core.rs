@@ -27,11 +27,7 @@ fn test_f156_perf_metrics_accuracy() {
 
     // Prefill: 100 tokens / 200ms = 500 tok/s
     let prefill_tps = metrics.prefill_tokens_per_second();
-    assert!(
-        (prefill_tps - 500.0).abs() < 1.0,
-        "Expected ~500 tok/s, got {}",
-        prefill_tps
-    );
+    assert!((prefill_tps - 500.0).abs() < 1.0, "Expected ~500 tok/s, got {}", prefill_tps);
 }
 
 /// F157: Direct I/O alignment - 4KB aligned
@@ -41,10 +37,7 @@ fn test_f157_direct_io_alignment() {
     let buf = AlignedBuffer::new(8192).expect("allocation should succeed");
 
     // Verify 4KB alignment
-    assert!(
-        is_direct_io_aligned(buf.as_ptr()),
-        "Buffer should be 4KB aligned"
-    );
+    assert!(is_direct_io_aligned(buf.as_ptr()), "Buffer should be 4KB aligned");
     assert_eq!(buf.as_ptr() as usize % DIRECT_IO_ALIGNMENT, 0);
     assert_eq!(buf.len(), 8192);
     assert!(!buf.is_empty());
@@ -100,17 +93,10 @@ fn test_f161_cache_alignment() {
     let aligned: CacheAligned<AtomicU64> = CacheAligned::new(AtomicU64::new(42));
 
     // Verify alignment
-    assert_eq!(
-        std::mem::align_of_val(&aligned),
-        64,
-        "Should be 64-byte aligned"
-    );
+    assert_eq!(std::mem::align_of_val(&aligned), 64, "Should be 64-byte aligned");
 
     // Verify size is at least 64 bytes
-    assert!(
-        std::mem::size_of_val(&aligned) >= 64,
-        "Should be at least 64 bytes"
-    );
+    assert!(std::mem::size_of_val(&aligned) >= 64, "Should be at least 64 bytes");
 
     // Verify value is correct
     assert_eq!(aligned.get().load(Ordering::Relaxed), 42);
@@ -353,18 +339,12 @@ fn test_f174_serve_limits_builder() {
 /// F175: LimitError display
 #[test]
 fn test_f175_limit_error_display() {
-    let err = LimitError::TooManyHeaders {
-        count: 150,
-        max: 100,
-    };
+    let err = LimitError::TooManyHeaders { count: 150, max: 100 };
     let msg = format!("{}", err);
     assert!(msg.contains("150"));
     assert!(msg.contains("100"));
 
-    let err = LimitError::BodyTooLarge {
-        size: 5_000_000,
-        max: 2_000_000,
-    };
+    let err = LimitError::BodyTooLarge { size: 5_000_000, max: 2_000_000 };
     let msg = format!("{}", err);
     assert!(msg.contains("5000000"));
     assert!(msg.contains("2000000"));

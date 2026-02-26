@@ -52,13 +52,7 @@ impl GpuMonitor {
         let history = Arc::new(RwLock::new(VecDeque::with_capacity(config.history_size)));
         let stop_signal = Arc::new(Mutex::new(false));
 
-        let monitor = Self {
-            device_info,
-            config,
-            history,
-            _background_handle: None,
-            stop_signal,
-        };
+        let monitor = Self { device_info, config, history, _background_handle: None, stop_signal };
 
         Ok(monitor)
     }
@@ -66,9 +60,7 @@ impl GpuMonitor {
     /// Create monitor without GPU feature (for testing)
     #[cfg(not(feature = "gpu"))]
     pub fn new(_device_index: u32, _config: MonitorConfig) -> Result<Self, MonitorError> {
-        Err(MonitorError::NotAvailable(
-            "GPU feature not enabled".to_string(),
-        ))
+        Err(MonitorError::NotAvailable("GPU feature not enabled".to_string()))
     }
 
     /// Create a mock monitor for testing (no GPU required)
@@ -127,18 +119,13 @@ impl GpuMonitor {
             .read()
             .ok()
             .and_then(|h| h.back().cloned())
-            .ok_or(MonitorError::QueryFailed(
-                "No metrics available".to_string(),
-            ))
+            .ok_or(MonitorError::QueryFailed("No metrics available".to_string()))
     }
 
     /// Get history buffer (read-only snapshot)
     #[must_use]
     pub fn history(&self) -> Vec<GpuMetrics> {
-        self.history
-            .read()
-            .map(|h| h.iter().cloned().collect())
-            .unwrap_or_default()
+        self.history.read().map(|h| h.iter().cloned().collect()).unwrap_or_default()
     }
 
     /// Get number of samples in history

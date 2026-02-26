@@ -14,9 +14,7 @@ fn main() {
         let matrix = Matrix::from_vec(
             rows,
             cols,
-            (0..rows * cols)
-                .map(|i| ((i % 100) as f32) / 10.0)
-                .collect(),
+            (0..rows * cols).map(|i| ((i % 100) as f32) / 10.0).collect(),
         )
         .expect("Failed to create matrix");
 
@@ -39,10 +37,7 @@ fn main() {
         let elapsed = start.elapsed();
         let avg_time_us = elapsed.as_micros() as f64 / iterations as f64;
 
-        println!(
-            "Average time: {:.2} µs ({} iterations)",
-            avg_time_us, iterations
-        );
+        println!("Average time: {:.2} µs ({} iterations)", avg_time_us, iterations);
         println!(
             "Throughput: {:.2} GFLOPS\n",
             (2.0 * rows as f64 * cols as f64) / (avg_time_us * 1000.0)

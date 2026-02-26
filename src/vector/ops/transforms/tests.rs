@@ -120,10 +120,7 @@ fn test_pow_square_root() {
 fn test_abs_gpu_backend_returns_error() {
     let v = Vector::from_slice_with_backend(&[1.0, -2.0, 3.0], Backend::GPU);
     let result = v.abs();
-    assert!(matches!(
-        result,
-        Err(TruenoError::UnsupportedBackend(Backend::GPU))
-    ));
+    assert!(matches!(result, Err(TruenoError::UnsupportedBackend(Backend::GPU))));
 }
 
 #[test]
@@ -140,10 +137,7 @@ fn test_abs_auto_backend_returns_error() {
 fn test_clamp_gpu_backend_returns_error() {
     let v = Vector::from_slice_with_backend(&[1.0, 2.0, 3.0], Backend::GPU);
     let result = v.clamp(0.0, 2.0);
-    assert!(matches!(
-        result,
-        Err(TruenoError::UnsupportedBackend(Backend::GPU))
-    ));
+    assert!(matches!(result, Err(TruenoError::UnsupportedBackend(Backend::GPU))));
 }
 
 #[test]
@@ -172,10 +166,7 @@ fn test_lerp_gpu_backend_returns_error() {
     let a = Vector::from_slice_with_backend(&[1.0, 2.0], Backend::GPU);
     let b = Vector::from_slice_with_backend(&[3.0, 4.0], Backend::GPU);
     let result = a.lerp(&b, 0.5);
-    assert!(matches!(
-        result,
-        Err(TruenoError::UnsupportedBackend(Backend::GPU))
-    ));
+    assert!(matches!(result, Err(TruenoError::UnsupportedBackend(Backend::GPU))));
 }
 
 #[test]
@@ -252,10 +243,7 @@ fn assert_sqrt_backend_eq(data: &[f32], backend: Backend) {
 
 #[test]
 fn test_sqrt_scalar_backend_perfect_squares() {
-    assert_sqrt_backend_eq(
-        &[0.0, 1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0],
-        Backend::Scalar,
-    );
+    assert_sqrt_backend_eq(&[0.0, 1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0], Backend::Scalar);
 }
 
 #[test]
@@ -276,10 +264,7 @@ fn test_sqrt_scalar_backend_edge_cases() {
 #[test]
 fn test_sqrt_sse2_backend_aligned() {
     // 8 elements: exactly 2 SSE2 chunks (4 elements each), no remainder
-    assert_sqrt_backend_eq(
-        &[1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0],
-        Backend::SSE2,
-    );
+    assert_sqrt_backend_eq(&[1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0], Backend::SSE2);
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -287,9 +272,7 @@ fn test_sqrt_sse2_backend_aligned() {
 fn test_sqrt_sse2_backend_remainder() {
     // 11 elements: 2 full SSE2 chunks (8 elements) + 3 remainder
     assert_sqrt_backend_eq(
-        &[
-            1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0, 81.0, 100.0, 121.0,
-        ],
+        &[1.0, 4.0, 9.0, 16.0, 25.0, 36.0, 49.0, 64.0, 81.0, 100.0, 121.0],
         Backend::SSE2,
     );
 }
@@ -329,16 +312,7 @@ fn test_sqrt_avx2_backend_sub_chunk() {
 fn test_sqrt_avx2_backend_edge_cases() {
     // Mix of edge cases: exactly 8 elements for 1 AVX2 chunk
     assert_sqrt_backend_eq(
-        &[
-            0.0,
-            f32::MIN_POSITIVE,
-            1e-38,
-            1.0,
-            100.0,
-            1e10,
-            f32::INFINITY,
-            -4.0,
-        ],
+        &[0.0, f32::MIN_POSITIVE, 1e-38, 1.0, 100.0, 1e10, f32::INFINITY, -4.0],
         Backend::AVX2,
     );
 }
@@ -371,10 +345,7 @@ fn test_sqrt_large_vector() {
     assert_eq!(result.len(), 256);
     for (i, (&input, &output)) in data.iter().zip(result.as_slice().iter()).enumerate() {
         let expected = input.sqrt();
-        assert!(
-            (output - expected).abs() < 1e-5,
-            "index {i}: expected {expected}, got {output}"
-        );
+        assert!((output - expected).abs() < 1e-5, "index {i}: expected {expected}, got {output}");
     }
 }
 
@@ -392,10 +363,7 @@ fn test_sqrt_parallel_path() {
     assert!((result.as_slice()[99] - 10.0).abs() < 1e-4); // sqrt(100) = 10
     let last = result.as_slice()[99_999];
     let expected_last = 100_000.0f32.sqrt();
-    assert!(
-        (last - expected_last).abs() < 1e-1,
-        "last: {last}, expected: {expected_last}"
-    );
+    assert!((last - expected_last).abs() < 1e-1, "last: {last}, expected: {expected_last}");
 }
 
 #[cfg(feature = "parallel")]
@@ -410,16 +378,10 @@ fn test_sqrt_parallel_correctness_vs_scalar() {
     let result_scalar = v_scalar.sqrt().unwrap();
 
     assert_eq!(result_parallel.len(), result_scalar.len());
-    for (i, (&par, &sca)) in result_parallel
-        .as_slice()
-        .iter()
-        .zip(result_scalar.as_slice().iter())
-        .enumerate()
+    for (i, (&par, &sca)) in
+        result_parallel.as_slice().iter().zip(result_scalar.as_slice().iter()).enumerate()
     {
-        assert!(
-            (par - sca).abs() < 1e-6,
-            "index {i}: parallel={par}, scalar={sca}"
-        );
+        assert!((par - sca).abs() < 1e-6, "index {i}: parallel={par}, scalar={sca}");
     }
 }
 
@@ -464,19 +426,12 @@ fn test_sqrt_preserves_backend() {
 #[test]
 fn test_sqrt_subnormal_values() {
     // Subnormal (denormalized) float values
-    let data = vec![
-        f32::MIN_POSITIVE / 2.0,
-        f32::MIN_POSITIVE,
-        f32::MIN_POSITIVE * 4.0,
-    ];
+    let data = vec![f32::MIN_POSITIVE / 2.0, f32::MIN_POSITIVE, f32::MIN_POSITIVE * 4.0];
     let v = Vector::from_slice(&data);
     let result = v.sqrt().unwrap();
     for (i, (&input, &output)) in data.iter().zip(result.as_slice().iter()).enumerate() {
         let expected = input.sqrt();
-        assert!(
-            (output - expected).abs() < 1e-20,
-            "index {i}: expected {expected}, got {output}"
-        );
+        assert!((output - expected).abs() < 1e-20, "index {i}: expected {expected}, got {output}");
     }
 }
 

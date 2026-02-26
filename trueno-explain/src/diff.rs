@@ -169,11 +169,8 @@ fn compare_warning_counts(
     } else {
         Severity::Info
     };
-    let percent_change = if baseline_warns > 0 {
-        (increase as f32 / baseline_warns as f32) * 100.0
-    } else {
-        100.0
-    };
+    let percent_change =
+        if baseline_warns > 0 { (increase as f32 / baseline_warns as f32) * 100.0 } else { 100.0 };
     changes.push(Change {
         metric: "muda_warnings".to_string(),
         baseline: baseline_warns as f32,
@@ -185,20 +182,11 @@ fn compare_warning_counts(
 
 /// Generate a human-readable summary from the list of changes.
 fn build_summary(changes: &[Change]) -> String {
-    let critical_count = changes
-        .iter()
-        .filter(|c| c.severity == Severity::Critical)
-        .count();
-    let warning_count = changes
-        .iter()
-        .filter(|c| c.severity == Severity::Warning)
-        .count();
+    let critical_count = changes.iter().filter(|c| c.severity == Severity::Critical).count();
+    let warning_count = changes.iter().filter(|c| c.severity == Severity::Warning).count();
 
     if critical_count > 0 {
-        format!(
-            "{} critical regression(s), {} warning(s)",
-            critical_count, warning_count
-        )
+        format!("{} critical regression(s), {} warning(s)", critical_count, warning_count)
     } else if warning_count > 0 {
         format!("{} warning(s), no critical regressions", warning_count)
     } else if changes.is_empty() {
@@ -246,12 +234,7 @@ pub fn compare_reports(
     let has_regression = reg_critical || inst_critical || occ_critical;
     let summary = build_summary(&changes);
 
-    DiffReport {
-        name: current.name.clone(),
-        changes,
-        has_regression,
-        summary,
-    }
+    DiffReport { name: current.name.clone(), changes, has_regression, summary }
 }
 
 /// Format diff report as text
@@ -271,11 +254,7 @@ pub fn format_diff_text(report: &DiffReport) -> String {
                 Severity::Warning => "⚠️",
                 Severity::Info => "ℹ️",
             };
-            let direction = if change.percent_change > 0.0 {
-                "↑"
-            } else {
-                "↓"
-            };
+            let direction = if change.percent_change > 0.0 { "↑" } else { "↓" };
             output.push_str(&format!(
                 "{} {}: {} → {} ({}{:.1}%)\n",
                 icon,

@@ -164,11 +164,7 @@ impl BrickTuner {
         // RTX 4090: ~1000 GB/s -> ~150 tok/s for 7B Q4K
         // RTX 3090: ~936 GB/s -> ~140 tok/s
         // A100: ~2000 GB/s -> ~200 tok/s
-        let mem_bw_factor = hw
-            .gpu
-            .as_ref()
-            .map(|g| g.memory_bw_gbps / 1000.0)
-            .unwrap_or(0.5);
+        let mem_bw_factor = hw.gpu.as_ref().map(|g| g.memory_bw_gbps / 1000.0).unwrap_or(0.5);
 
         100.0 * mem_bw_factor as f32
     }

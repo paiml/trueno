@@ -39,19 +39,10 @@ fn main() {
 
     // Verify key PTX features
     println!("\n=== PTX Verification ===");
-    assert!(
-        ptx.contains(".param .u64 a_ptr"),
-        "Missing input activation pointer"
-    );
-    assert!(
-        ptx.contains(".param .u64 b_quant_ptr"),
-        "Missing quantized weights pointer"
-    );
+    assert!(ptx.contains(".param .u64 a_ptr"), "Missing input activation pointer");
+    assert!(ptx.contains(".param .u64 b_quant_ptr"), "Missing quantized weights pointer");
     assert!(ptx.contains(".param .u64 c_ptr"), "Missing output pointer");
-    assert!(
-        ptx.contains("ld.global.b16"),
-        "Missing f16 load (b16 format)"
-    );
+    assert!(ptx.contains("ld.global.b16"), "Missing f16 load (b16 format)");
     assert!(ptx.contains("cvt.f32.f16"), "Missing f16→f32 conversion");
     assert!(ptx.contains("shfl.sync"), "Missing warp shuffle reduction");
     assert!(ptx.contains("min.u32"), "Missing address clamping");
@@ -61,17 +52,11 @@ fn main() {
     println!("\n=== GGML Q4_K Super-block Format ===");
     let ggml_kernel = QuantizeKernel::ggml(m, n, 256); // K must be divisible by 256
     println!("Kernel name: {}", ggml_kernel.name());
-    println!(
-        "Super-blocks per row: {}",
-        ggml_kernel.num_super_blocks_per_row()
-    );
+    println!("Super-blocks per row: {}", ggml_kernel.num_super_blocks_per_row());
 
     let ggml_ptx = ggml_kernel.emit_ptx();
     assert!(ggml_ptx.contains("sb_loop"), "Missing super-block loop");
-    assert!(
-        ggml_ptx.contains("sub_block_loop"),
-        "Missing sub-block loop"
-    );
+    assert!(ggml_ptx.contains("sub_block_loop"), "Missing sub-block loop");
     println!("GGML kernel verified!");
 
     println!("\n=== Example Complete ===");

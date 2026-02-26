@@ -36,10 +36,7 @@ impl KernelClassifier {
     /// Create a classifier with aprender RandomForest (ml-tuner feature)
     #[cfg(feature = "ml-tuner")]
     pub fn with_random_forest(n_estimators: usize) -> Self {
-        Self {
-            accuracy: 0.85,
-            rf_classifier: Some(RandomForestClassifier::new(n_estimators)),
-        }
+        Self { accuracy: 0.85, rf_classifier: Some(RandomForestClassifier::new(n_estimators)) }
     }
 
     /// Train the classifier using aprender RandomForest (ml-tuner feature)
@@ -65,11 +62,8 @@ impl KernelClassifier {
         let x_matrix = Matrix::from_vec(n_samples, n_features, x_data)
             .map_err(|e| TunerError::TrainingFailed(e.to_string()))?;
 
-        let rf = self
-            .rf_classifier
-            .get_or_insert_with(|| RandomForestClassifier::new(50));
-        rf.fit(&x_matrix, &y_data)
-            .map_err(|e| TunerError::TrainingFailed(e.to_string()))?;
+        let rf = self.rf_classifier.get_or_insert_with(|| RandomForestClassifier::new(50));
+        rf.fit(&x_matrix, &y_data).map_err(|e| TunerError::TrainingFailed(e.to_string()))?;
 
         // Calculate accuracy on training data
         let predictions = rf.predict(&x_matrix);
@@ -124,10 +118,6 @@ impl KernelClassifier {
         .take(2)
         .collect();
 
-        KernelRecommendation {
-            top_kernel,
-            confidence,
-            alternatives,
-        }
+        KernelRecommendation { top_kernel, confidence, alternatives }
     }
 }

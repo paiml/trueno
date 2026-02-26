@@ -67,10 +67,7 @@ fn training_sample_serialization_round_trip() {
     assert_eq!(deserialized.throughput_tps, 200.0);
     assert_eq!(deserialized.hardware_id, "test-hw");
     assert!(matches!(deserialized.best_kernel, KernelType::TiledQ4K));
-    assert!(matches!(
-        deserialized.bottleneck,
-        BottleneckClass::MemoryBound
-    ));
+    assert!(matches!(deserialized.bottleneck, BottleneckClass::MemoryBound));
 }
 
 // ============================================================================

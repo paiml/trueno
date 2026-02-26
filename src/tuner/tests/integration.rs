@@ -5,10 +5,7 @@ use crate::brick::BrickProfiler;
 
 #[test]
 fn f066_recommendations_json_valid() {
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let tuner = BrickTuner::new();
     let rec = tuner.recommend(&features);
@@ -45,10 +42,7 @@ fn f071_feature_extractor_deterministic() {
 
 #[test]
 fn f072_prediction_deterministic() {
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let tuner = BrickTuner::new();
     let rec1 = tuner.recommend(&features);
@@ -61,10 +55,7 @@ fn f072_prediction_deterministic() {
 #[test]
 fn f075_error_handling_graceful() {
     // Invalid features should not panic
-    let features = TunerFeatures {
-        model_params_b: f32::NAN,
-        ..Default::default()
-    };
+    let features = TunerFeatures { model_params_b: f32::NAN, ..Default::default() };
 
     let result = features.validate();
     assert!(result.is_err());

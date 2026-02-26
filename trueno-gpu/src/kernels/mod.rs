@@ -115,11 +115,7 @@ pub trait Kernel {
 
     /// Get PTX module containing this kernel with specified compute target
     fn as_module_for_target(&self, target: &str) -> PtxModule {
-        PtxModule::new()
-            .version(8, 0)
-            .target(target)
-            .address_size(64)
-            .add_kernel(self.build_ptx())
+        PtxModule::new().version(8, 0).target(target).address_size(64).add_kernel(self.build_ptx())
     }
 
     /// Get PTX module containing this kernel
@@ -163,11 +159,7 @@ pub trait Kernel {
     fn emit_ptx_validated(&self) -> String {
         let ptx = self.emit_ptx();
         if let Err(e) = barrier_safety::validate(&ptx) {
-            panic!(
-                "PARITY-114: Barrier safety violation in kernel '{}': {}",
-                self.name(),
-                e
-            );
+            panic!("PARITY-114: Barrier safety violation in kernel '{}': {}", self.name(), e);
         }
         ptx
     }

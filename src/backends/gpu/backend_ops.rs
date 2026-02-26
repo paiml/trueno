@@ -22,11 +22,7 @@ impl GpuBackend {
     /// Vector c (element-wise sum)
     pub fn vec_add(&mut self, a: &[f32], b: &[f32]) -> Result<Vec<f32>, String> {
         if a.len() != b.len() {
-            return Err(format!(
-                "Vector length mismatch: {} != {}",
-                a.len(),
-                b.len()
-            ));
+            return Err(format!("Vector length mismatch: {} != {}", a.len(), b.len()));
         }
 
         // wgpu doesn't allow zero-sized buffers
@@ -57,11 +53,7 @@ impl GpuBackend {
     /// Scalar dot product result
     pub fn dot(&mut self, a: &[f32], b: &[f32]) -> Result<f32, String> {
         if a.len() != b.len() {
-            return Err(format!(
-                "Vector length mismatch: {} != {}",
-                a.len(),
-                b.len()
-            ));
+            return Err(format!("Vector length mismatch: {} != {}", a.len(), b.len()));
         }
 
         let device = self.ensure_device()?;

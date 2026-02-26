@@ -34,18 +34,9 @@ fn main() {
     let sim_2_3 = cosine_similarity(&doc2, &doc3);
 
     println!("\nCosine Similarities:");
-    println!(
-        "  Doc1 vs Doc2 (ML vs DL): {:.4} - Similar topics!",
-        sim_1_2
-    );
-    println!(
-        "  Doc1 vs Doc3 (ML vs Cooking): {:.4} - Different topics",
-        sim_1_3
-    );
-    println!(
-        "  Doc2 vs Doc3 (DL vs Cooking): {:.4} - Different topics",
-        sim_2_3
-    );
+    println!("  Doc1 vs Doc2 (ML vs DL): {:.4} - Similar topics!", sim_1_2);
+    println!("  Doc1 vs Doc3 (ML vs Cooking): {:.4} - Different topics", sim_1_3);
+    println!("  Doc2 vs Doc3 (DL vs Cooking): {:.4} - Different topics", sim_2_3);
 
     // Example: Feature normalization for neural network input
     println!("\n{}", "-".repeat(80));
@@ -61,10 +52,7 @@ fn main() {
     println!("\nL2 Normalized: {:?}", normalized.as_slice());
 
     // Verify it's a unit vector (magnitude = 1.0)
-    let magnitude = (normalized
-        .dot(&normalized)
-        .expect("Example should not fail"))
-    .sqrt();
+    let magnitude = (normalized.dot(&normalized).expect("Example should not fail")).sqrt();
     println!("Magnitude: {:.6} (should be ~1.0)", magnitude);
 
     // Example: k-Nearest Neighbors distance calculation
@@ -101,11 +89,7 @@ fn main() {
 
     // Find nearest neighbor
     let min_dist = dist1.min(dist2).min(dist3).min(dist4);
-    let class = if min_dist == dist1 || min_dist == dist2 {
-        "A"
-    } else {
-        "B"
-    };
+    let class = if min_dist == dist1 || min_dist == dist2 { "A" } else { "B" };
     println!("\nNearest neighbor distance: {:.4}", min_dist);
     println!("Predicted class: {} ✓", class);
 
@@ -144,11 +128,6 @@ fn l2_normalize(v: &Vector<f32>) -> Vector<f32> {
 ///
 /// Distance = sqrt(sum((a_i - b_i)^2))
 fn euclidean_distance(a: &Vector<f32>, b: &Vector<f32>) -> f32 {
-    let diff = a
-        .as_slice()
-        .iter()
-        .zip(b.as_slice())
-        .map(|(x, y)| (x - y).powi(2))
-        .sum::<f32>();
+    let diff = a.as_slice().iter().zip(b.as_slice()).map(|(x, y)| (x - y).powi(2)).sum::<f32>();
     diff.sqrt()
 }

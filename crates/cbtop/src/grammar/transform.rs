@@ -44,10 +44,7 @@ impl DataTransform {
 
     /// Create quantization transform
     pub fn quantize(bits: u8) -> Self {
-        DataTransform::Quantize {
-            bits,
-            scheme: QuantScheme::Symmetric,
-        }
+        DataTransform::Quantize { bits, scheme: QuantScheme::Symmetric }
     }
 
     /// Create padding transform

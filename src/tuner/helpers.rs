@@ -50,9 +50,7 @@ pub fn crc32_hash(data: &[u8]) -> u32 {
 /// Simple timestamp (avoids chrono dependency)
 pub fn chrono_lite_now() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
+    let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
     format!("{}", duration.as_secs())
 }
 
@@ -80,11 +78,7 @@ mod tests {
     #[test]
     fn test_crc32_table_length() {
         let table = crc32_table();
-        assert_eq!(
-            table.len(),
-            256,
-            "CRC32 table must have exactly 256 entries"
-        );
+        assert_eq!(table.len(), 256, "CRC32 table must have exactly 256 entries");
     }
 
     #[test]
@@ -101,14 +95,8 @@ mod tests {
         assert_eq!(table[2], 0xEE0E_612C, "table[2] mismatch for IEEE CRC32");
         assert_eq!(table[3], 0x9909_51BA, "table[3] mismatch for IEEE CRC32");
         assert_eq!(table[4], 0x076D_C419, "table[4] mismatch for IEEE CRC32");
-        assert_eq!(
-            table[128], 0xEDB8_8320,
-            "table[128] must equal the polynomial"
-        );
-        assert_eq!(
-            table[255], 0x2D02_EF8D,
-            "table[255] mismatch for IEEE CRC32"
-        );
+        assert_eq!(table[128], 0xEDB8_8320, "table[128] must equal the polynomial");
+        assert_eq!(table[255], 0x2D02_EF8D, "table[255] mismatch for IEEE CRC32");
     }
 
     #[test]
@@ -118,12 +106,7 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for (i, &val) in table.iter().enumerate() {
             if val != 0 {
-                assert!(
-                    seen.insert(val),
-                    "Duplicate nonzero entry 0x{:08X} at index {}",
-                    val,
-                    i
-                );
+                assert!(seen.insert(val), "Duplicate nonzero entry 0x{:08X} at index {}", val, i);
             }
         }
     }
@@ -134,10 +117,7 @@ mod tests {
         // because 128 == 0x80 (only MSB set), after 8 iterations of the
         // reflected algorithm, the result is the polynomial itself.
         let table = crc32_table();
-        assert_eq!(
-            table[128], 0xEDB8_8320,
-            "table[128] must equal the reflected CRC32 polynomial"
-        );
+        assert_eq!(table[128], 0xEDB8_8320, "table[128] must equal the reflected CRC32 polynomial");
     }
 
     #[test]
@@ -179,10 +159,7 @@ mod tests {
     fn test_crc32_hash_different_inputs_differ() {
         let hash_a = crc32_hash(b"hello");
         let hash_b = crc32_hash(b"world");
-        assert_ne!(
-            hash_a, hash_b,
-            "Different inputs should produce different hashes"
-        );
+        assert_ne!(hash_a, hash_b, "Different inputs should produce different hashes");
     }
 
     #[test]
@@ -200,10 +177,7 @@ mod tests {
 
         let part1 = crc32_update(0, b"hello ");
         let incremental = crc32_update(part1, b"world");
-        assert_eq!(
-            single_pass, incremental,
-            "Incremental CRC32 must match single-pass"
-        );
+        assert_eq!(single_pass, incremental, "Incremental CRC32 must match single-pass");
     }
 
     #[test]
@@ -266,10 +240,7 @@ mod tests {
         let ts2 = chrono_lite_now();
         let secs1: u64 = ts1.parse().expect("Should be parseable");
         let secs2: u64 = ts2.parse().expect("Should be parseable");
-        assert!(
-            secs2 >= secs1,
-            "Timestamps should be monotonically non-decreasing"
-        );
+        assert!(secs2 >= secs1, "Timestamps should be monotonically non-decreasing");
     }
 
     // =========================================================================

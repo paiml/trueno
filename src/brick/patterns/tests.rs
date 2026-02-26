@@ -251,16 +251,10 @@ fn test_stream_capacity_window_ops() {
 #[test]
 fn test_flow_control_error() {
     let err1 = FlowControlError::NegativeReservation;
-    let err2 = FlowControlError::InsufficientCapacity {
-        requested: 100,
-        available: 50,
-    };
+    let err2 = FlowControlError::InsufficientCapacity { requested: 100, available: 50 };
 
     assert_eq!(err1, FlowControlError::NegativeReservation);
-    assert!(matches!(
-        err2,
-        FlowControlError::InsufficientCapacity { .. }
-    ));
+    assert!(matches!(err2, FlowControlError::InsufficientCapacity { .. }));
 }
 
 // ------------------------------------------------------------------------
@@ -388,11 +382,7 @@ fn test_falsify_graph_reuse_threshold() {
 
         // At threshold
         counter.record_use();
-        assert!(
-            counter.is_hot(),
-            "FALSIFICATION FAILED: Not hot at threshold {}",
-            threshold
-        );
+        assert!(counter.is_hot(), "FALSIFICATION FAILED: Not hot at threshold {}", threshold);
     }
 }
 

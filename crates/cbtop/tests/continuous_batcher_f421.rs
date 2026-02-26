@@ -55,9 +55,8 @@ fn test_f421_empty_schedule() {
 /// F422: Preemption works under memory pressure.
 #[test]
 fn test_f422_preemption() {
-    let mut batcher = ContinuousBatcher::new(10, 4096).with_policy(SchedulingPolicy::Priority {
-        preempt_enabled: true,
-    });
+    let mut batcher = ContinuousBatcher::new(10, 4096)
+        .with_policy(SchedulingPolicy::Priority { preempt_enabled: true });
 
     // Fill the batch
     for i in 0..10 {
@@ -109,11 +108,7 @@ fn test_f423_fcfs_ordering() {
     let schedule = batcher.schedule();
 
     for i in 0..10 {
-        assert_eq!(
-            schedule.sequence_ids[i],
-            SeqId(i as u64),
-            "FCFS should preserve arrival order"
-        );
+        assert_eq!(schedule.sequence_ids[i], SeqId(i as u64), "FCFS should preserve arrival order");
     }
 }
 
@@ -156,11 +151,7 @@ fn test_f424_sjf_priority() {
     let schedule = batcher.schedule();
 
     // Short should be first
-    assert_eq!(
-        schedule.sequence_ids[0],
-        SeqId(2),
-        "SJF should schedule shortest first"
-    );
+    assert_eq!(schedule.sequence_ids[0], SeqId(2), "SJF should schedule shortest first");
     // Medium should be second
     assert_eq!(schedule.sequence_ids[1], SeqId(3));
     // Long should be last
@@ -196,11 +187,7 @@ fn test_f425_throughput_accuracy() {
 
     // Process 100 tokens
     for i in 0..100 {
-        batcher.process_outputs(vec![TokenOutput {
-            seq_id: SeqId(1),
-            token: i,
-            is_eos: false,
-        }]);
+        batcher.process_outputs(vec![TokenOutput { seq_id: SeqId(1), token: i, is_eos: false }]);
     }
 
     let stats = batcher.stats();
@@ -208,11 +195,7 @@ fn test_f425_throughput_accuracy() {
 
     // Throughput should be positive (time > 0)
     let throughput = batcher.throughput();
-    assert!(
-        throughput > 0.0,
-        "Throughput should be positive, got {}",
-        throughput
-    );
+    assert!(throughput > 0.0, "Throughput should be positive, got {}", throughput);
 }
 
 /// F425: Throughput tracks over time.
@@ -226,11 +209,7 @@ fn test_f425_throughput_over_time() {
 
     // Process tokens with small delay
     for i in 0..10 {
-        batcher.process_outputs(vec![TokenOutput {
-            seq_id: SeqId(1),
-            token: i,
-            is_eos: false,
-        }]);
+        batcher.process_outputs(vec![TokenOutput { seq_id: SeqId(1), token: i, is_eos: false }]);
     }
 
     // Throughput should be calculable
@@ -306,14 +285,7 @@ fn test_f428_draft_tokens() {
     let mut decoder = SpeculativeDecoder::new(5);
 
     let draft_tokens = vec![100, 200, 300, 400, 500];
-    let target_probs = vec![
-        (100, 0.9),
-        (200, 0.9),
-        (300, 0.9),
-        (400, 0.9),
-        (500, 0.9),
-        (600, 0.9),
-    ];
+    let target_probs = vec![(100, 0.9), (200, 0.9), (300, 0.9), (400, 0.9), (500, 0.9), (600, 0.9)];
 
     let output = decoder.simulate_step(&draft_tokens, &target_probs);
 
@@ -390,11 +362,7 @@ fn test_f430_speedup_calculation() {
     }
 
     let speedup = decoder.speedup();
-    assert!(
-        speedup > 5.0,
-        "Speedup should be > 5x with 100% acceptance, got {}",
-        speedup
-    );
+    assert!(speedup > 5.0, "Speedup should be > 5x with 100% acceptance, got {}", speedup);
 }
 
 /// F430: Speedup decreases with lower acceptance.
@@ -411,11 +379,7 @@ fn test_f430_speedup_with_rejection() {
 
     let speedup = decoder.speedup();
     // With 0% acceptance: speedup ≈ 1 (no benefit)
-    assert!(
-        speedup < 2.0,
-        "Speedup should be < 2x with 0% acceptance, got {}",
-        speedup
-    );
+    assert!(speedup < 2.0, "Speedup should be < 2x with 0% acceptance, got {}", speedup);
 }
 
 /// Integration test: Full continuous batching workflow.

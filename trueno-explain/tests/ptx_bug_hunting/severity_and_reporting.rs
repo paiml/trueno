@@ -75,11 +75,7 @@ fn test_generate_ptx_bug_report() {
         };
 
         if !test_passed {
-            bugs_found.push((
-                desc.to_string(),
-                ptx.to_string(),
-                format!("{:?}", result.bugs),
-            ));
+            bugs_found.push((desc.to_string(), ptx.to_string(), format!("{:?}", result.bugs)));
         }
     }
 
@@ -106,38 +102,20 @@ fn test_generate_ptx_bug_report() {
 #[test]
 fn test_bug_severity_correct() {
     // P0 Critical
-    assert_eq!(
-        PtxBugClass::MissingBarrierSync.severity(),
-        BugSeverity::Critical
-    );
-    assert_eq!(
-        PtxBugClass::SharedMemU64Addressing.severity(),
-        BugSeverity::Critical
-    );
-    assert_eq!(
-        PtxBugClass::LoopBranchToEnd.severity(),
-        BugSeverity::Critical
-    );
+    assert_eq!(PtxBugClass::MissingBarrierSync.severity(), BugSeverity::Critical);
+    assert_eq!(PtxBugClass::SharedMemU64Addressing.severity(), BugSeverity::Critical);
+    assert_eq!(PtxBugClass::LoopBranchToEnd.severity(), BugSeverity::Critical);
 
     // P1 High
     assert_eq!(PtxBugClass::RegisterSpills.severity(), BugSeverity::High);
-    assert_eq!(
-        PtxBugClass::NonInPlaceLoopAccumulator.severity(),
-        BugSeverity::High
-    );
+    assert_eq!(PtxBugClass::NonInPlaceLoopAccumulator.severity(), BugSeverity::High);
 
     // P2 Medium
     assert_eq!(PtxBugClass::RedundantMoves.severity(), BugSeverity::Medium);
-    assert_eq!(
-        PtxBugClass::UnoptimizedMemoryPattern.severity(),
-        BugSeverity::Medium
-    );
+    assert_eq!(PtxBugClass::UnoptimizedMemoryPattern.severity(), BugSeverity::Medium);
 
     // False Positive
-    assert_eq!(
-        PtxBugClass::MissingEntryPoint.severity(),
-        BugSeverity::FalsePositive
-    );
+    assert_eq!(PtxBugClass::MissingEntryPoint.severity(), BugSeverity::FalsePositive);
 }
 
 #[test]

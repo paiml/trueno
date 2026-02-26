@@ -47,10 +47,7 @@ fn h0_mon_33_memory_metrics_mb_helpers() {
 
 #[test]
 fn h0_mon_40_thermal_safe() {
-    let thermal = GpuThermalMetrics {
-        temperature_celsius: 50,
-        ..Default::default()
-    };
+    let thermal = GpuThermalMetrics { temperature_celsius: 50, ..Default::default() };
     assert!(thermal.is_safe());
     assert!(!thermal.is_critical());
     assert_eq!(thermal.status(), "COOL");
@@ -58,10 +55,7 @@ fn h0_mon_40_thermal_safe() {
 
 #[test]
 fn h0_mon_41_thermal_warm() {
-    let thermal = GpuThermalMetrics {
-        temperature_celsius: 65,
-        ..Default::default()
-    };
+    let thermal = GpuThermalMetrics { temperature_celsius: 65, ..Default::default() };
     assert!(thermal.is_safe());
     assert!(!thermal.is_critical());
     assert_eq!(thermal.status(), "WARM");
@@ -69,10 +63,7 @@ fn h0_mon_41_thermal_warm() {
 
 #[test]
 fn h0_mon_42_thermal_hot() {
-    let thermal = GpuThermalMetrics {
-        temperature_celsius: 82,
-        ..Default::default()
-    };
+    let thermal = GpuThermalMetrics { temperature_celsius: 82, ..Default::default() };
     assert!(!thermal.is_safe());
     assert!(!thermal.is_critical());
     assert_eq!(thermal.status(), "HOT");
@@ -80,10 +71,7 @@ fn h0_mon_42_thermal_hot() {
 
 #[test]
 fn h0_mon_43_thermal_critical() {
-    let thermal = GpuThermalMetrics {
-        temperature_celsius: 95,
-        ..Default::default()
-    };
+    let thermal = GpuThermalMetrics { temperature_celsius: 95, ..Default::default() };
     assert!(!thermal.is_safe());
     assert!(thermal.is_critical());
     assert_eq!(thermal.status(), "CRITICAL");
@@ -95,21 +83,14 @@ fn h0_mon_43_thermal_critical() {
 
 #[test]
 fn h0_mon_50_power_usage_percent() {
-    let power = GpuPowerMetrics {
-        power_draw_watts: 225.0,
-        power_limit_watts: 450.0,
-        power_state: 0,
-    };
+    let power =
+        GpuPowerMetrics { power_draw_watts: 225.0, power_limit_watts: 450.0, power_state: 0 };
     assert!((power.usage_percent() - 50.0).abs() < 0.01);
 }
 
 #[test]
 fn h0_mon_51_power_usage_percent_zero_limit() {
-    let power = GpuPowerMetrics {
-        power_draw_watts: 100.0,
-        power_limit_watts: 0.0,
-        power_state: 0,
-    };
+    let power = GpuPowerMetrics { power_draw_watts: 100.0, power_limit_watts: 0.0, power_state: 0 };
     assert!((power.usage_percent() - 0.0).abs() < 0.01);
 }
 

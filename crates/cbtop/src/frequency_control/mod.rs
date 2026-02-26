@@ -30,9 +30,7 @@ pub use variance::FrequencyVariance;
 
 /// Get number of CPUs
 fn num_cpus() -> usize {
-    std::thread::available_parallelism()
-        .map(|p| p.get())
-        .unwrap_or(1)
+    std::thread::available_parallelism().map(|p| p.get()).unwrap_or(1)
 }
 
 #[cfg(test)]

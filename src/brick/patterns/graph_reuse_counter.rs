@@ -17,11 +17,7 @@ pub struct GraphReuseCounter {
 impl GraphReuseCounter {
     /// Create a new counter with hot threshold.
     pub fn new(hot_threshold: u64) -> Self {
-        Self {
-            reuse_count: 0,
-            hot_threshold,
-            cache_enabled: false,
-        }
+        Self { reuse_count: 0, hot_threshold, cache_enabled: false }
     }
 
     /// Record a graph execution.

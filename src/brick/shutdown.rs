@@ -144,10 +144,7 @@ mod tests {
             ShutdownResult::Timeout { remaining: 5 },
             ShutdownResult::Timeout { remaining: 5 }
         );
-        assert_ne!(
-            ShutdownResult::Clean,
-            ShutdownResult::Timeout { remaining: 0 }
-        );
+        assert_ne!(ShutdownResult::Clean, ShutdownResult::Timeout { remaining: 0 });
     }
 
     #[test]
@@ -205,10 +202,7 @@ mod tests {
 
         // Try to register after shutdown
         let guard = shutdown.register();
-        assert!(
-            guard.is_none(),
-            "Should reject new operations after shutdown"
-        );
+        assert!(guard.is_none(), "Should reject new operations after shutdown");
     }
 
     #[test]
@@ -273,11 +267,7 @@ mod tests {
 
         // Create many guards
         let mut guards: Vec<_> = (0..100).filter_map(|_| shutdown.register()).collect();
-        assert_eq!(
-            shutdown.active_count(),
-            100,
-            "FALSIFICATION FAILED: Not all guards registered"
-        );
+        assert_eq!(shutdown.active_count(), 100, "FALSIFICATION FAILED: Not all guards registered");
 
         // Drop half by truncating the vector (keeps first 50, drops last 50)
         guards.truncate(50);

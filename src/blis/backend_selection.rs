@@ -210,15 +210,9 @@ impl UnifiedBrickProfiler {
         let mut s = String::new();
         s.push_str("Unified Brick Profiler Summary\n");
         s.push_str("==============================\n");
-        s.push_str(&format!(
-            "Backend: {:?}\n",
-            self.backend.unwrap_or(ComputeBackend::Scalar)
-        ));
+        s.push_str(&format!("Backend: {:?}\n", self.backend.unwrap_or(ComputeBackend::Scalar)));
         s.push_str(&format!("Total elements: {}\n", self.total_elements));
-        s.push_str(&format!(
-            "Selections: {} decisions\n",
-            self.selection_history.len()
-        ));
+        s.push_str(&format!("Selections: {} decisions\n", self.selection_history.len()));
         s.push_str("\nCPU Stats:\n");
         s.push_str(&self.cpu_stats.summary());
         s
@@ -312,11 +306,7 @@ pub struct WgslMicrokernelSpec {
 
 impl Default for WgslMicrokernelSpec {
     fn default() -> Self {
-        Self {
-            workgroup_size: (8, 8, 1),
-            tile_dim: (8, 8),
-            use_shared_memory: true,
-        }
+        Self { workgroup_size: (8, 8, 1), tile_dim: (8, 8), use_shared_memory: true }
     }
 }
 

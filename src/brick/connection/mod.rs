@@ -31,14 +31,7 @@ impl<T> ManagedConnection<T> {
     /// Create a new managed connection.
     pub fn new(inner: T, max_lifetime: Duration, max_idle: Duration) -> Self {
         let now = Instant::now();
-        Self {
-            inner,
-            created_at: now,
-            last_used: now,
-            max_lifetime,
-            max_idle,
-            health_failures: 0,
-        }
+        Self { inner, created_at: now, last_used: now, max_lifetime, max_idle, health_failures: 0 }
     }
 
     /// Check if the connection is still valid.
@@ -132,20 +125,12 @@ pub struct KeepAliveConfig {
 impl KeepAliveConfig {
     /// Create with default values.
     pub fn new() -> Self {
-        Self {
-            enabled: true,
-            timeout_secs: 60,
-            max_requests: 100,
-        }
+        Self { enabled: true, timeout_secs: 60, max_requests: 100 }
     }
 
     /// Disabled keep-alive.
     pub fn disabled() -> Self {
-        Self {
-            enabled: false,
-            timeout_secs: 0,
-            max_requests: 0,
-        }
+        Self { enabled: false, timeout_secs: 0, max_requests: 0 }
     }
 
     /// Parse from HTTP header value (e.g., "timeout=5, max=100").

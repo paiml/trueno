@@ -58,11 +58,7 @@ fn demo_simd_softmax(profiler: &mut BrickProfiler) {
 
     // Verify correctness
     let sum: f32 = simd_result.iter().sum();
-    assert!(
-        (sum - 1.0).abs() < 1e-5,
-        "Softmax sum should be 1.0, got {}",
-        sum
-    );
+    assert!((sum - 1.0).abs() < 1e-5, "Softmax sum should be 1.0, got {}", sum);
 
     let speedup = scalar_time.as_nanos() as f64 / simd_time.as_nanos() as f64;
     println!("  Vector size: {}", size);
@@ -95,10 +91,7 @@ fn demo_q5k_quantization(profiler: &mut BrickProfiler) {
 
     println!("  Block size:      {} elements", BlockQ5K::BLOCK_SIZE);
     println!("  Dequant time:    {:?}", dequant_time);
-    println!(
-        "  Sample values:   [{:.4}, {:.4}, {:.4}, ...]",
-        dequant[0], dequant[1], dequant[2]
-    );
+    println!("  Sample values:   [{:.4}, {:.4}, {:.4}, ...]", dequant[0], dequant[1], dequant[2]);
 
     // Dot product with Q5_K
     let op = DotQ5KOp::new(256);
@@ -122,9 +115,7 @@ fn demo_q6k_quantization(profiler: &mut BrickProfiler) {
     let block = BlockQ6K {
         ql: [0x55; 128], // Pattern: 0101 0101 (low 4 bits)
         qh: [0x55; 64],  // Pattern: 0101 0101 (high 2 bits)
-        scales: [
-            10, 12, 14, 16, 18, 20, 22, 24, 10, 12, 14, 16, 18, 20, 22, 24,
-        ],
+        scales: [10, 12, 14, 16, 18, 20, 22, 24, 10, 12, 14, 16, 18, 20, 22, 24],
         d: 0.1,
     };
 
@@ -138,10 +129,7 @@ fn demo_q6k_quantization(profiler: &mut BrickProfiler) {
 
     println!("  Block size:      {} elements", BlockQ6K::BLOCK_SIZE);
     println!("  Dequant time:    {:?}", dequant_time);
-    println!(
-        "  Sample values:   [{:.4}, {:.4}, {:.4}, ...]",
-        dequant[0], dequant[1], dequant[2]
-    );
+    println!("  Sample values:   [{:.4}, {:.4}, {:.4}, ...]", dequant[0], dequant[1], dequant[2]);
 
     // Dot product with Q6_K
     let op = DotQ6KOp::new(256);

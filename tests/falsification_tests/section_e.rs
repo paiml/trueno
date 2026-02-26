@@ -14,10 +14,7 @@ fn test_e066_wgsl_validation_infrastructure() {
     // Verify WGSL shader structure patterns
     let compute_shader_pattern = r"@compute\s+@workgroup_size";
     let regex = regex::Regex::new(compute_shader_pattern);
-    assert!(
-        regex.is_ok(),
-        "E-066 FALSIFIED: Cannot compile WGSL compute shader pattern"
-    );
+    assert!(regex.is_ok(), "E-066 FALSIFIED: Cannot compile WGSL compute shader pattern");
 }
 
 /// E-067: WGSL add shader correctness
@@ -91,11 +88,7 @@ fn test_e071_wgsl_sigmoid_correctness() {
 
     // sigmoid(0) = 0.5
     let diff = (result.as_slice()[0] - 0.5).abs();
-    assert!(
-        diff < 1e-6,
-        "E-071 FALSIFIED: sigmoid(0) = {}, expected 0.5",
-        result.as_slice()[0]
-    );
+    assert!(diff < 1e-6, "E-071 FALSIFIED: sigmoid(0) = {}, expected 0.5", result.as_slice()[0]);
 }
 
 /// E-072: WGSL tanh shader correctness
@@ -106,11 +99,7 @@ fn test_e072_wgsl_tanh_correctness() {
 
     // tanh(0) = 0
     let diff = result.as_slice()[0].abs();
-    assert!(
-        diff < 1e-6,
-        "E-072 FALSIFIED: tanh(0) = {}, expected 0",
-        result.as_slice()[0]
-    );
+    assert!(diff < 1e-6, "E-072 FALSIFIED: tanh(0) = {}, expected 0", result.as_slice()[0]);
 }
 
 /// E-073: WGSL gelu shader correctness
@@ -127,10 +116,7 @@ fn test_e073_wgsl_gelu_correctness() {
     );
 
     // gelu(x) > 0 for x > 0
-    assert!(
-        result.as_slice()[1] > 0.0,
-        "E-073 FALSIFIED: gelu(1) should be positive"
-    );
+    assert!(result.as_slice()[1] > 0.0, "E-073 FALSIFIED: gelu(1) should be positive");
 }
 
 /// E-074: WGSL swish shader correctness
@@ -147,10 +133,7 @@ fn test_e074_wgsl_swish_correctness() {
     );
 
     // swish(x) > 0 for x > 0
-    assert!(
-        result.as_slice()[1] > 0.0,
-        "E-074 FALSIFIED: swish(1) should be positive"
-    );
+    assert!(result.as_slice()[1] > 0.0, "E-074 FALSIFIED: swish(1) should be positive");
 }
 
 /// E-075: WGSL softmax shader correctness
@@ -261,10 +244,7 @@ fn test_e080_cross_platform() {
     // On x86_64, should have at least SSE2
     #[cfg(target_arch = "x86_64")]
     {
-        assert!(
-            !matches!(backend, Backend::Scalar),
-            "E-080: Should have SIMD backend on x86_64"
-        );
+        assert!(!matches!(backend, Backend::Scalar), "E-080: Should have SIMD backend on x86_64");
     }
 
     // On other architectures, just verify we get a valid backend

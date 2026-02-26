@@ -257,10 +257,7 @@ fn test_gpu_allocation_under_pressure() {
     }
 
     // We should have allocated at least one tensor
-    assert!(
-        allocation_count > 0,
-        "Should have allocated at least one tensor"
-    );
+    assert!(allocation_count > 0, "Should have allocated at least one tensor");
 
     // Record how many we allocated before hitting the limit
     let tensors_at_limit = tensors.len();
@@ -282,10 +279,7 @@ fn test_gpu_allocation_under_pressure() {
 
     // If we hit the limit, we should be able to recover after freeing
     if hit_limit {
-        assert!(
-            recovery_result.is_ok(),
-            "Should be able to allocate after freeing tensors"
-        );
+        assert!(recovery_result.is_ok(), "Should be able to allocate after freeing tensors");
     }
 
     // Verify transfer tracking still works under pressure
@@ -305,10 +299,7 @@ fn test_memory_pool_exhaustion() {
     use crate::memory::pool::{MemoryPool, PoolConfig};
 
     // Create a tiny pool (1MB with 64KB pages = 16 pages)
-    let config = PoolConfig {
-        total_bytes: 1024 * 1024,
-        page_size: 64 * 1024,
-    };
+    let config = PoolConfig { total_bytes: 1024 * 1024, page_size: 64 * 1024 };
     let mut pool = MemoryPool::new(config);
 
     // Allocate all pages
@@ -325,10 +316,7 @@ fn test_memory_pool_exhaustion() {
 
     // Next allocation should fail
     let failed_alloc = pool.allocate(64 * 1024);
-    assert!(
-        failed_alloc.is_none(),
-        "Allocation should fail when pool is exhausted"
-    );
+    assert!(failed_alloc.is_none(), "Allocation should fail when pool is exhausted");
 
     // Free one allocation
     if let Some(id) = allocations.pop() {
@@ -337,8 +325,5 @@ fn test_memory_pool_exhaustion() {
 
     // Now allocation should succeed
     let recovered_alloc = pool.allocate(64 * 1024);
-    assert!(
-        recovered_alloc.is_some(),
-        "Allocation should succeed after freeing"
-    );
+    assert!(recovered_alloc.is_some(), "Allocation should succeed after freeing");
 }

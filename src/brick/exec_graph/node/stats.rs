@@ -31,14 +31,8 @@ impl PtxRegistry {
         debug_assert!(!name.is_empty(), "CB-BUDGET: kernel name must not be empty");
         debug_assert!(!ptx.is_empty(), "CB-BUDGET: PTX source must not be empty");
         let hash = Self::hash_ptx(ptx);
-        self.kernels.insert(
-            hash,
-            (
-                name.to_string(),
-                ptx.to_string(),
-                path.map(|p| p.to_path_buf()),
-            ),
-        );
+        self.kernels
+            .insert(hash, (name.to_string(), ptx.to_string(), path.map(|p| p.to_path_buf())));
     }
 
     /// Compute FNV-1a hash of PTX source.
@@ -65,9 +59,7 @@ impl PtxRegistry {
 
     /// Lookup file path by hash.
     pub fn lookup_path(&self, hash: u64) -> Option<&std::path::Path> {
-        self.kernels
-            .get(&hash)
-            .and_then(|(_, _, path)| path.as_deref())
+        self.kernels.get(&hash).and_then(|(_, _, path)| path.as_deref())
     }
 
     /// Get all registered hashes.
@@ -463,11 +455,7 @@ mod tests {
 
     #[test]
     fn test_category_stats_avg_us() {
-        let stats = CategoryStats {
-            total_ns: 10_000,
-            total_elements: 0,
-            count: 2,
-        };
+        let stats = CategoryStats { total_ns: 10_000, total_elements: 0, count: 2 };
         // 10_000 ns / 2 / 1000 = 5.0 us
         assert!((stats.avg_us() - 5.0).abs() < 1e-10);
     }
@@ -491,32 +479,20 @@ mod tests {
 
     #[test]
     fn test_category_stats_percentage_zero_total() {
-        let stats = CategoryStats {
-            total_ns: 500,
-            total_elements: 0,
-            count: 1,
-        };
+        let stats = CategoryStats { total_ns: 500, total_elements: 0, count: 1 };
         assert_eq!(stats.percentage(0), 0.0);
     }
 
     #[test]
     fn test_category_stats_percentage() {
-        let stats = CategoryStats {
-            total_ns: 250,
-            total_elements: 0,
-            count: 1,
-        };
+        let stats = CategoryStats { total_ns: 250, total_elements: 0, count: 1 };
         // 100.0 * 250 / 1000 = 25.0%
         assert!((stats.percentage(1000) - 25.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_category_stats_percentage_full() {
-        let stats = CategoryStats {
-            total_ns: 1000,
-            total_elements: 0,
-            count: 1,
-        };
+        let stats = CategoryStats { total_ns: 1000, total_elements: 0, count: 1 };
         assert!((stats.percentage(1000) - 100.0).abs() < 1e-10);
     }
 
@@ -652,10 +628,7 @@ mod tests {
         stats.total_elements = 10;
         stats.total_cycles = 100;
         stats.total_ns = 50; // ns_per_cycle = 0.5 (doesn't matter, ipc<0.5 catches first)
-        assert_eq!(
-            stats.diagnose_from_cycles(),
-            "memory-bound (low IPC, likely cache misses)"
-        );
+        assert_eq!(stats.diagnose_from_cycles(), "memory-bound (low IPC, likely cache misses)");
     }
 
     #[test]
@@ -678,10 +651,7 @@ mod tests {
         stats.total_elements = 100;
         stats.total_cycles = 100;
         stats.total_ns = 200;
-        assert_eq!(
-            stats.diagnose_from_cycles(),
-            "throttled or context-switched"
-        );
+        assert_eq!(stats.diagnose_from_cycles(), "throttled or context-switched");
     }
 
     #[test]

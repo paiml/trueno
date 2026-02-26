@@ -277,16 +277,8 @@ impl Kernel for BatchedQ4KGemvKernel {
                 // Each thread handles 8 values (256 values / 32 threads)
                 let thread_partials: Vec<_> = (0..m).map(|_| ctx.mov_f32_imm(0.0)).collect();
 
-                let offsets_and_blocks: [(u32, u32); 8] = [
-                    (0, 0),
-                    (32, 1),
-                    (64, 2),
-                    (96, 3),
-                    (128, 4),
-                    (160, 5),
-                    (192, 6),
-                    (224, 7),
-                ];
+                let offsets_and_blocks: [(u32, u32); 8] =
+                    [(0, 0), (32, 1), (64, 2), (96, 3), (128, 4), (160, 5), (192, 6), (224, 7)];
 
                 for (offset, block_idx) in offsets_and_blocks {
                     let (ds, dm) = match block_idx {

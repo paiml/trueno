@@ -88,12 +88,7 @@ impl FusedQKVOp {
     pub fn new(hidden_size: usize, num_heads: usize, num_kv_heads: usize) -> Self {
         let head_dim = hidden_size / num_heads;
         let kv_dim = num_kv_heads * head_dim;
-        Self {
-            hidden_size,
-            kv_dim,
-            num_heads,
-            head_dim,
-        }
+        Self { hidden_size, kv_dim, num_heads, head_dim }
     }
 }
 
@@ -111,10 +106,7 @@ impl ComputeOp for FusedQKVOp {
 
         // Validate input dimensions
         if x.len() != self.hidden_size {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.hidden_size,
-                actual: x.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.hidden_size, actual: x.len() });
         }
 
         // Q projection: x @ W_q^T -> [hidden_size]
@@ -217,10 +209,7 @@ impl FusedGateUpOp {
     /// * `hidden_size` - Hidden dimension (e.g., 3584 for Qwen 3B)
     /// * `intermediate_size` - FFN intermediate dimension (e.g., 18944)
     pub fn new(hidden_size: usize, intermediate_size: usize) -> Self {
-        Self {
-            hidden_size,
-            intermediate_size,
-        }
+        Self { hidden_size, intermediate_size }
     }
 
     /// SiLU activation: x * sigmoid(x)
@@ -245,10 +234,7 @@ impl ComputeOp for FusedGateUpOp {
 
         // Validate input dimensions
         if x.len() != self.hidden_size {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.hidden_size,
-                actual: x.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.hidden_size, actual: x.len() });
         }
 
         // SIMD-optimized fused gate + up + SwiGLU
@@ -352,10 +338,7 @@ mod tests {
     fn test_fused_gate_up_dimension_mismatch() {
         let op = FusedGateUpOp::new(4, 2);
         let x = vec![1.0, 2.0]; // Wrong size
-        let weights = FusedGateUpWeights {
-            gate_weight: vec![1.0; 8],
-            up_weight: vec![1.0; 8],
-        };
+        let weights = FusedGateUpWeights { gate_weight: vec![1.0; 8], up_weight: vec![1.0; 8] };
 
         let result = op.execute((x, weights), Backend::Scalar);
         assert!(result.is_err());
@@ -377,11 +360,7 @@ mod tests {
     fn test_fused_qkv_tokens() {
         // hidden=128, heads=8, kv_heads=4 → head_dim=16, kv_dim=64
         let op = FusedQKVOp::new(128, 8, 4);
-        let weights = FusedQKVWeights {
-            q_weight: vec![],
-            k_weight: vec![],
-            v_weight: vec![],
-        };
+        let weights = FusedQKVWeights { q_weight: vec![], k_weight: vec![], v_weight: vec![] };
         // tokens = hidden + 2 * kv_dim = 128 + 2 * 64 = 256
         assert_eq!(op.tokens(&(vec![], weights)), 256);
     }
@@ -389,10 +368,7 @@ mod tests {
     #[test]
     fn test_fused_gate_up_tokens() {
         let op = FusedGateUpOp::new(128, 256);
-        let weights = FusedGateUpWeights {
-            gate_weight: vec![],
-            up_weight: vec![],
-        };
+        let weights = FusedGateUpWeights { gate_weight: vec![], up_weight: vec![] };
         assert_eq!(op.tokens(&(vec![], weights)), 256);
     }
 }

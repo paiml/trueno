@@ -7,10 +7,7 @@ use super::super::super::super::*;
 /// F279: WatermarkedBuffer full API coverage
 #[test]
 fn test_f279_watermarked_buffer_api() {
-    let wm = BufferWatermarks {
-        low: 100,
-        high: 1000,
-    };
+    let wm = BufferWatermarks { low: 100, high: 1000 };
     let mut buf = WatermarkedBuffer::new(wm);
 
     // Test len and is_empty
@@ -91,10 +88,7 @@ fn test_f280_execution_graph_node_types() {
     graph.add_edge(
         func,
         transfer,
-        EdgeType::Transfer {
-            bytes: 4096,
-            direction: TransferDirection::H2D,
-        },
+        EdgeType::Transfer { bytes: 4096, direction: TransferDirection::H2D },
     );
     graph.add_edge(kernel, transfer, EdgeType::DependsOn);
 
@@ -125,12 +119,8 @@ fn test_f281_attention_trace_config_filtering() {
     assert!(!config.should_trace_head(2));
 
     // Test with None (trace all)
-    let config_all = AttentionTraceConfig {
-        top_k: 5,
-        layers: None,
-        heads: None,
-        weight_threshold: 0.05,
-    };
+    let config_all =
+        AttentionTraceConfig { top_k: 5, layers: None, heads: None, weight_threshold: 0.05 };
 
     assert!(config_all.should_trace_layer(99));
     assert!(config_all.should_trace_head(31));

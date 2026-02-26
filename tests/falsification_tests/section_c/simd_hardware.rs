@@ -157,12 +157,7 @@ fn test_c049_fma_availability() {
     let expected = [3.0f32, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0];
     for (i, (r, e)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
         let diff = (*r - *e).abs();
-        assert!(
-            diff < f32::EPSILON,
-            "C-049 FALSIFIED: FMA incorrect at index {i}: {} vs {}",
-            r,
-            e
-        );
+        assert!(diff < f32::EPSILON, "C-049 FALSIFIED: FMA incorrect at index {i}: {} vs {}", r, e);
     }
 }
 
@@ -196,8 +191,5 @@ fn test_c050_no_denormal_stall() {
     // Denormal operations shouldn't be more than 10x slower
     // (this is a heuristic - actual threshold depends on hardware)
     let ratio = denormal_time.as_nanos() as f64 / normal_time.as_nanos() as f64;
-    assert!(
-        ratio < 100.0,
-        "C-050 WARNING: Denormal operations are {ratio:.1}x slower than normal"
-    );
+    assert!(ratio < 100.0, "C-050 WARNING: Denormal operations are {ratio:.1}x slower than normal");
 }

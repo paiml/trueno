@@ -42,18 +42,13 @@ fn main() {
 
     // --- 3. Module-level validate() ---
     println!("\n3. Module-level validation:");
-    let good_module = PtxModule::new()
-        .version(8, 0)
-        .target("sm_80")
-        .address_size(64);
+    let good_module = PtxModule::new().version(8, 0).target("sm_80").address_size(64);
     match good_module.validate() {
         Ok(()) => println!("   PASS: sm_80, PTX 8.0, 64-bit"),
         Err(e) => println!("   FAIL: {e}"),
     }
 
-    let bad_module = PtxModule::new()
-        .version(6, 0)
-        .target("sm_50");
+    let bad_module = PtxModule::new().version(6, 0).target("sm_50");
     match bad_module.validate() {
         Ok(()) => println!("   UNEXPECTED PASS"),
         Err(e) => println!("   REJECTED (expected): {e}"),
@@ -62,9 +57,14 @@ fn main() {
     // --- 4. PTX Type System Contracts ---
     println!("\n4. PTX type system:");
     let types = [
-        PtxType::U32, PtxType::U64, PtxType::S32,
-        PtxType::F16, PtxType::F32, PtxType::F64,
-        PtxType::V2F32, PtxType::V4F32,
+        PtxType::U32,
+        PtxType::U64,
+        PtxType::S32,
+        PtxType::F16,
+        PtxType::F32,
+        PtxType::F64,
+        PtxType::V2F32,
+        PtxType::V4F32,
     ];
     for ty in &types {
         println!(
@@ -91,11 +91,7 @@ fn main() {
         .param(PtxType::U64, "c_ptr")
         .param(PtxType::U32, "n");
 
-    let module = PtxModule::new()
-        .version(8, 0)
-        .target("sm_80")
-        .address_size(64)
-        .add_kernel(kernel);
+    let module = PtxModule::new().version(8, 0).target("sm_80").address_size(64).add_kernel(kernel);
 
     let ptx_source = module.emit();
     println!("   Generated {} bytes of PTX", ptx_source.len());

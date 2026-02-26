@@ -23,12 +23,7 @@ fn test_gpu_vec_add_matches_scalar() {
 
     if let Ok(gpu_r) = gpu_result {
         for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
-            assert!(
-                (g - s).abs() < 1e-4,
-                "GPU vs Scalar mismatch: gpu={}, scalar={}",
-                g,
-                s
-            );
+            assert!((g - s).abs() < 1e-4, "GPU vs Scalar mismatch: gpu={}, scalar={}", g, s);
         }
     } else {
         eprintln!("GPU vec_add failed: {:?}", gpu_result);
@@ -81,12 +76,7 @@ fn test_gpu_relu_matches_scalar() {
 
     if let Ok(gpu_r) = gpu_result {
         for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
-            assert!(
-                (g - s).abs() < 1e-4,
-                "GPU vs Scalar relu mismatch: gpu={}, scalar={}",
-                g,
-                s
-            );
+            assert!((g - s).abs() < 1e-4, "GPU vs Scalar relu mismatch: gpu={}, scalar={}", g, s);
         }
     } else {
         eprintln!("GPU relu failed: {:?}", gpu_result);
@@ -143,12 +133,7 @@ fn test_gpu_gelu_matches_scalar() {
 
     if let Ok(gpu_r) = gpu_result {
         for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
-            assert!(
-                (g - s).abs() < 1e-2,
-                "GPU vs Scalar gelu mismatch: gpu={}, scalar={}",
-                g,
-                s
-            );
+            assert!((g - s).abs() < 1e-2, "GPU vs Scalar gelu mismatch: gpu={}, scalar={}", g, s);
         }
     } else {
         eprintln!("GPU gelu failed: {:?}", gpu_result);
@@ -174,12 +159,7 @@ fn test_gpu_swish_matches_scalar() {
 
     if let Ok(gpu_r) = gpu_result {
         for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
-            assert!(
-                (g - s).abs() < 1e-3,
-                "GPU vs Scalar swish mismatch: gpu={}, scalar={}",
-                g,
-                s
-            );
+            assert!((g - s).abs() < 1e-3, "GPU vs Scalar swish mismatch: gpu={}, scalar={}", g, s);
         }
     } else {
         eprintln!("GPU swish failed: {:?}", gpu_result);
@@ -207,12 +187,7 @@ fn test_gpu_clip_matches_scalar() {
 
     if let Ok(gpu_r) = gpu_result {
         for (g, s) in gpu_r.iter().zip(scalar_result.iter()) {
-            assert!(
-                (g - s).abs() < 1e-4,
-                "GPU vs Scalar clip mismatch: gpu={}, scalar={}",
-                g,
-                s
-            );
+            assert!((g - s).abs() < 1e-4, "GPU vs Scalar clip mismatch: gpu={}, scalar={}", g, s);
         }
     } else {
         eprintln!("GPU clip failed: {:?}", gpu_result);

@@ -44,10 +44,7 @@ fn f017_fma_more_accurate_than_mul_add() {
         separate_result.is_finite(),
         "F017 FALSIFIED: separate mul+add produced non-finite result"
     );
-    assert!(
-        fma_result.is_finite(),
-        "F017 FALSIFIED: FMA produced non-finite result"
-    );
+    assert!(fma_result.is_finite(), "F017 FALSIFIED: FMA produced non-finite result");
 
     // The results may differ due to rounding, but both should be small
     // FMA is not guaranteed to be more accurate in all cases with f32
@@ -57,16 +54,9 @@ fn f017_fma_more_accurate_than_mul_add() {
         "F017 FALSIFIED: separate result too large: {}",
         separate_result
     );
-    assert!(
-        fma_result.abs() < 1.0,
-        "F017 FALSIFIED: FMA result too large: {}",
-        fma_result
-    );
+    assert!(fma_result.abs() < 1.0, "F017 FALSIFIED: FMA result too large: {}", fma_result);
 
-    println!(
-        "F017: separate={:.10e}, fma={:.10e}",
-        separate_result, fma_result
-    );
+    println!("F017: separate={:.10e}, fma={:.10e}", separate_result, fma_result);
 }
 
 /// F027: FMA preserves NaN semantics (IEEE 754 compliant)
@@ -95,12 +85,7 @@ fn f027_fma_nan_propagation() {
         let ab = av.mul(&bv).unwrap();
         let result = ab.add(&cv).unwrap().as_slice()[0];
 
-        assert!(
-            result.is_nan(),
-            "F027 FALSIFIED: {} should produce NaN, got {}",
-            desc,
-            result
-        );
+        assert!(result.is_nan(), "F027 FALSIFIED: {} should produce NaN, got {}", desc, result);
     }
 
     // Special case: 0 * inf + NaN should be NaN (not just the inf*0 indeterminate)
@@ -111,11 +96,7 @@ fn f027_fma_nan_propagation() {
 
     let ab = av.mul(&bv).unwrap();
     let result = ab.add(&cv).unwrap().as_slice()[0];
-    assert!(
-        result.is_nan(),
-        "F027 FALSIFIED: 0*inf+NaN should be NaN, got {}",
-        result
-    );
+    assert!(result.is_nan(), "F027 FALSIFIED: 0*inf+NaN should be NaN, got {}", result);
 
     println!("F027 PASSED: NaN propagation verified");
 }
@@ -136,13 +117,7 @@ fn f028_fma_infinity_handling() {
         (neg_inf, one, one, false, "-inf*1+1 -> -inf"),
         (one, neg_inf, one, false, "1*-inf+1 -> -inf"),
         (one, one, neg_inf, false, "1*1-inf -> -inf"),
-        (
-            inf,
-            two,
-            neg_inf,
-            true,
-            "inf*2-inf -> undefined (but finite or inf)",
-        ),
+        (inf, two, neg_inf, true, "inf*2-inf -> undefined (but finite or inf)"),
     ];
 
     for (a, b, c, expect_pos_inf, desc) in test_cases.iter().take(6) {
@@ -177,11 +152,7 @@ fn f028_fma_infinity_handling() {
 
     let ab = av.mul(&bv).unwrap();
     let result = ab.add(&cv).unwrap().as_slice()[0];
-    assert!(
-        result.is_nan(),
-        "F028 FALSIFIED: inf*1-inf should be NaN, got {}",
-        result
-    );
+    assert!(result.is_nan(), "F028 FALSIFIED: inf*1-inf should be NaN, got {}", result);
 
     println!("F028 PASSED: Infinity handling verified");
 }
@@ -240,21 +211,12 @@ fn f020_fma_backend_consistency() {
 
     // Verify all results are finite
     for (i, val) in result.as_slice().iter().enumerate() {
-        assert!(
-            val.is_finite(),
-            "F020 FALSIFIED: result[{}] is not finite: {}",
-            i,
-            val
-        );
+        assert!(val.is_finite(), "F020 FALSIFIED: result[{}] is not finite: {}", i, val);
     }
 
     // Compute same with scalar backend
-    let scalar_results: Vec<f32> = a
-        .iter()
-        .zip(b.iter())
-        .zip(c.iter())
-        .map(|((a, b), c)| a * b + c)
-        .collect();
+    let scalar_results: Vec<f32> =
+        a.iter().zip(b.iter()).zip(c.iter()).map(|((a, b), c)| a * b + c).collect();
 
     // Results should be very close (within FMA rounding tolerance)
     let max_diff: f32 = result
@@ -264,16 +226,9 @@ fn f020_fma_backend_consistency() {
         .map(|(a, b)| (a - b).abs())
         .fold(0.0f32, |acc, x| acc.max(x));
 
-    assert!(
-        max_diff < 1e-5,
-        "F020 FALSIFIED: SIMD/scalar difference too large: {}",
-        max_diff
-    );
+    assert!(max_diff < 1e-5, "F020 FALSIFIED: SIMD/scalar difference too large: {}", max_diff);
 
-    println!(
-        "F020 PASSED: Backend consistency verified (max diff: {:.2e})",
-        max_diff
-    );
+    println!("F020 PASSED: Backend consistency verified (max diff: {:.2e})", max_diff);
 }
 
 /// F021: FMA with zeros
@@ -306,11 +261,7 @@ fn f021_fma_zero_handling() {
     let result = ab.add(&cv).unwrap().as_slice()[0];
 
     // Check it's zero (either sign is acceptable per IEEE 754)
-    assert!(
-        result == 0.0,
-        "F021 FALSIFIED: -0*1+0 should be 0, got {}",
-        result
-    );
+    assert!(result == 0.0, "F021 FALSIFIED: -0*1+0 should be 0, got {}", result);
 
     println!("F021 PASSED: Zero handling verified");
 }
@@ -340,8 +291,5 @@ fn f022_fma_dot_product_accuracy() {
         dot
     );
 
-    println!(
-        "F022 PASSED: Dot product accuracy verified (error: {:.2e})",
-        relative_error
-    );
+    println!("F022 PASSED: Dot product accuracy verified (error: {:.2e})", relative_error);
 }

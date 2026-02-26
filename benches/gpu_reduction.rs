@@ -35,9 +35,7 @@ use trueno::backends::gpu::GpuBackend;
 
 /// Generate 2D test data for reduction benchmarks
 fn generate_matrix_data(width: usize, height: usize) -> Vec<f32> {
-    (0..width * height)
-        .map(|i| ((i % 1000) as f32) * 0.001)
-        .collect()
+    (0..width * height).map(|i| ((i % 1000) as f32) * 0.001).collect()
 }
 
 /// Benchmark GPU tiled sum reduction vs scalar baseline

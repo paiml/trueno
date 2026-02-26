@@ -47,18 +47,12 @@ mod tests {
     #[test]
     fn test_unsupported_backend_error() {
         let err = TruenoError::UnsupportedBackend(Backend::AVX512);
-        assert_eq!(
-            err.to_string(),
-            "Backend not supported on this platform: AVX512"
-        );
+        assert_eq!(err.to_string(), "Backend not supported on this platform: AVX512");
     }
 
     #[test]
     fn test_size_mismatch_error() {
-        let err = TruenoError::SizeMismatch {
-            expected: 10,
-            actual: 5,
-        };
+        let err = TruenoError::SizeMismatch { expected: 10, actual: 5 };
         assert_eq!(err.to_string(), "Size mismatch: expected 10, got 5");
     }
 
@@ -76,14 +70,8 @@ mod tests {
 
     #[test]
     fn test_error_equality() {
-        let err1 = TruenoError::SizeMismatch {
-            expected: 10,
-            actual: 5,
-        };
-        let err2 = TruenoError::SizeMismatch {
-            expected: 10,
-            actual: 5,
-        };
+        let err1 = TruenoError::SizeMismatch { expected: 10, actual: 5 };
+        let err2 = TruenoError::SizeMismatch { expected: 10, actual: 5 };
         assert_eq!(err1, err2);
     }
 
@@ -113,10 +101,7 @@ mod tests {
 
     #[test]
     fn test_error_debug_size_mismatch() {
-        let err = TruenoError::SizeMismatch {
-            expected: 100,
-            actual: 50,
-        };
+        let err = TruenoError::SizeMismatch { expected: 100, actual: 50 };
         let debug = format!("{:?}", err);
         assert!(debug.contains("SizeMismatch"));
         assert!(debug.contains("100"));
@@ -166,14 +151,8 @@ mod tests {
 
     #[test]
     fn test_error_inequality_different_values() {
-        let err1 = TruenoError::SizeMismatch {
-            expected: 10,
-            actual: 5,
-        };
-        let err2 = TruenoError::SizeMismatch {
-            expected: 20,
-            actual: 5,
-        };
+        let err1 = TruenoError::SizeMismatch { expected: 10, actual: 5 };
+        let err2 = TruenoError::SizeMismatch { expected: 20, actual: 5 };
         assert_ne!(err1, err2);
     }
 
@@ -231,16 +210,10 @@ mod tests {
 
     #[test]
     fn test_size_mismatch_various_values() {
-        let err = TruenoError::SizeMismatch {
-            expected: 0,
-            actual: 0,
-        };
+        let err = TruenoError::SizeMismatch { expected: 0, actual: 0 };
         assert_eq!(err.to_string(), "Size mismatch: expected 0, got 0");
 
-        let err = TruenoError::SizeMismatch {
-            expected: 1000000,
-            actual: 999999,
-        };
+        let err = TruenoError::SizeMismatch { expected: 1000000, actual: 999999 };
         assert!(err.to_string().contains("1000000"));
         assert!(err.to_string().contains("999999"));
     }
@@ -283,10 +256,7 @@ mod tests {
         let err = TruenoError::InvalidInput("test".to_string());
         assert!(err.source().is_none());
 
-        let err = TruenoError::SizeMismatch {
-            expected: 1,
-            actual: 2,
-        };
+        let err = TruenoError::SizeMismatch { expected: 1, actual: 2 };
         assert!(err.source().is_none());
 
         let err = TruenoError::UnsupportedBackend(Backend::Scalar);
@@ -317,10 +287,7 @@ mod tests {
     fn test_error_clone_all_variants() {
         let errors: Vec<TruenoError> = vec![
             TruenoError::UnsupportedBackend(Backend::AVX512),
-            TruenoError::SizeMismatch {
-                expected: 10,
-                actual: 5,
-            },
+            TruenoError::SizeMismatch { expected: 10, actual: 5 },
             TruenoError::GpuError("test clone".to_string()),
             TruenoError::InvalidInput("test clone".to_string()),
             TruenoError::DivisionByZero,

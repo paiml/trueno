@@ -36,10 +36,7 @@ impl StressTestConfig {
     /// Create new stress test config
     #[must_use]
     pub fn new(master_seed: u64) -> Self {
-        Self {
-            master_seed,
-            ..Default::default()
-        }
+        Self { master_seed, ..Default::default() }
     }
 
     /// Set cycles per backend
@@ -322,14 +319,8 @@ mod tests {
 
     #[test]
     fn test_stress_anomaly_kinds() {
-        assert_eq!(
-            StressAnomalyKind::SlowOperation,
-            StressAnomalyKind::SlowOperation
-        );
-        assert_ne!(
-            StressAnomalyKind::SlowOperation,
-            StressAnomalyKind::TestFailure
-        );
+        assert_eq!(StressAnomalyKind::SlowOperation, StressAnomalyKind::SlowOperation);
+        assert_ne!(StressAnomalyKind::SlowOperation, StressAnomalyKind::TestFailure);
 
         // Test all variants exist
         let _slow = StressAnomalyKind::SlowOperation;

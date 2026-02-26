@@ -262,10 +262,7 @@ impl Vector<f32> {
             return Err(TruenoError::EmptyVector);
         }
         if self.len() != other.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: other.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
         let mean_x = self.mean()?;

@@ -41,11 +41,8 @@ fn f092_perturbation_stability() {
     );
 
     // For addition, relative change should be exactly O(eps)
-    for (i, (orig, pert)) in baseline_add
-        .as_slice()
-        .iter()
-        .zip(perturbed_add.as_slice().iter())
-        .enumerate()
+    for (i, (orig, pert)) in
+        baseline_add.as_slice().iter().zip(perturbed_add.as_slice().iter()).enumerate()
     {
         let relative_change = (pert - orig).abs() / orig.abs().max(1e-10);
         assert!(
@@ -56,10 +53,7 @@ fn f092_perturbation_stability() {
         );
     }
 
-    println!(
-        "F092 PASSED: Operations stable under {:.0e} perturbation",
-        eps
-    );
+    println!("F092 PASSED: Operations stable under {:.0e} perturbation", eps);
 }
 
 /// F093: Matrix multiplication numerical stability
@@ -86,13 +80,7 @@ fn f093_matmul_stability() {
     for i in 0..3 {
         for j in 0..3 {
             let val = c.get(i, j).unwrap();
-            assert!(
-                val.is_finite(),
-                "F093 FALSIFIED: matmul[{},{}] is not finite: {}",
-                i,
-                j,
-                val
-            );
+            assert!(val.is_finite(), "F093 FALSIFIED: matmul[{},{}] is not finite: {}", i, j, val);
         }
     }
 
@@ -126,21 +114,12 @@ fn f094_eigen_well_conditioned() {
 
     // All eigenvalues should be positive (matrix is positive definite)
     for (i, val) in values.iter().enumerate() {
-        assert!(
-            *val > 0.0,
-            "F094 FALSIFIED: eigenvalue[{}] not positive: {}",
-            i,
-            val
-        );
+        assert!(*val > 0.0, "F094 FALSIFIED: eigenvalue[{}] not positive: {}", i, val);
     }
 
     // Condition number = max_eigenvalue / min_eigenvalue
     let cond = values[0] / values[values.len() - 1];
-    assert!(
-        cond < 10.0,
-        "F094 FALSIFIED: condition number too high: {}",
-        cond
-    );
+    assert!(cond < 10.0, "F094 FALSIFIED: condition number too high: {}", cond);
 
     // Verify reconstruction accuracy
     let reconstructed = eigen.reconstruct().unwrap();
@@ -153,11 +132,7 @@ fn f094_eigen_well_conditioned() {
         }
     }
 
-    assert!(
-        max_error < 1e-5,
-        "F094 FALSIFIED: reconstruction error too large: {}",
-        max_error
-    );
+    assert!(max_error < 1e-5, "F094 FALSIFIED: reconstruction error too large: {}", max_error);
 
     println!(
         "F094 PASSED: Eigen decomposition stable (cond: {:.2}, error: {:.2e})",
@@ -187,10 +162,7 @@ fn f095_ill_conditioned_warning() {
         Ok(eigen) => {
             let values = eigen.eigenvalues();
             // Verify we got the eigenvalues (they're the diagonal entries for diagonal matrix)
-            assert!(
-                (values[0] - 1e6).abs() / 1e6 < 1e-3,
-                "F095: largest eigenvalue wrong"
-            );
+            assert!((values[0] - 1e6).abs() / 1e6 < 1e-3, "F095: largest eigenvalue wrong");
             println!(
                 "F095 PASSED: Ill-conditioned matrix handled (cond ~{:.0e})",
                 values[0] / values[values.len() - 1]
@@ -198,10 +170,7 @@ fn f095_ill_conditioned_warning() {
         }
         Err(e) => {
             // It's also acceptable to return an error for very ill-conditioned matrices
-            println!(
-                "F095 PASSED: Ill-conditioned matrix rejected with error: {}",
-                e
-            );
+            println!("F095 PASSED: Ill-conditioned matrix rejected with error: {}", e);
         }
     }
 }
@@ -235,10 +204,7 @@ fn f096_dot_product_order() {
         relative_diff
     );
 
-    println!(
-        "F096 PASSED: Dot product order stable (diff: {:.2e})",
-        relative_diff
-    );
+    println!("F096 PASSED: Dot product order stable (diff: {:.2e})", relative_diff);
 }
 
 /// F097: Vector norm stability
@@ -255,10 +221,7 @@ fn f097_norm_stability() {
 
     // ||v||^2 = 4 * (1e18)^2 = 4e36, which is well within f32 range
     // A stable implementation should handle this
-    assert!(
-        norm_sq.is_finite(),
-        "F097 FALSIFIED: norm squared overflowed"
-    );
+    assert!(norm_sq.is_finite(), "F097 FALSIFIED: norm squared overflowed");
 
     // Expected: 4 * 1e36
     let expected = 4.0 * large_val * large_val;
@@ -281,10 +244,7 @@ fn f097_norm_stability() {
 
     // Should be very small but not zero (underflow) unless it's a subnormal
     // The result 4 * (1e-30)^2 = 4e-60 underflows to 0 in f32
-    assert!(
-        dot_small >= 0.0,
-        "F097 FALSIFIED: small norm squared negative"
-    );
+    assert!(dot_small >= 0.0, "F097 FALSIFIED: small norm squared negative");
 
     println!("F097 PASSED: Norm computation stable");
 }
@@ -361,9 +321,7 @@ fn f099_higham_stability_suite() {
     );
 
     // Test 3: Alternating series stability
-    let alternating: Vec<f32> = (0..1000)
-        .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
-        .collect();
+    let alternating: Vec<f32> = (0..1000).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect();
     let alt_v = Vector::from_slice(&alternating);
     let sum_sq = alt_v.dot(&alt_v).unwrap();
 

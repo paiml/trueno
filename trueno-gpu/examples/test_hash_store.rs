@@ -42,9 +42,7 @@ fn main() {
 
     // Initialize to sentinel value
     let init_val = [0xBAD_BADu32];
-    output_buf
-        .copy_from_host(&init_val)
-        .expect("Failed to init output");
+    output_buf.copy_from_host(&init_val).expect("Failed to init output");
 
     let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("Failed to load PTX");
     println!("\nModule loaded successfully");
@@ -70,9 +68,7 @@ fn main() {
 
     // Read result
     let mut result = [0u32; 1];
-    output_buf
-        .copy_to_host(&mut result)
-        .expect("Failed to copy result");
+    output_buf.copy_to_host(&mut result).expect("Failed to copy result");
 
     println!();
     println!("=== RESULT ===");

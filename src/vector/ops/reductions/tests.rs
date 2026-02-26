@@ -274,10 +274,7 @@ fn test_covariance_basic() {
 fn test_covariance_size_mismatch() {
     let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
     let y = Vector::from_slice(&[1.0, 2.0]);
-    assert!(matches!(
-        x.covariance(&y),
-        Err(TruenoError::SizeMismatch { .. })
-    ));
+    assert!(matches!(x.covariance(&y), Err(TruenoError::SizeMismatch { .. })));
 }
 
 #[test]
@@ -309,20 +306,14 @@ fn test_correlation_negative() {
 fn test_correlation_constant_x() {
     let x = Vector::from_slice(&[5.0, 5.0, 5.0]);
     let y = Vector::from_slice(&[1.0, 2.0, 3.0]);
-    assert!(matches!(
-        x.correlation(&y),
-        Err(TruenoError::DivisionByZero)
-    ));
+    assert!(matches!(x.correlation(&y), Err(TruenoError::DivisionByZero)));
 }
 
 #[test]
 fn test_correlation_constant_y() {
     let x = Vector::from_slice(&[1.0, 2.0, 3.0]);
     let y = Vector::from_slice(&[5.0, 5.0, 5.0]);
-    assert!(matches!(
-        x.correlation(&y),
-        Err(TruenoError::DivisionByZero)
-    ));
+    assert!(matches!(x.correlation(&y), Err(TruenoError::DivisionByZero)));
 }
 
 // ========== Backend Tests ==========

@@ -161,17 +161,8 @@ fn test_layer_norm_basic() {
     assert!(mean.abs() < 1e-5, "Mean should be ~0, got {}", mean);
 
     // Output should have variance ≈ 1
-    let var: f32 = y
-        .as_slice()
-        .iter()
-        .map(|&v| (v - mean).powi(2))
-        .sum::<f32>()
-        / y.len() as f32;
-    assert!(
-        (var - 1.0).abs() < 1e-3,
-        "Variance should be ~1, got {}",
-        var
-    );
+    let var: f32 = y.as_slice().iter().map(|&v| (v - mean).powi(2)).sum::<f32>() / y.len() as f32;
+    assert!((var - 1.0).abs() < 1e-3, "Variance should be ~1, got {}", var);
 }
 
 #[test]
@@ -187,12 +178,7 @@ fn test_layer_norm_with_scale_shift() {
     assert!((mean - 1.0).abs() < 1e-3, "Mean should be ~1, got {}", mean);
 
     // Output should have std ≈ 2 (gamma)
-    let var: f32 = y
-        .as_slice()
-        .iter()
-        .map(|&v| (v - mean).powi(2))
-        .sum::<f32>()
-        / y.len() as f32;
+    let var: f32 = y.as_slice().iter().map(|&v| (v - mean).powi(2)).sum::<f32>() / y.len() as f32;
     let std = var.sqrt();
     assert!((std - 2.0).abs() < 1e-3, "Std should be ~2, got {}", std);
 }

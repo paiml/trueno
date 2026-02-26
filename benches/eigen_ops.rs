@@ -102,17 +102,12 @@ fn bench_eigen_comparison(c: &mut Criterion) {
         let nalgebra_matrix = DMatrix::from_row_slice(n, n, &data);
 
         // Benchmark trueno
-        group.bench_with_input(
-            BenchmarkId::new("trueno", n),
-            &trueno_matrix,
-            |bench, matrix| {
-                bench.iter(|| {
-                    let eigen =
-                        SymmetricEigen::new(black_box(matrix)).expect("eigen should succeed");
-                    black_box(eigen);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("trueno", n), &trueno_matrix, |bench, matrix| {
+            bench.iter(|| {
+                let eigen = SymmetricEigen::new(black_box(matrix)).expect("eigen should succeed");
+                black_box(eigen);
+            });
+        });
 
         // Benchmark nalgebra
         group.bench_with_input(

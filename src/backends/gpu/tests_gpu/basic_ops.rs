@@ -123,9 +123,5 @@ fn test_gpu_vec_add_empty() {
     let result = gpu.vec_add(&a, &b);
 
     // GPU backend returns error for empty vectors (wgpu doesn't allow zero-sized buffers)
-    assert!(
-        result.is_err(),
-        "Expected error for empty vectors, got: {:?}",
-        result
-    );
+    assert!(result.is_err(), "Expected error for empty vectors, got: {:?}", result);
 }

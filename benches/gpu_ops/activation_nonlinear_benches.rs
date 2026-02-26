@@ -9,9 +9,7 @@ const BENCH_SIZES: [usize; 3] = [10_000, 100_000, 1_000_000];
 
 /// Generate narrow-range test data: values in `[-size*0.0005, size*0.0005)` with step 0.001
 fn make_narrow_data(size: usize) -> Vec<f32> {
-    (0..size)
-        .map(|i| (i as f32) * 0.001 - (size as f32) * 0.0005)
-        .collect()
+    (0..size).map(|i| (i as f32) * 0.001 - (size as f32) * 0.0005).collect()
 }
 
 /// Run a GPU-vs-Scalar activation benchmark over standard sizes.
@@ -60,42 +58,28 @@ pub fn bench_gpu_sigmoid(c: &mut Criterion) {
 
 /// Benchmark GPU tanh activation vs scalar baseline
 pub fn bench_gpu_tanh(c: &mut Criterion) {
-    run_bench(
-        c,
-        "gpu_tanh",
-        make_narrow_data,
-        &|gpu, data| gpu.tanh(data).unwrap(),
-        &|data| data.iter().map(|&x| x.tanh()).collect(),
-    );
+    run_bench(c, "gpu_tanh", make_narrow_data, &|gpu, data| gpu.tanh(data).unwrap(), &|data| {
+        data.iter().map(|&x| x.tanh()).collect()
+    });
 }
 
 /// Benchmark GPU swish activation vs scalar baseline
 pub fn bench_gpu_swish(c: &mut Criterion) {
-    run_bench(
-        c,
-        "gpu_swish",
-        make_narrow_data,
-        &|gpu, data| gpu.swish(data).unwrap(),
-        &|data| data.iter().map(|&x| x / (1.0 + (-x).exp())).collect(),
-    );
+    run_bench(c, "gpu_swish", make_narrow_data, &|gpu, data| gpu.swish(data).unwrap(), &|data| {
+        data.iter().map(|&x| x / (1.0 + (-x).exp())).collect()
+    });
 }
 
 /// Benchmark GPU GELU activation vs scalar baseline
 pub fn bench_gpu_gelu(c: &mut Criterion) {
-    run_bench(
-        c,
-        "gpu_gelu",
-        make_narrow_data,
-        &|gpu, data| gpu.gelu(data).unwrap(),
-        &|data| {
-            const SQRT_2_OVER_PI: f32 = 0.7978846;
-            const COEFF: f32 = 0.044715;
-            data.iter()
-                .map(|&x| {
-                    let inner = SQRT_2_OVER_PI * (x + COEFF * x * x * x);
-                    0.5 * x * (1.0 + inner.tanh())
-                })
-                .collect()
-        },
-    );
+    run_bench(c, "gpu_gelu", make_narrow_data, &|gpu, data| gpu.gelu(data).unwrap(), &|data| {
+        const SQRT_2_OVER_PI: f32 = 0.7978846;
+        const COEFF: f32 = 0.044715;
+        data.iter()
+            .map(|&x| {
+                let inner = SQRT_2_OVER_PI * (x + COEFF * x * x * x);
+                0.5 * x * (1.0 + inner.tanh())
+            })
+            .collect()
+    });
 }

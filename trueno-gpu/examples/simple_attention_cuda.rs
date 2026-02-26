@@ -205,12 +205,7 @@ fn build_simple_attention_kernel(seq_len: u32, head_dim: u32) -> PtxKernel {
 fn attention_kernel_ptx() -> String {
     let kernel = build_simple_attention_kernel(SEQ_LEN as u32, HEAD_DIM as u32);
 
-    PtxModule::new()
-        .version(8, 0)
-        .target("sm_89")
-        .address_size(64)
-        .add_kernel(kernel)
-        .emit()
+    PtxModule::new().version(8, 0).target("sm_89").address_size(64).add_kernel(kernel).emit()
 }
 
 /// CPU reference implementation
@@ -282,18 +277,11 @@ fn main() {
     };
 
     let device_name = ctx.device_name().unwrap_or_else(|_| "Unknown".to_string());
-    println!(
-        "       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m",
-        device_name
-    );
+    println!("       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m", device_name);
 
     println!("\x1b[33m[2/7]\x1b[0m Generating PTX...");
     let ptx = attention_kernel_ptx();
-    println!(
-        "       PTX: {} bytes ({} lines)",
-        ptx.len(),
-        ptx.lines().count()
-    );
+    println!("       PTX: {} bytes ({} lines)", ptx.len(), ptx.lines().count());
 
     println!("\x1b[33m[3/7]\x1b[0m JIT compiling...");
     let mut module = match CudaModule::from_ptx(&ctx, &ptx) {
@@ -312,10 +300,7 @@ fn main() {
     println!("\x1b[33m[4/7]\x1b[0m Generating test data...");
     let (q_host, k_host, v_host) = generate_test_data(SEQ_LEN, HEAD_DIM);
     let total_elements = SEQ_LEN * HEAD_DIM;
-    println!(
-        "       Q/K/V: {}x{} = {}",
-        SEQ_LEN, HEAD_DIM, total_elements
-    );
+    println!("       Q/K/V: {}x{} = {}", SEQ_LEN, HEAD_DIM, total_elements);
 
     println!("\x1b[33m[5/7]\x1b[0m Allocating and transferring...");
     let mut q_buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, total_elements).expect("Q alloc");
@@ -351,19 +336,13 @@ fn main() {
     let block_size = SEQ_LEN.min(256) as u32;
     let grid_size = (SEQ_LEN as u32 + block_size - 1) / block_size;
 
-    let config = LaunchConfig {
-        grid: (grid_size, 1, 1),
-        block: (block_size, 1, 1),
-        shared_mem: 0,
-    };
+    let config = LaunchConfig { grid: (grid_size, 1, 1), block: (block_size, 1, 1), shared_mem: 0 };
 
     println!("       Grid: {}, Block: {}", grid_size, block_size);
 
     let start = std::time::Instant::now();
     unsafe {
-        stream
-            .launch_kernel(&mut module, "simple_attention", &config, &mut args)
-            .expect("launch");
+        stream.launch_kernel(&mut module, "simple_attention", &config, &mut args).expect("launch");
     }
     stream.synchronize().expect("sync");
     let elapsed = start.elapsed();
@@ -396,10 +375,7 @@ fn main() {
     println!("│ Head dimension     │ {:>20} │", HEAD_DIM);
     println!("│ GPU execution      │ {:>17?} │", elapsed);
     println!("│ Max difference     │ {:>18.6e} │", max_diff);
-    println!(
-        "│ Status             │ {:>20} │",
-        if passed { "✓ PASS" } else { "✗ FAIL" }
-    );
+    println!("│ Status             │ {:>20} │", if passed { "✓ PASS" } else { "✗ FAIL" });
     println!("└────────────────────┴──────────────────────┘");
 
     if !passed {
@@ -408,8 +384,5 @@ fn main() {
         std::process::exit(1);
     }
 
-    println!(
-        "\n\x1b[32m✓ Simple Attention CUDA verified on {}!\x1b[0m\n",
-        device_name
-    );
+    println!("\n\x1b[32m✓ Simple Attention CUDA verified on {}!\x1b[0m\n", device_name);
 }

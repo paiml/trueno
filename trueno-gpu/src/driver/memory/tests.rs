@@ -279,8 +279,7 @@ mod cuda_tests {
         dst.copy_from_host(&zeros).unwrap();
 
         unsafe {
-            dst.copy_from_buffer_at_async(&src, 15, 0, 10, &stream)
-                .unwrap();
+            dst.copy_from_buffer_at_async(&src, 15, 0, 10, &stream).unwrap();
         }
         stream.synchronize().unwrap();
 
@@ -338,8 +337,7 @@ mod cuda_tests {
 
         // zero count
         unsafe {
-            dst.copy_from_buffer_at_async(&src, 0, 0, 0, &stream)
-                .unwrap();
+            dst.copy_from_buffer_at_async(&src, 0, 0, 0, &stream).unwrap();
         }
     }
 }

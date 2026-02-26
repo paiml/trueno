@@ -24,21 +24,13 @@ fn kernel_arm_mean_zero_pulls_returns_zero() {
 
 #[test]
 fn kernel_arm_mean_single_pull() {
-    let arm = KernelArm {
-        pulls: 1,
-        total_reward: 0.8,
-        total_reward_sq: 0.64,
-    };
+    let arm = KernelArm { pulls: 1, total_reward: 0.8, total_reward_sq: 0.64 };
     assert!((arm.mean() - 0.8).abs() < 1e-6);
 }
 
 #[test]
 fn kernel_arm_mean_multiple_pulls() {
-    let arm = KernelArm {
-        pulls: 4,
-        total_reward: 2.0,
-        total_reward_sq: 1.2,
-    };
+    let arm = KernelArm { pulls: 4, total_reward: 2.0, total_reward_sq: 1.2 };
     assert!((arm.mean() - 0.5).abs() < 1e-6);
 }
 
@@ -52,11 +44,7 @@ fn kernel_arm_ucb_unexplored_is_infinity() {
 
 #[test]
 fn kernel_arm_ucb_explored_finite() {
-    let arm = KernelArm {
-        pulls: 10,
-        total_reward: 5.0,
-        total_reward_sq: 3.0,
-    };
+    let arm = KernelArm { pulls: 10, total_reward: 5.0, total_reward_sq: 3.0 };
     let ucb = arm.ucb(100, 2.0);
     assert!(ucb.is_finite());
     // UCB = mean + c * sqrt(2 * ln(total) / pulls)
@@ -67,16 +55,8 @@ fn kernel_arm_ucb_explored_finite() {
 
 #[test]
 fn kernel_arm_ucb_decreases_with_more_pulls() {
-    let arm_few = KernelArm {
-        pulls: 5,
-        total_reward: 2.5,
-        total_reward_sq: 1.5,
-    };
-    let arm_many = KernelArm {
-        pulls: 50,
-        total_reward: 25.0,
-        total_reward_sq: 15.0,
-    };
+    let arm_few = KernelArm { pulls: 5, total_reward: 2.5, total_reward_sq: 1.5 };
+    let arm_many = KernelArm { pulls: 50, total_reward: 25.0, total_reward_sq: 15.0 };
     // Same mean (0.5), but more pulls => smaller confidence interval
     let ucb_few = arm_few.ucb(100, 2.0);
     let ucb_many = arm_many.ucb(100, 2.0);
@@ -85,11 +65,7 @@ fn kernel_arm_ucb_decreases_with_more_pulls() {
 
 #[test]
 fn kernel_arm_ucb_increases_with_higher_exploration() {
-    let arm = KernelArm {
-        pulls: 10,
-        total_reward: 5.0,
-        total_reward_sq: 3.0,
-    };
+    let arm = KernelArm { pulls: 10, total_reward: 5.0, total_reward_sq: 3.0 };
     let ucb_low_c = arm.ucb(100, 0.5);
     let ucb_high_c = arm.ucb(100, 4.0);
     assert!(ucb_high_c > ucb_low_c, "Higher c should increase UCB");
@@ -97,11 +73,7 @@ fn kernel_arm_ucb_increases_with_higher_exploration() {
 
 #[test]
 fn kernel_arm_clone_is_equal() {
-    let arm = KernelArm {
-        pulls: 5,
-        total_reward: 3.0,
-        total_reward_sq: 2.0,
-    };
+    let arm = KernelArm { pulls: 5, total_reward: 3.0, total_reward_sq: 2.0 };
     let cloned = arm.clone();
     assert_eq!(cloned.pulls, arm.pulls);
     assert_eq!(cloned.total_reward, arm.total_reward);
@@ -330,19 +302,13 @@ fn online_learner_predict_non_negative() {
     let features = TunerFeatures::builder().build();
     let vec = features.to_vector();
     let prediction = learner.predict(&vec);
-    assert!(
-        prediction >= 0.0,
-        "Throughput prediction must be non-negative"
-    );
+    assert!(prediction >= 0.0, "Throughput prediction must be non-negative");
 }
 
 #[test]
 fn online_learner_predict_deterministic() {
     let learner = OnlineLearner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(7.0).batch_size(4).build();
     let vec = features.to_vector();
     let p1 = learner.predict(&vec);
     let p2 = learner.predict(&vec);
@@ -364,20 +330,13 @@ fn online_learner_observe_dimension_mismatch_ignored() {
     // Features length must be weights.len() - 1 for observe to work
     let wrong_dim = vec![1.0; 5]; // Wrong dimension
     learner.observe(&wrong_dim, 100.0);
-    assert_eq!(
-        learner.num_updates(),
-        0,
-        "Mismatched dimensions should be silently ignored"
-    );
+    assert_eq!(learner.num_updates(), 0, "Mismatched dimensions should be silently ignored");
 }
 
 #[test]
 fn online_learner_observe_correct_dimension() {
     let mut learner = OnlineLearner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
     let vec = features.to_vector();
 
     learner.observe(&vec, 100.0);
@@ -387,17 +346,11 @@ fn online_learner_observe_correct_dimension() {
 #[test]
 fn online_learner_observe_updates_ema_loss() {
     let mut learner = OnlineLearner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .batch_size(1)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(7.0).batch_size(1).build();
     let vec = features.to_vector();
 
     learner.observe(&vec, 200.0);
-    assert!(
-        learner.ema_loss() > 0.0,
-        "EMA loss should be updated after observation"
-    );
+    assert!(learner.ema_loss() > 0.0, "EMA loss should be updated after observation");
 }
 
 #[test]
@@ -405,31 +358,23 @@ fn online_learner_observe_updates_weights() {
     let mut learner = OnlineLearner::new();
     let original_weights = learner.weights().to_vec();
 
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
     let vec = features.to_vector();
 
     learner.observe(&vec, 100.0);
 
     let updated_weights = learner.weights();
     // At least some weights should have changed
-    let changed = original_weights
-        .iter()
-        .zip(updated_weights.iter())
-        .any(|(a, b)| (a - b).abs() > 1e-10);
+    let changed =
+        original_weights.iter().zip(updated_weights.iter()).any(|(a, b)| (a - b).abs() > 1e-10);
     assert!(changed, "Weights should be updated after observe");
 }
 
 #[test]
 fn online_learner_multiple_observations_converge() {
     let mut learner = OnlineLearner::new().with_learning_rate(0.01);
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .hidden_dim(1536)
-        .batch_size(1)
-        .build();
+    let features =
+        TunerFeatures::builder().model_params_b(1.5).hidden_dim(1536).batch_size(1).build();
     let vec = features.to_vector();
     let target = 150.0;
 
@@ -448,10 +393,7 @@ fn online_learner_multiple_observations_converge() {
 #[test]
 fn online_learner_replay_triggers_at_10() {
     let mut learner = OnlineLearner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
     let vec = features.to_vector();
 
     // Observe exactly 10 times to trigger replay
@@ -464,10 +406,7 @@ fn online_learner_replay_triggers_at_10() {
 #[test]
 fn online_learner_replay_buffer_bounded() {
     let mut learner = OnlineLearner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
     let vec = features.to_vector();
 
     // Push more than replay_buffer_size (100) observations

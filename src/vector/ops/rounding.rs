@@ -33,10 +33,7 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend, floor, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Computes the ceiling (round up to nearest integer) of each element.
@@ -58,10 +55,7 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend, ceil, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Rounds each element to the nearest integer.
@@ -87,10 +81,7 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend, round, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Truncates each element toward zero (removes fractional part).
@@ -112,10 +103,7 @@ impl Vector<f32> {
     /// ```
     pub fn trunc(&self) -> Result<Vector<f32>> {
         let trunc_data: Vec<f32> = self.data.iter().map(|x| x.trunc()).collect();
-        Ok(Vector {
-            data: trunc_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: trunc_data, backend: self.backend })
     }
 
     /// Returns the fractional part of each element.
@@ -139,10 +127,7 @@ impl Vector<f32> {
     /// ```
     pub fn fract(&self) -> Result<Vector<f32>> {
         let fract_data: Vec<f32> = self.data.iter().map(|x| x.fract()).collect();
-        Ok(Vector {
-            data: fract_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: fract_data, backend: self.backend })
     }
 
     /// Returns the sign of each element.
@@ -164,10 +149,7 @@ impl Vector<f32> {
     /// ```
     pub fn signum(&self) -> Result<Vector<f32>> {
         let signum_data: Vec<f32> = self.data.iter().map(|x| x.signum()).collect();
-        Ok(Vector {
-            data: signum_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: signum_data, backend: self.backend })
     }
 
     /// Returns a vector with the magnitude of `self` and the sign of `sign`.
@@ -196,23 +178,13 @@ impl Vector<f32> {
     /// ```
     pub fn copysign(&self, sign: &Self) -> Result<Vector<f32>> {
         if self.len() != sign.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: sign.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: sign.len() });
         }
 
-        let copysign_data: Vec<f32> = self
-            .data
-            .iter()
-            .zip(sign.data.iter())
-            .map(|(mag, sgn)| mag.copysign(*sgn))
-            .collect();
+        let copysign_data: Vec<f32> =
+            self.data.iter().zip(sign.data.iter()).map(|(mag, sgn)| mag.copysign(*sgn)).collect();
 
-        Ok(Vector {
-            data: copysign_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: copysign_data, backend: self.backend })
     }
 
     /// Element-wise minimum of two vectors.
@@ -233,23 +205,13 @@ impl Vector<f32> {
     /// ```
     pub fn minimum(&self, other: &Self) -> Result<Vector<f32>> {
         if self.len() != other.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: other.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
-        let minimum_data: Vec<f32> = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a.min(*b))
-            .collect();
+        let minimum_data: Vec<f32> =
+            self.data.iter().zip(other.data.iter()).map(|(a, b)| a.min(*b)).collect();
 
-        Ok(Vector {
-            data: minimum_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: minimum_data, backend: self.backend })
     }
 
     /// Element-wise maximum of two vectors.
@@ -270,23 +232,13 @@ impl Vector<f32> {
     /// ```
     pub fn maximum(&self, other: &Self) -> Result<Vector<f32>> {
         if self.len() != other.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: other.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
-        let maximum_data: Vec<f32> = self
-            .data
-            .iter()
-            .zip(other.data.iter())
-            .map(|(a, b)| a.max(*b))
-            .collect();
+        let maximum_data: Vec<f32> =
+            self.data.iter().zip(other.data.iter()).map(|(a, b)| a.max(*b)).collect();
 
-        Ok(Vector {
-            data: maximum_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: maximum_data, backend: self.backend })
     }
 
     /// Element-wise negation (unary minus).
@@ -306,9 +258,6 @@ impl Vector<f32> {
     /// ```
     pub fn neg(&self) -> Result<Vector<f32>> {
         let neg_data: Vec<f32> = self.data.iter().map(|x| -x).collect();
-        Ok(Vector {
-            data: neg_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: neg_data, backend: self.backend })
     }
 }

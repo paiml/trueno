@@ -144,10 +144,7 @@ fn test_memory_layout() {
     let view =
         TensorView::<f32>::new([4, 4, 1, 1]).with_layout(MemoryLayout::Tiled { tile_size: [2, 2] });
 
-    assert!(matches!(
-        view.layout(),
-        MemoryLayout::Tiled { tile_size: [2, 2] }
-    ));
+    assert!(matches!(view.layout(), MemoryLayout::Tiled { tile_size: [2, 2] }));
 }
 
 #[test]

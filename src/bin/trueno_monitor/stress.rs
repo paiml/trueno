@@ -88,12 +88,10 @@ impl App {
 
             let thread = thread::spawn(move || {
                 let n = matrix_size;
-                let data_a: Vec<f32> = (0..n * n)
-                    .map(|i| ((i + worker_id) % 1000) as f32 * 0.001)
-                    .collect();
-                let data_b: Vec<f32> = (0..n * n)
-                    .map(|i| ((i * 7 + worker_id) % 1000) as f32 * 0.001)
-                    .collect();
+                let data_a: Vec<f32> =
+                    (0..n * n).map(|i| ((i + worker_id) % 1000) as f32 * 0.001).collect();
+                let data_b: Vec<f32> =
+                    (0..n * n).map(|i| ((i * 7 + worker_id) % 1000) as f32 * 0.001).collect();
 
                 let a = Matrix::from_vec(n, n, data_a).expect("stress test matrix A creation");
                 let b = Matrix::from_vec(n, n, data_b).expect("stress test matrix B creation");
@@ -104,11 +102,7 @@ impl App {
                 }
             });
 
-            self.cpu_workers.push(StressWorker {
-                running,
-                ops_count,
-                thread: Some(thread),
-            });
+            self.cpu_workers.push(StressWorker { running, ops_count, thread: Some(thread) });
         }
     }
 
@@ -146,11 +140,7 @@ impl App {
             }
         });
 
-        self.mem_worker = Some(StressWorker {
-            running,
-            ops_count,
-            thread: Some(thread),
-        });
+        self.mem_worker = Some(StressWorker { running, ops_count, thread: Some(thread) });
     }
 
     #[cfg(feature = "cuda")]
@@ -192,21 +182,14 @@ impl App {
                 }
             });
 
-            self.gpu_workers.push(StressWorker {
-                running,
-                ops_count,
-                thread: Some(thread),
-            });
+            self.gpu_workers.push(StressWorker { running, ops_count, thread: Some(thread) });
         }
     }
 
     fn stop_stress(&mut self) {
         self.stress_running = false;
 
-        let duration_secs = self
-            .stress_start
-            .map(|s| s.elapsed().as_secs())
-            .unwrap_or(0);
+        let duration_secs = self.stress_start.map(|s| s.elapsed().as_secs()).unwrap_or(0);
         let cpu_worker_count = self.cpu_workers.len();
         let gpu_worker_count = self.gpu_workers.len();
 

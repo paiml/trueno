@@ -168,14 +168,10 @@ fn test_correctness(ctx: &CudaContext, n: u32, k: u32) -> Result<bool, String> {
             .map_err(|e| format!("Launch failed: {}", e))?;
     }
 
-    stream
-        .synchronize()
-        .map_err(|e| format!("Sync failed: {}", e))?;
+    stream.synchronize().map_err(|e| format!("Sync failed: {}", e))?;
 
     let mut output = vec![0.0f32; n as usize];
-    output_buf
-        .copy_to_host(&mut output)
-        .map_err(|e| format!("D2H failed: {}", e))?;
+    output_buf.copy_to_host(&mut output).map_err(|e| format!("D2H failed: {}", e))?;
 
     let (nan_outputs, inf_outputs, ok_outputs) = classify_outputs(&output);
 
@@ -245,12 +241,5 @@ fn main() {
         }
     }
 
-    println!(
-        "\n═══ {} ═══",
-        if all_passed {
-            "ALL TESTS PASSED"
-        } else {
-            "SOME TESTS FAILED"
-        }
-    );
+    println!("\n═══ {} ═══", if all_passed { "ALL TESTS PASSED" } else { "SOME TESTS FAILED" });
 }

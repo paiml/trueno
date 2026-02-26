@@ -66,9 +66,7 @@ fn render_register_widget(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
             Span::raw(format!("Total: {} → ", total)),
             Span::styled(
                 format!("{:.0}% occ", occupancy * 100.0),
-                Style::default()
-                    .fg(status_color)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(status_color).add_modifier(Modifier::BOLD),
             ),
         ])),
     ];
@@ -101,9 +99,7 @@ fn render_memory_widget(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
             Span::raw("Coalesced: "),
             Span::styled(
                 format!("{:.1}%", coal_pct),
-                Style::default()
-                    .fg(status_color)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(status_color).add_modifier(Modifier::BOLD),
             ),
         ])),
     ];
@@ -163,27 +159,15 @@ fn render_bugs_widget(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
         vec![
             ListItem::new(Line::from(vec![Span::styled(
                 format!("P0 Critical: {}", critical),
-                Style::default().fg(if critical > 0 {
-                    Color::Red
-                } else {
-                    Color::Green
-                }),
+                Style::default().fg(if critical > 0 { Color::Red } else { Color::Green }),
             )])),
             ListItem::new(Line::from(vec![Span::styled(
                 format!("P1 High: {}", high),
-                Style::default().fg(if high > 0 {
-                    Color::Yellow
-                } else {
-                    Color::Green
-                }),
+                Style::default().fg(if high > 0 { Color::Yellow } else { Color::Green }),
             )])),
             ListItem::new(Line::from(vec![Span::styled(
                 format!("P2 Medium: {}", medium),
-                Style::default().fg(if medium > 0 {
-                    Color::Blue
-                } else {
-                    Color::Green
-                }),
+                Style::default().fg(if medium > 0 { Color::Blue } else { Color::Green }),
             )])),
         ]
     };
@@ -221,11 +205,7 @@ fn render_warnings_widget(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
             .collect()
     };
 
-    let border_color = if app.report.warnings.is_empty() {
-        Color::Green
-    } else {
-        Color::Yellow
-    };
+    let border_color = if app.report.warnings.is_empty() { Color::Green } else { Color::Yellow };
 
     let block = Block::default()
         .title(" Muda (Waste) ")

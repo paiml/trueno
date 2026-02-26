@@ -22,11 +22,7 @@ fn dump_rd11_lines(ptx: &str) {
     println!("=== ALL lines containing %rd11 ===");
     for (i, line) in ptx.lines().enumerate() {
         if line.contains("%rd11") {
-            let marker = if check_writes_rd11(line) {
-                " <-- WRITES"
-            } else {
-                ""
-            };
+            let marker = if check_writes_rd11(line) { " <-- WRITES" } else { "" };
             println!("{:4}: {}{}", i + 1, line, marker);
         }
     }

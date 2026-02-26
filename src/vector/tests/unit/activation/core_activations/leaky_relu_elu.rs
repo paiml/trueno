@@ -49,10 +49,7 @@ fn test_leaky_relu_preserves_positive() {
     let result = v.leaky_relu(0.01).unwrap();
 
     for i in 0..v.len() {
-        assert_eq!(
-            result.data[i], v.data[i],
-            "Positive values should be preserved"
-        );
+        assert_eq!(result.data[i], v.data[i], "Positive values should be preserved");
     }
 }
 
@@ -138,10 +135,7 @@ fn test_elu_preserves_positive() {
     let result = v.elu(1.0).unwrap();
 
     for i in 0..v.len() {
-        assert_eq!(
-            result.data[i], v.data[i],
-            "Positive values should be preserved"
-        );
+        assert_eq!(result.data[i], v.data[i], "Positive values should be preserved");
     }
 }
 

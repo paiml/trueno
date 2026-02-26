@@ -6,10 +6,7 @@ fn assert_iota_sum(width: usize, height: usize) {
     let data: Vec<f32> = (1..=n as i32).map(|x| x as f32).collect();
     let sum = tiled_sum_2d(&data, width, height);
     let expected: f32 = (1..=n as i32).sum::<i32>() as f32;
-    assert!(
-        (sum - expected).abs() < 1e-2,
-        "sum={sum}, expected={expected}, dims={width}x{height}"
-    );
+    assert!((sum - expected).abs() < 1e-2, "sum={sum}, expected={expected}, dims={width}x{height}");
 }
 
 #[test]

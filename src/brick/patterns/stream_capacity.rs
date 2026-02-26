@@ -52,10 +52,7 @@ impl StreamCapacity {
         let available = self.available_send();
         if bytes > available {
             self.is_blocked = true;
-            return Err(FlowControlError::InsufficientCapacity {
-                requested: bytes,
-                available,
-            });
+            return Err(FlowControlError::InsufficientCapacity { requested: bytes, available });
         }
 
         self.stream_send -= bytes;

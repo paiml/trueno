@@ -14,11 +14,7 @@ fn test_to_dot_all_node_types() {
     graph.add_node(ExecutionNode::Layer { index: 0 });
 
     // Brick node
-    graph.add_node(ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 5000,
-        elements: 2048,
-    });
+    graph.add_node(ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 5000, elements: 2048 });
 
     // Kernel node
     graph.add_node(ExecutionNode::Kernel {
@@ -40,11 +36,7 @@ fn test_to_dot_all_node_types() {
     });
 
     // Function node without file/line
-    graph.add_node(ExecutionNode::Function {
-        name: "dispatch".into(),
-        file: None,
-        line: None,
-    });
+    graph.add_node(ExecutionNode::Function { name: "dispatch".into(), file: None, line: None });
 
     // Transfer H2D
     graph.add_node(ExecutionNode::Transfer {
@@ -146,14 +138,7 @@ fn test_to_dot_all_edge_types() {
     graph.add_edge(n2, n3, EdgeType::Launches);
     graph.add_edge(n3, n4, EdgeType::Sequence);
     graph.add_edge(n4, n5, EdgeType::DependsOn);
-    graph.add_edge(
-        n1,
-        n5,
-        EdgeType::Transfer {
-            bytes: 1024,
-            direction: TransferDirection::H2D,
-        },
-    );
+    graph.add_edge(n1, n5, EdgeType::Transfer { bytes: 1024, direction: TransferDirection::H2D });
 
     let dot = graph.to_dot();
 
@@ -242,11 +227,8 @@ fn test_to_ascii_tree_all_node_types() {
     });
     graph.add_edge(root, func, EdgeType::Contains);
 
-    let func_no_loc = graph.add_node(ExecutionNode::Function {
-        name: "init".into(),
-        file: None,
-        line: None,
-    });
+    let func_no_loc =
+        graph.add_node(ExecutionNode::Function { name: "init".into(), file: None, line: None });
     graph.add_edge(root, func_no_loc, EdgeType::Contains);
 
     let transfer = graph.add_node(ExecutionNode::Transfer {
@@ -403,10 +385,7 @@ fn test_to_dot_function_no_file_has_line() {
     let dot = graph.to_dot();
     assert!(dot.contains("orphan_func"));
     // (None, Some(99)) should produce empty loc string
-    assert!(
-        !dot.contains(":99"),
-        "Function with no file should not show :99 in DOT label"
-    );
+    assert!(!dot.contains(":99"), "Function with no file should not show :99 in DOT label");
 }
 
 // ================================================================
@@ -449,11 +428,7 @@ fn test_to_ascii_tree_function_no_file_has_line() {
 
     let tree = graph.to_ascii_tree();
     assert!(tree.contains("teardown"));
-    assert!(
-        !tree.contains(":55"),
-        "Function with no file should not show line number: {}",
-        tree
-    );
+    assert!(!tree.contains(":55"), "Function with no file should not show line number: {}", tree);
 }
 
 // ================================================================
@@ -474,11 +449,7 @@ fn test_to_dot_async_task_zero_polls_efficiency() {
     let dot = graph.to_dot();
     assert!(dot.contains("zero_poll_task"));
     assert!(dot.contains("polls:0"));
-    assert!(
-        dot.contains("0%"),
-        "Zero polls should show 0% efficiency in DOT: {}",
-        dot
-    );
+    assert!(dot.contains("0%"), "Zero polls should show 0% efficiency in DOT: {}", dot);
 }
 
 /// Verify DOT output for AsyncTask with nonzero polls shows correct efficiency.
@@ -497,11 +468,7 @@ fn test_to_dot_async_task_nonzero_polls_efficiency() {
     assert!(dot.contains("polls:4"));
     assert!(dot.contains("yields:2"));
     // 100.0 / 4 = 25%
-    assert!(
-        dot.contains("25%"),
-        "4 polls should show 25% efficiency: {}",
-        dot
-    );
+    assert!(dot.contains("25%"), "4 polls should show 25% efficiency: {}", dot);
 }
 
 // ================================================================

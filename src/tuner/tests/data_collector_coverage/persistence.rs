@@ -18,14 +18,8 @@ fn save_and_load_apr_round_trip() {
 
     let loaded = TunerDataCollector::load_apr(&path).expect("load should succeed");
     assert_eq!(loaded.len(), 5);
-    assert_eq!(
-        loaded.samples()[0].throughput_tps,
-        c.samples()[0].throughput_tps
-    );
-    assert_eq!(
-        loaded.samples()[4].throughput_tps,
-        c.samples()[4].throughput_tps
-    );
+    assert_eq!(loaded.samples()[0].throughput_tps, c.samples()[0].throughput_tps);
+    assert_eq!(loaded.samples()[4].throughput_tps, c.samples()[4].throughput_tps);
 
     // Loaded collector should have default state for non-persisted fields
     assert!(!loaded.is_online_learning_enabled());
@@ -42,8 +36,7 @@ fn save_apr_creates_parent_directories() {
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join("trueno_test_nested_dir"));
 
     let c = make_collector_with_samples(1);
-    c.save_apr(&path)
-        .expect("save to nested dir should succeed");
+    c.save_apr(&path).expect("save to nested dir should succeed");
     assert!(path.exists());
 
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join("trueno_test_nested_dir"));
@@ -110,12 +103,10 @@ fn load_apr_crc_mismatch() {
     let json_bytes = b"[]";
     let mut file = std::fs::File::create(&path).expect("create file");
     file.write_all(b"APR2").expect("write magic");
-    file.write_all(&(json_bytes.len() as u32).to_le_bytes())
-        .expect("write len");
+    file.write_all(&(json_bytes.len() as u32).to_le_bytes()).expect("write len");
     file.write_all(json_bytes).expect("write data");
     // Write wrong CRC
-    file.write_all(&0xDEADBEEFu32.to_le_bytes())
-        .expect("write bad crc");
+    file.write_all(&0xDEADBEEFu32.to_le_bytes()).expect("write bad crc");
     drop(file);
 
     let result = TunerDataCollector::load_apr(&path);
@@ -158,8 +149,7 @@ fn load_apr_invalid_json_in_valid_envelope() {
 
     let mut file = std::fs::File::create(&path).expect("create file");
     file.write_all(b"APR2").expect("write magic");
-    file.write_all(&(json_bytes.len() as u32).to_le_bytes())
-        .expect("write len");
+    file.write_all(&(json_bytes.len() as u32).to_le_bytes()).expect("write len");
     file.write_all(json_bytes).expect("write data");
     file.write_all(&crc.to_le_bytes()).expect("write crc");
     drop(file);
@@ -204,16 +194,10 @@ fn record_and_persist_and_load_or_create_full_lifecycle() {
     // Phase 1: load_or_create falls back to new when no cache exists
     // ------------------------------------------------------------------
     let _ = std::fs::remove_file(&cache_path);
-    assert!(
-        !cache_path.exists(),
-        "pre-clean: cache file should not exist"
-    );
+    assert!(!cache_path.exists(), "pre-clean: cache file should not exist");
 
     let collector = TunerDataCollector::load_or_create();
-    assert!(
-        collector.is_empty(),
-        "load_or_create should return empty when no cache"
-    );
+    assert!(collector.is_empty(), "load_or_create should return empty when no cache");
 
     // ------------------------------------------------------------------
     // Phase 2: load_or_create falls back to new on corrupt cache
@@ -223,16 +207,12 @@ fn record_and_persist_and_load_or_create_full_lifecycle() {
     }
     {
         let mut file = std::fs::File::create(&cache_path).expect("create corrupt file");
-        file.write_all(b"GARBAGE_DATA_NOT_APR")
-            .expect("write garbage");
+        file.write_all(b"GARBAGE_DATA_NOT_APR").expect("write garbage");
     }
     assert!(cache_path.exists(), "corrupt file should exist");
 
     let collector = TunerDataCollector::load_or_create();
-    assert!(
-        collector.is_empty(),
-        "load_or_create should fall back to new on corrupt cache"
-    );
+    assert!(collector.is_empty(), "load_or_create should fall back to new on corrupt cache");
 
     // ------------------------------------------------------------------
     // Phase 3: record_and_persist writes sample and saves to cache
@@ -249,23 +229,13 @@ fn record_and_persist_and_load_or_create_full_lifecycle() {
 
     let result = collector.record_and_persist(&profiler, &config, KernelType::TiledQ4K);
     assert!(result.is_ok(), "record_and_persist should succeed");
-    assert_eq!(
-        collector.len(),
-        1,
-        "collector should have one sample after record_and_persist"
-    );
+    assert_eq!(collector.len(), 1, "collector should have one sample after record_and_persist");
 
     // Verify file was written and is loadable
-    assert!(
-        cache_path.exists(),
-        "cache file should exist after record_and_persist"
-    );
+    assert!(cache_path.exists(), "cache file should exist after record_and_persist");
     let loaded = TunerDataCollector::load_apr(&cache_path).expect("load after persist");
     assert_eq!(loaded.len(), 1);
-    assert_eq!(
-        loaded.samples()[0].throughput_tps,
-        collector.samples()[0].throughput_tps
-    );
+    assert_eq!(loaded.samples()[0].throughput_tps, collector.samples()[0].throughput_tps);
 
     // ------------------------------------------------------------------
     // Phase 4: record_and_persist appends a second sample
@@ -282,19 +252,9 @@ fn record_and_persist_and_load_or_create_full_lifecycle() {
     // Phase 5: load_or_create loads the persisted data
     // ------------------------------------------------------------------
     let loaded = TunerDataCollector::load_or_create();
-    assert_eq!(
-        loaded.len(),
-        2,
-        "load_or_create should load the 2 persisted samples"
-    );
-    assert_eq!(
-        loaded.samples()[0].throughput_tps,
-        collector.samples()[0].throughput_tps
-    );
-    assert_eq!(
-        loaded.samples()[1].throughput_tps,
-        collector.samples()[1].throughput_tps
-    );
+    assert_eq!(loaded.len(), 2, "load_or_create should load the 2 persisted samples");
+    assert_eq!(loaded.samples()[0].throughput_tps, collector.samples()[0].throughput_tps);
+    assert_eq!(loaded.samples()[1].throughput_tps, collector.samples()[1].throughput_tps);
 
     // ------------------------------------------------------------------
     // Phase 6: load_or_create returns data with correct default state
@@ -326,11 +286,7 @@ fn cache_path_returns_valid_path_with_hardware_id() {
     );
     // Path should contain "trueno" directory
     let path_str = path.to_string_lossy();
-    assert!(
-        path_str.contains("trueno"),
-        "cache path should contain 'trueno': {}",
-        path_str
-    );
+    assert!(path_str.contains("trueno"), "cache path should contain 'trueno': {}", path_str);
     // Filename should contain hardware ID prefix
     let filename = path.file_name().unwrap().to_string_lossy();
     assert!(
@@ -349,9 +305,5 @@ fn hardware_id_returns_stable_hex_string() {
     assert_eq!(id1, id2, "hardware_id should be stable across calls");
     // Should be 8 hex characters
     assert_eq!(id1.len(), 8, "hardware_id should be 8 hex chars: {}", id1);
-    assert!(
-        id1.chars().all(|c| c.is_ascii_hexdigit()),
-        "hardware_id should be hex: {}",
-        id1
-    );
+    assert!(id1.chars().all(|c| c.is_ascii_hexdigit()), "hardware_id should be hex: {}", id1);
 }

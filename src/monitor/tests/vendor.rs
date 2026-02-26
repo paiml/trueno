@@ -50,8 +50,5 @@ fn h0_mon_05_vendor_unknown_id() {
 fn h0_mon_06_vendor_display() {
     assert_eq!(format!("{}", GpuVendor::Nvidia), "NVIDIA");
     assert_eq!(format!("{}", GpuVendor::Amd), "AMD");
-    assert_eq!(
-        format!("{}", GpuVendor::Unknown(0x1234)),
-        "Unknown (0x1234)"
-    );
+    assert_eq!(format!("{}", GpuVendor::Unknown(0x1234)), "Unknown (0x1234)");
 }

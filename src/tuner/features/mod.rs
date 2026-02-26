@@ -177,31 +177,23 @@ impl TunerFeatures {
 
         // F022: No infinite features
         if v.iter().any(|x| x.is_infinite()) {
-            return Err(TunerError::InvalidFeature(
-                "Infinite value in features".into(),
-            ));
+            return Err(TunerError::InvalidFeature("Infinite value in features".into()));
         }
 
         // F023: All features in [0, 1] (with small tolerance for floating point)
         if v.iter().any(|x| *x < -0.001 || *x > 1.001) {
-            return Err(TunerError::InvalidFeature(
-                "Feature value outside [0, 1]".into(),
-            ));
+            return Err(TunerError::InvalidFeature("Feature value outside [0, 1]".into()));
         }
 
         // F029: One-hot sums = 1
         let quant_sum: f32 = self.quant_type_onehot.iter().sum();
         if (quant_sum - 1.0).abs() > 0.001 && quant_sum > 0.001 {
-            return Err(TunerError::InvalidFeature(
-                "Quant one-hot does not sum to 1".into(),
-            ));
+            return Err(TunerError::InvalidFeature("Quant one-hot does not sum to 1".into()));
         }
 
         let kernel_sum: f32 = self.kernel_type_onehot.iter().sum();
         if (kernel_sum - 1.0).abs() > 0.001 && kernel_sum > 0.001 {
-            return Err(TunerError::InvalidFeature(
-                "Kernel one-hot does not sum to 1".into(),
-            ));
+            return Err(TunerError::InvalidFeature("Kernel one-hot does not sum to 1".into()));
         }
 
         Ok(())

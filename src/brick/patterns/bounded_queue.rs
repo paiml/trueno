@@ -27,10 +27,7 @@ pub struct BoundedQueue<T> {
 impl<T> BoundedQueue<T> {
     /// Create a new bounded queue.
     pub fn new(capacity: usize) -> Self {
-        Self {
-            items: VecDeque::with_capacity(capacity),
-            capacity,
-        }
+        Self { items: VecDeque::with_capacity(capacity), capacity }
     }
 
     /// Try to push an item. Returns error if queue is full.

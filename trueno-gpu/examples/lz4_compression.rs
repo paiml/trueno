@@ -76,10 +76,7 @@ fn main() {
     let matches = decompressed[..decomp_size] == text_page[..decomp_size];
     println!("  Roundtrip Verification:");
     println!("    Decompressed size: {} bytes", decomp_size);
-    println!(
-        "    Data matches:      {}\n",
-        if matches { "✓" } else { "✗" }
-    );
+    println!("    Data matches:      {}\n", if matches { "✓" } else { "✗" });
 
     // ==========================================================================
     // Part 2: GPU Kernel Generation
@@ -113,14 +110,7 @@ fn main() {
     // Barrier safety analysis
     let safety = kernel.analyze_barrier_safety();
     println!("  Barrier Safety Analysis:");
-    println!(
-        "    Status:        {}",
-        if safety.is_safe {
-            "✓ Safe"
-        } else {
-            "✗ Violations found"
-        }
-    );
+    println!("    Status:        {}", if safety.is_safe { "✓ Safe" } else { "✗ Violations found" });
     if !safety.is_safe {
         for v in &safety.violations {
             println!("    Violation:     {:?}", v);
@@ -170,10 +160,7 @@ fn main() {
     for (i, line) in ptx.lines().take(40).enumerate() {
         println!("  {:3} │ {}", i + 1, line);
     }
-    println!(
-        "  ... [{} more lines]\n",
-        ptx.lines().count().saturating_sub(40)
-    );
+    println!("  ... [{} more lines]\n", ptx.lines().count().saturating_sub(40));
 
     // ==========================================================================
     // Summary

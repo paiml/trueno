@@ -49,12 +49,7 @@ impl BrickProfiler {
     /// ```
     #[must_use]
     pub fn start_tile(&self, level: TileLevel, row: u32, col: u32) -> TileTimer {
-        TileTimer {
-            level,
-            _row: row,
-            _col: col,
-            start: Instant::now(),
-        }
+        TileTimer { level, _row: row, _col: col, start: Instant::now() }
     }
 
     /// Stop timing and record tile statistics.

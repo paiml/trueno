@@ -185,14 +185,7 @@ fn reduce_tile<Op: ReduceOp>(
     tile_y: usize,
 ) -> f32 {
     let mut tile = [[Op::identity(); TILE_SIZE]; TILE_SIZE];
-    load_tile(
-        &mut tile,
-        data,
-        width,
-        height,
-        tile_x * TILE_SIZE,
-        tile_y * TILE_SIZE,
-    );
+    load_tile(&mut tile, data, width, height, tile_x * TILE_SIZE, tile_y * TILE_SIZE);
     reduce_rows::<Op>(&mut tile);
     reduce_columns::<Op>(&mut tile);
     tile[0][0]

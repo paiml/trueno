@@ -38,32 +38,17 @@ mod calibrate_tests {
         let result = tuner.calibrate().expect("calibrate should succeed");
 
         // Must produce calibration weights
-        assert!(
-            !result.throughput_weights.is_empty(),
-            "Calibration should produce weights"
-        );
+        assert!(!result.throughput_weights.is_empty(), "Calibration should produce weights");
         // MAPE should be non-negative
         assert!(result.local_mape >= 0.0, "MAPE should be non-negative");
         // Improvement over pretrained >= 0 (clamped)
-        assert!(
-            result.improvement_pct >= 0.0,
-            "Improvement should be non-negative"
-        );
+        assert!(result.improvement_pct >= 0.0, "Improvement should be non-negative");
         // Hardware ID should not be empty
-        assert!(
-            !result.hardware_id.is_empty(),
-            "Hardware ID should be populated"
-        );
+        assert!(!result.hardware_id.is_empty(), "Hardware ID should be populated");
         // Duration should be positive
-        assert!(
-            result.duration_secs > 0.0,
-            "Calibration should take some time"
-        );
+        assert!(result.duration_secs > 0.0, "Calibration should take some time");
         // Should have 4 batch sizes * 3 model sizes * 2 quant types = 24 benchmarks
-        assert_eq!(
-            result.num_benchmarks, 24,
-            "Expected 24 synthetic benchmarks"
-        );
+        assert_eq!(result.num_benchmarks, 24, "Expected 24 synthetic benchmarks");
     }
 
     #[test]
@@ -89,10 +74,7 @@ mod calibrate_tests {
             "Weights should be non-empty after calibration"
         );
         // MAPE may improve or stay the same, but should be valid
-        assert!(
-            tuner.throughput_mape() >= 0.0,
-            "MAPE should be valid after calibration"
-        );
+        assert!(tuner.throughput_mape() >= 0.0, "MAPE should be valid after calibration");
         // Verify MAPE was updated (not necessarily improved, but changed)
         let _ = pretrained_mape; // used for comparison reference
     }
@@ -157,9 +139,7 @@ mod train_random_forest_tests {
         let mut regressor = ThroughputRegressor::with_random_forest(10);
         let initial_mape = regressor.mape;
         let data = make_training_data(20);
-        regressor
-            .train_random_forest(&data)
-            .expect("training should succeed");
+        regressor.train_random_forest(&data).expect("training should succeed");
         // MAPE should be updated (may be different from default)
         assert!(regressor.mape >= 0.0, "MAPE should be non-negative");
         // With a trained model, MAPE on training data should be low
@@ -175,9 +155,7 @@ mod train_random_forest_tests {
     fn train_random_forest_predict_uses_rf() {
         let mut regressor = ThroughputRegressor::with_random_forest(10);
         let data = make_training_data(20);
-        regressor
-            .train_random_forest(&data)
-            .expect("training should succeed");
+        regressor.train_random_forest(&data).expect("training should succeed");
 
         // After training, predict should use the random forest model
         let features = TunerFeatures::builder()
@@ -196,9 +174,7 @@ mod train_random_forest_tests {
     fn train_random_forest_with_larger_dataset() {
         let mut regressor = ThroughputRegressor::with_random_forest(20);
         let data = make_training_data(50);
-        regressor
-            .train_random_forest(&data)
-            .expect("training should succeed");
+        regressor.train_random_forest(&data).expect("training should succeed");
         assert_eq!(regressor.sample_count, 50);
     }
 
@@ -261,10 +237,7 @@ mod kernel_classifier_train_tests {
         classifier.train(&data).expect("training should succeed");
         // Accuracy should be between 0 and 1
         // Access accuracy through the struct (it's private, so test via predict behavior)
-        let features = TunerFeatures::builder()
-            .model_params_b(7.0)
-            .batch_size(4)
-            .build();
+        let features = TunerFeatures::builder().model_params_b(7.0).batch_size(4).build();
         let rec = classifier.predict(&features);
         assert!(rec.confidence > 0.0);
     }
@@ -273,10 +246,7 @@ mod kernel_classifier_train_tests {
     fn kernel_classifier_train_with_rf_constructor() {
         let classifier = KernelClassifier::with_random_forest(50);
         // Should work without training — predict uses rule-based fallback
-        let features = TunerFeatures::builder()
-            .model_params_b(7.0)
-            .batch_size(1)
-            .build();
+        let features = TunerFeatures::builder().model_params_b(7.0).batch_size(1).build();
         let rec = classifier.predict(&features);
         assert!(rec.confidence > 0.0);
     }
@@ -333,11 +303,7 @@ mod crc32_table_tests {
             hashes.insert(hash);
         }
         // All 16 low-nibble values should produce distinct hashes
-        assert_eq!(
-            hashes.len(),
-            16,
-            "All low-nibble bytes should produce unique CRC32"
-        );
+        assert_eq!(hashes.len(), 16, "All low-nibble bytes should produce unique CRC32");
     }
 
     #[test]
@@ -364,11 +330,7 @@ mod crc32_table_tests {
             let hash = crc32_hash(&[i << 4]);
             hashes.insert(hash);
         }
-        assert_eq!(
-            hashes.len(),
-            16,
-            "All high-nibble bytes should produce unique CRC32"
-        );
+        assert_eq!(hashes.len(), 16, "All high-nibble bytes should produce unique CRC32");
     }
 }
 
@@ -385,10 +347,7 @@ mod record_tests {
         let profiler = make_profiler_with_tokens(100, 1_000_000); // 100 tokens in 1ms
         let config = RunConfig::default();
         let result = collector.record(&profiler, &config, KernelType::VectorizedQ4K);
-        assert!(
-            result.is_some(),
-            "record should return Some when profiler has tokens"
-        );
+        assert!(result.is_some(), "record should return Some when profiler has tokens");
         assert_eq!(collector.len(), 1);
     }
 
@@ -570,9 +529,7 @@ mod load_or_default_tests {
         let path2 = BrickTuner::cache_path();
         assert_eq!(path1, path2, "Cache path should be deterministic");
         assert!(
-            path1
-                .to_string_lossy()
-                .contains(&format!("tuner_model_v{}.apr", BrickTuner::VERSION)),
+            path1.to_string_lossy().contains(&format!("tuner_model_v{}.apr", BrickTuner::VERSION)),
             "Cache path should contain version: {:?}",
             path1
         );
@@ -651,11 +608,9 @@ mod brick_tuner_persistence_tests {
         let json = b"{}";
         let mut file = std::fs::File::create(&path).expect("create");
         file.write_all(b"APR1").expect("magic");
-        file.write_all(&(json.len() as u32).to_le_bytes())
-            .expect("len");
+        file.write_all(&(json.len() as u32).to_le_bytes()).expect("len");
         file.write_all(json).expect("data");
-        file.write_all(&0xDEADBEEFu32.to_le_bytes())
-            .expect("bad crc");
+        file.write_all(&0xDEADBEEFu32.to_le_bytes()).expect("bad crc");
         drop(file);
 
         let result = BrickTuner::load_apr(&path);
@@ -738,10 +693,7 @@ mod throughput_train_tests {
         let data = make_training_data(20);
         regressor.train(&data).expect("training should succeed");
         assert!(regressor.mape >= 0.0);
-        assert!(
-            regressor.mape < 10.0,
-            "MAPE should be reasonable after training"
-        );
+        assert!(regressor.mape < 10.0, "MAPE should be reasonable after training");
     }
 
     #[test]
@@ -773,10 +725,7 @@ mod throughput_train_tests {
         let data = make_training_data(20);
         regressor.train(&data).expect("training should succeed");
 
-        let features = TunerFeatures::builder()
-            .model_params_b(7.0)
-            .batch_size(4)
-            .build();
+        let features = TunerFeatures::builder().model_params_b(7.0).batch_size(4).build();
         let prediction = regressor.predict(&features);
         assert!(prediction.predicted_tps > 0.0);
         assert!(prediction.confidence > 0.0);
@@ -821,10 +770,7 @@ mod roofline_tests {
         let bound_q4k = ThroughputRegressor::compute_roofline_bound(&features_q4k);
         let bound_f32 = ThroughputRegressor::compute_roofline_bound(&features_f32);
         // F32 uses 4 bytes/param vs Q4K's 0.5625, so bound should be lower for F32
-        assert!(
-            bound_q4k > bound_f32,
-            "Q4K should have higher roofline bound than F32"
-        );
+        assert!(bound_q4k > bound_f32, "Q4K should have higher roofline bound than F32");
     }
 
     #[test]

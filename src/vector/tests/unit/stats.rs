@@ -240,13 +240,7 @@ fn test_covariance_size_mismatch() {
     let x = Vector::from_slice(&[1.0, 2.0]);
     let y = Vector::from_slice(&[1.0, 2.0, 3.0]);
     let result = x.covariance(&y);
-    assert!(matches!(
-        result,
-        Err(TruenoError::SizeMismatch {
-            expected: 2,
-            actual: 3
-        })
-    ));
+    assert!(matches!(result, Err(TruenoError::SizeMismatch { expected: 2, actual: 3 })));
 }
 
 #[test]
@@ -310,13 +304,7 @@ fn test_correlation_size_mismatch() {
     let x = Vector::from_slice(&[1.0, 2.0]);
     let y = Vector::from_slice(&[1.0, 2.0, 3.0]);
     let result = x.correlation(&y);
-    assert!(matches!(
-        result,
-        Err(TruenoError::SizeMismatch {
-            expected: 2,
-            actual: 3
-        })
-    ));
+    assert!(matches!(result, Err(TruenoError::SizeMismatch { expected: 2, actual: 3 })));
 }
 
 // ========================================================================

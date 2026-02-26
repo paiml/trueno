@@ -209,11 +209,8 @@ mod tests {
 
         assert_eq!(builder.instructions.len(), 6);
 
-        let labels: Vec<_> = builder
-            .instructions
-            .iter()
-            .map(|i| i.label.as_deref().unwrap())
-            .collect();
+        let labels: Vec<_> =
+            builder.instructions.iter().map(|i| i.label.as_deref().unwrap()).collect();
         assert_eq!(labels, vec!["ge", "eq", "ne", "lt", "gt", "le"]);
     }
 
@@ -324,9 +321,7 @@ mod tests {
         let pred10 = builder.setp_lt_u32_imm(a, 20);
 
         // All predicates should be unique
-        let preds = vec![
-            pred1, pred2, pred3, pred4, pred5, pred6, pred7, pred8, pred9, pred10,
-        ];
+        let preds = vec![pred1, pred2, pred3, pred4, pred5, pred6, pred7, pred8, pred9, pred10];
         for i in 0..preds.len() {
             for j in (i + 1)..preds.len() {
                 assert_ne!(
@@ -341,12 +336,7 @@ mod tests {
 
         // All predicates should be of type Pred
         for (i, pred) in preds.iter().enumerate() {
-            assert_eq!(
-                pred.ty(),
-                PtxType::Pred,
-                "Predicate {} should be of type Pred",
-                i
-            );
+            assert_eq!(pred.ty(), PtxType::Pred, "Predicate {} should be of type Pred", i);
         }
     }
 }

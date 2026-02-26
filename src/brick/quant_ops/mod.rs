@@ -78,11 +78,7 @@ impl BlockQ5K {
                 let byte_idx = base_idx / 2 + i / 2;
 
                 // Extract 4-bit low value
-                let q4 = if i % 2 == 0 {
-                    self.qs[byte_idx] & 0x0F
-                } else {
-                    self.qs[byte_idx] >> 4
-                };
+                let q4 = if i % 2 == 0 { self.qs[byte_idx] & 0x0F } else { self.qs[byte_idx] >> 4 };
 
                 // Extract 5th bit from qh
                 let qh_bit = ((self.qh[i] >> block_idx) & 1) as u8;
@@ -145,11 +141,7 @@ impl BlockQ6K {
                 let qh_idx = base_idx / 4 + i / 4;
 
                 // Extract 4-bit low value
-                let ql_val = if i % 2 == 0 {
-                    self.ql[ql_idx] & 0x0F
-                } else {
-                    self.ql[ql_idx] >> 4
-                };
+                let ql_val = if i % 2 == 0 { self.ql[ql_idx] & 0x0F } else { self.ql[ql_idx] >> 4 };
 
                 // Extract 2-bit high value
                 let qh_shift = (i % 4) * 2;
@@ -182,9 +174,7 @@ impl DotQ5KOp {
     /// Create a new Q5_K dot product operation.
     #[must_use]
     pub fn new(n_elements: usize) -> Self {
-        Self {
-            n_blocks: n_elements / BlockQ5K::BLOCK_SIZE,
-        }
+        Self { n_blocks: n_elements / BlockQ5K::BLOCK_SIZE }
     }
 
     /// Compute dot product with SIMD acceleration.
@@ -281,9 +271,7 @@ impl DotQ6KOp {
     /// Create a new Q6_K dot product operation.
     #[must_use]
     pub fn new(n_elements: usize) -> Self {
-        Self {
-            n_blocks: n_elements / BlockQ6K::BLOCK_SIZE,
-        }
+        Self { n_blocks: n_elements / BlockQ6K::BLOCK_SIZE }
     }
 
     /// Compute dot product with SIMD acceleration.

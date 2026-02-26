@@ -5,9 +5,7 @@ use super::*;
 fn test_matvec_parallel_large_matrix() {
     let rows = 4096;
     let cols = 16;
-    let mat_data: Vec<f32> = (0..rows * cols)
-        .map(|i| ((i % 100) as f32) * 0.01)
-        .collect();
+    let mat_data: Vec<f32> = (0..rows * cols).map(|i| ((i % 100) as f32) * 0.01).collect();
     let vec_data: Vec<f32> = (0..cols).map(|i| (i as f32) * 0.1 + 1.0).collect();
 
     let m_scalar = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), Backend::Scalar);
@@ -28,9 +26,7 @@ fn test_matvec_parallel_large_matrix() {
 fn test_matvec_parallel_with_simd_backends() {
     let rows = 4096;
     let cols = 32;
-    let mat_data: Vec<f32> = (0..rows * cols)
-        .map(|i| ((i % 50) as f32) * 0.02 - 0.5)
-        .collect();
+    let mat_data: Vec<f32> = (0..rows * cols).map(|i| ((i % 50) as f32) * 0.02 - 0.5).collect();
     let vec_data: Vec<f32> = (0..cols).map(|i| (i as f32) * 0.1).collect();
     let v = Vector::from_slice(&vec_data);
 
@@ -41,26 +37,17 @@ fn test_matvec_parallel_with_simd_backends() {
     {
         let m_sse = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), Backend::SSE2);
         let result_sse = m_sse.matvec(&v).unwrap();
-        for (i, (&got, &exp)) in result_sse
-            .as_slice()
-            .iter()
-            .zip(expected.as_slice().iter())
-            .enumerate()
+        for (i, (&got, &exp)) in
+            result_sse.as_slice().iter().zip(expected.as_slice().iter()).enumerate()
         {
-            assert!(
-                (got - exp).abs() < 1e-2,
-                "parallel Scalar vs SSE2 at [{i}]: {got} vs {exp}",
-            );
+            assert!((got - exp).abs() < 1e-2, "parallel Scalar vs SSE2 at [{i}]: {got} vs {exp}",);
         }
 
         if is_x86_feature_detected!("avx2") {
             let m_avx2 = Matrix::from_vec_with_backend(rows, cols, mat_data.clone(), Backend::AVX2);
             let result_avx2 = m_avx2.matvec(&v).unwrap();
-            for (i, (&got, &exp)) in result_avx2
-                .as_slice()
-                .iter()
-                .zip(expected.as_slice().iter())
-                .enumerate()
+            for (i, (&got, &exp)) in
+                result_avx2.as_slice().iter().zip(expected.as_slice().iter()).enumerate()
             {
                 assert!(
                     (got - exp).abs() < 1e-2,

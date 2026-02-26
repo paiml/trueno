@@ -113,10 +113,7 @@ mod tests {
 
     #[test]
     fn test_bottleneck_severity() {
-        assert_eq!(
-            serde_json::to_string(&BottleneckSeverity::Critical).unwrap(),
-            "\"Critical\""
-        );
+        assert_eq!(serde_json::to_string(&BottleneckSeverity::Critical).unwrap(), "\"Critical\"");
     }
 
     #[test]

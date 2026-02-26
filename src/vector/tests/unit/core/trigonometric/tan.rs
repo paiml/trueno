@@ -8,13 +8,7 @@ fn test_tan_basic() {
     let result = a.tan().unwrap();
     let expected = [0.0, 1.0, -1.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "tan basic mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "tan basic mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -42,13 +36,7 @@ fn test_tan_negative() {
     let result = a.tan().unwrap();
     let expected = [-1.0, -(1.0 / 3.0_f32.sqrt())];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "tan negative mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "tan negative mismatch at {}: {} != {}", i, res, exp);
     }
 }
 

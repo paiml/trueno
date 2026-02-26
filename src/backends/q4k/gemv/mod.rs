@@ -115,10 +115,7 @@ fn matmul_q4k_f32_parallel(
     use std::thread;
 
     // Use fewer threads with larger chunks for better cache efficiency
-    let num_threads = thread::available_parallelism()
-        .map(|p| p.get())
-        .unwrap_or(4)
-        .min(12);
+    let num_threads = thread::available_parallelism().map(|p| p.get()).unwrap_or(4).min(12);
 
     let chunk_size = (out_dim + num_threads - 1) / num_threads;
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;

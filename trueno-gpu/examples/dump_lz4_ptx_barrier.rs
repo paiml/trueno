@@ -1,12 +1,7 @@
 use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
 
-const BARRIER_PATTERNS: &[&str] = &[
-    "bar.sync",
-    "L_leader",
-    "L_warp_done",
-    "p_leader",
-    "L_compress_loop",
-];
+const BARRIER_PATTERNS: &[&str] =
+    &["bar.sync", "L_leader", "L_warp_done", "p_leader", "L_compress_loop"];
 
 fn is_barrier_related(line: &str) -> bool {
     BARRIER_PATTERNS.iter().any(|p| line.contains(p))

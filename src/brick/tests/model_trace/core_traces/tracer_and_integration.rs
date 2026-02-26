@@ -235,10 +235,7 @@ fn test_f263_tracing_overhead() {
     // Verify zero work done
     assert!(result.is_none());
     let summary = tracer_disabled.summary();
-    assert_eq!(
-        summary.total_forwards, 0,
-        "Disabled tracer should not track forwards"
-    );
+    assert_eq!(summary.total_forwards, 0, "Disabled tracer should not track forwards");
     assert_eq!(summary.attention_traces, 0);
     assert_eq!(summary.kv_steps, 0);
 
@@ -338,26 +335,11 @@ fn test_f272_bit_exactness() {
 
     // Bit-exact comparison
     assert_eq!(stats_with_tracing.count, stats_without_tracing.count);
-    assert_eq!(
-        stats_with_tracing.min.to_bits(),
-        stats_without_tracing.min.to_bits()
-    );
-    assert_eq!(
-        stats_with_tracing.max.to_bits(),
-        stats_without_tracing.max.to_bits()
-    );
-    assert_eq!(
-        stats_with_tracing.mean.to_bits(),
-        stats_without_tracing.mean.to_bits()
-    );
-    assert_eq!(
-        stats_with_tracing.std.to_bits(),
-        stats_without_tracing.std.to_bits()
-    );
-    assert_eq!(
-        stats_with_tracing.l2_norm.to_bits(),
-        stats_without_tracing.l2_norm.to_bits()
-    );
+    assert_eq!(stats_with_tracing.min.to_bits(), stats_without_tracing.min.to_bits());
+    assert_eq!(stats_with_tracing.max.to_bits(), stats_without_tracing.max.to_bits());
+    assert_eq!(stats_with_tracing.mean.to_bits(), stats_without_tracing.mean.to_bits());
+    assert_eq!(stats_with_tracing.std.to_bits(), stats_without_tracing.std.to_bits());
+    assert_eq!(stats_with_tracing.l2_norm.to_bits(), stats_without_tracing.l2_norm.to_bits());
 
     // Verify tracer doesn't modify data by reference
     let mut tracer = ModelTracer::new(ModelTracerConfig::full());
@@ -434,10 +416,7 @@ fn test_f275_anomaly_integration() {
     tracer.record_layer_activation(inf_layer);
     let result2 = tracer.end_forward();
     assert!(result2.is_some(), "Inf should trigger anomaly");
-    assert!(
-        result2.unwrap().contains("Inf"),
-        "Anomaly should mention Inf"
-    );
+    assert!(result2.unwrap().contains("Inf"), "Anomaly should mention Inf");
 
     // Forward pass 3: Inject NaN
     tracer.begin_forward(2);
@@ -446,10 +425,7 @@ fn test_f275_anomaly_integration() {
     tracer.record_layer_activation(nan_layer);
     let result3 = tracer.end_forward();
     assert!(result3.is_some(), "NaN should trigger anomaly");
-    assert!(
-        result3.unwrap().contains("NaN"),
-        "Anomaly should mention NaN"
-    );
+    assert!(result3.unwrap().contains("NaN"), "Anomaly should mention NaN");
 
     // Verify summary counts anomalies
     let summary = tracer.summary();

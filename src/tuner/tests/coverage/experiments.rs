@@ -21,16 +21,12 @@ fn test_suggest_experiments_memory_bound_small_batch() {
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     // Should suggest increasing batch size since batch_size < 8
     assert!(
-        suggestions
-            .iter()
-            .any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
+        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
         "Should suggest increasing batch size for memory-bound with small batch"
     );
     // Should suggest trying BatchedQ4K kernel
     assert!(
-        suggestions
-            .iter()
-            .any(|s| matches!(s, ExperimentSuggestion::TryKernel { .. })),
+        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::TryKernel { .. })),
         "Should suggest trying a kernel"
     );
 }
@@ -51,16 +47,12 @@ fn test_suggest_experiments_memory_bound_large_batch() {
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     // batch_size >= 8, so no batch size increase suggestion
     assert!(
-        !suggestions
-            .iter()
-            .any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
+        !suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
         "Should NOT suggest increasing batch size when already >= 8"
     );
     // But should suggest EnableMultiKvCache since batch_size > 1
     assert!(
-        suggestions
-            .iter()
-            .any(|s| matches!(s, ExperimentSuggestion::EnableMultiKvCache { .. })),
+        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::EnableMultiKvCache { .. })),
         "Should suggest multi-KV cache for batch_size > 1"
     );
 }
@@ -68,10 +60,7 @@ fn test_suggest_experiments_memory_bound_large_batch() {
 #[test]
 fn test_suggest_experiments_launch_bound_no_cuda_graphs() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(1)
-        .cuda_graphs(false)
-        .build();
+    let features = TunerFeatures::builder().batch_size(1).cuda_graphs(false).build();
 
     let bottleneck = BottleneckPrediction {
         class: BottleneckClass::LaunchBound,
@@ -82,17 +71,13 @@ fn test_suggest_experiments_launch_bound_no_cuda_graphs() {
 
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     assert!(
-        suggestions
-            .iter()
-            .any(|s| matches!(s, ExperimentSuggestion::EnableCudaGraphs)),
+        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::EnableCudaGraphs)),
         "Should suggest enabling CUDA graphs"
     );
     assert!(
         suggestions.iter().any(|s| matches!(
             s,
-            ExperimentSuggestion::TryKernel {
-                kernel: KernelType::FusedRmsNormQ4K
-            }
+            ExperimentSuggestion::TryKernel { kernel: KernelType::FusedRmsNormQ4K }
         )),
         "Should suggest fused kernel"
     );
@@ -101,10 +86,7 @@ fn test_suggest_experiments_launch_bound_no_cuda_graphs() {
 #[test]
 fn test_suggest_experiments_launch_bound_with_cuda_graphs() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(1)
-        .cuda_graphs(true)
-        .build();
+    let features = TunerFeatures::builder().batch_size(1).cuda_graphs(true).build();
 
     let bottleneck = BottleneckPrediction {
         class: BottleneckClass::LaunchBound,
@@ -116,9 +98,7 @@ fn test_suggest_experiments_launch_bound_with_cuda_graphs() {
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     // Should NOT suggest CUDA graphs since already enabled
     assert!(
-        !suggestions
-            .iter()
-            .any(|s| matches!(s, ExperimentSuggestion::EnableCudaGraphs)),
+        !suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::EnableCudaGraphs)),
         "Should NOT suggest CUDA graphs when already enabled"
     );
 }
@@ -139,16 +119,12 @@ fn test_suggest_experiments_attention_bound() {
     assert!(
         suggestions.iter().any(|s| matches!(
             s,
-            ExperimentSuggestion::TryKernel {
-                kernel: KernelType::BatchedAttention
-            }
+            ExperimentSuggestion::TryKernel { kernel: KernelType::BatchedAttention }
         )),
         "Should suggest batched attention kernel"
     );
     assert!(
-        suggestions
-            .iter()
-            .any(|s| matches!(s, ExperimentSuggestion::ReduceSequenceLength { .. })),
+        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::ReduceSequenceLength { .. })),
         "Should suggest reducing sequence length"
     );
 }
@@ -168,9 +144,7 @@ fn test_suggest_experiments_compute_bound() {
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     // ComputeBound falls into the default arm with batch_size < 4
     assert!(
-        suggestions
-            .iter()
-            .any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
+        suggestions.iter().any(|s| matches!(s, ExperimentSuggestion::IncreaseBatchSize { .. })),
         "Default arm should suggest increasing batch size when < 4"
     );
 }
@@ -189,10 +163,7 @@ fn test_suggest_experiments_unknown_large_batch() {
 
     let suggestions = tuner.suggest_experiments(&features, &bottleneck);
     // batch_size >= 4, so default arm should NOT suggest increasing
-    assert!(
-        suggestions.is_empty(),
-        "No suggestions when unknown bottleneck and batch_size >= 4"
-    );
+    assert!(suggestions.is_empty(), "No suggestions when unknown bottleneck and batch_size >= 4");
 }
 
 // =========================================================================
@@ -202,18 +173,12 @@ fn test_suggest_experiments_unknown_large_batch() {
 #[test]
 fn test_brick_tuner_render_panel() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(2)
-        .model_params_b(1.5)
-        .build();
+    let features = TunerFeatures::builder().batch_size(2).model_params_b(1.5).build();
     let rec = tuner.recommend(&features);
     let lines = tuner.render_panel(&rec);
     assert!(!lines.is_empty(), "Panel should have lines");
     // Should contain version info
-    assert!(
-        lines[0].contains("BrickTuner"),
-        "First line should mention BrickTuner"
-    );
+    assert!(lines[0].contains("BrickTuner"), "First line should mention BrickTuner");
 }
 
 #[test]
@@ -248,35 +213,23 @@ fn test_brick_tuner_render_panel_few_suggestions() {
 
     let lines = tuner.render_panel(&rec);
     // Should pad to 3 empty suggestion lines
-    assert!(
-        lines.len() >= 10,
-        "Panel should have padding for missing suggestions"
-    );
+    assert!(lines.len() >= 10, "Panel should have padding for missing suggestions");
 }
 
 #[test]
 fn test_brick_tuner_render_compact() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(2)
-        .model_params_b(1.5)
-        .build();
+    let features = TunerFeatures::builder().batch_size(2).model_params_b(1.5).build();
     let rec = tuner.recommend(&features);
     let compact = tuner.render_compact(&rec);
-    assert!(
-        compact.contains("Tuner:"),
-        "Compact should start with 'Tuner:'"
-    );
+    assert!(compact.contains("Tuner:"), "Compact should start with 'Tuner:'");
     assert!(compact.contains("tok/s"), "Compact should mention tok/s");
 }
 
 #[test]
 fn test_brick_tuner_render_comparison_excellent() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(2)
-        .model_params_b(1.5)
-        .build();
+    let features = TunerFeatures::builder().batch_size(2).model_params_b(1.5).build();
     let rec = tuner.recommend(&features);
     // Give actual_tps close to predicted for "Excellent"
     let actual_tps = rec.throughput.predicted_tps * 0.98;
@@ -289,10 +242,7 @@ fn test_brick_tuner_render_comparison_excellent() {
 #[test]
 fn test_brick_tuner_render_comparison_poor() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(2)
-        .model_params_b(1.5)
-        .build();
+    let features = TunerFeatures::builder().batch_size(2).model_params_b(1.5).build();
     let rec = tuner.recommend(&features);
     // Give very different actual_tps for "Poor"
     let actual_tps = rec.throughput.predicted_tps * 0.5;
@@ -395,10 +345,7 @@ fn test_brick_tuner_load_apr_crc_mismatch() {
 #[test]
 fn test_data_collector_apr_roundtrip() {
     let mut collector = TunerDataCollector::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(7.0).batch_size(4).build();
     collector.samples.push(TrainingSample {
         features,
         throughput_tps: 200.0,

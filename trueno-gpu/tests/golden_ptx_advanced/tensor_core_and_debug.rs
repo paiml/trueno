@@ -29,14 +29,12 @@ fn golden_cvt_f16_f32_instruction() {
 
 #[test]
 fn golden_cvt_f32_f16_instruction() {
-    let kernel = PtxKernel::new("test_cvt_f32_f16")
-        .param(PtxType::U64, "ptr")
-        .build(|ctx| {
-            let ptr = ctx.load_param_u64("ptr");
-            let f16_val = ctx.ld_global_f16(ptr);
-            let _f32_val = ctx.cvt_f32_f16(f16_val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_cvt_f32_f16").param(PtxType::U64, "ptr").build(|ctx| {
+        let ptr = ctx.load_param_u64("ptr");
+        let f16_val = ctx.ld_global_f16(ptr);
+        let _f32_val = ctx.cvt_f32_f16(f16_val);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     assert!(
@@ -48,13 +46,11 @@ fn golden_cvt_f32_f16_instruction() {
 
 #[test]
 fn golden_ld_global_f16_instruction() {
-    let kernel = PtxKernel::new("test_ld_global_f16")
-        .param(PtxType::U64, "ptr")
-        .build(|ctx| {
-            let ptr = ctx.load_param_u64("ptr");
-            let _val = ctx.ld_global_f16(ptr);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_ld_global_f16").param(PtxType::U64, "ptr").build(|ctx| {
+        let ptr = ctx.load_param_u64("ptr");
+        let _val = ctx.ld_global_f16(ptr);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     // PTX uses .b16 for f16 loads
@@ -67,15 +63,13 @@ fn golden_ld_global_f16_instruction() {
 
 #[test]
 fn golden_st_global_f16_instruction() {
-    let kernel = PtxKernel::new("test_st_global_f16")
-        .param(PtxType::U64, "ptr")
-        .build(|ctx| {
-            let ptr = ctx.load_param_u64("ptr");
-            let f32_val = ctx.mov_f32_imm(3.14);
-            let f16_val = ctx.cvt_f16_f32(f32_val);
-            ctx.st_global_f16(ptr, f16_val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_st_global_f16").param(PtxType::U64, "ptr").build(|ctx| {
+        let ptr = ctx.load_param_u64("ptr");
+        let f32_val = ctx.mov_f32_imm(3.14);
+        let f16_val = ctx.cvt_f16_f32(f32_val);
+        ctx.st_global_f16(ptr, f16_val);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     // PTX ISA requires st.global.b16 for half-precision stores (not st.global.f16)
@@ -92,13 +86,11 @@ fn golden_st_global_f16_instruction() {
 
 #[test]
 fn golden_wmma_load_a_f16_instruction() {
-    let kernel = PtxKernel::new("test_wmma_load_a")
-        .param(PtxType::U64, "a_ptr")
-        .build(|ctx| {
-            let a_ptr = ctx.load_param_u64("a_ptr");
-            let _frag = ctx.wmma_load_a_f16(a_ptr, 16, WmmaLayout::RowMajor);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_wmma_load_a").param(PtxType::U64, "a_ptr").build(|ctx| {
+        let a_ptr = ctx.load_param_u64("a_ptr");
+        let _frag = ctx.wmma_load_a_f16(a_ptr, 16, WmmaLayout::RowMajor);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     assert!(
@@ -110,13 +102,11 @@ fn golden_wmma_load_a_f16_instruction() {
 
 #[test]
 fn golden_wmma_load_b_f16_instruction() {
-    let kernel = PtxKernel::new("test_wmma_load_b")
-        .param(PtxType::U64, "b_ptr")
-        .build(|ctx| {
-            let b_ptr = ctx.load_param_u64("b_ptr");
-            let _frag = ctx.wmma_load_b_f16(b_ptr, 16, WmmaLayout::ColMajor);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_wmma_load_b").param(PtxType::U64, "b_ptr").build(|ctx| {
+        let b_ptr = ctx.load_param_u64("b_ptr");
+        let _frag = ctx.wmma_load_b_f16(b_ptr, 16, WmmaLayout::ColMajor);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     assert!(
@@ -128,13 +118,11 @@ fn golden_wmma_load_b_f16_instruction() {
 
 #[test]
 fn golden_wmma_load_c_f32_instruction() {
-    let kernel = PtxKernel::new("test_wmma_load_c")
-        .param(PtxType::U64, "c_ptr")
-        .build(|ctx| {
-            let c_ptr = ctx.load_param_u64("c_ptr");
-            let _frag = ctx.wmma_load_c_f32(c_ptr, 16, WmmaLayout::RowMajor);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_wmma_load_c").param(PtxType::U64, "c_ptr").build(|ctx| {
+        let c_ptr = ctx.load_param_u64("c_ptr");
+        let _frag = ctx.wmma_load_c_f32(c_ptr, 16, WmmaLayout::RowMajor);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     assert!(
@@ -215,9 +203,8 @@ fn golden_wmma_store_d_f32_instruction() {
 
 #[test]
 fn golden_emit_debug_marker_instruction() {
-    let kernel = PtxKernel::new("test_debug_marker")
-        .param(PtxType::U64, "debug_ptr")
-        .build(|ctx| {
+    let kernel =
+        PtxKernel::new("test_debug_marker").param(PtxType::U64, "debug_ptr").build(|ctx| {
             let debug_ptr = ctx.load_param_u64("debug_ptr");
             let _slot = ctx.emit_debug_marker(debug_ptr, 0xDEAD);
             ctx.ret();
@@ -234,14 +221,12 @@ fn golden_emit_debug_marker_instruction() {
 
 #[test]
 fn golden_emit_debug_value_instruction() {
-    let kernel = PtxKernel::new("test_debug_value")
-        .param(PtxType::U64, "debug_ptr")
-        .build(|ctx| {
-            let debug_ptr = ctx.load_param_u64("debug_ptr");
-            let value = ctx.special_reg(PtxReg::TidX);
-            let _slot = ctx.emit_debug_value(debug_ptr, value);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_debug_value").param(PtxType::U64, "debug_ptr").build(|ctx| {
+        let debug_ptr = ctx.load_param_u64("debug_ptr");
+        let value = ctx.special_reg(PtxReg::TidX);
+        let _slot = ctx.emit_debug_value(debug_ptr, value);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     // emit_debug_value uses atom.add, st.global

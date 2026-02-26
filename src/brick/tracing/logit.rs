@@ -25,11 +25,7 @@ pub struct TokenLogitEvolution {
 impl TokenLogitEvolution {
     /// Create a new token evolution tracker.
     pub fn new(token_id: u32, token_str: String) -> Self {
-        Self {
-            token_id,
-            token_str,
-            ..Default::default()
-        }
+        Self { token_id, token_str, ..Default::default() }
     }
 
     /// Record logit value at a layer.
@@ -77,21 +73,13 @@ pub struct LogitEvolutionTrace {
 impl LogitEvolutionTrace {
     /// Create a new logit evolution trace.
     pub fn new(position: usize, temperature: f32, top_p: f32) -> Self {
-        Self {
-            position,
-            temperature,
-            top_p,
-            ..Default::default()
-        }
+        Self { position, temperature, top_p, ..Default::default() }
     }
 
     /// Add a token to track.
     pub fn track_token(&mut self, token_id: u32, token_str: String) -> &mut TokenLogitEvolution {
-        self.tracked_tokens
-            .push(TokenLogitEvolution::new(token_id, token_str));
-        self.tracked_tokens
-            .last_mut()
-            .expect("invariant: just pushed")
+        self.tracked_tokens.push(TokenLogitEvolution::new(token_id, token_str));
+        self.tracked_tokens.last_mut().expect("invariant: just pushed")
     }
 
     /// Compute rank of a token in a logit distribution.

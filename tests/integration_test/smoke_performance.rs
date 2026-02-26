@@ -123,9 +123,5 @@ fn integration_performance_gate() {
     let elapsed = start.elapsed();
 
     // This specific test should be very fast (<1s)
-    assert!(
-        elapsed.as_secs() < 5,
-        "Performance gate failed: took {:?}, expected <5s",
-        elapsed
-    );
+    assert!(elapsed.as_secs() < 5, "Performance gate failed: took {:?}, expected <5s", elapsed);
 }

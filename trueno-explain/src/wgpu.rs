@@ -60,10 +60,7 @@ pub struct WgpuAnalyzer {
 
 impl Default for WgpuAnalyzer {
     fn default() -> Self {
-        Self {
-            min_workgroup_size: 64,
-            max_workgroup_size: 1024,
-        }
+        Self { min_workgroup_size: 64, max_workgroup_size: 1024 }
     }
 }
 
@@ -324,9 +321,7 @@ mod tests {
         let warnings = analyzer.detect_muda(wgsl);
 
         assert!(!warnings.is_empty(), "Should warn on small workgroup");
-        assert!(warnings
-            .iter()
-            .any(|w| w.description.contains("Small workgroup")));
+        assert!(warnings.iter().any(|w| w.description.contains("Small workgroup")));
     }
 
     #[test]
@@ -335,9 +330,7 @@ mod tests {
         let analyzer = WgpuAnalyzer::new();
         let warnings = analyzer.detect_muda(wgsl);
 
-        assert!(warnings
-            .iter()
-            .any(|w| w.description.contains("not a multiple of 32")));
+        assert!(warnings.iter().any(|w| w.description.contains("not a multiple of 32")));
     }
 
     #[test]
@@ -347,10 +340,7 @@ mod tests {
         let warnings = analyzer.detect_muda(wgsl);
 
         // 256 is warp-aligned and within bounds
-        assert!(
-            warnings.is_empty(),
-            "Optimal workgroup should have no warnings"
-        );
+        assert!(warnings.is_empty(), "Optimal workgroup should have no warnings");
     }
 
     /// F067: Detects workgroup size
@@ -402,9 +392,6 @@ mod tests {
         let report = analyzer.analyze(wgsl).unwrap();
 
         assert_eq!(report.target, "WGSL (wgpu)");
-        assert!(
-            report.warnings.is_empty(),
-            "Valid WGSL should have no warnings"
-        );
+        assert!(report.warnings.is_empty(), "Valid WGSL should have no warnings");
     }
 }

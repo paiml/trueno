@@ -295,15 +295,10 @@ mod tests {
     /// FALSIFY-GE-001: Non-negativity — GELU(x) >= 0 for all x > 0
     #[test]
     fn falsify_ge_001_non_negativity() {
-        let test_values = [
-            0.001, 0.01, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 100.0, 1e6,
-        ];
+        let test_values = [0.001, 0.01, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 100.0, 1e6];
         for &x in &test_values {
             let y = gelu_scalar(x);
-            assert!(
-                y >= 0.0,
-                "FALSIFIED GE-001: GELU({x}) = {y} < 0 for positive input"
-            );
+            assert!(y >= 0.0, "FALSIFIED GE-001: GELU({x}) = {y} < 0 for positive input");
         }
     }
 
@@ -316,7 +311,10 @@ mod tests {
             assert!(
                 y_hi > y_lo,
                 "FALSIFIED GE-002: GELU({}) = {} not > GELU({}) = {}",
-                window[1], y_hi, window[0], y_lo
+                window[1],
+                y_hi,
+                window[0],
+                y_lo
             );
         }
     }
@@ -325,10 +323,7 @@ mod tests {
     #[test]
     fn falsify_ge_003_zero_preservation() {
         let y = gelu_scalar(0.0);
-        assert!(
-            y.abs() < 1e-7,
-            "FALSIFIED GE-003: GELU(0) = {y}, expected 0"
-        );
+        assert!(y.abs() < 1e-7, "FALSIFIED GE-003: GELU(0) = {y}, expected 0");
     }
 
     /// FALSIFY-GE-005: Tanh approximation vs exact CDF — |diff| < 0.005
@@ -347,7 +342,8 @@ mod tests {
             let t4 = t3 * t;
             let t5 = t4 * t;
             let poly = 0.254_829_592 * t - 0.284_496_736 * t2 + 1.421_413_741 * t3
-                - 1.453_152_027 * t4 + 1.061_405_429 * t5;
+                - 1.453_152_027 * t4
+                + 1.061_405_429 * t5;
             sign * (1.0 - poly * (-x * x).exp())
         }
 
@@ -373,17 +369,11 @@ mod tests {
     fn falsify_ge_006_large_input_stability() {
         for &x in &[10.0_f32, 50.0, 100.0, 1000.0] {
             let y = gelu_scalar(x);
-            assert!(
-                (y - x).abs() < 0.01,
-                "FALSIFIED GE-006: GELU({x}) = {y}, expected ≈ {x}"
-            );
+            assert!((y - x).abs() < 0.01, "FALSIFIED GE-006: GELU({x}) = {y}, expected ≈ {x}");
         }
         for &x in &[-10.0_f32, -50.0, -100.0, -1000.0] {
             let y = gelu_scalar(x);
-            assert!(
-                y.abs() < 0.01,
-                "FALSIFIED GE-006: GELU({x}) = {y}, expected ≈ 0"
-            );
+            assert!(y.abs() < 0.01, "FALSIFIED GE-006: GELU({x}) = {y}, expected ≈ 0");
         }
     }
 
@@ -466,9 +456,8 @@ mod silu_contract_tests {
     /// FALSIFY-SI-002: Global lower bound — SiLU(x) > -0.279 for all x
     #[test]
     fn falsify_si_002_global_lower_bound() {
-        let test_values: Vec<f32> = vec![
-            -100.0, -50.0, -10.0, -5.0, -2.0, -1.278, -1.0, -0.5, 0.0, 0.5, 1.0, 5.0, 100.0,
-        ];
+        let test_values: Vec<f32> =
+            vec![-100.0, -50.0, -10.0, -5.0, -2.0, -1.278, -1.0, -0.5, 0.0, 0.5, 1.0, 5.0, 100.0];
         for &x in &test_values {
             let y = silu_scalar(x);
             assert!(y > -0.28, "FALSIFIED SI-002: SiLU({x}) = {y}, expected > -0.279");
@@ -485,7 +474,8 @@ mod silu_contract_tests {
             assert!(
                 y_curr > y_prev,
                 "FALSIFIED SI-003: SiLU({}) = {y_curr} not > SiLU({}) = {y_prev}",
-                values[i], values[i - 1]
+                values[i],
+                values[i - 1]
             );
         }
     }
@@ -508,10 +498,7 @@ mod silu_contract_tests {
     fn falsify_si_006_large_negative_vanishes() {
         for &x in &[-10.0f32, -20.0, -50.0, -100.0, -500.0] {
             let y = silu_scalar(x);
-            assert!(
-                y.abs() < 0.01,
-                "FALSIFIED SI-006: SiLU({x}) = {y}, expected ≈ 0"
-            );
+            assert!(y.abs() < 0.01, "FALSIFIED SI-006: SiLU({x}) = {y}, expected ≈ 0");
         }
     }
 

@@ -133,11 +133,7 @@ fn test_tanh_range() {
     let a = Vector::from_slice(&[10.0, -10.0, 100.0]);
     let result = a.tanh().unwrap();
     for &val in result.as_slice() {
-        assert!(
-            (-1.0..=1.0).contains(&val),
-            "tanh value {} out of range [-1, 1]",
-            val
-        );
+        assert!((-1.0..=1.0).contains(&val), "tanh value {} out of range [-1, 1]", val);
     }
 }
 
@@ -157,10 +153,7 @@ fn test_tanh_sinh_cosh_relation() {
     let sinh_result = a.sinh().unwrap();
     let cosh_result = a.cosh().unwrap();
     let ratio = sinh_result.as_slice()[0] / cosh_result.as_slice()[0];
-    assert!(
-        (tanh_result.as_slice()[0] - ratio).abs() < 1e-5,
-        "tanh(x) = sinh(x)/cosh(x)"
-    );
+    assert!((tanh_result.as_slice()[0] - ratio).abs() < 1e-5, "tanh(x) = sinh(x)/cosh(x)");
 }
 
 #[test]
@@ -264,10 +257,7 @@ fn test_acosh_cosh_relation() {
     let a = Vector::from_slice(&[1.5]);
     let cosh_result = a.cosh().unwrap();
     let acosh_result = cosh_result.acosh().unwrap();
-    assert!(
-        (a.as_slice()[0] - acosh_result.as_slice()[0]).abs() < 1e-5,
-        "acosh(cosh(x)) = x"
-    );
+    assert!((a.as_slice()[0] - acosh_result.as_slice()[0]).abs() < 1e-5, "acosh(cosh(x)) = x");
 }
 
 #[test]
@@ -283,13 +273,7 @@ fn test_atanh_basic() {
     let result = a.atanh().unwrap();
     let expected: Vec<f32> = vec![0.0_f32.atanh(), 0.5_f32.atanh(), (-0.5_f32).atanh()];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "atanh failed at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "atanh failed at {}: {} != {}", i, res, exp);
     }
 }
 

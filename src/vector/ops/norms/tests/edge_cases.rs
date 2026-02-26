@@ -25,18 +25,11 @@ fn edge_cases() -> Vec<(NormMethod, &'static str, Vec<f32>, f32)> {
         (norm_l1, "l1-zeros", vec![0.0, 0.0, 0.0], 0.0),
         (norm_l1, "l1-positive", vec![1.0, 2.0, 3.0, 4.0], 10.0),
         (norm_l1, "l1-all-neg", vec![-1.0, -2.0, -3.0], 6.0),
-        (
-            norm_l1,
-            "l1-non-aligned",
-            vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0],
-            28.0,
-        ),
+        (norm_l1, "l1-non-aligned", vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0], 28.0),
         (
             norm_l1,
             "l1-large",
-            (0..512)
-                .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
-                .collect(),
+            (0..512).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }).collect(),
             512.0,
         ),
         (norm_linf, "linf-basic", vec![3.0, -7.0, 5.0, -2.0], 7.0),
@@ -47,12 +40,7 @@ fn edge_cases() -> Vec<(NormMethod, &'static str, Vec<f32>, f32)> {
         (norm_linf, "linf-end", vec![1.0, 2.0, 3.0, 100.0], 100.0),
         (norm_linf, "linf-begin", vec![-100.0, 2.0, 3.0, 4.0], 100.0),
         (norm_linf, "linf-equal", vec![5.0, 5.0, 5.0, 5.0], 5.0),
-        (
-            norm_linf,
-            "linf-non-aligned",
-            vec![1.0, -9.0, 3.0, -4.0, 5.0],
-            9.0,
-        ),
+        (norm_linf, "linf-non-aligned", vec![1.0, -9.0, 3.0, -4.0, 5.0], 9.0),
         (
             norm_linf,
             "linf-large",
@@ -71,10 +59,7 @@ fn test_all_norm_edge_cases() {
     for (method, label, data, expected) in edge_cases() {
         let result = method(&Vector::from_slice(&data)).unwrap();
         let tol = if data.len() > 256 { 1e-2 } else { 1e-5 };
-        assert!(
-            (result - expected).abs() <= tol,
-            "{label}: expected {expected}, got {result}"
-        );
+        assert!((result - expected).abs() <= tol, "{label}: expected {expected}, got {result}");
     }
 }
 
@@ -89,9 +74,7 @@ fn test_norm_l2_very_small_values() {
 fn test_norm_ordering_property() {
     for data in [
         vec![3.0, -4.0, 5.0, -2.0, 1.0],
-        (0..100)
-            .map(|i| ((i as f32) * 0.37).sin())
-            .collect::<Vec<_>>(),
+        (0..100).map(|i| ((i as f32) * 0.37).sin()).collect::<Vec<_>>(),
     ] {
         let v = Vector::from_slice(&data);
         let l1 = v.norm_l1().unwrap();

@@ -43,11 +43,7 @@ pub struct ObservabilityConfig {
 impl ObservabilityConfig {
     /// Create new configuration
     pub fn new() -> Self {
-        Self {
-            batch_size: 100,
-            flush_interval_ms: 10_000,
-            ..Default::default()
-        }
+        Self { batch_size: 100, flush_interval_ms: 10_000, ..Default::default() }
     }
 
     /// Enable Datadog
@@ -230,11 +226,8 @@ impl ObservabilityExporter {
                 .chain(config.default_tags.iter().cloned())
                 .collect();
 
-            let tag_str = if tags.is_empty() {
-                String::new()
-            } else {
-                format!("|#{}", tags.join(","))
-            };
+            let tag_str =
+                if tags.is_empty() { String::new() } else { format!("|#{}", tags.join(",")) };
 
             let metric_type = match metric.metric_type {
                 MetricExportType::Gauge => "g",
@@ -336,11 +329,8 @@ impl ObservabilityExporter {
         // Format as JSON array
         let mut json_metrics = Vec::new();
         for metric in metrics {
-            let tags_json: Vec<String> = metric
-                .tags
-                .iter()
-                .map(|(k, v)| format!(r#""{}":"{}""#, k, v))
-                .collect();
+            let tags_json: Vec<String> =
+                metric.tags.iter().map(|(k, v)| format!(r#""{}":"{}""#, k, v)).collect();
 
             json_metrics.push(format!(
                 r#"{{"name":"{}","value":{},"type":"{:?}","tags":{{{}}},"timestamp_ns":{}}}"#,
@@ -425,11 +415,7 @@ pub fn format_dogstatsd(metric: &ExportMetric, prefix: &str, default_tags: &[Str
         .chain(default_tags.iter().cloned())
         .collect();
 
-    let tag_str = if tags.is_empty() {
-        String::new()
-    } else {
-        format!("|#{}", tags.join(","))
-    };
+    let tag_str = if tags.is_empty() { String::new() } else { format!("|#{}", tags.join(",")) };
 
     let metric_type = match metric.metric_type {
         MetricExportType::Gauge => "g",
@@ -437,10 +423,7 @@ pub fn format_dogstatsd(metric: &ExportMetric, prefix: &str, default_tags: &[Str
         MetricExportType::Histogram => "h",
     };
 
-    format!(
-        "{}.{}:{}|{}{}",
-        prefix, metric.name, metric.value, metric_type, tag_str
-    )
+    format!("{}.{}:{}|{}{}", prefix, metric.name, metric.value, metric_type, tag_str)
 }
 
 /// Default batch size

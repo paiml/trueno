@@ -2,10 +2,7 @@ use super::*;
 
 #[test]
 fn test_effect_category() {
-    assert_eq!(
-        EffectCategory::from_cohens_d(0.1),
-        EffectCategory::Negligible
-    );
+    assert_eq!(EffectCategory::from_cohens_d(0.1), EffectCategory::Negligible);
     assert_eq!(EffectCategory::from_cohens_d(0.3), EffectCategory::Small);
     assert_eq!(EffectCategory::from_cohens_d(0.6), EffectCategory::Medium);
     assert_eq!(EffectCategory::from_cohens_d(1.0), EffectCategory::Large);

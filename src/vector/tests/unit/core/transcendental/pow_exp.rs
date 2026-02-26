@@ -58,13 +58,7 @@ fn test_exp_basic() {
     let result = a.exp().unwrap();
     let expected = [1.0, std::f32::consts::E, std::f32::consts::E.powi(2)];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "exp mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "exp mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -83,13 +77,7 @@ fn test_exp_negative() {
     let result = a.exp().unwrap();
     let expected = [(-1.0f32).exp(), (-2.0f32).exp(), (-3.0f32).exp()];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "exp negative mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "exp negative mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -135,10 +123,7 @@ fn test_exp_empty() {
 #[test]
 fn test_exp_backend_auto_falls_through_to_scalar() {
     // dispatch_unary_op! routes Auto to ScalarBackend (consistent with all other ops)
-    let v = Vector {
-        data: vec![1.0, 2.0, 3.0],
-        backend: Backend::Auto,
-    };
+    let v = Vector { data: vec![1.0, 2.0, 3.0], backend: Backend::Auto };
 
     let result = v.exp().unwrap();
     assert!((result.as_slice()[0] - 1.0_f32.exp()).abs() < 1e-6);
@@ -149,10 +134,7 @@ fn test_exp_backend_auto_falls_through_to_scalar() {
 #[test]
 fn test_exp_backend_gpu_falls_through_to_scalar() {
     // dispatch_unary_op! routes GPU to ScalarBackend (consistent with all other ops)
-    let v = Vector {
-        data: vec![1.0, 2.0, 3.0],
-        backend: Backend::GPU,
-    };
+    let v = Vector { data: vec![1.0, 2.0, 3.0], backend: Backend::GPU };
     let result = v.exp().unwrap();
     assert!((result.as_slice()[0] - 1.0_f32.exp()).abs() < 1e-6);
 }

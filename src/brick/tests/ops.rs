@@ -93,10 +93,7 @@ fn falsify_mm_002_numerical_accuracy() {
     let result = op.execute((a, b), Backend::Scalar).unwrap();
     let expected = vec![58.0, 64.0, 139.0, 154.0];
     for (i, (&got, &exp)) in result.iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (got - exp).abs() < 1e-4,
-            "FALSIFIED MM-002: result[{i}] = {got}, expected {exp}"
-        );
+        assert!((got - exp).abs() < 1e-4, "FALSIFIED MM-002: result[{i}] = {got}, expected {exp}");
     }
 }
 
@@ -114,10 +111,7 @@ fn falsify_mm_005_identity_matrix() {
     }
     let result = op.execute((a.clone(), identity), Backend::Scalar).unwrap();
     for (i, (&got, &exp)) in result.iter().zip(a.iter()).enumerate() {
-        assert!(
-            (got - exp).abs() < 1e-5,
-            "FALSIFIED MM-005: (A@I)[{i}] = {got}, expected {exp}"
-        );
+        assert!((got - exp).abs() < 1e-5, "FALSIFIED MM-005: (A@I)[{i}] = {got}, expected {exp}");
     }
 
     // Test I @ B = B
@@ -129,10 +123,7 @@ fn falsify_mm_005_identity_matrix() {
     }
     let result2 = op2.execute((identity2, b.clone()), Backend::Scalar).unwrap();
     for (i, (&got, &exp)) in result2.iter().zip(b.iter()).enumerate() {
-        assert!(
-            (got - exp).abs() < 1e-5,
-            "FALSIFIED MM-005: (I@B)[{i}] = {got}, expected {exp}"
-        );
+        assert!((got - exp).abs() < 1e-5, "FALSIFIED MM-005: (I@B)[{i}] = {got}, expected {exp}");
     }
 }
 

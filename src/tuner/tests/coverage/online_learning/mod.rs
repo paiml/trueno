@@ -54,11 +54,7 @@ fn test_collector_record_prediction_error_window_trimming() {
     for i in 0..60 {
         collector.record_prediction_error(100.0 + i as f32, 100.0);
     }
-    assert_eq!(
-        collector.error_window.len(),
-        50,
-        "Window should be trimmed to max size"
-    );
+    assert_eq!(collector.error_window.len(), 50, "Window should be trimmed to max size");
 }
 
 #[test]
@@ -105,9 +101,7 @@ fn test_collector_detect_concept_drift_stale() {
     }
     // Add many samples since last training
     for i in 0..120 {
-        let features = TunerFeatures::builder()
-            .model_params_b(1.0 + (i as f32) * 0.1)
-            .build();
+        let features = TunerFeatures::builder().model_params_b(1.0 + (i as f32) * 0.1).build();
         collector.samples.push(TrainingSample {
             features,
             throughput_tps: 100.0,
@@ -128,10 +122,7 @@ fn test_collector_detect_concept_drift_stale() {
 #[test]
 fn test_collector_should_retrain_disabled() {
     let collector = TunerDataCollector::new();
-    assert!(
-        !collector.should_retrain(),
-        "Should not retrain when online learning disabled"
-    );
+    assert!(!collector.should_retrain(), "Should not retrain when online learning disabled");
 }
 
 #[test]
@@ -141,10 +132,7 @@ fn test_collector_mark_trained() {
         collector.error_window.push(0.20);
     }
     collector.mark_trained();
-    assert!(
-        collector.error_window.is_empty(),
-        "Error window should be cleared after training"
-    );
+    assert!(collector.error_window.is_empty(), "Error window should be cleared after training");
     assert_eq!(collector.samples_at_last_train, collector.samples.len());
 }
 
@@ -314,10 +302,7 @@ fn test_bottleneck_class_display() {
     assert_eq!(format!("{}", BottleneckClass::MemoryBound), "MemoryBound");
     assert_eq!(format!("{}", BottleneckClass::ComputeBound), "ComputeBound");
     assert_eq!(format!("{}", BottleneckClass::LaunchBound), "LaunchBound");
-    assert_eq!(
-        format!("{}", BottleneckClass::AttentionBound),
-        "AttentionBound"
-    );
+    assert_eq!(format!("{}", BottleneckClass::AttentionBound), "AttentionBound");
 }
 
 // =========================================================================
@@ -344,11 +329,7 @@ fn test_bytes_per_param_from_onehot() {
         let mut onehot = [0.0f32; 8];
         onehot[idx] = 1.0;
         let bpp = ThroughputRegressor::bytes_per_param_from_onehot(&onehot);
-        assert!(
-            bpp > 0.0,
-            "Bytes per param should be positive for index {}",
-            idx
-        );
+        assert!(bpp > 0.0, "Bytes per param should be positive for index {}", idx);
     }
 
     // All zeros: max_by returns last of equal elements (index 7) -> F32 -> 4.0
@@ -380,10 +361,7 @@ fn test_bottleneck_classifier_with_preset_class() {
 fn test_bottleneck_classifier_heuristic_launch_bound() {
     let classifier = BottleneckClassifier::new();
     // batch_size=1 and no CUDA graphs -> launch bound
-    let features = TunerFeatures::builder()
-        .batch_size(1)
-        .cuda_graphs(false)
-        .build();
+    let features = TunerFeatures::builder().batch_size(1).cuda_graphs(false).build();
     let prediction = classifier.predict(&features);
     assert_eq!(prediction.class, BottleneckClass::LaunchBound);
 }
@@ -429,10 +407,7 @@ fn test_kernel_classifier_medium_batch() {
 #[test]
 fn test_kernel_classifier_single_no_cuda_graphs() {
     let classifier = KernelClassifier::new();
-    let features = TunerFeatures::builder()
-        .batch_size(1)
-        .cuda_graphs(false)
-        .build();
+    let features = TunerFeatures::builder().batch_size(1).cuda_graphs(false).build();
     let rec = classifier.predict(&features);
     assert_eq!(rec.top_kernel, KernelType::CoalescedQ4K);
 }
@@ -440,10 +415,7 @@ fn test_kernel_classifier_single_no_cuda_graphs() {
 #[test]
 fn test_kernel_classifier_single_with_cuda_graphs() {
     let classifier = KernelClassifier::new();
-    let features = TunerFeatures::builder()
-        .batch_size(1)
-        .cuda_graphs(true)
-        .build();
+    let features = TunerFeatures::builder().batch_size(1).cuda_graphs(true).build();
     let rec = classifier.predict(&features);
     assert_eq!(rec.top_kernel, KernelType::VectorizedQ4K);
 }

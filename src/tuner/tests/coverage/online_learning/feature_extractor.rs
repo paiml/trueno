@@ -20,39 +20,25 @@ fn test_brick_tuner_default_trait() {
 #[test]
 fn test_brick_tuner_render_comparison_good() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(2)
-        .model_params_b(1.5)
-        .build();
+    let features = TunerFeatures::builder().batch_size(2).model_params_b(1.5).build();
     let rec = tuner.recommend(&features);
     // ~7% error -> "Good" branch (5% <= error < 10%)
     let actual_tps = rec.throughput.predicted_tps * 0.93;
     let comparison = tuner.render_comparison(&rec, actual_tps);
     assert_eq!(comparison.len(), 2);
-    assert!(
-        comparison[1].contains("Good"),
-        "Expected 'Good' indicator, got: {}",
-        comparison[1]
-    );
+    assert!(comparison[1].contains("Good"), "Expected 'Good' indicator, got: {}", comparison[1]);
 }
 
 #[test]
 fn test_brick_tuner_render_comparison_fair() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .batch_size(2)
-        .model_params_b(1.5)
-        .build();
+    let features = TunerFeatures::builder().batch_size(2).model_params_b(1.5).build();
     let rec = tuner.recommend(&features);
     // ~15% error -> "Fair" branch (10% <= error < 20%)
     let actual_tps = rec.throughput.predicted_tps * 0.85;
     let comparison = tuner.render_comparison(&rec, actual_tps);
     assert_eq!(comparison.len(), 2);
-    assert!(
-        comparison[1].contains("Fair"),
-        "Expected 'Fair' indicator, got: {}",
-        comparison[1]
-    );
+    assert!(comparison[1].contains("Fair"), "Expected 'Fair' indicator, got: {}", comparison[1]);
 }
 
 // =========================================================================
@@ -121,10 +107,7 @@ fn test_builder_hardware_without_gpu() {
             memory_bw_gbps: 50.0,
         },
         gpu: None,
-        roofline: RooflineParams {
-            cpu_arithmetic_intensity: 10.0,
-            gpu_arithmetic_intensity: None,
-        },
+        roofline: RooflineParams { cpu_arithmetic_intensity: 10.0, gpu_arithmetic_intensity: None },
         byte_budget: None,
     };
 
@@ -260,10 +243,7 @@ fn test_calculate_efficiency_no_hardware() {
 
     let config = RunConfig::default();
     let efficiency = extractor.calculate_efficiency(&profiler, &config);
-    assert!(
-        efficiency.is_none(),
-        "No hardware -> no efficiency calculation"
-    );
+    assert!(efficiency.is_none(), "No hardware -> no efficiency calculation");
 }
 
 // =========================================================================

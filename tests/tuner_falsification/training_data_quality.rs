@@ -13,10 +13,7 @@ fn f041_empty_training_errors() {
     let empty_data: Vec<(TunerFeatures, f32)> = vec![];
 
     let result = regressor.train_random_forest(&empty_data);
-    assert!(
-        result.is_err(),
-        "F041 FALSIFIED: empty training data should error"
-    );
+    assert!(result.is_err(), "F041 FALSIFIED: empty training data should error");
 }
 
 /// F042: Single sample training should work or error gracefully
@@ -85,10 +82,7 @@ fn f045_heuristic_no_training() {
     let features = TunerFeatures::builder().model_params_b(1.5).build();
 
     let pred = regressor.predict(&features);
-    assert!(
-        pred.predicted_tps > 0.0,
-        "F045 FALSIFIED: heuristic prediction failed"
-    );
+    assert!(pred.predicted_tps > 0.0, "F045 FALSIFIED: heuristic prediction failed");
 }
 
 /// F046: Training improves over heuristic (or doesn't regress)
@@ -113,11 +107,7 @@ fn f046_training_improves() {
         .collect();
 
     let result = regressor.train_random_forest(&training_data);
-    assert!(
-        result.is_ok(),
-        "F046 FALSIFIED: training failed: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "F046 FALSIFIED: training failed: {:?}", result.err());
 }
 
 #[cfg(not(feature = "ml-tuner"))]
@@ -161,10 +151,7 @@ fn f048_classifier_training() {
     let training_data: Vec<(TunerFeatures, u32)> = (0..50)
         .map(|i| {
             let batch = 1 + (i % 8) as u32;
-            let features = TunerFeatures::builder()
-                .model_params_b(1.5)
-                .batch_size(batch)
-                .build();
+            let features = TunerFeatures::builder().model_params_b(1.5).batch_size(batch).build();
             // Label: BatchedQ4K (3) for M>=4, VectorizedQ4K (2) otherwise
             let label = if batch >= 4 { 3 } else { 2 };
             (features, label)
@@ -172,11 +159,7 @@ fn f048_classifier_training() {
         .collect();
 
     let result = classifier.train(&training_data);
-    assert!(
-        result.is_ok(),
-        "F048 FALSIFIED: classifier training failed: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "F048 FALSIFIED: classifier training failed: {:?}", result.err());
 }
 
 #[cfg(not(feature = "ml-tuner"))]
@@ -194,11 +177,7 @@ fn f049_training_data_variance() {
 
     let diff: f32 = f1.iter().zip(f2.iter()).map(|(a, b)| (a - b).abs()).sum();
 
-    assert!(
-        diff > 0.1,
-        "F049 FALSIFIED: features don't vary with input (diff={})",
-        diff
-    );
+    assert!(diff > 0.1, "F049 FALSIFIED: features don't vary with input (diff={})", diff);
 }
 
 /// F050: Feature correlation sanity
@@ -219,10 +198,7 @@ fn f050_feature_correlation() {
 
     // Should be generally increasing
     let increasing_count = throughputs.windows(2).filter(|w| w[1] >= w[0]).count();
-    assert!(
-        increasing_count >= 2,
-        "F050 FALSIFIED: throughput not correlated with batch size"
-    );
+    assert!(increasing_count >= 2, "F050 FALSIFIED: throughput not correlated with batch size");
 }
 
 /// F051-F060: Reserved for future training quality tests

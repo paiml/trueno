@@ -29,11 +29,7 @@ fn test_f081_valid_rgba_output() {
 
     // Alpha channel should always be 255
     for i in (3..16).step_by(4) {
-        assert_eq!(
-            rgba[i], 255,
-            "F-081 FALSIFIED: Alpha channel should be 255 at byte {}",
-            i
-        );
+        assert_eq!(rgba[i], 255, "F-081 FALSIFIED: Alpha channel should be 255 at byte {}", i);
     }
 }
 
@@ -67,10 +63,7 @@ fn test_f083_identical_inputs() {
     let rgba1 = renderer.render_to_rgba(&buffer, 2, 2);
     let rgba2 = renderer.render_to_rgba(&buffer, 2, 2);
 
-    assert_eq!(
-        rgba1, rgba2,
-        "F-083 FALSIFIED: Identical inputs should produce identical RGBA"
-    );
+    assert_eq!(rgba1, rgba2, "F-083 FALSIFIED: Identical inputs should produce identical RGBA");
 }
 
 /// F-084: Different inputs produce different RGBA
@@ -84,10 +77,7 @@ fn test_f084_different_inputs() {
     let rgba1 = renderer.render_to_rgba(&buffer1, 2, 2);
     let rgba2 = renderer.render_to_rgba(&buffer2, 2, 2);
 
-    assert_ne!(
-        rgba1, rgba2,
-        "F-084 FALSIFIED: Different inputs should produce different RGBA"
-    );
+    assert_ne!(rgba1, rgba2, "F-084 FALSIFIED: Different inputs should produce different RGBA");
 }
 
 /// F-085: Color palette maps correctly
@@ -97,19 +87,11 @@ fn test_f085_color_palette_mapping() {
 
     // 0.0 should map to start color
     let at_0 = palette.interpolate(0.0);
-    assert_eq!(
-        at_0,
-        Rgb::new(68, 1, 84),
-        "F-085: 0.0 should map to viridis start"
-    );
+    assert_eq!(at_0, Rgb::new(68, 1, 84), "F-085: 0.0 should map to viridis start");
 
     // 1.0 should map to end color
     let at_1 = palette.interpolate(1.0);
-    assert_eq!(
-        at_1,
-        Rgb::new(253, 231, 37),
-        "F-085: 1.0 should map to viridis end"
-    );
+    assert_eq!(at_1, Rgb::new(253, 231, 37), "F-085: 1.0 should map to viridis end");
 }
 
 /// F-086: Auto-normalize handles constant inputs
@@ -157,10 +139,7 @@ fn test_f088_single_pixel_detection() {
 
     let result = renderer.compare_rgba(&rgba1, &rgba2, 0);
 
-    assert!(
-        result.different_pixels > 0,
-        "F-088 FALSIFIED: Should detect single pixel difference"
-    );
+    assert!(result.different_pixels > 0, "F-088 FALSIFIED: Should detect single pixel difference");
 }
 
 /// F-089: Visual diff threshold application
@@ -168,21 +147,14 @@ fn test_f088_single_pixel_detection() {
 fn test_f089_threshold_application() {
     let config = VisualRegressionConfig::default().with_max_diff_pct(5.0); // Allow 5% different pixels
 
-    let result = PixelDiffResult {
-        different_pixels: 5,
-        total_pixels: 100,
-        max_diff: 10,
-    };
+    let result = PixelDiffResult { different_pixels: 5, total_pixels: 100, max_diff: 10 };
 
     assert!(
         result.matches(config.max_diff_pct),
         "F-089 FALSIFIED: 5% diff should match 5% threshold"
     );
 
-    assert!(
-        !result.matches(4.0),
-        "F-089 FALSIFIED: 5% diff should not match 4% threshold"
-    );
+    assert!(!result.matches(4.0), "F-089 FALSIFIED: 5% diff should not match 4% threshold");
 }
 
 /// F-090: Renderer determinism
@@ -196,11 +168,7 @@ fn test_f090_renderer_determinism() {
 
     for i in 0..100 {
         let next = renderer.render_to_rgba(&buffer, 10, 10);
-        assert_eq!(
-            first, next,
-            "F-090 FALSIFIED: Renderer not deterministic on iteration {}",
-            i
-        );
+        assert_eq!(first, next, "F-090 FALSIFIED: Renderer not deterministic on iteration {}", i);
     }
 }
 
@@ -242,10 +210,7 @@ fn test_g092_slowdown_detection() {
         }],
     };
 
-    assert!(
-        !result.passed(),
-        "G-092 FALSIFIED: Slowdown should be detected as anomaly"
-    );
+    assert!(!result.passed(), "G-092 FALSIFIED: Slowdown should be detected as anomaly");
 }
 
 /// G-093: Anomaly detection for test failure
@@ -263,10 +228,7 @@ fn test_g093_failure_detection() {
         anomalies: vec![],
     };
 
-    assert!(
-        !result.passed(),
-        "G-093 FALSIFIED: Test failure should be detected"
-    );
+    assert!(!result.passed(), "G-093 FALSIFIED: Test failure should be detected");
 }
 
 /// G-094: Timing variance threshold
@@ -355,10 +317,7 @@ fn test_g097_report_schema() {
     // max_op_time_ms should not exceed mean (which is 1.0ms in this test)
     // Verify the value is sensible - max should be >= mean for timing data
     let max_as_f64 = result.max_op_time_ms as f64;
-    assert!(
-        max_as_f64 >= result.mean_op_time_ms,
-        "G-097 FALSIFIED: max_op_time should be >= mean"
-    );
+    assert!(max_as_f64 >= result.mean_op_time_ms, "G-097 FALSIFIED: max_op_time should be >= mean");
     assert!(result.timing_variance >= 0.0);
 }
 
@@ -408,10 +367,7 @@ fn test_g099_seed_reproducibility() {
     let seq1: Vec<f64> = (0..100).map(|_| rng1.gen_f64()).collect();
     let seq2: Vec<f64> = (0..100).map(|_| rng2.gen_f64()).collect();
 
-    assert_eq!(
-        seq1, seq2,
-        "G-099 FALSIFIED: Same seed should produce same test data"
-    );
+    assert_eq!(seq1, seq2, "G-099 FALSIFIED: Same seed should produce same test data");
 }
 
 /// G-100: Jidoka triggers on first failure
@@ -425,10 +381,7 @@ fn test_g100_jidoka_first_failure() {
     let data_with_nan = vec![1.0f32, 2.0, f32::NAN, 4.0, 5.0];
     let result = guard.check_output(&data_with_nan);
 
-    assert!(
-        result.is_err(),
-        "G-100 FALSIFIED: Jidoka should detect NaN immediately"
-    );
+    assert!(result.is_err(), "G-100 FALSIFIED: Jidoka should detect NaN immediately");
 
     // Verify it found the NaN at the correct position
     if let Err(e) = result {

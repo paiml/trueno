@@ -50,10 +50,7 @@ fn test_cuda_stress_memory_pressure() {
     }
 
     // We should have allocated at least 8 chunks (2GB) on RTX 4090
-    assert!(
-        buffers.len() >= 8,
-        "RTX 4090 should handle at least 2GB allocation"
-    );
+    assert!(buffers.len() >= 8, "RTX 4090 should handle at least 2GB allocation");
 
     // Drop all buffers - verify cleanup
     drop(buffers);
@@ -78,8 +75,7 @@ fn test_gpu_buffer_copy_from_buffer_at_async_raw() {
 
     let mut dst: GpuBuffer<f32> = GpuBuffer::new(&ctx, 64).expect("dst buffer MUST succeed");
     let zeros = vec![0.0f32; 64];
-    dst.copy_from_host(&zeros)
-        .expect("copy_from_host MUST succeed");
+    dst.copy_from_host(&zeros).expect("copy_from_host MUST succeed");
 
     // Use raw stream handle API (line 636-669)
     unsafe {
@@ -89,8 +85,7 @@ fn test_gpu_buffer_copy_from_buffer_at_async_raw() {
     stream.synchronize().expect("Sync MUST succeed");
 
     let mut result = vec![0.0f32; 64];
-    dst.copy_to_host(&mut result)
-        .expect("copy_to_host MUST succeed");
+    dst.copy_to_host(&mut result).expect("copy_to_host MUST succeed");
 
     // Verify copy was correct
     assert_eq!(result[15], 0.0, "Before copy region should be 0");
@@ -131,17 +126,13 @@ fn test_gpu_buffer_async_host_to_device() {
 
     // Async host-to-device copy
     unsafe {
-        buffer
-            .copy_from_host_async(&data, &stream)
-            .expect("copy_from_host_async MUST succeed");
+        buffer.copy_from_host_async(&data, &stream).expect("copy_from_host_async MUST succeed");
     }
     stream.synchronize().expect("Sync MUST succeed");
 
     // Verify data
     let mut result = vec![0.0f32; 256];
-    buffer
-        .copy_to_host(&mut result)
-        .expect("copy_to_host MUST succeed");
+    buffer.copy_to_host(&mut result).expect("copy_to_host MUST succeed");
     assert_eq!(result, data);
 }
 
@@ -155,9 +146,7 @@ fn test_gpu_buffer_async_device_to_host() {
 
     let mut result = vec![0.0f32; 128];
     unsafe {
-        buffer
-            .copy_to_host_async(&mut result, &stream)
-            .expect("copy_to_host_async MUST succeed");
+        buffer.copy_to_host_async(&mut result, &stream).expect("copy_to_host_async MUST succeed");
     }
     stream.synchronize().expect("Sync MUST succeed");
 

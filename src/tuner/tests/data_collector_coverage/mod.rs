@@ -15,11 +15,8 @@ use crate::brick::BrickProfiler;
 // ============================================================================
 
 fn make_sample(throughput: f32) -> TrainingSample {
-    let features = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .hidden_dim(4096)
-        .batch_size(1)
-        .build();
+    let features =
+        TunerFeatures::builder().model_params_b(7.0).hidden_dim(4096).batch_size(1).build();
     TrainingSample {
         features,
         throughput_tps: throughput,

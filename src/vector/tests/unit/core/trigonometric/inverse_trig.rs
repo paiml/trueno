@@ -9,13 +9,7 @@ fn test_asin_basic() {
     let result = a.asin().unwrap();
     let expected = [0.0, PI / 2.0, -PI / 2.0, PI / 6.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "asin basic mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "asin basic mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -50,13 +44,7 @@ fn test_asin_negative() {
     let result = a.asin().unwrap();
     let expected = [-PI / 6.0, -PI / 4.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-3,
-            "asin negative mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-3, "asin negative mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -68,11 +56,8 @@ fn test_asin_sin_inverse() {
     let sin_result = a.sin().unwrap();
     let asin_result = sin_result.asin().unwrap();
 
-    for (i, (&original, &reconstructed)) in a
-        .as_slice()
-        .iter()
-        .zip(asin_result.as_slice().iter())
-        .enumerate()
+    for (i, (&original, &reconstructed)) in
+        a.as_slice().iter().zip(asin_result.as_slice().iter()).enumerate()
     {
         assert!(
             (original - reconstructed).abs() < 1e-5,
@@ -100,13 +85,7 @@ fn test_acos_basic() {
     let result = a.acos().unwrap();
     let expected = [PI / 2.0, 0.0, PI, PI / 3.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "acos basic mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "acos basic mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -130,12 +109,7 @@ fn test_acos_range() {
     let a = Vector::from_slice(&[-1.0, -0.5, 0.0, 0.5, 1.0]);
     let result = a.acos().unwrap();
     for (i, &res) in result.as_slice().iter().enumerate() {
-        assert!(
-            (0.0..=PI).contains(&res),
-            "acos range violation at {}: {} not in [0, pi]",
-            i,
-            res
-        );
+        assert!((0.0..=PI).contains(&res), "acos range violation at {}: {} not in [0, pi]", i, res);
     }
 }
 
@@ -149,11 +123,8 @@ fn test_acos_symmetry() {
     let a_neg = Vector::from_slice(&[-0.5, -0.707]);
     let result_neg = a_neg.acos().unwrap();
 
-    for (i, (&pos, &neg)) in result_pos
-        .as_slice()
-        .iter()
-        .zip(result_neg.as_slice().iter())
-        .enumerate()
+    for (i, (&pos, &neg)) in
+        result_pos.as_slice().iter().zip(result_neg.as_slice().iter()).enumerate()
     {
         let expected_neg = PI - pos;
         assert!(
@@ -174,11 +145,8 @@ fn test_acos_cos_inverse() {
     let cos_result = a.cos().unwrap();
     let acos_result = cos_result.acos().unwrap();
 
-    for (i, (&original, &reconstructed)) in a
-        .as_slice()
-        .iter()
-        .zip(acos_result.as_slice().iter())
-        .enumerate()
+    for (i, (&original, &reconstructed)) in
+        a.as_slice().iter().zip(acos_result.as_slice().iter()).enumerate()
     {
         assert!(
             (original - reconstructed).abs() < 1e-5,
@@ -206,13 +174,7 @@ fn test_atan_basic() {
     let result = a.atan().unwrap();
     let expected = [0.0, PI / 4.0, -PI / 4.0, PI / 3.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-3,
-            "atan basic mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-3, "atan basic mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -247,13 +209,7 @@ fn test_atan_negative() {
     let result = a.atan().unwrap();
     let expected = [-PI / 4.0, -PI / 3.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-3,
-            "atan negative mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-3, "atan negative mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -265,11 +221,8 @@ fn test_atan_tan_inverse() {
     let tan_result = a.tan().unwrap();
     let atan_result = tan_result.atan().unwrap();
 
-    for (i, (&original, &reconstructed)) in a
-        .as_slice()
-        .iter()
-        .zip(atan_result.as_slice().iter())
-        .enumerate()
+    for (i, (&original, &reconstructed)) in
+        a.as_slice().iter().zip(atan_result.as_slice().iter()).enumerate()
     {
         assert!(
             (original - reconstructed).abs() < 1e-5,

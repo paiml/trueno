@@ -15,14 +15,10 @@ impl GpuCommandBatch {
                 let input_info = self.buffers.get(input).ok_or("Invalid input buffer ID")?;
                 let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
-                let input_buffer = input_info
-                    .gpu_buffer
-                    .as_ref()
-                    .ok_or("Input buffer not created")?;
-                let output_buffer = output_info
-                    .gpu_buffer
-                    .as_ref()
-                    .ok_or("Output buffer not created")?;
+                let input_buffer =
+                    input_info.gpu_buffer.as_ref().ok_or("Input buffer not created")?;
+                let output_buffer =
+                    output_info.gpu_buffer.as_ref().ok_or("Output buffer not created")?;
 
                 self.execute_unary_op::<()>(
                     shaders::RELU_SHADER,
@@ -35,22 +31,14 @@ impl GpuCommandBatch {
                 .await?;
             }
 
-            GpuOp::Scale {
-                input,
-                output,
-                scalar,
-            } => {
+            GpuOp::Scale { input, output, scalar } => {
                 let input_info = self.buffers.get(input).ok_or("Invalid input buffer ID")?;
                 let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
-                let input_buffer = input_info
-                    .gpu_buffer
-                    .as_ref()
-                    .ok_or("Input buffer not created")?;
-                let output_buffer = output_info
-                    .gpu_buffer
-                    .as_ref()
-                    .ok_or("Output buffer not created")?;
+                let input_buffer =
+                    input_info.gpu_buffer.as_ref().ok_or("Input buffer not created")?;
+                let output_buffer =
+                    output_info.gpu_buffer.as_ref().ok_or("Output buffer not created")?;
 
                 // Create uniform buffer for scalar parameter
                 #[repr(C)]
@@ -60,10 +48,7 @@ impl GpuCommandBatch {
                     _padding: [f32; 3], // Uniform buffer alignment
                 }
 
-                let params = ScaleParams {
-                    scalar: *scalar,
-                    _padding: [0.0; 3],
-                };
+                let params = ScaleParams { scalar: *scalar, _padding: [0.0; 3] };
 
                 self.execute_unary_op(
                     shaders::SCALE_SHADER,
@@ -77,13 +62,11 @@ impl GpuCommandBatch {
             }
 
             GpuOp::Add { a, b, output } => {
-                self.execute_binary_op_for(shaders::VEC_ADD_SHADER, "Add", a, b, output)
-                    .await?;
+                self.execute_binary_op_for(shaders::VEC_ADD_SHADER, "Add", a, b, output).await?;
             }
 
             GpuOp::Mul { a, b, output } => {
-                self.execute_binary_op_for(shaders::VEC_MUL_SHADER, "Mul", a, b, output)
-                    .await?;
+                self.execute_binary_op_for(shaders::VEC_MUL_SHADER, "Mul", a, b, output).await?;
             }
 
             GpuOp::Dot { a, b, output } => {
@@ -97,23 +80,19 @@ impl GpuCommandBatch {
             }
 
             GpuOp::Tanh { input, output } => {
-                self.execute_unary_op_for(shaders::TANH_SHADER, "Tanh", input, output)
-                    .await?;
+                self.execute_unary_op_for(shaders::TANH_SHADER, "Tanh", input, output).await?;
             }
 
             GpuOp::Swish { input, output } => {
-                self.execute_unary_op_for(shaders::SWISH_SHADER, "Swish", input, output)
-                    .await?;
+                self.execute_unary_op_for(shaders::SWISH_SHADER, "Swish", input, output).await?;
             }
 
             GpuOp::Gelu { input, output } => {
-                self.execute_unary_op_for(shaders::GELU_SHADER, "GELU", input, output)
-                    .await?;
+                self.execute_unary_op_for(shaders::GELU_SHADER, "GELU", input, output).await?;
             }
 
             GpuOp::Sub { a, b, output } => {
-                self.execute_binary_op_for(shaders::VEC_SUB_SHADER, "Sub", a, b, output)
-                    .await?;
+                self.execute_binary_op_for(shaders::VEC_SUB_SHADER, "Sub", a, b, output).await?;
             }
         }
 
@@ -131,14 +110,8 @@ impl GpuCommandBatch {
         let input_info = self.buffers.get(input).ok_or("Invalid input buffer ID")?;
         let output_info = self.buffers.get(output).ok_or("Invalid output buffer ID")?;
 
-        let input_buffer = input_info
-            .gpu_buffer
-            .as_ref()
-            .ok_or("Input buffer not created")?;
-        let output_buffer = output_info
-            .gpu_buffer
-            .as_ref()
-            .ok_or("Output buffer not created")?;
+        let input_buffer = input_info.gpu_buffer.as_ref().ok_or("Input buffer not created")?;
+        let output_buffer = output_info.gpu_buffer.as_ref().ok_or("Output buffer not created")?;
 
         self.execute_unary_op::<()>(
             shader_source,
@@ -166,19 +139,9 @@ impl GpuCommandBatch {
 
         let a_buffer = a_info.gpu_buffer.as_ref().ok_or("Buffer A not created")?;
         let b_buffer = b_info.gpu_buffer.as_ref().ok_or("Buffer B not created")?;
-        let output_buffer = output_info
-            .gpu_buffer
-            .as_ref()
-            .ok_or("Output buffer not created")?;
+        let output_buffer = output_info.gpu_buffer.as_ref().ok_or("Output buffer not created")?;
 
-        self.execute_binary_op(
-            shader_source,
-            label,
-            a_buffer,
-            b_buffer,
-            output_buffer,
-            a_info.size,
-        )
-        .await
+        self.execute_binary_op(shader_source, label, a_buffer, b_buffer, output_buffer, a_info.size)
+            .await
     }
 }

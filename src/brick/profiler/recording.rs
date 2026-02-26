@@ -14,10 +14,7 @@ impl BrickProfiler {
     /// completes but BEFORE calling stop().
     #[must_use]
     pub fn start(&self, name: &str) -> super::BrickTimer {
-        super::BrickTimer {
-            name: name.to_string(),
-            start: std::time::Instant::now(),
-        }
+        super::BrickTimer { name: name.to_string(), start: std::time::Instant::now() }
     }
 
     /// Stop timing and record the sample.
@@ -40,10 +37,8 @@ impl BrickProfiler {
         } else {
             // Fall back to dynamic stats
             let name = timer.name;
-            let stats = self
-                .dynamic_stats
-                .entry(name.clone())
-                .or_insert_with(|| BrickStats::new(&name));
+            let stats =
+                self.dynamic_stats.entry(name.clone()).or_insert_with(|| BrickStats::new(&name));
             stats.add_sample(elapsed_ns, elements);
         }
 
@@ -84,10 +79,8 @@ impl BrickProfiler {
             stats.add_sample(elapsed_ns, elements);
         } else {
             // Fall back to dynamic stats
-            let stats = self
-                .dynamic_stats
-                .entry(name.to_string())
-                .or_insert_with(|| BrickStats::new(name));
+            let stats =
+                self.dynamic_stats.entry(name.to_string()).or_insert_with(|| BrickStats::new(name));
             stats.add_sample(elapsed_ns, elements);
         }
 
@@ -138,10 +131,8 @@ impl BrickProfiler {
             stats.add_sample_with_bytes(elapsed_ns, elements, input_bytes, output_bytes);
         } else {
             // Fall back to dynamic stats
-            let stats = self
-                .dynamic_stats
-                .entry(name.to_string())
-                .or_insert_with(|| BrickStats::new(name));
+            let stats =
+                self.dynamic_stats.entry(name.to_string()).or_insert_with(|| BrickStats::new(name));
             stats.add_sample_with_bytes(elapsed_ns, elements, input_bytes, output_bytes);
         }
 
@@ -180,20 +171,14 @@ impl BrickProfiler {
     ///
     /// For full statistics including known bricks, use `all_brick_stats()` instead.
     #[must_use]
-    #[deprecated(
-        since = "0.12.0",
-        note = "Use all_brick_stats() for complete statistics"
-    )]
+    #[deprecated(since = "0.12.0", note = "Use all_brick_stats() for complete statistics")]
     pub fn all_stats(&self) -> &std::collections::HashMap<String, BrickStats> {
         &self.dynamic_stats
     }
 
     /// Get all brick statistics including both known and dynamic bricks.
     pub fn all_brick_stats(&self) -> impl Iterator<Item = &BrickStats> {
-        self.brick_stats
-            .iter()
-            .filter(|s| s.count > 0)
-            .chain(self.dynamic_stats.values())
+        self.brick_stats.iter().filter(|s| s.count > 0).chain(self.dynamic_stats.values())
     }
 
     /// Get all brick names.

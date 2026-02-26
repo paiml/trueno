@@ -350,11 +350,7 @@ impl<T> TensorView<T> {
 
         // Insert the new dimension
         new_shape[dim] = 1;
-        new_strides[dim] = if dim < self.ndim {
-            self.strides[dim] * self.shape[dim]
-        } else {
-            1
-        };
+        new_strides[dim] = if dim < self.ndim { self.strides[dim] * self.shape[dim] } else { 1 };
 
         // Copy remaining dimensions (offset by 1 for insertion)
         #[allow(clippy::manual_memcpy)]

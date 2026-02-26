@@ -94,10 +94,7 @@ fn test_pipeline_status_github() {
 fn test_git_ref_as_str() {
     assert_eq!(GitRef::Branch("main".to_string()).as_ref_str(), "main");
     assert_eq!(GitRef::Commit("abc123".to_string()).as_ref_str(), "abc123");
-    assert_eq!(
-        GitRef::Tag("v1.0.0".to_string()).as_ref_str(),
-        "refs/tags/v1.0.0"
-    );
+    assert_eq!(GitRef::Tag("v1.0.0".to_string()).as_ref_str(), "refs/tags/v1.0.0");
     assert_eq!(GitRef::PullRequest(123).as_ref_str(), "refs/pull/123/head");
 }
 
@@ -132,9 +129,7 @@ fn test_regression_analysis_counts() {
     let config = PipelineConfig::default();
     let mut pipeline = RegressionPipeline::new(config);
 
-    let result = pipeline
-        .run(&GitRef::Branch("feature".to_string()))
-        .unwrap();
+    let result = pipeline.run(&GitRef::Branch("feature".to_string())).unwrap();
 
     // All simulated metrics should be stable
     assert_eq!(result.regression_count(), 0);
@@ -146,9 +141,7 @@ fn test_generate_report() {
     let config = PipelineConfig::default();
     let mut pipeline = RegressionPipeline::new(config);
 
-    let analysis = pipeline
-        .run(&GitRef::Branch("feature".to_string()))
-        .unwrap();
+    let analysis = pipeline.run(&GitRef::Branch("feature".to_string())).unwrap();
     let report = pipeline.generate_report(&analysis);
 
     assert!(report.contains("# Performance Regression Report"));
@@ -158,9 +151,7 @@ fn test_generate_report() {
 
 #[test]
 fn test_error_display() {
-    let err = PipelineError::GitError {
-        reason: "not found".to_string(),
-    };
+    let err = PipelineError::GitError { reason: "not found".to_string() };
     assert!(err.to_string().contains("not found"));
 
     let err = PipelineError::Timeout { timeout_sec: 60 };
@@ -172,9 +163,7 @@ fn test_store_artifact() {
     let config = PipelineConfig::default();
     let mut pipeline = RegressionPipeline::new(config);
 
-    let analysis = pipeline
-        .run(&GitRef::Branch("feature".to_string()))
-        .unwrap();
+    let analysis = pipeline.run(&GitRef::Branch("feature".to_string())).unwrap();
     let artifact_id = pipeline.store_artifact(&analysis).unwrap();
 
     assert!(!artifact_id.is_empty());
@@ -184,10 +173,7 @@ fn test_store_artifact() {
 // FKR-048: Pipeline detects regression within 60 seconds
 #[test]
 fn test_fkr_048_regression_detection_timing() {
-    let config = PipelineConfig {
-        timeout_sec: 60,
-        ..Default::default()
-    };
+    let config = PipelineConfig { timeout_sec: 60, ..Default::default() };
     let mut pipeline = RegressionPipeline::new(config);
 
     let start = Instant::now();
@@ -198,11 +184,7 @@ fn test_fkr_048_regression_detection_timing() {
     let elapsed = start.elapsed();
 
     // Must complete within 60 seconds
-    assert!(
-        elapsed.as_secs() < 60,
-        "Pipeline took too long: {:?}",
-        elapsed
-    );
+    assert!(elapsed.as_secs() < 60, "Pipeline took too long: {:?}", elapsed);
 
     // Must produce valid result
     assert!(result.is_ok());

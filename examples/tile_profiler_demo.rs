@@ -75,22 +75,13 @@ fn main() {
         if stats.count > 0 {
             println!("\n   {} tiles:", stats.level.name().to_uppercase());
             println!("     Samples: {}", stats.count);
-            println!(
-                "     Total time: {:.2} ms",
-                stats.total_ns as f64 / 1_000_000.0
-            );
+            println!("     Total time: {:.2} ms", stats.total_ns as f64 / 1_000_000.0);
             println!("     Avg time: {:.2} µs", stats.avg_us());
             println!("     Min time: {:.2} µs", stats.min_ns as f64 / 1000.0);
             println!("     Max time: {:.2} µs", stats.max_ns as f64 / 1000.0);
-            println!(
-                "     Throughput: {:.2} Melem/s",
-                stats.throughput() / 1_000_000.0
-            );
+            println!("     Throughput: {:.2} Melem/s", stats.throughput() / 1_000_000.0);
             println!("     GFLOP/s: {:.2}", stats.gflops());
-            println!(
-                "     Arithmetic intensity: {:.2} FLOP/byte",
-                stats.arithmetic_intensity()
-            );
+            println!("     Arithmetic intensity: {:.2} FLOP/byte", stats.arithmetic_intensity());
         }
     }
 
@@ -126,10 +117,7 @@ fn main() {
     println!("   Q4K MatVec Results:");
     println!("     Batches: {}", macro_stats.count);
     println!("     Avg time: {:.2} ms", macro_stats.avg_us() / 1000.0);
-    println!(
-        "     Throughput: {:.2} Melem/s",
-        macro_stats.throughput() / 1_000_000.0
-    );
+    println!("     Throughput: {:.2} Melem/s", macro_stats.throughput() / 1_000_000.0);
     println!("     GFLOP/s: {:.2}", macro_stats.gflops());
 
     // =========================================================================
@@ -149,10 +137,7 @@ fn main() {
     let macro_stats = profiler.tile_stats(TileLevel::Macro);
     if macro_stats.count > 0 {
         println!("\n   Macro tile efficiency:");
-        println!(
-            "     vs AVX2: {:.1}%",
-            macro_stats.cache_efficiency(avx2_peak_gflops) * 100.0
-        );
+        println!("     vs AVX2: {:.1}%", macro_stats.cache_efficiency(avx2_peak_gflops) * 100.0);
         println!(
             "     vs AVX-512: {:.1}%",
             macro_stats.cache_efficiency(avx512_peak_gflops) * 100.0
@@ -180,10 +165,7 @@ fn main() {
         TilingConfig::gpu_q4k_matvec(),
     ];
 
-    println!(
-        "\n   {:20} {:>10} {:>12} {:>12}",
-        "Config", "AI", "Macro AI", "Micro AI"
-    );
+    println!("\n   {:20} {:>10} {:>12} {:>12}", "Config", "AI", "Macro AI", "Micro AI");
     println!("   {:─<20} {:─>10} {:─>12} {:─>12}", "", "", "", "");
 
     for config in &configs {
@@ -202,15 +184,9 @@ fn main() {
     println!("\n7. Profiler Reset Demo");
     println!("   ──────────────────────");
 
-    println!(
-        "   Before reset: {} macro samples",
-        profiler.tile_stats(TileLevel::Macro).count
-    );
+    println!("   Before reset: {} macro samples", profiler.tile_stats(TileLevel::Macro).count);
     profiler.reset_tile_stats();
-    println!(
-        "   After reset: {} macro samples",
-        profiler.tile_stats(TileLevel::Macro).count
-    );
+    println!("   After reset: {} macro samples", profiler.tile_stats(TileLevel::Macro).count);
 
     println!("\n=== Demo Complete ===");
 }

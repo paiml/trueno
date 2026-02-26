@@ -121,10 +121,7 @@ fn test_f130_slack_parallel_branch() {
     // C should have slack (it's the shorter parallel path)
     let _c_slack = slack.get(&c).copied().unwrap_or(0);
     // Note: exact slack depends on algorithm details
-    assert!(
-        slack.values().any(|&s| s > 0),
-        "F130: At least one node should have positive slack"
-    );
+    assert!(slack.values().any(|&s| s > 0), "F130: At least one node should have positive slack");
 }
 
 /// F131: Roofline distance is 0.0 for kernel at peak
@@ -149,10 +146,7 @@ fn test_f131_roofline_at_peak() {
 
     // Should be at or near zero distance (achieving peak)
     for &dist in distances.values() {
-        assert!(
-            dist <= 0.1,
-            "F131: Roofline distance should be near 0 at peak"
-        );
+        assert!(dist <= 0.1, "F131: Roofline distance should be near 0 at peak");
     }
 }
 
@@ -178,10 +172,7 @@ fn test_f132_roofline_underperforming() {
 
     // Distance should be high (0.9 = 90% from optimal)
     for &dist in distances.values() {
-        assert!(
-            dist >= 0.8,
-            "F132: Roofline distance should be high for underperforming kernel"
-        );
+        assert!(dist >= 0.8, "F132: Roofline distance should be high for underperforming kernel");
     }
 }
 
@@ -236,10 +227,7 @@ fn test_f134_no_false_positive_ping_pong() {
 
     let patterns = graph.detect_ping_pong();
 
-    assert!(
-        patterns.is_empty(),
-        "F134: Should not detect ping-pong for different sizes"
-    );
+    assert!(patterns.is_empty(), "F134: Should not detect ping-pong for different sizes");
 }
 
 /// F135: Critical path summary includes all critical nodes
@@ -267,16 +255,7 @@ fn test_f135_critical_path_summary() {
     let summary = graph.critical_path_summary();
 
     // Summary should mention both bricks
-    assert!(
-        summary.contains("RmsNorm"),
-        "F135: Summary should include RmsNorm"
-    );
-    assert!(
-        summary.contains("QkvProjection"),
-        "F135: Summary should include QkvProjection"
-    );
-    assert!(
-        summary.contains("ms"),
-        "F135: Summary should include timing in ms"
-    );
+    assert!(summary.contains("RmsNorm"), "F135: Summary should include RmsNorm");
+    assert!(summary.contains("QkvProjection"), "F135: Summary should include QkvProjection");
+    assert!(summary.contains("ms"), "F135: Summary should include timing in ms");
 }

@@ -52,12 +52,10 @@ impl GpuDevice {
         }
 
         // Create shader module for Jacobi rotation
-        let rotation_shader = self
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Jacobi Rotation Shader"),
-                source: wgpu::ShaderSource::Wgsl(shaders::JACOBI_ROTATION_SHADER.into()),
-            });
+        let rotation_shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Jacobi Rotation Shader"),
+            source: wgpu::ShaderSource::Wgsl(shaders::JACOBI_ROTATION_SHADER.into()),
+        });
 
         // Create buffers
         let matrix_size = (n * n * std::mem::size_of::<f32>()) as u64;
@@ -106,89 +104,77 @@ impl GpuDevice {
         }
 
         // Write initial data
-        self.queue
-            .write_buffer(&matrix_buffer, 0, bytemuck::cast_slice(matrix));
-        self.queue
-            .write_buffer(&eigenvectors_buffer, 0, bytemuck::cast_slice(&eigenvectors));
+        self.queue.write_buffer(&matrix_buffer, 0, bytemuck::cast_slice(matrix));
+        self.queue.write_buffer(&eigenvectors_buffer, 0, bytemuck::cast_slice(&eigenvectors));
 
         // Create bind group layout
         let bind_group_layout =
-            self.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Jacobi Bind Group Layout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
+            self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Jacobi Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
                         },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
                         },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
                         },
-                    ],
-                });
+                        count: None,
+                    },
+                ],
+            });
 
         // Create bind group
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Jacobi Bind Group"),
             layout: &bind_group_layout,
             entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: matrix_buffer.as_entire_binding(),
-                },
+                wgpu::BindGroupEntry { binding: 0, resource: matrix_buffer.as_entire_binding() },
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: eigenvectors_buffer.as_entire_binding(),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: params_buffer.as_entire_binding(),
-                },
+                wgpu::BindGroupEntry { binding: 2, resource: params_buffer.as_entire_binding() },
             ],
         });
 
         // Create pipeline
-        let pipeline_layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Jacobi Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
+        let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Jacobi Pipeline Layout"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
 
         let rotation_pipeline =
-            self.device
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("Jacobi Rotation Pipeline"),
-                    layout: Some(&pipeline_layout),
-                    module: &rotation_shader,
-                    entry_point: Some("main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    cache: None,
-                });
+            self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Jacobi Rotation Pipeline"),
+                layout: Some(&pipeline_layout),
+                module: &rotation_shader,
+                entry_point: Some("main"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            });
 
         // Jacobi iteration
         let max_sweeps = 50;
@@ -235,15 +221,13 @@ impl GpuDevice {
                         _padding: [0; 3],
                     };
 
-                    self.queue
-                        .write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
+                    self.queue.write_buffer(&params_buffer, 0, bytemuck::bytes_of(&params));
 
                     // Create command encoder and dispatch
                     let mut encoder =
-                        self.device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("Jacobi Rotation Encoder"),
-                            });
+                        self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Jacobi Rotation Encoder"),
+                        });
 
                     {
                         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -297,11 +281,9 @@ impl GpuDevice {
             mapped_at_creation: false,
         });
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Copy Encoder"),
-            });
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Copy Encoder"),
+        });
 
         encoder.copy_buffer_to_buffer(&matrix_buffer, 0, &staging_matrix, 0, matrix_size);
         encoder.copy_buffer_to_buffer(
@@ -318,17 +300,10 @@ impl GpuDevice {
         let eigenvector_slice = staging_eigenvectors.slice(..);
         let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
         eigenvector_slice.map_async(wgpu::MapMode::Read, move |result| {
-            sender
-                .send(result)
-                .expect("oneshot channel receiver dropped");
+            sender.send(result).expect("oneshot channel receiver dropped");
         });
 
-        self.device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .ok();
+        self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
 
         receiver
             .receive()

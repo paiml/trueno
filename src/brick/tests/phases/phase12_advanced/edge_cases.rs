@@ -79,10 +79,7 @@ fn test_f214_stream_capacity_window_ops() {
 
     // Consume receive window
     cap.consume_receive(50000);
-    assert_eq!(
-        cap.available_receive(),
-        StreamCapacity::DEFAULT_WINDOW - 50000
-    );
+    assert_eq!(cap.available_receive(), StreamCapacity::DEFAULT_WINDOW - 50000);
 
     // Check if needs window update (when < 50% of initial)
     cap.consume_receive(20000);
@@ -90,10 +87,7 @@ fn test_f214_stream_capacity_window_ops() {
 
     // Replenish
     cap.replenish_receive(10000);
-    assert_eq!(
-        cap.available_receive(),
-        StreamCapacity::DEFAULT_WINDOW - 60000
-    );
+    assert_eq!(cap.available_receive(), StreamCapacity::DEFAULT_WINDOW - 60000);
 
     // Default trait
     let cap2 = StreamCapacity::default();

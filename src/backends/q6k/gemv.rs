@@ -10,11 +10,7 @@ use super::{f16_to_f32, SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
 #[inline(always)]
 fn extract_q6k_scalar(ql: &[u8], qh: &[u8], idx: usize) -> i8 {
     let ql_byte = ql[idx / 2];
-    let low4 = if idx % 2 == 0 {
-        ql_byte & 0x0F
-    } else {
-        ql_byte >> 4
-    };
+    let low4 = if idx % 2 == 0 { ql_byte & 0x0F } else { ql_byte >> 4 };
     let qh_byte = qh[idx / 4];
     let high2 = (qh_byte >> ((idx % 4) * 2)) & 0x03;
     (low4 | (high2 << 4)) as i8 - 32
@@ -30,9 +26,7 @@ fn process_q6k_superblock_scalar(
 ) -> f32 {
     let ql = sb_data.get(0..128).expect("Q6_K: need ≥128 bytes for ql");
     let qh = sb_data.get(128..192).expect("Q6_K: need ≥192 bytes for qh");
-    let scales = sb_data
-        .get(192..208)
-        .expect("Q6_K: need ≥208 bytes for scales");
+    let scales = sb_data.get(192..208).expect("Q6_K: need ≥208 bytes for scales");
     let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
     let mut sum = 0.0f32;
 
@@ -93,11 +87,7 @@ fn extract_q6k_values(ql: &[u8], qh: &[u8], idx_base: usize) -> [i32; 8] {
     for i in 0..8 {
         let idx = idx_base + i;
         let ql_byte = ql[idx / 2];
-        let low4 = if idx % 2 == 0 {
-            ql_byte & 0x0F
-        } else {
-            ql_byte >> 4
-        };
+        let low4 = if idx % 2 == 0 { ql_byte & 0x0F } else { ql_byte >> 4 };
         let qh_byte = qh[idx / 4];
         let qh_shift = (idx % 4) * 2;
         let high2 = (qh_byte >> qh_shift) & 0x03;
@@ -137,9 +127,7 @@ unsafe fn process_q6k_superblock_avx2(
 
     let ql = sb_data.get(0..128).expect("Q6_K: need ≥128 bytes for ql");
     let qh = sb_data.get(128..192).expect("Q6_K: need ≥192 bytes for qh");
-    let scales = sb_data
-        .get(192..208)
-        .expect("Q6_K: need ≥208 bytes for scales");
+    let scales = sb_data.get(192..208).expect("Q6_K: need ≥208 bytes for scales");
     let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
     let d_vec = _mm256_set1_ps(d);
 
@@ -267,10 +255,7 @@ fn matmul_q6k_f32_parallel(
     use std::thread;
 
     // Use fewer threads with larger chunks for better cache efficiency
-    let num_threads = thread::available_parallelism()
-        .map(|p| p.get())
-        .unwrap_or(4)
-        .min(12); // Use 12 threads max for better cache behavior
+    let num_threads = thread::available_parallelism().map(|p| p.get()).unwrap_or(4).min(12); // Use 12 threads max for better cache behavior
 
     let chunk_size = (out_dim + num_threads - 1) / num_threads;
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;

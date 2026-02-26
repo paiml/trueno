@@ -65,11 +65,7 @@ impl ValidationResults {
         let failed = total - passed;
 
         for step in &self.steps {
-            let status = if step.success {
-                "✓".green()
-            } else {
-                "✗".red()
-            };
+            let status = if step.success { "✓".green() } else { "✗".red() };
             println!("{} Step {}: {}", status, step.number, step.name);
         }
 
@@ -78,11 +74,7 @@ impl ValidationResults {
             "Total: {}, Passed: {}, Failed: {}",
             total,
             format!("{}", passed).green(),
-            if failed > 0 {
-                format!("{}", failed).red()
-            } else {
-                format!("{}", failed).green()
-            }
+            if failed > 0 { format!("{}", failed).red() } else { format!("{}", failed).green() }
         );
 
         if failed == 0 {

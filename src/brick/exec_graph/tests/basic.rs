@@ -59,11 +59,7 @@ fn test_execution_graph_basic() {
 
 #[test]
 fn test_execution_node_name() {
-    let brick = ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 1000,
-        elements: 4096,
-    };
+    let brick = ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 1000, elements: 4096 };
     assert_eq!(brick.name(), "RmsNorm");
 
     let layer = ExecutionNode::Layer { index: 5 };
@@ -103,11 +99,7 @@ fn test_brick_stats_basic() {
 
 #[test]
 fn test_category_stats_percentage() {
-    let stats = CategoryStats {
-        total_ns: 250,
-        total_elements: 1000,
-        count: 10,
-    };
+    let stats = CategoryStats { total_ns: 250, total_elements: 1000, count: 10 };
     assert!((stats.percentage(1000) - 25.0).abs() < 0.001);
 }
 

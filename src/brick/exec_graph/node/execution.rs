@@ -31,11 +31,7 @@ impl ExecutionNodeId {
 #[derive(Debug, Clone)]
 pub enum ExecutionNode {
     /// High-level brick (BrickId from v2)
-    Brick {
-        id: BrickId,
-        timing_ns: u64,
-        elements: u64,
-    },
+    Brick { id: BrickId, timing_ns: u64, elements: u64 },
     /// GPU kernel launch
     Kernel {
         name: String,
@@ -68,11 +64,7 @@ pub enum ExecutionNode {
         timing_ns: Option<u64>,
     },
     /// Rust function (from DWARF or manual annotation)
-    Function {
-        name: String,
-        file: Option<String>,
-        line: Option<u32>,
-    },
+    Function { name: String, file: Option<String>, line: Option<u32> },
     /// Transformer layer grouping
     Layer { index: u32 },
     /// Phase 11 (E.9.4): Async task metrics for poll efficiency tracking
@@ -96,12 +88,7 @@ impl ExecutionNode {
             Self::Kernel { name, .. } => name.clone(),
             Self::Function { name, .. } => name.clone(),
             Self::Layer { index } => format!("Layer{}", index),
-            Self::Transfer {
-                src,
-                dst,
-                direction,
-                ..
-            } => {
+            Self::Transfer { src, dst, direction, .. } => {
                 let dir = match direction {
                     TransferDirection::H2D => "H2D",
                     TransferDirection::D2H => "D2H",
@@ -149,10 +136,7 @@ impl ExecutionNode {
     /// Get arithmetic intensity if available (kernels only, Phase 9).
     pub fn arithmetic_intensity(&self) -> Option<f32> {
         match self {
-            Self::Kernel {
-                arithmetic_intensity,
-                ..
-            } => *arithmetic_intensity,
+            Self::Kernel { arithmetic_intensity, .. } => *arithmetic_intensity,
             _ => None,
         }
     }
@@ -160,9 +144,7 @@ impl ExecutionNode {
     /// Get achieved TFLOP/s if available (kernels only, Phase 9).
     pub fn achieved_tflops(&self) -> Option<f32> {
         match self {
-            Self::Kernel {
-                achieved_tflops, ..
-            } => *achieved_tflops,
+            Self::Kernel { achieved_tflops, .. } => *achieved_tflops,
             _ => None,
         }
     }

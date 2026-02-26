@@ -49,11 +49,8 @@ pub fn hash_bytes(bytes: &[u8]) -> u64 {
     let remainder = chunks.remainder();
 
     for chunk in chunks {
-        let word = u64::from_le_bytes(
-            chunk
-                .try_into()
-                .expect("chunks_exact(8) guarantees 8 bytes"),
-        );
+        let word =
+            u64::from_le_bytes(chunk.try_into().expect("chunks_exact(8) guarantees 8 bytes"));
         hash = hash.rotate_left(5).bitxor(word).wrapping_mul(K);
     }
 
@@ -195,11 +192,7 @@ mod tests {
 
         assert_eq!(hashes.len(), 4);
         for (i, key) in keys.iter().enumerate() {
-            assert_eq!(
-                hashes[i],
-                hash_key(key),
-                "Batch hash must match single hash"
-            );
+            assert_eq!(hashes[i], hash_key(key), "Batch hash must match single hash");
         }
     }
 
@@ -227,10 +220,7 @@ mod tests {
         let scalar = hash_keys_batch_with_backend(&keys, Backend::Scalar);
         let auto = hash_keys_batch_with_backend(&keys, Backend::Auto);
 
-        assert_eq!(
-            scalar, auto,
-            "Scalar and Auto must produce identical results"
-        );
+        assert_eq!(scalar, auto, "Scalar and Auto must produce identical results");
     }
 
     #[test]
@@ -257,11 +247,7 @@ mod tests {
 
         let diff = (h1 ^ h2).count_ones();
         // Expect at least 20 bits to differ (out of 64) for good avalanche
-        assert!(
-            diff >= 15,
-            "Avalanche effect: {} bits differ, expected >=15",
-            diff
-        );
+        assert!(diff >= 15, "Avalanche effect: {} bits differ, expected >=15", diff);
     }
 
     #[test]

@@ -49,12 +49,7 @@ fn test_a002_backend_consistent_add() {
     let result2 = a.add(&b).expect("add failed");
 
     // Compare element-by-element (should be exact)
-    for (i, (r1, r2)) in result1
-        .as_slice()
-        .iter()
-        .zip(result2.as_slice().iter())
-        .enumerate()
-    {
+    for (i, (r1, r2)) in result1.as_slice().iter().zip(result2.as_slice().iter()).enumerate() {
         assert_eq!(
             r1.to_bits(),
             r2.to_bits(),
@@ -124,10 +119,7 @@ fn test_a008_simd_auto_detect() {
 
     // On x86_64, should detect at least SSE2
     assert!(
-        matches!(
-            backend,
-            Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512
-        ),
+        matches!(backend, Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512),
         "A-008 FALSIFIED: x86_64 should detect SIMD variant, got {:?}",
         backend
     );
@@ -221,12 +213,7 @@ fn test_a003_avx512_matches_scalar() {
 
     // Test add
     let result_add = va.add(&vb).expect("add failed");
-    for (i, (r, (&x, &y))) in result_add
-        .as_slice()
-        .iter()
-        .zip(a.iter().zip(b.iter()))
-        .enumerate()
-    {
+    for (i, (r, (&x, &y))) in result_add.as_slice().iter().zip(a.iter().zip(b.iter())).enumerate() {
         let expected = x + y;
         assert!(
             (*r - expected).abs() < f32::EPSILON,
@@ -238,12 +225,7 @@ fn test_a003_avx512_matches_scalar() {
 
     // Test mul
     let result_mul = va.mul(&vb).expect("mul failed");
-    for (i, (r, (&x, &y))) in result_mul
-        .as_slice()
-        .iter()
-        .zip(a.iter().zip(b.iter()))
-        .enumerate()
-    {
+    for (i, (r, (&x, &y))) in result_mul.as_slice().iter().zip(a.iter().zip(b.iter())).enumerate() {
         let expected = x * y;
         assert!(
             (*r - expected).abs() < f32::EPSILON,
@@ -310,11 +292,7 @@ fn test_a013_neon_speedup() {
     let neon_time = start.elapsed();
 
     let speedup = scalar_time.as_nanos() as f64 / neon_time.as_nanos() as f64;
-    assert!(
-        speedup >= 2.0,
-        "A-013 FALSIFIED: NEON speedup {} is less than 2x",
-        speedup
-    );
+    assert!(speedup >= 2.0, "A-013 FALSIFIED: NEON speedup {} is less than 2x", speedup);
 }
 
 /// A-013: NEON speedup test placeholder for non-ARM64
@@ -339,12 +317,7 @@ fn test_a014_wasm_simd_speedup() {
     let result = va.add(&vb).expect("WASM SIMD add failed");
 
     // Verify correctness
-    for (i, (r, (&x, &y))) in result
-        .as_slice()
-        .iter()
-        .zip(a.iter().zip(b.iter()))
-        .enumerate()
-    {
+    for (i, (r, (&x, &y))) in result.as_slice().iter().zip(a.iter().zip(b.iter())).enumerate() {
         let expected = x + y;
         assert!(
             (*r - expected).abs() < f32::EPSILON,
@@ -394,23 +367,14 @@ fn test_backend_tolerance_for_backends() {
     let tolerance = BackendTolerance::default();
 
     // Scalar vs Scalar
-    assert_eq!(
-        tolerance.for_backends(Backend::Scalar, Backend::Scalar),
-        0.0
-    );
+    assert_eq!(tolerance.for_backends(Backend::Scalar, Backend::Scalar), 0.0);
 
     // Scalar vs SIMD (should be exact)
     assert_eq!(tolerance.for_backends(Backend::Scalar, Backend::AVX2), 0.0);
 
     // GPU vs GPU
-    assert_eq!(
-        tolerance.for_backends(Backend::GPU, Backend::GPU),
-        tolerance.gpu_vs_gpu
-    );
+    assert_eq!(tolerance.for_backends(Backend::GPU, Backend::GPU), tolerance.gpu_vs_gpu);
 
     // SIMD vs GPU
-    assert_eq!(
-        tolerance.for_backends(Backend::AVX2, Backend::GPU),
-        tolerance.simd_vs_gpu
-    );
+    assert_eq!(tolerance.for_backends(Backend::AVX2, Backend::GPU), tolerance.simd_vs_gpu);
 }

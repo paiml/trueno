@@ -236,14 +236,8 @@ fn test_ggml_kernel_config() {
 #[test]
 fn test_ggml_super_block_constants() {
     // Verify GGML Q4_K super-block constants
-    assert_eq!(
-        Q4K_SUPER_BLOCK_SIZE, 256,
-        "Super-block should have 256 values"
-    );
-    assert_eq!(
-        Q4K_SUPER_BLOCK_BYTES, 144,
-        "Super-block should be 144 bytes (2+2+12+128)"
-    );
+    assert_eq!(Q4K_SUPER_BLOCK_SIZE, 256, "Super-block should have 256 values");
+    assert_eq!(Q4K_SUPER_BLOCK_BYTES, 144, "Super-block should be 144 bytes (2+2+12+128)");
 }
 
 #[test]
@@ -258,10 +252,7 @@ fn test_ggml_ptx_generation() {
     let ptx = kernel.emit_ptx();
 
     // Verify kernel name
-    assert!(
-        ptx.contains("q4k_gemm_ggml"),
-        "Should contain GGML kernel name"
-    );
+    assert!(ptx.contains("q4k_gemm_ggml"), "Should contain GGML kernel name");
 
     // Verify parameters
     assert!(ptx.contains(".param .u64 a_ptr"));
@@ -295,10 +286,7 @@ fn test_ggml_ptx_contains_nested_loops() {
 
     // GGML kernel has nested loops: super-block loop and sub-block loop
     assert!(ptx.contains("sb_loop"), "Should have super-block loop");
-    assert!(
-        ptx.contains("sub_block_loop"),
-        "Should have sub-block loop for 8 sub-blocks"
-    );
+    assert!(ptx.contains("sub_block_loop"), "Should have sub-block loop for 8 sub-blocks");
 }
 
 #[test]
@@ -311,10 +299,7 @@ fn test_ggml_ptx_contains_scale_extraction() {
         ptx.contains("shr") || ptx.contains("shl"),
         "Should have shift operations for scale extraction"
     );
-    assert!(
-        ptx.contains("and"),
-        "Should have AND operations for 6-bit masking"
-    );
+    assert!(ptx.contains("and"), "Should have AND operations for 6-bit masking");
 }
 
 #[test]
@@ -323,10 +308,7 @@ fn test_ggml_ptx_contains_warp_reduce() {
     let ptx = kernel.emit_ptx();
 
     // Warp shuffle reduction for dot product
-    assert!(
-        ptx.contains("shfl"),
-        "Should have warp shuffle for reduction"
-    );
+    assert!(ptx.contains("shfl"), "Should have warp shuffle for reduction");
 }
 
 #[test]

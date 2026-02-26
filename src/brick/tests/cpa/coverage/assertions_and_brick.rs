@@ -8,11 +8,7 @@ use super::super::super::super::*;
 #[test]
 fn test_c001_compute_assertion_equiv() {
     let assertion = ComputeAssertion::equiv(Backend::Scalar);
-    if let ComputeAssertion::Equivalence {
-        baseline,
-        tolerance,
-    } = assertion
-    {
+    if let ComputeAssertion::Equivalence { baseline, tolerance } = assertion {
         assert_eq!(baseline, Backend::Scalar);
         assert!((tolerance - 1e-5).abs() < 1e-10);
     } else {

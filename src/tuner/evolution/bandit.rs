@@ -87,11 +87,7 @@ impl KernelBandit {
 
     /// Select kernel using UCB1 or Thompson Sampling
     pub fn select(&self) -> KernelType {
-        let idx = if self.use_thompson {
-            self.select_thompson()
-        } else {
-            self.select_ucb()
-        };
+        let idx = if self.use_thompson { self.select_thompson() } else { self.select_ucb() };
         KernelType::from_index(idx)
     }
 
@@ -130,9 +126,7 @@ impl KernelBandit {
                     a.mean() + 0.1 * ((seed.wrapping_add(*i as u64) % 1000) as f32 / 1000.0 - 0.5);
                 let sample_b =
                     b.mean() + 0.1 * ((seed.wrapping_add(*j as u64) % 1000) as f32 / 1000.0 - 0.5);
-                sample_a
-                    .partial_cmp(&sample_b)
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                sample_a.partial_cmp(&sample_b).unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|(i, _)| i)
             .unwrap_or(0)
@@ -156,9 +150,7 @@ impl KernelBandit {
             .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| {
-                a.mean()
-                    .partial_cmp(&b.mean())
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                a.mean().partial_cmp(&b.mean()).unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|(i, _)| i)
             .unwrap_or(0);
@@ -179,9 +171,6 @@ impl KernelBandit {
     #[allow(clippy::cast_precision_loss)] // Pull counts << 2^24
     pub fn estimated_regret(&self) -> f32 {
         let best_mean = self.arms.iter().map(|a| a.mean()).fold(0.0f32, f32::max);
-        self.arms
-            .iter()
-            .map(|a| (best_mean - a.mean()) * a.pulls as f32)
-            .sum()
+        self.arms.iter().map(|a| (best_mean - a.mean()) * a.pulls as f32).sum()
     }
 }

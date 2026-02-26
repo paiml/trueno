@@ -42,10 +42,7 @@ fn smoke_simd_vector_add() {
     // Verify against expected (scalar computation)
     let expected: Vec<f32> = a.iter().zip(b.iter()).map(|(x, y)| x + y).collect();
     for (i, (got, want)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (got - want).abs() < FP_TOLERANCE,
-            "Mismatch at index {i}: got {got}, want {want}"
-        );
+        assert!((got - want).abs() < FP_TOLERANCE, "Mismatch at index {i}: got {got}, want {want}");
     }
 }
 
@@ -105,10 +102,7 @@ fn smoke_simd_vector_mul() {
     // Verify against expected
     let expected: Vec<f32> = a.iter().zip(b.iter()).map(|(x, y)| x * y).collect();
     for (i, (got, want)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (got - want).abs() < FP_TOLERANCE,
-            "Mismatch at index {i}: got {got}, want {want}"
-        );
+        assert!((got - want).abs() < FP_TOLERANCE, "Mismatch at index {i}: got {got}, want {want}");
     }
 }
 
@@ -116,9 +110,8 @@ fn smoke_simd_vector_mul() {
 #[test]
 fn smoke_simd_relu() {
     let size = 10_000;
-    let data: Vec<f32> = (0..size)
-        .map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) })
-        .collect();
+    let data: Vec<f32> =
+        (0..size).map(|i| if i % 2 == 0 { i as f32 } else { -(i as f32) }).collect();
 
     let v = Vector::from_slice(&data);
     let result = v.relu().expect("ReLU failed");
@@ -143,10 +136,7 @@ fn smoke_simd_softmax() {
 
     // Verify softmax sums to 1
     let sum: f32 = result.as_slice().iter().sum();
-    assert!(
-        (sum - 1.0).abs() < FP_TOLERANCE,
-        "Softmax sum should be 1.0, got {sum}"
-    );
+    assert!((sum - 1.0).abs() < FP_TOLERANCE, "Softmax sum should be 1.0, got {sum}");
 
     // Verify all values are positive
     for (i, val) in result.as_slice().iter().enumerate() {
@@ -213,9 +203,7 @@ mod wgpu_tests {
         // 256x256 matrix multiply (above GPU threshold)
         let n = 256;
         let a_data: Vec<f32> = (0..n * n).map(|i| (i as f32 * 0.001) % 1.0).collect();
-        let b_data: Vec<f32> = (0..n * n)
-            .map(|i| ((n * n - i) as f32 * 0.001) % 1.0)
-            .collect();
+        let b_data: Vec<f32> = (0..n * n).map(|i| ((n * n - i) as f32 * 0.001) % 1.0).collect();
 
         let a = Matrix::from_vec(n, n, a_data.clone()).expect("Matrix A creation failed");
         let b = Matrix::from_vec(n, n, b_data.clone()).expect("Matrix B creation failed");
@@ -233,10 +221,7 @@ mod wgpu_tests {
                 }
                 let got = result.as_slice()[i * n + j];
                 let diff = (got - expected).abs();
-                assert!(
-                    diff < FP_TOLERANCE * n as f32,
-                    "Matmul[{i}][{j}] diff {diff} too large"
-                );
+                assert!(diff < FP_TOLERANCE * n as f32, "Matmul[{i}][{j}] diff {diff} too large");
             }
         }
     }
@@ -264,11 +249,8 @@ fn smoke_backend_equivalence() {
     let auto_result = auto_a.add(&auto_b).expect("Auto add failed");
 
     // Compare results
-    for (i, (scalar, auto)) in scalar_result
-        .as_slice()
-        .iter()
-        .zip(auto_result.as_slice().iter())
-        .enumerate()
+    for (i, (scalar, auto)) in
+        scalar_result.as_slice().iter().zip(auto_result.as_slice().iter()).enumerate()
     {
         assert!(
             (scalar - auto).abs() < FP_TOLERANCE,
@@ -295,10 +277,7 @@ fn smoke_single_element() {
     let single = vec![42.0f32];
     let v = Vector::from_slice(&single);
     let norm = v.norm_l2().expect("norm_l2 failed");
-    assert!(
-        (norm - 42.0).abs() < FP_TOLERANCE,
-        "Single element norm: {norm}"
-    );
+    assert!((norm - 42.0).abs() < FP_TOLERANCE, "Single element norm: {norm}");
 }
 
 /// Non-aligned sizes (test remainder handling)
@@ -315,10 +294,7 @@ fn smoke_non_aligned_17() {
 
     // All values should be 17.0
     for (i, val) in result.as_slice().iter().enumerate() {
-        assert!(
-            (val - 17.0).abs() < FP_TOLERANCE,
-            "Non-aligned result at {i}: {val}"
-        );
+        assert!((val - 17.0).abs() < FP_TOLERANCE, "Non-aligned result at {i}: {val}");
     }
 }
 
@@ -342,10 +318,7 @@ fn smoke_infinity_handling() {
 
     let result = v.mul(&v).expect("Infinity mul failed");
 
-    assert!(
-        result.as_slice()[1].is_infinite(),
-        "Infinity should persist"
-    );
+    assert!(result.as_slice()[1].is_infinite(), "Infinity should persist");
 }
 
 // ============================================================================
@@ -376,11 +349,7 @@ fn smoke_performance_baseline() {
     let elapsed = start.elapsed();
     let max_duration = std::time::Duration::from_secs(120); // 2 minutes
 
-    assert!(
-        elapsed < max_duration,
-        "Smoke test took {:?}, exceeds 2 minute limit",
-        elapsed
-    );
+    assert!(elapsed < max_duration, "Smoke test took {:?}, exceeds 2 minute limit", elapsed);
 
     println!("Smoke test completed in {:?}", elapsed);
 }

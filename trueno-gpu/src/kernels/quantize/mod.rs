@@ -119,14 +119,7 @@ impl QuantizeKernel {
     /// Create a new Q4_K quantized GEMM kernel (simplified format for compatibility)
     #[must_use]
     pub fn new(m: u32, n: u32, k: u32) -> Self {
-        Self {
-            m,
-            n,
-            k,
-            tile_size: 32,
-            block_size: Q4K_BLOCK_SIZE,
-            format: Q4KFormat::Simplified,
-        }
+        Self { m, n, k, tile_size: 32, block_size: Q4K_BLOCK_SIZE, format: Q4KFormat::Simplified }
     }
 
     /// Create a Q4_K kernel using real GGML super-block format (PARITY-041)

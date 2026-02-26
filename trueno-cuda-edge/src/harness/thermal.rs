@@ -20,11 +20,7 @@ pub struct ThermalConfig {
 
 impl Default for ThermalConfig {
     fn default() -> Self {
-        Self {
-            healthy_below_c: 80,
-            throttle_at_c: 85,
-            shutdown_at_c: 95,
-        }
+        Self { healthy_below_c: 80, throttle_at_c: 85, shutdown_at_c: 95 }
     }
 }
 

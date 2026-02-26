@@ -211,13 +211,7 @@ fn test_dot_q5k_empty() {
 #[test]
 fn test_dot_q5k_empty_activations() {
     let op = DotQ5KOp::new(256);
-    let block = BlockQ5K {
-        d: 1.0,
-        dmin: 0.0,
-        scales: [32; 12],
-        qh: [0; 32],
-        qs: [0; 128],
-    };
+    let block = BlockQ5K { d: 1.0, dmin: 0.0, scales: [32; 12], qh: [0; 32], qs: [0; 128] };
     let result = op.execute((vec![block], vec![]), Backend::Scalar).unwrap();
     assert!((result - 0.0).abs() < 1e-6);
 }
@@ -247,30 +241,16 @@ fn test_dot_q5k_scalar_execution() {
 #[test]
 fn test_dot_q5k_multiple_blocks() {
     let op = DotQ5KOp::new(512);
-    let block = BlockQ5K {
-        d: 0.5,
-        dmin: 0.1,
-        scales: [34; 12],
-        qh: [0; 32],
-        qs: [0x44; 128],
-    };
+    let block = BlockQ5K { d: 0.5, dmin: 0.1, scales: [34; 12], qh: [0; 32], qs: [0x44; 128] };
     let x = vec![0.5f32; 512];
-    let result = op
-        .execute((vec![block.clone(), block], x), Backend::Scalar)
-        .unwrap();
+    let result = op.execute((vec![block.clone(), block], x), Backend::Scalar).unwrap();
     assert!(result.is_finite());
 }
 
 #[test]
 fn test_dot_q5k_auto_backend() {
     let op = DotQ5KOp::new(256);
-    let block = BlockQ5K {
-        d: 1.0,
-        dmin: 0.0,
-        scales: [32; 12],
-        qh: [0; 32],
-        qs: [0; 128],
-    };
+    let block = BlockQ5K { d: 1.0, dmin: 0.0, scales: [32; 12], qh: [0; 32], qs: [0; 128] };
     let x = vec![1.0f32; 256];
     // Auto backend should work (may use AVX2 if available)
     let result = op.execute((vec![block], x), Backend::Auto).unwrap();
@@ -280,13 +260,7 @@ fn test_dot_q5k_auto_backend() {
 #[test]
 fn test_dot_q5k_avx2_backend() {
     let op = DotQ5KOp::new(256);
-    let block = BlockQ5K {
-        d: 1.0,
-        dmin: 0.0,
-        scales: [33; 12],
-        qh: [0; 32],
-        qs: [0x11; 128],
-    };
+    let block = BlockQ5K { d: 1.0, dmin: 0.0, scales: [33; 12], qh: [0; 32], qs: [0x11; 128] };
     let x = vec![2.0f32; 256];
     // Request AVX2, will fall back to scalar if not available
     let result = op.execute((vec![block], x), Backend::Avx2).unwrap();
@@ -317,12 +291,7 @@ fn test_dot_q6k_empty() {
 #[test]
 fn test_dot_q6k_empty_activations() {
     let op = DotQ6KOp::new(256);
-    let block = BlockQ6K {
-        ql: [0; 128],
-        qh: [0; 64],
-        scales: [0; 16],
-        d: 1.0,
-    };
+    let block = BlockQ6K { ql: [0; 128], qh: [0; 64], scales: [0; 16], d: 1.0 };
     let result = op.execute((vec![block], vec![]), Backend::Scalar).unwrap();
     assert!((result - 0.0).abs() < 1e-6);
 }
@@ -337,12 +306,7 @@ fn test_dot_q6k_tokens() {
 #[test]
 fn test_dot_q6k_scalar_execution() {
     let op = DotQ6KOp::new(256);
-    let block = BlockQ6K {
-        ql: [0x55; 128],
-        qh: [0x55; 64],
-        scales: [1; 16],
-        d: 0.5,
-    };
+    let block = BlockQ6K { ql: [0x55; 128], qh: [0x55; 64], scales: [1; 16], d: 0.5 };
     let x = vec![1.0f32; 256];
     let result = op.execute((vec![block], x), Backend::Scalar).unwrap();
     assert!(result.is_finite());
@@ -351,28 +315,16 @@ fn test_dot_q6k_scalar_execution() {
 #[test]
 fn test_dot_q6k_multiple_blocks() {
     let op = DotQ6KOp::new(512);
-    let block = BlockQ6K {
-        ql: [0x33; 128],
-        qh: [0x33; 64],
-        scales: [2; 16],
-        d: 0.25,
-    };
+    let block = BlockQ6K { ql: [0x33; 128], qh: [0x33; 64], scales: [2; 16], d: 0.25 };
     let x = vec![0.5f32; 512];
-    let result = op
-        .execute((vec![block.clone(), block], x), Backend::Scalar)
-        .unwrap();
+    let result = op.execute((vec![block.clone(), block], x), Backend::Scalar).unwrap();
     assert!(result.is_finite());
 }
 
 #[test]
 fn test_dot_q6k_auto_backend() {
     let op = DotQ6KOp::new(256);
-    let block = BlockQ6K {
-        ql: [0; 128],
-        qh: [0; 64],
-        scales: [1; 16],
-        d: 1.0,
-    };
+    let block = BlockQ6K { ql: [0; 128], qh: [0; 64], scales: [1; 16], d: 1.0 };
     let x = vec![1.0f32; 256];
     let result = op.execute((vec![block], x), Backend::Auto).unwrap();
     assert!(result.is_finite());
@@ -381,12 +333,7 @@ fn test_dot_q6k_auto_backend() {
 #[test]
 fn test_dot_q6k_avx2_backend() {
     let op = DotQ6KOp::new(256);
-    let block = BlockQ6K {
-        ql: [0xAA; 128],
-        qh: [0xAA; 64],
-        scales: [3; 16],
-        d: 0.1,
-    };
+    let block = BlockQ6K { ql: [0xAA; 128], qh: [0xAA; 64], scales: [3; 16], d: 0.1 };
     let x = vec![2.0f32; 256];
     let result = op.execute((vec![block], x), Backend::Avx2).unwrap();
     assert!(result.is_finite());
@@ -397,75 +344,43 @@ fn test_dot_q6k_avx2_backend() {
 #[test]
 fn test_q5k_backend_equivalence() {
     let op = DotQ5KOp::new(256);
-    let block = BlockQ5K {
-        d: 0.5,
-        dmin: 0.1,
-        scales: [35; 12],
-        qh: [0x55; 32],
-        qs: [0x77; 128],
-    };
+    let block = BlockQ5K { d: 0.5, dmin: 0.1, scales: [35; 12], qh: [0x55; 32], qs: [0x77; 128] };
     let x = vec![1.5f32; 256];
 
-    let scalar = op
-        .execute((vec![block.clone()], x.clone()), Backend::Scalar)
-        .unwrap();
+    let scalar = op.execute((vec![block.clone()], x.clone()), Backend::Scalar).unwrap();
     let auto = op.execute((vec![block], x), Backend::Auto).unwrap();
 
     // Allow small FP differences due to SIMD operation ordering
     let rel_diff = (scalar - auto).abs() / scalar.abs().max(1e-6);
-    assert!(
-        rel_diff < 1e-4,
-        "scalar={scalar}, auto={auto}, rel_diff={rel_diff}"
-    );
+    assert!(rel_diff < 1e-4, "scalar={scalar}, auto={auto}, rel_diff={rel_diff}");
 }
 
 #[test]
 fn test_q6k_backend_equivalence() {
     let op = DotQ6KOp::new(256);
-    let block = BlockQ6K {
-        ql: [0x66; 128],
-        qh: [0x22; 64],
-        scales: [4; 16],
-        d: 0.2,
-    };
+    let block = BlockQ6K { ql: [0x66; 128], qh: [0x22; 64], scales: [4; 16], d: 0.2 };
     let x = vec![1.5f32; 256];
 
-    let scalar = op
-        .execute((vec![block.clone()], x.clone()), Backend::Scalar)
-        .unwrap();
+    let scalar = op.execute((vec![block.clone()], x.clone()), Backend::Scalar).unwrap();
     let auto = op.execute((vec![block], x), Backend::Auto).unwrap();
 
     // Allow small FP differences due to SIMD operation ordering
     let rel_diff = (scalar - auto).abs() / scalar.abs().max(1e-6);
-    assert!(
-        rel_diff < 1e-4,
-        "scalar={scalar}, auto={auto}, rel_diff={rel_diff}"
-    );
+    assert!(rel_diff < 1e-4, "scalar={scalar}, auto={auto}, rel_diff={rel_diff}");
 }
 
 // ===== Clone/Debug Trait Tests =====
 
 #[test]
 fn test_block_q5k_clone_debug() {
-    let block = BlockQ5K {
-        d: 1.0,
-        dmin: 0.5,
-        scales: [32; 12],
-        qh: [0; 32],
-        qs: [0; 128],
-    };
+    let block = BlockQ5K { d: 1.0, dmin: 0.5, scales: [32; 12], qh: [0; 32], qs: [0; 128] };
     let cloned = block.clone();
     assert_eq!(format!("{:?}", block), format!("{:?}", cloned));
 }
 
 #[test]
 fn test_block_q6k_clone_debug() {
-    let block = BlockQ6K {
-        ql: [0; 128],
-        qh: [0; 64],
-        scales: [0; 16],
-        d: 1.0,
-    };
+    let block = BlockQ6K { ql: [0; 128], qh: [0; 64], scales: [0; 16], d: 1.0 };
     let cloned = block.clone();
     assert_eq!(format!("{:?}", block), format!("{:?}", cloned));
 }

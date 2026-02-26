@@ -96,15 +96,9 @@ fn f035_coalesced_vs_strided_bandwidth() {
     );
 
     // Verify warp alignment
-    assert!(
-        WARP_SIZE.is_power_of_two(),
-        "F035: Warp size must be power of two"
-    );
+    assert!(WARP_SIZE.is_power_of_two(), "F035: Warp size must be power of two");
 
-    println!(
-        "F035 PASSED: Coalesced vs strided bandwidth ratio = {}x",
-        bandwidth_ratio
-    );
+    println!("F035 PASSED: Coalesced vs strided bandwidth ratio = {}x", bandwidth_ratio);
 }
 
 /// F036: Power-of-two tiles improve GPU occupancy
@@ -120,11 +114,7 @@ fn f036_power_of_two_tile_occupancy() {
     // Power-of-two tiles should pass validation
     for tile in &power_of_two_tiles {
         let result = validate_shape(&[*tile]);
-        assert!(
-            result.is_ok(),
-            "F036 FALSIFIED: Power-of-two tile {} should be valid",
-            tile
-        );
+        assert!(result.is_ok(), "F036 FALSIFIED: Power-of-two tile {} should be valid", tile);
     }
 
     // Non-power-of-two tiles should fail validation
@@ -152,10 +142,7 @@ fn f036_power_of_two_tile_occupancy() {
 fn f037_max_tile_elements() {
     // Just at limit: should pass
     let at_limit = validate_shape(&[4096, 4096]); // 16M elements
-    assert!(
-        at_limit.is_ok(),
-        "F037 FALSIFIED: Tile at limit should pass"
-    );
+    assert!(at_limit.is_ok(), "F037 FALSIFIED: Tile at limit should pass");
 
     // Over limit: should fail
     let over_limit = validate_shape(&[8192, 4096]); // 32M elements
@@ -165,15 +152,9 @@ fn f037_max_tile_elements() {
     );
 
     // Verify constant
-    assert_eq!(
-        MAX_TILE_ELEMENTS, 16_777_216,
-        "F037: MAX_TILE_ELEMENTS should be 16M"
-    );
+    assert_eq!(MAX_TILE_ELEMENTS, 16_777_216, "F037: MAX_TILE_ELEMENTS should be 16M");
 
-    println!(
-        "F037 PASSED: Maximum tile elements = {} enforced",
-        MAX_TILE_ELEMENTS
-    );
+    println!("F037 PASSED: Maximum tile elements = {} enforced", MAX_TILE_ELEMENTS);
 }
 
 /// F038: Maximum single dimension prevents degenerate shapes
@@ -184,10 +165,7 @@ fn f037_max_tile_elements() {
 fn f038_max_single_dimension() {
     // At limit: should pass
     let at_limit = validate_shape(&[4096]);
-    assert!(
-        at_limit.is_ok(),
-        "F038 FALSIFIED: Dimension at limit should pass"
-    );
+    assert!(at_limit.is_ok(), "F038 FALSIFIED: Dimension at limit should pass");
 
     // Over limit: should fail
     let over_limit = validate_shape(&[8192]);
@@ -232,11 +210,7 @@ fn f039_stride_aware_offsets() {
     let stride = 128usize; // Typical row size
     for thread_id in 0..warp_size {
         let offset = thread_id * stride * element_size;
-        assert_eq!(
-            offset % element_size,
-            0,
-            "F039: Strided offset must be aligned"
-        );
+        assert_eq!(offset % element_size, 0, "F039: Strided offset must be aligned");
     }
 
     // Pattern 3: Blocked (for tiled algorithms)
@@ -256,29 +230,13 @@ fn f039_stride_aware_offsets() {
 #[test]
 fn test_wmma_shapes() {
     // Valid shapes
-    assert!(
-        validate_wmma_shape(&WmmaShape::M16N16K16).is_ok(),
-        "16x16x16 should be valid"
-    );
-    assert!(
-        validate_wmma_shape(&WmmaShape::M8N32K16).is_ok(),
-        "8x32x16 should be valid"
-    );
-    assert!(
-        validate_wmma_shape(&WmmaShape::M32N8K16).is_ok(),
-        "32x8x16 should be valid"
-    );
+    assert!(validate_wmma_shape(&WmmaShape::M16N16K16).is_ok(), "16x16x16 should be valid");
+    assert!(validate_wmma_shape(&WmmaShape::M8N32K16).is_ok(), "8x32x16 should be valid");
+    assert!(validate_wmma_shape(&WmmaShape::M32N8K16).is_ok(), "32x8x16 should be valid");
 
     // Invalid shapes
-    let invalid = WmmaShape {
-        m: 16,
-        n: 32,
-        k: 16,
-    };
-    assert!(
-        validate_wmma_shape(&invalid).is_err(),
-        "16x32x16 should be invalid"
-    );
+    let invalid = WmmaShape { m: 16, n: 32, k: 16 };
+    assert!(validate_wmma_shape(&invalid).is_err(), "16x32x16 should be invalid");
 
     println!("WMMA shape validation verified");
 }
@@ -298,20 +256,12 @@ fn test_error_messages_actionable() {
     // Too many elements
     let err = validate_shape(&[8192, 4096]).unwrap_err();
     let msg = err.to_string();
-    assert!(
-        msg.contains("too many elements"),
-        "Error should mention element count: {}",
-        msg
-    );
+    assert!(msg.contains("too many elements"), "Error should mention element count: {}", msg);
 
     // Dimension too large
     let err = validate_shape(&[8192]).unwrap_err();
     let msg = err.to_string();
-    assert!(
-        msg.contains("exceeds maximum"),
-        "Error should mention size limit: {}",
-        msg
-    );
+    assert!(msg.contains("exceeds maximum"), "Error should mention size limit: {}", msg);
 
     println!("Error messages are actionable");
 }
@@ -325,21 +275,11 @@ fn test_memory_access_constants() {
     const L1_CACHE_LINE: usize = 128; // bytes
 
     // Warp coalesced access fills one cache line for f32
-    assert_eq!(
-        WARP_SIZE * 4,
-        L2_CACHE_LINE,
-        "Warp f32 access should fill cache line"
-    );
+    assert_eq!(WARP_SIZE * 4, L2_CACHE_LINE, "Warp f32 access should fill cache line");
 
     // Memory transaction sizes
-    assert!(
-        L1_CACHE_LINE.is_power_of_two(),
-        "Cache line must be power of two"
-    );
-    assert!(
-        L2_CACHE_LINE.is_power_of_two(),
-        "Cache line must be power of two"
-    );
+    assert!(L1_CACHE_LINE.is_power_of_two(), "Cache line must be power of two");
+    assert!(L2_CACHE_LINE.is_power_of_two(), "Cache line must be power of two");
 
     println!("Memory access constants verified");
 }
@@ -351,25 +291,16 @@ fn test_tile_edge_cases() {
     assert!(validate_shape(&[]).is_ok(), "Empty shape should be valid");
 
     // Single element
-    assert!(
-        validate_shape(&[1]).is_ok(),
-        "Single element should be valid"
-    );
+    assert!(validate_shape(&[1]).is_ok(), "Single element should be valid");
 
     // Maximum valid 2D tile
     assert!(validate_shape(&[4096, 4]).is_ok(), "4096x4 should be valid");
 
     // Exactly at element limit
-    assert!(
-        validate_shape(&[4096, 4096]).is_ok(),
-        "4096x4096 should be valid"
-    );
+    assert!(validate_shape(&[4096, 4096]).is_ok(), "4096x4096 should be valid");
 
     // Just over element limit (with valid dimensions)
-    assert!(
-        validate_shape(&[4096, 4096, 2]).is_err(),
-        "4096x4096x2 should exceed element limit"
-    );
+    assert!(validate_shape(&[4096, 4096, 2]).is_err(), "4096x4096x2 should exceed element limit");
 
     println!("Tile edge cases verified");
 }

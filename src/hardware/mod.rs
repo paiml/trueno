@@ -12,12 +12,10 @@ use std::path::Path;
 /// Get hostname (native only, returns "wasm" on WASM targets)
 #[cfg(not(target_arch = "wasm32"))]
 fn get_hostname() -> String {
-    hostname::get()
-        .map(|h| h.to_string_lossy().to_string())
-        .unwrap_or_else(|e| {
-            eprintln!("warning: failed to get hostname: {e}");
-            "unknown".to_string()
-        })
+    hostname::get().map(|h| h.to_string_lossy().to_string()).unwrap_or_else(|e| {
+        eprintln!("warning: failed to get hostname: {e}");
+        "unknown".to_string()
+    })
 }
 
 /// Get hostname (WASM fallback)
@@ -161,9 +159,7 @@ impl HardwareCapability {
         let gpu = detect_gpu();
 
         let cpu_ai = cpu.peak_gflops / cpu.memory_bw_gbps;
-        let gpu_ai = gpu
-            .as_ref()
-            .map(|g| g.peak_tflops_fp32 * 1000.0 / g.memory_bw_gbps);
+        let gpu_ai = gpu.as_ref().map(|g| g.peak_tflops_fp32 * 1000.0 / g.memory_bw_gbps);
         // PMAT-452: Extract memory bandwidth before moving cpu
         let byte_budget_throughput = cpu.memory_bw_gbps.min(25.0);
 
@@ -177,9 +173,7 @@ impl HardwareCapability {
                 gpu_arithmetic_intensity: gpu_ai,
             },
             // PMAT-452: Default byte budget based on memory bandwidth
-            byte_budget: Some(crate::brick::ByteBudget::from_throughput(
-                byte_budget_throughput,
-            )),
+            byte_budget: Some(crate::brick::ByteBudget::from_throughput(byte_budget_throughput)),
         }
     }
 
@@ -210,10 +204,7 @@ impl HardwareCapability {
 
     /// Get the best available backend for a workload
     pub fn best_backend(&self) -> GpuBackend {
-        self.gpu
-            .as_ref()
-            .map(|g| g.backend)
-            .unwrap_or(GpuBackend::None)
+        self.gpu.as_ref().map(|g| g.backend).unwrap_or(GpuBackend::None)
     }
 
     /// Calculate expected throughput for a brick given its arithmetic intensity

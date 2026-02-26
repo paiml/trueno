@@ -43,10 +43,7 @@ pub fn get_driver() -> Result<&'static CudaDriver, GpuError> {
         let result = unsafe { (driver.cuInit)(0) };
         if result != CUDA_SUCCESS {
             CUDA_INITIALIZED.store(false, Ordering::SeqCst);
-            return Err(GpuError::DeviceInit(format!(
-                "cuInit failed with code {}",
-                result
-            )));
+            return Err(GpuError::DeviceInit(format!("cuInit failed with code {}", result)));
         }
     }
 
@@ -224,11 +221,8 @@ impl CudaContext {
         CudaDriver::check(result)?;
 
         // Convert to Rust string
-        let name_str = unsafe {
-            std::ffi::CStr::from_ptr(name.as_ptr())
-                .to_string_lossy()
-                .into_owned()
-        };
+        let name_str =
+            unsafe { std::ffi::CStr::from_ptr(name.as_ptr()).to_string_lossy().into_owned() };
 
         Ok(name_str)
     }
@@ -249,12 +243,10 @@ impl CudaContext {
         let mut minor: i32 = 0;
 
         // SAFETY: pointer is valid, device is valid
-        let result =
-            unsafe { (driver.cuDeviceGetAttribute)(&mut major, 75, self.device) };
+        let result = unsafe { (driver.cuDeviceGetAttribute)(&mut major, 75, self.device) };
         CudaDriver::check(result)?;
 
-        let result =
-            unsafe { (driver.cuDeviceGetAttribute)(&mut minor, 76, self.device) };
+        let result = unsafe { (driver.cuDeviceGetAttribute)(&mut minor, 76, self.device) };
         CudaDriver::check(result)?;
 
         Ok((major, minor))

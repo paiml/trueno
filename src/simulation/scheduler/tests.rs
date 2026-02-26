@@ -14,18 +14,9 @@ fn test_backend_selector_simd_only() {
     // N < 1,000 should use SIMD only
     let selector = BackendSelector::default();
 
-    assert_eq!(
-        selector.select_for_size(100, false),
-        BackendCategory::SimdOnly
-    );
-    assert_eq!(
-        selector.select_for_size(999, false),
-        BackendCategory::SimdOnly
-    );
-    assert_eq!(
-        selector.select_for_size(999, true),
-        BackendCategory::SimdOnly
-    );
+    assert_eq!(selector.select_for_size(100, false), BackendCategory::SimdOnly);
+    assert_eq!(selector.select_for_size(999, false), BackendCategory::SimdOnly);
+    assert_eq!(selector.select_for_size(999, true), BackendCategory::SimdOnly);
 }
 
 #[test]
@@ -33,18 +24,9 @@ fn test_backend_selector_simd_parallel() {
     // 1,000 <= N < 100,000 should use SIMD + Parallel
     let selector = BackendSelector::default();
 
-    assert_eq!(
-        selector.select_for_size(1_000, false),
-        BackendCategory::SimdParallel
-    );
-    assert_eq!(
-        selector.select_for_size(50_000, false),
-        BackendCategory::SimdParallel
-    );
-    assert_eq!(
-        selector.select_for_size(99_999, false),
-        BackendCategory::SimdParallel
-    );
+    assert_eq!(selector.select_for_size(1_000, false), BackendCategory::SimdParallel);
+    assert_eq!(selector.select_for_size(50_000, false), BackendCategory::SimdParallel);
+    assert_eq!(selector.select_for_size(99_999, false), BackendCategory::SimdParallel);
 }
 
 #[test]
@@ -52,14 +34,8 @@ fn test_backend_selector_gpu() {
     // N >= 100,000 should use GPU (if available)
     let selector = BackendSelector::default();
 
-    assert_eq!(
-        selector.select_for_size(100_000, true),
-        BackendCategory::Gpu
-    );
-    assert_eq!(
-        selector.select_for_size(1_000_000, true),
-        BackendCategory::Gpu
-    );
+    assert_eq!(selector.select_for_size(100_000, true), BackendCategory::Gpu);
+    assert_eq!(selector.select_for_size(1_000_000, true), BackendCategory::Gpu);
 }
 
 #[test]
@@ -67,10 +43,7 @@ fn test_backend_selector_gpu_fallback() {
     // N >= 100,000 without GPU should fallback to SIMD + Parallel
     let selector = BackendSelector::default();
 
-    assert_eq!(
-        selector.select_for_size(100_000, false),
-        BackendCategory::SimdParallel
-    );
+    assert_eq!(selector.select_for_size(100_000, false), BackendCategory::SimdParallel);
 }
 
 #[test]
@@ -113,25 +86,16 @@ fn test_backend_tolerance_for_backends() {
     let tolerance = BackendTolerance::default();
 
     // Scalar vs Scalar
-    assert_eq!(
-        tolerance.for_backends(Backend::Scalar, Backend::Scalar),
-        0.0
-    );
+    assert_eq!(tolerance.for_backends(Backend::Scalar, Backend::Scalar), 0.0);
 
     // Scalar vs SIMD (should be exact)
     assert_eq!(tolerance.for_backends(Backend::Scalar, Backend::AVX2), 0.0);
 
     // GPU vs GPU
-    assert_eq!(
-        tolerance.for_backends(Backend::GPU, Backend::GPU),
-        tolerance.gpu_vs_gpu
-    );
+    assert_eq!(tolerance.for_backends(Backend::GPU, Backend::GPU), tolerance.gpu_vs_gpu);
 
     // SIMD vs GPU
-    assert_eq!(
-        tolerance.for_backends(Backend::AVX2, Backend::GPU),
-        tolerance.simd_vs_gpu
-    );
+    assert_eq!(tolerance.for_backends(Backend::AVX2, Backend::GPU), tolerance.simd_vs_gpu);
 }
 
 #[test]
@@ -193,10 +157,7 @@ fn test_heijunka_different_master_seeds() {
     let t1 = scheduler1.next_test().unwrap();
     let t2 = scheduler2.next_test().unwrap();
 
-    assert_ne!(
-        t1.seed, t2.seed,
-        "Different master seeds must produce different test seeds"
-    );
+    assert_ne!(t1.seed, t2.seed, "Different master seeds must produce different test seeds");
 }
 
 #[test]

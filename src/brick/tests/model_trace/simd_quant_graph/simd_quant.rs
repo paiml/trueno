@@ -15,11 +15,7 @@ fn test_simd_exp_001_softmax_simd_correctness() {
 
     // Verify sum is 1.0
     let sum: f32 = result.iter().sum();
-    assert!(
-        (sum - 1.0).abs() < 1e-5,
-        "Softmax sum should be 1.0, got {}",
-        sum
-    );
+    assert!((sum - 1.0).abs() < 1e-5, "Softmax sum should be 1.0, got {}", sum);
 
     // Verify monotonicity (larger inputs -> larger outputs)
     for i in 1..result.len() {
@@ -45,13 +41,7 @@ fn test_simd_exp_002_simd_matches_scalar() {
 
     // Results should match within floating point tolerance
     for (i, (s, a)) in scalar_result.iter().zip(simd_result.iter()).enumerate() {
-        assert!(
-            (s - a).abs() < 1e-5,
-            "Mismatch at index {}: scalar={}, simd={}",
-            i,
-            s,
-            a
-        );
+        assert!((s - a).abs() < 1e-5, "Mismatch at index {}: scalar={}, simd={}", i, s, a);
     }
 }
 
@@ -113,11 +103,7 @@ fn test_quant_q5k_001_basic_dequant() {
     // The dequant formula is: d * scale * (q5 - 16) + dmin
     // With scale=0 (32-32) and q5=0, we get: d * 0 * (0-16) + dmin = dmin
     for &v in &output {
-        assert!(
-            (v - 0.0).abs() < 1e-3,
-            "Expected near zero with zero scale, got {}",
-            v
-        );
+        assert!((v - 0.0).abs() < 1e-3, "Expected near zero with zero scale, got {}", v);
     }
 }
 
@@ -145,11 +131,7 @@ fn test_quant_q6k_001_basic_dequant() {
     // With zero scales and zero values, output should be:
     // d * scale * (q6 - 32) = 1.0 * 0 * (0 - 32) = 0
     for &v in &output {
-        assert!(
-            (v - 0.0).abs() < 1e-3,
-            "Expected near zero with zero scale, got {}",
-            v
-        );
+        assert!((v - 0.0).abs() < 1e-3, "Expected near zero with zero scale, got {}", v);
     }
 }
 
@@ -186,13 +168,7 @@ fn test_quant_q6k_op_name() {
 #[test]
 fn test_quant_q5k_tokens() {
     let op = DotQ5KOp::new(512);
-    let block = BlockQ5K {
-        d: 1.0,
-        dmin: 0.0,
-        scales: [32; 12],
-        qh: [0; 32],
-        qs: [0; 128],
-    };
+    let block = BlockQ5K { d: 1.0, dmin: 0.0, scales: [32; 12], qh: [0; 32], qs: [0; 128] };
     let input = (vec![block.clone(), block], vec![0.0f32; 512]);
     assert_eq!(op.tokens(&input), 512); // 2 blocks * 256
 }
@@ -201,12 +177,7 @@ fn test_quant_q5k_tokens() {
 #[test]
 fn test_quant_q6k_tokens() {
     let op = DotQ6KOp::new(512);
-    let block = BlockQ6K {
-        ql: [0; 128],
-        qh: [0; 64],
-        scales: [0; 16],
-        d: 1.0,
-    };
+    let block = BlockQ6K { ql: [0; 128], qh: [0; 64], scales: [0; 16], d: 1.0 };
     let input = (vec![block.clone(), block], vec![0.0f32; 512]);
     assert_eq!(op.tokens(&input), 512); // 2 blocks * 256
 }

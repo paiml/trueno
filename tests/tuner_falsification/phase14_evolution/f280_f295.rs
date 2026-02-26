@@ -22,12 +22,7 @@ fn f280_pretrained_weights_valid() {
 
     // Verify no NaN or Inf in weights
     for (i, w) in pretrained::THROUGHPUT_WEIGHTS.iter().enumerate() {
-        assert!(
-            w.is_finite(),
-            "F280 FALSIFIED: throughput weight {} is not finite: {}",
-            i,
-            w
-        );
+        assert!(w.is_finite(), "F280 FALSIFIED: throughput weight {} is not finite: {}", i, w);
     }
 }
 
@@ -56,10 +51,7 @@ fn f281_pretrained_mape_reasonable() {
 fn f282_feature_importance_valid() {
     use trueno::tuner::pretrained;
 
-    let total_importance: f32 = pretrained::FEATURE_IMPORTANCE
-        .iter()
-        .map(|(_, _, imp)| imp)
-        .sum();
+    let total_importance: f32 = pretrained::FEATURE_IMPORTANCE.iter().map(|(_, _, imp)| imp).sum();
 
     // Top 10 features should account for significant portion
     assert!(
@@ -119,11 +111,7 @@ fn f284_bandit_arm_stats() {
     // Initial state
     assert_eq!(arm.pulls, 0);
     assert_eq!(arm.mean(), 0.0);
-    assert_eq!(
-        arm.ucb(0, 2.0),
-        f32::INFINITY,
-        "Unexplored arm should have infinite UCB"
-    );
+    assert_eq!(arm.ucb(0, 2.0), f32::INFINITY, "Unexplored arm should have infinite UCB");
 
     // After some observations
     arm.pulls = 10;
@@ -138,17 +126,8 @@ fn f284_bandit_arm_stats() {
 
     // UCB should be finite
     let ucb = arm.ucb(100, 2.0);
-    assert!(
-        ucb.is_finite(),
-        "F284 FALSIFIED: UCB should be finite, got {}",
-        ucb
-    );
-    assert!(
-        ucb > arm.mean(),
-        "F284 FALSIFIED: UCB {} should exceed mean {}",
-        ucb,
-        arm.mean()
-    );
+    assert!(ucb.is_finite(), "F284 FALSIFIED: UCB should be finite, got {}", ucb);
+    assert!(ucb > arm.mean(), "F284 FALSIFIED: UCB {} should exceed mean {}", ucb, arm.mean());
 }
 
 /// F285: Bandit selection explores unexplored arms (MLT-13)
@@ -253,16 +232,8 @@ fn f289_online_learner_predict() {
 
     let pred = learner.predict(&features);
 
-    assert!(
-        pred.is_finite(),
-        "F289 FALSIFIED: prediction should be finite, got {}",
-        pred
-    );
-    assert!(
-        pred >= 0.0,
-        "F289 FALSIFIED: prediction should be non-negative, got {}",
-        pred
-    );
+    assert!(pred.is_finite(), "F289 FALSIFIED: prediction should be finite, got {}", pred);
+    assert!(pred >= 0.0, "F289 FALSIFIED: prediction should be non-negative, got {}", pred);
 }
 
 /// F290: OnlineLearner updates weights on observe (MLT-12)
@@ -279,15 +250,10 @@ fn f290_online_learner_observe() {
 
     // Weights should change
     let weights_after = learner.weights();
-    let changed = weights_before
-        .iter()
-        .zip(weights_after.iter())
-        .any(|(a, b)| (a - b).abs() > 1e-10);
+    let changed =
+        weights_before.iter().zip(weights_after.iter()).any(|(a, b)| (a - b).abs() > 1e-10);
 
-    assert!(
-        changed,
-        "F290 FALSIFIED: weights should change after observe()"
-    );
+    assert!(changed, "F290 FALSIFIED: weights should change after observe()");
     assert_eq!(learner.num_updates(), 1);
 }
 
@@ -305,10 +271,7 @@ fn f291_online_learner_convergence() {
     }
 
     // After training, should be converging
-    assert!(
-        learner.ema_loss() < 100.0,
-        "F291 FALSIFIED: EMA loss should decrease with training"
-    );
+    assert!(learner.ema_loss() < 100.0, "F291 FALSIFIED: EMA loss should decrease with training");
 }
 
 /// F292: BrickTuner::with_pretrained creates valid tuner (MLT-10)
@@ -324,11 +287,8 @@ fn f292_with_pretrained_creates_tuner() {
     );
 
     // Should still produce valid recommendations
-    let features = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .batch_size(1)
-        .gpu_mem_bw_gbs(1000.0)
-        .build();
+    let features =
+        TunerFeatures::builder().model_params_b(7.0).batch_size(1).gpu_mem_bw_gbs(1000.0).build();
 
     let rec = tuner.recommend(&features);
     assert!(rec.throughput.predicted_tps > 0.0);
@@ -364,10 +324,7 @@ fn f294_bandit_integration() {
     let tuner = BrickTuner::with_pretrained();
     let mut bandit = tuner.kernel_bandit();
 
-    let features = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(7.0).batch_size(4).build();
 
     // Simulate some exploration
     for _ in 0..5 {
@@ -376,10 +333,7 @@ fn f294_bandit_integration() {
     }
 
     // Should have explored
-    assert!(
-        bandit.estimated_regret() >= 0.0,
-        "F294 FALSIFIED: regret should be non-negative"
-    );
+    assert!(bandit.estimated_regret() >= 0.0, "F294 FALSIFIED: regret should be non-negative");
 }
 
 /// F295: Full Phase 14 integration test
@@ -425,16 +379,10 @@ fn f295_phase14_integration() {
         learner.num_updates()
     );
 
-    assert!(
-        bandit.exploration_rate() < 1.0,
-        "F295 FALSIFIED: exploration rate should decrease"
-    );
+    assert!(bandit.exploration_rate() < 1.0, "F295 FALSIFIED: exploration rate should decrease");
 
     println!("F295 PASSED: Phase 14 integration successful");
     println!("  Online learner updates: {}", learner.num_updates());
-    println!(
-        "  Bandit exploration rate: {:.2}",
-        bandit.exploration_rate()
-    );
+    println!("  Bandit exploration rate: {:.2}", bandit.exploration_rate());
     println!("  Best kernel: {:?}", bandit.best_kernel());
 }

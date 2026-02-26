@@ -108,10 +108,7 @@ fn test_max_empty() {
     let v: Vector<f32> = Vector::from_slice(&[]);
     let result = v.max();
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err(),
-        TruenoError::InvalidInput("Empty vector".to_string())
-    );
+    assert_eq!(result.unwrap_err(), TruenoError::InvalidInput("Empty vector".to_string()));
 }
 
 #[test]
@@ -137,10 +134,7 @@ fn test_min_empty() {
     let v: Vector<f32> = Vector::from_slice(&[]);
     let result = v.min();
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err(),
-        TruenoError::InvalidInput("Empty vector".to_string())
-    );
+    assert_eq!(result.unwrap_err(), TruenoError::InvalidInput("Empty vector".to_string()));
 }
 
 #[test]
@@ -166,10 +160,7 @@ fn test_argmax_empty() {
     let v: Vector<f32> = Vector::from_slice(&[]);
     let result = v.argmax();
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err(),
-        TruenoError::InvalidInput("Empty vector".to_string())
-    );
+    assert_eq!(result.unwrap_err(), TruenoError::InvalidInput("Empty vector".to_string()));
 }
 
 #[test]
@@ -202,10 +193,7 @@ fn test_argmin_empty() {
     let v: Vector<f32> = Vector::from_slice(&[]);
     let result = v.argmin();
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err(),
-        TruenoError::InvalidInput("Empty vector".to_string())
-    );
+    assert_eq!(result.unwrap_err(), TruenoError::InvalidInput("Empty vector".to_string()));
 }
 
 #[test]

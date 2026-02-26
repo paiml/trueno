@@ -303,10 +303,7 @@ fn test_f243_serve_limits() {
 /// F244: LimitError Display
 #[test]
 fn test_f244_limit_error_display() {
-    let err = LimitError::BodyTooLarge {
-        size: 2000,
-        max: 1000,
-    };
+    let err = LimitError::BodyTooLarge { size: 2000, max: 1000 };
     let msg = format!("{}", err);
     assert!(msg.contains("2000"));
 
@@ -314,17 +311,11 @@ fn test_f244_limit_error_display() {
     let msg = format!("{}", err);
     assert!(msg.contains("50"));
 
-    let err = LimitError::ConnectionLimitReached {
-        current: 200,
-        max: 100,
-    };
+    let err = LimitError::ConnectionLimitReached { current: 200, max: 100 };
     let msg = format!("{}", err);
     assert!(msg.contains("200"));
 
-    let err = LimitError::HeaderTooLarge {
-        size: 5000,
-        max: 1000,
-    };
+    let err = LimitError::HeaderTooLarge { size: 5000, max: 1000 };
     let msg = format!("{}", err);
     assert!(msg.contains("5000"));
 

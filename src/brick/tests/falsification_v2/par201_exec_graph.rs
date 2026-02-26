@@ -55,10 +55,7 @@ fn test_f112_ptx_hash_stable() {
 .target sm_80
 .entry other() { ret; }";
     let hash3 = PtxRegistry::hash_ptx(ptx3);
-    assert_ne!(
-        hash1, hash3,
-        "F112: Different PTX must produce different hash"
-    );
+    assert_ne!(hash1, hash3, "F112: Different PTX must produce different hash");
 }
 
 /// F113: Kernel launch recorded in graph
@@ -72,22 +69,13 @@ fn test_f113_kernel_launch_recorded() {
     profiler.graph_push_scope(ExecutionNode::Layer { index: 0 });
 
     // Record kernel
-    let kernel_id = profiler.graph_record_kernel(
-        "batched_q4k_gemv",
-        0xDEADBEEF,
-        (32, 1, 1),
-        (256, 1, 1),
-        4096,
-    );
+    let kernel_id =
+        profiler.graph_record_kernel("batched_q4k_gemv", 0xDEADBEEF, (32, 1, 1), (256, 1, 1), 4096);
 
     profiler.graph_pop_scope();
 
     assert!(kernel_id.is_some(), "F113: Kernel should be recorded");
-    assert_eq!(
-        profiler.execution_graph().num_nodes(),
-        2,
-        "F113: Should have layer + kernel nodes"
-    );
+    assert_eq!(profiler.execution_graph().num_nodes(), 2, "F113: Should have layer + kernel nodes");
 
     // Verify kernel node exists
     let kernels: Vec<_> = profiler.execution_graph().kernel_nodes().collect();
@@ -99,25 +87,16 @@ fn test_f113_kernel_launch_recorded() {
 fn test_f114_scope_balanced() {
     let mut graph = ExecutionGraph::new();
 
-    assert!(
-        graph.is_scope_balanced(),
-        "F114: Empty graph should be balanced"
-    );
+    assert!(graph.is_scope_balanced(), "F114: Empty graph should be balanced");
 
     graph.push_scope(ExecutionNode::Layer { index: 0 });
     assert!(!graph.is_scope_balanced(), "F114: After push, not balanced");
 
     graph.push_scope(ExecutionNode::Layer { index: 1 });
-    assert!(
-        !graph.is_scope_balanced(),
-        "F114: After 2 pushes, not balanced"
-    );
+    assert!(!graph.is_scope_balanced(), "F114: After 2 pushes, not balanced");
 
     graph.pop_scope();
-    assert!(
-        !graph.is_scope_balanced(),
-        "F114: After 1 pop, not balanced"
-    );
+    assert!(!graph.is_scope_balanced(), "F114: After 1 pop, not balanced");
 
     graph.pop_scope();
     assert!(graph.is_scope_balanced(), "F114: After 2 pops, balanced");
@@ -139,11 +118,7 @@ fn test_f115_graph_query_performance() {
 
     // Add 999 edges (chain)
     for i in 0..999 {
-        graph.add_edge(
-            ExecutionNodeId(i),
-            ExecutionNodeId(i + 1),
-            EdgeType::Sequence,
-        );
+        graph.add_edge(ExecutionNodeId(i), ExecutionNodeId(i + 1), EdgeType::Sequence);
     }
 
     // Query should complete quickly
@@ -153,11 +128,7 @@ fn test_f115_graph_query_performance() {
     let elapsed = start.elapsed();
 
     // Should complete in <1ms for 1000 nodes
-    assert!(
-        elapsed.as_millis() < 10,
-        "F115: Query took {}ms, expected <10ms",
-        elapsed.as_millis()
-    );
+    assert!(elapsed.as_millis() < 10, "F115: Query took {}ms, expected <10ms", elapsed.as_millis());
 }
 
 /// F116: DOT export is valid
@@ -177,10 +148,7 @@ fn test_f116_dot_export_valid() {
     let dot = graph.to_dot();
 
     // Basic DOT format validation
-    assert!(
-        dot.starts_with("digraph"),
-        "F116: DOT must start with digraph"
-    );
+    assert!(dot.starts_with("digraph"), "F116: DOT must start with digraph");
     assert!(dot.contains("->"), "F116: DOT must contain edges");
     assert!(
         dot.ends_with(
@@ -189,18 +157,9 @@ fn test_f116_dot_export_valid() {
         ),
         "F116: DOT must end with closing brace"
     );
-    assert!(
-        dot.contains("Layer 0"),
-        "F116: DOT must contain layer label"
-    );
-    assert!(
-        dot.contains("QkvProjection"),
-        "F116: DOT must contain brick label"
-    );
-    assert!(
-        dot.contains("test_kernel"),
-        "F116: DOT must contain kernel label"
-    );
+    assert!(dot.contains("Layer 0"), "F116: DOT must contain layer label");
+    assert!(dot.contains("QkvProjection"), "F116: DOT must contain brick label");
+    assert!(dot.contains("test_kernel"), "F116: DOT must contain kernel label");
 
     // Check node count in DOT
     let node_count = dot.matches("[label=").count();
@@ -215,11 +174,8 @@ fn test_f117_edge_types_preserved() {
     let mut graph = ExecutionGraph::new();
 
     let n1 = graph.add_node(ExecutionNode::Layer { index: 0 });
-    let n2 = graph.add_node(ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 100,
-        elements: 1,
-    });
+    let n2 =
+        graph.add_node(ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 100, elements: 1 });
     let n3 = graph.add_node(ExecutionNode::Kernel {
         name: "k".into(),
         ptx_hash: 0,
@@ -254,27 +210,15 @@ fn test_f118_ptx_registry_lookup() {
 .entry kernel2() {}";
 
     registry.register("kernel1", ptx1, None);
-    registry.register(
-        "kernel2",
-        ptx2,
-        Some(std::path::Path::new("/src/kernels.ptx")),
-    );
+    registry.register("kernel2", ptx2, Some(std::path::Path::new("/src/kernels.ptx")));
 
     let hash1 = PtxRegistry::hash_ptx(ptx1);
     let hash2 = PtxRegistry::hash_ptx(ptx2);
 
     assert_eq!(registry.lookup(hash1), Some(ptx1), "F118: PTX1 lookup");
     assert_eq!(registry.lookup(hash2), Some(ptx2), "F118: PTX2 lookup");
-    assert_eq!(
-        registry.lookup_name(hash1),
-        Some("kernel1"),
-        "F118: Name1 lookup"
-    );
-    assert_eq!(
-        registry.lookup_name(hash2),
-        Some("kernel2"),
-        "F118: Name2 lookup"
-    );
+    assert_eq!(registry.lookup_name(hash1), Some("kernel1"), "F118: Name1 lookup");
+    assert_eq!(registry.lookup_name(hash2), Some("kernel2"), "F118: Name2 lookup");
     assert!(registry.lookup_path(hash1).is_none(), "F118: Path1 is None");
     assert_eq!(
         registry.lookup_path(hash2),
@@ -290,11 +234,8 @@ fn test_f119_slowest_kernel_detection() {
     let mut graph = ExecutionGraph::new();
 
     // Brick 1: 100ns, has kernel
-    let b1 = graph.add_node(ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 100,
-        elements: 1,
-    });
+    let b1 =
+        graph.add_node(ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 100, elements: 1 });
     let k1 = graph.add_node(ExecutionNode::Kernel {
         name: "fast".into(),
         ptx_hash: 1,
@@ -362,10 +303,7 @@ fn test_f120_graph_clear() {
     assert!(graph.is_scope_balanced(), "F120: Post-clear balanced");
     assert_eq!(graph.num_nodes(), 0, "F120: Post-clear no nodes");
     assert_eq!(graph.num_edges(), 0, "F120: Post-clear no edges");
-    assert!(
-        graph.node_by_name("Layer0").is_none(),
-        "F120: Post-clear no name lookup"
-    );
+    assert!(graph.node_by_name("Layer0").is_none(), "F120: Post-clear no name lookup");
 
     let _ = n1; // Silence unused warning
 }

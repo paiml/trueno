@@ -92,10 +92,8 @@ impl TuiApp {
     }
 
     fn page_down(&mut self) {
-        self.source_scroll = self
-            .source_scroll
-            .saturating_add(20)
-            .min(self.source_lines.saturating_sub(1) as u16);
+        self.source_scroll =
+            self.source_scroll.saturating_add(20).min(self.source_lines.saturating_sub(1) as u16);
     }
 
     fn page_up(&mut self) {
@@ -128,11 +126,7 @@ pub fn run_tui(ptx_source: String, report: AnalysisReport) -> io::Result<()> {
 
     // Restore terminal
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
 
     result
@@ -206,9 +200,7 @@ fn render_source_pane(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
 
-    let paragraph = Paragraph::new(lines)
-        .block(source_block)
-        .scroll((app.source_scroll, 0));
+    let paragraph = Paragraph::new(lines).block(source_block).scroll((app.source_scroll, 0));
 
     frame.render_widget(paragraph, chunks[0]);
 
@@ -222,39 +214,18 @@ fn render_source_pane(frame: &mut Frame<'_>, app: &TuiApp, area: Rect) {
 
     // Status bar
     let status = Line::from(vec![
-        Span::styled(
-            " q",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        ),
+        Span::styled(" q", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         Span::raw(":Quit "),
-        Span::styled(
-            "s",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("s", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         Span::raw(":Sidebar "),
-        Span::styled(
-            "↑↓",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("↑↓", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         Span::raw(":Scroll "),
-        Span::styled(
-            "PgUp/Dn",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("PgUp/Dn", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
         Span::raw(":Page "),
     ]);
 
-    let status_block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
+    let status_block =
+        Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray));
 
     let status_para = Paragraph::new(status).block(status_block);
     frame.render_widget(status_para, chunks[1]);

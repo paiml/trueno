@@ -68,15 +68,8 @@ impl<T> PartitionView<T> {
     ///
     /// - Falsification test #36: Tile count calculation is correct
     pub fn new(tensor: TensorView<T>, tile_shape: [usize; 4]) -> Self {
-        assert!(
-            tile_shape.iter().all(|&d| d > 0),
-            "Tile dimensions must be non-zero"
-        );
-        Self {
-            tensor,
-            tile_shape,
-            _marker: PhantomData,
-        }
+        assert!(tile_shape.iter().all(|&d| d > 0), "Tile dimensions must be non-zero");
+        Self { tensor, tile_shape, _marker: PhantomData }
     }
 
     /// Create a PartitionView with power-of-two tile sizes.
@@ -93,12 +86,8 @@ impl<T> PartitionView<T> {
     ///
     /// - Falsification test #1: Power-of-two tiles improve GPU occupancy
     pub fn new_power_of_two(tensor: TensorView<T>, tile_log2: [usize; 4]) -> Self {
-        let tile_shape = [
-            1 << tile_log2[0],
-            1 << tile_log2[1],
-            1 << tile_log2[2],
-            1 << tile_log2[3],
-        ];
+        let tile_shape =
+            [1 << tile_log2[0], 1 << tile_log2[1], 1 << tile_log2[2], 1 << tile_log2[3]];
         Self::new(tensor, tile_shape)
     }
 
@@ -183,12 +172,7 @@ impl<T> PartitionView<T> {
             }
         }
 
-        Some(TileInfo {
-            tile_idx,
-            start,
-            size,
-            is_edge,
-        })
+        Some(TileInfo { tile_idx, start, size, is_edge })
     }
 
     /// Get a TensorView for a specific tile.
@@ -221,11 +205,7 @@ impl<T> PartitionView<T> {
     ///
     /// - Falsification test #37: Tile iteration covers all elements
     pub fn iter_tiles(&self) -> TileIterator<'_, T> {
-        TileIterator {
-            partition: self,
-            current: [0, 0, 0, 0],
-            done: false,
-        }
+        TileIterator { partition: self, current: [0, 0, 0, 0], done: false }
     }
 
     /// Check if tiles are power-of-two sized.
@@ -266,11 +246,7 @@ impl<T> PartitionView<T> {
 
 impl<T> Clone for PartitionView<T> {
     fn clone(&self) -> Self {
-        Self {
-            tensor: self.tensor.clone(),
-            tile_shape: self.tile_shape,
-            _marker: PhantomData,
-        }
+        Self { tensor: self.tensor.clone(), tile_shape: self.tile_shape, _marker: PhantomData }
     }
 }
 

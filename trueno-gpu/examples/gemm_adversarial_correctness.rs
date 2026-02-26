@@ -48,12 +48,7 @@ fn check_nan_inf(data: &[f32], name: &str) -> bool {
 /// Compare GPU results to CPU reference
 fn compare_results(gpu: &[f32], cpu: &[f32], tolerance: f32, name: &str) -> bool {
     if gpu.len() != cpu.len() {
-        eprintln!(
-            "ERROR: Size mismatch in {}: GPU={}, CPU={}",
-            name,
-            gpu.len(),
-            cpu.len()
-        );
+        eprintln!("ERROR: Size mismatch in {}: GPU={}, CPU={}", name, gpu.len(), cpu.len());
         return false;
     }
 
@@ -86,10 +81,7 @@ fn compare_results(gpu: &[f32], cpu: &[f32], tolerance: f32, name: &str) -> bool
         return false;
     }
 
-    println!(
-        "  {} PASSED (max diff={:.6} at index {})",
-        name, max_diff, max_idx
-    );
+    println!("  {} PASSED (max diff={:.6} at index {})", name, max_diff, max_idx);
     true
 }
 
@@ -101,18 +93,11 @@ fn test_gemm_dimension(
     k: u32,
     tile_size: u32,
 ) -> Result<bool, String> {
-    println!(
-        "\n=== Testing M={}, N={}, K={} (tile_size={}) ===",
-        m, n, k, tile_size
-    );
+    println!("\n=== Testing M={}, N={}, K={} (tile_size={}) ===", m, n, k, tile_size);
 
     // Create input matrices with known values
-    let a_host: Vec<f32> = (0..(m * k))
-        .map(|i| ((i % 17) as f32 - 8.0) * 0.1)
-        .collect();
-    let b_host: Vec<f32> = (0..(k * n))
-        .map(|i| ((i % 13) as f32 - 6.0) * 0.1)
-        .collect();
+    let a_host: Vec<f32> = (0..(m * k)).map(|i| ((i % 17) as f32 - 8.0) * 0.1).collect();
+    let b_host: Vec<f32> = (0..(k * n)).map(|i| ((i % 13) as f32 - 6.0) * 0.1).collect();
 
     // Compute CPU reference
     let c_cpu = cpu_gemm(&a_host, &b_host, m as usize, n as usize, k as usize);
@@ -146,18 +131,12 @@ fn test_gemm_dimension(
         GpuBuffer::new(ctx, (m * n) as usize).map_err(|e| format!("C alloc failed: {}", e))?;
 
     // Copy inputs to GPU
-    a_gpu
-        .copy_from_host(&a_host)
-        .map_err(|e| format!("A copy failed: {}", e))?;
-    b_gpu
-        .copy_from_host(&b_host)
-        .map_err(|e| format!("B copy failed: {}", e))?;
+    a_gpu.copy_from_host(&a_host).map_err(|e| format!("A copy failed: {}", e))?;
+    b_gpu.copy_from_host(&b_host).map_err(|e| format!("B copy failed: {}", e))?;
 
     // Initialize C to zero
     let c_zeros = vec![0.0f32; (m * n) as usize];
-    c_gpu
-        .copy_from_host(&c_zeros)
-        .map_err(|e| format!("C init failed: {}", e))?;
+    c_gpu.copy_from_host(&c_zeros).map_err(|e| format!("C init failed: {}", e))?;
 
     // Launch kernel
     let grid_x = (n + tile_size - 1) / tile_size;
@@ -188,15 +167,11 @@ fn test_gemm_dimension(
             .map_err(|e| format!("Kernel launch failed: {}", e))?;
     }
 
-    stream
-        .synchronize()
-        .map_err(|e| format!("Sync failed: {}", e))?;
+    stream.synchronize().map_err(|e| format!("Sync failed: {}", e))?;
 
     // Copy results back
     let mut c_host = vec![0.0f32; (m * n) as usize];
-    c_gpu
-        .copy_to_host(&mut c_host)
-        .map_err(|e| format!("C copy failed: {}", e))?;
+    c_gpu.copy_to_host(&mut c_host).map_err(|e| format!("C copy failed: {}", e))?;
 
     // Validate results
     if !check_nan_inf(&c_host, "GPU result") {
@@ -232,18 +207,8 @@ fn main() {
     let test_cases: Vec<(u32, u32, u32, &str)> = vec![
         // (M, N, K, description)
         (1, 1, 1, "Minimum dimension (N=1)"),
-        (
-            tile_size + 1,
-            tile_size + 1,
-            tile_size + 1,
-            "Tile+1 (17x17x17)",
-        ),
-        (
-            tile_size - 1,
-            tile_size - 1,
-            tile_size - 1,
-            "Tile-1 (15x15x15)",
-        ),
+        (tile_size + 1, tile_size + 1, tile_size + 1, "Tile+1 (17x17x17)"),
+        (tile_size - 1, tile_size - 1, tile_size - 1, "Tile-1 (15x15x15)"),
         (31, 31, 31, "2*Tile-1 (31x31x31)"),
         (33, 33, 33, "2*Tile+1 (33x33x33)"),
         (64, 63, 65, "Mixed non-aligned"),
@@ -305,14 +270,7 @@ fn main() {
         let ptx = kernel.emit_ptx();
 
         if ptx.contains(".entry gemm_tiled") {
-            println!(
-                "  {} ({}x{}x{}): PTX generated OK ({} bytes)",
-                desc,
-                m,
-                n,
-                k,
-                ptx.len()
-            );
+            println!("  {} ({}x{}x{}): PTX generated OK ({} bytes)", desc, m, n, k, ptx.len());
         } else {
             println!("  {} ({}x{}x{}): PTX GENERATION FAILED", desc, m, n, k);
         }

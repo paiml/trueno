@@ -73,13 +73,9 @@ impl PtxVerifier {
     pub fn verify(&self, source: &str) -> crate::error::Result<VerifiedPtx> {
         let errors = self.check_all(source);
         if let Some(first) = errors.into_iter().next() {
-            return Err(EdgeError::PtxVerification {
-                reason: first.to_string(),
-            });
+            return Err(EdgeError::PtxVerification { reason: first.to_string() });
         }
-        Ok(VerifiedPtx {
-            source: source.to_string(),
-        })
+        Ok(VerifiedPtx { source: source.to_string() })
     }
 
     /// Run all checks and return all errors found.
@@ -198,9 +194,7 @@ mod tests {
         let src = ".version 7.0\n.target sm_80\n.address_size 64\n.entry k() {\nret;\n";
         let verifier = PtxVerifier::new();
         let errors = verifier.check_all(src);
-        assert!(errors
-            .iter()
-            .any(|e| matches!(e, PtxVerificationError::UnbalancedBraces { .. })));
+        assert!(errors.iter().any(|e| matches!(e, PtxVerificationError::UnbalancedBraces { .. })));
     }
 
     #[test]

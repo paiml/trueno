@@ -284,9 +284,7 @@ fn test_tiling_config_micro_divisibility_error() {
 // F341: TilingError Display implementations
 #[test]
 fn test_tiling_error_display() {
-    let err1 = TilingError::InvalidHierarchy {
-        reason: "test".into(),
-    };
+    let err1 = TilingError::InvalidHierarchy { reason: "test".into() };
     assert!(format!("{}", err1).contains("Invalid tiling hierarchy"));
     assert!(format!("{}", err1).contains("test"));
 
@@ -307,17 +305,10 @@ fn test_tiling_error_display() {
     assert!(format!("{}", err3).contains("exceeds"));
     assert!(format!("{}", err3).contains("Midi"));
 
-    let err4 = TilingError::AlignmentError {
-        required: 64,
-        actual: 32,
-    };
+    let err4 = TilingError::AlignmentError { required: 64, actual: 32 };
     assert!(format!("{}", err4).contains("Alignment error"));
 
-    let err5 = TilingError::QuantAlignmentError {
-        format: "Q4_K",
-        required_k: 256,
-        actual_k: 100,
-    };
+    let err5 = TilingError::QuantAlignmentError { format: "Q4_K", required_k: 256, actual_k: 100 };
     assert!(format!("{}", err5).contains("Quantization alignment"));
     assert!(format!("{}", err5).contains("Q4_K"));
 }
@@ -325,9 +316,7 @@ fn test_tiling_error_display() {
 // F342: TilingError as std::error::Error
 #[test]
 fn test_tiling_error_trait() {
-    let err = TilingError::InvalidHierarchy {
-        reason: "test".into(),
-    };
+    let err = TilingError::InvalidHierarchy { reason: "test".into() };
     // Ensure it implements Error trait
     let _: &dyn std::error::Error = &err;
 }
@@ -439,10 +428,7 @@ fn test_validate_midi_micro_divisibility_detail() {
     config.micro_tile.m = 13;
     let result = config.validate();
     assert!(result.is_err());
-    if let Err(TilingError::DivisibilityError {
-        level, dimension, ..
-    }) = result
-    {
+    if let Err(TilingError::DivisibilityError { level, dimension, .. }) = result {
         assert_eq!(level, "midi/micro");
         assert_eq!(dimension, "M");
     } else {
@@ -823,11 +809,7 @@ fn test_all_factory_configs_validate() {
         TilingConfig::cpu_rmsnorm(),
     ];
     for config in &configs {
-        assert!(
-            config.validate().is_ok(),
-            "Factory config '{}' failed validation",
-            config.name
-        );
+        assert!(config.validate().is_ok(), "Factory config '{}' failed validation", config.name);
     }
 }
 

@@ -227,11 +227,7 @@ pub struct JidokaSummary {
 
 impl Default for JidokaSummary {
     fn default() -> Self {
-        Self {
-            status: JidokaHealthStatus::Healthy,
-            checks_passed: 100,
-            last_violation: None,
-        }
+        Self { status: JidokaHealthStatus::Healthy, checks_passed: 100, last_violation: None }
     }
 }
 
@@ -248,20 +244,13 @@ impl Brick for WosCollectorBrick {
 
     fn assertions(&self) -> Vec<BrickAssertion> {
         vec![
-            BrickAssertion::ValueInRange {
-                min: 0.0,
-                max: 10000.0,
-            }, // Process count
+            BrickAssertion::ValueInRange { min: 0.0, max: 10000.0 }, // Process count
             BrickAssertion::max_latency_ms(10),
         ]
     }
 
     fn budget(&self) -> BrickBudget {
-        BrickBudget {
-            collect_ms: 10,
-            layout_ms: 0,
-            render_ms: 0,
-        }
+        BrickBudget { collect_ms: 10, layout_ms: 0, render_ms: 0 }
     }
 
     fn verify(&self) -> BrickVerification {
@@ -308,10 +297,7 @@ mod tests {
         collector.collect();
 
         let breakdown = collector.process_breakdown();
-        assert_eq!(
-            breakdown.total,
-            breakdown.runnable + breakdown.sleeping + breakdown.zombie
-        );
+        assert_eq!(breakdown.total, breakdown.runnable + breakdown.sleeping + breakdown.zombie);
     }
 
     #[test]

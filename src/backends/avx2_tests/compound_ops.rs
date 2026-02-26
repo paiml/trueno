@@ -79,9 +79,7 @@ fn test_avx2_lerp_matches_scalar() {
     }
 
     let a = [0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0];
-    let b = [
-        100.0, 110.0, 120.0, 130.0, 140.0, 150.0, 160.0, 170.0, 180.0,
-    ];
+    let b = [100.0, 110.0, 120.0, 130.0, 140.0, 150.0, 160.0, 170.0, 180.0];
     let mut avx2_result = [0.0; 9];
     let mut scalar_result = [0.0; 9];
 
@@ -92,12 +90,7 @@ fn test_avx2_lerp_matches_scalar() {
     }
 
     for (avx2, scalar) in avx2_result.iter().zip(scalar_result.iter()) {
-        assert!(
-            (avx2 - scalar).abs() < 1e-5,
-            "lerp mismatch: avx2={}, scalar={}",
-            avx2,
-            scalar
-        );
+        assert!((avx2 - scalar).abs() < 1e-5, "lerp mismatch: avx2={}, scalar={}", avx2, scalar);
     }
 }
 

@@ -7,11 +7,7 @@ use super::*;
 fn test_barrier_safety_gemm_naive() {
     let kernel = GemmKernel::naive(64, 64, 64);
     let result = kernel.analyze_barrier_safety();
-    assert!(
-        result.is_safe,
-        "GEMM naive should be barrier-safe: {:?}",
-        result.violations
-    );
+    assert!(result.is_safe, "GEMM naive should be barrier-safe: {:?}", result.violations);
 }
 
 /// PARITY-114: GEMM tiled kernel is barrier-safe
@@ -19,11 +15,7 @@ fn test_barrier_safety_gemm_naive() {
 fn test_barrier_safety_gemm_tiled() {
     let kernel = GemmKernel::tiled(64, 64, 64, 16);
     let result = kernel.analyze_barrier_safety();
-    assert!(
-        result.is_safe,
-        "GEMM tiled should be barrier-safe: {:?}",
-        result.violations
-    );
+    assert!(result.is_safe, "GEMM tiled should be barrier-safe: {:?}", result.violations);
 }
 
 /// PARITY-114: GEMM tensor core kernel is barrier-safe
@@ -31,11 +23,7 @@ fn test_barrier_safety_gemm_tiled() {
 fn test_barrier_safety_gemm_tensor_core() {
     let kernel = GemmKernel::tensor_core(64, 64, 64);
     let result = kernel.analyze_barrier_safety();
-    assert!(
-        result.is_safe,
-        "GEMM tensor core should be barrier-safe: {:?}",
-        result.violations
-    );
+    assert!(result.is_safe, "GEMM tensor core should be barrier-safe: {:?}", result.violations);
 }
 
 /// PARITY-114: GEMM WMMA FP16 kernel is barrier-safe
@@ -43,11 +31,7 @@ fn test_barrier_safety_gemm_tensor_core() {
 fn test_barrier_safety_gemm_wmma() {
     let kernel = GemmKernel::wmma_fp16(64, 64, 64);
     let result = kernel.analyze_barrier_safety();
-    assert!(
-        result.is_safe,
-        "GEMM WMMA should be barrier-safe: {:?}",
-        result.violations
-    );
+    assert!(result.is_safe, "GEMM WMMA should be barrier-safe: {:?}", result.violations);
 }
 
 /// PARITY-114: Attention kernel is barrier-safe
@@ -55,11 +39,7 @@ fn test_barrier_safety_gemm_wmma() {
 fn test_barrier_safety_attention() {
     let kernel = AttentionKernel::new(64, 32);
     let result = kernel.analyze_barrier_safety();
-    assert!(
-        result.is_safe,
-        "Attention should be barrier-safe: {:?}",
-        result.violations
-    );
+    assert!(result.is_safe, "Attention should be barrier-safe: {:?}", result.violations);
 }
 
 /// PARITY-114: Tensor Core attention kernel is barrier-safe
@@ -67,11 +47,7 @@ fn test_barrier_safety_attention() {
 fn test_barrier_safety_attention_tensor_core() {
     let kernel = AttentionKernel::tensor_core(64, 32);
     let result = kernel.analyze_barrier_safety();
-    assert!(
-        result.is_safe,
-        "TC Attention should be barrier-safe: {:?}",
-        result.violations
-    );
+    assert!(result.is_safe, "TC Attention should be barrier-safe: {:?}", result.violations);
 }
 
 /// PARITY-114: Softmax kernel is barrier-safe
@@ -79,11 +55,7 @@ fn test_barrier_safety_attention_tensor_core() {
 fn test_barrier_safety_softmax() {
     let kernel = SoftmaxKernel::new(1024);
     let result = kernel.analyze_barrier_safety();
-    assert!(
-        result.is_safe,
-        "Softmax should be barrier-safe: {:?}",
-        result.violations
-    );
+    assert!(result.is_safe, "Softmax should be barrier-safe: {:?}", result.violations);
 }
 
 /// PARITY-114: LayerNorm kernel is barrier-safe
@@ -91,21 +63,14 @@ fn test_barrier_safety_softmax() {
 fn test_barrier_safety_layernorm() {
     let kernel = LayerNormKernel::new(512);
     let result = kernel.analyze_barrier_safety();
-    assert!(
-        result.is_safe,
-        "LayerNorm should be barrier-safe: {:?}",
-        result.violations
-    );
+    assert!(result.is_safe, "LayerNorm should be barrier-safe: {:?}", result.violations);
 }
 
 /// PARITY-114: validate_barrier_safety returns Ok for safe kernels
 #[test]
 fn test_validate_barrier_safety_ok() {
     let kernel = GemmKernel::naive(32, 32, 32);
-    assert!(
-        kernel.validate_barrier_safety().is_ok(),
-        "Safe kernel should pass validation"
-    );
+    assert!(kernel.validate_barrier_safety().is_ok(), "Safe kernel should pass validation");
 }
 
 /// PARITY-114: emit_ptx_validated works for safe kernels

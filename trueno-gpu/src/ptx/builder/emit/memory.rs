@@ -36,10 +36,7 @@ pub(crate) fn emit_memory_opcode(instr: &PtxInstruction, s: &mut String) {
         }
         PtxOp::Cvt => emit_cvt_opcode(instr, s),
         PtxOp::Cvta => {
-            let space = instr
-                .state_space
-                .map(|ss| ss.to_ptx_string())
-                .unwrap_or(".shared");
+            let space = instr.state_space.map(|ss| ss.to_ptx_string()).unwrap_or(".shared");
             let ty = instr.ty.to_ptx_string();
             s.push_str("cvta");
             s.push_str(space);
@@ -69,13 +66,7 @@ fn emit_cvt_opcode(instr: &PtxInstruction, s: &mut String) {
         instr
             .srcs
             .first()
-            .and_then(|src| {
-                if let Operand::Reg(vreg) = src {
-                    Some(vreg.ty())
-                } else {
-                    None
-                }
-            })
+            .and_then(|src| if let Operand::Reg(vreg) = src { Some(vreg.ty()) } else { None })
             .unwrap_or(PtxType::U32)
     });
 
@@ -104,10 +95,7 @@ fn emit_cvt_opcode(instr: &PtxInstruction, s: &mut String) {
 
 /// Emit atomic operation opcode
 fn emit_atomic_opcode(instr: &PtxInstruction, s: &mut String, op: &str) {
-    let space = instr
-        .state_space
-        .map(|ss| ss.to_ptx_string())
-        .unwrap_or(".global");
+    let space = instr.state_space.map(|ss| ss.to_ptx_string()).unwrap_or(".global");
     let _ = write!(s, "atom{}.{}", space, op);
 }
 

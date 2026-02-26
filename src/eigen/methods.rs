@@ -62,10 +62,7 @@ impl SymmetricEigen {
     /// # Ok::<(), trueno::TruenoError>(())
     /// ```
     pub fn iter(&self) -> EigenIterator<'_> {
-        EigenIterator {
-            eigen: self,
-            index: 0,
-        }
+        EigenIterator { eigen: self, index: 0 }
     }
 
     /// Returns the number of eigenvalue/eigenvector pairs

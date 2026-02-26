@@ -21,8 +21,8 @@ use std::os::raw::c_uint;
 
 use super::context::{get_driver, CudaContext};
 use super::sys::{
-    CUfunction, CUmodule, CudaDriver, CU_JIT_ERROR_LOG_BUFFER,
-    CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES, CU_JIT_TARGET,
+    CUfunction, CUmodule, CudaDriver, CU_JIT_ERROR_LOG_BUFFER, CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
+    CU_JIT_TARGET,
 };
 use crate::GpuError;
 
@@ -88,11 +88,8 @@ impl CudaModule {
         let error_log_size: usize = error_log.len();
 
         // Set up JIT options: target architecture + error log
-        let mut options: [c_uint; 3] = [
-            CU_JIT_TARGET,
-            CU_JIT_ERROR_LOG_BUFFER,
-            CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
-        ];
+        let mut options: [c_uint; 3] =
+            [CU_JIT_TARGET, CU_JIT_ERROR_LOG_BUFFER, CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES];
         let mut option_values: [*mut c_void; 3] = [
             jit_target as *mut c_void,
             error_log.as_mut_ptr() as *mut c_void,
@@ -114,33 +111,23 @@ impl CudaModule {
 
         if let Err(e) = CudaDriver::check(result) {
             // Extract JIT error log
-            let jit_log = String::from_utf8_lossy(&error_log)
-                .trim_end_matches('\0')
-                .to_string();
+            let jit_log = String::from_utf8_lossy(&error_log).trim_end_matches('\0').to_string();
             if !jit_log.is_empty() {
                 eprintln!("[PTX-JIT] Error log: {jit_log}");
             }
 
             // Extract kernel name from PTX for diagnostics
-            let kernel_name = ptx
-                .lines()
-                .find(|l| l.contains(".entry"))
-                .map(|l| l.trim())
-                .unwrap_or("<unknown>");
+            let kernel_name =
+                ptx.lines().find(|l| l.contains(".entry")).map(|l| l.trim()).unwrap_or("<unknown>");
             eprintln!(
                 "[PTX-JIT] Failed kernel: {kernel_name}, target: sm_{major}{minor}, \
                  PTX length: {} bytes",
                 ptx.len()
             );
-            return Err(GpuError::ModuleLoad(format!(
-                "{e} (JIT target: sm_{major}{minor})"
-            )));
+            return Err(GpuError::ModuleLoad(format!("{e} (JIT target: sm_{major}{minor})")));
         }
 
-        Ok(Self {
-            module,
-            functions: HashMap::new(),
-        })
+        Ok(Self { module, functions: HashMap::new() })
     }
 
     /// Get kernel function handle by name

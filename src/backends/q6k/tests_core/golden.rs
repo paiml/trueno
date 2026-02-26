@@ -38,9 +38,7 @@ fn test_golden_q6k_scalar_vs_dispatch() {
     }
 
     // Sinusoidal input
-    let input: Vec<f32> = (0..in_dim)
-        .map(|i| ((i as f32) * 0.019).sin() * 0.4)
-        .collect();
+    let input: Vec<f32> = (0..in_dim).map(|i| ((i as f32) * 0.019).sin() * 0.4).collect();
 
     let scalar_output = matmul_q6k_f32_scalar(&q6k_data, &input, out_dim, in_dim);
     let dispatch_output = matmul_q6k_f32_dispatch(&q6k_data, &input, out_dim, in_dim);
@@ -92,19 +90,13 @@ fn test_golden_q6k_colmajor_consistency() {
         }
     }
 
-    let input: Vec<f32> = (0..in_dim)
-        .map(|i| ((i as f32) * 0.011 + 0.3).cos() * 0.5)
-        .collect();
+    let input: Vec<f32> = (0..in_dim).map(|i| ((i as f32) * 0.011 + 0.3).cos() * 0.5).collect();
 
     let colmajor_output = matmul_q6k_f32_colmajor(&q6k_data, &input, out_dim, in_dim);
     let colmajor_dispatch = matmul_q6k_f32_colmajor_dispatch(&q6k_data, &input, out_dim, in_dim);
 
     assert_eq!(colmajor_output.len(), colmajor_dispatch.len());
-    for (i, (base, dispatch)) in colmajor_output
-        .iter()
-        .zip(colmajor_dispatch.iter())
-        .enumerate()
-    {
+    for (i, (base, dispatch)) in colmajor_output.iter().zip(colmajor_dispatch.iter()).enumerate() {
         let diff = (base - dispatch).abs();
         assert!(
             diff < 1e-4,
@@ -228,9 +220,7 @@ fn test_golden_q6k_large_simd() {
         }
     }
 
-    let input: Vec<f32> = (0..in_dim)
-        .map(|i| ((i as f32) * 0.007 - 1.0).tanh())
-        .collect();
+    let input: Vec<f32> = (0..in_dim).map(|i| ((i as f32) * 0.007 - 1.0).tanh()).collect();
 
     let scalar_output = matmul_q6k_f32_scalar(&q6k_data, &input, out_dim, in_dim);
     let dispatch_output = matmul_q6k_f32_dispatch(&q6k_data, &input, out_dim, in_dim);
@@ -238,11 +228,7 @@ fn test_golden_q6k_large_simd() {
     let mut max_rel_error = 0.0f32;
     for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
         let abs_error = (scalar - dispatch).abs();
-        let rel_error = if scalar.abs() > 1e-6 {
-            abs_error / scalar.abs()
-        } else {
-            abs_error
-        };
+        let rel_error = if scalar.abs() > 1e-6 { abs_error / scalar.abs() } else { abs_error };
         max_rel_error = max_rel_error.max(rel_error);
 
         assert!(

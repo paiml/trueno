@@ -41,17 +41,10 @@ fn test_symmetric_eigen_all_backends() {
         let av = matrix.matvec(&v).expect("matvec should succeed");
         let lambda_v: Vec<f32> = v.as_slice().iter().map(|x| x * lambda).collect();
 
-        let error: f32 = av
-            .as_slice()
-            .iter()
-            .zip(lambda_v.iter())
-            .map(|(a, b)| (a - b).abs())
-            .sum();
+        let error: f32 =
+            av.as_slice().iter().zip(lambda_v.iter()).map(|(a, b)| (a - b).abs()).sum();
 
-        assert!(
-            error < 1e-4,
-            "Eigenpair validation failed: error={error} (expected < 1e-4)"
-        );
+        assert!(error < 1e-4, "Eigenpair validation failed: error={error} (expected < 1e-4)");
     }
 
     // Verify reconstruction: V * D * V^T = A
@@ -64,10 +57,7 @@ fn test_symmetric_eigen_all_backends() {
             max_error = max_error.max((orig - recon).abs());
         }
     }
-    assert!(
-        max_error < 1e-5,
-        "Reconstruction error too large: {max_error}"
-    );
+    assert!(max_error < 1e-5, "Reconstruction error too large: {max_error}");
 }
 
 /// Test that SymmetricEigen works with explicit backend selection
@@ -83,16 +73,8 @@ fn test_symmetric_eigen_backend_equivalence() {
     let eigen = SymmetricEigen::new(&matrix).expect("eigendecomposition");
     let values = eigen.eigenvalues();
 
-    assert!(
-        (values[0] - 4.0).abs() < 1e-5,
-        "First eigenvalue should be 4.0, got {}",
-        values[0]
-    );
-    assert!(
-        (values[1] - 2.0).abs() < 1e-5,
-        "Second eigenvalue should be 2.0, got {}",
-        values[1]
-    );
+    assert!((values[0] - 4.0).abs() < 1e-5, "First eigenvalue should be 4.0, got {}", values[0]);
+    assert!((values[1] - 2.0).abs() < 1e-5, "Second eigenvalue should be 2.0, got {}", values[1]);
 }
 
 /// Test that Vector operations work on all backends

@@ -28,13 +28,7 @@ fn test_gemm_blis_medium() {
 
     for i in 0..n * n {
         let diff = (c_ref[i] - c_blis[i]).abs();
-        assert!(
-            diff < 1e-3,
-            "Mismatch at {}: ref={}, blis={}",
-            i,
-            c_ref[i],
-            c_blis[i]
-        );
+        assert!(diff < 1e-3, "Mismatch at {}: ref={}, blis={}", i, c_ref[i], c_blis[i]);
     }
 }
 
@@ -98,13 +92,7 @@ fn test_gemm_blis_edge_m_not_divisible_by_mr() {
 
     for i in 0..m * n {
         let diff = (c_ref[i] - c_blis[i]).abs();
-        assert!(
-            diff < 1e-3,
-            "Mismatch at {}: {} vs {}",
-            i,
-            c_ref[i],
-            c_blis[i]
-        );
+        assert!(diff < 1e-3, "Mismatch at {}: {} vs {}", i, c_ref[i], c_blis[i]);
     }
 }
 
@@ -124,12 +112,6 @@ fn test_gemm_blis_edge_n_not_divisible_by_nr() {
 
     for i in 0..m * n {
         let diff = (c_ref[i] - c_blis[i]).abs();
-        assert!(
-            diff < 1e-3,
-            "Mismatch at {}: {} vs {}",
-            i,
-            c_ref[i],
-            c_blis[i]
-        );
+        assert!(diff < 1e-3, "Mismatch at {}: {} vs {}", i, c_ref[i], c_blis[i]);
     }
 }

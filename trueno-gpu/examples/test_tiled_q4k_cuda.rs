@@ -85,16 +85,12 @@ fn test_tiled_kernel(ctx: &CudaContext, n: u32, k: u32) -> Result<(), String> {
             .map_err(|e| format!("Launch failed: {}", e))?;
     }
 
-    stream
-        .synchronize()
-        .map_err(|e| format!("Sync failed: {}", e))?;
+    stream.synchronize().map_err(|e| format!("Sync failed: {}", e))?;
     let elapsed = start.elapsed();
     println!("✓ Kernel executed in {:?}", elapsed);
 
     let mut output = vec![0.0f32; output_size];
-    output_buf
-        .copy_to_host(&mut output)
-        .map_err(|e| format!("D2H failed: {}", e))?;
+    output_buf.copy_to_host(&mut output).map_err(|e| format!("D2H failed: {}", e))?;
 
     println!("✓ SUCCESS for N={}, K={}", n, k);
     Ok(())

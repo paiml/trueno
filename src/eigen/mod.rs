@@ -189,9 +189,7 @@ impl SymmetricEigen {
                 // Sort eigenvalues in descending order
                 let mut indices: Vec<usize> = (0..n).collect();
                 indices.sort_by(|&i, &j| {
-                    eigenvalues[j]
-                        .partial_cmp(&eigenvalues[i])
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                    eigenvalues[j].partial_cmp(&eigenvalues[i]).unwrap_or(std::cmp::Ordering::Equal)
                 });
 
                 // Reorder eigenvalues
@@ -326,9 +324,7 @@ impl SymmetricEigen {
         // Sort eigenvalues in descending order
         let mut indices: Vec<usize> = (0..n).collect();
         indices.sort_by(|&i, &j| {
-            eigenvalues[j]
-                .partial_cmp(&eigenvalues[i])
-                .unwrap_or(std::cmp::Ordering::Equal)
+            eigenvalues[j].partial_cmp(&eigenvalues[i]).unwrap_or(std::cmp::Ordering::Equal)
         });
 
         let sorted_eigenvalues: Vec<f32> = indices.iter().map(|&i| eigenvalues[i]).collect();

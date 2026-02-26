@@ -59,13 +59,7 @@ fn test_02_zero_matmul() {
     for i in 0..n {
         for j in 0..n {
             let val = *result.get(i, j).unwrap();
-            assert!(
-                val == 0.0,
-                "Zero test failed at ({}, {}): expected 0.0, got {}",
-                i,
-                j,
-                val
-            );
+            assert!(val == 0.0, "Zero test failed at ({}, {}): expected 0.0, got {}", i, j, val);
         }
     }
 }
@@ -98,14 +92,7 @@ fn test_03_transpose_property() {
             let v1 = *c.get(i, j).unwrap();
             let v2 = *c_prime.get(i, j).unwrap();
             let diff = (v1 - v2).abs();
-            assert!(
-                diff < 1e-5,
-                "Transpose test failed at ({}, {}): {} vs {}",
-                i,
-                j,
-                v1,
-                v2
-            );
+            assert!(diff < 1e-5, "Transpose test failed at ({}, {}): {} vs {}", i, j, v1, v2);
         }
     }
 }
@@ -187,11 +174,7 @@ fn test_06_infinity_handling() {
 
     // Should overflow to infinity, not panic or produce garbage
     let val = *result.get(0, 0).unwrap();
-    assert!(
-        val.is_infinite() || val.is_nan(),
-        "Overflow should produce Inf or NaN, got {}",
-        val
-    );
+    assert!(val.is_infinite() || val.is_nan(), "Overflow should produce Inf or NaN, got {}", val);
 }
 
 /// Checklist #7: The Determinism Check
@@ -288,10 +271,7 @@ fn test_14_memory_ceiling() {
     // Calculate expected memory: 3 matrices × 384² × 4 bytes = ~1.7MB
     // This is well under the 256MB target
     let expected_bytes = 3 * n * n * 4;
-    assert!(
-        expected_bytes < 256 * 1024 * 1024,
-        "Memory calculation exceeded 256MB ceiling"
-    );
+    assert!(expected_bytes < 256 * 1024 * 1024, "Memory calculation exceeded 256MB ceiling");
 }
 
 /// Checklist #15: The Leak Check
@@ -351,10 +331,7 @@ fn test_34_graceful_error_handling() {
     let b = Matrix::zeros(30, 40); // Incompatible: 20 != 30
 
     let result = a.matmul(&b);
-    assert!(
-        result.is_err(),
-        "Should return error for dimension mismatch"
-    );
+    assert!(result.is_err(), "Should return error for dimension mismatch");
 }
 
 /// Checklist #38: The API Match
@@ -392,9 +369,7 @@ fn test_whisper_encoder_attention() {
 
     // Simulate encoder weight shapes
     let q_proj: Vec<f32> = (0..m * k).map(|i| ((i % 19) as f32 - 9.0) * 0.02).collect();
-    let k_proj: Vec<f32> = (0..k * n)
-        .map(|i| ((i % 23) as f32 - 11.0) * 0.02)
-        .collect();
+    let k_proj: Vec<f32> = (0..k * n).map(|i| ((i % 23) as f32 - 11.0) * 0.02).collect();
 
     let q = Matrix::from_vec(m, k, q_proj).unwrap();
     let kt = Matrix::from_vec(k, n, k_proj).unwrap();

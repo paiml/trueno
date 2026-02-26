@@ -70,9 +70,7 @@ fn compress_file(input_path: &str, output_path: &str) {
     // Read input file
     let mut input_file = File::open(input_path).expect("Failed to open input file");
     let mut input_data = Vec::new();
-    input_file
-        .read_to_end(&mut input_data)
-        .expect("Failed to read input");
+    input_file.read_to_end(&mut input_data).expect("Failed to read input");
 
     let original_size = input_data.len();
     println!("Compressing: {} ({} bytes)", input_path, original_size);
@@ -107,17 +105,11 @@ fn compress_file(input_path: &str, output_path: &str) {
 
     // Header: magic + original_size + page_count + compressed_sizes
     output_file.write_all(MAGIC).unwrap();
-    output_file
-        .write_all(&(original_size as u64).to_le_bytes())
-        .unwrap();
-    output_file
-        .write_all(&(num_pages as u32).to_le_bytes())
-        .unwrap();
+    output_file.write_all(&(original_size as u64).to_le_bytes()).unwrap();
+    output_file.write_all(&(num_pages as u32).to_le_bytes()).unwrap();
 
     for page in &compressed_pages {
-        output_file
-            .write_all(&(page.len() as u32).to_le_bytes())
-            .unwrap();
+        output_file.write_all(&(page.len() as u32).to_le_bytes()).unwrap();
     }
 
     // Compressed data
@@ -130,11 +122,7 @@ fn compress_file(input_path: &str, output_path: &str) {
     let speed = original_size as f64 / elapsed.as_secs_f64() / 1_000_000.0;
 
     println!("Output:      {} ({} bytes)", output_path, output_size);
-    println!(
-        "Ratio:       {:.2}:1 ({:.1}% reduction)",
-        ratio,
-        (1.0 - 1.0 / ratio) * 100.0
-    );
+    println!("Ratio:       {:.2}:1 ({:.1}% reduction)", ratio, (1.0 - 1.0 / ratio) * 100.0);
     println!("Speed:       {:.1} MB/s", speed);
     println!("Time:        {:.2}ms", elapsed.as_secs_f64() * 1000.0);
 }
@@ -143,9 +131,7 @@ fn decompress_file(input_path: &str, output_path: &str) {
     // Read compressed file
     let mut input_file = File::open(input_path).expect("Failed to open input file");
     let mut input_data = Vec::new();
-    input_file
-        .read_to_end(&mut input_data)
-        .expect("Failed to read input");
+    input_file.read_to_end(&mut input_data).expect("Failed to read input");
 
     println!("Decompressing: {} ({} bytes)", input_path, input_data.len());
 
@@ -181,10 +167,7 @@ fn decompress_file(input_path: &str, output_path: &str) {
         let decomp_size = lz4_decompress_block(compressed, page_buf).expect("Decompression failed");
 
         if decomp_size != page_size && page_idx < num_pages - 1 {
-            eprintln!(
-                "Warning: Page {} decompressed to {} bytes",
-                page_idx, decomp_size
-            );
+            eprintln!("Warning: Page {} decompressed to {} bytes", page_idx, decomp_size);
         }
 
         pos += comp_size;
@@ -287,14 +270,7 @@ fn gpu_info() {
     println!();
 
     let safety = kernel.analyze_barrier_safety();
-    println!(
-        "Barrier safety: {}",
-        if safety.is_safe {
-            "✓ Safe"
-        } else {
-            "✗ Violations"
-        }
-    );
+    println!("Barrier safety: {}", if safety.is_safe { "✓ Safe" } else { "✗ Violations" });
 
     println!("\nTheoretical throughput:");
     println!("  RTX 4090: ~100 GB/s (PCIe 4.0 limited)");

@@ -7,11 +7,7 @@ use crate::blis::*;
 #[test]
 fn test_jidoka_error_display() {
     // NumericalDeviation
-    let err = JidokaError::NumericalDeviation {
-        computed: 1.5,
-        expected: 1.0,
-        relative_error: 0.5,
-    };
+    let err = JidokaError::NumericalDeviation { computed: 1.5, expected: 1.0, relative_error: 0.5 };
     let display = format!("{}", err);
     assert!(display.contains("numerical deviation"));
     assert!(display.contains("1.5"));
@@ -19,26 +15,19 @@ fn test_jidoka_error_display() {
     assert!(display.contains("0.5"));
 
     // NaNDetected
-    let err = JidokaError::NaNDetected {
-        location: "test_loc",
-    };
+    let err = JidokaError::NaNDetected { location: "test_loc" };
     let display = format!("{}", err);
     assert!(display.contains("NaN"));
     assert!(display.contains("test_loc"));
 
     // InfDetected
-    let err = JidokaError::InfDetected {
-        location: "inf_loc",
-    };
+    let err = JidokaError::InfDetected { location: "inf_loc" };
     let display = format!("{}", err);
     assert!(display.contains("Inf"));
     assert!(display.contains("inf_loc"));
 
     // DimensionMismatch
-    let err = JidokaError::DimensionMismatch {
-        expected: (10, 20, 30),
-        actual: (5, 10, 15),
-    };
+    let err = JidokaError::DimensionMismatch { expected: (10, 20, 30), actual: (5, 10, 15) };
     let display = format!("{}", err);
     assert!(display.contains("dimension mismatch"));
 }
@@ -53,35 +42,25 @@ fn test_jidoka_guard_check_input() {
     // NaN input fails
     assert!(matches!(
         guard.check_input(f32::NAN, "nan_loc"),
-        Err(JidokaError::NaNDetected {
-            location: "nan_loc"
-        })
+        Err(JidokaError::NaNDetected { location: "nan_loc" })
     ));
 
     // Inf input fails
     assert!(matches!(
         guard.check_input(f32::INFINITY, "inf_loc"),
-        Err(JidokaError::InfDetected {
-            location: "inf_loc"
-        })
+        Err(JidokaError::InfDetected { location: "inf_loc" })
     ));
 
     // Negative Inf input fails
     assert!(matches!(
         guard.check_input(f32::NEG_INFINITY, "neg_inf"),
-        Err(JidokaError::InfDetected {
-            location: "neg_inf"
-        })
+        Err(JidokaError::InfDetected { location: "neg_inf" })
     ));
 }
 
 #[test]
 fn test_jidoka_guard_check_special_disabled() {
-    let guard = JidokaGuard {
-        epsilon: 1e-6,
-        check_special: false,
-        sample_rate: 1,
-    };
+    let guard = JidokaGuard { epsilon: 1e-6, check_special: false, sample_rate: 1 };
 
     // With check_special disabled, NaN/Inf should pass check_input
     assert!(guard.check_input(f32::NAN, "test").is_ok());
@@ -200,10 +179,7 @@ fn test_blis_profiler_reset() {
 
 #[test]
 fn test_heijunka_scheduler_partition() {
-    let scheduler = HeijunkaScheduler {
-        num_threads: 4,
-        variance_threshold: 0.05,
-    };
+    let scheduler = HeijunkaScheduler { num_threads: 4, variance_threshold: 0.05 };
 
     // Test partitioning with M=100, MC=32
     let partitions = scheduler.partition_m(100, 32);
@@ -222,10 +198,7 @@ fn test_heijunka_scheduler_partition() {
 
 #[test]
 fn test_heijunka_scheduler_small_m() {
-    let scheduler = HeijunkaScheduler {
-        num_threads: 4,
-        variance_threshold: 0.05,
-    };
+    let scheduler = HeijunkaScheduler { num_threads: 4, variance_threshold: 0.05 };
 
     // Test with M smaller than MC
     let partitions = scheduler.partition_m(10, 32);
@@ -252,10 +225,7 @@ fn test_backend_cost_model_select() {
 
     // Small matrix - should use CPU (or Scalar)
     let backend = model.select_backend(16, 16, 16);
-    assert!(matches!(
-        backend,
-        ComputeBackend::Cpu | ComputeBackend::Scalar
-    ));
+    assert!(matches!(backend, ComputeBackend::Cpu | ComputeBackend::Scalar));
 
     // Large matrix - may use GPU if feature enabled, otherwise CPU
     let backend = model.select_backend(4096, 4096, 4096);
@@ -289,18 +259,12 @@ fn test_backend_cost_model_estimate_time() {
 #[test]
 fn test_roofline_result() {
     // Compute-bound result
-    let compute = RooflineResult::ComputeBound {
-        ai: 100.0,
-        ridge_point: 50.0,
-    };
+    let compute = RooflineResult::ComputeBound { ai: 100.0, ridge_point: 50.0 };
     assert!(compute.is_compute_bound());
     assert!((compute.arithmetic_intensity() - 100.0).abs() < 0.01);
 
     // Memory-bound result
-    let memory = RooflineResult::MemoryBound {
-        ai: 2.0,
-        ridge_point: 50.0,
-    };
+    let memory = RooflineResult::MemoryBound { ai: 2.0, ridge_point: 50.0 };
     assert!(!memory.is_compute_bound());
     assert!((memory.arithmetic_intensity() - 2.0).abs() < 0.01);
 }
@@ -361,13 +325,7 @@ fn test_gemm_function() {
     gemm_reference(2, 2, 2, &a, &b, &mut c_ref).unwrap();
 
     for (i, (val, expected)) in c.iter().zip(c_ref.iter()).enumerate() {
-        assert!(
-            (val - expected).abs() < 1e-5,
-            "Mismatch at {}: {} vs {}",
-            i,
-            val,
-            expected
-        );
+        assert!((val - expected).abs() < 1e-5, "Mismatch at {}: {} vs {}", i, val, expected);
     }
 }
 

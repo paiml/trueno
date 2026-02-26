@@ -43,10 +43,7 @@ fn test_throughput_regressor_predict_raw() {
 #[test]
 fn test_brick_tuner_recommend() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
     let rec = tuner.recommend(&features);
 
     assert!(rec.throughput.predicted_tps > 0.0);
@@ -61,9 +58,7 @@ fn test_experiment_suggestion_display() {
     let exp = ExperimentSuggestion::EnableCudaGraphs;
     assert!(format!("{}", exp).contains("CUDA graphs"));
 
-    let exp = ExperimentSuggestion::TryKernel {
-        kernel: KernelType::BatchedQ4K,
-    };
+    let exp = ExperimentSuggestion::TryKernel { kernel: KernelType::BatchedQ4K };
     assert!(format!("{}", exp).contains("kernel"));
 
     let exp = ExperimentSuggestion::ReduceSequenceLength { factor: 0.5 };
@@ -109,10 +104,7 @@ fn test_pad_right() {
 
 #[test]
 fn test_validation_infinite_features() {
-    let features = TunerFeatures {
-        model_params_b: f32::INFINITY,
-        ..Default::default()
-    };
+    let features = TunerFeatures { model_params_b: f32::INFINITY, ..Default::default() };
     let result = features.validate();
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("Infinite"));
@@ -241,8 +233,5 @@ fn test_brick_tuner_train_insufficient_data() {
 
     let result = tuner.train(&data);
     assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        TunerError::InsufficientData(5)
-    ));
+    assert!(matches!(result.unwrap_err(), TunerError::InsufficientData(5)));
 }

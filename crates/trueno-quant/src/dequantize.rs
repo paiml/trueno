@@ -126,11 +126,7 @@ pub fn dequantize_q5_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
             for k in 0..32 {
                 let idx = j * 32 + k;
                 let qs_idx = j * 16 + (k % 16);
-                let q_lo = if k < 16 {
-                    qs[qs_idx] & 0x0F
-                } else {
-                    (qs[qs_idx] >> 4) & 0x0F
-                };
+                let q_lo = if k < 16 { qs[qs_idx] & 0x0F } else { (qs[qs_idx] >> 4) & 0x0F };
                 let q_hi = (qh[k] >> j) & 1;
                 let q = q_lo | (q_hi << 4);
                 result[out_start + idx] = scale * f32::from(q) - min_val;
@@ -162,10 +158,7 @@ pub fn dequantize_q6_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
         let ql = &data[sb_start..sb_start + 128];
         let qh = &data[sb_start + 128..sb_start + 192];
         let scales = &data[sb_start + 192..sb_start + 208];
-        let d = f16_to_f32(u16::from_le_bytes([
-            data[sb_start + 208],
-            data[sb_start + 209],
-        ]));
+        let d = f16_to_f32(u16::from_le_bytes([data[sb_start + 208], data[sb_start + 209]]));
 
         for half in 0..2 {
             let ql_base = half * 64;

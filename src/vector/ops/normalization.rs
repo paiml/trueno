@@ -73,11 +73,7 @@ impl Vector<f32> {
 
         // Transform: z[i] = (x[i] - μ) / σ
         let inv_std = 1.0 / std_val;
-        let data: Vec<f32> = self
-            .as_slice()
-            .iter()
-            .map(|&x| (x - mean_val) * inv_std)
-            .collect();
+        let data: Vec<f32> = self.as_slice().iter().map(|&x| (x - mean_val) * inv_std).collect();
 
         Ok(Vector::from_vec(data))
     }
@@ -145,11 +141,7 @@ impl Vector<f32> {
 
         // Transform: x'[i] = (x[i] - min) / (max - min)
         let inv_range = 1.0 / range;
-        let data: Vec<f32> = self
-            .as_slice()
-            .iter()
-            .map(|&x| (x - min_val) * inv_range)
-            .collect();
+        let data: Vec<f32> = self.as_slice().iter().map(|&x| (x - min_val) * inv_range).collect();
 
         Ok(Vector::from_vec(data))
     }
@@ -203,17 +195,11 @@ impl Vector<f32> {
         }
 
         if self.len() != gamma.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: gamma.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: gamma.len() });
         }
 
         if self.len() != beta.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: beta.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: beta.len() });
         }
 
         // Compute mean
@@ -287,11 +273,7 @@ impl Vector<f32> {
 
         let inv_std = 1.0 / (variance + eps).sqrt();
 
-        let data: Vec<f32> = self
-            .as_slice()
-            .iter()
-            .map(|&x| (x - mean_val) * inv_std)
-            .collect();
+        let data: Vec<f32> = self.as_slice().iter().map(|&x| (x - mean_val) * inv_std).collect();
 
         Ok(Vector::from_vec(data))
     }
@@ -384,19 +366,13 @@ mod tests {
     #[test]
     fn test_minmax_normalize_empty() {
         let v: Vector<f32> = Vector::from_slice(&[]);
-        assert!(matches!(
-            v.minmax_normalize(),
-            Err(TruenoError::EmptyVector)
-        ));
+        assert!(matches!(v.minmax_normalize(), Err(TruenoError::EmptyVector)));
     }
 
     #[test]
     fn test_minmax_normalize_constant() {
         let v = Vector::from_slice(&[5.0, 5.0, 5.0]);
-        assert!(matches!(
-            v.minmax_normalize(),
-            Err(TruenoError::DivisionByZero)
-        ));
+        assert!(matches!(v.minmax_normalize(), Err(TruenoError::DivisionByZero)));
     }
 
     #[test]
@@ -418,10 +394,7 @@ mod tests {
         let gamma = Vector::from_slice(&[1.0, 1.0]); // Wrong size
         let beta = Vector::from_slice(&[0.0, 0.0, 0.0]);
 
-        assert!(matches!(
-            x.layer_norm(&gamma, &beta, 1e-5),
-            Err(TruenoError::SizeMismatch { .. })
-        ));
+        assert!(matches!(x.layer_norm(&gamma, &beta, 1e-5), Err(TruenoError::SizeMismatch { .. })));
     }
 
     #[test]

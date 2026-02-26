@@ -41,10 +41,7 @@ impl Vector<f32> {
     /// ```
     pub fn sinh(&self) -> Result<Vector<f32>> {
         let sinh_data: Vec<f32> = self.data.iter().map(|x| x.sinh()).collect();
-        Ok(Vector {
-            data: sinh_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: sinh_data, backend: self.backend })
     }
 
     /// Computes the hyperbolic cosine (cosh) of each element.
@@ -75,10 +72,7 @@ impl Vector<f32> {
     /// ```
     pub fn cosh(&self) -> Result<Vector<f32>> {
         let cosh_data: Vec<f32> = self.data.iter().map(|x| x.cosh()).collect();
-        Ok(Vector {
-            data: cosh_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: cosh_data, backend: self.backend })
     }
 
     /// Computes the hyperbolic tangent (tanh) of each element.
@@ -190,10 +184,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector {
-            data: result,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result, backend: self.backend })
     }
 
     /// Computes the inverse hyperbolic sine (asinh) of each element.
@@ -224,10 +215,7 @@ impl Vector<f32> {
     /// ```
     pub fn asinh(&self) -> Result<Vector<f32>> {
         let asinh_data: Vec<f32> = self.data.iter().map(|x| x.asinh()).collect();
-        Ok(Vector {
-            data: asinh_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: asinh_data, backend: self.backend })
     }
 
     /// Computes the inverse hyperbolic cosine (acosh) of each element.
@@ -257,10 +245,7 @@ impl Vector<f32> {
     /// ```
     pub fn acosh(&self) -> Result<Vector<f32>> {
         let acosh_data: Vec<f32> = self.data.iter().map(|x| x.acosh()).collect();
-        Ok(Vector {
-            data: acosh_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: acosh_data, backend: self.backend })
     }
 
     /// Computes the inverse hyperbolic tangent (atanh) of each element.
@@ -282,9 +267,6 @@ impl Vector<f32> {
     /// ```
     pub fn atanh(&self) -> Result<Vector<f32>> {
         let atanh_data: Vec<f32> = self.data.iter().map(|x| x.atanh()).collect();
-        Ok(Vector {
-            data: atanh_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: atanh_data, backend: self.backend })
     }
 }

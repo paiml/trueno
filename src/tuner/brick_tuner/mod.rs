@@ -65,18 +65,10 @@ impl std::fmt::Display for ExperimentSuggestion {
                 write!(f, "Try kernel: {:?}", kernel)
             }
             ExperimentSuggestion::ReduceSequenceLength { factor } => {
-                write!(
-                    f,
-                    "Reduce sequence length by {:.0}%",
-                    (1.0 - factor) * 100.0
-                )
+                write!(f, "Reduce sequence length by {:.0}%", (1.0 - factor) * 100.0)
             }
             ExperimentSuggestion::EnableMultiKvCache { count } => {
-                write!(
-                    f,
-                    "Enable {} separate KV caches for batched attention",
-                    count
-                )
+                write!(f, "Enable {} separate KV caches for batched attention", count)
             }
         }
     }
@@ -185,9 +177,8 @@ impl BrickTuner {
                         to: (batch_size * 2).min(8),
                     });
                 }
-                suggestions.push(ExperimentSuggestion::TryKernel {
-                    kernel: KernelType::BatchedQ4K,
-                });
+                suggestions
+                    .push(ExperimentSuggestion::TryKernel { kernel: KernelType::BatchedQ4K });
                 if batch_size > 1 {
                     suggestions
                         .push(ExperimentSuggestion::EnableMultiKvCache { count: batch_size });
@@ -197,23 +188,19 @@ impl BrickTuner {
                 if features.cuda_graphs < 0.5 {
                     suggestions.push(ExperimentSuggestion::EnableCudaGraphs);
                 }
-                suggestions.push(ExperimentSuggestion::TryKernel {
-                    kernel: KernelType::FusedRmsNormQ4K,
-                });
+                suggestions
+                    .push(ExperimentSuggestion::TryKernel { kernel: KernelType::FusedRmsNormQ4K });
             }
             BottleneckClass::AttentionBound => {
-                suggestions.push(ExperimentSuggestion::TryKernel {
-                    kernel: KernelType::BatchedAttention,
-                });
+                suggestions
+                    .push(ExperimentSuggestion::TryKernel { kernel: KernelType::BatchedAttention });
                 suggestions.push(ExperimentSuggestion::ReduceSequenceLength { factor: 0.5 });
             }
             _ => {
                 // Default suggestions
                 if batch_size < 4 {
-                    suggestions.push(ExperimentSuggestion::IncreaseBatchSize {
-                        from: batch_size,
-                        to: 4,
-                    });
+                    suggestions
+                        .push(ExperimentSuggestion::IncreaseBatchSize { from: batch_size, to: 4 });
                 }
             }
         }

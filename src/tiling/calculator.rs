@@ -19,12 +19,7 @@ impl TcbIndexCalculator {
     /// Create a new index calculator for the given problem size
     #[must_use]
     pub fn new(config: TilingConfig, m: u32, n: u32, k: u32) -> Self {
-        Self {
-            config,
-            problem_m: m,
-            problem_n: n,
-            problem_k: k,
-        }
+        Self { config, problem_m: m, problem_n: n, problem_k: k }
     }
 
     /// Get macro-tile offset for a given block index

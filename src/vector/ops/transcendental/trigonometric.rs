@@ -46,10 +46,7 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend, sin, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Element-wise cosine: result\[i\] = cos(x\[i\])
@@ -94,10 +91,7 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend, cos, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Computes element-wise tangent (tan) of the vector.
@@ -146,10 +140,7 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend, tan, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Computes element-wise arcsine (asin/sin⁻¹) of the vector.
@@ -195,10 +186,7 @@ impl Vector<f32> {
     /// - Control systems: Inverse kinematics, servo positioning
     pub fn asin(&self) -> Result<Vector<f32>> {
         let asin_data: Vec<f32> = self.data.iter().map(|x| x.asin()).collect();
-        Ok(Vector {
-            data: asin_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: asin_data, backend: self.backend })
     }
 
     /// Computes element-wise arccosine (acos/cos⁻¹) of the vector.
@@ -244,10 +232,7 @@ impl Vector<f32> {
     /// - Robotics: Joint angle solving, orientation calculations
     pub fn acos(&self) -> Result<Vector<f32>> {
         let acos_data: Vec<f32> = self.data.iter().map(|x| x.acos()).collect();
-        Ok(Vector {
-            data: acos_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: acos_data, backend: self.backend })
     }
 
     /// Computes element-wise arctangent (atan/tan⁻¹) of the vector.
@@ -295,9 +280,6 @@ impl Vector<f32> {
     /// - Navigation: Heading calculations from coordinates
     pub fn atan(&self) -> Result<Vector<f32>> {
         let atan_data: Vec<f32> = self.data.iter().map(|x| x.atan()).collect();
-        Ok(Vector {
-            data: atan_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: atan_data, backend: self.backend })
     }
 }

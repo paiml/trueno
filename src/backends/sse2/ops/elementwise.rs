@@ -112,10 +112,7 @@ pub unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
     let max_vec = _mm_set1_ps(max_val);
     while i + 4 <= len {
         let va = _mm_loadu_ps(a.as_ptr().add(i));
-        _mm_storeu_ps(
-            result.as_mut_ptr().add(i),
-            _mm_min_ps(_mm_max_ps(va, min_vec), max_vec),
-        );
+        _mm_storeu_ps(result.as_mut_ptr().add(i), _mm_min_ps(_mm_max_ps(va, min_vec), max_vec));
         i += 4;
     }
     for j in i..len {
@@ -156,10 +153,7 @@ pub unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
         let va = _mm_loadu_ps(a.as_ptr().add(i));
         let vb = _mm_loadu_ps(b.as_ptr().add(i));
         let vc = _mm_loadu_ps(c.as_ptr().add(i));
-        _mm_storeu_ps(
-            result.as_mut_ptr().add(i),
-            _mm_add_ps(_mm_mul_ps(va, vb), vc),
-        );
+        _mm_storeu_ps(result.as_mut_ptr().add(i), _mm_add_ps(_mm_mul_ps(va, vb), vc));
         i += 4;
     }
     for j in i..len {
@@ -195,10 +189,7 @@ pub unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
     while i + 4 <= len {
-        _mm_storeu_ps(
-            result.as_mut_ptr().add(i),
-            _mm_sqrt_ps(_mm_loadu_ps(a.as_ptr().add(i))),
-        );
+        _mm_storeu_ps(result.as_mut_ptr().add(i), _mm_sqrt_ps(_mm_loadu_ps(a.as_ptr().add(i))));
         i += 4;
     }
     for j in i..len {
@@ -215,10 +206,7 @@ pub unsafe fn recip(a: &[f32], result: &mut [f32]) {
     let mut i = 0;
     let one = _mm_set1_ps(1.0);
     while i + 4 <= len {
-        _mm_storeu_ps(
-            result.as_mut_ptr().add(i),
-            _mm_div_ps(one, _mm_loadu_ps(a.as_ptr().add(i))),
-        );
+        _mm_storeu_ps(result.as_mut_ptr().add(i), _mm_div_ps(one, _mm_loadu_ps(a.as_ptr().add(i))));
         i += 4;
     }
     for j in i..len {

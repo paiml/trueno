@@ -25,11 +25,7 @@ impl PreciseRopeKernel {
     /// Create a new precise RoPE kernel
     #[must_use]
     pub fn new(num_heads: u32, head_dim: u32, theta: f32) -> Self {
-        Self {
-            num_heads,
-            head_dim,
-            theta,
-        }
+        Self { num_heads, head_dim, theta }
     }
 }
 
@@ -133,11 +129,7 @@ impl PreciseRopeIndirectKernel {
     /// Create a new precise RoPE indirect kernel
     #[must_use]
     pub fn new(num_heads: u32, head_dim: u32, theta: f32) -> Self {
-        Self {
-            num_heads,
-            head_dim,
-            theta,
-        }
+        Self { num_heads, head_dim, theta }
     }
 }
 

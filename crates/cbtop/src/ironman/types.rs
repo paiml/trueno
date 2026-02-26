@@ -321,11 +321,7 @@ impl IronmanScorecard {
     pub fn skipped_gates(&self) -> Vec<&QualityGate> {
         IRONMAN_GATES
             .iter()
-            .filter(|g| {
-                self.results
-                    .get(g.id)
-                    .map_or(true, |r| matches!(r, GateResult::Skip(_)))
-            })
+            .filter(|g| self.results.get(g.id).map_or(true, |r| matches!(r, GateResult::Skip(_))))
             .collect()
     }
 }

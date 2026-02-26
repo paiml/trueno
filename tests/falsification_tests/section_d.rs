@@ -16,10 +16,7 @@ fn test_d051_ptx_validation_infrastructure() {
     // These patterns would be used to validate actual PTX code
     let entry_point_pattern = r"\.entry\s+\w+";
     let regex = regex::Regex::new(entry_point_pattern);
-    assert!(
-        regex.is_ok(),
-        "D-051 FALSIFIED: Cannot compile PTX entry point pattern"
-    );
+    assert!(regex.is_ok(), "D-051 FALSIFIED: Cannot compile PTX entry point pattern");
 }
 
 /// D-052: Shared memory pattern validation
@@ -28,10 +25,7 @@ fn test_d052_shared_memory_pattern() {
     // Pattern to detect shared memory usage in PTX
     let shared_mem_pattern = r"\.shared\s+\.align\s+\d+\s+\.b\d+";
     let regex = regex::Regex::new(shared_mem_pattern);
-    assert!(
-        regex.is_ok(),
-        "D-052 FALSIFIED: Cannot compile shared memory pattern"
-    );
+    assert!(regex.is_ok(), "D-052 FALSIFIED: Cannot compile shared memory pattern");
 }
 
 /// D-053: Barrier sync pattern validation
@@ -40,10 +34,7 @@ fn test_d053_barrier_sync_pattern() {
     // Pattern to detect bar.sync in PTX
     let barrier_pattern = r"bar\.sync\s+\d+";
     let regex = regex::Regex::new(barrier_pattern);
-    assert!(
-        regex.is_ok(),
-        "D-053 FALSIFIED: Cannot compile barrier sync pattern"
-    );
+    assert!(regex.is_ok(), "D-053 FALSIFIED: Cannot compile barrier sync pattern");
 }
 
 /// D-054: Attention kernel naming convention
@@ -52,10 +43,7 @@ fn test_d054_attention_kernel_naming() {
     // Verify causal attention naming convention
     let causal_pattern = r"_causal$";
     let regex = regex::Regex::new(causal_pattern);
-    assert!(
-        regex.is_ok(),
-        "D-054 FALSIFIED: Cannot compile causal kernel pattern"
-    );
+    assert!(regex.is_ok(), "D-054 FALSIFIED: Cannot compile causal kernel pattern");
 
     // Test the pattern
     assert!(regex.as_ref().unwrap().is_match("attention_kernel_causal"));
@@ -92,18 +80,12 @@ fn test_d056_softmax_stability() {
     let large_values = Vector::from_slice(&[1000.0f32, 1001.0, 1002.0]);
     let result = large_values.softmax();
 
-    assert!(
-        result.is_ok(),
-        "D-056 FALSIFIED: Softmax failed on large values"
-    );
+    assert!(result.is_ok(), "D-056 FALSIFIED: Softmax failed on large values");
 
     let softmax = result.unwrap();
     // Should not produce NaN or Inf
     for (i, val) in softmax.as_slice().iter().enumerate() {
-        assert!(
-            val.is_finite(),
-            "D-056 FALSIFIED: Softmax produced non-finite value at index {i}"
-        );
+        assert!(val.is_finite(), "D-056 FALSIFIED: Softmax produced non-finite value at index {i}");
     }
 }
 
@@ -120,10 +102,7 @@ fn test_d057_layernorm_constant_input() {
     let centered: Vec<f32> = constant.iter().map(|x| x - mean).collect();
 
     for (i, val) in centered.iter().enumerate() {
-        assert!(
-            val.abs() < 1e-6,
-            "D-057: Constant input should center to zero at index {i}"
-        );
+        assert!(val.abs() < 1e-6, "D-057: Constant input should center to zero at index {i}");
     }
 }
 
@@ -157,14 +136,8 @@ fn test_d059_loop_branch_pattern() {
     let regex_correct = regex::Regex::new(correct_pattern).unwrap();
 
     // Both patterns should compile
-    assert!(
-        regex_incorrect.is_match("bra END"),
-        "D-059: Pattern should match incorrect branch"
-    );
-    assert!(
-        regex_correct.is_match("bra LOOP_START"),
-        "D-059: Pattern should match correct branch"
-    );
+    assert!(regex_incorrect.is_match("bra END"), "D-059: Pattern should match incorrect branch");
+    assert!(regex_correct.is_match("bra LOOP_START"), "D-059: Pattern should match correct branch");
 }
 
 /// D-060: Register count validation
@@ -221,24 +194,9 @@ fn test_d062_grid_block_dimensions() {
     ];
 
     for (x, y, z) in test_configs {
-        assert!(
-            x <= MAX_BLOCK_X,
-            "D-062 FALSIFIED: Block X {} exceeds max {}",
-            x,
-            MAX_BLOCK_X
-        );
-        assert!(
-            y <= MAX_BLOCK_Y,
-            "D-062 FALSIFIED: Block Y {} exceeds max {}",
-            y,
-            MAX_BLOCK_Y
-        );
-        assert!(
-            z <= MAX_BLOCK_Z,
-            "D-062 FALSIFIED: Block Z {} exceeds max {}",
-            z,
-            MAX_BLOCK_Z
-        );
+        assert!(x <= MAX_BLOCK_X, "D-062 FALSIFIED: Block X {} exceeds max {}", x, MAX_BLOCK_X);
+        assert!(y <= MAX_BLOCK_Y, "D-062 FALSIFIED: Block Y {} exceeds max {}", y, MAX_BLOCK_Y);
+        assert!(z <= MAX_BLOCK_Z, "D-062 FALSIFIED: Block Z {} exceeds max {}", z, MAX_BLOCK_Z);
         assert!(
             x * y * z <= MAX_THREADS_PER_BLOCK,
             "D-062 FALSIFIED: Total threads {} exceeds max {}",
@@ -294,11 +252,7 @@ fn test_d065_ptx_vs_cpu_reference() {
     let simulated_gpu_result = [1.0f32, 2.0, 3.0, 4.0];
 
     let tolerance = 1e-5;
-    for (i, (cpu, gpu)) in cpu_result
-        .iter()
-        .zip(simulated_gpu_result.iter())
-        .enumerate()
-    {
+    for (i, (cpu, gpu)) in cpu_result.iter().zip(simulated_gpu_result.iter()).enumerate() {
         let diff = (cpu - gpu).abs();
         assert!(
             diff <= tolerance,

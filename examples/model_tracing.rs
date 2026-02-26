@@ -49,14 +49,7 @@ fn demo_tensor_stats() {
         "Normal tensor: mean={:.2}, std={:.2}, L2={:.2}",
         normal_stats.mean, normal_stats.std, normal_stats.l2_norm
     );
-    println!(
-        "  Anomaly: {}",
-        if normal_stats.has_anomaly() {
-            "YES"
-        } else {
-            "no"
-        }
-    );
+    println!("  Anomaly: {}", if normal_stats.has_anomaly() { "YES" } else { "no" });
 
     // Tensor with NaN (bad!)
     let nan_data = vec![1.0, f32::NAN, 3.0, 4.0, 5.0];
@@ -74,11 +67,7 @@ fn demo_tensor_stats() {
     println!("Exploding tensor: max={:.2e}", explode_stats.max);
     println!(
         "  Anomaly: {} - {}",
-        if explode_stats.has_anomaly() {
-            "YES"
-        } else {
-            "no"
-        },
+        if explode_stats.has_anomaly() { "YES" } else { "no" },
         explode_stats.anomaly_description().unwrap_or_default()
     );
 
@@ -112,10 +101,7 @@ fn demo_layer_activation_trace() {
     }
 
     model_trace.finalize();
-    println!(
-        "Model anomaly: {}",
-        if model_trace.has_anomaly { "YES" } else { "no" }
-    );
+    println!("Model anomaly: {}", if model_trace.has_anomaly { "YES" } else { "no" });
     println!();
 }
 
@@ -123,9 +109,7 @@ fn demo_attention_trace() {
     println!("--- Demo 3: AttentionWeightTrace (MLT-02) ---");
 
     // Simulate attention weights for position 10 looking at positions 0-10
-    let weights = vec![
-        0.4, 0.05, 0.05, 0.05, 0.05, 0.1, 0.05, 0.05, 0.1, 0.05, 0.05,
-    ];
+    let weights = vec![0.4, 0.05, 0.05, 0.05, 0.05, 0.1, 0.05, 0.05, 0.1, 0.05, 0.05];
 
     let trace = AttentionWeightTrace::from_weights(
         0,  // layer 0
@@ -138,11 +122,7 @@ fn demo_attention_trace() {
     println!("Top-5 attended positions: {:?}", trace.top_k_positions);
     println!(
         "Top-5 weights: {:?}",
-        trace
-            .top_k_weights
-            .iter()
-            .map(|w| format!("{:.2}", w))
-            .collect::<Vec<_>>()
+        trace.top_k_weights.iter().map(|w| format!("{:.2}", w)).collect::<Vec<_>>()
     );
     println!("Tail mass (outside top-5): {:.2}", trace.tail_mass);
     println!("Entropy: {:.3}", trace.entropy);
@@ -207,14 +187,8 @@ fn demo_logit_evolution() {
 
     // Demonstrate rank computation
     let logits = vec![1.0, 5.0, 3.0, 2.0, 4.0];
-    println!(
-        "Rank of token 1 (logit=5.0): {}",
-        LogitEvolutionTrace::compute_rank(&logits, 1)
-    );
-    println!(
-        "Rank of token 0 (logit=1.0): {}",
-        LogitEvolutionTrace::compute_rank(&logits, 0)
-    );
+    println!("Rank of token 1 (logit=5.0): {}", LogitEvolutionTrace::compute_rank(&logits, 1));
+    println!("Rank of token 0 (logit=1.0): {}", LogitEvolutionTrace::compute_rank(&logits, 0));
 
     println!();
 }
@@ -316,10 +290,7 @@ fn demo_kv_cache_trace() {
     // Check last step
     if let Some(last) = session.steps.last() {
         println!("\nFinal step state:");
-        println!(
-            "  Valid positions: {}/{}",
-            last.valid_positions, last.max_positions
-        );
+        println!("  Valid positions: {}/{}", last.valid_positions, last.max_positions);
         println!("  Utilization: {:.1}%", last.utilization() * 100.0);
         println!("  Window exhausted: {}", last.is_window_exhausted());
     }
@@ -398,8 +369,5 @@ fn demo_model_tracer() {
 
     // Demonstrate disabled config (zero overhead)
     let disabled = ModelTracerConfig::default();
-    println!(
-        "\nDisabled config (zero overhead): is_enabled={}",
-        disabled.is_enabled()
-    );
+    println!("\nDisabled config (zero overhead): is_enabled={}", disabled.is_enabled());
 }

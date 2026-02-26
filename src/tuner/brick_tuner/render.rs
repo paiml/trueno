@@ -11,10 +11,7 @@ impl BrickTuner {
     /// Print recommendations to console (TUI-friendly)
     pub fn print_recommendation(&self, rec: &TunerRecommendation) {
         println!("╭─────────────────────────────────────────────────────────────╮");
-        println!(
-            "│           BrickTuner Recommendations v{}                 │",
-            self.version
-        );
+        println!("│           BrickTuner Recommendations v{}                 │", self.version);
         println!("├─────────────────────────────────────────────────────────────┤");
         println!(
             "│ Predicted throughput: {:>7.1} tok/s ({:>4.0}% confidence)     │",
@@ -32,10 +29,7 @@ impl BrickTuner {
             rec.bottleneck.confidence * 100.0
         );
         println!("├─────────────────────────────────────────────────────────────┤");
-        println!(
-            "│ Explanation: {}│",
-            pad_right(&rec.bottleneck.explanation, 47)
-        );
+        println!("│ Explanation: {}│", pad_right(&rec.bottleneck.explanation, 47));
         println!("├─────────────────────────────────────────────────────────────┤");
         println!("│ Suggested experiments:                                      │");
         for (i, exp) in rec.suggested_experiments.iter().take(3).enumerate() {
@@ -76,19 +70,12 @@ impl BrickTuner {
             rec.bottleneck.confidence * 100.0
         ));
         lines.push("├─────────────────────────────────────────────────────────────┤".to_string());
-        lines.push(format!(
-            "│ Explanation: {}│",
-            pad_right(&rec.bottleneck.explanation, 47)
-        ));
+        lines.push(format!("│ Explanation: {}│", pad_right(&rec.bottleneck.explanation, 47)));
         lines.push("├─────────────────────────────────────────────────────────────┤".to_string());
         lines.push("│ Suggested experiments:                                      │".to_string());
 
         for (i, exp) in rec.suggested_experiments.iter().take(3).enumerate() {
-            lines.push(format!(
-                "│  {}. {}│",
-                i + 1,
-                pad_right(&exp.to_string(), 56)
-            ));
+            lines.push(format!("│  {}. {}│", i + 1, pad_right(&exp.to_string(), 56)));
         }
 
         // Pad if fewer than 3 suggestions

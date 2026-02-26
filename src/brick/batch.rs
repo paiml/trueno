@@ -32,11 +32,7 @@ pub fn balance211(n: usize, nthreads: usize) -> Vec<(usize, usize)> {
 
     (0..nthreads)
         .map(|i| {
-            let offset = if i < rem {
-                (div + 1) * i
-            } else {
-                div * i + rem
-            };
+            let offset = if i < rem { (div + 1) * i } else { div * i + rem };
             let count = if i < rem { div + 1 } else { div };
             (offset, count)
         })
@@ -52,10 +48,7 @@ pub struct Balance211Iter {
 impl Balance211Iter {
     /// Create a new balanced work iterator.
     pub fn new(n: usize, nthreads: usize) -> Self {
-        Self {
-            ranges: balance211(n, nthreads),
-            current: 0,
-        }
+        Self { ranges: balance211(n, nthreads), current: 0 }
     }
 }
 
@@ -122,17 +115,11 @@ pub fn split_batch(total: usize, num_workers: usize, strategy: BatchSplitStrateg
         }
         BatchSplitStrategy::Equal => {
             // Use Balance211 for even distribution
-            balance211(total, num_workers)
-                .iter()
-                .map(|(_, count)| *count)
-                .collect()
+            balance211(total, num_workers).iter().map(|(_, count)| *count).collect()
         }
         BatchSplitStrategy::SequenceAware => {
             // For now, same as Equal (sequence boundaries would need external info)
-            balance211(total, num_workers)
-                .iter()
-                .map(|(_, count)| *count)
-                .collect()
+            balance211(total, num_workers).iter().map(|(_, count)| *count).collect()
         }
     }
 }

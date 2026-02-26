@@ -68,11 +68,7 @@ impl<T> GpuBuffer<T> {
     /// without triggering the borrow checker.
     #[must_use]
     pub unsafe fn from_raw_parts(ptr: CUdeviceptr, len: usize) -> Self {
-        Self {
-            ptr,
-            len,
-            _marker: PhantomData,
-        }
+        Self { ptr, len, _marker: PhantomData }
     }
 
     /// Allocate a new GPU buffer
@@ -88,11 +84,7 @@ impl<T> GpuBuffer<T> {
     /// Returns `Err(GpuError::OutOfMemory)` if insufficient GPU memory.
     pub fn new(_ctx: &CudaContext, len: usize) -> Result<Self, GpuError> {
         if len == 0 {
-            return Ok(Self {
-                ptr: 0,
-                len: 0,
-                _marker: PhantomData,
-            });
+            return Ok(Self { ptr: 0, len: 0, _marker: PhantomData });
         }
 
         let driver = get_driver()?;
@@ -103,11 +95,7 @@ impl<T> GpuBuffer<T> {
         let result = unsafe { (driver.cuMemAlloc)(&mut ptr, size) };
         CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(e.to_string()))?;
 
-        Ok(Self {
-            ptr,
-            len,
-            _marker: PhantomData,
-        })
+        Ok(Self { ptr, len, _marker: PhantomData })
     }
 
     /// Get device pointer as raw u64
@@ -151,11 +139,7 @@ impl<T> GpuBuffer<T> {
     /// `&GpuBuffer<T>` while avoiding borrow checker conflicts.
     #[must_use]
     pub fn clone_metadata(&self) -> GpuBufferView<T> {
-        GpuBufferView {
-            ptr: self.ptr,
-            len: self.len,
-            _marker: PhantomData,
-        }
+        GpuBufferView { ptr: self.ptr, len: self.len, _marker: PhantomData }
     }
 }
 

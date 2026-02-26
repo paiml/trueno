@@ -81,8 +81,7 @@ impl OnlineLearner {
             // Remove oldest
             self.replay_buffer.remove(0);
         }
-        self.replay_buffer
-            .push((features.to_vec(), actual_throughput));
+        self.replay_buffer.push((features.to_vec(), actual_throughput));
 
         self.num_updates += 1;
 

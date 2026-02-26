@@ -17,17 +17,11 @@ fn f021_no_nan_features() {
 
 #[test]
 fn f022_no_infinite_features() {
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .hidden_dim(1536)
-        .batch_size(4)
-        .build();
+    let features =
+        TunerFeatures::builder().model_params_b(1.5).hidden_dim(1536).batch_size(4).build();
 
     let v = features.to_vector();
-    assert!(
-        !v.iter().any(|x| x.is_infinite()),
-        "Features contain infinity"
-    );
+    assert!(!v.iter().any(|x| x.is_infinite()), "Features contain infinity");
 }
 
 #[test]
@@ -41,12 +35,7 @@ fn f023_features_in_0_1_range() {
 
     let v = features.to_vector();
     for (i, x) in v.iter().enumerate() {
-        assert!(
-            *x >= -0.001 && *x <= 1.001,
-            "Feature {} = {} is outside [0, 1]",
-            i,
-            x
-        );
+        assert!(*x >= -0.001 && *x <= 1.001, "Feature {} = {} is outside [0, 1]", i, x);
     }
 }
 
@@ -112,16 +101,8 @@ fn f029_onehot_sums_to_one() {
     let quant_sum: f32 = features.quant_type_onehot.iter().sum();
     let kernel_sum: f32 = features.kernel_type_onehot.iter().sum();
 
-    assert!(
-        (quant_sum - 1.0).abs() < 0.001,
-        "Quant one-hot sum = {}",
-        quant_sum
-    );
-    assert!(
-        (kernel_sum - 1.0).abs() < 0.001,
-        "Kernel one-hot sum = {}",
-        kernel_sum
-    );
+    assert!((quant_sum - 1.0).abs() < 0.001, "Quant one-hot sum = {}", quant_sum);
+    assert!((kernel_sum - 1.0).abs() < 0.001, "Kernel one-hot sum = {}", kernel_sum);
 }
 
 /// f040: Feature dimension must be 42 per spec v1.1.0

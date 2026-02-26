@@ -31,17 +31,12 @@ pub fn scalar_rmsnorm(x: &[f32], weight: &[f32], eps: f32) -> Vec<f32> {
     let sum_sq: f32 = x.iter().map(|v| v * v).sum();
     let rms = (sum_sq / n as f32 + eps).sqrt();
 
-    x.iter()
-        .zip(weight.iter())
-        .map(|(xi, wi)| (xi / rms) * wi)
-        .collect()
+    x.iter().zip(weight.iter()).map(|(xi, wi)| (xi / rms) * wi).collect()
 }
 
 /// SiLU activation (LLaMA FFN) - scalar implementation
 pub fn scalar_silu(x: &[f32]) -> Vec<f32> {
-    x.iter()
-        .map(|xi| xi * (1.0 / (1.0 + (-xi).exp())))
-        .collect()
+    x.iter().map(|xi| xi * (1.0 / (1.0 + (-xi).exp()))).collect()
 }
 
 /// Softmax - scalar implementation with numerical stability

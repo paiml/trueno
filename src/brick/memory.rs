@@ -101,11 +101,7 @@ impl AlignedBuffer {
             return Err(TruenoError::InvalidInput("allocation failed".into()));
         }
 
-        Ok(Self {
-            ptr,
-            len: size,
-            layout,
-        })
+        Ok(Self { ptr, len: size, layout })
     }
 
     /// Get the buffer as a slice.

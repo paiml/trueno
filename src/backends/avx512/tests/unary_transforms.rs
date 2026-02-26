@@ -82,12 +82,7 @@ fn test_avx512_relu() {
 #[test]
 fn test_avx512_exp() {
     avx512_test(|| {
-        assert_unary_transform(
-            &[0.0, 1.0],
-            &[1.0, std::f32::consts::E],
-            1e-3,
-            Avx512Backend::exp,
-        );
+        assert_unary_transform(&[0.0, 1.0], &[1.0, std::f32::consts::E], 1e-3, Avx512Backend::exp);
     });
 }
 
@@ -122,24 +117,14 @@ fn test_avx512_tanh() {
 #[test]
 fn test_avx512_sqrt() {
     avx512_test(|| {
-        assert_unary_transform(
-            &[4.0, 9.0, 16.0],
-            &[2.0, 3.0, 4.0],
-            1e-5,
-            Avx512Backend::sqrt,
-        );
+        assert_unary_transform(&[4.0, 9.0, 16.0], &[2.0, 3.0, 4.0], 1e-5, Avx512Backend::sqrt);
     });
 }
 
 #[test]
 fn test_avx512_recip() {
     avx512_test(|| {
-        assert_unary_transform(
-            &[2.0, 4.0, 5.0],
-            &[0.5, 0.25, 0.2],
-            1e-5,
-            Avx512Backend::recip,
-        );
+        assert_unary_transform(&[2.0, 4.0, 5.0], &[0.5, 0.25, 0.2], 1e-5, Avx512Backend::recip);
     });
 }
 

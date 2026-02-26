@@ -59,10 +59,7 @@ where
     /// assert_eq!(v.len(), 4);
     /// ```
     pub fn from_slice(data: &[T]) -> Self {
-        Self {
-            data: data.to_vec(),
-            backend: crate::select_best_available_backend(),
-        }
+        Self { data: data.to_vec(), backend: crate::select_best_available_backend() }
     }
 
     /// Create vector from an existing Vec (takes ownership, no copy)
@@ -80,10 +77,7 @@ where
     /// assert_eq!(v.len(), 3);
     /// ```
     pub fn from_vec(data: Vec<T>) -> Self {
-        Self {
-            data,
-            backend: crate::select_best_available_backend(),
-        }
+        Self { data, backend: crate::select_best_available_backend() }
     }
 
     /// Create vector with specific backend (for benchmarking or testing)
@@ -102,10 +96,7 @@ where
             other => other,
         };
 
-        Self {
-            data: data.to_vec(),
-            backend: resolved_backend,
-        }
+        Self { data: data.to_vec(), backend: resolved_backend }
     }
 }
 
@@ -179,10 +170,7 @@ impl Vector<f32> {
             );
         }
 
-        Ok(Self {
-            data,
-            backend: resolved_backend,
-        })
+        Ok(Self { data, backend: resolved_backend })
     }
 }
 

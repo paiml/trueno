@@ -20,9 +20,7 @@ fn build_children_map(
         }
     }
 
-    let root_ids: Vec<u32> = (0..node_count as u32)
-        .filter(|id| !has_parent.contains(id))
-        .collect();
+    let root_ids: Vec<u32> = (0..node_count as u32).filter(|id| !has_parent.contains(id)).collect();
 
     (children_map, root_ids)
 }
@@ -31,26 +29,13 @@ fn build_children_map(
 fn format_ascii_node(node: &ExecutionNode) -> (String, String) {
     match node {
         ExecutionNode::Layer { index } => (format!("Layer {}", index), String::new()),
-        ExecutionNode::Brick {
-            id: brick_id,
-            timing_ns,
-            elements,
-        } => (
+        ExecutionNode::Brick { id: brick_id, timing_ns, elements } => (
             brick_id.name().to_string(),
             format!("  {:.1}µs ({} elem)", *timing_ns as f64 / 1000.0, elements),
         ),
-        ExecutionNode::Kernel {
-            name,
-            grid,
-            block,
-            shared_mem,
-            ..
-        } => (
+        ExecutionNode::Kernel { name, grid, block, shared_mem, .. } => (
             name.clone(),
-            format!(
-                "  <<<{},{},{}>>> smem={}B",
-                grid.0, block.0, block.1, shared_mem
-            ),
+            format!("  <<<{},{},{}>>> smem={}B", grid.0, block.0, block.1, shared_mem),
         ),
         ExecutionNode::Function { name, file, line } => {
             let loc = match (file, line) {
@@ -59,32 +44,13 @@ fn format_ascii_node(node: &ExecutionNode) -> (String, String) {
             };
             (format!("{}{}", name, loc), String::new())
         }
-        ExecutionNode::Transfer {
-            src,
-            dst,
-            bytes,
-            direction,
-            timing_ns,
-        } => {
-            let timing_str = timing_ns
-                .map(|ns| format!(" {:.1}µs", ns as f64 / 1000.0))
-                .unwrap_or_default();
-            (
-                format!("{:?}: {} → {}", direction, src, dst),
-                format!("  {}B{}", bytes, timing_str),
-            )
+        ExecutionNode::Transfer { src, dst, bytes, direction, timing_ns } => {
+            let timing_str =
+                timing_ns.map(|ns| format!(" {:.1}µs", ns as f64 / 1000.0)).unwrap_or_default();
+            (format!("{:?}: {} → {}", direction, src, dst), format!("  {}B{}", bytes, timing_str))
         }
-        ExecutionNode::AsyncTask {
-            name,
-            poll_count,
-            yield_count,
-            total_poll_ns,
-        } => {
-            let efficiency = if *poll_count > 0 {
-                100.0 / *poll_count as f64
-            } else {
-                0.0
-            };
+        ExecutionNode::AsyncTask { name, poll_count, yield_count, total_poll_ns } => {
+            let efficiency = if *poll_count > 0 { 100.0 / *poll_count as f64 } else { 0.0 };
             (
                 name.clone(),
                 format!(
@@ -123,14 +89,7 @@ fn build_ascii_tree(
             } else {
                 format!("{}│   ", prefix)
             };
-            build_ascii_tree(
-                graph,
-                child_id,
-                children_map,
-                &new_prefix,
-                new_connector,
-                output,
-            );
+            build_ascii_tree(graph, child_id, children_map, &new_prefix, new_connector, output);
         }
     }
 }
@@ -138,17 +97,14 @@ fn build_ascii_tree(
 /// Map an `ExecutionNode` to its DOT label text and style attribute string.
 fn node_to_dot_label(node: &ExecutionNode) -> (String, &'static str) {
     match node {
-        ExecutionNode::Layer { index } => (
-            format!("Layer {}", index),
-            "style=filled,fillcolor=lightblue",
-        ),
+        ExecutionNode::Layer { index } => {
+            (format!("Layer {}", index), "style=filled,fillcolor=lightblue")
+        }
         ExecutionNode::Brick { id, timing_ns, .. } => (
             format!("{}\\n{:.1}µs", id.name(), *timing_ns as f64 / 1000.0),
             "style=filled,fillcolor=lightgreen",
         ),
-        ExecutionNode::Kernel {
-            name, grid, block, ..
-        } => (
+        ExecutionNode::Kernel { name, grid, block, .. } => (
             format!("{}\\n<<<{},{},{}>>>", name, grid.0, block.0, block.1),
             "style=filled,fillcolor=lightyellow",
         ),
@@ -157,18 +113,9 @@ fn node_to_dot_label(node: &ExecutionNode) -> (String, &'static str) {
                 (Some(f), Some(l)) => format!("\\n{}:{}", f, l),
                 (None, _) | (_, None) => String::new(),
             };
-            (
-                format!("{}{}", name, loc),
-                "style=filled,fillcolor=lightgray",
-            )
+            (format!("{}{}", name, loc), "style=filled,fillcolor=lightgray")
         }
-        ExecutionNode::Transfer {
-            src,
-            dst,
-            bytes,
-            direction,
-            ..
-        } => {
+        ExecutionNode::Transfer { src, dst, bytes, direction, .. } => {
             let dir = match direction {
                 TransferDirection::H2D => "H2D",
                 TransferDirection::D2H => "D2H",
@@ -179,17 +126,8 @@ fn node_to_dot_label(node: &ExecutionNode) -> (String, &'static str) {
                 "style=filled,fillcolor=lightsalmon",
             )
         }
-        ExecutionNode::AsyncTask {
-            name,
-            poll_count,
-            yield_count,
-            total_poll_ns,
-        } => {
-            let efficiency = if *poll_count > 0 {
-                100.0 / *poll_count as f64
-            } else {
-                0.0
-            };
+        ExecutionNode::AsyncTask { name, poll_count, yield_count, total_poll_ns } => {
+            let efficiency = if *poll_count > 0 { 100.0 / *poll_count as f64 } else { 0.0 };
             (
                 format!(
                     "{}\\npolls:{} yields:{}\\n{:.1}µs ({:.0}%)",
@@ -240,10 +178,7 @@ impl ExecutionGraph {
         // Add edges with styling based on type
         for edge in &self.edges {
             let style = edge_to_dot_style(&edge.edge_type);
-            dot.push_str(&format!(
-                "  n{} -> n{} [{}];\n",
-                edge.src.0, edge.dst.0, style
-            ));
+            dot.push_str(&format!("  n{} -> n{} [{}];\n", edge.src.0, edge.dst.0, style));
         }
 
         dot.push_str("}\n");
@@ -255,11 +190,8 @@ impl ExecutionGraph {
     pub fn to_csr(&self) -> trueno_graph::CsrGraph {
         use trueno_graph::{CsrGraph, NodeId};
 
-        let edges: Vec<(NodeId, NodeId, f32)> = self
-            .edges
-            .iter()
-            .map(|e| (NodeId(e.src.0), NodeId(e.dst.0), e.weight))
-            .collect();
+        let edges: Vec<(NodeId, NodeId, f32)> =
+            self.edges.iter().map(|e| (NodeId(e.src.0), NodeId(e.dst.0), e.weight)).collect();
 
         let mut graph = CsrGraph::from_edge_list(&edges).unwrap_or_default();
 
@@ -298,31 +230,14 @@ impl ExecutionGraph {
             let node = &graph.nodes[id as usize];
             let (label, info, color) = match node {
                 ExecutionNode::Layer { index } => (format!("Layer {}", index), None, layer_color),
-                ExecutionNode::Brick {
-                    id: brick_id,
-                    timing_ns,
-                    elements,
-                } => (
+                ExecutionNode::Brick { id: brick_id, timing_ns, elements } => (
                     brick_id.name().to_string(),
-                    Some(format!(
-                        "{:.1}µs ({} elem)",
-                        *timing_ns as f64 / 1000.0,
-                        elements
-                    )),
+                    Some(format!("{:.1}µs ({} elem)", *timing_ns as f64 / 1000.0, elements)),
                     brick_color,
                 ),
-                ExecutionNode::Kernel {
-                    name,
-                    grid,
-                    block,
-                    shared_mem,
-                    ..
-                } => (
+                ExecutionNode::Kernel { name, grid, block, shared_mem, .. } => (
                     name.clone(),
-                    Some(format!(
-                        "<<<{},{},{}>>> smem={}B",
-                        grid.0, block.0, block.1, shared_mem
-                    )),
+                    Some(format!("<<<{},{},{}>>> smem={}B", grid.0, block.0, block.1, shared_mem)),
                     kernel_color,
                 ),
                 ExecutionNode::Function { name, file, line } => {
@@ -332,13 +247,7 @@ impl ExecutionGraph {
                     };
                     (format!("{}{}", name, loc), None, func_color)
                 }
-                ExecutionNode::Transfer {
-                    src,
-                    dst,
-                    bytes,
-                    direction,
-                    timing_ns,
-                } => {
+                ExecutionNode::Transfer { src, dst, bytes, direction, timing_ns } => {
                     let timing_str = timing_ns
                         .map(|ns| format!(" {:.1}µs", ns as f64 / 1000.0))
                         .unwrap_or_default();
@@ -348,17 +257,8 @@ impl ExecutionGraph {
                         Color::new(0.8, 0.4, 0.8, 1.0), // Transfer color (magenta)
                     )
                 }
-                ExecutionNode::AsyncTask {
-                    name,
-                    poll_count,
-                    yield_count,
-                    total_poll_ns,
-                } => {
-                    let efficiency = if *poll_count > 0 {
-                        100.0 / *poll_count as f64
-                    } else {
-                        0.0
-                    };
+                ExecutionNode::AsyncTask { name, poll_count, yield_count, total_poll_ns } => {
+                    let efficiency = if *poll_count > 0 { 100.0 / *poll_count as f64 } else { 0.0 };
                     (
                         name.clone(),
                         Some(format!(

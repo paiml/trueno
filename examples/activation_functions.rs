@@ -106,10 +106,7 @@ fn main() {
     println!("✓ Softmax (multi-class output layer)");
     println!("  Input logits: {:?}", logits.as_slice());
     println!("  Output probabilities: {:?}", softmax_output.as_slice());
-    println!(
-        "  Sum: {:.6}",
-        softmax_output.as_slice().iter().sum::<f32>()
-    );
+    println!("  Sum: {:.6}", softmax_output.as_slice().iter().sum::<f32>());
     println!("  Characteristic: Outputs sum to 1.0, probabilistic\n");
 
     // Log-Softmax: Numerically stable for cross-entropy loss
@@ -131,44 +128,21 @@ fn main() {
     println!("Activation   | -5.0     | -1.0     | 0.0      | 1.0      | 5.0");
     println!("-------------|----------|----------|----------|----------|----------");
 
-    print_activation_row(
-        "ReLU        ",
-        &test_points.relu().expect("Example should not fail"),
-    );
+    print_activation_row("ReLU        ", &test_points.relu().expect("Example should not fail"));
     print_activation_row(
         "Leaky ReLU  ",
-        &test_points
-            .leaky_relu(0.01)
-            .expect("Example should not fail"),
+        &test_points.leaky_relu(0.01).expect("Example should not fail"),
     );
-    print_activation_row(
-        "ELU         ",
-        &test_points.elu(1.0).expect("Example should not fail"),
-    );
-    print_activation_row(
-        "Sigmoid     ",
-        &test_points.sigmoid().expect("Example should not fail"),
-    );
-    print_activation_row(
-        "GELU        ",
-        &test_points.gelu().expect("Example should not fail"),
-    );
-    print_activation_row(
-        "Swish       ",
-        &test_points.swish().expect("Example should not fail"),
-    );
+    print_activation_row("ELU         ", &test_points.elu(1.0).expect("Example should not fail"));
+    print_activation_row("Sigmoid     ", &test_points.sigmoid().expect("Example should not fail"));
+    print_activation_row("GELU        ", &test_points.gelu().expect("Example should not fail"));
+    print_activation_row("Swish       ", &test_points.swish().expect("Example should not fail"));
     print_activation_row(
         "Hardswish   ",
         &test_points.hardswish().expect("Example should not fail"),
     );
-    print_activation_row(
-        "Mish        ",
-        &test_points.mish().expect("Example should not fail"),
-    );
-    print_activation_row(
-        "SELU        ",
-        &test_points.selu().expect("Example should not fail"),
-    );
+    print_activation_row("Mish        ", &test_points.mish().expect("Example should not fail"));
+    print_activation_row("SELU        ", &test_points.selu().expect("Example should not fail"));
 
     println!("\n");
 
@@ -181,10 +155,7 @@ fn main() {
 
     // Simulate a batch of pre-activations from a linear layer
     let layer_output = Vector::from_slice(&[0.5, -0.3, 1.2, -0.8, 2.1]);
-    println!(
-        "Layer output (pre-activation): {:?}",
-        layer_output.as_slice()
-    );
+    println!("Layer output (pre-activation): {:?}", layer_output.as_slice());
 
     // Different activation choices for different architectures
     println!("\nIf using CNN (e.g., ResNet):");
