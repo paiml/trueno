@@ -1,8 +1,12 @@
 [workspace]
+resolver = "2"
 members = [".", "xtask", "trueno-gpu", "trueno-explain", "crates/cbtop", "crates/trueno-quant", "trueno-cuda-edge", "trueno-ptx-debug"]
 exclude = []
 
 # Workspace-level lints (PMAT best practices)
+[workspace.package]
+edition = "2021"
+
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "warn"
 missing_docs = "warn"
@@ -198,3 +202,16 @@ required-features = ["gpu"]
 [[example]]
 name = "gpu_tiled_reduction"
 required-features = ["gpu"]
+
+[package.metadata.release]
+shared-version = true
+
+[[package.metadata.release.pre-release-replacements]]
+file = "CHANGELOG.md"
+search = "## \\[Unreleased\\]"
+replace = "## [{{version}}] - {{date}}"
+
+[workspace.dependencies]
+
+[profile.dev]
+panic = "abort"
