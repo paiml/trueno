@@ -47,7 +47,7 @@ const MAX_JACOBI_SWEEPS: usize = 50;
 const CONVERGENCE_THRESHOLD: f32 = 1e-7;
 
 /// GPU threshold - use wgpu for matrices larger than this
-const _GPU_THRESHOLD: usize = 1000;
+const GPU_THRESHOLD: usize = 1000;
 
 /// Symmetric matrix eigendecomposition
 ///
