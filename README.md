@@ -1,6 +1,10 @@
 <div align="center">
 
+<p align="center">
 <img src=".github/trueno-hero.svg" alt="trueno" width="600">
+</p>
+
+<h1 align="center">trueno</h1>
 
 **Multi-Target High-Performance Compute Library**
 
@@ -13,6 +17,18 @@
 ---
 
 **trueno** (Spanish: "thunder") provides unified compute primitives across CPU SIMD, GPU, and WebAssembly.
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Performance](#performance)
+- [trueno-gpu: Pure Rust CUDA](#trueno-gpu-pure-rust-cuda)
+- [Operations](#operations)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
