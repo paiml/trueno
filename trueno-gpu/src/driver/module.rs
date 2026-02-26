@@ -16,8 +16,14 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::ptr;
 
+use std::ffi::c_void;
+use std::os::raw::c_uint;
+
 use super::context::{get_driver, CudaContext};
-use super::sys::{CUfunction, CUmodule, CudaDriver};
+use super::sys::{
+    CUfunction, CUmodule, CudaDriver, CU_JIT_ERROR_LOG_BUFFER,
+    CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES, CU_JIT_TARGET,
+};
 use crate::GpuError;
 
 // ============================================================================
@@ -46,46 +52,89 @@ unsafe impl Sync for CudaModule {}
 impl CudaModule {
     /// Load PTX source and JIT compile to device code
     ///
+    /// Uses `cuModuleLoadDataEx` with explicit JIT target architecture
+    /// derived from the device's compute capability. This ensures the JIT
+    /// compiler knows exactly which SASS to generate.
+    ///
+    /// # Contract: F-PTX-002 (Context Currency)
+    ///
+    /// Ensures the CUDA context is current on the calling thread before
+    /// JIT compilation. CUDA contexts are thread-local.
+    ///
     /// # Arguments
     ///
-    /// * `_ctx` - CUDA context (must be current)
+    /// * `ctx` - CUDA context (will be made current)
     /// * `ptx` - PTX assembly source code
-    ///
-    /// # JIT Compilation
-    ///
-    /// The PTX is compiled to SASS (device assembly) at load time.
-    /// This incurs one-time cost but enables runtime architecture targeting.
     ///
     /// # Errors
     ///
     /// Returns `Err(GpuError::ModuleLoad)` if PTX is invalid or compilation fails.
-    pub fn from_ptx(_ctx: &CudaContext, ptx: &str) -> Result<Self, GpuError> {
+    pub fn from_ptx(ctx: &CudaContext, ptx: &str) -> Result<Self, GpuError> {
         let driver = get_driver()?;
+
+        // F-PTX-002: Ensure context is current on this thread before JIT compilation.
+        ctx.make_current()?;
+
+        // Detect device compute capability for JIT target
+        let (major, minor) = ctx.compute_capability()?;
+        let jit_target: c_uint = (major * 10 + minor) as c_uint;
 
         // Ensure PTX is null-terminated
         let ptx_cstring = CString::new(ptx)
             .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
 
-        // SAFETY: ptx_cstring is valid null-terminated string
+        // JIT error log buffer for diagnostics on failure
+        let mut error_log = vec![0u8; 4096];
+        let error_log_size: usize = error_log.len();
+
+        // Set up JIT options: target architecture + error log
+        let mut options: [c_uint; 3] = [
+            CU_JIT_TARGET,
+            CU_JIT_ERROR_LOG_BUFFER,
+            CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
+        ];
+        let mut option_values: [*mut c_void; 3] = [
+            jit_target as *mut c_void,
+            error_log.as_mut_ptr() as *mut c_void,
+            error_log_size as *mut c_void,
+        ];
+
+        // SAFETY: ptx_cstring is valid null-terminated string, options arrays
+        // are valid for the lifetime of this call, context is current.
         let mut module: CUmodule = ptr::null_mut();
-        let result =
-            unsafe { (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _) };
+        let result = unsafe {
+            (driver.cuModuleLoadDataEx)(
+                &mut module,
+                ptx_cstring.as_ptr() as *const _,
+                3,
+                options.as_mut_ptr(),
+                option_values.as_mut_ptr(),
+            )
+        };
 
         if let Err(e) = CudaDriver::check(result) {
-            // Dump failing PTX to file for debugging
-            let ptx_path = "/tmp/failing_ptx.txt";
-            if let Ok(()) = std::fs::write(ptx_path, ptx) {
-                eprintln!("[PTX-DEBUG] Failing PTX dumped to {}", ptx_path);
+            // Extract JIT error log
+            let jit_log = String::from_utf8_lossy(&error_log)
+                .trim_end_matches('\0')
+                .to_string();
+            if !jit_log.is_empty() {
+                eprintln!("[PTX-JIT] Error log: {jit_log}");
             }
-            // Extract kernel name from PTX for better diagnostics
+
+            // Extract kernel name from PTX for diagnostics
             let kernel_name = ptx
                 .lines()
                 .find(|l| l.contains(".entry"))
                 .map(|l| l.trim())
                 .unwrap_or("<unknown>");
-            eprintln!("[PTX-DEBUG] Failed kernel: {}", kernel_name);
-            eprintln!("[PTX-DEBUG] PTX length: {} bytes", ptx.len());
-            return Err(GpuError::ModuleLoad(e.to_string()));
+            eprintln!(
+                "[PTX-JIT] Failed kernel: {kernel_name}, target: sm_{major}{minor}, \
+                 PTX length: {} bytes",
+                ptx.len()
+            );
+            return Err(GpuError::ModuleLoad(format!(
+                "{e} (JIT target: sm_{major}{minor})"
+            )));
         }
 
         Ok(Self {

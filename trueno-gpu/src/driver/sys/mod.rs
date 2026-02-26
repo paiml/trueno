@@ -87,12 +87,44 @@ pub const CUDA_ERROR_INVALID_CONTEXT: CUresult = 201;
 pub const CUDA_ERROR_NO_BINARY_FOR_GPU: CUresult = 209;
 /// Invalid PTX
 pub const CUDA_ERROR_INVALID_PTX: CUresult = 218;
-/// Illegal instruction encountered
-pub const CUDA_ERROR_ILLEGAL_INSTRUCTION: CUresult = 715;
 /// Function not found
 pub const CUDA_ERROR_NOT_FOUND: CUresult = 500;
 /// Operation not ready
 pub const CUDA_ERROR_NOT_READY: CUresult = 600;
+/// Illegal memory address accessed by a kernel (sticky — context unrecoverable)
+pub const CUDA_ERROR_ILLEGAL_ADDRESS: CUresult = 700;
+/// Illegal instruction encountered
+pub const CUDA_ERROR_ILLEGAL_INSTRUCTION: CUresult = 715;
+/// Unspecified launch failure (sticky — context unrecoverable)
+pub const CUDA_ERROR_LAUNCH_FAILED: CUresult = 719;
+
+// ============================================================================
+// CUDA JIT Option Codes (subset we use)
+// ============================================================================
+
+/// CU_JIT_TARGET - Specifies target architecture for JIT compilation
+pub const CU_JIT_TARGET: c_uint = 9;
+/// CU_JIT_ERROR_LOG_BUFFER - Pointer to buffer for error log
+pub const CU_JIT_ERROR_LOG_BUFFER: c_uint = 5;
+/// CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES - Size of error log buffer
+pub const CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES: c_uint = 6;
+
+// ============================================================================
+// CUDA Compute Capability Target Values (for CU_JIT_TARGET)
+// ============================================================================
+
+/// SM 7.0 (Volta)
+pub const CU_TARGET_COMPUTE_70: c_uint = 70;
+/// SM 7.5 (Turing)
+pub const CU_TARGET_COMPUTE_75: c_uint = 75;
+/// SM 8.0 (Ampere)
+pub const CU_TARGET_COMPUTE_80: c_uint = 80;
+/// SM 8.6 (Ampere consumer)
+pub const CU_TARGET_COMPUTE_86: c_uint = 86;
+/// SM 8.9 (Ada Lovelace)
+pub const CU_TARGET_COMPUTE_89: c_uint = 89;
+/// SM 9.0 (Hopper)
+pub const CU_TARGET_COMPUTE_90: c_uint = 90;
 
 // ============================================================================
 // CUDA Stream Flags
@@ -127,6 +159,9 @@ pub struct CudaDriver {
         unsafe extern "C" fn(name: *mut c_char, len: c_int, device: CUdevice) -> CUresult,
     /// cuDeviceTotalMem - Get total device memory
     pub cuDeviceTotalMem: unsafe extern "C" fn(bytes: *mut usize, device: CUdevice) -> CUresult,
+    /// cuDeviceGetAttribute - Get device attribute
+    pub cuDeviceGetAttribute:
+        unsafe extern "C" fn(pi: *mut c_int, attrib: c_int, device: CUdevice) -> CUresult,
 
     // Context Management (Primary Context API - preferred)
     /// cuDevicePrimaryCtxRetain - Retain primary context
@@ -143,6 +178,15 @@ pub struct CudaDriver {
     /// cuModuleLoadData - Load module from PTX/cubin data
     pub cuModuleLoadData:
         unsafe extern "C" fn(module: *mut CUmodule, image: *const c_void) -> CUresult,
+    /// cuModuleLoadDataEx - Load module with JIT options (target arch, error log)
+    #[allow(clippy::type_complexity)]
+    pub cuModuleLoadDataEx: unsafe extern "C" fn(
+        module: *mut CUmodule,
+        image: *const c_void,
+        num_options: c_uint,
+        options: *mut c_uint,
+        option_values: *mut *mut c_void,
+    ) -> CUresult,
     /// cuModuleUnload - Unload module
     pub cuModuleUnload: unsafe extern "C" fn(module: CUmodule) -> CUresult,
     /// cuModuleGetFunction - Get function from module
@@ -307,6 +351,8 @@ mod loading {
                 type FnDeviceGetName =
                     unsafe extern "C" fn(*mut c_char, c_int, CUdevice) -> CUresult;
                 type FnDeviceTotalMem = unsafe extern "C" fn(*mut usize, CUdevice) -> CUresult;
+                type FnDeviceGetAttribute =
+                    unsafe extern "C" fn(*mut c_int, c_int, CUdevice) -> CUresult;
                 type FnPrimaryCtxRetain =
                     unsafe extern "C" fn(*mut CUcontext, CUdevice) -> CUresult;
                 type FnPrimaryCtxRelease = unsafe extern "C" fn(CUdevice) -> CUresult;
@@ -314,6 +360,13 @@ mod loading {
                 type FnCtxSync = unsafe extern "C" fn() -> CUresult;
                 type FnModuleLoadData =
                     unsafe extern "C" fn(*mut CUmodule, *const c_void) -> CUresult;
+                type FnModuleLoadDataEx = unsafe extern "C" fn(
+                    *mut CUmodule,
+                    *const c_void,
+                    c_uint,
+                    *mut c_uint,
+                    *mut *mut c_void,
+                ) -> CUresult;
                 type FnModuleUnload = unsafe extern "C" fn(CUmodule) -> CUresult;
                 type FnModuleGetFunction =
                     unsafe extern "C" fn(*mut CUfunction, CUmodule, *const c_char) -> CUresult;
@@ -364,6 +417,10 @@ mod loading {
                     cuDeviceGet: load_sym!(cuDeviceGet, FnDeviceGet),
                     cuDeviceGetName: load_sym!(cuDeviceGetName, FnDeviceGetName),
                     cuDeviceTotalMem: load_sym!(cuDeviceTotalMem_v2, FnDeviceTotalMem),
+                    cuDeviceGetAttribute: load_sym!(
+                        cuDeviceGetAttribute,
+                        FnDeviceGetAttribute
+                    ),
                     cuDevicePrimaryCtxRetain: load_sym!(
                         cuDevicePrimaryCtxRetain,
                         FnPrimaryCtxRetain
@@ -375,6 +432,7 @@ mod loading {
                     cuCtxSetCurrent: load_sym!(cuCtxSetCurrent, FnCtxSetCurrent),
                     cuCtxSynchronize: load_sym!(cuCtxSynchronize, FnCtxSync),
                     cuModuleLoadData: load_sym!(cuModuleLoadData, FnModuleLoadData),
+                    cuModuleLoadDataEx: load_sym!(cuModuleLoadDataEx, FnModuleLoadDataEx),
                     cuModuleUnload: load_sym!(cuModuleUnload, FnModuleUnload),
                     cuModuleGetFunction: load_sym!(cuModuleGetFunction, FnModuleGetFunction),
                     cuMemAlloc: load_sym!(cuMemAlloc_v2, FnMemAlloc),
@@ -464,7 +522,9 @@ pub fn cuda_error_string(code: CUresult) -> &'static str {
         CUDA_ERROR_INVALID_PTX => "CUDA_ERROR_INVALID_PTX",
         CUDA_ERROR_NOT_FOUND => "CUDA_ERROR_NOT_FOUND",
         CUDA_ERROR_NOT_READY => "CUDA_ERROR_NOT_READY",
+        CUDA_ERROR_ILLEGAL_ADDRESS => "CUDA_ERROR_ILLEGAL_ADDRESS",
         CUDA_ERROR_ILLEGAL_INSTRUCTION => "CUDA_ERROR_ILLEGAL_INSTRUCTION",
+        CUDA_ERROR_LAUNCH_FAILED => "CUDA_ERROR_LAUNCH_FAILED",
         _ => "CUDA_ERROR_UNKNOWN",
     }
 }
