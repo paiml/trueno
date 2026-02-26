@@ -65,3 +65,6 @@ target/
 .pmat
 proptest-regressions/
 *.bak
+
+# Machine-specific cargo config (contains local target-dir paths)
+.cargo/config.toml
