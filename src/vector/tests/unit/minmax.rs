@@ -135,11 +135,8 @@ fn test_neg_double_negation() {
     let a = Vector::from_slice(&[1.0, -2.0, 3.0, -4.0, 5.0]);
     let neg_once = a.neg().unwrap();
     let neg_twice = neg_once.neg().unwrap();
-    for (i, (&original, &double_neg)) in a
-        .as_slice()
-        .iter()
-        .zip(neg_twice.as_slice().iter())
-        .enumerate()
+    for (i, (&original, &double_neg)) in
+        a.as_slice().iter().zip(neg_twice.as_slice().iter()).enumerate()
     {
         assert!(
             (original - double_neg).abs() < 1e-6,

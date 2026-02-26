@@ -271,13 +271,6 @@ fn test_matmul_q6k_scalar_multiple_blocks() {
 
     for (i, (s, d)) in output_scalar.iter().zip(output_dispatch.iter()).enumerate() {
         let diff = (s - d).abs();
-        assert!(
-            diff < 1e-3,
-            "Row {}: scalar={} vs dispatch={}, diff={}",
-            i,
-            s,
-            d,
-            diff
-        );
+        assert!(diff < 1e-3, "Row {}: scalar={} vs dispatch={}, diff={}", i, s, d, diff);
     }
 }

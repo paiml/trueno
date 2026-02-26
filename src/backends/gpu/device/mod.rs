@@ -110,12 +110,10 @@ impl GpuDevice {
         let len = input.len();
 
         // Create shader module
-        let shader = self
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some(&format!("{} Shader", op_name)),
-                source: wgpu::ShaderSource::Wgsl(shader_source.into()),
-            });
+        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(&format!("{} Shader", op_name)),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
 
         // Create input buffer
         let input_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -136,8 +134,7 @@ impl GpuDevice {
         });
 
         // Write input data
-        self.queue
-            .write_buffer(&input_buffer, 0, bytemuck::cast_slice(input));
+        self.queue.write_buffer(&input_buffer, 0, bytemuck::cast_slice(input));
 
         // Create optional uniform buffer
         let uniform_buffer = uniform_data.map(|data| {
@@ -191,22 +188,15 @@ impl GpuDevice {
 
         // Create bind group layout
         let bind_group_layout =
-            self.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some(&format!("{} Bind Group Layout", op_name)),
-                    entries: &bind_group_entries,
-                });
+            self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some(&format!("{} Bind Group Layout", op_name)),
+                entries: &bind_group_entries,
+            });
 
         // Create bind group entries
         let mut bind_entries = vec![
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: input_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: output_buffer.as_entire_binding(),
-            },
+            wgpu::BindGroupEntry { binding: 0, resource: input_buffer.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 1, resource: output_buffer.as_entire_binding() },
         ];
 
         // Add uniform buffer binding if present
@@ -225,24 +215,20 @@ impl GpuDevice {
         });
 
         // Create pipeline
-        let pipeline_layout = self
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some(&format!("{} Pipeline Layout", op_name)),
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
+        let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some(&format!("{} Pipeline Layout", op_name)),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
 
-        let pipeline = self
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(&format!("{} Pipeline", op_name)),
-                layout: Some(&pipeline_layout),
-                module: &shader,
-                entry_point: Some("main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
+        let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some(&format!("{} Pipeline", op_name)),
+            layout: Some(&pipeline_layout),
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
 
         // Create staging buffer for reading results
         let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -253,11 +239,9 @@ impl GpuDevice {
         });
 
         // Create command encoder
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some(&format!("{} Encoder", op_name)),
-            });
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some(&format!("{} Encoder", op_name)),
+        });
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -294,12 +278,7 @@ impl GpuDevice {
         });
 
         // Poll device to ensure GPU work completes and callbacks are invoked
-        self.device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .ok();
+        self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
 
         receiver
             .receive()
@@ -361,10 +340,7 @@ mod tests {
         let result = runtime::block_on(device.reduce_sum(&input)).expect("reduce_sum failed");
 
         // Kill mutant: verify result is NOT -1.0
-        assert_ne!(
-            result, -1.0,
-            "reduce_sum returned hardcoded -1.0 (mutant not killed)"
-        );
+        assert_ne!(result, -1.0, "reduce_sum returned hardcoded -1.0 (mutant not killed)");
 
         // Verify correct computation
         let expected: f32 = input.iter().sum();

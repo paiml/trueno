@@ -75,16 +75,8 @@ fn falsify_em_001_output_shape_empty() {
     let table = Matrix::from_vec(10, 4, vec![1.0; 40]).unwrap();
     let result = table.embedding_lookup(&[]).unwrap();
 
-    assert_eq!(
-        result.rows(),
-        0,
-        "FALSIFIED EM-001: empty indices should produce 0 rows"
-    );
-    assert_eq!(
-        result.cols(),
-        4,
-        "FALSIFIED EM-001: empty indices should preserve d_model=4"
-    );
+    assert_eq!(result.rows(), 0, "FALSIFIED EM-001: empty indices should produce 0 rows");
+    assert_eq!(result.cols(), 4, "FALSIFIED EM-001: empty indices should preserve d_model=4");
 }
 
 // ============================================================================
@@ -98,10 +90,7 @@ fn falsify_em_002_oob_returns_error() {
 
     // Exactly at boundary
     let result = table.embedding_lookup(&[5]);
-    assert!(
-        result.is_err(),
-        "FALSIFIED EM-002: index=5 should error for vocab_size=5"
-    );
+    assert!(result.is_err(), "FALSIFIED EM-002: index=5 should error for vocab_size=5");
 }
 
 #[test]
@@ -122,10 +111,7 @@ fn falsify_em_002_boundary_valid() {
 
     // Last valid index
     let result = table.embedding_lookup(&[4]);
-    assert!(
-        result.is_ok(),
-        "FALSIFIED EM-002: index=4 should succeed for vocab_size=5"
-    );
+    assert!(result.is_ok(), "FALSIFIED EM-002: index=4 should succeed for vocab_size=5");
 }
 
 #[test]
@@ -134,10 +120,7 @@ fn falsify_em_002_mixed_valid_invalid() {
 
     // Valid + invalid mix: should fail (first invalid contaminates)
     let result = table.embedding_lookup(&[0, 2, 10]);
-    assert!(
-        result.is_err(),
-        "FALSIFIED EM-002: mixed valid+invalid should error"
-    );
+    assert!(result.is_err(), "FALSIFIED EM-002: mixed valid+invalid should error");
 }
 
 // ============================================================================
@@ -155,11 +138,7 @@ fn falsify_em_003_determinism() {
     let r2 = table.embedding_lookup(&indices).unwrap();
 
     // Bit-identical comparison (not approximate)
-    assert_eq!(
-        r1.data,
-        r2.data,
-        "FALSIFIED EM-003: embedding lookup is non-deterministic"
-    );
+    assert_eq!(r1.data, r2.data, "FALSIFIED EM-003: embedding lookup is non-deterministic");
 }
 
 #[test]
@@ -175,14 +154,8 @@ fn falsify_em_003_repeated_index_determinism() {
         let v0 = result.get(0, col).unwrap();
         let v1 = result.get(1, col).unwrap();
         let v2 = result.get(2, col).unwrap();
-        assert_eq!(
-            v0, v1,
-            "FALSIFIED EM-003: repeated index produced different rows"
-        );
-        assert_eq!(
-            v1, v2,
-            "FALSIFIED EM-003: repeated index produced different rows"
-        );
+        assert_eq!(v0, v1, "FALSIFIED EM-003: repeated index produced different rows");
+        assert_eq!(v1, v2, "FALSIFIED EM-003: repeated index produced different rows");
     }
 }
 
@@ -193,19 +166,14 @@ fn falsify_em_003_repeated_index_determinism() {
 
 #[test]
 fn falsify_em_004_finite_output() {
-    let data: Vec<f32> = (0..500)
-        .map(|i| (i as f32 * 0.123).sin() * 100.0)
-        .collect();
+    let data: Vec<f32> = (0..500).map(|i| (i as f32 * 0.123).sin() * 100.0).collect();
     let table = Matrix::from_vec(25, 20, data).unwrap();
     let indices: Vec<usize> = (0..25).collect();
 
     let result = table.embedding_lookup(&indices).unwrap();
 
     for (i, val) in result.data.iter().enumerate() {
-        assert!(
-            val.is_finite(),
-            "FALSIFIED EM-004: output[{i}] = {val} is not finite"
-        );
+        assert!(val.is_finite(), "FALSIFIED EM-004: output[{i}] = {val} is not finite");
     }
 }
 
@@ -220,16 +188,8 @@ fn falsify_em_004_no_nan_no_inf() {
     let nan_count = result.data.iter().filter(|v| v.is_nan()).count();
     let inf_count = result.data.iter().filter(|v| v.is_infinite()).count();
 
-    assert_eq!(
-        nan_count, 0,
-        "FALSIFIED EM-004: output contains {} NaN values",
-        nan_count
-    );
-    assert_eq!(
-        inf_count, 0,
-        "FALSIFIED EM-004: output contains {} Inf values",
-        inf_count
-    );
+    assert_eq!(nan_count, 0, "FALSIFIED EM-004: output contains {} NaN values", nan_count);
+    assert_eq!(inf_count, 0, "FALSIFIED EM-004: output contains {} Inf values", inf_count);
 }
 
 // ============================================================================
@@ -326,25 +286,15 @@ fn falsify_emb_004_vocabulary_bounds() {
 
     // At the boundary: vocab_size-1 is valid
     let result = table.embedding_lookup(&[vocab_size - 1]);
-    assert!(
-        result.is_ok(),
-        "FALSIFIED EMB-004: valid index {} rejected",
-        vocab_size - 1
-    );
+    assert!(result.is_ok(), "FALSIFIED EMB-004: valid index {} rejected", vocab_size - 1);
 
     // Past the boundary: vocab_size is invalid
     let result = table.embedding_lookup(&[vocab_size]);
-    assert!(
-        result.is_err(),
-        "FALSIFIED EMB-004: OOB index {vocab_size} was not rejected"
-    );
+    assert!(result.is_err(), "FALSIFIED EMB-004: OOB index {vocab_size} was not rejected");
 
     // Way past the boundary
     let result = table.embedding_lookup(&[999]);
-    assert!(
-        result.is_err(),
-        "FALSIFIED EMB-004: OOB index 999 was not rejected"
-    );
+    assert!(result.is_err(), "FALSIFIED EMB-004: OOB index 999 was not rejected");
 }
 
 // ============================================================================
@@ -385,10 +335,7 @@ fn falsify_emb_005_per_row_non_zero() {
     for idx in 0..5 {
         let result = table.embedding_lookup(&[idx]).unwrap();
         let row_l2: f32 = result.data.iter().map(|v| v * v).sum::<f32>().sqrt();
-        assert!(
-            row_l2 > 1e-6,
-            "FALSIFIED EMB-005: row {idx} is all-zero (L2={row_l2})"
-        );
+        assert!(row_l2 > 1e-6, "FALSIFIED EMB-005: row {idx} is all-zero (L2={row_l2})");
     }
 }
 

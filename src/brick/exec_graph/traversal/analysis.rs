@@ -68,9 +68,8 @@ impl ExecutionGraph {
             }
         }
 
-        let mut queue: Vec<u32> = (0..self.nodes.len() as u32)
-            .filter(|&i| in_degree[i as usize] == 0)
-            .collect();
+        let mut queue: Vec<u32> =
+            (0..self.nodes.len() as u32).filter(|&i| in_degree[i as usize] == 0).collect();
         let mut topo_order = Vec::with_capacity(self.nodes.len());
 
         while let Some(u) = queue.pop() {
@@ -105,11 +104,8 @@ impl ExecutionGraph {
         }
 
         // Find endpoint with maximum distance
-        let (end_node, &total_time) = dist
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, &d)| d)
-            .unwrap_or((0, &0));
+        let (end_node, &total_time) =
+            dist.iter().enumerate().max_by_key(|(_, &d)| d).unwrap_or((0, &0));
 
         // Reconstruct path
         let mut path = vec![];
@@ -190,12 +186,7 @@ impl ExecutionGraph {
         let mut distances = HashMap::new();
 
         for (i, node) in self.nodes.iter().enumerate() {
-            if let ExecutionNode::Kernel {
-                arithmetic_intensity,
-                achieved_tflops,
-                ..
-            } = node
-            {
+            if let ExecutionNode::Kernel { arithmetic_intensity, achieved_tflops, .. } = node {
                 if let (Some(ai), Some(achieved)) = (arithmetic_intensity, achieved_tflops) {
                     // Roofline model: achievable = min(peak_compute, ai * bandwidth)
                     let bandwidth_bound = *ai * peak_bandwidth_gb_s / 1000.0; // Convert GB/s to TFLOP/s
@@ -330,17 +321,10 @@ impl ExecutionGraph {
             ExecutionNode::Brick { id, .. } => id.name().to_string(),
             ExecutionNode::Kernel { name, .. } => name.clone(),
             ExecutionNode::Function { name, .. } => name.clone(),
-            ExecutionNode::Transfer {
-                direction,
-                src,
-                dst,
-                ..
-            } => {
+            ExecutionNode::Transfer { direction, src, dst, .. } => {
                 format!("{:?} {} → {}", direction, src, dst)
             }
-            ExecutionNode::AsyncTask {
-                name, poll_count, ..
-            } => {
+            ExecutionNode::AsyncTask { name, poll_count, .. } => {
                 format!("{} ({}polls)", name, poll_count)
             }
         }

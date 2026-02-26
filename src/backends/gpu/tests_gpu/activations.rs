@@ -15,12 +15,7 @@ fn test_gpu_leaky_relu_basic() {
         // Expected: max(negative_slope * x, x)
         let expected = [-0.03, -0.01, 0.0, 1.0, 3.0];
         for (r, e) in output.iter().zip(expected.iter()) {
-            assert!(
-                (r - e).abs() < 1e-4,
-                "Leaky ReLU mismatch: got={}, expected={}",
-                r,
-                e
-            );
+            assert!((r - e).abs() < 1e-4, "Leaky ReLU mismatch: got={}, expected={}", r, e);
         }
     } else {
         eprintln!("GPU leaky_relu failed: {:?}", result);
@@ -68,12 +63,7 @@ fn test_gpu_tanh_basic() {
     if let Ok(output) = result {
         for (r, &x) in output.iter().zip(input.iter()) {
             let expected = x.tanh();
-            assert!(
-                (r - expected).abs() < 1e-4,
-                "Tanh mismatch: got={}, expected={}",
-                r,
-                expected
-            );
+            assert!((r - expected).abs() < 1e-4, "Tanh mismatch: got={}, expected={}", r, expected);
         }
     } else {
         eprintln!("GPU tanh failed: {:?}", result);
@@ -124,11 +114,7 @@ fn test_gpu_softmax_basic() {
     if let Ok(output) = result {
         // Softmax should sum to 1
         let sum: f32 = output.iter().sum();
-        assert!(
-            (sum - 1.0).abs() < 1e-3,
-            "Softmax sum should be 1, got {}",
-            sum
-        );
+        assert!((sum - 1.0).abs() < 1e-3, "Softmax sum should be 1, got {}", sum);
 
         // All values should be positive
         for &v in &output {
@@ -165,11 +151,7 @@ fn test_gpu_log_softmax_basic() {
 
         // exp(log_softmax) should sum to 1
         let exp_sum: f32 = output.iter().map(|x| x.exp()).sum();
-        assert!(
-            (exp_sum - 1.0).abs() < 1e-3,
-            "exp(log_softmax) should sum to 1, got {}",
-            exp_sum
-        );
+        assert!((exp_sum - 1.0).abs() < 1e-3, "exp(log_softmax) should sum to 1, got {}", exp_sum);
     } else {
         eprintln!("GPU log_softmax failed: {:?}", result);
     }

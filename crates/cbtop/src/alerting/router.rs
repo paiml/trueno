@@ -18,11 +18,7 @@ struct RateLimiter {
 
 impl RateLimiter {
     fn new(max_alerts: usize, window: Duration) -> Self {
-        Self {
-            max_alerts,
-            window,
-            timestamps: HashMap::new(),
-        }
+        Self { max_alerts, window, timestamps: HashMap::new() }
     }
 
     fn should_allow(&mut self, source: &str) -> bool {
@@ -52,10 +48,7 @@ struct Deduplicator {
 
 impl Deduplicator {
     fn new(window: Duration) -> Self {
-        Self {
-            seen: HashMap::new(),
-            window,
-        }
+        Self { seen: HashMap::new(), window }
     }
 
     fn is_duplicate(&mut self, alert_id: &str) -> bool {
@@ -153,11 +146,7 @@ impl AlertRouter {
 
     /// Add channel for severity
     pub fn add_route(&mut self, severity: AlertSeverity, channel: AlertChannel) {
-        self.config
-            .severity_routes
-            .entry(severity)
-            .or_default()
-            .push(channel);
+        self.config.severity_routes.entry(severity).or_default().push(channel);
     }
 
     /// Add default channel
@@ -189,12 +178,7 @@ impl AlertRouter {
 
         match channel {
             AlertChannel::Console => {
-                println!(
-                    "[{}] {} - {}",
-                    alert.severity.name(),
-                    alert.title,
-                    alert.message
-                );
+                println!("[{}] {} - {}", alert.severity.name(), alert.title, alert.message);
                 DeliveryResult::success("console", 0)
             }
             AlertChannel::Slack { webhook_url: _ } => {
@@ -222,10 +206,8 @@ impl AlertRouter {
 
         // Get channels and send
         let channels = self.get_channels(alert.severity);
-        let results: Vec<DeliveryResult> = channels
-            .iter()
-            .map(|ch| self.send_to_channel(&alert, ch))
-            .collect();
+        let results: Vec<DeliveryResult> =
+            channels.iter().map(|ch| self.send_to_channel(&alert, ch)).collect();
 
         // Store results
         self.delivery_results.extend(results.clone());

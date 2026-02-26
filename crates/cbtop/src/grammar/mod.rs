@@ -89,9 +89,7 @@ mod tests {
 
     #[test]
     fn test_builder_with_workload() {
-        let result = ComputeBlock::builder()
-            .workload(WorkloadSpec::dot(1000))
-            .build();
+        let result = ComputeBlock::builder().workload(WorkloadSpec::dot(1000)).build();
         assert!(result.is_ok());
     }
 
@@ -128,10 +126,7 @@ mod tests {
     #[test]
     fn test_linear_scale_invalid_domain() {
         let result = LinearResourceScale::new((100.0, 0.0), (0.0, 8.0));
-        assert!(matches!(
-            result,
-            Err(GrammarError::InvalidScaleDomain { .. })
-        ));
+        assert!(matches!(result, Err(GrammarError::InvalidScaleDomain { .. })));
     }
 
     #[test]
@@ -151,10 +146,7 @@ mod tests {
     #[test]
     fn test_composition_modes() {
         let batch = CompositionMode::batch(32);
-        assert!(matches!(
-            batch,
-            CompositionMode::Batch { batch_size: 32, .. }
-        ));
+        assert!(matches!(batch, CompositionMode::Batch { batch_size: 32, .. }));
 
         let dp = CompositionMode::data_parallel(4);
         assert!(matches!(dp, CompositionMode::DataParallel { shards: 4 }));

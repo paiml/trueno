@@ -93,23 +93,13 @@ fn test_avx512_backend_vector_ops() {
     let dot = v1.dot(&v2).unwrap();
     let expected_dot: f32 = data1.iter().zip(data2.iter()).map(|(a, b)| a * b).sum();
     let dot_rel_err = (dot - expected_dot).abs() / expected_dot.abs().max(1.0);
-    assert!(
-        dot_rel_err < 0.01,
-        "dot mismatch: {} vs {}",
-        dot,
-        expected_dot
-    );
+    assert!(dot_rel_err < 0.01, "dot mismatch: {} vs {}", dot, expected_dot);
 
     // Test sum
     let sum = v1.sum().unwrap();
     let expected_sum: f32 = data1.iter().sum();
     let sum_rel_err = (sum - expected_sum).abs() / expected_sum.abs().max(1.0);
-    assert!(
-        sum_rel_err < 0.01,
-        "sum mismatch: {} vs {}",
-        sum,
-        expected_sum
-    );
+    assert!(sum_rel_err < 0.01, "sum mismatch: {} vs {}", sum, expected_sum);
 
     // Test max
     let max = v1.max().unwrap();
@@ -189,19 +179,13 @@ fn test_with_alignment_invalid_not_power_of_two() {
         assert!(result.is_err(), "Alignment {} should be invalid", alignment);
         match result {
             Err(TruenoError::InvalidInput(msg)) => {
-                assert!(
-                    msg.contains("power of 2"),
-                    "Error message should mention power of 2"
-                );
+                assert!(msg.contains("power of 2"), "Error message should mention power of 2");
                 assert!(
                     msg.contains(&alignment.to_string()),
                     "Error message should mention the invalid alignment"
                 );
             }
-            _ => panic!(
-                "Expected InvalidInput error for non-power-of-2 alignment {}",
-                alignment
-            ),
+            _ => panic!("Expected InvalidInput error for non-power-of-2 alignment {}", alignment),
         }
     }
 }

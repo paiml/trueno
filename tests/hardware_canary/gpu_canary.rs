@@ -36,30 +36,18 @@ fn canary_gpu_vector_roundtrip() {
     let stream = CudaStream::new(&ctx).expect("CUDA stream creation failed");
 
     // Test data: recognizable pattern to verify integrity
-    let test_data: Vec<f32> = vec![
-        1.0,
-        2.0,
-        3.0,
-        4.0,
-        0.5,
-        -0.5,
-        std::f32::consts::PI,
-        std::f32::consts::E,
-    ];
+    let test_data: Vec<f32> =
+        vec![1.0, 2.0, 3.0, 4.0, 0.5, -0.5, std::f32::consts::PI, std::f32::consts::E];
     let n = test_data.len();
 
     // Allocate GPU buffer and upload
     let mut gpu_buffer: GpuBuffer<f32> =
         GpuBuffer::new(&ctx, n).expect("GPU buffer allocation failed");
-    gpu_buffer
-        .copy_from_host(&test_data)
-        .expect("Host→GPU copy failed");
+    gpu_buffer.copy_from_host(&test_data).expect("Host→GPU copy failed");
 
     // Download back to host
     let mut result = vec![0.0f32; n];
-    gpu_buffer
-        .copy_to_host(&mut result)
-        .expect("GPU→Host copy failed");
+    gpu_buffer.copy_to_host(&mut result).expect("GPU→Host copy failed");
 
     // Synchronize to ensure all operations complete
     stream.synchronize().expect("Stream sync failed");
@@ -75,10 +63,7 @@ fn canary_gpu_vector_roundtrip() {
         );
     }
 
-    println!(
-        "✅ GPU CANARY PASSED: Vector roundtrip successful ({} elements)",
-        n
-    );
+    println!("✅ GPU CANARY PASSED: Vector roundtrip successful ({} elements)", n);
 }
 
 /// GPU Canary: Verify CUDA device properties are accessible
@@ -96,10 +81,7 @@ fn canary_gpu_device_info() {
     };
 
     // If we got here, CUDA is working
-    println!(
-        "✅ GPU CANARY PASSED: CUDA device {} accessible",
-        ctx.device()
-    );
+    println!("✅ GPU CANARY PASSED: CUDA device {} accessible", ctx.device());
 }
 
 /// GPU Canary: Basic kernel execution test
@@ -121,21 +103,19 @@ fn canary_gpu_kernel_execution() {
     let stream = CudaStream::new(&ctx).expect("CUDA stream");
 
     // Simple kernel: write thread ID to output
-    let kernel = PtxKernel::new("canary_kernel")
-        .param(PtxType::U64, "output")
-        .build(|ctx| {
-            let out_ptr = ctx.load_param_u64("output");
-            let tid = ctx.special_reg(PtxReg::TidX);
+    let kernel = PtxKernel::new("canary_kernel").param(PtxType::U64, "output").build(|ctx| {
+        let out_ptr = ctx.load_param_u64("output");
+        let tid = ctx.special_reg(PtxReg::TidX);
 
-            // Compute output address: output + tid * 4
-            let offset = ctx.mul_u32(tid, 4); // mul_u32 takes (VirtualReg, u32)
-            let offset64 = ctx.cvt_u64_u32(offset);
-            let addr = ctx.add_u64(out_ptr, offset64);
+        // Compute output address: output + tid * 4
+        let offset = ctx.mul_u32(tid, 4); // mul_u32 takes (VirtualReg, u32)
+        let offset64 = ctx.cvt_u64_u32(offset);
+        let addr = ctx.add_u64(out_ptr, offset64);
 
-            // Write tid to output[tid]
-            ctx.st_global_u32(addr, tid);
-            ctx.ret();
-        });
+        // Write tid to output[tid]
+        ctx.st_global_u32(addr, tid);
+        ctx.ret();
+    });
 
     let ptx = PtxModule::new()
         .version(8, 0)
@@ -152,11 +132,7 @@ fn canary_gpu_kernel_execution() {
     output.copy_from_host(&[0u32; 32]).expect("Buffer init");
 
     // Launch kernel with 32 threads
-    let config = LaunchConfig {
-        grid: (1, 1, 1),
-        block: (32, 1, 1),
-        shared_mem: 0,
-    };
+    let config = LaunchConfig { grid: (1, 1, 1), block: (32, 1, 1), shared_mem: 0 };
 
     let mut args: [*mut c_void; 1] = [output.as_kernel_arg()];
 

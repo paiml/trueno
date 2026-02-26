@@ -88,9 +88,7 @@ fn test_matmul_microkernel_8x1_avx512() {
     // Test case 3: Zero accumulation
     {
         let zeros = vec![0.0f32; 32];
-        let rows: [&[f32]; 8] = [
-            &zeros, &zeros, &zeros, &zeros, &zeros, &zeros, &zeros, &zeros,
-        ];
+        let rows: [&[f32]; 8] = [&zeros, &zeros, &zeros, &zeros, &zeros, &zeros, &zeros, &zeros];
         let b_col: Vec<f32> = (1..=32).map(|x| x as f32).collect();
         let mut results = [0.0f32; 8];
 
@@ -100,12 +98,7 @@ fn test_matmul_microkernel_8x1_avx512() {
         }
 
         for (i, &result) in results.iter().enumerate() {
-            assert!(
-                result.abs() < 1e-6,
-                "Row {}: expected 0.0, got {}",
-                i,
-                result
-            );
+            assert!(result.abs() < 1e-6, "Row {}: expected 0.0, got {}", i, result);
         }
     }
 }
@@ -138,21 +131,12 @@ fn test_matmul_avx512_backend_large_matrix() {
     assert_eq!(result.cols, size);
 
     // Spot check a few values against scalar reference
-    let a_ref = Matrix::from_vec(
-        size,
-        size,
-        (0..size * size).map(|i| (i % 10) as f32).collect(),
-    )
-    .expect("valid data");
-    let b_ref = Matrix::from_vec(
-        size,
-        size,
-        (0..size * size).map(|i| ((i + 5) % 10) as f32).collect(),
-    )
-    .expect("valid data");
-    let expected = a_ref
-        .matmul(&b_ref)
-        .expect("reference matmul should succeed");
+    let a_ref = Matrix::from_vec(size, size, (0..size * size).map(|i| (i % 10) as f32).collect())
+        .expect("valid data");
+    let b_ref =
+        Matrix::from_vec(size, size, (0..size * size).map(|i| ((i + 5) % 10) as f32).collect())
+            .expect("valid data");
+    let expected = a_ref.matmul(&b_ref).expect("reference matmul should succeed");
 
     // Check first few and last few elements
     for i in 0..5 {
@@ -191,9 +175,7 @@ fn test_matmul_avx512_remainder_handling() {
     // Compare with scalar
     let a_scalar = Matrix::from_vec_with_backend(size, size, a_data, Backend::Scalar);
     let b_scalar = Matrix::from_vec_with_backend(size, size, b_data, Backend::Scalar);
-    let expected = a_scalar
-        .matmul(&b_scalar)
-        .expect("scalar matmul should succeed");
+    let expected = a_scalar.matmul(&b_scalar).expect("scalar matmul should succeed");
 
     for i in 0..size {
         for j in 0..size {
@@ -225,16 +207,12 @@ fn test_matmul_avx512_l3_blocking() {
     // Use 520 to also exercise remainder handling (520 = 512 + 8, 520 % 16 != 0)
     let size = 520;
     let a_data: Vec<f32> = (0..size * size).map(|i| (i % 7) as f32 * 0.1).collect();
-    let b_data: Vec<f32> = (0..size * size)
-        .map(|i| ((i + 3) % 11) as f32 * 0.1)
-        .collect();
+    let b_data: Vec<f32> = (0..size * size).map(|i| ((i + 3) % 11) as f32 * 0.1).collect();
 
     let a = Matrix::from_vec_with_backend(size, size, a_data.clone(), Backend::AVX512);
     let b = Matrix::from_vec_with_backend(size, size, b_data.clone(), Backend::AVX512);
 
-    let result = a
-        .matmul(&b)
-        .expect("AVX-512 L3 blocking matmul should succeed");
+    let result = a.matmul(&b).expect("AVX-512 L3 blocking matmul should succeed");
 
     // Verify dimensions
     assert_eq!(result.rows, size);
@@ -243,9 +221,7 @@ fn test_matmul_avx512_l3_blocking() {
     // Compare with scalar reference
     let a_scalar = Matrix::from_vec_with_backend(size, size, a_data, Backend::Scalar);
     let b_scalar = Matrix::from_vec_with_backend(size, size, b_data, Backend::Scalar);
-    let expected = a_scalar
-        .matmul(&b_scalar)
-        .expect("scalar matmul should succeed");
+    let expected = a_scalar.matmul(&b_scalar).expect("scalar matmul should succeed");
 
     // Check corners and some middle elements
     let check_indices = [
@@ -363,16 +339,12 @@ fn test_matmul_avx512_parallel_large() {
 
     let size = 1024; // Triggers parallel path (PARALLEL_THRESHOLD = 1024)
     let a_data: Vec<f32> = (0..size * size).map(|i| ((i % 10) as f32) * 0.1).collect();
-    let b_data: Vec<f32> = (0..size * size)
-        .map(|i| (((i + 3) % 10) as f32) * 0.1)
-        .collect();
+    let b_data: Vec<f32> = (0..size * size).map(|i| (((i + 3) % 10) as f32) * 0.1).collect();
 
     let a = Matrix::from_vec_with_backend(size, size, a_data.clone(), Backend::AVX512);
     let b = Matrix::from_vec_with_backend(size, size, b_data.clone(), Backend::AVX512);
 
-    let result = a
-        .matmul(&b)
-        .expect("parallel AVX-512 matmul should succeed");
+    let result = a.matmul(&b).expect("parallel AVX-512 matmul should succeed");
     assert_eq!(result.shape(), (size, size));
 
     // Spot check against scalar reference

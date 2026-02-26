@@ -21,12 +21,7 @@ pub struct PcieMetrics {
 
 impl Default for PcieMetrics {
     fn default() -> Self {
-        Self {
-            timestamp: Instant::now(),
-            gen4_count: 0,
-            gen5_count: 0,
-            max_width: 0,
-        }
+        Self { timestamp: Instant::now(), gen4_count: 0, gen5_count: 0, max_width: 0 }
     }
 }
 
@@ -36,9 +31,7 @@ pub struct PcieCollectorBrick {
 
 impl PcieCollectorBrick {
     pub fn new() -> Self {
-        Self {
-            history: RingBuffer::new(120),
-        }
+        Self { history: RingBuffer::new(120) }
     }
 
     pub fn collect(&mut self) -> PcieMetrics {
@@ -78,12 +71,7 @@ impl PcieCollectorBrick {
             }
         }
 
-        Ok(PcieMetrics {
-            timestamp: Instant::now(),
-            gen4_count: gen4,
-            gen5_count: gen5,
-            max_width,
-        })
+        Ok(PcieMetrics { timestamp: Instant::now(), gen4_count: gen4, gen5_count: gen5, max_width })
     }
 
     pub fn history(&self) -> &RingBuffer<PcieMetrics> {
@@ -109,11 +97,7 @@ impl Brick for PcieCollectorBrick {
     }
 
     fn budget(&self) -> BrickBudget {
-        BrickBudget {
-            collect_ms: 10,
-            layout_ms: 0,
-            render_ms: 0,
-        }
+        BrickBudget { collect_ms: 10, layout_ms: 0, render_ms: 0 }
     }
 
     fn verify(&self) -> BrickVerification {

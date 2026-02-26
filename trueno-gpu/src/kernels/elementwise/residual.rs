@@ -208,10 +208,7 @@ impl FusedResidualRmsNormKernel {
     /// Create a new fused residual+rmsnorm kernel
     #[must_use]
     pub fn new(hidden_size: u32) -> Self {
-        Self {
-            hidden_size,
-            epsilon: 1e-5,
-        }
+        Self { hidden_size, epsilon: 1e-5 }
     }
 
     /// Set custom epsilon value

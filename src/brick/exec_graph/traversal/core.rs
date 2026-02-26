@@ -83,12 +83,7 @@ impl ExecutionGraph {
             dst.0,
             self.nodes.len()
         );
-        self.edges.push(ExecutionEdge {
-            src,
-            dst,
-            edge_type,
-            weight: 1.0,
-        });
+        self.edges.push(ExecutionEdge { src, dst, edge_type, weight: 1.0 });
     }
 
     /// Add an edge with a weight.
@@ -99,12 +94,7 @@ impl ExecutionGraph {
         edge_type: EdgeType,
         weight: f32,
     ) {
-        self.edges.push(ExecutionEdge {
-            src,
-            dst,
-            edge_type,
-            weight,
-        });
+        self.edges.push(ExecutionEdge { src, dst, edge_type, weight });
     }
 
     /// Push a scope for hierarchical recording.
@@ -146,10 +136,7 @@ impl ExecutionGraph {
         block: (u32, u32, u32),
         shared_mem: u32,
     ) -> ExecutionNodeId {
-        debug_assert!(
-            grid.0 > 0 && grid.1 > 0 && grid.2 > 0,
-            "CB-BUDGET: grid dims must be > 0"
-        );
+        debug_assert!(grid.0 > 0 && grid.1 > 0 && grid.2 > 0, "CB-BUDGET: grid dims must be > 0");
         debug_assert!(
             block.0 > 0 && block.1 > 0 && block.2 > 0,
             "CB-BUDGET: block dims must be > 0"
@@ -243,9 +230,7 @@ impl ExecutionGraph {
 
     /// Get a node by name.
     pub fn node_by_name(&self, name: &str) -> Option<(ExecutionNodeId, &ExecutionNode)> {
-        self.name_to_id
-            .get(name)
-            .and_then(|&id| self.nodes.get(id.0 as usize).map(|n| (id, n)))
+        self.name_to_id.get(name).and_then(|&id| self.nodes.get(id.0 as usize).map(|n| (id, n)))
     }
 
     /// Get all nodes.
@@ -295,9 +280,8 @@ impl ExecutionGraph {
             if let ExecutionNode::Brick { timing_ns, .. } = node {
                 // Check if this brick has kernel children
                 let node_id = ExecutionNodeId(id as u32);
-                let has_kernel = self
-                    .outgoing_edges(node_id)
-                    .any(|e| e.edge_type == EdgeType::Launches);
+                let has_kernel =
+                    self.outgoing_edges(node_id).any(|e| e.edge_type == EdgeType::Launches);
 
                 if has_kernel {
                     match &slowest {

@@ -74,11 +74,7 @@ fn test_f136_cpa_parallel_heavy_branch() {
         "F136: Critical path should be >= 15ms, got {}ms",
         total_ns / 1_000_000
     );
-    assert!(
-        path.len() >= 5,
-        "F136: Critical path should have >= 5 nodes, got {}",
-        path.len()
-    );
+    assert!(path.len() >= 5, "F136: Critical path should have >= 5 nodes, got {}", path.len());
 }
 
 /// F137: DependsOn edge overrides wall-clock sequence
@@ -209,22 +205,11 @@ fn test_f140_transfer_metadata_preservation() {
 
     // Verify the node was recorded with correct data
     let node = &graph.nodes()[transfer_id.0 as usize];
-    if let ExecutionNode::Transfer {
-        src,
-        dst,
-        bytes,
-        direction,
-        timing_ns,
-    } = node
-    {
+    if let ExecutionNode::Transfer { src, dst, bytes, direction, timing_ns } = node {
         assert_eq!(src, "src_buffer", "F140: Source buffer mismatch");
         assert_eq!(dst, "dst_buffer", "F140: Dest buffer mismatch");
         assert_eq!(*bytes, 4 * 1024 * 1024, "F140: Bytes mismatch");
-        assert_eq!(
-            *direction,
-            TransferDirection::H2D,
-            "F140: Direction mismatch"
-        );
+        assert_eq!(*direction, TransferDirection::H2D, "F140: Direction mismatch");
         assert_eq!(*timing_ns, Some(25_000), "F140: Timing mismatch");
     } else {
         panic!("F140: Expected Transfer node");

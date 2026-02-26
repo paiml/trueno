@@ -99,12 +99,7 @@ fn test_amx_tile_config_default() {
 
 #[test]
 fn test_amx_tile_config_custom() {
-    let config = AmxTileConfig {
-        palette: 1,
-        start_row: 0,
-        rows: 16,
-        bytes_per_row: 64,
-    };
+    let config = AmxTileConfig { palette: 1, start_row: 0, rows: 16, bytes_per_row: 64 };
     assert_eq!(config.palette, 1);
     assert_eq!(config.rows, 16);
     assert_eq!(config.bytes_per_row, 64);
@@ -124,26 +119,11 @@ fn test_unroll_factor_value() {
 
 #[test]
 fn test_unroll_factor_for_backend() {
-    assert_eq!(
-        UnrollFactor::for_backend(ComputeBackend::Avx512),
-        UnrollFactor::X8
-    );
-    assert_eq!(
-        UnrollFactor::for_backend(ComputeBackend::Avx2),
-        UnrollFactor::X4
-    );
-    assert_eq!(
-        UnrollFactor::for_backend(ComputeBackend::Sse2),
-        UnrollFactor::X2
-    );
-    assert_eq!(
-        UnrollFactor::for_backend(ComputeBackend::Neon),
-        UnrollFactor::X2
-    );
-    assert_eq!(
-        UnrollFactor::for_backend(ComputeBackend::Scalar),
-        UnrollFactor::None
-    );
+    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Avx512), UnrollFactor::X8);
+    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Avx2), UnrollFactor::X4);
+    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Sse2), UnrollFactor::X2);
+    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Neon), UnrollFactor::X2);
+    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Scalar), UnrollFactor::None);
 }
 
 // =========================================================================
@@ -257,12 +237,7 @@ fn test_unroll_tail_process_small() {
 /// FALSIFICATION TEST: UnrollFactor values must be powers of 2
 #[test]
 fn test_falsify_unroll_factor_powers_of_two() {
-    let factors = [
-        UnrollFactor::None,
-        UnrollFactor::X2,
-        UnrollFactor::X4,
-        UnrollFactor::X8,
-    ];
+    let factors = [UnrollFactor::None, UnrollFactor::X2, UnrollFactor::X4, UnrollFactor::X8];
 
     for factor in &factors {
         let value = factor.value();
@@ -279,12 +254,7 @@ fn test_falsify_unroll_factor_powers_of_two() {
 #[test]
 fn test_falsify_unroll_tail_covers_all() {
     for total in [1, 7, 8, 10, 100, 1000] {
-        for factor in [
-            UnrollFactor::None,
-            UnrollFactor::X2,
-            UnrollFactor::X4,
-            UnrollFactor::X8,
-        ] {
+        for factor in [UnrollFactor::None, UnrollFactor::X2, UnrollFactor::X4, UnrollFactor::X8] {
             let mut iter = UnrollTailIterator::new(total, factor);
             let mut covered = 0usize;
 
@@ -321,10 +291,7 @@ fn test_falsify_simd_config_state_transitions() {
 
     // After ensure_ready, state must be Ready
     let result = config.ensure_ready();
-    assert!(
-        result.is_ok(),
-        "FALSIFICATION FAILED: ensure_ready should succeed"
-    );
+    assert!(result.is_ok(), "FALSIFICATION FAILED: ensure_ready should succeed");
     assert_eq!(
         config.state(),
         SimdBackendState::Ready,

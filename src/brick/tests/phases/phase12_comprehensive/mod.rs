@@ -97,10 +97,7 @@ fn test_f219_unroll_factor_traits() {
 /// F220: SimdBackendState Debug/PartialEq
 #[test]
 fn test_f220_simd_backend_state_traits() {
-    assert_eq!(
-        SimdBackendState::Uninitialized,
-        SimdBackendState::Uninitialized
-    );
+    assert_eq!(SimdBackendState::Uninitialized, SimdBackendState::Uninitialized);
     assert_ne!(SimdBackendState::Ready, SimdBackendState::Failed);
     assert!(!format!("{:?}", SimdBackendState::Configuring).is_empty());
 }
@@ -119,10 +116,7 @@ fn test_f222_flow_control_error_traits() {
     let err = FlowControlError::NegativeReservation;
     assert!(!format!("{err:?}").is_empty());
 
-    let err = FlowControlError::InsufficientCapacity {
-        requested: 100,
-        available: 50,
-    };
+    let err = FlowControlError::InsufficientCapacity { requested: 100, available: 50 };
     assert!(!format!("{err:?}").is_empty());
 }
 

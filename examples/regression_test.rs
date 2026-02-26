@@ -39,10 +39,7 @@ fn main() {
         let gflops = (2.0 * ops) / (time_ms / 1000.0) / 1e9;
 
         let path = if m == 1 { "vector-matrix" } else { "general" };
-        println!(
-            "{:30} {:>8.2}ms {:>5.1} GFLOPS  [{}]",
-            name, time_ms, gflops, path
-        );
+        println!("{:30} {:>8.2}ms {:>5.1} GFLOPS  [{}]", name, time_ms, gflops, path);
     }
 
     println!("\nNote: Check if 128x512x256 shows significant degradation vs baseline");

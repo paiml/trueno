@@ -7,11 +7,8 @@ fn main() {
     let kernel = CoalescedQ6KGemvKernel::new(1536, 8960);
     let ptx_kernel = kernel.build_ptx();
 
-    let module = PtxModule::new()
-        .version(8, 0)
-        .target("sm_86")
-        .address_size(64)
-        .add_kernel(ptx_kernel);
+    let module =
+        PtxModule::new().version(8, 0).target("sm_86").address_size(64).add_kernel(ptx_kernel);
 
     let ptx = module.emit();
     println!("{}", ptx);

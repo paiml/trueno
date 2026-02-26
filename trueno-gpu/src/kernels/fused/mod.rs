@@ -57,10 +57,7 @@ pub struct FusedQKVKernel {
 impl FusedQKVKernel {
     /// Create a new fused QKV kernel.
     pub fn new(hidden_size: usize, kv_dim: usize) -> Self {
-        Self {
-            hidden_size,
-            kv_dim,
-        }
+        Self { hidden_size, kv_dim }
     }
 }
 
@@ -234,10 +231,7 @@ pub struct FusedGateUpKernel {
 impl FusedGateUpKernel {
     /// Create a new fused gate+up kernel.
     pub fn new(hidden_size: usize, intermediate_size: usize) -> Self {
-        Self {
-            hidden_size,
-            intermediate_size,
-        }
+        Self { hidden_size, intermediate_size }
     }
 }
 

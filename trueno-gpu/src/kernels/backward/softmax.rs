@@ -196,11 +196,7 @@ mod tests {
     fn test_softmax_backward_barrier_safety() {
         let kernel = SoftmaxBackwardKernel::new(64, 32);
         let result = kernel.analyze_barrier_safety();
-        assert!(
-            result.is_safe,
-            "Softmax backward should be barrier-safe: {:?}",
-            result.violations
-        );
+        assert!(result.is_safe, "Softmax backward should be barrier-safe: {:?}", result.violations);
     }
 
     #[test]

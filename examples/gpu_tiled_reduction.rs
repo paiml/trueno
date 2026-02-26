@@ -79,12 +79,7 @@ fn demo_small_sum(gpu: &mut GpuBackend) -> Result<(), String> {
     // Expected sum: 0 + 1 + 2 + ... + 255 = 255 * 256 / 2 = 32640
     let expected: f32 = (0..256).map(|i| i as f32).sum();
 
-    println!(
-        "   Matrix: {}x{} = {} elements",
-        width,
-        height,
-        width * height
-    );
+    println!("   Matrix: {}x{} = {} elements", width, height, width * height);
     println!("   Values: 0, 1, 2, ..., 255");
     println!("   Expected sum: {}", expected);
 
@@ -110,12 +105,7 @@ fn demo_large_sum(gpu: &mut GpuBackend) -> Result<(), String> {
     let data: Vec<f32> = vec![1.0; width * height];
     let expected = (width * height) as f32;
 
-    println!(
-        "   Matrix: {}x{} = {} elements",
-        width,
-        height,
-        width * height
-    );
+    println!("   Matrix: {}x{} = {} elements", width, height, width * height);
     println!("   All values: 1.0");
     println!("   Expected sum: {}", expected);
 
@@ -148,12 +138,7 @@ fn demo_tiled_max(gpu: &mut GpuBackend) -> Result<(), String> {
     let mut data: Vec<f32> = vec![1.0; width * height];
     data[5050] = 999.0; // Hidden max in the middle
 
-    println!(
-        "   Matrix: {}x{} = {} elements",
-        width,
-        height,
-        width * height
-    );
+    println!("   Matrix: {}x{} = {} elements", width, height, width * height);
     println!("   Values: all 1.0 except one 999.0 at index 5050");
 
     let result = gpu.tiled_max_2d_gpu(&data, width, height)?;
@@ -178,12 +163,7 @@ fn demo_tiled_min(gpu: &mut GpuBackend) -> Result<(), String> {
     let mut data: Vec<f32> = vec![100.0; width * height];
     data[7777] = -42.0; // Hidden min
 
-    println!(
-        "   Matrix: {}x{} = {} elements",
-        width,
-        height,
-        width * height
-    );
+    println!("   Matrix: {}x{} = {} elements", width, height, width * height);
     println!("   Values: all 100.0 except one -42.0 at index 7777");
 
     let result = gpu.tiled_min_2d_gpu(&data, width, height)?;

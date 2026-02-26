@@ -52,10 +52,7 @@ fn main() {
     let non_aligned: TensorView<f32> = TensorView::new([100, 100, 1, 1]);
     let partition2: PartitionView<f32> = PartitionView::new(non_aligned, [16, 16, 1, 1]);
     println!("\n   Non-aligned tensor: [100, 100]");
-    println!(
-        "   Tile count: {:?} (ceil division)",
-        partition2.tile_count()
-    );
+    println!("   Tile count: {:?} (ceil division)", partition2.tile_count());
     println!("   Total tiles: {}", partition2.total_tiles());
 
     // Get tile info for edge tiles
@@ -85,9 +82,8 @@ fn main() {
     println!("   Match: {}", (sum - expected_sum).abs() < 1e-3);
 
     // Tiled max reduction
-    let max_data: Vec<f32> = vec![
-        1.0, 5.0, 3.0, 9.0, 2.0, 7.0, 8.0, 4.0, 6.0, 10.0, 15.0, 12.0, 11.0, 14.0, 13.0, 16.0,
-    ];
+    let max_data: Vec<f32> =
+        vec![1.0, 5.0, 3.0, 9.0, 2.0, 7.0, 8.0, 4.0, 6.0, 10.0, 15.0, 12.0, 11.0, 14.0, 13.0, 16.0];
     let max = tiled_max_2d(&max_data, 4, 4);
     println!("\n   Tiled Max (4x4 matrix with max=16):");
     println!("   Result: {}", max);

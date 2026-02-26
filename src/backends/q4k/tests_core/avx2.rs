@@ -40,11 +40,7 @@ fn test_avx2_large_matrix_mul() {
 
     for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
         let diff = (scalar - dispatch).abs();
-        let rel_diff = if scalar.abs() > 1e-6 {
-            diff / scalar.abs()
-        } else {
-            diff
-        };
+        let rel_diff = if scalar.abs() > 1e-6 { diff / scalar.abs() } else { diff };
         assert!(
             rel_diff < 1e-4 || diff < 1e-4,
             "Row {}: AVX2 vs scalar divergence: {} vs {} (d={}, rel={})",
@@ -139,11 +135,7 @@ fn test_avx2_non_aligned_dimensions() {
 
     for (i, (scalar, dispatch)) in scalar_output.iter().zip(dispatch_output.iter()).enumerate() {
         let diff = (scalar - dispatch).abs();
-        let rel_diff = if scalar.abs() > 1e-6 {
-            diff / scalar.abs()
-        } else {
-            diff
-        };
+        let rel_diff = if scalar.abs() > 1e-6 { diff / scalar.abs() } else { diff };
         // FMA operations can have ordering differences, allow 1e-5 relative error
         assert!(
             rel_diff < 1e-5 || diff < 1e-2,
@@ -189,11 +181,6 @@ fn test_parallel_avx2_large_batch() {
 
     assert_eq!(output.len(), out_dim);
     for (i, val) in output.iter().enumerate() {
-        assert!(
-            val.is_finite(),
-            "Row {}: parallel AVX2 produced non-finite: {}",
-            i,
-            val
-        );
+        assert!(val.is_finite(), "Row {}: parallel AVX2 produced non-finite: {}", i, val);
     }
 }

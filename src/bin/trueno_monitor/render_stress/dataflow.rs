@@ -25,9 +25,7 @@ pub(crate) fn render_dataflow_tab(f: &mut Frame, app: &App, area: Rect) {
             Line::from(""),
             Line::from(Span::styled(
                 "  No CUDA GPU Detected",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
             Line::from(Span::styled(
@@ -52,19 +50,14 @@ pub(crate) fn render_dataflow_tab(f: &mut Frame, app: &App, area: Rect) {
             Line::from(""),
             Line::from(Span::styled(
                 "  PCIe Data Flow",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
         ];
 
         for (i, gpu) in app.gpus.iter().enumerate() {
             lines.push(Line::from(vec![
-                Span::styled(
-                    format!("  GPU {}: ", i),
-                    Style::default().fg(Color::DarkGray),
-                ),
+                Span::styled(format!("  GPU {}: ", i), Style::default().fg(Color::DarkGray)),
                 Span::styled(&gpu.info.name, Style::default().fg(Color::Magenta)),
             ]));
 
@@ -99,9 +92,7 @@ pub(crate) fn render_dataflow_tab(f: &mut Frame, app: &App, area: Rect) {
                     Span::raw("    PCIe: "),
                     Span::styled(
                         "STRESS ACTIVE",
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
+                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
                     ),
                     Span::raw(" - "),
                     Span::styled(
@@ -125,9 +116,7 @@ pub(crate) fn render_dataflow_tab(f: &mut Frame, app: &App, area: Rect) {
 
         lines.push(Line::from(Span::styled(
             "  Active Transfers",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(""));
 
@@ -149,9 +138,7 @@ pub(crate) fn render_dataflow_tab(f: &mut Frame, app: &App, area: Rect) {
                         "Throughput: {:.2} G elements/sec",
                         app.gpu_ops_per_sec as f64 / 1_000_000_000.0
                     ),
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
                 ),
             ]));
         } else {

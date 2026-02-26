@@ -47,11 +47,7 @@ impl TiledQ4KMatvec {
             Q4K_SUPERBLOCK_SIZE
         );
 
-        Self {
-            config: TilingConfig::cpu_avx2_q4k_matvec(),
-            m,
-            k,
-        }
+        Self { config: TilingConfig::cpu_avx2_q4k_matvec(), m, k }
     }
 
     /// Get number of superblocks per row
@@ -78,11 +74,7 @@ impl TiledQ4KMatvec {
     /// Goal: Keep working set in L2 (256KB typical)
     /// Working set = midi_tile.m rows × K × sizeof(Q4K) + K × sizeof(f32)
     #[must_use]
-    #[allow(
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss
-    )]
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     // SAFETY: k ≤ 2^24 for practical matrix dims so usize→f32 is lossless;
     //         result of f32 multiply is non-negative and fits in usize.
     pub fn optimal_parallel_rows(&self, l2_bytes: usize) -> usize {
@@ -103,10 +95,7 @@ impl TiledQ4KMatvec {
     ///
     /// For parallel execution, use [`execute_parallel`] when the `parallel` feature is enabled.
     pub fn execute_scalar(&self, weights: &[u8], input: &[f32], output: &mut [f32]) {
-        assert_eq!(
-            weights.len(),
-            self.total_superblocks() * Q4K_SUPERBLOCK_BYTES
-        );
+        assert_eq!(weights.len(), self.total_superblocks() * Q4K_SUPERBLOCK_BYTES);
         assert_eq!(input.len(), self.k);
         assert_eq!(output.len(), self.m);
 
@@ -145,10 +134,7 @@ impl TiledQ4KMatvec {
     pub fn execute_parallel(&self, weights: &[u8], input: &[f32], output: &mut [f32]) {
         use rayon::prelude::*;
 
-        assert_eq!(
-            weights.len(),
-            self.total_superblocks() * Q4K_SUPERBLOCK_BYTES
-        );
+        assert_eq!(weights.len(), self.total_superblocks() * Q4K_SUPERBLOCK_BYTES);
         assert_eq!(input.len(), self.k);
         assert_eq!(output.len(), self.m);
 
@@ -386,11 +372,7 @@ pub fn extract_scale_min_6bit(scales: &[u8], idx: usize) -> (f32, f32) {
     // Extract min: branchless using masking
     let min_even = ((b0 >> 6) | ((b1 & 0x0F) << 2)) as u32;
     // For odd indices, we need byte at base+2, but use 0 if at boundary
-    let b2 = if base + 2 < scales.len() {
-        scales[base + 2]
-    } else {
-        0
-    };
+    let b2 = if base + 2 < scales.len() { scales[base + 2] } else { 0 };
     let min_odd = ((b1 >> 4) | ((b2 & 0x03) << 4)) as u32;
     let min = if is_odd == 0 { min_even } else { min_odd };
 

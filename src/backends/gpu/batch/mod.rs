@@ -69,25 +69,13 @@ pub(crate) enum GpuOp {
     Relu { input: BufferId, output: BufferId },
 
     /// Scalar multiplication: x * scalar
-    Scale {
-        input: BufferId,
-        output: BufferId,
-        scalar: f32,
-    },
+    Scale { input: BufferId, output: BufferId, scalar: f32 },
 
     /// Element-wise addition: a + b
-    Add {
-        a: BufferId,
-        b: BufferId,
-        output: BufferId,
-    },
+    Add { a: BufferId, b: BufferId, output: BufferId },
 
     /// Element-wise multiplication: a * b
-    Mul {
-        a: BufferId,
-        b: BufferId,
-        output: BufferId,
-    },
+    Mul { a: BufferId, b: BufferId, output: BufferId },
 
     /// Dot product: sum(a[i] * b[i])
     Dot {
@@ -109,11 +97,7 @@ pub(crate) enum GpuOp {
     Gelu { input: BufferId, output: BufferId },
 
     /// Element-wise subtraction: a - b
-    Sub {
-        a: BufferId,
-        b: BufferId,
-        output: BufferId,
-    },
+    Sub { a: BufferId, b: BufferId, output: BufferId },
 }
 
 /// Command batch for async GPU execution
@@ -156,14 +140,7 @@ impl GpuCommandBatch {
         let id = BufferId(self.next_buffer_id);
         self.next_buffer_id += 1;
 
-        self.buffers.insert(
-            id,
-            BufferInfo {
-                size,
-                data,
-                gpu_buffer: None,
-            },
-        );
+        self.buffers.insert(id, BufferInfo { size, data, gpu_buffer: None });
 
         id
     }
@@ -201,11 +178,7 @@ impl GpuCommandBatch {
 
         let output = self.alloc_output(size);
 
-        self.operations.push(GpuOp::Scale {
-            input,
-            output,
-            scalar,
-        });
+        self.operations.push(GpuOp::Scale { input, output, scalar });
 
         output
     }
@@ -221,11 +194,7 @@ impl GpuCommandBatch {
         let size_a = self.buffers.get(&a).expect("Invalid buffer ID").size;
         let size_b = self.buffers.get(&b).expect("Invalid buffer ID").size;
 
-        assert_eq!(
-            size_a, size_b,
-            "Buffer size mismatch: {} vs {}",
-            size_a, size_b
-        );
+        assert_eq!(size_a, size_b, "Buffer size mismatch: {} vs {}", size_a, size_b);
 
         let output = self.alloc_output(size_a);
 
@@ -245,11 +214,7 @@ impl GpuCommandBatch {
         let size_a = self.buffers.get(&a).expect("Invalid buffer ID").size;
         let size_b = self.buffers.get(&b).expect("Invalid buffer ID").size;
 
-        assert_eq!(
-            size_a, size_b,
-            "Buffer size mismatch: {} vs {}",
-            size_a, size_b
-        );
+        assert_eq!(size_a, size_b, "Buffer size mismatch: {} vs {}", size_a, size_b);
 
         let output = self.alloc_output(size_a);
 
@@ -269,11 +234,7 @@ impl GpuCommandBatch {
         let size_a = self.buffers.get(&a).expect("Invalid buffer ID").size;
         let size_b = self.buffers.get(&b).expect("Invalid buffer ID").size;
 
-        assert_eq!(
-            size_a, size_b,
-            "Buffer size mismatch: {} vs {}",
-            size_a, size_b
-        );
+        assert_eq!(size_a, size_b, "Buffer size mismatch: {} vs {}", size_a, size_b);
 
         let output = self.alloc_output(1); // Dot product returns scalar
 
@@ -345,11 +306,7 @@ impl GpuCommandBatch {
         let size_a = self.buffers.get(&a).expect("Invalid buffer ID").size;
         let size_b = self.buffers.get(&b).expect("Invalid buffer ID").size;
 
-        assert_eq!(
-            size_a, size_b,
-            "Buffer size mismatch: {} vs {}",
-            size_a, size_b
-        );
+        assert_eq!(size_a, size_b, "Buffer size mismatch: {} vs {}", size_a, size_b);
 
         let output = self.alloc_output(size_a);
 

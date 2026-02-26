@@ -248,11 +248,7 @@ fn test_f371_gflops_exact_1e9_in_1s() {
     stats.add_sample(1_000_000_000, 1000, 1_000_000_000);
 
     let gflops = stats.gflops();
-    assert!(
-        (gflops - 1.0).abs() < 0.001,
-        "Expected 1.0 GFLOP/s, got {}",
-        gflops
-    );
+    assert!((gflops - 1.0).abs() < 0.001, "Expected 1.0 GFLOP/s, got {}", gflops);
 }
 
 /// F372: Arithmetic Intensity exact - 200 FLOPs / 100 bytes = 2.0
@@ -265,11 +261,7 @@ fn test_f372_ai_exact_200_flops_100_bytes() {
     stats.add_sample(1_000_000, 50, 400);
 
     let ai = stats.arithmetic_intensity();
-    assert!(
-        (ai - 2.0).abs() < 0.001,
-        "Expected 2.0 FLOP/byte, got {}",
-        ai
-    );
+    assert!((ai - 2.0).abs() < 0.001, "Expected 2.0 FLOP/byte, got {}", ai);
 }
 
 /// F373: Hierarchy aggregation - 4 micro tiles in 1 midi tile
@@ -288,16 +280,8 @@ fn test_f373_hierarchy_aggregation() {
         profiler.stop_tile(micro_timer, 256, 512);
     }
 
-    assert_eq!(
-        profiler.tile_stats(TileLevel::Micro).count,
-        4,
-        "Expected 4 micro tiles"
-    );
-    assert_eq!(
-        profiler.tile_stats(TileLevel::Midi).count,
-        1,
-        "Expected 1 midi tile"
-    );
+    assert_eq!(profiler.tile_stats(TileLevel::Micro).count, 4, "Expected 4 micro tiles");
+    assert_eq!(profiler.tile_stats(TileLevel::Midi).count, 1, "Expected 1 midi tile");
 }
 
 /// F374: Profiling overhead benchmark - start_tile/stop_tile < 50ns
@@ -356,11 +340,7 @@ fn test_f375_toggle_safety_zero_cost() {
     );
 
     // Near-zero overhead (just timer creation)
-    assert!(
-        overhead_ns < 100.0,
-        "Disabled overhead too high: {:.1}ns",
-        overhead_ns
-    );
+    assert!(overhead_ns < 100.0, "Disabled overhead too high: {:.1}ns", overhead_ns);
     println!("F375: Disabled overhead = {:.1}ns", overhead_ns);
 }
 
@@ -390,10 +370,7 @@ fn test_f376_summary_format_required_sections() {
     assert!(summary.contains("macro"), "Summary missing 'macro' section");
     assert!(summary.contains("midi"), "Summary missing 'midi' section");
     assert!(summary.contains("micro"), "Summary missing 'micro' section");
-    assert!(
-        summary.contains("GFLOP/s"),
-        "Summary missing 'GFLOP/s' column"
-    );
+    assert!(summary.contains("GFLOP/s"), "Summary missing 'GFLOP/s' column");
 }
 
 /// F377: JSON schema validation
@@ -449,11 +426,7 @@ fn test_f378_q4k_matvec_realistic_ai() {
 
     // Q4K MatVec is memory-bound, AI should be low (< 1.0)
     let ai = stats.arithmetic_intensity();
-    assert!(
-        ai > 0.0 && ai < 10.0,
-        "Q4K MatVec AI should be low (memory-bound), got {}",
-        ai
-    );
+    assert!(ai > 0.0 && ai < 10.0, "Q4K MatVec AI should be low (memory-bound), got {}", ai);
 
     // Should have non-zero GFLOP/s
     let gflops = stats.gflops();

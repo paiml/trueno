@@ -21,17 +21,12 @@ fn main() {
         let matrix = Matrix::from_vec(
             rows,
             cols,
-            (0..rows * cols)
-                .map(|i| ((i % 100) as f32) / 10.0)
-                .collect(),
+            (0..rows * cols).map(|i| ((i % 100) as f32) / 10.0).collect(),
         )
         .expect("Failed to create matrix");
 
-        let vector = Vector::from_slice(
-            &(0..cols)
-                .map(|i| ((i % 50) as f32) / 5.0)
-                .collect::<Vec<f32>>(),
-        );
+        let vector =
+            Vector::from_slice(&(0..cols).map(|i| ((i % 50) as f32) / 5.0).collect::<Vec<f32>>());
 
         // Warmup
         for _ in 0..3 {
@@ -52,10 +47,7 @@ fn main() {
         let gflops = ops / (avg_time_ms * 1e6);
 
         println!("  Rows: {}, Cols: {}", rows, cols);
-        println!(
-            "  Average time: {:.3} ms ({} iterations)",
-            avg_time_ms, iterations
-        );
+        println!("  Average time: {:.3} ms ({} iterations)", avg_time_ms, iterations);
         println!("  Throughput: {:.2} GFLOPS", gflops);
 
         #[cfg(feature = "parallel")]

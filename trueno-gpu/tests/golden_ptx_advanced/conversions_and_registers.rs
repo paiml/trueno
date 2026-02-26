@@ -17,11 +17,7 @@ fn golden_cvt_u32_u64_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("cvt.u32.u64"),
-        "GOLDEN FAIL: cvt.u32.u64 not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("cvt.u32.u64"), "GOLDEN FAIL: cvt.u32.u64 not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -46,13 +42,11 @@ fn golden_cvt_f32_s32_instruction() {
 
 #[test]
 fn golden_ld_shared_u32_instruction() {
-    let kernel = PtxKernel::new("test_ld_shared_u32")
-        .shared_memory(256)
-        .build(|ctx| {
-            let offset = ctx.mov_u32_imm(0);
-            let _val = ctx.ld_shared_u32(offset);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_ld_shared_u32").shared_memory(256).build(|ctx| {
+        let offset = ctx.mov_u32_imm(0);
+        let _val = ctx.ld_shared_u32(offset);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     assert!(
@@ -64,14 +58,12 @@ fn golden_ld_shared_u32_instruction() {
 
 #[test]
 fn golden_st_shared_u32_instruction() {
-    let kernel = PtxKernel::new("test_st_shared_u32")
-        .shared_memory(256)
-        .build(|ctx| {
-            let offset = ctx.mov_u32_imm(0);
-            let val = ctx.mov_u32_imm(42);
-            ctx.st_shared_u32(offset, val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_st_shared_u32").shared_memory(256).build(|ctx| {
+        let offset = ctx.mov_u32_imm(0);
+        let val = ctx.mov_u32_imm(42);
+        ctx.st_shared_u32(offset, val);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     assert!(
@@ -83,14 +75,12 @@ fn golden_st_shared_u32_instruction() {
 
 #[test]
 fn golden_st_shared_u16_instruction() {
-    let kernel = PtxKernel::new("test_st_shared_u16")
-        .shared_memory(256)
-        .build(|ctx| {
-            let offset = ctx.mov_u32_imm(0);
-            let val = ctx.mov_u32_imm(42);
-            ctx.st_shared_u16(offset, val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_st_shared_u16").shared_memory(256).build(|ctx| {
+        let offset = ctx.mov_u32_imm(0);
+        let val = ctx.mov_u32_imm(42);
+        ctx.st_shared_u16(offset, val);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     assert!(
@@ -112,11 +102,7 @@ fn golden_special_reg_tid_y() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("%tid.y"),
-        "GOLDEN FAIL: %tid.y not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("%tid.y"), "GOLDEN FAIL: %tid.y not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -127,11 +113,7 @@ fn golden_special_reg_tid_z() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("%tid.z"),
-        "GOLDEN FAIL: %tid.z not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("%tid.z"), "GOLDEN FAIL: %tid.z not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -142,11 +124,7 @@ fn golden_special_reg_ctaid_y() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("%ctaid.y"),
-        "GOLDEN FAIL: %ctaid.y not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("%ctaid.y"), "GOLDEN FAIL: %ctaid.y not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -157,11 +135,7 @@ fn golden_special_reg_ctaid_z() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("%ctaid.z"),
-        "GOLDEN FAIL: %ctaid.z not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("%ctaid.z"), "GOLDEN FAIL: %ctaid.z not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -172,11 +146,7 @@ fn golden_special_reg_laneid() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("%laneid"),
-        "GOLDEN FAIL: %laneid not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("%laneid"), "GOLDEN FAIL: %laneid not found\nPTX:\n{}", ptx);
 }
 
 #[test]
@@ -187,9 +157,5 @@ fn golden_special_reg_warpid() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("%warpid"),
-        "GOLDEN FAIL: %warpid not found\nPTX:\n{}",
-        ptx
-    );
+    assert!(ptx.contains("%warpid"), "GOLDEN FAIL: %warpid not found\nPTX:\n{}", ptx);
 }

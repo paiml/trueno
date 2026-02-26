@@ -84,11 +84,7 @@ fn test_f006_zero_page_compression_ratio() {
 
     let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
 
-    assert!(
-        comp_size < 100,
-        "Zero page should compress to <100 bytes, got {}",
-        comp_size
-    );
+    assert!(comp_size < 100, "Zero page should compress to <100 bytes, got {}", comp_size);
 }
 
 #[test]
@@ -101,12 +97,7 @@ fn test_f007_repeated_pattern_ratio() {
     let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
     let ratio = PAGE_SIZE as usize / comp_size;
 
-    assert!(
-        ratio >= 100,
-        "Should achieve >100:1 ratio, got {}:1 ({} bytes)",
-        ratio,
-        comp_size
-    );
+    assert!(ratio >= 100, "Should achieve >100:1 ratio, got {}:1 ({} bytes)", ratio, comp_size);
 }
 
 #[test]

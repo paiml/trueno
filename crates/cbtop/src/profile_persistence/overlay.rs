@@ -113,9 +113,7 @@ pub mod templates {
             problem_size: 4_194_304,
             threads: default_threads(),
             deterministic: false,
-            metadata: [("use_case".to_string(), "training".to_string())]
-                .into_iter()
-                .collect(),
+            metadata: [("use_case".to_string(), "training".to_string())].into_iter().collect(),
         }
     }
 
@@ -133,9 +131,7 @@ pub mod templates {
             problem_size: 1_048_576,
             threads: default_threads(),
             deterministic: true,
-            metadata: [("use_case".to_string(), "inference".to_string())]
-                .into_iter()
-                .collect(),
+            metadata: [("use_case".to_string(), "inference".to_string())].into_iter().collect(),
         }
     }
 
@@ -153,9 +149,7 @@ pub mod templates {
             problem_size: 16_777_216,
             threads: default_threads(),
             deterministic: false,
-            metadata: [("use_case".to_string(), "stress".to_string())]
-                .into_iter()
-                .collect(),
+            metadata: [("use_case".to_string(), "stress".to_string())].into_iter().collect(),
         }
     }
 
@@ -173,9 +167,7 @@ pub mod templates {
             problem_size: 1_048_576,
             threads: default_threads(),
             deterministic: false,
-            metadata: [("use_case".to_string(), "cpu".to_string())]
-                .into_iter()
-                .collect(),
+            metadata: [("use_case".to_string(), "cpu".to_string())].into_iter().collect(),
         }
     }
 }

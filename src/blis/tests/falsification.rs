@@ -111,11 +111,7 @@ fn test_falsification_03_microkernel_k64() {
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
     for i in 0..MR * NR {
-        assert!(
-            (c_ref[i] - c_scalar[i]).abs() < 1e-4,
-            "F3: k=64 mismatch at {}",
-            i
-        );
+        assert!((c_ref[i] - c_scalar[i]).abs() < 1e-4, "F3: k=64 mismatch at {}", i);
     }
 }
 
@@ -139,11 +135,7 @@ fn test_falsification_04_microkernel_k256() {
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
     for i in 0..MR * NR {
-        assert!(
-            (c_ref[i] - c_scalar[i]).abs() < 1e-3,
-            "F4: k=256 mismatch at {}",
-            i
-        );
+        assert!((c_ref[i] - c_scalar[i]).abs() < 1e-3, "F4: k=256 mismatch at {}", i);
     }
 }
 
@@ -162,11 +154,7 @@ fn test_falsification_05_pack_a_layout() {
         for row in 0..MR {
             let expected = a[row * kc + col];
             let actual = packed[col * MR + row];
-            assert_eq!(
-                expected, actual,
-                "F5: Pack A mismatch at row={}, col={}",
-                row, col
-            );
+            assert_eq!(expected, actual, "F5: Pack A mismatch at row={}, col={}", row, col);
         }
     }
 }
@@ -186,11 +174,7 @@ fn test_falsification_06_pack_b_layout() {
         for col in 0..NR {
             let expected = b[row * nc + col];
             let actual = packed[row * NR + col];
-            assert_eq!(
-                expected, actual,
-                "F6: Pack B mismatch at row={}, col={}",
-                row, col
-            );
+            assert_eq!(expected, actual, "F6: Pack B mismatch at row={}, col={}", row, col);
         }
     }
 }
@@ -210,17 +194,10 @@ fn test_falsification_07_l2_blocking_mc_boundary() {
     gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
     gemm_blis(m, n, k, &a, &b, &mut c_blis, None).unwrap();
 
-    let max_diff: f32 = c_ref
-        .iter()
-        .zip(c_blis.iter())
-        .map(|(r, b)| (r - b).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_ref.iter().zip(c_blis.iter()).map(|(r, b)| (r - b).abs()).fold(0.0, f32::max);
 
-    assert!(
-        max_diff < 1e-2,
-        "F7: L2 blocking MC boundary max_diff={}",
-        max_diff
-    );
+    assert!(max_diff < 1e-2, "F7: L2 blocking MC boundary max_diff={}", max_diff);
 }
 
 // F8: L3 blocking produces correct result (NC boundary)
@@ -238,17 +215,10 @@ fn test_falsification_08_l3_blocking_nc_boundary() {
     gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
     gemm_blis(m, n, k, &a, &b, &mut c_blis, None).unwrap();
 
-    let max_diff: f32 = c_ref
-        .iter()
-        .zip(c_blis.iter())
-        .map(|(r, b)| (r - b).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_ref.iter().zip(c_blis.iter()).map(|(r, b)| (r - b).abs()).fold(0.0, f32::max);
 
-    assert!(
-        max_diff < 1e-2,
-        "F8: L3 blocking NC boundary max_diff={}",
-        max_diff
-    );
+    assert!(max_diff < 1e-2, "F8: L3 blocking NC boundary max_diff={}", max_diff);
 }
 
 // F11: Edge case: K not divisible by KC
@@ -265,17 +235,10 @@ fn test_falsification_11_k_not_divisible_by_kc() {
     gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
     gemm_blis(m, n, k, &a, &b, &mut c_blis, None).unwrap();
 
-    let max_diff: f32 = c_ref
-        .iter()
-        .zip(c_blis.iter())
-        .map(|(r, b)| (r - b).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_ref.iter().zip(c_blis.iter()).map(|(r, b)| (r - b).abs()).fold(0.0, f32::max);
 
-    assert!(
-        max_diff < 1e-1,
-        "F11: K not divisible by KC max_diff={}",
-        max_diff
-    );
+    assert!(max_diff < 1e-1, "F11: K not divisible by KC max_diff={}", max_diff);
 }
 
 // F12: Edge case: M=1 (vector-matrix multiplication)
@@ -292,11 +255,8 @@ fn test_falsification_12_vector_matrix() {
     gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
     gemm_blis(m, n, k, &a, &b, &mut c_blis, None).unwrap();
 
-    let max_diff: f32 = c_ref
-        .iter()
-        .zip(c_blis.iter())
-        .map(|(r, b)| (r - b).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_ref.iter().zip(c_blis.iter()).map(|(r, b)| (r - b).abs()).fold(0.0, f32::max);
 
     assert!(max_diff < 1e-3, "F12: Vector-matrix max_diff={}", max_diff);
 }
@@ -315,11 +275,8 @@ fn test_falsification_13_matrix_vector() {
     gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
     gemm_blis(m, n, k, &a, &b, &mut c_blis, None).unwrap();
 
-    let max_diff: f32 = c_ref
-        .iter()
-        .zip(c_blis.iter())
-        .map(|(r, b)| (r - b).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_ref.iter().zip(c_blis.iter()).map(|(r, b)| (r - b).abs()).fold(0.0, f32::max);
 
     assert!(max_diff < 1e-3, "F13: Matrix-vector max_diff={}", max_diff);
 }
@@ -340,11 +297,7 @@ fn test_falsification_14_outer_product() {
 
     // Outer product: c[i,j] = a[i] * b[j]
     for i in 0..m * n {
-        assert!(
-            (c_ref[i] - c_blis[i]).abs() < 1e-5,
-            "F14: Outer product mismatch at {}",
-            i
-        );
+        assert!((c_ref[i] - c_blis[i]).abs() < 1e-5, "F14: Outer product mismatch at {}", i);
     }
 }
 
@@ -365,10 +318,7 @@ fn test_falsification_15_subnormal_inputs() {
     // Should not produce NaN or Inf
     for val in &c {
         assert!(!val.is_nan(), "F15: NaN produced from subnormal inputs");
-        assert!(
-            !val.is_infinite(),
-            "F15: Inf produced from subnormal inputs"
-        );
+        assert!(!val.is_infinite(), "F15: Inf produced from subnormal inputs");
     }
 }
 
@@ -403,11 +353,7 @@ fn test_falsification_17_negative_values() {
 
     // [-1 -2] * [ 5 -6] = [-1*5-2*7  -1*(-6)-2*(-8)] = [-19  22]
     // [-3 -4]   [ 7 -8]   [-3*5-4*7  -3*(-6)-4*(-8)]   [-43  50]
-    assert_eq!(
-        c,
-        vec![-19.0, 22.0, -43.0, 50.0],
-        "F17: Negative values incorrect"
-    );
+    assert_eq!(c, vec![-19.0, 22.0, -43.0, 50.0], "F17: Negative values incorrect");
 }
 
 // F20: Associativity (approximate)
@@ -437,11 +383,7 @@ fn test_falsification_20_associativity() {
         .map(|(l, r)| (l - r).abs() / l.abs().max(1e-10))
         .fold(0.0, f32::max);
 
-    assert!(
-        max_rel_diff < 1e-4,
-        "F20: Associativity max_rel_diff={}",
-        max_rel_diff
-    );
+    assert!(max_rel_diff < 1e-4, "F20: Associativity max_rel_diff={}", max_rel_diff);
 }
 
 // ========================================================================
@@ -464,22 +406,10 @@ fn test_falsification_34_workspace_allocation() {
     // Verify padding overhead is minimal (< 1% for typical sizes)
     let a_overhead = (packed_a as f64 / (MC * KC) as f64) - 1.0;
     let b_overhead = (packed_b as f64 / (KC * NC) as f64) - 1.0;
-    assert!(
-        a_overhead < 0.01,
-        "F34: Pack A overhead {} > 1%",
-        a_overhead
-    );
-    assert!(
-        b_overhead < 0.01,
-        "F34: Pack B overhead {} > 1%",
-        b_overhead
-    );
+    assert!(a_overhead < 0.01, "F34: Pack A overhead {} > 1%", a_overhead);
+    assert!(b_overhead < 0.01, "F34: Pack B overhead {} > 1%", b_overhead);
 
     // Total workspace should be < 8 MB (reasonable for modern CPUs)
     let total_bytes = (packed_a + packed_b) * 4; // f32 = 4 bytes
-    assert!(
-        total_bytes < 8 * 1024 * 1024,
-        "F34: Workspace {} bytes > 8MB",
-        total_bytes
-    );
+    assert!(total_bytes < 8 * 1024 * 1024, "F34: Workspace {} bytes > 8MB", total_bytes);
 }

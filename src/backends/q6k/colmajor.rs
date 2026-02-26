@@ -9,11 +9,7 @@ use super::{f16_to_f32, SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
 #[inline(always)]
 fn extract_q6k_value(ql: &[u8], qh: &[u8], idx: usize) -> i8 {
     let ql_byte = ql[idx / 2];
-    let low4 = if idx % 2 == 0 {
-        ql_byte & 0x0F
-    } else {
-        ql_byte >> 4
-    };
+    let low4 = if idx % 2 == 0 { ql_byte & 0x0F } else { ql_byte >> 4 };
     let qh_byte = qh[idx / 4];
     let high2 = (qh_byte >> ((idx % 4) * 2)) & 0x03;
     (low4 | (high2 << 4)) as i8 - 32
@@ -30,9 +26,7 @@ fn accumulate_q6k_superblock_colmajor(
 ) {
     let ql = sb_data.get(0..128).expect("Q6_K: need ≥128 bytes for ql");
     let qh = sb_data.get(128..192).expect("Q6_K: need ≥192 bytes for qh");
-    let scales = sb_data
-        .get(192..208)
-        .expect("Q6_K: need ≥208 bytes for scales");
+    let scales = sb_data.get(192..208).expect("Q6_K: need ≥208 bytes for scales");
     let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
 
     for group in 0..16 {
@@ -64,18 +58,17 @@ fn accumulate_q6k_superblock_colmajor(
 ///
 /// # Returns
 /// F32 output vector [ne0]
-#[deprecated(since = "0.15.0", note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary.")]
+#[deprecated(
+    since = "0.15.0",
+    note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary."
+)]
 pub fn matmul_q6k_f32_colmajor(
     q6k_data: &[u8],
     input: &[f32],
     ne0: usize, // output dimension (rows)
     ne1: usize, // input/reduction dimension (columns)
 ) -> Vec<f32> {
-    assert_eq!(
-        input.len(),
-        ne1,
-        "Input length must match ne1 (input dimension)"
-    );
+    assert_eq!(input.len(), ne1, "Input length must match ne1 (input dimension)");
 
     let blocks_per_col = (ne0 + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
     let col_bytes = blocks_per_col * SUPER_BLOCK_BYTES;
@@ -108,7 +101,10 @@ pub fn matmul_q6k_f32_colmajor(
 ///
 /// Uses scalar implementation for correctness.
 /// Critical for lm_head which is typically 151936 x 1536 (233M elements).
-#[deprecated(since = "0.15.0", note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary.")]
+#[deprecated(
+    since = "0.15.0",
+    note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary."
+)]
 #[inline]
 pub fn matmul_q6k_f32_colmajor_dispatch(
     q6k_data: &[u8],

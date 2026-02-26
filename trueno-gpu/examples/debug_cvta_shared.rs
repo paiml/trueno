@@ -56,18 +56,12 @@ L_done:
 
     let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
 
-    let config = LaunchConfig {
-        grid: (1, 1, 1),
-        block: (32, 1, 1),
-        shared_mem: 0,
-    };
+    let config = LaunchConfig { grid: (1, 1, 1), block: (32, 1, 1), shared_mem: 0 };
 
     let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 
     unsafe {
-        stream
-            .launch_kernel(&mut module, "debug_cvta", &config, &mut args)
-            .expect("Kernel launch");
+        stream.launch_kernel(&mut module, "debug_cvta", &config, &mut args).expect("Kernel launch");
     }
     stream.synchronize().expect("Sync");
 

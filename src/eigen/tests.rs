@@ -20,16 +20,8 @@ fn test_symmetric_eigen_2x2_simple() {
     assert!(values[0] >= values[1], "eigenvalues must be descending");
 
     // Check eigenvalue values (with tolerance)
-    assert!(
-        (values[0] - 3.0).abs() < 1e-5,
-        "first eigenvalue should be 3, got {}",
-        values[0]
-    );
-    assert!(
-        (values[1] - 1.0).abs() < 1e-5,
-        "second eigenvalue should be 1, got {}",
-        values[1]
-    );
+    assert!((values[0] - 3.0).abs() < 1e-5, "first eigenvalue should be 3, got {}", values[0]);
+    assert!((values[1] - 1.0).abs() < 1e-5, "second eigenvalue should be 1, got {}", values[1]);
 }
 
 #[test]
@@ -43,12 +35,7 @@ fn test_symmetric_eigen_identity() {
     assert_eq!(values.len(), 3);
 
     for (i, &val) in values.iter().enumerate() {
-        assert!(
-            (val - 1.0).abs() < 1e-5,
-            "eigenvalue {} should be 1, got {}",
-            i,
-            val
-        );
+        assert!((val - 1.0).abs() < 1e-5, "eigenvalue {} should be 1, got {}", i, val);
     }
 }
 
@@ -137,14 +124,7 @@ fn test_symmetric_eigen_av_equals_lambda_v() {
 
         // Check equality
         for (i, (&av_i, &lv_i)) in av.as_slice().iter().zip(lambda_v.iter()).enumerate() {
-            assert!(
-                (av_i - lv_i).abs() < 1e-4,
-                "A×v[{}] = {}, λv[{}] = {}",
-                i,
-                av_i,
-                i,
-                lv_i
-            );
+            assert!((av_i - lv_i).abs() < 1e-4, "A×v[{}] = {}, λv[{}] = {}", i, av_i, i, lv_i);
         }
     }
 }
@@ -157,10 +137,7 @@ fn test_symmetric_eigen_error_non_square() {
     assert!(result.is_err());
 
     let err = result.unwrap_err();
-    assert!(
-        matches!(err, TruenoError::InvalidInput(_)),
-        "expected InvalidInput error"
-    );
+    assert!(matches!(err, TruenoError::InvalidInput(_)), "expected InvalidInput error");
 }
 
 #[test]
@@ -240,14 +217,8 @@ fn test_symmetric_eigen_negative_eigenvalues() {
     let eigen = SymmetricEigen::new(&m).expect("eigendecomposition should succeed");
 
     let values = eigen.eigenvalues();
-    assert!(
-        (values[0] - 1.0).abs() < 1e-5,
-        "first eigenvalue should be 1"
-    );
-    assert!(
-        (values[1] - (-1.0)).abs() < 1e-5,
-        "second eigenvalue should be -1"
-    );
+    assert!((values[0] - 1.0).abs() < 1e-5, "first eigenvalue should be 1");
+    assert!((values[1] - (-1.0)).abs() < 1e-5, "second eigenvalue should be -1");
 }
 
 #[test]

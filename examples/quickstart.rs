@@ -81,11 +81,7 @@ fn main() {
     );
 
     let transposed = m1.transpose();
-    println!(
-        "   Transpose: [2×3] → [{}×{}]",
-        transposed.rows(),
-        transposed.cols()
-    );
+    println!("   Transpose: [2×3] → [{}×{}]", transposed.rows(), transposed.cols());
     println!();
 
     // 4. Eigendecomposition
@@ -129,12 +125,7 @@ fn main() {
     let beta = Vector::<f32>::from_slice(&[0.0, 0.0, 0.0, 0.0, 0.0]);
     let normalized = hidden.layer_norm(&gamma, &beta, 1e-5).expect("layer_norm");
     let mean: f32 = normalized.as_slice().iter().sum::<f32>() / 5.0;
-    let var: f32 = normalized
-        .as_slice()
-        .iter()
-        .map(|x| (x - mean).powi(2))
-        .sum::<f32>()
-        / 5.0;
+    let var: f32 = normalized.as_slice().iter().map(|x| (x - mean).powi(2)).sum::<f32>() / 5.0;
     println!("   Input:  {:?}", hidden.as_slice());
     println!(
         "   Output: [{:.3}, {:.3}, {:.3}, {:.3}, {:.3}]",

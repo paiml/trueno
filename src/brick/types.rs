@@ -55,19 +55,11 @@ pub type Backend = ComputeBackend;
 pub enum BrickError {
     /// Assertion failed during verification
     #[error("Assertion failed: {name} - expected {expected}, got {actual}")]
-    AssertionFailed {
-        name: String,
-        expected: String,
-        actual: String,
-    },
+    AssertionFailed { name: String, expected: String, actual: String },
 
     /// Performance budget exceeded
     #[error("Budget exceeded: {limit_us:.1}µs/tok limit, {actual_us:.1}µs/tok actual ({utilization:.0}% of budget)")]
-    BudgetExceeded {
-        limit_us: f64,
-        actual_us: f64,
-        utilization: f64,
-    },
+    BudgetExceeded { limit_us: f64, actual_us: f64, utilization: f64 },
 
     /// Underlying compute error
     #[error("Compute error: {0}")]
@@ -98,18 +90,12 @@ pub enum ComputeAssertion {
 impl ComputeAssertion {
     /// Create equivalence assertion with default tolerance (1e-5).
     pub fn equiv(baseline: Backend) -> Self {
-        Self::Equivalence {
-            baseline,
-            tolerance: 1e-5,
-        }
+        Self::Equivalence { baseline, tolerance: 1e-5 }
     }
 
     /// Create equivalence assertion with custom tolerance.
     pub fn equiv_with_tolerance(baseline: Backend, tolerance: f64) -> Self {
-        Self::Equivalence {
-            baseline,
-            tolerance,
-        }
+        Self::Equivalence { baseline, tolerance }
     }
 
     /// Create bounds assertion.

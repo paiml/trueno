@@ -24,12 +24,7 @@ fn wgpu_pixel_fkr_large_vector() {
     let vb = Vector::from_slice(&b);
     let wgpu_add = va.add(&vb).expect("WGPU add failed");
 
-    assert!(vectors_match(
-        &scalar_add,
-        wgpu_add.as_slice(),
-        GPU_TOLERANCE,
-        "wgpu_large_vector"
-    ));
+    assert!(vectors_match(&scalar_add, wgpu_add.as_slice(), GPU_TOLERANCE, "wgpu_large_vector"));
 }
 
 /// wgpu-pixel-fkr: Matrix multiply (GPU stress test)
@@ -91,10 +86,5 @@ fn wgpu_pixel_fkr_softmax() {
     let v = Vector::from_slice(&x);
     let wgpu_result = v.softmax().expect("WGPU softmax failed");
 
-    assert!(vectors_match(
-        &scalar_result,
-        wgpu_result.as_slice(),
-        GPU_TOLERANCE,
-        "wgpu_softmax"
-    ));
+    assert!(vectors_match(&scalar_result, wgpu_result.as_slice(), GPU_TOLERANCE, "wgpu_softmax"));
 }

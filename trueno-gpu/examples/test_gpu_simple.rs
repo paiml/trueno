@@ -24,11 +24,7 @@ fn main() {
             input_flat.push(((page_idx * 17 + byte_idx) % 256) as u8);
         }
     }
-    println!(
-        "Input: {} bytes, first 16: {:?}",
-        input_flat.len(),
-        &input_flat[0..16]
-    );
+    println!("Input: {} bytes, first 16: {:?}", input_flat.len(), &input_flat[0..16]);
 
     // Allocate GPU buffers (using OUTPUT_STRIDE = 4352 bytes per page)
     let mut input_buf: GpuBuffer<u8> =
@@ -38,9 +34,7 @@ fn main() {
     let mut sizes_buf: GpuBuffer<u32> =
         GpuBuffer::new(&ctx, NUM_PAGES as usize).expect("Failed to allocate sizes buffer");
 
-    input_buf
-        .copy_from_host(&input_flat)
-        .expect("Failed to copy input");
+    input_buf.copy_from_host(&input_flat).expect("Failed to copy input");
 
     let kernel = Lz4WarpCompressKernel::new(NUM_PAGES);
     let ptx = kernel.emit_ptx();
@@ -59,11 +53,7 @@ fn main() {
     let block = kernel.block_dim();
     println!("Grid: {:?}, Block: {:?}", grid, block);
 
-    let config = LaunchConfig {
-        grid,
-        block,
-        shared_mem: 0,
-    };
+    let config = LaunchConfig { grid, block, shared_mem: 0 };
 
     let num_pages_u32 = NUM_PAGES as u32;
     let mut args: [*mut c_void; 4] = [
@@ -85,9 +75,7 @@ fn main() {
 
     println!("Copying results...");
     let mut sizes_host = vec![0u32; NUM_PAGES as usize];
-    sizes_buf
-        .copy_to_host(&mut sizes_host)
-        .expect("Failed to copy sizes");
+    sizes_buf.copy_to_host(&mut sizes_host).expect("Failed to copy sizes");
 
     println!("Results:");
     for (i, size) in sizes_host.iter().enumerate() {

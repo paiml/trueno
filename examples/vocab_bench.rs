@@ -32,10 +32,7 @@ fn main() {
     let matmul_time = start.elapsed().as_secs_f64() * 1000.0 / iterations as f64;
     let matmul_gflops =
         (2.0 * rows as f64 * inner as f64 * cols as f64) / (matmul_time / 1000.0) / 1e9;
-    println!(
-        "\nMatrix::matmul: {:.1}ms ({:.2} GFLOPS)",
-        matmul_time, matmul_gflops
-    );
+    println!("\nMatrix::matmul: {:.1}ms ({:.2} GFLOPS)", matmul_time, matmul_gflops);
 
     // Method 2: Transpose B to column-major, then use dots
     let mut b_t = vec![0.0_f32; inner * cols];
@@ -89,20 +86,11 @@ fn main() {
     let scalar_time = start.elapsed().as_secs_f64() * 1000.0 / iterations as f64;
     let scalar_gflops =
         (2.0 * rows as f64 * inner as f64 * cols as f64) / (scalar_time / 1000.0) / 1e9;
-    println!(
-        "Scalar (naive): {:.1}ms ({:.2} GFLOPS)",
-        scalar_time, scalar_gflops
-    );
+    println!("Scalar (naive): {:.1}ms ({:.2} GFLOPS)", scalar_time, scalar_gflops);
 
     println!("\n=== ANALYSIS ===");
-    println!(
-        "Matrix::matmul vs scalar: {:.1}x",
-        scalar_time / matmul_time
-    );
-    println!(
-        "Transposed dots vs scalar: {:.1}x",
-        scalar_time / transposed_time
-    );
+    println!("Matrix::matmul vs scalar: {:.1}x", scalar_time / matmul_time);
+    println!("Transposed dots vs scalar: {:.1}x", scalar_time / transposed_time);
     println!(
         "Potential speedup for matmul: {:.1}x",
         matmul_time / transposed_time.min(scalar_time)

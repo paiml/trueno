@@ -132,24 +132,13 @@ fn main() {
 
     let device_name = ctx.device_name().unwrap_or_else(|_| "Unknown".to_string());
     let (free, total) = ctx.memory_info().unwrap_or((0, 0));
-    println!(
-        "       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m",
-        device_name
-    );
-    println!(
-        "       Memory: {} MB free / {} MB total",
-        free / 1024 / 1024,
-        total / 1024 / 1024
-    );
+    println!("       \x1b[32m✓\x1b[0m GPU: \x1b[1;32m{}\x1b[0m", device_name);
+    println!("       Memory: {} MB free / {} MB total", free / 1024 / 1024, total / 1024 / 1024);
 
     // Step 2: Generate PTX
     println!("\x1b[33m[2/8]\x1b[0m Generating FlashAttention PTX...");
     let ptx = attention_kernel_ptx(false);
-    println!(
-        "       PTX size: {} bytes ({} lines)",
-        ptx.len(),
-        ptx.lines().count()
-    );
+    println!("       PTX size: {} bytes ({} lines)", ptx.len(), ptx.lines().count());
 
     // Step 3: JIT compile
     println!("\x1b[33m[3/8]\x1b[0m JIT compiling PTX to SASS...");
@@ -170,10 +159,7 @@ fn main() {
     println!("\x1b[33m[4/8]\x1b[0m Generating test data...");
     let (q_host, k_host, v_host) = generate_test_data(SEQ_LEN, HEAD_DIM);
     let total_elements = SEQ_LEN * HEAD_DIM * NUM_HEADS;
-    println!(
-        "       Q/K/V: {}x{} = {} elements each",
-        SEQ_LEN, HEAD_DIM, total_elements
-    );
+    println!("       Q/K/V: {}x{} = {} elements each", SEQ_LEN, HEAD_DIM, total_elements);
 
     // Step 5: Allocate GPU buffers
     println!("\x1b[33m[5/8]\x1b[0m Allocating GPU memory...");
@@ -272,15 +258,9 @@ fn main() {
     let passed = max_diff < tolerance;
 
     if passed {
-        println!(
-            "       \x1b[32m✓\x1b[0m Output matches CPU within {:.0e}",
-            tolerance
-        );
+        println!("       \x1b[32m✓\x1b[0m Output matches CPU within {:.0e}", tolerance);
     } else {
-        println!(
-            "       \x1b[31m✗\x1b[0m Output differs from CPU (max diff: {:.6})",
-            max_diff
-        );
+        println!("       \x1b[31m✗\x1b[0m Output differs from CPU (max diff: {:.6})", max_diff);
     }
 
     // Statistics
@@ -293,14 +273,8 @@ fn main() {
     println!("│ GPU execution time │ {:>17?} │", elapsed);
     println!("│ Max difference     │ {:>18.6e} │", max_diff);
     println!("│ Avg difference     │ {:>18.6e} │", avg_diff);
-    println!(
-        "│ Verification       │ {:>20} │",
-        if passed { "✓ PASS" } else { "✗ FAIL" }
-    );
-    println!(
-        "│ Device             │ {:>20} │",
-        &device_name[..device_name.len().min(20)]
-    );
+    println!("│ Verification       │ {:>20} │", if passed { "✓ PASS" } else { "✗ FAIL" });
+    println!("│ Device             │ {:>20} │", &device_name[..device_name.len().min(20)]);
     println!("└────────────────────┴──────────────────────┘");
 
     if passed {

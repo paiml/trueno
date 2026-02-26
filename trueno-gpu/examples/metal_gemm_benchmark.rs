@@ -248,22 +248,10 @@ fn run_gpu_matmul(
         label: Some("GEMM Bind Group"),
         layout: &bind_group_layout,
         entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer_a.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: buffer_b.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: buffer_c.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 3,
-                resource: buffer_dims.as_entire_binding(),
-            },
+            wgpu::BindGroupEntry { binding: 0, resource: buffer_a.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 1, resource: buffer_b.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 2, resource: buffer_c.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 3, resource: buffer_dims.as_entire_binding() },
         ],
     });
 

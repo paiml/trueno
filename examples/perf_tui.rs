@@ -54,10 +54,7 @@ where
 
 fn print_section_header(title: &str) {
     println!("\n{}{}▶ {}{}", BOLD, CYAN, title, RESET);
-    println!(
-        "{}─────────────────────────────────────────────────────────────────{}",
-        DIM, RESET
-    );
+    println!("{}─────────────────────────────────────────────────────────────────{}", DIM, RESET);
 }
 
 fn bench_vector_ops() {
@@ -131,12 +128,7 @@ fn bench_vecmat_multiply() {
 fn bench_general_matmul() {
     print_section_header("GENERAL MATRIX MULTIPLY");
 
-    let sizes = [
-        (64, 64, 64),
-        (128, 128, 128),
-        (256, 256, 256),
-        (512, 512, 512),
-    ];
+    let sizes = [(64, 64, 64), (128, 128, 128), (256, 256, 256), (512, 512, 512)];
 
     for (m, k, n) in sizes {
         let ops = (m * k * n) as f64;
@@ -313,10 +305,7 @@ fn main() {
         "\n{}{}═══════════════════════════════════════════════════════════════{}",
         BOLD, CYAN, RESET
     );
-    println!(
-        "{}Legend: {}FAST{} {}OK{} {}SLOW{}",
-        DIM, GREEN, RESET, YELLOW, RESET, RED, RESET
-    );
+    println!("{}Legend: {}FAST{} {}OK{} {}SLOW{}", DIM, GREEN, RESET, YELLOW, RESET, RED, RESET);
     println!(
         "{}{}═══════════════════════════════════════════════════════════════{}\n",
         BOLD, CYAN, RESET

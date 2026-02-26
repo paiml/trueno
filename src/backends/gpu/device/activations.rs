@@ -13,15 +13,13 @@ impl GpuDevice {
     #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn relu(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
         runtime::block_on(async {
-            self.execute_element_wise_op("ReLU", shaders::RELU_SHADER, input, result, None)
-                .await
+            self.execute_element_wise_op("ReLU", shaders::RELU_SHADER, input, result, None).await
         })
     }
 
     /// Execute ReLU activation on GPU (async, works on all platforms)
     pub async fn relu_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        self.execute_element_wise_op("ReLU", shaders::RELU_SHADER, input, result, None)
-            .await
+        self.execute_element_wise_op("ReLU", shaders::RELU_SHADER, input, result, None).await
     }
 
     /// Execute leaky ReLU activation on GPU (sync, native only)
@@ -83,14 +81,8 @@ impl GpuDevice {
         let params = EluParams { alpha };
         let uniform_data = bytemuck::bytes_of(&params);
 
-        self.execute_element_wise_op(
-            "ELU",
-            shaders::ELU_SHADER,
-            input,
-            result,
-            Some(uniform_data),
-        )
-        .await
+        self.execute_element_wise_op("ELU", shaders::ELU_SHADER, input, result, Some(uniform_data))
+            .await
     }
 
     /// Execute sigmoid activation on GPU (sync, native only)
@@ -101,8 +93,7 @@ impl GpuDevice {
 
     /// Execute sigmoid activation on GPU (async, works on all platforms)
     pub async fn sigmoid_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        self.execute_element_wise_op("Sigmoid", shaders::SIGMOID_SHADER, input, result, None)
-            .await
+        self.execute_element_wise_op("Sigmoid", shaders::SIGMOID_SHADER, input, result, None).await
     }
 
     /// Execute tanh activation on GPU (sync, native only)
@@ -113,8 +104,7 @@ impl GpuDevice {
 
     /// Execute tanh activation on GPU (async, works on all platforms)
     pub async fn tanh_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        self.execute_element_wise_op("Tanh", shaders::TANH_SHADER, input, result, None)
-            .await
+        self.execute_element_wise_op("Tanh", shaders::TANH_SHADER, input, result, None).await
     }
 
     /// Execute swish activation on GPU (sync, native only)
@@ -125,8 +115,7 @@ impl GpuDevice {
 
     /// Execute swish activation on GPU (async, works on all platforms)
     pub async fn swish_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        self.execute_element_wise_op("Swish", shaders::SWISH_SHADER, input, result, None)
-            .await
+        self.execute_element_wise_op("Swish", shaders::SWISH_SHADER, input, result, None).await
     }
 
     /// Execute GELU activation on GPU (sync, native only)
@@ -137,8 +126,7 @@ impl GpuDevice {
 
     /// Execute GELU activation on GPU (async, works on all platforms)
     pub async fn gelu_async(&self, input: &[f32], result: &mut [f32]) -> Result<(), String> {
-        self.execute_element_wise_op("GELU", shaders::GELU_SHADER, input, result, None)
-            .await
+        self.execute_element_wise_op("GELU", shaders::GELU_SHADER, input, result, None).await
     }
 
     /// Execute clip (clamp) operation on GPU (sync, native only)
@@ -243,10 +231,7 @@ impl GpuDevice {
             log_sum_exp: f32,
         }
 
-        let params = LogSoftmaxParams {
-            max_val,
-            log_sum_exp,
-        };
+        let params = LogSoftmaxParams { max_val, log_sum_exp };
         let uniform_data = bytemuck::bytes_of(&params);
 
         self.execute_element_wise_op(

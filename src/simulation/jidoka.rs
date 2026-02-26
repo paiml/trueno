@@ -83,41 +83,24 @@ impl std::fmt::Display for JidokaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NanDetected { context, indices } => {
-                write!(
-                    f,
-                    "Jidoka: NaN detected at {context} (indices: {indices:?})"
-                )
+                write!(f, "Jidoka: NaN detected at {context} (indices: {indices:?})")
             }
             Self::InfDetected { context, indices } => {
-                write!(
-                    f,
-                    "Jidoka: Infinity detected at {context} (indices: {indices:?})"
-                )
+                write!(f, "Jidoka: Infinity detected at {context} (indices: {indices:?})")
             }
-            Self::BackendDivergence {
-                context,
-                max_diff,
-                tolerance,
-            } => {
+            Self::BackendDivergence { context, max_diff, tolerance } => {
                 write!(
                     f,
                     "Jidoka: Backend divergence at {context} (max_diff: {max_diff}, tolerance: {tolerance})"
                 )
             }
-            Self::PerformanceRegression {
-                context,
-                regression_pct,
-                threshold_pct,
-            } => {
+            Self::PerformanceRegression { context, regression_pct, threshold_pct } => {
                 write!(
                     f,
                     "Jidoka: Performance regression at {context} ({regression_pct:.2}% > {threshold_pct:.2}%)"
                 )
             }
-            Self::DeterminismFailure {
-                context,
-                first_diff_index,
-            } => {
+            Self::DeterminismFailure { context, first_diff_index } => {
                 write!(
                     f,
                     "Jidoka: Determinism failure at {context} (first diff at index {first_diff_index})"
@@ -151,11 +134,7 @@ impl JidokaGuard {
         action: JidokaAction,
         context: impl Into<String>,
     ) -> Self {
-        Self {
-            condition,
-            action,
-            context: context.into(),
-        }
+        Self { condition, action, context: context.into() }
     }
 
     /// Create a NaN detection guard
@@ -173,11 +152,7 @@ impl JidokaGuard {
     /// Create a backend divergence guard
     #[must_use]
     pub fn divergence_guard(tolerance: f32, context: impl Into<String>) -> Self {
-        Self::new(
-            JidokaCondition::BackendDivergence { tolerance },
-            JidokaAction::Stop,
-            context,
-        )
+        Self::new(JidokaCondition::BackendDivergence { tolerance }, JidokaAction::Stop, context)
     }
 
     /// Check output for NaN/Inf and return error if found
@@ -188,12 +163,8 @@ impl JidokaGuard {
     pub fn check_output(&self, output: &[f32]) -> Result<(), JidokaError> {
         match &self.condition {
             JidokaCondition::NanDetected => {
-                let nan_indices: Vec<usize> = output
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, x)| x.is_nan())
-                    .map(|(i, _)| i)
-                    .collect();
+                let nan_indices: Vec<usize> =
+                    output.iter().enumerate().filter(|(_, x)| x.is_nan()).map(|(i, _)| i).collect();
 
                 if !nan_indices.is_empty() {
                     return Err(JidokaError::NanDetected {
@@ -231,11 +202,8 @@ impl JidokaGuard {
     /// Returns `JidokaError` if divergence exceeds tolerance
     pub fn check_divergence(&self, a: &[f32], b: &[f32]) -> Result<(), JidokaError> {
         if let JidokaCondition::BackendDivergence { tolerance } = &self.condition {
-            let max_diff = a
-                .iter()
-                .zip(b.iter())
-                .map(|(x, y)| (x - y).abs())
-                .fold(0.0_f32, f32::max);
+            let max_diff =
+                a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).fold(0.0_f32, f32::max);
 
             if max_diff > *tolerance {
                 return Err(JidokaError::BackendDivergence {
@@ -374,10 +342,7 @@ mod tests {
         let result = guard.check_determinism(&a, &b);
         assert!(result.is_err());
 
-        if let Err(JidokaError::DeterminismFailure {
-            first_diff_index, ..
-        }) = result
-        {
+        if let Err(JidokaError::DeterminismFailure { first_diff_index, .. }) = result {
             assert_eq!(first_diff_index, 2);
         } else {
             panic!("Expected DeterminismFailure error");
@@ -386,10 +351,7 @@ mod tests {
 
     #[test]
     fn test_jidoka_error_display() {
-        let err = JidokaError::NanDetected {
-            context: "test".to_string(),
-            indices: vec![0, 2],
-        };
+        let err = JidokaError::NanDetected { context: "test".to_string(), indices: vec![0, 2] };
         let display = format!("{err}");
         assert!(display.contains("NaN"));
         assert!(display.contains("test"));
@@ -409,23 +371,15 @@ mod tests {
 
     #[test]
     fn test_jidoka_error_display_inf_detected() {
-        let err = JidokaError::InfDetected {
-            context: "matmul_output".to_string(),
-            indices: vec![1, 3],
-        };
+        let err =
+            JidokaError::InfDetected { context: "matmul_output".to_string(), indices: vec![1, 3] };
         let display = format!("{err}");
-        assert!(
-            display.contains("Infinity"),
-            "Display should contain 'Infinity', got: {display}"
-        );
+        assert!(display.contains("Infinity"), "Display should contain 'Infinity', got: {display}");
         assert!(
             display.contains("matmul_output"),
             "Display should contain context, got: {display}"
         );
-        assert!(
-            display.contains("[1, 3]"),
-            "Display should contain indices, got: {display}"
-        );
+        assert!(display.contains("[1, 3]"), "Display should contain indices, got: {display}");
     }
 
     #[test]
@@ -444,14 +398,8 @@ mod tests {
             display.contains("avx2_dot_product"),
             "Display should contain context, got: {display}"
         );
-        assert!(
-            display.contains("15.75"),
-            "Display should contain regression_pct, got: {display}"
-        );
-        assert!(
-            display.contains("5.00"),
-            "Display should contain threshold_pct, got: {display}"
-        );
+        assert!(display.contains("15.75"), "Display should contain regression_pct, got: {display}");
+        assert!(display.contains("5.00"), "Display should contain threshold_pct, got: {display}");
     }
 
     #[test]
@@ -465,28 +413,16 @@ mod tests {
             display.contains("Determinism failure"),
             "Display should contain 'Determinism failure', got: {display}"
         );
-        assert!(
-            display.contains("sse2_vs_avx2"),
-            "Display should contain context, got: {display}"
-        );
-        assert!(
-            display.contains("42"),
-            "Display should contain first_diff_index, got: {display}"
-        );
+        assert!(display.contains("sse2_vs_avx2"), "Display should contain context, got: {display}");
+        assert!(display.contains("42"), "Display should contain first_diff_index, got: {display}");
     }
 
     #[test]
     fn test_jidoka_error_is_std_error() {
         // Verify the std::error::Error impl works for all variants
         let errors: Vec<Box<dyn std::error::Error>> = vec![
-            Box::new(JidokaError::NanDetected {
-                context: "a".to_string(),
-                indices: vec![],
-            }),
-            Box::new(JidokaError::InfDetected {
-                context: "b".to_string(),
-                indices: vec![],
-            }),
+            Box::new(JidokaError::NanDetected { context: "a".to_string(), indices: vec![] }),
+            Box::new(JidokaError::InfDetected { context: "b".to_string(), indices: vec![] }),
             Box::new(JidokaError::BackendDivergence {
                 context: "c".to_string(),
                 max_diff: 0.0,

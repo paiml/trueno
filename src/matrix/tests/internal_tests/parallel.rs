@@ -6,20 +6,13 @@ fn test_matmul_parallel_1024() {
     // Phase 4: Test parallel matmul for 1024x1024 matrices
     // This triggers the parallel path (PARALLEL_THRESHOLD = 1024)
     let size = 1024;
-    let a = Matrix::from_vec(
-        size,
-        size,
-        (0..size * size)
-            .map(|i| ((i % 100) as f32) / 10.0)
-            .collect(),
-    )
-    .unwrap();
+    let a =
+        Matrix::from_vec(size, size, (0..size * size).map(|i| ((i % 100) as f32) / 10.0).collect())
+            .unwrap();
     let b = Matrix::from_vec(
         size,
         size,
-        (0..size * size)
-            .map(|i| (((i * 7) % 100) as f32) / 10.0)
-            .collect(),
+        (0..size * size).map(|i| (((i * 7) % 100) as f32) / 10.0).collect(),
     )
     .unwrap();
 
@@ -37,11 +30,7 @@ fn test_matmul_parallel_1024() {
             let naive_val = result_naive.get(i, j).unwrap();
             let parallel_val = result_parallel.get(i, j).unwrap();
             let diff = (naive_val - parallel_val).abs();
-            let tolerance = if naive_val.abs() > 1.0 {
-                naive_val.abs() * 1e-2
-            } else {
-                1e-2
-            };
+            let tolerance = if naive_val.abs() > 1.0 { naive_val.abs() * 1e-2 } else { 1e-2 };
             if diff >= tolerance {
                 mismatches += 1;
                 if mismatches <= 5 {
@@ -69,20 +58,12 @@ fn test_matvec_parallel_4096() {
     let rows = 4096;
     let cols = 512;
 
-    let matrix = Matrix::from_vec(
-        rows,
-        cols,
-        (0..rows * cols)
-            .map(|i| ((i % 100) as f32) / 10.0)
-            .collect(),
-    )
-    .unwrap();
+    let matrix =
+        Matrix::from_vec(rows, cols, (0..rows * cols).map(|i| ((i % 100) as f32) / 10.0).collect())
+            .unwrap();
 
-    let vector = Vector::from_slice(
-        &(0..cols)
-            .map(|i| ((i % 50) as f32) / 5.0)
-            .collect::<Vec<f32>>(),
-    );
+    let vector =
+        Vector::from_slice(&(0..cols).map(|i| ((i % 50) as f32) / 5.0).collect::<Vec<f32>>());
 
     // Compute result (should use parallel path)
     let result = matrix.matvec(&vector).unwrap();
@@ -97,19 +78,11 @@ fn test_matvec_parallel_4096() {
         let row = &matrix.data[row_start..(row_start + cols)];
 
         // Manual dot product
-        let expected: f32 = row
-            .iter()
-            .zip(vector.as_slice().iter())
-            .map(|(a, b)| a * b)
-            .sum();
+        let expected: f32 = row.iter().zip(vector.as_slice().iter()).map(|(a, b)| a * b).sum();
 
         let actual = result.as_slice()[sample_row];
         let diff = (expected - actual).abs();
-        let tolerance = if expected.abs() > 1.0 {
-            expected.abs() * 1e-3
-        } else {
-            1e-3
-        };
+        let tolerance = if expected.abs() > 1.0 { expected.abs() * 1e-3 } else { 1e-3 };
 
         assert!(
             diff < tolerance,

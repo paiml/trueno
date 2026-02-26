@@ -129,18 +129,8 @@ fn test_avx2_log10_matches_scalar() {
 #[test]
 fn test_avx2_sin_matches_scalar() {
     use std::f32::consts::PI;
-    let a = [
-        0.0,
-        PI / 6.0,
-        PI / 4.0,
-        PI / 3.0,
-        PI / 2.0,
-        PI,
-        1.5 * PI,
-        2.0 * PI,
-        -PI / 4.0,
-        -PI / 2.0,
-    ];
+    let a =
+        [0.0, PI / 6.0, PI / 4.0, PI / 3.0, PI / 2.0, PI, 1.5 * PI, 2.0 * PI, -PI / 4.0, -PI / 2.0];
     let mut avx2_result = vec![0.0; a.len()];
     let mut scalar_result = vec![0.0; a.len()];
 
@@ -165,18 +155,8 @@ fn test_avx2_sin_matches_scalar() {
 #[test]
 fn test_avx2_cos_matches_scalar() {
     use std::f32::consts::PI;
-    let a = [
-        0.0,
-        PI / 6.0,
-        PI / 4.0,
-        PI / 3.0,
-        PI / 2.0,
-        PI,
-        1.5 * PI,
-        2.0 * PI,
-        -PI / 4.0,
-        -PI / 2.0,
-    ];
+    let a =
+        [0.0, PI / 6.0, PI / 4.0, PI / 3.0, PI / 2.0, PI, 1.5 * PI, 2.0 * PI, -PI / 4.0, -PI / 2.0];
     let mut avx2_result = vec![0.0; a.len()];
     let mut scalar_result = vec![0.0; a.len()];
 
@@ -201,18 +181,7 @@ fn test_avx2_cos_matches_scalar() {
 #[test]
 fn test_avx2_tan_matches_scalar() {
     use std::f32::consts::PI;
-    let a = [
-        0.0,
-        PI / 6.0,
-        PI / 4.0,
-        PI / 3.0,
-        1.0,
-        -1.0,
-        0.5,
-        -0.5,
-        2.0,
-        -2.0,
-    ];
+    let a = [0.0, PI / 6.0, PI / 4.0, PI / 3.0, 1.0, -1.0, 0.5, -0.5, 2.0, -2.0];
     let mut avx2_result = vec![0.0; a.len()];
     let mut scalar_result = vec![0.0; a.len()];
 

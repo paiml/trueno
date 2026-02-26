@@ -298,28 +298,15 @@ mod tests {
 
     #[test]
     fn test_chaos_error_display() {
-        let mem_err = ChaosError::MemoryLimitExceeded {
-            limit: 1000,
-            used: 2000,
-        };
-        assert_eq!(
-            format!("{}", mem_err),
-            "Memory limit exceeded: 2000 > 1000 bytes"
-        );
+        let mem_err = ChaosError::MemoryLimitExceeded { limit: 1000, used: 2000 };
+        assert_eq!(format!("{}", mem_err), "Memory limit exceeded: 2000 > 1000 bytes");
 
-        let timeout_err = ChaosError::Timeout {
-            elapsed: Duration::from_secs(5),
-            limit: Duration::from_secs(3),
-        };
+        let timeout_err =
+            ChaosError::Timeout { elapsed: Duration::from_secs(5), limit: Duration::from_secs(3) };
         assert!(format!("{}", timeout_err).contains("Timeout"));
 
-        let signal_err = ChaosError::SignalInjectionFailed {
-            signal: 9,
-            reason: "test failure".to_string(),
-        };
-        assert_eq!(
-            format!("{}", signal_err),
-            "Signal injection failed (9): test failure"
-        );
+        let signal_err =
+            ChaosError::SignalInjectionFailed { signal: 9, reason: "test failure".to_string() };
+        assert_eq!(format!("{}", signal_err), "Signal injection failed (9): test failure");
     }
 }

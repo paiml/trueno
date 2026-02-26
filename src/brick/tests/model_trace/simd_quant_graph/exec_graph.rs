@@ -33,10 +33,7 @@ fn test_execution_node_function_formatting() {
     // Test the formatting via to_ascii_tree
     let ascii = graph.to_ascii_tree();
     assert!(ascii.contains("test_func"), "Should contain function name");
-    assert!(
-        ascii.contains("anonymous"),
-        "Should contain anonymous function"
-    );
+    assert!(ascii.contains("anonymous"), "Should contain anonymous function");
 
     // Use the node IDs to prevent unused warnings
     assert!(graph.node(func1).is_some());
@@ -97,11 +94,7 @@ fn test_slowest_kernel_edge_cases() {
     let mut graph = ExecutionGraph::new();
 
     // Add bricks with various timings
-    graph.add_node(ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 100,
-        elements: 1,
-    });
+    graph.add_node(ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 100, elements: 1 });
 
     graph.add_node(ExecutionNode::Brick {
         id: BrickId::AttentionScore,
@@ -210,10 +203,7 @@ fn test_to_dot_all_node_types() {
     let dot = graph.to_dot();
 
     // Verify DOT contains expected structure
-    assert!(
-        dot.contains("digraph ExecutionGraph"),
-        "Should have digraph header"
-    );
+    assert!(dot.contains("digraph ExecutionGraph"), "Should have digraph header");
     assert!(dot.contains("Layer 0"), "Should contain layer");
     assert!(dot.contains("matmul_f32"), "Should contain kernel name");
 

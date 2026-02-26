@@ -2,15 +2,9 @@
 
 #[cfg(feature = "cuda-monitor")]
 use super::GpuMemoryMetrics;
-#[cfg(any(
-    all(feature = "gpu", not(target_arch = "wasm32")),
-    feature = "cuda-monitor"
-))]
+#[cfg(any(all(feature = "gpu", not(target_arch = "wasm32")), feature = "cuda-monitor"))]
 use super::MonitorError;
-#[cfg(any(
-    all(feature = "gpu", not(target_arch = "wasm32")),
-    feature = "cuda-monitor"
-))]
+#[cfg(any(all(feature = "gpu", not(target_arch = "wasm32")), feature = "cuda-monitor"))]
 use super::{GpuBackend, GpuDeviceInfo, GpuVendor};
 
 // ============================================================================
@@ -32,9 +26,8 @@ pub(crate) fn query_wgpu_device_info(device_index: u32) -> Result<GpuDeviceInfo,
             return Err(MonitorError::NoDevice);
         }
 
-        let adapter = adapters
-            .get(device_index as usize)
-            .ok_or(MonitorError::InvalidDevice(device_index))?;
+        let adapter =
+            adapters.get(device_index as usize).ok_or(MonitorError::InvalidDevice(device_index))?;
 
         let info = adapter.get_info();
 
@@ -139,13 +132,8 @@ pub fn enumerate_cuda_devices() -> Result<Vec<GpuDeviceInfo>, MonitorError> {
     Ok(cuda_devices
         .into_iter()
         .map(|cuda_info| {
-            GpuDeviceInfo::new(
-                cuda_info.index,
-                cuda_info.name,
-                GpuVendor::Nvidia,
-                GpuBackend::Cuda,
-            )
-            .with_vram(cuda_info.total_memory)
+            GpuDeviceInfo::new(cuda_info.index, cuda_info.name, GpuVendor::Nvidia, GpuBackend::Cuda)
+                .with_vram(cuda_info.total_memory)
         })
         .collect())
 }

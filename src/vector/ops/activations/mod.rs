@@ -206,11 +206,7 @@ impl Vector<f32> {
         let log_sum_exp = sum_exp.max(f32::EPSILON).ln();
 
         // log_softmax(x)[i] = x[i] - max - log_sum_exp
-        let data: Vec<f32> = self
-            .data
-            .iter()
-            .map(|&x| x - max_val - log_sum_exp)
-            .collect();
+        let data: Vec<f32> = self.data.iter().map(|&x| x - max_val - log_sum_exp).collect();
 
         Ok(Vector::from_vec(data))
     }
@@ -295,12 +291,11 @@ impl Vector<f32> {
             if self.len() >= PARALLEL_THRESHOLD {
                 use rayon::prelude::*;
 
-                self.data
-                    .par_chunks(CHUNK_SIZE)
-                    .zip(result.par_chunks_mut(CHUNK_SIZE))
-                    .for_each(|(chunk_in, chunk_out)| {
+                self.data.par_chunks(CHUNK_SIZE).zip(result.par_chunks_mut(CHUNK_SIZE)).for_each(
+                    |(chunk_in, chunk_out)| {
                         dispatch_unary_op!(self.backend, relu, chunk_in, chunk_out);
-                    });
+                    },
+                );
 
                 return Ok(Vector::from_vec(result)); // Use from_vec to avoid extra copy
             }

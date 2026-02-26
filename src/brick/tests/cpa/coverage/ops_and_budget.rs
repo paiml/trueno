@@ -62,10 +62,7 @@ fn test_c018_edge_type_debug() {
     let debug_str = format!("{:?}", depends);
     assert!(debug_str.contains("DependsOn"));
 
-    let transfer = EdgeType::Transfer {
-        bytes: 1024,
-        direction: TransferDirection::H2D,
-    };
+    let transfer = EdgeType::Transfer { bytes: 1024, direction: TransferDirection::H2D };
     let debug_str = format!("{:?}", transfer);
     assert!(debug_str.contains("Transfer"));
     assert!(debug_str.contains("1024"));

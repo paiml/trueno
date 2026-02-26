@@ -50,10 +50,7 @@ fn test_avx512_sigmoid_large() {
             Avx512Backend::sigmoid(&a, &mut result);
         }
         for (i, &val) in result.iter().enumerate() {
-            assert!(
-                val >= 0.0 && val <= 1.0,
-                "sigmoid out of range at {i}: {val}"
-            );
+            assert!(val >= 0.0 && val <= 1.0, "sigmoid out of range at {i}: {val}");
             let expected = 1.0 / (1.0 + (-a[i]).exp());
             assert!(
                 (val - expected).abs() < 1e-4,
@@ -70,11 +67,7 @@ fn test_avx512_gelu_large() {
         let mut result = vec![0.0; 32];
         // SAFETY: test-only; result matches input length
         unsafe { Avx512Backend::gelu(&a, &mut result) };
-        assert!(
-            (result[16]).abs() < 1e-4,
-            "gelu(0) should be 0, got {}",
-            result[16]
-        );
+        assert!((result[16]).abs() < 1e-4, "gelu(0) should be 0, got {}", result[16]);
     });
 }
 
@@ -85,11 +78,7 @@ fn test_avx512_swish_large() {
         let mut result = vec![0.0; 32];
         // SAFETY: test-only; result matches input length
         unsafe { Avx512Backend::swish(&a, &mut result) };
-        assert!(
-            (result[16]).abs() < 1e-4,
-            "swish(0) should be 0, got {}",
-            result[16]
-        );
+        assert!((result[16]).abs() < 1e-4, "swish(0) should be 0, got {}", result[16]);
     });
 }
 
@@ -106,10 +95,7 @@ fn test_avx512_backend_equivalence() {
             ScalarBackend::add(&a, &b, &mut scalar_add);
         }
         for i in 0..100 {
-            assert!(
-                (avx512_add[i] - scalar_add[i]).abs() < 1e-5,
-                "add mismatch at {i}",
-            );
+            assert!((avx512_add[i] - scalar_add[i]).abs() < 1e-5, "add mismatch at {i}",);
         }
     });
 }

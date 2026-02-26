@@ -139,12 +139,9 @@ fn test_matmul_public_api_large() {
     // Large matrix - verify SIMD path works correctly
     let size = 128;
     let a = Matrix::identity(size);
-    let b = Matrix::from_vec(
-        size,
-        size,
-        (0..size * size).map(|i| ((i * 2) % 100) as f32).collect(),
-    )
-    .unwrap();
+    let b =
+        Matrix::from_vec(size, size, (0..size * size).map(|i| ((i * 2) % 100) as f32).collect())
+            .unwrap();
     let result = a.matmul(&b).unwrap();
     // I x B = B
     assert_eq!(result.as_slice(), b.as_slice());
@@ -193,18 +190,14 @@ fn test_gpu_matmul_basic() {
     let a = Matrix::from_vec(
         4,
         4,
-        vec![
-            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0,
-        ],
+        vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
     )
     .unwrap();
 
     let b = Matrix::from_vec(
         4,
         4,
-        vec![
-            16.0, 15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0,
-        ],
+        vec![16.0, 15.0, 14.0, 13.0, 12.0, 11.0, 10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
     )
     .unwrap();
 

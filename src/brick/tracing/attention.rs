@@ -47,21 +47,10 @@ impl AttentionWeightTrace {
         let tail_mass = (total_mass - top_k_mass).max(0.0);
 
         // Compute entropy: H = -sum(p * log(p)) for non-zero probabilities
-        let entropy = weights
-            .iter()
-            .filter(|&&w| w > 1e-10)
-            .map(|&w| -w * w.max(f32::EPSILON).ln())
-            .sum();
+        let entropy =
+            weights.iter().filter(|&&w| w > 1e-10).map(|&w| -w * w.max(f32::EPSILON).ln()).sum();
 
-        Self {
-            layer_idx,
-            head_idx,
-            query_pos,
-            top_k_positions,
-            top_k_weights,
-            tail_mass,
-            entropy,
-        }
+        Self { layer_idx, head_idx, query_pos, top_k_positions, top_k_weights, tail_mass, entropy }
     }
 
     /// Check if attention is concentrated on first position (attention sink).
@@ -107,28 +96,19 @@ pub struct AttentionTraceConfig {
 
 impl Default for AttentionTraceConfig {
     fn default() -> Self {
-        Self {
-            top_k: 10,
-            layers: None,
-            heads: None,
-            weight_threshold: 0.01,
-        }
+        Self { top_k: 10, layers: None, heads: None, weight_threshold: 0.01 }
     }
 }
 
 impl AttentionTraceConfig {
     /// Check if a layer should be traced.
     pub fn should_trace_layer(&self, layer_idx: usize) -> bool {
-        self.layers
-            .as_ref()
-            .is_none_or(|layers| layers.contains(&layer_idx))
+        self.layers.as_ref().is_none_or(|layers| layers.contains(&layer_idx))
     }
 
     /// Check if a head should be traced.
     pub fn should_trace_head(&self, head_idx: usize) -> bool {
-        self.heads
-            .as_ref()
-            .is_none_or(|heads| heads.contains(&head_idx))
+        self.heads.as_ref().is_none_or(|heads| heads.contains(&head_idx))
     }
 }
 

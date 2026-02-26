@@ -28,10 +28,7 @@ fn test_relu_all_positive() {
     let result = v.relu().unwrap();
 
     for i in 0..v.len() {
-        assert_eq!(
-            result.data[i], expected.data[i],
-            "Positive values should remain unchanged"
-        );
+        assert_eq!(result.data[i], expected.data[i], "Positive values should remain unchanged");
     }
 }
 
@@ -88,11 +85,7 @@ fn test_sigmoid_range() {
     let result = v.sigmoid().unwrap();
 
     for &val in result.as_slice() {
-        assert!(
-            (0.0..=1.0).contains(&val),
-            "Sigmoid output {} not in [0, 1]",
-            val
-        );
+        assert!((0.0..=1.0).contains(&val), "Sigmoid output {} not in [0, 1]", val);
     }
 }
 

@@ -85,16 +85,10 @@ impl ServeLimits {
         body_size: usize,
     ) -> Result<(), LimitError> {
         if headers_count > self.max_headers {
-            return Err(LimitError::TooManyHeaders {
-                count: headers_count,
-                max: self.max_headers,
-            });
+            return Err(LimitError::TooManyHeaders { count: headers_count, max: self.max_headers });
         }
         if body_size > self.max_request_size {
-            return Err(LimitError::BodyTooLarge {
-                size: body_size,
-                max: self.max_request_size,
-            });
+            return Err(LimitError::BodyTooLarge { size: body_size, max: self.max_request_size });
         }
         Ok(())
     }
@@ -102,10 +96,7 @@ impl ServeLimits {
     /// Validate header size.
     pub fn validate_header_size(&self, size: usize) -> Result<(), LimitError> {
         if size > self.max_header_size {
-            return Err(LimitError::HeaderTooLarge {
-                size,
-                max: self.max_header_size,
-            });
+            return Err(LimitError::HeaderTooLarge { size, max: self.max_header_size });
         }
         Ok(())
     }
@@ -113,10 +104,7 @@ impl ServeLimits {
     /// Validate pipelined request count.
     pub fn validate_pipelined(&self, count: usize) -> Result<(), LimitError> {
         if count > self.max_pipelined {
-            return Err(LimitError::TooManyPipelined {
-                count,
-                max: self.max_pipelined,
-            });
+            return Err(LimitError::TooManyPipelined { count, max: self.max_pipelined });
         }
         Ok(())
     }
@@ -124,10 +112,7 @@ impl ServeLimits {
     /// Validate connection count.
     pub fn validate_connections(&self, current: usize) -> Result<(), LimitError> {
         if current >= self.max_connections {
-            return Err(LimitError::ConnectionLimitReached {
-                current,
-                max: self.max_connections,
-            });
+            return Err(LimitError::ConnectionLimitReached { current, max: self.max_connections });
         }
         Ok(())
     }
@@ -279,44 +264,23 @@ mod tests {
     fn test_validate_connections_limit_reached() {
         let limits = ServeLimits::default();
         let result = limits.validate_connections(1024);
-        assert!(matches!(
-            result,
-            Err(LimitError::ConnectionLimitReached { .. })
-        ));
+        assert!(matches!(result, Err(LimitError::ConnectionLimitReached { .. })));
     }
 
     #[test]
     fn test_limit_error_display() {
-        let err = LimitError::TooManyHeaders {
-            count: 150,
-            max: 100,
-        };
+        let err = LimitError::TooManyHeaders { count: 150, max: 100 };
         assert_eq!(format!("{}", err), "too many headers: 150 (max 100)");
 
-        let err = LimitError::BodyTooLarge {
-            size: 5000000,
-            max: 2097152,
-        };
-        assert_eq!(
-            format!("{}", err),
-            "body too large: 5000000 bytes (max 2097152)"
-        );
+        let err = LimitError::BodyTooLarge { size: 5000000, max: 2097152 };
+        assert_eq!(format!("{}", err), "body too large: 5000000 bytes (max 2097152)");
     }
 
     #[test]
     fn test_limit_error_eq() {
-        let err1 = LimitError::TooManyHeaders {
-            count: 150,
-            max: 100,
-        };
-        let err2 = LimitError::TooManyHeaders {
-            count: 150,
-            max: 100,
-        };
-        let err3 = LimitError::TooManyHeaders {
-            count: 200,
-            max: 100,
-        };
+        let err1 = LimitError::TooManyHeaders { count: 150, max: 100 };
+        let err2 = LimitError::TooManyHeaders { count: 150, max: 100 };
+        let err3 = LimitError::TooManyHeaders { count: 200, max: 100 };
 
         assert_eq!(err1, err2);
         assert_ne!(err1, err3);

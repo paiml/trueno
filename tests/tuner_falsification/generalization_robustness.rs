@@ -40,10 +40,7 @@ fn f082_extreme_large_model() {
 #[test]
 fn f083_extreme_batch_size() {
     let regressor = ThroughputRegressor::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(64)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(64).build();
 
     let pred = regressor.predict(&features);
     assert!(
@@ -65,10 +62,7 @@ fn f084_zero_batch_size() {
     if result.is_ok() {
         let regressor = ThroughputRegressor::new();
         let pred = regressor.predict(&features);
-        assert!(
-            pred.predicted_tps.is_finite(),
-            "F084 FALSIFIED: zero batch handled badly"
-        );
+        assert!(pred.predicted_tps.is_finite(), "F084 FALSIFIED: zero batch handled badly");
     }
 }
 
@@ -112,10 +106,7 @@ fn f086_all_quant_types() {
         QuantType::F16,
         QuantType::F32,
     ] {
-        let features = TunerFeatures::builder()
-            .model_params_b(1.5)
-            .quant_type(qt)
-            .build();
+        let features = TunerFeatures::builder().model_params_b(1.5).quant_type(qt).build();
 
         let pred = regressor.predict(&features);
         assert!(
@@ -135,21 +126,12 @@ fn f087_concept_drift_placeholder() {
     let regressor = ThroughputRegressor::new();
     let features = TunerFeatures::builder().model_params_b(1.5).build();
 
-    let predictions: Vec<_> = (0..10)
-        .map(|_| regressor.predict(&features).predicted_tps)
-        .collect();
+    let predictions: Vec<_> = (0..10).map(|_| regressor.predict(&features).predicted_tps).collect();
 
-    let variance: f32 = predictions
-        .iter()
-        .map(|p| (p - predictions[0]).powi(2))
-        .sum::<f32>()
-        / 10.0;
+    let variance: f32 =
+        predictions.iter().map(|p| (p - predictions[0]).powi(2)).sum::<f32>() / 10.0;
 
-    assert!(
-        variance < 0.001,
-        "F087 FALSIFIED: prediction variance {} too high",
-        variance
-    );
+    assert!(variance < 0.001, "F087 FALSIFIED: prediction variance {} too high", variance);
 }
 
 /// F088: Retraining improves accuracy (placeholder)
@@ -183,11 +165,7 @@ fn f090_all_zeros() {
 
     // Should not panic or produce NaN
     for (i, &v) in vec.iter().enumerate() {
-        assert!(
-            v.is_finite(),
-            "F090 FALSIFIED: default feature[{}] is not finite",
-            i
-        );
+        assert!(v.is_finite(), "F090 FALSIFIED: default feature[{}] is not finite", i);
     }
 }
 
@@ -239,10 +217,7 @@ fn f093_memory_stability() {
 #[test]
 fn f094_feature_importance_consistency() {
     let regressor = ThroughputRegressor::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let pred1 = regressor.predict(&features);
     let pred2 = regressor.predict(&features);
@@ -258,10 +233,7 @@ fn f094_feature_importance_consistency() {
 #[test]
 fn f095_recommendations_actionable() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(1)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(1).build();
 
     let rec = tuner.recommend(&features);
 
@@ -276,10 +248,7 @@ fn f095_recommendations_actionable() {
 #[test]
 fn f096_bottleneck_deterministic() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .batch_size(1)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(7.0).batch_size(1).build();
 
     let rec1 = tuner.recommend(&features);
     let rec2 = tuner.recommend(&features);
@@ -301,11 +270,7 @@ fn f097_version_format() {
 
     // Version should match semver pattern
     let parts: Vec<&str> = rec.model_version.split('.').collect();
-    assert!(
-        parts.len() >= 2,
-        "F097 FALSIFIED: version '{}' not semver",
-        rec.model_version
-    );
+    assert!(parts.len() >= 2, "F097 FALSIFIED: version '{}' not semver", rec.model_version);
 }
 
 /// F098: Confidence overall in valid range
@@ -377,10 +342,7 @@ fn f100_complete_workflow() {
     assert!(rec.confidence_overall >= 0.0);
 
     println!("F100 PASSED: Complete workflow successful");
-    println!(
-        "  Predicted throughput: {:.1} tok/s",
-        rec.throughput.predicted_tps
-    );
+    println!("  Predicted throughput: {:.1} tok/s", rec.throughput.predicted_tps);
     println!("  Recommended kernel: {:?}", rec.kernel.top_kernel);
     println!("  Bottleneck: {:?}", rec.bottleneck);
 }

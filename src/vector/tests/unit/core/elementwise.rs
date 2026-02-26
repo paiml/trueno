@@ -31,13 +31,7 @@ fn test_add_size_mismatch() {
     let b = Vector::from_slice(&[3.0]);
     let result = a.add(&b);
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err(),
-        TruenoError::SizeMismatch {
-            expected: 2,
-            actual: 1
-        }
-    );
+    assert_eq!(result.unwrap_err(), TruenoError::SizeMismatch { expected: 2, actual: 1 });
 }
 
 // Subtract operation tests
@@ -71,13 +65,7 @@ fn test_sub_size_mismatch() {
     let b = Vector::from_slice(&[3.0]);
     let result = a.sub(&b);
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err(),
-        TruenoError::SizeMismatch {
-            expected: 2,
-            actual: 1
-        }
-    );
+    assert_eq!(result.unwrap_err(), TruenoError::SizeMismatch { expected: 2, actual: 1 });
 }
 
 #[test]

@@ -30,9 +30,7 @@ pub struct MessageTemplate {
 impl MessageTemplate {
     /// Create new template
     pub fn new(template: &str) -> Self {
-        Self {
-            template: template.to_string(),
-        }
+        Self { template: template.to_string() }
     }
 
     /// Render template with alert data
@@ -42,16 +40,10 @@ impl MessageTemplate {
             .replace("{message}", &alert.message)
             .replace("{severity}", alert.severity.name())
             .replace("{source}", &alert.source)
-            .replace(
-                "{value}",
-                &alert.value.map(|v| format!("{:.2}", v)).unwrap_or_default(),
-            )
+            .replace("{value}", &alert.value.map(|v| format!("{:.2}", v)).unwrap_or_default())
             .replace(
                 "{threshold}",
-                &alert
-                    .threshold
-                    .map(|t| format!("{:.2}", t))
-                    .unwrap_or_default(),
+                &alert.threshold.map(|t| format!("{:.2}", t)).unwrap_or_default(),
             )
     }
 }
@@ -66,10 +58,7 @@ pub fn alert_from_anomaly(
     let deviation = ((value - expected) / expected * 100.0).abs();
     Alert::new(
         &format!("Anomaly detected: {}", metric),
-        &format!(
-            "{} deviated {:.1}% from expected value {:.2}",
-            metric, deviation, expected
-        ),
+        &format!("{} deviated {:.1}% from expected value {:.2}", metric, deviation, expected),
         severity,
     )
     .with_source(metric)

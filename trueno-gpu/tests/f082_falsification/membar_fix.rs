@@ -86,11 +86,7 @@ L_skip:
         }
     };
 
-    let config = LaunchConfig {
-        grid: (1, 1, 1),
-        block: (32, 1, 1),
-        shared_mem: 64,
-    };
+    let config = LaunchConfig { grid: (1, 1, 1), block: (32, 1, 1), shared_mem: 64 };
 
     let mut args: [*mut c_void; 1] = [output_buf.as_kernel_arg()];
 

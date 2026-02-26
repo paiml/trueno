@@ -105,11 +105,7 @@ impl GpuResidentTensor<f32> {
 
             // 256 threads per block (8 warps), one block per row
             // Shared memory: 8 warp maxes + 8 warp sums + 2 global = 72 bytes
-            let config = LaunchConfig {
-                grid: (seq_len, 1, 1),
-                block: (256, 1, 1),
-                shared_mem: 72,
-            };
+            let config = LaunchConfig { grid: (seq_len, 1, 1), block: (256, 1, 1), shared_mem: 72 };
 
             let mut args: Vec<*mut std::ffi::c_void> = vec![
                 std::ptr::addr_of!(input_ptr) as *mut _,
@@ -183,15 +179,7 @@ impl GpuResidentTensor<f32> {
                 std::ptr::addr_of!(row_size_val) as *mut _,
             ];
 
-            launch_cached_kernel(
-                ctx,
-                stream,
-                &cache_key,
-                &ptx,
-                kernel.name(),
-                &config,
-                &mut args,
-            )?;
+            launch_cached_kernel(ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         } else {
             // Use long row softmax for rows > 32 elements (cached)
             let kernel = LongRowSoftmaxKernel::new(row_size as u32);
@@ -199,11 +187,7 @@ impl GpuResidentTensor<f32> {
             let cache_key = format!("softmax_long_row:{}", row_size);
 
             // 256 threads per block (8 warps), one block per row
-            let config = LaunchConfig {
-                grid: (seq_len, 1, 1),
-                block: (256, 1, 1),
-                shared_mem: 72,
-            };
+            let config = LaunchConfig { grid: (seq_len, 1, 1), block: (256, 1, 1), shared_mem: 72 };
 
             let mut args: Vec<*mut std::ffi::c_void> = vec![
                 std::ptr::addr_of!(input_ptr) as *mut _,
@@ -211,15 +195,7 @@ impl GpuResidentTensor<f32> {
                 std::ptr::addr_of!(row_size_val) as *mut _,
             ];
 
-            launch_cached_kernel(
-                ctx,
-                stream,
-                &cache_key,
-                &ptx,
-                kernel.name(),
-                &config,
-                &mut args,
-            )?;
+            launch_cached_kernel(ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         }
         // NO SYNC - caller controls synchronization for graph capture
 
@@ -262,11 +238,7 @@ impl GpuResidentTensor<f32> {
         // Configure launch
         let threads = 256u32;
         let blocks = ((n as u32) + threads - 1) / threads;
-        let config = LaunchConfig {
-            grid: (blocks, 1, 1),
-            block: (threads, 1, 1),
-            shared_mem: 0,
-        };
+        let config = LaunchConfig { grid: (blocks, 1, 1), block: (threads, 1, 1), shared_mem: 0 };
 
         // Prepare arguments
         let a_ptr = self.as_ptr();
@@ -281,15 +253,7 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        launch_cached_kernel(
-            ctx,
-            &stream,
-            &cache_key,
-            &ptx,
-            kernel.name(),
-            &config,
-            &mut args,
-        )?;
+        launch_cached_kernel(ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         stream.synchronize()?;
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -333,11 +297,7 @@ impl GpuResidentTensor<f32> {
         // Configure launch
         let threads = 256u32;
         let blocks = ((n as u32) + threads - 1) / threads;
-        let config = LaunchConfig {
-            grid: (blocks, 1, 1),
-            block: (threads, 1, 1),
-            shared_mem: 0,
-        };
+        let config = LaunchConfig { grid: (blocks, 1, 1), block: (threads, 1, 1), shared_mem: 0 };
 
         // Prepare arguments
         let a_ptr = self.as_ptr();
@@ -352,15 +312,7 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        launch_cached_kernel(
-            ctx,
-            stream,
-            &cache_key,
-            &ptx,
-            kernel.name(),
-            &config,
-            &mut args,
-        )?;
+        launch_cached_kernel(ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -409,36 +361,19 @@ impl GpuResidentTensor<f32> {
         use crate::kernels::InterleavedToBatchedKernel;
         let kernel = InterleavedToBatchedKernel::new(seq_len, n_heads, head_dim);
         let ptx = kernel.emit_ptx();
-        let cache_key = format!(
-            "interleaved_to_batched:{}:{}:{}",
-            seq_len, n_heads, head_dim
-        );
+        let cache_key = format!("interleaved_to_batched:{}:{}:{}", seq_len, n_heads, head_dim);
 
         let threads = 256u32;
         let blocks = (total_elems as u32 + threads - 1) / threads;
-        let config = LaunchConfig {
-            grid: (blocks, 1, 1),
-            block: (threads, 1, 1),
-            shared_mem: 0,
-        };
+        let config = LaunchConfig { grid: (blocks, 1, 1), block: (threads, 1, 1), shared_mem: 0 };
 
         let input_ptr = self.as_ptr();
         let output_ptr = output_buffer.as_ptr();
 
-        let mut args: Vec<*mut std::ffi::c_void> = vec![
-            std::ptr::addr_of!(input_ptr) as *mut _,
-            std::ptr::addr_of!(output_ptr) as *mut _,
-        ];
+        let mut args: Vec<*mut std::ffi::c_void> =
+            vec![std::ptr::addr_of!(input_ptr) as *mut _, std::ptr::addr_of!(output_ptr) as *mut _];
 
-        launch_cached_kernel(
-            ctx,
-            stream,
-            &cache_key,
-            &ptx,
-            kernel.name(),
-            &config,
-            &mut args,
-        )?;
+        launch_cached_kernel(ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -462,11 +397,7 @@ impl GpuResidentTensor<f32> {
         // Configure launch
         let threads = 256u32;
         let blocks = ((n as u32) + threads - 1) / threads;
-        let config = LaunchConfig {
-            grid: (blocks, 1, 1),
-            block: (threads, 1, 1),
-            shared_mem: 0,
-        };
+        let config = LaunchConfig { grid: (blocks, 1, 1), block: (threads, 1, 1), shared_mem: 0 };
 
         // Prepare arguments (must match kernel params: input_ptr, output_ptr, scale, n)
         let input_ptr = self.as_ptr();
@@ -480,15 +411,7 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        launch_cached_kernel(
-            ctx,
-            &stream,
-            &cache_key,
-            &ptx,
-            kernel.name(),
-            &config,
-            &mut args,
-        )?;
+        launch_cached_kernel(ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         stream.synchronize()?;
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))

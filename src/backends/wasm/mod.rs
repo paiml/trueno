@@ -158,10 +158,7 @@ impl VectorBackend for WasmBackend {
         let scalar_vec = f32x4_splat(scalar);
         while i + 4 <= len {
             let va = v128_load(a.as_ptr().add(i) as *const v128);
-            v128_store(
-                result.as_mut_ptr().add(i) as *mut v128,
-                f32x4_mul(va, scalar_vec),
-            );
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_mul(va, scalar_vec));
             i += 4;
         }
         for j in i..len {
@@ -234,10 +231,7 @@ impl VectorBackend for WasmBackend {
             let va = v128_load(a.as_ptr().add(i) as *const v128);
             let vb = v128_load(b.as_ptr().add(i) as *const v128);
             let vc = v128_load(c.as_ptr().add(i) as *const v128);
-            v128_store(
-                result.as_mut_ptr().add(i) as *mut v128,
-                f32x4_add(f32x4_mul(va, vb), vc),
-            );
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_add(f32x4_mul(va, vb), vc));
             i += 4;
         }
         for j in i..len {
@@ -253,10 +247,7 @@ impl VectorBackend for WasmBackend {
         let zero = f32x4_splat(0.0);
         while i + 4 <= len {
             let va = v128_load(a.as_ptr().add(i) as *const v128);
-            v128_store(
-                result.as_mut_ptr().add(i) as *mut v128,
-                f32x4_pmax(va, zero),
-            );
+            v128_store(result.as_mut_ptr().add(i) as *mut v128, f32x4_pmax(va, zero));
             i += 4;
         }
         for j in i..len {
@@ -397,10 +388,7 @@ mod tests {
         unsafe {
             WasmBackend::add(&a, &b, &mut result);
         }
-        assert_eq!(
-            result,
-            vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
-        );
+        assert_eq!(result, vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -413,10 +401,7 @@ mod tests {
         unsafe {
             WasmBackend::mul(&a, &b, &mut result);
         }
-        assert_eq!(
-            result,
-            vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]
-        );
+        assert_eq!(result, vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]);
     }
 
     #[cfg(target_arch = "wasm32")]

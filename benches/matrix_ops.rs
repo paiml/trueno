@@ -26,13 +26,9 @@ fn bench_matmul_group(
     for &(m, n, p) in shapes {
         let id = format!("{m}x{n}_x_{n}x{p}");
         let (a, b) = make_matmul_pair(m, n, p, b_stride);
-        group.bench_with_input(
-            BenchmarkId::from_parameter(&id),
-            &(&a, &b),
-            |bench, (a, b)| {
-                bench.iter(|| black_box(black_box(a).matmul(black_box(b)).unwrap()));
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(&id), &(&a, &b), |bench, (a, b)| {
+            bench.iter(|| black_box(black_box(a).matmul(black_box(b)).unwrap()));
+        });
     }
     group.finish();
 }
@@ -46,9 +42,7 @@ fn bench_convolve2d_group(
 ) {
     let mut group = c.benchmark_group(group_name);
     for (rows, cols, desc, kernel) in configs {
-        let input_data: Vec<f32> = (0..rows * cols)
-            .map(|i| ((i % 256) as f32) / 255.0)
-            .collect();
+        let input_data: Vec<f32> = (0..rows * cols).map(|i| ((i % 256) as f32) / 255.0).collect();
         let input = Matrix::from_vec(*rows, *cols, input_data).unwrap();
         let id = format!("{rows}x{cols}_k{}", kernel.rows());
         group.bench_with_input(
@@ -117,13 +111,9 @@ fn bench_matvec(c: &mut Criterion) {
         let id = format!("{rows}x{cols}_x_{cols}");
         let m = Matrix::from_vec(rows, cols, gen_data(rows * cols, 1, 100)).unwrap();
         let v = trueno::Vector::from_slice(&gen_data(cols, 1, 100));
-        group.bench_with_input(
-            BenchmarkId::from_parameter(&id),
-            &(&m, &v),
-            |bench, (m, v)| {
-                bench.iter(|| black_box(black_box(m).matvec(black_box(v)).unwrap()));
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(&id), &(&m, &v), |bench, (m, v)| {
+            bench.iter(|| black_box(black_box(m).matvec(black_box(v)).unwrap()));
+        });
     }
 
     group.finish();

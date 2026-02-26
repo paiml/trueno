@@ -77,10 +77,7 @@ mod tests {
         let seq1: Vec<f64> = (0..100).map(|_| rng1.gen_f64()).collect();
         let seq2: Vec<f64> = (0..100).map(|_| rng2.gen_f64()).collect();
 
-        assert_ne!(
-            seq1, seq2,
-            "Different seeds must produce different sequences"
-        );
+        assert_ne!(seq1, seq2, "Different seeds must produce different sequences");
     }
 
     #[test]

@@ -240,18 +240,9 @@ fn test_f202_unroll_factor() {
     assert_eq!(UnrollFactor::X8.value(), 8);
 
     // Backend selection
-    assert_eq!(
-        UnrollFactor::for_backend(ComputeBackend::Avx512),
-        UnrollFactor::X8
-    );
-    assert_eq!(
-        UnrollFactor::for_backend(ComputeBackend::Avx2),
-        UnrollFactor::X4
-    );
-    assert_eq!(
-        UnrollFactor::for_backend(ComputeBackend::Scalar),
-        UnrollFactor::None
-    );
+    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Avx512), UnrollFactor::X8);
+    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Avx2), UnrollFactor::X4);
+    assert_eq!(UnrollFactor::for_backend(ComputeBackend::Scalar), UnrollFactor::None);
 }
 
 /// F203: UnrollTailIterator chunks and tail (LCP-13)

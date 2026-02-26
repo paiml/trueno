@@ -45,11 +45,7 @@ impl ModelTracerConfig {
 
     /// Create a lightweight config (activations + KV cache only).
     pub fn lightweight() -> Self {
-        Self {
-            trace_activations: true,
-            trace_kv_cache: true,
-            ..Default::default()
-        }
+        Self { trace_activations: true, trace_kv_cache: true, ..Default::default() }
     }
 
     /// Check if any tracing is enabled.
@@ -157,10 +153,7 @@ impl ModelTracer {
     pub fn record_logits(&mut self, layer_idx: usize, logits: &[f32]) {
         if let Some(ref mut logit_trace) = self.current_logit_trace {
             for token_evo in &mut logit_trace.tracked_tokens {
-                let logit = logits
-                    .get(token_evo.token_id as usize)
-                    .copied()
-                    .unwrap_or(0.0);
+                let logit = logits.get(token_evo.token_id as usize).copied().unwrap_or(0.0);
                 let rank = LogitEvolutionTrace::compute_rank(logits, token_evo.token_id);
                 token_evo.record_layer(logit, rank);
             }
@@ -215,11 +208,7 @@ impl ModelTracer {
     pub fn summary(&self) -> ModelTracerSummary {
         ModelTracerSummary {
             total_forwards: self.activation_traces.len(),
-            anomalies_detected: self
-                .activation_traces
-                .iter()
-                .filter(|t| t.has_anomaly)
-                .count(),
+            anomalies_detected: self.activation_traces.iter().filter(|t| t.has_anomaly).count(),
             attention_traces: self.attention_traces.len(),
             logit_traces: self.logit_traces.len(),
             kv_steps: self.kv_trace.steps.len(),

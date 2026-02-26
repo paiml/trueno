@@ -167,12 +167,7 @@ fn test_log_softmax_uniform() {
     // Each should be log(1/4) = log(0.25) ~= -1.386
     let expected = (0.25_f32).ln();
     for &lp in log_probs.as_slice() {
-        assert!(
-            (lp - expected).abs() < 1e-5,
-            "log_prob = {}, expected {}",
-            lp,
-            expected
-        );
+        assert!((lp - expected).abs() < 1e-5, "log_prob = {}, expected {}", lp, expected);
     }
 }
 
@@ -264,10 +259,7 @@ fn falsify_sm_001_sums_to_one() {
         let v = Vector::from_vec(logits.clone());
         let probs = v.softmax().unwrap();
         let sum: f32 = probs.as_slice().iter().sum();
-        assert!(
-            (sum - 1.0).abs() < 1e-5,
-            "FALSIFIED SM-001: case {idx} sum={sum}, expected 1.0"
-        );
+        assert!((sum - 1.0).abs() < 1e-5, "FALSIFIED SM-001: case {idx} sum={sum}, expected 1.0");
     }
 }
 
@@ -281,10 +273,7 @@ fn falsify_sm_002_strictly_positive() {
     let probs = v.softmax().unwrap();
 
     for (i, &p) in probs.as_slice().iter().enumerate() {
-        assert!(
-            p > 0.0,
-            "FALSIFIED SM-002: probs[{i}] = {p} is not strictly positive"
-        );
+        assert!(p > 0.0, "FALSIFIED SM-002: probs[{i}] = {p} is not strictly positive");
     }
 }
 
@@ -293,11 +282,8 @@ fn falsify_sm_002_strictly_positive() {
 /// Contract: argmax(σ(x)) = argmax(x)
 #[test]
 fn falsify_sm_003_order_preservation() {
-    let test_cases: Vec<Vec<f32>> = vec![
-        vec![1.0, 5.0, 3.0],
-        vec![-100.0, 0.0, -50.0],
-        vec![0.001, 0.002, 0.001],
-    ];
+    let test_cases: Vec<Vec<f32>> =
+        vec![vec![1.0, 5.0, 3.0], vec![-100.0, 0.0, -50.0], vec![0.001, 0.002, 0.001]];
 
     for (idx, logits) in test_cases.iter().enumerate() {
         let input_argmax = logits
@@ -334,10 +320,7 @@ fn falsify_sm_004_bounded_zero_one() {
     let probs = v.softmax().unwrap();
 
     for (i, &p) in probs.as_slice().iter().enumerate() {
-        assert!(
-            p > 0.0 && p < 1.0,
-            "FALSIFIED SM-004: probs[{i}] = {p} not in (0, 1)"
-        );
+        assert!(p > 0.0 && p < 1.0, "FALSIFIED SM-004: probs[{i}] = {p} not in (0, 1)");
     }
 }
 
@@ -347,10 +330,10 @@ fn falsify_sm_004_bounded_zero_one() {
 #[test]
 fn falsify_sm_005_numerical_stability() {
     let extreme_cases: Vec<Vec<f32>> = vec![
-        vec![1000.0, 1001.0, 1002.0],         // Large positive
-        vec![-1000.0, -999.0, -998.0],         // Large negative
-        vec![-500.0, 0.0, 500.0],              // Huge range
-        vec![f32::MIN_POSITIVE, 1.0, 80.0],    // Near-zero to large
+        vec![1000.0, 1001.0, 1002.0],       // Large positive
+        vec![-1000.0, -999.0, -998.0],      // Large negative
+        vec![-500.0, 0.0, 500.0],           // Huge range
+        vec![f32::MIN_POSITIVE, 1.0, 80.0], // Near-zero to large
     ];
 
     for (idx, logits) in extreme_cases.iter().enumerate() {
@@ -358,10 +341,7 @@ fn falsify_sm_005_numerical_stability() {
         let probs = v.softmax().unwrap();
 
         for (i, &p) in probs.as_slice().iter().enumerate() {
-            assert!(
-                p.is_finite(),
-                "FALSIFIED SM-005: case {idx} probs[{i}] = {p} is not finite"
-            );
+            assert!(p.is_finite(), "FALSIFIED SM-005: case {idx} probs[{i}] = {p} is not finite");
         }
 
         let sum: f32 = probs.as_slice().iter().sum();
@@ -412,11 +392,8 @@ fn falsify_sm_007_translation_invariance() {
         let shifted = Vector::from_vec(vec![1.0 + c, 3.0 + c, -2.0 + c, 0.5 + c]);
         let shifted_probs = shifted.softmax().unwrap();
 
-        for (i, (&orig, &shift)) in base_probs
-            .as_slice()
-            .iter()
-            .zip(shifted_probs.as_slice().iter())
-            .enumerate()
+        for (i, (&orig, &shift)) in
+            base_probs.as_slice().iter().zip(shifted_probs.as_slice().iter()).enumerate()
         {
             assert!(
                 (orig - shift).abs() < 1e-5,
@@ -454,11 +431,8 @@ fn falsify_sm_008_simd_scalar_equivalence() {
         let scalar_probs = v_scalar.softmax().unwrap();
         let auto_probs = v_auto.softmax().unwrap();
 
-        for (i, (&s, &a)) in scalar_probs
-            .as_slice()
-            .iter()
-            .zip(auto_probs.as_slice().iter())
-            .enumerate()
+        for (i, (&s, &a)) in
+            scalar_probs.as_slice().iter().zip(auto_probs.as_slice().iter()).enumerate()
         {
             let diff = (s - a).abs();
             let ulp_bound = 8.0 * f32::EPSILON * s.abs().max(a.abs()).max(f32::MIN_POSITIVE);

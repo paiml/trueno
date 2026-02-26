@@ -36,10 +36,7 @@ fn test_kaizen_metrics() {
 
 #[test]
 fn test_heijunka_balanced_partition() {
-    let scheduler = HeijunkaScheduler {
-        num_threads: 4,
-        variance_threshold: 0.05,
-    };
+    let scheduler = HeijunkaScheduler { num_threads: 4, variance_threshold: 0.05 };
 
     // Use m=288 which divides evenly into 4 blocks of MC=72
     let partitions = scheduler.partition_m(288, MC);
@@ -65,10 +62,7 @@ fn test_heijunka_balanced_partition() {
 
 #[test]
 fn test_heijunka_single_thread() {
-    let scheduler = HeijunkaScheduler {
-        num_threads: 1,
-        variance_threshold: 0.05,
-    };
+    let scheduler = HeijunkaScheduler { num_threads: 1, variance_threshold: 0.05 };
     let partitions = scheduler.partition_m(100, MC);
     assert_eq!(partitions.len(), 1);
     assert_eq!(partitions[0], 0..100);
@@ -76,10 +70,7 @@ fn test_heijunka_single_thread() {
 
 #[test]
 fn test_heijunka_more_threads_than_blocks() {
-    let scheduler = HeijunkaScheduler {
-        num_threads: 8,
-        variance_threshold: 0.05,
-    };
+    let scheduler = HeijunkaScheduler { num_threads: 8, variance_threshold: 0.05 };
     // m=MC means 1 block but 8 threads — some threads get nothing
     let partitions = scheduler.partition_m(MC, MC);
     assert!(!partitions.is_empty());
@@ -112,14 +103,7 @@ fn test_gemm_blis_parallel_small_matrix() {
     gemm_blis_parallel(m, n, k, &a, &b_mut, &mut c).unwrap();
     // First row of C should match first row of A (for k<=n)
     for j in 0..k.min(n) {
-        assert!(
-            (c[j] - a[j]).abs() < 1e-3,
-            "c[{}] = {}, a[{}] = {}",
-            j,
-            c[j],
-            j,
-            a[j]
-        );
+        assert!((c[j] - a[j]).abs() < 1e-3, "c[{}] = {}, a[{}] = {}", j, c[j], j, a[j]);
     }
 }
 

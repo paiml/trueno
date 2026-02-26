@@ -417,10 +417,7 @@ mod loading {
                     cuDeviceGet: load_sym!(cuDeviceGet, FnDeviceGet),
                     cuDeviceGetName: load_sym!(cuDeviceGetName, FnDeviceGetName),
                     cuDeviceTotalMem: load_sym!(cuDeviceTotalMem_v2, FnDeviceTotalMem),
-                    cuDeviceGetAttribute: load_sym!(
-                        cuDeviceGetAttribute,
-                        FnDeviceGetAttribute
-                    ),
+                    cuDeviceGetAttribute: load_sym!(cuDeviceGetAttribute, FnDeviceGetAttribute),
                     cuDevicePrimaryCtxRetain: load_sym!(
                         cuDevicePrimaryCtxRetain,
                         FnPrimaryCtxRetain
@@ -472,10 +469,7 @@ mod loading {
             if result == CUDA_SUCCESS {
                 Ok(())
             } else {
-                Err(GpuError::CudaDriver(
-                    cuda_error_string(result).to_string(),
-                    result,
-                ))
+                Err(GpuError::CudaDriver(cuda_error_string(result).to_string(), result))
             }
         }
     }
@@ -494,9 +488,7 @@ mod loading {
 
         /// Check is a no-op without CUDA
         pub fn check(_result: CUresult) -> Result<(), GpuError> {
-            Err(GpuError::CudaNotAvailable(
-                "cuda feature not enabled".to_string(),
-            ))
+            Err(GpuError::CudaNotAvailable("cuda feature not enabled".to_string()))
         }
     }
 }

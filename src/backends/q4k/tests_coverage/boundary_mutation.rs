@@ -37,10 +37,7 @@ fn test_bh_mut_dequant_data_length_boundary() {
     let short_data = &data[..SUPER_BLOCK_BYTES - 1];
     let result_short = dequantize_q4k_to_f32(short_data, 256);
     let non_zero_short = result_short.iter().filter(|&&v| v != 0.0).count();
-    assert_eq!(
-        non_zero_short, 0,
-        "Short data must not produce dequantized values"
-    );
+    assert_eq!(non_zero_short, 0, "Short data must not produce dequantized values");
 }
 
 /// BH-MUT-2: chunk loop bound -- for chunk in 0..4
@@ -135,16 +132,8 @@ fn test_bh_mut_out_idx_boundary() {
 
     // First 3 elements should be computed (finite)
     for i in 0..3 {
-        assert!(
-            chunk[i].is_finite(),
-            "chunk[{i}] should be computed, got {}",
-            chunk[i]
-        );
+        assert!(chunk[i].is_finite(), "chunk[{i}] should be computed, got {}", chunk[i]);
     }
     // Fourth element should still be NAN (out_idx=3 >= out_dim=3)
-    assert!(
-        chunk[3].is_nan(),
-        "chunk[3] should be untouched (NAN), got {}",
-        chunk[3]
-    );
+    assert!(chunk[3].is_nan(), "chunk[3] should be untouched (NAN), got {}", chunk[3]);
 }

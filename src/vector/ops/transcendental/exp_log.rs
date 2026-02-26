@@ -57,20 +57,14 @@ impl Vector<f32> {
                             dispatch_unary_op!(self.backend, exp, chunk_in, chunk_out);
                         });
 
-                    return Ok(Vector {
-                        data: result_data,
-                        backend: self.backend,
-                    });
+                    return Ok(Vector { data: result_data, backend: self.backend });
                 }
             }
 
             dispatch_unary_op!(self.backend, exp, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Element-wise natural logarithm: result\[i\] = ln(x\[i\])
@@ -113,10 +107,7 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend, ln, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Element-wise base-2 logarithm: result\[i\] = log₂(x\[i\])
@@ -158,10 +149,7 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend, log2, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Element-wise base-10 logarithm: result\[i\] = log₁₀(x\[i\])
@@ -203,9 +191,6 @@ impl Vector<f32> {
             dispatch_unary_op!(self.backend, log10, &self.data, &mut result_data);
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 }

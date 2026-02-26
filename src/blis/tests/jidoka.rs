@@ -27,16 +27,9 @@ fn test_jidoka_guard_passes_valid() {
 
 #[test]
 fn test_jidoka_guard_catches_deviation() {
-    let guard = JidokaGuard {
-        epsilon: 0.01,
-        check_special: true,
-        sample_rate: 1,
-    };
+    let guard = JidokaGuard { epsilon: 0.01, check_special: true, sample_rate: 1 };
     let result = guard.validate(1.0, 2.0); // 50% error
-    assert!(matches!(
-        result,
-        Err(JidokaError::NumericalDeviation { .. })
-    ));
+    assert!(matches!(result, Err(JidokaError::NumericalDeviation { .. })));
 }
 
 #[test]

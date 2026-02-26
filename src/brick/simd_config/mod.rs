@@ -216,11 +216,7 @@ pub struct UnrollTailIterator {
 impl UnrollTailIterator {
     /// Create iterator for given size and unroll factor.
     pub fn new(total: usize, factor: UnrollFactor) -> Self {
-        Self {
-            total,
-            position: 0,
-            chunk_size: factor.value(),
-        }
+        Self { total, position: 0, chunk_size: factor.value() }
     }
 
     /// Get number of full unrolled iterations.

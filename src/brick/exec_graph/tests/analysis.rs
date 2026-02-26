@@ -24,11 +24,7 @@ fn test_critical_path_empty_graph() {
 #[test]
 fn test_critical_path_single_node() {
     let mut graph = ExecutionGraph::new();
-    graph.add_node(ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 5000,
-        elements: 1024,
-    });
+    graph.add_node(ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 5000, elements: 1024 });
     let (path, total) = graph.critical_path();
     assert_eq!(path.len(), 1);
     assert_eq!(total, 5000);
@@ -58,11 +54,7 @@ fn test_critical_path_linear_depends_on() {
 
     let (path, total) = graph.critical_path();
     assert!(path.len() >= 2, "Path should include at least 2 nodes");
-    assert!(
-        total >= 5000,
-        "Total should be at least 5000ns: got {}",
-        total
-    );
+    assert!(total >= 5000, "Total should be at least 5000ns: got {}", total);
 }
 
 /// Sequence edges are included in critical path analysis.
@@ -105,20 +97,13 @@ fn test_critical_path_transfer_edge() {
     graph.add_edge(
         brick,
         transfer,
-        EdgeType::Transfer {
-            bytes: 1_000_000,
-            direction: TransferDirection::H2D,
-        },
+        EdgeType::Transfer { bytes: 1_000_000, direction: TransferDirection::H2D },
     );
 
     let (path, total) = graph.critical_path();
     assert!(!path.is_empty());
     // The total should include the transfer node timing
-    assert!(
-        total >= 500,
-        "Total should include transfer timing: got {}",
-        total
-    );
+    assert!(total >= 500, "Total should include transfer timing: got {}", total);
 }
 
 /// Contains edges contribute to critical path (hierarchical).
@@ -142,11 +127,8 @@ fn test_critical_path_contains_edges() {
 #[test]
 fn test_critical_path_calls_edges() {
     let mut graph = ExecutionGraph::new();
-    let func1 = graph.add_node(ExecutionNode::Function {
-        name: "outer".into(),
-        file: None,
-        line: None,
-    });
+    let func1 =
+        graph.add_node(ExecutionNode::Function { name: "outer".into(), file: None, line: None });
     let func2 = graph.add_node(ExecutionNode::Brick {
         id: BrickId::GateProjection,
         timing_ns: 7000,
@@ -156,10 +138,7 @@ fn test_critical_path_calls_edges() {
 
     let (path, total) = graph.critical_path();
     assert!(!path.is_empty());
-    assert!(
-        total >= 7000,
-        "Total should include brick timing via Calls edge"
-    );
+    assert!(total >= 7000, "Total should include brick timing via Calls edge");
 }
 
 /// Launches edges contribute to critical path.
@@ -185,10 +164,7 @@ fn test_critical_path_launches_edges() {
 
     let (path, total) = graph.critical_path();
     assert!(path.len() >= 2);
-    assert!(
-        total >= 1500,
-        "Total should include kernel timing via Launches edge"
-    );
+    assert!(total >= 1500, "Total should include kernel timing via Launches edge");
 }
 
 /// Diamond graph — critical path picks the longer branch.
@@ -212,11 +188,8 @@ fn test_critical_path_diamond() {
         timing_ns: 9000,
         elements: 64,
     });
-    let end = graph.add_node(ExecutionNode::Brick {
-        id: BrickId::LmHead,
-        timing_ns: 200,
-        elements: 64,
-    });
+    let end =
+        graph.add_node(ExecutionNode::Brick { id: BrickId::LmHead, timing_ns: 200, elements: 64 });
 
     graph.add_dependency(start, fast);
     graph.add_dependency(start, slow);
@@ -226,11 +199,7 @@ fn test_critical_path_diamond() {
     let (path, total) = graph.critical_path();
     // Should pick start -> slow -> end
     assert!(path.len() >= 2);
-    assert!(
-        total >= 9000,
-        "Critical path should follow slow branch: got {}",
-        total
-    );
+    assert!(total >= 9000, "Critical path should follow slow branch: got {}", total);
 }
 
 /// Kernel with no timing (timing_ns = None) contributes 0 to critical path.
@@ -287,11 +256,8 @@ fn test_critical_path_transfer_no_timing() {
 fn test_critical_path_zero_timing_nodes() {
     let mut graph = ExecutionGraph::new();
     let layer = graph.add_node(ExecutionNode::Layer { index: 0 });
-    let func = graph.add_node(ExecutionNode::Function {
-        name: "setup".into(),
-        file: None,
-        line: None,
-    });
+    let func =
+        graph.add_node(ExecutionNode::Function { name: "setup".into(), file: None, line: None });
     graph.add_edge(layer, func, EdgeType::Contains);
 
     let (path, total) = graph.critical_path();
@@ -339,11 +305,7 @@ fn test_critical_path_summary_empty() {
 #[test]
 fn test_critical_path_summary_single_node() {
     let mut graph = ExecutionGraph::new();
-    graph.add_node(ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 5000,
-        elements: 1024,
-    });
+    graph.add_node(ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 5000, elements: 1024 });
 
     let summary = graph.critical_path_summary();
     assert!(summary.contains("Critical Path:"));
@@ -405,11 +367,8 @@ fn test_critical_path_summary_with_slack() {
         timing_ns: 10_000,
         elements: 2048,
     });
-    let end = graph.add_node(ExecutionNode::Brick {
-        id: BrickId::LmHead,
-        timing_ns: 200,
-        elements: 32,
-    });
+    let end =
+        graph.add_node(ExecutionNode::Brick { id: BrickId::LmHead, timing_ns: 200, elements: 32 });
 
     graph.add_dependency(start, fast);
     graph.add_dependency(start, slow);
@@ -424,11 +383,7 @@ fn test_critical_path_summary_with_slack() {
         "Should show parallelization opportunities when slack exists: {}",
         summary
     );
-    assert!(
-        summary.contains("slack="),
-        "Should show slack values: {}",
-        summary
-    );
+    assert!(summary.contains("slack="), "Should show slack values: {}", summary);
 }
 
 /// Summary with Transfer node in the path exercises format_node_name for Transfer.
@@ -544,11 +499,7 @@ fn test_format_node_name_via_summary_transfer_d2h() {
         "Summary should contain D2H from format_node_name: {}",
         summary
     );
-    assert!(
-        summary.contains("gpu0"),
-        "Summary should contain src: {}",
-        summary
-    );
+    assert!(summary.contains("gpu0"), "Summary should contain src: {}", summary);
 }
 
 /// format_node_name: Transfer node with D2D direction.
@@ -564,11 +515,7 @@ fn test_format_node_name_via_summary_transfer_d2d() {
     });
 
     let summary = graph.critical_path_summary();
-    assert!(
-        summary.contains("D2D"),
-        "Summary should contain D2D: {}",
-        summary
-    );
+    assert!(summary.contains("D2D"), "Summary should contain D2D: {}", summary);
 }
 
 /// format_node_name: AsyncTask node with poll_count.
@@ -583,11 +530,7 @@ fn test_format_node_name_via_summary_async_task() {
     });
 
     let summary = graph.critical_path_summary();
-    assert!(
-        summary.contains("fetch_data"),
-        "Summary should contain async task name: {}",
-        summary
-    );
+    assert!(summary.contains("fetch_data"), "Summary should contain async task name: {}", summary);
     assert!(
         summary.contains("7polls"),
         "Summary should contain poll count from format_node_name: {}",
@@ -602,11 +545,7 @@ fn test_format_node_name_via_summary_layer() {
     graph.add_node(ExecutionNode::Layer { index: 42 });
 
     let summary = graph.critical_path_summary();
-    assert!(
-        summary.contains("Layer 42"),
-        "Summary should contain Layer name: {}",
-        summary
-    );
+    assert!(summary.contains("Layer 42"), "Summary should contain Layer name: {}", summary);
 }
 
 /// format_node_name: Brick node (exercises id.name()).
@@ -620,11 +559,7 @@ fn test_format_node_name_via_summary_brick() {
     });
 
     let summary = graph.critical_path_summary();
-    assert!(
-        summary.contains("DownProjection"),
-        "Summary should contain brick name: {}",
-        summary
-    );
+    assert!(summary.contains("DownProjection"), "Summary should contain brick name: {}", summary);
 }
 
 /// format_node_name: Kernel node (exercises name clone).
@@ -643,11 +578,7 @@ fn test_format_node_name_via_summary_kernel() {
     });
 
     let summary = graph.critical_path_summary();
-    assert!(
-        summary.contains("softmax_warp"),
-        "Summary should contain kernel name: {}",
-        summary
-    );
+    assert!(summary.contains("softmax_warp"), "Summary should contain kernel name: {}", summary);
 }
 
 /// format_node_name: Function node.
@@ -661,11 +592,7 @@ fn test_format_node_name_via_summary_function() {
     });
 
     let summary = graph.critical_path_summary();
-    assert!(
-        summary.contains("inference"),
-        "Summary should contain function name: {}",
-        summary
-    );
+    assert!(summary.contains("inference"), "Summary should contain function name: {}", summary);
 }
 
 // ========================================================================
@@ -684,11 +611,7 @@ fn test_compute_slack_empty() {
 #[test]
 fn test_compute_slack_single_node() {
     let mut graph = ExecutionGraph::new();
-    graph.add_node(ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 1000,
-        elements: 64,
-    });
+    graph.add_node(ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 1000, elements: 64 });
 
     let slack = graph.compute_slack();
     assert_eq!(slack.len(), 1);
@@ -714,11 +637,8 @@ fn test_compute_slack_diamond() {
         timing_ns: 10_000,
         elements: 2048,
     });
-    let end = graph.add_node(ExecutionNode::Brick {
-        id: BrickId::LmHead,
-        timing_ns: 200,
-        elements: 32,
-    });
+    let end =
+        graph.add_node(ExecutionNode::Brick { id: BrickId::LmHead, timing_ns: 200, elements: 32 });
 
     graph.add_dependency(start, fast);
     graph.add_dependency(start, slow);
@@ -728,11 +648,7 @@ fn test_compute_slack_diamond() {
     let slack = graph.compute_slack();
     // The "fast" path should have non-zero slack
     let fast_slack = slack[&fast];
-    assert!(
-        fast_slack > 0,
-        "Fast branch should have positive slack: got {}",
-        fast_slack
-    );
+    assert!(fast_slack > 0, "Fast branch should have positive slack: got {}", fast_slack);
 }
 
 // ========================================================================

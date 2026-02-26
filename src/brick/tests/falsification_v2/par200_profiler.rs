@@ -22,10 +22,7 @@ fn test_f102_immediate_mode_matches_v1() {
 
     let legacy_stats = profiler.brick_stats(BrickId::RmsNorm);
     assert_eq!(legacy_stats.count, 1, "F102: legacy API count mismatch");
-    assert!(
-        legacy_stats.total_ns > 0,
-        "F102: legacy API recorded zero ns"
-    );
+    assert!(legacy_stats.total_ns > 0, "F102: legacy API recorded zero ns");
 
     profiler.reset();
 
@@ -79,11 +76,7 @@ fn test_f104_category_aggregation_correct() {
     let cat_total: u64 = cats.iter().map(|c| c.total_ns).sum();
 
     // Category sum must equal total
-    assert_eq!(
-        cat_total,
-        profiler.total_ns(),
-        "F104 failed: category sum mismatch"
-    );
+    assert_eq!(cat_total, profiler.total_ns(), "F104 failed: category sum mismatch");
 }
 
 /// F105: Dynamic fallback works for unknown bricks
@@ -124,10 +117,7 @@ fn test_f106_finalize_idempotent() {
     profiler.finalize(end);
     let count_after_second = profiler.brick_stats(BrickId::RmsNorm).count;
 
-    assert_eq!(
-        count_after_first, count_after_second,
-        "F106 failed: finalize not idempotent"
-    );
+    assert_eq!(count_after_first, count_after_second, "F106 failed: finalize not idempotent");
 }
 
 /// F108: Zero-alloc hot path (verified by no String in BrickIdTimer)
@@ -139,11 +129,7 @@ fn test_f108_zero_alloc_hot_path() {
     // BrickIdTimer is small (BrickId + Instant, with padding)
     // Instant is 16 bytes on Linux, so BrickIdTimer is 24 bytes (with alignment)
     let brick_id_timer_size = std::mem::size_of::<BrickIdTimer>();
-    assert!(
-        brick_id_timer_size <= 32,
-        "F108: BrickIdTimer too large: {}",
-        brick_id_timer_size
-    );
+    assert!(brick_id_timer_size <= 32, "F108: BrickIdTimer too large: {}", brick_id_timer_size);
 
     // Verify BrickTimer (legacy) is larger due to String
     // String is 24 bytes (ptr + len + cap), so BrickTimer is at least 40 bytes
@@ -186,14 +172,8 @@ fn test_f110_json_export_includes_categories() {
     let json = profiler.to_json();
 
     // JSON should contain the brick name
-    assert!(
-        json.contains("\"name\":\"RmsNorm\""),
-        "F110 failed: JSON missing brick name"
-    );
-    assert!(
-        json.contains("\"count\":1"),
-        "F110 failed: JSON missing count"
-    );
+    assert!(json.contains("\"name\":\"RmsNorm\""), "F110 failed: JSON missing brick name");
+    assert!(json.contains("\"count\":1"), "F110 failed: JSON missing count");
 }
 
 /// F101: Deferred mode overhead <10% (simplified unit test version)
@@ -236,10 +216,7 @@ fn test_f101_deferred_mode_low_overhead() {
     );
 
     // Verify profiler recorded correctly
-    assert_eq!(
-        profiler.brick_stats(BrickId::RmsNorm).count,
-        ITERATIONS as u64
-    );
+    assert_eq!(profiler.brick_stats(BrickId::RmsNorm).count, ITERATIONS as u64);
 }
 
 /// F107: Thread-safe (no race conditions)
@@ -282,9 +259,5 @@ fn test_f107_thread_safe() {
 
     let profiler = profiler.lock().unwrap();
     let total = profiler.total_tokens();
-    assert_eq!(
-        total, 400,
-        "F107 failed: expected 400 tokens, got {}",
-        total
-    );
+    assert_eq!(total, 400, "F107 failed: expected 400 tokens, got {}", total);
 }

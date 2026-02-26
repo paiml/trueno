@@ -10,11 +10,7 @@ fn test_c006_execution_node_name() {
     let layer = ExecutionNode::Layer { index: 5 };
     assert_eq!(layer.name(), "Layer5");
 
-    let brick = ExecutionNode::Brick {
-        id: BrickId::GateProjection,
-        timing_ns: 100,
-        elements: 10,
-    };
+    let brick = ExecutionNode::Brick { id: BrickId::GateProjection, timing_ns: 100, elements: 10 };
     assert_eq!(brick.name(), "GateProjection");
 
     let kernel = ExecutionNode::Kernel {
@@ -77,22 +73,14 @@ fn test_c007_execution_node_is_transfer() {
     };
     assert!(transfer.is_transfer());
 
-    let brick = ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 100,
-        elements: 10,
-    };
+    let brick = ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 100, elements: 10 };
     assert!(!brick.is_transfer());
 }
 
 /// C008: ExecutionNode::timing_ns() all variants
 #[test]
 fn test_c008_execution_node_timing_ns() {
-    let brick = ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 12345,
-        elements: 10,
-    };
+    let brick = ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 12345, elements: 10 };
     assert_eq!(brick.timing_ns(), Some(12345));
 
     let kernel = ExecutionNode::Kernel {
@@ -119,11 +107,7 @@ fn test_c008_execution_node_timing_ns() {
     let layer = ExecutionNode::Layer { index: 0 };
     assert_eq!(layer.timing_ns(), None);
 
-    let func = ExecutionNode::Function {
-        name: "f".into(),
-        file: None,
-        line: None,
-    };
+    let func = ExecutionNode::Function { name: "f".into(), file: None, line: None };
     assert_eq!(func.timing_ns(), None);
 }
 
@@ -142,11 +126,7 @@ fn test_c009_execution_node_ptx_hash() {
     };
     assert_eq!(kernel.ptx_hash(), Some(0xDEADBEEF));
 
-    let brick = ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 100,
-        elements: 10,
-    };
+    let brick = ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 100, elements: 10 };
     assert_eq!(brick.ptx_hash(), None);
 }
 
@@ -166,11 +146,7 @@ fn test_c010_execution_node_roofline_accessors() {
     assert_eq!(kernel.arithmetic_intensity(), Some(50.0));
     assert_eq!(kernel.achieved_tflops(), Some(10.5));
 
-    let brick = ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 100,
-        elements: 10,
-    };
+    let brick = ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 100, elements: 10 };
     assert_eq!(brick.arithmetic_intensity(), None);
     assert_eq!(brick.achieved_tflops(), None);
 }
@@ -187,10 +163,6 @@ fn test_c011_execution_node_transfer_bytes() {
     };
     assert_eq!(transfer.transfer_bytes(), Some(1024 * 1024));
 
-    let brick = ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 100,
-        elements: 10,
-    };
+    let brick = ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 100, elements: 10 };
     assert_eq!(brick.transfer_bytes(), None);
 }

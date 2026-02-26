@@ -211,11 +211,7 @@ fn test_fract_range() {
     let a = Vector::from_slice(&[0.1, 0.5, 0.9, -0.1, -0.5, -0.9]);
     let result = a.fract().unwrap();
     for &val in result.as_slice() {
-        assert!(
-            val.abs() < 1.0,
-            "fract value should be in range (-1, 1): {}",
-            val
-        );
+        assert!(val.abs() < 1.0, "fract value should be in range (-1, 1): {}", val);
     }
 }
 
@@ -309,10 +305,7 @@ fn test_copysign_size_mismatch() {
     let sign = Vector::from_slice(&[1.0, 2.0, 3.0]);
     let result = magnitude.copysign(&sign);
     assert!(result.is_err());
-    assert!(matches!(
-        result.unwrap_err(),
-        TruenoError::SizeMismatch { .. }
-    ));
+    assert!(matches!(result.unwrap_err(), TruenoError::SizeMismatch { .. }));
 }
 
 #[test]

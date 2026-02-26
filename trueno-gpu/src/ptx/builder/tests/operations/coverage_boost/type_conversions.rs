@@ -10,11 +10,7 @@ fn test_cvt_u32_u8() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("cvt") || ptx.contains("and"),
-        "Expected conversion in: {}",
-        ptx
-    );
+    assert!(ptx.contains("cvt") || ptx.contains("and"), "Expected conversion in: {}", ptx);
 }
 
 #[test]
@@ -25,11 +21,7 @@ fn test_cvt_u32_u16() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("cvt") || ptx.contains("and"),
-        "Expected conversion in: {}",
-        ptx
-    );
+    assert!(ptx.contains("cvt") || ptx.contains("and"), "Expected conversion in: {}", ptx);
 }
 
 #[test]
@@ -40,11 +32,7 @@ fn test_cvt_u16_u32() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("cvt") || ptx.contains("and"),
-        "Expected conversion in: {}",
-        ptx
-    );
+    assert!(ptx.contains("cvt") || ptx.contains("and"), "Expected conversion in: {}", ptx);
 }
 
 #[test]
@@ -77,11 +65,7 @@ fn test_cvt_f32_s32() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("cvt.rni") || ptx.contains("cvt"),
-        "Expected cvt in: {}",
-        ptx
-    );
+    assert!(ptx.contains("cvt.rni") || ptx.contains("cvt"), "Expected cvt in: {}", ptx);
 }
 
 #[test]

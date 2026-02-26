@@ -47,10 +47,7 @@ fn test_select_best_available_backend() {
         // x86_64 baseline is SSE2, so we should never get Scalar on x86_64
         assert_ne!(backend, Backend::Scalar);
         // Verify it's one of the x86 SIMD backends
-        assert!(matches!(
-            backend,
-            Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512
-        ));
+        assert!(matches!(backend, Backend::SSE2 | Backend::AVX | Backend::AVX2 | Backend::AVX512));
     }
 
     // On other platforms, we might get Scalar or platform-specific SIMD
@@ -170,14 +167,8 @@ fn test_op_complexity_ord() {
     // Test Ord
     use std::cmp::Ordering;
     assert_eq!(OpComplexity::Low.cmp(&OpComplexity::Medium), Ordering::Less);
-    assert_eq!(
-        OpComplexity::Medium.cmp(&OpComplexity::High),
-        Ordering::Less
-    );
-    assert_eq!(
-        OpComplexity::High.cmp(&OpComplexity::Medium),
-        Ordering::Greater
-    );
+    assert_eq!(OpComplexity::Medium.cmp(&OpComplexity::High), Ordering::Less);
+    assert_eq!(OpComplexity::High.cmp(&OpComplexity::Medium), Ordering::Greater);
     assert_eq!(OpComplexity::Low.cmp(&OpComplexity::Low), Ordering::Equal);
 }
 
@@ -239,10 +230,7 @@ fn test_matrix_reexport() {
 fn test_detect_x86_backend() {
     let backend = detect_x86_backend();
     // On x86_64, we should get at least SSE2
-    assert!(matches!(
-        backend,
-        Backend::SSE2 | Backend::AVX | Backend::AVX2
-    ));
+    assert!(matches!(backend, Backend::SSE2 | Backend::AVX | Backend::AVX2));
     // Should NOT return AVX-512 (intentionally avoided for safety)
     assert_ne!(backend, Backend::AVX512);
 }

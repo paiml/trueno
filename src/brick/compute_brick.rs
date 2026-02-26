@@ -53,8 +53,7 @@ impl<Op: ComputeOp> ComputeBrick<Op> {
     /// Add equivalence assertion with custom tolerance.
     #[must_use]
     pub fn assert_equiv_with_tolerance(mut self, baseline: Backend, tolerance: f64) -> Self {
-        self.assertions
-            .push(ComputeAssertion::equiv_with_tolerance(baseline, tolerance));
+        self.assertions.push(ComputeAssertion::equiv_with_tolerance(baseline, tolerance));
         self
     }
 
@@ -137,16 +136,9 @@ impl<Op: ComputeOp> ComputeBrick<Op> {
         let elapsed_us = start.elapsed().as_secs_f64() * 1_000_000.0;
 
         // Calculate metrics
-        let us_per_token = if tokens > 0 {
-            elapsed_us / tokens as f64
-        } else {
-            elapsed_us
-        };
-        let tokens_per_sec = if elapsed_us > 0.0 {
-            tokens as f64 * 1_000_000.0 / elapsed_us
-        } else {
-            f64::INFINITY
-        };
+        let us_per_token = if tokens > 0 { elapsed_us / tokens as f64 } else { elapsed_us };
+        let tokens_per_sec =
+            if elapsed_us > 0.0 { tokens as f64 * 1_000_000.0 / elapsed_us } else { f64::INFINITY };
         let budget_met = self.budget.is_met(us_per_token);
         let budget_utilization = self.budget.utilization(us_per_token);
 
@@ -196,11 +188,7 @@ impl<Op: ComputeOp> ComputeBrick<Op> {
         let results: Vec<AssertionResult> = self
             .assertions
             .iter()
-            .map(|a| AssertionResult {
-                assertion: a.clone(),
-                passed: true,
-                error: None,
-            })
+            .map(|a| AssertionResult { assertion: a.clone(), passed: true, error: None })
             .collect();
 
         let passed = results.iter().all(|r| r.passed);
@@ -260,8 +248,7 @@ impl BrickLayer {
     /// Add a brick to the layer.
     #[must_use]
     pub fn with_brick<Op: ComputeOp>(mut self, brick: &ComputeBrick<Op>) -> Self {
-        self.bricks
-            .push((brick.name().to_string(), brick.budget.tokens_per_sec));
+        self.bricks.push((brick.name().to_string(), brick.budget.tokens_per_sec));
         self
     }
 
@@ -275,10 +262,7 @@ impl BrickLayer {
     /// Get the throughput ceiling (bottleneck).
     /// Layer throughput = min(component throughputs).
     pub fn throughput_ceiling(&self) -> f64 {
-        self.bricks
-            .iter()
-            .map(|(_, tps)| *tps)
-            .fold(f64::INFINITY, f64::min)
+        self.bricks.iter().map(|(_, tps)| *tps).fold(f64::INFINITY, f64::min)
     }
 
     /// Get the bottleneck brick name.

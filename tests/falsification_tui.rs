@@ -22,10 +22,7 @@ fn test_h003_cpu_core_count() {
             .expect("Failed to execute grep");
 
         let proc_string = String::from_utf8(output.stdout).expect("Invalid UTF-8");
-        let proc_cores: usize = proc_string
-            .trim()
-            .parse()
-            .expect("Failed to parse core count");
+        let proc_cores: usize = proc_string.trim().parse().expect("Failed to parse core count");
 
         assert_eq!(
             detected_cores, proc_cores,

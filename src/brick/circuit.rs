@@ -369,10 +369,7 @@ mod tests {
         );
 
         // Verify opened_at was updated (circuit should wait again)
-        assert!(
-            cb.opened_at.is_some(),
-            "FALSIFICATION FAILED: opened_at not set after reopen"
-        );
+        assert!(cb.opened_at.is_some(), "FALSIFICATION FAILED: opened_at not set after reopen");
     }
 
     /// FALSIFICATION TEST: State machine must be deterministic

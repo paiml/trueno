@@ -21,12 +21,7 @@ impl Q5KKernel {
     /// Create a new Q5_K quantized GEMM kernel
     #[must_use]
     pub fn new(m: u32, n: u32, k: u32) -> Self {
-        Self {
-            m,
-            n,
-            k,
-            tile_size: 32,
-        }
+        Self { m, n, k, tile_size: 32 }
     }
 
     /// Set output tile size

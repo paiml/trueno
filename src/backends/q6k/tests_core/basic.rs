@@ -57,14 +57,7 @@ fn test_q6k_avx2_vs_scalar() {
 
     for (i, (s, d)) in scalar.iter().zip(dispatch.iter()).enumerate() {
         let diff = (s - d).abs();
-        assert!(
-            diff < 1e-4,
-            "Row {}: scalar {} vs dispatch {} (diff {})",
-            i,
-            s,
-            d,
-            diff
-        );
+        assert!(diff < 1e-4, "Row {}: scalar {} vs dispatch {} (diff {})", i, s, d, diff);
     }
 }
 
@@ -111,19 +104,11 @@ fn test_f16_to_f32_infinity() {
 fn test_f16_to_f32_subnormal() {
     // Smallest subnormal: 0x0001 ≈ 5.96e-8
     let result = f16_to_f32(0x0001);
-    assert!(
-        result > 0.0 && result < 1e-6,
-        "Expected small subnormal, got {}",
-        result
-    );
+    assert!(result > 0.0 && result < 1e-6, "Expected small subnormal, got {}", result);
 
     // Larger subnormal: 0x03FF (largest subnormal)
     let result = f16_to_f32(0x03FF);
-    assert!(
-        result > 0.0 && result < 1e-4,
-        "Expected subnormal, got {}",
-        result
-    );
+    assert!(result > 0.0 && result < 1e-4, "Expected subnormal, got {}", result);
 }
 
 #[test]

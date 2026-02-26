@@ -5,10 +5,7 @@ use super::super::super::*;
 #[test]
 fn online_learner_is_converging_after_large_error() {
     let mut learner = OnlineLearner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
     let vec = features.to_vector();
 
     // Observe with very different target to create large error
@@ -34,10 +31,7 @@ fn brick_tuner_with_pretrained_has_weights() {
 #[test]
 fn brick_tuner_with_pretrained_mape() {
     let tuner = BrickTuner::with_pretrained();
-    assert!(
-        (tuner.throughput_mape() - 0.082).abs() < 0.001,
-        "Pretrained MAPE should be 8.2%"
-    );
+    assert!((tuner.throughput_mape() - 0.082).abs() < 0.001, "Pretrained MAPE should be 8.2%");
 }
 
 #[test]
@@ -69,10 +63,7 @@ fn brick_tuner_apply_online_updates_with_observations() {
     let mut tuner = BrickTuner::new();
     let mut learner = tuner.online_learner();
 
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
     let vec = features.to_vector();
 
     learner.observe(&vec, 100.0);
@@ -94,10 +85,7 @@ fn brick_tuner_kernel_bandit_returns_new_bandit() {
 fn brick_tuner_recommend_with_exploration_exploit() {
     let tuner = BrickTuner::with_pretrained();
     let bandit = KernelBandit::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     // With explore_prob = 0.0, should always exploit (model prediction)
     let rec = tuner.recommend_kernel_with_exploration(&features, &bandit, 0.0);
@@ -108,10 +96,7 @@ fn brick_tuner_recommend_with_exploration_exploit() {
 fn brick_tuner_recommend_with_exploration_explore() {
     let tuner = BrickTuner::with_pretrained();
     let bandit = KernelBandit::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     // With explore_prob = 1.0, should always explore
     let rec = tuner.recommend_kernel_with_exploration(&features, &bandit, 1.0);
@@ -202,11 +187,7 @@ fn kernel_bandit_select_after_single_update() {
 
     // After one update, all other arms have INFINITY UCB, so they should be preferred
     let selected = bandit.select();
-    assert_ne!(
-        selected,
-        KernelType::TiledQ4K,
-        "Should explore unexplored arms first"
-    );
+    assert_ne!(selected, KernelType::TiledQ4K, "Should explore unexplored arms first");
 }
 
 #[test]
@@ -293,14 +274,8 @@ fn online_learner_predict_with_all_ones() {
 fn online_learner_observe_multiple_different_targets() {
     let mut learner = OnlineLearner::new().with_learning_rate(0.001);
 
-    let features_small = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(1)
-        .build();
-    let features_large = TunerFeatures::builder()
-        .model_params_b(13.0)
-        .batch_size(8)
-        .build();
+    let features_small = TunerFeatures::builder().model_params_b(1.5).batch_size(1).build();
+    let features_large = TunerFeatures::builder().model_params_b(13.0).batch_size(8).build();
 
     let vec_small = features_small.to_vector();
     let vec_large = features_large.to_vector();
@@ -321,10 +296,7 @@ fn pretrained_then_online_workflow() {
     let mut tuner = BrickTuner::with_pretrained();
     let mut learner = tuner.online_learner();
 
-    let features = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .batch_size(1)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(7.0).batch_size(1).build();
     let vec = features.to_vector();
 
     // Simulate online learning loop
@@ -344,14 +316,9 @@ fn pretrained_then_bandit_workflow() {
     let mut bandit = tuner.kernel_bandit();
 
     // Simulate bandit exploration
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
-    let kernel = tuner
-        .recommend_kernel_with_exploration(&features, &bandit, 0.3)
-        .top_kernel;
+    let kernel = tuner.recommend_kernel_with_exploration(&features, &bandit, 0.3).top_kernel;
     bandit.update(kernel, 0.8);
 
     assert_eq!(bandit.total_pulls, 1);
@@ -362,10 +329,6 @@ fn kernel_from_index_roundtrip() {
     for i in 0..KernelBandit::NUM_KERNELS {
         let kernel = KernelType::from_index(i);
         let back = kernel.to_index();
-        assert_eq!(
-            back, i,
-            "KernelType::from_index({}).to_index() should be {}",
-            i, i
-        );
+        assert_eq!(back, i, "KernelType::from_index({}).to_index() should be {}", i, i);
     }
 }

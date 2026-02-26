@@ -148,19 +148,13 @@ mod shmem_prober_tests {
         let injector = BankConflictInjector::new();
 
         // Sequential: no conflicts (ideal)
-        assert_eq!(
-            injector.expected_serialization(AccessPattern::Sequential),
-            1
-        );
+        assert_eq!(injector.expected_serialization(AccessPattern::Sequential), 1);
 
         // Stride-2: 2-way conflicts
         assert_eq!(injector.expected_serialization(AccessPattern::Stride2), 2);
 
         // Full conflict: 32-way serialization (worst case)
-        assert_eq!(
-            injector.expected_serialization(AccessPattern::FullConflict),
-            32
-        );
+        assert_eq!(injector.expected_serialization(AccessPattern::FullConflict), 32);
 
         // Padded: no conflicts (bank conflict avoidance)
         assert_eq!(injector.expected_serialization(AccessPattern::Padded), 1);

@@ -22,10 +22,7 @@ pub struct RingBuffer<T> {
 impl<T> RingBuffer<T> {
     /// Create new ring buffer with specified capacity
     pub fn new(capacity: usize) -> Self {
-        Self {
-            data: VecDeque::with_capacity(capacity),
-            capacity,
-        }
+        Self { data: VecDeque::with_capacity(capacity), capacity }
     }
 
     /// Push value, evicting oldest if at capacity

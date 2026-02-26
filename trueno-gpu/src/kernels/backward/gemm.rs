@@ -314,11 +314,7 @@ mod tests {
     fn test_gemm_backward_a_barrier_safety() {
         let kernel = GemmBackwardAKernel::new(32, 32, 32);
         let result = kernel.analyze_barrier_safety();
-        assert!(
-            result.is_safe,
-            "GEMM backward A should be barrier-safe: {:?}",
-            result.violations
-        );
+        assert!(result.is_safe, "GEMM backward A should be barrier-safe: {:?}", result.violations);
     }
 
     #[test]
@@ -346,10 +342,6 @@ mod tests {
     fn test_gemm_backward_b_barrier_safety() {
         let kernel = GemmBackwardBKernel::new(32, 32, 32);
         let result = kernel.analyze_barrier_safety();
-        assert!(
-            result.is_safe,
-            "GEMM backward B should be barrier-safe: {:?}",
-            result.violations
-        );
+        assert!(result.is_safe, "GEMM backward B should be barrier-safe: {:?}", result.violations);
     }
 }

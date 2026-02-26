@@ -5,9 +5,7 @@
 //!
 //! Run with: `cargo run --example design_by_contract`
 
-use trueno::contracts::{
-    self, QuantFormat, TensorLayout, STACK_LAYOUT, Q4_K, Q5_K, Q6_K, Q8_0,
-};
+use trueno::contracts::{self, QuantFormat, TensorLayout, Q4_K, Q5_K, Q6_K, Q8_0, STACK_LAYOUT};
 
 fn main() {
     println!("=== Trueno Design by Contract ===\n");
@@ -94,10 +92,14 @@ fn main() {
 
     // --- 9. Non-aligned columns (edge case) ---
     println!("\n9. Non-aligned columns (Q4_K, block_size=256):");
-    println!("   100 cols: ceil(100/256)=1 block/row -> {} bytes for 10 rows",
-             Q4_K.expected_bytes(10, 100));
-    println!("   300 cols: ceil(300/256)=2 blocks/row -> {} bytes for 10 rows",
-             Q4_K.expected_bytes(10, 300));
+    println!(
+        "   100 cols: ceil(100/256)=1 block/row -> {} bytes for 10 rows",
+        Q4_K.expected_bytes(10, 100)
+    );
+    println!(
+        "   300 cols: ceil(300/256)=2 blocks/row -> {} bytes for 10 rows",
+        Q4_K.expected_bytes(10, 300)
+    );
 
     println!("\n=== All contract demonstrations complete ===");
 }

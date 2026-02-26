@@ -83,15 +83,7 @@ impl QuantizationErrorTrace {
             f32::INFINITY
         };
 
-        Self {
-            brick_id,
-            layer_idx,
-            mse,
-            max_abs_error,
-            cosine_similarity,
-            snr_db,
-            quant_type,
-        }
+        Self { brick_id, layer_idx, mse, max_abs_error, cosine_similarity, snr_db, quant_type }
     }
 
     /// Check if error is acceptable (cosine > 0.995).

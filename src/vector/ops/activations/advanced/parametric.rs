@@ -89,10 +89,7 @@ impl Vector<f32> {
                 if GpuDevice::is_available() {
                     let gpu = GpuDevice::new().map_err(TruenoError::InvalidInput)?;
                     let mut result = vec![0.0; self.data.len()];
-                    if gpu
-                        .leaky_relu(&self.data, &mut result, negative_slope)
-                        .is_ok()
-                    {
+                    if gpu.leaky_relu(&self.data, &mut result, negative_slope).is_ok() {
                         return Ok(Vector::from_vec(result));
                     }
                 }
@@ -100,11 +97,8 @@ impl Vector<f32> {
         }
 
         // Scalar fallback: leaky_relu(x, α) = x if x > 0, αx otherwise
-        let data: Vec<f32> = self
-            .data
-            .iter()
-            .map(|&x| if x > 0.0 { x } else { negative_slope * x })
-            .collect();
+        let data: Vec<f32> =
+            self.data.iter().map(|&x| if x > 0.0 { x } else { negative_slope * x }).collect();
 
         Ok(Vector::from_vec(data))
     }
@@ -177,10 +171,7 @@ impl Vector<f32> {
 
         // Validate alpha parameter
         if alpha <= 0.0 {
-            return Err(TruenoError::InvalidInput(format!(
-                "alpha must be > 0, got {}",
-                alpha
-            )));
+            return Err(TruenoError::InvalidInput(format!("alpha must be > 0, got {}", alpha)));
         }
 
         // OpComplexity::Low - GPU threshold: >100K elements
@@ -203,11 +194,8 @@ impl Vector<f32> {
         }
 
         // Scalar fallback: elu(x, α) = x if x > 0, α(e^x - 1) otherwise
-        let data: Vec<f32> = self
-            .data
-            .iter()
-            .map(|&x| if x > 0.0 { x } else { alpha * (x.exp() - 1.0) })
-            .collect();
+        let data: Vec<f32> =
+            self.data.iter().map(|&x| if x > 0.0 { x } else { alpha * (x.exp() - 1.0) }).collect();
 
         Ok(Vector::from_vec(data))
     }
@@ -268,13 +256,7 @@ impl Vector<f32> {
         let data: Vec<f32> = self
             .data
             .iter()
-            .map(|&x| {
-                if x > 0.0 {
-                    LAMBDA * x
-                } else {
-                    LAMBDA * ALPHA * (x.exp() - 1.0)
-                }
-            })
+            .map(|&x| if x > 0.0 { LAMBDA * x } else { LAMBDA * ALPHA * (x.exp() - 1.0) })
             .collect();
 
         Ok(Vector::from_vec(data))

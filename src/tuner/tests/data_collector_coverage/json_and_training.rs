@@ -20,14 +20,8 @@ fn from_json_round_trip_preserves_data() {
     let json = original.to_json().expect("serialize");
     let loaded = TunerDataCollector::from_json(&json).expect("deserialize");
     assert_eq!(loaded.len(), 2);
-    assert_eq!(
-        loaded.samples()[0].throughput_tps,
-        original.samples()[0].throughput_tps
-    );
-    assert_eq!(
-        loaded.samples()[1].throughput_tps,
-        original.samples()[1].throughput_tps
-    );
+    assert_eq!(loaded.samples()[0].throughput_tps, original.samples()[0].throughput_tps);
+    assert_eq!(loaded.samples()[1].throughput_tps, original.samples()[1].throughput_tps);
 }
 
 #[test]

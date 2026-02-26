@@ -61,13 +61,7 @@ impl ColorPalette {
     /// Grayscale palette
     #[must_use]
     pub fn grayscale() -> Self {
-        Self {
-            colors: vec![
-                Rgb::new(0, 0, 0),
-                Rgb::new(128, 128, 128),
-                Rgb::new(255, 255, 255),
-            ],
-        }
+        Self { colors: vec![Rgb::new(0, 0, 0), Rgb::new(128, 128, 128), Rgb::new(255, 255, 255)] }
     }
 
     /// Interpolate color at position t (0.0 to 1.0)
@@ -119,10 +113,7 @@ impl VisualRegressionConfig {
     /// Create new config with custom golden directory
     #[must_use]
     pub fn new(golden_dir: impl Into<PathBuf>) -> Self {
-        Self {
-            golden_dir: golden_dir.into(),
-            ..Default::default()
-        }
+        Self { golden_dir: golden_dir.into(), ..Default::default() }
     }
 
     /// Set output directory
@@ -178,11 +169,7 @@ impl PixelDiffResult {
     /// Create a passing result (no differences)
     #[must_use]
     pub const fn pass(total_pixels: usize) -> Self {
-        Self {
-            different_pixels: 0,
-            total_pixels,
-            max_diff: 0,
-        }
+        Self { different_pixels: 0, total_pixels, max_diff: 0 }
     }
 }
 
@@ -205,10 +192,7 @@ impl BufferRenderer {
     /// Create renderer with auto-normalization
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            palette: ColorPalette::default(),
-            range: None,
-        }
+        Self { palette: ColorPalette::default(), range: None }
     }
 
     /// Set fixed range for normalization

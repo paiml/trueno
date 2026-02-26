@@ -7,15 +7,13 @@ use super::*;
 
 #[test]
 fn test_st_shared_f16_instruction() {
-    let kernel = PtxKernel::new("test_st_shared_f16")
-        .shared_memory(256)
-        .build(|ctx| {
-            let addr = ctx.shared_base_addr();
-            let val = ctx.mov_f32_imm(1.0);
-            let f16_val = ctx.cvt_f16_f32(val);
-            ctx.st_shared_f16(addr, f16_val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_st_shared_f16").shared_memory(256).build(|ctx| {
+        let addr = ctx.shared_base_addr();
+        let val = ctx.mov_f32_imm(1.0);
+        let f16_val = ctx.cvt_f16_f32(val);
+        ctx.st_shared_f16(addr, f16_val);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
     assert!(ptx.contains("st.shared"), "Expected st.shared in: {}", ptx);
@@ -32,11 +30,7 @@ fn test_shfl_down_f32_warp_shuffle() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("shfl.sync.down.b32"),
-        "Expected shfl.sync.down.b32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("shfl.sync.down.b32"), "Expected shfl.sync.down.b32 in: {}", ptx);
 }
 
 #[test]
@@ -48,11 +42,7 @@ fn test_shfl_idx_f32_warp_broadcast() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("shfl.sync.idx.b32"),
-        "Expected shfl.sync.idx.b32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("shfl.sync.idx.b32"), "Expected shfl.sync.idx.b32 in: {}", ptx);
 }
 
 #[test]
@@ -77,11 +67,7 @@ fn test_ex2_f32_exponential() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("ex2.approx"),
-        "Expected ex2.approx in: {}",
-        ptx
-    );
+    assert!(ptx.contains("ex2.approx"), "Expected ex2.approx in: {}", ptx);
 }
 
 #[test]
@@ -93,11 +79,7 @@ fn test_rsqrt_f32_instruction() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("rsqrt.approx"),
-        "Expected rsqrt.approx in: {}",
-        ptx
-    );
+    assert!(ptx.contains("rsqrt.approx"), "Expected rsqrt.approx in: {}", ptx);
 }
 
 #[test]
@@ -124,31 +106,21 @@ fn test_branch_if_not_negated_predicate() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("@!"),
-        "Expected negated predicate @! in: {}",
-        ptx
-    );
+    assert!(ptx.contains("@!"), "Expected negated predicate @! in: {}", ptx);
     assert!(ptx.contains("bra skip"), "Expected bra skip in: {}", ptx);
 }
 
 #[test]
 fn test_cvt_u32_u8_conversion() {
-    let kernel = PtxKernel::new("test_cvt_u32_u8")
-        .param(PtxType::U64, "src")
-        .build(|ctx| {
-            let addr = ctx.load_param_u64("src");
-            let byte_val = ctx.ld_global_u8(addr);
-            let _u32_val = ctx.cvt_u32_u8(byte_val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_cvt_u32_u8").param(PtxType::U64, "src").build(|ctx| {
+        let addr = ctx.load_param_u64("src");
+        let byte_val = ctx.ld_global_u8(addr);
+        let _u32_val = ctx.cvt_u32_u8(byte_val);
+        ctx.ret();
+    });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("cvt.u32"),
-        "Expected cvt.u32 conversion in: {}",
-        ptx
-    );
+    assert!(ptx.contains("cvt.u32"), "Expected cvt.u32 conversion in: {}", ptx);
 }
 
 #[test]
@@ -262,11 +234,7 @@ fn test_f64_literal_format() {
     });
 
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("0F"),
-        "Expected hex float literal 0F prefix in: {}",
-        ptx
-    );
+    assert!(ptx.contains("0F"), "Expected hex float literal 0F prefix in: {}", ptx);
 }
 
 #[test]
@@ -275,16 +243,9 @@ fn test_emit_operand_addr_with_offset() {
     use crate::ptx::registers::VirtualReg;
 
     let vreg = VirtualReg::new(0, PtxType::U64);
-    let addr_op = Operand::Addr {
-        base: vreg,
-        offset: 128,
-    };
+    let addr_op = Operand::Addr { base: vreg, offset: 128 };
     let result = emit_operand(&addr_op);
-    assert!(
-        result.contains("+128"),
-        "Expected offset +128 in: {}",
-        result
-    );
+    assert!(result.contains("+128"), "Expected offset +128 in: {}", result);
 }
 
 #[test]
@@ -293,10 +254,7 @@ fn test_emit_shared_mem_operand_with_offset() {
     use crate::ptx::registers::VirtualReg;
 
     let vreg = VirtualReg::new(0, PtxType::U64);
-    let addr_op = Operand::Addr {
-        base: vreg,
-        offset: 64,
-    };
+    let addr_op = Operand::Addr { base: vreg, offset: 64 };
     let result = emit_shared_mem_operand(&addr_op);
     assert!(result.contains("+64"), "Expected offset +64 in: {}", result);
 }
@@ -307,16 +265,9 @@ fn test_emit_global_mem_operand_with_offset() {
     use crate::ptx::registers::VirtualReg;
 
     let vreg = VirtualReg::new(0, PtxType::U64);
-    let addr_op = Operand::Addr {
-        base: vreg,
-        offset: 256,
-    };
+    let addr_op = Operand::Addr { base: vreg, offset: 256 };
     let result = emit_global_mem_operand(&addr_op);
-    assert!(
-        result.contains("+256"),
-        "Expected offset +256 in: {}",
-        result
-    );
+    assert!(result.contains("+256"), "Expected offset +256 in: {}", result);
 }
 
 #[test]
@@ -355,9 +306,5 @@ fn test_signed_wide_multiply() {
         .src(Operand::ImmI64(100));
 
     let ptx = emit_instruction(&instr);
-    assert!(
-        ptx.contains("mul.wide.s32"),
-        "Expected mul.wide.s32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("mul.wide.s32"), "Expected mul.wide.s32 in: {}", ptx);
 }

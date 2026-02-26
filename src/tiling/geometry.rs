@@ -121,12 +121,7 @@ impl TcbGeometry {
 impl Default for TcbGeometry {
     fn default() -> Self {
         // Sensible default: 4×4 micro-tile for SIMD
-        Self {
-            m: 4,
-            n: 4,
-            k: 4,
-            alignment: 16,
-        }
+        Self { m: 4, n: 4, k: 4, alignment: 16 }
     }
 }
 

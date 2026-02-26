@@ -52,11 +52,7 @@ impl GpuResidentTensor<f32> {
         // The kernel handles bounds checking internally for hidden_size < 32
         let threads = 32u32;
         let blocks = batch_size;
-        let config = LaunchConfig {
-            grid: (blocks, 1, 1),
-            block: (threads, 1, 1),
-            shared_mem: 0,
-        };
+        let config = LaunchConfig { grid: (blocks, 1, 1), block: (threads, 1, 1), shared_mem: 0 };
 
         let input_ptr = self.as_ptr();
         let output_ptr = output_buffer.as_ptr();
@@ -72,15 +68,7 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(batch_size) as *mut _,
         ];
 
-        compile_lock_launch(
-            ctx,
-            &stream,
-            &cache_key,
-            &ptx,
-            kernel.name(),
-            &config,
-            &mut args,
-        )?;
+        compile_lock_launch(ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         stream.synchronize()?;
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -120,11 +108,7 @@ impl GpuResidentTensor<f32> {
         // The kernel handles bounds checking internally for hidden_size < 32
         let threads = 32u32;
         let blocks = batch_size;
-        let config = LaunchConfig {
-            grid: (blocks, 1, 1),
-            block: (threads, 1, 1),
-            shared_mem: 0,
-        };
+        let config = LaunchConfig { grid: (blocks, 1, 1), block: (threads, 1, 1), shared_mem: 0 };
 
         let input_ptr = self.as_ptr();
         let output_ptr = output_buffer.as_ptr();
@@ -140,15 +124,7 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(batch_size) as *mut _,
         ];
 
-        compile_lock_launch(
-            ctx,
-            stream,
-            &cache_key,
-            &ptx,
-            kernel.name(),
-            &config,
-            &mut args,
-        )?;
+        compile_lock_launch(ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -173,11 +149,7 @@ impl GpuResidentTensor<f32> {
 
         let threads = 256u32;
         let blocks = ((n as u32) + threads - 1) / threads;
-        let config = LaunchConfig {
-            grid: (blocks, 1, 1),
-            block: (threads, 1, 1),
-            shared_mem: 0,
-        };
+        let config = LaunchConfig { grid: (blocks, 1, 1), block: (threads, 1, 1), shared_mem: 0 };
 
         let input_ptr = self.as_ptr();
         let output_ptr = output_buffer.as_ptr();
@@ -189,15 +161,7 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        compile_lock_launch(
-            ctx,
-            &stream,
-            &cache_key,
-            &ptx,
-            kernel.name(),
-            &config,
-            &mut args,
-        )?;
+        compile_lock_launch(ctx, &stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         stream.synchronize()?;
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))
@@ -227,11 +191,7 @@ impl GpuResidentTensor<f32> {
 
         let threads = 256u32;
         let blocks = ((n as u32) + threads - 1) / threads;
-        let config = LaunchConfig {
-            grid: (blocks, 1, 1),
-            block: (threads, 1, 1),
-            shared_mem: 0,
-        };
+        let config = LaunchConfig { grid: (blocks, 1, 1), block: (threads, 1, 1), shared_mem: 0 };
 
         let input_ptr = self.as_ptr();
         let output_ptr = output_buffer.as_ptr();
@@ -243,15 +203,7 @@ impl GpuResidentTensor<f32> {
             std::ptr::addr_of!(n_val) as *mut _,
         ];
 
-        compile_lock_launch(
-            ctx,
-            stream,
-            &cache_key,
-            &ptx,
-            kernel.name(),
-            &config,
-            &mut args,
-        )?;
+        compile_lock_launch(ctx, stream, &cache_key, &ptx, kernel.name(), &config, &mut args)?;
         // NO SYNC - caller controls synchronization for graph capture
 
         Ok(GpuResidentTensor::from_buffer_internal(output_buffer, 1))

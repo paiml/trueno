@@ -35,9 +35,7 @@ impl FeatureExtractor {
 
     /// Create with hardware capability
     pub fn with_hardware(hardware: HardwareCapability) -> Self {
-        Self {
-            hardware: Some(hardware),
-        }
+        Self { hardware: Some(hardware) }
     }
 
     /// Extract features from profiler and configuration

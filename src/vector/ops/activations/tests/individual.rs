@@ -119,18 +119,9 @@ fn test_leaky_relu_slope_zero_acts_like_relu() {
 #[test]
 fn test_leaky_relu_invalid_slopes() {
     let v = Vector::from_slice(&[1.0, 2.0]);
-    assert!(matches!(
-        v.leaky_relu(-0.1),
-        Err(TruenoError::InvalidInput(_))
-    ));
-    assert!(matches!(
-        v.leaky_relu(1.0),
-        Err(TruenoError::InvalidInput(_))
-    ));
-    assert!(matches!(
-        v.leaky_relu(1.5),
-        Err(TruenoError::InvalidInput(_))
-    ));
+    assert!(matches!(v.leaky_relu(-0.1), Err(TruenoError::InvalidInput(_))));
+    assert!(matches!(v.leaky_relu(1.0), Err(TruenoError::InvalidInput(_))));
+    assert!(matches!(v.leaky_relu(1.5), Err(TruenoError::InvalidInput(_))));
 }
 
 // ========== ELU ==========
@@ -229,10 +220,7 @@ fn test_hardswish_mid_range() {
     for (i, &val) in result.as_slice().iter().enumerate() {
         let x = inputs[i];
         let expected = x * (x + 3.0) / 6.0;
-        assert!(
-            (val - expected).abs() < 1e-5,
-            "hardswish({x}) = {val}, expected {expected}"
-        );
+        assert!((val - expected).abs() < 1e-5, "hardswish({x}) = {val}, expected {expected}");
     }
 }
 
@@ -270,10 +258,7 @@ fn test_mish_extreme_values() {
     let v = Vector::from_slice(&[-25.0, -30.0, -50.0]);
     let result = v.mish().unwrap();
     for &val in result.as_slice() {
-        assert!(
-            (val - 0.0).abs() < 1e-6,
-            "mish of very negative should be 0, got {val}"
-        );
+        assert!((val - 0.0).abs() < 1e-6, "mish of very negative should be 0, got {val}");
     }
     // Very positive → x
     let v2 = Vector::from_slice(&[25.0, 30.0, 50.0]);
@@ -289,10 +274,7 @@ fn test_mish_extreme_values() {
     let v3 = Vector::from_slice(&[-20.0, -19.9, 19.9, 20.0]);
     let result3 = v3.mish().unwrap();
     for &val in result3.as_slice() {
-        assert!(
-            val.is_finite(),
-            "mish should produce finite results at boundaries"
-        );
+        assert!(val.is_finite(), "mish should produce finite results at boundaries");
     }
 }
 

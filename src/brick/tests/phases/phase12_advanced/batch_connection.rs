@@ -19,10 +19,7 @@ fn test_f177_batch_split_strategy() {
     assert!(matches!(seq_aware, BatchSplitStrategy::SequenceAware));
 
     // Default should be Simple
-    assert!(matches!(
-        BatchSplitStrategy::default(),
-        BatchSplitStrategy::Simple
-    ));
+    assert!(matches!(BatchSplitStrategy::default(), BatchSplitStrategy::Simple));
 }
 
 /// F178: split_batch correctness (LCP-09)

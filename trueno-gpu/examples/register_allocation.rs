@@ -107,10 +107,7 @@ fn demonstrate_simple_kernel() {
             ctx.ret();
         });
 
-    let module = PtxModule::new()
-        .version(8, 0)
-        .target("sm_70")
-        .add_kernel(simple_kernel);
+    let module = PtxModule::new().version(8, 0).target("sm_70").add_kernel(simple_kernel);
 
     let ptx = module.emit();
 
@@ -197,10 +194,7 @@ fn demonstrate_complex_kernel() {
             ctx.ret();
         });
 
-    let complex_module = PtxModule::new()
-        .version(8, 0)
-        .target("sm_70")
-        .add_kernel(complex_kernel);
+    let complex_module = PtxModule::new().version(8, 0).target("sm_70").add_kernel(complex_kernel);
 
     let complex_ptx = complex_module.emit();
     println!("Complex kernel PTX ({} bytes)\n", complex_ptx.len());

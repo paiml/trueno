@@ -55,9 +55,7 @@ pub struct AddressRegistry {
 
 impl AddressRegistry {
     pub(super) fn new() -> Self {
-        Self {
-            buffers: HashMap::new(),
-        }
+        Self { buffers: HashMap::new() }
     }
 
     /// Get the global address registry
@@ -75,13 +73,8 @@ impl AddressRegistry {
         type_name: impl Into<String>,
         element_size: usize,
     ) {
-        let info = BufferInfo {
-            name: name.into(),
-            ptr,
-            size,
-            type_name: type_name.into(),
-            element_size,
-        };
+        let info =
+            BufferInfo { name: name.into(), ptr, size, type_name: type_name.into(), element_size };
         self.buffers.insert(ptr, info);
     }
 
@@ -114,10 +107,7 @@ impl AddressRegistry {
                 let elem_idx = offset / info.element_size;
                 let byte_in_elem = offset % info.element_size;
                 if byte_in_elem == 0 {
-                    format!(
-                        "{}[{}] (0x{:X} + {} bytes)",
-                        info.name, elem_idx, info.ptr, offset
-                    )
+                    format!("{}[{}] (0x{:X} + {} bytes)", info.name, elem_idx, info.ptr, offset)
                 } else {
                     format!(
                         "{}[{}]+{} (0x{:X} + {} bytes)",

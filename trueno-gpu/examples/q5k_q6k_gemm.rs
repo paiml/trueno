@@ -35,18 +35,12 @@ fn main() {
     println!("PTX size: {} bytes", ptx_q5k.len());
 
     // Verify Q5_K-specific features
-    assert!(
-        ptx_q5k.contains("q5k_gemm_ggml"),
-        "Missing Q5_K kernel name"
-    );
+    assert!(ptx_q5k.contains("q5k_gemm_ggml"), "Missing Q5_K kernel name");
     assert!(ptx_q5k.contains("sb_loop"), "Missing super-block loop");
     assert!(ptx_q5k.contains("sub_block_loop"), "Missing sub-block loop");
     // Q5_K loads both ql (4-bit) and qh (1-bit high) values
     let u8_loads = ptx_q5k.matches("ld.global.u8").count();
-    assert!(
-        u8_loads >= 4,
-        "Q5_K should have multiple u8 loads for ql/qh"
-    );
+    assert!(u8_loads >= 4, "Q5_K should have multiple u8 loads for ql/qh");
     println!("Q5_K verified: {} u8 loads for scales/ql/qh", u8_loads);
 
     // =========================================================================
@@ -62,10 +56,7 @@ fn main() {
     println!("PTX size: {} bytes", ptx_q6k.len());
 
     // Verify Q6_K-specific features
-    assert!(
-        ptx_q6k.contains("q6k_gemm_ggml"),
-        "Missing Q6_K kernel name"
-    );
+    assert!(ptx_q6k.contains("q6k_gemm_ggml"), "Missing Q6_K kernel name");
     assert!(ptx_q6k.contains("sb_loop"), "Missing super-block loop");
     assert!(ptx_q6k.contains("sub_block_loop"), "Missing sub-block loop");
     // Q6_K uses signed offset (-32) for symmetric quantization
@@ -81,10 +72,7 @@ fn main() {
     println!("\n--- Format Comparison ---");
     println!("Q5_K PTX: {} bytes", ptx_q5k.len());
     println!("Q6_K PTX: {} bytes", ptx_q6k.len());
-    assert_ne!(
-        ptx_q5k, ptx_q6k,
-        "Q5_K and Q6_K should produce different PTX"
-    );
+    assert_ne!(ptx_q5k, ptx_q6k, "Q5_K and Q6_K should produce different PTX");
     println!("Kernels verified as distinct!");
 
     println!("\n=== Example Complete ===");

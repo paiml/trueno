@@ -36,11 +36,7 @@ fn generate_and_load_module(
         .address_size(64)
         .add_kernel(kernel.build_ptx())
         .emit();
-    println!(
-        "       PTX generated ({} bytes, {} lines)",
-        ptx.len(),
-        ptx.lines().count()
-    );
+    println!("       PTX generated ({} bytes, {} lines)", ptx.len(), ptx.lines().count());
 
     println!("[3/7] JIT compiling PTX...");
     match CudaModule::from_ptx(ctx, &ptx) {
@@ -89,10 +85,7 @@ fn allocate_buffers(ctx: &CudaContext, n: u32, k: u32) -> Option<GpuBuffers> {
     let output_size = n as usize;
 
     println!("[5/7] Allocating buffers...");
-    println!(
-        "       Weights: {} bytes ({} super-blocks)",
-        weights_size, n_super_blocks
-    );
+    println!("       Weights: {} bytes ({} super-blocks)", weights_size, n_super_blocks);
     println!("       Input: {} floats", input_size);
     println!("       Output: {} floats", output_size);
 
@@ -123,12 +116,7 @@ fn allocate_buffers(ctx: &CudaContext, n: u32, k: u32) -> Option<GpuBuffers> {
     };
     println!("       ✓ Buffers allocated");
 
-    Some(GpuBuffers {
-        weights,
-        input,
-        output,
-        output_size,
-    })
+    Some(GpuBuffers { weights, input, output, output_size })
 }
 
 fn launch_and_verify(
@@ -156,11 +144,7 @@ fn launch_and_verify(
 
     // Q4KGemvKernel: one warp (32 threads) per output row
     // Grid: ceil(N / 32), Block: 32
-    let config = LaunchConfig {
-        grid: ((n + 31) / 32, 1, 1),
-        block: (32, 1, 1),
-        shared_mem: 0,
-    };
+    let config = LaunchConfig { grid: ((n + 31) / 32, 1, 1), block: (32, 1, 1), shared_mem: 0 };
     println!("       Grid: ({}, 1, 1), Block: (32, 1, 1)", (n + 31) / 32);
 
     let start = std::time::Instant::now();

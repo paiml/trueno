@@ -148,14 +148,9 @@ fn test_pooling_kitchen_sink() {
 #[test]
 fn test_vecmat_kitchen_sink() {
     let v = Vector::from_slice(&[1.0, 2.0, 3.0]);
-    let m = Matrix::from_vec(
-        3,
-        4,
-        vec![
-            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
-        ],
-    )
-    .unwrap();
+    let m =
+        Matrix::from_vec(3, 4, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
+            .unwrap();
 
     // v (1x3) @ M (3x4) -> result (1x4)
     let result = Matrix::vecmat(&v, &m).unwrap();

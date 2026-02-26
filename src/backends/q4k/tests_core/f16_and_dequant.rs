@@ -245,11 +245,7 @@ fn test_parse_q4k_header() {
     let (d, dmin, scales, mins) = parse_q4k_header(&block);
 
     assert!((d - 1.0).abs() < 0.01, "d should be ~1.0, got {}", d);
-    assert!(
-        (dmin - 0.5).abs() < 0.01,
-        "dmin should be ~0.5, got {}",
-        dmin
-    );
+    assert!((dmin - 0.5).abs() < 0.01, "dmin should be ~0.5, got {}", dmin);
     // Check first scales/mins have expected low 6-bit values
     assert_eq!(scales[0], 0x01, "scales[0] should be 1");
     assert_eq!(scales[1], 0x02, "scales[1] should be 2");

@@ -54,10 +54,7 @@ fn benchmark_gemm(name: &str, n: usize, iterations: usize) {
     let gflops = total_flops as f64 / elapsed.as_secs_f64() / 1e9;
     let time_per_op = elapsed.as_micros() as f64 / iterations as f64;
 
-    println!(
-        "{:20} {:4}x{:4}: {:8.1} us, {:6.1} GFLOP/s",
-        name, n, n, time_per_op, gflops
-    );
+    println!("{:20} {:4}x{:4}: {:8.1} us, {:6.1} GFLOP/s", name, n, n, time_per_op, gflops);
 }
 
 fn benchmark_with_profiler(n: usize) {
@@ -90,11 +87,8 @@ fn compare_reference_vs_blis(n: usize) {
     let blis_time = start.elapsed();
 
     // Verify correctness
-    let max_diff: f32 = c_ref
-        .iter()
-        .zip(c_blis.iter())
-        .map(|(a, b)| (a - b).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_ref.iter().zip(c_blis.iter()).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
 
     let speedup = ref_time.as_secs_f64() / blis_time.as_secs_f64();
 

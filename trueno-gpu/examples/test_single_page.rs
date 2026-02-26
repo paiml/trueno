@@ -31,19 +31,11 @@ fn main() {
     let kernel = Lz4WarpCompressKernel::new(NUM_PAGES);
     let ptx = kernel.emit_ptx();
 
-    println!(
-        "Grid: {:?}, Block: {:?}",
-        kernel.grid_dim(),
-        kernel.block_dim()
-    );
+    println!("Grid: {:?}, Block: {:?}", kernel.grid_dim(), kernel.block_dim());
 
     let mut module = CudaModule::from_ptx(&ctx, &ptx).expect("PTX load");
 
-    let config = LaunchConfig {
-        grid: kernel.grid_dim(),
-        block: kernel.block_dim(),
-        shared_mem: 0,
-    };
+    let config = LaunchConfig { grid: kernel.grid_dim(), block: kernel.block_dim(), shared_mem: 0 };
 
     let num_pages = NUM_PAGES;
     let mut args: [*mut c_void; 4] = [

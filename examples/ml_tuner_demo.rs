@@ -67,10 +67,7 @@ fn main() {
     let regressor = ThroughputRegressor::new();
     let prediction = regressor.predict(&features);
 
-    println!(
-        "   Predicted throughput: {:.1} tok/s",
-        prediction.predicted_tps
-    );
+    println!("   Predicted throughput: {:.1} tok/s", prediction.predicted_tps);
     println!("   Confidence: {:.1}%", prediction.confidence * 100.0);
     println!("   Top contributing features:");
     for (name, importance) in prediction.top_features.iter().take(3) {
@@ -152,10 +149,7 @@ fn main() {
             .gpu_mem_bw_gbs(1000.0)
             .build();
         let pred = regressor.predict(&f);
-        println!(
-            "     {}: {:.0} tok/s (roofline-clamped)",
-            name, pred.predicted_tps
-        );
+        println!("     {}: {:.0} tok/s (roofline-clamped)", name, pred.predicted_tps);
     }
     println!();
 
@@ -168,10 +162,7 @@ fn main() {
     let tuner = BrickTuner::new();
     let full_rec = tuner.recommend(&features);
 
-    println!(
-        "   Throughput: {:.1} tok/s",
-        full_rec.throughput.predicted_tps
-    );
+    println!("   Throughput: {:.1} tok/s", full_rec.throughput.predicted_tps);
     println!("   Best kernel: {:?}", full_rec.kernel.top_kernel);
     println!("   Experiment suggestions:");
     for suggestion in full_rec.suggested_experiments.iter().take(3) {

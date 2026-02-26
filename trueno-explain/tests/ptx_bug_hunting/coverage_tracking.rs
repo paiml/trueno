@@ -72,10 +72,7 @@ fn test_coverage_tracker_basic() {
     let report = coverage.generate_report();
 
     assert_eq!(report.total_features, 2);
-    assert!(
-        report.coverage >= 0.5,
-        "Should cover at least entry_point and register_allocation"
-    );
+    assert!(report.coverage >= 0.5, "Should cover at least entry_point and register_allocation");
 }
 
 /// Test default coverage tracker
@@ -87,8 +84,5 @@ fn test_coverage_tracker_default() {
     coverage.analyze(&ptx);
 
     let report = coverage.generate_report();
-    assert!(
-        report.total_features >= 6,
-        "Default tracker should have 6+ features"
-    );
+    assert!(report.total_features >= 6, "Default tracker should have 6+ features");
 }

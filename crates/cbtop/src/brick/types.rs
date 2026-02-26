@@ -24,10 +24,7 @@ pub enum BrickAssertion {
     /// Data must not be empty
     DataNonEmpty,
     /// Custom assertion with name and validator
-    Custom {
-        name: &'static str,
-        description: &'static str,
-    },
+    Custom { name: &'static str, description: &'static str },
     /// CORRECTNESS-011: Checksum must match between backends (CPU vs GPU)
     /// Five-Whys: Hours of manual debugging → No automated divergence detection
     ChecksumMatch {
@@ -65,10 +62,7 @@ impl BrickAssertion {
     where
         F: Fn(&dyn Any) -> bool,
     {
-        Self::Custom {
-            name: _name,
-            description: "",
-        }
+        Self::Custom { name: _name, description: "" }
     }
 
     /// Create max latency assertion (milliseconds)
@@ -78,12 +72,7 @@ impl BrickAssertion {
 
     /// CORRECTNESS-011: Create checksum match assertion
     pub fn checksum_match(expected: u64, actual: u64, kernel_name: &str, position: u32) -> Self {
-        Self::ChecksumMatch {
-            expected,
-            actual,
-            kernel_name: kernel_name.to_string(),
-            position,
-        }
+        Self::ChecksumMatch { expected, actual, kernel_name: kernel_name.to_string(), position }
     }
 }
 
@@ -175,10 +164,7 @@ impl DivergenceReport {
             expected_trace: None,
             actual_trace: None,
             kernels_compared,
-            diagnosis: format!(
-                "All {} kernels matched between CPU and GPU",
-                kernels_compared
-            ),
+            diagnosis: format!("All {} kernels matched between CPU and GPU", kernels_compared),
         }
     }
 
@@ -240,26 +226,14 @@ pub struct BrickBudget {
 impl BrickBudget {
     /// Create uniform budget (same for all phases)
     pub const fn uniform(ms: u32) -> Self {
-        Self {
-            collect_ms: ms,
-            layout_ms: ms,
-            render_ms: ms,
-        }
+        Self { collect_ms: ms, layout_ms: ms, render_ms: ms }
     }
 
     /// 60fps budget: 16ms total
-    pub const FRAME_60FPS: Self = Self {
-        collect_ms: 5,
-        layout_ms: 3,
-        render_ms: 8,
-    };
+    pub const FRAME_60FPS: Self = Self { collect_ms: 5, layout_ms: 3, render_ms: 8 };
 
     /// 30fps budget: 33ms total
-    pub const FRAME_30FPS: Self = Self {
-        collect_ms: 10,
-        layout_ms: 6,
-        render_ms: 17,
-    };
+    pub const FRAME_30FPS: Self = Self { collect_ms: 10, layout_ms: 6, render_ms: 17 };
 
     /// Total budget in milliseconds
     pub const fn total_ms(&self) -> u32 {

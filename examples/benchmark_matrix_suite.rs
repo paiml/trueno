@@ -5,9 +5,7 @@ fn create_test_matrix(rows: usize, cols: usize, seed_multiplier: usize) -> Matri
     Matrix::from_vec(
         rows,
         cols,
-        (0..rows * cols)
-            .map(|i| (((i * seed_multiplier) % 100) as f32) / 10.0)
-            .collect(),
+        (0..rows * cols).map(|i| (((i * seed_multiplier) % 100) as f32) / 10.0).collect(),
     )
     .expect("Failed to create matrix")
 }

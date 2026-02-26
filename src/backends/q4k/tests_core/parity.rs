@@ -90,11 +90,7 @@ fn test_scalar_vs_optimized_parity() {
     let scalar_output = matmul_q4k_f32_scalar(&q4k_data, &input, out_dim, in_dim);
     let optimized_output = matmul_q4k_f32(&q4k_data, &input, out_dim, in_dim);
 
-    for (i, (s, o)) in scalar_output
-        .iter()
-        .zip(optimized_output.iter())
-        .enumerate()
-    {
+    for (i, (s, o)) in scalar_output.iter().zip(optimized_output.iter()).enumerate() {
         let diff = (s - o).abs();
         // Allow small FP differences from mul_add vs separate multiply-add
         assert!(
@@ -150,13 +146,6 @@ fn test_determinism() {
     let output2 = matmul_q4k_f32(&q4k_data, &input, out_dim, in_dim);
 
     for (i, (a, b)) in output1.iter().zip(output2.iter()).enumerate() {
-        assert_eq!(
-            a.to_bits(),
-            b.to_bits(),
-            "Row {}: Non-deterministic output: {} vs {}",
-            i,
-            a,
-            b
-        );
+        assert_eq!(a.to_bits(), b.to_bits(), "Row {}: Non-deterministic output: {} vs {}", i, a, b);
     }
 }

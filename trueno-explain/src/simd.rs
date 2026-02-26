@@ -75,10 +75,7 @@ pub struct SimdAnalyzer {
 
 impl Default for SimdAnalyzer {
     fn default() -> Self {
-        Self {
-            target_arch: SimdArch::Avx2,
-            vectorization_threshold: 0.5,
-        }
+        Self { target_arch: SimdArch::Avx2, vectorization_threshold: 0.5 }
     }
 }
 
@@ -86,10 +83,7 @@ impl SimdAnalyzer {
     /// Create a new SIMD analyzer for the given architecture
     #[must_use]
     pub fn new(arch: SimdArch) -> Self {
-        Self {
-            target_arch: arch,
-            ..Default::default()
-        }
+        Self { target_arch: arch, ..Default::default() }
     }
 
     /// Count SIMD instructions in assembly
@@ -247,12 +241,7 @@ mod tests {
 
     #[test]
     fn test_vectorization_ratio() {
-        let counts = SimdInstructionCounts {
-            scalar: 2,
-            sse: 0,
-            avx: 8,
-            avx512: 0,
-        };
+        let counts = SimdInstructionCounts { scalar: 2, sse: 0, avx: 8, avx512: 0 };
 
         let ratio = counts.vectorization_ratio();
         assert!((ratio - 0.8).abs() < 0.01, "Expected 80% vectorization");
@@ -300,9 +289,6 @@ mod tests {
         let report = analyzer.analyze(asm).unwrap();
 
         // estimated_occupancy repurposed as vectorization ratio
-        assert!(
-            report.estimated_occupancy > 0.0,
-            "Vectorization ratio should be > 0%"
-        );
+        assert!(report.estimated_occupancy > 0.0, "Vectorization ratio should be > 0%");
     }
 }

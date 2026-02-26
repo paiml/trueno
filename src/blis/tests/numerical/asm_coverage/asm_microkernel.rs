@@ -34,11 +34,7 @@ fn test_f21a_true_asm_matches_scalar_k64() {
         .map(|(s, a)| (s - a).abs() / s.abs().max(1e-10))
         .fold(0.0, f32::max);
 
-    assert!(
-        max_rel_diff < 1e-5,
-        "F21a: ASM microkernel k=64 max_rel_diff={}",
-        max_rel_diff
-    );
+    assert!(max_rel_diff < 1e-5, "F21a: ASM microkernel k=64 max_rel_diff={}", max_rel_diff);
 }
 
 #[test]
@@ -62,17 +58,10 @@ fn test_f21a_true_asm_matches_scalar_k256() {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
 
-    let max_diff: f32 = c_scalar
-        .iter()
-        .zip(c_asm.iter())
-        .map(|(s, a)| (s - a).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_scalar.iter().zip(c_asm.iter()).map(|(s, a)| (s - a).abs()).fold(0.0, f32::max);
 
-    assert!(
-        max_diff < 1e-4,
-        "F21a: ASM microkernel k=256 max_diff={}",
-        max_diff
-    );
+    assert!(max_diff < 1e-4, "F21a: ASM microkernel k=256 max_diff={}", max_diff);
 }
 
 #[test]
@@ -96,17 +85,10 @@ fn test_f21a_true_asm_matches_scalar_k1024() {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
 
-    let max_diff: f32 = c_scalar
-        .iter()
-        .zip(c_asm.iter())
-        .map(|(s, a)| (s - a).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_scalar.iter().zip(c_asm.iter()).map(|(s, a)| (s - a).abs()).fold(0.0, f32::max);
 
-    assert!(
-        max_diff < 1e-3,
-        "F21a: ASM microkernel k=1024 max_diff={}",
-        max_diff
-    );
+    assert!(max_diff < 1e-3, "F21a: ASM microkernel k=1024 max_diff={}", max_diff);
 }
 
 /// F21h: K remainder handled correctly (k=1,2,3,5,7,9)
@@ -163,11 +145,8 @@ fn test_f21h_k_remainder_k5() {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
 
-    let max_diff: f32 = c_scalar
-        .iter()
-        .zip(c_asm.iter())
-        .map(|(s, a)| (s - a).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_scalar.iter().zip(c_asm.iter()).map(|(s, a)| (s - a).abs()).fold(0.0, f32::max);
 
     assert!(max_diff < 1e-5, "F21h: k=5 remainder max_diff={}", max_diff);
 }
@@ -193,11 +172,8 @@ fn test_f21h_k_remainder_k7() {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
 
-    let max_diff: f32 = c_scalar
-        .iter()
-        .zip(c_asm.iter())
-        .map(|(s, a)| (s - a).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_scalar.iter().zip(c_asm.iter()).map(|(s, a)| (s - a).abs()).fold(0.0, f32::max);
 
     assert!(max_diff < 1e-5, "F21h: k=7 remainder max_diff={}", max_diff);
 }
@@ -223,11 +199,8 @@ fn test_f21h_k_remainder_k9() {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
 
-    let max_diff: f32 = c_scalar
-        .iter()
-        .zip(c_asm.iter())
-        .map(|(s, a)| (s - a).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_scalar.iter().zip(c_asm.iter()).map(|(s, a)| (s - a).abs()).fold(0.0, f32::max);
 
     assert!(max_diff < 1e-5, "F21h: k=9 remainder max_diff={}", max_diff);
 }
@@ -342,15 +315,8 @@ fn test_gemm_with_true_asm_microkernel() {
     gemm_reference(n, n, n, &a, &b, &mut c_ref).unwrap();
     gemm_blis(n, n, n, &a, &b, &mut c_blis, None).unwrap();
 
-    let max_diff: f32 = c_ref
-        .iter()
-        .zip(c_blis.iter())
-        .map(|(r, b)| (r - b).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_ref.iter().zip(c_blis.iter()).map(|(r, b)| (r - b).abs()).fold(0.0, f32::max);
 
-    assert!(
-        max_diff < 1e-2,
-        "GEMM with true ASM microkernel: max_diff={}",
-        max_diff
-    );
+    assert!(max_diff < 1e-2, "GEMM with true ASM microkernel: max_diff={}", max_diff);
 }

@@ -25,11 +25,7 @@ fn test_f16_to_f32_negative_normal() {
 fn test_f16_to_f32_smallest_normal() {
     // Smallest positive normal: 0x0400 = 2^(-14) ~ 6.1035e-5
     let val = f16_to_f32(0x0400);
-    assert!(
-        val > 0.0 && val < 0.001,
-        "Expected small normal, got {}",
-        val
-    );
+    assert!(val > 0.0 && val < 0.001, "Expected small normal, got {}", val);
 }
 
 /// Test f16 conversion: largest normal
@@ -37,11 +33,7 @@ fn test_f16_to_f32_smallest_normal() {
 fn test_f16_to_f32_largest_normal() {
     // Largest finite f16: 0x7BFF ~ 65504
     let val = f16_to_f32(0x7BFF);
-    assert!(
-        (val - 65504.0).abs() < 100.0,
-        "Expected ~65504, got {}",
-        val
-    );
+    assert!((val - 65504.0).abs() < 100.0, "Expected ~65504, got {}", val);
 }
 
 /// Test f16 conversion: negative subnormal
@@ -49,11 +41,7 @@ fn test_f16_to_f32_largest_normal() {
 fn test_f16_to_f32_negative_subnormal() {
     // Negative smallest subnormal: 0x8001
     let val = f16_to_f32(0x8001);
-    assert!(
-        val < 0.0 && val > -1e-4,
-        "Expected small negative, got {}",
-        val
-    );
+    assert!(val < 0.0 && val > -1e-4, "Expected small negative, got {}", val);
 }
 
 /// Test parse_q4k_header with all-zero block
@@ -149,11 +137,5 @@ fn test_matmul_q4k_f32_optimized_remainder() {
     let optimized = matmul_q4k_f32(&q4k_data, &input, out_dim, in_dim);
 
     let diff = (scalar[0] - optimized[0]).abs();
-    assert!(
-        diff < 1e-3,
-        "Scalar {} vs optimized {}, diff={}",
-        scalar[0],
-        optimized[0],
-        diff
-    );
+    assert!(diff < 1e-3, "Scalar {} vs optimized {}, diff={}", scalar[0], optimized[0], diff);
 }

@@ -121,10 +121,7 @@ impl GpuBackend {
     /// Check if this backend supports compute shaders
     #[must_use]
     pub const fn supports_compute(&self) -> bool {
-        matches!(
-            self,
-            Self::Vulkan | Self::Metal | Self::Dx12 | Self::WebGpu | Self::Cuda
-        )
+        matches!(self, Self::Vulkan | Self::Metal | Self::Dx12 | Self::WebGpu | Self::Cuda)
     }
 }
 

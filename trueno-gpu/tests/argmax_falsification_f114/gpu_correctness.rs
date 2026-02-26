@@ -43,11 +43,7 @@ fn f114_test3_correctness_known_max() {
 
     input_buf.copy_from_host(&input).unwrap();
 
-    let config = LaunchConfig {
-        grid: (1, 1, 1),
-        block: (256, 1, 1),
-        shared_mem: 2048,
-    };
+    let config = LaunchConfig { grid: (1, 1, 1), block: (256, 1, 1), shared_mem: 2048 };
 
     let length = 256u32;
     let mut args: [*mut c_void; 4] = [
@@ -120,11 +116,7 @@ fn f114_test4_max_at_zero() {
 
     input_buf.copy_from_host(&input).unwrap();
 
-    let config = LaunchConfig {
-        grid: (1, 1, 1),
-        block: (256, 1, 1),
-        shared_mem: 2048,
-    };
+    let config = LaunchConfig { grid: (1, 1, 1), block: (256, 1, 1), shared_mem: 2048 };
 
     let length = 512u32;
     let mut args: [*mut c_void; 4] = [
@@ -191,11 +183,7 @@ fn f114_test5_max_at_last() {
 
     input_buf.copy_from_host(&input).unwrap();
 
-    let config = LaunchConfig {
-        grid: (1, 1, 1),
-        block: (256, 1, 1),
-        shared_mem: 2048,
-    };
+    let config = LaunchConfig { grid: (1, 1, 1), block: (256, 1, 1), shared_mem: 2048 };
 
     let length = 1000u32;
     let mut args: [*mut c_void; 4] = [
@@ -270,11 +258,7 @@ fn f114_test6_vocab_size_reduction() {
 
     input_buf.copy_from_host(&input).unwrap();
 
-    let config = LaunchConfig {
-        grid: (num_blocks, 1, 1),
-        block: (256, 1, 1),
-        shared_mem: 2048,
-    };
+    let config = LaunchConfig { grid: (num_blocks, 1, 1), block: (256, 1, 1), shared_mem: 2048 };
 
     let mut args: [*mut c_void; 4] = [
         input_buf.as_kernel_arg(),
@@ -299,11 +283,8 @@ fn f114_test6_vocab_size_reduction() {
             let mut final_module = CudaModule::from_ptx(&ctx, &final_ptx).unwrap();
             let mut output_buf: GpuBuffer<u32> = GpuBuffer::new(&ctx, 1).unwrap();
 
-            let final_config = LaunchConfig {
-                grid: (1, 1, 1),
-                block: (256, 1, 1),
-                shared_mem: 2048,
-            };
+            let final_config =
+                LaunchConfig { grid: (1, 1, 1), block: (256, 1, 1), shared_mem: 2048 };
 
             let mut final_args: [*mut c_void; 4] = [
                 block_vals_buf.as_kernel_arg(),
@@ -369,9 +350,7 @@ fn f114_test7_cpu_reference_match() {
     let stream = CudaStream::new(&ctx).unwrap();
 
     // Use deterministic "random" data for reproducibility
-    let input: Vec<f32> = (0..512)
-        .map(|i| ((i * 17 + 13) % 1000) as f32 - 500.0)
-        .collect();
+    let input: Vec<f32> = (0..512).map(|i| ((i * 17 + 13) % 1000) as f32 - 500.0).collect();
 
     // CPU reference
     let cpu_argmax = input
@@ -400,11 +379,7 @@ fn f114_test7_cpu_reference_match() {
 
     input_buf.copy_from_host(&input).unwrap();
 
-    let config = LaunchConfig {
-        grid: (1, 1, 1),
-        block: (256, 1, 1),
-        shared_mem: 2048,
-    };
+    let config = LaunchConfig { grid: (1, 1, 1), block: (256, 1, 1), shared_mem: 2048 };
 
     let length = 512u32;
     let mut args: [*mut c_void; 4] = [

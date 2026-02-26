@@ -28,11 +28,7 @@ pub struct KvCacheStateTrace {
 impl KvCacheStateTrace {
     /// Create a new trace for a step.
     pub fn new(step: usize, max_positions: usize) -> Self {
-        Self {
-            step,
-            max_positions,
-            ..Default::default()
-        }
+        Self { step, max_positions, ..Default::default() }
     }
 
     /// Check if context window is exhausted.
@@ -80,11 +76,7 @@ impl KvCacheSessionTrace {
         if self.steps.is_empty() {
             return false;
         }
-        let eviction_steps = self
-            .steps
-            .iter()
-            .filter(|s| s.evictions_this_step > 0)
-            .count();
+        let eviction_steps = self.steps.iter().filter(|s| s.evictions_this_step > 0).count();
         eviction_steps as f32 / self.steps.len() as f32 > 0.1
     }
 

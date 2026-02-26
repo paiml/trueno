@@ -7,13 +7,7 @@ fn test_ln_basic() {
     let result = a.ln().unwrap();
     let expected = [0.0, 1.0, 2.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "ln mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "ln mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -32,13 +26,7 @@ fn test_ln_small_values() {
     let result = a.ln().unwrap();
     let expected = [0.1f32.ln(), 0.5f32.ln(), 0.9f32.ln()];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "ln small values mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "ln small values mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -48,13 +36,7 @@ fn test_ln_large_values() {
     let result = a.ln().unwrap();
     let expected = [10.0f32.ln(), 100.0f32.ln(), 1000.0f32.ln()];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "ln large values mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "ln large values mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -64,11 +46,8 @@ fn test_ln_inverse_exp() {
     let a = Vector::from_slice(&[0.5, 1.0, 2.0, 3.0]);
     let exp_result = a.exp().unwrap();
     let ln_result = exp_result.ln().unwrap();
-    for (i, (&original, &recovered)) in a
-        .as_slice()
-        .iter()
-        .zip(ln_result.as_slice().iter())
-        .enumerate()
+    for (i, (&original, &recovered)) in
+        a.as_slice().iter().zip(ln_result.as_slice().iter()).enumerate()
     {
         assert!(
             (original - recovered).abs() < 1e-5,
@@ -95,13 +74,7 @@ fn test_log2_basic() {
     let result = a.log2().unwrap();
     let expected = [0.0, 1.0, 2.0, 3.0, 4.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "log2 mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "log2 mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -120,13 +93,7 @@ fn test_log2_fractional() {
     let result = a.log2().unwrap();
     let expected = [-1.0, -2.0, -3.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "log2 fractional mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "log2 fractional mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -136,13 +103,7 @@ fn test_log2_non_powers() {
     let result = a.log2().unwrap();
     let expected = [3.0f32.log2(), 5.0f32.log2(), 10.0f32.log2()];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "log2 non-powers mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "log2 non-powers mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -161,13 +122,7 @@ fn test_log10_basic() {
     let result = a.log10().unwrap();
     let expected = [0.0, 1.0, 2.0, 3.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "log10 mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "log10 mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -186,13 +141,7 @@ fn test_log10_fractional() {
     let result = a.log10().unwrap();
     let expected = [-1.0, -2.0, -3.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "log10 fractional mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "log10 fractional mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -202,13 +151,7 @@ fn test_log10_non_powers() {
     let result = a.log10().unwrap();
     let expected = [2.0f32.log10(), 5.0f32.log10(), 50.0f32.log10()];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "log10 non-powers mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "log10 non-powers mismatch at {}: {} != {}", i, res, exp);
     }
 }
 

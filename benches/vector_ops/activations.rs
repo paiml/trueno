@@ -13,9 +13,7 @@ pub fn bench_relu(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         // Generate data with mix of positive and negative values
-        let data: Vec<f32> = (0..*size)
-            .map(|i| (i as f32) * 0.5 - (*size as f32) * 0.25)
-            .collect();
+        let data: Vec<f32> = (0..*size).map(|i| (i as f32) * 0.5 - (*size as f32) * 0.25).collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
@@ -178,9 +176,7 @@ pub fn bench_sigmoid(c: &mut Criterion) {
         // Generate data in range [-6, 6] for realistic sigmoid values
         // Previous range [-500, 500] caused scalar fast-path (returns 0/1 without exp())
         // while SIMD computed full exp(), creating misleading benchmarks
-        let data: Vec<f32> = (0..*size)
-            .map(|i| (i as f32 / *size as f32) * 12.0 - 6.0)
-            .collect();
+        let data: Vec<f32> = (0..*size).map(|i| (i as f32 / *size as f32) * 12.0 - 6.0).collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
@@ -221,9 +217,7 @@ pub fn bench_gelu(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         // Generate data with mix of positive and negative values
-        let data: Vec<f32> = (0..*size)
-            .map(|i| (i as f32) * 0.1 - (*size as f32) * 0.05)
-            .collect();
+        let data: Vec<f32> = (0..*size).map(|i| (i as f32) * 0.1 - (*size as f32) * 0.05).collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
@@ -264,9 +258,7 @@ pub fn bench_swish(c: &mut Criterion) {
         group.throughput(Throughput::Elements(*size as u64));
 
         // Generate data with mix of positive and negative values
-        let data: Vec<f32> = (0..*size)
-            .map(|i| (i as f32) * 0.1 - (*size as f32) * 0.05)
-            .collect();
+        let data: Vec<f32> = (0..*size).map(|i| (i as f32) * 0.1 - (*size as f32) * 0.05).collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {
@@ -308,9 +300,7 @@ pub fn bench_tanh(c: &mut Criterion) {
 
         // Generate data with mix of positive and negative values in [-3.5, 3.5] range
         // (avoiding saturation region where tanh(x) ≈ ±1)
-        let data: Vec<f32> = (0..*size)
-            .map(|i| (i as f32) / (*size as f32) * 7.0 - 3.5)
-            .collect();
+        let data: Vec<f32> = (0..*size).map(|i| (i as f32) / (*size as f32) * 7.0 - 3.5).collect();
 
         // Scalar backend
         group.bench_with_input(BenchmarkId::new("Scalar", size), size, |bencher, _size| {

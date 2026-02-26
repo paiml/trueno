@@ -130,10 +130,7 @@ impl VectorBackend for Avx512Backend {
         let sign_mask = _mm512_set1_ps(f32::from_bits(0x7FFF_FFFF));
         let mut acc = _mm512_setzero_ps();
         while i + 16 <= len {
-            acc = _mm512_add_ps(
-                acc,
-                _mm512_and_ps(_mm512_loadu_ps(a.as_ptr().add(i)), sign_mask),
-            );
+            acc = _mm512_add_ps(acc, _mm512_and_ps(_mm512_loadu_ps(a.as_ptr().add(i)), sign_mask));
             i += 16;
         }
         let mut result = _mm512_reduce_add_ps(acc);

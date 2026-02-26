@@ -97,10 +97,7 @@ fn test_falsify_dot_commutative() {
     let result1 = op.execute((a.clone(), b.clone()), Backend::Scalar).unwrap();
     let result2 = op.execute((b, a), Backend::Scalar).unwrap();
 
-    assert!(
-        (result1 - result2).abs() < 1e-6,
-        "FALSIFICATION FAILED: dot product not commutative"
-    );
+    assert!((result1 - result2).abs() < 1e-6, "FALSIFICATION FAILED: dot product not commutative");
 }
 
 /// FALSIFICATION: Softmax probabilities sum to 1

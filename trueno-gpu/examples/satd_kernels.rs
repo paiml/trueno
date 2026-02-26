@@ -26,15 +26,9 @@ fn main() {
     let q4k_kernel = QuantizeKernel::new(256, 256, 4096);
 
     println!("Configuration:");
-    println!(
-        "  M × N × K: {} × {} × {}",
-        q4k_kernel.m, q4k_kernel.n, q4k_kernel.k
-    );
+    println!("  M × N × K: {} × {} × {}", q4k_kernel.m, q4k_kernel.n, q4k_kernel.k);
     println!("  Format: {:?}", q4k_kernel.format);
-    println!(
-        "  Super-blocks per row: {}",
-        q4k_kernel.num_super_blocks_per_row()
-    );
+    println!("  Super-blocks per row: {}", q4k_kernel.num_super_blocks_per_row());
     println!("  Block size: {} values", q4k_kernel.block_size);
     println!();
 
@@ -45,22 +39,14 @@ fn main() {
     let has_kloop_fix = ptx.contains("bra k_block_loop") || ptx.contains("bra\tk_block_loop");
     println!(
         "K-loop fix verified: {} (branches back to loop start)",
-        if has_kloop_fix {
-            "✓ PASS"
-        } else {
-            "✗ FAIL"
-        }
+        if has_kloop_fix { "✓ PASS" } else { "✗ FAIL" }
     );
 
     // Verify shuffle fix: should use shfl.idx for broadcast
     let has_shuffle_fix = ptx.contains("shfl.idx") || ptx.contains("shfl.sync.idx");
     println!(
         "Shuffle fix verified: {} (uses shfl.idx for broadcast)",
-        if has_shuffle_fix {
-            "✓ PASS"
-        } else {
-            "✗ FAIL"
-        }
+        if has_shuffle_fix { "✓ PASS" } else { "✗ FAIL" }
     );
     println!();
 
@@ -110,11 +96,7 @@ fn main() {
     let has_stride_fix = ptx_shared.contains("shr.u32");
     println!(
         "  Stride halving verified: {} (shr.u32 for stride/2)",
-        if has_stride_fix {
-            "✓ PASS"
-        } else {
-            "✗ FAIL"
-        }
+        if has_stride_fix { "✓ PASS" } else { "✗ FAIL" }
     );
     println!();
 

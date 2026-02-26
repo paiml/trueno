@@ -110,20 +110,9 @@ fn main() {
     let kernels: Vec<_> = graph.kernel_nodes().collect();
     println!("\nKernel Nodes ({}):", kernels.len());
     for (id, node) in &kernels {
-        if let ExecutionNode::Kernel {
-            name,
-            ptx_hash,
-            grid,
-            block,
-            shared_mem,
-            ..
-        } = node
-        {
+        if let ExecutionNode::Kernel { name, ptx_hash, grid, block, shared_mem, .. } = node {
             println!("  [{:>2}] {} (hash: 0x{:016x})", id.0, name, ptx_hash);
-            println!(
-                "       grid: {:?}, block: {:?}, smem: {}B",
-                grid, block, shared_mem
-            );
+            println!("       grid: {:?}, block: {:?}, smem: {}B", grid, block, shared_mem);
         }
     }
 
@@ -149,10 +138,7 @@ fn main() {
     let slack = graph.compute_slack();
     let high_slack: Vec<_> = slack.iter().filter(|(_, &s)| s > 0).collect();
     if !high_slack.is_empty() {
-        println!(
-            "\nParallelization Opportunities ({} nodes with slack):",
-            high_slack.len()
-        );
+        println!("\nParallelization Opportunities ({} nodes with slack):", high_slack.len());
     }
 
     // Formatted summary

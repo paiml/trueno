@@ -94,14 +94,8 @@ fn demo_loop_splitting() {
 
     // LoopPredicate conversion
     println!("\nLoop predicate conversion:");
-    println!(
-        "  CmpOp::Lt -> {:?}",
-        loop_split::LoopPredicate::from_cmp_op(CmpOp::Lt)
-    );
-    println!(
-        "  CmpOp::Ge -> {:?}",
-        loop_split::LoopPredicate::from_cmp_op(CmpOp::Ge)
-    );
+    println!("  CmpOp::Lt -> {:?}", loop_split::LoopPredicate::from_cmp_op(CmpOp::Lt));
+    println!("  CmpOp::Ge -> {:?}", loop_split::LoopPredicate::from_cmp_op(CmpOp::Ge));
 
     println!("\nBenefit: Eliminates branch divergence in GPU warps");
     println!("Reference: NVIDIA LoopSplit.cpp (CUDA Toolkit 13.1)\n");
@@ -130,37 +124,16 @@ fn demo_tko() {
 
     // Memory ordering semantics
     println!("\nMemory ordering semantics:");
-    println!(
-        "  MemoryOrdering::Weak    -> \"{}\"",
-        tko::MemoryOrdering::Weak.to_ptx_modifier()
-    );
-    println!(
-        "  MemoryOrdering::Relaxed -> \"{}\"",
-        tko::MemoryOrdering::Relaxed.to_ptx_modifier()
-    );
-    println!(
-        "  MemoryOrdering::Acquire -> \"{}\"",
-        tko::MemoryOrdering::Acquire.to_ptx_modifier()
-    );
-    println!(
-        "  MemoryOrdering::Release -> \"{}\"",
-        tko::MemoryOrdering::Release.to_ptx_modifier()
-    );
+    println!("  MemoryOrdering::Weak    -> \"{}\"", tko::MemoryOrdering::Weak.to_ptx_modifier());
+    println!("  MemoryOrdering::Relaxed -> \"{}\"", tko::MemoryOrdering::Relaxed.to_ptx_modifier());
+    println!("  MemoryOrdering::Acquire -> \"{}\"", tko::MemoryOrdering::Acquire.to_ptx_modifier());
+    println!("  MemoryOrdering::Release -> \"{}\"", tko::MemoryOrdering::Release.to_ptx_modifier());
 
     // Memory scopes
     println!("\nMemory scopes:");
-    println!(
-        "  MemoryScope::Block   -> \"{}\"",
-        tko::MemoryScope::Block.to_ptx_scope()
-    );
-    println!(
-        "  MemoryScope::Device  -> \"{}\"",
-        tko::MemoryScope::Device.to_ptx_scope()
-    );
-    println!(
-        "  MemoryScope::System  -> \"{}\"",
-        tko::MemoryScope::System.to_ptx_scope()
-    );
+    println!("  MemoryScope::Block   -> \"{}\"", tko::MemoryScope::Block.to_ptx_scope());
+    println!("  MemoryScope::Device  -> \"{}\"", tko::MemoryScope::Device.to_ptx_scope());
+    println!("  MemoryScope::System  -> \"{}\"", tko::MemoryScope::System.to_ptx_scope());
 
     // Token graph with cycle detection
     let mut graph = tko::TokenGraph::new();
@@ -217,11 +190,7 @@ fn demo_tile_validation() {
     println!("\nWMMA (Tensor Core) shapes:");
     let wmma_16x16x16 = WmmaShape::M16N16K16;
     let wmma_8x32x16 = WmmaShape::M8N32K16;
-    let wmma_invalid = WmmaShape {
-        m: 24,
-        n: 24,
-        k: 16,
-    };
+    let wmma_invalid = WmmaShape { m: 24, n: 24, k: 16 };
 
     match tile_validation::validate_wmma_shape(&wmma_16x16x16) {
         Ok(()) => println!("  m16n16k16 OK (standard)"),

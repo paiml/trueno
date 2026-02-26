@@ -48,11 +48,7 @@ fn test_falsification_45_tiny_matrix() {
 
     gemm_blis(2, 2, 2, &a, &b, &mut c, None).unwrap();
 
-    assert_eq!(
-        c,
-        vec![19.0, 22.0, 43.0, 50.0],
-        "F45: Tiny matrix incorrect"
-    );
+    assert_eq!(c, vec![19.0, 22.0, 43.0, 50.0], "F45: Tiny matrix incorrect");
 }
 
 // ========================================================================
@@ -62,10 +58,7 @@ fn test_falsification_45_tiny_matrix() {
 // F53: Heijunka load leveling produces balanced partitions
 #[test]
 fn test_falsification_53_heijunka_variance() {
-    let scheduler = HeijunkaScheduler {
-        num_threads: 4,
-        variance_threshold: 0.05,
-    };
+    let scheduler = HeijunkaScheduler { num_threads: 4, variance_threshold: 0.05 };
 
     // Test with M values that divide evenly into MC-sized tiles
     for m in [576, 720, 1024, 2048] {
@@ -77,10 +70,8 @@ fn test_falsification_53_heijunka_variance() {
 
         let sizes: Vec<usize> = partitions.iter().map(|r| r.len()).collect();
         let avg = sizes.iter().sum::<usize>() as f32 / sizes.len() as f32;
-        let max_deviation = sizes
-            .iter()
-            .map(|&s| ((s as f32 - avg) / avg).abs())
-            .fold(0.0_f32, f32::max);
+        let max_deviation =
+            sizes.iter().map(|&s| ((s as f32 - avg) / avg).abs()).fold(0.0_f32, f32::max);
 
         assert!(
             max_deviation < 0.5,
@@ -103,20 +94,11 @@ fn test_falsification_55_profiler_works() {
 
     gemm_blis(n, n, n, &a, &b, &mut c, Some(&mut profiler)).unwrap();
 
-    assert!(
-        profiler.macro_stats.flops > 0,
-        "F55: Profiler didn't record FLOPs"
-    );
-    assert!(
-        profiler.macro_stats.total_ns > 0,
-        "F55: Profiler didn't record time"
-    );
+    assert!(profiler.macro_stats.flops > 0, "F55: Profiler didn't record FLOPs");
+    assert!(profiler.macro_stats.total_ns > 0, "F55: Profiler didn't record time");
 
     let summary = profiler.summary();
-    assert!(
-        summary.contains("GFLOP/s"),
-        "F55: Profiler summary incomplete"
-    );
+    assert!(summary.contains("GFLOP/s"), "F55: Profiler summary incomplete");
 }
 
 // ========================================================================
@@ -175,19 +157,14 @@ fn test_falsification_39_no_catastrophic_cancellation() {
     let big = 1e6_f32;
     let small = 1.0_f32;
 
-    let a: Vec<f32> = (0..n * n)
-        .map(|i| if i % 2 == 0 { big } else { -big })
-        .collect();
+    let a: Vec<f32> = (0..n * n).map(|i| if i % 2 == 0 { big } else { -big }).collect();
     let b: Vec<f32> = vec![small; n * n];
     let mut c = vec![0.0; n * n];
 
     gemm_blis(n, n, n, &a, &b, &mut c, None).unwrap();
 
     for &val in &c {
-        assert!(
-            val.is_finite(),
-            "F39: Catastrophic cancellation produced NaN/Inf"
-        );
+        assert!(val.is_finite(), "F39: Catastrophic cancellation produced NaN/Inf");
     }
 }
 
@@ -213,11 +190,8 @@ fn test_falsification_41_error_bound() {
     let gamma_k = (k as f32) * eps / (1.0 - (k as f32) * eps);
     let error_bound = gamma_k * norm_a * norm_b;
 
-    let max_error = c_blis
-        .iter()
-        .zip(c_ref.iter())
-        .map(|(a, b)| (a - b).abs())
-        .fold(0.0_f32, f32::max);
+    let max_error =
+        c_blis.iter().zip(c_ref.iter()).map(|(a, b)| (a - b).abs()).fold(0.0_f32, f32::max);
 
     assert!(
         max_error < error_bound * 100.0,

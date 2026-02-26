@@ -181,11 +181,7 @@ fn test_c030_to_dot_function_and_transfer() {
     });
 
     // Add function without file/line
-    graph.add_node(ExecutionNode::Function {
-        name: "anonymous".into(),
-        file: None,
-        line: None,
-    });
+    graph.add_node(ExecutionNode::Function { name: "anonymous".into(), file: None, line: None });
 
     // Add transfer nodes
     graph.add_node(ExecutionNode::Transfer {
@@ -210,10 +206,7 @@ fn test_c030_to_dot_function_and_transfer() {
     assert!(dot.contains("digraph"), "Should be valid digraph");
     assert!(dot.contains("my_function"), "Should contain function name");
     assert!(dot.contains("src/main.rs:42"), "Should contain file:line");
-    assert!(
-        dot.contains("anonymous"),
-        "Should contain anonymous function"
-    );
+    assert!(dot.contains("anonymous"), "Should contain anonymous function");
     assert!(dot.contains("H2D"), "Should contain H2D transfer");
     assert!(dot.contains("D2D"), "Should contain D2D transfer");
     assert!(dot.contains("lightsalmon"), "Transfer should have color");
@@ -251,22 +244,14 @@ fn test_slowest_kernel_empty_graph() {
 fn test_slowest_kernel_no_bricks() {
     let mut graph = ExecutionGraph::new();
     graph.add_node(ExecutionNode::Layer { index: 0 });
-    graph.add_node(ExecutionNode::Function {
-        name: "func".into(),
-        file: None,
-        line: None,
-    });
+    graph.add_node(ExecutionNode::Function { name: "func".into(), file: None, line: None });
     assert!(graph.slowest_kernel().is_none());
 }
 
 #[test]
 fn test_slowest_kernel_brick_without_launches() {
     let mut graph = ExecutionGraph::new();
-    graph.add_node(ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 5000,
-        elements: 100,
-    });
+    graph.add_node(ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 5000, elements: 100 });
     // Brick exists but has no Launches edges
     assert!(graph.slowest_kernel().is_none());
 }
@@ -393,11 +378,8 @@ fn test_to_tree_node_all_node_types() {
         file: Some("model.rs".into()),
         line: Some(42),
     });
-    let func_no_loc = graph.add_node(ExecutionNode::Function {
-        name: "helper".into(),
-        file: None,
-        line: None,
-    });
+    let func_no_loc =
+        graph.add_node(ExecutionNode::Function { name: "helper".into(), file: None, line: None });
     let transfer = graph.add_node(ExecutionNode::Transfer {
         src: "host".into(),
         dst: "device".into(),
@@ -455,11 +437,8 @@ fn test_critical_path_empty_graph() {
 #[test]
 fn test_critical_path_linear_chain() {
     let mut graph = ExecutionGraph::new();
-    let n1 = graph.add_node(ExecutionNode::Brick {
-        id: BrickId::RmsNorm,
-        timing_ns: 100,
-        elements: 10,
-    });
+    let n1 =
+        graph.add_node(ExecutionNode::Brick { id: BrickId::RmsNorm, timing_ns: 100, elements: 10 });
     let n2 = graph.add_node(ExecutionNode::Brick {
         id: BrickId::QkvProjection,
         timing_ns: 200,

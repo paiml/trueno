@@ -20,10 +20,7 @@ fn test_b016_simrng_platform_independent() {
     let mut rng2 = SimRng::new(42);
     let seq2: Vec<f64> = (0..10).map(|_| rng2.gen_f64()).collect();
 
-    assert_eq!(
-        seq, seq2,
-        "B-016 FALSIFIED: Same seed must produce identical sequences"
-    );
+    assert_eq!(seq, seq2, "B-016 FALSIFIED: Same seed must produce identical sequences");
 }
 
 /// B-017: Same seed + same input produces identical output across runs
@@ -46,12 +43,7 @@ fn test_b017_deterministic_output() {
         let result2 = a2.add(&b_vec).expect("add failed");
 
         // Verify bitwise equality
-        for (i, (r1, r2)) in result
-            .as_slice()
-            .iter()
-            .zip(result2.as_slice().iter())
-            .enumerate()
-        {
+        for (i, (r1, r2)) in result.as_slice().iter().zip(result2.as_slice().iter()).enumerate() {
             assert_eq!(
                 r1.to_bits(),
                 r2.to_bits(),
@@ -106,10 +98,7 @@ fn test_b019_parallel_determinism() {
         results2.push(seq);
     }
 
-    assert_eq!(
-        results, results2,
-        "B-019 FALSIFIED: Parallel partitions not deterministic"
-    );
+    assert_eq!(results, results2, "B-019 FALSIFIED: Parallel partitions not deterministic");
 }
 
 /// B-020: GPU execution with same seed is deterministic
@@ -243,14 +232,7 @@ fn test_b024_determinism_all_sizes() {
 /// B-025: Determinism holds for special values (0, -0, MIN, MAX)
 #[test]
 fn test_b025_special_values_determinism() {
-    let special = vec![
-        0.0f32,
-        -0.0f32,
-        f32::MIN,
-        f32::MAX,
-        f32::MIN_POSITIVE,
-        -f32::MIN_POSITIVE,
-    ];
+    let special = vec![0.0f32, -0.0f32, f32::MIN, f32::MAX, f32::MIN_POSITIVE, -f32::MIN_POSITIVE];
     let b = vec![1.0f32; special.len()];
 
     let vec_special = Vector::from_slice(&special);
@@ -260,14 +242,8 @@ fn test_b025_special_values_determinism() {
         let result = vec_special.add(&vec_b).expect("add failed");
 
         // Verify consistent handling of special values
-        assert!(
-            result.as_slice()[0] == 1.0,
-            "B-025 FALSIFIED: 0.0 + 1.0 should equal 1.0"
-        );
-        assert!(
-            result.as_slice()[1] == 1.0,
-            "B-025 FALSIFIED: -0.0 + 1.0 should equal 1.0"
-        );
+        assert!(result.as_slice()[0] == 1.0, "B-025 FALSIFIED: 0.0 + 1.0 should equal 1.0");
+        assert!(result.as_slice()[1] == 1.0, "B-025 FALSIFIED: -0.0 + 1.0 should equal 1.0");
     }
 }
 
@@ -310,10 +286,7 @@ fn test_b027_nan_propagation() {
     let result = vec_a.add(&vec_b).expect("add failed");
 
     // NaN should propagate
-    assert!(
-        result.as_slice()[1].is_nan(),
-        "B-027 FALSIFIED: NaN should propagate"
-    );
+    assert!(result.as_slice()[1].is_nan(), "B-027 FALSIFIED: NaN should propagate");
 
     // Jidoka should detect it
     let check = nan_guard.check_output(result.as_slice());
@@ -359,10 +332,7 @@ fn test_b029_cross_process_determinism() {
     let mut rng2 = SimRng::new(42);
     let seq2: Vec<f64> = (0..100).map(|_| rng2.gen_f64()).collect();
 
-    assert_eq!(
-        seq1, seq2,
-        "B-029 FALSIFIED: RNG not deterministic across instances"
-    );
+    assert_eq!(seq1, seq2, "B-029 FALSIFIED: RNG not deterministic across instances");
 }
 
 /// B-030: Thread-local state does not leak between tests
@@ -372,8 +342,5 @@ fn test_b030_thread_local_isolation() {
     let backend1 = select_best_available_backend();
     let backend2 = select_best_available_backend();
 
-    assert_eq!(
-        backend1, backend2,
-        "B-030 FALSIFIED: Backend selection should be consistent"
-    );
+    assert_eq!(backend1, backend2, "B-030 FALSIFIED: Backend selection should be consistent");
 }

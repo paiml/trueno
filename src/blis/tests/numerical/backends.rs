@@ -158,17 +158,10 @@ fn test_gemm_auto_produces_correct_result() {
     gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
     gemm_auto(m, n, k, &a, &b, &mut c_auto, None).unwrap();
 
-    let max_diff: f32 = c_ref
-        .iter()
-        .zip(c_auto.iter())
-        .map(|(r, a)| (r - a).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 =
+        c_ref.iter().zip(c_auto.iter()).map(|(r, a)| (r - a).abs()).fold(0.0, f32::max);
 
-    assert!(
-        max_diff < 1e-3,
-        "gemm_auto should match reference, max_diff={}",
-        max_diff
-    );
+    assert!(max_diff < 1e-3, "gemm_auto should match reference, max_diff={}", max_diff);
 }
 
 #[test]
@@ -212,11 +205,7 @@ fn test_f323_backend_selection_respects_pcie_rule() {
     let ai = flops as f64 / bytes as f64;
 
     // AI for GEMM with large K should be high
-    assert!(
-        ai > 100.0,
-        "F323: AI should be high for large K, got {}",
-        ai
-    );
+    assert!(ai > 100.0, "F323: AI should be high for large K, got {}", ai);
 }
 
 #[test]
@@ -241,16 +230,10 @@ fn test_f324_cross_backend_equivalence() {
     let mut c_auto = vec![0.0; m * n];
     gemm_auto(m, n, k, &a, &b, &mut c_auto, None).unwrap();
 
-    let max_diff_blis: f32 = c_ref
-        .iter()
-        .zip(c_blis.iter())
-        .map(|(r, b)| (r - b).abs())
-        .fold(0.0, f32::max);
-    let max_diff_auto: f32 = c_ref
-        .iter()
-        .zip(c_auto.iter())
-        .map(|(r, a)| (r - a).abs())
-        .fold(0.0, f32::max);
+    let max_diff_blis: f32 =
+        c_ref.iter().zip(c_blis.iter()).map(|(r, b)| (r - b).abs()).fold(0.0, f32::max);
+    let max_diff_auto: f32 =
+        c_ref.iter().zip(c_auto.iter()).map(|(r, a)| (r - a).abs()).fold(0.0, f32::max);
 
     assert!(max_diff_blis < 1e-3, "F324: BLIS should match reference");
     assert!(max_diff_auto < 1e-3, "F324: Auto should match reference");
@@ -292,18 +275,9 @@ fn test_f329_brick_hierarchy_profiled() {
     gemm_blis(n, n, n, &a, &b, &mut c, Some(&mut profiler)).unwrap();
 
     // Verify all levels were profiled
-    assert!(
-        profiler.macro_stats.count > 0,
-        "F329: Macro level should be profiled"
-    );
-    assert!(
-        profiler.midi_stats.count > 0,
-        "F329: Midi level should be profiled"
-    );
-    assert!(
-        profiler.micro_stats.count > 0,
-        "F329: Micro level should be profiled"
-    );
+    assert!(profiler.macro_stats.count > 0, "F329: Macro level should be profiled");
+    assert!(profiler.midi_stats.count > 0, "F329: Midi level should be profiled");
+    assert!(profiler.micro_stats.count > 0, "F329: Micro level should be profiled");
 }
 
 #[test]

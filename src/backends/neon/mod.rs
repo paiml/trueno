@@ -223,10 +223,7 @@ impl VectorBackend for NeonBackend {
         let len = a.len();
         let mut i = 0;
         while i + 4 <= len {
-            vst1q_f32(
-                result.as_mut_ptr().add(i),
-                vabsq_f32(vld1q_f32(a.as_ptr().add(i))),
-            );
+            vst1q_f32(result.as_mut_ptr().add(i), vabsq_f32(vld1q_f32(a.as_ptr().add(i))));
             i += 4;
         }
         for j in i..len {
@@ -244,10 +241,7 @@ impl VectorBackend for NeonBackend {
         let max_vec = vdupq_n_f32(max_val);
         while i + 4 <= len {
             let va = vld1q_f32(a.as_ptr().add(i));
-            vst1q_f32(
-                result.as_mut_ptr().add(i),
-                vminq_f32(vmaxq_f32(va, min_vec), max_vec),
-            );
+            vst1q_f32(result.as_mut_ptr().add(i), vminq_f32(vmaxq_f32(va, min_vec), max_vec));
             i += 4;
         }
         for j in i..len {
@@ -266,10 +260,7 @@ impl VectorBackend for NeonBackend {
         while i + 4 <= len {
             let va = vld1q_f32(a.as_ptr().add(i));
             let vb = vld1q_f32(b.as_ptr().add(i));
-            vst1q_f32(
-                result.as_mut_ptr().add(i),
-                vfmaq_f32(va, t_vec, vsubq_f32(vb, va)),
-            );
+            vst1q_f32(result.as_mut_ptr().add(i), vfmaq_f32(va, t_vec, vsubq_f32(vb, va)));
             i += 4;
         }
         for j in i..len {
@@ -288,10 +279,7 @@ impl VectorBackend for NeonBackend {
         while i + 4 <= len {
             let va = vld1q_f32(a.as_ptr().add(i));
             let vb = vld1q_f32(b.as_ptr().add(i));
-            vst1q_f32(
-                result.as_mut_ptr().add(i),
-                vmlaq_f32(va, t_vec, vsubq_f32(vb, va)),
-            );
+            vst1q_f32(result.as_mut_ptr().add(i), vmlaq_f32(va, t_vec, vsubq_f32(vb, va)));
             i += 4;
         }
         for j in i..len {
@@ -345,10 +333,7 @@ impl VectorBackend for NeonBackend {
         let mut i = 0;
         let zero = vdupq_n_f32(0.0);
         while i + 4 <= len {
-            vst1q_f32(
-                result.as_mut_ptr().add(i),
-                vmaxq_f32(vld1q_f32(a.as_ptr().add(i)), zero),
-            );
+            vst1q_f32(result.as_mut_ptr().add(i), vmaxq_f32(vld1q_f32(a.as_ptr().add(i)), zero));
             i += 4;
         }
         for j in i..len {

@@ -51,35 +51,20 @@ fn one_for_all_restarts() {
 /// Test health monitoring for GPU workers.
 #[test]
 fn health_monitoring() {
-    let monitor = GpuHealthMonitor::builder()
-        .max_missed(3)
-        .throttle_temp(85)
-        .shutdown_temp(95)
-        .build();
+    let monitor =
+        GpuHealthMonitor::builder().max_missed(3).throttle_temp(85).shutdown_temp(95).build();
 
     // Alive: healthy
-    assert_eq!(
-        monitor.check_status(HeartbeatStatus::Alive),
-        HealthAction::Healthy
-    );
+    assert_eq!(monitor.check_status(HeartbeatStatus::Alive), HealthAction::Healthy);
 
     // Missed beats below threshold: healthy
-    assert_eq!(
-        monitor.check_status(HeartbeatStatus::MissedBeats(2)),
-        HealthAction::Healthy
-    );
+    assert_eq!(monitor.check_status(HeartbeatStatus::MissedBeats(2)), HealthAction::Healthy);
 
     // Missed beats at threshold: restart
-    assert_eq!(
-        monitor.check_status(HeartbeatStatus::MissedBeats(3)),
-        HealthAction::RestartWorker
-    );
+    assert_eq!(monitor.check_status(HeartbeatStatus::MissedBeats(3)), HealthAction::RestartWorker);
 
     // Dead: shutdown
-    assert_eq!(
-        monitor.check_status(HeartbeatStatus::Dead),
-        HealthAction::Shutdown
-    );
+    assert_eq!(monitor.check_status(HeartbeatStatus::Dead), HealthAction::Shutdown);
 }
 
 /// Test thermal monitoring thresholds.

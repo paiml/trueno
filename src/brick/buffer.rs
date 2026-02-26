@@ -72,10 +72,7 @@ pub struct WatermarkedBuffer {
 impl WatermarkedBuffer {
     /// Create a new watermarked buffer.
     pub fn new(watermarks: BufferWatermarks) -> Self {
-        Self {
-            data: Vec::with_capacity(watermarks.high),
-            watermarks,
-        }
+        Self { data: Vec::with_capacity(watermarks.high), watermarks }
     }
 
     /// Check if back-pressure should be applied.
@@ -309,11 +306,7 @@ mod tests {
         );
 
         // Verify buffer actually accepted all the data (it's non-blocking)
-        assert_eq!(
-            buffer.len(),
-            2000,
-            "Buffer should accept all writes (signaling is advisory)"
-        );
+        assert_eq!(buffer.len(), 2000, "Buffer should accept all writes (signaling is advisory)");
 
         // Verify pressure level is capped at 1.0 even when way over
         assert!(

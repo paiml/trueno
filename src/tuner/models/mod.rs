@@ -94,10 +94,7 @@ impl BottleneckClassifier {
             (
                 BottleneckClass::AttentionBound,
                 0.80,
-                format!(
-                    "Long sequence (len={}) likely makes attention the bottleneck",
-                    seq_len
-                ),
+                format!("Long sequence (len={}) likely makes attention the bottleneck", seq_len),
             )
         } else {
             (

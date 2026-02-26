@@ -13,11 +13,7 @@ fn test_dp4a_u32_instruction() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("dp4a.u32.u32"),
-        "Expected dp4a.u32.u32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("dp4a.u32.u32"), "Expected dp4a.u32.u32 in: {}", ptx);
 }
 
 #[test]
@@ -66,11 +62,7 @@ fn test_membar_cta_instruction() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("membar.cta"),
-        "Expected membar.cta in: {}",
-        ptx
-    );
+    assert!(ptx.contains("membar.cta"), "Expected membar.cta in: {}", ptx);
 }
 
 #[test]
@@ -85,19 +77,13 @@ fn test_membar_gl_instruction() {
 
 #[test]
 fn test_ld_shared_u32_volatile_instruction() {
-    let kernel = PtxKernel::new("test_ld_volatile")
-        .shared_memory(256)
-        .build(|ctx| {
-            let addr = ctx.mov_u64_imm(0);
-            let _val = ctx.ld_shared_u32_volatile(addr);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_ld_volatile").shared_memory(256).build(|ctx| {
+        let addr = ctx.mov_u64_imm(0);
+        let _val = ctx.ld_shared_u32_volatile(addr);
+        ctx.ret();
+    });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("ld.volatile.shared.u32"),
-        "Expected ld.volatile.shared.u32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("ld.volatile.shared.u32"), "Expected ld.volatile.shared.u32 in: {}", ptx);
 }
 
 #[test]
@@ -110,11 +96,7 @@ fn test_ballot_sync_instruction() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("vote") || ptx.contains("ballot"),
-        "Expected ballot in: {}",
-        ptx
-    );
+    assert!(ptx.contains("vote") || ptx.contains("ballot"), "Expected ballot in: {}", ptx);
 }
 
 #[test]
@@ -159,101 +141,67 @@ fn test_shfl_idx_u32_reg_instruction() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("shfl.sync.idx"),
-        "Expected shfl.sync.idx in: {}",
-        ptx
-    );
+    assert!(ptx.contains("shfl.sync.idx"), "Expected shfl.sync.idx in: {}", ptx);
 }
 
 #[test]
 fn test_atom_add_global_u32_instruction() {
-    let kernel = PtxKernel::new("test_atom_add")
-        .param(PtxType::U64, "ptr")
-        .build(|ctx| {
-            let ptr = ctx.load_param_u64("ptr");
-            let val = ctx.mov_u32_imm(1);
-            let _old = ctx.atom_add_global_u32(ptr, val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_atom_add").param(PtxType::U64, "ptr").build(|ctx| {
+        let ptr = ctx.load_param_u64("ptr");
+        let val = ctx.mov_u32_imm(1);
+        let _old = ctx.atom_add_global_u32(ptr, val);
+        ctx.ret();
+    });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("atom.global.add.u32"),
-        "Expected atom.global.add.u32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("atom.global.add.u32"), "Expected atom.global.add.u32 in: {}", ptx);
 }
 
 #[test]
 fn test_atom_exch_global_u32_instruction() {
-    let kernel = PtxKernel::new("test_atom_exch")
-        .param(PtxType::U64, "ptr")
-        .build(|ctx| {
-            let ptr = ctx.load_param_u64("ptr");
-            let val = ctx.mov_u32_imm(42);
-            let _old = ctx.atom_exch_global_u32(ptr, val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_atom_exch").param(PtxType::U64, "ptr").build(|ctx| {
+        let ptr = ctx.load_param_u64("ptr");
+        let val = ctx.mov_u32_imm(42);
+        let _old = ctx.atom_exch_global_u32(ptr, val);
+        ctx.ret();
+    });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("atom.global.exch.u32"),
-        "Expected atom.global.exch.u32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("atom.global.exch.u32"), "Expected atom.global.exch.u32 in: {}", ptx);
 }
 
 #[test]
 fn test_atom_min_global_u32_instruction() {
-    let kernel = PtxKernel::new("test_atom_min")
-        .param(PtxType::U64, "ptr")
-        .build(|ctx| {
-            let ptr = ctx.load_param_u64("ptr");
-            let val = ctx.mov_u32_imm(10);
-            let _old = ctx.atom_min_global_u32(ptr, val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_atom_min").param(PtxType::U64, "ptr").build(|ctx| {
+        let ptr = ctx.load_param_u64("ptr");
+        let val = ctx.mov_u32_imm(10);
+        let _old = ctx.atom_min_global_u32(ptr, val);
+        ctx.ret();
+    });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("atom.global.min.u32"),
-        "Expected atom.global.min.u32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("atom.global.min.u32"), "Expected atom.global.min.u32 in: {}", ptx);
 }
 
 #[test]
 fn test_atom_max_global_u32_instruction() {
-    let kernel = PtxKernel::new("test_atom_max")
-        .param(PtxType::U64, "ptr")
-        .build(|ctx| {
-            let ptr = ctx.load_param_u64("ptr");
-            let val = ctx.mov_u32_imm(100);
-            let _old = ctx.atom_max_global_u32(ptr, val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_atom_max").param(PtxType::U64, "ptr").build(|ctx| {
+        let ptr = ctx.load_param_u64("ptr");
+        let val = ctx.mov_u32_imm(100);
+        let _old = ctx.atom_max_global_u32(ptr, val);
+        ctx.ret();
+    });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("atom.global.max.u32"),
-        "Expected atom.global.max.u32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("atom.global.max.u32"), "Expected atom.global.max.u32 in: {}", ptx);
 }
 
 #[test]
 fn test_atom_exch_shared_u32_instruction() {
-    let kernel = PtxKernel::new("test_atom_exch_shared")
-        .shared_memory(256)
-        .build(|ctx| {
-            let addr = ctx.mov_u64_imm(0);
-            let val = ctx.mov_u32_imm(42);
-            let _old = ctx.atom_exch_shared_u32(addr, val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_atom_exch_shared").shared_memory(256).build(|ctx| {
+        let addr = ctx.mov_u64_imm(0);
+        let val = ctx.mov_u32_imm(42);
+        let _old = ctx.atom_exch_shared_u32(addr, val);
+        ctx.ret();
+    });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("atom.shared.exch.u32"),
-        "Expected atom.shared.exch.u32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("atom.shared.exch.u32"), "Expected atom.shared.exch.u32 in: {}", ptx);
 }
 
 #[test]
@@ -264,11 +212,7 @@ fn test_sin_f32_instruction() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("sin.approx.f32"),
-        "Expected sin.approx.f32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("sin.approx.f32"), "Expected sin.approx.f32 in: {}", ptx);
 }
 
 #[test]
@@ -279,11 +223,7 @@ fn test_cos_f32_instruction() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("cos.approx.f32"),
-        "Expected cos.approx.f32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("cos.approx.f32"), "Expected cos.approx.f32 in: {}", ptx);
 }
 
 #[test]
@@ -299,20 +239,14 @@ fn test_neg_f32_instruction() {
 
 #[test]
 fn test_cvt_s32_s8_instruction() {
-    let kernel = PtxKernel::new("test_cvt_s8")
-        .param(PtxType::U64, "ptr")
-        .build(|ctx| {
-            let ptr = ctx.load_param_u64("ptr");
-            let val = ctx.ld_global_u8(ptr);
-            let _signed = ctx.cvt_s32_s8(val);
-            ctx.ret();
-        });
+    let kernel = PtxKernel::new("test_cvt_s8").param(PtxType::U64, "ptr").build(|ctx| {
+        let ptr = ctx.load_param_u64("ptr");
+        let val = ctx.ld_global_u8(ptr);
+        let _signed = ctx.cvt_s32_s8(val);
+        ctx.ret();
+    });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("setp"),
-        "Expected setp for sign extension in: {}",
-        ptx
-    );
+    assert!(ptx.contains("setp"), "Expected setp for sign extension in: {}", ptx);
 }
 
 #[test]
@@ -323,9 +257,5 @@ fn test_cvt_f32_s32_instruction() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(
-        ptx.contains("cvt.rn.f32.s32"),
-        "Expected cvt.rn.f32.s32 in: {}",
-        ptx
-    );
+    assert!(ptx.contains("cvt.rn.f32.s32"), "Expected cvt.rn.f32.s32 in: {}", ptx);
 }

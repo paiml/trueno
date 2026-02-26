@@ -128,10 +128,7 @@ impl Matrix<f32> {
     /// Batched matrix multiplication for 3D tensors.
     ///
     /// Computes `[batch, m, k] @ [batch, k, n] -> [batch, m, n]` using SIMD for each batch.
-    #[cfg_attr(
-        feature = "tracing",
-        instrument(skip(a_data, b_data), fields(batch, m, k, n))
-    )]
+    #[cfg_attr(feature = "tracing", instrument(skip(a_data, b_data), fields(batch, m, k, n)))]
     pub fn batched_matmul(
         a_data: &[f32],
         b_data: &[f32],
@@ -712,8 +709,7 @@ mod tests {
     /// FALSIFY-MM-005: Identity matrix — matmul(A, I) = A
     #[test]
     fn falsify_mm_005_identity_matrix() {
-        let a = Matrix::from_vec(3, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
-            .unwrap();
+        let a = Matrix::from_vec(3, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]).unwrap();
         let eye =
             Matrix::from_vec(3, 3, vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).unwrap();
 
@@ -812,13 +808,7 @@ mod gpu_tests {
         assert_eq!(result.cols(), n);
 
         // A * I = A: sample verification (check corners and center)
-        let check_indices = [
-            (0, 0),
-            (0, n - 1),
-            (n - 1, 0),
-            (n - 1, n - 1),
-            (n / 2, n / 2),
-        ];
+        let check_indices = [(0, 0), (0, n - 1), (n - 1, 0), (n - 1, n - 1), (n / 2, n / 2)];
         for &(r, c) in &check_indices {
             let expected = a_data[r * n + c];
             let actual = *result.get(r, c).unwrap();
@@ -932,5 +922,4 @@ mod gpu_tests {
             assert!(result.is_err(), "matmul_gpu should fail without GPU");
         }
     }
-
 }

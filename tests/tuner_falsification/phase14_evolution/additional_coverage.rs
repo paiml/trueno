@@ -43,11 +43,7 @@ fn test_online_learner_dimension_mismatch() {
     // Wrong dimension - should be ignored
     let wrong_features = vec![0.5; 10]; // Too few
     learner.observe(&wrong_features, 100.0);
-    assert_eq!(
-        learner.num_updates(),
-        0,
-        "Dimension mismatch should be ignored"
-    );
+    assert_eq!(learner.num_updates(), 0, "Dimension mismatch should be ignored");
 
     // Empty features - should be ignored
     learner.observe(&[], 100.0);
@@ -136,13 +132,9 @@ fn test_bottleneck_actions() {
     use trueno::tuner::BottleneckClass;
 
     assert!(!BottleneckClass::MemoryBound.recommended_action().is_empty());
-    assert!(!BottleneckClass::ComputeBound
-        .recommended_action()
-        .is_empty());
+    assert!(!BottleneckClass::ComputeBound.recommended_action().is_empty());
     assert!(!BottleneckClass::LaunchBound.recommended_action().is_empty());
-    assert!(!BottleneckClass::AttentionBound
-        .recommended_action()
-        .is_empty());
+    assert!(!BottleneckClass::AttentionBound.recommended_action().is_empty());
     assert!(!BottleneckClass::Unknown.recommended_action().is_empty());
 }
 
@@ -198,12 +190,7 @@ fn test_kernel_type_to_index_all() {
     ];
 
     for (expected_idx, kernel) in kernels.iter().enumerate() {
-        assert_eq!(
-            kernel.to_index(),
-            expected_idx,
-            "Index mismatch for {:?}",
-            kernel
-        );
+        assert_eq!(kernel.to_index(), expected_idx, "Index mismatch for {:?}", kernel);
     }
 }
 

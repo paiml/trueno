@@ -48,17 +48,10 @@ fn main() {
         let av = cov.matvec(&v).expect("matvec");
         let lambda_v: Vec<f32> = v.as_slice().iter().map(|x| x * lambda).collect();
 
-        let error: f32 = av
-            .as_slice()
-            .iter()
-            .zip(lambda_v.iter())
-            .map(|(a, b)| (a - b).abs())
-            .sum();
+        let error: f32 =
+            av.as_slice().iter().zip(lambda_v.iter()).map(|(a, b)| (a - b).abs()).sum();
 
-        println!(
-            "   Eigenpair {}: lambda={:.4}, error={:.2e}",
-            i, lambda, error
-        );
+        println!("   Eigenpair {}: lambda={:.4}, error={:.2e}", i, lambda, error);
     }
     println!();
 
@@ -96,16 +89,9 @@ fn main() {
     let large_eigen = SymmetricEigen::new(&large).expect("eigendecomposition");
     let elapsed = start.elapsed();
 
-    println!(
-        "   Computed {} eigenvalues in {:?}",
-        large_eigen.len(),
-        elapsed
-    );
+    println!("   Computed {} eigenvalues in {:?}", large_eigen.len(), elapsed);
     println!("   Largest eigenvalue: {:.4}", large_eigen.eigenvalues()[0]);
-    println!(
-        "   Smallest eigenvalue: {:.4}",
-        large_eigen.eigenvalues()[n - 1]
-    );
+    println!("   Smallest eigenvalue: {:.4}", large_eigen.eigenvalues()[n - 1]);
     println!();
 
     println!("=== Demo Complete ===");

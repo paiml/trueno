@@ -40,10 +40,7 @@ fn assert_activation_in_range(
     let v = Vector::from_slice_with_backend(data, backend);
     let result = activation_fn(&v).unwrap();
     for &val in result.as_slice() {
-        assert!(
-            val >= lo && val <= hi,
-            "{label} {backend:?} out of range [{lo}, {hi}]: {val}"
-        );
+        assert!(val >= lo && val <= hi, "{label} {backend:?} out of range [{lo}, {hi}]: {val}");
     }
 }
 
@@ -72,12 +69,7 @@ fn assert_backend_equivalence(data: &[f32], activation_fn: ActFn, tolerance: f32
     let scalar = activation_fn(&Vector::from_slice_with_backend(data, Backend::Scalar)).unwrap();
     for &backend in &[Backend::SSE2] {
         let other = activation_fn(&Vector::from_slice_with_backend(data, backend)).unwrap();
-        for (i, (&s, &x)) in scalar
-            .as_slice()
-            .iter()
-            .zip(other.as_slice().iter())
-            .enumerate()
-        {
+        for (i, (&s, &x)) in scalar.as_slice().iter().zip(other.as_slice().iter()).enumerate() {
             assert!(
                 (s - x).abs() < tolerance,
                 "Scalar vs {backend:?} {label} mismatch at {i}: {s} vs {x}"
@@ -86,12 +78,7 @@ fn assert_backend_equivalence(data: &[f32], activation_fn: ActFn, tolerance: f32
     }
     if is_x86_feature_detected!("avx2") {
         let avx2 = activation_fn(&Vector::from_slice_with_backend(data, Backend::AVX2)).unwrap();
-        for (i, (&s, &x)) in scalar
-            .as_slice()
-            .iter()
-            .zip(avx2.as_slice().iter())
-            .enumerate()
-        {
+        for (i, (&s, &x)) in scalar.as_slice().iter().zip(avx2.as_slice().iter()).enumerate() {
             assert!(
                 (s - x).abs() < tolerance,
                 "Scalar vs AVX2 {label} mismatch at {i}: {s} vs {x}"

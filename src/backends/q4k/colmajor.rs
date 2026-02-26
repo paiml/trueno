@@ -67,18 +67,17 @@ fn accumulate_q4k_superblock_colmajor(
 ///
 /// # Returns
 /// F32 output vector [ne0]
-#[deprecated(since = "0.15.0", note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary.")]
+#[deprecated(
+    since = "0.15.0",
+    note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary."
+)]
 pub fn matmul_q4k_f32_colmajor(
     q4k_data: &[u8],
     input: &[f32],
     ne0: usize, // output dimension (rows)
     ne1: usize, // input/reduction dimension (columns)
 ) -> Vec<f32> {
-    assert_eq!(
-        input.len(),
-        ne1,
-        "Input length must match ne1 (input dimension)"
-    );
+    assert_eq!(input.len(), ne1, "Input length must match ne1 (input dimension)");
 
     let blocks_per_col = (ne0 + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
     let col_bytes = blocks_per_col * SUPER_BLOCK_BYTES;
@@ -111,7 +110,10 @@ pub fn matmul_q4k_f32_colmajor(
 ///
 /// Uses scalar implementation for correctness.
 /// Matches GGUF tensor layout without requiring transposition.
-#[deprecated(since = "0.15.0", note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary.")]
+#[deprecated(
+    since = "0.15.0",
+    note = "LAYOUT-001: Use row-major kernels. APR/GGUF data is transposed at import boundary."
+)]
 #[inline]
 pub fn matmul_q4k_f32_colmajor_dispatch(
     q4k_data: &[u8],

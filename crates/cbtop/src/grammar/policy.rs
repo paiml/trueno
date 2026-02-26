@@ -103,12 +103,7 @@ impl ExecutionPolicy {
 
     /// Create batch policy (high throughput, preemptible)
     pub fn batch() -> Self {
-        Self {
-            qos: QosLevel::BestEffort,
-            preemptible: true,
-            timeout: None,
-            ..Default::default()
-        }
+        Self { qos: QosLevel::BestEffort, preemptible: true, timeout: None, ..Default::default() }
     }
 
     /// Create interactive policy (balanced)
@@ -122,11 +117,7 @@ impl ExecutionPolicy {
             qos: QosLevel::BestEffort,
             preemptible: true,
             timeout: None,
-            observability: ObservabilityConfig {
-                tracing: true,
-                metrics: true,
-                sampling_rate: 1.0,
-            },
+            observability: ObservabilityConfig { tracing: true, metrics: true, sampling_rate: 1.0 },
             ..Default::default()
         }
     }

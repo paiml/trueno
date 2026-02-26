@@ -28,10 +28,7 @@ fn f001_throughput_positive() {
 #[test]
 fn f002_throughput_confidence_valid() {
     let regressor = ThroughputRegressor::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let pred = regressor.predict(&features);
     assert!(
@@ -71,17 +68,11 @@ fn f003_roofline_bound_respected() {
 fn f004_batch_size_monotonic() {
     let regressor = ThroughputRegressor::new();
 
-    let small_batch = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(1)
-        .gpu_mem_bw_gbs(1000.0)
-        .build();
+    let small_batch =
+        TunerFeatures::builder().model_params_b(1.5).batch_size(1).gpu_mem_bw_gbs(1000.0).build();
 
-    let large_batch = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(8)
-        .gpu_mem_bw_gbs(1000.0)
-        .build();
+    let large_batch =
+        TunerFeatures::builder().model_params_b(1.5).batch_size(8).gpu_mem_bw_gbs(1000.0).build();
 
     let small_pred = regressor.predict(&small_batch);
     let large_pred = regressor.predict(&large_batch);
@@ -155,10 +146,7 @@ fn f007_kernel_single_preference() {
 #[test]
 fn f008_prediction_deterministic() {
     let regressor = ThroughputRegressor::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let pred1 = regressor.predict(&features);
     let pred2 = regressor.predict(&features);
@@ -175,10 +163,7 @@ fn f008_prediction_deterministic() {
 #[test]
 fn f009_classifier_deterministic() {
     let classifier = KernelClassifier::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let rec1 = classifier.predict(&features);
     let rec2 = classifier.predict(&features);
@@ -194,10 +179,7 @@ fn f009_classifier_deterministic() {
 #[test]
 fn f010_prediction_latency() {
     let regressor = ThroughputRegressor::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let start = std::time::Instant::now();
     for _ in 0..100 {
@@ -206,56 +188,36 @@ fn f010_prediction_latency() {
     let elapsed = start.elapsed();
     let avg_us = elapsed.as_micros() / 100;
 
-    assert!(
-        avg_us < 1000,
-        "F010 FALSIFIED: prediction latency {} us >= 1ms",
-        avg_us
-    );
+    assert!(avg_us < 1000, "F010 FALSIFIED: prediction latency {} us >= 1ms", avg_us);
 }
 
 /// F011: Top features must be non-empty
 #[test]
 fn f011_top_features_present() {
     let regressor = ThroughputRegressor::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let pred = regressor.predict(&features);
-    assert!(
-        !pred.top_features.is_empty(),
-        "F011 FALSIFIED: top_features must not be empty"
-    );
+    assert!(!pred.top_features.is_empty(), "F011 FALSIFIED: top_features must not be empty");
 }
 
 /// F012: Top features importances must sum to <= 1.0
 #[test]
 fn f012_feature_importance_sum() {
     let regressor = ThroughputRegressor::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let pred = regressor.predict(&features);
     let sum: f32 = pred.top_features.iter().map(|(_, v)| v).sum();
 
-    assert!(
-        sum <= 1.0 + 0.001,
-        "F012 FALSIFIED: feature importance sum {} > 1.0",
-        sum
-    );
+    assert!(sum <= 1.0 + 0.001, "F012 FALSIFIED: feature importance sum {} > 1.0", sum);
 }
 
 /// F013: Alternatives must have decreasing confidence
 #[test]
 fn f013_alternatives_ordered() {
     let classifier = KernelClassifier::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let rec = classifier.predict(&features);
     for i in 1..rec.alternatives.len() {
@@ -296,17 +258,11 @@ fn f014_no_catastrophic_overpredict() {
 fn f015_model_size_inverse() {
     let regressor = ThroughputRegressor::new();
 
-    let small_model = TunerFeatures::builder()
-        .model_params_b(0.5)
-        .batch_size(4)
-        .gpu_mem_bw_gbs(1000.0)
-        .build();
+    let small_model =
+        TunerFeatures::builder().model_params_b(0.5).batch_size(4).gpu_mem_bw_gbs(1000.0).build();
 
-    let large_model = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .batch_size(4)
-        .gpu_mem_bw_gbs(1000.0)
-        .build();
+    let large_model =
+        TunerFeatures::builder().model_params_b(7.0).batch_size(4).gpu_mem_bw_gbs(1000.0).build();
 
     let small_pred = regressor.predict(&small_model);
     let large_pred = regressor.predict(&large_model);
@@ -324,17 +280,11 @@ fn f015_model_size_inverse() {
 fn f016_bandwidth_monotonic() {
     let regressor = ThroughputRegressor::new();
 
-    let slow_gpu = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .gpu_mem_bw_gbs(500.0)
-        .build();
+    let slow_gpu =
+        TunerFeatures::builder().model_params_b(1.5).batch_size(4).gpu_mem_bw_gbs(500.0).build();
 
-    let fast_gpu = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .gpu_mem_bw_gbs(1000.0)
-        .build();
+    let fast_gpu =
+        TunerFeatures::builder().model_params_b(1.5).batch_size(4).gpu_mem_bw_gbs(1000.0).build();
 
     let slow_pred = regressor.predict(&slow_gpu);
     let fast_pred = regressor.predict(&fast_gpu);
@@ -351,10 +301,7 @@ fn f016_bandwidth_monotonic() {
 #[test]
 fn f017_tuner_consistency() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let rec = tuner.recommend(&features);
 
@@ -366,10 +313,7 @@ fn f017_tuner_consistency() {
 #[test]
 fn f018_experiments_present() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let rec = tuner.recommend(&features);
     assert!(
@@ -396,10 +340,7 @@ fn f019_model_version_valid() {
 #[test]
 fn f020_bottleneck_valid() {
     let tuner = BrickTuner::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let rec = tuner.recommend(&features);
     // Bottleneck should be one of the valid types
@@ -411,9 +352,5 @@ fn f020_bottleneck_valid() {
             | BottleneckClass::LaunchBound
             | BottleneckClass::AttentionBound
     );
-    assert!(
-        valid,
-        "F020 FALSIFIED: invalid bottleneck {:?}",
-        rec.bottleneck.class
-    );
+    assert!(valid, "F020 FALSIFIED: invalid bottleneck {:?}", rec.bottleneck.class);
 }

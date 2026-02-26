@@ -17,38 +17,14 @@ fn main() {
     let _ = GemmKernel::naive(32, 32, 32).emit_ptx();
 
     let tests: Vec<(&str, Box<dyn Fn() -> String>)> = vec![
-        (
-            "gemm_naive_64",
-            Box::new(|| GemmKernel::naive(64, 64, 64).emit_ptx()),
-        ),
-        (
-            "gemm_tiled_128",
-            Box::new(|| GemmKernel::tiled(128, 128, 128, 32).emit_ptx()),
-        ),
-        (
-            "gemm_tensor_core",
-            Box::new(|| GemmKernel::tensor_core(64, 64, 64).emit_ptx()),
-        ),
-        (
-            "gemm_wmma_fp16",
-            Box::new(|| GemmKernel::wmma_fp16(64, 64, 64).emit_ptx()),
-        ),
-        (
-            "softmax_1024",
-            Box::new(|| SoftmaxKernel::new(1024).emit_ptx()),
-        ),
-        (
-            "layernorm_1024",
-            Box::new(|| LayerNormKernel::new(1024).emit_ptx()),
-        ),
-        (
-            "attention_64_64",
-            Box::new(|| AttentionKernel::new(64, 64).emit_ptx()),
-        ),
-        (
-            "q4k_32",
-            Box::new(|| QuantizeKernel::ggml(32, 32, 256).emit_ptx()),
-        ),
+        ("gemm_naive_64", Box::new(|| GemmKernel::naive(64, 64, 64).emit_ptx())),
+        ("gemm_tiled_128", Box::new(|| GemmKernel::tiled(128, 128, 128, 32).emit_ptx())),
+        ("gemm_tensor_core", Box::new(|| GemmKernel::tensor_core(64, 64, 64).emit_ptx())),
+        ("gemm_wmma_fp16", Box::new(|| GemmKernel::wmma_fp16(64, 64, 64).emit_ptx())),
+        ("softmax_1024", Box::new(|| SoftmaxKernel::new(1024).emit_ptx())),
+        ("layernorm_1024", Box::new(|| LayerNormKernel::new(1024).emit_ptx())),
+        ("attention_64_64", Box::new(|| AttentionKernel::new(64, 64).emit_ptx())),
+        ("q4k_32", Box::new(|| QuantizeKernel::ggml(32, 32, 256).emit_ptx())),
     ];
 
     for (name, gen_fn) in &tests {
@@ -78,8 +54,5 @@ fn main() {
     }
     let elapsed = start.elapsed();
     let kernels_per_sec = heavy_iterations as f64 / elapsed.as_secs_f64();
-    println!(
-        "Throughput: {:.0} kernels/sec (gemm_tiled_64)",
-        kernels_per_sec
-    );
+    println!("Throughput: {:.0} kernels/sec (gemm_tiled_64)", kernels_per_sec);
 }

@@ -35,9 +35,7 @@ fn bench_sync_chained_ops(c: &mut Criterion) {
 
                 // Operation 1: ReLU (upload + execute + download)
                 let mut relu_result = vec![0.0f32; size];
-                device
-                    .relu(input_data, &mut relu_result)
-                    .expect("ReLU failed");
+                device.relu(input_data, &mut relu_result).expect("ReLU failed");
 
                 // Operation 2: Scale by 2.0 (upload + execute + download)
                 let mut scaled_result = vec![0.0f32; size];
@@ -48,9 +46,7 @@ fn bench_sync_chained_ops(c: &mut Criterion) {
                 // Operation 3: Add constant vector (upload + execute + download)
                 let other = vec![0.5f32; size];
                 let mut final_result = vec![0.0f32; size];
-                device
-                    .vec_add(&scaled_result, &other, &mut final_result)
-                    .expect("Add failed");
+                device.vec_add(&scaled_result, &other, &mut final_result).expect("Add failed");
 
                 black_box(final_result)
             });
@@ -128,9 +124,7 @@ fn bench_single_op_comparison(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("sync", size), &size, |b, &_size| {
             b.iter(|| {
                 let mut result = vec![0.0f32; size];
-                device
-                    .relu(black_box(&input), &mut result)
-                    .expect("ReLU failed");
+                device.relu(black_box(&input), &mut result).expect("ReLU failed");
                 black_box(result)
             });
         });

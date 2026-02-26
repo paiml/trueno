@@ -22,11 +22,7 @@ fn test_f150_cpu_cycles_overhead() {
 
     // Should be < 15ns on most platforms
     // On unsupported platforms, cpu_cycles() returns 0 and is essentially free
-    assert!(
-        avg_ns < 50.0,
-        "cpu_cycles() overhead should be < 50ns, got {:.1}ns",
-        avg_ns
-    );
+    assert!(avg_ns < 50.0, "cpu_cycles() overhead should be < 50ns, got {:.1}ns", avg_ns);
 }
 
 /// F151: Cycle count monotonic
@@ -43,12 +39,7 @@ fn test_f151_cpu_cycles_monotonic() {
 
     // On platforms that support cycle counting, should be monotonic
     // On unsupported platforms, both will be 0
-    assert!(
-        c2 >= c1,
-        "Cycle count should be monotonic: {} >= {}",
-        c2,
-        c1
-    );
+    assert!(c2 >= c1, "Cycle count should be monotonic: {} >= {}", c2, c1);
 }
 
 /// F152: Cached time precision < 200us drift
@@ -103,11 +94,7 @@ fn test_f153_cached_time_overhead() {
     let avg_ns = elapsed.as_nanos() as f64 / 100000.0;
 
     // Should be very fast (atomic load)
-    assert!(
-        avg_ns < 20.0,
-        "cached_nanos() overhead should be < 20ns, got {:.1}ns",
-        avg_ns
-    );
+    assert!(avg_ns < 20.0, "cached_nanos() overhead should be < 20ns, got {:.1}ns", avg_ns);
 }
 
 /// F154: Poll count accuracy
@@ -124,14 +111,8 @@ fn test_f154_poll_count_accuracy() {
 
     assert_eq!(profiler.poll_count, 5, "Should have 5 polls");
     assert_eq!(profiler.yield_count, 4, "Should have 4 yields (Pending)");
-    assert!(
-        (profiler.efficiency() - 0.2).abs() < 0.01,
-        "Efficiency should be 1/5 = 0.2"
-    );
-    assert!(
-        (profiler.yield_ratio() - 0.8).abs() < 0.01,
-        "Yield ratio should be 4/5 = 0.8"
-    );
+    assert!((profiler.efficiency() - 0.2).abs() < 0.01, "Efficiency should be 1/5 = 0.2");
+    assert!((profiler.yield_ratio() - 0.8).abs() < 0.01, "Yield ratio should be 4/5 = 0.8");
 }
 
 /// F155: Page fault detection (Linux only)
@@ -151,21 +132,11 @@ fn test_f155_page_fault_detection() {
     #[cfg(target_os = "linux")]
     {
         // Should have at least some minor faults from allocation
-        assert!(
-            minor2 >= minor1,
-            "Minor faults should not decrease: {} >= {}",
-            minor2,
-            minor1
-        );
+        assert!(minor2 >= minor1, "Minor faults should not decrease: {} >= {}", minor2, minor1);
     }
 
     // Major faults should be rare (no swapping in this test)
-    assert!(
-        major2 - major1 < 10,
-        "Should have minimal major faults: {} - {} < 10",
-        major2,
-        major1
-    );
+    assert!(major2 - major1 < 10, "Should have minimal major faults: {} - {} < 10", major2, major1);
 }
 
 /// F150+: BrickStats cycle tracking
@@ -204,13 +175,7 @@ fn test_async_task_profiler_to_execution_node() {
 
     let node = profiler.to_execution_node();
 
-    if let ExecutionNode::AsyncTask {
-        name,
-        poll_count,
-        yield_count,
-        total_poll_ns,
-    } = node
-    {
+    if let ExecutionNode::AsyncTask { name, poll_count, yield_count, total_poll_ns } = node {
         assert_eq!(name, "request_handler");
         assert_eq!(poll_count, 3);
         assert_eq!(yield_count, 2);
@@ -240,10 +205,7 @@ fn test_execution_graph_async_task() {
     // Test DOT export
     let dot = graph.to_dot();
     assert!(dot.contains("inference"), "DOT should contain task name");
-    assert!(
-        dot.contains("lightcyan"),
-        "AsyncTask should have cyan color"
-    );
+    assert!(dot.contains("lightcyan"), "AsyncTask should have cyan color");
 }
 
 /// F150+: with_page_fault_tracking helper

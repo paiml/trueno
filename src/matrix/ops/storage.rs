@@ -48,12 +48,7 @@ impl Matrix<f32> {
     /// ```
     pub fn new(rows: usize, cols: usize) -> Self {
         let backend = Backend::select_best();
-        Matrix {
-            rows,
-            cols,
-            data: vec![0.0; rows * cols],
-            backend,
-        }
+        Matrix { rows, cols, data: vec![0.0; rows * cols], backend }
     }
 
     /// Creates a matrix from a vector of data
@@ -89,12 +84,7 @@ impl Matrix<f32> {
         }
 
         let backend = Backend::select_best();
-        Ok(Matrix {
-            rows,
-            cols,
-            data,
-            backend,
-        })
+        Ok(Matrix { rows, cols, data, backend })
     }
 
     /// Creates a matrix from a vector with a specific backend
@@ -114,12 +104,7 @@ impl Matrix<f32> {
             rows,
             cols
         );
-        Matrix {
-            rows,
-            cols,
-            data,
-            backend,
-        }
+        Matrix { rows, cols, data, backend }
     }
 
     /// Creates a matrix from a slice by copying the data
@@ -168,12 +153,7 @@ impl Matrix<f32> {
     /// Creates a matrix filled with zeros using a specific backend
     /// (Internal use only - reuses backend from parent matrix)
     pub(crate) fn zeros_with_backend(rows: usize, cols: usize, backend: Backend) -> Self {
-        Matrix {
-            rows,
-            cols,
-            data: vec![0.0; rows * cols],
-            backend,
-        }
+        Matrix { rows, cols, data: vec![0.0; rows * cols], backend }
     }
 
     /// Creates an identity matrix (square matrix with 1s on diagonal)
@@ -194,12 +174,7 @@ impl Matrix<f32> {
             data[i * n + i] = 1.0;
         }
         let backend = Backend::select_best();
-        Matrix {
-            rows: n,
-            cols: n,
-            data,
-            backend,
-        }
+        Matrix { rows: n, cols: n, data, backend }
     }
 
     // =========================================================================

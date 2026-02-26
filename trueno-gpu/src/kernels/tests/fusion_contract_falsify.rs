@@ -25,8 +25,7 @@ fn read_contract() -> String {
         "kernel-fusion-v1.yaml contract not found at {CONTRACT_PATH}. \
          Ensure aprender is checked out as a sibling of trueno."
     );
-    std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {CONTRACT_PATH}: {e}"))
+    std::fs::read_to_string(path).unwrap_or_else(|e| panic!("Failed to read {CONTRACT_PATH}: {e}"))
 }
 
 /// All fused kernel struct names that implement the `Kernel` trait.
@@ -38,8 +37,14 @@ fn all_fused_kernels() -> Vec<(&'static str, String)> {
         ("BatchedSwigluKernel", BatchedSwigluKernel::new(4096, 4).name().to_string()),
         ("FusedQKVKernel", FusedQKVKernel::new(3584, 512).name().to_string()),
         ("FusedGateUpKernel", FusedGateUpKernel::new(3584, 18944).name().to_string()),
-        ("FusedGemmBiasGeluKernel", FusedGemmBiasGeluKernel::new(512, 2048, 512).name().to_string()),
-        ("FusedRmsNormQ4KGemvKernel", FusedRmsNormQ4KGemvKernel::new(3584, 3584).name().to_string()),
+        (
+            "FusedGemmBiasGeluKernel",
+            FusedGemmBiasGeluKernel::new(512, 2048, 512).name().to_string(),
+        ),
+        (
+            "FusedRmsNormQ4KGemvKernel",
+            FusedRmsNormQ4KGemvKernel::new(3584, 3584).name().to_string(),
+        ),
         ("FusedGateUpQ4KGemvKernel", FusedGateUpQ4KGemvKernel::new(3584, 18944).name().to_string()),
         (
             "FusedRmsNormGateUpSwigluQ4KKernel",
@@ -249,12 +254,8 @@ fn falsify_fusion_004_no_comment_only_decisions() {
         "do not use.*fused",
     ];
 
-    let contract_references: &[&str] = &[
-        "kernel-fusion-v1",
-        "FUSION-0",
-        "fusion_decisions",
-        "F-FUSION-001",
-    ];
+    let contract_references: &[&str] =
+        &["kernel-fusion-v1", "FUSION-0", "fusion_decisions", "F-FUSION-001"];
 
     // Self-exclude: this test file contains the suspect patterns as test data,
     // so we skip it during scanning.
@@ -295,7 +296,11 @@ fn scan_directory_for_comment_violations(
         let path = entry.path();
         if path.is_dir() {
             scan_directory_for_comment_violations(
-                &path, suspect_patterns, contract_references, skip_filename, violations,
+                &path,
+                suspect_patterns,
+                contract_references,
+                skip_filename,
+                violations,
             );
         } else if path.extension() == Some(std::ffi::OsStr::new("rs")) {
             // Skip this test file to avoid self-triggering
@@ -329,9 +334,7 @@ fn scan_directory_for_comment_violations(
                 });
 
                 if is_suspect {
-                    let has_contract_ref = contract_references
-                        .iter()
-                        .any(|r| trimmed.contains(r));
+                    let has_contract_ref = contract_references.iter().any(|r| trimmed.contains(r));
                     if !has_contract_ref {
                         violations.push(format!(
                             "  {}:{}: {}",
@@ -375,10 +378,8 @@ fn falsify_fusion_005_orphan_detection() {
     );
 
     // All known fused kernel struct names that are instantiable
-    let known_kernel_structs: Vec<&str> = all_fused_kernels()
-        .iter()
-        .map(|(name, _)| *name)
-        .collect();
+    let known_kernel_structs: Vec<&str> =
+        all_fused_kernels().iter().map(|(name, _)| *name).collect();
 
     let mut orphans = Vec::new();
     for yaml_name in &yaml_kernel_names {

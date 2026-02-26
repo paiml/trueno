@@ -89,10 +89,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice_with_backend(
-            &result_data,
-            self.backend(),
-        ))
+        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
     }
 
     /// Clip values to a specified range [min_val, max_val]
@@ -140,11 +137,7 @@ impl Vector<f32> {
         }
 
         // Scalar fallback: Element-wise clamp
-        let data: Vec<f32> = self
-            .as_slice()
-            .iter()
-            .map(|&x| x.max(min_val).min(max_val))
-            .collect();
+        let data: Vec<f32> = self.as_slice().iter().map(|&x| x.max(min_val).min(max_val)).collect();
 
         Ok(Vector::from_vec(data))
     }
@@ -238,10 +231,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice_with_backend(
-            &result_data,
-            self.backend(),
-        ))
+        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
     }
 
     /// Linear interpolation between two vectors
@@ -288,10 +278,7 @@ impl Vector<f32> {
     /// Returns `SizeMismatch` if vectors have different lengths.
     pub fn lerp(&self, other: &Vector<f32>, t: f32) -> Result<Vector<f32>> {
         if self.len() != other.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: other.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
         let mut result_data = vec![0.0; self.len()];
@@ -339,10 +326,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector::from_slice_with_backend(
-            &result_data,
-            self.backend(),
-        ))
+        Ok(Vector::from_slice_with_backend(&result_data, self.backend()))
     }
 }
 

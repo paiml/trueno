@@ -53,9 +53,7 @@ fn test_golden_vector_q4k_matmul_vs_dequant() {
     }
 
     // Random-ish input vector (sinusoidal distribution)
-    let input: Vec<f32> = (0..in_dim)
-        .map(|i| ((i as f32) * 0.017).sin() * 0.5)
-        .collect();
+    let input: Vec<f32> = (0..in_dim).map(|i| ((i as f32) * 0.017).sin() * 0.5).collect();
 
     // Method 1: Fused Q4K matmul
     let fused_output = matmul_q4k_f32(&q4k_data, &input, out_dim, in_dim);
@@ -72,11 +70,8 @@ fn test_golden_vector_q4k_matmul_vs_dequant() {
 
     for (i, (fused, reference)) in fused_output.iter().zip(reference_output.iter()).enumerate() {
         let abs_error = (fused - reference).abs();
-        let rel_error = if reference.abs() > 1e-6 {
-            abs_error / reference.abs()
-        } else {
-            abs_error
-        };
+        let rel_error =
+            if reference.abs() > 1e-6 { abs_error / reference.abs() } else { abs_error };
         max_rel_error = max_rel_error.max(rel_error);
         max_abs_error = max_abs_error.max(abs_error);
 
@@ -125,9 +120,7 @@ fn test_golden_vector_q4k_dispatch_vs_dequant() {
         }
     }
 
-    let input: Vec<f32> = (0..in_dim)
-        .map(|i| ((i as f32) * 0.013 + 0.5).cos() * 0.3)
-        .collect();
+    let input: Vec<f32> = (0..in_dim).map(|i| ((i as f32) * 0.013 + 0.5).cos() * 0.3).collect();
 
     // Dispatch (may use AVX2/SIMD)
     let dispatch_output = matmul_q4k_f32_dispatch(&q4k_data, &input, out_dim, in_dim);
@@ -138,17 +131,12 @@ fn test_golden_vector_q4k_dispatch_vs_dequant() {
     let reference_output = matmul_f32_naive(&dequantized, &input, out_dim, in_dim);
 
     let mut max_rel_error = 0.0f32;
-    for (i, (dispatch, reference)) in dispatch_output
-        .iter()
-        .zip(reference_output.iter())
-        .enumerate()
+    for (i, (dispatch, reference)) in
+        dispatch_output.iter().zip(reference_output.iter()).enumerate()
     {
         let abs_error = (dispatch - reference).abs();
-        let rel_error = if reference.abs() > 1e-6 {
-            abs_error / reference.abs()
-        } else {
-            abs_error
-        };
+        let rel_error =
+            if reference.abs() > 1e-6 { abs_error / reference.abs() } else { abs_error };
         max_rel_error = max_rel_error.max(rel_error);
 
         assert!(
@@ -162,10 +150,7 @@ fn test_golden_vector_q4k_dispatch_vs_dequant() {
         );
     }
 
-    eprintln!(
-        "[Golden Q4K Dispatch Test] max_rel_error={:.4}%",
-        max_rel_error * 100.0
-    );
+    eprintln!("[Golden Q4K Dispatch Test] max_rel_error={:.4}%", max_rel_error * 100.0);
 }
 
 /// Edge case: zero input vector should produce zero output
@@ -187,12 +172,7 @@ fn test_golden_vector_zero_input() {
 
     // With dmin=0 and all-zero input, output should be near zero
     for (i, val) in output.iter().enumerate() {
-        assert!(
-            val.abs() < 1e-6,
-            "Zero input should give ~zero output, got {} at row {}",
-            val,
-            i
-        );
+        assert!(val.abs() < 1e-6, "Zero input should give ~zero output, got {} at row {}", val, i);
     }
 }
 

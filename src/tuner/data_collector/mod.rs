@@ -105,9 +105,7 @@ impl TunerDataCollector {
     ) -> Option<()> {
         let throughput_tps = profiler.tokens_per_sec()?;
         let features = self.extractor.extract(profiler, config);
-        let bottleneck = features
-            .bottleneck_class
-            .unwrap_or(BottleneckClass::Unknown);
+        let bottleneck = features.bottleneck_class.unwrap_or(BottleneckClass::Unknown);
 
         let sample = TrainingSample {
             features,
@@ -145,10 +143,7 @@ impl TunerDataCollector {
 
     /// Prepare training data for model
     pub fn prepare_training_data(&self) -> Vec<(TunerFeatures, f32)> {
-        self.samples
-            .iter()
-            .map(|s| (s.features.clone(), s.throughput_tps))
-            .collect()
+        self.samples.iter().map(|s| (s.features.clone(), s.throughput_tps)).collect()
     }
 
     /// Check if we have enough samples to train

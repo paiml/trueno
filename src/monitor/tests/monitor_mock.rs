@@ -46,10 +46,7 @@ fn h0_mon_102_monitor_history_buffer() {
         GpuDeviceInfo::new(0, "Mock GPU", GpuVendor::Nvidia, GpuBackend::Vulkan).with_vram(1024);
 
     // Small history size to test ring buffer
-    let config = MonitorConfig {
-        history_size: 3,
-        ..Default::default()
-    };
+    let config = MonitorConfig { history_size: 3, ..Default::default() };
     let monitor = GpuMonitor::mock(info, config);
 
     // Fill beyond capacity

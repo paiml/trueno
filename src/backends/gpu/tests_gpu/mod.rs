@@ -13,12 +13,6 @@ static SHARED_GPU: OnceLock<Option<GpuBackend>> = OnceLock::new();
 /// Get shared GPU backend (fast) or None if unavailable
 fn get_shared_gpu() -> Option<GpuBackend> {
     SHARED_GPU
-        .get_or_init(|| {
-            if GpuBackend::is_available() {
-                Some(GpuBackend::new())
-            } else {
-                None
-            }
-        })
+        .get_or_init(|| if GpuBackend::is_available() { Some(GpuBackend::new()) } else { None })
         .clone()
 }

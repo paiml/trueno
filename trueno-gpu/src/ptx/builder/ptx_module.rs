@@ -30,12 +30,7 @@ impl PtxModule {
     /// Create a new PTX module with defaults
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            version: (8, 0),
-            target: "sm_70".to_string(),
-            address_size: 64,
-            kernels: Vec::new(),
-        }
+        Self { version: (8, 0), target: "sm_70".to_string(), address_size: 64, kernels: Vec::new() }
     }
 
     /// Set PTX version
@@ -174,10 +169,7 @@ impl PtxKernel {
     /// Add a parameter
     #[must_use]
     pub fn param(mut self, ty: PtxType, name: impl Into<String>) -> Self {
-        self.params.push(KernelParam {
-            ty,
-            name: name.into(),
-        });
+        self.params.push(KernelParam { ty, name: name.into() });
         self
     }
 
@@ -250,13 +242,8 @@ impl PtxKernel {
         // Parameters
         for (i, param) in self.params.iter().enumerate() {
             let comma = if i < self.params.len() - 1 { "," } else { "" };
-            let _ = writeln!(
-                ptx,
-                "    .param {} {}{}",
-                param.ty.to_ptx_string(),
-                param.name,
-                comma
-            );
+            let _ =
+                writeln!(ptx, "    .param {} {}{}", param.ty.to_ptx_string(), param.name, comma);
         }
 
         ptx.push_str(") {\n");
@@ -266,11 +253,7 @@ impl PtxKernel {
 
         // Shared memory declaration (if any)
         if self.shared_memory > 0 {
-            let _ = writeln!(
-                ptx,
-                "    .shared .align 16 .b8 smem[{}];",
-                self.shared_memory
-            );
+            let _ = writeln!(ptx, "    .shared .align 16 .b8 smem[{}];", self.shared_memory);
         }
 
         ptx.push('\n');

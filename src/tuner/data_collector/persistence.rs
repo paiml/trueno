@@ -76,8 +76,7 @@ impl TunerDataCollector {
             .map_err(|e: std::io::Error| TunerError::Io(e.to_string()))?;
 
         // Write magic bytes: "APR2" (version 2 for training data)
-        file.write_all(b"APR2")
-            .map_err(|e: std::io::Error| TunerError::Io(e.to_string()))?;
+        file.write_all(b"APR2").map_err(|e: std::io::Error| TunerError::Io(e.to_string()))?;
 
         // Write length as u32 little-endian
         let len = json_bytes.len() as u32;
@@ -85,8 +84,7 @@ impl TunerDataCollector {
             .map_err(|e: std::io::Error| TunerError::Io(e.to_string()))?;
 
         // Write JSON
-        file.write_all(json_bytes)
-            .map_err(|e: std::io::Error| TunerError::Io(e.to_string()))?;
+        file.write_all(json_bytes).map_err(|e: std::io::Error| TunerError::Io(e.to_string()))?;
 
         // Write CRC32 checksum
         let checksum = crc32_hash(json_bytes);
@@ -105,13 +103,9 @@ impl TunerDataCollector {
 
         // Read and verify magic
         let mut magic = [0u8; 4];
-        file.read_exact(&mut magic)
-            .map_err(|e: std::io::Error| TunerError::Io(e.to_string()))?;
+        file.read_exact(&mut magic).map_err(|e: std::io::Error| TunerError::Io(e.to_string()))?;
         if &magic != b"APR2" {
-            return Err(TunerError::InvalidFormat(format!(
-                "Expected APR2 magic, got {:?}",
-                magic
-            )));
+            return Err(TunerError::InvalidFormat(format!("Expected APR2 magic, got {:?}", magic)));
         }
 
         // Read length

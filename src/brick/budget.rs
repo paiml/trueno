@@ -44,22 +44,14 @@ impl ByteBudget {
         );
         let bytes_per_sec = gb_per_sec * 1e9;
         let pages_per_sec = bytes_per_sec / 4096.0;
-        Self {
-            us_per_page: 1_000_000.0 / pages_per_sec,
-            gb_per_sec,
-            page_size: 4096,
-        }
+        Self { us_per_page: 1_000_000.0 / pages_per_sec, gb_per_sec, page_size: 4096 }
     }
 
     /// Create budget from latency target (µs per page).
     pub fn from_latency(us_per_page: f64) -> Self {
         let pages_per_sec = 1_000_000.0 / us_per_page;
         let bytes_per_sec = pages_per_sec * 4096.0;
-        Self {
-            us_per_page,
-            gb_per_sec: bytes_per_sec / 1e9,
-            page_size: 4096,
-        }
+        Self { us_per_page, gb_per_sec: bytes_per_sec / 1e9, page_size: 4096 }
     }
 
     /// Set custom page size (e.g., 64KB for huge pages).
@@ -111,21 +103,13 @@ impl TokenBudget {
     /// Create budget from latency target.
     /// 50µs/token = 20,000 tokens/sec
     pub fn from_latency(us_per_token: f64) -> Self {
-        Self {
-            us_per_token,
-            tokens_per_sec: 1_000_000.0 / us_per_token,
-            batch_size: 1,
-        }
+        Self { us_per_token, tokens_per_sec: 1_000_000.0 / us_per_token, batch_size: 1 }
     }
 
     /// Create budget from throughput target.
     /// 20,000 tokens/sec = 50µs/token
     pub fn from_throughput(tokens_per_sec: f64) -> Self {
-        Self {
-            us_per_token: 1_000_000.0 / tokens_per_sec,
-            tokens_per_sec,
-            batch_size: 1,
-        }
+        Self { us_per_token: 1_000_000.0 / tokens_per_sec, tokens_per_sec, batch_size: 1 }
     }
 
     /// Set batch size for amortization.

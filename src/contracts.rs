@@ -91,36 +91,20 @@ pub const Q6_K: QuantFormat = QuantFormat {
 };
 
 /// Q8_0 block format: 32 elements, 34 bytes
-pub const Q8_0: QuantFormat = QuantFormat {
-    name: "Q8_0",
-    block_size: 32,
-    block_bytes: 34,
-    ggml_type_id: 8,
-};
+pub const Q8_0: QuantFormat =
+    QuantFormat { name: "Q8_0", block_size: 32, block_bytes: 34, ggml_type_id: 8 };
 
 /// Q5_0 block format: 32 elements, 22 bytes
-pub const Q5_0: QuantFormat = QuantFormat {
-    name: "Q5_0",
-    block_size: 32,
-    block_bytes: 22,
-    ggml_type_id: 6,
-};
+pub const Q5_0: QuantFormat =
+    QuantFormat { name: "Q5_0", block_size: 32, block_bytes: 22, ggml_type_id: 6 };
 
 /// Q4_0 block format: 32 elements, 18 bytes
-pub const Q4_0: QuantFormat = QuantFormat {
-    name: "Q4_0",
-    block_size: 32,
-    block_bytes: 18,
-    ggml_type_id: 2,
-};
+pub const Q4_0: QuantFormat =
+    QuantFormat { name: "Q4_0", block_size: 32, block_bytes: 18, ggml_type_id: 2 };
 
 /// Q4_1 block format: 32 elements, 20 bytes
-pub const Q4_1: QuantFormat = QuantFormat {
-    name: "Q4_1",
-    block_size: 32,
-    block_bytes: 20,
-    ggml_type_id: 3,
-};
+pub const Q4_1: QuantFormat =
+    QuantFormat { name: "Q4_1", block_size: 32, block_bytes: 20, ggml_type_id: 3 };
 
 /// All supported quantization formats, ordered by GGML type ID.
 pub const ALL_FORMATS: &[QuantFormat] = &[Q4_0, Q4_1, Q5_0, Q8_0, Q4_K, Q5_K, Q6_K];
@@ -146,11 +130,7 @@ pub struct WeightBufferError {
 
 impl std::fmt::Display for WeightBufferError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Kernel contract violation for '{}': {}",
-            self.weight_name, self.reason
-        )
+        write!(f, "Kernel contract violation for '{}': {}", self.weight_name, self.reason)
     }
 }
 
@@ -337,16 +317,12 @@ mod tests {
     #[test]
     fn test_validate_buffer_ok() {
         let bytes = Q4_K.expected_bytes(4096, 4096);
-        assert!(Q4_K
-            .validate_buffer("test.weight", bytes, 4096, 4096)
-            .is_ok());
+        assert!(Q4_K.validate_buffer("test.weight", bytes, 4096, 4096).is_ok());
     }
 
     #[test]
     fn test_validate_buffer_wrong_size() {
-        let err = Q4_K
-            .validate_buffer("test.weight", 1000, 4096, 4096)
-            .unwrap_err();
+        let err = Q4_K.validate_buffer("test.weight", 1000, 4096, 4096).unwrap_err();
         assert!(err.reason.contains("buffer size mismatch"));
     }
 

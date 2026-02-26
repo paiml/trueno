@@ -85,11 +85,7 @@ fn test_visual_regression_config_builder() {
 
 #[test]
 fn test_pixel_diff_result_percentage() {
-    let result = PixelDiffResult {
-        different_pixels: 10,
-        total_pixels: 100,
-        max_diff: 50,
-    };
+    let result = PixelDiffResult { different_pixels: 10, total_pixels: 100, max_diff: 50 };
 
     assert_eq!(result.diff_percentage(), 10.0);
     assert!(!result.matches(5.0));
@@ -99,11 +95,7 @@ fn test_pixel_diff_result_percentage() {
 
 #[test]
 fn test_pixel_diff_result_zero_total() {
-    let result = PixelDiffResult {
-        different_pixels: 0,
-        total_pixels: 0,
-        max_diff: 0,
-    };
+    let result = PixelDiffResult { different_pixels: 0, total_pixels: 0, max_diff: 0 };
 
     assert_eq!(result.diff_percentage(), 0.0);
 }
@@ -225,14 +217,8 @@ fn test_golden_baseline_paths() {
     let config = VisualRegressionConfig::new("/test/golden").with_output_dir("/test/output");
     let baseline = GoldenBaseline::new(config);
 
-    assert_eq!(
-        baseline.golden_path("relu_4x4"),
-        PathBuf::from("/test/golden/relu_4x4.golden")
-    );
-    assert_eq!(
-        baseline.output_path("relu_4x4"),
-        PathBuf::from("/test/output/relu_4x4.output")
-    );
+    assert_eq!(baseline.golden_path("relu_4x4"), PathBuf::from("/test/golden/relu_4x4.golden"));
+    assert_eq!(baseline.output_path("relu_4x4"), PathBuf::from("/test/output/relu_4x4.output"));
 }
 
 #[test]

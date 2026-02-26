@@ -230,15 +230,9 @@ fn test_q8_quantize_separate_signed_unsigned_registers() {
     let ptx = kernel.emit_ptx();
 
     // U32 registers use %r prefix
-    assert!(
-        ptx.contains(".reg .u32  %r<"),
-        "Missing .u32 register declaration in PTX"
-    );
+    assert!(ptx.contains(".reg .u32  %r<"), "Missing .u32 register declaration in PTX");
     // S32 registers use %ri prefix (not %r -- that would conflict!)
-    assert!(
-        ptx.contains(".reg .s32  %ri<"),
-        "Missing .s32 register declaration in PTX"
-    );
+    assert!(ptx.contains(".reg .s32  %ri<"), "Missing .s32 register declaration in PTX");
 
     // Verify no duplicate %r declarations (only one .reg line should contain "%r<")
     let r_decl_count = ptx

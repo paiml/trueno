@@ -39,12 +39,7 @@ fn test_horizontal_sum_avx2() {
         let v = _mm256_setr_ps(10.5, -5.25, 3.75, -8.0, 12.0, -6.5, 4.25, -2.75);
         let expected = 10.5 - 5.25 + 3.75 - 8.0 + 12.0 - 6.5 + 4.25 - 2.75;
         let sum = Matrix::<f32>::horizontal_sum_avx2(v);
-        assert!(
-            (sum - expected).abs() < 1e-5,
-            "Expected {}, got {}",
-            expected,
-            sum
-        );
+        assert!((sum - expected).abs() < 1e-5, "Expected {}, got {}", expected, sum);
     }
 }
 
@@ -68,12 +63,7 @@ fn test_matmul_microkernel_4x1_avx2() {
         let row3: Vec<f32> = (49..=64).map(|x| x as f32).collect();
         let b_col = vec![1.0f32; 16];
 
-        let a_rows = [
-            row0.as_slice(),
-            row1.as_slice(),
-            row2.as_slice(),
-            row3.as_slice(),
-        ];
+        let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
         let mut results = [0.0f32; 4];
 
         // SAFETY: CPU feature verified at runtime, slices bounds-checked
@@ -103,26 +93,17 @@ fn test_matmul_microkernel_4x1_avx2() {
     // Test case 2: Identity-like pattern
     // Each row is all zeros except one 1.0
     {
-        let row0 = vec![
-            1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ];
-        let row1 = vec![
-            0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ];
-        let row2 = vec![
-            0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ];
-        let row3 = vec![
-            0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ];
+        let row0 =
+            vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let row1 =
+            vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let row2 =
+            vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let row3 =
+            vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         let b_col: Vec<f32> = (1..=16).map(|x| x as f32).collect();
 
-        let a_rows = [
-            row0.as_slice(),
-            row1.as_slice(),
-            row2.as_slice(),
-            row3.as_slice(),
-        ];
+        let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
         let mut results = [0.0f32; 4];
 
         // SAFETY: CPU feature verified at runtime, slices bounds-checked
@@ -152,12 +133,7 @@ fn test_matmul_microkernel_4x1_avx2() {
         let row3: Vec<f32> = (31..=40).map(|x| x as f32).collect();
         let b_col = vec![2.0f32; 10];
 
-        let a_rows = [
-            row0.as_slice(),
-            row1.as_slice(),
-            row2.as_slice(),
-            row3.as_slice(),
-        ];
+        let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
         let mut results = [0.0f32; 4];
 
         // SAFETY: CPU feature verified at runtime, slices bounds-checked
@@ -201,16 +177,10 @@ fn test_matmul_microkernel_4x1_avx2() {
             10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0, -10.0, 10.0,
             -10.0, 10.0, -10.0,
         ];
-        let b_col = vec![
-            1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-        ];
+        let b_col =
+            vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
 
-        let a_rows = [
-            row0.as_slice(),
-            row1.as_slice(),
-            row2.as_slice(),
-            row3.as_slice(),
-        ];
+        let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
         let mut results = [0.0f32; 4];
 
         // SAFETY: CPU feature verified at runtime, slices bounds-checked
@@ -245,12 +215,7 @@ fn test_matmul_microkernel_4x1_avx2() {
         let row3 = vec![0.0f32; 16];
         let b_col: Vec<f32> = (1..=16).map(|x| x as f32).collect();
 
-        let a_rows = [
-            row0.as_slice(),
-            row1.as_slice(),
-            row2.as_slice(),
-            row3.as_slice(),
-        ];
+        let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
         let mut results = [0.0f32; 4];
 
         // SAFETY: CPU feature verified at runtime, slices bounds-checked
@@ -259,12 +224,7 @@ fn test_matmul_microkernel_4x1_avx2() {
         }
 
         for (i, &result) in results.iter().enumerate() {
-            assert!(
-                result.abs() < 1e-6,
-                "Row {}: expected 0.0, got {}",
-                i,
-                result
-            );
+            assert!(result.abs() < 1e-6, "Row {}: expected 0.0, got {}", i, result);
         }
     }
 
@@ -278,23 +238,16 @@ fn test_matmul_microkernel_4x1_avx2() {
             2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 28.0, 30.0,
             32.0,
         ];
-        let row2 = vec![
-            0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0,
-        ];
+        let row2 =
+            vec![0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0];
         let row3 = vec![
             3.0, 6.0, 9.0, 12.0, 15.0, 18.0, 21.0, 24.0, 27.0, 30.0, 33.0, 36.0, 39.0, 42.0, 45.0,
             48.0,
         ];
-        let b_col = vec![
-            0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5,
-        ];
+        let b_col =
+            vec![0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
 
-        let a_rows = [
-            row0.as_slice(),
-            row1.as_slice(),
-            row2.as_slice(),
-            row3.as_slice(),
-        ];
+        let a_rows = [row0.as_slice(), row1.as_slice(), row2.as_slice(), row3.as_slice()];
         let mut results = [0.0f32; 4];
 
         // SAFETY: CPU feature verified at runtime, slices bounds-checked

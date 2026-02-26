@@ -36,20 +36,14 @@ pub(crate) fn render_help_overlay(f: &mut Frame, size: Rect) {
         Line::from("  s        Toggle stress test"),
         Line::from("  ?        Toggle this help"),
         Line::from(""),
-        Line::from(Span::styled(
-            "Tabs",
-            Style::default().add_modifier(Modifier::BOLD),
-        )),
+        Line::from(Span::styled("Tabs", Style::default().add_modifier(Modifier::BOLD))),
         Line::from(""),
         Line::from("  Compute    CPU/GPU utilization"),
         Line::from("  Memory     RAM/SWAP/VRAM usage"),
         Line::from("  Data Flow  PCIe bandwidth"),
         Line::from("  Stress     Stress test controls"),
         Line::from(""),
-        Line::from(Span::styled(
-            "Press ? to close",
-            Style::default().fg(Color::DarkGray),
-        )),
+        Line::from(Span::styled("Press ? to close", Style::default().fg(Color::DarkGray))),
     ];
 
     let paragraph = Paragraph::new(help_text).block(block);

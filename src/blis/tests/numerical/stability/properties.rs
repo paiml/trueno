@@ -74,11 +74,8 @@ fn prop_blis_matches_reference() {
         gemm_reference(m, n, k, &a, &b, &mut c_ref).unwrap();
         gemm_blis(m, n, k, &a, &b, &mut c_blis, None).unwrap();
 
-        let max_diff: f32 = c_ref
-            .iter()
-            .zip(c_blis.iter())
-            .map(|(r, b)| (r - b).abs())
-            .fold(0.0, f32::max);
+        let max_diff: f32 =
+            c_ref.iter().zip(c_blis.iter()).map(|(r, b)| (r - b).abs()).fold(0.0, f32::max);
 
         assert!(
             max_diff < 1e-3,

@@ -44,10 +44,7 @@ pub struct RegressionDetector {
 impl RegressionDetector {
     /// Create new regression detector
     pub fn new(baseline: BaselineReport, threshold_percent: f64) -> Self {
-        Self {
-            baseline,
-            threshold_percent,
-        }
+        Self { baseline, threshold_percent }
     }
 
     /// Load baseline from file and create detector
@@ -104,12 +101,7 @@ impl RegressionDetector {
             )
         };
 
-        RegressionReport {
-            passed,
-            regressions,
-            improvements,
-            summary,
-        }
+        RegressionReport { passed, regressions, improvements, summary }
     }
 
     fn find_baseline(&self, current: &BaselineEntry) -> Option<&BaselineEntry> {

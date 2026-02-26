@@ -65,24 +65,12 @@ fn test_gentle_preset_properties() {
     let gentle = ChaosConfig::gentle();
 
     // Gentle should have reasonable limits
-    assert!(
-        gentle.memory_limit > 0,
-        "Gentle preset should have memory limit"
-    );
-    assert!(
-        gentle.memory_limit >= 64 * 1024 * 1024,
-        "Gentle should allow at least 64MB"
-    );
+    assert!(gentle.memory_limit > 0, "Gentle preset should have memory limit");
+    assert!(gentle.memory_limit >= 64 * 1024 * 1024, "Gentle should allow at least 64MB");
     assert!(gentle.cpu_limit > 0.0, "Gentle should have CPU limit");
     assert!(gentle.cpu_limit >= 0.5, "Gentle should allow >= 50% CPU");
-    assert!(
-        gentle.timeout >= Duration::from_secs(60),
-        "Gentle should allow >= 60s timeout"
-    );
-    assert!(
-        !gentle.signal_injection,
-        "Gentle should not inject signals by default"
-    );
+    assert!(gentle.timeout >= Duration::from_secs(60), "Gentle should allow >= 60s timeout");
+    assert!(!gentle.signal_injection, "Gentle should not inject signals by default");
 }
 
 #[test]
@@ -90,22 +78,10 @@ fn test_aggressive_preset_properties() {
     let aggressive = ChaosConfig::aggressive();
 
     // Aggressive should have strict limits
-    assert!(
-        aggressive.memory_limit > 0,
-        "Aggressive preset should have memory limit"
-    );
-    assert!(
-        aggressive.memory_limit <= 128 * 1024 * 1024,
-        "Aggressive should limit <= 128MB"
-    );
-    assert!(
-        aggressive.cpu_limit > 0.0,
-        "Aggressive should have CPU limit"
-    );
-    assert!(
-        aggressive.cpu_limit <= 0.5,
-        "Aggressive should limit <= 50% CPU"
-    );
+    assert!(aggressive.memory_limit > 0, "Aggressive preset should have memory limit");
+    assert!(aggressive.memory_limit <= 128 * 1024 * 1024, "Aggressive should limit <= 128MB");
+    assert!(aggressive.cpu_limit > 0.0, "Aggressive should have CPU limit");
+    assert!(aggressive.cpu_limit <= 0.5, "Aggressive should limit <= 50% CPU");
     assert!(
         aggressive.timeout <= Duration::from_secs(30),
         "Aggressive should limit <= 30s timeout"
@@ -114,26 +90,19 @@ fn test_aggressive_preset_properties() {
 
 #[test]
 fn test_chaos_error_display_messages() {
-    let mem_err = ChaosError::MemoryLimitExceeded {
-        limit: 1000,
-        used: 2000,
-    };
+    let mem_err = ChaosError::MemoryLimitExceeded { limit: 1000, used: 2000 };
     let msg = format!("{}", mem_err);
     assert!(msg.contains("Memory limit exceeded"));
     assert!(msg.contains("2000"));
     assert!(msg.contains("1000"));
 
-    let timeout_err = ChaosError::Timeout {
-        elapsed: Duration::from_secs(5),
-        limit: Duration::from_secs(3),
-    };
+    let timeout_err =
+        ChaosError::Timeout { elapsed: Duration::from_secs(5), limit: Duration::from_secs(3) };
     let msg = format!("{}", timeout_err);
     assert!(msg.contains("Timeout"));
 
-    let signal_err = ChaosError::SignalInjectionFailed {
-        signal: 9,
-        reason: "permission denied".to_string(),
-    };
+    let signal_err =
+        ChaosError::SignalInjectionFailed { signal: 9, reason: "permission denied".to_string() };
     let msg = format!("{}", signal_err);
     assert!(msg.contains("Signal injection failed"));
     assert!(msg.contains("9"));
@@ -145,20 +114,10 @@ fn test_default_is_permissive() {
     let default = ChaosConfig::default();
 
     // Default should impose no limits (permissive for testing)
-    assert_eq!(
-        default.memory_limit, 0,
-        "Default should have no memory limit"
-    );
+    assert_eq!(default.memory_limit, 0, "Default should have no memory limit");
     assert_eq!(default.cpu_limit, 0.0, "Default should have no CPU limit");
-    assert_eq!(
-        default.timeout,
-        Duration::from_secs(60),
-        "Default timeout should be reasonable"
-    );
-    assert!(
-        !default.signal_injection,
-        "Default should not inject signals"
-    );
+    assert_eq!(default.timeout, Duration::from_secs(60), "Default timeout should be reasonable");
+    assert!(!default.signal_injection, "Default should not inject signals");
 }
 
 #[test]
@@ -167,16 +126,7 @@ fn test_presets_are_distinct() {
     let aggressive = ChaosConfig::aggressive();
 
     // Presets should have different characteristics
-    assert!(
-        gentle.memory_limit > aggressive.memory_limit,
-        "Gentle should allow more memory"
-    );
-    assert!(
-        gentle.cpu_limit > aggressive.cpu_limit,
-        "Gentle should allow more CPU"
-    );
-    assert!(
-        gentle.timeout > aggressive.timeout,
-        "Gentle should allow longer timeout"
-    );
+    assert!(gentle.memory_limit > aggressive.memory_limit, "Gentle should allow more memory");
+    assert!(gentle.cpu_limit > aggressive.cpu_limit, "Gentle should allow more CPU");
+    assert!(gentle.timeout > aggressive.timeout, "Gentle should allow longer timeout");
 }

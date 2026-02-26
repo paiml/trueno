@@ -30,9 +30,7 @@ fn f1271_feature_extraction() {
 /// F1271.2: Feature vector conversion
 #[test]
 fn f1271_feature_to_vec() {
-    let features = WorkloadFeatures::new()
-        .with_intensity(5.0)
-        .with_compute_density(4.0);
+    let features = WorkloadFeatures::new().with_intensity(5.0).with_compute_density(4.0);
 
     let vec = features.to_vec();
     assert_eq!(vec[0], 5.0); // arithmetic_intensity
@@ -153,12 +151,8 @@ fn f1275_identical_similarity() {
 /// F1275.3: Cosine similarity in valid range
 #[test]
 fn f1275_cosine_similarity() {
-    let a = WorkloadFeatures::new()
-        .with_intensity(10.0)
-        .with_compute_density(5.0);
-    let b = WorkloadFeatures::new()
-        .with_intensity(20.0)
-        .with_compute_density(10.0);
+    let a = WorkloadFeatures::new().with_intensity(10.0).with_compute_density(5.0);
+    let b = WorkloadFeatures::new().with_intensity(20.0).with_compute_density(10.0);
 
     let sim = a.cosine_similarity(&b);
     assert!(sim >= -1.0 && sim <= 1.0);
@@ -255,9 +249,7 @@ fn f1278_gpu_crossover_in_result() {
 /// F1279.1: Z-score normalized
 #[test]
 fn f1279_feature_normalization() {
-    let features = WorkloadFeatures::new()
-        .with_intensity(10.0)
-        .with_compute_density(5.0);
+    let features = WorkloadFeatures::new().with_intensity(10.0).with_compute_density(5.0);
 
     let means = vec![10.0, 0.0, 0.0, 0.5, 5.0, 0.0, 1.0];
     let stds = vec![2.0, 1.0, 1.0, 0.2, 1.0, 0.1, 0.5];
@@ -299,10 +291,7 @@ fn f1280_is_confident() {
 
     assert!(result.is_confident());
 
-    let low_conf = ClassificationResult {
-        confidence: 0.5,
-        ..result
-    };
+    let low_conf = ClassificationResult { confidence: 0.5, ..result };
     assert!(!low_conf.is_confident());
 }
 
@@ -338,10 +327,8 @@ fn test_add_prototype() {
     let mut characterizer = WorkloadCharacterizer::new();
     let initial_count = characterizer.get_prototypes().len();
 
-    characterizer.add_prototype(
-        WorkloadCategory::Unknown,
-        WorkloadFeatures::new().with_intensity(100.0),
-    );
+    characterizer
+        .add_prototype(WorkloadCategory::Unknown, WorkloadFeatures::new().with_intensity(100.0));
 
     assert_eq!(characterizer.get_prototypes().len(), initial_count + 1);
 }

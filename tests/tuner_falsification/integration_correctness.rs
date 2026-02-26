@@ -23,18 +23,10 @@ fn f063_features_from_hardware() {
 
     let hw = HardwareCapability::detect();
     let features = TunerFeatures::builder()
-        .gpu_mem_bw_gbs(
-            hw.gpu
-                .as_ref()
-                .map(|g| g.memory_bw_gbps as f32)
-                .unwrap_or(500.0),
-        )
+        .gpu_mem_bw_gbs(hw.gpu.as_ref().map(|g| g.memory_bw_gbps as f32).unwrap_or(500.0))
         .build();
 
-    assert!(
-        features.validate().is_ok(),
-        "F063 FALSIFIED: hardware-based features invalid"
-    );
+    assert!(features.validate().is_ok(), "F063 FALSIFIED: hardware-based features invalid");
 }
 
 /// F064: Tuner creation is fast
@@ -47,11 +39,7 @@ fn f064_tuner_creation_fast() {
     let elapsed = start.elapsed();
     let avg_us = elapsed.as_micros() / 100;
 
-    assert!(
-        avg_us < 1000,
-        "F064 FALSIFIED: tuner creation {} us >= 1ms",
-        avg_us
-    );
+    assert!(avg_us < 1000, "F064 FALSIFIED: tuner creation {} us >= 1ms", avg_us);
 }
 
 /// F065: Model load time < 100ms (placeholder for persistence)
@@ -72,10 +60,7 @@ fn f065_model_load_fast() {
 /// F066: Feature extraction is fast
 #[test]
 fn f066_feature_extraction_fast() {
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let start = std::time::Instant::now();
     for _ in 0..1000 {
@@ -84,11 +69,7 @@ fn f066_feature_extraction_fast() {
     let elapsed = start.elapsed();
     let avg_ns = elapsed.as_nanos() / 1000;
 
-    assert!(
-        avg_ns < 1000,
-        "F066 FALSIFIED: feature extraction {} ns >= 1us",
-        avg_ns
-    );
+    assert!(avg_ns < 1000, "F066 FALSIFIED: feature extraction {} ns >= 1us", avg_ns);
 }
 
 /// F067: Recommendation is fast
@@ -104,11 +85,7 @@ fn f067_recommendation_fast() {
     let elapsed = start.elapsed();
     let avg_us = elapsed.as_micros() / 100;
 
-    assert!(
-        avg_us < 1000,
-        "F067 FALSIFIED: recommendation {} us >= 1ms",
-        avg_us
-    );
+    assert!(avg_us < 1000, "F067 FALSIFIED: recommendation {} us >= 1ms", avg_us);
 }
 
 /// F068: Thread safety - concurrent predictions
@@ -140,19 +117,13 @@ fn f068_thread_safety() {
 /// F069: Clone works correctly
 #[test]
 fn f069_clone_correct() {
-    let features = TunerFeatures::builder()
-        .model_params_b(1.5)
-        .batch_size(4)
-        .build();
+    let features = TunerFeatures::builder().model_params_b(1.5).batch_size(4).build();
 
     let cloned = features.clone();
     let orig_vec = features.to_vector();
     let clone_vec = cloned.to_vector();
 
-    assert_eq!(
-        orig_vec, clone_vec,
-        "F069 FALSIFIED: clone produced different vector"
-    );
+    assert_eq!(orig_vec, clone_vec, "F069 FALSIFIED: clone produced different vector");
 }
 
 /// F070: Serialization round-trip (placeholder for SafeTensors)
@@ -185,10 +156,7 @@ fn f071_extractor_deterministic() {
     let vec1 = features.to_vector();
     let vec2 = features.to_vector();
 
-    assert_eq!(
-        vec1, vec2,
-        "F071 FALSIFIED: feature extraction not deterministic"
-    );
+    assert_eq!(vec1, vec2, "F071 FALSIFIED: feature extraction not deterministic");
 }
 
 /// F072: Prediction deterministic across instances
@@ -212,10 +180,7 @@ fn f072_prediction_deterministic_instances() {
 #[test]
 fn f073_defaults_sensible() {
     let features = TunerFeatures::default();
-    assert!(
-        features.validate().is_ok(),
-        "F073 FALSIFIED: default features invalid"
-    );
+    assert!(features.validate().is_ok(), "F073 FALSIFIED: default features invalid");
 }
 
 /// F074: Builder chain works

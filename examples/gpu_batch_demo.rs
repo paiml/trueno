@@ -115,10 +115,7 @@ async fn demo_batched_operations() -> Result<(), String> {
     let expected = [2.5, 4.5, 0.5, 8.5];
     for (i, (&actual, &expect)) in result.iter().zip(expected.iter()).enumerate() {
         if (actual - expect).abs() > 1e-5 {
-            return Err(format!(
-                "Mismatch at index {}: expected {}, got {}",
-                i, expect, actual
-            ));
+            return Err(format!("Mismatch at index {}: expected {}, got {}", i, expect, actual));
         }
     }
 
@@ -163,10 +160,7 @@ async fn demo_ml_pipeline() -> Result<(), String> {
     let expected = [3.0, 5.0, 7.0, 9.0];
     for (i, (&actual, &expect)) in result.iter().zip(expected.iter()).enumerate() {
         if (actual - expect).abs() > 1e-5 {
-            return Err(format!(
-                "Mismatch at index {}: expected {}, got {}",
-                i, expect, actual
-            ));
+            return Err(format!("Mismatch at index {}: expected {}, got {}", i, expect, actual));
         }
     }
 

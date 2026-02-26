@@ -22,9 +22,8 @@ pub(crate) fn render_stress_tab(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
-    let block = Block::default()
-        .title(" Stress Test Mode (TRUENO-SPEC-025) ")
-        .borders(Borders::ALL);
+    let block =
+        Block::default().title(" Stress Test Mode (TRUENO-SPEC-025) ").borders(Borders::ALL);
 
     let mut text = vec![
         Line::from(""),
@@ -35,9 +34,7 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
         Line::from(""),
         Line::from(Span::styled(
             "  Hardware Detected:",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(vec![
@@ -61,18 +58,13 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
         Line::from(""),
         Line::from(Span::styled(
             "  Stress Test Will:",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(vec![
             Span::raw("    "),
             Span::styled("CPU:", Style::default().fg(Color::Yellow)),
-            Span::raw(format!(
-                " {} threads doing FP math (sin/cos/sqrt)",
-                num_cpus::get()
-            )),
+            Span::raw(format!(" {} threads doing FP math (sin/cos/sqrt)", num_cpus::get())),
         ]),
         Line::from(vec![
             Span::raw("    "),
@@ -100,18 +92,14 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
             Line::from(""),
             Line::from(Span::styled(
                 "  Stress Test Report (renacer):",
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
             Line::from(vec![
                 Span::raw("    Verdict: "),
                 Span::styled(
                     format!("{}", report.verdict),
-                    Style::default()
-                        .fg(verdict_color)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(verdict_color).add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
@@ -168,9 +156,7 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
             text.push(Line::from(""));
             text.push(Line::from(Span::styled(
                 "  Recommendations:",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
             )));
             for rec in &report.recommendations {
                 text.push(Line::from(vec![
@@ -186,9 +172,7 @@ fn render_stress_idle(f: &mut Frame, app: &App, area: Rect) {
         Line::from(""),
         Line::from(Span::styled(
             "  >>> Press 's' to START stress test <<<",
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
         )),
     ]);
 
@@ -229,12 +213,7 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
         app.gpu_workers.len()
     );
     let status = Paragraph::new(status_text)
-        .style(
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-        )
+        .style(Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD))
         .block(Block::default().borders(Borders::ALL));
     f.render_widget(status, chunks[0]);
 
@@ -258,11 +237,7 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
 
     // CPU ops sparkline
     let cpu_sparkline = Sparkline::default()
-        .block(
-            Block::default()
-                .title(" CPU History ")
-                .borders(Borders::ALL),
-        )
+        .block(Block::default().title(" CPU History ").borders(Borders::ALL))
         .data(&app.cpu_ops_history)
         .style(Style::default().fg(Color::Cyan));
     f.render_widget(cpu_sparkline, chunks[2]);
@@ -287,11 +262,7 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
 
     // Memory ops sparkline
     let mem_sparkline = Sparkline::default()
-        .block(
-            Block::default()
-                .title(" Memory History ")
-                .borders(Borders::ALL),
-        )
+        .block(Block::default().title(" Memory History ").borders(Borders::ALL))
         .data(&app.mem_ops_history)
         .style(Style::default().fg(Color::Magenta));
     f.render_widget(mem_sparkline, chunks[4]);
@@ -317,11 +288,7 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
 
         // GPU ops sparkline
         let gpu_sparkline = Sparkline::default()
-            .block(
-                Block::default()
-                    .title(" GPU History ")
-                    .borders(Borders::ALL),
-            )
+            .block(Block::default().title(" GPU History ").borders(Borders::ALL))
             .data(&app.gpu_ops_history)
             .style(Style::default().fg(Color::Yellow));
         f.render_widget(gpu_sparkline, chunks[6]);
@@ -339,20 +306,12 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
         Span::styled("System: ", Style::default().fg(Color::DarkGray)),
         Span::styled(
             format!("CPU {:.0}%", cpu_util),
-            Style::default().fg(if cpu_util > 90.0 {
-                Color::Red
-            } else {
-                Color::Green
-            }),
+            Style::default().fg(if cpu_util > 90.0 { Color::Red } else { Color::Green }),
         ),
         Span::raw(" | "),
         Span::styled(
             format!("RAM {:.0}%", mem_pct_used),
-            Style::default().fg(if mem_pct_used > 80.0 {
-                Color::Red
-            } else {
-                Color::Green
-            }),
+            Style::default().fg(if mem_pct_used > 80.0 { Color::Red } else { Color::Green }),
         ),
         Span::raw(" | Pressure: "),
         Span::styled(
@@ -369,10 +328,7 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
     // Show GPU VRAM if available
     for (i, gpu) in app.gpus.iter().enumerate() {
         stats.push(Line::from(vec![
-            Span::styled(
-                format!("GPU{} VRAM: ", i),
-                Style::default().fg(Color::DarkGray),
-            ),
+            Span::styled(format!("GPU{} VRAM: ", i), Style::default().fg(Color::DarkGray)),
             Span::styled(
                 format!("{:.1}%", gpu.vram_percent),
                 Style::default().fg(if gpu.vram_percent > 90.0 {
@@ -388,10 +344,7 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
         ]));
     }
 
-    let stats_block = Paragraph::new(stats).block(
-        Block::default()
-            .title(" System Impact ")
-            .borders(Borders::ALL),
-    );
+    let stats_block = Paragraph::new(stats)
+        .block(Block::default().title(" System Impact ").borders(Borders::ALL));
     f.render_widget(stats_block, chunks[stats_idx]);
 }

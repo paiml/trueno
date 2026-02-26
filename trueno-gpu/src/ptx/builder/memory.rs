@@ -223,14 +223,8 @@ mod tests {
         builder.st_shared_f32(addr, val);
 
         assert_eq!(builder.instructions.len(), 2);
-        assert_eq!(
-            builder.instructions[0].state_space,
-            Some(PtxStateSpace::Shared)
-        );
-        assert_eq!(
-            builder.instructions[1].state_space,
-            Some(PtxStateSpace::Shared)
-        );
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Shared));
+        assert_eq!(builder.instructions[1].state_space, Some(PtxStateSpace::Shared));
     }
 
     #[test]
@@ -256,10 +250,7 @@ mod tests {
         assert_eq!(builder.instructions.len(), 1);
         assert_eq!(builder.instructions[0].op, PtxOp::Ld);
         assert_eq!(builder.instructions[0].ty, PtxType::U8);
-        assert_eq!(
-            builder.instructions[0].state_space,
-            Some(PtxStateSpace::Global)
-        );
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
         assert_eq!(val.ty(), PtxType::U32); // Zero-extended to u32
     }
 
@@ -273,10 +264,7 @@ mod tests {
         assert_eq!(builder.instructions.len(), 1);
         assert_eq!(builder.instructions[0].op, PtxOp::Ld);
         assert_eq!(builder.instructions[0].ty, PtxType::U16);
-        assert_eq!(
-            builder.instructions[0].state_space,
-            Some(PtxStateSpace::Global)
-        );
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Global));
         assert_eq!(val.ty(), PtxType::U32); // Zero-extended
     }
 
@@ -291,14 +279,8 @@ mod tests {
         assert_eq!(builder.instructions.len(), 2);
         assert_eq!(builder.instructions[0].op, PtxOp::Ld);
         assert_eq!(builder.instructions[0].ty, PtxType::U32);
-        assert_eq!(
-            builder.instructions[0].state_space,
-            Some(PtxStateSpace::Shared)
-        );
+        assert_eq!(builder.instructions[0].state_space, Some(PtxStateSpace::Shared));
         assert_eq!(builder.instructions[1].op, PtxOp::St);
-        assert_eq!(
-            builder.instructions[1].state_space,
-            Some(PtxStateSpace::Shared)
-        );
+        assert_eq!(builder.instructions[1].state_space, Some(PtxStateSpace::Shared));
     }
 }

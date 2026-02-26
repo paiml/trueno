@@ -45,10 +45,7 @@ impl Vector<f32> {
     /// Returns [`TruenoError::SizeMismatch`] if vectors have different lengths.
     pub fn add(&self, other: &Self) -> Result<Self> {
         if self.len() != other.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: other.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
         let mut result = vec![0.0; self.len()];
@@ -70,19 +67,13 @@ impl Vector<f32> {
                         dispatch_binary_op!(self.backend, add, chunk_a, chunk_b, chunk_out);
                     });
 
-                return Ok(Self {
-                    data: result,
-                    backend: self.backend,
-                });
+                return Ok(Self { data: result, backend: self.backend });
             }
         }
 
         dispatch_binary_op!(self.backend, add, &self.data, &other.data, &mut result);
 
-        Ok(Self {
-            data: result,
-            backend: self.backend,
-        })
+        Ok(Self { data: result, backend: self.backend })
     }
 
     /// Element-wise subtraction
@@ -111,10 +102,7 @@ impl Vector<f32> {
     /// Returns [`TruenoError::SizeMismatch`] if vectors have different lengths.
     pub fn sub(&self, other: &Self) -> Result<Self> {
         if self.len() != other.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: other.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
         let mut result = vec![0.0; self.len()];
@@ -136,19 +124,13 @@ impl Vector<f32> {
                         dispatch_binary_op!(self.backend, sub, chunk_a, chunk_b, chunk_out);
                     });
 
-                return Ok(Self {
-                    data: result,
-                    backend: self.backend,
-                });
+                return Ok(Self { data: result, backend: self.backend });
             }
         }
 
         dispatch_binary_op!(self.backend, sub, &self.data, &other.data, &mut result);
 
-        Ok(Self {
-            data: result,
-            backend: self.backend,
-        })
+        Ok(Self { data: result, backend: self.backend })
     }
 
     /// Element-wise multiplication
@@ -167,10 +149,7 @@ impl Vector<f32> {
     /// ```
     pub fn mul(&self, other: &Self) -> Result<Self> {
         if self.len() != other.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: other.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
         let mut result = vec![0.0; self.len()];
@@ -192,19 +171,13 @@ impl Vector<f32> {
                         dispatch_binary_op!(self.backend, mul, chunk_a, chunk_b, chunk_out);
                     });
 
-                return Ok(Self {
-                    data: result,
-                    backend: self.backend,
-                });
+                return Ok(Self { data: result, backend: self.backend });
             }
         }
 
         dispatch_binary_op!(self.backend, mul, &self.data, &other.data, &mut result);
 
-        Ok(Self {
-            data: result,
-            backend: self.backend,
-        })
+        Ok(Self { data: result, backend: self.backend })
     }
 
     /// Element-wise division
@@ -223,10 +196,7 @@ impl Vector<f32> {
     /// ```
     pub fn div(&self, other: &Self) -> Result<Self> {
         if self.len() != other.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: other.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
         let mut result = vec![0.0; self.len()];
@@ -248,19 +218,13 @@ impl Vector<f32> {
                         dispatch_binary_op!(self.backend, div, chunk_a, chunk_b, chunk_out);
                     });
 
-                return Ok(Self {
-                    data: result,
-                    backend: self.backend,
-                });
+                return Ok(Self { data: result, backend: self.backend });
             }
         }
 
         dispatch_binary_op!(self.backend, div, &self.data, &other.data, &mut result);
 
-        Ok(Self {
-            data: result,
-            backend: self.backend,
-        })
+        Ok(Self { data: result, backend: self.backend })
     }
 
     /// Scalar multiplication (scale all elements by a scalar value)
@@ -337,10 +301,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 
     /// Fused multiply-add: result\[i\] = self\[i\] * b\[i\] + c\[i\]
@@ -384,16 +345,10 @@ impl Vector<f32> {
     /// - Physics simulations: force calculations, particle systems
     pub fn fma(&self, b: &Vector<f32>, c: &Vector<f32>) -> Result<Vector<f32>> {
         if self.len() != b.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: b.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: b.len() });
         }
         if self.len() != c.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: c.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: c.len() });
         }
 
         let mut result_data = vec![0.0; self.len()];
@@ -441,10 +396,7 @@ impl Vector<f32> {
             }
         }
 
-        Ok(Vector {
-            data: result_data,
-            backend: self.backend,
-        })
+        Ok(Vector { data: result_data, backend: self.backend })
     }
 }
 

@@ -41,14 +41,8 @@ fn h0_mon_72_config_low_overhead() {
 
 #[test]
 fn h0_mon_80_error_display() {
-    assert_eq!(
-        format!("{}", MonitorError::NoDevice),
-        "No GPU device available"
-    );
-    assert_eq!(
-        format!("{}", MonitorError::InvalidDevice(5)),
-        "Invalid device index: 5"
-    );
+    assert_eq!(format!("{}", MonitorError::NoDevice), "No GPU device available");
+    assert_eq!(format!("{}", MonitorError::InvalidDevice(5)), "Invalid device index: 5");
     assert_eq!(
         format!("{}", MonitorError::BackendInit("test".to_string())),
         "Backend initialization failed: test"

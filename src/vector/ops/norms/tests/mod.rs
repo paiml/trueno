@@ -24,39 +24,22 @@ fn assert_norm_with_backend(
 ) {
     let v = Vector::from_slice_with_backend(data, backend);
     let result = norm_fn(&v).unwrap();
-    assert!(
-        (result - expected).abs() <= tol,
-        "expected {expected} got {result} ({backend:?})"
-    );
+    assert!((result - expected).abs() <= tol, "expected {expected} got {result} ({backend:?})");
 }
 
 fn assert_norm_backend_equivalence(norm_fn: NormMethod, data: &[f32], tol: f32) {
     let scalar = norm_fn(&Vector::from_slice_with_backend(data, Backend::Scalar)).unwrap();
-    for &backend in &[
-        Backend::NEON,
-        Backend::WasmSIMD,
-        Backend::GPU,
-        Backend::Auto,
-    ] {
+    for &backend in &[Backend::NEON, Backend::WasmSIMD, Backend::GPU, Backend::Auto] {
         let val = norm_fn(&Vector::from_slice_with_backend(data, backend)).unwrap();
-        assert!(
-            (scalar - val).abs() < tol,
-            "Scalar vs {backend:?}: {scalar} vs {val}"
-        );
+        assert!((scalar - val).abs() < tol, "Scalar vs {backend:?}: {scalar} vs {val}");
     }
     #[cfg(target_arch = "x86_64")]
     {
         let sse2 = norm_fn(&Vector::from_slice_with_backend(data, Backend::SSE2)).unwrap();
-        assert!(
-            (scalar - sse2).abs() < tol,
-            "Scalar vs SSE2: {scalar} vs {sse2}"
-        );
+        assert!((scalar - sse2).abs() < tol, "Scalar vs SSE2: {scalar} vs {sse2}");
         if is_x86_feature_detected!("avx2") {
             let avx2 = norm_fn(&Vector::from_slice_with_backend(data, Backend::AVX2)).unwrap();
-            assert!(
-                (scalar - avx2).abs() < tol,
-                "Scalar vs AVX2: {scalar} vs {avx2}"
-            );
+            assert!((scalar - avx2).abs() < tol, "Scalar vs AVX2: {scalar} vs {avx2}");
         }
     }
 }
@@ -71,10 +54,7 @@ fn assert_norm_non_aligned(
         let data = make_data(size);
         let result = norm_fn(&Vector::from_slice(&data)).unwrap();
         let expected = make_expected(&data);
-        assert!(
-            (result - expected).abs() < tol,
-            "size {size}: {result} vs {expected}"
-        );
+        assert!((result - expected).abs() < tol, "size {size}: {result} vs {expected}");
     }
 }
 

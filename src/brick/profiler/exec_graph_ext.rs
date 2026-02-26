@@ -85,11 +85,7 @@ impl BrickProfiler {
         if !self.graph_enabled {
             return None;
         }
-        let node = ExecutionNode::Brick {
-            id: brick_id,
-            timing_ns,
-            elements,
-        };
+        let node = ExecutionNode::Brick { id: brick_id, timing_ns, elements };
         Some(self.execution_graph.add_node_in_scope(node))
     }
 
@@ -112,10 +108,7 @@ impl BrickProfiler {
         if !self.graph_enabled {
             return None;
         }
-        Some(
-            self.execution_graph
-                .record_kernel_launch(name, ptx_hash, grid, block, shared_mem),
-        )
+        Some(self.execution_graph.record_kernel_launch(name, ptx_hash, grid, block, shared_mem))
     }
 
     /// Export execution graph to DOT format for visualization.

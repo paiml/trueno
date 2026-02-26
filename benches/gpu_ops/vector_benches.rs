@@ -39,11 +39,8 @@ pub fn bench_gpu_vec_add(c: &mut Criterion) {
             let data_b = generate_test_data(size);
 
             bencher.iter(|| {
-                let result: Vec<f32> = data_a
-                    .iter()
-                    .zip(data_b.iter())
-                    .map(|(a, b)| a + b)
-                    .collect();
+                let result: Vec<f32> =
+                    data_a.iter().zip(data_b.iter()).map(|(a, b)| a + b).collect();
                 black_box(result);
             });
         });

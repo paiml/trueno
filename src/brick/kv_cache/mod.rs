@@ -29,14 +29,7 @@ pub struct KvCacheSlotInfo {
 impl KvCacheSlotInfo {
     /// Create a new slot info.
     pub fn new(position: u32, token_id: u32, layer: u16, head: u16) -> Self {
-        Self {
-            position,
-            token_id,
-            layer,
-            head,
-            valid: true,
-            last_access: 0,
-        }
+        Self { position, token_id, layer, head, valid: true, last_access: 0 }
     }
 
     /// Mark slot as accessed.
@@ -73,11 +66,7 @@ pub struct KvCacheManager {
 impl KvCacheManager {
     /// Create manager with given capacity.
     pub fn new(capacity: usize) -> Self {
-        Self {
-            slots: vec![KvCacheSlotInfo::default(); capacity],
-            current_step: 0,
-            valid_count: 0,
-        }
+        Self { slots: vec![KvCacheSlotInfo::default(); capacity], current_step: 0, valid_count: 0 }
     }
 
     /// Allocate a slot.
@@ -169,18 +158,12 @@ pub struct SequentialBatchOrderer {
 impl SequentialBatchOrderer {
     /// Create orderer for n batches.
     pub fn new(n_batches: usize) -> Self {
-        Self {
-            order: (0..n_batches).collect(),
-            position: 0,
-        }
+        Self { order: (0..n_batches).collect(), position: 0 }
     }
 
     /// Create orderer with reverse order (sometimes better for certain patterns).
     pub fn reversed(n_batches: usize) -> Self {
-        Self {
-            order: (0..n_batches).rev().collect(),
-            position: 0,
-        }
+        Self { order: (0..n_batches).rev().collect(), position: 0 }
     }
 
     /// Create orderer with interleaved order (for better cache utilization).

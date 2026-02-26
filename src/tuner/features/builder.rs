@@ -170,8 +170,7 @@ impl TunerFeaturesBuilder {
     ///
     /// Use `try_build()` for fallible construction.
     pub fn build(self) -> TunerFeatures {
-        self.try_build()
-            .expect("TunerFeatures: invalid raw input (see try_build for details)")
+        self.try_build().expect("TunerFeatures: invalid raw input (see try_build for details)")
     }
 
     /// Build features, returning Err if raw inputs violate physical constraints.
@@ -224,10 +223,7 @@ impl TunerFeaturesBuilder {
         // C-14 (Meyer DbC): 0 = unknown, no architecture-specific magic number.
         let hidden_dim = self.hidden_dim.unwrap_or(0) as f32;
         let batch_size_f = batch_size as f32;
-        let quant_bytes = self
-            .quant_type
-            .map(|q| q.bytes_per_param())
-            .unwrap_or(0.5625);
+        let quant_bytes = self.quant_type.map(|q| q.bytes_per_param()).unwrap_or(0.5625);
 
         // Arithmetic intensity for GEMV: 2*N*K FLOPs / (N*K*bytes + K + N) bytes
         // Simplified: ~2 / bytes_per_param for memory-bound inference

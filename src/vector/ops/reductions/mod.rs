@@ -42,10 +42,7 @@ impl Vector<f32> {
     /// ```
     pub fn dot(&self, other: &Self) -> Result<f32> {
         if self.len() != other.len() {
-            return Err(TruenoError::SizeMismatch {
-                expected: self.len(),
-                actual: other.len(),
-            });
+            return Err(TruenoError::SizeMismatch { expected: self.len(), actual: other.len() });
         }
 
         // SAFETY: Unsafe block delegates to backend implementation which maintains safety invariants

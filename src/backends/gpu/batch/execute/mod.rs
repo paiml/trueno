@@ -39,9 +39,7 @@ impl GpuCommandBatch {
         for buffer_info in self.buffers.values() {
             if let Some(data) = &buffer_info.data {
                 if let Some(gpu_buffer) = &buffer_info.gpu_buffer {
-                    self.device
-                        .queue
-                        .write_buffer(gpu_buffer, 0, bytemuck::cast_slice(data));
+                    self.device.queue.write_buffer(gpu_buffer, 0, bytemuck::cast_slice(data));
                 }
             }
         }
@@ -77,11 +75,9 @@ impl GpuCommandBatch {
 
         // Copy from GPU buffer to staging buffer
         let mut encoder =
-            self.device
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Read Encoder"),
-                });
+            self.device.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Read Encoder"),
+            });
 
         encoder.copy_buffer_to_buffer(gpu_buffer, 0, &staging_buffer, 0, size_bytes);
 
@@ -99,10 +95,7 @@ impl GpuCommandBatch {
         // for map_async callbacks to fire
         self.device
             .device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
+            .poll(wgpu::PollType::Wait { submission_index: None, timeout: None })
             .map_err(|e| format!("GPU poll failed: {:?}", e))?;
 
         // Wait for mapping to complete

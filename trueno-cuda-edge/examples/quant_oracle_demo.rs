@@ -71,10 +71,7 @@ fn main() {
 
     println!("\n   Format-specific boundaries (Q4K, 16 levels):");
     let format_bounds = gen.format_boundaries();
-    println!(
-        "   Count: {} values (16 levels × 2 signs)",
-        format_bounds.len()
-    );
+    println!("   Count: {} values (16 levels × 2 signs)", format_bounds.len());
     print!("   First 8: ");
     for v in format_bounds.iter().take(8) {
         print!("{:.3} ", v);
@@ -97,14 +94,7 @@ fn main() {
     println!("\n   Test 1: Identical values");
     println!("   CPU: {:?}", cpu);
     println!("   GPU: {:?}", gpu);
-    println!(
-        "   Result: {}",
-        if report.passed() {
-            "✓ PASS"
-        } else {
-            "✗ FAIL"
-        }
-    );
+    println!("   Result: {}", if report.passed() { "✓ PASS" } else { "✗ FAIL" });
 
     // Test 2: Small difference (within tolerance)
     let gpu_close = vec![1.01, 2.01, 3.01, 4.01];
@@ -112,14 +102,7 @@ fn main() {
     println!("\n   Test 2: Small difference (within 0.05 tolerance)");
     println!("   CPU: {:?}", cpu);
     println!("   GPU: {:?}", gpu_close);
-    println!(
-        "   Result: {}",
-        if report.passed() {
-            "✓ PASS"
-        } else {
-            "✗ FAIL"
-        }
-    );
+    println!("   Result: {}", if report.passed() { "✓ PASS" } else { "✗ FAIL" });
     println!("   Max diff: {:.4}", report.max_abs_diff);
 
     // Test 3: Large difference (exceeds tolerance)
@@ -128,14 +111,7 @@ fn main() {
     println!("\n   Test 3: Large difference (exceeds tolerance)");
     println!("   CPU: {:?}", cpu);
     println!("   GPU: {:?}", gpu_far);
-    println!(
-        "   Result: {}",
-        if report.passed() {
-            "✓ PASS"
-        } else {
-            "✗ FAIL"
-        }
-    );
+    println!("   Result: {}", if report.passed() { "✓ PASS" } else { "✗ FAIL" });
     println!("   Violations: {}", report.violations.len());
     for v in &report.violations {
         println!(
@@ -151,14 +127,7 @@ fn main() {
     println!("\n   Test 4: NaN handling");
     println!("   CPU: [NaN, 1.0]");
     println!("   GPU: [NaN, 1.0]");
-    println!(
-        "   Result: {}",
-        if report.passed() {
-            "✓ PASS (NaN == NaN)"
-        } else {
-            "✗ FAIL"
-        }
-    );
+    println!("   Result: {}", if report.passed() { "✓ PASS (NaN == NaN)" } else { "✗ FAIL" });
 
     println!("\n=== Demo Complete ===");
 }

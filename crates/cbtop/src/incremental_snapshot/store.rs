@@ -49,9 +49,7 @@ impl IncrementalSnapshotStore {
         self.total_raw_size += raw_size;
 
         // Decide if this should be a keyframe
-        let is_keyframe = self
-            .next_index
-            .is_multiple_of(self.config.keyframe_interval)
+        let is_keyframe = self.next_index.is_multiple_of(self.config.keyframe_interval)
             || self.keyframes.is_empty();
 
         let (compressed_size, is_delta, base_index) = if is_keyframe {

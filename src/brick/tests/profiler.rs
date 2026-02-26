@@ -160,10 +160,7 @@ fn test_brick_id_category() {
     assert_eq!(BrickId::RmsNorm.category(), BrickCategory::Norm);
     assert_eq!(BrickId::LayerNorm.category(), BrickCategory::Norm);
     assert_eq!(BrickId::QkvProjection.category(), BrickCategory::Attention);
-    assert_eq!(
-        BrickId::AttentionSoftmax.category(),
-        BrickCategory::Attention
-    );
+    assert_eq!(BrickId::AttentionSoftmax.category(), BrickCategory::Attention);
     assert_eq!(BrickId::GateProjection.category(), BrickCategory::Ffn);
     assert_eq!(BrickId::DownProjection.category(), BrickCategory::Ffn);
     assert_eq!(BrickId::Embedding.category(), BrickCategory::Other);

@@ -21,18 +21,8 @@ fn simd_pixel_fkr_vector_ops() {
     let simd_add = va.add(&vb).expect("SIMD add failed");
     let simd_mul = va.mul(&vb).expect("SIMD mul failed");
 
-    assert!(vectors_match(
-        &scalar_add,
-        simd_add.as_slice(),
-        SIMD_TOLERANCE,
-        "simd_add"
-    ));
-    assert!(vectors_match(
-        &scalar_mul,
-        simd_mul.as_slice(),
-        SIMD_TOLERANCE,
-        "simd_mul"
-    ));
+    assert!(vectors_match(&scalar_add, simd_add.as_slice(), SIMD_TOLERANCE, "simd_add"));
+    assert!(vectors_match(&scalar_mul, simd_mul.as_slice(), SIMD_TOLERANCE, "simd_mul"));
 }
 
 /// simd-pixel-fkr: Softmax matches scalar baseline
@@ -48,12 +38,7 @@ fn simd_pixel_fkr_softmax() {
     let v = Vector::from_slice(&x);
     let simd_result = v.softmax().expect("SIMD softmax failed");
 
-    assert!(vectors_match(
-        &scalar_result,
-        simd_result.as_slice(),
-        SIMD_TOLERANCE,
-        "simd_softmax"
-    ));
+    assert!(vectors_match(&scalar_result, simd_result.as_slice(), SIMD_TOLERANCE, "simd_softmax"));
 }
 
 /// simd-pixel-fkr: Unaligned input (17 elements - not divisible by SIMD width)
@@ -71,12 +56,7 @@ fn simd_pixel_fkr_unaligned_17() {
     let vb = Vector::from_slice(&b);
     let simd_add = va.add(&vb).expect("SIMD unaligned add failed");
 
-    assert!(vectors_match(
-        &scalar_add,
-        simd_add.as_slice(),
-        SIMD_TOLERANCE,
-        "simd_unaligned_17"
-    ));
+    assert!(vectors_match(&scalar_add, simd_add.as_slice(), SIMD_TOLERANCE, "simd_unaligned_17"));
 }
 
 /// simd-pixel-fkr: Remainder handling (255 elements)
@@ -94,12 +74,7 @@ fn simd_pixel_fkr_remainder_255() {
     let vb = Vector::from_slice(&b);
     let simd_mul = va.mul(&vb).expect("SIMD remainder mul failed");
 
-    assert!(vectors_match(
-        &scalar_mul,
-        simd_mul.as_slice(),
-        SIMD_TOLERANCE,
-        "simd_remainder_255"
-    ));
+    assert!(vectors_match(&scalar_mul, simd_mul.as_slice(), SIMD_TOLERANCE, "simd_remainder_255"));
 }
 
 /// simd-pixel-fkr: ReLU activation
@@ -115,10 +90,5 @@ fn simd_pixel_fkr_relu() {
     let v = Vector::from_slice(&x);
     let simd_relu = v.relu().expect("SIMD relu failed");
 
-    assert!(vectors_match(
-        &scalar_relu,
-        simd_relu.as_slice(),
-        SIMD_TOLERANCE,
-        "simd_relu"
-    ));
+    assert!(vectors_match(&scalar_relu, simd_relu.as_slice(), SIMD_TOLERANCE, "simd_relu"));
 }

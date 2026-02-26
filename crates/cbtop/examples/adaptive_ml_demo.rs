@@ -20,9 +20,8 @@ fn main() {
 
     // Create FFN workload samples (high variance pattern)
     println!("Training on FFN workload samples (high variance)...");
-    let ffn_samples: Vec<f64> = (0..50)
-        .map(|i| 10.0 + (i as f64 * 0.5) + (i % 7) as f64 * 2.0)
-        .collect();
+    let ffn_samples: Vec<f64> =
+        (0..50).map(|i| 10.0 + (i as f64 * 0.5) + (i % 7) as f64 * 2.0).collect();
 
     // Train with FFN samples (not anomalous)
     for chunk in ffn_samples.chunks(10) {
@@ -44,11 +43,7 @@ fn main() {
 
     // Get thresholds for different workloads
     println!("\n=== Learned Per-Workload Thresholds ===");
-    for class in [
-        WorkloadClass::Ffn,
-        WorkloadClass::Matmul,
-        WorkloadClass::Attention,
-    ] {
+    for class in [WorkloadClass::Ffn, WorkloadClass::Matmul, WorkloadClass::Attention] {
         let threshold = ml.get_threshold(class);
         println!("{:?}: CV threshold = {:.2}%", class, threshold);
     }
@@ -124,11 +119,7 @@ fn main() {
         WorkloadClass::Unknown,
     ];
     for class in classes {
-        println!(
-            "  {:?} (default CV threshold: {:.1}%)",
-            class,
-            class.default_cv_threshold()
-        );
+        println!("  {:?} (default CV threshold: {:.1}%)", class, class.default_cv_threshold());
     }
 
     println!("\n✅ Adaptive ML thresholds demo complete!");

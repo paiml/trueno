@@ -8,13 +8,7 @@ fn test_sin_basic() {
     let result = a.sin().unwrap();
     let expected = [0.0, 1.0, 0.0, -1.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "sin mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "sin mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -51,13 +45,7 @@ fn test_sin_negative() {
     let result = a.sin().unwrap();
     let expected = [-1.0, 0.0, 1.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "sin negative mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "sin negative mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -69,11 +57,8 @@ fn test_sin_periodicity() {
     let b = Vector::from_slice(&[0.5 + 2.0 * PI, 1.0 + 2.0 * PI, 1.5 + 2.0 * PI]);
     let result_a = a.sin().unwrap();
     let result_b = b.sin().unwrap();
-    for (i, (&res_a, &res_b)) in result_a
-        .as_slice()
-        .iter()
-        .zip(result_b.as_slice().iter())
-        .enumerate()
+    for (i, (&res_a, &res_b)) in
+        result_a.as_slice().iter().zip(result_b.as_slice().iter()).enumerate()
     {
         assert!(
             (res_a - res_b).abs() < 1e-5,
@@ -100,13 +85,7 @@ fn test_cos_basic() {
     let result = a.cos().unwrap();
     let expected = [1.0, 0.0, -1.0, 0.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "cos mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "cos mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -143,13 +122,7 @@ fn test_cos_negative() {
     let result = a.cos().unwrap();
     let expected = [0.0, -1.0, 0.0];
     for (i, (&res, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (res - exp).abs() < 1e-5,
-            "cos negative mismatch at {}: {} != {}",
-            i,
-            res,
-            exp
-        );
+        assert!((res - exp).abs() < 1e-5, "cos negative mismatch at {}: {} != {}", i, res, exp);
     }
 }
 
@@ -164,11 +137,8 @@ fn test_cos_sin_relation() {
     let shifted = Vector::from_slice(&a_plus_pi_2);
     let sin_result = shifted.sin().unwrap();
 
-    for (i, (&cos_val, &sin_val)) in cos_result
-        .as_slice()
-        .iter()
-        .zip(sin_result.as_slice().iter())
-        .enumerate()
+    for (i, (&cos_val, &sin_val)) in
+        cos_result.as_slice().iter().zip(sin_result.as_slice().iter()).enumerate()
     {
         assert!(
             (cos_val - sin_val).abs() < 1e-5,

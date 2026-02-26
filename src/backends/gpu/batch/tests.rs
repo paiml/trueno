@@ -11,13 +11,7 @@ static SHARED_DEVICE: OnceLock<Option<GpuDevice>> = OnceLock::new();
 /// Get shared GPU device (fast) or None if unavailable
 fn get_shared_device() -> Option<GpuDevice> {
     SHARED_DEVICE
-        .get_or_init(|| {
-            if GpuDevice::is_available() {
-                GpuDevice::new().ok()
-            } else {
-                None
-            }
-        })
+        .get_or_init(|| if GpuDevice::is_available() { GpuDevice::new().ok() } else { None })
         .clone()
 }
 

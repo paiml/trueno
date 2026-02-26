@@ -12,12 +12,7 @@ pub struct MemBandwidthBrick {
 
 impl MemBandwidthBrick {
     pub fn new(buffer_size: usize) -> Self {
-        Self {
-            is_running: false,
-            intensity: 0.0,
-            buffer_size,
-            buffer: vec![0u8; buffer_size],
-        }
+        Self { is_running: false, intensity: 0.0, buffer_size, buffer: vec![0u8; buffer_size] }
     }
 
     pub fn start(&mut self) {
@@ -56,11 +51,7 @@ impl Brick for MemBandwidthBrick {
     }
 
     fn budget(&self) -> BrickBudget {
-        BrickBudget {
-            collect_ms: 16,
-            layout_ms: 0,
-            render_ms: 0,
-        }
+        BrickBudget { collect_ms: 16, layout_ms: 0, render_ms: 0 }
     }
 
     fn verify(&self) -> BrickVerification {

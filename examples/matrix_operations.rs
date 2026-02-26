@@ -83,14 +83,9 @@ fn main() {
     println!("\n🎯 Matrix-Vector Multiplication (matvec)");
     println!("-----------------------------------------\n");
 
-    let matrix = Matrix::from_vec(
-        3,
-        4,
-        vec![
-            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
-        ],
-    )
-    .expect("Example should not fail");
+    let matrix =
+        Matrix::from_vec(3, 4, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
+            .expect("Example should not fail");
     let vector = Vector::from_slice(&[1.0, 2.0, 3.0, 4.0]);
 
     println!("Matrix A (3×4):");
@@ -112,14 +107,9 @@ fn main() {
     println!("\n🎯 Vector-Matrix Multiplication (vecmat)");
     println!("-----------------------------------------\n");
 
-    let matrix2 = Matrix::from_vec(
-        3,
-        4,
-        vec![
-            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
-        ],
-    )
-    .expect("Example should not fail");
+    let matrix2 =
+        Matrix::from_vec(3, 4, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
+            .expect("Example should not fail");
     let vector2 = Vector::from_slice(&[1.0, 2.0, 3.0]);
 
     println!("Vector v^T (1×3):");
@@ -208,10 +198,7 @@ fn main() {
     // Batch 0: 4×2 matrix, Batch 1: 4×2 matrix
     let b_data: Vec<f32> = (0..batch * k * n).map(|i| (i as f32 + 1.0) * 0.1).collect();
 
-    println!(
-        "Shape: [batch={}, m={}, k={}] @ [batch={}, k={}, n={}]",
-        batch, m, k, batch, k, n
-    );
+    println!("Shape: [batch={}, m={}, k={}] @ [batch={}, k={}, n={}]", batch, m, k, batch, k, n);
     println!("A data (flattened): {:?}", &a_data[..8]);
     println!("B data (flattened): {:?}", &b_data[..8]);
 
@@ -236,13 +223,11 @@ fn main() {
     let head_dim = 8;
 
     // Q: [1, 2, 4, 8] - 64 elements
-    let q_data: Vec<f32> = (0..batch * heads * seq_len * head_dim)
-        .map(|i| (i as f32 * 0.01).sin())
-        .collect();
+    let q_data: Vec<f32> =
+        (0..batch * heads * seq_len * head_dim).map(|i| (i as f32 * 0.01).sin()).collect();
     // K^T: [1, 2, 8, 4] - 64 elements
-    let kt_data: Vec<f32> = (0..batch * heads * head_dim * seq_len)
-        .map(|i| (i as f32 * 0.02).cos())
-        .collect();
+    let kt_data: Vec<f32> =
+        (0..batch * heads * head_dim * seq_len).map(|i| (i as f32 * 0.02).cos()).collect();
 
     println!("Multi-head attention pattern: Q @ K^T");
     println!(

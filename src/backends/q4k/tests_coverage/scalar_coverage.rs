@@ -114,19 +114,8 @@ fn test_matmul_q4k_scalar_multiple_blocks() {
     assert_eq!(output_scalar.len(), out_dim);
     assert_eq!(output_optimized.len(), out_dim);
 
-    for (i, (s, o)) in output_scalar
-        .iter()
-        .zip(output_optimized.iter())
-        .enumerate()
-    {
+    for (i, (s, o)) in output_scalar.iter().zip(output_optimized.iter()).enumerate() {
         let diff = (s - o).abs();
-        assert!(
-            diff < 1e-3,
-            "Row {}: scalar={} vs optimized={}, diff={}",
-            i,
-            s,
-            o,
-            diff
-        );
+        assert!(diff < 1e-3, "Row {}: scalar={} vs optimized={}, diff={}", i, s, o, diff);
     }
 }

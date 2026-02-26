@@ -230,10 +230,7 @@ impl BrickProfiler {
     #[inline]
     #[must_use]
     pub fn start_brick(&self, brick_id: BrickId) -> BrickIdTimer {
-        BrickIdTimer {
-            brick_id,
-            start: Instant::now(),
-        }
+        BrickIdTimer { brick_id, start: Instant::now() }
     }
 
     /// Stop timing and record the sample (O(1) hot path).

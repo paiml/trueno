@@ -69,18 +69,8 @@ impl PerformancePredictor {
             return None;
         }
 
-        let min = self
-            .data_points
-            .iter()
-            .map(|p| p.size)
-            .min()
-            .expect("non-empty collection");
-        let max = self
-            .data_points
-            .iter()
-            .map(|p| p.size)
-            .max()
-            .expect("non-empty collection");
+        let min = self.data_points.iter().map(|p| p.size).min().expect("non-empty collection");
+        let max = self.data_points.iter().map(|p| p.size).max().expect("non-empty collection");
         Some((min, max))
     }
 
@@ -115,11 +105,7 @@ impl PerformancePredictor {
 
         let mean_y = sum_y / n;
         let (ss_res, ss_tot) = self.compute_ss(|x| a * x + b, mean_y);
-        let r_squared = if ss_tot > 0.0 {
-            1.0 - ss_res / ss_tot
-        } else {
-            1.0
-        };
+        let r_squared = if ss_tot > 0.0 { 1.0 - ss_res / ss_tot } else { 1.0 };
 
         let model = FittedModel {
             model_type: ModelType::Linear,
@@ -223,11 +209,7 @@ impl PerformancePredictor {
 
         let mean_y = sum_y / n;
         let (ss_res, ss_tot) = self.compute_ss(|x| a * x.ln() + b, mean_y);
-        let r_squared = if ss_tot > 0.0 {
-            1.0 - ss_res / ss_tot
-        } else {
-            1.0
-        };
+        let r_squared = if ss_tot > 0.0 { 1.0 - ss_res / ss_tot } else { 1.0 };
 
         let model = FittedModel {
             model_type: ModelType::Logarithmic,
@@ -267,9 +249,7 @@ impl PerformancePredictor {
             .models
             .iter()
             .max_by(|a, b| {
-                a.1.r_squared
-                    .partial_cmp(&b.1.r_squared)
-                    .expect("values should be comparable")
+                a.1.r_squared.partial_cmp(&b.1.r_squared).expect("values should be comparable")
             })
             .map(|(t, _)| *t);
 

@@ -71,15 +71,8 @@ fn assert_matvec_backend(
     let m = Matrix::from_vec_with_backend(rows, cols, mat_data, backend);
     let v = Vector::from_slice(vec_data);
     let result = m.matvec(&v).unwrap();
-    assert_eq!(
-        result.as_slice().len(),
-        expected.len(),
-        "{label}: length mismatch"
-    );
+    assert_eq!(result.as_slice().len(), expected.len(), "{label}: length mismatch");
     for (i, (&got, &exp)) in result.as_slice().iter().zip(expected.iter()).enumerate() {
-        assert!(
-            (got - exp).abs() < tolerance,
-            "{label} at index {i}: got {got} expected {exp}",
-        );
+        assert!((got - exp).abs() < tolerance, "{label} at index {i}: got {got} expected {exp}",);
     }
 }

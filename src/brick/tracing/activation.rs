@@ -76,11 +76,7 @@ impl TensorStats {
             m2 += delta * delta2;
         }
 
-        let std = if count > 1 {
-            (m2 / (count - 1) as f64).sqrt() as f32
-        } else {
-            0.0
-        };
+        let std = if count > 1 { (m2 / (count - 1) as f64).sqrt() as f32 } else { 0.0 };
 
         let l2_norm = sum_sq.sqrt() as f32;
 
@@ -124,10 +120,7 @@ impl TensorStats {
             return Some(format!("Inf detected: {} values", self.inf_count));
         }
         if self.max.abs() > 1e6 || self.min.abs() > 1e6 {
-            return Some(format!(
-                "Explosion: min={:.2e}, max={:.2e}",
-                self.min, self.max
-            ));
+            return Some(format!("Explosion: min={:.2e}, max={:.2e}", self.min, self.max));
         }
         if self.std > 1e4 {
             return Some(format!("High variance: std={:.2e}", self.std));
@@ -161,10 +154,7 @@ pub struct LayerActivationTrace {
 impl LayerActivationTrace {
     /// Create a new layer activation trace.
     pub fn new(layer_idx: usize) -> Self {
-        Self {
-            layer_idx,
-            ..Default::default()
-        }
+        Self { layer_idx, ..Default::default() }
     }
 
     /// Check if this layer has any anomalies.
@@ -222,10 +212,7 @@ pub struct ModelActivationTrace {
 impl ModelActivationTrace {
     /// Create a new model activation trace with expected layer count.
     pub fn with_capacity(num_layers: usize) -> Self {
-        Self {
-            layers: Vec::with_capacity(num_layers),
-            ..Default::default()
-        }
+        Self { layers: Vec::with_capacity(num_layers), ..Default::default() }
     }
 
     /// Add a layer trace.

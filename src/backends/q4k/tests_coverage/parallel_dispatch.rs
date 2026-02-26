@@ -75,10 +75,8 @@ fn test_q4k_parallel_dispatch_matches_scalar() {
     assert_eq!(dispatch.len(), out_dim);
 
     // Compare every 64th row for speed, plus first and last
-    let check_indices: Vec<usize> = (0..out_dim)
-        .step_by(64)
-        .chain(std::iter::once(out_dim - 1))
-        .collect();
+    let check_indices: Vec<usize> =
+        (0..out_dim).step_by(64).chain(std::iter::once(out_dim - 1)).collect();
 
     for &i in &check_indices {
         let diff = (scalar[i] - dispatch[i]).abs();
@@ -250,13 +248,7 @@ fn test_q4k_parallel_dispatch_single_row() {
     assert_eq!(dispatch.len(), 1);
     let diff = (scalar[0] - dispatch[0]).abs();
     let tol = scalar[0].abs() * 1e-4 + 1e-4;
-    assert!(
-        diff < tol,
-        "scalar={}, dispatch={}, diff={}",
-        scalar[0],
-        dispatch[0],
-        diff
-    );
+    assert!(diff < tol, "scalar={}, dispatch={}, diff={}", scalar[0], dispatch[0], diff);
 }
 
 /// All-zero input: parallel path should produce all-zero output regardless.
@@ -276,10 +268,6 @@ fn test_q4k_parallel_dispatch_zero_input() {
     // (since dmin * mins * 0.0 = 0 and d * scales * q * 0.0 = 0)
     // Actually: sum += (d1*q_val - dm1) * input[idx], so with input=0, sum=0
     for (i, &val) in dispatch.iter().enumerate() {
-        assert_eq!(
-            val, 0.0,
-            "Row {}: expected 0.0 with zero input, got {}",
-            i, val
-        );
+        assert_eq!(val, 0.0, "Row {}: expected 0.0 with zero input, got {}", i, val);
     }
 }

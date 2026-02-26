@@ -2,11 +2,8 @@ use super::*;
 
 #[test]
 fn test_managed_connection_new() {
-    let conn = ManagedConnection::new(
-        "test_connection",
-        Duration::from_secs(60),
-        Duration::from_secs(10),
-    );
+    let conn =
+        ManagedConnection::new("test_connection", Duration::from_secs(60), Duration::from_secs(10));
 
     assert_eq!(conn.inner(), &"test_connection");
     assert!(conn.is_valid());
@@ -16,11 +13,8 @@ fn test_managed_connection_new() {
 
 #[test]
 fn test_managed_connection_inner_mut() {
-    let mut conn = ManagedConnection::new(
-        vec![1, 2, 3],
-        Duration::from_secs(60),
-        Duration::from_secs(10),
-    );
+    let mut conn =
+        ManagedConnection::new(vec![1, 2, 3], Duration::from_secs(60), Duration::from_secs(10));
 
     conn.inner_mut().push(4);
     assert_eq!(conn.inner(), &vec![1, 2, 3, 4]);
@@ -106,18 +100,12 @@ fn test_falsify_validity_requires_all_conditions() {
     // Test 1: Healthy and not idle, but expired
     let expired = ManagedConnection::new("test", Duration::from_millis(5), Duration::from_secs(60));
     std::thread::sleep(Duration::from_millis(10));
-    assert!(
-        !expired.is_valid(),
-        "FALSIFICATION FAILED: Expired connection should be invalid"
-    );
+    assert!(!expired.is_valid(), "FALSIFICATION FAILED: Expired connection should be invalid");
 
     // Test 2: Healthy and not expired, but idle
     let idle = ManagedConnection::new("test", Duration::from_secs(60), Duration::from_millis(5));
     std::thread::sleep(Duration::from_millis(10));
-    assert!(
-        !idle.is_valid(),
-        "FALSIFICATION FAILED: Idle connection should be invalid"
-    );
+    assert!(!idle.is_valid(), "FALSIFICATION FAILED: Idle connection should be invalid");
 
     // Test 3: Not expired and not idle, but unhealthy
     let mut unhealthy =
@@ -125,17 +113,11 @@ fn test_falsify_validity_requires_all_conditions() {
     unhealthy.record_health_failure();
     unhealthy.record_health_failure();
     unhealthy.record_health_failure();
-    assert!(
-        !unhealthy.is_valid(),
-        "FALSIFICATION FAILED: Unhealthy connection should be invalid"
-    );
+    assert!(!unhealthy.is_valid(), "FALSIFICATION FAILED: Unhealthy connection should be invalid");
 
     // Test 4: All conditions pass
     let valid = ManagedConnection::new("test", Duration::from_secs(60), Duration::from_secs(60));
-    assert!(
-        valid.is_valid(),
-        "FALSIFICATION FAILED: Fresh connection should be valid"
-    );
+    assert!(valid.is_valid(), "FALSIFICATION FAILED: Fresh connection should be valid");
 }
 
 /// FALSIFICATION TEST: Touch must reset idle timer
@@ -149,27 +131,18 @@ fn test_falsify_touch_resets_idle() {
 
     // Wait until almost idle (100ms of 200ms timeout = 50% margin)
     std::thread::sleep(Duration::from_millis(100));
-    assert!(
-        !conn.is_idle(),
-        "Should not be idle yet at 100ms with 200ms timeout"
-    );
+    assert!(!conn.is_idle(), "Should not be idle yet at 100ms with 200ms timeout");
 
     // Touch to reset
     conn.touch();
 
     // Wait another 100ms (would be 200ms total without touch, but only 100ms since touch)
     std::thread::sleep(Duration::from_millis(100));
-    assert!(
-        !conn.is_idle(),
-        "FALSIFICATION FAILED: Touch should have reset idle timer"
-    );
+    assert!(!conn.is_idle(), "FALSIFICATION FAILED: Touch should have reset idle timer");
 
     // Now wait until actually idle (another 150ms = 250ms since touch > 200ms timeout)
     std::thread::sleep(Duration::from_millis(150));
-    assert!(
-        conn.is_idle(),
-        "Should be idle now (250ms since touch > 200ms timeout)"
-    );
+    assert!(conn.is_idle(), "Should be idle now (250ms since touch > 200ms timeout)");
 }
 
 // =========================================================================
@@ -370,11 +343,7 @@ fn test_falsify_connection_state_flags_unique() {
 /// FALSIFICATION TEST: KeepAliveConfig should_keep_alive boundary
 #[test]
 fn test_falsify_keep_alive_boundary() {
-    let config = KeepAliveConfig {
-        enabled: true,
-        timeout_secs: 60,
-        max_requests: 100,
-    };
+    let config = KeepAliveConfig { enabled: true, timeout_secs: 60, max_requests: 100 };
 
     // At exactly max_requests, should NOT keep alive
     assert!(

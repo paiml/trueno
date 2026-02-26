@@ -16,30 +16,12 @@ fn protocol_completeness() {
 fn framework_distribution() {
     let claims = all_claims();
 
-    let null_fuzzer = claims
-        .iter()
-        .filter(|c| c.framework == Framework::NullFuzzer)
-        .count();
-    let shmem = claims
-        .iter()
-        .filter(|c| c.framework == Framework::ShmemProber)
-        .count();
-    let lifecycle = claims
-        .iter()
-        .filter(|c| c.framework == Framework::LifecycleChaos)
-        .count();
-    let quant = claims
-        .iter()
-        .filter(|c| c.framework == Framework::QuantOracle)
-        .count();
-    let ptx = claims
-        .iter()
-        .filter(|c| c.framework == Framework::PtxPoison)
-        .count();
-    let supervisor = claims
-        .iter()
-        .filter(|c| c.framework == Framework::Supervisor)
-        .count();
+    let null_fuzzer = claims.iter().filter(|c| c.framework == Framework::NullFuzzer).count();
+    let shmem = claims.iter().filter(|c| c.framework == Framework::ShmemProber).count();
+    let lifecycle = claims.iter().filter(|c| c.framework == Framework::LifecycleChaos).count();
+    let quant = claims.iter().filter(|c| c.framework == Framework::QuantOracle).count();
+    let ptx = claims.iter().filter(|c| c.framework == Framework::PtxPoison).count();
+    let supervisor = claims.iter().filter(|c| c.framework == Framework::Supervisor).count();
 
     assert_eq!(null_fuzzer, 10);
     assert_eq!(shmem, 10);

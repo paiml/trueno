@@ -345,10 +345,6 @@ mod tests {
         let kernel = TransformerBlockMegakernel::new(3584, 18944, 28);
         let ptx = kernel.emit_ptx();
         let result = barrier_safety::analyze(&ptx);
-        assert!(
-            result.is_safe,
-            "Megakernel should be barrier-safe: {:?}",
-            result.violations
-        );
+        assert!(result.is_safe, "Megakernel should be barrier-safe: {:?}", result.violations);
     }
 }

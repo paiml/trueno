@@ -21,10 +21,7 @@ fn test_avx2_add() {
         Avx2Backend::add(&a, &b, &mut result);
     }
 
-    assert_eq!(
-        result,
-        vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]
-    );
+    assert_eq!(result, vec![10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -44,10 +41,7 @@ fn test_avx2_mul() {
         Avx2Backend::mul(&a, &b, &mut result);
     }
 
-    assert_eq!(
-        result,
-        vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]
-    );
+    assert_eq!(result, vec![2.0, 6.0, 12.0, 20.0, 30.0, 42.0, 56.0, 72.0, 90.0]);
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -166,17 +160,15 @@ fn test_avx2_relu() {
     }
 
     // Test with 16 elements (2 AVX2 registers of 8 f32s)
-    let a = [
-        -3.0, -1.0, 0.0, 1.0, 3.0, -2.0, 2.0, -0.5, -4.0, 4.0, -5.0, 5.0, 0.0, -0.1, 0.1, 10.0,
-    ];
+    let a =
+        [-3.0, -1.0, 0.0, 1.0, 3.0, -2.0, 2.0, -0.5, -4.0, 4.0, -5.0, 5.0, 0.0, -0.1, 0.1, 10.0];
     let mut result = [0.0; 16];
     // SAFETY: Test code calling backend trait methods marked unsafe
     unsafe {
         Avx2Backend::relu(&a, &mut result);
     }
-    let expected = [
-        0.0, 0.0, 0.0, 1.0, 3.0, 0.0, 2.0, 0.0, 0.0, 4.0, 0.0, 5.0, 0.0, 0.0, 0.1, 10.0,
-    ];
+    let expected =
+        [0.0, 0.0, 0.0, 1.0, 3.0, 0.0, 2.0, 0.0, 0.0, 4.0, 0.0, 5.0, 0.0, 0.0, 0.1, 10.0];
     assert_eq!(result, expected);
 }
 
@@ -220,12 +212,7 @@ fn test_avx2_sigmoid_matches_scalar() {
     }
 
     for (avx2, scalar) in avx2_result.iter().zip(scalar_result.iter()) {
-        assert!(
-            (avx2 - scalar).abs() < 1e-6,
-            "sigmoid mismatch: avx2={}, scalar={}",
-            avx2,
-            scalar
-        );
+        assert!((avx2 - scalar).abs() < 1e-6, "sigmoid mismatch: avx2={}, scalar={}", avx2, scalar);
     }
 }
 
@@ -287,12 +274,7 @@ fn test_avx2_gelu_matches_scalar() {
     }
 
     for (avx2, scalar) in avx2_result.iter().zip(scalar_result.iter()) {
-        assert!(
-            (avx2 - scalar).abs() < 1e-5,
-            "gelu mismatch: avx2={}, scalar={}",
-            avx2,
-            scalar
-        );
+        assert!((avx2 - scalar).abs() < 1e-5, "gelu mismatch: avx2={}, scalar={}", avx2, scalar);
     }
 }
 
@@ -315,12 +297,7 @@ fn test_avx2_swish_matches_scalar() {
     }
 
     for (avx2, scalar) in avx2_result.iter().zip(scalar_result.iter()) {
-        assert!(
-            (avx2 - scalar).abs() < 1e-5,
-            "swish mismatch: avx2={}, scalar={}",
-            avx2,
-            scalar
-        );
+        assert!((avx2 - scalar).abs() < 1e-5, "swish mismatch: avx2={}, scalar={}", avx2, scalar);
     }
 }
 

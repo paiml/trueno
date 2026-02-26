@@ -104,11 +104,7 @@ fn main() {
     let drift = (cached_delta as i64 - instant_delta as i64).unsigned_abs();
 
     println!("  Sleep duration: 2 seconds");
-    println!(
-        "  Cached delta: {}ns ({:.3}s)",
-        cached_delta,
-        cached_delta as f64 / 1_000_000_000.0
-    );
+    println!("  Cached delta: {}ns ({:.3}s)", cached_delta, cached_delta as f64 / 1_000_000_000.0);
     println!(
         "  Instant delta: {}ns ({:.3}s)",
         instant_delta,
@@ -175,14 +171,7 @@ fn main() {
     println!("└──────┴─────────────────────┴───────────────┴────────┘");
 
     let all_pass = f150_pass && f151_pass && f152_pass && f153_pass && f155_pass;
-    println!(
-        "\nOverall: {}",
-        if all_pass {
-            "ALL TESTS PASSED ✓"
-        } else {
-            "SOME TESTS FAILED"
-        }
-    );
+    println!("\nOverall: {}", if all_pass { "ALL TESTS PASSED ✓" } else { "SOME TESTS FAILED" });
 
     if !all_pass {
         std::process::exit(1);

@@ -89,10 +89,7 @@ impl<T> ResourcePool<T> {
             pool.pop().unwrap_or_else(|| (self.factory)())
         };
 
-        Some(PooledResource {
-            resource: Some(resource),
-            pool: self,
-        })
+        Some(PooledResource { resource: Some(resource), pool: self })
     }
 
     fn release(&self, resource: T) {

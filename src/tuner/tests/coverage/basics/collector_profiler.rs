@@ -12,10 +12,8 @@ fn test_collector_training_progress() {
 
     // Add 5 samples
     for i in 0..5 {
-        let features = TunerFeatures::builder()
-            .model_params_b(7.0)
-            .batch_size((i as u32) + 1)
-            .build();
+        let features =
+            TunerFeatures::builder().model_params_b(7.0).batch_size((i as u32) + 1).build();
         collector.samples.push(TrainingSample {
             features,
             throughput_tps: 100.0,
@@ -47,11 +45,7 @@ fn test_collector_train_if_ready_success() {
             .model_params_b(1.0 + (i as f32) % 20.0)
             .hidden_dim(2048 + (i as u32) % 4096)
             .batch_size((i as u32) % 16 + 1)
-            .quant_type(if i % 2 == 0 {
-                QuantType::Q4K
-            } else {
-                QuantType::Q8_0
-            })
+            .quant_type(if i % 2 == 0 { QuantType::Q4K } else { QuantType::Q8_0 })
             .build();
         collector.samples.push(TrainingSample {
             features,
@@ -102,11 +96,7 @@ fn test_collector_auto_retrain_success() {
             .model_params_b(1.0 + (i as f32) * 0.1)
             .hidden_dim(2048)
             .batch_size((i as u32) % 16 + 1)
-            .quant_type(if i % 2 == 0 {
-                QuantType::Q4K
-            } else {
-                QuantType::Q8_0
-            })
+            .quant_type(if i % 2 == 0 { QuantType::Q4K } else { QuantType::Q8_0 })
             .build();
         collector.samples.push(TrainingSample {
             features,
@@ -130,11 +120,8 @@ fn test_collector_auto_retrain_success() {
 fn test_collector_from_json_valid() {
     // Create a collector with samples, serialize it, then deserialize
     let mut original = TunerDataCollector::new();
-    let features = TunerFeatures::builder()
-        .model_params_b(7.0)
-        .hidden_dim(4096)
-        .batch_size(1)
-        .build();
+    let features =
+        TunerFeatures::builder().model_params_b(7.0).hidden_dim(4096).batch_size(1).build();
     original.samples.push(TrainingSample {
         features,
         throughput_tps: 150.0,

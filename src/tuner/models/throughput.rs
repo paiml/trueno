@@ -166,11 +166,8 @@ impl ThroughputRegressor {
         let y_vector = Vector::from_vec(y_data);
 
         // Train RandomForest
-        let rf = self
-            .rf_model
-            .get_or_insert_with(|| RandomForestRegressor::new(100));
-        rf.fit(&x_matrix, &y_vector)
-            .map_err(|e| TunerError::TrainingFailed(e.to_string()))?;
+        let rf = self.rf_model.get_or_insert_with(|| RandomForestRegressor::new(100));
+        rf.fit(&x_matrix, &y_vector).map_err(|e| TunerError::TrainingFailed(e.to_string()))?;
 
         // Calculate MAPE on training data
         let predictions = rf.predict(&x_matrix);

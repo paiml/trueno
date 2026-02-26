@@ -41,10 +41,7 @@ fn test_copy_from_host_too_small() {
     let small_data = vec![1.0f32; 500];
     let result = buf.copy_from_host(&small_data);
 
-    assert!(
-        result.is_err(),
-        "copy_from_host should fail when host buffer is smaller"
-    );
+    assert!(result.is_err(), "copy_from_host should fail when host buffer is smaller");
     if let Err(e) = result {
         assert!(
             format!("{:?}", e).contains("mismatch") || format!("{:?}", e).contains("Transfer"),
@@ -64,10 +61,7 @@ fn test_copy_to_host_too_large() {
     let mut large_data = vec![0.0f32; 500];
     let result = buf.copy_to_host(&mut large_data);
 
-    assert!(
-        result.is_err(),
-        "copy_to_host should fail when host buffer size doesn't match"
-    );
+    assert!(result.is_err(), "copy_to_host should fail when host buffer size doesn't match");
 }
 
 /// Falsification Test 4: Partial copy out of bounds (offset too large)
@@ -80,10 +74,7 @@ fn test_copy_from_host_at_out_of_bounds() {
 
     // Offset 60 + len 50 = 110 > 100 buffer size
     let result = buf.copy_from_host_at(&data, 60);
-    assert!(
-        result.is_err(),
-        "copy_from_host_at should fail when offset+len > buffer size"
-    );
+    assert!(result.is_err(), "copy_from_host_at should fail when offset+len > buffer size");
 }
 
 /// Falsification Test 5: Partial copy to host out of bounds
@@ -97,10 +88,7 @@ fn test_copy_to_host_at_out_of_bounds() {
 
     // Offset 60 + len 50 = 110 > 100 buffer size
     let copy_result = buf.copy_to_host_at(&mut result, 60);
-    assert!(
-        copy_result.is_err(),
-        "copy_to_host_at should fail when offset+len > buffer size"
-    );
+    assert!(copy_result.is_err(), "copy_to_host_at should fail when offset+len > buffer size");
 }
 
 /// Falsification Test 6: D2D copy size mismatch
@@ -112,10 +100,7 @@ fn test_d2d_copy_size_mismatch() {
     let mut dst = GpuBuffer::<f32>::new(&ctx, 200).expect("Alloc dst");
 
     let result = dst.copy_from_buffer(&src);
-    assert!(
-        result.is_err(),
-        "D2D copy should fail when buffer sizes don't match"
-    );
+    assert!(result.is_err(), "D2D copy should fail when buffer sizes don't match");
 }
 
 /// Falsification Test 7: D2D partial copy out of bounds (dst)
@@ -128,10 +113,7 @@ fn test_d2d_copy_at_dst_out_of_bounds() {
 
     // dst_offset 60 + count 50 = 110 > dst.len 100
     let result = dst.copy_from_buffer_at(&src, 60, 0, 50);
-    assert!(
-        result.is_err(),
-        "D2D copy_at should fail when dst_offset+count > dst.len"
-    );
+    assert!(result.is_err(), "D2D copy_at should fail when dst_offset+count > dst.len");
 }
 
 /// Falsification Test 8: D2D partial copy out of bounds (src)
@@ -144,10 +126,7 @@ fn test_d2d_copy_at_src_out_of_bounds() {
 
     // src_offset 30 + count 50 = 80 > src.len 50
     let result = dst.copy_from_buffer_at(&src, 0, 30, 50);
-    assert!(
-        result.is_err(),
-        "D2D copy_at should fail when src_offset+count > src.len"
-    );
+    assert!(result.is_err(), "D2D copy_at should fail when src_offset+count > src.len");
 }
 
 /// Falsification Test 9: RAII cleanup verification

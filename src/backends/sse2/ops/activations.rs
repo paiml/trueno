@@ -94,10 +94,7 @@ pub unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         poly = _mm_add_ps(one, _mm_mul_ps(r, poly));
         let exp_k = _mm_castsi128_ps(_mm_slli_epi32(_mm_add_epi32(k, _mm_set1_epi32(127)), 23));
         let exp_neg_x = _mm_mul_ps(poly, exp_k);
-        _mm_storeu_ps(
-            result.as_mut_ptr().add(i),
-            _mm_div_ps(one, _mm_add_ps(one, exp_neg_x)),
-        );
+        _mm_storeu_ps(result.as_mut_ptr().add(i), _mm_div_ps(one, _mm_add_ps(one, exp_neg_x)));
         i += 4;
     }
     for j in i..len {
