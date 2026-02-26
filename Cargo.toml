@@ -44,7 +44,7 @@ unnecessary_unwrap = "allow"
 
 [package]
 name = "trueno"
-version = "0.16.0"
+version = "0.16.1"
 edition = "2021"
 rust-version = "1.89"
 authors = ["Pragmatic AI Labs"]
