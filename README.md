@@ -42,10 +42,10 @@
 
 ```toml
 [dependencies]
-trueno = "0.14"
+trueno = "0.16"
 
 # Optional: GPU support for large matrices
-trueno = { version = "0.14", features = ["gpu"] }
+trueno = { version = "0.16", features = ["gpu"] }
 
 # Optional: Pure Rust CUDA PTX generation
 trueno-gpu = "0.4"
@@ -162,7 +162,7 @@ Add trueno to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-trueno = "0.14"
+trueno = "0.16"
 ```
 
 Then use it in your code:
