@@ -9,26 +9,22 @@ use ratatui::{
     text::Span,
 };
 
+/// PTX instruction prefix to color category mapping.
+const PTX_MEMORY_PREFIXES: &[&str] = &["ld.", "st."];
+const PTX_ARITH_PREFIXES: &[&str] = &["add", "sub", "mul", "mad", "fma"];
+const PTX_CONTROL_PREFIXES: &[&str] = &["bra", "ret", "setp"];
+
 /// Classify a PTX instruction's syntax category for color highlighting.
 fn ptx_instruction_color(trimmed: &str) -> Option<Color> {
-    // Memory operations
-    if trimmed.starts_with("ld.") || trimmed.starts_with("st.") {
-        return Some(Color::Yellow);
-    }
-    // Arithmetic
-    if trimmed.starts_with("add")
-        || trimmed.starts_with("sub")
-        || trimmed.starts_with("mul")
-        || trimmed.starts_with("mad")
-        || trimmed.starts_with("fma")
-    {
-        return Some(Color::Green);
-    }
-    // Control flow
-    if trimmed.starts_with("bra") || trimmed.starts_with("ret") || trimmed.starts_with("setp") {
-        return Some(Color::Red);
-    }
-    None
+    let categories: &[(&[&str], Color)] = &[
+        (PTX_MEMORY_PREFIXES, Color::Yellow),
+        (PTX_ARITH_PREFIXES, Color::Green),
+        (PTX_CONTROL_PREFIXES, Color::Red),
+    ];
+    categories
+        .iter()
+        .find(|(prefixes, _)| prefixes.iter().any(|p| trimmed.starts_with(p)))
+        .map(|(_, color)| *color)
 }
 
 /// Apply simple syntax highlighting to a single PTX source line.
