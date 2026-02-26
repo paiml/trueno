@@ -109,6 +109,7 @@ fn extract_q6k_values(ql: &[u8], qh: &[u8], idx_base: usize) -> [i32; 8] {
 /// AVX2 horizontal sum of 8 f32 lanes to a single f32.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
+// SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
 unsafe fn hsum_q6k_avx2(acc: std::arch::x86_64::__m256) -> f32 {
     use std::arch::x86_64::*;
     let hi128 = _mm256_extractf128_ps(acc, 1);
@@ -124,6 +125,7 @@ unsafe fn hsum_q6k_avx2(acc: std::arch::x86_64::__m256) -> f32 {
 /// Process one Q6K super-block with AVX2, accumulating into `acc`.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+// SAFETY: Caller ensures AVX2+FMA are available and sb_data is a valid Q6_K super-block
 unsafe fn process_q6k_superblock_avx2(
     sb_data: &[u8],
     input: &[f32],
@@ -170,6 +172,7 @@ unsafe fn process_q6k_superblock_avx2(
 /// dequant and dot product in one pass without intermediate buffer.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+// SAFETY: Caller ensures AVX2+FMA are available and q6k_data is valid Q6_K layout
 unsafe fn matmul_q6k_f32_avx2(
     q6k_data: &[u8],
     input: &[f32],
@@ -246,6 +249,7 @@ pub fn matmul_q6k_f32_dispatch(
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            // SAFETY: preconditions verified by caller
             return unsafe { matmul_q6k_f32_avx2(q6k_data, input, out_dim, in_dim) };
         }
     }
@@ -331,6 +335,7 @@ fn matmul_q6k_f32_parallel(
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+// SAFETY: Caller ensures AVX2+FMA are available and chunk bounds are valid
 unsafe fn compute_chunk_avx2(
     q6k_data: &[u8],
     input: &[f32],
@@ -366,7 +371,6 @@ unsafe fn compute_chunk_avx2(
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn compute_chunk_scalar(
     q6k_data: &[u8],
     input: &[f32],

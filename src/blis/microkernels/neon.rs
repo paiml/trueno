@@ -4,6 +4,7 @@
 
 /// NEON microkernel (8x8 output tile)
 #[cfg(target_arch = "aarch64")]
+// SAFETY: Caller ensures NEON is available (always on aarch64) and pointers/dims are valid
 pub unsafe fn microkernel_8x8_neon(
     k: usize,
     a: *const f32,

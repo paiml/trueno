@@ -17,6 +17,7 @@ use super::super::{MR, NR};
 /// Performance target: 70%+ FMA utilization
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+// SAFETY: Caller ensures AVX2+FMA are available, pointers are valid, and dimensions are correct
 pub unsafe fn microkernel_8x6_avx2(
     k: usize,
     a: *const f32, // MR x K packed, column-major
@@ -87,6 +88,7 @@ pub unsafe fn microkernel_8x6_avx2(
 /// - Target: 2 FMAs/cycle sustained = 70%+ utilization
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+// SAFETY: Caller ensures AVX2+FMA are available, pointers are valid, k >= 4 for asm path
 pub unsafe fn microkernel_8x6_avx2_asm(
     k: usize,
     a: *const f32, // MR x K packed, column-major
@@ -247,6 +249,7 @@ pub unsafe fn microkernel_8x6_avx2_asm(
 /// - Intel(R) 64 and IA-32 Architectures Optimization Reference Manual
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+// SAFETY: Caller ensures AVX2+FMA are available, pointers are valid for tile dimensions
 pub unsafe fn microkernel_8x6_true_asm(
     k: usize,
     a: *const f32,

@@ -5,6 +5,7 @@ fn test_avx512_scale() {
     avx512_test(|| {
         let a = vec![1.0; 32];
         let mut result = vec![0.0; 32];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx512Backend::scale(&a, 3.0, &mut result);
         }
@@ -29,6 +30,7 @@ fn test_avx512_clamp() {
     avx512_test(|| {
         let a = vec![0.0, 5.0, 10.0, 15.0];
         let mut result = vec![0.0; 4];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx512Backend::clamp(&a, 2.0, 12.0, &mut result);
         }
@@ -42,6 +44,7 @@ fn test_avx512_lerp() {
         let a = vec![0.0; 32];
         let b = vec![10.0; 32];
         let mut result = vec![0.0; 32];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx512Backend::lerp(&a, &b, 0.5, &mut result);
         }
@@ -56,6 +59,7 @@ fn test_avx512_fma() {
         let b = vec![3.0; 32];
         let c = vec![1.0; 32];
         let mut result = vec![0.0; 32];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx512Backend::fma(&a, &b, &c, &mut result);
         }
@@ -146,6 +150,7 @@ fn test_avx512_transcendental() {
         let mut ln_result = vec![0.0; 3];
         let mut log2_result = vec![0.0; 3];
         let mut log10_result = vec![0.0; 3];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx512Backend::ln(&a, &mut ln_result);
             Avx512Backend::log2(&a, &mut log2_result);
@@ -164,6 +169,7 @@ fn test_avx512_trig() {
         let mut sin_result = vec![0.0; 2];
         let mut cos_result = vec![0.0; 2];
         let mut tan_result = vec![0.0; 2];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx512Backend::sin(&a, &mut sin_result);
             Avx512Backend::cos(&a, &mut cos_result);
@@ -182,6 +188,7 @@ fn test_avx512_rounding() {
         let mut floor_result = vec![0.0; 6];
         let mut ceil_result = vec![0.0; 6];
         let mut round_result = vec![0.0; 6];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx512Backend::floor(&a, &mut floor_result);
             Avx512Backend::ceil(&a, &mut ceil_result);

@@ -295,7 +295,6 @@ impl Matrix<f32> {
     }
 
     /// WASM-optimized tiled matrix multiplication
-    #[allow(dead_code)]
     fn matmul_wasm_tiled(
         &self,
         other: &Matrix<f32>,

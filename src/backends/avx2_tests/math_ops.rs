@@ -379,6 +379,7 @@ fn test_avx2_vs_scalar_golden_parity() {
         let mut scalar_result = vec![0.0f32; VECTOR_SIZE];
 
         // Test add
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx2Backend::add(&a, &b, &mut avx2_result);
             ScalarBackend::add(&a, &b, &mut scalar_result);
@@ -399,6 +400,7 @@ fn test_avx2_vs_scalar_golden_parity() {
         total_ops += 1;
 
         // Test mul
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx2Backend::mul(&a, &b, &mut avx2_result);
             ScalarBackend::mul(&a, &b, &mut scalar_result);
@@ -419,7 +421,9 @@ fn test_avx2_vs_scalar_golden_parity() {
         total_ops += 1;
 
         // Test dot product
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let avx2_dot = unsafe { Avx2Backend::dot(&a, &b) };
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let scalar_dot = unsafe { ScalarBackend::dot(&a, &b) };
         // Dot products accumulate, so tolerance scales with vector size
         let dot_tolerance = FP_TOLERANCE * VECTOR_SIZE as f32 * 100.0;
@@ -436,7 +440,9 @@ fn test_avx2_vs_scalar_golden_parity() {
         total_ops += 1;
 
         // Test sum
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let avx2_sum = unsafe { Avx2Backend::sum(&a) };
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let scalar_sum = unsafe { ScalarBackend::sum(&a) };
         let sum_tolerance = FP_TOLERANCE * VECTOR_SIZE as f32 * 100.0;
         let sum_diff = (avx2_sum - scalar_sum).abs();

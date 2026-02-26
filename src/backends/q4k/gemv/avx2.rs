@@ -11,6 +11,7 @@ use super::super::{parse_q4k_header, SUPER_BLOCK_BYTES, SUPER_BLOCK_SIZE};
 /// Delegates per-super-block work to `process_q4k_superblock_avx2`.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+// SAFETY: Caller ensures AVX2+FMA are available and q4k_data is valid Q4_K layout
 pub(crate) unsafe fn matmul_q4k_f32_avx2(
     q4k_data: &[u8],
     input: &[f32],
@@ -45,6 +46,7 @@ pub(crate) unsafe fn matmul_q4k_f32_avx2(
 /// Process one Q4K super-block row with AVX2 and accumulate into `acc`.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+// SAFETY: Caller ensures AVX2+FMA are available, sb_data is a valid super-block
 pub(crate) unsafe fn process_q4k_superblock_avx2(
     sb_data: &[u8],
     input: &[f32],
@@ -109,6 +111,7 @@ pub(crate) unsafe fn process_q4k_superblock_avx2(
 /// AVX2 horizontal sum of 8 f32 lanes to a single f32.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
+// SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
 pub(crate) unsafe fn hsum_avx2(acc: std::arch::x86_64::__m256) -> f32 {
     use std::arch::x86_64::*;
     let hi128 = _mm256_extractf128_ps(acc, 1);
@@ -123,6 +126,7 @@ pub(crate) unsafe fn hsum_avx2(acc: std::arch::x86_64::__m256) -> f32 {
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
+// SAFETY: Caller ensures AVX2+FMA are available and chunk bounds are valid
 pub(crate) unsafe fn compute_chunk_q4k_avx2(
     q4k_data: &[u8],
     input: &[f32],

@@ -322,6 +322,7 @@ fn test_microkernel_pipelined_matches_reference() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_avx2_asm(k, a.as_ptr(), b.as_ptr(), c_pipelined.as_mut_ptr(), MR);
     }

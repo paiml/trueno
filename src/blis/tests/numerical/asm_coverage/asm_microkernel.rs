@@ -22,6 +22,7 @@ fn test_f21a_true_asm_matches_scalar_k64() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
@@ -56,6 +57,7 @@ fn test_f21a_true_asm_matches_scalar_k256() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
@@ -89,6 +91,7 @@ fn test_f21a_true_asm_matches_scalar_k1024() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
@@ -123,6 +126,7 @@ fn test_f21h_k_remainder_k1() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
@@ -154,6 +158,7 @@ fn test_f21h_k_remainder_k5() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
@@ -183,6 +188,7 @@ fn test_f21h_k_remainder_k7() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
@@ -212,6 +218,7 @@ fn test_f21h_k_remainder_k9() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
@@ -241,6 +248,7 @@ fn test_f21j_asm_faster_than_intrinsics() {
 
     // Warmup
     for _ in 0..10 {
+        // SAFETY: test-only usage with controlled inputs
         unsafe {
             microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c.as_mut_ptr(), MR);
         }
@@ -251,6 +259,7 @@ fn test_f21j_asm_faster_than_intrinsics() {
     let iterations = 1000;
     let start_asm = std::time::Instant::now();
     for _ in 0..iterations {
+        // SAFETY: test-only usage with controlled inputs
         unsafe {
             microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c.as_mut_ptr(), MR);
         }
@@ -262,6 +271,7 @@ fn test_f21j_asm_faster_than_intrinsics() {
     // Benchmark intrinsics version
     let start_intrinsics = std::time::Instant::now();
     for _ in 0..iterations {
+        // SAFETY: test-only usage with controlled inputs
         unsafe {
             microkernel_8x6_avx2(k, a.as_ptr(), b.as_ptr(), c.as_mut_ptr(), MR);
         }
@@ -300,6 +310,7 @@ fn test_f21c_pipeline_correctness() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }

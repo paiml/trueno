@@ -6,6 +6,7 @@ use std::arch::x86_64::*;
 /// SSE2 L1 norm.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn norm_l1(a: &[f32]) -> f32 {
     if a.is_empty() {
         return 0.0;
@@ -32,6 +33,7 @@ pub unsafe fn norm_l1(a: &[f32]) -> f32 {
 /// SSE2 L-infinity norm.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn norm_linf(a: &[f32]) -> f32 {
     if a.is_empty() {
         return 0.0;
@@ -62,6 +64,7 @@ pub unsafe fn norm_linf(a: &[f32]) -> f32 {
 /// SSE2 scalar multiply.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -81,6 +84,7 @@ pub unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
 /// SSE2 absolute value.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn abs(a: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -100,6 +104,7 @@ pub unsafe fn abs(a: &[f32], result: &mut [f32]) {
 /// SSE2 clamp.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -121,6 +126,7 @@ pub unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
 /// SSE2 linear interpolation.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -142,6 +148,7 @@ pub unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
 /// SSE2 fused multiply-add (emulated, no FMA instruction set).
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -163,6 +170,7 @@ pub unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
 /// SSE2 ReLU activation.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn relu(a: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -182,6 +190,7 @@ pub unsafe fn relu(a: &[f32], result: &mut [f32]) {
 /// SSE2 square root.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -200,6 +209,7 @@ pub unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
 /// SSE2 reciprocal.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn recip(a: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;

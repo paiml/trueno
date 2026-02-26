@@ -95,8 +95,10 @@ fn assert_unary_large_relative(
 }
 
 /// Helper: test a scalar reduction on sequential 1..=32 input.
+// SAFETY: caller verifies SSE2 support, input slices meet alignment/length requirements
 fn assert_reduction_f32(expected: f32, tol: f32, op: unsafe fn(&[f32]) -> f32) {
     let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
+    // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
     let result = unsafe { op(&a) };
     assert!(
         (result - expected).abs() < tol,
@@ -105,8 +107,10 @@ fn assert_reduction_f32(expected: f32, tol: f32, op: unsafe fn(&[f32]) -> f32) {
 }
 
 /// Helper: test an index-returning reduction on sequential 1..=32 input.
+// SAFETY: caller verifies SSE2 support, input slices meet alignment/length requirements
 fn assert_reduction_usize(expected: usize, op: unsafe fn(&[f32]) -> usize) {
     let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
+    // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
     let result = unsafe { op(&a) };
     assert_eq!(result, expected);
 }

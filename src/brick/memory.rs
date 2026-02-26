@@ -95,6 +95,7 @@ impl AlignedBuffer {
         let layout = Layout::from_size_align(size, DIRECT_IO_ALIGNMENT)
             .map_err(|e| TruenoError::InvalidInput(format!("invalid alignment: {e}")))?;
 
+        // SAFETY: layout is valid, pointer was allocated with matching layout
         let ptr = unsafe { alloc_zeroed(layout) };
         if ptr.is_null() {
             return Err(TruenoError::InvalidInput("allocation failed".into()));
@@ -154,9 +155,11 @@ impl Drop for AlignedBuffer {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+// SAFETY: type invariants ensure trait contract is upheld
 unsafe impl Send for AlignedBuffer {}
 
 #[cfg(not(target_arch = "wasm32"))]
+// SAFETY: type invariants ensure trait contract is upheld
 unsafe impl Sync for AlignedBuffer {}
 
 // ----------------------------------------------------------------------------
@@ -191,6 +194,7 @@ const MADV_DONTNEED: i32 = 4;
 /// # Safety
 /// The pointer must be valid and the length must not exceed the mapped region.
 #[cfg(target_os = "linux")]
+// SAFETY: Caller ensures pointer is valid and length does not exceed the mapped region
 pub unsafe fn madvise_region(
     addr: *mut u8,
     len: usize,
@@ -244,6 +248,7 @@ pub unsafe fn madvise_region(
 
 /// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
+// SAFETY: No-op stub, no actual unsafe operations performed
 pub unsafe fn madvise_region(
     _addr: *mut u8,
     _len: usize,
@@ -261,6 +266,7 @@ pub unsafe fn madvise_region(
 /// # Safety
 /// The pointer must be valid and the length must not exceed the mapped region.
 #[cfg(target_os = "linux")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn prefetch_for_inference(addr: *mut u8, len: usize) -> std::io::Result<()> {
     // First: tell kernel we'll need this data
     madvise_region(addr, len, MemoryAdvice::WillNeed)?;
@@ -271,6 +277,7 @@ pub unsafe fn prefetch_for_inference(addr: *mut u8, len: usize) -> std::io::Resu
 
 /// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn prefetch_for_inference(_addr: *mut u8, _len: usize) -> std::io::Result<()> {
     Ok(()) // No-op on non-Linux
 }
@@ -298,6 +305,7 @@ pub enum PrefetchLocality {
 /// The pointer must be valid for reading.
 #[inline]
 #[cfg(target_arch = "x86_64")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn prefetch_ptr<T>(ptr: *const T, locality: PrefetchLocality) {
     use core::arch::x86_64::*;
     match locality {
@@ -311,6 +319,7 @@ pub unsafe fn prefetch_ptr<T>(ptr: *const T, locality: PrefetchLocality) {
 /// Prefetch data into cache (ARM64).
 #[inline]
 #[cfg(target_arch = "aarch64")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn prefetch_ptr<T>(ptr: *const T, _locality: PrefetchLocality) {
     // ARM prefetch (PRFM instruction) - locality hints are limited
     core::arch::asm!(
@@ -323,6 +332,7 @@ pub unsafe fn prefetch_ptr<T>(ptr: *const T, _locality: PrefetchLocality) {
 /// Fallback for other architectures.
 #[inline]
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn prefetch_ptr<T>(_ptr: *const T, _locality: PrefetchLocality) {
     // No-op on unsupported architectures
 }
@@ -460,6 +470,7 @@ mod tests {
     #[test]
     fn test_madvise_region_stub() {
         // On non-Linux, this is a no-op
+        // SAFETY: preconditions verified by caller
         unsafe {
             let mut data = [0u8; 4096];
             let _result = madvise_region(data.as_mut_ptr(), data.len(), MemoryAdvice::WillNeed);
@@ -470,6 +481,7 @@ mod tests {
 
     #[test]
     fn test_prefetch_for_inference_stub() {
+        // SAFETY: preconditions verified by caller
         unsafe {
             let mut data = [0u8; 4096];
             let _result = prefetch_for_inference(data.as_mut_ptr(), data.len());

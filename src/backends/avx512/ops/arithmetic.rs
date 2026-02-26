@@ -6,6 +6,7 @@ use std::arch::x86_64::*;
 /// AVX-512 vector addition.
 #[inline]
 #[target_feature(enable = "avx512f")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -23,6 +24,7 @@ pub unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
 /// AVX-512 vector subtraction.
 #[inline]
 #[target_feature(enable = "avx512f")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -40,6 +42,7 @@ pub unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
 /// AVX-512 vector multiplication.
 #[inline]
 #[target_feature(enable = "avx512f")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -57,6 +60,7 @@ pub unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
 /// AVX-512 vector division.
 #[inline]
 #[target_feature(enable = "avx512f")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
