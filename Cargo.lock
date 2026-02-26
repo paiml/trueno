@@ -222,7 +222,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "trueno 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trueno 0.15.0",
  "trueno-quant 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -842,7 +842,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "toml",
- "trueno 0.15.0",
+ "trueno 0.16.0",
  "trueno-gpu",
 ]
 
@@ -5475,6 +5475,23 @@ dependencies = [
 [[package]]
 name = "trueno"
 version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85e19fa22753d395f043b205999122520efd45a33e0867d137f20b777ad794ef"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hostname",
+ "num_cpus",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "toml",
+ "trueno-quant 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "trueno"
+version = "0.16.0"
 dependencies = [
  "anyhow",
  "aprender 0.26.0",
@@ -5510,23 +5527,6 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu 27.0.1",
-]
-
-[[package]]
-name = "trueno"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85e19fa22753d395f043b205999122520efd45a33e0867d137f20b777ad794ef"
-dependencies = [
- "anyhow",
- "chrono",
- "hostname",
- "num_cpus",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "toml",
- "trueno-quant 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
