@@ -299,6 +299,7 @@ impl SoftmaxOp {
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
+    // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
     unsafe fn avx2_max(input: &[f32]) -> f32 {
         use std::arch::x86_64::*;
         let len = input.len();
@@ -328,6 +329,7 @@ impl SoftmaxOp {
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
+    // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
     unsafe fn avx2_exp(input: &[f32], output: &mut [f32]) {
         use std::arch::x86_64::*;
 
@@ -388,6 +390,7 @@ impl SoftmaxOp {
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
+    // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
     unsafe fn avx2_sum(input: &[f32]) -> f32 {
         use std::arch::x86_64::*;
         let len = input.len();
@@ -417,6 +420,7 @@ impl SoftmaxOp {
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
+    // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
     unsafe fn avx2_scale(input: &[f32], scalar: f32, output: &mut [f32]) {
         use std::arch::x86_64::*;
         let len = input.len();

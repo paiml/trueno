@@ -5,6 +5,7 @@ fn test_avx512_dot() {
     avx512_test(|| {
         let a: Vec<f32> = (1..=32).map(|i| i as f32).collect();
         let b: Vec<f32> = (1..=32).map(|i| i as f32).collect();
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let result = unsafe { Avx512Backend::dot(&a, &b) };
         let expected: f32 = (1..=32).map(|i| (i * i) as f32).sum();
         assert!((result - expected).abs() < 1e-3);
@@ -47,6 +48,7 @@ fn test_avx512_sum_kahan() {
 fn test_avx512_norm_l2() {
     avx512_test(|| {
         let a = vec![3.0, 4.0];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let result = unsafe { Avx512Backend::norm_l2(&a) };
         assert!((result - 5.0).abs() < 1e-5);
     });
@@ -56,6 +58,7 @@ fn test_avx512_norm_l2() {
 fn test_avx512_norm_l1() {
     avx512_test(|| {
         let a = vec![-1.0, 2.0, -3.0, 4.0];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let result = unsafe { Avx512Backend::norm_l1(&a) };
         assert!((result - 10.0).abs() < 1e-5);
     });
@@ -65,6 +68,7 @@ fn test_avx512_norm_l1() {
 fn test_avx512_norm_linf() {
     avx512_test(|| {
         let a = vec![-5.0, 2.0, -3.0, 4.0];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let result = unsafe { Avx512Backend::norm_linf(&a) };
         assert!((result - 5.0).abs() < 1e-5);
     });

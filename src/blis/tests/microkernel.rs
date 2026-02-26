@@ -60,6 +60,7 @@ fn test_microkernel_avx2_matches_scalar() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_avx2(k, a.as_ptr(), b.as_ptr(), c_avx2.as_mut_ptr(), MR);
     }
@@ -98,6 +99,7 @@ fn test_microkernel_avx2_asm_matches_scalar() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_avx2_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
@@ -132,6 +134,7 @@ fn test_microkernel_avx2_asm_k_less_than_4() {
 
         microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+        // SAFETY: test-only usage with controlled inputs
         unsafe {
             microkernel_8x6_avx2_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
         }
@@ -169,6 +172,7 @@ fn test_microkernel_avx2_asm_k_with_remainder() {
 
         microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+        // SAFETY: test-only usage with controlled inputs
         unsafe {
             microkernel_8x6_avx2_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
         }
@@ -205,6 +209,7 @@ fn test_microkernel_avx2_asm_k_exact_multiple_of_4() {
 
         microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+        // SAFETY: test-only usage with controlled inputs
         unsafe {
             microkernel_8x6_avx2_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
         }
@@ -244,6 +249,7 @@ fn test_microkernel_true_asm_matches_scalar() {
 
     microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
     }
@@ -278,6 +284,7 @@ fn test_microkernel_true_asm_k_less_than_4() {
 
         microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+        // SAFETY: test-only usage with controlled inputs
         unsafe {
             microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
         }
@@ -314,6 +321,7 @@ fn test_microkernel_true_asm_k_with_remainder() {
 
         microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+        // SAFETY: test-only usage with controlled inputs
         unsafe {
             microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
         }
@@ -350,6 +358,7 @@ fn test_microkernel_true_asm_k_exact_multiple_of_4() {
 
         microkernel_scalar(k, &a, &b, &mut c_scalar, MR);
 
+        // SAFETY: test-only usage with controlled inputs
         unsafe {
             microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c_asm.as_mut_ptr(), MR);
         }
@@ -383,6 +392,7 @@ fn test_microkernel_true_asm_accumulates_into_c() {
     // Pre-fill C with non-zero values
     let mut c = vec![10.0f32; MR * NR];
 
+    // SAFETY: test-only usage with controlled inputs
     unsafe {
         microkernel_8x6_true_asm(k, a.as_ptr(), b.as_ptr(), c.as_mut_ptr(), MR);
     }

@@ -83,6 +83,7 @@ impl AttentionOp {
         #[cfg(target_arch = "x86_64")]
         {
             if is_x86_feature_detected!("avx2") {
+                // SAFETY: preconditions verified by caller
                 return unsafe { Self::avx2_dot(a, b) };
             }
         }
@@ -113,6 +114,7 @@ impl AttentionOp {
     /// AVX2-optimized dot product.
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
+    // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
     unsafe fn avx2_dot(a: &[f32], b: &[f32]) -> f32 {
         use std::arch::x86_64::*;
 

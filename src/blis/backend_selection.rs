@@ -30,10 +30,8 @@ pub enum ComputeBackend {
     /// CPU SIMD backend (AVX2, AVX-512, NEON, SSE2)
     Cpu,
     /// NVIDIA GPU backend (PTX)
-    #[allow(dead_code)]
     Gpu,
     /// Cross-platform GPU backend (wgpu/WGSL)
-    #[allow(dead_code)]
     Wgpu,
     /// Scalar fallback (no SIMD)
     Scalar,

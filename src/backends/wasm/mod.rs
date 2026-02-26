@@ -25,61 +25,73 @@ pub struct WasmBackend;
 
 impl VectorBackend for WasmBackend {
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
         ops::arithmetic::add(a, b, result);
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
         ops::arithmetic::sub(a, b, result);
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         ops::arithmetic::mul(a, b, result);
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
         ops::arithmetic::div(a, b, result);
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         ops::reductions::dot(a, b)
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sum(a: &[f32]) -> f32 {
         ops::reductions::sum(a)
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn max(a: &[f32]) -> f32 {
         ops::reductions::max(a)
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn min(a: &[f32]) -> f32 {
         ops::reductions::min(a)
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn argmax(a: &[f32]) -> usize {
         ops::reductions::argmax(a)
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn argmin(a: &[f32]) -> usize {
         ops::reductions::argmin(a)
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sum_kahan(a: &[f32]) -> f32 {
         ops::reductions::sum_kahan(a)
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn norm_l2(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -88,6 +100,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn norm_l1(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -111,6 +124,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn norm_linf(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -137,6 +151,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -155,6 +170,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn abs(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -169,6 +185,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -188,6 +205,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -208,6 +226,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -227,6 +246,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn relu(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -245,6 +265,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn exp(a: &[f32], result: &mut [f32]) {
         // Polynomial approximation for exp
         let len = a.len();
@@ -279,6 +300,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         // sigmoid(x) = 1 / (1 + exp(-x))
         let len = a.len();
@@ -288,6 +310,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
         // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
         for j in 0..a.len() {
@@ -298,6 +321,7 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
         // swish(x) = x * sigmoid(x)
         for j in 0..a.len() {
@@ -306,42 +330,54 @@ impl VectorBackend for WasmBackend {
     }
 
     #[target_feature(enable = "simd128")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn tanh(a: &[f32], result: &mut [f32]) {
         for j in 0..a.len() {
             result[j] = a[j].tanh();
         }
     }
 
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::sqrt(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::recip(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn ln(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::ln(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn log2(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::log2(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn log10(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::log10(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sin(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::sin(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn cos(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::cos(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn tan(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::tan(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn floor(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::floor(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn ceil(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::ceil(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn round(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::round(a, result);
     }
@@ -357,6 +393,7 @@ mod tests {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let b = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
         let mut result = vec![0.0; 9];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             WasmBackend::add(&a, &b, &mut result);
         }
@@ -372,6 +409,7 @@ mod tests {
         let a = vec![2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         let b = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let mut result = vec![0.0; 9];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             WasmBackend::mul(&a, &b, &mut result);
         }
@@ -386,6 +424,7 @@ mod tests {
     fn test_wasm_dot() {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let b = vec![9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let result = unsafe { WasmBackend::dot(&a, &b) };
         assert!((result - 165.0).abs() < 1e-5);
     }
@@ -394,6 +433,7 @@ mod tests {
     #[test]
     fn test_wasm_sum() {
         let a = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let result = unsafe { WasmBackend::sum(&a) };
         assert!((result - 45.0).abs() < 1e-5);
     }

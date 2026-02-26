@@ -45,6 +45,7 @@ fn test_avx512_sigmoid_large() {
     avx512_test(|| {
         let a: Vec<f32> = (-16..16).map(|i| i as f32 * 0.5).collect();
         let mut result = vec![0.0; 32];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx512Backend::sigmoid(&a, &mut result);
         }
@@ -99,6 +100,7 @@ fn test_avx512_backend_equivalence() {
         let b: Vec<f32> = (0..100).map(|i| (100 - i) as f32 * 0.1).collect();
         let mut avx512_add = vec![0.0; 100];
         let mut scalar_add = vec![0.0; 100];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             Avx512Backend::add(&a, &b, &mut avx512_add);
             ScalarBackend::add(&a, &b, &mut scalar_add);

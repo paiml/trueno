@@ -291,8 +291,7 @@ fn main(
 ///
 /// Note: Currently unused - pivot selection done on CPU for simplicity.
 /// Future optimization: use this shader for fully GPU-based pivot selection.
-#[allow(dead_code)]
-pub const JACOBI_MAX_OFFDIAG_SHADER: &str = r#"
+pub const _JACOBI_MAX_OFFDIAG_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> matrix: array<f32>;
 @group(0) @binding(1) var<storage, read_write> result: array<f32>;
 

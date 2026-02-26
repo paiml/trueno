@@ -1,8 +1,6 @@
 //! Golden Vector Tests (Section 12.4: Q4K fused matmul ~ dequant+f32_matmul)
 //! and compute_chunk_scalar direct tests.
 
-#![allow(dead_code)]
-
 use super::gemv::compute_chunk_q4k_scalar;
 use super::*;
 

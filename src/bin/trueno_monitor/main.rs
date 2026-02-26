@@ -48,6 +48,16 @@ use trueno_gpu::monitor::{CudaDeviceInfo, CudaMemoryInfo};
 #[cfg(feature = "cuda")]
 use trueno_gpu::driver::CudaContext;
 
+#[cfg(feature = "cuda")]
+fn vram_stats(ctx: &CudaContext, info: &CudaDeviceInfo) -> (f64, f64, f64) {
+    const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
+    if let Ok(mem) = CudaMemoryInfo::query(ctx) {
+        (mem.used() as f64 / GIB, mem.total as f64 / GIB, mem.usage_percent())
+    } else {
+        (0.0, info.total_memory_gb(), 0.0)
+    }
+}
+
 impl App {
     fn new() -> Self {
         let mut cpu = CpuDevice::new();
@@ -74,15 +84,7 @@ impl App {
                     for info in devices {
                         if let Ok(ctx) = CudaContext::new(info.index as i32) {
                             let (vram_used_gb, vram_total_gb, vram_percent) =
-                                if let Ok(mem) = CudaMemoryInfo::query(&ctx) {
-                                    (
-                                        mem.used() as f64 / (1024.0 * 1024.0 * 1024.0),
-                                        mem.total as f64 / (1024.0 * 1024.0 * 1024.0),
-                                        mem.usage_percent(),
-                                    )
-                                } else {
-                                    (0.0, info.total_memory_gb(), 0.0)
-                                };
+                                vram_stats(&ctx, &info);
 
                             info!(
                                 gpu_index = info.index,

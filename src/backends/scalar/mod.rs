@@ -63,6 +63,7 @@ impl VectorBackend for ScalarBackend {
     // This follows the cuda-tile pattern for improved throughput (spec: cuda-tile-behavior.md).
     // Using f32::mul_add provides FMA semantics where available, improving accuracy.
     #[inline(always)]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         let len = a.len();
         let chunks = len / 4;

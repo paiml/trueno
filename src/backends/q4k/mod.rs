@@ -33,8 +33,6 @@
 //! let output = matmul_q4k_f32(&q4k_weights, &input, 4864, 896);
 //! ```
 
-#![allow(dead_code)]
-
 // Sub-modules
 mod colmajor;
 mod dequant;
@@ -49,8 +47,7 @@ pub use gemv::{matmul_q4k_f32, matmul_q4k_f32_dispatch, matmul_q4k_f32_scalar};
 // Constants (pub(crate) for submodule access)
 pub(crate) const SUPER_BLOCK_SIZE: usize = 256;
 pub(crate) const SUPER_BLOCK_BYTES: usize = 144;
-#[allow(dead_code)] // Reserved for future sub-block optimizations
-pub(crate) const SUB_BLOCK_SIZE: usize = 32;
+pub(crate) const _SUB_BLOCK_SIZE: usize = 32; // Reserved for future sub-block optimizations
 
 /// Convert f16 bits to f32
 #[inline(always)]

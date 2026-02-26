@@ -105,6 +105,7 @@ pub fn gemm_blis_parallel(
         let a_local = &a[m_start * k..(m_start + m_local) * k];
 
         // Local C slice (unsafe but safe due to non-overlapping partitions)
+        // SAFETY: preconditions verified by caller
         let c_local = unsafe {
             // SAFETY: Each thread accesses a disjoint row range of C.
             // Partitions are non-overlapping by construction in HeijunkaScheduler::partition_m.

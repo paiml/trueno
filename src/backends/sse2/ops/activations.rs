@@ -10,6 +10,7 @@ use std::arch::x86_64::*;
 /// Caller must ensure SSE2 is available on the current CPU.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller verifies SSE2 support, input slices meet alignment/length requirements
 pub unsafe fn exp_approx_sse2(x: __m128) -> __m128 {
     let ln2 = _mm_set1_ps(std::f32::consts::LN_2);
     let inv_ln2 = _mm_set1_ps(1.0 / std::f32::consts::LN_2);
@@ -33,6 +34,7 @@ pub unsafe fn exp_approx_sse2(x: __m128) -> __m128 {
 /// SSE2 exp (element-wise).
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn exp(a: &[f32], result: &mut [f32]) {
     // Polynomial approximation for exp - range reduction + polynomial
     let len = a.len();
@@ -66,6 +68,7 @@ pub unsafe fn exp(a: &[f32], result: &mut [f32]) {
 /// SSE2 sigmoid activation.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
     // sigmoid(x) = 1 / (1 + exp(-x))
     let len = a.len();
@@ -105,6 +108,7 @@ pub unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
 /// SSE2 GELU activation.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn gelu(a: &[f32], result: &mut [f32]) {
     // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
     let len = a.len();
@@ -137,6 +141,7 @@ pub unsafe fn gelu(a: &[f32], result: &mut [f32]) {
 /// SSE2 swish activation.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn swish(a: &[f32], result: &mut [f32]) {
     // swish(x) = x * sigmoid(x)
     let len = a.len();
@@ -174,6 +179,7 @@ pub unsafe fn swish(a: &[f32], result: &mut [f32]) {
 /// SSE2 tanh activation.
 #[inline]
 #[target_feature(enable = "sse2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn tanh(a: &[f32], result: &mut [f32]) {
     // tanh(x) = (e^2x - 1) / (e^2x + 1)
     let len = a.len();

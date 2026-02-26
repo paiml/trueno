@@ -9,6 +9,7 @@ use std::arch::arm::*;
 /// NEON vector addition.
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -27,6 +28,7 @@ pub unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
 /// NEON vector subtraction.
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -45,6 +47,7 @@ pub unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
 /// NEON vector multiplication.
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;
@@ -63,6 +66,7 @@ pub unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
 /// NEON vector division.
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
     let len = a.len();
     let mut i = 0;

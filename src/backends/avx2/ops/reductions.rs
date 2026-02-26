@@ -8,6 +8,7 @@ use crate::backends::VectorBackend;
 /// AVX2 dot product with 4-accumulator unrolling for ILP.
 #[inline]
 #[target_feature(enable = "avx2,fma")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
     let len = a.len();
     let mut i = 0;
@@ -60,6 +61,7 @@ pub unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
 /// AVX2 vector sum.
 #[inline]
 #[target_feature(enable = "avx2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn sum(a: &[f32]) -> f32 {
     let len = a.len();
     let mut i = 0;
@@ -85,6 +87,7 @@ pub unsafe fn sum(a: &[f32]) -> f32 {
 /// AVX2 vector max.
 #[inline]
 #[target_feature(enable = "avx2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn max(a: &[f32]) -> f32 {
     let len = a.len();
     let mut i = 0;
@@ -114,6 +117,7 @@ pub unsafe fn max(a: &[f32]) -> f32 {
 /// AVX2 vector min.
 #[inline]
 #[target_feature(enable = "avx2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn min(a: &[f32]) -> f32 {
     let len = a.len();
     let mut i = 0;
@@ -143,6 +147,7 @@ pub unsafe fn min(a: &[f32]) -> f32 {
 /// AVX2 argmax.
 #[inline]
 #[target_feature(enable = "avx2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn argmax(a: &[f32]) -> usize {
     let len = a.len();
     let mut max_idx: usize = 0;
@@ -190,6 +195,7 @@ pub unsafe fn argmax(a: &[f32]) -> usize {
 /// AVX2 argmin.
 #[inline]
 #[target_feature(enable = "avx2")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn argmin(a: &[f32]) -> usize {
     let len = a.len();
     let mut min_idx: usize = 0;
@@ -234,6 +240,7 @@ pub unsafe fn argmin(a: &[f32]) -> usize {
 
 /// Kahan sum for numerical stability (delegates to scalar).
 #[inline]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn sum_kahan(a: &[f32]) -> f32 {
     crate::backends::scalar::ScalarBackend::sum_kahan(a)
 }

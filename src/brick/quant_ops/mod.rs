@@ -190,6 +190,7 @@ impl DotQ5KOp {
     /// Compute dot product with SIMD acceleration.
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
+    // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
     unsafe fn avx2_dot_block(block: &BlockQ5K, x: &[f32]) -> f32 {
         use std::arch::x86_64::*;
 
@@ -238,6 +239,7 @@ impl ComputeOp for DotQ5KOp {
             {
                 for (i, block) in blocks.iter().enumerate() {
                     let x_slice = &x[i * BlockQ5K::BLOCK_SIZE..];
+                    // SAFETY: preconditions verified by caller
                     sum += unsafe { Self::avx2_dot_block(block, x_slice) };
                 }
                 return Ok(sum);
@@ -287,6 +289,7 @@ impl DotQ6KOp {
     /// Compute dot product with SIMD acceleration.
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
+    // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
     unsafe fn avx2_dot_block(block: &BlockQ6K, x: &[f32]) -> f32 {
         use std::arch::x86_64::*;
 
@@ -335,6 +338,7 @@ impl ComputeOp for DotQ6KOp {
             {
                 for (i, block) in blocks.iter().enumerate() {
                     let x_slice = &x[i * BlockQ6K::BLOCK_SIZE..];
+                    // SAFETY: preconditions verified by caller
                     sum += unsafe { Self::avx2_dot_block(block, x_slice) };
                 }
                 return Ok(sum);

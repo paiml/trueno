@@ -6,8 +6,6 @@
 //! - `scales`: 16 bytes (8-bit scales for 16 groups of 16 values)
 //! - `d`: 2 bytes (f16 global scale)
 
-#![allow(dead_code)]
-
 // Sub-modules
 mod colmajor;
 mod gemv;

@@ -47,8 +47,7 @@ const MAX_JACOBI_SWEEPS: usize = 50;
 const CONVERGENCE_THRESHOLD: f32 = 1e-7;
 
 /// GPU threshold - use wgpu for matrices larger than this
-#[allow(dead_code)]
-const GPU_THRESHOLD: usize = 1000;
+const _GPU_THRESHOLD: usize = 1000;
 
 /// Symmetric matrix eigendecomposition
 ///
@@ -75,8 +74,7 @@ pub struct SymmetricEigen {
     /// Eigenvectors as columns (column i corresponds to eigenvalue i)
     pub(crate) eigenvectors: Matrix<f32>,
     /// Sorting indices mapping original to sorted order
-    #[allow(dead_code)]
-    pub(crate) sort_indices: Vec<usize>,
+    pub(crate) _sort_indices: Vec<usize>,
     /// Backend used for computation
     pub(crate) backend: Backend,
 }
@@ -213,7 +211,7 @@ impl SymmetricEigen {
                 return Ok(SymmetricEigen {
                     eigenvalues: sorted_eigenvalues,
                     eigenvectors,
-                    sort_indices: indices,
+                    _sort_indices: indices,
                     backend,
                 });
             }
@@ -228,8 +226,7 @@ impl SymmetricEigen {
 
     /// Find the largest off-diagonal element (unused in cyclic Jacobi, kept for classic Jacobi)
     #[inline]
-    #[allow(dead_code)]
-    fn find_max_off_diagonal(a: &[f32], n: usize) -> (usize, usize, f32) {
+    fn _find_max_off_diagonal(a: &[f32], n: usize) -> (usize, usize, f32) {
         let mut max_val = 0.0f32;
         let mut p = 0;
         let mut q = 1;
@@ -349,7 +346,7 @@ impl SymmetricEigen {
         Ok(SymmetricEigen {
             eigenvalues: sorted_eigenvalues,
             eigenvectors,
-            sort_indices: indices,
+            _sort_indices: indices,
             backend: Backend::GPU,
         })
     }

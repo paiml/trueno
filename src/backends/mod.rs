@@ -62,6 +62,7 @@ pub trait VectorBackend {
     ///
     /// - `a` and `b` must have the same length
     /// - `result` must have length >= `a.len()`
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]);
 
     /// Element-wise subtraction: a\[i\] - b\[i\]
@@ -70,6 +71,7 @@ pub trait VectorBackend {
     ///
     /// - `a` and `b` must have the same length
     /// - `result` must have length >= `a.len()`
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]);
 
     /// Element-wise multiplication: a\[i\] * b\[i\]
@@ -78,6 +80,7 @@ pub trait VectorBackend {
     ///
     /// - `a` and `b` must have the same length
     /// - `result` must have length >= `a.len()`
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]);
 
     /// Element-wise division: a\[i\] / b\[i\]
@@ -86,6 +89,7 @@ pub trait VectorBackend {
     ///
     /// - `a` and `b` must have the same length
     /// - `result` must have length >= `a.len()`
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]);
 
     /// Dot product: sum(a\[i\] * b\[i\])
@@ -93,6 +97,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - `a` and `b` must have the same length
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32;
 
     /// Sum reduction: sum(a\[i\])
@@ -100,6 +105,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - `a` must not be empty
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn sum(a: &[f32]) -> f32;
 
     /// Max reduction: max(a\[i\])
@@ -107,6 +113,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - `a` must not be empty
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn max(a: &[f32]) -> f32;
 
     /// Min reduction: min(a\[i\])
@@ -114,6 +121,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - `a` must not be empty
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn min(a: &[f32]) -> f32;
 
     /// Argmax: index of maximum value
@@ -123,6 +131,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - `a` must not be empty
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn argmax(a: &[f32]) -> usize;
 
     /// Argmin: index of minimum value
@@ -132,6 +141,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - `a` must not be empty
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn argmin(a: &[f32]) -> usize;
 
     /// Kahan summation: numerically stable sum(a\[i\])
@@ -142,6 +152,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - Can handle empty slice (returns 0.0)
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn sum_kahan(a: &[f32]) -> f32;
 
     /// L2 norm (Euclidean norm): sqrt(sum(a\[i\]^2))
@@ -151,6 +162,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - Can handle empty slice (returns 0.0)
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn norm_l2(a: &[f32]) -> f32;
 
     /// L1 norm (Manhattan norm): sum(|a\[i\]|)
@@ -161,6 +173,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - Can handle empty slice (returns 0.0)
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn norm_l1(a: &[f32]) -> f32;
 
     /// L-infinity norm (maximum absolute value): max(|a\[i\]|)
@@ -171,6 +184,7 @@ pub trait VectorBackend {
     /// # Safety
     ///
     /// - Can handle empty slice (returns 0.0)
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn norm_linf(a: &[f32]) -> f32;
 
     /// Scalar multiplication: result\[i\] = a\[i\] * scalar
@@ -182,6 +196,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slice
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]);
 
     /// Absolute value: result\[i\] = |a\[i\]|
@@ -193,6 +208,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slice
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn abs(a: &[f32], result: &mut [f32]);
 
     /// Clamp elements to range [min_val, max_val]: result\[i\] = max(min_val, min(a\[i\], max_val))
@@ -205,6 +221,7 @@ pub trait VectorBackend {
     /// - `result` must have the same length as `a`
     /// - Can handle empty slice
     /// - Assumes min_val <= max_val (caller must validate)
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]);
 
     /// Linear interpolation: result\[i\] = a\[i\] + t * (b\[i\] - a\[i\])
@@ -218,6 +235,7 @@ pub trait VectorBackend {
     /// - `a` and `b` must have the same length
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]);
 
     /// Fused multiply-add: result\[i\] = a\[i\] * b\[i\] + c\[i\]
@@ -232,6 +250,7 @@ pub trait VectorBackend {
     /// - `a`, `b`, and `c` must all have the same length
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]);
 
     /// ReLU activation: result\[i\] = max(0, a\[i\])
@@ -243,6 +262,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn relu(a: &[f32], result: &mut [f32]);
 
     /// Exponential function: result\[i\] = exp(a\[i\])
@@ -254,6 +274,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn exp(a: &[f32], result: &mut [f32]);
 
     /// Sigmoid activation: result\[i\] = 1 / (1 + exp(-a\[i\]))
@@ -265,6 +286,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]);
 
     /// GELU activation: result\[i\] = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
@@ -276,6 +298,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn gelu(a: &[f32], result: &mut [f32]);
 
     /// Swish activation: result\[i\] = x * sigmoid(x) = x / (1 + exp(-x))
@@ -287,6 +310,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn swish(a: &[f32], result: &mut [f32]);
 
     /// Hyperbolic tangent activation: result\[i\] = tanh(a\[i\]) = (exp(2x) - 1) / (exp(2x) + 1)
@@ -299,6 +323,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn tanh(a: &[f32], result: &mut [f32]);
 
     /// Square root: result\[i\] = sqrt(a\[i\])
@@ -307,6 +332,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn sqrt(a: &[f32], result: &mut [f32]);
 
     /// Reciprocal: result\[i\] = 1 / a\[i\]
@@ -315,6 +341,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn recip(a: &[f32], result: &mut [f32]);
 
     /// Natural logarithm: result\[i\] = ln(a\[i\])
@@ -323,6 +350,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn ln(a: &[f32], result: &mut [f32]);
 
     /// Base-2 logarithm: result\[i\] = log2(a\[i\])
@@ -331,6 +359,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn log2(a: &[f32], result: &mut [f32]);
 
     /// Base-10 logarithm: result\[i\] = log10(a\[i\])
@@ -339,6 +368,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn log10(a: &[f32], result: &mut [f32]);
 
     /// Sine: result\[i\] = sin(a\[i\])
@@ -347,6 +377,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn sin(a: &[f32], result: &mut [f32]);
 
     /// Cosine: result\[i\] = cos(a\[i\])
@@ -355,6 +386,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn cos(a: &[f32], result: &mut [f32]);
 
     /// Tangent: result\[i\] = tan(a\[i\])
@@ -363,6 +395,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn tan(a: &[f32], result: &mut [f32]);
 
     /// Floor: result\[i\] = floor(a\[i\])
@@ -371,6 +404,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn floor(a: &[f32], result: &mut [f32]);
 
     /// Ceiling: result\[i\] = ceil(a\[i\])
@@ -379,6 +413,7 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn ceil(a: &[f32], result: &mut [f32]);
 
     /// Round: result\[i\] = round(a\[i\])
@@ -387,5 +422,6 @@ pub trait VectorBackend {
     ///
     /// - `result` must have the same length as `a`
     /// - Can handle empty slices
+    // SAFETY: Caller must satisfy the documented preconditions for slice validity
     unsafe fn round(a: &[f32], result: &mut [f32]);
 }

@@ -9,6 +9,7 @@ use std::arch::arm::*;
 /// NEON dot product.
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
     let len = a.len();
     let mut i = 0;
@@ -36,6 +37,7 @@ pub unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
 /// NEON vector sum.
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn sum(a: &[f32]) -> f32 {
     let len = a.len();
     let mut i = 0;
@@ -54,6 +56,7 @@ pub unsafe fn sum(a: &[f32]) -> f32 {
 /// NEON vector max.
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn max(a: &[f32]) -> f32 {
     let len = a.len();
     let mut i = 0;
@@ -74,6 +77,7 @@ pub unsafe fn max(a: &[f32]) -> f32 {
 /// NEON vector min.
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn min(a: &[f32]) -> f32 {
     let len = a.len();
     let mut i = 0;
@@ -94,6 +98,7 @@ pub unsafe fn min(a: &[f32]) -> f32 {
 /// NEON argmax (scalar fallback).
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn argmax(a: &[f32]) -> usize {
     let mut max_idx = 0;
     let mut max_val = a[0];
@@ -109,6 +114,7 @@ pub unsafe fn argmax(a: &[f32]) -> usize {
 /// NEON argmin (scalar fallback).
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn argmin(a: &[f32]) -> usize {
     let mut min_idx = 0;
     let mut min_val = a[0];
@@ -123,6 +129,7 @@ pub unsafe fn argmin(a: &[f32]) -> usize {
 
 /// Kahan sum (scalar implementation).
 #[inline]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 pub unsafe fn sum_kahan(a: &[f32]) -> f32 {
     let mut sum = 0.0;
     let mut c = 0.0;
@@ -138,6 +145,7 @@ pub unsafe fn sum_kahan(a: &[f32]) -> f32 {
 // Helper: horizontal sum of float32x4
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 unsafe fn horizontal_sum(v: float32x4_t) -> f32 {
     #[cfg(target_arch = "aarch64")]
     {
@@ -154,6 +162,7 @@ unsafe fn horizontal_sum(v: float32x4_t) -> f32 {
 // Helper: horizontal max of float32x4
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 unsafe fn horizontal_max(v: float32x4_t) -> f32 {
     #[cfg(target_arch = "aarch64")]
     {
@@ -170,6 +179,7 @@ unsafe fn horizontal_max(v: float32x4_t) -> f32 {
 // Helper: horizontal min of float32x4
 #[inline]
 #[target_feature(enable = "neon")]
+// SAFETY: caller ensures preconditions are met for this unsafe function
 unsafe fn horizontal_min(v: float32x4_t) -> f32 {
     #[cfg(target_arch = "aarch64")]
     {

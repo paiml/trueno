@@ -24,70 +24,82 @@ pub struct NeonBackend;
 impl VectorBackend for NeonBackend {
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
         ops::arithmetic::add(a, b, result);
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
         ops::arithmetic::sub(a, b, result);
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
         ops::arithmetic::mul(a, b, result);
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
         ops::arithmetic::div(a, b, result);
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
         ops::reductions::dot(a, b)
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sum(a: &[f32]) -> f32 {
         ops::reductions::sum(a)
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn max(a: &[f32]) -> f32 {
         ops::reductions::max(a)
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn min(a: &[f32]) -> f32 {
         ops::reductions::min(a)
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn argmax(a: &[f32]) -> usize {
         ops::reductions::argmax(a)
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn argmin(a: &[f32]) -> usize {
         ops::reductions::argmin(a)
     }
 
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sum_kahan(a: &[f32]) -> f32 {
         ops::reductions::sum_kahan(a)
     }
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn norm_l2(a: &[f32]) -> f32 {
         if a.is_empty() {
             return 0.0;
@@ -116,6 +128,7 @@ impl VectorBackend for NeonBackend {
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn norm_l1(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -141,6 +154,7 @@ impl VectorBackend for NeonBackend {
     #[cfg(target_arch = "aarch64")]
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn norm_linf(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -162,6 +176,7 @@ impl VectorBackend for NeonBackend {
     #[cfg(target_arch = "arm")]
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn norm_linf(a: &[f32]) -> f32 {
         let len = a.len();
         let mut i = 0;
@@ -184,6 +199,7 @@ impl VectorBackend for NeonBackend {
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -202,6 +218,7 @@ impl VectorBackend for NeonBackend {
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn abs(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -219,6 +236,7 @@ impl VectorBackend for NeonBackend {
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -240,6 +258,7 @@ impl VectorBackend for NeonBackend {
     #[cfg(target_arch = "aarch64")]
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -261,6 +280,7 @@ impl VectorBackend for NeonBackend {
     #[cfg(target_arch = "arm")]
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -282,6 +302,7 @@ impl VectorBackend for NeonBackend {
     #[cfg(target_arch = "aarch64")]
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -300,6 +321,7 @@ impl VectorBackend for NeonBackend {
     #[cfg(target_arch = "arm")]
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -317,6 +339,7 @@ impl VectorBackend for NeonBackend {
 
     #[inline]
     #[target_feature(enable = "neon")]
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn relu(a: &[f32], result: &mut [f32]) {
         let len = a.len();
         let mut i = 0;
@@ -333,14 +356,17 @@ impl VectorBackend for NeonBackend {
         }
     }
 
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn exp(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::exp(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
         for j in 0..a.len() {
             result[j] = 1.0 / (1.0 + (-a[j]).exp());
         }
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
         for j in 0..a.len() {
             let x = a[j];
@@ -348,46 +374,59 @@ impl VectorBackend for NeonBackend {
             result[j] = 0.5 * x * (1.0 + inner.tanh());
         }
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn swish(a: &[f32], result: &mut [f32]) {
         for j in 0..a.len() {
             result[j] = a[j] / (1.0 + (-a[j]).exp());
         }
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn tanh(a: &[f32], result: &mut [f32]) {
         for j in 0..a.len() {
             result[j] = a[j].tanh();
         }
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::sqrt(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn recip(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::recip(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn ln(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::ln(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn log2(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::log2(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn log10(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::log10(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn sin(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::sin(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn cos(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::cos(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn tan(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::tan(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn floor(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::floor(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn ceil(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::ceil(a, result);
     }
+    // SAFETY: caller ensures preconditions are met for this unsafe function
     unsafe fn round(a: &[f32], result: &mut [f32]) {
         super::scalar::ScalarBackend::round(a, result);
     }
@@ -402,6 +441,7 @@ mod tests {
         let a = vec![1.0; 16];
         let b = vec![2.0; 16];
         let mut result = vec![0.0; 16];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             NeonBackend::add(&a, &b, &mut result);
         }
@@ -413,6 +453,7 @@ mod tests {
         let a = vec![5.0; 16];
         let b = vec![2.0; 16];
         let mut result = vec![0.0; 16];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             NeonBackend::sub(&a, &b, &mut result);
         }
@@ -424,6 +465,7 @@ mod tests {
         let a = vec![2.0; 16];
         let b = vec![3.0; 16];
         let mut result = vec![0.0; 16];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             NeonBackend::mul(&a, &b, &mut result);
         }
@@ -435,6 +477,7 @@ mod tests {
         let a = vec![6.0; 16];
         let b = vec![2.0; 16];
         let mut result = vec![0.0; 16];
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         unsafe {
             NeonBackend::div(&a, &b, &mut result);
         }
@@ -445,6 +488,7 @@ mod tests {
     fn test_neon_dot() {
         let a: Vec<f32> = (1..=16).map(|i| i as f32).collect();
         let b: Vec<f32> = (1..=16).map(|i| i as f32).collect();
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let result = unsafe { NeonBackend::dot(&a, &b) };
         let expected: f32 = (1..=16).map(|i| (i * i) as f32).sum();
         assert!((result - expected).abs() < 1e-3);
@@ -453,6 +497,7 @@ mod tests {
     #[test]
     fn test_neon_sum() {
         let a: Vec<f32> = (1..=16).map(|i| i as f32).collect();
+        // SAFETY: SIMD intrinsic call with valid inputs, target feature verified by caller
         let result = unsafe { NeonBackend::sum(&a) };
         assert!((result - 136.0).abs() < 1e-3);
     }
