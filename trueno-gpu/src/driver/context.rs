@@ -233,6 +233,45 @@ impl CudaContext {
         Ok(name_str)
     }
 
+    /// Get device compute capability as (major, minor)
+    ///
+    /// Returns the SM architecture version, e.g. (8, 9) for RTX 4090.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::CudaDriver)` if query fails.
+    pub fn compute_capability(&self) -> Result<(i32, i32), GpuError> {
+        let driver = get_driver()?;
+
+        // CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR = 75
+        // CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR = 76
+        let mut major: i32 = 0;
+        let mut minor: i32 = 0;
+
+        // SAFETY: pointer is valid, device is valid
+        let result =
+            unsafe { (driver.cuDeviceGetAttribute)(&mut major, 75, self.device) };
+        CudaDriver::check(result)?;
+
+        let result =
+            unsafe { (driver.cuDeviceGetAttribute)(&mut minor, 76, self.device) };
+        CudaDriver::check(result)?;
+
+        Ok((major, minor))
+    }
+
+    /// Get device compute capability as SM target string (e.g. "sm_89")
+    ///
+    /// Suitable for passing to `PtxModule::target()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::CudaDriver)` if query fails.
+    pub fn sm_target(&self) -> Result<String, GpuError> {
+        let (major, minor) = self.compute_capability()?;
+        Ok(format!("sm_{major}{minor}"))
+    }
+
     /// Get total device memory in bytes
     ///
     /// # Errors
