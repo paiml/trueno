@@ -33,6 +33,10 @@ complexity = { level = "warn", priority = -1 }
 style = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 
+# Additional high-value lints (PMAT best practices)
+checked_conversions = "warn"
+fallible_impl_from = "warn"
+
 # Development-phase allows (to be addressed incrementally)
 uninlined_format_args = "allow"
 useless_vec = "allow"
@@ -56,8 +60,8 @@ exclude = ["target/", ".profraw", ".profdata", ".vscode/", ".idea/", ".pmat", "p
 all-features = true
 rustdoc-args = ["--generate-link-to-definition"]
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(internal_matrix_tests)'] }
+[lints]
+workspace = true
 
 [dependencies]
 thiserror = "2.0.17"
@@ -213,6 +217,10 @@ search = "## \\[Unreleased\\]"
 replace = "## [{{version}}] - {{date}}"
 
 [workspace.dependencies]
+
+[profile.test]
+opt-level = 1              # Slight optimization for faster test execution
+incremental = true         # Reuse previous builds
 
 [profile.dev]
 panic = "abort"
