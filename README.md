@@ -170,6 +170,11 @@ Contributions are welcome. Please ensure:
 3. No clippy warnings: `cargo clippy --all-features -- -D warnings`
 4. Code is formatted: `cargo fmt`
 
+
+## MSRV
+
+Minimum Supported Rust Version: **1.89**
+
 ## License
 
 MIT - see [LICENSE](LICENSE)

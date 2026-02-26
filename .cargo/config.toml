@@ -1,2 +1,9 @@
 [build]
+incremental = true
 target-dir = "/mnt/nvme-raid0/coverage/trueno"
+
+[alias]
+t = "test"
+c = "check"
+b = "build --release"
+cl = "clippy --all-targets -- -D warnings"
