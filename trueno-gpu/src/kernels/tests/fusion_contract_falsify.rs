@@ -79,6 +79,25 @@ fn falsify_fusion_001_every_fused_kernel_has_yaml_entry() {
     }
 }
 
+/// Check if a YAML line is a top-level fusion entry (2-space indent key ending with colon).
+fn is_fusion_entry_key(line: &str, trimmed: &str) -> bool {
+    !trimmed.starts_with('#')
+        && !trimmed.is_empty()
+        && line.starts_with("  ")
+        && !line.starts_with("    ")
+        && trimmed.ends_with(':')
+        && !trimmed.starts_with('-')
+}
+
+/// Check if a YAML `tok_s` value line has a non-null, non-empty value.
+fn has_valid_tok_s_value(trimmed: &str, prefix: &str) -> bool {
+    if !trimmed.starts_with(prefix) {
+        return false;
+    }
+    let value = trimmed.trim_start_matches(prefix).trim();
+    value != "null" && !value.is_empty()
+}
+
 /// FUSION-002: All BLOCKED entries MUST have benchmark data (unfused_tok_s and fused_tok_s).
 ///
 /// Falsification: A BLOCKED entry without measured performance data is an undocumented
@@ -87,8 +106,6 @@ fn falsify_fusion_001_every_fused_kernel_has_yaml_entry() {
 fn falsify_fusion_002_blocked_entries_have_benchmarks() {
     let yaml = read_contract();
 
-    // Find all BLOCKED sections and verify they have benchmark numbers.
-    // We parse by splitting on fusion_decisions entries and checking BLOCKED ones.
     let mut in_blocked_section = false;
     let mut current_entry_name = String::new();
     let mut found_unfused = false;
@@ -98,14 +115,7 @@ fn falsify_fusion_002_blocked_entries_have_benchmarks() {
     for line in yaml.lines() {
         let trimmed = line.trim();
 
-        // Detect top-level fusion entry (2-space indent key ending with colon)
-        if !trimmed.starts_with('#')
-            && !trimmed.is_empty()
-            && line.starts_with("  ")
-            && !line.starts_with("    ")
-            && trimmed.ends_with(':')
-            && !trimmed.starts_with('-')
-        {
+        if is_fusion_entry_key(line, trimmed) {
             // Finalize previous BLOCKED section
             if in_blocked_section {
                 assert!(
@@ -127,17 +137,11 @@ fn falsify_fusion_002_blocked_entries_have_benchmarks() {
         }
 
         if in_blocked_section {
-            if trimmed.starts_with("unfused_tok_s:") {
-                let value = trimmed.trim_start_matches("unfused_tok_s:").trim();
-                if value != "null" && !value.is_empty() {
-                    found_unfused = true;
-                }
+            if has_valid_tok_s_value(trimmed, "unfused_tok_s:") {
+                found_unfused = true;
             }
-            if trimmed.starts_with("fused_tok_s:") {
-                let value = trimmed.trim_start_matches("fused_tok_s:").trim();
-                if value != "null" && !value.is_empty() {
-                    found_fused = true;
-                }
+            if has_valid_tok_s_value(trimmed, "fused_tok_s:") {
+                found_fused = true;
             }
         }
     }
@@ -152,12 +156,20 @@ fn falsify_fusion_002_blocked_entries_have_benchmarks() {
         checked_entries += 1;
     }
 
-    // Sanity: we should have found at least one BLOCKED entry (FUSION-003 is BLOCKED)
     assert!(
         checked_entries > 0,
         "No BLOCKED entries found in contract — expected at least FUSION-003 \
          (rmsnorm_gate_up_swiglu_fused_q4k). Is the contract format changed?"
     );
+}
+
+/// Check if a call_site value is valid (non-empty and not "NOT WIRED").
+fn is_valid_call_site(trimmed: &str) -> Option<bool> {
+    if !trimmed.starts_with("call_site:") {
+        return None;
+    }
+    let value = trimmed.trim_start_matches("call_site:").trim().trim_matches('"');
+    Some(!value.contains("NOT WIRED") && !value.is_empty())
 }
 
 /// FUSION-003: All ACTIVE entries MUST have a call_site that is NOT "NOT WIRED".
@@ -177,14 +189,7 @@ fn falsify_fusion_003_active_entries_have_call_site() {
     for line in yaml.lines() {
         let trimmed = line.trim();
 
-        // Detect top-level fusion entry
-        if !trimmed.starts_with('#')
-            && !trimmed.is_empty()
-            && line.starts_with("  ")
-            && !line.starts_with("    ")
-            && trimmed.ends_with(':')
-            && !trimmed.starts_with('-')
-        {
+        if is_fusion_entry_key(line, trimmed) {
             // Finalize previous ACTIVE section
             if in_active_section {
                 assert!(
@@ -205,12 +210,10 @@ fn falsify_fusion_003_active_entries_have_call_site() {
             in_active_section = true;
         }
 
-        if in_active_section && trimmed.starts_with("call_site:") {
-            found_call_site = true;
-            let value = trimmed.trim_start_matches("call_site:").trim().trim_matches('"');
-            // "NOT WIRED" means the kernel is not actually called
-            if !value.contains("NOT WIRED") && !value.is_empty() {
-                call_site_is_wired = true;
+        if in_active_section {
+            if let Some(is_wired) = is_valid_call_site(trimmed) {
+                found_call_site = true;
+                call_site_is_wired = is_wired;
             }
         }
     }
@@ -225,7 +228,6 @@ fn falsify_fusion_003_active_entries_have_call_site() {
         checked_entries += 1;
     }
 
-    // We expect multiple ACTIVE entries (FUSION-001, 002, 006, 007, 008, 009, 010)
     assert!(
         checked_entries >= 5,
         "Only found {checked_entries} ACTIVE entries with valid call_sites — \
@@ -278,6 +280,50 @@ fn falsify_fusion_004_no_comment_only_decisions() {
     );
 }
 
+/// Check if a comment matches a suspect pattern using simple glob-style matching.
+fn matches_suspect_pattern(lower: &str, pattern: &str) -> bool {
+    let parts: Vec<&str> = pattern.split('*').collect();
+    let mut pos = 0;
+    parts.iter().all(|part| {
+        if let Some(found) = lower[pos..].find(part) {
+            pos += found + part.len();
+            true
+        } else {
+            false
+        }
+    })
+}
+
+/// Check a single .rs file for suspect comment patterns without contract references.
+fn check_file_for_comment_violations(
+    path: &Path,
+    suspect_patterns: &[&str],
+    contract_references: &[&str],
+    violations: &mut Vec<String>,
+) {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return;
+    };
+
+    for (line_num, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        // Only check comment lines
+        if !trimmed.starts_with("//") && !trimmed.starts_with("///") {
+            continue;
+        }
+
+        let lower = trimmed.to_lowercase();
+        let is_suspect = suspect_patterns.iter().any(|pat| matches_suspect_pattern(&lower, pat));
+
+        if is_suspect {
+            let has_contract_ref = contract_references.iter().any(|r| trimmed.contains(r));
+            if !has_contract_ref {
+                violations.push(format!("  {}:{}: {}", path.display(), line_num + 1, trimmed));
+            }
+        }
+    }
+}
+
 /// Recursively scan a directory for .rs files containing suspect comment patterns
 /// without contract references. Skips the file named `skip_filename` to avoid
 /// self-triggering from test data.
@@ -307,44 +353,12 @@ fn scan_directory_for_comment_violations(
             if path.file_name() == Some(std::ffi::OsStr::new(skip_filename)) {
                 continue;
             }
-            let Ok(content) = std::fs::read_to_string(&path) else {
-                continue;
-            };
-
-            for (line_num, line) in content.lines().enumerate() {
-                let trimmed = line.trim();
-                // Only check comment lines
-                if !trimmed.starts_with("//") && !trimmed.starts_with("///") {
-                    continue;
-                }
-
-                let lower = trimmed.to_lowercase();
-                let is_suspect = suspect_patterns.iter().any(|pat| {
-                    // Simple glob-style matching: split on * and check all parts appear in order
-                    let parts: Vec<&str> = pat.split('*').collect();
-                    let mut pos = 0;
-                    parts.iter().all(|part| {
-                        if let Some(found) = lower[pos..].find(part) {
-                            pos += found + part.len();
-                            true
-                        } else {
-                            false
-                        }
-                    })
-                });
-
-                if is_suspect {
-                    let has_contract_ref = contract_references.iter().any(|r| trimmed.contains(r));
-                    if !has_contract_ref {
-                        violations.push(format!(
-                            "  {}:{}: {}",
-                            path.display(),
-                            line_num + 1,
-                            trimmed
-                        ));
-                    }
-                }
-            }
+            check_file_for_comment_violations(
+                &path,
+                suspect_patterns,
+                contract_references,
+                violations,
+            );
         }
     }
 }

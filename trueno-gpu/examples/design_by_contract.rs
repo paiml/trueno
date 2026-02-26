@@ -7,10 +7,8 @@
 
 use trueno_gpu::ptx::{self, PtxKernel, PtxModule, PtxType};
 
-fn main() {
-    println!("=== Trueno-GPU Design by Contract ===\n");
-
-    // --- 1. SM Target Validation ---
+/// Demonstrate SM target validation (sm_70+ required).
+fn demo_sm_target_validation() {
     println!("1. SM target validation (sm_70+ required):");
     for target in &["sm_70", "sm_80", "sm_86", "sm_90"] {
         match ptx::validate_target(target) {
@@ -24,8 +22,10 @@ fn main() {
             Err(e) => println!("   REJECTED (expected): {e}"),
         }
     }
+}
 
-    // --- 2. PTX Version Validation ---
+/// Demonstrate PTX version validation (>= 7.0 required).
+fn demo_ptx_version_validation() {
     println!("\n2. PTX version validation (>= 7.0 required):");
     for (major, minor) in &[(7, 0), (8, 0), (8, 5), (9, 0)] {
         match ptx::validate_version(*major, *minor) {
@@ -39,8 +39,10 @@ fn main() {
             Err(e) => println!("   REJECTED (expected): {e}"),
         }
     }
+}
 
-    // --- 3. Module-level validate() ---
+/// Demonstrate module-level validation.
+fn demo_module_validation() {
     println!("\n3. Module-level validation:");
     let good_module = PtxModule::new().version(8, 0).target("sm_80").address_size(64);
     match good_module.validate() {
@@ -53,8 +55,10 @@ fn main() {
         Ok(()) => println!("   UNEXPECTED PASS"),
         Err(e) => println!("   REJECTED (expected): {e}"),
     }
+}
 
-    // --- 4. PTX Type System Contracts ---
+/// Demonstrate PTX type system contracts.
+fn demo_ptx_type_system() {
     println!("\n4. PTX type system:");
     let types = [
         PtxType::U32,
@@ -74,8 +78,10 @@ fn main() {
             ty.register_prefix()
         );
     }
+}
 
-    // --- 5. Kernel with shared memory ---
+/// Demonstrate full module emit with kernel and assertions.
+fn demo_full_module_emit() {
     println!("\n5. Kernel shared memory contract:");
     let kernel = PtxKernel::new("gemm_tiled").shared_memory(4096);
     println!(
@@ -83,7 +89,6 @@ fn main() {
         kernel.shared_memory_bytes()
     );
 
-    // --- 6. Full module emit ---
     println!("\n6. Full PTX module emission:");
     let kernel = PtxKernel::new("vector_add")
         .param(PtxType::U64, "a_ptr")
@@ -101,6 +106,14 @@ fn main() {
     assert!(ptx_source.contains(".visible .entry vector_add"), "must contain kernel entry");
     assert!(ptx_source.contains(".param .u64 a_ptr"), "must contain typed parameters");
     println!("   All PTX structure assertions passed");
+}
 
+fn main() {
+    println!("=== Trueno-GPU Design by Contract ===\n");
+    demo_sm_target_validation();
+    demo_ptx_version_validation();
+    demo_module_validation();
+    demo_ptx_type_system();
+    demo_full_module_emit();
     println!("\n=== All contract demonstrations complete ===");
 }

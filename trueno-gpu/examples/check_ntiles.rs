@@ -1,5 +1,16 @@
 use trueno_gpu::kernels::{GemmKernel, Kernel};
 
+/// Check if a PTX line is a constant assignment of interest.
+fn is_interesting_constant(trimmed: &str) -> bool {
+    trimmed.contains("mov.u32")
+        && (trimmed.ends_with(", 2;") || trimmed.ends_with(", 1;") || trimmed.ends_with(", 32;"))
+}
+
+/// Count occurrences of `mov.u32 ..., <suffix>;` in PTX.
+fn count_mov_u32_with_suffix(ptx: &str, suffix: &str) -> usize {
+    ptx.lines().filter(|l| l.contains("mov.u32") && l.trim().ends_with(suffix)).count()
+}
+
 fn main() {
     // Test with k=64, tile_size=32 -> n_tiles should be 2
     let kernel = GemmKernel::tiled(4, 192, 64, 32);
@@ -9,12 +20,11 @@ fn main() {
 
     // Look for the n_tiles constant (should be 2)
     for line in ptx.lines() {
-        if line.contains("mov.u32")
-            && (line.contains(", 2;") || line.contains(", 1;") || line.contains(", 32;"))
-        {
+        let trimmed = line.trim();
+        if is_interesting_constant(trimmed) {
             println!("CONSTANT: {}", line);
         }
-        if line.contains("tile_loop") {
+        if trimmed.contains("tile_loop") {
             println!("{}", line);
         }
     }
@@ -23,14 +33,10 @@ fn main() {
     println!("\n=== Value Analysis ===");
 
     // The n_tiles register should have value 2 (k=64, tile=32)
-    let mov_2_count =
-        ptx.lines().filter(|l: &&str| l.contains("mov.u32") && l.trim().ends_with(", 2;")).count();
-    println!("mov.u32 ..., 2; occurrences: {}", mov_2_count);
+    println!("mov.u32 ..., 2; occurrences: {}", count_mov_u32_with_suffix(&ptx, ", 2;"));
 
     // Check for potential bugs - if n_tiles is 1 instead of 2
-    let mov_1_count =
-        ptx.lines().filter(|l: &&str| l.contains("mov.u32") && l.trim().ends_with(", 1;")).count();
-    println!("mov.u32 ..., 1; occurrences: {}", mov_1_count);
+    println!("mov.u32 ..., 1; occurrences: {}", count_mov_u32_with_suffix(&ptx, ", 1;"));
 
     // Print all mov.u32 lines
     println!("\n=== All mov.u32 instructions ===");
