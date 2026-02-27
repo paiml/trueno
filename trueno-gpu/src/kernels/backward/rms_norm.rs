@@ -189,6 +189,208 @@ impl Kernel for RmsNormBackwardKernel {
     }
 }
 
+/// Batched RMSNorm Backward Kernel (stride-loop, one warp per row, arbitrary hidden_dim)
+///
+/// Handles hidden_dim > 32 by striding across the row in warp-width (32) steps.
+/// Computes RMS from input inline (no pre-computed RMS values needed).
+///
+/// # Contract (C-BRMS-BACK-001)
+///
+/// - **Precondition**: input_ptr contains original forward input (x), gamma_ptr contains
+///   learned scale (γ), grad_output_ptr contains ∂L/∂y, all buffers have at least
+///   num_rows * hidden_dim elements, hidden_dim > 0, num_rows > 0
+/// - **Postcondition**: grad_input[r][i] = γ[i]/rms(x[r]) * (∂L/∂y[r][i] - x[r][i]/rms²
+///   * mean(x[r] · ∂L/∂y[r] · γ)) for all r in [0, num_rows), i in [0, hidden_dim)
+/// - **Invariant**: Zero CPU-side data transfers; RMS computed inline from input
+///
+/// # Falsifiable Prediction (P-BRMS-BACK-001)
+///
+/// Batched RMSNorm backward matches finite-difference within ε < 1e-4 for hidden_dim in {1..1024}.
+///
+/// # Parameters
+/// - `input_ptr`: Original forward input (x) [num_rows, hidden_dim]
+/// - `gamma_ptr`: Learned scale parameter (γ) [hidden_dim]
+/// - `grad_output_ptr`: Gradient from upstream (∂L/∂y) [num_rows, hidden_dim]
+/// - `grad_input_ptr`: Output gradient for input (∂L/∂x) [num_rows, hidden_dim]
+/// - `grad_gamma_ptr`: Placeholder for gamma gradient (currently unused)
+/// - `num_rows`: Number of rows (batch size × seq_len)
+/// - `hidden_dim`: Hidden dimension (no upper limit)
+/// - `eps`: Epsilon for numerical stability
+#[derive(Debug, Clone)]
+pub struct BatchedRmsNormBackwardKernel {
+    /// Number of rows to process
+    pub num_rows: u32,
+    /// Hidden dimension (may exceed 32)
+    pub hidden_dim: u32,
+    /// Epsilon for numerical stability
+    pub eps: f32,
+}
+
+impl BatchedRmsNormBackwardKernel {
+    /// Create a new batched RMSNorm backward kernel
+    ///
+    /// # Arguments
+    /// - `num_rows`: Number of rows to process
+    /// - `hidden_dim`: Hidden dimension (no upper limit)
+    /// - `eps`: Epsilon for numerical stability
+    #[must_use]
+    pub fn new(num_rows: u32, hidden_dim: u32, eps: f32) -> Self {
+        Self { num_rows, hidden_dim, eps }
+    }
+}
+
+impl Kernel for BatchedRmsNormBackwardKernel {
+    fn name(&self) -> &str {
+        "batched_rms_norm_backward"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        let num_rows = self.num_rows;
+        let hidden_dim = self.hidden_dim;
+        let eps = self.eps;
+
+        PtxKernel::new("batched_rms_norm_backward")
+            .param(PtxType::U64, "input_ptr")
+            .param(PtxType::U64, "gamma_ptr")
+            .param(PtxType::U64, "grad_output_ptr")
+            .param(PtxType::U64, "grad_input_ptr")
+            .param(PtxType::U64, "grad_gamma_ptr")
+            .param(PtxType::U32, "num_rows")
+            .param(PtxType::U32, "hidden_dim")
+            .param(PtxType::F32, "eps")
+            .build(move |ctx| {
+                // One block per row, one warp (32 threads) per block
+                let row_idx = ctx.special_reg(PtxReg::CtaIdX);
+                let tid = ctx.special_reg(PtxReg::TidX);
+
+                // Bounds check: row_idx < num_rows
+                let num_rows_reg = ctx.mov_u32_imm(num_rows);
+                let valid = ctx.setp_lt_u32(row_idx, num_rows_reg);
+                ctx.branch_if_not(valid, "exit");
+
+                let input_ptr = ctx.load_param_u64("input_ptr");
+                let gamma_ptr = ctx.load_param_u64("gamma_ptr");
+                let grad_output_ptr = ctx.load_param_u64("grad_output_ptr");
+                let grad_input_ptr = ctx.load_param_u64("grad_input_ptr");
+                let hidden_dim_reg = ctx.mov_u32_imm(hidden_dim);
+
+                // Calculate row base addresses
+                let row_offset = ctx.mul_wide_u32(row_idx, hidden_dim * 4);
+                let input_row_base = ctx.add_u64(input_ptr, row_offset);
+                let grad_out_row_base = ctx.add_u64(grad_output_ptr, row_offset);
+                let grad_in_row_base = ctx.add_u64(grad_input_ptr, row_offset);
+
+                let four = ctx.mov_u32_imm(4);
+
+                // === Pass 1: Compute sum(x²) and sum(x·grad_y·γ) via stride loop ===
+                let local_sum_x2 = ctx.mov_f32_imm(0.0);
+                let local_sum_xgg = ctx.mov_f32_imm(0.0);
+                let i_pass1 = ctx.mov_u32_imm(0);
+                ctx.add_u32_reg_inplace(i_pass1, tid);
+                ctx.label("pass1_loop");
+                let done1 = ctx.setp_ge_u32(i_pass1, hidden_dim_reg);
+                ctx.branch_if(done1, "pass1_done");
+
+                let offset = ctx.mul_wide_u32_reg(i_pass1, four);
+                let x_addr = ctx.add_u64(input_row_base, offset);
+                let gy_addr = ctx.add_u64(grad_out_row_base, offset);
+                let g_addr = ctx.add_u64(gamma_ptr, offset);
+
+                let x_val = ctx.ld_global_f32(x_addr);
+                let gy_val = ctx.ld_global_f32(gy_addr);
+                let g_val = ctx.ld_global_f32(g_addr);
+
+                // sum_x2 += x * x
+                let x2 = ctx.mul_f32(x_val, x_val);
+                ctx.add_f32_inplace(local_sum_x2, x2);
+
+                // sum_xgg += x * grad_y * gamma
+                let xgy = ctx.mul_f32(x_val, gy_val);
+                let xgyg = ctx.mul_f32(xgy, g_val);
+                ctx.add_f32_inplace(local_sum_xgg, xgyg);
+
+                ctx.add_u32_inplace(i_pass1, 32);
+                ctx.branch("pass1_loop");
+
+                ctx.label("pass1_done");
+
+                // Warp-reduce sum_x2
+                let s16a = ctx.shfl_down_f32(local_sum_x2, 16, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_x2, s16a);
+                let s8a = ctx.shfl_down_f32(local_sum_x2, 8, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_x2, s8a);
+                let s4a = ctx.shfl_down_f32(local_sum_x2, 4, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_x2, s4a);
+                let s2a = ctx.shfl_down_f32(local_sum_x2, 2, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_x2, s2a);
+                let s1a = ctx.shfl_down_f32(local_sum_x2, 1, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_x2, s1a);
+                let sum_x2 = ctx.shfl_idx_f32(local_sum_x2, 0, 0xFFFF_FFFF);
+
+                // Warp-reduce sum_xgg
+                let s16b = ctx.shfl_down_f32(local_sum_xgg, 16, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_xgg, s16b);
+                let s8b = ctx.shfl_down_f32(local_sum_xgg, 8, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_xgg, s8b);
+                let s4b = ctx.shfl_down_f32(local_sum_xgg, 4, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_xgg, s4b);
+                let s2b = ctx.shfl_down_f32(local_sum_xgg, 2, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_xgg, s2b);
+                let s1b = ctx.shfl_down_f32(local_sum_xgg, 1, 0xFFFF_FFFF);
+                ctx.add_f32_inplace(local_sum_xgg, s1b);
+                let sum_xgg = ctx.shfl_idx_f32(local_sum_xgg, 0, 0xFFFF_FFFF);
+
+                // Compute rms = sqrt(mean(x²) + eps)
+                let hidden_dim_f32 = ctx.cvt_f32_u32(hidden_dim_reg);
+                let mean_x2 = ctx.div_f32(sum_x2, hidden_dim_f32);
+                let eps_const = ctx.mov_f32_imm(eps);
+                let variance_eps = ctx.add_f32(mean_x2, eps_const);
+                let rms = ctx.sqrt_f32(variance_eps);
+
+                // Compute mean(x · grad_y · gamma) = sum_xgg / hidden_dim
+                let mean_xgg = ctx.div_f32(sum_xgg, hidden_dim_f32);
+
+                // === Pass 2: Compute and store grad_x via stride loop ===
+                // grad_x[i] = gamma[i] / rms * (grad_y[i] - x[i] / variance_eps * mean_xgg)
+                let i_pass2 = ctx.mov_u32_imm(0);
+                ctx.add_u32_reg_inplace(i_pass2, tid);
+                ctx.label("pass2_loop");
+                let done2 = ctx.setp_ge_u32(i_pass2, hidden_dim_reg);
+                ctx.branch_if(done2, "exit");
+
+                let offset = ctx.mul_wide_u32_reg(i_pass2, four);
+                let x_addr = ctx.add_u64(input_row_base, offset);
+                let gy_addr = ctx.add_u64(grad_out_row_base, offset);
+                let g_addr = ctx.add_u64(gamma_ptr, offset);
+                let gx_addr = ctx.add_u64(grad_in_row_base, offset);
+
+                let x_val = ctx.ld_global_f32(x_addr);
+                let gy_val = ctx.ld_global_f32(gy_addr);
+                let g_val = ctx.ld_global_f32(g_addr);
+
+                // gamma / rms
+                let g_over_rms = ctx.div_f32(g_val, rms);
+
+                // x / variance_eps * mean_xgg
+                let x_over_var = ctx.div_f32(x_val, variance_eps);
+                let correction = ctx.mul_f32(x_over_var, mean_xgg);
+
+                // grad_y - correction
+                let adjusted = ctx.sub_f32(gy_val, correction);
+
+                // grad_x = gamma/rms * adjusted
+                let grad_x = ctx.mul_f32(g_over_rms, adjusted);
+                ctx.st_global_f32(gx_addr, grad_x);
+
+                ctx.add_u32_inplace(i_pass2, 32);
+                ctx.branch("pass2_loop");
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,5 +444,110 @@ mod tests {
     #[should_panic(expected = "hidden_dim must be ≤ 32")]
     fn test_rms_norm_backward_hidden_dim_limit() {
         let _ = RmsNormBackwardKernel::new(64, 64, 1e-6);
+    }
+
+    // === BatchedRmsNormBackwardKernel tests ===
+
+    #[test]
+    fn test_batched_rms_norm_backward_name() {
+        let kernel = BatchedRmsNormBackwardKernel::new(64, 128, 1e-6);
+        assert_eq!(kernel.name(), "batched_rms_norm_backward");
+    }
+
+    #[test]
+    fn test_batched_rms_norm_backward_ptx_generation() {
+        let kernel = BatchedRmsNormBackwardKernel::new(64, 128, 1e-6);
+        let ptx = kernel.emit_ptx();
+
+        // Verify entry point
+        assert!(ptx.contains(".entry batched_rms_norm_backward"));
+        // Verify parameters
+        assert!(ptx.contains(".param .u64 input_ptr"));
+        assert!(ptx.contains(".param .u64 gamma_ptr"));
+        assert!(ptx.contains(".param .u64 grad_output_ptr"));
+        assert!(ptx.contains(".param .u64 grad_input_ptr"));
+        assert!(ptx.contains(".param .u64 grad_gamma_ptr"));
+        assert!(ptx.contains(".param .u32 num_rows"));
+        assert!(ptx.contains(".param .u32 hidden_dim"));
+        assert!(ptx.contains(".param .f32 eps"));
+        // Verify warp shuffle for reductions
+        assert!(ptx.contains("shfl.sync.down"));
+        assert!(ptx.contains("shfl.sync.idx"));
+        // Verify sqrt for RMS
+        assert!(
+            ptx.contains("sqrt.rn.f32") || ptx.contains("sqrt"),
+            "PTX should contain sqrt: {}",
+            ptx
+        );
+    }
+
+    #[test]
+    fn test_batched_rms_norm_backward_large_hidden() {
+        // hidden_dim=896 (Qwen2-0.5B) — must not panic
+        let kernel = BatchedRmsNormBackwardKernel::new(512, 896, 1e-5);
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry batched_rms_norm_backward"));
+    }
+
+    #[test]
+    fn test_batched_rms_norm_backward_small_hidden() {
+        // hidden_dim=1 edge case
+        let kernel = BatchedRmsNormBackwardKernel::new(4, 1, 1e-6);
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry batched_rms_norm_backward"));
+    }
+
+    #[test]
+    fn test_batched_rms_norm_backward_hidden_32() {
+        // Exactly one warp width — no stride needed
+        let kernel = BatchedRmsNormBackwardKernel::new(128, 32, 1e-5);
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry batched_rms_norm_backward"));
+        assert!(ptx.contains("shfl.sync"));
+    }
+
+    #[test]
+    fn test_batched_rms_norm_backward_hidden_64() {
+        // Smallest size that triggers stride-loop (hidden > 32)
+        let kernel = BatchedRmsNormBackwardKernel::new(8, 64, 1e-5);
+        let ptx = kernel.emit_ptx();
+        assert!(ptx.contains(".entry batched_rms_norm_backward"));
+    }
+
+    #[test]
+    fn test_batched_rms_norm_backward_barrier_safety() {
+        let kernel = BatchedRmsNormBackwardKernel::new(64, 128, 1e-6);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "Batched RMSNorm backward should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+
+    #[test]
+    fn test_batched_rms_norm_backward_clone_and_debug() {
+        let kernel = BatchedRmsNormBackwardKernel::new(256, 64, 1e-5);
+        let cloned = kernel.clone();
+        assert_eq!(kernel.num_rows, cloned.num_rows);
+        assert_eq!(kernel.hidden_dim, cloned.hidden_dim);
+        assert!((kernel.eps - cloned.eps).abs() < 1e-10);
+
+        let debug_str = format!("{kernel:?}");
+        assert!(debug_str.contains("BatchedRmsNormBackwardKernel"));
+        assert!(debug_str.contains("256"));
+        assert!(debug_str.contains("64"));
+    }
+
+    #[test]
+    fn test_batched_rms_norm_backward_various_sizes() {
+        for (rows, dim) in [(1, 1), (16, 16), (64, 32), (128, 64), (512, 128), (24, 896)] {
+            let kernel = BatchedRmsNormBackwardKernel::new(rows, dim, 1e-5);
+            let ptx = kernel.emit_ptx();
+            assert!(
+                ptx.contains(".entry batched_rms_norm_backward"),
+                "Failed for rows={rows}, dim={dim}"
+            );
+        }
     }
 }

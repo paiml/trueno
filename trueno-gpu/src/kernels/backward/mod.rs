@@ -52,8 +52,8 @@ mod softmax;
 pub use activations::{GeluBackwardKernel, ReluBackwardKernel, SiluBackwardKernel};
 pub use gemm::{GemmBackwardAKernel, GemmBackwardBKernel};
 pub use layer_norm::LayerNormBackwardKernel;
-pub use rms_norm::RmsNormBackwardKernel;
-pub use softmax::SoftmaxBackwardKernel;
+pub use rms_norm::{BatchedRmsNormBackwardKernel, RmsNormBackwardKernel};
+pub use softmax::{BatchedSoftmaxBackwardKernel, SoftmaxBackwardKernel};
 
 #[cfg(test)]
 mod tests {
@@ -75,9 +75,17 @@ mod tests {
         let softmax = SoftmaxBackwardKernel::new(64, 32);
         assert!(softmax.emit_ptx().contains(".entry"));
 
+        // Batched softmax backward (handles row_size > 32)
+        let batched_softmax = BatchedSoftmaxBackwardKernel::new(64, 128);
+        assert!(batched_softmax.emit_ptx().contains(".entry"));
+
         // RMSNorm backward
         let rms_norm = RmsNormBackwardKernel::new(64, 32, 1e-6);
         assert!(rms_norm.emit_ptx().contains(".entry"));
+
+        // Batched RMSNorm backward (handles hidden_dim > 32)
+        let batched_rms_norm = BatchedRmsNormBackwardKernel::new(64, 128, 1e-6);
+        assert!(batched_rms_norm.emit_ptx().contains(".entry"));
 
         // LayerNorm backward
         let layer_norm = LayerNormBackwardKernel::new(64, 32);
@@ -97,7 +105,9 @@ mod tests {
             Box::new(GeluBackwardKernel::new(1024)),
             Box::new(SiluBackwardKernel::new(1024)),
             Box::new(SoftmaxBackwardKernel::new(64, 32)),
+            Box::new(BatchedSoftmaxBackwardKernel::new(64, 128)),
             Box::new(RmsNormBackwardKernel::new(64, 32, 1e-6)),
+            Box::new(BatchedRmsNormBackwardKernel::new(64, 128, 1e-6)),
             Box::new(LayerNormBackwardKernel::new(64, 32)),
             Box::new(GemmBackwardAKernel::new(64, 64, 64)),
             Box::new(GemmBackwardBKernel::new(64, 64, 64)),
@@ -119,7 +129,9 @@ mod tests {
         assert_eq!(GeluBackwardKernel::new(128).name(), "gelu_backward");
         assert_eq!(SiluBackwardKernel::new(128).name(), "silu_backward");
         assert_eq!(SoftmaxBackwardKernel::new(16, 16).name(), "softmax_backward");
+        assert_eq!(BatchedSoftmaxBackwardKernel::new(16, 64).name(), "batched_softmax_backward");
         assert_eq!(RmsNormBackwardKernel::new(16, 16, 1e-5).name(), "rms_norm_backward");
+        assert_eq!(BatchedRmsNormBackwardKernel::new(16, 64, 1e-5).name(), "batched_rms_norm_backward");
         assert_eq!(LayerNormBackwardKernel::new(16, 16).name(), "layer_norm_backward");
         assert_eq!(GemmBackwardAKernel::new(32, 32, 32).name(), "gemm_backward_a");
         assert_eq!(GemmBackwardBKernel::new(32, 32, 32).name(), "gemm_backward_b");
@@ -171,6 +183,14 @@ mod tests {
         assert!(debug_str.contains("RmsNormBackwardKernel"));
         assert!(debug_str.contains("64"));
         assert!(debug_str.contains("16"));
+
+        let batched = BatchedRmsNormBackwardKernel::new(32, 128, 1e-5);
+        let batched_clone = batched.clone();
+        assert_eq!(batched.num_rows, batched_clone.num_rows);
+        assert_eq!(batched.hidden_dim, batched_clone.hidden_dim);
+        assert!((batched.eps - batched_clone.eps).abs() < 1e-10);
+        let debug_str = format!("{batched:?}");
+        assert!(debug_str.contains("BatchedRmsNormBackwardKernel"));
     }
 
     #[test]
@@ -222,9 +242,25 @@ mod tests {
         assert!(softmax_ptx.contains("num_rows"));
         assert!(softmax_ptx.contains("row_size"));
 
+        let batched_softmax_ptx = BatchedSoftmaxBackwardKernel::new(32, 64).emit_ptx();
+        assert!(batched_softmax_ptx.contains("output_ptr"));
+        assert!(batched_softmax_ptx.contains("grad_output_ptr"));
+        assert!(batched_softmax_ptx.contains("total_rows"));
+        assert!(batched_softmax_ptx.contains("row_size"));
+
         let rms_norm_ptx = RmsNormBackwardKernel::new(32, 16, 1e-5).emit_ptx();
         assert!(rms_norm_ptx.contains("gamma_ptr"));
         assert!(rms_norm_ptx.contains("rms_ptr"));
+
+        let batched_rms_ptx = BatchedRmsNormBackwardKernel::new(32, 64, 1e-5).emit_ptx();
+        assert!(batched_rms_ptx.contains("input_ptr"));
+        assert!(batched_rms_ptx.contains("gamma_ptr"));
+        assert!(batched_rms_ptx.contains("grad_output_ptr"));
+        assert!(batched_rms_ptx.contains("grad_input_ptr"));
+        assert!(batched_rms_ptx.contains("grad_gamma_ptr"));
+        assert!(batched_rms_ptx.contains("num_rows"));
+        assert!(batched_rms_ptx.contains("hidden_dim"));
+        assert!(batched_rms_ptx.contains(".param .f32 eps"));
 
         let layer_norm_ptx = LayerNormBackwardKernel::new(32, 16).emit_ptx();
         assert!(layer_norm_ptx.contains("mean_ptr"));
@@ -293,7 +329,9 @@ mod tests {
             GeluBackwardKernel::new(64).emit_ptx(),
             SiluBackwardKernel::new(64).emit_ptx(),
             SoftmaxBackwardKernel::new(16, 16).emit_ptx(),
+            BatchedSoftmaxBackwardKernel::new(16, 64).emit_ptx(),
             RmsNormBackwardKernel::new(16, 16, 1e-6).emit_ptx(),
+            BatchedRmsNormBackwardKernel::new(16, 64, 1e-6).emit_ptx(),
             LayerNormBackwardKernel::new(16, 16).emit_ptx(),
             GemmBackwardAKernel::new(16, 16, 16).emit_ptx(),
             GemmBackwardBKernel::new(16, 16, 16).emit_ptx(),
