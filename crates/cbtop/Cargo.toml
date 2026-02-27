@@ -20,8 +20,8 @@ presentar-core = "0.3"
 presentar-terminal = "0.3"
 
 # Compute backends
-trueno = { path = "../.." }
-trueno-gpu = { path = "../../trueno-gpu", optional = true }
+trueno = { version = "0.16", path = "../.." }
+trueno-gpu = { version = "0.4", path = "../../trueno-gpu", optional = true }
 
 # Terminal handling
 crossterm = "0.28"
