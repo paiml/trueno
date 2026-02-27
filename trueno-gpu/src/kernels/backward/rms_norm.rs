@@ -7,7 +7,7 @@
 //! Forward: `y_i = x_i / rms(x) * γ_i` where `rms(x) = sqrt(mean(x²) + ε)`
 //!
 //! Backward:
-//! - `∂L/∂x_i = γ_i/rms * (∂L/∂y_i - x_i/rms² * mean(x · ∂L/∂y · γ))`
+//! - `∂L/∂x_i = (1/rms) * (γ_i * ∂L/∂y_i - x_i/rms² * mean(x · ∂L/∂y · γ))`
 //! - `∂L/∂γ_i = Σ_batch (∂L/∂y_i * x_i / rms)`
 //!
 //! ## Implementation
@@ -157,27 +157,28 @@ impl Kernel for RmsNormBackwardKernel {
                 let hidden_dim_f32 = ctx.cvt_f32_u32(hidden_dim_param);
                 let mean_term = ctx.div_f32(total_sum, hidden_dim_f32);
 
-                // Compute grad_x_i = gamma_i/rms * (grad_y_i - x_i/rms² * mean_term)
-                // = gamma_i/rms * grad_y_i - gamma_i * x_i * mean_term / rms³
+                // Compute grad_x_i = (1/rms) * (gamma_i * grad_y_i - x_i/rms² * mean_term)
                 let eps_const = ctx.mov_f32_imm(eps);
                 let rms_sq = ctx.mul_f32(rms, rms);
                 let rms_sq_eps = ctx.add_f32(rms_sq, eps_const);
                 let rms_safe = ctx.sqrt_f32(rms_sq_eps);
 
-                // gamma_i / rms
-                let gamma_over_rms = ctx.div_f32(gamma_i, rms_safe);
+                // 1 / rms
+                let one = ctx.mov_f32_imm(1.0);
+                let inv_rms = ctx.div_f32(one, rms_safe);
 
-                // x_i / rms²
+                // gamma_i * grad_y_i
+                let gamma_grad_y = ctx.mul_f32(gamma_i, grad_y_i);
+
+                // x_i / rms² * mean_term (correction)
                 let x_over_rms_sq = ctx.div_f32(x_i, rms_sq_eps);
-
-                // x_i / rms² * mean_term
                 let correction = ctx.mul_f32(x_over_rms_sq, mean_term);
 
-                // grad_y_i - correction
-                let adjusted_grad = ctx.sub_f32(grad_y_i, correction);
+                // gamma_i * grad_y_i - correction
+                let adjusted_grad = ctx.sub_f32(gamma_grad_y, correction);
 
-                // final gradient
-                let grad_x_i = ctx.mul_f32(gamma_over_rms, adjusted_grad);
+                // final gradient = (1/rms) * adjusted
+                let grad_x_i = ctx.mul_f32(inv_rms, adjusted_grad);
 
                 // Store result only for valid lanes
                 ctx.branch_if_not(valid_lane, "exit");
@@ -199,7 +200,7 @@ impl Kernel for RmsNormBackwardKernel {
 /// - **Precondition**: input_ptr contains original forward input (x), gamma_ptr contains
 ///   learned scale (γ), grad_output_ptr contains ∂L/∂y, all buffers have at least
 ///   num_rows * hidden_dim elements, hidden_dim > 0, num_rows > 0
-/// - **Postcondition**: grad_input[r][i] = γ[i]/rms(x[r]) * (∂L/∂y[r][i] - x[r][i]/rms²
+/// - **Postcondition**: grad_input[r][i] = (1/rms(x[r])) * (γ[i] * ∂L/∂y[r][i] - x[r][i]/rms²
 ///   * mean(x[r] · ∂L/∂y[r] · γ)) for all r in [0, num_rows), i in [0, hidden_dim)
 /// - **Invariant**: Zero CPU-side data transfers; RMS computed inline from input
 ///
@@ -351,7 +352,9 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 let mean_xgg = ctx.div_f32(sum_xgg, hidden_dim_f32);
 
                 // === Pass 2: Compute and store grad_x via stride loop ===
-                // grad_x[i] = gamma[i] / rms * (grad_y[i] - x[i] / variance_eps * mean_xgg)
+                // grad_x[i] = (1/rms) * (gamma[i] * grad_y[i] - x[i] / variance_eps * mean_xgg)
+                let one = ctx.mov_f32_imm(1.0);
+                let inv_rms = ctx.div_f32(one, rms);
                 let i_pass2 = ctx.mov_u32_imm(0);
                 ctx.add_u32_reg_inplace(i_pass2, tid);
                 ctx.label("pass2_loop");
@@ -368,18 +371,18 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 let gy_val = ctx.ld_global_f32(gy_addr);
                 let g_val = ctx.ld_global_f32(g_addr);
 
-                // gamma / rms
-                let g_over_rms = ctx.div_f32(g_val, rms);
+                // gamma * grad_y
+                let gamma_gy = ctx.mul_f32(g_val, gy_val);
 
-                // x / variance_eps * mean_xgg
+                // x / variance_eps * mean_xgg (correction term)
                 let x_over_var = ctx.div_f32(x_val, variance_eps);
                 let correction = ctx.mul_f32(x_over_var, mean_xgg);
 
-                // grad_y - correction
-                let adjusted = ctx.sub_f32(gy_val, correction);
+                // gamma * grad_y - correction
+                let adjusted = ctx.sub_f32(gamma_gy, correction);
 
-                // grad_x = gamma/rms * adjusted
-                let grad_x = ctx.mul_f32(g_over_rms, adjusted);
+                // grad_x = (1/rms) * adjusted
+                let grad_x = ctx.mul_f32(inv_rms, adjusted);
                 ctx.st_global_f32(gx_addr, grad_x);
 
                 ctx.add_u32_inplace(i_pass2, 32);
