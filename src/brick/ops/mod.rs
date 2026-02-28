@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Built-in Compute Operations
 //!
 //! Pre-defined operations that implement the ComputeOp trait:
@@ -288,7 +289,7 @@ impl SoftmaxOp {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_max(input: &[f32]) -> f32 {
+    unsafe fn avx2_max(input: &[f32]) -> f32 { unsafe {
         use std::arch::x86_64::*;
         let len = input.len();
         let mut i = 0;
@@ -313,12 +314,12 @@ impl SoftmaxOp {
             result = result.max(val);
         }
         result
-    }
+    }}
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_exp(input: &[f32], output: &mut [f32]) {
+    unsafe fn avx2_exp(input: &[f32], output: &mut [f32]) { unsafe {
         use std::arch::x86_64::*;
 
         let len = input.len();
@@ -374,12 +375,12 @@ impl SoftmaxOp {
         for j in i..len {
             output[j] = input[j].exp();
         }
-    }
+    }}
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_sum(input: &[f32]) -> f32 {
+    unsafe fn avx2_sum(input: &[f32]) -> f32 { unsafe {
         use std::arch::x86_64::*;
         let len = input.len();
         let mut i = 0;
@@ -404,12 +405,12 @@ impl SoftmaxOp {
             result += val;
         }
         result
-    }
+    }}
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_scale(input: &[f32], scalar: f32, output: &mut [f32]) {
+    unsafe fn avx2_scale(input: &[f32], scalar: f32, output: &mut [f32]) { unsafe {
         use std::arch::x86_64::*;
         let len = input.len();
         let mut i = 0;
@@ -426,7 +427,7 @@ impl SoftmaxOp {
         for j in i..len {
             output[j] = input[j] * scalar;
         }
-    }
+    }}
 }
 
 #[cfg(test)]

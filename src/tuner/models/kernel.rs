@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Kernel classifier model for ML tuner.
 
 use serde::{Deserialize, Serialize};

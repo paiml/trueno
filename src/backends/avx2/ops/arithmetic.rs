@@ -7,7 +7,7 @@ use std::arch::x86_64::*;
 #[inline]
 #[target_feature(enable = "avx2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
+pub(crate) unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) { unsafe {
     let len = a.len();
     let mut i = 0;
 
@@ -22,13 +22,13 @@ pub unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
     for j in i..len {
         result[j] = a[j] + b[j];
     }
-}
+}}
 
 /// AVX2 vector subtraction.
 #[inline]
 #[target_feature(enable = "avx2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
+pub(crate) unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) { unsafe {
     let len = a.len();
     let mut i = 0;
 
@@ -43,13 +43,13 @@ pub unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
     for j in i..len {
         result[j] = a[j] - b[j];
     }
-}
+}}
 
 /// AVX2 vector multiplication.
 #[inline]
 #[target_feature(enable = "avx2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
+pub(crate) unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) { unsafe {
     let len = a.len();
     let mut i = 0;
 
@@ -64,13 +64,13 @@ pub unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
     for j in i..len {
         result[j] = a[j] * b[j];
     }
-}
+}}
 
 /// AVX2 vector division.
 #[inline]
 #[target_feature(enable = "avx2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
+pub(crate) unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) { unsafe {
     let len = a.len();
     let mut i = 0;
 
@@ -85,4 +85,4 @@ pub unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
     for j in i..len {
         result[j] = a[j] / b[j];
     }
-}
+}}

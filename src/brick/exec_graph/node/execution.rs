@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Execution Path Graph Types (PAR-201)
 //!
 //! Node, edge, and transfer types for the execution hierarchy.

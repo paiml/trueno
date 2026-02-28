@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! BLIS Profiler Integration
 //!
 //! Performance tracking for BLIS operations at multiple granularity levels.

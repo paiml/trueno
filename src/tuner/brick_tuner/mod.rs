@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! BrickTuner - ML-based ComputeBrick Tuner Ensemble
 //!
 //! Combines throughput regression, kernel classification, and bottleneck analysis.

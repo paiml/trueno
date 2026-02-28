@@ -17,93 +17,93 @@ impl VectorBackend for Avx2Backend {
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) {
+    unsafe fn add(a: &[f32], b: &[f32], result: &mut [f32]) { unsafe {
         ops::arithmetic::add(a, b, result)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) {
+    unsafe fn sub(a: &[f32], b: &[f32], result: &mut [f32]) { unsafe {
         ops::arithmetic::sub(a, b, result)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) {
+    unsafe fn mul(a: &[f32], b: &[f32], result: &mut [f32]) { unsafe {
         ops::arithmetic::mul(a, b, result)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) {
+    unsafe fn div(a: &[f32], b: &[f32], result: &mut [f32]) { unsafe {
         ops::arithmetic::div(a, b, result)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2,fma")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
+    unsafe fn dot(a: &[f32], b: &[f32]) -> f32 { unsafe {
         ops::reductions::dot(a, b)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn sum(a: &[f32]) -> f32 {
+    unsafe fn sum(a: &[f32]) -> f32 { unsafe {
         ops::reductions::sum(a)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn max(a: &[f32]) -> f32 {
+    unsafe fn max(a: &[f32]) -> f32 { unsafe {
         ops::reductions::max(a)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn min(a: &[f32]) -> f32 {
+    unsafe fn min(a: &[f32]) -> f32 { unsafe {
         ops::reductions::min(a)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn argmax(a: &[f32]) -> usize {
+    unsafe fn argmax(a: &[f32]) -> usize { unsafe {
         ops::reductions::argmax(a)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn argmin(a: &[f32]) -> usize {
+    unsafe fn argmin(a: &[f32]) -> usize { unsafe {
         ops::reductions::argmin(a)
-    }
+    }}
 
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn sum_kahan(a: &[f32]) -> f32 {
+    unsafe fn sum_kahan(a: &[f32]) -> f32 { unsafe {
         ops::reductions::sum_kahan(a)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2,fma")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn norm_l2(a: &[f32]) -> f32 {
+    unsafe fn norm_l2(a: &[f32]) -> f32 { unsafe {
         if a.is_empty() {
             return 0.0;
         }
         Self::dot(a, a).sqrt()
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn norm_l1(a: &[f32]) -> f32 {
+    unsafe fn norm_l1(a: &[f32]) -> f32 { unsafe {
         if a.is_empty() {
             return 0.0;
         }
@@ -130,12 +130,12 @@ impl VectorBackend for Avx2Backend {
             result += val.abs();
         }
         result
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn norm_linf(a: &[f32]) -> f32 {
+    unsafe fn norm_linf(a: &[f32]) -> f32 { unsafe {
         if a.is_empty() {
             return 0.0;
         }
@@ -166,12 +166,12 @@ impl VectorBackend for Avx2Backend {
             }
         }
         result
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) {
+    unsafe fn scale(a: &[f32], scalar: f32, result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
         let scalar_vec = _mm256_set1_ps(scalar);
@@ -187,12 +187,12 @@ impl VectorBackend for Avx2Backend {
             result[i] = a[i] * scalar;
             i += 1;
         }
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn abs(a: &[f32], result: &mut [f32]) {
+    unsafe fn abs(a: &[f32], result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
         let sign_mask = _mm256_set1_ps(f32::from_bits(0x7FFF_FFFF));
@@ -207,12 +207,12 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = a[j].abs();
         }
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) {
+    unsafe fn clamp(a: &[f32], min_val: f32, max_val: f32, result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
         let vmin = _mm256_set1_ps(min_val);
@@ -228,12 +228,12 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = a[j].clamp(min_val, max_val);
         }
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2,fma")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) {
+    unsafe fn lerp(a: &[f32], b: &[f32], t: f32, result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
         let vt = _mm256_set1_ps(t);
@@ -250,12 +250,12 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = a[j] * (1.0 - t) + b[j] * t;
         }
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2,fma")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) {
+    unsafe fn fma(a: &[f32], b: &[f32], c: &[f32], result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
 
@@ -271,12 +271,12 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = a[j] * b[j] + c[j];
         }
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn relu(a: &[f32], result: &mut [f32]) {
+    unsafe fn relu(a: &[f32], result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
         let vzero = _mm256_setzero_ps();
@@ -291,43 +291,43 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = a[j].max(0.0);
         }
-    }
+    }}
 
     // Delegate transcendental functions to scalar backend
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn exp(a: &[f32], result: &mut [f32]) {
+    unsafe fn exp(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::exp(a, result)
-    }
+    }}
 
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
+    unsafe fn sigmoid(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::sigmoid(a, result)
-    }
+    }}
 
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn gelu(a: &[f32], result: &mut [f32]) {
+    unsafe fn gelu(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::gelu(a, result)
-    }
+    }}
 
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn swish(a: &[f32], result: &mut [f32]) {
+    unsafe fn swish(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::swish(a, result)
-    }
+    }}
 
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn tanh(a: &[f32], result: &mut [f32]) {
+    unsafe fn tanh(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::tanh(a, result)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn sqrt(a: &[f32], result: &mut [f32]) {
+    unsafe fn sqrt(a: &[f32], result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
 
@@ -341,12 +341,12 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = a[j].sqrt();
         }
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn recip(a: &[f32], result: &mut [f32]) {
+    unsafe fn recip(a: &[f32], result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
         let vone = _mm256_set1_ps(1.0);
@@ -361,50 +361,50 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = 1.0 / a[j];
         }
-    }
+    }}
 
     // Delegate log functions to scalar backend
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn ln(a: &[f32], result: &mut [f32]) {
+    unsafe fn ln(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::ln(a, result)
-    }
+    }}
 
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn log2(a: &[f32], result: &mut [f32]) {
+    unsafe fn log2(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::log2(a, result)
-    }
+    }}
 
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn log10(a: &[f32], result: &mut [f32]) {
+    unsafe fn log10(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::log10(a, result)
-    }
+    }}
 
     // Delegate trig functions to scalar backend
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn sin(a: &[f32], result: &mut [f32]) {
+    unsafe fn sin(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::sin(a, result)
-    }
+    }}
 
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn cos(a: &[f32], result: &mut [f32]) {
+    unsafe fn cos(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::cos(a, result)
-    }
+    }}
 
     #[inline]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn tan(a: &[f32], result: &mut [f32]) {
+    unsafe fn tan(a: &[f32], result: &mut [f32]) { unsafe {
         super::scalar::ScalarBackend::tan(a, result)
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn floor(a: &[f32], result: &mut [f32]) {
+    unsafe fn floor(a: &[f32], result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
 
@@ -418,12 +418,12 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = a[j].floor();
         }
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn ceil(a: &[f32], result: &mut [f32]) {
+    unsafe fn ceil(a: &[f32], result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
 
@@ -437,12 +437,12 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = a[j].ceil();
         }
-    }
+    }}
 
     #[inline]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller ensures preconditions are met for this unsafe function
-    unsafe fn round(a: &[f32], result: &mut [f32]) {
+    unsafe fn round(a: &[f32], result: &mut [f32]) { unsafe {
         let len = a.len();
         let mut i = 0;
 
@@ -465,5 +465,5 @@ impl VectorBackend for Avx2Backend {
         for j in i..len {
             result[j] = a[j].round();
         }
-    }
+    }}
 }

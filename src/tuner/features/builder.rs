@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Builder for `TunerFeatures` with automatic normalization.
 
 use crate::hardware::HardwareCapability;

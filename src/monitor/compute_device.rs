@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Unified Compute Device Abstraction (TRUENO-SPEC-020)
 
 /// Device identification

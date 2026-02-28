@@ -12,7 +12,7 @@
 //! This separation allows each domain to be optimized and tested independently.
 //! A matrix's memory layout is independent of its mathematical operations.
 
-pub mod arithmetic;
-pub mod linear;
-pub mod ml_ops;
-pub mod storage;
+pub(super) mod arithmetic;
+pub(super) mod linear;
+pub(super) mod ml_ops;
+pub(super) mod storage;

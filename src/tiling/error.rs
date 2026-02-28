@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Tiling error types.
 
 use super::geometry::TcbLevel;

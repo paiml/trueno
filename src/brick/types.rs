@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Core types for the ComputeBrick system.
 //!
 //! Defines execution backends, error types, assertions, and verification results.

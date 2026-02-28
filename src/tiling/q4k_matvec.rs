@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Q4_K quantized matrix-vector tiling implementation.
 
 use super::config::TilingConfig;

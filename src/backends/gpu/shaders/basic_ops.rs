@@ -9,7 +9,7 @@
 /// - C is M×N
 ///
 /// Uses workgroups of 16×16 threads for optimal GPU utilization
-pub const MATMUL_SHADER: &str = r#"
+pub(crate) const MATMUL_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
 @group(0) @binding(2) var<storage, read_write> c: array<f32>;
@@ -50,7 +50,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Vector addition compute shader (WGSL)
 ///
 /// Computes c = a + b element-wise
-pub const VEC_ADD_SHADER: &str = r#"
+pub(crate) const VEC_ADD_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
 @group(0) @binding(2) var<storage, read_write> c: array<f32>;
@@ -69,7 +69,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Element-wise multiplication shader (WGSL)
 ///
 /// Computes c = a * b element-wise
-pub const VEC_MUL_SHADER: &str = r#"
+pub(crate) const VEC_MUL_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
 @group(0) @binding(2) var<storage, read_write> c: array<f32>;
@@ -88,7 +88,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Element-wise subtraction shader (WGSL)
 ///
 /// Computes c = a - b element-wise
-pub const VEC_SUB_SHADER: &str = r#"
+pub(crate) const VEC_SUB_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
 @group(0) @binding(2) var<storage, read_write> c: array<f32>;
@@ -107,7 +107,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Scalar multiplication shader (WGSL)
 ///
 /// Computes output = input * scalar element-wise
-pub const SCALE_SHADER: &str = r#"
+pub(crate) const SCALE_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
 
@@ -131,7 +131,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Dot product reduction shader (WGSL)
 ///
 /// Computes sum(a[i] * b[i]) using parallel reduction
-pub const DOT_PRODUCT_SHADER: &str = r#"
+pub(crate) const DOT_PRODUCT_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> a: array<f32>;
 @group(0) @binding(1) var<storage, read> b: array<f32>;
 @group(0) @binding(2) var<storage, read_write> result: array<f32>;
@@ -179,7 +179,7 @@ fn main(
 ///
 /// This is one of the simplest GPU operations - a single comparison and selection per element.
 /// GPU acceleration beneficial for large vectors (>100K elements).
-pub const RELU_SHADER: &str = r#"
+pub(crate) const RELU_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
 
@@ -201,7 +201,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 ///
 /// Leaky ReLU addresses the "dying ReLU" problem by allowing small negative activations.
 /// GPU acceleration beneficial for large vectors (>100K elements).
-pub const LEAKY_RELU_SHADER: &str = r#"
+pub(crate) const LEAKY_RELU_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
 
@@ -236,7 +236,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// ELU has smooth gradients everywhere and pushes mean activations closer to zero,
 /// improving learning in deep networks.
 /// GPU acceleration beneficial for large vectors (>100K elements).
-pub const ELU_SHADER: &str = r#"
+pub(crate) const ELU_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
 
@@ -270,7 +270,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 ///
 /// Classic logistic function used in binary classification and attention mechanisms.
 /// GPU acceleration beneficial for large vectors (>100K elements).
-pub const SIGMOID_SHADER: &str = r#"
+pub(crate) const SIGMOID_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
 
@@ -305,7 +305,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 ///
 /// Classic activation function used in LSTM, GRU, and traditional neural networks.
 /// GPU acceleration beneficial for large vectors (>100K elements).
-pub const TANH_SHADER: &str = r#"
+pub(crate) const TANH_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
 
@@ -343,7 +343,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 ///
 /// Modern activation function (SiLU) used in transformers and modern architectures.
 /// GPU acceleration beneficial for large vectors (>100K elements).
-pub const SWISH_SHADER: &str = r#"
+pub(crate) const SWISH_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
 
@@ -379,7 +379,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 ///
 /// Standard activation in BERT, GPT-2, GPT-3, and modern transformers.
 /// GPU acceleration beneficial for large vectors (>100K elements).
-pub const GELU_SHADER: &str = r#"
+pub(crate) const GELU_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
 
@@ -411,7 +411,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 ///
 /// Constrains values to the range [min_val, max_val].
 /// GPU acceleration beneficial for large vectors (>100K elements).
-pub const CLIP_SHADER: &str = r#"
+pub(crate) const CLIP_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> output: array<f32>;
 
@@ -444,7 +444,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// - output_cols = input_cols - kernel_cols + 1
 ///
 /// Uses workgroups of 16×16 threads for optimal GPU utilization
-pub const CONVOLVE2D_SHADER: &str = r#"
+pub(crate) const CONVOLVE2D_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read> kernel: array<f32>;
 @group(0) @binding(2) var<storage, read_write> output: array<f32>;

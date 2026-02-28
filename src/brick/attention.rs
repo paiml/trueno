@@ -110,7 +110,7 @@ impl AttentionOp {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_dot(a: &[f32], b: &[f32]) -> f32 {
+    unsafe fn avx2_dot(a: &[f32], b: &[f32]) -> f32 { unsafe {
         use std::arch::x86_64::*;
 
         let mut sum = _mm256_setzero_ps();
@@ -137,7 +137,7 @@ impl AttentionOp {
         }
 
         result
-    }
+    }}
 
     /// Row-wise softmax with SIMD max/sum.
     #[inline]
