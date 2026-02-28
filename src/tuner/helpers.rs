@@ -29,7 +29,7 @@ const fn crc32_table() -> [u32; 256] {
 
 /// Simple CRC32 implementation (IEEE polynomial).
 /// Used for .apr file checksum verification.
-pub fn crc32_update(crc: u32, data: &[u8]) -> u32 {
+pub(crate) fn crc32_update(crc: u32, data: &[u8]) -> u32 {
     const CRC32_TABLE: [u32; 256] = crc32_table();
     let mut crc = !crc;
     for &byte in data {
@@ -39,7 +39,7 @@ pub fn crc32_update(crc: u32, data: &[u8]) -> u32 {
 }
 
 /// Compute CRC32 hash for given data (convenience wrapper)
-pub fn crc32_hash(data: &[u8]) -> u32 {
+pub(crate) fn crc32_hash(data: &[u8]) -> u32 {
     crc32_update(0, data)
 }
 
@@ -48,7 +48,7 @@ pub fn crc32_hash(data: &[u8]) -> u32 {
 // ============================================================================
 
 /// Simple timestamp (avoids chrono dependency)
-pub fn chrono_lite_now() -> String {
+pub(crate) fn chrono_lite_now() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let duration = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
     format!("{}", duration.as_secs())
@@ -59,7 +59,7 @@ pub fn chrono_lite_now() -> String {
 // ============================================================================
 
 /// Pad string to fixed width
-pub fn pad_right(s: &str, width: usize) -> String {
+pub(crate) fn pad_right(s: &str, width: usize) -> String {
     if s.len() >= width {
         s[..width].to_string()
     } else {

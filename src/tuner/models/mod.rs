@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! ML Models for Tuner
 //!
 //! Throughput regressor, kernel classifier, and bottleneck classifier implementations.

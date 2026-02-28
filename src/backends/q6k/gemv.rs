@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Row-major Q6_K matrix-vector multiplication.
 //!
 //! This module implements row-major GEMV for Q6_K format.
@@ -122,7 +123,7 @@ unsafe fn process_q6k_superblock_avx2(
     input_offset: usize,
     in_dim: usize,
     acc: &mut std::arch::x86_64::__m256,
-) {
+) { unsafe {
     use std::arch::x86_64::*;
 
     let ql = sb_data.get(0..128).expect("Q6_K: need ≥128 bytes for ql");
@@ -152,7 +153,7 @@ unsafe fn process_q6k_superblock_avx2(
             *acc = _mm256_fmadd_ps(dequant, x, *acc);
         }
     }
-}
+}}
 
 /// Fused Q6_K matrix-vector multiply with AVX2 SIMD
 ///
@@ -166,7 +167,7 @@ unsafe fn matmul_q6k_f32_avx2(
     input: &[f32],
     out_dim: usize,
     in_dim: usize,
-) -> Vec<f32> {
+) -> Vec<f32> { unsafe {
     use std::arch::x86_64::*;
 
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
@@ -192,7 +193,7 @@ unsafe fn matmul_q6k_f32_avx2(
     }
 
     output
-}
+}}
 
 /// Runtime dispatch for Q6K matmul - uses AVX2 if available
 ///
@@ -330,7 +331,7 @@ unsafe fn compute_chunk_avx2(
     in_dim: usize,
     num_blocks_per_row: usize,
     row_bytes: usize,
-) {
+) { unsafe {
     use std::arch::x86_64::*;
 
     for (local_idx, out_val) in chunk.iter_mut().enumerate() {
@@ -354,7 +355,7 @@ unsafe fn compute_chunk_avx2(
 
         *out_val = hsum_q6k_avx2(acc);
     }
-}
+}}
 
 pub(crate) fn compute_chunk_scalar(
     q6k_data: &[u8],

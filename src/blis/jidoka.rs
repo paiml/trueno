@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Jidoka (Autonomation) - Stop on Defect
 //!
 //! Runtime guards that detect and halt computation on numerical errors.

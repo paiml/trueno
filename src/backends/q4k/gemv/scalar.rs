@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Scalar Q4_K GEMV implementations.
 //!
 //! Contains the baseline scalar dot product, 4-way unrolled fused GEMV,

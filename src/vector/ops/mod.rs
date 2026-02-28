@@ -10,11 +10,11 @@
 //! - `transcendental`: Mathematical functions (exp, log, sin, cos, etc.)
 //! - `transforms`: Element-wise transforms (abs, clamp, clip, lerp, sqrt, recip, pow)
 
-pub mod activations;
-pub mod arithmetic;
-pub mod normalization;
-pub mod norms;
-pub mod reductions;
-pub mod rounding;
-pub mod transcendental;
-pub mod transforms;
+pub(super) mod activations;
+pub(super) mod arithmetic;
+pub(super) mod normalization;
+pub(super) mod norms;
+pub(super) mod reductions;
+pub(super) mod rounding;
+pub(super) mod transcendental;
+pub(super) mod transforms;

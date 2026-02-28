@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! AWP-04: HTTP/2 Stream Capacity
 
 /// HTTP/2 flow control window state.

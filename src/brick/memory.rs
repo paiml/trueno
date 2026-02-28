@@ -195,7 +195,7 @@ pub unsafe fn madvise_region(
     addr: *mut u8,
     len: usize,
     advice: MemoryAdvice,
-) -> std::io::Result<()> {
+) -> std::io::Result<()> { unsafe {
     // madvise syscall number is 28 on x86_64
     #[cfg(target_arch = "x86_64")]
     const SYS_MADVISE: i64 = 28;
@@ -240,7 +240,7 @@ pub unsafe fn madvise_region(
     }
 
     Ok(())
-}
+}}
 
 /// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
@@ -263,13 +263,13 @@ pub unsafe fn madvise_region(
 /// The pointer must be valid and the length must not exceed the mapped region.
 #[cfg(target_os = "linux")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn prefetch_for_inference(addr: *mut u8, len: usize) -> std::io::Result<()> {
+pub unsafe fn prefetch_for_inference(addr: *mut u8, len: usize) -> std::io::Result<()> { unsafe {
     // First: tell kernel we'll need this data
     madvise_region(addr, len, MemoryAdvice::WillNeed)?;
     // Second: hint random access pattern (disables readahead waste)
     madvise_region(addr, len, MemoryAdvice::Random)?;
     Ok(())
-}
+}}
 
 /// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
@@ -302,7 +302,7 @@ pub enum PrefetchLocality {
 #[inline]
 #[cfg(target_arch = "x86_64")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn prefetch_ptr<T>(ptr: *const T, locality: PrefetchLocality) {
+pub unsafe fn prefetch_ptr<T>(ptr: *const T, locality: PrefetchLocality) { unsafe {
     use core::arch::x86_64::*;
     match locality {
         PrefetchLocality::None => _mm_prefetch(ptr as *const i8, _MM_HINT_NTA),
@@ -310,7 +310,7 @@ pub unsafe fn prefetch_ptr<T>(ptr: *const T, locality: PrefetchLocality) {
         PrefetchLocality::Moderate => _mm_prefetch(ptr as *const i8, _MM_HINT_T1),
         PrefetchLocality::High => _mm_prefetch(ptr as *const i8, _MM_HINT_T0),
     }
-}
+}}
 
 /// Prefetch data into cache (ARM64).
 #[inline]

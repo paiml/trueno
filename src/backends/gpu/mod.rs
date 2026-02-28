@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! GPU backend using wgpu (Vulkan/Metal/DX12/WebGPU)
 //!
 //! This backend provides GPU-accelerated compute for large-scale operations.

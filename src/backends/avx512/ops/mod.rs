@@ -1,4 +1,4 @@
 //! AVX-512 SIMD operation implementations.
 
-pub mod arithmetic;
-pub mod reductions;
+pub(super) mod arithmetic;
+pub(super) mod reductions;

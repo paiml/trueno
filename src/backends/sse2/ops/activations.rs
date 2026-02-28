@@ -11,7 +11,7 @@ use std::arch::x86_64::*;
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller verifies SSE2 support, input slices meet alignment/length requirements
-pub unsafe fn exp_approx_sse2(x: __m128) -> __m128 {
+pub(crate) unsafe fn exp_approx_sse2(x: __m128) -> __m128 {
     let ln2 = _mm_set1_ps(std::f32::consts::LN_2);
     let inv_ln2 = _mm_set1_ps(1.0 / std::f32::consts::LN_2);
     let one = _mm_set1_ps(1.0);
@@ -35,7 +35,7 @@ pub unsafe fn exp_approx_sse2(x: __m128) -> __m128 {
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn exp(a: &[f32], result: &mut [f32]) {
+pub(crate) unsafe fn exp(a: &[f32], result: &mut [f32]) { unsafe {
     // Polynomial approximation for exp - range reduction + polynomial
     let len = a.len();
     let mut i = 0;
@@ -63,13 +63,13 @@ pub unsafe fn exp(a: &[f32], result: &mut [f32]) {
     for j in i..len {
         result[j] = a[j].exp();
     }
-}
+}}
 
 /// SSE2 sigmoid activation.
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
+pub(crate) unsafe fn sigmoid(a: &[f32], result: &mut [f32]) { unsafe {
     // sigmoid(x) = 1 / (1 + exp(-x))
     let len = a.len();
     let mut i = 0;
@@ -100,13 +100,13 @@ pub unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
     for j in i..len {
         result[j] = 1.0 / (1.0 + (-a[j]).exp());
     }
-}
+}}
 
 /// SSE2 GELU activation.
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn gelu(a: &[f32], result: &mut [f32]) {
+pub(crate) unsafe fn gelu(a: &[f32], result: &mut [f32]) { unsafe {
     // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
     let len = a.len();
     let mut i = 0;
@@ -133,13 +133,13 @@ pub unsafe fn gelu(a: &[f32], result: &mut [f32]) {
         result[j] =
             0.5 * x * (1.0 + ((0.797_884_56 * (x + 0.044_715 * x * x * x)) as f64).tanh() as f32);
     }
-}
+}}
 
 /// SSE2 swish activation.
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn swish(a: &[f32], result: &mut [f32]) {
+pub(crate) unsafe fn swish(a: &[f32], result: &mut [f32]) { unsafe {
     // swish(x) = x * sigmoid(x)
     let len = a.len();
     let mut i = 0;
@@ -171,13 +171,13 @@ pub unsafe fn swish(a: &[f32], result: &mut [f32]) {
     for j in i..len {
         result[j] = a[j] / (1.0 + (-a[j]).exp());
     }
-}
+}}
 
 /// SSE2 tanh activation.
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn tanh(a: &[f32], result: &mut [f32]) {
+pub(crate) unsafe fn tanh(a: &[f32], result: &mut [f32]) { unsafe {
     // tanh(x) = (e^2x - 1) / (e^2x + 1)
     let len = a.len();
     let mut i = 0;
@@ -196,4 +196,4 @@ pub unsafe fn tanh(a: &[f32], result: &mut [f32]) {
         let exp_2x = (2.0 * a[j]).exp();
         result[j] = (exp_2x - 1.0) / (exp_2x + 1.0);
     }
-}
+}}

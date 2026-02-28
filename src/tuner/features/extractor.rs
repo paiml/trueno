@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Feature extraction and runtime configuration.
 //!
 //! Implements `FeatureExtractor` and `RunConfig`.

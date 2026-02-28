@@ -24,7 +24,7 @@ pub unsafe fn microkernel_8x6_avx2(
     b: *const f32, // K x NR packed, row-major
     c: *mut f32,   // MR x NR output, column-major
     ldc: usize,    // Leading dimension of C
-) {
+) { unsafe {
     use std::arch::x86_64::*;
 
     // Load C into registers (6 columns of 8 elements each)
@@ -64,7 +64,7 @@ pub unsafe fn microkernel_8x6_avx2(
     _mm256_storeu_ps(c.add(3 * ldc), c3);
     _mm256_storeu_ps(c.add(4 * ldc), c4);
     _mm256_storeu_ps(c.add(5 * ldc), c5);
-}
+}}
 
 /// Hand-tuned ASM microkernel with software pipelining (8x6 output tile)
 ///
@@ -95,7 +95,7 @@ pub unsafe fn microkernel_8x6_avx2_asm(
     b: *const f32, // K x NR packed, row-major
     c: *mut f32,   // MR x NR output, column-major
     ldc: usize,    // Leading dimension of C
-) {
+) { unsafe {
     use std::arch::x86_64::*;
 
     // Handle k < 4 with intrinsics fallback
@@ -219,7 +219,7 @@ pub unsafe fn microkernel_8x6_avx2_asm(
     _mm256_storeu_ps(c.add(3 * ldc), c3);
     _mm256_storeu_ps(c.add(4 * ldc), c4);
     _mm256_storeu_ps(c.add(5 * ldc), c5);
-}
+}}
 
 /// Phase 2c: True hand-written inline ASM microkernel (8x6 output tile)
 ///
@@ -256,7 +256,7 @@ pub unsafe fn microkernel_8x6_true_asm(
     b: *const f32,
     c: *mut f32,
     ldc: usize,
-) {
+) { unsafe {
     use std::arch::asm;
 
     // Handle k < 4 with intrinsics fallback for correctness
@@ -469,4 +469,4 @@ pub unsafe fn microkernel_8x6_true_asm(
         _mm256_storeu_ps(c.add(4 * ldc), c4);
         _mm256_storeu_ps(c.add(5 * ldc), c5);
     }
-}
+}}

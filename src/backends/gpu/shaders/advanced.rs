@@ -10,7 +10,7 @@
 ///
 /// This is a single rotation step in the Jacobi eigenvalue algorithm.
 /// Parallelizes over rows (each thread handles one row).
-pub const JACOBI_ROTATION_SHADER: &str = r#"
+pub(crate) const JACOBI_ROTATION_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read_write> matrix: array<f32>;
 @group(0) @binding(1) var<storage, read_write> eigenvectors: array<f32>;
 
@@ -65,7 +65,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// This is more efficient than 1D reduction for 2D data (images, matrices)
 /// as it exploits 2D spatial locality in GPU memory hierarchies.
 ///
-pub const TILED_SUM_REDUCTION_SHADER: &str = r#"
+pub(crate) const TILED_SUM_REDUCTION_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;
 
@@ -140,7 +140,7 @@ fn main(
 ///
 /// Computes max reduction using 16×16 workgroups for optimal memory coalescing.
 /// Same algorithm as tiled sum reduction but with max operation.
-pub const TILED_MAX_REDUCTION_SHADER: &str = r#"
+pub(crate) const TILED_MAX_REDUCTION_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;
 
@@ -214,7 +214,7 @@ fn main(
 ///
 /// Computes min reduction using 16×16 workgroups for optimal memory coalescing.
 /// Same algorithm as tiled sum reduction but with min operation.
-pub const TILED_MIN_REDUCTION_SHADER: &str = r#"
+pub(crate) const TILED_MIN_REDUCTION_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read_write> partial_results: array<f32>;
 
@@ -291,7 +291,7 @@ fn main(
 ///
 /// Note: Currently unused - pivot selection done on CPU for simplicity.
 /// Future optimization: use this shader for fully GPU-based pivot selection.
-pub const _JACOBI_MAX_OFFDIAG_SHADER: &str = r#"
+pub(crate) const _JACOBI_MAX_OFFDIAG_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> matrix: array<f32>;
 @group(0) @binding(1) var<storage, read_write> result: array<f32>;
 

@@ -181,7 +181,7 @@ impl DotQ5KOp {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_dot_block(block: &BlockQ5K, x: &[f32]) -> f32 {
+    unsafe fn avx2_dot_block(block: &BlockQ5K, x: &[f32]) -> f32 { unsafe {
         use std::arch::x86_64::*;
 
         let mut acc = _mm256_setzero_ps();
@@ -203,7 +203,7 @@ impl DotQ5KOp {
         let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
         let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
         _mm_cvtss_f32(sum32)
-    }
+    }}
 }
 
 impl ComputeOp for DotQ5KOp {
@@ -278,7 +278,7 @@ impl DotQ6KOp {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_dot_block(block: &BlockQ6K, x: &[f32]) -> f32 {
+    unsafe fn avx2_dot_block(block: &BlockQ6K, x: &[f32]) -> f32 { unsafe {
         use std::arch::x86_64::*;
 
         let mut acc = _mm256_setzero_ps();
@@ -300,7 +300,7 @@ impl DotQ6KOp {
         let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
         let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
         _mm_cvtss_f32(sum32)
-    }
+    }}
 }
 
 impl ComputeOp for DotQ6KOp {

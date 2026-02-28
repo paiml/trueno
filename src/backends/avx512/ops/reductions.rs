@@ -7,7 +7,7 @@ use std::arch::x86_64::*;
 #[inline]
 #[target_feature(enable = "avx512f")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
+pub(crate) unsafe fn dot(a: &[f32], b: &[f32]) -> f32 { unsafe {
     let len = a.len();
     let mut i = 0;
     let mut acc = _mm512_setzero_ps();
@@ -22,13 +22,13 @@ pub unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
     let mut result = _mm512_reduce_add_ps(acc);
     result += a[i..].iter().zip(&b[i..]).map(|(x, y)| x * y).sum::<f32>();
     result
-}
+}}
 
 /// AVX-512 vector sum.
 #[inline]
 #[target_feature(enable = "avx512f")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn sum(a: &[f32]) -> f32 {
+pub(crate) unsafe fn sum(a: &[f32]) -> f32 { unsafe {
     let len = a.len();
     let mut i = 0;
     let mut acc = _mm512_setzero_ps();
@@ -41,13 +41,13 @@ pub unsafe fn sum(a: &[f32]) -> f32 {
     let mut result = _mm512_reduce_add_ps(acc);
     result += a[i..].iter().sum::<f32>();
     result
-}
+}}
 
 /// AVX-512 vector max.
 #[inline]
 #[target_feature(enable = "avx512f")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn max(a: &[f32]) -> f32 {
+pub(crate) unsafe fn max(a: &[f32]) -> f32 { unsafe {
     let len = a.len();
     let mut i = 0;
     let mut vmax = _mm512_set1_ps(a[0]);
@@ -64,13 +64,13 @@ pub unsafe fn max(a: &[f32]) -> f32 {
         }
     }
     result
-}
+}}
 
 /// AVX-512 vector min.
 #[inline]
 #[target_feature(enable = "avx512f")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn min(a: &[f32]) -> f32 {
+pub(crate) unsafe fn min(a: &[f32]) -> f32 { unsafe {
     let len = a.len();
     let mut i = 0;
     let mut vmin = _mm512_set1_ps(a[0]);
@@ -87,13 +87,13 @@ pub unsafe fn min(a: &[f32]) -> f32 {
         }
     }
     result
-}
+}}
 
 /// AVX-512 argmax.
 #[inline]
 #[target_feature(enable = "avx512f")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn argmax(a: &[f32]) -> usize {
+pub(crate) unsafe fn argmax(a: &[f32]) -> usize {
     let mut max_idx: usize = 0;
     let mut max_val = a[0];
     for (i, &val) in a.iter().enumerate() {
@@ -109,7 +109,7 @@ pub unsafe fn argmax(a: &[f32]) -> usize {
 #[inline]
 #[target_feature(enable = "avx512f")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn argmin(a: &[f32]) -> usize {
+pub(crate) unsafe fn argmin(a: &[f32]) -> usize {
     let mut min_idx: usize = 0;
     let mut min_val = a[0];
     for (i, &val) in a.iter().enumerate() {
@@ -124,7 +124,7 @@ pub unsafe fn argmin(a: &[f32]) -> usize {
 /// Kahan sum (scalar implementation).
 #[inline]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn sum_kahan(a: &[f32]) -> f32 {
+pub(crate) unsafe fn sum_kahan(a: &[f32]) -> f32 {
     let mut sum = 0.0;
     let mut c = 0.0;
     for &x in a {

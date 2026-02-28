@@ -3,5 +3,5 @@
 //! This module contains the actual SIMD implementations, isolated from the
 //! trait dispatch in the parent module.
 
-pub mod arithmetic;
-pub mod reductions;
+pub(super) mod arithmetic;
+pub(super) mod reductions;

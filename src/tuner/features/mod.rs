@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Feature Extraction for ML Tuning
 //!
 //! Implements TunerFeatures, TunerFeaturesBuilder, FeatureExtractor, and RunConfig.

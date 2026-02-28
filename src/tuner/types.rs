@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Tuner Type Definitions
 //!
 //! Core enums for quantization, kernel selection, and bottleneck classification.

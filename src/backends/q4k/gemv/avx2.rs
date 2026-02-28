@@ -17,7 +17,7 @@ pub(crate) unsafe fn matmul_q4k_f32_avx2(
     input: &[f32],
     out_dim: usize,
     in_dim: usize,
-) -> Vec<f32> {
+) -> Vec<f32> { unsafe {
     use std::arch::x86_64::*;
 
     let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
@@ -41,7 +41,7 @@ pub(crate) unsafe fn matmul_q4k_f32_avx2(
     }
 
     output
-}
+}}
 
 /// Process one Q4K super-block row with AVX2 and accumulate into `acc`.
 #[cfg(target_arch = "x86_64")]
@@ -54,7 +54,7 @@ pub(crate) unsafe fn process_q4k_superblock_avx2(
     in_dim: usize,
     low_mask: std::arch::x86_64::__m256i,
     acc: &mut std::arch::x86_64::__m256,
-) {
+) { unsafe {
     use std::arch::x86_64::*;
 
     let (d, dmin, scales, mins) = parse_q4k_header(sb_data);
@@ -106,7 +106,7 @@ pub(crate) unsafe fn process_q4k_superblock_avx2(
             i += 8;
         }
     }
-}
+}}
 
 /// AVX2 horizontal sum of 8 f32 lanes to a single f32.
 #[cfg(target_arch = "x86_64")]
@@ -136,7 +136,7 @@ pub(crate) unsafe fn compute_chunk_q4k_avx2(
     in_dim: usize,
     num_blocks_per_row: usize,
     row_bytes: usize,
-) {
+) { unsafe {
     use std::arch::x86_64::*;
 
     let low_mask = _mm256_set1_epi32(0x0F);
@@ -162,4 +162,4 @@ pub(crate) unsafe fn compute_chunk_q4k_avx2(
 
         *out_val = hsum_avx2(acc);
     }
-}
+}}
