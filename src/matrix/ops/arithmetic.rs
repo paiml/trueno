@@ -249,27 +249,46 @@ impl Matrix<f32> {
     }
 
     /// Fast path for vector-matrix multiplication (1×K @ K×N → 1×N)
+    ///
+    /// Uses 4-way K-unrolled axpy: for each group of 4 K-elements, accumulate
+    /// 4 scaled B-rows into the result vector in one pass. This reduces loop
+    /// overhead and enables FMA chains. The inner j-loop is auto-vectorizable.
     #[cfg_attr(feature = "tracing", instrument(skip(self, other), fields(k = self.cols, n = other.cols)))]
     fn matmul_vector_matrix(&self, other: &Matrix<f32>) -> Result<Matrix<f32>, TruenoError> {
         debug_assert_eq!(self.rows, 1);
 
         let k = self.cols;
         let n = other.cols;
-        let mut result = Matrix::zeros_with_backend(1, n, self.backend);
+        let a = &self.data;
+        let b = &other.data;
+        let mut c = vec![0.0f32; n];
 
-        for ki in 0..k {
-            let a_k = self.data[ki];
-            if a_k == 0.0 {
-                continue;
-            }
-
-            let b_row_start = ki * n;
+        // 4-way K-unrolled axpy: accumulate 4 scaled B-rows per iteration.
+        let k4 = k / 4 * 4;
+        for ki in (0..k4).step_by(4) {
+            let a0 = a[ki];
+            let a1 = a[ki + 1];
+            let a2 = a[ki + 2];
+            let a3 = a[ki + 3];
+            let b0 = ki * n;
+            let b1 = b0 + n;
+            let b2 = b1 + n;
+            let b3 = b2 + n;
             for j in 0..n {
-                result.data[j] += a_k * other.data[b_row_start + j];
+                c[j] += a0 * b[b0 + j] + a1 * b[b1 + j] + a2 * b[b2 + j] + a3 * b[b3 + j];
             }
         }
 
-        Ok(result)
+        // Remainder K
+        for ki in k4..k {
+            let a_k = a[ki];
+            let b_start = ki * n;
+            for j in 0..n {
+                c[j] += a_k * b[b_start + j];
+            }
+        }
+
+        Ok(Matrix::from_vec(1, n, c)?)
     }
 
     /// Naive O(n³) matrix multiplication (baseline for small matrices)
