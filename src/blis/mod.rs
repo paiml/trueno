@@ -35,6 +35,7 @@ pub mod compute;
 pub mod gemv;
 pub mod jidoka;
 pub mod microkernels;
+pub mod norms;
 pub mod packing;
 pub mod parallel;
 pub mod profiler;
