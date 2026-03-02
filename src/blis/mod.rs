@@ -41,6 +41,7 @@ pub mod packing;
 pub mod parallel;
 pub mod profiler;
 pub mod reference;
+pub mod softmax;
 pub mod transpose;
 
 // Re-export jidoka types for backwards compatibility

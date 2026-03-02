@@ -125,28 +125,48 @@ performance:
   bounds:
     transpose_2048x128:
       description: "Attention K^T shape — critical for LLM decode"
-      min_ratio_vs_reference: 0.20
-      target_ratio: 0.50
-      pre_simd_ratio: 0.068
-      pre_simd_throughput: "459 Melem/s"
-      reference_throughput: "6.79 Gelem/s"
+      min_ratio_vs_reference: 0.40
+      target_ratio: 0.70
+      measured_ratio: 0.55
+      measured_throughput: "3.71 Gelem/s"
+      reference_throughput: "6.77 Gelem/s"
       measured_date: "2026-03-02"
-      note: "8x store coalescing should yield ~4-8x improvement"
+      history:
+        - { date: "2026-03-02", ratio: 0.068, note: "Scalar 8×8 tiling (459 Melem/s)" }
+        - { date: "2026-03-02", ratio: 0.35, note: "AVX2 8×8 micro-kernel" }
+        - { date: "2026-03-02", ratio: 0.55, note: "Shape-adaptive loop order (tall-skinny path)" }
+      note: |
+        ndarray .t().to_owned() flips strides and does memcpy — NOT a real transpose.
+        This is a structural benchmark gap: memcpy vs actual data rearrangement.
+        0.55x against memcpy is a genuine win for the kernel.
 
     transpose_4096x4096:
       description: "Square transpose — TLB-limited regime"
-      min_ratio_vs_reference: 0.40
-      target_ratio: 0.80
-      pre_simd_ratio: 0.48
-      pre_simd_throughput: "241 Melem/s"
-      reference_throughput: "500 Melem/s"
+      min_ratio_vs_reference: 0.80
+      target_ratio: 1.00
+      measured_ratio: 0.88
+      measured_throughput: "486 Melem/s"
+      reference_throughput: "550 Melem/s"
       measured_date: "2026-03-02"
+      history:
+        - { date: "2026-03-02", ratio: 0.48, note: "Scalar 8×8 tiling (241 Melem/s)" }
+        - { date: "2026-03-02", ratio: 0.88, note: "AVX2 + two-level tiling" }
 
   analysis: |
-    Pre-SIMD: scalar 8×8/32×32 tiling achieves 459M at 2048×128 (0.068x ndarray).
-    Root cause: 64 individual 4-byte stores per 8×8 block → 64 cache line fetches.
-    AVX2 fix: 8 contiguous 32-byte stores per block → 8 cache line fetches.
-    Expected: 4-8x improvement from store bandwidth alone.
+    Post-SIMD with shape-adaptive loop order:
+
+    2048×128 (tall-skinny):
+      - Shape-adaptive loop order: inner loop over r0 makes destination
+        writes sequential (B[c0*rows+r0], B[c0*rows+r0+8] are adjacent)
+      - Software prefetch for next micro-kernel's destination
+      - Improved from 0.35x → 0.55x
+      - Remaining gap: ndarray's "transpose" is actually memcpy (stride flip),
+        not real data rearrangement. This is a structural benchmark asymmetry.
+
+    4096×4096 (square):
+      - Two-level tiling: 64×64 outer (L1), 8×8 inner (AVX2)
+      - TLB-limited: 4096×4096×4 = 64MB, each 8×8 block touches different TLB entry
+      - Prefetch on square path could improve by reducing TLB misses
 
 # =============================================================================
 # FALSIFICATION TESTS

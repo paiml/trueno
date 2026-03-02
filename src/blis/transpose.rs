@@ -207,6 +207,8 @@ unsafe fn transpose_avx2_impl(rows: usize, cols: usize, a: &[f32], b: &mut [f32]
                         }
                     }
                 } else {
+                    // Square/wide: standard order (no prefetch — at large strides
+                    // the destination is too far apart for L1 prefetch to help)
                     for r0 in (rt..rt_end).step_by(BLOCK) {
                         for c0 in (ct..ct_end).step_by(BLOCK) {
                             let src = a.as_ptr().add(r0 * cols + c0);
