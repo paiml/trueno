@@ -154,7 +154,14 @@ pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(
     Ok(())
 }
 
-/// AVX2 transpose implementation with 8×8 micro-kernel blocks.
+/// AVX2 transpose with two-level tiling: 64×64 outer (L1), 8×8 inner (AVX2).
+///
+/// Two-level tiling keeps the working set within L1 cache (64×64×4 = 16KB < 32KB).
+/// Within each 64×64 tile, 8×8 AVX2 micro-kernels process all column-blocks before
+/// moving to the next row-block, maximizing destination cache line reuse.
+///
+/// Software prefetch hints (`PREFETCHT0`) for the next tile's destination lines
+/// hide memory latency for the scattered store pattern.
 ///
 /// # Safety
 ///
@@ -162,16 +169,29 @@ pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 unsafe fn transpose_avx2_impl(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(), TruenoError> {
-    let rb_end = rows / 8 * 8;
-    let cb_end = cols / 8 * 8;
+    const TILE: usize = 64; // L1-resident outer tile
+    const BLOCK: usize = 8;  // AVX2 micro-kernel
 
-    // Full 8×8 blocks: AVX2 micro-kernel
+    let rb_end = rows / BLOCK * BLOCK;
+    let cb_end = cols / BLOCK * BLOCK;
+
+    // Two-level tiled transpose: outer 64×64, inner 8×8 AVX2
+    // The 64×64 outer tile keeps the working set within L1 (16KB < 32KB).
+    // Within each tile, all column-blocks are processed per row-block,
+    // maximizing destination cache line reuse before eviction.
     unsafe {
-        for r0 in (0..rb_end).step_by(8) {
-            for c0 in (0..cb_end).step_by(8) {
-                let src = a.as_ptr().add(r0 * cols + c0);
-                let dst = b.as_mut_ptr().add(c0 * rows + r0);
-                transpose_8x8_avx2(src, cols, dst, rows);
+        for rt in (0..rb_end).step_by(TILE) {
+            let rt_end = (rt + TILE).min(rb_end);
+            for ct in (0..cb_end).step_by(TILE) {
+                let ct_end = (ct + TILE).min(cb_end);
+
+                for r0 in (rt..rt_end).step_by(BLOCK) {
+                    for c0 in (ct..ct_end).step_by(BLOCK) {
+                        let src = a.as_ptr().add(r0 * cols + c0);
+                        let dst = b.as_mut_ptr().add(c0 * rows + r0);
+                        transpose_8x8_avx2(src, cols, dst, rows);
+                    }
+                }
             }
         }
     }
