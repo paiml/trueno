@@ -1,0 +1,231 @@
+# GEMV (General Matrix-Vector) SIMD Kernel Contract v1.0.0
+# THE SOURCE OF TRUTH for AVX2 GEMV correctness and performance
+#
+# STATUS: Authoritative — all M=1 matvec paths route through this kernel
+# CONSUMERS:
+#   - src/blis/gemv.rs (gemv_avx2, gemv_scalar, gemv dispatch)
+#   - src/matrix/ops/arithmetic.rs (matmul_vector_matrix delegates here)
+#   - aprender/contracts/matvec-kernel-v1.yaml (upstream contract)
+#
+# Mathematical Foundation:
+#   c[j] = Σ_{k=0}^{K-1} a[k] * B[k*N + j]    for j = 0..N-1
+#   Axpy form: c += a[k] * B[k,:]  (sum of K scaled rows)
+#
+# Access Pattern Analysis:
+#   Row-major B: B[k,:] is contiguous → sequential DRAM reads
+#   Axpy (outer K, inner N): reads each B row once, streaming through N
+#   Column-major variant (outer N, inner K): random B access → cache thrashing
+#   PROVEN: axpy pattern required for row-major data (GH-380)
+
+metadata:
+  version: "1.0.0"
+  created: "2026-03-02"
+  author: "PAIML Engineering"
+  description: "AVX2+FMA GEMV kernel for M=1 matvec bypassing BLIS packing"
+  references:
+    - "GH-380: matvec (M=1) performance gap vs ndarray"
+    - "Goto & Van de Geijn (2008). Anatomy of High-Performance Matrix Multiplication"
+    - "Intel Intrinsics Guide: _mm256_fmadd_ps"
+  issues:
+    - "https://github.com/paiml/aprender/issues/380"
+
+# =============================================================================
+# KERNEL EQUATIONS
+# =============================================================================
+
+equations:
+  gemv:
+    formula: |
+      c[j] += Σ_{k=0}^{K-1} a[k] * B[k*N + j]   for j = 0..N-1
+
+      Axpy decomposition (implemented):
+        for k in 0..K:
+          c[:] += a[k] * B[k,:]
+
+      4-way K-unrolled:
+        for ki in (0..K).step_by(4):
+          c[:] += a[ki]*B[ki,:] + a[ki+1]*B[ki+1,:] + a[ki+2]*B[ki+2,:] + a[ki+3]*B[ki+3,:]
+    domain: "a ∈ R^K, B ∈ R^{K×N} (row-major), c ∈ R^N"
+    properties:
+      - linearity: "gemv(a, B1+B2, c) = gemv(a, B1, c) + gemv(a, B2, c)"
+      - scaling: "gemv(α*a, B, c) = α * gemv(a, B, c)"
+      - identity: "gemv(e_i, B, c) = B[i,:] (row selection)"
+      - zeros: "gemv(0, B, c) = 0"
+
+# =============================================================================
+# IMPLEMENTATION MANDATES
+# =============================================================================
+
+implementation:
+  dispatch:
+    description: "Runtime CPU feature detection selects AVX2+FMA or scalar fallback"
+    assertion: "gemv() checks is_x86_feature_detected!(avx2) && is_x86_feature_detected!(fma)"
+    rationale: "Ensures correct execution on all x86_64 platforms"
+    file: "src/blis/gemv.rs"
+    function: "gemv"
+
+  avx2_axpy_pattern:
+    description: "Outer loop over K (4-way unrolled), inner loop over N with AVX2 VFMADD"
+    mandates:
+      - "Outer loop: K in steps of 4 (4-way unrolled)"
+      - "Inner loop: N in steps of 8 (AVX2 register width = 8 × f32)"
+      - "Use _mm256_fmadd_ps for fused multiply-add (1 cycle latency, 0.5 CPI)"
+      - "4 independent FMA chains per K-step → hides load latency"
+      - "Scalar remainder for N % 8"
+      - "Scalar remainder for K % 4"
+    pattern: |
+      while ki < k4 {
+          let a0 = _mm256_set1_ps(a[ki]);
+          let a1 = _mm256_set1_ps(a[ki+1]);
+          let a2 = _mm256_set1_ps(a[ki+2]);
+          let a3 = _mm256_set1_ps(a[ki+3]);
+          while j < n8 {
+              cv = load(c[j]);
+              r = fmadd(a0, load(B[ki*N+j]), cv);
+              r = fmadd(a1, load(B[(ki+1)*N+j]), r);
+              r = fmadd(a2, load(B[(ki+2)*N+j]), r);
+              r = fmadd(a3, load(B[(ki+3)*N+j]), r);
+              store(c[j], r);
+          }
+          ki += 4;
+      }
+    rationale: |
+      Axpy pattern (outer K, inner N) matches row-major B layout:
+      B[k,:] is contiguous → sequential DRAM reads → hardware prefetcher effective.
+      The alternative (outer N, inner K) causes random B access → cache thrashing.
+      4-way K-unrolling provides 4 independent FMA chains that hide load latency
+      on modern out-of-order CPUs.
+    file: "src/blis/gemv.rs"
+    function: "gemv_avx2"
+
+  scalar_fallback:
+    description: "Pure Rust scalar implementation with same 4-way K-unrolled axpy"
+    assertion: "gemv_scalar uses identical algorithm without intrinsics"
+    rationale: "Auto-vectorizable by LLVM; serves non-AVX2 platforms and as reference"
+    file: "src/blis/gemv.rs"
+    function: "gemv_scalar"
+
+  no_blis_for_m1:
+    description: "M=1 MUST NOT route through BLIS 5-loop"
+    assertion: "matmul_vector_matrix delegates to gemv::gemv, not gemm_blis"
+    rationale: |
+      BLIS packing overhead (pack_a + pack_b) costs ~50μs at K=4096.
+      For M=1, this packing dominates: 430M elem/s vs 5.57G (scalar).
+      Measured 13x regression through BLIS at 1x4096x11008.
+    file: "src/matrix/ops/arithmetic.rs"
+    function: "matmul_vector_matrix"
+
+# =============================================================================
+# PERFORMANCE BOUNDS
+# =============================================================================
+
+performance:
+  benchmark_crate: "aprender-bench-compute"
+  benchmark_file: "benches/matmul.rs"
+  reference: "ndarray (matrixmultiply crate, pure Rust, no external BLAS)"
+
+  bounds:
+    gemv_1x1536x1536:
+      description: "Small square — fits L3 cache, compute-bound"
+      min_ratio_vs_reference: 1.5
+      target_ratio: 3.0
+      measured_ratio: 2.32
+      measured_throughput: "5.88 Gelem/s"
+      reference_throughput: "2.54 Gelem/s"
+      measured_date: "2026-03-02"
+      note: "FASTER than ndarray — cache-resident data, SIMD wins"
+
+    gemv_1x1536x8960:
+      description: "1.5B FFN matvec — exceeds L3, bandwidth-bound"
+      min_ratio_vs_reference: 0.25
+      target_ratio: 0.50
+      measured_ratio: 0.35
+      measured_throughput: "988 Melem/s"
+      reference_throughput: "2.86 Gelem/s"
+      measured_date: "2026-03-02"
+
+    gemv_1x4096x4096:
+      description: "7B attention matvec"
+      min_ratio_vs_reference: 0.25
+      target_ratio: 0.50
+      measured_ratio: 0.45
+      measured_throughput: "951 Melem/s"
+      reference_throughput: "2.10 Gelem/s"
+      measured_date: "2026-03-02"
+
+    gemv_1x4096x11008:
+      description: "7B FFN matvec (LLM decode hot path)"
+      min_ratio_vs_reference: 0.25
+      target_ratio: 0.50
+      measured_ratio: 0.32
+      measured_throughput: "952 Melem/s"
+      reference_throughput: "2.94 Gelem/s"
+      measured_date: "2026-03-02"
+      history:
+        - { date: "2026-03-01", ratio: 0.29, note: "Scalar with zero-check branch" }
+        - { date: "2026-03-02", ratio: 0.34, note: "4-way K-unrolled axpy, no branch" }
+        - { date: "2026-03-02", ratio: 0.32, note: "AVX2 SIMD GEMV kernel (bandwidth-bound, no gain at this size)" }
+
+  analysis: |
+    Two regimes clearly visible:
+    1. Cache-resident (K*N*4 < L3): SIMD wins big (2.32x at 1536²)
+    2. Bandwidth-bound (K*N*4 >> L3): ~950M regardless of SIMD
+       B matrix = 4096*11008*4 = 172 MB >> 16 MB L3
+
+    At bandwidth-bound sizes, ndarray achieves ~3.0 Gelem/s vs our ~1.0 Gelem/s.
+    The 3x gap suggests ndarray's matrixmultiply uses:
+    - Software prefetch hints (PREFETCHT0) for B rows
+    - Cache-line-aligned memory allocation
+    - Possibly different N-blocking to improve TLB efficiency
+
+    Next steps: investigate prefetch hints and N-blocking in gemv_avx2.
+
+# =============================================================================
+# FALSIFICATION TESTS
+# =============================================================================
+
+falsification:
+  tests_file: "src/blis/gemv.rs"
+  tests_module: "blis::gemv::tests"
+
+  FALSIFY-GV-001:
+    name: "Correctness: basic matmul"
+    assertion: "1×3 @ 3×4 matches hand-computed result within 1e-5"
+    test: "test_gemv_basic"
+    status: "PASS"
+
+  FALSIFY-GV-002:
+    name: "Identity row selection"
+    assertion: "e_i @ B = B[i,:] for i=1"
+    test: "test_gemv_identity_row_select"
+    status: "PASS"
+
+  FALSIFY-GV-003:
+    name: "AVX2 remainder handling"
+    assertion: "K=2, N=17 (not divisible by 8) matches scalar reference"
+    test: "test_gemv_large_n"
+    status: "PASS"
+
+  FALSIFY-GV-004:
+    name: "Zero vector"
+    assertion: "matvec(0, B) = 0"
+    test: "test_gemv_zeros"
+    status: "PASS"
+
+# =============================================================================
+# QA GATE
+# =============================================================================
+
+qa_gate:
+  id: "F-GEMV-001"
+  name: "GEMV Kernel Contract"
+  checks:
+    - "AVX2+FMA dispatch with scalar fallback"
+    - "Axpy pattern (outer K, inner N) — NEVER column-major access"
+    - "4-way K-unrolled with 4 independent FMA chains"
+    - "N remainder handled (scalar loop for N%8)"
+    - "K remainder handled (scalar loop for K%4)"
+    - "Performance >= 1.5x ndarray at cache-resident sizes"
+    - "Performance >= 0.25x ndarray at bandwidth-bound sizes"
+    - "All FALSIFY tests pass"
+  pass_criteria: "All checks pass"
