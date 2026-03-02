@@ -368,6 +368,45 @@ unsafe fn layer_norm_avx2(
 }
 
 // ============================================================================
+// Allocating variants
+// ============================================================================
+
+/// RMSNorm with output allocation. Avoids zero-fill overhead.
+///
+/// # Panics
+///
+/// Panics if input and gamma have different lengths.
+#[must_use]
+pub fn rms_norm_alloc(input: &[f32], gamma: &[f32], eps: f32) -> Vec<f32> {
+    let n = input.len();
+    let mut output = Vec::with_capacity(n);
+    // SAFETY: rms_norm writes exactly n elements.
+    unsafe { output.set_len(n); }
+    rms_norm(input, gamma, eps, &mut output).expect("rms_norm_alloc: length mismatch");
+    output
+}
+
+/// LayerNorm with output allocation. Avoids zero-fill overhead.
+///
+/// # Panics
+///
+/// Panics if input, gamma, and beta have different lengths.
+#[must_use]
+pub fn layer_norm_alloc(
+    input: &[f32],
+    gamma: &[f32],
+    beta: &[f32],
+    eps: f32,
+) -> Vec<f32> {
+    let n = input.len();
+    let mut output = Vec::with_capacity(n);
+    // SAFETY: layer_norm writes exactly n elements.
+    unsafe { output.set_len(n); }
+    layer_norm(input, gamma, beta, eps, &mut output).expect("layer_norm_alloc: length mismatch");
+    output
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
