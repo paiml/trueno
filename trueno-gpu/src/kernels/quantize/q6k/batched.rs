@@ -215,6 +215,9 @@ impl Kernel for BatchedQ6KGemvKernel {
                     let sb_k_base = ctx.mul_u32(sb_idx, Q6K_SUPER_BLOCK_SIZE);
                     let k_idx = ctx.add_u32_reg(sb_k_base, val_idx);
 
+                    // GH-215 FIX: Bounds-check for non-256-aligned K dimensions.
+                    let in_bounds = ctx.setp_lt_u32(k_idx, k_dim);
+
                     // Accumulate for all M batch elements
                     for batch_idx in 0..m as usize {
                         // Load x[batch_idx, k_idx]
@@ -223,7 +226,7 @@ impl Kernel for BatchedQ6KGemvKernel {
                         let x_offset_64 = ctx.cvt_u64_u32(x_offset);
                         let x_bytes = ctx.mul_u64(x_offset_64, 4);
                         let x_addr = ctx.add_u64(x_ptr, x_bytes);
-                        let x_val = ctx.ld_global_f32(x_addr);
+                        let x_val = ctx.ld_global_f32_predicated(x_addr, in_bounds, 0.0);
 
                         ctx.fma_f32_inplace(thread_partials[batch_idx], x_val, dequant);
                     }
