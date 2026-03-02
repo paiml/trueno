@@ -36,6 +36,8 @@ mod fp16_tensor;
 mod fused;
 mod fused_gemm;
 mod legacy;
+mod nf4;
+mod nf4_cpu;
 mod q4k;
 mod q5k;
 mod q6k;
@@ -54,6 +56,11 @@ pub use q4k::{
 };
 pub use q5k::{Q5KGemvKernel, Q5KKernel};
 pub use q6k::{BatchedQ6KGemvKernel, CoalescedQ6KGemvKernel, Q6KGemvKernel, Q6KKernel};
+pub use nf4::Nf4GemmKernel;
+pub use nf4_cpu::{
+    dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu, Nf4Quantized,
+    NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,
+};
 pub use q8::Q8QuantizeKernel;
 
 /// Q4_K sub-block size (number of weights per sub-block)
