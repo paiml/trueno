@@ -32,6 +32,7 @@
 
 pub mod backend_selection;
 pub mod compute;
+pub mod elementwise;
 pub mod gemv;
 pub mod jidoka;
 pub mod microkernels;
