@@ -8,18 +8,26 @@
 //!
 //! # Algorithm
 //!
-//! Process N in chunks of 8 (AVX2 register width). For each chunk,
-//! accumulate K scaled B-rows using FMA. 4-way K-unrolling hides
-//! load latency and enables instruction-level parallelism.
+//! Two strategies based on N:
+//!
+//! - **Small N (≤ 4096)**: Axpy pattern — outer K, inner N. c[] fits in L1.
+//! - **Large N (> 4096)**: N-tiled — outer N-tiles (64), inner K. c[] stays
+//!   in YMM registers for all K iterations, eliminating L1 thrashing.
 //!
 //! # References
 //!
 //! - GH-380: matvec (M=1) performance gap vs ndarray
 
+/// Threshold: when N > this, c[] doesn't fit in L1 → switch to tiled.
+/// L1d = 32KB = 8192 f32. c[] at 4096 = 16KB → safe. c[] at 8192 = 32KB → tight.
+const GEMV_TILE_THRESHOLD: usize = 4096;
+
 /// AVX2 GEMV using axpy pattern: c += a[k] * B[k,:] for each k
 ///
 /// Outer loop over K (4-way unrolled), inner loop over N with AVX2 VFMADD.
 /// This matches row-major B access: B[k,:] is contiguous → sequential reads.
+///
+/// Best for small N where c[] fits in L1 cache.
 ///
 /// # Safety
 ///
@@ -106,6 +114,233 @@ pub unsafe fn gemv_avx2(
     }
 }
 
+/// AVX2 GEMV with N-dimension tiling for bandwidth-bound sizes.
+///
+/// Tiles the N dimension into strips of 64, keeping the c[] accumulator
+/// in 8 YMM registers for ALL K iterations. This eliminates the repeated
+/// L1 load/store of c[] that dominates the axpy pattern when N > L1.
+///
+/// For 4096×11008: original axpy does 1024 load-store sweeps of c[] (43KB).
+/// Tiled: each c[j0..j0+64] is loaded 0 times (initialized in registers)
+/// and stored once at the end. Saves ~88MB of c[] traffic.
+///
+/// # Safety
+///
+/// Requires AVX2+FMA CPU features.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+unsafe fn gemv_tiled_avx2(
+    k: usize,
+    n: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) {
+    unsafe {
+        use std::arch::x86_64::*;
+
+        // NT=64: 8 YMM accumulators × 8 f32 = 64 elements.
+        // 4 registers for broadcast a, 1-2 for B loads = ~14 registers total.
+        const NT: usize = 64;
+
+        let k4 = k / 4 * 4;
+        let nt_end = n / NT * NT;
+
+        for j0 in (0..nt_end).step_by(NT) {
+            // 8 YMM accumulators — stay in registers for ALL K iterations
+            let mut acc0 = _mm256_setzero_ps();
+            let mut acc1 = _mm256_setzero_ps();
+            let mut acc2 = _mm256_setzero_ps();
+            let mut acc3 = _mm256_setzero_ps();
+            let mut acc4 = _mm256_setzero_ps();
+            let mut acc5 = _mm256_setzero_ps();
+            let mut acc6 = _mm256_setzero_ps();
+            let mut acc7 = _mm256_setzero_ps();
+
+            // Process ALL K for this N-tile (4-way unrolled)
+            let mut ki = 0;
+            while ki < k4 {
+                let a0 = _mm256_set1_ps(*a.get_unchecked(ki));
+                let a1 = _mm256_set1_ps(*a.get_unchecked(ki + 1));
+                let a2 = _mm256_set1_ps(*a.get_unchecked(ki + 2));
+                let a3 = _mm256_set1_ps(*a.get_unchecked(ki + 3));
+
+                let b0 = ki * n + j0;
+                let b1 = b0 + n;
+                let b2 = b1 + n;
+                let b3 = b2 + n;
+
+                // Software prefetch: B rows 8 iterations ahead
+                if ki + 8 < k {
+                    let pf = (ki + 8) * n + j0;
+                    _mm_prefetch(b.as_ptr().add(pf) as *const i8, _MM_HINT_T0);
+                    _mm_prefetch(b.as_ptr().add(pf + 32) as *const i8, _MM_HINT_T0);
+                }
+
+                // 8 chunks × 4 K iterations = 32 FMAs
+                let bv = _mm256_loadu_ps(b.get_unchecked(b0));
+                acc0 = _mm256_fmadd_ps(a0, bv, acc0);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b1));
+                acc0 = _mm256_fmadd_ps(a1, bv, acc0);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b2));
+                acc0 = _mm256_fmadd_ps(a2, bv, acc0);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b3));
+                acc0 = _mm256_fmadd_ps(a3, bv, acc0);
+
+                let bv = _mm256_loadu_ps(b.get_unchecked(b0 + 8));
+                acc1 = _mm256_fmadd_ps(a0, bv, acc1);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b1 + 8));
+                acc1 = _mm256_fmadd_ps(a1, bv, acc1);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b2 + 8));
+                acc1 = _mm256_fmadd_ps(a2, bv, acc1);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b3 + 8));
+                acc1 = _mm256_fmadd_ps(a3, bv, acc1);
+
+                let bv = _mm256_loadu_ps(b.get_unchecked(b0 + 16));
+                acc2 = _mm256_fmadd_ps(a0, bv, acc2);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b1 + 16));
+                acc2 = _mm256_fmadd_ps(a1, bv, acc2);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b2 + 16));
+                acc2 = _mm256_fmadd_ps(a2, bv, acc2);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b3 + 16));
+                acc2 = _mm256_fmadd_ps(a3, bv, acc2);
+
+                let bv = _mm256_loadu_ps(b.get_unchecked(b0 + 24));
+                acc3 = _mm256_fmadd_ps(a0, bv, acc3);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b1 + 24));
+                acc3 = _mm256_fmadd_ps(a1, bv, acc3);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b2 + 24));
+                acc3 = _mm256_fmadd_ps(a2, bv, acc3);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b3 + 24));
+                acc3 = _mm256_fmadd_ps(a3, bv, acc3);
+
+                let bv = _mm256_loadu_ps(b.get_unchecked(b0 + 32));
+                acc4 = _mm256_fmadd_ps(a0, bv, acc4);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b1 + 32));
+                acc4 = _mm256_fmadd_ps(a1, bv, acc4);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b2 + 32));
+                acc4 = _mm256_fmadd_ps(a2, bv, acc4);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b3 + 32));
+                acc4 = _mm256_fmadd_ps(a3, bv, acc4);
+
+                let bv = _mm256_loadu_ps(b.get_unchecked(b0 + 40));
+                acc5 = _mm256_fmadd_ps(a0, bv, acc5);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b1 + 40));
+                acc5 = _mm256_fmadd_ps(a1, bv, acc5);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b2 + 40));
+                acc5 = _mm256_fmadd_ps(a2, bv, acc5);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b3 + 40));
+                acc5 = _mm256_fmadd_ps(a3, bv, acc5);
+
+                let bv = _mm256_loadu_ps(b.get_unchecked(b0 + 48));
+                acc6 = _mm256_fmadd_ps(a0, bv, acc6);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b1 + 48));
+                acc6 = _mm256_fmadd_ps(a1, bv, acc6);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b2 + 48));
+                acc6 = _mm256_fmadd_ps(a2, bv, acc6);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b3 + 48));
+                acc6 = _mm256_fmadd_ps(a3, bv, acc6);
+
+                let bv = _mm256_loadu_ps(b.get_unchecked(b0 + 56));
+                acc7 = _mm256_fmadd_ps(a0, bv, acc7);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b1 + 56));
+                acc7 = _mm256_fmadd_ps(a1, bv, acc7);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b2 + 56));
+                acc7 = _mm256_fmadd_ps(a2, bv, acc7);
+                let bv = _mm256_loadu_ps(b.get_unchecked(b3 + 56));
+                acc7 = _mm256_fmadd_ps(a3, bv, acc7);
+
+                ki += 4;
+            }
+
+            // Remainder K (1 at a time)
+            while ki < k {
+                let av = _mm256_set1_ps(*a.get_unchecked(ki));
+                let base = ki * n + j0;
+
+                acc0 = _mm256_fmadd_ps(av, _mm256_loadu_ps(b.get_unchecked(base)), acc0);
+                acc1 = _mm256_fmadd_ps(av, _mm256_loadu_ps(b.get_unchecked(base + 8)), acc1);
+                acc2 = _mm256_fmadd_ps(av, _mm256_loadu_ps(b.get_unchecked(base + 16)), acc2);
+                acc3 = _mm256_fmadd_ps(av, _mm256_loadu_ps(b.get_unchecked(base + 24)), acc3);
+                acc4 = _mm256_fmadd_ps(av, _mm256_loadu_ps(b.get_unchecked(base + 32)), acc4);
+                acc5 = _mm256_fmadd_ps(av, _mm256_loadu_ps(b.get_unchecked(base + 40)), acc5);
+                acc6 = _mm256_fmadd_ps(av, _mm256_loadu_ps(b.get_unchecked(base + 48)), acc6);
+                acc7 = _mm256_fmadd_ps(av, _mm256_loadu_ps(b.get_unchecked(base + 56)), acc7);
+                ki += 1;
+            }
+
+            // Store accumulators (one store per tile, not K/4 stores)
+            _mm256_storeu_ps(c.get_unchecked_mut(j0), acc0);
+            _mm256_storeu_ps(c.get_unchecked_mut(j0 + 8), acc1);
+            _mm256_storeu_ps(c.get_unchecked_mut(j0 + 16), acc2);
+            _mm256_storeu_ps(c.get_unchecked_mut(j0 + 24), acc3);
+            _mm256_storeu_ps(c.get_unchecked_mut(j0 + 32), acc4);
+            _mm256_storeu_ps(c.get_unchecked_mut(j0 + 40), acc5);
+            _mm256_storeu_ps(c.get_unchecked_mut(j0 + 48), acc6);
+            _mm256_storeu_ps(c.get_unchecked_mut(j0 + 56), acc7);
+        }
+
+        // Remainder N (< 64 elements) — axpy is fine since c fits in L1
+        if nt_end < n {
+            let rem_n = n - nt_end;
+            let rem8 = rem_n / 8 * 8;
+            let k4 = k / 4 * 4;
+
+            let mut ki = 0;
+            while ki < k4 {
+                let a0 = _mm256_set1_ps(*a.get_unchecked(ki));
+                let a1 = _mm256_set1_ps(*a.get_unchecked(ki + 1));
+                let a2 = _mm256_set1_ps(*a.get_unchecked(ki + 2));
+                let a3 = _mm256_set1_ps(*a.get_unchecked(ki + 3));
+                let b0 = ki * n + nt_end;
+                let b1 = b0 + n;
+                let b2 = b1 + n;
+                let b3 = b2 + n;
+
+                let mut j = 0;
+                while j < rem8 {
+                    let cv = _mm256_loadu_ps(c.get_unchecked(nt_end + j));
+                    let r = _mm256_fmadd_ps(a0, _mm256_loadu_ps(b.get_unchecked(b0 + j)), cv);
+                    let r = _mm256_fmadd_ps(a1, _mm256_loadu_ps(b.get_unchecked(b1 + j)), r);
+                    let r = _mm256_fmadd_ps(a2, _mm256_loadu_ps(b.get_unchecked(b2 + j)), r);
+                    let r = _mm256_fmadd_ps(a3, _mm256_loadu_ps(b.get_unchecked(b3 + j)), r);
+                    _mm256_storeu_ps(c.get_unchecked_mut(nt_end + j), r);
+                    j += 8;
+                }
+                while j < rem_n {
+                    let idx = nt_end + j;
+                    *c.get_unchecked_mut(idx) +=
+                        *a.get_unchecked(ki) * *b.get_unchecked(b0 + j)
+                            + *a.get_unchecked(ki + 1) * *b.get_unchecked(b1 + j)
+                            + *a.get_unchecked(ki + 2) * *b.get_unchecked(b2 + j)
+                            + *a.get_unchecked(ki + 3) * *b.get_unchecked(b3 + j);
+                    j += 1;
+                }
+                ki += 4;
+            }
+
+            while ki < k {
+                let ak = *a.get_unchecked(ki);
+                let bk = ki * n + nt_end;
+                let ak_v = _mm256_set1_ps(ak);
+
+                let mut j = 0;
+                while j < rem8 {
+                    let cv = _mm256_loadu_ps(c.get_unchecked(nt_end + j));
+                    let bv = _mm256_loadu_ps(b.get_unchecked(bk + j));
+                    _mm256_storeu_ps(c.get_unchecked_mut(nt_end + j), _mm256_fmadd_ps(ak_v, bv, cv));
+                    j += 8;
+                }
+                while j < rem_n {
+                    *c.get_unchecked_mut(nt_end + j) += ak * *b.get_unchecked(bk + j);
+                    j += 1;
+                }
+                ki += 1;
+            }
+        }
+    }
+}
+
 /// Scalar fallback GEMV for non-x86 or non-AVX2 platforms
 pub fn gemv_scalar(
     k: usize,
@@ -154,7 +389,11 @@ pub fn gemv(
             // SAFETY: AVX2+FMA verified by feature detection above.
             // Slice bounds are checked by the caller (matmul_vector_matrix).
             unsafe {
-                gemv_avx2(k, n, a, b, c);
+                if n > GEMV_TILE_THRESHOLD {
+                    gemv_tiled_avx2(k, n, a, b, c);
+                } else {
+                    gemv_avx2(k, n, a, b, c);
+                }
             }
             return;
         }
@@ -232,6 +471,114 @@ mod tests {
 
         for j in 0..8 {
             assert!((c[j]).abs() < 1e-10);
+        }
+    }
+
+    /// Test tiled path: N > GEMV_TILE_THRESHOLD triggers tiled kernel
+    #[test]
+    fn test_gemv_tiled_large_n() {
+        let k = 64;
+        let n = 8192; // > 4096 → tiled path
+
+        let a: Vec<f32> = (0..k).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0 - 0.5).collect();
+        let b: Vec<f32> = (0..k * n)
+            .map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5)
+            .collect();
+        let mut c_tiled = vec![0.0f32; n];
+        let mut c_scalar = vec![0.0f32; n];
+
+        gemv(k, n, &a, &b, &mut c_tiled);
+        gemv_scalar(k, n, &a, &b, &mut c_scalar);
+
+        for j in 0..n {
+            let diff = (c_tiled[j] - c_scalar[j]).abs();
+            assert!(
+                diff < 1e-2,
+                "j={j}: tiled={} scalar={} diff={diff}",
+                c_tiled[j],
+                c_scalar[j]
+            );
+        }
+    }
+
+    /// Test tiled path with LLM-size dimensions
+    #[test]
+    fn test_gemv_tiled_llm_size() {
+        let k = 256; // reduced from 4096 for test speed
+        let n = 11008;
+
+        let a: Vec<f32> = (0..k).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
+        let b: Vec<f32> = (0..k * n)
+            .map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5)
+            .collect();
+        let mut c_tiled = vec![0.0f32; n];
+        let mut c_scalar = vec![0.0f32; n];
+
+        gemv(k, n, &a, &b, &mut c_tiled);
+        gemv_scalar(k, n, &a, &b, &mut c_scalar);
+
+        for j in 0..n {
+            let diff = (c_tiled[j] - c_scalar[j]).abs();
+            assert!(
+                diff < 1e-1,
+                "j={j}: tiled={} scalar={} diff={diff}",
+                c_tiled[j],
+                c_scalar[j]
+            );
+        }
+    }
+
+    /// Test tiled path with N not a multiple of 64 (exercises remainder)
+    #[test]
+    fn test_gemv_tiled_remainder() {
+        let k = 32;
+        let n = 5000; // > 4096, not multiple of 64 → remainder = 5000 - 4992 = 8
+
+        let a: Vec<f32> = (0..k).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0 - 0.5).collect();
+        let b: Vec<f32> = (0..k * n)
+            .map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5)
+            .collect();
+        let mut c_tiled = vec![0.0f32; n];
+        let mut c_scalar = vec![0.0f32; n];
+
+        gemv(k, n, &a, &b, &mut c_tiled);
+        gemv_scalar(k, n, &a, &b, &mut c_scalar);
+
+        for j in 0..n {
+            let diff = (c_tiled[j] - c_scalar[j]).abs();
+            assert!(
+                diff < 1e-2,
+                "j={j}: tiled={} scalar={} diff={diff}",
+                c_tiled[j],
+                c_scalar[j]
+            );
+        }
+    }
+
+    /// Test tiled path with non-multiple-of-4 K (exercises K remainder)
+    #[test]
+    fn test_gemv_tiled_k_remainder() {
+        let k = 67; // not multiple of 4
+        let n = 8192;
+
+        let a: Vec<f32> = (0..k).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0 - 0.5).collect();
+        let b: Vec<f32> = (0..k * n)
+            .map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5)
+            .collect();
+        let mut c_tiled = vec![0.0f32; n];
+        let mut c_scalar = vec![0.0f32; n];
+
+        gemv(k, n, &a, &b, &mut c_tiled);
+        gemv_scalar(k, n, &a, &b, &mut c_scalar);
+
+        for j in 0..n {
+            let diff = (c_tiled[j] - c_scalar[j]).abs();
+            assert!(
+                diff < 1e-2,
+                "j={j}: tiled={} scalar={} diff={diff}",
+                c_tiled[j],
+                c_scalar[j]
+            );
         }
     }
 }
