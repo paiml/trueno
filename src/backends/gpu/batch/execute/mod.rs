@@ -3,10 +3,17 @@
 //! Contains the `execute()` and `read()` public entry points, plus sub-modules
 //! for operation dispatch and shader pipeline infrastructure.
 //!
-//! - [`dispatch`]: Unary/binary shader dispatch (`execute_unary_op`, `execute_binary_op`)
-//! - [`operations`]: Per-operation routing (`execute_operation`)
+//! - [`dispatch`]: Pipeline-cached shader dispatch (`encode_unary_op`, `encode_binary_op`, etc.)
+//! - [`operations`]: Per-operation routing (`encode_operation`)
+//!
+//! # KAIZEN-022: Pipeline caching + single encoder
+//!
+//! All operations in a batch share a single command encoder (one GPU submission)
+//! and a pipeline cache (shader compiled once, reused for all operations using
+//! that shader).  For Qwen3-4B FFN: reduces 5 pipeline compilations + 5 submissions
+//! per layer to 3 compilations (first layer only) + 1 submission.
 
-mod dispatch;
+pub(crate) mod dispatch;
 mod operations;
 
 use super::{BufferId, GpuCommandBatch};
@@ -15,10 +22,15 @@ use std::sync::Arc;
 impl GpuCommandBatch {
     /// Execute all queued operations on GPU
     ///
-    /// This performs all GPU operations in a single batch:
-    /// 1. Upload all input buffers once
-    /// 2. Execute all operations sequentially on GPU
-    /// 3. Results stay on GPU until `read()` is called
+    /// Uses a single command encoder for all operations (one GPU submission)
+    /// and caches pipelines per shader source to avoid redundant compilation.
+    ///
+    /// # Contract (C-BATCH-EXEC-001)
+    ///
+    /// - **Precondition**: Operations queued via `matmul()`, `relu()`, etc.
+    /// - **Postcondition**: All operations executed, results in GPU buffers
+    /// - **Invariant**: Pipeline compiled at most once per unique shader source
+    /// - **Invariant**: Single `queue.submit()` per `execute()` call
     pub async fn execute(&mut self) -> Result<(), String> {
         // Step 1: Create GPU buffers for all BufferIds
         // Skip imported buffers — already GPU-resident (KAIZEN-015)
@@ -50,10 +62,21 @@ impl GpuCommandBatch {
             }
         }
 
-        // Step 3: Execute each operation
+        // Step 3: Encode all operations into a single command encoder
+        // with cached pipelines (KAIZEN-022)
+        let mut encoder =
+            self.device.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Batch Encoder"),
+            });
+
+        let mut pipeline_cache = dispatch::PipelineCache::new();
+
         for op in &self.operations {
-            self.execute_operation(op).await?;
+            self.encode_operation(op, &mut encoder, &mut pipeline_cache)?;
         }
+
+        // Step 4: Single GPU submission for all operations
+        self.device.queue.submit(Some(encoder.finish()));
 
         Ok(())
     }
