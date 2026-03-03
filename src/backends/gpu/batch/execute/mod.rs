@@ -13,7 +13,7 @@
 //! that shader).  For Qwen3-4B FFN: reduces 5 pipeline compilations + 5 submissions
 //! per layer to 3 compilations (first layer only) + 1 submission.
 
-pub mod dispatch;
+pub(crate) mod dispatch;
 mod operations;
 
 use super::{BufferId, GpuCommandBatch};
