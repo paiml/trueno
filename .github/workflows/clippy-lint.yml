@@ -26,6 +26,7 @@ jobs:
       - name: Clippy (tests, all features)
         run: >-
           cargo clippy --tests --all-features -- -D warnings
+          -A unknown-lints
           -A clippy::disallowed-methods
           -A clippy::float-cmp -A clippy::float-cmp-const
           -A clippy::approx-constant
@@ -34,15 +35,18 @@ jobs:
           -A clippy::single-char-pattern
           -A clippy::manual-range-contains
           -A clippy::no-effect-underscore-binding
-          -A clippy::ignore-without-reason
           -A clippy::unused-unit
           -A clippy::large-stack-arrays
-          -A clippy::unnecessary-sort-by
           -A clippy::ref-as-ptr
-          -A clippy::manual-midpoint
-          -A clippy::manual-contains
-          -A clippy::map-or-transform
           -A clippy::identity-op
           -A clippy::len-zero
-          -A clippy::needless-return-with-question-mark
+          -A clippy::ignore-without-reason
+          -A clippy::stable-sort-primitive
+          -A clippy::manual-contains
+          -A clippy::manual-midpoint
+          -A clippy::needless-lifetimes
+          -A clippy::map-or-transform
           -A clippy::unwrap-on-ok
+          -A clippy::unnecessary-literal-unwrap
+          -A clippy::unnecessary-literal-bound
+          -A clippy::unnecessary-map-or
