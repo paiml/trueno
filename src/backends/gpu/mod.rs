@@ -33,6 +33,9 @@ mod batch;
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 mod device;
 
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+mod pool;
+
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 mod shaders;
 
@@ -57,6 +60,9 @@ pub use batch::{BufferId, GpuCommandBatch};
 // Export GpuDevice for both native and WASM GPU features
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 pub use device::GpuDevice;
+
+#[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+pub use pool::GpuDevicePool;
 
 #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 mod backend_ops;

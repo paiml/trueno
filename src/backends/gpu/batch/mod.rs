@@ -98,6 +98,17 @@ pub(crate) enum GpuOp {
 
     /// Element-wise subtraction: a - b
     Sub { a: BufferId, b: BufferId, output: BufferId },
+
+    /// Matrix multiplication: C = A × B
+    /// A is M×K, B is K×N, C is M×N (all row-major)
+    Matmul {
+        a: BufferId,
+        b: BufferId,
+        output: BufferId,
+        m: u32,
+        k: u32,
+        n: u32,
+    },
 }
 
 /// Command batch for async GPU execution
@@ -311,6 +322,42 @@ impl GpuCommandBatch {
         let output = self.alloc_output(size_a);
 
         self.operations.push(GpuOp::Sub { a, b, output });
+
+        output
+    }
+
+    /// Queue matrix multiplication: C = A × B
+    ///
+    /// A is M×K elements, B is K×N elements, output is M×N elements.
+    /// All matrices are row-major flat arrays.
+    ///
+    /// Returns buffer ID for the M×N output.
+    ///
+    /// # Panics
+    ///
+    /// Panics if buffer sizes don't match the declared dimensions.
+    pub fn matmul(&mut self, a: BufferId, b: BufferId, m: u32, k: u32, n: u32) -> BufferId {
+        let size_a = self.buffers.get(&a).expect("Invalid buffer A ID").size;
+        let size_b = self.buffers.get(&b).expect("Invalid buffer B ID").size;
+
+        assert_eq!(
+            size_a,
+            (m * k) as usize,
+            "Buffer A size {} doesn't match M×K = {}",
+            size_a,
+            m * k
+        );
+        assert_eq!(
+            size_b,
+            (k * n) as usize,
+            "Buffer B size {} doesn't match K×N = {}",
+            size_b,
+            k * n
+        );
+
+        let output = self.alloc_output((m * n) as usize);
+
+        self.operations.push(GpuOp::Matmul { a, b, output, m, k, n });
 
         output
     }
