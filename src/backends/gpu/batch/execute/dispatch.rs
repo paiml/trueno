@@ -12,14 +12,17 @@ const WORKGROUP_SIZE: u32 = 256;
 
 /// Cached GPU pipeline: shader module → compute pipeline + bind group layout.
 /// Created once per unique shader source, reused for all operations using that shader.
-pub(crate) struct CachedPipeline {
+pub struct CachedPipeline {
     pub(crate) pipeline: wgpu::ComputePipeline,
     pub(crate) bind_group_layout: wgpu::BindGroupLayout,
 }
 
 /// Pipeline cache keyed by shader source pointer address.
+///
 /// Safe because all shader sources are `&'static str` constants with stable addresses.
-pub(crate) type PipelineCache = HashMap<usize, CachedPipeline>;
+/// Create one per training session and pass to `GpuCommandBatch::execute_with_cache()`
+/// to avoid recompiling shaders across batch executions (KAIZEN-023).
+pub type PipelineCache = HashMap<usize, CachedPipeline>;
 
 /// Compute a cache key from a shader source string.
 /// Uses pointer address since all sources are `&'static str` constants.
