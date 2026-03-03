@@ -94,6 +94,11 @@ impl GpuCommandBatch {
             GpuOp::Sub { a, b, output } => {
                 self.execute_binary_op_for(shaders::VEC_SUB_SHADER, "Sub", a, b, output).await?;
             }
+
+            GpuOp::Matmul { a, b, output, m, k, n } => {
+                self.execute_matmul_op(shaders::MATMUL_SHADER, "Matmul", a, b, output, *m, *k, *n)
+                    .await?;
+            }
         }
 
         Ok(())

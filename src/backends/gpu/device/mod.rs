@@ -68,6 +68,74 @@ impl GpuDevice {
         Ok(Self { device, queue })
     }
 
+    /// Initialize GPU device with a specific adapter index (sync, native only)
+    ///
+    /// Use this to select a specific GPU when multiple are available.
+    /// Adapter indices correspond to `Instance::enumerate_adapters()` ordering.
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+    pub fn new_with_adapter_index(index: u32) -> Result<Self, String> {
+        runtime::block_on(async { Self::new_with_adapter_index_async(index).await })
+    }
+
+    /// Initialize GPU device with a specific adapter index (async, all platforms)
+    ///
+    /// Use this to select a specific GPU when multiple are available.
+    /// Adapter indices correspond to `Instance::enumerate_adapters()` ordering.
+    pub async fn new_with_adapter_index_async(index: u32) -> Result<Self, String> {
+        let instance = wgpu::Instance::default();
+        let adapters = instance.enumerate_adapters(wgpu::Backends::all());
+
+        if adapters.is_empty() {
+            return Err("No GPU adapters found".to_string());
+        }
+
+        let adapter = adapters
+            .into_iter()
+            .nth(index as usize)
+            .ok_or_else(|| format!("GPU adapter index {} out of range", index))?;
+
+        let mut limits = wgpu::Limits::default();
+        limits.max_buffer_size = adapter.limits().max_buffer_size;
+        limits.max_storage_buffer_binding_size = adapter.limits().max_storage_buffer_binding_size;
+
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some(&format!("Trueno GPU Device [{}]", index)),
+                required_features: wgpu::Features::empty(),
+                required_limits: limits,
+                memory_hints: wgpu::MemoryHints::Performance,
+                experimental_features: Default::default(),
+                trace: Default::default(),
+            })
+            .await
+            .map_err(|e| format!("Failed to create device at index {}: {}", index, e))?;
+
+        Ok(Self { device, queue })
+    }
+
+    /// List all available GPU adapters (sync, native only)
+    ///
+    /// Returns a list of (index, name, backend) tuples for each adapter.
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+    pub fn list_adapters() -> Vec<(u32, String, String)> {
+        runtime::block_on(Self::list_adapters_async())
+    }
+
+    /// List all available GPU adapters (async, all platforms)
+    pub async fn list_adapters_async() -> Vec<(u32, String, String)> {
+        let instance = wgpu::Instance::default();
+        let adapters = instance.enumerate_adapters(wgpu::Backends::all());
+
+        adapters
+            .iter()
+            .enumerate()
+            .map(|(idx, adapter)| {
+                let info = adapter.get_info();
+                (idx as u32, info.name, format!("{:?}", info.backend))
+            })
+            .collect()
+    }
+
     /// Check if GPU is available (sync, native only)
     #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
     pub fn is_available() -> bool {
