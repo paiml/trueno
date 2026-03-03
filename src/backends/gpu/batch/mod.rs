@@ -50,6 +50,8 @@
 
 mod execute;
 
+pub use execute::dispatch::{CachedPipeline, PipelineCache};
+
 #[cfg(test)]
 mod tests;
 
