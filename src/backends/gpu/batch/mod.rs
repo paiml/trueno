@@ -50,7 +50,7 @@
 
 mod execute;
 
-pub use execute::dispatch::{CachedPipeline, PipelineCache};
+pub use execute::dispatch::PipelineCache;
 
 #[cfg(test)]
 mod tests;
@@ -135,11 +135,8 @@ pub(crate) struct BufferInfo {
 
     /// GPU buffer (created during execute(), or pre-existing for imported buffers).
     /// Wrapped in `Arc` to allow sharing across multiple batch executions (KAIZEN-015).
+    /// When `Some`, execute() skips buffer creation (already GPU-resident).
     pub(crate) gpu_buffer: Option<Arc<wgpu::Buffer>>,
-
-    /// Whether this buffer was imported via `import_buffer()` (KAIZEN-015).
-    /// Imported buffers are already GPU-resident and skip creation during execute().
-    pub(crate) imported: bool,
 }
 
 impl GpuCommandBatch {
@@ -158,7 +155,7 @@ impl GpuCommandBatch {
         let id = BufferId(self.next_buffer_id);
         self.next_buffer_id += 1;
 
-        self.buffers.insert(id, BufferInfo { size, data, gpu_buffer: None, imported: false });
+        self.buffers.insert(id, BufferInfo { size, data, gpu_buffer: None });
 
         id
     }
@@ -391,7 +388,6 @@ impl GpuCommandBatch {
                 size,
                 data: None,
                 gpu_buffer: Some(buffer),
-                imported: true,
             },
         );
         id
