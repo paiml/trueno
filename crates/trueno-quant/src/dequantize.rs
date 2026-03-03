@@ -103,8 +103,8 @@ pub fn dequantize_q5_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
             break;
         }
 
-        let d = f16_to_f32(u16::from_le_bytes([data[sb_start], data[sb_start + 1]]));
-        let dmin = f16_to_f32(u16::from_le_bytes([data[sb_start + 2], data[sb_start + 3]]));
+        let d = sanitize_f16_scale(data[sb_start], data[sb_start + 1]);
+        let dmin = sanitize_f16_scale(data[sb_start + 2], data[sb_start + 3]);
 
         let scales_bytes = &data[sb_start + 4..sb_start + 16];
         let mut scales = [0u8; 8];
@@ -158,7 +158,7 @@ pub fn dequantize_q6_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
         let ql = &data[sb_start..sb_start + 128];
         let qh = &data[sb_start + 128..sb_start + 192];
         let scales = &data[sb_start + 192..sb_start + 208];
-        let d = f16_to_f32(u16::from_le_bytes([data[sb_start + 208], data[sb_start + 209]]));
+        let d = sanitize_f16_scale(data[sb_start + 208], data[sb_start + 209]);
 
         for half in 0..2 {
             let ql_base = half * 64;
