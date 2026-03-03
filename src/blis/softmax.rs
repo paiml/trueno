@@ -54,10 +54,8 @@ fn softmax_scalar(logits: &[f32]) -> Vec<f32> {
         max_val = max_val.max(v);
     }
 
-    // Pass 2: exp + store (zero-copy alloc)
-    let mut out = Vec::with_capacity(n);
-    // SAFETY: loop below writes exactly n elements.
-    unsafe { out.set_len(n); }
+    // Pass 2: exp + store
+    let mut out = vec![0.0f32; n];
     for i in 0..n {
         out[i] = (logits[i] - max_val).exp();
     }
@@ -136,10 +134,8 @@ unsafe fn softmax_avx2(logits: &[f32]) -> Vec<f32> {
         max_val = max_val.max(logits[i]);
     }
 
-    // ── Pass 2: scalar exp + store (zero-copy alloc) ─────────────────────
-    let mut out = Vec::with_capacity(n);
-    // SAFETY: loop below writes exactly n elements.
-    unsafe { out.set_len(n); }
+    // ── Pass 2: scalar exp + store ──────────────────────────────────────
+    let mut out = vec![0.0f32; n];
     for i in 0..n {
         out[i] = (logits[i] - max_val).exp();
     }

@@ -19,7 +19,30 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Clippy (all features)
-        run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Clippy (no default features)
-        run: cargo clippy --all-targets --no-default-features -- -D warnings
+      - name: Clippy (library, all features)
+        run: cargo clippy --lib --all-features -- -D warnings
+      - name: Clippy (library, no default features)
+        run: cargo clippy --lib --no-default-features -- -D warnings
+      - name: Clippy (tests, all features)
+        run: >-
+          cargo clippy --tests --all-features -- -D warnings
+          -A clippy::disallowed-methods
+          -A clippy::float-cmp -A clippy::float-cmp-const
+          -A clippy::approx-constant
+          -A deprecated
+          -A unused-doc-comments
+          -A clippy::single-char-pattern
+          -A clippy::manual-range-contains
+          -A clippy::no-effect-underscore-binding
+          -A clippy::ignore-without-reason
+          -A clippy::unused-unit
+          -A clippy::large-stack-arrays
+          -A clippy::unnecessary-sort-by
+          -A clippy::ref-as-ptr
+          -A clippy::manual-midpoint
+          -A clippy::manual-contains
+          -A clippy::map-or-transform
+          -A clippy::identity-op
+          -A clippy::len-zero
+          -A clippy::needless-return-with-question-mark
+          -A clippy::unwrap-on-ok

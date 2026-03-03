@@ -257,10 +257,7 @@ unsafe fn mul_scalar_avx2(input: &[f32], scalar: f32, output: &mut [f32]) {
 #[must_use]
 pub fn relu_alloc(input: &[f32]) -> Vec<f32> {
     let n = input.len();
-    let mut output = Vec::with_capacity(n);
-    // SAFETY: relu writes exactly n elements via SIMD + scalar tail.
-    // Every element is initialized before the Vec is used.
-    unsafe { output.set_len(n); }
+    let mut output = vec![0.0f32; n];
     let _ = relu(input, &mut output);
     output
 }
@@ -274,8 +271,7 @@ pub fn relu_alloc(input: &[f32]) -> Vec<f32> {
 pub fn add_alloc(a: &[f32], b: &[f32]) -> Vec<f32> {
     assert_eq!(a.len(), b.len(), "add_alloc: length mismatch");
     let n = a.len();
-    let mut output = Vec::with_capacity(n);
-    unsafe { output.set_len(n); }
+    let mut output = vec![0.0f32; n];
     let _ = add(a, b, &mut output);
     output
 }
@@ -284,8 +280,7 @@ pub fn add_alloc(a: &[f32], b: &[f32]) -> Vec<f32> {
 #[must_use]
 pub fn mul_scalar_alloc(input: &[f32], scalar: f32) -> Vec<f32> {
     let n = input.len();
-    let mut output = Vec::with_capacity(n);
-    unsafe { output.set_len(n); }
+    let mut output = vec![0.0f32; n];
     let _ = mul_scalar(input, scalar, &mut output);
     output
 }
