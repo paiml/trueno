@@ -10,6 +10,7 @@ mod dispatch;
 mod operations;
 
 use super::{BufferId, GpuCommandBatch};
+use std::sync::Arc;
 
 impl GpuCommandBatch {
     /// Execute all queued operations on GPU
@@ -20,7 +21,12 @@ impl GpuCommandBatch {
     /// 3. Results stay on GPU until `read()` is called
     pub async fn execute(&mut self) -> Result<(), String> {
         // Step 1: Create GPU buffers for all BufferIds
+        // Skip imported buffers — already GPU-resident (KAIZEN-015)
         for (buffer_id, buffer_info) in &mut self.buffers {
+            if buffer_info.gpu_buffer.is_some() {
+                continue;
+            }
+
             let size_bytes = (buffer_info.size * std::mem::size_of::<f32>()) as u64;
 
             let gpu_buffer = self.device.device.create_buffer(&wgpu::BufferDescriptor {
@@ -32,7 +38,7 @@ impl GpuCommandBatch {
                 mapped_at_creation: false,
             });
 
-            buffer_info.gpu_buffer = Some(gpu_buffer);
+            buffer_info.gpu_buffer = Some(Arc::new(gpu_buffer));
         }
 
         // Step 2: Upload initial data to buffers that have it
