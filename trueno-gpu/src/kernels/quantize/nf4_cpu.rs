@@ -29,6 +29,7 @@ pub const NF4_BLOCK_BYTES: usize = 36;
 ///
 /// These are the optimal reconstruction points for a standard normal distribution
 /// quantized to 4 bits (Dettmers et al., "QLoRA", NeurIPS 2023).
+#[allow(clippy::excessive_precision, clippy::unreadable_literal)]
 pub const NF4_LUT: [f32; 16] = [
     -1.0,
     -0.6961928009986877,
