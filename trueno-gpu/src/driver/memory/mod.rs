@@ -16,7 +16,7 @@
 mod buffer;
 mod transfer;
 
-#[allow(unused_imports)] // GpuBufferView is part of the public API
+#[allow(unused_imports, unreachable_pub)] // Re-exported by driver/mod.rs
 pub use buffer::{GpuBuffer, GpuBufferView};
 
 // ============================================================================

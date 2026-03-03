@@ -6,7 +6,7 @@ use super::builder::PtxModule;
 
 /// PTX emitter configuration
 #[derive(Debug, Clone, Default)]
-pub struct EmitConfig {
+pub(crate) struct EmitConfig {
     /// Include comments in output
     pub include_comments: bool,
     /// Pretty print with indentation
@@ -18,20 +18,20 @@ pub struct EmitConfig {
 impl EmitConfig {
     /// Create a new emit configuration
     #[must_use]
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self { include_comments: true, pretty_print: true, debug_info: false }
     }
 
     /// Enable debug information
     #[must_use]
-    pub const fn with_debug(mut self) -> Self {
+    pub(crate) const fn with_debug(mut self) -> Self {
         self.debug_info = true;
         self
     }
 
     /// Disable comments
     #[must_use]
-    pub const fn without_comments(mut self) -> Self {
+    pub(crate) const fn without_comments(mut self) -> Self {
         self.include_comments = false;
         self
     }
@@ -39,13 +39,13 @@ impl EmitConfig {
 
 /// Emit PTX with configuration
 #[must_use]
-pub fn emit_ptx(module: &PtxModule, _config: &EmitConfig) -> String {
+pub(crate) fn emit_ptx(module: &PtxModule, _config: &EmitConfig) -> String {
     // For now, just use the default emit
     module.emit()
 }
 
 /// Validate emitted PTX for basic syntax errors
-pub fn validate_ptx(ptx: &str) -> Result<(), Vec<String>> {
+pub(crate) fn validate_ptx(ptx: &str) -> Result<(), Vec<String>> {
     let mut errors = Vec::new();
 
     // Check for required directives
