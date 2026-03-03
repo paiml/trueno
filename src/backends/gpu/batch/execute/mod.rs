@@ -13,7 +13,7 @@
 //! that shader).  For Qwen3-4B FFN: reduces 5 pipeline compilations + 5 submissions
 //! per layer to 3 compilations (first layer only) + 1 submission.
 
-pub(crate) mod dispatch;
+pub mod dispatch;
 mod operations;
 
 use super::{BufferId, GpuCommandBatch};
@@ -24,6 +24,8 @@ impl GpuCommandBatch {
     ///
     /// Uses a single command encoder for all operations (one GPU submission)
     /// and caches pipelines per shader source to avoid redundant compilation.
+    /// The pipeline cache is local to this call — see `execute_with_cache()`
+    /// for persistent caching across multiple batch executions.
     ///
     /// # Contract (C-BATCH-EXEC-001)
     ///
@@ -32,6 +34,31 @@ impl GpuCommandBatch {
     /// - **Invariant**: Pipeline compiled at most once per unique shader source
     /// - **Invariant**: Single `queue.submit()` per `execute()` call
     pub async fn execute(&mut self) -> Result<(), String> {
+        let mut local_cache = dispatch::PipelineCache::new();
+        self.execute_inner(&mut local_cache)
+    }
+
+    /// Execute with a persistent pipeline cache (KAIZEN-023).
+    ///
+    /// Same as `execute()` but uses a caller-provided pipeline cache that
+    /// persists across multiple batch executions.  Shaders compiled in a
+    /// previous batch are reused without recompilation.
+    ///
+    /// For Qwen3-4B FFN (36 layers × 3 unique shaders per batch):
+    /// - `execute()`: 3 compilations per layer × 36 = 108 total
+    /// - `execute_with_cache()`: 3 compilations (layer 1) + 0 (layers 2-36) = 3 total
+    pub async fn execute_with_cache(
+        &mut self,
+        cache: &mut dispatch::PipelineCache,
+    ) -> Result<(), String> {
+        self.execute_inner(cache)
+    }
+
+    /// Shared implementation for execute() and execute_with_cache().
+    fn execute_inner(
+        &mut self,
+        pipeline_cache: &mut dispatch::PipelineCache,
+    ) -> Result<(), String> {
         // Step 1: Create GPU buffers for all BufferIds
         // Skip imported buffers — already GPU-resident (KAIZEN-015)
         for (buffer_id, buffer_info) in &mut self.buffers {
@@ -69,10 +96,8 @@ impl GpuCommandBatch {
                 label: Some("Batch Encoder"),
             });
 
-        let mut pipeline_cache = dispatch::PipelineCache::new();
-
         for op in &self.operations {
-            self.encode_operation(op, &mut encoder, &mut pipeline_cache)?;
+            self.encode_operation(op, &mut encoder, pipeline_cache)?;
         }
 
         // Step 4: Single GPU submission for all operations

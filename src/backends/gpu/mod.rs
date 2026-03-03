@@ -55,7 +55,7 @@ pub use tiled_reduction::{
 };
 
 #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
-pub use batch::{BufferId, GpuCommandBatch};
+pub use batch::{BufferId, GpuCommandBatch, PipelineCache};
 
 // Export GpuDevice for both native and WASM GPU features
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
