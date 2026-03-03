@@ -61,6 +61,11 @@ pub use batch::{BufferId, GpuCommandBatch};
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 pub use device::GpuDevice;
 
+/// Re-export wgpu types for downstream crates that need to create persistent
+/// GPU buffers (KAIZEN-015: GPU-resident weights).
+#[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
+pub use wgpu;
+
 #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 pub use pool::GpuDevicePool;
 
