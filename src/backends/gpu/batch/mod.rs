@@ -131,8 +131,13 @@ pub(crate) struct BufferInfo {
     /// Initial data to upload (if any)
     pub(crate) data: Option<Vec<f32>>,
 
-    /// GPU buffer (created during execute())
-    pub(crate) gpu_buffer: Option<wgpu::Buffer>,
+    /// GPU buffer (created during execute(), or pre-existing for imported buffers).
+    /// Wrapped in `Arc` to allow sharing across multiple batch executions (KAIZEN-015).
+    pub(crate) gpu_buffer: Option<Arc<wgpu::Buffer>>,
+
+    /// Whether this buffer was imported via `import_buffer()` (KAIZEN-015).
+    /// Imported buffers are already GPU-resident and skip creation during execute().
+    pub(crate) imported: bool,
 }
 
 impl GpuCommandBatch {
@@ -151,7 +156,7 @@ impl GpuCommandBatch {
         let id = BufferId(self.next_buffer_id);
         self.next_buffer_id += 1;
 
-        self.buffers.insert(id, BufferInfo { size, data, gpu_buffer: None });
+        self.buffers.insert(id, BufferInfo { size, data, gpu_buffer: None, imported: false });
 
         id
     }
@@ -360,6 +365,47 @@ impl GpuCommandBatch {
         self.operations.push(GpuOp::Matmul { a, b, output, m, k, n });
 
         output
+    }
+
+    /// Import a pre-existing GPU buffer for use in batch operations.
+    ///
+    /// Unlike `upload()` which copies host data to GPU during `execute()`,
+    /// imported buffers are already GPU-resident and skip the upload step.
+    /// The `Arc` wrapper allows the same buffer to be shared across multiple
+    /// batch executions without re-uploading (KAIZEN-015: GPU-resident weights).
+    ///
+    /// # Contract (C-BATCH-IMPORT-001)
+    ///
+    /// - **Precondition**: `buffer` is a valid `wgpu::Buffer` with STORAGE | COPY_SRC usage
+    /// - **Postcondition**: Returned `BufferId` can be used in all batch operations (matmul, etc.)
+    /// - **Invariant**: Imported buffer is NOT destroyed when the batch is dropped —
+    ///   the `Arc` keeps it alive as long as the caller retains a clone
+    pub fn import_buffer(&mut self, buffer: Arc<wgpu::Buffer>, size: usize) -> BufferId {
+        let id = BufferId(self.next_buffer_id);
+        self.next_buffer_id += 1;
+        self.buffers.insert(
+            id,
+            BufferInfo {
+                size,
+                data: None,
+                gpu_buffer: Some(buffer),
+                imported: true,
+            },
+        );
+        id
+    }
+
+    /// Get the underlying wgpu device for creating persistent buffers.
+    ///
+    /// Used to create `wgpu::Buffer` instances that outlive individual batch executions.
+    /// Created buffers can be registered via `import_buffer()`.
+    pub fn wgpu_device(&self) -> &wgpu::Device {
+        &self.device.device
+    }
+
+    /// Get the underlying wgpu queue for writing to persistent buffers.
+    pub fn wgpu_queue(&self) -> &wgpu::Queue {
+        &self.device.queue
     }
 
     /// Get number of queued operations
