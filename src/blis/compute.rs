@@ -105,13 +105,16 @@ fn compute_macroblock(
     n: usize,
     profiler: &mut Option<&mut BlisProfiler>,
 ) {
-    let midi_start = Instant::now();
+    // KAIZEN-038: Avoid Instant::now() syscall (~20-40ns) when profiler is disabled.
+    // For 1024x1024 GEMM, this eliminates thousands of syscalls per macroblock.
+    let track_time = profiler.is_some();
+    let midi_start = if track_time { Some(Instant::now()) } else { None };
 
     for jr in (0..nc_block).step_by(NR) {
         let nr_block = NR.min(nc_block - jr);
         for ir in (0..mc_block).step_by(MR) {
             let mr_block = MR.min(mc_block - ir);
-            let micro_start = Instant::now();
+            let micro_start = if track_time { Some(Instant::now()) } else { None };
 
             let a_panel = &packed_a[(ir / MR) * MR * kc_block..];
             let b_panel = &packed_b[(jr / NR) * NR * kc_block..];
@@ -120,20 +123,20 @@ fn compute_macroblock(
             dispatch_microkernel(kc_block, a_panel, b_panel, c_micro, mr_block, nr_block);
             store_c_tile(c, c_micro, ic + ir, jc + jr, mr_block, nr_block, n);
 
-            if let Some(ref mut prof) = profiler.as_deref_mut() {
+            if let (Some(ref mut prof), Some(start)) = (profiler.as_deref_mut(), micro_start) {
                 prof.record(
                     BlisProfileLevel::Micro,
-                    micro_start.elapsed().as_nanos() as u64,
+                    start.elapsed().as_nanos() as u64,
                     (2 * mr_block * nr_block * kc_block) as u64,
                 );
             }
         }
     }
 
-    if let Some(ref mut prof) = profiler.as_deref_mut() {
+    if let (Some(ref mut prof), Some(start)) = (profiler.as_deref_mut(), midi_start) {
         prof.record(
             BlisProfileLevel::Midi,
-            midi_start.elapsed().as_nanos() as u64,
+            start.elapsed().as_nanos() as u64,
             (2 * mc_block * nc_block * kc_block) as u64,
         );
     }
@@ -177,11 +180,11 @@ fn validate_gemm_dims(
 fn record_prof(
     profiler: &mut Option<&mut BlisProfiler>,
     level: BlisProfileLevel,
-    start: Instant,
+    start: Option<Instant>,
     flops: u64,
 ) {
-    if let Some(ref mut prof) = profiler.as_deref_mut() {
-        prof.record(level, start.elapsed().as_nanos() as u64, flops);
+    if let (Some(ref mut prof), Some(s)) = (profiler.as_deref_mut(), start) {
+        prof.record(level, s.elapsed().as_nanos() as u64, flops);
     }
 }
 
@@ -211,7 +214,9 @@ pub fn gemm_blis(
         return gemm_reference(m, n, k, a, b, c);
     }
 
-    let start = Instant::now();
+    // KAIZEN-038: Only call Instant::now() when profiler is active
+    let track_time = profiler.is_some();
+    let start = if track_time { Some(Instant::now()) } else { None };
 
     let mc = MC.min(m);
     let nc = NC.min(n);
@@ -227,14 +232,14 @@ pub fn gemm_blis(
         for pc in (0..k).step_by(KC) {
             let kc_block = KC.min(k - pc);
 
-            let pack_start = Instant::now();
+            let pack_start = if track_time { Some(Instant::now()) } else { None };
             pack_b_block(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
             record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
 
             for ic in (0..m).step_by(MC) {
                 let mc_block = MC.min(m - ic);
 
-                let pack_start = Instant::now();
+                let pack_start = if track_time { Some(Instant::now()) } else { None };
                 pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
                 record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
 
@@ -255,10 +260,10 @@ pub fn gemm_blis(
         }
     }
 
-    if let Some(prof) = profiler {
+    if let (Some(prof), Some(s)) = (profiler, start) {
         prof.record(
             BlisProfileLevel::Macro,
-            start.elapsed().as_nanos() as u64,
+            s.elapsed().as_nanos() as u64,
             (2 * m * n * k) as u64,
         );
     }
