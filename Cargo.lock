@@ -5689,6 +5689,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "trueno-tensor"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "trueno-viz"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
