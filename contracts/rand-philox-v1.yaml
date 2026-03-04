@@ -1,0 +1,44 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Philox 4x32-10 counter-based RNG"
+  crate: "trueno-rand"
+  references:
+    - "Salmon et al., 'Parallel random numbers: as easy as 1, 2, 3', SC 2011"
+
+equations:
+  philox:
+    formula: "output = Philox4x32_10(counter, key) — 10 rounds of Feistel-like bijection"
+    domain: "counter ∈ {0..2^128}, key ∈ {0..2^64}"
+    codomain: "output ∈ {0..2^32}^4"
+    invariants:
+      - "Determinism: same (key, counter) → same output"
+      - "Period: 2^128 per key"
+      - "Statistical quality: passes BigCrush"
+
+proof_obligations:
+  - type: determinism
+    property: "Reproducibility"
+    formal: "Philox(key, ctr) == Philox(key, ctr) for all inputs"
+    applies_to: all
+
+  - type: statistical
+    property: "Uniform distribution"
+    formal: "chi-squared test on 100-bucket histogram < 150 (p=0.001)"
+    applies_to: all
+
+  - type: statistical
+    property: "Normal distribution (Box-Muller)"
+    formal: "|mean| < 0.02, |variance - 1.0| < 0.05 for 100k samples"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-RNG-001
+    rule: "Determinism"
+    test: "test_deterministic_same_seed, test_stateless_generation"
+  - id: FALSIFY-RNG-002
+    rule: "Uniform chi-squared"
+    test: "test_chi_squared_uniformity"
+  - id: FALSIFY-RNG-003
+    rule: "Normal distribution"
+    test: "test_normal_mean_and_variance"

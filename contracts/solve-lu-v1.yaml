@@ -1,0 +1,42 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "LU factorization with partial pivoting"
+  crate: "trueno-solve"
+  references:
+    - "Golub & Van Loan, 'Matrix Computations', 4th ed., 2013"
+
+equations:
+  lu_factorization:
+    formula: "PA = LU where L unit lower triangular, U upper triangular, P permutation"
+    domain: "A ∈ ℝ^{n×n}, non-singular"
+    codomain: "L ∈ ℝ^{n×n}, U ∈ ℝ^{n×n}, P ∈ {0,1}^{n×n}"
+    invariants:
+      - "PA = LU within backward error"
+      - "L[i][j] = 0 for j > i, L[i][i] = 1"
+      - "U[i][j] = 0 for j < i"
+
+proof_obligations:
+  - type: invariant
+    property: "Factorization backward error"
+    formal: "||PA - LU||_F / ||A||_F < n · u"
+    tolerance: "n * f32::EPSILON"
+    applies_to: all
+
+  - type: invariant
+    property: "Solution residual"
+    formal: "||Ax - b|| / ||b|| < κ(A) · n · u"
+    applies_to: all
+
+  - type: error
+    property: "Singular matrix detection"
+    formal: "returns Err(SingularMatrix) for rank-deficient A"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-LU-001
+    rule: "PA = LU reconstruction"
+    test: "test_lu_backward_error"
+  - id: FALSIFY-LU-002
+    rule: "Singular detection"
+    test: "test_lu_singular_detected"
