@@ -43,6 +43,7 @@
 //! by moving backward passes from CPU (ndarray) to GPU (CUDA).
 
 mod activations;
+mod cross_entropy;
 mod gemm;
 mod layer_norm;
 mod rms_norm;
@@ -50,6 +51,7 @@ mod softmax;
 
 // Re-export backward kernels
 pub use activations::{GeluBackwardKernel, ReluBackwardKernel, SiluBackwardKernel};
+pub use cross_entropy::FusedCrossEntropyKernel;
 pub use gemm::{GemmBackwardAKernel, GemmBackwardBKernel};
 pub use layer_norm::LayerNormBackwardKernel;
 pub use rms_norm::{BatchedRmsNormBackwardKernel, RmsNormBackwardKernel};

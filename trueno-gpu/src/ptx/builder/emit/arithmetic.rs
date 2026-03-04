@@ -27,6 +27,7 @@ pub(crate) fn emit_arithmetic_opcode(instr: &PtxInstruction, s: &mut String) {
         }
         PtxOp::Neg => s.push_str("neg"),
         PtxOp::Ex2 => s.push_str("ex2.approx"),
+        PtxOp::Lg2 => s.push_str("lg2.approx"),
         PtxOp::Rsqrt => s.push_str("rsqrt.approx"),
         PtxOp::Rcp => s.push_str("rcp.approx"),
         PtxOp::Sqrt => {
@@ -76,6 +77,7 @@ pub(crate) fn is_arithmetic_op(op: &PtxOp) -> bool {
             | PtxOp::Fma
             | PtxOp::Neg
             | PtxOp::Ex2
+            | PtxOp::Lg2
             | PtxOp::Rsqrt
             | PtxOp::Rcp
             | PtxOp::Sqrt
