@@ -78,34 +78,28 @@ impl Matrix<f32> {
     /// assert_eq!(t.get(0, 1), Some(&4.0));
     /// assert_eq!(t.get(1, 0), Some(&2.0));
     /// ```
+    // KAIZEN-040: Delegate to crate::blis::transpose which has AVX2 8×8
+    // in-register micro-kernel with 64×64 L1-resident tiling and prefetch.
+    // Previous implementation used scalar 32×32 blocks.
     #[cfg_attr(feature = "tracing", instrument(skip(self), fields(dims = %format!("{}x{}", self.rows, self.cols))))]
     pub fn transpose(&self) -> Matrix<f32> {
         let mut result = Matrix::zeros_with_backend(self.cols, self.rows, self.backend);
 
-        // Use block-wise transpose for better cache locality
-        // Block size of 32 balances cache efficiency for both square and non-square matrices
-        const BLOCK_SIZE: usize = 32;
-
-        // For non-square matrices, process output rows sequentially for write coalescing
-        // This ensures writes are sequential in memory regardless of input shape
-        // Non-square transpose uses write-coalesced layout for sequential memory access
-
-        // Process in blocks, iterating output rows first for sequential writes
-        for j_block in (0..self.cols).step_by(BLOCK_SIZE) {
-            let j_end = (j_block + BLOCK_SIZE).min(self.cols);
-
-            for i_block in (0..self.rows).step_by(BLOCK_SIZE) {
-                let i_end = (i_block + BLOCK_SIZE).min(self.rows);
-
-                // Within block: iterate output rows (j) in outer loop for sequential writes
-                for j in j_block..j_end {
-                    let dst_row_start = j * result.cols;
-                    for i in i_block..i_end {
-                        // result[j, i] = self[i, j]
-                        // Sequential write: dst_row_start + i increments by 1
-                        // Strided read: acceptable, CPU prefetch handles this
-                        result.data[dst_row_start + i] = self.data[i * self.cols + j];
-                    }
+        // BLIS transpose handles AVX2 dispatch, remainder edges, and shape-adaptive
+        // loop ordering internally. Dimensions are correct by construction so
+        // the only possible error (size mismatch) cannot occur.
+        if let Err(e) = crate::blis::transpose::transpose(
+            self.rows,
+            self.cols,
+            &self.data,
+            &mut result.data,
+        ) {
+            // Unreachable: result is allocated as cols×rows which matches rows×cols elements.
+            // If somehow triggered, fall back to scalar element-wise transpose.
+            debug_assert!(false, "BLIS transpose dimension mismatch: {e}");
+            for i in 0..self.rows {
+                for j in 0..self.cols {
+                    result.data[j * self.rows + i] = self.data[i * self.cols + j];
                 }
             }
         }
