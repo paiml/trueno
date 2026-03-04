@@ -1,0 +1,55 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "GPU-accelerated FFT via Stockham/Cooley-Tukey algorithm"
+  crate: "trueno-fft"
+  references:
+    - "Stockham, 'High-speed convolution and correlation', AFIPS 1966"
+    - "Cooley & Tukey, 'An algorithm for the machine calculation of complex Fourier series', 1965"
+    - "VkFFT: Efficient Vulkan/CUDA/HIP/OpenCL/Metal FFT, IEEE 2023"
+
+equations:
+  dft:
+    formula: "X_k = Σ_{n=0}^{N-1} x_n · exp(-2πi·k·n/N)"
+    domain: "x ∈ ℂ^N, N = 2^k for k ≥ 0"
+    codomain: "X ∈ ℂ^N"
+    invariants:
+      - "Parseval: Σ|x_n|² = (1/N)·Σ|X_k|²"
+      - "Linearity: DFT(αx + βy) = α·DFT(x) + β·DFT(y)"
+      - "Inverse: IDFT(DFT(x)) = x"
+
+proof_obligations:
+  - type: conservation
+    property: "Parseval energy conservation"
+    formal: "|Σ|x_n|² - (1/N)·Σ|X_k|²| < ε"
+    tolerance: 1.0e-3
+    applies_to: all
+
+  - type: invariant
+    property: "Inverse roundtrip"
+    formal: "|IFFT(FFT(x)) - x| < ε element-wise"
+    tolerance: 1.0e-3
+    applies_to: all
+
+  - type: linearity
+    property: "FFT linearity"
+    formal: "|FFT(αx + βy) - α·FFT(x) - β·FFT(y)| < ε"
+    tolerance: 1.0e-4
+    applies_to: all
+
+  - type: exact
+    property: "Impulse response"
+    formal: "FFT([1, 0, ..., 0]) = [1, 1, ..., 1]"
+    tolerance: 1.0e-6
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-FFT-001
+    rule: "Parseval energy conservation"
+    test: "test_parseval_energy_conservation_size_4, test_parseval_energy_conservation_size_8"
+  - id: FALSIFY-FFT-002
+    rule: "Inverse roundtrip"
+    test: "test_inverse_roundtrip_size_4, test_inverse_roundtrip_size_16"
+  - id: FALSIFY-FFT-003
+    rule: "Impulse response"
+    test: "test_impulse_response, test_dc_signal"
