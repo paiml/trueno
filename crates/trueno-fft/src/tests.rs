@@ -1,5 +1,6 @@
 //! Tests for FFT — provable contracts and falsification tests.
 
+use crate::bluestein::bluestein_fft;
 use crate::complex::Complex;
 use crate::stockham::{fft_2d, FftPlan};
 
@@ -296,4 +297,119 @@ mod proptests {
             }
         }
     }
+}
+
+// ============================================================================
+// Bluestein (arbitrary-length FFT)
+// ============================================================================
+
+#[test]
+fn test_bluestein_size_3() -> Result<(), Box<dyn std::error::Error>> {
+    // DFT of [1, 1, 1] size 3: X[0]=3, X[1]=X[2]=0
+    let input = [
+        Complex::new(1.0, 0.0),
+        Complex::new(1.0, 0.0),
+        Complex::new(1.0, 0.0),
+    ];
+    let mut output = [Complex::ZERO; 3];
+    bluestein_fft(&input, &mut output, false)?;
+    assert!((output[0].re - 3.0).abs() < 1e-3);
+    assert!(output[1].abs() < 1e-3);
+    assert!(output[2].abs() < 1e-3);
+    Ok(())
+}
+
+#[test]
+fn test_bluestein_size_5_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    let input = [
+        Complex::new(1.0, 0.0),
+        Complex::new(2.0, 0.0),
+        Complex::new(3.0, 0.0),
+        Complex::new(4.0, 0.0),
+        Complex::new(5.0, 0.0),
+    ];
+    let mut freq = [Complex::ZERO; 5];
+    let mut recovered = [Complex::ZERO; 5];
+
+    bluestein_fft(&input, &mut freq, false)?;
+    bluestein_fft(&freq, &mut recovered, true)?;
+
+    for (orig, rec) in input.iter().zip(recovered.iter()) {
+        let err = (*orig - *rec).abs();
+        assert!(err < 1e-3, "Bluestein roundtrip error: {err}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_bluestein_size_7_parseval() -> Result<(), Box<dyn std::error::Error>> {
+    let input: Vec<Complex> = (0..7)
+        .map(|i| Complex::new(i as f32, 0.0))
+        .collect();
+    let mut output = vec![Complex::ZERO; 7];
+    bluestein_fft(&input, &mut output, false)?;
+
+    // Parseval: Σ|x|² = (1/N)·Σ|X|²
+    let energy_time: f32 = input.iter().map(|x| x.norm_sq()).sum();
+    let energy_freq: f32 = output.iter().map(|x| x.norm_sq()).sum::<f32>() / 7.0;
+    assert!(
+        (energy_time - energy_freq).abs() < 0.5,
+        "Parseval violated: time={energy_time}, freq={energy_freq}"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_bluestein_size_6_impulse() -> Result<(), Box<dyn std::error::Error>> {
+    // Impulse: [1, 0, 0, 0, 0, 0] -> all X[k] = 1
+    let mut input = vec![Complex::ZERO; 6];
+    input[0] = Complex::new(1.0, 0.0);
+    let mut output = vec![Complex::ZERO; 6];
+    bluestein_fft(&input, &mut output, false)?;
+
+    for k in 0..6 {
+        assert!((output[k].re - 1.0).abs() < 1e-3, "Impulse X[{k}].re = {}", output[k].re);
+        assert!(output[k].im.abs() < 1e-3, "Impulse X[{k}].im = {}", output[k].im);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_bluestein_power_of_two_matches_stockham() -> Result<(), Box<dyn std::error::Error>> {
+    // For power-of-two sizes, Bluestein should match Stockham
+    let input = [
+        Complex::new(1.0, 0.0),
+        Complex::new(0.0, 1.0),
+        Complex::new(-1.0, 0.0),
+        Complex::new(0.0, -1.0),
+    ];
+    let mut blue_out = [Complex::ZERO; 4];
+    let mut stock_out = [Complex::ZERO; 4];
+
+    bluestein_fft(&input, &mut blue_out, false)?;
+    let plan = FftPlan::new(4)?;
+    plan.forward(&input, &mut stock_out)?;
+
+    for k in 0..4 {
+        let diff = (blue_out[k] - stock_out[k]).abs();
+        assert!(diff < 1e-3, "Bluestein vs Stockham diff at {k}: {diff}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_bluestein_size_1() -> Result<(), Box<dyn std::error::Error>> {
+    let input = [Complex::new(42.0, 7.0)];
+    let mut output = [Complex::ZERO; 1];
+    bluestein_fft(&input, &mut output, false)?;
+    assert!((output[0].re - 42.0).abs() < 1e-6);
+    assert!((output[0].im - 7.0).abs() < 1e-6);
+    Ok(())
+}
+
+#[test]
+fn test_bluestein_empty() {
+    let input: &[Complex] = &[];
+    let output: &mut [Complex] = &mut [];
+    assert!(bluestein_fft(input, output, false).is_err());
 }
