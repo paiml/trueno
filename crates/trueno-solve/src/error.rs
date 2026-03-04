@@ -46,4 +46,17 @@ pub enum SolverError {
         /// Columns.
         n: usize,
     },
+
+    /// Buffer length mismatch for BLAS operations.
+    #[error("buffer length {got} does not match expected {expected} for {rows}x{cols} matrix")]
+    BufferLengthMismatch {
+        /// Expected length.
+        expected: usize,
+        /// Actual length.
+        got: usize,
+        /// Matrix rows.
+        rows: usize,
+        /// Matrix cols.
+        cols: usize,
+    },
 }

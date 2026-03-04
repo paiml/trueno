@@ -1,0 +1,59 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "BLAS Level-3 operations: syrk, trmm, symm"
+  crate: "trueno-solve"
+  references:
+    - "Dongarra et al., 'A set of level 3 basic linear algebra subprograms', 1990"
+
+equations:
+  syrk:
+    formula: "C = α·A·Aᵀ + β·C"
+    domain: "A ∈ ℝ^{n×k}, C ∈ ℝ^{n×n} (symmetric)"
+    invariants:
+      - "Output is symmetric: C = Cᵀ"
+      - "Identity: syrk(I, n, n, α, β) = α·I + β·C"
+
+  trmm:
+    formula: "B = α·A·B where A is lower triangular"
+    domain: "A ∈ ℝ^{n×n} (triangular), B ∈ ℝ^{n×m}"
+    invariants:
+      - "Identity: trmm(I, B) = α·B"
+
+  symm:
+    formula: "C = α·A·B + β·C where A is symmetric"
+    domain: "A ∈ ℝ^{n×n} (symmetric), B ∈ ℝ^{n×m}"
+    invariants:
+      - "Identity: symm(I, B, C, α, β) = α·B + β·C"
+      - "Equivalent to GEMM when A is stored full"
+
+proof_obligations:
+  - type: invariant
+    property: "syrk symmetry"
+    formal: "C[i,j] = C[j,i] after syrk"
+    applies_to: all
+
+  - type: invariant
+    property: "trmm identity"
+    formal: "trmm(I, B, α) = α·B"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-BLAS3-001
+    rule: "syrk identity"
+    test: "test_syrk_identity"
+  - id: FALSIFY-BLAS3-002
+    rule: "syrk known value"
+    test: "test_syrk_known_value"
+  - id: FALSIFY-BLAS3-003
+    rule: "syrk symmetry"
+    test: "test_syrk_symmetry"
+  - id: FALSIFY-BLAS3-004
+    rule: "trmm identity"
+    test: "test_trmm_identity"
+  - id: FALSIFY-BLAS3-005
+    rule: "trmm triangular"
+    test: "test_trmm_lower_triangular"
+  - id: FALSIFY-BLAS3-006
+    rule: "symm known product"
+    test: "test_symm_known_product"
