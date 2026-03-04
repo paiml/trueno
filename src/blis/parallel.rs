@@ -7,9 +7,7 @@ use crate::error::TruenoError;
 
 use super::compute::gemm_blis;
 #[cfg(feature = "parallel")]
-use super::packing::packed_b_size;
-#[cfg(feature = "parallel")]
-use super::{KC, MC, NC, NR};
+use super::MC;
 
 /// Heijunka (load-leveling) scheduler for parallel GEMM
 #[derive(Debug, Clone)]
@@ -87,15 +85,12 @@ pub fn gemm_blis_parallel(
     let scheduler = HeijunkaScheduler::default();
     let partitions = scheduler.partition_m(m, MC);
 
-    // Pack B once (shared across threads)
-    let nc = NC.min(n);
-    let kc = KC.min(k);
-    let packed_b_total_size = ((n + NR - 1) / NR) * ((k + KC - 1) / KC) * packed_b_size(kc, nc);
-    let _packed_b = std::sync::Arc::new(std::sync::RwLock::new(vec![0.0f32; packed_b_total_size]));
+    // KAIZEN-042: Removed dead packed_b allocation that was never used.
+    // Each thread packs B internally via gemm_blis. Sharing packed B across
+    // threads would require refactoring gemm_blis to accept pre-packed input.
 
     // Parallel over M partitions
     let c_ptr = c.as_mut_ptr() as usize;
-    let _c_len = c.len();
 
     partitions.into_par_iter().for_each(|m_range| {
         let m_local = m_range.len();
