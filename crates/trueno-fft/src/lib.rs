@@ -28,6 +28,7 @@
 //! assert!((energy_time - energy_freq).abs() < 1e-4);
 //! ```
 
+mod bluestein;
 mod complex;
 mod error;
 mod stockham;
@@ -35,6 +36,7 @@ mod stockham;
 #[cfg(test)]
 mod tests;
 
+pub use bluestein::bluestein_fft;
 pub use complex::Complex;
 pub use error::FftError;
 pub use stockham::{fft_2d, FftPlan};
