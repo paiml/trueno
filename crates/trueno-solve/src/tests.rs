@@ -482,3 +482,125 @@ fn test_trsm_singular_detected() {
     let result = trsm(&a, &b, 2, 1, TriangularSide::Lower, DiagonalType::NonUnit);
     assert!(result.is_err());
 }
+
+// ============================================================================
+// BLAS Level-3 tests (Contract: blas-level3-v1.yaml)
+// ============================================================================
+
+use crate::blas3::{symm, syrk, trmm};
+
+#[test]
+fn test_syrk_identity() -> Result<(), Box<dyn std::error::Error>> {
+    // A = I (2×2), C = α·I·Iᵀ + β·0 = α·I
+    let a = [1.0, 0.0, 0.0, 1.0_f32];
+    let mut c = [0.0_f32; 4];
+    syrk(&a, &mut c, 2, 2, 1.0, 0.0)?;
+    assert!((c[0] - 1.0).abs() < 1e-6);
+    assert!((c[3] - 1.0).abs() < 1e-6);
+    assert!(c[1].abs() < 1e-6);
+    assert!(c[2].abs() < 1e-6);
+    Ok(())
+}
+
+#[test]
+fn test_syrk_known_value() -> Result<(), Box<dyn std::error::Error>> {
+    // A = [[1, 2], [3, 4]], C = A·Aᵀ = [[5, 11], [11, 25]]
+    let a = [1.0, 2.0, 3.0, 4.0_f32];
+    let mut c = [0.0_f32; 4];
+    syrk(&a, &mut c, 2, 2, 1.0, 0.0)?;
+    assert!((c[0] - 5.0).abs() < 1e-4);
+    assert!((c[1] - 11.0).abs() < 1e-4);
+    assert!((c[2] - 11.0).abs() < 1e-4); // symmetric
+    assert!((c[3] - 25.0).abs() < 1e-4);
+    Ok(())
+}
+
+#[test]
+fn test_syrk_symmetry() -> Result<(), Box<dyn std::error::Error>> {
+    // Result should always be symmetric
+    let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0_f32]; // 2×3
+    let mut c = [0.0_f32; 4];
+    syrk(&a, &mut c, 2, 3, 2.0, 0.0)?;
+    assert!((c[1] - c[2]).abs() < 1e-6, "Not symmetric: c[1]={}, c[2]={}", c[1], c[2]);
+    Ok(())
+}
+
+#[test]
+fn test_syrk_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
+    let a = [1.0, 0.0, 0.0, 1.0_f32];
+    let mut c = [10.0, 0.0, 0.0, 10.0_f32];
+    // C = 2·I·Iᵀ + 0.5·C = [[2+5, 0], [0, 2+5]] = [[7, 0], [0, 7]]
+    syrk(&a, &mut c, 2, 2, 2.0, 0.5)?;
+    assert!((c[0] - 7.0).abs() < 1e-5);
+    assert!((c[3] - 7.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_trmm_identity() -> Result<(), Box<dyn std::error::Error>> {
+    // A = I (lower triangular), B should be unchanged (scaled by α)
+    let a = [1.0, 0.0, 0.0, 1.0_f32];
+    let mut b = [3.0, 4.0, 5.0, 6.0_f32]; // 2×2
+    trmm(&a, &mut b, 2, 2, 1.0)?;
+    assert!((b[0] - 3.0).abs() < 1e-6);
+    assert!((b[1] - 4.0).abs() < 1e-6);
+    assert!((b[2] - 5.0).abs() < 1e-6);
+    assert!((b[3] - 6.0).abs() < 1e-6);
+    Ok(())
+}
+
+#[test]
+fn test_trmm_lower_triangular() -> Result<(), Box<dyn std::error::Error>> {
+    // A = [[2, 0], [3, 4]], B = [[1], [1]]
+    // A·B = [[2], [7]]
+    let a = [2.0, 0.0, 3.0, 4.0_f32];
+    let mut b = [1.0, 1.0_f32]; // 2×1
+    trmm(&a, &mut b, 2, 1, 1.0)?;
+    assert!((b[0] - 2.0).abs() < 1e-5);
+    assert!((b[1] - 7.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_trmm_alpha_scaling() -> Result<(), Box<dyn std::error::Error>> {
+    let a = [1.0, 0.0, 0.0, 1.0_f32];
+    let mut b = [5.0, 10.0_f32];
+    trmm(&a, &mut b, 2, 1, 3.0)?;
+    assert!((b[0] - 15.0).abs() < 1e-5);
+    assert!((b[1] - 30.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_symm_known_product() -> Result<(), Box<dyn std::error::Error>> {
+    // A = [[1, 2], [2, 3]] (symmetric), B = [[1, 0], [0, 1]]
+    // C = A·B = A
+    let a = [1.0, 2.0, 2.0, 3.0_f32];
+    let b = [1.0, 0.0, 0.0, 1.0_f32];
+    let mut c = [0.0_f32; 4];
+    symm(&a, &b, &mut c, 2, 2, 1.0, 0.0)?;
+    assert!((c[0] - 1.0).abs() < 1e-5);
+    assert!((c[1] - 2.0).abs() < 1e-5);
+    assert!((c[2] - 2.0).abs() < 1e-5);
+    assert!((c[3] - 3.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_symm_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
+    let a = [1.0, 0.0, 0.0, 1.0_f32]; // I
+    let b = [2.0, 3.0_f32]; // 2×1
+    let mut c = [10.0, 20.0_f32]; // 2×1
+    // C = 2·I·B + 0.5·C = [4+5, 6+10] = [9, 16]
+    symm(&a, &b, &mut c, 2, 1, 2.0, 0.5)?;
+    assert!((c[0] - 9.0).abs() < 1e-5);
+    assert!((c[1] - 16.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_blas3_dimension_mismatch() {
+    let a = [1.0_f32; 4]; // 2×2
+    let mut c = [0.0_f32; 3]; // wrong size
+    assert!(syrk(&a, &mut c, 2, 2, 1.0, 0.0).is_err());
+}

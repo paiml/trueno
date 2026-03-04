@@ -21,6 +21,7 @@
 //! assert!((x[1] - 1.8).abs() < 1e-5);
 //! ```
 
+mod blas3;
 mod cholesky;
 mod error;
 mod lu;
@@ -31,6 +32,7 @@ mod trsm;
 #[cfg(test)]
 mod tests;
 
+pub use blas3::{symm, syrk, trmm};
 pub use cholesky::{cholesky, CholeskyFactorization};
 pub use error::SolverError;
 pub use lu::{lu_factorize, LuFactorization};
