@@ -543,3 +543,79 @@ fn test_bsr_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
     assert!((y[1] - 16.0).abs() < 1e-6);
     Ok(())
 }
+
+// ============================================================================
+// SpGEMM tests (Contract: sparse-spgemm-v1.yaml)
+// ============================================================================
+
+#[test]
+fn test_spgemm_identity() -> Result<(), Box<dyn std::error::Error>> {
+    // A * I = A
+    let a = CsrMatrix::new(
+        2, 2,
+        vec![0, 1, 2],
+        vec![0, 1],
+        vec![3.0_f32, 5.0],
+    )?;
+    let eye = CsrMatrix::<f32>::identity(2);
+    let c = crate::spgemm::spgemm(&a, &eye)?;
+    let dense = c.to_dense();
+    assert!((dense[0] - 3.0).abs() < 1e-5);
+    assert!((dense[3] - 5.0).abs() < 1e-5);
+    assert!(dense[1].abs() < 1e-5);
+    assert!(dense[2].abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_spgemm_identity_left() -> Result<(), Box<dyn std::error::Error>> {
+    // I * A = A
+    let a = CsrMatrix::new(
+        3, 3,
+        vec![0, 2, 3, 4],
+        vec![0, 2, 1, 0],
+        vec![1.0_f32, 2.0, 3.0, 4.0],
+    )?;
+    let eye = CsrMatrix::<f32>::identity(3);
+    let c = crate::spgemm::spgemm(&eye, &a)?;
+    assert_eq!(c.to_dense(), a.to_dense());
+    Ok(())
+}
+
+#[test]
+fn test_spgemm_known_product() -> Result<(), Box<dyn std::error::Error>> {
+    // A = [[1, 2], [3, 4]], B = [[5, 6], [7, 8]]
+    // AB = [[19, 22], [43, 50]]
+    let a = CsrMatrix::new(2, 2, vec![0, 2, 4], vec![0, 1, 0, 1], vec![1.0_f32, 2.0, 3.0, 4.0])?;
+    let b = CsrMatrix::new(2, 2, vec![0, 2, 4], vec![0, 1, 0, 1], vec![5.0_f32, 6.0, 7.0, 8.0])?;
+    let c = crate::spgemm::spgemm(&a, &b)?;
+    let d = c.to_dense();
+    assert!((d[0] - 19.0).abs() < 1e-4, "got {}", d[0]);
+    assert!((d[1] - 22.0).abs() < 1e-4);
+    assert!((d[2] - 43.0).abs() < 1e-4);
+    assert!((d[3] - 50.0).abs() < 1e-4);
+    Ok(())
+}
+
+#[test]
+fn test_spgemm_dimension_mismatch() -> Result<(), Box<dyn std::error::Error>> {
+    let a = CsrMatrix::new(2, 3, vec![0, 1, 2], vec![0, 1], vec![1.0_f32, 2.0])?;
+    let b = CsrMatrix::new(2, 2, vec![0, 1, 2], vec![0, 1], vec![1.0_f32, 2.0])?;
+    // a.cols()=3 != b.rows()=2
+    assert!(crate::spgemm::spgemm(&a, &b).is_err());
+    Ok(())
+}
+
+#[test]
+fn test_spgemm_sparse_result() -> Result<(), Box<dyn std::error::Error>> {
+    // Diagonal × Diagonal = Diagonal
+    let a = CsrMatrix::new(3, 3, vec![0, 1, 2, 3], vec![0, 1, 2], vec![2.0_f32, 3.0, 4.0])?;
+    let b = CsrMatrix::new(3, 3, vec![0, 1, 2, 3], vec![0, 1, 2], vec![5.0_f32, 6.0, 7.0])?;
+    let c = crate::spgemm::spgemm(&a, &b)?;
+    assert_eq!(c.nnz(), 3);
+    let d = c.to_dense();
+    assert!((d[0] - 10.0).abs() < 1e-4);
+    assert!((d[4] - 18.0).abs() < 1e-4);
+    assert!((d[8] - 28.0).abs() < 1e-4);
+    Ok(())
+}

@@ -451,3 +451,146 @@ fn test_resize_zero_output() {
     let image = vec![1.0f32; 4];
     assert!(resize(&image, 2, 2, 0, 2, Interpolation::Nearest).is_err());
 }
+
+// ============================================================================
+// Color conversion tests (Contract: image-color-v1.yaml)
+// ============================================================================
+
+use crate::color::{connected_components, hsv_to_rgb, rgb_to_gray, rgb_to_hsv};
+
+#[test]
+fn test_rgb_to_gray_bt601() -> Result<(), Box<dyn std::error::Error>> {
+    // Pure white → 1.0
+    let rgb = vec![1.0, 1.0, 1.0_f32];
+    let gray = rgb_to_gray(&rgb, 1, 1)?;
+    assert!((gray[0] - 1.0).abs() < 1e-5, "White → {}", gray[0]);
+
+    // Pure red → 0.299
+    let rgb = vec![1.0, 0.0, 0.0_f32];
+    let gray = rgb_to_gray(&rgb, 1, 1)?;
+    assert!((gray[0] - 0.299).abs() < 1e-3, "Red → {}", gray[0]);
+
+    // Pure green → 0.587
+    let rgb = vec![0.0, 1.0, 0.0_f32];
+    let gray = rgb_to_gray(&rgb, 1, 1)?;
+    assert!((gray[0] - 0.587).abs() < 1e-3, "Green → {}", gray[0]);
+    Ok(())
+}
+
+#[test]
+fn test_rgb_to_gray_buffer_mismatch() {
+    // 2 pixels but only 5 values (need 6)
+    let rgb = vec![1.0; 5];
+    assert!(rgb_to_gray(&rgb, 2, 1).is_err());
+}
+
+#[test]
+fn test_hsv_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    // Various RGB colors → HSV → RGB should roundtrip
+    let colors = [
+        1.0, 0.0, 0.0, // red
+        0.0, 1.0, 0.0, // green
+        0.0, 0.0, 1.0, // blue
+        0.5, 0.5, 0.5, // gray
+        1.0, 1.0, 0.0, // yellow
+        0.0, 1.0, 1.0, // cyan
+    ];
+    let w = 6;
+    let h = 1;
+    let hsv = rgb_to_hsv(&colors, w, h)?;
+    let recovered = hsv_to_rgb(&hsv, w, h)?;
+
+    for i in 0..colors.len() {
+        let err = (colors[i] - recovered[i]).abs();
+        assert!(err < 1e-4, "HSV roundtrip at {i}: orig={}, rec={}, err={err}", colors[i], recovered[i]);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_hsv_black() -> Result<(), Box<dyn std::error::Error>> {
+    let rgb = vec![0.0, 0.0, 0.0_f32];
+    let hsv = rgb_to_hsv(&rgb, 1, 1)?;
+    // Black: V=0, S=0
+    assert!(hsv[2].abs() < 1e-6);
+    assert!(hsv[1].abs() < 1e-6);
+    Ok(())
+}
+
+#[test]
+fn test_hsv_white() -> Result<(), Box<dyn std::error::Error>> {
+    let rgb = vec![1.0, 1.0, 1.0_f32];
+    let hsv = rgb_to_hsv(&rgb, 1, 1)?;
+    // White: V=1, S=0
+    assert!((hsv[2] - 1.0).abs() < 1e-6);
+    assert!(hsv[1].abs() < 1e-6);
+    Ok(())
+}
+
+// ============================================================================
+// Connected components tests
+// ============================================================================
+
+#[test]
+fn test_connected_components_single_blob() -> Result<(), Box<dyn std::error::Error>> {
+    #[rustfmt::skip]
+    let image = vec![
+        0.0, 1.0, 1.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0_f32,
+    ];
+    let labels = connected_components(&image, 3, 3)?;
+    // The three foreground pixels should share one label
+    assert_eq!(labels[0], 0); // background
+    assert!(labels[1] > 0);
+    assert_eq!(labels[1], labels[2]); // connected
+    assert_eq!(labels[1], labels[4]); // connected to below
+    Ok(())
+}
+
+#[test]
+fn test_connected_components_two_blobs() -> Result<(), Box<dyn std::error::Error>> {
+    #[rustfmt::skip]
+    let image = vec![
+        1.0, 0.0, 1.0,
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 1.0_f32,
+    ];
+    let labels = connected_components(&image, 3, 3)?;
+    // Three separate components (4-connectivity)
+    let l0 = labels[0]; // top-left
+    let l2 = labels[2]; // top-right
+    let l8 = labels[8]; // bottom-right
+    assert!(l0 > 0);
+    assert!(l2 > 0);
+    assert!(l8 > 0);
+    assert_ne!(l0, l2);
+    assert_ne!(l0, l8);
+    assert_ne!(l2, l8);
+    Ok(())
+}
+
+#[test]
+fn test_connected_components_all_background() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.0_f32; 9];
+    let labels = connected_components(&image, 3, 3)?;
+    assert!(labels.iter().all(|&l| l == 0));
+    Ok(())
+}
+
+#[test]
+fn test_connected_components_all_foreground() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![1.0_f32; 9];
+    let labels = connected_components(&image, 3, 3)?;
+    // All one component
+    let first = labels[0];
+    assert!(first > 0);
+    assert!(labels.iter().all(|&l| l == first));
+    Ok(())
+}
+
+#[test]
+fn test_connected_components_buffer_mismatch() {
+    let image = vec![1.0_f32; 5];
+    assert!(connected_components(&image, 3, 3).is_err());
+}

@@ -1,0 +1,66 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Color conversion and connected component labeling"
+  crate: "trueno-image"
+  references:
+    - "ITU-R BT.601: Studio encoding parameters"
+    - "Suzuki & Abe, 'Topological structural analysis of digitized binary images', 1985"
+
+equations:
+  rgb_to_gray:
+    formula: "Y = 0.299·R + 0.587·G + 0.114·B"
+    domain: "RGB ∈ [0,1]^3"
+    codomain: "Y ∈ [0,1]"
+    invariants:
+      - "White maps to 1.0"
+      - "Black maps to 0.0"
+      - "Coefficients sum to 1.0"
+
+  hsv_roundtrip:
+    formula: "HSV→RGB→HSV = identity"
+    domain: "H ∈ [0,360), S ∈ [0,1], V ∈ [0,1]"
+    invariants:
+      - "RGB→HSV→RGB = identity within tolerance"
+
+  connected_components:
+    formula: "Label(p) = Label(q) ⟺ p and q are 4-connected in foreground"
+    domain: "Binary image ∈ {0, nonzero}^{W×H}"
+    codomain: "Labels ∈ ℕ^{W×H}"
+    invariants:
+      - "All background pixels have label 0"
+      - "Connected pixels share the same label"
+      - "Disconnected pixels have different labels"
+
+proof_obligations:
+  - type: invariant
+    property: "BT.601 weights"
+    formal: "gray(1,0,0) = 0.299, gray(0,1,0) = 0.587"
+    applies_to: all
+
+  - type: invariant
+    property: "HSV roundtrip"
+    formal: "||HSV→RGB→HSV(x) - x||_∞ < ε for valid RGB"
+    applies_to: all
+
+  - type: invariant
+    property: "Component connectivity"
+    formal: "∀p,q: label(p) = label(q) → 4-path(p,q)"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-COLOR-001
+    rule: "BT.601"
+    test: "test_rgb_to_gray_bt601"
+  - id: FALSIFY-COLOR-002
+    rule: "HSV roundtrip"
+    test: "test_hsv_roundtrip"
+  - id: FALSIFY-COLOR-003
+    rule: "Single component"
+    test: "test_connected_components_single_blob"
+  - id: FALSIFY-COLOR-004
+    rule: "Multiple components"
+    test: "test_connected_components_two_blobs"
+  - id: FALSIFY-COLOR-005
+    rule: "All background"
+    test: "test_connected_components_all_background"

@@ -51,6 +51,7 @@ pub fn erode(
 }
 
 /// Compute max over SE neighborhood at pixel (px, py).
+#[allow(clippy::too_many_arguments)]
 fn neighborhood_max(
     image: &[f32],
     width: usize,
@@ -83,6 +84,7 @@ fn neighborhood_max(
 }
 
 /// Compute min over SE neighborhood at pixel (px, py).
+#[allow(clippy::too_many_arguments)]
 fn neighborhood_min(
     image: &[f32],
     width: usize,

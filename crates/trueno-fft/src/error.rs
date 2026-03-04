@@ -39,4 +39,17 @@ pub enum FftError {
         /// Y dimension.
         ny: usize,
     },
+
+    /// 3D dimension mismatch.
+    #[error("3D FFT: input length {len} does not match {nx}x{ny}x{nz}")]
+    DimensionMismatch3d {
+        /// Input length.
+        len: usize,
+        /// X dimension.
+        nx: usize,
+        /// Y dimension.
+        ny: usize,
+        /// Z dimension.
+        nz: usize,
+    },
 }

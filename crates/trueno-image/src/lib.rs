@@ -17,6 +17,7 @@
 //! assert!((out[4] - 5.0).abs() < 1e-6); // Center pixel preserved
 //! ```
 
+mod color;
 mod conv;
 mod error;
 mod histogram;
@@ -26,6 +27,7 @@ mod resize;
 #[cfg(test)]
 mod tests;
 
+pub use color::{connected_components, hsv_to_rgb, rgb_to_gray, rgb_to_hsv};
 pub use conv::{
     canny, conv2d, gaussian_blur, gradient_magnitude, separable_conv2d, sobel, BorderMode,
 };
