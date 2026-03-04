@@ -788,3 +788,42 @@ fn test_gemm_ex_buffer_mismatch() {
     let result = gemm_ex(&a, &b, &mut c, 2, 2, 2, 1.0, 0.0);
     assert!(result.is_err());
 }
+
+// ============================================================================
+// Solver trait tests
+// ============================================================================
+
+use crate::Solver;
+
+#[test]
+fn test_solver_trait_lu() -> Result<(), Box<dyn std::error::Error>> {
+    let lu = lu_factorize(&[2.0, 1.0, 1.0, 3.0_f32], 2)?;
+    let solver: &dyn Solver = &lu;
+    assert_eq!(solver.dimension(), 2);
+    let x = solver.solve(&[5.0, 7.0])?;
+    assert!((x[0] - 1.6).abs() < 1e-5);
+    assert!((x[1] - 1.8).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_solver_trait_cholesky() -> Result<(), Box<dyn std::error::Error>> {
+    let chol = cholesky(&[4.0, 2.0, 2.0, 3.0_f32], 2)?;
+    let solver: &dyn Solver = &chol;
+    assert_eq!(solver.dimension(), 2);
+    let x = solver.solve(&[8.0, 7.0])?;
+    assert!((x[0] - 1.25).abs() < 1e-4);
+    assert!((x[1] - 1.5).abs() < 1e-4);
+    Ok(())
+}
+
+#[test]
+fn test_solver_trait_qr() -> Result<(), Box<dyn std::error::Error>> {
+    let qr = qr_factorize(&[1.0, 0.0, 0.0, 1.0_f32], 2, 2)?;
+    let solver: &dyn Solver = &qr;
+    assert_eq!(solver.dimension(), 2);
+    let x = solver.solve(&[3.0, 7.0])?;
+    assert!((x[0] - 3.0).abs() < 1e-5);
+    assert!((x[1] - 7.0).abs() < 1e-5);
+    Ok(())
+}

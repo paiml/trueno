@@ -8,9 +8,9 @@ Trueno achieves feature parity with NVIDIA's CUDA library ecosystem through six 
 |---|---|---|---|---|
 | **cuSPARSE** | `trueno-sparse` | CSR/COO/BSR/SELL, SpMV, SpMM, SpGEMM, SparseBackend trait | 43 | Complete (CPU) |
 | **cuFFT** | `trueno-fft` | Stockham 1D/2D/3D, R2C/C2R, Bluestein, Batched, Fft trait | 39 | Complete (CPU) |
-| **cuSOLVER** | `trueno-solve` | LU, QR, SVD, Cholesky, TRSM, syrk/syr2k/trmm/symm, gemmEx, gemmStridedBatched | 48 | Complete (CPU) |
-| **NPP** | `trueno-image` | Conv2D, Gaussian, Sobel, Canny, histogram, morphology, resize (4 modes), color, CC, ImageBuf | 53 | Complete (CPU) |
-| **cuRAND** | `trueno-rand` | Philox 4×32-10, Threefry 4×64-20 (uniform, normal, stateless) | 24 | Complete (CPU) |
+| **cuSOLVER** | `trueno-solve` | LU, QR, SVD, Cholesky, TRSM, syrk/syr2k/trmm/symm, gemmEx, gemmStridedBatched, Solver trait | 51 | Complete (CPU) |
+| **NPP** | `trueno-image` | Conv2D, Gaussian, Sobel, Canny, canny_rgb, histogram, morphology, resize (4 modes), color, CC, ImageBuf, ImageOps trait | 64 | Complete (CPU) |
+| **cuRAND** | `trueno-rand` | Philox 4×32-10, Threefry 4×64-20 (uniform, normal, stateless), Rng trait | 28 | Complete (CPU) |
 | **cuTENSOR** | `trueno-tensor` | Einstein summation (TTGT), einsum_nary, matmul, outer, trace | 28 | Complete (CPU) |
 
 ## Provable Contracts
@@ -50,6 +50,18 @@ cargo run -p trueno-image  --example image_demo
 cargo run -p trueno-rand   --example rng_demo
 cargo run -p trueno-tensor --example tensor_demo
 ```
+
+## Unified Traits
+
+Each crate exposes a trait for dynamic dispatch and pluggable backends:
+
+| Trait | Crate | Implementors | Purpose |
+|---|---|---|---|
+| `Solver` | trueno-solve | LU, QR, Cholesky | Unified `solve(b)` for any factorization |
+| `Rng` | trueno-rand | Philox4x32, Threefry4x64 | `fill_uniform()` / `fill_normal()` backend swap |
+| `ImageOps` | trueno-image | ImageBuf | `blur()`, `canny_edges()`, `to_gray()` on structured buffers |
+| `SparseBackend` | trueno-sparse | Scalar, AVX2, NEON | SIMD-pluggable SpMV kernels |
+| `Fft` | trueno-fft | FftPlan | `fft_1d()`, `ifft_1d()`, `fft_r2c()`, `fft_c2r()` |
 
 ## Quality Gates
 

@@ -39,3 +39,45 @@ pub use lu::{lu_factorize, LuFactorization};
 pub use qr::{qr_factorize, QrFactorization};
 pub use svd::{svd, SvdResult};
 pub use trsm::{trsm, DiagonalType, TriangularSide, TrsmResult};
+
+/// Unified solver trait for factorization-based linear system solving.
+///
+/// Implemented by `LuFactorization`, `QrFactorization`, and `CholeskyFactorization`.
+pub trait Solver {
+    /// Solve `Ax = b` using this factorization.
+    ///
+    /// # Errors
+    ///
+    /// Returns error on dimension mismatch or singular matrix.
+    fn solve(&self, b: &[f32]) -> Result<Vec<f32>, SolverError>;
+
+    /// Matrix dimension (n for n×n systems, or min(m,n) for rectangular).
+    fn dimension(&self) -> usize;
+}
+
+impl Solver for LuFactorization {
+    fn solve(&self, b: &[f32]) -> Result<Vec<f32>, SolverError> {
+        self.solve(b)
+    }
+    fn dimension(&self) -> usize {
+        self.n
+    }
+}
+
+impl Solver for QrFactorization {
+    fn solve(&self, b: &[f32]) -> Result<Vec<f32>, SolverError> {
+        self.solve(b)
+    }
+    fn dimension(&self) -> usize {
+        self.n
+    }
+}
+
+impl Solver for CholeskyFactorization {
+    fn solve(&self, b: &[f32]) -> Result<Vec<f32>, SolverError> {
+        self.solve(b)
+    }
+    fn dimension(&self) -> usize {
+        self.n
+    }
+}

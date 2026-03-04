@@ -401,3 +401,51 @@ fn validate_conv_args(
     }
     Ok(())
 }
+
+/// Multi-channel Canny edge detection (NPP 3-channel parity).
+///
+/// Converts RGB input to grayscale using BT.601 weights, then applies
+/// the standard Canny pipeline (Gaussian blur → Sobel → NMS → hysteresis).
+///
+/// Input is `width * height * channels` row-major interleaved pixels.
+/// Output is `width * height` binary edge map (single channel).
+///
+/// # Errors
+///
+/// Returns error on dimension mismatch or invalid thresholds.
+pub fn canny_rgb(
+    image: &[f32],
+    width: usize,
+    height: usize,
+    channels: usize,
+    sigma: f32,
+    low_threshold: f32,
+    high_threshold: f32,
+) -> Result<Vec<f32>, ImageError> {
+    let expected = width * height * channels;
+    if image.len() != expected {
+        return Err(ImageError::BufferLengthMismatch {
+            expected,
+            got: image.len(),
+            width,
+            height,
+        });
+    }
+
+    // Convert to grayscale (BT.601 weights: 0.299R + 0.587G + 0.114B)
+    let gray = if channels == 1 {
+        image.to_vec()
+    } else {
+        let mut g = Vec::with_capacity(width * height);
+        for i in 0..width * height {
+            let base = i * channels;
+            let r = image[base];
+            let green = if channels > 1 { image[base + 1] } else { 0.0 };
+            let b = if channels > 2 { image[base + 2] } else { 0.0 };
+            g.push(0.299 * r + 0.587 * green + 0.114 * b);
+        }
+        g
+    };
+
+    canny(&gray, width, height, sigma, low_threshold, high_threshold)
+}

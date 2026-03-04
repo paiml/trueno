@@ -4,7 +4,7 @@
 //! cargo run --example rng_demo -p trueno-rand
 //! ```
 
-use trueno_rand::{Philox4x32, Threefry4x64};
+use trueno_rand::{Philox4x32, Rng, Threefry4x64};
 
 fn main() {
     println!("=== trueno-rand: RNG Demo ===\n");
@@ -60,6 +60,21 @@ fn main() {
     let tf_key = [42u64, 0, 0, 0];
     let tf_result = Threefry4x64::generate_at(tf_key, [0, 0, 0, 0]);
     println!("Stateless: generate_at = {tf_result:?}");
+
+    // ── Rng trait (dynamic dispatch) ──────────────────────
+    println!("\n--- Rng trait (unified interface) ---");
+    let mut philox = Philox4x32::new(555);
+    let rng: &mut dyn Rng = &mut philox;
+    let mut buf = vec![0.0f32; 1000];
+    rng.fill_uniform(&mut buf);
+    let trait_mean: f32 = buf.iter().sum::<f32>() / buf.len() as f32;
+    println!("dyn Rng (Philox) uniform mean: {trait_mean:.4}");
+
+    let mut threefry = Threefry4x64::new(555);
+    let rng2: &mut dyn Rng = &mut threefry;
+    rng2.fill_normal(&mut buf);
+    let n_mean: f64 = buf.iter().map(|&v| f64::from(v)).sum::<f64>() / buf.len() as f64;
+    println!("dyn Rng (Threefry) normal mean: {n_mean:.4}");
 
     println!("\n=== All RNG demos passed ===");
 }

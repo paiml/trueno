@@ -740,3 +740,113 @@ fn test_imagebuf_dimension_mismatch() {
     let result = ImageBuf::new(vec![1.0, 2.0, 3.0], 2, 2, 1);
     assert!(result.is_err());
 }
+
+// ── canny_rgb tests (NPP 3-channel parity) ─────────────────────
+
+#[test]
+fn test_canny_rgb_uniform_no_edges() -> Result<(), Box<dyn std::error::Error>> {
+    let w = 20;
+    let h = 20;
+    let image = vec![0.5f32; w * h * 3];
+    let edges = canny_rgb(&image, w, h, 3, 1.0, 0.1, 0.3)?;
+    assert_eq!(edges.len(), w * h);
+    let edge_count: usize = edges.iter().filter(|&&v| v > 0.5).count();
+    assert_eq!(edge_count, 0, "Uniform RGB should have no edges");
+    Ok(())
+}
+
+#[test]
+fn test_canny_rgb_strong_edge() -> Result<(), Box<dyn std::error::Error>> {
+    let w = 20;
+    let h = 20;
+    let mut image = vec![0.0f32; w * h * 3];
+    // Right half = bright white
+    for y in 0..h {
+        for x in w / 2..w {
+            let base = (y * w + x) * 3;
+            image[base] = 1.0;
+            image[base + 1] = 1.0;
+            image[base + 2] = 1.0;
+        }
+    }
+    let edges = canny_rgb(&image, w, h, 3, 1.0, 0.05, 0.15)?;
+    let edge_count: usize = edges.iter().filter(|&&v| v > 0.5).count();
+    assert!(edge_count > 0, "Strong RGB edge should be detected");
+    Ok(())
+}
+
+#[test]
+fn test_canny_rgb_single_channel() -> Result<(), Box<dyn std::error::Error>> {
+    let w = 10;
+    let h = 10;
+    let image = vec![0.5f32; w * h];
+    let edges = canny_rgb(&image, w, h, 1, 1.0, 0.1, 0.3)?;
+    assert_eq!(edges.len(), w * h);
+    Ok(())
+}
+
+#[test]
+fn test_canny_rgb_buffer_mismatch() {
+    let image = vec![0.5f32; 10]; // 10 pixels but claiming 10x10x3
+    assert!(canny_rgb(&image, 10, 10, 3, 1.0, 0.1, 0.3).is_err());
+}
+
+// ── ImageOps trait tests (Contract: §5C) ────────────────────────
+
+use crate::ImageOps;
+
+#[test]
+fn test_imageops_blur_grayscale() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ImageBuf::new(vec![5.0f32; 25], 5, 5, 1)?;
+    let blurred = buf.blur(1.0)?;
+    assert_eq!(blurred.width(), 5);
+    assert_eq!(blurred.height(), 5);
+    assert_eq!(blurred.channels(), 1);
+    for &v in blurred.data() {
+        assert!((v - 5.0).abs() < 0.1, "Blur changed constant: {v}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_imageops_blur_rgb() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ImageBuf::new(vec![0.5f32; 75], 5, 5, 3)?;
+    let blurred = buf.blur(1.0)?;
+    assert_eq!(blurred.channels(), 3);
+    assert_eq!(blurred.len(), 75);
+    for &v in blurred.data() {
+        assert!((v - 0.5).abs() < 0.1, "RGB blur changed constant: {v}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_imageops_to_gray() -> Result<(), Box<dyn std::error::Error>> {
+    // White pixel → gray = 1.0
+    let buf = ImageBuf::new(vec![1.0, 1.0, 1.0], 1, 1, 3)?;
+    let gray = buf.to_gray()?;
+    assert_eq!(gray.channels(), 1);
+    assert!((gray.data()[0] - 1.0).abs() < 1e-3);
+    Ok(())
+}
+
+#[test]
+fn test_imageops_to_gray_already_gray() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ImageBuf::new(vec![0.7, 0.3, 0.5, 0.9], 2, 2, 1)?;
+    let gray = buf.to_gray()?;
+    assert_eq!(gray.data(), buf.data());
+    Ok(())
+}
+
+#[test]
+fn test_imageops_canny_edges() -> Result<(), Box<dyn std::error::Error>> {
+    let w = 20;
+    let h = 20;
+    let buf = ImageBuf::new(vec![0.5f32; w * h * 3], w, h, 3)?;
+    let edges = buf.canny_edges(1.0, 0.1, 0.3)?;
+    assert_eq!(edges.channels(), 1);
+    assert_eq!(edges.len(), w * h);
+    let edge_count: usize = edges.data().iter().filter(|&&v| v > 0.5).count();
+    assert_eq!(edge_count, 0, "Uniform image should have no edges");
+    Ok(())
+}
