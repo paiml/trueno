@@ -5587,6 +5587,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "trueno-fft"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "trueno-gpu"
 version = "0.4.19"
 dependencies = [
@@ -5625,6 +5633,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "trueno-image"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "trueno-ptx-debug"
 version = "0.1.0"
 dependencies = [
@@ -5646,6 +5662,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5da5ac788b596e45d1d3fa0991c04b0e1bac63ffe4ae2faf6ae7c0d9fdfc00eb"
 dependencies = [
  "half",
+]
+
+[[package]]
+name = "trueno-rand"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "trueno-solve"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
