@@ -5,9 +5,9 @@
 //! ```
 
 use trueno_image::{
-    canny, connected_components, conv2d, dilate, equalize, erode, gaussian_blur,
+    canny, canny_rgb, connected_components, conv2d, dilate, equalize, erode, gaussian_blur,
     gradient_magnitude, histogram, hsv_to_rgb, resize, rgb_to_gray, rgb_to_hsv, sobel,
-    BorderMode, Interpolation,
+    BorderMode, ImageBuf, ImageOps, Interpolation,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -114,6 +114,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }).collect();
         println!("  {row}");
     }
+
+    // ── Multi-channel Canny (NPP parity) ──────────────────
+    println!("\n--- Multi-channel Canny (canny_rgb) ---");
+    let mut rgb_img = vec![0.0f32; w * h * 3];
+    for y in 0..h {
+        for x in w / 2..w {
+            let base = (y * w + x) * 3;
+            rgb_img[base] = 1.0;
+            rgb_img[base + 1] = 1.0;
+            rgb_img[base + 2] = 1.0;
+        }
+    }
+    let rgb_edges = canny_rgb(&rgb_img, w, h, 3, 1.0, 0.05, 0.15)?;
+    let rgb_edge_count = rgb_edges.iter().filter(|&&v| v > 0.5).count();
+    println!("canny_rgb: {rgb_edge_count} edge pixels from {w}×{h}×3 input");
+
+    // ── ImageOps trait (method dispatch on ImageBuf) ─────
+    println!("\n--- ImageOps trait ---");
+    let buf = ImageBuf::new(rgb_img, w, h, 3)?;
+    let blurred_buf = buf.blur(1.5)?;
+    println!(
+        "ImageBuf.blur(): {}×{} × {} channels",
+        blurred_buf.width(),
+        blurred_buf.height(),
+        blurred_buf.channels()
+    );
+    let gray_buf = buf.to_gray()?;
+    println!(
+        "ImageBuf.to_gray(): {}×{} × {} channel",
+        gray_buf.width(),
+        gray_buf.height(),
+        gray_buf.channels()
+    );
+    let edge_buf = buf.canny_edges(1.0, 0.05, 0.15)?;
+    let trait_edges = edge_buf.data().iter().filter(|&&v| v > 0.5).count();
+    println!("ImageBuf.canny_edges(): {trait_edges} edge pixels");
 
     println!("\n=== All image demos passed ===");
     Ok(())

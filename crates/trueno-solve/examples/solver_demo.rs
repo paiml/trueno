@@ -6,7 +6,7 @@
 
 use trueno_solve::{
     cholesky, f32_to_f16, gemm_ex, gemm_strided_batched, lu_factorize, qr_factorize, svd, syr2k,
-    syrk, symm, trmm, trsm,
+    syrk, symm, trmm, trsm, Solver,
 };
 use trueno_solve::{DiagonalType, TriangularSide};
 
@@ -106,6 +106,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!(
         "Batch 1: [{:.1}, {:.1}; {:.1}, {:.1}]",
         c_batch[4], c_batch[5], c_batch[6], c_batch[7]
+    );
+
+    // ── Solver trait (dynamic dispatch) ────────────────────
+    println!("\n--- Solver trait (unified interface) ---");
+    let lu2 = lu_factorize(&[4.0, 1.0, 1.0, 3.0_f32], 2)?;
+    let solver: &dyn Solver = &lu2;
+    let x_dyn = solver.solve(&[5.0, 7.0])?;
+    println!(
+        "dyn Solver (LU): dim={}, x=[{:.4}, {:.4}]",
+        solver.dimension(),
+        x_dyn[0],
+        x_dyn[1]
+    );
+
+    let chol2 = cholesky(&[4.0, 2.0, 2.0, 3.0_f32], 2)?;
+    let solver2: &dyn Solver = &chol2;
+    let x_dyn2 = solver2.solve(&[8.0, 7.0])?;
+    println!(
+        "dyn Solver (Cholesky): dim={}, x=[{:.4}, {:.4}]",
+        solver2.dimension(),
+        x_dyn2[0],
+        x_dyn2[1]
     );
 
     println!("\n=== All solver demos passed ===");

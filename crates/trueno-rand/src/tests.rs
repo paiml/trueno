@@ -296,6 +296,56 @@ fn test_threefry_normal_no_nan_or_inf() {
     }
 }
 
+// ============================================================================
+// Rng trait tests (Contract: rand-philox-v1.yaml §6B-C)
+// ============================================================================
+
+use crate::Rng;
+
+#[test]
+fn test_rng_trait_philox_uniform() {
+    let mut rng = Philox4x32::new(999);
+    let rng_trait: &mut dyn Rng = &mut rng;
+    let mut buf = vec![0.0f32; 1000];
+    rng_trait.fill_uniform(&mut buf);
+    for &v in &buf {
+        assert!((0.0..1.0).contains(&v), "Rng trait uniform out of range: {v}");
+    }
+}
+
+#[test]
+fn test_rng_trait_philox_normal() {
+    let mut rng = Philox4x32::new(888);
+    let rng_trait: &mut dyn Rng = &mut rng;
+    let mut buf = vec![0.0f32; 1000];
+    rng_trait.fill_normal(&mut buf);
+    for &v in &buf {
+        assert!(v.is_finite(), "Rng trait normal non-finite: {v}");
+    }
+}
+
+#[test]
+fn test_rng_trait_threefry_uniform() {
+    let mut rng = Threefry4x64::new(777);
+    let rng_trait: &mut dyn Rng = &mut rng;
+    let mut buf = vec![0.0f32; 1000];
+    rng_trait.fill_uniform(&mut buf);
+    for &v in &buf {
+        assert!((0.0..1.0).contains(&v), "Rng trait threefry uniform out of range: {v}");
+    }
+}
+
+#[test]
+fn test_rng_trait_threefry_normal() {
+    let mut rng = Threefry4x64::new(666);
+    let rng_trait: &mut dyn Rng = &mut rng;
+    let mut buf = vec![0.0f32; 1000];
+    rng_trait.fill_normal(&mut buf);
+    for &v in &buf {
+        assert!(v.is_finite(), "Rng trait threefry normal non-finite: {v}");
+    }
+}
+
 #[cfg(test)]
 mod proptests {
     use super::*;
