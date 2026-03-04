@@ -619,3 +619,88 @@ fn test_spgemm_sparse_result() -> Result<(), Box<dyn std::error::Error>> {
     assert!((d[8] - 28.0).abs() < 1e-4);
     Ok(())
 }
+
+// ============================================================================
+// SELL (Sliced ELLPACK) tests
+// ============================================================================
+
+#[test]
+fn test_sell_identity_spmv() -> Result<(), Box<dyn std::error::Error>> {
+    let csr = CsrMatrix::<f32>::identity(4);
+    let sell = SellMatrix::from_csr(&csr, 2);
+    let x = vec![1.0, 2.0, 3.0, 4.0_f32];
+    let mut y = vec![0.0_f32; 4];
+    sell.spmv(1.0, &x, 0.0, &mut y)?;
+    assert!((y[0] - 1.0).abs() < 1e-6);
+    assert!((y[1] - 2.0).abs() < 1e-6);
+    assert!((y[2] - 3.0).abs() < 1e-6);
+    assert!((y[3] - 4.0).abs() < 1e-6);
+    Ok(())
+}
+
+#[test]
+fn test_sell_matches_csr_spmv() -> Result<(), Box<dyn std::error::Error>> {
+    // Sparse matrix with variable row lengths
+    let csr = CsrMatrix::new(
+        4, 4,
+        vec![0, 2, 3, 5, 6],
+        vec![0, 1, 2, 1, 3, 0],
+        vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0_f32],
+    )?;
+    let sell = SellMatrix::from_csr(&csr, 2);
+    let x = vec![1.0, 1.0, 1.0, 1.0_f32];
+
+    let mut y_csr = vec![0.0_f32; 4];
+    let mut y_sell = vec![0.0_f32; 4];
+
+    csr.spmv(1.0, &x, 0.0, &mut y_csr)?;
+    sell.spmv(1.0, &x, 0.0, &mut y_sell)?;
+
+    for i in 0..4 {
+        assert!(
+            (y_csr[i] - y_sell[i]).abs() < 1e-5,
+            "SELL vs CSR mismatch at {i}: csr={}, sell={}",
+            y_csr[i], y_sell[i]
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn test_sell_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
+    let csr = CsrMatrix::<f32>::identity(3);
+    let sell = SellMatrix::from_csr(&csr, 4);
+    let x = vec![1.0, 2.0, 3.0_f32];
+    let mut y = vec![10.0, 20.0, 30.0_f32];
+    // y = 2·I·x + 0.5·y = [2+5, 4+10, 6+15] = [7, 14, 21]
+    sell.spmv(2.0, &x, 0.5, &mut y)?;
+    assert!((y[0] - 7.0).abs() < 1e-5);
+    assert!((y[1] - 14.0).abs() < 1e-5);
+    assert!((y[2] - 21.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_sell_dimension_mismatch() -> Result<(), Box<dyn std::error::Error>> {
+    let csr = CsrMatrix::<f32>::identity(3);
+    let sell = SellMatrix::from_csr(&csr, 2);
+    let x = vec![1.0, 2.0_f32]; // wrong length
+    let mut y = vec![0.0_f32; 3];
+    assert!(sell.spmv(1.0, &x, 0.0, &mut y).is_err());
+    Ok(())
+}
+
+#[test]
+fn test_sell_properties() -> Result<(), Box<dyn std::error::Error>> {
+    let csr = CsrMatrix::new(
+        3, 3,
+        vec![0, 2, 3, 3],
+        vec![0, 1, 2],
+        vec![1.0, 2.0, 3.0_f32],
+    )?;
+    let sell = SellMatrix::from_csr(&csr, 2);
+    assert_eq!(sell.rows(), 3);
+    assert_eq!(sell.cols(), 3);
+    assert_eq!(sell.slice_size(), 2);
+    Ok(())
+}
