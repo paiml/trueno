@@ -41,4 +41,4 @@ pub use bluestein::bluestein_fft;
 pub use complex::Complex;
 pub use error::FftError;
 pub use fft3d::{fft_3d, fft_batched, ifft_3d};
-pub use stockham::{fft_2d, FftPlan};
+pub use stockham::{fft_2d, fft_c2r, fft_r2c, FftPlan};

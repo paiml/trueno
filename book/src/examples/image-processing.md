@@ -43,13 +43,15 @@ let closed = closing(&image, w, h, &se, 3, 3)?;  // dilate then erode
 
 ## Resize
 
-Bilinear and nearest-neighbor interpolation:
+Four interpolation methods: Nearest, Bilinear, Bicubic (Keys' convolution), and Lanczos (a=3):
 
 ```rust
 use trueno_image::{resize, Interpolation};
 
 let small = resize(&image, 256, 256, 64, 64, Interpolation::Bilinear)?;
 let big = resize(&image, 64, 64, 256, 256, Interpolation::Nearest)?;
+let sharp = resize(&image, 256, 256, 128, 128, Interpolation::Bicubic)?;
+let best = resize(&image, 256, 256, 128, 128, Interpolation::Lanczos)?;
 ```
 
 ## Color Conversion

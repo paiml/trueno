@@ -1,0 +1,40 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Sparse matrix format conversions (BSR, SELL)"
+  crate: "trueno-sparse"
+  references:
+    - "Monakov et al., 'Automatically Tuning Sparse Matrix-Vector Multiplication for GPU Architectures', HiPEAC 2010"
+
+equations:
+  sell_spmv:
+    formula: "y = alpha * A * x + beta * y via SELL (Sliced ELLPACK) format"
+    domain: "A in SELL, x in R^n, y in R^m"
+    codomain: "y in R^m"
+    invariants:
+      - "SELL SpMV matches CSR SpMV within ULP tolerance"
+      - "Sliced storage: column-major within each slice"
+      - "Padding: rows within a slice padded to max width"
+
+proof_obligations:
+  - type: equivalence
+    property: "SELL SpMV matches CSR SpMV"
+    formal: "|sell_spmv(A,x) - csr_spmv(A,x)| < epsilon"
+    tolerance: 1.0e-5
+    applies_to: all
+
+  - type: invariant
+    property: "Format conversion preserves structure"
+    formal: "SellMatrix::from_csr(A).to_dense() == A.to_dense()"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-SELL-001
+    rule: "CSR equivalence"
+    test: "test_sell_matches_csr"
+  - id: FALSIFY-SELL-002
+    rule: "Dimension mismatch"
+    test: "test_sell_spmv_dimension_mismatch"
+  - id: FALSIFY-SELL-003
+    rule: "Alpha-beta scaling"
+    test: "test_sell_spmv_alpha_beta"

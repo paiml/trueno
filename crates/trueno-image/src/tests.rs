@@ -594,3 +594,99 @@ fn test_connected_components_buffer_mismatch() {
     let image = vec![1.0_f32; 5];
     assert!(connected_components(&image, 3, 3).is_err());
 }
+
+// ============================================================================
+// Bicubic and Lanczos interpolation tests
+// ============================================================================
+
+#[test]
+fn test_resize_bicubic_identity() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![1.0, 2.0, 3.0, 4.0f32];
+    let result = resize(&image, 2, 2, 2, 2, Interpolation::Bicubic)?;
+    for i in 0..4 {
+        assert!((result[i] - image[i]).abs() < 0.2, "Bicubic identity at {i}: {}", result[i]);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_resize_lanczos_identity() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![1.0, 2.0, 3.0, 4.0f32];
+    let result = resize(&image, 2, 2, 2, 2, Interpolation::Lanczos)?;
+    for i in 0..4 {
+        assert!((result[i] - image[i]).abs() < 0.2, "Lanczos identity at {i}: {}", result[i]);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_resize_bicubic_constant() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.7f32; 16];
+    let result = resize(&image, 4, 4, 8, 8, Interpolation::Bicubic)?;
+    assert_eq!(result.len(), 64);
+    for &v in &result {
+        assert!((v - 0.7).abs() < 0.01, "Bicubic constant: {v}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_resize_lanczos_constant() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.7f32; 16];
+    let result = resize(&image, 4, 4, 8, 8, Interpolation::Lanczos)?;
+    assert_eq!(result.len(), 64);
+    for &v in &result {
+        assert!((v - 0.7).abs() < 0.01, "Lanczos constant: {v}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_resize_bicubic_downscale() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.5f32; 64];
+    let result = resize(&image, 8, 8, 4, 4, Interpolation::Bicubic)?;
+    assert_eq!(result.len(), 16);
+    for &v in &result {
+        assert!((v - 0.5).abs() < 0.01);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_resize_lanczos_downscale() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.5f32; 64];
+    let result = resize(&image, 8, 8, 4, 4, Interpolation::Lanczos)?;
+    assert_eq!(result.len(), 16);
+    for &v in &result {
+        assert!((v - 0.5).abs() < 0.01);
+    }
+    Ok(())
+}
+
+// ============================================================================
+// BorderMode::Wrap tests
+// ============================================================================
+
+#[test]
+fn test_conv_wrap_border() -> Result<(), Box<dyn std::error::Error>> {
+    // 3×3 image with wrap boundary: average kernel should see wrapped pixels
+    let image = vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0_f32];
+    let avg = [1.0 / 9.0; 9];
+    let out = conv2d(&image, 3, 3, &avg, 3, 3, BorderMode::Wrap)?;
+    // Center pixel sees 1/9 contribution from wrapped (0,0)
+    assert!(out[4] > 0.0, "Wrap should contribute to center");
+    Ok(())
+}
+
+#[test]
+fn test_conv_wrap_periodic() -> Result<(), Box<dyn std::error::Error>> {
+    // Constant image under wrap should be identity with identity kernel
+    let image = vec![3.0f32; 9];
+    let delta = [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0_f32];
+    let out = conv2d(&image, 3, 3, &delta, 3, 3, BorderMode::Wrap)?;
+    for (i, &v) in out.iter().enumerate() {
+        assert!((v - 3.0).abs() < 1e-5, "Wrap identity at {i}: {v}");
+    }
+    Ok(()
+)
+}

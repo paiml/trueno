@@ -9,6 +9,10 @@ pub enum Interpolation {
     Nearest,
     /// Bilinear interpolation (smooth).
     Bilinear,
+    /// Bicubic interpolation (sharper than bilinear, slower).
+    Bicubic,
+    /// Lanczos interpolation with a=3 (highest quality, slowest).
+    Lanczos,
 }
 
 /// Resize a grayscale image.
@@ -60,11 +64,23 @@ pub fn resize(
                 Interpolation::Bilinear => {
                     bilinear_sample(image, src_w, src_h, sx, sy)
                 }
+                Interpolation::Bicubic => {
+                    bicubic_sample(image, src_w, src_h, sx, sy)
+                }
+                Interpolation::Lanczos => {
+                    lanczos_sample(image, src_w, src_h, sx, sy)
+                }
             };
         }
     }
 
     Ok(output)
+}
+
+/// Clamp index to [0, size-1].
+#[inline]
+fn clamp_idx(i: isize, size: usize) -> usize {
+    i.clamp(0, size as isize - 1) as usize
 }
 
 /// Bilinear interpolation at fractional coordinates.
@@ -83,4 +99,79 @@ fn bilinear_sample(image: &[f32], w: usize, h: usize, x: f32, y: f32) -> f32 {
     let p11 = image[y1 * w + x1];
 
     p00 * (1.0 - fx) * (1.0 - fy) + p10 * fx * (1.0 - fy) + p01 * (1.0 - fx) * fy + p11 * fx * fy
+}
+
+/// Cubic interpolation weight (Keys' convolution, a = -0.5).
+#[inline]
+fn cubic_weight(t: f32) -> f32 {
+    let t = t.abs();
+    if t <= 1.0 {
+        (1.5 * t - 2.5) * t * t + 1.0
+    } else if t < 2.0 {
+        ((-0.5 * t + 2.5) * t - 4.0) * t + 2.0
+    } else {
+        0.0
+    }
+}
+
+/// Bicubic interpolation at fractional coordinates (4×4 neighborhood).
+fn bicubic_sample(image: &[f32], w: usize, h: usize, x: f32, y: f32) -> f32 {
+    let ix = x.floor() as isize;
+    let iy = y.floor() as isize;
+    let fx = x - ix as f32;
+    let fy = y - iy as f32;
+
+    let mut sum = 0.0f64;
+    for j in -1..=2_isize {
+        let wy = cubic_weight(fy - j as f32) as f64;
+        let cy = clamp_idx(iy + j, h);
+        for i in -1..=2_isize {
+            let wx = cubic_weight(fx - i as f32) as f64;
+            let cx = clamp_idx(ix + i, w);
+            sum += wy * wx * f64::from(image[cy * w + cx]);
+        }
+    }
+    sum as f32
+}
+
+/// Lanczos kernel with a=3.
+#[inline]
+fn lanczos_weight(t: f32) -> f32 {
+    let t = t.abs();
+    if t < 1e-7 {
+        1.0
+    } else if t < 3.0 {
+        let pi_t = std::f32::consts::PI * t;
+        let pi_t_over_a = pi_t / 3.0;
+        (pi_t.sin() * pi_t_over_a.sin()) / (pi_t * pi_t_over_a)
+    } else {
+        0.0
+    }
+}
+
+/// Lanczos interpolation at fractional coordinates (6×6 neighborhood, a=3).
+fn lanczos_sample(image: &[f32], w: usize, h: usize, x: f32, y: f32) -> f32 {
+    let ix = x.floor() as isize;
+    let iy = y.floor() as isize;
+    let fx = x - ix as f32;
+    let fy = y - iy as f32;
+
+    let mut sum = 0.0f64;
+    let mut weight_sum = 0.0f64;
+    for j in -2..=3_isize {
+        let wy = lanczos_weight(fy - j as f32) as f64;
+        let cy = clamp_idx(iy + j, h);
+        for i in -2..=3_isize {
+            let wx = lanczos_weight(fx - i as f32) as f64;
+            let cx = clamp_idx(ix + i, w);
+            let w_total = wy * wx;
+            sum += w_total * f64::from(image[cy * w + cx]);
+            weight_sum += w_total;
+        }
+    }
+    if weight_sum.abs() > 1e-12 {
+        (sum / weight_sum) as f32
+    } else {
+        0.0
+    }
 }

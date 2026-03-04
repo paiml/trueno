@@ -2,7 +2,7 @@
 
 use crate::bluestein::bluestein_fft;
 use crate::complex::Complex;
-use crate::stockham::{fft_2d, FftPlan};
+use crate::stockham::{fft_2d, fft_c2r, fft_r2c, FftPlan};
 
 // ============================================================================
 // FALSIFY-FFT-001: Parseval energy conservation
@@ -551,4 +551,91 @@ fn test_fft_batched_size_mismatch() {
     let input = vec![Complex::ZERO; 10]; // not a multiple of n=4
     let mut output = vec![Complex::ZERO; 8];
     assert!(fft_batched(&input, &mut output, 4, 2, false).is_err());
+}
+
+// ============================================================================
+// C2R (complex-to-real inverse) tests
+// ============================================================================
+
+#[test]
+fn test_c2r_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 8;
+    let plan = FftPlan::new(n)?;
+    let real_input: Vec<f32> = (0..n).map(|i| i as f32).collect();
+
+    // R2C forward
+    let mut freq = vec![Complex::ZERO; n / 2 + 1];
+    plan.forward_r2c(&real_input, &mut freq)?;
+
+    // C2R inverse
+    let mut recovered = vec![0.0f32; n];
+    plan.inverse_c2r(&freq, &mut recovered)?;
+
+    for (i, (&orig, &rec)) in real_input.iter().zip(recovered.iter()).enumerate() {
+        let err = (orig - rec).abs();
+        assert!(err < 1e-4, "C2R roundtrip failed at {i}: orig={orig}, rec={rec}, err={err}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_c2r_dc_signal() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 4;
+    let plan = FftPlan::new(n)?;
+    let real_input = vec![5.0f32; n];
+
+    let mut freq = vec![Complex::ZERO; n / 2 + 1];
+    plan.forward_r2c(&real_input, &mut freq)?;
+
+    let mut recovered = vec![0.0f32; n];
+    plan.inverse_c2r(&freq, &mut recovered)?;
+
+    for (i, &v) in recovered.iter().enumerate() {
+        assert!((v - 5.0).abs() < 1e-4, "C2R DC signal wrong at {i}: {v}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_fft_r2c_free_function() -> Result<(), Box<dyn std::error::Error>> {
+    let input: Vec<f32> = (0..8).map(|i| i as f32).collect();
+    let mut output = vec![Complex::ZERO; 5];
+    fft_r2c(&input, &mut output)?;
+
+    let expected_dc: f32 = input.iter().sum();
+    assert!((output[0].re - expected_dc).abs() < 1e-4);
+    Ok(())
+}
+
+#[test]
+fn test_fft_c2r_free_function() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 8;
+    let real_input: Vec<f32> = (0..n).map(|i| i as f32).collect();
+
+    let mut freq = vec![Complex::ZERO; n / 2 + 1];
+    fft_r2c(&real_input, &mut freq)?;
+
+    let mut recovered = vec![0.0f32; n];
+    fft_c2r(&freq, &mut recovered, n)?;
+
+    for (i, (&orig, &rec)) in real_input.iter().zip(recovered.iter()).enumerate() {
+        assert!((orig - rec).abs() < 1e-4, "C2R free fn failed at {i}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_c2r_dimension_mismatch() {
+    let plan = FftPlan::new(8).expect("valid plan");
+    let freq = vec![Complex::ZERO; 3]; // Wrong: should be 5
+    let mut output = vec![0.0f32; 8];
+    assert!(plan.inverse_c2r(&freq, &mut output).is_err());
+}
+
+#[test]
+fn test_c2r_output_dimension_mismatch() {
+    let plan = FftPlan::new(8).expect("valid plan");
+    let freq = vec![Complex::ZERO; 5];
+    let mut output = vec![0.0f32; 4]; // Wrong: should be 8
+    assert!(plan.inverse_c2r(&freq, &mut output).is_err());
 }

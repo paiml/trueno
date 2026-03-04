@@ -63,13 +63,21 @@ let mut output = vec![Complex::ZERO; n * batch_count];
 fft_batched(&input, &mut output, n, batch_count, false)?;
 ```
 
-## Real-to-Complex (R2C)
+## Real-to-Complex (R2C) and Complex-to-Real (C2R)
 
-Exploits Hermitian symmetry — outputs only N/2+1 complex values:
+R2C exploits Hermitian symmetry — outputs only N/2+1 complex values.
+C2R reconstructs the full real signal from the half-spectrum:
 
 ```rust
+use trueno_fft::{fft_r2c, fft_c2r, Complex};
+
+// R2C: real → N/2+1 complex
 let mut r2c_output = vec![Complex::ZERO; n / 2 + 1];
-plan.forward_r2c(&real_input, &mut r2c_output)?;
+fft_r2c(&real_input, &mut r2c_output)?;
+
+// C2R: N/2+1 complex → real (roundtrip)
+let mut recovered = vec![0.0f32; n];
+fft_c2r(&r2c_output, &mut recovered, n)?;
 ```
 
 ## Provable Contracts

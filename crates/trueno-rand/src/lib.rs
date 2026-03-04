@@ -21,9 +21,11 @@
 
 mod error;
 mod philox;
+mod threefry;
 
 #[cfg(test)]
 mod tests;
 
 pub use error::RngError;
 pub use philox::Philox4x32;
+pub use threefry::Threefry4x64;

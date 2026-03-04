@@ -1,63 +1,65 @@
-//! RNG demonstration: Philox 4x32-10 uniform and normal generation.
+//! RNG demonstration: Philox 4x32-10 and Threefry 4x64-20.
 //!
 //! ```sh
 //! cargo run --example rng_demo -p trueno-rand
 //! ```
 
-use trueno_rand::Philox4x32;
+use trueno_rand::{Philox4x32, Threefry4x64};
 
 fn main() {
-    println!("=== trueno-rand: Philox 4x32-10 Demo ===\n");
+    println!("=== trueno-rand: RNG Demo ===\n");
 
-    // 1. Basic generation
+    // ── Philox 4x32-10 ──────────────────────────────────
+    println!("--- Philox 4x32-10 ---");
     let mut rng = Philox4x32::new(42);
     let vals = rng.next_4u32();
     println!("4 u32 values: {vals:?}");
 
-    // 2. Determinism
     let mut rng2 = Philox4x32::new(42);
     assert_eq!(rng2.next_4u32(), vals);
     println!("Determinism verified: same seed → same output");
 
-    // 3. Uniform distribution
     let mut rng3 = Philox4x32::new(123);
     let mut uniform = vec![0.0f32; 10000];
     rng3.fill_uniform(&mut uniform);
     let mean: f32 = uniform.iter().sum::<f32>() / uniform.len() as f32;
-    println!("\nUniform[0,1) — 10k samples:");
-    println!("  Mean: {mean:.4} (expected: 0.5)");
+    println!("Uniform mean: {mean:.4} (expected: 0.5)");
 
-    let var: f64 = uniform
-        .iter()
-        .map(|&v| {
-            let d = f64::from(v) - f64::from(mean);
-            d * d
-        })
-        .sum::<f64>()
-        / uniform.len() as f64;
-    println!("  Variance: {var:.4} (expected: 0.0833)");
-
-    // 4. Normal distribution
     let mut rng4 = Philox4x32::new(456);
     let mut normal = vec![0.0f32; 10000];
     rng4.fill_normal(&mut normal);
     let n_mean: f64 = normal.iter().map(|&v| f64::from(v)).sum::<f64>() / normal.len() as f64;
-    let n_var: f64 = normal
-        .iter()
-        .map(|&v| {
-            let d = f64::from(v) - n_mean;
-            d * d
-        })
-        .sum::<f64>()
-        / normal.len() as f64;
-    println!("\nNormal(0,1) — 10k samples:");
-    println!("  Mean: {n_mean:.4} (expected: 0.0)");
-    println!("  Variance: {n_var:.4} (expected: 1.0)");
+    println!("Normal mean: {n_mean:.4} (expected: 0.0)");
 
-    // 5. Parallel-friendly stateless generation
     let key = [42u32, 0];
     let result = Philox4x32::generate_at(key, [0, 0, 0, 0]);
-    println!("\nStateless: generate_at(key, counter) = {result:?}");
+    println!("Stateless: generate_at = {result:?}");
+
+    // ── Threefry 4x64-20 ────────────────────────────────
+    println!("\n--- Threefry 4x64-20 ---");
+    let mut tf = Threefry4x64::new(42);
+    let tf_vals = tf.next_4u64();
+    println!("4 u64 values: {tf_vals:?}");
+
+    let mut tf2 = Threefry4x64::new(42);
+    assert_eq!(tf2.next_4u64(), tf_vals);
+    println!("Determinism verified: same seed → same output");
+
+    let mut tf3 = Threefry4x64::new(789);
+    let mut tf_uniform = vec![0.0f32; 10000];
+    tf3.fill_uniform(&mut tf_uniform);
+    let tf_mean: f32 = tf_uniform.iter().sum::<f32>() / tf_uniform.len() as f32;
+    println!("Uniform mean: {tf_mean:.4} (expected: 0.5)");
+
+    let mut tf4 = Threefry4x64::new(101);
+    let mut tf_normal = vec![0.0f32; 10000];
+    tf4.fill_normal(&mut tf_normal);
+    let tf_n_mean: f64 = tf_normal.iter().map(|&v| f64::from(v)).sum::<f64>() / tf_normal.len() as f64;
+    println!("Normal mean: {tf_n_mean:.4} (expected: 0.0)");
+
+    let tf_key = [42u64, 0, 0, 0];
+    let tf_result = Threefry4x64::generate_at(tf_key, [0, 0, 0, 0]);
+    println!("Stateless: generate_at = {tf_result:?}");
 
     println!("\n=== All RNG demos passed ===");
 }

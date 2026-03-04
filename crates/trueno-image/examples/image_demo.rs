@@ -68,9 +68,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Resize ─────────────────────────────────────────────
     println!("\n--- Resize ---");
     let small = resize(&image, w, h, 8, 8, Interpolation::Bilinear)?;
-    println!("Resize {w}×{h} → 8×8: {} pixels", small.len());
+    println!("Resize {w}×{h} → 8×8 (bilinear): {} pixels", small.len());
     let big = resize(&image, w, h, 32, 32, Interpolation::Nearest)?;
-    println!("Resize {w}×{h} → 32×32: {} pixels", big.len());
+    println!("Resize {w}×{h} → 32×32 (nearest): {} pixels", big.len());
+    let bicubic = resize(&image, w, h, 8, 8, Interpolation::Bicubic)?;
+    println!("Resize {w}×{h} → 8×8 (bicubic): {} pixels", bicubic.len());
+    let lanczos = resize(&image, w, h, 8, 8, Interpolation::Lanczos)?;
+    println!("Resize {w}×{h} → 8×8 (lanczos): {} pixels", lanczos.len());
 
     // ── Color conversion ───────────────────────────────────
     println!("\n--- Color Conversion ---");

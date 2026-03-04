@@ -1,0 +1,36 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Sparse Matrix-Matrix Multiply (CSR format)"
+  crate: "trueno-sparse"
+  references:
+    - "Gustavson, 'Two fast algorithms for sparse matrices', 1978"
+
+equations:
+  spmm:
+    formula: "C = alpha * A * B + beta * C where A is sparse CSR, B,C are dense"
+    domain: "A in CSR^{m x k}, B in R^{k x n}, C in R^{m x n}"
+    codomain: "C in R^{m x n}"
+    invariants:
+      - "Output dimensions: C.rows = A.rows, C.cols = B.cols"
+      - "Matches dense reference within backward error"
+
+proof_obligations:
+  - type: equivalence
+    property: "Sparse-dense result matches dense-dense reference"
+    formal: "|spmm(A,B) - dense(A)*B| < epsilon"
+    tolerance: 1.0e-4
+    applies_to: all
+
+  - type: invariant
+    property: "Identity matrix: I*B = B"
+    formal: "spmm(I, B) = B"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-SPMM-001
+    rule: "Dense equivalence"
+    test: "test_spmm_matches_dense"
+  - id: FALSIFY-SPMM-002
+    rule: "Dimension mismatch"
+    test: "test_spmm_dimension_mismatch"

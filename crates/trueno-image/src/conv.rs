@@ -21,6 +21,8 @@ pub enum BorderMode {
     Clamp,
     /// Reflect at image boundary.
     Reflect,
+    /// Wrap (periodic boundary).
+    Wrap,
 }
 
 /// 2D convolution with same-padding.
@@ -349,7 +351,17 @@ fn sample_border(
             let ry = reflect(y, height);
             image[ry * width + rx]
         }
+        BorderMode::Wrap => {
+            let wx = wrap(x, width);
+            let wy = wrap(y, height);
+            image[wy * width + wx]
+        }
     }
+}
+
+fn wrap(i: isize, size: usize) -> usize {
+    let s = size as isize;
+    ((i % s + s) % s) as usize
 }
 
 fn reflect(i: isize, size: usize) -> usize {

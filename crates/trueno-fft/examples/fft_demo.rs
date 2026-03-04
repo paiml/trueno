@@ -4,7 +4,7 @@
 //! cargo run --example fft_demo -p trueno-fft
 //! ```
 
-use trueno_fft::{bluestein_fft, fft_3d, fft_batched, ifft_3d, Complex, FftPlan};
+use trueno_fft::{bluestein_fft, fft_3d, fft_batched, fft_c2r, fft_r2c, ifft_3d, Complex, FftPlan};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== trueno-fft: Full FFT Demo ===\n");
@@ -82,12 +82,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .fold(0.0f32, f32::max);
     println!("{batch} batches of size {n}: roundtrip error = {err_batch:.2e}");
 
-    // ── R2C ────────────────────────────────────────────────
-    println!("\n--- R2C ---");
+    // ── R2C + C2R ─────────────────────────────────────────
+    println!("\n--- R2C + C2R ---");
     let real_input: Vec<f32> = (0..8).map(|i| i as f32).collect();
     let mut r2c_out = vec![Complex::ZERO; 5]; // N/2+1
-    plan.forward_r2c(&real_input, &mut r2c_out)?;
+    fft_r2c(&real_input, &mut r2c_out)?;
     println!("R2C DC component: {:.3} (expected: 28.0)", r2c_out[0].re);
+
+    // C2R roundtrip
+    let mut c2r_out = vec![0.0f32; 8];
+    fft_c2r(&r2c_out, &mut c2r_out, 8)?;
+    let c2r_err: f32 = real_input.iter().zip(c2r_out.iter())
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0f32, f32::max);
+    println!("R2C → C2R roundtrip error: {c2r_err:.2e}");
 
     println!("\n=== All FFT demos passed ===");
     Ok(())
