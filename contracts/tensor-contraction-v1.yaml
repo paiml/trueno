@@ -1,0 +1,62 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Einstein summation via TTGT — tensor contraction correctness"
+  crate: "trueno-tensor"
+  references:
+    - "Springer et al., 'TTGT: A General Approach for Tensor Contractions on GPUs', 2017"
+    - "cuTENSOR documentation, NVIDIA"
+
+equations:
+  einsum:
+    formula: "C_{out} = Σ_{contracted} A_{a_labels} · B_{b_labels}"
+    domain: "subscript string 'ij,jk->ik' style, two dense tensors"
+    codomain: "dense output tensor with shape from output labels"
+    invariants:
+      - "Output shape matches output label dimensions"
+      - "Contracted dimensions must match between inputs"
+      - "Matrix multiply is associative: (AB)C = A(BC)"
+      - "Transpose is involutory: (A^T)^T = A"
+
+proof_obligations:
+  - type: invariant
+    property: "Matmul correctness"
+    formal: "einsum('ij,jk->ik', A, B) = standard matrix product"
+    applies_to: all
+
+  - type: invariant
+    property: "Matmul associativity"
+    formal: "||einsum(AB,C) - einsum(A,BC)||_F < ε"
+    applies_to: all
+
+  - type: invariant
+    property: "Transpose involution"
+    formal: "transpose(transpose(A, p), p^{-1}) = A"
+    applies_to: all
+
+  - type: error
+    property: "Dimension mismatch detection"
+    formal: "returns Err when contracted indices have different sizes"
+    applies_to: all
+
+  - type: error
+    property: "Invalid subscript detection"
+    formal: "returns Err for malformed subscript strings"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-TENSOR-001
+    rule: "Matmul correctness"
+    test: "test_matmul_2x3_3x2"
+  - id: FALSIFY-TENSOR-002
+    rule: "Matmul associativity"
+    test: "test_contract_matmul_associativity"
+  - id: FALSIFY-TENSOR-003
+    rule: "Transpose involution"
+    test: "test_contract_transpose_involution"
+  - id: FALSIFY-TENSOR-004
+    rule: "Dimension mismatch"
+    test: "test_einsum_dimension_mismatch"
+  - id: FALSIFY-TENSOR-005
+    rule: "Invalid subscript"
+    test: "test_einsum_no_arrow"

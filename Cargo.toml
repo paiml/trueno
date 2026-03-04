@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [".", "xtask", "trueno-gpu", "trueno-explain", "crates/cbtop", "crates/trueno-quant", "crates/trueno-sparse", "crates/trueno-fft", "crates/trueno-solve", "crates/trueno-rand", "crates/trueno-image", "trueno-cuda-edge", "trueno-ptx-debug"]
+members = [".", "xtask", "trueno-gpu", "trueno-explain", "crates/cbtop", "crates/trueno-quant", "crates/trueno-sparse", "crates/trueno-fft", "crates/trueno-solve", "crates/trueno-rand", "crates/trueno-image", "crates/trueno-tensor", "trueno-cuda-edge", "trueno-ptx-debug"]
 exclude = []
 
 # Workspace-level lints (PMAT best practices)
