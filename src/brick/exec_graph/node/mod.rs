@@ -109,11 +109,33 @@ pub enum BrickId {
     LmHead = 13,
     /// Token sampling
     Sampling = 14,
+
+    // Sparse (15-17) — CUDA-parity-spec Phase 1
+    /// Sparse matrix-vector multiply (cuSPARSE parity)
+    SpMV = 15,
+    /// Sparse matrix-dense matrix multiply
+    SpMM = 16,
+    /// Sparse format conversion
+    FormatConvert = 17,
+
+    // FFT (18-19) — CUDA-parity-spec Phase 2
+    /// 1D Fast Fourier Transform
+    FFT1D = 18,
+    /// 2D Fast Fourier Transform
+    FFT2D = 19,
+
+    // Solvers (20-22) — CUDA-parity-spec Phase 2
+    /// LU factorization
+    LUFactorize = 20,
+    /// QR factorization
+    QRFactorize = 21,
+    /// Singular Value Decomposition
+    SVDCompute = 22,
 }
 
 impl BrickId {
     /// Number of well-known brick types.
-    pub const COUNT: usize = 15;
+    pub const COUNT: usize = 23;
 
     /// All BrickId variants in order, for safe index-based iteration.
     ///
@@ -134,6 +156,14 @@ impl BrickId {
         Self::Embedding,
         Self::LmHead,
         Self::Sampling,
+        Self::SpMV,
+        Self::SpMM,
+        Self::FormatConvert,
+        Self::FFT1D,
+        Self::FFT2D,
+        Self::LUFactorize,
+        Self::QRFactorize,
+        Self::SVDCompute,
     ];
 
     /// Validate that a raw u8 is within the BrickId range.
@@ -163,6 +193,9 @@ impl BrickId {
                 BrickCategory::Ffn
             }
             Self::Embedding | Self::LmHead | Self::Sampling => BrickCategory::Other,
+            Self::SpMV | Self::SpMM | Self::FormatConvert => BrickCategory::Sparse,
+            Self::FFT1D | Self::FFT2D => BrickCategory::Fft,
+            Self::LUFactorize | Self::QRFactorize | Self::SVDCompute => BrickCategory::Solver,
         }
     }
 
@@ -185,6 +218,14 @@ impl BrickId {
             Self::Embedding => "Embedding",
             Self::LmHead => "LmHead",
             Self::Sampling => "Sampling",
+            Self::SpMV => "SpMV",
+            Self::SpMM => "SpMM",
+            Self::FormatConvert => "FormatConvert",
+            Self::FFT1D => "FFT1D",
+            Self::FFT2D => "FFT2D",
+            Self::LUFactorize => "LUFactorize",
+            Self::QRFactorize => "QRFactorize",
+            Self::SVDCompute => "SVDCompute",
         }
     }
 
@@ -207,6 +248,14 @@ impl BrickId {
             "Embedding" | "Embed" => Some(Self::Embedding),
             "LmHead" | "Head" => Some(Self::LmHead),
             "Sampling" | "Sample" => Some(Self::Sampling),
+            "SpMV" | "spmv" => Some(Self::SpMV),
+            "SpMM" | "spmm" => Some(Self::SpMM),
+            "FormatConvert" => Some(Self::FormatConvert),
+            "FFT1D" | "fft1d" | "FFT" => Some(Self::FFT1D),
+            "FFT2D" | "fft2d" => Some(Self::FFT2D),
+            "LUFactorize" | "LU" => Some(Self::LUFactorize),
+            "QRFactorize" | "QR" => Some(Self::QRFactorize),
+            "SVDCompute" | "SVD" => Some(Self::SVDCompute),
             _ => None,
         }
     }
@@ -233,15 +282,21 @@ pub enum BrickCategory {
     /// Other operations (embedding, lm_head, sampling)
     #[default]
     Other = 3,
+    /// Sparse linear algebra (SpMV, SpMM, format conversion)
+    Sparse = 4,
+    /// FFT operations (1D, 2D, 3D)
+    Fft = 5,
+    /// Dense solvers (LU, QR, SVD, Cholesky)
+    Solver = 6,
 }
 
 impl BrickCategory {
     /// Number of categories.
-    pub const COUNT: usize = 4;
+    pub const COUNT: usize = 7;
 
     /// All BrickCategory variants in order, for safe index-based iteration.
     pub const ALL: [BrickCategory; Self::COUNT] =
-        [Self::Norm, Self::Attention, Self::Ffn, Self::Other];
+        [Self::Norm, Self::Attention, Self::Ffn, Self::Other, Self::Sparse, Self::Fft, Self::Solver];
 
     /// Get the string name of this category.
     #[inline]
@@ -251,6 +306,9 @@ impl BrickCategory {
             Self::Attention => "Attention",
             Self::Ffn => "FFN",
             Self::Other => "Other",
+            Self::Sparse => "Sparse",
+            Self::Fft => "FFT",
+            Self::Solver => "Solver",
         }
     }
 }
