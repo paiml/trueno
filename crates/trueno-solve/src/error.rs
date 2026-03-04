@@ -47,6 +47,13 @@ pub enum SolverError {
         n: usize,
     },
 
+    /// Invalid input parameter.
+    #[error("invalid input: {reason}")]
+    InvalidInput {
+        /// Reason for invalidity.
+        reason: &'static str,
+    },
+
     /// Buffer length mismatch for BLAS operations.
     #[error("buffer length {got} does not match expected {expected} for {rows}x{cols} matrix")]
     BufferLengthMismatch {

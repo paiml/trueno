@@ -151,6 +151,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let trait_edges = edge_buf.data().iter().filter(|&&v| v > 0.5).count();
     println!("ImageBuf.canny_edges(): {trait_edges} edge pixels");
 
+    // ImageOps expanded trait: sobel, dilate, resize, histogram, components
+    let (gx_buf, _gy_buf) = buf.sobel_gradients()?;
+    println!("ImageBuf.sobel_gradients(): {}×{}", gx_buf.width(), gx_buf.height());
+
+    let se = [1.0f32; 9];
+    let dilated = gray_buf.apply_dilate(&se, 3, 3)?;
+    println!("ImageBuf.apply_dilate(): {}×{}", dilated.width(), dilated.height());
+
+    let resized = buf.apply_resize(8, 8, Interpolation::Bilinear)?;
+    println!(
+        "ImageBuf.apply_resize(8×8): {}×{} × {} ch",
+        resized.width(), resized.height(), resized.channels()
+    );
+
+    let hist = gray_buf.compute_histogram(10)?;
+    let total: u32 = hist.iter().sum();
+    println!("ImageBuf.compute_histogram(10): total={total}");
+
+    let hsv_buf = buf.to_hsv()?;
+    println!("ImageBuf.to_hsv(): {} channels", hsv_buf.channels());
+
     println!("\n=== All image demos passed ===");
     Ok(())
 }

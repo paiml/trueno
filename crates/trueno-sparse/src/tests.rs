@@ -744,3 +744,36 @@ fn test_scalar_backend_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
     assert!((y[1] - 20.0).abs() < 1e-5);
     Ok(())
 }
+
+// ── SparseBackend spmm_kernel tests (§2C parity) ───────────────
+
+#[test]
+fn test_scalar_backend_spmm_identity() -> Result<(), Box<dyn std::error::Error>> {
+    // 2×2 identity CSR × 2×2 dense = identity
+    let csr = CsrMatrix::new(2, 2, vec![0, 1, 2], vec![0, 1], vec![1.0, 1.0_f32])?;
+    let b = [1.0, 2.0, 3.0, 4.0_f32]; // 2×2 row-major
+    let mut c = [0.0_f32; 4];
+    ScalarBackend::spmm_kernel(&csr, 1.0, &b, 2, 0.0, &mut c);
+    assert!((c[0] - 1.0).abs() < 1e-5);
+    assert!((c[1] - 2.0).abs() < 1e-5);
+    assert!((c[2] - 3.0).abs() < 1e-5);
+    assert!((c[3] - 4.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_scalar_backend_spmm_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
+    let csr = CsrMatrix::new(2, 2, vec![0, 1, 2], vec![0, 1], vec![2.0, 3.0_f32])?;
+    let b = [1.0, 0.0, 0.0, 1.0_f32]; // identity
+    let mut c = [10.0, 20.0, 30.0, 40.0_f32];
+    ScalarBackend::spmm_kernel(&csr, 1.0, &b, 2, 0.5, &mut c);
+    // C[0,0] = 1.0*2.0*1.0 + 0.5*10.0 = 7.0
+    // C[0,1] = 1.0*2.0*0.0 + 0.5*20.0 = 10.0
+    // C[1,0] = 1.0*3.0*0.0 + 0.5*30.0 = 15.0
+    // C[1,1] = 1.0*3.0*1.0 + 0.5*40.0 = 23.0
+    assert!((c[0] - 7.0).abs() < 1e-5);
+    assert!((c[1] - 10.0).abs() < 1e-5);
+    assert!((c[2] - 15.0).abs() < 1e-5);
+    assert!((c[3] - 23.0).abs() < 1e-5);
+    Ok(())
+}

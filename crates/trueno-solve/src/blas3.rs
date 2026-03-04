@@ -374,6 +374,133 @@ pub fn f32_to_f16(f: f32) -> u16 {
     ((sign << 15) | (h_exp << 10) | h_mant) as u16
 }
 
+/// Epilogue operation applied after GEMM computation.
+///
+/// Matches cuBLASLt `cublasLtEpilogue_t` post-processing modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Epilogue {
+    /// No post-processing: C = α·A·B + β·C
+    #[default]
+    None,
+    /// ReLU activation: C = max(0, α·A·B + β·C)
+    Relu,
+    /// Bias add: C = α·A·B + β·C + bias
+    Bias,
+    /// GELU activation: C = gelu(α·A·B + β·C)
+    Gelu,
+    /// Bias + ReLU: C = max(0, α·A·B + β·C + bias)
+    BiasRelu,
+    /// Bias + GELU: C = gelu(α·A·B + β·C + bias)
+    BiasGelu,
+}
+
+/// Mixed-precision GEMM with epilogue fusion.
+///
+/// Like `gemm_ex` but applies a post-processing epilogue operation.
+/// `bias` is a per-column vector of length `n` (one per output column),
+/// required when epilogue is `Bias`, `BiasRelu`, or `BiasGelu`.
+///
+/// # Errors
+///
+/// Returns error on dimension mismatch or missing bias.
+#[allow(clippy::too_many_arguments)]
+pub fn gemm_ex_epilogue(
+    a: &[u16],
+    b: &[u16],
+    c: &mut [f32],
+    m: usize,
+    n: usize,
+    k: usize,
+    alpha: f32,
+    beta: f32,
+    epilogue: Epilogue,
+    bias: Option<&[f32]>,
+) -> Result<(), SolverError> {
+    gemm_ex(a, b, c, m, n, k, alpha, beta)?;
+    apply_epilogue(c, m, n, epilogue, bias)
+}
+
+/// Apply epilogue post-processing to a matrix C (m×n row-major).
+fn apply_epilogue(
+    c: &mut [f32],
+    m: usize,
+    n: usize,
+    epilogue: Epilogue,
+    bias: Option<&[f32]>,
+) -> Result<(), SolverError> {
+    if epilogue == Epilogue::None {
+        return Ok(());
+    }
+
+    let bias_vec = validate_bias_if_needed(epilogue, bias, n)?;
+
+    // Add bias if present
+    if let Some(bv) = bias_vec {
+        add_bias(c, m, n, bv);
+    }
+
+    // Apply activation
+    apply_activation(c, epilogue);
+
+    Ok(())
+}
+
+/// Validate that bias is provided when the epilogue requires it.
+fn validate_bias_if_needed<'a>(
+    epilogue: Epilogue,
+    bias: Option<&'a [f32]>,
+    n: usize,
+) -> Result<Option<&'a [f32]>, SolverError> {
+    let needs_bias = matches!(epilogue, Epilogue::Bias | Epilogue::BiasRelu | Epilogue::BiasGelu);
+    if !needs_bias {
+        return Ok(None);
+    }
+    let bv = bias.ok_or(SolverError::InvalidInput {
+        reason: "epilogue requires bias vector",
+    })?;
+    if bv.len() != n {
+        return Err(SolverError::BufferLengthMismatch {
+            expected: n,
+            got: bv.len(),
+            rows: 1,
+            cols: n,
+        });
+    }
+    Ok(Some(bv))
+}
+
+/// Add per-column bias to matrix C.
+fn add_bias(c: &mut [f32], m: usize, n: usize, bias: &[f32]) {
+    for i in 0..m {
+        for j in 0..n {
+            c[i * n + j] += bias[j];
+        }
+    }
+}
+
+/// Apply element-wise activation function.
+fn apply_activation(c: &mut [f32], epilogue: Epilogue) {
+    match epilogue {
+        Epilogue::Relu | Epilogue::BiasRelu => {
+            for val in c.iter_mut() {
+                *val = val.max(0.0);
+            }
+        }
+        Epilogue::Gelu | Epilogue::BiasGelu => {
+            for val in c.iter_mut() {
+                *val = gelu(*val);
+            }
+        }
+        Epilogue::None | Epilogue::Bias => {}
+    }
+}
+
+/// GELU approximation: x · Φ(x) ≈ 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))
+fn gelu(x: f32) -> f32 {
+    let coeff = (2.0_f32 / std::f32::consts::PI).sqrt();
+    0.5 * x * (1.0 + (coeff * (x + 0.044715 * x * x * x)).tanh())
+}
+
 /// Validate buffer length matches expected dimensions.
 fn validate_buffer(buf: &[f32], expected: usize, rows: usize, cols: usize) -> Result<(), SolverError> {
     if buf.len() != expected {

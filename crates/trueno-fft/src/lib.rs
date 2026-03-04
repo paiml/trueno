@@ -61,6 +61,15 @@ pub trait Fft {
     /// Complex-to-real 1D inverse FFT.
     fn fft_c2r(&self, input: &[Complex], output: &mut [f32]) -> Result<(), FftError>;
 
+    /// 2D FFT via row-column decomposition.
+    fn fft_2d(
+        &self,
+        input: &[Complex],
+        output: &mut [Complex],
+        nx: usize,
+        ny: usize,
+    ) -> Result<(), FftError>;
+
     /// Transform length.
     fn len(&self) -> usize;
 
@@ -85,6 +94,16 @@ impl Fft for FftPlan {
 
     fn fft_c2r(&self, input: &[Complex], output: &mut [f32]) -> Result<(), FftError> {
         self.inverse_c2r(input, output)
+    }
+
+    fn fft_2d(
+        &self,
+        input: &[Complex],
+        output: &mut [Complex],
+        nx: usize,
+        ny: usize,
+    ) -> Result<(), FftError> {
+        fft_2d(input, output, nx, ny)
     }
 
     fn len(&self) -> usize {

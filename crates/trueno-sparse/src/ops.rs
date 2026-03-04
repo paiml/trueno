@@ -31,6 +31,18 @@ pub trait SparseBackend {
         beta: f32,
         y: &mut [f32],
     );
+
+    /// Perform SpMM: `C = alpha * A * B + beta * C` using this backend.
+    ///
+    /// B is row-major with `b_cols` columns.
+    fn spmm_kernel(
+        a: &CsrMatrix<f32>,
+        alpha: f32,
+        b: &[f32],
+        b_cols: usize,
+        beta: f32,
+        c: &mut [f32],
+    );
 }
 
 /// Scalar (portable) SpMV backend.
@@ -39,6 +51,17 @@ pub struct ScalarBackend;
 impl SparseBackend for ScalarBackend {
     fn spmv_kernel(a: &CsrMatrix<f32>, alpha: f32, x: &[f32], beta: f32, y: &mut [f32]) {
         spmv_csr_scalar(a, alpha, x, beta, y);
+    }
+
+    fn spmm_kernel(
+        a: &CsrMatrix<f32>,
+        alpha: f32,
+        b: &[f32],
+        b_cols: usize,
+        beta: f32,
+        c: &mut [f32],
+    ) {
+        spmm_csr_scalar(a, alpha, b, b_cols, beta, c);
     }
 }
 
@@ -52,6 +75,18 @@ impl SparseBackend for Avx2Backend {
         // SAFETY: caller must ensure AVX2+FMA is available
         unsafe { spmv_csr_avx2(a, alpha, x, beta, y) }
     }
+
+    fn spmm_kernel(
+        a: &CsrMatrix<f32>,
+        alpha: f32,
+        b: &[f32],
+        b_cols: usize,
+        beta: f32,
+        c: &mut [f32],
+    ) {
+        // AVX2 SpMM not yet specialized — fall back to scalar
+        spmm_csr_scalar(a, alpha, b, b_cols, beta, c);
+    }
 }
 
 /// NEON SpMV backend stub (aarch64).
@@ -63,6 +98,18 @@ impl SparseBackend for NeonBackend {
     fn spmv_kernel(a: &CsrMatrix<f32>, alpha: f32, x: &[f32], beta: f32, y: &mut [f32]) {
         // NEON dispatch not yet implemented — falls back to scalar
         spmv_csr_scalar(a, alpha, x, beta, y);
+    }
+
+    fn spmm_kernel(
+        a: &CsrMatrix<f32>,
+        alpha: f32,
+        b: &[f32],
+        b_cols: usize,
+        beta: f32,
+        c: &mut [f32],
+    ) {
+        // NEON SpMM not yet specialized — fall back to scalar
+        spmm_csr_scalar(a, alpha, b, b_cols, beta, c);
     }
 }
 
