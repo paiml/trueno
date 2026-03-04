@@ -173,6 +173,207 @@ pub fn symm(
     Ok(())
 }
 
+/// Mixed-precision GEMM: C = α·A·B + β·C with f16 inputs, f32 accumulation.
+///
+/// A is m×k, B is k×n, C is m×n. Inputs `a` and `b` are `u16` containing
+/// IEEE 754 half-precision floats. Accumulation is in f32 for cuBLAS `gemmEx` parity.
+///
+/// # Errors
+///
+/// Returns error on dimension mismatch.
+#[allow(clippy::too_many_arguments)]
+pub fn gemm_ex(
+    a: &[u16],
+    b: &[u16],
+    c: &mut [f32],
+    m: usize,
+    n: usize,
+    k: usize,
+    alpha: f32,
+    beta: f32,
+) -> Result<(), SolverError> {
+    if a.len() != m * k {
+        return Err(SolverError::BufferLengthMismatch {
+            expected: m * k,
+            got: a.len(),
+            rows: m,
+            cols: k,
+        });
+    }
+    if b.len() != k * n {
+        return Err(SolverError::BufferLengthMismatch {
+            expected: k * n,
+            got: b.len(),
+            rows: k,
+            cols: n,
+        });
+    }
+    if c.len() != m * n {
+        return Err(SolverError::BufferLengthMismatch {
+            expected: m * n,
+            got: c.len(),
+            rows: m,
+            cols: n,
+        });
+    }
+
+    for i in 0..m {
+        for j in 0..n {
+            let mut sum = 0.0_f64;
+            for p in 0..k {
+                let a_val = f16_to_f32(a[i * k + p]);
+                let b_val = f16_to_f32(b[p * n + j]);
+                sum += f64::from(a_val) * f64::from(b_val);
+            }
+            c[i * n + j] = alpha * sum as f32 + beta * c[i * n + j];
+        }
+    }
+
+    Ok(())
+}
+
+/// Strided batched GEMM: C_b = α·A_b·B_b + β·C_b for b = 0..batch_count.
+///
+/// Each batch matrix is accessed via stride offsets into flat buffers.
+/// A_b is m×k at a[b*stride_a..], B_b is k×n at b[b*stride_b..],
+/// C_b is m×n at c[b*stride_c..].
+///
+/// # Errors
+///
+/// Returns error on dimension mismatch or insufficient buffer length.
+#[allow(clippy::too_many_arguments)]
+pub fn gemm_strided_batched(
+    a: &[f32],
+    stride_a: usize,
+    b: &[f32],
+    stride_b: usize,
+    c: &mut [f32],
+    stride_c: usize,
+    batch_count: usize,
+    m: usize,
+    n: usize,
+    k: usize,
+    alpha: f32,
+    beta: f32,
+) -> Result<(), SolverError> {
+    if batch_count == 0 {
+        return Ok(());
+    }
+
+    let a_needed = (batch_count - 1) * stride_a + m * k;
+    if a.len() < a_needed {
+        return Err(SolverError::BufferLengthMismatch {
+            expected: a_needed,
+            got: a.len(),
+            rows: m,
+            cols: k,
+        });
+    }
+    let b_needed = (batch_count - 1) * stride_b + k * n;
+    if b.len() < b_needed {
+        return Err(SolverError::BufferLengthMismatch {
+            expected: b_needed,
+            got: b.len(),
+            rows: k,
+            cols: n,
+        });
+    }
+    let c_needed = (batch_count - 1) * stride_c + m * n;
+    if c.len() < c_needed {
+        return Err(SolverError::BufferLengthMismatch {
+            expected: c_needed,
+            got: c.len(),
+            rows: m,
+            cols: n,
+        });
+    }
+
+    for batch in 0..batch_count {
+        let a_off = batch * stride_a;
+        let b_off = batch * stride_b;
+        let c_off = batch * stride_c;
+
+        for i in 0..m {
+            for j in 0..n {
+                let mut sum = 0.0_f64;
+                for p in 0..k {
+                    sum += f64::from(a[a_off + i * k + p]) * f64::from(b[b_off + p * n + j]);
+                }
+                c[c_off + i * n + j] = alpha * sum as f32 + beta * c[c_off + i * n + j];
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Convert IEEE 754 half-precision (u16) to f32 (software implementation).
+fn f16_to_f32(h: u16) -> f32 {
+    let sign = (h >> 15) & 1;
+    let exp = (h >> 10) & 0x1F;
+    let mant = h & 0x3FF;
+
+    if exp == 0 {
+        // Subnormal or zero
+        if mant == 0 {
+            return if sign == 1 { -0.0 } else { 0.0 };
+        }
+        // Subnormal: value = (-1)^sign * 2^(-14) * (mant/1024)
+        let val = (mant as f32) * (1.0 / 1024.0) * (1.0 / 16384.0);
+        return if sign == 1 { -val } else { val };
+    }
+
+    if exp == 31 {
+        // Inf or NaN
+        return if mant == 0 {
+            if sign == 1 { f32::NEG_INFINITY } else { f32::INFINITY }
+        } else {
+            f32::NAN
+        };
+    }
+
+    // Normal: value = (-1)^sign * 2^(exp-15) * (1 + mant/1024)
+    let f32_exp = (exp as i32) - 15 + 127;
+    let f32_bits = ((sign as u32) << 31)
+        | ((f32_exp as u32) << 23)
+        | ((mant as u32) << 13);
+    f32::from_bits(f32_bits)
+}
+
+/// Convert f32 to IEEE 754 half-precision (u16).
+pub fn f32_to_f16(f: f32) -> u16 {
+    let bits = f.to_bits();
+    let sign = (bits >> 31) & 1;
+    let exp = ((bits >> 23) & 0xFF) as i32;
+    let mant = bits & 0x7F_FFFF;
+
+    if exp == 255 {
+        // Inf or NaN
+        let h_mant = if mant != 0 { 0x200 } else { 0 };
+        return ((sign << 15) | (0x1F << 10) | h_mant) as u16;
+    }
+
+    let unbiased = exp - 127;
+    if unbiased > 15 {
+        // Overflow → infinity
+        return ((sign << 15) | (0x1F << 10)) as u16;
+    }
+    if unbiased < -24 {
+        // Underflow → zero
+        return (sign << 15) as u16;
+    }
+    if unbiased < -14 {
+        // Subnormal
+        let shift = (-14 - unbiased) as u32;
+        let h_mant = ((mant | 0x80_0000) >> (14 + shift)) as u16;
+        return ((sign << 15) as u16) | h_mant;
+    }
+
+    let h_exp = (unbiased + 15) as u32;
+    let h_mant = mant >> 13;
+    ((sign << 15) | (h_exp << 10) | h_mant) as u16
+}
+
 /// Validate buffer length matches expected dimensions.
 fn validate_buffer(buf: &[f32], expected: usize, rows: usize, cols: usize) -> Result<(), SolverError> {
     if buf.len() != expected {

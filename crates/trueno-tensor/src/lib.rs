@@ -8,7 +8,7 @@ pub mod einsum;
 pub mod error;
 pub mod tensor;
 
-pub use einsum::{batch_matmul, einsum, matmul, outer, trace};
+pub use einsum::{batch_matmul, einsum, einsum_nary, matmul, outer, trace};
 pub use error::TensorError;
 pub use tensor::Tensor;
 

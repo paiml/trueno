@@ -1,6 +1,6 @@
 //! Tests for trueno-tensor: tensor ops, einsum, and provable contracts.
 
-use crate::{batch_matmul, einsum, matmul, outer, trace, Tensor};
+use crate::{batch_matmul, einsum, einsum_nary, matmul, outer, trace, Tensor};
 
 type R = Result<(), Box<dyn std::error::Error>>;
 
@@ -256,4 +256,98 @@ mod proptests {
             prop_assert_eq!(r.data(), t.data());
         }
     }
+}
+
+// ── einsum_nary tests ──────────────────────────────────────────────
+
+#[test]
+fn test_einsum_nary_two_inputs() -> R {
+    // einsum_nary with 2 inputs should match einsum binary
+    let a = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    let b = Tensor::new(vec![3, 2], vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0])?;
+    let r1 = einsum("ij,jk->ik", &a, &b)?;
+    let r2 = einsum_nary("ij,jk->ik", &[&a, &b])?;
+    for (v1, v2) in r1.data().iter().zip(r2.data().iter()) {
+        assert!((v1 - v2).abs() < 1e-5);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_einsum_nary_three_inputs() -> R {
+    // (A @ B) @ C = A @ (B @ C) for matmul chain
+    // A=2×3, B=3×4, C=4×2
+    let a = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    let b = Tensor::new(
+        vec![3, 4],
+        vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0],
+    )?;
+    let c = Tensor::new(
+        vec![4, 2],
+        vec![1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0],
+    )?;
+
+    let result = einsum_nary("ij,jk,kl->il", &[&a, &b, &c])?;
+    assert_eq!(result.shape(), &[2, 2]);
+
+    // Verify by manual computation: AB first, then (AB)C
+    let ab = einsum("ij,jk->ik", &a, &b)?;
+    let expected = einsum("ij,jk->ik", &ab, &c)?;
+    for (v1, v2) in result.data().iter().zip(expected.data().iter()) {
+        assert!((v1 - v2).abs() < 1e-5, "nary mismatch: {v1} vs {v2}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_einsum_nary_single_input() -> R {
+    // Single input: trace-like operation "ii->"
+    let a = Tensor::new(vec![3, 3], vec![1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0])?;
+    let result = einsum_nary("ij->ij", &[&a])?;
+    assert_eq!(result.shape(), &[3, 3]);
+    assert!((result.get(&[0, 0]) - 1.0).abs() < 1e-5);
+    assert!((result.get(&[1, 1]) - 2.0).abs() < 1e-5);
+    assert!((result.get(&[2, 2]) - 3.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_einsum_nary_single_transpose() -> R {
+    // "ij->ji" should transpose
+    let a = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    let result = einsum_nary("ij->ji", &[&a])?;
+    assert_eq!(result.shape(), &[3, 2]);
+    assert!((result.get(&[0, 0]) - 1.0).abs() < 1e-5);
+    assert!((result.get(&[0, 1]) - 4.0).abs() < 1e-5);
+    assert!((result.get(&[1, 0]) - 2.0).abs() < 1e-5);
+    assert!((result.get(&[2, 0]) - 3.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_einsum_nary_wrong_count() {
+    let a = Tensor::zeros(vec![2, 2]);
+    let result = einsum_nary("ij,jk->ik", &[&a]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_einsum_nary_four_inputs() -> R {
+    // Chain of 4 matmuls: A(2×2) @ B(2×2) @ C(2×2) @ D(2×2)
+    let a = Tensor::new(vec![2, 2], vec![1.0, 2.0, 3.0, 4.0])?;
+    let b = Tensor::new(vec![2, 2], vec![0.0, 1.0, 1.0, 0.0])?;
+    let c = Tensor::new(vec![2, 2], vec![1.0, 1.0, 0.0, 1.0])?;
+    let d = Tensor::new(vec![2, 2], vec![2.0, 0.0, 0.0, 2.0])?;
+
+    let result = einsum_nary("ij,jk,kl,lm->im", &[&a, &b, &c, &d])?;
+
+    // Manual: AB = [[2,1],[4,3]], ABC = [[2,3],[4,7]], ABCD = [[4,6],[8,14]]
+    let ab = einsum("ij,jk->ik", &a, &b)?;
+    let abc = einsum("ij,jk->ik", &ab, &c)?;
+    let expected = einsum("ij,jk->ik", &abc, &d)?;
+
+    for (v1, v2) in result.data().iter().zip(expected.data().iter()) {
+        assert!((v1 - v2).abs() < 1e-4, "4-input mismatch: {v1} vs {v2}");
+    }
+    Ok(())
 }

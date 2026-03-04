@@ -108,11 +108,201 @@ fn build_index_sizes(
 ///
 /// Returns error if subscripts are invalid or dimensions don't match.
 pub fn einsum(subscripts: &str, a: &Tensor, b: &Tensor) -> Result<Tensor, TensorError> {
+    einsum_binary(subscripts, a, b)
+}
+
+/// Perform Einstein summation on an arbitrary number of input tensors.
+///
+/// Supports subscript notation like `"ij,jk,kl->il"` with pairwise reduction.
+/// For 2 inputs, delegates directly. For N>2 inputs, reduces left-to-right.
+///
+/// # Errors
+///
+/// Returns error if subscripts are invalid or dimensions don't match.
+pub fn einsum_nary(subscripts: &str, inputs: &[&Tensor]) -> Result<Tensor, TensorError> {
+    let plan = parse_subscripts(subscripts)?;
+
+    if plan.input_labels.len() != inputs.len() {
+        return Err(TensorError::InvalidSubscript(format!(
+            "subscript has {} inputs but {} tensors provided",
+            plan.input_labels.len(),
+            inputs.len()
+        )));
+    }
+
+    if inputs.is_empty() {
+        return Err(TensorError::InvalidSubscript(
+            "no input tensors specified".into(),
+        ));
+    }
+
+    if inputs.len() == 1 {
+        // Single tensor: just select/sum as needed
+        return einsum_single(&plan, inputs[0]);
+    }
+
+    if inputs.len() == 2 {
+        return einsum_binary(subscripts, inputs[0], inputs[1]);
+    }
+
+    // N-ary: pairwise left-to-right reduction
+    // First contraction: inputs[0] and inputs[1]
+    let mut result = reduce_pair(
+        inputs[0],
+        inputs[1],
+        &plan.input_labels[0],
+        &plan.input_labels[1],
+        &plan.output_labels,
+        &plan.input_labels[2..],
+    )?;
+
+    // Track which labels the current result carries
+    let mut result_labels = intermediate_labels(
+        &plan.input_labels[0],
+        &plan.input_labels[1],
+        &plan.output_labels,
+        &plan.input_labels[2..],
+    );
+
+    // Contract remaining inputs one at a time
+    for i in 2..inputs.len() {
+        let next = reduce_pair(
+            &result,
+            inputs[i],
+            &result_labels,
+            &plan.input_labels[i],
+            &plan.output_labels,
+            &plan.input_labels[i + 1..],
+        )?;
+        result_labels = intermediate_labels(
+            &result_labels,
+            &plan.input_labels[i],
+            &plan.output_labels,
+            &plan.input_labels[i + 1..],
+        );
+        result = next;
+    }
+
+    Ok(result)
+}
+
+/// Compute intermediate labels for a pair contraction.
+/// Keep all labels that appear in the final output or in remaining inputs.
+fn intermediate_labels(
+    a_labels: &[char],
+    b_labels: &[char],
+    output_labels: &[char],
+    remaining: &[Vec<char>],
+) -> Vec<char> {
+    let mut labels = Vec::new();
+    let mut seen = Vec::new();
+
+    for &l in a_labels.iter().chain(b_labels.iter()) {
+        if seen.contains(&l) {
+            continue;
+        }
+        seen.push(l);
+        let needed_later = remaining.iter().any(|r| r.contains(&l))
+            || output_labels.contains(&l);
+        if needed_later {
+            labels.push(l);
+        }
+    }
+    labels
+}
+
+/// Contract two tensors, keeping indices needed for later contractions.
+fn reduce_pair(
+    a: &Tensor,
+    b: &Tensor,
+    a_labels: &[char],
+    b_labels: &[char],
+    final_output: &[char],
+    remaining: &[Vec<char>],
+) -> Result<Tensor, TensorError> {
+    let out_labels = intermediate_labels(a_labels, b_labels, final_output, remaining);
+
+    // Build subscript string for this pair
+    let a_str: String = a_labels.iter().collect();
+    let b_str: String = b_labels.iter().collect();
+    let o_str: String = out_labels.iter().collect();
+    let sub = format!("{a_str},{b_str}->{o_str}");
+
+    einsum_binary(&sub, a, b)
+}
+
+/// Single-tensor einsum (trace, transpose, etc.)
+fn einsum_single(plan: &EinsumPlan, a: &Tensor) -> Result<Tensor, TensorError> {
+    let inputs = [a];
+    let index_sizes = build_index_sizes(plan, &inputs)?;
+    let a_labels = &plan.input_labels[0];
+    let out_labels = &plan.output_labels;
+
+    let out_shape: Vec<usize> = out_labels.iter().map(|l| index_sizes[l]).collect();
+    let mut output = Tensor::zeros(out_shape);
+
+    // Contracted indices: in input but not in output
+    let contracted: Vec<char> = a_labels
+        .iter()
+        .filter(|l| !out_labels.contains(l))
+        .copied()
+        .collect();
+
+    let mut all_labels: Vec<char> = out_labels.clone();
+    all_labels.extend_from_slice(&contracted);
+    let all_sizes: Vec<usize> = all_labels.iter().map(|l| index_sizes[l]).collect();
+    let total: usize = all_sizes.iter().product();
+
+    if total == 0 {
+        return Ok(output);
+    }
+
+    let ndim = all_labels.len();
+    let mut indices = vec![0usize; ndim];
+
+    for _ in 0..total {
+        let label_vals: HashMap<char, usize> = all_labels
+            .iter()
+            .zip(indices.iter())
+            .map(|(&l, &v)| (l, v))
+            .collect();
+
+        let a_idx: Vec<usize> = a_labels.iter().map(|l| label_vals[l]).collect();
+        let out_idx: Vec<usize> = out_labels.iter().map(|l| label_vals[l]).collect();
+
+        let val = a.get(&a_idx);
+        let cur = output.get(&out_idx);
+        output.set(&out_idx, cur + val);
+
+        increment_indices(&mut indices, &all_sizes);
+    }
+
+    Ok(output)
+}
+
+/// Increment a multi-index (odometer style) given dimension sizes.
+fn increment_indices(indices: &mut [usize], sizes: &[usize]) {
+    let mut d = indices.len();
+    loop {
+        if d == 0 {
+            break;
+        }
+        d -= 1;
+        indices[d] += 1;
+        if indices[d] < sizes[d] {
+            break;
+        }
+        indices[d] = 0;
+    }
+}
+
+/// Binary einsum (the core 2-input implementation).
+fn einsum_binary(subscripts: &str, a: &Tensor, b: &Tensor) -> Result<Tensor, TensorError> {
     let plan = parse_subscripts(subscripts)?;
 
     if plan.input_labels.len() != 2 {
         return Err(TensorError::InvalidSubscript(
-            "currently supports exactly 2 input tensors".into(),
+            "binary einsum requires exactly 2 input operands in subscript".into(),
         ));
     }
 
@@ -159,7 +349,6 @@ pub fn einsum(subscripts: &str, a: &Tensor, b: &Tensor) -> Result<Tensor, Tensor
     let mut output = Tensor::zeros(out_shape);
 
     // Compute contraction via explicit nested iteration
-    // This is the "naive" TTGT approach — correct first, optimize later
     contract_tensors(
         a,
         b,
@@ -222,19 +411,7 @@ fn contract_tensors(
         let cur = output.get(&out_idx);
         output.set(&out_idx, cur + val);
 
-        // Increment multi-index (odometer)
-        let mut d = ndim;
-        loop {
-            if d == 0 {
-                break;
-            }
-            d -= 1;
-            indices[d] += 1;
-            if indices[d] < all_sizes[d] {
-                break;
-            }
-            indices[d] = 0;
-        }
+        increment_indices(&mut indices, &all_sizes);
     }
 }
 
