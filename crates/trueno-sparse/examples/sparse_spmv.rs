@@ -1,85 +1,72 @@
-//! Sparse SpMV example — CUDA-parity-spec Phase 1
-//!
-//! Demonstrates CSR matrix construction, COO→CSR conversion, and SpMV.
+//! Sparse matrix demonstration — all formats and operations.
 //!
 //! ```bash
 //! cargo run -p trueno-sparse --example sparse_spmv
 //! ```
 
-use trueno_sparse::{CooMatrix, CsrMatrix, SparseOps};
+use trueno_sparse::{BsrMatrix, CooMatrix, CsrMatrix, SellMatrix, SparseOps};
 
-fn main() {
-    println!("=== Trueno Sparse: SpMV Example ===\n");
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("=== Trueno Sparse: Full Demo ===\n");
 
-    // Build a sparse matrix from COO triplets
-    // A = [[1, 0, 2, 0],
-    //      [0, 3, 0, 0],
-    //      [4, 0, 5, 6],
-    //      [0, 0, 0, 7]]
+    // ── COO → CSR ──────────────────────────────────────────
     let coo = CooMatrix::new(
-        4,
-        4,
+        4, 4,
         vec![0, 0, 1, 2, 2, 2, 3],
         vec![0, 2, 1, 0, 2, 3, 3],
         vec![1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
-    )
-    .expect("Valid COO");
-
-    println!("COO matrix: {} rows x {} cols, {} nonzeros", coo.rows, coo.cols, coo.nnz());
-
-    // Convert to CSR
+    )?;
     let csr = CsrMatrix::from_coo(&coo);
-    println!(
-        "CSR matrix: {} rows x {} cols, {} nonzeros",
-        csr.rows(),
-        csr.cols(),
-        csr.nnz()
-    );
-    println!("  avg nnz/row: {:.2}", csr.avg_nnz_per_row());
-    println!("  row length variance: {:.4}", csr.row_length_variance());
-    println!("  offsets: {:?}", csr.offsets());
-    println!("  col_indices: {:?}", csr.col_indices());
-    println!("  values: {:?}\n", csr.values());
+    println!("CSR: {}×{}, {} nnz, avg {:.2} nnz/row",
+        csr.rows(), csr.cols(), csr.nnz(), csr.avg_nnz_per_row());
 
-    // SpMV: y = A * x
-    let x = vec![1.0_f32, 2.0, 3.0, 4.0];
+    // ── SpMV ───────────────────────────────────────────────
+    let x = vec![1.0, 2.0, 3.0, 4.0_f32];
     let mut y = vec![0.0_f32; 4];
+    csr.spmv(1.0, &x, 0.0, &mut y)?;
+    println!("SpMV y = A*x: {y:?}");
 
-    csr.spmv(1.0, &x, 0.0, &mut y)
-        .expect("SpMV dimension check");
+    // ── SpMM ───────────────────────────────────────────────
+    let b = vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0_f32]; // 4×2 identity-ish
+    let mut c = vec![0.0_f32; 8]; // 4×2
+    csr.spmm(1.0, &b, 2, 0.0, &mut c)?;
+    println!("SpMM C = A*B (4×2): {:?}", &c[..8]);
 
-    println!("SpMV: y = A * x");
-    println!("  x = {:?}", x);
-    println!("  y = {:?}", y);
-    println!("  expected: [7.0, 6.0, 43.0, 28.0]");
+    // ── SpGEMM ─────────────────────────────────────────────
+    println!("\n--- SpGEMM (sparse × sparse) ---");
+    let diag_a = CsrMatrix::new(3, 3, vec![0, 1, 2, 3], vec![0, 1, 2], vec![2.0, 3.0, 4.0_f32])?;
+    let diag_b = CsrMatrix::new(3, 3, vec![0, 1, 2, 3], vec![0, 1, 2], vec![5.0, 6.0, 7.0_f32])?;
+    let product = trueno_sparse::spgemm(&diag_a, &diag_b)?;
+    println!("diag([2,3,4]) × diag([5,6,7]) = diag({:?})", product.values());
 
-    // Verify
-    let expected = [7.0_f32, 6.0, 43.0, 28.0];
-    for i in 0..4 {
-        assert!(
-            (y[i] - expected[i]).abs() < 1e-5,
-            "Mismatch at y[{i}]: got {}, expected {}",
-            y[i],
-            expected[i]
-        );
-    }
-    println!("\n  All values match. SpMV correct.");
+    // ── BSR ────────────────────────────────────────────────
+    println!("\n--- BSR (Block Sparse Row) ---");
+    #[rustfmt::skip]
+    let dense = [
+        1.0, 2.0, 0.0, 0.0,
+        3.0, 4.0, 0.0, 0.0,
+        0.0, 0.0, 5.0, 6.0,
+        0.0, 0.0, 7.0, 8.0_f32,
+    ];
+    let bsr = BsrMatrix::from_dense(&dense, 4, 4, 2);
+    let mut y_bsr = vec![0.0_f32; 4];
+    bsr.spmv(1.0, &[1.0, 1.0, 1.0, 1.0], 0.0, &mut y_bsr)?;
+    println!("BSR SpMV (block_size=2): {y_bsr:?}");
 
-    // SpMV with alpha/beta: y = 2*A*x + 0.5*y
-    let mut y2 = vec![10.0_f32; 4];
-    csr.spmv(2.0, &x, 0.5, &mut y2)
-        .expect("SpMV alpha/beta");
+    // ── SELL ───────────────────────────────────────────────
+    println!("\n--- SELL (Sliced ELLPACK) ---");
+    let sell = SellMatrix::from_csr(&csr, 2);
+    let mut y_sell = vec![0.0_f32; 4];
+    sell.spmv(1.0, &x, 0.0, &mut y_sell)?;
+    println!("SELL SpMV (slice_size=2): {y_sell:?}");
+    println!("SELL storage: {} elements (padded)", sell.storage_size());
 
-    println!("\nSpMV: y = 2*A*x + 0.5*[10,10,10,10]");
-    println!("  y = {:?}", y2);
-
-    // Identity matrix test
-    let eye = CsrMatrix::<f32>::identity(4);
-    let mut y3 = vec![0.0_f32; 4];
-    eye.spmv(1.0, &x, 0.0, &mut y3).expect("Identity SpMV");
-    println!("\nIdentity SpMV: y = I * x = {:?}", y3);
-    assert_eq!(y3, x);
-    println!("  Identity check passed.");
+    // Verify SELL matches CSR
+    let max_diff: f32 = y.iter().zip(y_sell.iter())
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f32::max);
+    println!("SELL vs CSR max diff: {max_diff:.2e}");
 
     println!("\n=== Done ===");
+    Ok(())
 }
