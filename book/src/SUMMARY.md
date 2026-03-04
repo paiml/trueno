@@ -122,6 +122,7 @@
 - [Ruchy Language Support](./specifications/ruchy-support.md)
 - [Quality Gates (TRUENO-SPEC-013)](./specifications/solidify-quality-spec.md)
 - [Academic Foundations](./specifications/academic-foundations.md)
+- [CUDA Library Parity](./specifications/cuda-parity.md)
 
 # Appendix
 
