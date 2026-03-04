@@ -12,7 +12,7 @@ categories = ["development-tools::testing"]
 [dependencies]
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"] }
-trueno-gpu = { version = "0.4.12", path = "../trueno-gpu", optional = true }
+trueno-gpu = { version = "0.4.12", optional = true }
 
 [dev-dependencies]
 proptest = "1.6"

@@ -842,8 +842,8 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "toml",
- "trueno 0.16.2",
- "trueno-gpu",
+ "trueno 0.16.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trueno-gpu 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5519,14 +5519,31 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "trueno-cuda-edge",
- "trueno-gpu",
+ "trueno-cuda-edge 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "trueno-gpu 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)",
  "trueno-graph",
- "trueno-quant 0.1.0",
+ "trueno-quant 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu 27.0.1",
+]
+
+[[package]]
+name = "trueno"
+version = "0.16.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2676205d0af0b161e0fb1805ed6b5cbfe32d10d3630d3572609c7fa07d53816e"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hostname",
+ "num_cpus",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "toml",
+ "trueno-quant 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5537,7 +5554,17 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.17",
- "trueno-gpu",
+ "trueno-gpu 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "trueno-cuda-edge"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02f8ab856a9d76851d12d0f02d09017046ac5bbb232c75c5cf00d0f7bb23ce61"
+dependencies = [
+ "serde",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -5583,7 +5610,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.17",
- "trueno-gpu",
+ "trueno-gpu 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5606,6 +5633,17 @@ dependencies = [
  "trueno-viz",
  "wasm-bindgen",
  "wgpu 24.0.5",
+]
+
+[[package]]
+name = "trueno-gpu"
+version = "0.4.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57884e4d63829bd5e4207f1bd84d18e005c7182d2c22c0a816eaf6e29f9fe2e5"
+dependencies = [
+ "batuta-common",
+ "libloading",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
