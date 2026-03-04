@@ -4,7 +4,10 @@
 //! cargo run --example solver_demo -p trueno-solve
 //! ```
 
-use trueno_solve::{cholesky, lu_factorize, qr_factorize, svd, syr2k, syrk, symm, trmm, trsm};
+use trueno_solve::{
+    cholesky, f32_to_f16, gemm_ex, gemm_strided_batched, lu_factorize, qr_factorize, svd, syr2k,
+    syrk, symm, trmm, trsm,
+};
 use trueno_solve::{DiagonalType, TriangularSide};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -70,6 +73,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     symm(&a_sym, &b_sym, &mut c_sym, 2, 2, 1.0, 0.0)?;
     println!("symm: [{:.1}, {:.1}; {:.1}, {:.1}]",
         c_sym[0], c_sym[1], c_sym[2], c_sym[3]);
+
+    // ── gemmEx (mixed-precision f16→f32) ───────────────────
+    println!("\n--- gemmEx (mixed-precision) ---");
+    let a_f16: Vec<u16> = [1.0, 2.0, 3.0, 4.0_f32]
+        .iter()
+        .map(|&v| f32_to_f16(v))
+        .collect();
+    let b_f16: Vec<u16> = [5.0, 6.0, 7.0, 8.0_f32]
+        .iter()
+        .map(|&v| f32_to_f16(v))
+        .collect();
+    let mut c_ex = [0.0_f32; 4];
+    gemm_ex(&a_f16, &b_f16, &mut c_ex, 2, 2, 2, 1.0, 0.0)?;
+    println!(
+        "f16 matmul: [{:.1}, {:.1}; {:.1}, {:.1}]",
+        c_ex[0], c_ex[1], c_ex[2], c_ex[3]
+    );
+
+    // ── gemmStridedBatched ───────────────────────────────
+    println!("\n--- gemmStridedBatched ---");
+    let a_batch = [1.0, 0.0, 0.0, 1.0, 2.0, 0.0, 0.0, 2.0_f32]; // 2 batches of 2×2
+    let b_batch = [3.0, 4.0, 5.0, 6.0, 1.0, 1.0, 1.0, 1.0_f32];
+    let mut c_batch = [0.0_f32; 8];
+    gemm_strided_batched(
+        &a_batch, 4, &b_batch, 4, &mut c_batch, 4, 2, 2, 2, 2, 1.0, 0.0,
+    )?;
+    println!(
+        "Batch 0: [{:.1}, {:.1}; {:.1}, {:.1}]",
+        c_batch[0], c_batch[1], c_batch[2], c_batch[3]
+    );
+    println!(
+        "Batch 1: [{:.1}, {:.1}; {:.1}, {:.1}]",
+        c_batch[4], c_batch[5], c_batch[6], c_batch[7]
+    );
 
     println!("\n=== All solver demos passed ===");
     Ok(())

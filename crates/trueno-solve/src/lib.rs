@@ -32,7 +32,7 @@ mod trsm;
 #[cfg(test)]
 mod tests;
 
-pub use blas3::{symm, syr2k, syrk, trmm};
+pub use blas3::{f32_to_f16, gemm_ex, gemm_strided_batched, symm, syr2k, syrk, trmm};
 pub use cholesky::{cholesky, CholeskyFactorization};
 pub use error::SolverError;
 pub use lu::{lu_factorize, LuFactorization};

@@ -654,3 +654,137 @@ fn test_syr2k_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
     assert!((c[3] - 9.0).abs() < 1e-5);
     Ok(())
 }
+
+// ============================================================================
+// gemmEx (mixed-precision) tests
+// ============================================================================
+
+use crate::blas3::{f32_to_f16, gemm_ex, gemm_strided_batched};
+
+#[test]
+fn test_gemm_ex_identity() -> Result<(), Box<dyn std::error::Error>> {
+    // A = 2×2 identity in f16, B = [[1,2],[3,4]] in f16
+    let a = [f32_to_f16(1.0), f32_to_f16(0.0), f32_to_f16(0.0), f32_to_f16(1.0)];
+    let b = [f32_to_f16(1.0), f32_to_f16(2.0), f32_to_f16(3.0), f32_to_f16(4.0)];
+    let mut c = [0.0_f32; 4];
+    gemm_ex(&a, &b, &mut c, 2, 2, 2, 1.0, 0.0)?;
+    assert!((c[0] - 1.0).abs() < 1e-3);
+    assert!((c[1] - 2.0).abs() < 1e-3);
+    assert!((c[2] - 3.0).abs() < 1e-3);
+    assert!((c[3] - 4.0).abs() < 1e-3);
+    Ok(())
+}
+
+#[test]
+fn test_gemm_ex_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
+    // C = 2·A·B + 0.5·C where A=B=I, C=[10,0,0,10]
+    let i16 = [f32_to_f16(1.0), f32_to_f16(0.0), f32_to_f16(0.0), f32_to_f16(1.0)];
+    let mut c = [10.0, 0.0, 0.0, 10.0_f32];
+    gemm_ex(&i16, &i16, &mut c, 2, 2, 2, 2.0, 0.5)?;
+    // C = 2·I + 0.5·[10,0,0,10] = [[2+5, 0], [0, 2+5]] = [[7, 0], [0, 7]]
+    assert!((c[0] - 7.0).abs() < 1e-3);
+    assert!((c[3] - 7.0).abs() < 1e-3);
+    Ok(())
+}
+
+#[test]
+fn test_gemm_ex_matmul_2x3_3x2() -> Result<(), Box<dyn std::error::Error>> {
+    // A = [[1,2,3],[4,5,6]], B = [[7,8],[9,10],[11,12]]
+    let a: Vec<u16> = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let b: Vec<u16> = [7.0, 8.0, 9.0, 10.0, 11.0, 12.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let mut c = [0.0_f32; 4];
+    gemm_ex(&a, &b, &mut c, 2, 2, 3, 1.0, 0.0)?;
+    // C = [[58, 64], [139, 154]]
+    assert!((c[0] - 58.0).abs() < 0.5);
+    assert!((c[1] - 64.0).abs() < 0.5);
+    assert!((c[2] - 139.0).abs() < 0.5);
+    assert!((c[3] - 154.0).abs() < 0.5);
+    Ok(())
+}
+
+#[test]
+fn test_f16_roundtrip() {
+    // Test f32 → f16 → f32 roundtrip for representable values
+    let vals = [0.0_f32, 1.0, -1.0, 0.5, 65504.0];
+    for &v in &vals {
+        let h = f32_to_f16(v);
+        // Use gemm_ex with 1×1 identity to convert back (α=1, β=0)
+        let mut c = [0.0_f32];
+        gemm_ex(&[h], &[f32_to_f16(1.0)], &mut c, 1, 1, 1, 1.0, 0.0)
+            .expect("gemm_ex roundtrip ok");
+        assert!((c[0] - v).abs() < 0.01, "f16 roundtrip failed for {v}: got {}", c[0]);
+    }
+}
+
+// ============================================================================
+// gemmStridedBatched tests
+// ============================================================================
+
+#[test]
+fn test_gemm_strided_batched_single() -> Result<(), Box<dyn std::error::Error>> {
+    // Single batch: same as regular GEMM
+    let a = [1.0, 2.0, 3.0, 4.0_f32]; // 2×2
+    let b = [5.0, 6.0, 7.0, 8.0_f32]; // 2×2
+    let mut c = [0.0_f32; 4];
+    gemm_strided_batched(&a, 4, &b, 4, &mut c, 4, 1, 2, 2, 2, 1.0, 0.0)?;
+    // C = [[1·5+2·7, 1·6+2·8], [3·5+4·7, 3·6+4·8]] = [[19,22],[43,50]]
+    assert!((c[0] - 19.0).abs() < 1e-5);
+    assert!((c[1] - 22.0).abs() < 1e-5);
+    assert!((c[2] - 43.0).abs() < 1e-5);
+    assert!((c[3] - 50.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_gemm_strided_batched_two_batches() -> Result<(), Box<dyn std::error::Error>> {
+    // Two batches of 2×2 matmuls
+    // Batch 0: A=I, B=[[1,2],[3,4]] → C=[[1,2],[3,4]]
+    // Batch 1: A=[[2,0],[0,2]], B=[[1,0],[0,1]] → C=[[2,0],[0,2]]
+    let a = [1.0, 0.0, 0.0, 1.0, 2.0, 0.0, 0.0, 2.0_f32];
+    let b = [1.0, 2.0, 3.0, 4.0, 1.0, 0.0, 0.0, 1.0_f32];
+    let mut c = [0.0_f32; 8];
+    gemm_strided_batched(&a, 4, &b, 4, &mut c, 4, 2, 2, 2, 2, 1.0, 0.0)?;
+    // Batch 0
+    assert!((c[0] - 1.0).abs() < 1e-5);
+    assert!((c[1] - 2.0).abs() < 1e-5);
+    assert!((c[2] - 3.0).abs() < 1e-5);
+    assert!((c[3] - 4.0).abs() < 1e-5);
+    // Batch 1
+    assert!((c[4] - 2.0).abs() < 1e-5);
+    assert!((c[5] - 0.0).abs() < 1e-5);
+    assert!((c[6] - 0.0).abs() < 1e-5);
+    assert!((c[7] - 2.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_gemm_strided_batched_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
+    let a = [1.0, 0.0, 0.0, 1.0_f32]; // I
+    let b = [1.0, 0.0, 0.0, 1.0_f32]; // I
+    let mut c = [10.0, 0.0, 0.0, 10.0_f32];
+    // C = 3·I·I + 0.5·C = [[3+5, 0], [0, 3+5]] = [[8, 0], [0, 8]]
+    gemm_strided_batched(&a, 4, &b, 4, &mut c, 4, 1, 2, 2, 2, 3.0, 0.5)?;
+    assert!((c[0] - 8.0).abs() < 1e-5);
+    assert!((c[3] - 8.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_gemm_strided_batched_zero_batch() -> Result<(), Box<dyn std::error::Error>> {
+    let a = [1.0_f32; 4];
+    let b = [1.0_f32; 4];
+    let mut c = [999.0_f32; 4];
+    gemm_strided_batched(&a, 4, &b, 4, &mut c, 4, 0, 2, 2, 2, 1.0, 0.0)?;
+    // Zero batches: C unchanged
+    assert!((c[0] - 999.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_gemm_ex_buffer_mismatch() {
+    let a = [f32_to_f16(1.0); 4]; // 2×2
+    let b = [f32_to_f16(1.0); 2]; // only 2 elements, need 4 for 2×2
+    let mut c = [0.0_f32; 4];
+    let result = gemm_ex(&a, &b, &mut c, 2, 2, 2, 1.0, 0.0);
+    assert!(result.is_err());
+}

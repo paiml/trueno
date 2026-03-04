@@ -8,10 +8,10 @@ Trueno achieves feature parity with NVIDIA's CUDA library ecosystem through six 
 |---|---|---|---|---|
 | **cuSPARSE** | `trueno-sparse` | CSR/COO/BSR/SELL, SpMV, SpMM, SpGEMM | 41 | Complete (CPU) |
 | **cuFFT** | `trueno-fft` | Stockham 1D/2D/3D, R2C/C2R, Bluestein, Batched | 36 | Complete (CPU) |
-| **cuSOLVER** | `trueno-solve` | LU, QR, SVD, Cholesky, TRSM, syrk/syr2k/trmm/symm | 39 | Complete (CPU) |
+| **cuSOLVER** | `trueno-solve` | LU, QR, SVD, Cholesky, TRSM, syrk/syr2k/trmm/symm, gemmEx, gemmStridedBatched | 48 | Complete (CPU) |
 | **NPP** | `trueno-image` | Conv2D, Gaussian, Sobel, Canny, histogram, morphology, resize (4 modes), color, CC | 48 | Complete (CPU) |
 | **cuRAND** | `trueno-rand` | Philox 4×32-10, Threefry 4×64-20 (uniform, normal, stateless) | 24 | Complete (CPU) |
-| **cuTENSOR** | `trueno-tensor` | Einstein summation (TTGT), matmul, outer, trace | 22 | Complete (CPU) |
+| **cuTENSOR** | `trueno-tensor` | Einstein summation (TTGT), einsum_nary, matmul, outer, trace | 28 | Complete (CPU) |
 
 ## Provable Contracts
 
@@ -31,6 +31,7 @@ Each crate has YAML contracts in `contracts/` with formal proof obligations mapp
 | `solve-cholesky-v1.yaml` | trueno-solve | SPD reconstruction, non-SPD rejection |
 | `blas-trsm-v1.yaml` | trueno-solve | AX = B within backward error |
 | `blas-level3-v1.yaml` | trueno-solve | syrk symmetry, trmm identity |
+| `blas-gemmex-v1.yaml` | trueno-solve | f16 roundtrip, batch independence |
 | `image-conv2d-v1.yaml` | trueno-image | Identity preservation, linearity |
 | `image-canny-v1.yaml` | trueno-image | Binary output, constant → no edges |
 | `image-resize-v1.yaml` | trueno-image | Constant preservation, identity resize |

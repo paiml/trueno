@@ -1,6 +1,6 @@
 //! Tensor contraction demo — Einstein summation via TTGT.
 
-use trueno_tensor::{einsum, matmul, outer, trace, Tensor};
+use trueno_tensor::{einsum, einsum_nary, matmul, outer, trace, Tensor};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== trueno-tensor: Einstein Summation Demo ===\n");
@@ -40,7 +40,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let m = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
     let mt = m.transpose(&[1, 0]);
     println!("Transpose (2x3 -> 3x2):");
-    println!("  shape={:?}, data={:?}", mt.shape(), mt.data());
+    println!("  shape={:?}, data={:?}\n", mt.shape(), mt.data());
+
+    // N-ary einsum: chain of 3 matmuls
+    let ma = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    let mb = Tensor::new(
+        vec![3, 4],
+        vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0],
+    )?;
+    let mc = Tensor::new(
+        vec![4, 2],
+        vec![1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0],
+    )?;
+    let chain = einsum_nary("ij,jk,kl->il", &[&ma, &mb, &mc])?;
+    println!("N-ary einsum (3 matmuls, 2×3 × 3×4 × 4×2 → 2×2):");
+    println!("  shape={:?}, data={:?}", chain.shape(), chain.data());
 
     Ok(())
 }
