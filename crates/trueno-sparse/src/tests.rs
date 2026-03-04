@@ -704,3 +704,43 @@ fn test_sell_properties() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(sell.slice_size(), 2);
     Ok(())
 }
+
+// ── SparseBackend trait tests ──────────────────────────────────
+
+use crate::ops::{ScalarBackend, SparseBackend};
+
+#[test]
+fn test_scalar_backend_spmv() -> Result<(), Box<dyn std::error::Error>> {
+    // 3×3 identity via scalar backend
+    let csr = CsrMatrix::new(
+        3, 3,
+        vec![0, 1, 2, 3],
+        vec![0, 1, 2],
+        vec![1.0, 1.0, 1.0_f32],
+    )?;
+    let x = [2.0, 3.0, 4.0_f32];
+    let mut y = [0.0_f32; 3];
+    ScalarBackend::spmv_kernel(&csr, 1.0, &x, 0.0, &mut y);
+    assert!((y[0] - 2.0).abs() < 1e-5);
+    assert!((y[1] - 3.0).abs() < 1e-5);
+    assert!((y[2] - 4.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_scalar_backend_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
+    let csr = CsrMatrix::new(
+        2, 2,
+        vec![0, 1, 2],
+        vec![0, 1],
+        vec![3.0, 5.0_f32],
+    )?;
+    let x = [1.0, 1.0_f32];
+    let mut y = [10.0, 20.0_f32];
+    ScalarBackend::spmv_kernel(&csr, 2.0, &x, 0.5, &mut y);
+    // y[0] = 2.0 * 3.0 + 0.5 * 10.0 = 11.0
+    // y[1] = 2.0 * 5.0 + 0.5 * 20.0 = 20.0
+    assert!((y[0] - 11.0).abs() < 1e-5);
+    assert!((y[1] - 20.0).abs() < 1e-5);
+    Ok(())
+}

@@ -46,7 +46,11 @@ pub use bsr::BsrMatrix;
 pub use coo::CooMatrix;
 pub use csr::CsrMatrix;
 pub use error::SparseError;
-pub use ops::SparseOps;
+pub use ops::{ScalarBackend, SparseBackend, SparseOps};
+#[cfg(target_arch = "x86_64")]
+pub use ops::Avx2Backend;
+#[cfg(target_arch = "aarch64")]
+pub use ops::NeonBackend;
 pub use sell::SellMatrix;
 pub use spgemm::spgemm;
 pub use validate::validate_csr_invariants;

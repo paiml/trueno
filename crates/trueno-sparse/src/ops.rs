@@ -17,6 +17,55 @@
 use crate::csr::CsrMatrix;
 use crate::error::SparseError;
 
+/// Backend dispatch trait for pluggable SIMD SpMV kernels.
+///
+/// Implementations provide SpMV for a specific hardware target.
+/// The default dispatch in `SparseOps::spmv` selects the best
+/// available backend at runtime.
+pub trait SparseBackend {
+    /// Perform SpMV: `y = alpha * A * x + beta * y` using this backend.
+    fn spmv_kernel(
+        a: &CsrMatrix<f32>,
+        alpha: f32,
+        x: &[f32],
+        beta: f32,
+        y: &mut [f32],
+    );
+}
+
+/// Scalar (portable) SpMV backend.
+pub struct ScalarBackend;
+
+impl SparseBackend for ScalarBackend {
+    fn spmv_kernel(a: &CsrMatrix<f32>, alpha: f32, x: &[f32], beta: f32, y: &mut [f32]) {
+        spmv_csr_scalar(a, alpha, x, beta, y);
+    }
+}
+
+/// AVX2 SpMV backend (x86_64 with AVX2+FMA).
+#[cfg(target_arch = "x86_64")]
+pub struct Avx2Backend;
+
+#[cfg(target_arch = "x86_64")]
+impl SparseBackend for Avx2Backend {
+    fn spmv_kernel(a: &CsrMatrix<f32>, alpha: f32, x: &[f32], beta: f32, y: &mut [f32]) {
+        // SAFETY: caller must ensure AVX2+FMA is available
+        unsafe { spmv_csr_avx2(a, alpha, x, beta, y) }
+    }
+}
+
+/// NEON SpMV backend stub (aarch64).
+#[cfg(target_arch = "aarch64")]
+pub struct NeonBackend;
+
+#[cfg(target_arch = "aarch64")]
+impl SparseBackend for NeonBackend {
+    fn spmv_kernel(a: &CsrMatrix<f32>, alpha: f32, x: &[f32], beta: f32, y: &mut [f32]) {
+        // NEON dispatch not yet implemented — falls back to scalar
+        spmv_csr_scalar(a, alpha, x, beta, y);
+    }
+}
+
 /// Sparse matrix operations trait.
 ///
 /// Provides SpMV and SpMM with provable error bounds.

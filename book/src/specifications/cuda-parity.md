@@ -6,10 +6,10 @@ Trueno achieves feature parity with NVIDIA's CUDA library ecosystem through six 
 
 | CUDA Library | Trueno Crate | Operations | Tests | Status |
 |---|---|---|---|---|
-| **cuSPARSE** | `trueno-sparse` | CSR/COO/BSR/SELL, SpMV, SpMM, SpGEMM | 41 | Complete (CPU) |
-| **cuFFT** | `trueno-fft` | Stockham 1D/2D/3D, R2C/C2R, Bluestein, Batched | 36 | Complete (CPU) |
+| **cuSPARSE** | `trueno-sparse` | CSR/COO/BSR/SELL, SpMV, SpMM, SpGEMM, SparseBackend trait | 43 | Complete (CPU) |
+| **cuFFT** | `trueno-fft` | Stockham 1D/2D/3D, R2C/C2R, Bluestein, Batched, Fft trait | 39 | Complete (CPU) |
 | **cuSOLVER** | `trueno-solve` | LU, QR, SVD, Cholesky, TRSM, syrk/syr2k/trmm/symm, gemmEx, gemmStridedBatched | 48 | Complete (CPU) |
-| **NPP** | `trueno-image` | Conv2D, Gaussian, Sobel, Canny, histogram, morphology, resize (4 modes), color, CC | 48 | Complete (CPU) |
+| **NPP** | `trueno-image` | Conv2D, Gaussian, Sobel, Canny, histogram, morphology, resize (4 modes), color, CC, ImageBuf | 53 | Complete (CPU) |
 | **cuRAND** | `trueno-rand` | Philox 4×32-10, Threefry 4×64-20 (uniform, normal, stateless) | 24 | Complete (CPU) |
 | **cuTENSOR** | `trueno-tensor` | Einstein summation (TTGT), einsum_nary, matmul, outer, trace | 28 | Complete (CPU) |
 
