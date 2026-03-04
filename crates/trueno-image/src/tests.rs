@@ -1,6 +1,9 @@
 //! Image processing tests — provable contracts and falsification.
 
 use crate::conv::*;
+use crate::histogram::{cumulative_histogram, equalize, histogram};
+use crate::morphology::{closing, dilate, erode, opening};
+use crate::resize::{resize, Interpolation};
 
 // ============================================================================
 // FALSIFY-IMG-002: Identity kernel preserves input
@@ -294,4 +297,157 @@ mod proptests {
             }
         }
     }
+}
+
+// ============================================================================
+// Histogram
+// ============================================================================
+
+#[test]
+fn test_histogram_uniform() -> Result<(), Box<dyn std::error::Error>> {
+    let image: Vec<f32> = (0..256).map(|i| i as f32 / 255.0).collect();
+    let hist = histogram(&image, 16, 16, 256)?;
+    let total: u32 = hist.iter().sum();
+    assert_eq!(total, 256);
+    Ok(())
+}
+
+#[test]
+fn test_histogram_constant() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.5f32; 100];
+    let hist = histogram(&image, 10, 10, 10)?;
+    let total: u32 = hist.iter().sum();
+    assert_eq!(total, 100);
+    assert_eq!(hist[5], 100);
+    Ok(())
+}
+
+#[test]
+fn test_cumulative_histogram() {
+    let hist = vec![1, 2, 3, 4u32];
+    let cdf = cumulative_histogram(&hist);
+    assert_eq!(cdf, vec![1, 3, 6, 10]);
+}
+
+#[test]
+fn test_equalize_constant() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.5f32; 25];
+    let eq = equalize(&image, 5, 5, 10)?;
+    let first = eq[0];
+    for &v in &eq {
+        assert!((v - first).abs() < 1e-6);
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Morphology
+// ============================================================================
+
+#[test]
+fn test_dilate_expands() -> Result<(), Box<dyn std::error::Error>> {
+    let mut image = vec![0.0f32; 25];
+    image[12] = 1.0;
+    let se = vec![1.0f32; 9];
+    let result = dilate(&image, 5, 5, &se, 3, 3)?;
+    assert!((result[12] - 1.0).abs() < 1e-6);
+    assert!((result[7] - 1.0).abs() < 1e-6);
+    assert!((result[17] - 1.0).abs() < 1e-6);
+    assert!((result[11] - 1.0).abs() < 1e-6);
+    assert!((result[13] - 1.0).abs() < 1e-6);
+    Ok(())
+}
+
+#[test]
+fn test_erode_shrinks() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![1.0f32; 25];
+    let se = vec![1.0f32; 9];
+    let result = erode(&image, 5, 5, &se, 3, 3)?;
+    assert!((result[12] - 1.0).abs() < 1e-6);
+    Ok(())
+}
+
+#[test]
+fn test_opening_removes_small_bright() -> Result<(), Box<dyn std::error::Error>> {
+    let mut image = vec![0.0f32; 25];
+    image[12] = 1.0;
+    let se = vec![1.0f32; 9];
+    let result = opening(&image, 5, 5, &se, 3, 3)?;
+    assert!(result[12] < 0.5);
+    Ok(())
+}
+
+#[test]
+fn test_closing_fills_small_dark() -> Result<(), Box<dyn std::error::Error>> {
+    let mut image = vec![1.0f32; 25];
+    image[12] = 0.0;
+    let se = vec![1.0f32; 9];
+    let result = closing(&image, 5, 5, &se, 3, 3)?;
+    assert!(result[12] > 0.5);
+    Ok(())
+}
+
+#[test]
+fn test_dilate_erode_duality() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.5f32; 25];
+    let se = vec![1.0f32; 9];
+    let d = dilate(&image, 5, 5, &se, 3, 3)?;
+    let e = erode(&image, 5, 5, &se, 3, 3)?;
+    for i in 0..25 {
+        assert!((d[i] - 0.5).abs() < 1e-6);
+        assert!((e[i] - 0.5).abs() < 1e-6);
+    }
+    Ok(())
+}
+
+// ============================================================================
+// Resize
+// ============================================================================
+
+#[test]
+fn test_resize_nearest_identity() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![1.0, 2.0, 3.0, 4.0f32];
+    let result = resize(&image, 2, 2, 2, 2, Interpolation::Nearest)?;
+    for i in 0..4 {
+        assert!((result[i] - image[i]).abs() < 1e-6);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_resize_bilinear_identity() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![1.0, 2.0, 3.0, 4.0f32];
+    let result = resize(&image, 2, 2, 2, 2, Interpolation::Bilinear)?;
+    for i in 0..4 {
+        assert!((result[i] - image[i]).abs() < 1e-5);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_resize_upscale_nearest() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.5f32];
+    let result = resize(&image, 1, 1, 4, 4, Interpolation::Nearest)?;
+    assert_eq!(result.len(), 16);
+    for &v in &result {
+        assert!((v - 0.5).abs() < 1e-6);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_resize_downscale_bilinear() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.7f32; 16];
+    let result = resize(&image, 4, 4, 2, 2, Interpolation::Bilinear)?;
+    assert_eq!(result.len(), 4);
+    for &v in &result {
+        assert!((v - 0.7).abs() < 1e-5);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_resize_zero_output() {
+    let image = vec![1.0f32; 4];
+    assert!(resize(&image, 2, 2, 0, 2, Interpolation::Nearest).is_err());
 }

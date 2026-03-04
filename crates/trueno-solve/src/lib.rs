@@ -26,6 +26,7 @@ mod error;
 mod lu;
 mod qr;
 mod svd;
+mod trsm;
 
 #[cfg(test)]
 mod tests;
@@ -35,3 +36,4 @@ pub use error::SolverError;
 pub use lu::{lu_factorize, LuFactorization};
 pub use qr::{qr_factorize, QrFactorization};
 pub use svd::{svd, SvdResult};
+pub use trsm::{trsm, DiagonalType, TriangularSide, TrsmResult};

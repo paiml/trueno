@@ -4,6 +4,7 @@ use crate::cholesky::cholesky;
 use crate::lu::lu_factorize;
 use crate::qr::qr_factorize;
 use crate::svd::svd;
+use crate::trsm::{trsm, DiagonalType, TriangularSide};
 
 // ============================================================================
 // LU factorization tests
@@ -390,4 +391,94 @@ mod proptests {
             }
         }
     }
+}
+
+// ============================================================================
+// TRSM (Triangular Solve AX = B)
+// ============================================================================
+
+#[test]
+fn test_trsm_lower_2x2() -> Result<(), Box<dyn std::error::Error>> {
+    // L = [[2, 0], [3, 4]], B = [[1], [2]]
+    // Lx = b => x0 = 1/2, x1 = (2 - 3*0.5)/4 = 0.125
+    let l = [2.0, 0.0, 3.0, 4.0_f32];
+    let b = [1.0, 2.0_f32];
+    let result = trsm(&l, &b, 2, 1, TriangularSide::Lower, DiagonalType::NonUnit)?;
+    assert!((result.x[0] - 0.5).abs() < 1e-5);
+    assert!((result.x[1] - 0.125).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_trsm_upper_2x2() -> Result<(), Box<dyn std::error::Error>> {
+    // U = [[3, 1], [0, 2]], B = [[5], [4]]
+    // x1 = 4/2 = 2, x0 = (5 - 1*2)/3 = 1
+    let u = [3.0, 1.0, 0.0, 2.0_f32];
+    let b = [5.0, 4.0_f32];
+    let result = trsm(&u, &b, 2, 1, TriangularSide::Upper, DiagonalType::NonUnit)?;
+    assert!((result.x[0] - 1.0).abs() < 1e-5);
+    assert!((result.x[1] - 2.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_trsm_unit_diagonal() -> Result<(), Box<dyn std::error::Error>> {
+    // L = [[1, 0], [3, 1]], B = [[1], [5]]  (unit diagonal)
+    // x0 = 1, x1 = 5 - 3*1 = 2
+    let l = [1.0, 0.0, 3.0, 1.0_f32];
+    let b = [1.0, 5.0_f32];
+    let result = trsm(&l, &b, 2, 1, TriangularSide::Lower, DiagonalType::Unit)?;
+    assert!((result.x[0] - 1.0).abs() < 1e-5);
+    assert!((result.x[1] - 2.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_trsm_multiple_rhs() -> Result<(), Box<dyn std::error::Error>> {
+    // L = [[2, 0], [1, 3]], B = [[2, 4], [5, 7]]  (n=2, nrhs=2)
+    let l = [2.0, 0.0, 1.0, 3.0_f32];
+    let b = [2.0, 4.0, 5.0, 7.0_f32];
+    let result = trsm(&l, &b, 2, 2, TriangularSide::Lower, DiagonalType::NonUnit)?;
+    // Column 0: x0=2/2=1, x1=(5-1*1)/3=4/3
+    assert!((result.x[0] - 1.0).abs() < 1e-5);
+    assert!((result.x[2] - 4.0 / 3.0).abs() < 1e-4);
+    // Column 1: x0=4/2=2, x1=(7-1*2)/3=5/3
+    assert!((result.x[1] - 2.0).abs() < 1e-5);
+    assert!((result.x[3] - 5.0 / 3.0).abs() < 1e-4);
+    Ok(())
+}
+
+#[test]
+fn test_trsm_backward_error() -> Result<(), Box<dyn std::error::Error>> {
+    // Verify ||AX - B||/||B|| is small
+    let l = [3.0, 0.0, 0.0, 2.0, 5.0, 0.0, 1.0, 4.0, 6.0_f32];
+    let b = [1.0, 2.0, 3.0_f32];
+    let result = trsm(&l, &b, 3, 1, TriangularSide::Lower, DiagonalType::NonUnit)?;
+
+    // Compute AX
+    let n = 3;
+    let mut ax = vec![0.0f32; n];
+    for i in 0..n {
+        for j in 0..n {
+            ax[i] += l[i * n + j] * result.x[j];
+        }
+    }
+    // ||AX - B|| / ||B||
+    let mut num = 0.0f32;
+    let mut den = 0.0f32;
+    for i in 0..n {
+        num += (ax[i] - b[i]).powi(2);
+        den += b[i].powi(2);
+    }
+    let rel_err = (num / den).sqrt();
+    assert!(rel_err < 1e-5, "TRSM backward error {rel_err} too large");
+    Ok(())
+}
+
+#[test]
+fn test_trsm_singular_detected() {
+    let a = [1.0, 0.0, 0.0, 0.0_f32]; // zero diagonal at (1,1)
+    let b = [1.0, 2.0_f32];
+    let result = trsm(&a, &b, 2, 1, TriangularSide::Lower, DiagonalType::NonUnit);
+    assert!(result.is_err());
 }

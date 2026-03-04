@@ -19,6 +19,9 @@
 
 mod conv;
 mod error;
+mod histogram;
+mod morphology;
+mod resize;
 
 #[cfg(test)]
 mod tests;
@@ -27,3 +30,6 @@ pub use conv::{
     canny, conv2d, gaussian_blur, gradient_magnitude, separable_conv2d, sobel, BorderMode,
 };
 pub use error::ImageError;
+pub use histogram::{cumulative_histogram, equalize, histogram};
+pub use morphology::{closing, dilate, erode, opening};
+pub use resize::{resize, Interpolation};

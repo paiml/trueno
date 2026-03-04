@@ -1,0 +1,35 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Triangular solve AX=B (TRSM) — cuBLAS parity"
+  crate: "trueno-solve"
+  references:
+    - "Golub & Van Loan, 'Matrix Computations', 4th ed., 2013"
+
+equations:
+  trsm:
+    formula: "AX = B where A is triangular (lower or upper)"
+    domain: "A ∈ ℝ^{n×n} triangular non-singular, B ∈ ℝ^{n×nrhs}"
+    codomain: "X ∈ ℝ^{n×nrhs}"
+    invariants:
+      - "||AX - B||_F / ||B||_F < n · u"
+      - "Singular matrix detected (zero diagonal)"
+
+proof_obligations:
+  - type: invariant
+    property: "Backward error"
+    formal: "||AX - B||_F / ||B||_F < n · u"
+    applies_to: all
+
+  - type: error
+    property: "Singular detection"
+    formal: "returns Err(SingularMatrix) when diagonal is zero"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-TRSM-001
+    rule: "Backward error"
+    test: "test_trsm_backward_error"
+  - id: FALSIFY-TRSM-002
+    rule: "Singular detection"
+    test: "test_trsm_singular_detected"

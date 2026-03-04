@@ -33,12 +33,14 @@
 //! - Merrill & Garland, "Merge-Based Parallel SpMV", PPoPP 2016
 //! - LAProof (Princeton): formal backward error bounds for CSR SpMV
 
+mod bsr;
 mod csr;
 mod coo;
 mod error;
 mod ops;
 mod validate;
 
+pub use bsr::BsrMatrix;
 pub use coo::CooMatrix;
 pub use csr::CsrMatrix;
 pub use error::SparseError;
