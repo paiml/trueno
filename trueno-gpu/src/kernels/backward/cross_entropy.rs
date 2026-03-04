@@ -32,7 +32,7 @@ use crate::ptx::{PtxKernel, PtxReg, PtxType};
 /// Fused cross-entropy loss + softmax backward kernel.
 ///
 /// Each block processes one sequence position (one row of vocab_size elements).
-/// Outputs gradient directly to GPU buffer and per-position loss partials.
+/// Writes gradient **in-place** to the logits buffer (KAIZEN-052) and per-position loss partials.
 ///
 /// # Contract (C-XENT-001)
 ///
@@ -76,13 +76,15 @@ impl Kernel for FusedCrossEntropyKernel {
         // [68..72)  = global sum (4 bytes)
         let smem_size = (n_warps * 2 + 2) * 4;
 
+        // KAIZEN-052: In-place operation — gradient written back to logits buffer.
+        // Phase 3 reads each logit once and writes gradient to the same address.
+        // Phases 1-2 complete all logit reads before phase 3 writes (barrier-protected).
         PtxKernel::new("fused_cross_entropy")
-            .param(PtxType::U64, "logits_ptr")    // [seq_len, vocab_size] f32
-            .param(PtxType::U64, "targets_ptr")   // [seq_len] u32
-            .param(PtxType::U64, "grad_ptr")      // [seq_len, vocab_size] f32 (output)
-            .param(PtxType::U64, "loss_ptr")      // [seq_len] f32 (output)
+            .param(PtxType::U64, "logits_grad_ptr") // [seq_len, vocab_size] f32 — logits in, grad out
+            .param(PtxType::U64, "targets_ptr")     // [seq_len] u32
+            .param(PtxType::U64, "loss_ptr")        // [seq_len] f32 (output)
             .param(PtxType::U32, "vocab_size")
-            .param(PtxType::F32, "scale")          // 1.0 / seq_len (or 1/(seq_len * accum_steps))
+            .param(PtxType::F32, "scale")            // 1.0 / seq_len (or 1/(seq_len * accum_steps))
             .shared_memory(smem_size as usize)
             .build(|ctx| {
                 let tid = ctx.special_reg(PtxReg::TidX);
@@ -94,9 +96,8 @@ impl Kernel for FusedCrossEntropyKernel {
                 let warp_id = ctx.shr_u32_imm(tid, 5);
 
                 let vocab_size = ctx.load_param_u32("vocab_size");
-                let logits_ptr = ctx.load_param_u64("logits_ptr");
+                let logits_grad_ptr = ctx.load_param_u64("logits_grad_ptr");
                 let targets_ptr = ctx.load_param_u64("targets_ptr");
-                let grad_ptr = ctx.load_param_u64("grad_ptr");
                 let loss_ptr = ctx.load_param_u64("loss_ptr");
                 let scale = ctx.load_param_f32("scale");
 
@@ -105,11 +106,11 @@ impl Kernel for FusedCrossEntropyKernel {
                 let target_addr = ctx.add_u64(targets_ptr, target_byte_off);
                 let target_id = ctx.ld_global_u32(target_addr);
 
-                // Row base pointers: logits_ptr + pos * vocab_size * 4
+                // Row base pointer: logits_grad_ptr + pos * vocab_size * 4
+                // KAIZEN-052: Same buffer for logits input and gradient output (in-place).
                 let row_elem_off = ctx.mul_lo_u32(pos, vocab_size);
                 let row_byte_off = ctx.mul_wide_u32(row_elem_off, 4);
-                let row_logits = ctx.add_u64(logits_ptr, row_byte_off);
-                let row_grad = ctx.add_u64(grad_ptr, row_byte_off);
+                let row_logits = ctx.add_u64(logits_grad_ptr, row_byte_off);
 
                 let zero = ctx.mov_u32_imm(0);
                 let is_lane_0 = ctx.setp_eq_u32(lane_id, zero);
@@ -300,7 +301,13 @@ impl Kernel for FusedCrossEntropyKernel {
 
                 ctx.label("skip_loss");
 
-                // All threads write gradient via grid-stride loop
+                // KAIZEN-052: Barrier ensures thread 0 has read logits[target] for loss
+                // before any thread overwrites logits with gradients (in-place).
+                ctx.bar_sync(4);
+
+                // All threads write gradient in-place via grid-stride loop.
+                // Safe because: each thread processes disjoint indices, and phases 1-2
+                // completed all reads before this point (barriers 0-3).
                 let one_f32 = ctx.mov_f32_imm(1.0);
                 let idx3 = ctx.add_u32(tid, 0);
 
@@ -329,8 +336,8 @@ impl Kernel for FusedCrossEntropyKernel {
                 // Select based on predicate
                 let grad_val = ctx.selp_f32(grad_target, grad_nontarget, is_target);
 
-                let grad_addr = ctx.add_u64(row_grad, byte_off3);
-                ctx.st_global_f32(grad_addr, grad_val);
+                // KAIZEN-052: Write gradient to same address as logits (in-place)
+                ctx.st_global_f32(addr3, grad_val);
 
                 ctx.add_u32_reg_inplace(idx3, ntid);
                 ctx.branch("grad_loop");
@@ -363,12 +370,13 @@ mod tests {
         let ptx = kernel.emit_ptx();
 
         assert!(ptx.contains(".entry fused_cross_entropy"));
-        assert!(ptx.contains(".param .u64 logits_ptr"));
+        assert!(ptx.contains(".param .u64 logits_grad_ptr"));
         assert!(ptx.contains(".param .u64 targets_ptr"));
-        assert!(ptx.contains(".param .u64 grad_ptr"));
         assert!(ptx.contains(".param .u64 loss_ptr"));
         assert!(ptx.contains(".param .u32 vocab_size"));
         assert!(ptx.contains(".param .f32 scale"));
+        // KAIZEN-052: No separate grad_ptr — in-place operation
+        assert!(!ptx.contains(".param .u64 grad_ptr"));
         // Verify warp shuffle
         assert!(ptx.contains("shfl.sync.down"));
         // Verify shared memory
