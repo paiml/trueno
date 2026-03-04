@@ -213,18 +213,17 @@ fn test_expected_throughput_with_fake_gpu() {
 
 #[test]
 fn test_load_invalid_toml() {
-    use std::path::PathBuf;
-    let tmp_path = PathBuf::from("/tmp/trueno_test_invalid.toml");
+    let tmp_path = Path::new("/tmp/trueno_test_invalid.toml");
 
     // Write invalid TOML
-    std::fs::write(&tmp_path, "this is not valid toml [[[").expect("Failed to write");
+    std::fs::write(tmp_path, "this is not valid toml [[[").expect("Failed to write");
 
     // Should fall back to detect
-    let cap = HardwareCapability::load_or_detect(&tmp_path);
+    let cap = HardwareCapability::load_or_detect(tmp_path);
     assert!(cap.cpu.cores > 0);
 
     // Cleanup
-    let _ = std::fs::remove_file(&tmp_path);
+    let _ = std::fs::remove_file(tmp_path);
 }
 
 #[test]
