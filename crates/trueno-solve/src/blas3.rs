@@ -1,4 +1,4 @@
-//! BLAS Level-3 operations: syrk, trmm, symm.
+//! BLAS Level-3 operations: syrk, syr2k, trmm, symm.
 //!
 //! # Contract: blas-level3-v1.yaml
 //!
@@ -49,6 +49,56 @@ fn dot_row_row(a: &[f32], k: usize, i: usize, j: usize) -> f32 {
     let mut sum = 0.0_f32;
     for p in 0..k {
         sum += a[i * k + p] * a[j * k + p];
+    }
+    sum
+}
+
+/// Symmetric rank-2k update: C = α·A·Bᵀ + α·B·Aᵀ + β·C
+///
+/// A and B are n×k, C is n×n (symmetric, stored as full matrix row-major).
+///
+/// # Errors
+///
+/// Returns error on dimension mismatch.
+pub fn syr2k(
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+    n: usize,
+    k: usize,
+    alpha: f32,
+    beta: f32,
+) -> Result<(), SolverError> {
+    validate_buffer(a, n * k, n, k)?;
+    validate_buffer(b, n * k, n, k)?;
+    validate_buffer(c, n * n, n, n)?;
+
+    // C = β·C
+    for val in c.iter_mut() {
+        *val *= beta;
+    }
+
+    // C += α·(A·Bᵀ + B·Aᵀ)
+    for i in 0..n {
+        for j in 0..=i {
+            let dot_ab = dot_rows(a, b, k, i, j);
+            let dot_ba = dot_rows(b, a, k, i, j);
+            let update = alpha * (dot_ab + dot_ba);
+            c[i * n + j] += update;
+            if i != j {
+                c[j * n + i] += update; // symmetric
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Dot product of row i of matrix a with row j of matrix b (n×k layout).
+fn dot_rows(a: &[f32], b: &[f32], k: usize, i: usize, j: usize) -> f32 {
+    let mut sum = 0.0_f32;
+    for p in 0..k {
+        sum += a[i * k + p] * b[j * k + p];
     }
     sum
 }

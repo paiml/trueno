@@ -604,3 +604,53 @@ fn test_blas3_dimension_mismatch() {
     let mut c = [0.0_f32; 3]; // wrong size
     assert!(syrk(&a, &mut c, 2, 2, 1.0, 0.0).is_err());
 }
+
+use crate::blas3::syr2k;
+
+#[test]
+fn test_syr2k_identity() -> Result<(), Box<dyn std::error::Error>> {
+    // A = B = I, C = α·(I·Iᵀ + I·Iᵀ) + β·0 = 2α·I
+    let a = [1.0, 0.0, 0.0, 1.0_f32];
+    let b = [1.0, 0.0, 0.0, 1.0_f32];
+    let mut c = [0.0_f32; 4];
+    syr2k(&a, &b, &mut c, 2, 2, 1.0, 0.0)?;
+    assert!((c[0] - 2.0).abs() < 1e-5);
+    assert!((c[3] - 2.0).abs() < 1e-5);
+    assert!(c[1].abs() < 1e-5);
+    assert!(c[2].abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_syr2k_known_value() -> Result<(), Box<dyn std::error::Error>> {
+    // A = [[1, 2]], B = [[3, 4]] (1×2 each)
+    // C = A·Bᵀ + B·Aᵀ = [1*3+2*4] + [3*1+4*2] = [11] + [11] = [22]
+    let a = [1.0, 2.0_f32];
+    let b = [3.0, 4.0_f32];
+    let mut c = [0.0_f32; 1];
+    syr2k(&a, &b, &mut c, 1, 2, 1.0, 0.0)?;
+    assert!((c[0] - 22.0).abs() < 1e-4, "got {}", c[0]);
+    Ok(())
+}
+
+#[test]
+fn test_syr2k_symmetry() -> Result<(), Box<dyn std::error::Error>> {
+    let a = [1.0, 2.0, 3.0, 4.0_f32]; // 2×2
+    let b = [5.0, 6.0, 7.0, 8.0_f32]; // 2×2
+    let mut c = [0.0_f32; 4];
+    syr2k(&a, &b, &mut c, 2, 2, 1.0, 0.0)?;
+    assert!((c[1] - c[2]).abs() < 1e-5, "Not symmetric: c[1]={}, c[2]={}", c[1], c[2]);
+    Ok(())
+}
+
+#[test]
+fn test_syr2k_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
+    let a = [1.0, 0.0, 0.0, 1.0_f32];
+    let b = [1.0, 0.0, 0.0, 1.0_f32];
+    let mut c = [10.0, 0.0, 0.0, 10.0_f32];
+    // C = 2·(I·Iᵀ + I·Iᵀ) + 0.5·C = [[4+5, 0], [0, 4+5]] = [[9, 0], [0, 9]]
+    syr2k(&a, &b, &mut c, 2, 2, 2.0, 0.5)?;
+    assert!((c[0] - 9.0).abs() < 1e-5);
+    assert!((c[3] - 9.0).abs() < 1e-5);
+    Ok(())
+}

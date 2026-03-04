@@ -38,6 +38,7 @@ mod csr;
 mod coo;
 mod error;
 mod ops;
+mod sell;
 mod spgemm;
 mod validate;
 
@@ -46,6 +47,7 @@ pub use coo::CooMatrix;
 pub use csr::CsrMatrix;
 pub use error::SparseError;
 pub use ops::SparseOps;
+pub use sell::SellMatrix;
 pub use spgemm::spgemm;
 pub use validate::validate_csr_invariants;
 
