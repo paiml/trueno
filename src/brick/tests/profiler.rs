@@ -315,8 +315,8 @@ fn test_sync_mode_default() {
 
 #[test]
 fn test_brick_id_count() {
-    assert_eq!(BrickId::COUNT, 15);
-    assert_eq!(BrickCategory::COUNT, 4);
+    assert_eq!(BrickId::COUNT, 23);
+    assert_eq!(BrickCategory::COUNT, 7);
 }
 
 // ========================================================================
