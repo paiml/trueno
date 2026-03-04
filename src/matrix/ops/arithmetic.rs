@@ -164,6 +164,9 @@ impl Matrix<f32> {
 
         let mut output = vec![0.0f32; batch * out_stride];
 
+        // KAIZEN-039: Call gemm_blis directly on sub-slices instead of
+        // Matrix::from_slice (which copies data). Eliminates 2 × batch Vec
+        // allocations per call (e.g., 64 copies for 32-head attention).
         for ba in 0..batch {
             let a_offset = ba * a_stride;
             let b_offset = ba * b_stride;
@@ -171,12 +174,19 @@ impl Matrix<f32> {
 
             let a_slice = &a_data[a_offset..a_offset + a_stride];
             let b_slice = &b_data[b_offset..b_offset + b_stride];
+            let c_slice = &mut output[out_offset..out_offset + out_stride];
 
-            let a_mat = Matrix::from_slice(m, k, a_slice)?;
-            let b_mat = Matrix::from_slice(k, n, b_slice)?;
-
-            let result = a_mat.matmul(&b_mat)?;
-            output[out_offset..out_offset + out_stride].copy_from_slice(result.as_slice());
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                crate::blis::gemm_blis(m, n, k, a_slice, b_slice, c_slice, None)?;
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                let a_mat = Matrix::from_slice(m, k, a_slice)?;
+                let b_mat = Matrix::from_slice(k, n, b_slice)?;
+                let result = a_mat.matmul(&b_mat)?;
+                c_slice.copy_from_slice(result.as_slice());
+            }
         }
 
         Ok(output)
@@ -230,6 +240,8 @@ impl Matrix<f32> {
 
         let mut output = vec![0.0f32; total_heads * out_head_stride];
 
+        // KAIZEN-039: Call gemm_blis directly — eliminates 2 × total_heads
+        // Vec copies per call (e.g., 64 copies for batch=1, heads=32).
         for bh in 0..total_heads {
             let a_offset = bh * a_head_stride;
             let b_offset = bh * b_head_stride;
@@ -237,12 +249,19 @@ impl Matrix<f32> {
 
             let a_slice = &a_data[a_offset..a_offset + a_head_stride];
             let b_slice = &b_data[b_offset..b_offset + b_head_stride];
+            let c_slice = &mut output[out_offset..out_offset + out_head_stride];
 
-            let a_mat = Matrix::from_slice(m, k, a_slice)?;
-            let b_mat = Matrix::from_slice(k, n, b_slice)?;
-
-            let result = a_mat.matmul(&b_mat)?;
-            output[out_offset..out_offset + out_head_stride].copy_from_slice(result.as_slice());
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                crate::blis::gemm_blis(m, n, k, a_slice, b_slice, c_slice, None)?;
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                let a_mat = Matrix::from_slice(m, k, a_slice)?;
+                let b_mat = Matrix::from_slice(k, n, b_slice)?;
+                let result = a_mat.matmul(&b_mat)?;
+                c_slice.copy_from_slice(result.as_slice());
+            }
         }
 
         Ok(output)
