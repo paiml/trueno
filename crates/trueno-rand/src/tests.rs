@@ -385,3 +385,111 @@ mod proptests {
         }
     }
 }
+
+// ============================================================================
+// POPPERIAN FALSIFICATION: Adversarial edge cases (GH #152)
+// ============================================================================
+
+#[test]
+fn test_falsify_fill_uniform_empty_buffer() {
+    let mut rng = Philox4x32::new(0);
+    let mut buf: Vec<f32> = vec![];
+    rng.fill_uniform(&mut buf); // should not panic
+    assert!(buf.is_empty());
+}
+
+#[test]
+fn test_falsify_fill_normal_empty_buffer() {
+    let mut rng = Philox4x32::new(0);
+    let mut buf: Vec<f32> = vec![];
+    rng.fill_normal(&mut buf); // should not panic
+    assert!(buf.is_empty());
+}
+
+#[test]
+fn test_falsify_fill_uniform_single_element() {
+    let mut rng = Philox4x32::new(42);
+    let mut buf = vec![0.0_f32; 1];
+    rng.fill_uniform(&mut buf);
+    assert!(buf[0] >= 0.0 && buf[0] < 1.0, "Single element out of range: {}", buf[0]);
+}
+
+#[test]
+fn test_falsify_fill_normal_single_element() {
+    let mut rng = Philox4x32::new(42);
+    let mut buf = vec![0.0_f32; 1];
+    rng.fill_normal(&mut buf);
+    assert!(buf[0].is_finite(), "Single element non-finite: {}", buf[0]);
+}
+
+#[test]
+fn test_falsify_sequential_calls_independent() {
+    // Two sequential fill_uniform calls should produce different values
+    let mut rng = Philox4x32::new(99);
+    let mut buf1 = vec![0.0_f32; 100];
+    let mut buf2 = vec![0.0_f32; 100];
+    rng.fill_uniform(&mut buf1);
+    rng.fill_uniform(&mut buf2);
+    // Very unlikely to be identical
+    let same = buf1.iter().zip(buf2.iter()).filter(|(&a, &b)| (a - b).abs() < 1e-10).count();
+    assert!(same < 5, "Sequential fills too similar: {same}/100 identical");
+}
+
+#[test]
+fn test_falsify_seed_zero() {
+    // Seed 0 should still produce valid output (not degenerate)
+    let mut rng = Philox4x32::new(0);
+    let mut buf = vec![0.0_f32; 1000];
+    rng.fill_uniform(&mut buf);
+    let mean: f32 = buf.iter().sum::<f32>() / buf.len() as f32;
+    assert!((mean - 0.5).abs() < 0.1, "Seed 0 mean: {mean}");
+    // Not all same value
+    let first = buf[0];
+    let all_same = buf.iter().all(|&v| (v - first).abs() < 1e-10);
+    assert!(!all_same, "Seed 0 produced degenerate constant output");
+}
+
+#[test]
+fn test_falsify_threefry_empty_buffers() {
+    let mut rng = Threefry4x64::new(0);
+    let mut buf: Vec<f32> = vec![];
+    rng.fill_uniform(&mut buf);
+    assert!(buf.is_empty());
+    rng.fill_normal(&mut buf);
+    assert!(buf.is_empty());
+}
+
+#[test]
+fn test_falsify_kolmogorov_smirnov_uniform() {
+    // KS test: max deviation of empirical CDF from theoretical U(0,1)
+    let mut rng = Philox4x32::new(404);
+    let n = 10_000;
+    let mut buf = vec![0.0_f32; n];
+    rng.fill_uniform(&mut buf);
+    buf.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut max_d = 0.0_f64;
+    for (i, &v) in buf.iter().enumerate() {
+        let empirical = (i + 1) as f64 / n as f64;
+        let theoretical = f64::from(v);
+        let d = (empirical - theoretical).abs();
+        if d > max_d {
+            max_d = d;
+        }
+    }
+    // KS critical value at α=0.01 for n=10000 ≈ 1.63/sqrt(n) ≈ 0.0163
+    assert!(
+        max_d < 0.02,
+        "KS statistic {max_d} exceeds threshold (distribution not uniform)"
+    );
+}
+
+#[test]
+fn test_falsify_normal_no_extreme_outliers() {
+    // For N(0,1), values beyond 6σ should be extremely rare (< 1 in 500M)
+    let mut rng = Philox4x32::new(505);
+    let mut buf = vec![0.0_f32; 100_000];
+    rng.fill_normal(&mut buf);
+    let outliers = buf.iter().filter(|&&v| v.abs() > 6.0).count();
+    assert!(outliers == 0, "Got {outliers} values beyond 6σ in 100K samples");
+}

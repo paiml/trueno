@@ -941,3 +941,145 @@ fn test_imageops_connected_components() -> Result<(), Box<dyn std::error::Error>
     assert_ne!(labels[0], labels[2]);
     Ok(())
 }
+
+// ============================================================================
+// POPPERIAN FALSIFICATION: Adversarial edge cases (GH #152)
+// ============================================================================
+
+#[test]
+fn test_falsify_conv2d_1x1_image() {
+    let image = vec![42.0_f32];
+    let kernel = [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0_f32];
+    let out = conv2d(&image, 1, 1, &kernel, 3, 3, BorderMode::Zero).expect("ok");
+    assert!((out[0] - 42.0).abs() < 1e-5, "1×1 identity conv: {}", out[0]);
+}
+
+#[test]
+fn test_falsify_conv2d_large_kernel() {
+    let image = vec![1.0_f32; 25]; // 5×5 constant
+    let kernel = vec![1.0 / 25.0; 25]; // 5×5 averaging
+    let out = conv2d(&image, 5, 5, &kernel, 5, 5, BorderMode::Clamp).expect("ok");
+    // Interior pixel: constant image → same value regardless of kernel
+    assert!((out[12] - 1.0).abs() < 1e-3, "Large kernel on constant: {}", out[12]);
+}
+
+#[test]
+fn test_falsify_gaussian_blur_1x1() {
+    let image = vec![7.0_f32];
+    let blurred = gaussian_blur(&image, 1, 1, 1.0).expect("ok");
+    assert!((blurred[0] - 7.0).abs() < 1e-3, "1×1 blur: {}", blurred[0]);
+}
+
+#[test]
+fn test_falsify_canny_1x1_no_edges() {
+    let image = vec![0.5_f32];
+    let edges = canny(&image, 1, 1, 1.0, 0.05, 0.15).expect("ok");
+    assert!(edges[0] < 0.5, "1×1 image should have no edges");
+}
+
+#[test]
+fn test_falsify_canny_binary_output() {
+    // Verify Canny output is truly binary (0 or 1)
+    let w = 20;
+    let h = 20;
+    let mut image = vec![0.0_f32; w * h];
+    for y in 0..h {
+        for x in w / 2..w {
+            image[y * w + x] = 1.0;
+        }
+    }
+    let edges = canny(&image, w, h, 1.0, 0.05, 0.15).expect("ok");
+    for (i, &v) in edges.iter().enumerate() {
+        assert!(
+            v.abs() < 1e-5 || (v - 1.0).abs() < 1e-5,
+            "Canny output not binary at {i}: {v}"
+        );
+    }
+}
+
+#[test]
+fn test_falsify_resize_same_size() -> Result<(), Box<dyn std::error::Error>> {
+    let image: Vec<f32> = (0..16).map(|i| i as f32 / 15.0).collect();
+    for interp in [Interpolation::Nearest, Interpolation::Bilinear] {
+        let result = resize(&image, 4, 4, 4, 4, interp)?;
+        for i in 0..16 {
+            assert!(
+                (result[i] - image[i]).abs() < 0.01,
+                "Same-size resize changed pixel {i}: {} → {} ({interp:?})",
+                image[i],
+                result[i]
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn test_falsify_resize_1x1() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.42_f32];
+    for interp in [Interpolation::Nearest, Interpolation::Bilinear, Interpolation::Bicubic, Interpolation::Lanczos] {
+        let result = resize(&image, 1, 1, 1, 1, interp)?;
+        assert!((result[0] - 0.42).abs() < 0.01, "1×1 resize ({interp:?}): {}", result[0]);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_falsify_morphology_constant_unchanged() -> Result<(), Box<dyn std::error::Error>> {
+    let se = vec![1.0_f32; 9];
+    let image = vec![0.5_f32; 25];
+    let d = dilate(&image, 5, 5, &se, 3, 3)?;
+    let e = erode(&image, 5, 5, &se, 3, 3)?;
+    for i in 0..25 {
+        assert!((d[i] - 0.5).abs() < 1e-6, "Dilate changed constant at {i}");
+        assert!((e[i] - 0.5).abs() < 1e-6, "Erode changed constant at {i}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_falsify_histogram_single_value() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![0.0_f32; 100]; // All zeros
+    let hist = histogram(&image, 10, 10, 10)?;
+    assert_eq!(hist[0], 100, "All-zero image: all in bin 0");
+    for i in 1..10 {
+        assert_eq!(hist[i], 0, "Bin {i} should be empty");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_falsify_connected_components_single_pixel() -> Result<(), Box<dyn std::error::Error>> {
+    let image = vec![1.0_f32];
+    let labels = connected_components(&image, 1, 1)?;
+    assert_eq!(labels.len(), 1);
+    assert!(labels[0] > 0);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_rgb_to_gray_preserves_zero() -> Result<(), Box<dyn std::error::Error>> {
+    let rgb = vec![0.0_f32; 12]; // 4 black pixels
+    let gray = rgb_to_gray(&rgb, 4, 1)?;
+    for &v in &gray {
+        assert!(v.abs() < 1e-7, "Black should map to zero: {v}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_falsify_hsv_extreme_saturation() -> Result<(), Box<dyn std::error::Error>> {
+    // Pure saturated colors with very low value
+    let rgb = vec![0.01, 0.0, 0.0_f32]; // very dark red
+    let hsv = rgb_to_hsv(&rgb, 1, 1)?;
+    let recovered = hsv_to_rgb(&hsv, 1, 1)?;
+    for i in 0..3 {
+        assert!(
+            (rgb[i] - recovered[i]).abs() < 1e-3,
+            "Dark red roundtrip at ch{i}: {} → {}",
+            rgb[i],
+            recovered[i]
+        );
+    }
+    Ok(())
+}

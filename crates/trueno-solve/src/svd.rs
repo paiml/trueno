@@ -37,15 +37,13 @@ pub struct SvdResult {
 /// # Errors
 ///
 /// Returns error on dimension mismatch.
-#[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
+#[allow(clippy::cast_precision_loss)]
 pub fn svd(a: &[f32], m: usize, n: usize) -> Result<SvdResult, SolverError> {
     if a.len() != m * n {
         return Err(SolverError::SvdDimensionMismatch { m, n });
     }
 
     let min_mn = m.min(n);
-
-    // Work on a copy
     let mut work = a.to_vec();
 
     // Initialize V = I(n×n)
@@ -54,81 +52,108 @@ pub fn svd(a: &[f32], m: usize, n: usize) -> Result<SvdResult, SolverError> {
         v[i * n + i] = 1.0;
     }
 
-    // One-sided Jacobi: apply rotations to columns of A
-    // Converge when off-diagonal of A^T A is negligible
-    let max_sweeps = 100;
+    // One-sided Jacobi sweeps
     let tol = f32::EPSILON * (m as f32).sqrt();
+    jacobi_sweeps(&mut work, &mut v, m, n, tol);
 
+    // Extract singular values and compute U
+    let sigma = extract_singular_values(&work, m, n, min_mn);
+    let u = compute_u_matrix(&work, &sigma, m, n, min_mn);
+
+    // Sort and assemble final result
+    assemble_sorted_result(u, v, sigma, m, n, min_mn)
+}
+
+/// Run one-sided Jacobi rotation sweeps until convergence.
+fn jacobi_sweeps(work: &mut [f32], v: &mut [f32], m: usize, n: usize, tol: f32) {
+    let max_sweeps = 100;
     for _sweep in 0..max_sweeps {
         let mut converged = true;
-
         for p in 0..n {
             for q in (p + 1)..n {
-                // Compute 2x2 Gram matrix elements:
-                // a_pp = col_p · col_p, a_pq = col_p · col_q, a_qq = col_q · col_q
-                let mut app = 0.0f64;
-                let mut apq = 0.0f64;
-                let mut aqq = 0.0f64;
-
-                for i in 0..m {
-                    let wp = f64::from(work[i * n + p]);
-                    let wq = f64::from(work[i * n + q]);
-                    app += wp * wp;
-                    apq += wp * wq;
-                    aqq += wq * wq;
-                }
-
-                // Skip if already orthogonal
-                if apq.abs() < f64::from(tol) * (app * aqq).sqrt() {
-                    continue;
-                }
-                converged = false;
-
-                // Compute Jacobi rotation angle
-                let tau = (aqq - app) / (2.0 * apq);
-                let t = if tau >= 0.0 {
-                    1.0 / (tau + (1.0 + tau * tau).sqrt())
-                } else {
-                    -1.0 / (-tau + (1.0 + tau * tau).sqrt())
-                };
-                let c = 1.0 / (1.0 + t * t).sqrt();
-                let s = t * c;
-
-                // Apply rotation to work columns p, q
-                for i in 0..m {
-                    let wp = f64::from(work[i * n + p]);
-                    let wq = f64::from(work[i * n + q]);
-                    work[i * n + p] = (c * wp - s * wq) as f32;
-                    work[i * n + q] = (s * wp + c * wq) as f32;
-                }
-
-                // Apply rotation to V columns p, q
-                for i in 0..n {
-                    let vp = f64::from(v[i * n + p]);
-                    let vq = f64::from(v[i * n + q]);
-                    v[i * n + p] = (c * vp - s * vq) as f32;
-                    v[i * n + q] = (s * vp + c * vq) as f32;
+                if apply_jacobi_rotation(work, v, m, n, p, q, tol) {
+                    converged = false;
                 }
             }
         }
-
         if converged {
             break;
         }
     }
+}
 
-    // Extract singular values (column norms of work = AV)
+/// Apply a single Jacobi rotation to column pair (p, q).
+/// Returns true if a rotation was applied (columns were not orthogonal).
+fn apply_jacobi_rotation(
+    work: &mut [f32], v: &mut [f32], m: usize, n: usize, p: usize, q: usize, tol: f32,
+) -> bool {
+    let (app, apq, aqq) = gram_elements(work, m, n, p, q);
+
+    let scale = (app * aqq).sqrt();
+    if apq.abs() < f64::from(tol) * scale || scale < f64::EPSILON {
+        return false;
+    }
+
+    let (c, s) = jacobi_rotation_angle(app, apq, aqq);
+    rotate_columns(work, m, n, p, q, c, s);
+    rotate_columns(v, n, n, p, q, c, s);
+    true
+}
+
+/// Compute 2×2 Gram matrix elements for columns p and q.
+fn gram_elements(work: &[f32], m: usize, n: usize, p: usize, q: usize) -> (f64, f64, f64) {
+    let mut app = 0.0f64;
+    let mut apq = 0.0f64;
+    let mut aqq = 0.0f64;
+    for i in 0..m {
+        let wp = f64::from(work[i * n + p]);
+        let wq = f64::from(work[i * n + q]);
+        app += wp * wp;
+        apq += wp * wq;
+        aqq += wq * wq;
+    }
+    (app, apq, aqq)
+}
+
+/// Compute Jacobi rotation cosine and sine from Gram matrix elements.
+fn jacobi_rotation_angle(app: f64, apq: f64, aqq: f64) -> (f64, f64) {
+    let tau = (aqq - app) / (2.0 * apq);
+    let t = if tau >= 0.0 {
+        1.0 / (tau + (1.0 + tau * tau).sqrt())
+    } else {
+        -1.0 / (-tau + (1.0 + tau * tau).sqrt())
+    };
+    let c = 1.0 / (1.0 + t * t).sqrt();
+    let s = t * c;
+    (c, s)
+}
+
+/// Apply Givens rotation to columns p and q of a row-major matrix.
+fn rotate_columns(mat: &mut [f32], rows: usize, cols: usize, p: usize, q: usize, c: f64, s: f64) {
+    for i in 0..rows {
+        let mp = f64::from(mat[i * cols + p]);
+        let mq = f64::from(mat[i * cols + q]);
+        mat[i * cols + p] = (c * mp - s * mq) as f32;
+        mat[i * cols + q] = (s * mp + c * mq) as f32;
+    }
+}
+
+/// Extract singular values as column norms of the work matrix.
+fn extract_singular_values(work: &[f32], m: usize, n: usize, min_mn: usize) -> Vec<f32> {
     let mut sigma = vec![0.0f32; min_mn];
     for j in 0..min_mn {
         let mut norm_sq = 0.0f64;
         for i in 0..m {
-            let v = f64::from(work[i * n + j]);
-            norm_sq += v * v;
+            let val = f64::from(work[i * n + j]);
+            norm_sq += val * val;
         }
         sigma[j] = norm_sq.sqrt() as f32;
     }
+    sigma
+}
 
-    // Compute U = AV * Σ^{-1} (normalize columns of work)
+/// Compute U = AV * Σ^{-1} (normalize columns of work).
+fn compute_u_matrix(work: &[f32], sigma: &[f32], m: usize, n: usize, min_mn: usize) -> Vec<f32> {
     let mut u = vec![0.0f32; m * m];
     for j in 0..min_mn {
         if sigma[j] > f32::EPSILON {
@@ -138,12 +163,17 @@ pub fn svd(a: &[f32], m: usize, n: usize) -> Result<SvdResult, SolverError> {
             }
         }
     }
-    // Fill remaining columns of U with orthogonal basis (Gram-Schmidt)
     for j in min_mn..m {
-        u[j * m + j] = 1.0; // Start with identity columns
+        u[j * m + j] = 1.0;
     }
+    u
+}
 
-    // Sort singular values (and corresponding vectors) in descending order
+/// Sort singular values descending and assemble the final SvdResult.
+#[allow(clippy::cast_precision_loss)]
+fn assemble_sorted_result(
+    u: Vec<f32>, v: Vec<f32>, sigma: Vec<f32>, m: usize, n: usize, min_mn: usize,
+) -> Result<SvdResult, SolverError> {
     let mut indices: Vec<usize> = (0..min_mn).collect();
     indices.sort_by(|&a, &b| sigma[b].partial_cmp(&sigma[a]).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -161,7 +191,6 @@ pub fn svd(a: &[f32], m: usize, n: usize) -> Result<SvdResult, SolverError> {
         }
     }
 
-    // Fill remaining U/V diagonal
     for j in min_mn..m {
         u_sorted[j * m + j] = 1.0;
     }

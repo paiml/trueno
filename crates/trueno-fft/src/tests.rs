@@ -736,3 +736,163 @@ fn test_fft_trait_2d_parseval() {
         "2D Parseval: time={energy_time}, freq={energy_freq}"
     );
 }
+
+// ============================================================================
+// POPPERIAN FALSIFICATION: Adversarial edge cases (GH #152)
+// ============================================================================
+
+#[test]
+fn test_falsify_fft_all_zeros() {
+    let plan = FftPlan::new(8).expect("valid plan");
+    let input = vec![Complex::ZERO; 8];
+    let mut output = vec![Complex::ZERO; 8];
+    plan.forward(&input, &mut output).expect("fft ok");
+    for (k, x) in output.iter().enumerate() {
+        assert!(
+            x.abs() < 1e-7,
+            "FFT of all zeros should be all zeros, got {x:?} at k={k}"
+        );
+    }
+}
+
+#[test]
+fn test_falsify_fft_nyquist_only() {
+    // Signal that alternates +1, -1, +1, -1 (Nyquist frequency)
+    let plan = FftPlan::new(4).expect("valid plan");
+    let input = [
+        Complex::new(1.0, 0.0),
+        Complex::new(-1.0, 0.0),
+        Complex::new(1.0, 0.0),
+        Complex::new(-1.0, 0.0),
+    ];
+    let mut output = [Complex::ZERO; 4];
+    plan.forward(&input, &mut output).expect("fft ok");
+
+    // All energy should be at Nyquist (k=N/2=2)
+    assert!(output[0].abs() < 1e-5, "DC should be zero: {:?}", output[0]);
+    assert!(output[2].abs() > 3.9, "Nyquist should have all energy: {:?}", output[2]);
+}
+
+#[test]
+fn test_falsify_fft_large_power_of_two() {
+    let n = 1024;
+    let plan = FftPlan::new(n).expect("valid plan");
+    let mut input = vec![Complex::ZERO; n];
+    input[0] = Complex::new(1.0, 0.0);
+    let mut output = vec![Complex::ZERO; n];
+    plan.forward(&input, &mut output).expect("fft ok");
+
+    // Impulse → all ones
+    for (k, x) in output.iter().enumerate() {
+        assert!(
+            (x.re - 1.0).abs() < 1e-4 && x.im.abs() < 1e-4,
+            "Large FFT impulse wrong at k={k}: {x:?}"
+        );
+    }
+}
+
+#[test]
+fn test_falsify_fft_roundtrip_large() {
+    let n = 256;
+    let plan = FftPlan::new(n).expect("valid plan");
+    let input: Vec<Complex> = (0..n)
+        .map(|i| Complex::new((i as f32 * 0.1).sin(), (i as f32 * 0.07).cos()))
+        .collect();
+    let mut freq = vec![Complex::ZERO; n];
+    let mut recovered = vec![Complex::ZERO; n];
+
+    plan.forward(&input, &mut freq).expect("ok");
+    plan.inverse(&freq, &mut recovered).expect("ok");
+
+    let max_err = input
+        .iter()
+        .zip(recovered.iter())
+        .map(|(a, b)| (*a - *b).abs())
+        .fold(0.0_f32, f32::max);
+    assert!(max_err < 1e-3, "Large roundtrip max error: {max_err}");
+}
+
+#[test]
+fn test_falsify_bluestein_large_prime() -> Result<(), Box<dyn std::error::Error>> {
+    // Large prime: 127
+    let n = 127;
+    let mut input = vec![Complex::ZERO; n];
+    input[0] = Complex::new(1.0, 0.0);
+    let mut output = vec![Complex::ZERO; n];
+    bluestein_fft(&input, &mut output, false)?;
+
+    // Impulse → all ones
+    for k in 0..n {
+        assert!(
+            (output[k].re - 1.0).abs() < 0.05 && output[k].im.abs() < 0.05,
+            "Bluestein prime=127 impulse wrong at k={k}: {:?}",
+            output[k]
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn test_falsify_bluestein_roundtrip_prime_23() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 23;
+    let input: Vec<Complex> = (0..n)
+        .map(|i| Complex::new((i as f32).sin(), (i as f32).cos()))
+        .collect();
+    let mut freq = vec![Complex::ZERO; n];
+    let mut recovered = vec![Complex::ZERO; n];
+
+    bluestein_fft(&input, &mut freq, false)?;
+    bluestein_fft(&freq, &mut recovered, true)?;
+
+    let max_err = input
+        .iter()
+        .zip(recovered.iter())
+        .map(|(a, b)| (*a - *b).abs())
+        .fold(0.0_f32, f32::max);
+    assert!(max_err < 0.05, "Bluestein prime=23 roundtrip max error: {max_err}");
+    Ok(())
+}
+
+#[test]
+fn test_falsify_fft_2d_constant() {
+    // Constant 4×4 input → energy only at DC
+    let val = Complex::new(3.0, 0.0);
+    let input = vec![val; 16];
+    let mut output = vec![Complex::ZERO; 16];
+    fft_2d(&input, &mut output, 4, 4).expect("ok");
+
+    // DC = N*M*val = 16*3 = 48
+    assert!(
+        (output[0].re - 48.0).abs() < 1e-3,
+        "2D constant DC: {:?}",
+        output[0]
+    );
+    // All other bins should be ~0
+    for k in 1..16 {
+        assert!(
+            output[k].abs() < 1e-3,
+            "2D constant non-DC at k={k}: {:?}",
+            output[k]
+        );
+    }
+}
+
+#[test]
+fn test_falsify_r2c_c2r_roundtrip_large() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 128;
+    let plan = FftPlan::new(n)?;
+    let real_input: Vec<f32> = (0..n).map(|i| (i as f32 * 0.3).sin()).collect();
+    let mut freq = vec![Complex::ZERO; n / 2 + 1];
+    let mut recovered = vec![0.0f32; n];
+
+    plan.forward_r2c(&real_input, &mut freq)?;
+    plan.inverse_c2r(&freq, &mut recovered)?;
+
+    let max_err = real_input
+        .iter()
+        .zip(recovered.iter())
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0_f32, f32::max);
+    assert!(max_err < 1e-3, "R2C/C2R large roundtrip max error: {max_err}");
+    Ok(())
+}

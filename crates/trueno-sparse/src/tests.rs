@@ -777,3 +777,91 @@ fn test_scalar_backend_spmm_alpha_beta() -> Result<(), Box<dyn std::error::Error
     assert!((c[3] - 23.0).abs() < 1e-5);
     Ok(())
 }
+
+// ============================================================================
+// POPPERIAN FALSIFICATION: Adversarial edge cases (GH #152)
+// ============================================================================
+
+#[test]
+fn test_falsify_spmv_1x1_matrix() {
+    let a = CsrMatrix::new(1, 1, vec![0, 1], vec![0], vec![7.0_f32]).unwrap();
+    let mut y = vec![0.0_f32];
+    a.spmv(1.0, &[3.0], 0.0, &mut y).unwrap();
+    assert!((y[0] - 21.0).abs() < 1e-5);
+}
+
+#[test]
+fn test_falsify_spmv_zero_nnz_matrix() {
+    let a = CsrMatrix::<f32>::new(3, 3, vec![0, 0, 0, 0], vec![], vec![]).unwrap();
+    let mut y = vec![99.0_f32; 3];
+    // beta=0 should zero out y even with no nonzeros
+    a.spmv(1.0, &[1.0, 2.0, 3.0], 0.0, &mut y).unwrap();
+    for &v in &y {
+        assert!(v.abs() < 1e-7, "Zero-nnz matrix should give zero output, got {v}");
+    }
+}
+
+#[test]
+fn test_falsify_spmv_beta_preserves_with_zero_nnz() {
+    let a = CsrMatrix::<f32>::new(2, 2, vec![0, 0, 0], vec![], vec![]).unwrap();
+    let mut y = vec![10.0, 20.0_f32];
+    // y = 0*A*x + 0.5*y = [5, 10]
+    a.spmv(1.0, &[1.0, 1.0], 0.5, &mut y).unwrap();
+    assert!((y[0] - 5.0).abs() < 1e-5);
+    assert!((y[1] - 10.0).abs() < 1e-5);
+}
+
+#[test]
+fn test_falsify_coo_duplicate_entries_sum() {
+    // Duplicate (0,0) entries: should accumulate in CSR
+    let coo = CooMatrix::new(2, 2, vec![0, 0, 1], vec![0, 0, 1], vec![3.0, 4.0, 5.0_f32]).unwrap();
+    let csr = CsrMatrix::from_coo(&coo);
+    let dense = csr.to_dense();
+    // (0,0) should be 3+4=7
+    assert!((dense[0] - 7.0).abs() < 1e-5, "Duplicate entries should sum: got {}", dense[0]);
+    assert!((dense[3] - 5.0).abs() < 1e-5);
+}
+
+#[test]
+fn test_falsify_spmm_zero_cols_b() -> Result<(), Box<dyn std::error::Error>> {
+    let a = CsrMatrix::<f32>::identity(3);
+    let b: Vec<f32> = vec![]; // 3×0 dense matrix
+    let mut c: Vec<f32> = vec![];
+    a.spmm(1.0, &b, 0, 0.0, &mut c)?;
+    assert!(c.is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_falsify_spgemm_empty_matrices() -> Result<(), Box<dyn std::error::Error>> {
+    let a = CsrMatrix::<f32>::new(2, 3, vec![0, 0, 0], vec![], vec![])?;
+    let b = CsrMatrix::<f32>::new(3, 2, vec![0, 0, 0, 0], vec![], vec![])?;
+    let c = crate::spgemm::spgemm(&a, &b)?;
+    assert_eq!(c.nnz(), 0);
+    assert_eq!(c.rows(), 2);
+    assert_eq!(c.cols(), 2);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_sell_single_row() -> Result<(), Box<dyn std::error::Error>> {
+    let csr = CsrMatrix::new(1, 3, vec![0, 2], vec![0, 2], vec![1.0, 3.0_f32])?;
+    let sell = SellMatrix::from_csr(&csr, 4);
+    let mut y = vec![0.0_f32];
+    sell.spmv(1.0, &[1.0, 2.0, 3.0], 0.0, &mut y)?;
+    // 1*1 + 3*3 = 10
+    assert!((y[0] - 10.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_bsr_single_block() -> Result<(), Box<dyn std::error::Error>> {
+    let dense = [5.0, 3.0, 3.0, 5.0_f32]; // 2×2 single block
+    let bsr = BsrMatrix::from_dense(&dense, 2, 2, 2);
+    assert_eq!(bsr.nnz_blocks(), 1);
+    let mut y = vec![0.0_f32; 2];
+    bsr.spmv(1.0, &[1.0, 1.0], 0.0, &mut y)?;
+    assert!((y[0] - 8.0).abs() < 1e-5);
+    assert!((y[1] - 8.0).abs() < 1e-5);
+    Ok(())
+}

@@ -887,3 +887,141 @@ fn test_gemm_ex_epilogue_bias_required() {
     let result = gemm_ex_epilogue(&a, &b, &mut c, 1, 1, 1, 1.0, 0.0, Epilogue::Bias, None);
     assert!(result.is_err());
 }
+
+// ============================================================================
+// POPPERIAN FALSIFICATION: Adversarial edge cases (GH #152)
+// ============================================================================
+
+#[test]
+fn test_falsify_lu_1x1() {
+    let a = [5.0_f32];
+    let lu = lu_factorize(&a, 1).expect("1x1 LU");
+    let x = lu.solve(&[15.0]).expect("1x1 solve");
+    assert!((x[0] - 3.0).abs() < 1e-5);
+}
+
+#[test]
+fn test_falsify_cholesky_1x1() {
+    let a = [9.0_f32];
+    let chol = cholesky(&a, 1).expect("1x1 cholesky");
+    assert!((chol.l[0] - 3.0).abs() < 1e-5); // sqrt(9)=3
+    let x = chol.solve(&[18.0]).expect("1x1 solve");
+    assert!((x[0] - 2.0).abs() < 1e-5); // 9*x=18
+}
+
+#[test]
+fn test_falsify_cholesky_negative_diagonal() {
+    // Diagonal matrix with negative entry → not SPD
+    let a = [-1.0, 0.0, 0.0, 4.0_f32];
+    assert!(cholesky(&a, 2).is_err());
+}
+
+#[test]
+fn test_falsify_svd_zero_matrix() {
+    let a = [0.0_f32; 4]; // 2×2 zero
+    let result = svd(&a, 2, 2).expect("svd of zero");
+    for s in &result.sigma {
+        assert!(s.abs() < 1e-5, "Zero matrix should have zero singular values: {s}");
+    }
+}
+
+#[test]
+fn test_falsify_svd_1x1() {
+    let a = [7.0_f32];
+    let result = svd(&a, 1, 1).expect("svd 1x1");
+    assert!((result.sigma[0] - 7.0).abs() < 1e-4);
+}
+
+#[test]
+fn test_falsify_svd_rectangular_tall() {
+    // 3×1 matrix
+    let a = [3.0, 4.0, 0.0_f32];
+    let result = svd(&a, 3, 1).expect("svd 3x1");
+    // Singular value = ||[3,4,0]|| = 5
+    assert!((result.sigma[0] - 5.0).abs() < 0.1, "σ={}", result.sigma[0]);
+}
+
+#[test]
+fn test_falsify_trsm_1x1() -> Result<(), Box<dyn std::error::Error>> {
+    let a = [4.0_f32];
+    let b = [12.0_f32];
+    let result = trsm(&a, &b, 1, 1, TriangularSide::Lower, DiagonalType::NonUnit)?;
+    assert!((result.x[0] - 3.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_syrk_zero_k() -> Result<(), Box<dyn std::error::Error>> {
+    // A is n×0 (zero columns) → C = α·0 + β·C
+    let a: &[f32] = &[];
+    let mut c = [10.0, 0.0, 0.0, 10.0_f32];
+    syrk(a, &mut c, 2, 0, 1.0, 0.5)?;
+    assert!((c[0] - 5.0).abs() < 1e-5); // 0 + 0.5*10
+    assert!((c[3] - 5.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_gemm_ex_1x1() -> Result<(), Box<dyn std::error::Error>> {
+    let a = [f32_to_f16(3.0)];
+    let b = [f32_to_f16(7.0)];
+    let mut c = [0.0_f32];
+    gemm_ex(&a, &b, &mut c, 1, 1, 1, 1.0, 0.0)?;
+    assert!((c[0] - 21.0).abs() < 0.5);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_epilogue_bias_relu() -> Result<(), Box<dyn std::error::Error>> {
+    let a: Vec<u16> = [1.0, 0.0, 0.0, 1.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let b: Vec<u16> = [-10.0, 5.0, 3.0, -7.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let mut c = [0.0_f32; 4];
+    let bias = [100.0, 200.0_f32];
+    gemm_ex_epilogue(&a, &b, &mut c, 2, 2, 2, 1.0, 0.0, Epilogue::BiasRelu, Some(&bias))?;
+    // C = matmul + bias, then ReLU
+    // [(-10+100), (5+200)] = [90, 205] → relu: [90, 205]
+    // [(3+100), (-7+200)] = [103, 193] → relu: [103, 193]
+    assert!(c[0] > 80.0, "BiasRelu c[0]={}", c[0]);
+    assert!(c[1] > 190.0, "BiasRelu c[1]={}", c[1]);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_epilogue_bias_gelu() -> Result<(), Box<dyn std::error::Error>> {
+    let a: Vec<u16> = [1.0, 0.0, 0.0, 1.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let b: Vec<u16> = [2.0, -2.0, 0.0, 3.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let mut c = [0.0_f32; 4];
+    let bias = [1.0, 1.0_f32];
+    gemm_ex_epilogue(&a, &b, &mut c, 2, 2, 2, 1.0, 0.0, Epilogue::BiasGelu, Some(&bias))?;
+    // C[0,0] = gelu(2+1) = gelu(3) ≈ 2.996
+    assert!(c[0] > 2.9, "BiasGelu c[0]={}", c[0]);
+    // C[0,1] = gelu(-2+1) = gelu(-1) ≈ -0.159
+    assert!(c[1] < 0.0 && c[1] > -0.2, "BiasGelu c[1]={}", c[1]);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_solver_trait_dimension_check() -> Result<(), Box<dyn std::error::Error>> {
+    let lu = lu_factorize(&[4.0, 1.0, 1.0, 3.0_f32], 2)?;
+    let solver: &dyn crate::Solver = &lu;
+    // Wrong dimension RHS
+    let result = solver.solve(&[1.0, 2.0, 3.0]); // 3 elements for 2×2 system
+    assert!(result.is_err(), "Solver should reject wrong-dimension RHS");
+    Ok(())
+}
+
+#[test]
+fn test_falsify_batched_independence() -> Result<(), Box<dyn std::error::Error>> {
+    // Verify batch 0 doesn't pollute batch 1
+    let a = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0_f32]; // batch0=I, batch1=zero
+    let b = [5.0, 6.0, 7.0, 8.0, 1.0, 1.0, 1.0, 1.0_f32];
+    let mut c = [0.0_f32; 8];
+    gemm_strided_batched(&a, 4, &b, 4, &mut c, 4, 2, 2, 2, 2, 1.0, 0.0)?;
+    // Batch 0: I * B = B
+    assert!((c[0] - 5.0).abs() < 1e-5);
+    // Batch 1: zero * B = 0
+    for i in 4..8 {
+        assert!(c[i].abs() < 1e-5, "Batch independence violated at c[{i}]={}", c[i]);
+    }
+    Ok(())
+}

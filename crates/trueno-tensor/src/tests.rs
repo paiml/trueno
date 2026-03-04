@@ -351,3 +351,120 @@ fn test_einsum_nary_four_inputs() -> R {
     }
     Ok(())
 }
+
+// ============================================================================
+// POPPERIAN FALSIFICATION: Adversarial edge cases (GH #152)
+// ============================================================================
+
+#[test]
+fn test_falsify_tensor_scalar() -> R {
+    let t = Tensor::new(vec![], vec![42.0])?;
+    assert_eq!(t.ndim(), 0);
+    assert_eq!(t.len(), 1);
+    assert!((t.data()[0] - 42.0).abs() < 1e-10);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_tensor_1_element() -> R {
+    let t = Tensor::new(vec![1, 1, 1], vec![7.0])?;
+    assert_eq!(t.ndim(), 3);
+    assert_eq!(t.len(), 1);
+    assert!((t.get(&[0, 0, 0]) - 7.0).abs() < 1e-10);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_matmul_1x1() -> R {
+    let a = Tensor::new(vec![1, 1], vec![3.0])?;
+    let b = Tensor::new(vec![1, 1], vec![7.0])?;
+    let c = matmul(&a, &b)?;
+    assert_eq!(c.shape(), &[1, 1]);
+    assert!((c.data()[0] - 21.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_trace_1x1() -> R {
+    let a = Tensor::new(vec![1, 1], vec![99.0])?;
+    let t = trace(&a)?;
+    assert!((t - 99.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_outer_single_elements() -> R {
+    let a = Tensor::new(vec![1], vec![3.0])?;
+    let b = Tensor::new(vec![1], vec![5.0])?;
+    let c = outer(&a, &b)?;
+    assert_eq!(c.shape(), &[1, 1]);
+    assert!((c.data()[0] - 15.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_falsify_einsum_identity_contraction() -> R {
+    // "ij,jk->ik" with identity matrices should give identity
+    let eye = Tensor::new(vec![3, 3], vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0])?;
+    let c = einsum("ij,jk->ik", &eye, &eye)?;
+    assert_eq!(c.shape(), &[3, 3]);
+    for i in 0..3 {
+        for j in 0..3 {
+            let expected = if i == j { 1.0 } else { 0.0 };
+            assert!(
+                (c.get(&[i, j]) - expected).abs() < 1e-5,
+                "I×I[{i},{j}]={}, expected {expected}",
+                c.get(&[i, j])
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn test_falsify_transpose_3d() -> R {
+    let t = Tensor::new(vec![2, 3, 4], (0..24).map(|i| i as f32).collect())?;
+    let tr = t.transpose(&[2, 0, 1]);
+    assert_eq!(tr.shape(), &[4, 2, 3]);
+    // Double transpose back
+    let back = tr.transpose(&[1, 2, 0]);
+    assert_eq!(back.shape(), &[2, 3, 4]);
+    for i in 0..24 {
+        assert!(
+            (back.data()[i] - t.data()[i]).abs() < 1e-10,
+            "3D transpose roundtrip failed at {i}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn test_falsify_einsum_nary_empty_error() {
+    let result = einsum_nary("->", &[]);
+    assert!(result.is_err(), "Empty input list should error");
+}
+
+#[test]
+fn test_falsify_matmul_zero_inner_dim() -> R {
+    // A=2×0, B=0×3 → C=2×3 of zeros (valid but degenerate)
+    let a = Tensor::new(vec![2, 0], vec![])?;
+    let b = Tensor::new(vec![0, 3], vec![])?;
+    let c = matmul(&a, &b)?;
+    assert_eq!(c.shape(), &[2, 3]);
+    for &v in c.data() {
+        assert!(v.abs() < 1e-10, "Zero inner dim should give zeros: {v}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_falsify_batch_matmul_single_batch() -> R {
+    // Single batch should match regular matmul
+    let a = Tensor::new(vec![1, 2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    let b = Tensor::new(vec![1, 3, 2], vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0])?;
+    let c = batch_matmul(&a, &b)?;
+    assert_eq!(c.shape(), &[1, 2, 2]);
+    assert!((c.get(&[0, 0, 0]) - 58.0).abs() < 1e-3);
+    assert!((c.get(&[0, 1, 1]) - 154.0).abs() < 1e-3);
+    Ok(())
+}
