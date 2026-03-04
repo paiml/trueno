@@ -1,0 +1,299 @@
+//! Tests for FFT — provable contracts and falsification tests.
+
+use crate::complex::Complex;
+use crate::stockham::{fft_2d, FftPlan};
+
+// ============================================================================
+// FALSIFY-FFT-001: Parseval energy conservation
+// ============================================================================
+
+#[test]
+fn test_parseval_energy_conservation_size_4() {
+    let plan = FftPlan::new(4).expect("valid plan");
+    let input = [
+        Complex::new(1.0, 0.0),
+        Complex::new(2.0, 0.0),
+        Complex::new(3.0, 0.0),
+        Complex::new(4.0, 0.0),
+    ];
+    let mut output = [Complex::ZERO; 4];
+    plan.forward(&input, &mut output).expect("fft ok");
+
+    let energy_time: f32 = input.iter().map(|x| x.norm_sq()).sum();
+    let energy_freq: f32 = output.iter().map(|x| x.norm_sq()).sum::<f32>() / 4.0;
+    assert!(
+        (energy_time - energy_freq).abs() < 1e-4,
+        "Parseval violated: time={energy_time}, freq={energy_freq}"
+    );
+}
+
+#[test]
+fn test_parseval_energy_conservation_size_8() {
+    let plan = FftPlan::new(8).expect("valid plan");
+    let input: Vec<Complex> = (0..8).map(|i| Complex::new(i as f32, 0.0)).collect();
+    let mut output = vec![Complex::ZERO; 8];
+    plan.forward(&input, &mut output).expect("fft ok");
+
+    let energy_time: f32 = input.iter().map(|x| x.norm_sq()).sum();
+    let energy_freq: f32 = output.iter().map(|x| x.norm_sq()).sum::<f32>() / 8.0;
+    assert!(
+        (energy_time - energy_freq).abs() < 1e-3,
+        "Parseval violated: time={energy_time}, freq={energy_freq}"
+    );
+}
+
+// ============================================================================
+// FALSIFY-FFT-002: Inverse roundtrip
+// ============================================================================
+
+#[test]
+fn test_inverse_roundtrip_size_4() {
+    let plan = FftPlan::new(4).expect("valid plan");
+    let input = [
+        Complex::new(1.0, 2.0),
+        Complex::new(3.0, -1.0),
+        Complex::new(0.5, 0.5),
+        Complex::new(-2.0, 1.0),
+    ];
+    let mut freq = [Complex::ZERO; 4];
+    let mut recovered = [Complex::ZERO; 4];
+
+    plan.forward(&input, &mut freq).expect("fft ok");
+    plan.inverse(&freq, &mut recovered).expect("ifft ok");
+
+    for (i, (orig, rec)) in input.iter().zip(recovered.iter()).enumerate() {
+        let err = (*orig - *rec).abs();
+        assert!(
+            err < 1e-5,
+            "Roundtrip failed at index {i}: orig={orig:?}, recovered={rec:?}, err={err}"
+        );
+    }
+}
+
+#[test]
+fn test_inverse_roundtrip_size_16() {
+    let plan = FftPlan::new(16).expect("valid plan");
+    let input: Vec<Complex> = (0..16)
+        .map(|i| Complex::new((i as f32).sin(), (i as f32).cos()))
+        .collect();
+    let mut freq = vec![Complex::ZERO; 16];
+    let mut recovered = vec![Complex::ZERO; 16];
+
+    plan.forward(&input, &mut freq).expect("fft ok");
+    plan.inverse(&freq, &mut recovered).expect("ifft ok");
+
+    for (i, (orig, rec)) in input.iter().zip(recovered.iter()).enumerate() {
+        let err = (*orig - *rec).abs();
+        assert!(
+            err < 1e-4,
+            "Roundtrip failed at index {i}: err={err}"
+        );
+    }
+}
+
+// ============================================================================
+// FALSIFY-FFT-003: Known value — impulse response
+// ============================================================================
+
+#[test]
+fn test_impulse_response() {
+    let plan = FftPlan::new(8).expect("valid plan");
+    let mut input = vec![Complex::ZERO; 8];
+    input[0] = Complex::new(1.0, 0.0); // Delta function
+
+    let mut output = vec![Complex::ZERO; 8];
+    plan.forward(&input, &mut output).expect("fft ok");
+
+    // FFT of impulse = all ones
+    for (k, x) in output.iter().enumerate() {
+        assert!(
+            (x.re - 1.0).abs() < 1e-6 && x.im.abs() < 1e-6,
+            "Impulse response wrong at k={k}: {x:?}"
+        );
+    }
+}
+
+#[test]
+fn test_dc_signal() {
+    let plan = FftPlan::new(4).expect("valid plan");
+    let input = [Complex::new(3.0, 0.0); 4]; // Constant signal
+
+    let mut output = [Complex::ZERO; 4];
+    plan.forward(&input, &mut output).expect("fft ok");
+
+    // FFT of constant = N*constant at k=0, zero elsewhere
+    assert!((output[0].re - 12.0).abs() < 1e-5, "DC component wrong");
+    for k in 1..4 {
+        assert!(
+            output[k].abs() < 1e-5,
+            "Non-DC component non-zero at k={k}: {:?}",
+            output[k]
+        );
+    }
+}
+
+// ============================================================================
+// Linearity tests
+// ============================================================================
+
+#[test]
+fn test_linearity() {
+    let plan = FftPlan::new(8).expect("valid plan");
+    let x: Vec<Complex> = (0..8).map(|i| Complex::new(i as f32, 0.0)).collect();
+    let y: Vec<Complex> = (0..8)
+        .map(|i| Complex::new(0.0, (i as f32).sin()))
+        .collect();
+
+    let alpha = Complex::new(2.0, 0.0);
+    let beta = Complex::new(0.5, 0.0);
+
+    // FFT(α*x + β*y)
+    let combined: Vec<Complex> = x
+        .iter()
+        .zip(y.iter())
+        .map(|(&xi, &yi)| alpha * xi + beta * yi)
+        .collect();
+    let mut fft_combined = vec![Complex::ZERO; 8];
+    plan.forward(&combined, &mut fft_combined).expect("ok");
+
+    // α*FFT(x) + β*FFT(y)
+    let mut fft_x = vec![Complex::ZERO; 8];
+    let mut fft_y = vec![Complex::ZERO; 8];
+    plan.forward(&x, &mut fft_x).expect("ok");
+    plan.forward(&y, &mut fft_y).expect("ok");
+
+    for k in 0..8 {
+        let expected = alpha * fft_x[k] + beta * fft_y[k];
+        let err = (fft_combined[k] - expected).abs();
+        assert!(err < 1e-4, "Linearity violated at k={k}: err={err}");
+    }
+}
+
+// ============================================================================
+// R2C tests
+// ============================================================================
+
+#[test]
+fn test_r2c_basic() {
+    let plan = FftPlan::new(8).expect("valid plan");
+    let input: Vec<f32> = (0..8).map(|i| i as f32).collect();
+    let mut output = vec![Complex::ZERO; 5]; // N/2 + 1
+
+    plan.forward_r2c(&input, &mut output).expect("r2c ok");
+
+    // DC component = sum of input
+    let expected_dc: f32 = input.iter().sum();
+    assert!(
+        (output[0].re - expected_dc).abs() < 1e-4,
+        "DC wrong: got {}, expected {expected_dc}",
+        output[0].re
+    );
+    // DC imaginary should be ~0 for real input
+    assert!(output[0].im.abs() < 1e-5);
+}
+
+// ============================================================================
+// 2D FFT tests
+// ============================================================================
+
+#[test]
+fn test_fft_2d_impulse() {
+    let mut input = vec![Complex::ZERO; 4 * 4];
+    input[0] = Complex::new(1.0, 0.0);
+    let mut output = vec![Complex::ZERO; 16];
+
+    fft_2d(&input, &mut output, 4, 4).expect("2d fft ok");
+
+    // 2D impulse → all ones
+    for (k, x) in output.iter().enumerate() {
+        assert!(
+            (x.re - 1.0).abs() < 1e-5 && x.im.abs() < 1e-5,
+            "2D impulse wrong at k={k}: {x:?}"
+        );
+    }
+}
+
+// ============================================================================
+// Error handling tests
+// ============================================================================
+
+#[test]
+fn test_zero_length_rejected() {
+    assert!(FftPlan::new(0).is_err());
+}
+
+#[test]
+fn test_non_power_of_two_rejected() {
+    assert!(FftPlan::new(3).is_err());
+    assert!(FftPlan::new(5).is_err());
+    assert!(FftPlan::new(6).is_err());
+}
+
+#[test]
+fn test_dimension_mismatch_rejected() {
+    let plan = FftPlan::new(4).expect("valid plan");
+    let input = [Complex::ZERO; 4];
+    let mut output = [Complex::ZERO; 8]; // Wrong size
+
+    assert!(plan.forward(&input, &mut output).is_err());
+}
+
+#[test]
+fn test_size_1_fft() {
+    let plan = FftPlan::new(1).expect("valid plan");
+    let input = [Complex::new(42.0, -7.0)];
+    let mut output = [Complex::ZERO; 1];
+
+    plan.forward(&input, &mut output).expect("fft ok");
+    assert!((output[0].re - 42.0).abs() < 1e-6);
+    assert!((output[0].im - (-7.0)).abs() < 1e-6);
+}
+
+// ============================================================================
+// Property-based tests
+// ============================================================================
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn arb_complex_vec(n: usize) -> impl Strategy<Value = Vec<Complex>> {
+        proptest::collection::vec((-100.0f32..100.0, -100.0f32..100.0), n)
+            .prop_map(|v| v.into_iter().map(|(re, im)| Complex::new(re, im)).collect())
+    }
+
+    proptest! {
+        #[test]
+        fn prop_parseval_conservation(input in arb_complex_vec(16)) {
+            let plan = FftPlan::new(16).expect("valid");
+            let mut output = vec![Complex::ZERO; 16];
+            plan.forward(&input, &mut output).expect("ok");
+
+            let energy_time: f32 = input.iter().map(|x| x.norm_sq()).sum();
+            let energy_freq: f32 = output.iter().map(|x| x.norm_sq()).sum::<f32>() / 16.0;
+
+            let rel_err = if energy_time.abs() > 1e-10 {
+                (energy_time - energy_freq).abs() / energy_time
+            } else {
+                (energy_time - energy_freq).abs()
+            };
+            prop_assert!(rel_err < 1e-3, "Parseval: time={energy_time}, freq={energy_freq}, rel_err={rel_err}");
+        }
+
+        #[test]
+        fn prop_inverse_roundtrip(input in arb_complex_vec(16)) {
+            let plan = FftPlan::new(16).expect("valid");
+            let mut freq = vec![Complex::ZERO; 16];
+            let mut recovered = vec![Complex::ZERO; 16];
+
+            plan.forward(&input, &mut freq).expect("ok");
+            plan.inverse(&freq, &mut recovered).expect("ok");
+
+            for (orig, rec) in input.iter().zip(recovered.iter()) {
+                let err = (*orig - *rec).abs();
+                prop_assert!(err < 1e-3, "Roundtrip err={err}");
+            }
+        }
+    }
+}
