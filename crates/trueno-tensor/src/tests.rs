@@ -2,15 +2,18 @@
 
 use crate::{batch_matmul, einsum, matmul, outer, trace, Tensor};
 
+type R = Result<(), Box<dyn std::error::Error>>;
+
 // ── Tensor basics ──────────────────────────────────────────────────
 
 #[test]
-fn test_tensor_new() {
-    let t = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+fn test_tensor_new() -> R {
+    let t = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
     assert_eq!(t.shape(), &[2, 3]);
     assert_eq!(t.ndim(), 2);
     assert_eq!(t.len(), 6);
     assert!(!t.is_empty());
+    Ok(())
 }
 
 #[test]
@@ -29,11 +32,12 @@ fn test_tensor_get_set() {
 }
 
 #[test]
-fn test_tensor_reshape() {
-    let t = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
-    let r = t.reshape(vec![3, 2]).unwrap();
+fn test_tensor_reshape() -> R {
+    let t = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    let r = t.reshape(vec![3, 2])?;
     assert_eq!(r.shape(), &[3, 2]);
     assert_eq!(r.data(), t.data());
+    Ok(())
 }
 
 #[test]
@@ -49,109 +53,101 @@ fn test_tensor_data_length_mismatch() {
 }
 
 #[test]
-fn test_tensor_transpose_2d() {
-    // [[1,2,3],[4,5,6]] -> [[1,4],[2,5],[3,6]]
-    let t = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+fn test_tensor_transpose_2d() -> R {
+    let t = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
     let tr = t.transpose(&[1, 0]);
     assert_eq!(tr.shape(), &[3, 2]);
     assert!((tr.get(&[0, 0]) - 1.0).abs() < 1e-10);
     assert!((tr.get(&[0, 1]) - 4.0).abs() < 1e-10);
     assert!((tr.get(&[1, 0]) - 2.0).abs() < 1e-10);
     assert!((tr.get(&[2, 1]) - 6.0).abs() < 1e-10);
+    Ok(())
 }
 
 // ── Matrix multiply via einsum ─────────────────────────────────────
 
 #[test]
-fn test_matmul_2x3_3x2() {
-    // A = [[1,2,3],[4,5,6]], B = [[7,8],[9,10],[11,12]]
-    let a = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
-    let b = Tensor::new(vec![3, 2], vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).unwrap();
-    let c = matmul(&a, &b).unwrap();
+fn test_matmul_2x3_3x2() -> R {
+    let a = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    let b = Tensor::new(vec![3, 2], vec![7.0, 8.0, 9.0, 10.0, 11.0, 12.0])?;
+    let c = matmul(&a, &b)?;
     assert_eq!(c.shape(), &[2, 2]);
-    // C[0,0] = 1*7+2*9+3*11 = 58
     assert!((c.get(&[0, 0]) - 58.0).abs() < 1e-4);
-    // C[0,1] = 1*8+2*10+3*12 = 64
     assert!((c.get(&[0, 1]) - 64.0).abs() < 1e-4);
-    // C[1,0] = 4*7+5*9+6*11 = 139
     assert!((c.get(&[1, 0]) - 139.0).abs() < 1e-4);
-    // C[1,1] = 4*8+5*10+6*12 = 154
     assert!((c.get(&[1, 1]) - 154.0).abs() < 1e-4);
+    Ok(())
 }
 
 #[test]
-fn test_matmul_identity() {
-    // I * A = A
-    let eye = Tensor::new(vec![3, 3], vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]).unwrap();
-    let a = Tensor::new(vec![3, 2], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
-    let c = matmul(&eye, &a).unwrap();
+fn test_matmul_identity() -> R {
+    let eye = Tensor::new(vec![3, 3], vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0])?;
+    let a = Tensor::new(vec![3, 2], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    let c = matmul(&eye, &a)?;
     assert_eq!(c.shape(), &[3, 2]);
     for i in 0..6 {
         assert!((c.data()[i] - a.data()[i]).abs() < 1e-6);
     }
+    Ok(())
 }
 
 // ── Einsum variations ──────────────────────────────────────────────
 
 #[test]
-fn test_einsum_outer_product() {
-    let a = Tensor::new(vec![3], vec![1.0, 2.0, 3.0]).unwrap();
-    let b = Tensor::new(vec![2], vec![4.0, 5.0]).unwrap();
-    let c = outer(&a, &b).unwrap();
+fn test_einsum_outer_product() -> R {
+    let a = Tensor::new(vec![3], vec![1.0, 2.0, 3.0])?;
+    let b = Tensor::new(vec![2], vec![4.0, 5.0])?;
+    let c = outer(&a, &b)?;
     assert_eq!(c.shape(), &[3, 2]);
     assert!((c.get(&[0, 0]) - 4.0).abs() < 1e-6);
     assert!((c.get(&[1, 1]) - 10.0).abs() < 1e-6);
     assert!((c.get(&[2, 0]) - 12.0).abs() < 1e-6);
+    Ok(())
 }
 
 #[test]
-fn test_einsum_dot_product() {
-    // "i,i->" is inner product, but we output scalar as 0-dim
-    let a = Tensor::new(vec![3], vec![1.0, 2.0, 3.0]).unwrap();
-    let b = Tensor::new(vec![3], vec![4.0, 5.0, 6.0]).unwrap();
-    let c = einsum("i,i->", &a, &b).unwrap();
+fn test_einsum_dot_product() -> R {
+    let a = Tensor::new(vec![3], vec![1.0, 2.0, 3.0])?;
+    let b = Tensor::new(vec![3], vec![4.0, 5.0, 6.0])?;
+    let c = einsum("i,i->", &a, &b)?;
     assert_eq!(c.shape(), &[] as &[usize]);
-    // 1*4+2*5+3*6 = 32
     assert!((c.data()[0] - 32.0).abs() < 1e-6);
+    Ok(())
 }
 
 #[test]
-fn test_einsum_trace() {
-    let a = Tensor::new(vec![3, 3], vec![1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0]).unwrap();
-    let t = trace(&a).unwrap();
+fn test_einsum_trace() -> R {
+    let a = Tensor::new(vec![3, 3], vec![1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0])?;
+    let t = trace(&a)?;
     assert!((t - 6.0).abs() < 1e-6);
+    Ok(())
 }
 
 #[test]
-fn test_einsum_batch_matmul() {
-    // 2 batches of 2x2 matmul
+fn test_einsum_batch_matmul() -> R {
     let a = Tensor::new(
         vec![2, 2, 2],
         vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-    )
-    .unwrap();
+    )?;
     let b = Tensor::new(
         vec![2, 2, 2],
         vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0],
-    )
-    .unwrap();
-    // B is identity in each batch, so C = A
-    let c = batch_matmul(&a, &b).unwrap();
+    )?;
+    let c = batch_matmul(&a, &b)?;
     assert_eq!(c.shape(), &[2, 2, 2]);
     for i in 0..8 {
         assert!((c.data()[i] - a.data()[i]).abs() < 1e-6);
     }
+    Ok(())
 }
 
 #[test]
-fn test_einsum_3d_contraction() {
-    // "ijk,jkl->il" — contract middle two indices
-    let a = Tensor::new(vec![2, 3, 4], (0..24).map(|i| i as f32).collect()).unwrap();
-    let b = Tensor::new(vec![3, 4, 5], (0..60).map(|i| i as f32).collect()).unwrap();
-    let c = einsum("ijk,jkl->il", &a, &b).unwrap();
+fn test_einsum_3d_contraction() -> R {
+    let a = Tensor::new(vec![2, 3, 4], (0..24).map(|i| i as f32).collect())?;
+    let b = Tensor::new(vec![3, 4, 5], (0..60).map(|i| i as f32).collect())?;
+    let c = einsum("ijk,jkl->il", &a, &b)?;
     assert_eq!(c.shape(), &[2, 5]);
 
-    // Verify one element: C[0,0] = sum_j sum_k A[0,j,k]*B[j,k,0]
     let mut expected = 0.0f32;
     for j in 0..3 {
         for k in 0..4 {
@@ -159,22 +155,22 @@ fn test_einsum_3d_contraction() {
         }
     }
     assert!((c.get(&[0, 0]) - expected).abs() < 1e-2);
+    Ok(())
 }
 
 // ── Contract: matmul associativity ─────────────────────────────────
 
 #[test]
-fn test_contract_matmul_associativity() {
-    // (A*B)*C ≈ A*(B*C)
-    let a = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
-    let b = Tensor::new(vec![3, 4], (1..=12).map(|i| i as f32).collect()).unwrap();
-    let c = Tensor::new(vec![4, 2], (1..=8).map(|i| i as f32).collect()).unwrap();
+fn test_contract_matmul_associativity() -> R {
+    let a = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
+    let b = Tensor::new(vec![3, 4], (1..=12).map(|i| i as f32).collect())?;
+    let c = Tensor::new(vec![4, 2], (1..=8).map(|i| i as f32).collect())?;
 
-    let ab = matmul(&a, &b).unwrap();
-    let ab_c = matmul(&ab, &c).unwrap();
+    let ab = matmul(&a, &b)?;
+    let ab_c = matmul(&ab, &c)?;
 
-    let bc = matmul(&b, &c).unwrap();
-    let a_bc = matmul(&a, &bc).unwrap();
+    let bc = matmul(&b, &c)?;
+    let a_bc = matmul(&a, &bc)?;
 
     assert_eq!(ab_c.shape(), a_bc.shape());
     for i in 0..ab_c.len() {
@@ -185,19 +181,20 @@ fn test_contract_matmul_associativity() {
             a_bc.data()[i]
         );
     }
+    Ok(())
 }
 
 // ── Contract: transpose involution ─────────────────────────────────
 
 #[test]
-fn test_contract_transpose_involution() {
-    // (A^T)^T = A
-    let a = Tensor::new(vec![3, 4], (0..12).map(|i| i as f32).collect()).unwrap();
+fn test_contract_transpose_involution() -> R {
+    let a = Tensor::new(vec![3, 4], (0..12).map(|i| i as f32).collect())?;
     let att = a.transpose(&[1, 0]).transpose(&[1, 0]);
     assert_eq!(att.shape(), a.shape());
     for i in 0..a.len() {
         assert!((att.data()[i] - a.data()[i]).abs() < 1e-10);
     }
+    Ok(())
 }
 
 // ── Error handling ─────────────────────────────────────────────────
@@ -212,7 +209,7 @@ fn test_einsum_no_arrow() {
 #[test]
 fn test_einsum_dimension_mismatch() {
     let a = Tensor::zeros(vec![2, 3]);
-    let b = Tensor::zeros(vec![4, 2]); // j=3 in a, j=4 in b
+    let b = Tensor::zeros(vec![4, 2]);
     assert!(einsum("ij,jk->ik", &a, &b).is_err());
 }
 
@@ -220,7 +217,6 @@ fn test_einsum_dimension_mismatch() {
 fn test_einsum_label_count_mismatch() {
     let a = Tensor::zeros(vec![2, 3]);
     let b = Tensor::zeros(vec![3, 2]);
-    // "ijk" has 3 labels but a has 2 dims
     assert!(einsum("ijk,jk->ik", &a, &b).is_err());
 }
 
@@ -240,10 +236,11 @@ mod proptests {
     proptest! {
         #[test]
         fn prop_matmul_zero_row(n in 2..8usize, k in 2..8usize) {
-            // Zero matrix times anything = zero
             let a = Tensor::zeros(vec![n, k]);
-            let b = Tensor::new(vec![k, n], (0..k*n).map(|i| i as f32).collect()).unwrap();
-            let c = matmul(&a, &b).unwrap();
+            let b = Tensor::new(vec![k, n], (0..k*n).map(|i| i as f32).collect())
+                .map_err(|e| TestCaseError::Fail(format!("{e}").into()))?;
+            let c = matmul(&a, &b)
+                .map_err(|e| TestCaseError::Fail(format!("{e}").into()))?;
             for &v in c.data() {
                 prop_assert!((v).abs() < 1e-6);
             }
@@ -252,8 +249,10 @@ mod proptests {
         #[test]
         fn prop_reshape_preserves_data(m in 1..6usize, n in 1..6usize) {
             let data: Vec<f32> = (0..m*n).map(|i| i as f32).collect();
-            let t = Tensor::new(vec![m, n], data.clone()).unwrap();
-            let r = t.reshape(vec![n, m]).unwrap();
+            let t = Tensor::new(vec![m, n], data.clone())
+                .map_err(|e| TestCaseError::Fail(format!("{e}").into()))?;
+            let r = t.reshape(vec![n, m])
+                .map_err(|e| TestCaseError::Fail(format!("{e}").into()))?;
             prop_assert_eq!(r.data(), t.data());
         }
     }

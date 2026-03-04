@@ -439,3 +439,107 @@ mod proptests {
         }
     }
 }
+
+// ============================================================================
+// BSR (Block Sparse Row)
+// ============================================================================
+
+#[test]
+fn test_bsr_from_dense_identity() {
+    // 4x4 identity with block_size=2
+    #[rustfmt::skip]
+    let dense = [
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0_f32,
+    ];
+    let bsr = BsrMatrix::from_dense(&dense, 4, 4, 2);
+    assert_eq!(bsr.rows(), 4);
+    assert_eq!(bsr.cols(), 4);
+    assert_eq!(bsr.block_size(), 2);
+    assert_eq!(bsr.nnz_blocks(), 2); // 2 non-zero 2x2 blocks on diagonal
+}
+
+#[test]
+fn test_bsr_spmv_identity() -> Result<(), Box<dyn std::error::Error>> {
+    #[rustfmt::skip]
+    let dense = [
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0_f32,
+    ];
+    let bsr = BsrMatrix::from_dense(&dense, 4, 4, 2);
+    let x = vec![1.0, 2.0, 3.0, 4.0_f32];
+    let mut y = vec![0.0f32; 4];
+    bsr.spmv(1.0, &x, 0.0, &mut y)?;
+    for i in 0..4 {
+        assert!((y[i] - x[i]).abs() < 1e-6);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_bsr_spmv_general() -> Result<(), Box<dyn std::error::Error>> {
+    // [[1,2,0,0],[3,4,0,0],[0,0,5,6],[0,0,7,8]]
+    #[rustfmt::skip]
+    let dense = [
+        1.0, 2.0, 0.0, 0.0,
+        3.0, 4.0, 0.0, 0.0,
+        0.0, 0.0, 5.0, 6.0,
+        0.0, 0.0, 7.0, 8.0_f32,
+    ];
+    let bsr = BsrMatrix::from_dense(&dense, 4, 4, 2);
+    let x = vec![1.0, 1.0, 1.0, 1.0_f32];
+    let mut y = vec![0.0f32; 4];
+    bsr.spmv(1.0, &x, 0.0, &mut y)?;
+    assert!((y[0] - 3.0).abs() < 1e-6);
+    assert!((y[1] - 7.0).abs() < 1e-6);
+    assert!((y[2] - 11.0).abs() < 1e-6);
+    assert!((y[3] - 15.0).abs() < 1e-6);
+    Ok(())
+}
+
+#[test]
+fn test_bsr_to_csr_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    #[rustfmt::skip]
+    let dense = [
+        1.0, 2.0, 0.0, 0.0,
+        3.0, 4.0, 0.0, 0.0,
+        0.0, 0.0, 5.0, 6.0,
+        0.0, 0.0, 7.0, 8.0_f32,
+    ];
+    let bsr = BsrMatrix::from_dense(&dense, 4, 4, 2);
+    let csr = bsr.to_csr()?;
+    assert_eq!(csr.rows(), 4);
+    assert_eq!(csr.cols(), 4);
+
+    // Verify SpMV gives same result
+    let x = vec![1.0, 2.0, 3.0, 4.0_f32];
+    let mut y_bsr = vec![0.0f32; 4];
+    let mut y_csr = vec![0.0f32; 4];
+    bsr.spmv(1.0, &x, 0.0, &mut y_bsr)?;
+    csr.spmv(1.0, &x, 0.0, &mut y_csr)?;
+    for i in 0..4 {
+        assert!((y_bsr[i] - y_csr[i]).abs() < 1e-6);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_bsr_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
+    #[rustfmt::skip]
+    let dense = [
+        2.0, 0.0,
+        0.0, 3.0_f32,
+    ];
+    let bsr = BsrMatrix::from_dense(&dense, 2, 2, 2);
+    let x = vec![1.0, 1.0_f32];
+    let mut y = vec![10.0, 20.0_f32];
+    // y = 2.0 * A * x + 0.5 * y = [2*2, 2*3] + [5, 10] = [9, 16]
+    bsr.spmv(2.0, &x, 0.5, &mut y)?;
+    assert!((y[0] - 9.0).abs() < 1e-6);
+    assert!((y[1] - 16.0).abs() < 1e-6);
+    Ok(())
+}
