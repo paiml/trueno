@@ -333,8 +333,8 @@ impl Kernel for FusedCrossEntropyKernel {
                 // For target: (softmax - 1.0) * scale
                 let sm_minus_one = ctx.sub_f32(softmax_val, one_f32);
                 let grad_target = ctx.mul_f32(sm_minus_one, scale);
-                // Select based on predicate
-                let grad_val = ctx.selp_f32(grad_target, grad_nontarget, is_target);
+                // Select based on predicate: is_target ? grad_target : grad_nontarget
+                let grad_val = ctx.selp_f32(is_target, grad_target, grad_nontarget);
 
                 // KAIZEN-052: Write gradient to same address as logits (in-place)
                 ctx.st_global_f32(addr3, grad_val);
@@ -656,7 +656,8 @@ impl Kernel for FusedCausalCrossEntropyKernel {
                 let grad_nontarget = ctx.mul_f32(softmax_val, scale);
                 let sm_minus_one = ctx.sub_f32(softmax_val, one_f32);
                 let grad_target = ctx.mul_f32(sm_minus_one, scale);
-                let grad_val = ctx.selp_f32(grad_target, grad_nontarget, is_target);
+                // Select based on predicate: is_target ? grad_target : grad_nontarget
+                let grad_val = ctx.selp_f32(is_target, grad_target, grad_nontarget);
 
                 ctx.st_global_f32(addr3, grad_val);
 
