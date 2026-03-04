@@ -241,6 +241,9 @@ impl Matrix<f32> {
     /// //         = [9, 12, 15]
     /// assert_eq!(result.as_slice(), &[9.0, 12.0, 15.0]);
     /// ```
+    // KAIZEN-041: Delegate to crate::blis::gemv which uses AVX2 VFMADD
+    // with 4-way K-unrolling and N-tiled accumulators. Previous implementation
+    // created 3 temporary Vector allocations per row (from_slice + scale + add).
     pub fn vecmat(v: &Vector<f32>, m: &Matrix<f32>) -> Result<Vector<f32>, TruenoError> {
         if v.len() != m.rows {
             return Err(TruenoError::InvalidInput(format!(
@@ -250,32 +253,9 @@ impl Matrix<f32> {
             )));
         }
 
-        // SIMD-optimized implementation using row-wise accumulation
-        // Instead of column-wise access (cache-unfriendly), we compute:
-        // result = Σ(i) v[i] * row_i (cache-friendly, vectorizable)
-        //
-        // This approach:
-        // 1. Sequential row access (cache-friendly vs strided column access)
-        // 2. Uses SIMD scale and add operations
-        // 3. Leverages existing optimized Vector operations
-
-        let mut result = Vector::from_slice(&vec![0.0; m.cols]);
-        let v_slice = v.as_slice();
-
-        // Accumulate each scaled row into result
-        for (i, &scalar) in v_slice.iter().enumerate().take(m.rows) {
-            let row_start = i * m.cols;
-            let row = &m.data[row_start..(row_start + m.cols)];
-
-            // Create vector for this row
-            let row_vec = Vector::from_slice(row);
-
-            // result += scalar * row (using SIMD scale and add)
-            let scaled_row = row_vec.scale(scalar)?;
-            result = result.add(&scaled_row)?;
-        }
-
-        Ok(result)
+        let mut result_data = vec![0.0f32; m.cols];
+        crate::blis::gemv::gemv(m.rows, m.cols, v.as_slice(), &m.data, &mut result_data);
+        Ok(Vector::from_slice(&result_data))
     }
 }
 
