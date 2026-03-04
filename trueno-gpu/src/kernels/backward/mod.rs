@@ -51,7 +51,7 @@ mod softmax;
 
 // Re-export backward kernels
 pub use activations::{GeluBackwardKernel, ReluBackwardKernel, SiluBackwardKernel};
-pub use cross_entropy::FusedCrossEntropyKernel;
+pub use cross_entropy::{FusedCausalCrossEntropyKernel, FusedCrossEntropyKernel};
 pub use gemm::{GemmBackwardAKernel, GemmBackwardBKernel};
 pub use layer_norm::LayerNormBackwardKernel;
 pub use rms_norm::{BatchedRmsNormBackwardKernel, RmsNormBackwardKernel};
@@ -113,6 +113,7 @@ mod tests {
             Box::new(LayerNormBackwardKernel::new(64, 32)),
             Box::new(GemmBackwardAKernel::new(64, 64, 64)),
             Box::new(GemmBackwardBKernel::new(64, 64, 64)),
+            Box::new(FusedCausalCrossEntropyKernel::new(32000)),
         ];
 
         for kernel in kernels {
