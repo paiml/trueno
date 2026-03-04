@@ -79,6 +79,32 @@ All crates pass 60 adversarial edge-case tests designed to break contract invari
 
 **Key finding**: SVD of all-zero matrix produced NaN due to 0/0 in Jacobi rotation angle computation. Fixed by adding zero-column guard in the Gram matrix orthogonality check (GH #153).
 
+## Benchmarks
+
+Each crate includes criterion benchmarks. Run with `cargo bench -p trueno-<crate> --bench <name>_bench`.
+
+| Crate | Operation | N=64 | N=256 | N=1024 |
+|---|---|---|---|---|
+| **trueno-sparse** | SpMV | 159 ns | 694 ns | 2.7 µs |
+| **trueno-sparse** | SpMM (k=8) | 1.7 µs | 6.8 µs | — |
+| **trueno-sparse** | COO→CSR | 984 ns | 3.6 µs | 14.6 µs |
+| **trueno-fft** | Forward FFT | 312 ns | 1.6 µs | 7.9 µs |
+| **trueno-fft** | Inverse FFT | 350 ns | 1.8 µs | 8.8 µs |
+| **trueno-fft** | R2C | — | 2.0 µs | 8.4 µs |
+| **trueno-solve** | LU factorize | 180 ns (8) | 14.8 µs | — |
+| **trueno-solve** | QR factorize | 280 ns (8) | 132 µs | — |
+| **trueno-solve** | Cholesky | 127 ns (8) | 23.4 µs | — |
+| **trueno-solve** | SVD (Jacobi) | 5.8 µs (8) | 350 µs (32) | — |
+| **trueno-image** | Conv2D 3×3 | 80 µs | 319 µs | — |
+| **trueno-image** | Gaussian blur | 113 µs | 491 µs | — |
+| **trueno-image** | Canny edge | 426 µs | 1.6 ms | — |
+| **trueno-image** | Resize 2× | 75 µs | 296 µs | — |
+| **trueno-rand** | Philox uniform | 2.7 µs (1K) | 43 µs (16K) | 344 µs (128K) |
+| **trueno-rand** | Philox normal | 16.7 µs (1K) | 267 µs (16K) | 2.1 ms (128K) |
+| **trueno-rand** | Threefry uniform | 6.9 µs (1K) | 101 µs (16K) | 701 µs (128K) |
+| **trueno-tensor** | matmul | 490 µs (16) | 30 ms (64) | 259 ms (128) |
+| **trueno-tensor** | einsum trace | 350 µs | 1.4 ms | — |
+
 ## Quality Gates
 
 All code passes PMAT pre-commit quality gates:
