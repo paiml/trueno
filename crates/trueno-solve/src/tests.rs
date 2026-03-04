@@ -1,5 +1,6 @@
 //! Solver tests — provable contracts and falsification.
 
+use crate::blas3::{gemm_ex_epilogue, Epilogue};
 use crate::cholesky::cholesky;
 use crate::lu::lu_factorize;
 use crate::qr::qr_factorize;
@@ -826,4 +827,63 @@ fn test_solver_trait_qr() -> Result<(), Box<dyn std::error::Error>> {
     assert!((x[0] - 3.0).abs() < 1e-5);
     assert!((x[1] - 7.0).abs() < 1e-5);
     Ok(())
+}
+
+// ── Epilogue fusion tests (§8 parity) ──────────────────────────
+
+#[test]
+fn test_gemm_ex_epilogue_none() -> Result<(), Box<dyn std::error::Error>> {
+    let a: Vec<u16> = [1.0, 0.0, 0.0, 1.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let b: Vec<u16> = [3.0, 4.0, 5.0, 6.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let mut c = [0.0_f32; 4];
+    gemm_ex_epilogue(&a, &b, &mut c, 2, 2, 2, 1.0, 0.0, Epilogue::None, None)?;
+    assert!((c[0] - 3.0).abs() < 0.1);
+    assert!((c[3] - 6.0).abs() < 0.1);
+    Ok(())
+}
+
+#[test]
+fn test_gemm_ex_epilogue_relu() -> Result<(), Box<dyn std::error::Error>> {
+    let a: Vec<u16> = [1.0, 0.0, 0.0, 1.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let b: Vec<u16> = [-3.0, 4.0, 5.0, -6.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let mut c = [0.0_f32; 4];
+    gemm_ex_epilogue(&a, &b, &mut c, 2, 2, 2, 1.0, 0.0, Epilogue::Relu, None)?;
+    assert!((c[0] - 0.0).abs() < 0.1); // max(0, -3) = 0
+    assert!((c[1] - 4.0).abs() < 0.1); // max(0, 4) = 4
+    assert!((c[3] - 0.0).abs() < 0.1); // max(0, -6) = 0
+    Ok(())
+}
+
+#[test]
+fn test_gemm_ex_epilogue_bias() -> Result<(), Box<dyn std::error::Error>> {
+    let a: Vec<u16> = [1.0, 0.0, 0.0, 1.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let b: Vec<u16> = [1.0, 2.0, 3.0, 4.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let mut c = [0.0_f32; 4];
+    let bias = [10.0, 20.0_f32];
+    gemm_ex_epilogue(&a, &b, &mut c, 2, 2, 2, 1.0, 0.0, Epilogue::Bias, Some(&bias))?;
+    assert!((c[0] - 11.0).abs() < 0.1); // 1 + 10
+    assert!((c[1] - 22.0).abs() < 0.1); // 2 + 20
+    Ok(())
+}
+
+#[test]
+fn test_gemm_ex_epilogue_gelu() -> Result<(), Box<dyn std::error::Error>> {
+    let a: Vec<u16> = [1.0, 0.0, 0.0, 1.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let b: Vec<u16> = [2.0, 0.0, 0.0, -2.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let mut c = [0.0_f32; 4];
+    gemm_ex_epilogue(&a, &b, &mut c, 2, 2, 2, 1.0, 0.0, Epilogue::Gelu, None)?;
+    // GELU(2.0) ≈ 1.9545, GELU(-2.0) ≈ -0.0455
+    assert!(c[0] > 1.9);
+    assert!(c[3] < 0.0 && c[3] > -0.1);
+    Ok(())
+}
+
+#[test]
+fn test_gemm_ex_epilogue_bias_required() {
+    let a: Vec<u16> = [1.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let b: Vec<u16> = [1.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let mut c = [0.0_f32];
+    // Bias epilogue without bias → error
+    let result = gemm_ex_epilogue(&a, &b, &mut c, 1, 1, 1, 1.0, 0.0, Epilogue::Bias, None);
+    assert!(result.is_err());
 }

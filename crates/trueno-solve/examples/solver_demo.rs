@@ -5,8 +5,8 @@
 //! ```
 
 use trueno_solve::{
-    cholesky, f32_to_f16, gemm_ex, gemm_strided_batched, lu_factorize, qr_factorize, svd, syr2k,
-    syrk, symm, trmm, trsm, Solver,
+    cholesky, f32_to_f16, gemm_ex, gemm_ex_epilogue, gemm_strided_batched, lu_factorize,
+    qr_factorize, svd, syr2k, syrk, symm, trmm, trsm, Epilogue, Solver,
 };
 use trueno_solve::{DiagonalType, TriangularSide};
 
@@ -128,6 +128,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         solver2.dimension(),
         x_dyn2[0],
         x_dyn2[1]
+    );
+
+    // ── gemmEx with epilogue fusion ─────────────────────────
+    println!("\n--- gemmEx with epilogue fusion ---");
+    let a_ep: Vec<u16> = [1.0, 0.0, 0.0, 1.0_f32]
+        .iter()
+        .map(|&v| f32_to_f16(v))
+        .collect();
+    let b_ep: Vec<u16> = [-3.0, 4.0, 5.0, -6.0_f32]
+        .iter()
+        .map(|&v| f32_to_f16(v))
+        .collect();
+    let mut c_relu = [0.0_f32; 4];
+    gemm_ex_epilogue(
+        &a_ep, &b_ep, &mut c_relu, 2, 2, 2, 1.0, 0.0, Epilogue::Relu, None,
+    )?;
+    println!(
+        "ReLU epilogue: [{:.1}, {:.1}; {:.1}, {:.1}]",
+        c_relu[0], c_relu[1], c_relu[2], c_relu[3]
+    );
+
+    let mut c_bias = [0.0_f32; 4];
+    let bias = [100.0, 200.0_f32];
+    gemm_ex_epilogue(
+        &a_ep, &b_ep, &mut c_bias, 2, 2, 2, 1.0, 0.0, Epilogue::Bias, Some(&bias),
+    )?;
+    println!(
+        "Bias epilogue: [{:.1}, {:.1}; {:.1}, {:.1}]",
+        c_bias[0], c_bias[1], c_bias[2], c_bias[3]
     );
 
     println!("\n=== All solver demos passed ===");

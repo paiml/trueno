@@ -850,3 +850,94 @@ fn test_imageops_canny_edges() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(edge_count, 0, "Uniform image should have no edges");
     Ok(())
 }
+
+// ── Expanded ImageOps trait tests (§5C parity) ──────────────────
+
+#[test]
+fn test_imageops_conv2d() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ImageBuf::new(vec![5.0f32; 25], 5, 5, 1)?;
+    let delta = [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0_f32];
+    let result = buf.apply_conv2d(&delta, 3, 3, BorderMode::Zero)?;
+    assert_eq!(result.width(), 5);
+    // Interior pixel should be preserved
+    assert!((result.data()[12] - 5.0).abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_imageops_sobel_gradients() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ImageBuf::new(vec![3.0f32; 25], 5, 5, 1)?;
+    let (gx, gy) = buf.sobel_gradients()?;
+    assert_eq!(gx.channels(), 1);
+    assert_eq!(gy.channels(), 1);
+    // Uniform image → zero gradients at interior
+    assert!(gx.data()[12].abs() < 1e-5);
+    assert!(gy.data()[12].abs() < 1e-5);
+    Ok(())
+}
+
+#[test]
+fn test_imageops_dilate_erode() -> Result<(), Box<dyn std::error::Error>> {
+    let mut data = vec![0.0f32; 25];
+    data[12] = 1.0;
+    let buf = ImageBuf::new(data, 5, 5, 1)?;
+    let se = [1.0f32; 9];
+    let dilated = buf.apply_dilate(&se, 3, 3)?;
+    assert!((dilated.data()[12] - 1.0).abs() < 1e-6);
+    assert!((dilated.data()[7] - 1.0).abs() < 1e-6); // neighbor expanded
+
+    let full = ImageBuf::new(vec![1.0f32; 25], 5, 5, 1)?;
+    let eroded = full.apply_erode(&se, 3, 3)?;
+    assert!((eroded.data()[12] - 1.0).abs() < 1e-6);
+    Ok(())
+}
+
+#[test]
+fn test_imageops_resize() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ImageBuf::new(vec![0.5f32; 16], 4, 4, 1)?;
+    let resized = buf.apply_resize(2, 2, Interpolation::Bilinear)?;
+    assert_eq!(resized.width(), 2);
+    assert_eq!(resized.height(), 2);
+    assert_eq!(resized.len(), 4);
+    for &v in resized.data() {
+        assert!((v - 0.5).abs() < 0.1);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_imageops_to_hsv() -> Result<(), Box<dyn std::error::Error>> {
+    // Pure red → H≈0, S=1, V=1
+    let buf = ImageBuf::new(vec![1.0, 0.0, 0.0], 1, 1, 3)?;
+    let hsv = buf.to_hsv()?;
+    assert_eq!(hsv.channels(), 3);
+    assert!((hsv.data()[1] - 1.0).abs() < 1e-4); // S = 1
+    assert!((hsv.data()[2] - 1.0).abs() < 1e-4); // V = 1
+    Ok(())
+}
+
+#[test]
+fn test_imageops_histogram() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ImageBuf::new(vec![0.5f32; 25], 5, 5, 1)?;
+    let hist = buf.compute_histogram(10)?;
+    let total: u32 = hist.iter().sum();
+    assert_eq!(total, 25);
+    Ok(())
+}
+
+#[test]
+fn test_imageops_connected_components() -> Result<(), Box<dyn std::error::Error>> {
+    #[rustfmt::skip]
+    let data = vec![
+        1.0, 0.0, 1.0,
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 1.0_f32,
+    ];
+    let buf = ImageBuf::new(data, 3, 3, 1)?;
+    let (labels, num) = buf.label_components()?;
+    assert!(num >= 3); // 3 separate components
+    assert!(labels[0] > 0);
+    assert!(labels[2] > 0);
+    assert_ne!(labels[0], labels[2]);
+    Ok(())
+}

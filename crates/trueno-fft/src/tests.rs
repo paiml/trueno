@@ -690,3 +690,49 @@ fn test_fft_trait_r2c_c2r() {
         assert!((a - b).abs() < 1e-4, "r2c/c2r roundtrip mismatch at {i}: {a} vs {b}");
     }
 }
+
+// ── Fft trait fft_2d (§3C parity) ──────────────────────────────
+
+#[test]
+fn test_fft_trait_2d_impulse() {
+    let plan = FftPlan::new(4).expect("valid plan");
+    let fft: &dyn Fft = &plan;
+
+    // 4×4 impulse → all ones in frequency domain
+    let mut input = vec![Complex::ZERO; 16];
+    input[0] = Complex::new(1.0, 0.0);
+    let mut output = vec![Complex::ZERO; 16];
+
+    fft.fft_2d(&input, &mut output, 4, 4).expect("2d ok");
+
+    // All frequency bins should be 1.0 + 0i for an impulse at (0,0)
+    for (i, &v) in output.iter().enumerate() {
+        assert!(
+            (v.re - 1.0).abs() < 1e-4 && v.im.abs() < 1e-4,
+            "2D impulse mismatch at {i}: ({}, {})",
+            v.re,
+            v.im
+        );
+    }
+}
+
+#[test]
+fn test_fft_trait_2d_parseval() {
+    let plan = FftPlan::new(4).expect("valid plan");
+    let fft: &dyn Fft = &plan;
+
+    let input: Vec<Complex> = (0..16)
+        .map(|i| Complex::new((i as f32).sin(), (i as f32).cos()))
+        .collect();
+    let mut output = vec![Complex::ZERO; 16];
+
+    fft.fft_2d(&input, &mut output, 4, 4).expect("2d ok");
+
+    let energy_time: f32 = input.iter().map(|c| c.norm_sq()).sum();
+    let energy_freq: f32 = output.iter().map(|c| c.norm_sq()).sum::<f32>() / 16.0;
+
+    assert!(
+        (energy_time - energy_freq).abs() < 0.1,
+        "2D Parseval: time={energy_time}, freq={energy_freq}"
+    );
+}
