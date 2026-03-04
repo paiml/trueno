@@ -7,6 +7,7 @@
 //! - [`AdamWStepKernel`]: Fused AdamW with weight decay
 //! - [`AdamStepKernel`]: Vanilla Adam without weight decay
 //! - [`GradientClipKernel`]: L2 gradient norm clipping
+//! - [`SquaredSumKernel`]: GPU-side sum-of-squares reduction for L2 norm (KAIZEN-049)
 //!
 //! ## Performance Benefits
 //!
@@ -30,6 +31,8 @@
 
 mod adamw;
 mod clip;
+mod squared_sum;
 
 pub use adamw::{AdamStepKernel, AdamWStepKernel};
 pub use clip::GradientClipKernel;
+pub use squared_sum::SquaredSumKernel;
