@@ -169,8 +169,12 @@ fn load_apr_invalid_json_in_valid_envelope() {
 #[test]
 fn save_apr_returns_io_error_for_invalid_path() {
     let c = make_collector_with_samples(1);
-    // Try to write to a directory that we can't create (root-owned)
-    let result = c.save_apr("/proc/nonexistent/deep/path/file.apr");
+    // Try to write to a path that cannot exist on any platform
+    #[cfg(unix)]
+    let invalid_path = "/proc/nonexistent/deep/path/file.apr";
+    #[cfg(windows)]
+    let invalid_path = r"\\?\INVALID:\nonexistent\deep\path\file.apr";
+    let result = c.save_apr(invalid_path);
     assert!(result.is_err());
     let err = format!("{}", result.unwrap_err());
     assert!(err.contains("I/O error"));

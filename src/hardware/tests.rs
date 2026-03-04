@@ -214,7 +214,7 @@ fn test_expected_throughput_with_fake_gpu() {
 #[test]
 fn test_load_invalid_toml() {
     use std::path::PathBuf;
-    let tmp_path = PathBuf::from("/tmp/trueno_test_invalid.toml");
+    let tmp_path = std::env::temp_dir().join("trueno_test_invalid.toml");
 
     // Write invalid TOML
     std::fs::write(&tmp_path, "this is not valid toml [[[").expect("Failed to write");
