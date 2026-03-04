@@ -14,6 +14,7 @@
 //! [5] NVIDIA CUDA C++ Programming Guide v12.3, Section 3.2 "CUDA Contexts"
 //!     recommends Primary Context API for applications using multiple modules.
 
+use std::os::raw::c_char;
 use std::ptr;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -215,7 +216,7 @@ impl CudaContext {
     pub fn device_name(&self) -> Result<String, GpuError> {
         let driver = get_driver()?;
 
-        let mut name = [0i8; 256];
+        let mut name = [0 as c_char; 256];
         // SAFETY: buffer is valid and large enough
         let result = unsafe { (driver.cuDeviceGetName)(name.as_mut_ptr(), 256, self.device) };
         CudaDriver::check(result)?;
