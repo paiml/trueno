@@ -413,3 +413,142 @@ fn test_bluestein_empty() {
     let output: &mut [Complex] = &mut [];
     assert!(bluestein_fft(input, output, false).is_err());
 }
+
+// ============================================================================
+// 3D FFT tests (Contract: fft-3d-v1.yaml)
+// ============================================================================
+
+use crate::fft3d::{fft_3d, fft_batched, ifft_3d};
+
+#[test]
+fn test_fft_3d_impulse() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 2;
+    let total = n * n * n;
+    let mut input = vec![Complex::ZERO; total];
+    input[0] = Complex::new(1.0, 0.0);
+    let mut output = vec![Complex::ZERO; total];
+
+    fft_3d(&input, &mut output, n, n, n)?;
+
+    // 3D impulse → all ones
+    for (k, x) in output.iter().enumerate() {
+        assert!(
+            (x.re - 1.0).abs() < 1e-4 && x.im.abs() < 1e-4,
+            "3D impulse wrong at k={k}: {x:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn test_fft_3d_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    let (nx, ny, nz) = (2, 4, 2);
+    let total = nx * ny * nz;
+    let input: Vec<Complex> = (0..total)
+        .map(|i| Complex::new((i as f32).sin(), (i as f32).cos()))
+        .collect();
+    let mut freq = vec![Complex::ZERO; total];
+    let mut recovered = vec![Complex::ZERO; total];
+
+    fft_3d(&input, &mut freq, nx, ny, nz)?;
+    ifft_3d(&freq, &mut recovered, nx, ny, nz)?;
+
+    for (i, (orig, rec)) in input.iter().zip(recovered.iter()).enumerate() {
+        let err = (*orig - *rec).abs();
+        assert!(err < 1e-3, "3D roundtrip failed at {i}: err={err}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_fft_3d_parseval() -> Result<(), Box<dyn std::error::Error>> {
+    let (nx, ny, nz) = (2, 2, 4);
+    let total = nx * ny * nz;
+    let input: Vec<Complex> = (0..total)
+        .map(|i| Complex::new(i as f32, 0.0))
+        .collect();
+    let mut output = vec![Complex::ZERO; total];
+
+    fft_3d(&input, &mut output, nx, ny, nz)?;
+
+    let energy_time: f32 = input.iter().map(|x| x.norm_sq()).sum();
+    let energy_freq: f32 = output.iter().map(|x| x.norm_sq()).sum::<f32>() / total as f32;
+    assert!(
+        (energy_time - energy_freq).abs() < 1.0,
+        "3D Parseval violated: time={energy_time}, freq={energy_freq}"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_fft_3d_zero_dim() {
+    let input = vec![Complex::ZERO; 0];
+    let mut output = vec![];
+    assert!(fft_3d(&input, &mut output, 0, 2, 2).is_err());
+}
+
+#[test]
+fn test_fft_3d_size_mismatch() {
+    let input = vec![Complex::ZERO; 8];
+    let mut output = vec![Complex::ZERO; 16];
+    assert!(fft_3d(&input, &mut output, 2, 2, 2).is_err());
+}
+
+// ============================================================================
+// Batched FFT tests
+// ============================================================================
+
+#[test]
+fn test_fft_batched_impulse() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 4;
+    let batch = 3;
+    let total = n * batch;
+    let mut input = vec![Complex::ZERO; total];
+    // Each batch has impulse at position 0
+    for b in 0..batch {
+        input[b * n] = Complex::new(1.0, 0.0);
+    }
+    let mut output = vec![Complex::ZERO; total];
+
+    fft_batched(&input, &mut output, n, batch, false)?;
+
+    // Each batch should produce all-ones
+    for b in 0..batch {
+        for k in 0..n {
+            let x = output[b * n + k];
+            assert!(
+                (x.re - 1.0).abs() < 1e-5 && x.im.abs() < 1e-5,
+                "Batched impulse wrong at batch={b}, k={k}: {x:?}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn test_fft_batched_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    let n = 8;
+    let batch = 2;
+    let total = n * batch;
+    let input: Vec<Complex> = (0..total)
+        .map(|i| Complex::new((i as f32).sin(), 0.0))
+        .collect();
+    let mut freq = vec![Complex::ZERO; total];
+    let mut recovered = vec![Complex::ZERO; total];
+
+    fft_batched(&input, &mut freq, n, batch, false)?;
+    fft_batched(&freq, &mut recovered, n, batch, true)?;
+
+    for (i, (orig, rec)) in input.iter().zip(recovered.iter()).enumerate() {
+        let err = (*orig - *rec).abs();
+        assert!(err < 1e-4, "Batched roundtrip err at {i}: {err}");
+    }
+    Ok(())
+}
+
+#[test]
+fn test_fft_batched_size_mismatch() {
+    let input = vec![Complex::ZERO; 10]; // not a multiple of n=4
+    let mut output = vec![Complex::ZERO; 8];
+    assert!(fft_batched(&input, &mut output, 4, 2, false).is_err());
+}

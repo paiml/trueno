@@ -1,0 +1,58 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "3D FFT and batched transforms"
+  crate: "trueno-fft"
+  references:
+    - "Cooley & Tukey, 'An algorithm for the machine calculation of complex Fourier series', 1965"
+
+equations:
+  fft_3d:
+    formula: "X[k1,k2,k3] = Σ_n1 Σ_n2 Σ_n3 x[n1,n2,n3] · exp(-2πi(k1·n1/N1 + k2·n2/N2 + k3·n3/N3))"
+    domain: "x ∈ ℂ^{N1×N2×N3}, each Ni = 2^k"
+    codomain: "X ∈ ℂ^{N1×N2×N3}"
+    invariants:
+      - "Impulse: FFT3D(δ) = 1"
+      - "Roundtrip: IFFT3D(FFT3D(x)) = x within tolerance"
+      - "Parseval: Σ|x|² = (1/N)·Σ|X|²"
+
+  fft_batched:
+    formula: "For each batch b: X_b = FFT(x_b)"
+    domain: "x_b ∈ ℂ^N for b = 0..B-1"
+    codomain: "X_b ∈ ℂ^N"
+    invariants:
+      - "Each batch independently satisfies 1D FFT contract"
+      - "Impulse per batch: FFT(δ) = 1"
+
+proof_obligations:
+  - type: invariant
+    property: "3D impulse response"
+    formal: "FFT3D(δ_{0,0,0}) = 1 at all k"
+    applies_to: all
+
+  - type: invariant
+    property: "3D roundtrip"
+    formal: "||IFFT3D(FFT3D(x)) - x||_∞ < ε"
+    applies_to: all
+
+  - type: invariant
+    property: "Parseval conservation"
+    formal: "Σ|x|² ≈ (1/N)·Σ|X|²"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-3DFFT-001
+    rule: "3D impulse"
+    test: "test_fft_3d_impulse"
+  - id: FALSIFY-3DFFT-002
+    rule: "3D roundtrip"
+    test: "test_fft_3d_roundtrip"
+  - id: FALSIFY-3DFFT-003
+    rule: "Parseval"
+    test: "test_fft_3d_parseval"
+  - id: FALSIFY-3DFFT-004
+    rule: "Batched impulse"
+    test: "test_fft_batched_impulse"
+  - id: FALSIFY-3DFFT-005
+    rule: "Batched roundtrip"
+    test: "test_fft_batched_roundtrip"

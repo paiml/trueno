@@ -31,6 +31,7 @@
 mod bluestein;
 mod complex;
 mod error;
+mod fft3d;
 mod stockham;
 
 #[cfg(test)]
@@ -39,4 +40,5 @@ mod tests;
 pub use bluestein::bluestein_fft;
 pub use complex::Complex;
 pub use error::FftError;
+pub use fft3d::{fft_3d, fft_batched, ifft_3d};
 pub use stockham::{fft_2d, FftPlan};
