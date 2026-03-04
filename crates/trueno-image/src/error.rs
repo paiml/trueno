@@ -42,4 +42,22 @@ pub enum ImageError {
         /// High threshold.
         high: f32,
     },
+
+    /// Data length doesn't match dimensions.
+    #[error("data length {got} does not match expected {expected}")]
+    DimensionMismatch {
+        /// Expected length.
+        expected: usize,
+        /// Actual length.
+        got: usize,
+    },
+
+    /// Invalid channel index.
+    #[error("channel {channel} out of range (max {max})")]
+    InvalidChannel {
+        /// Requested channel.
+        channel: usize,
+        /// Number of channels.
+        max: usize,
+    },
 }

@@ -639,3 +639,54 @@ fn test_c2r_output_dimension_mismatch() {
     let mut output = vec![0.0f32; 4]; // Wrong: should be 8
     assert!(plan.inverse_c2r(&freq, &mut output).is_err());
 }
+
+// ── Fft trait tests ──────────────────────────────────────────────
+
+use crate::Fft;
+
+#[test]
+fn test_fft_trait_roundtrip() {
+    let plan = FftPlan::new(4).expect("valid plan");
+    let fft: &dyn Fft = &plan;
+
+    let input = [
+        Complex::new(1.0, 0.0),
+        Complex::new(2.0, 0.0),
+        Complex::new(3.0, 0.0),
+        Complex::new(4.0, 0.0),
+    ];
+    let mut freq = vec![Complex::ZERO; 4];
+    let mut roundtrip = vec![Complex::ZERO; 4];
+
+    fft.fft_1d(&input, &mut freq).expect("forward ok");
+    fft.ifft_1d(&freq, &mut roundtrip).expect("inverse ok");
+
+    for (i, (a, b)) in input.iter().zip(roundtrip.iter()).enumerate() {
+        assert!((a.re - b.re).abs() < 1e-5, "roundtrip mismatch at {i}");
+    }
+}
+
+#[test]
+fn test_fft_trait_len() {
+    let plan = FftPlan::new(16).expect("valid plan");
+    let fft: &dyn Fft = &plan;
+    assert_eq!(fft.len(), 16);
+    assert!(!fft.is_empty());
+}
+
+#[test]
+fn test_fft_trait_r2c_c2r() {
+    let plan = FftPlan::new(8).expect("valid plan");
+    let fft: &dyn Fft = &plan;
+
+    let input = [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0_f32];
+    let mut freq = vec![Complex::ZERO; 5]; // N/2+1
+    let mut output = vec![0.0_f32; 8];
+
+    fft.fft_r2c(&input, &mut freq).expect("r2c ok");
+    fft.fft_c2r(&freq, &mut output).expect("c2r ok");
+
+    for (i, (&a, &b)) in input.iter().zip(output.iter()).enumerate() {
+        assert!((a - b).abs() < 1e-4, "r2c/c2r roundtrip mismatch at {i}: {a} vs {b}");
+    }
+}

@@ -690,3 +690,53 @@ fn test_conv_wrap_periodic() -> Result<(), Box<dyn std::error::Error>> {
     Ok(()
 )
 }
+
+// ── ImageBuf tests ──────────────────────────────────────────────
+
+use crate::buf::{DType, ImageBuf};
+
+#[test]
+fn test_imagebuf_new() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ImageBuf::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 3, 2, 1)?;
+    assert_eq!(buf.width(), 3);
+    assert_eq!(buf.height(), 2);
+    assert_eq!(buf.channels(), 1);
+    assert_eq!(buf.dtype(), DType::F32);
+    assert_eq!(buf.len(), 6);
+    assert!(!buf.is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_imagebuf_zeros() {
+    let buf = ImageBuf::zeros(4, 4, 3);
+    assert_eq!(buf.len(), 48);
+    assert!(buf.data().iter().all(|&v| v == 0.0));
+}
+
+#[test]
+fn test_imagebuf_channel_extract() -> Result<(), Box<dyn std::error::Error>> {
+    // RGB image: 2×1, 3 channels
+    let buf = ImageBuf::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 1, 3)?;
+    let r = buf.channel(0)?;
+    assert_eq!(r.channels(), 1);
+    assert_eq!(r.data(), &[1.0, 4.0]);
+    let g = buf.channel(1)?;
+    assert_eq!(g.data(), &[2.0, 5.0]);
+    let b = buf.channel(2)?;
+    assert_eq!(b.data(), &[3.0, 6.0]);
+    Ok(())
+}
+
+#[test]
+fn test_imagebuf_invalid_channel() -> Result<(), Box<dyn std::error::Error>> {
+    let buf = ImageBuf::new(vec![1.0, 2.0, 3.0], 1, 1, 3)?;
+    assert!(buf.channel(3).is_err());
+    Ok(())
+}
+
+#[test]
+fn test_imagebuf_dimension_mismatch() {
+    let result = ImageBuf::new(vec![1.0, 2.0, 3.0], 2, 2, 1);
+    assert!(result.is_err());
+}
