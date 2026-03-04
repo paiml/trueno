@@ -13,6 +13,57 @@ packages:
       - simd
       - wgpu
 
+  # CUDA parity crates (CPU implementations)
+  - name: trueno-sparse
+    type: library
+    path: crates/trueno-sparse
+    crates:
+      - trueno-sparse
+    depends_on:
+      - trueno
+    features:
+      - simd
+
+  - name: trueno-fft
+    type: library
+    path: crates/trueno-fft
+    crates:
+      - trueno-fft
+    depends_on:
+      - trueno
+
+  - name: trueno-solve
+    type: library
+    path: crates/trueno-solve
+    crates:
+      - trueno-solve
+    depends_on:
+      - trueno
+
+  - name: trueno-image
+    type: library
+    path: crates/trueno-image
+    crates:
+      - trueno-image
+    depends_on:
+      - trueno
+
+  - name: trueno-rand
+    type: library
+    path: crates/trueno-rand
+    crates:
+      - trueno-rand
+    depends_on:
+      - trueno
+
+  - name: trueno-tensor
+    type: library
+    path: crates/trueno-tensor
+    crates:
+      - trueno-tensor
+    depends_on:
+      - trueno
+
   # GPU sub-crate
   - name: trueno-gpu
     type: library
@@ -62,6 +113,12 @@ packages:
 
 build_order:
   - trueno
+  - trueno-sparse
+  - trueno-fft
+  - trueno-solve
+  - trueno-image
+  - trueno-rand
+  - trueno-tensor
   - trueno-gpu
   - trueno-cupti
   - cbtop
@@ -77,6 +134,13 @@ notifications:
       notify:
         - cbtop
         - trueno-ptx-debug
+
+    - pattern: "crates/trueno-sparse/src/*"
+      notify:
+        - trueno-gpu
+    - pattern: "crates/trueno-solve/src/*"
+      notify:
+        - trueno-gpu
 
   # Spec changes notify downstream
   on_spec_change:
