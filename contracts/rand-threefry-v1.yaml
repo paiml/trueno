@@ -1,0 +1,51 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Threefry 4x64-20 counter-based PRNG"
+  crate: "trueno-rand"
+  references:
+    - "Salmon et al., 'Parallel Random Numbers: As Easy as 1, 2, 3', SC 2011"
+
+equations:
+  threefry:
+    formula: "output = Threefry_20(counter, key) using rotation + XOR rounds"
+    domain: "key in Z^4_{2^64}, counter in Z^4_{2^64}"
+    codomain: "output in Z^4_{2^64}"
+    invariants:
+      - "Deterministic: same (key, counter) -> same output"
+      - "No multiplication: uses only add, rotate, XOR"
+      - "Period: 2^256 per key"
+      - "Uniform distribution: passes basic statistical tests"
+
+proof_obligations:
+  - type: invariant
+    property: "Determinism"
+    formal: "threefry(key, ctr) == threefry(key, ctr)"
+    applies_to: all
+
+  - type: invariant
+    property: "Different counters produce different output"
+    formal: "threefry(key, c1) != threefry(key, c2) for c1 != c2 (w.h.p.)"
+    applies_to: all
+
+  - type: bound
+    property: "Uniform distribution"
+    formal: "|mean(fill_uniform(N)) - 0.5| < 0.01 for N=100000"
+    applies_to: statistical
+
+falsification_tests:
+  - id: FALSIFY-THREEFRY-001
+    rule: "Determinism"
+    test: "test_threefry_deterministic_same_seed"
+  - id: FALSIFY-THREEFRY-002
+    rule: "Different seeds differ"
+    test: "test_threefry_different_seeds_differ"
+  - id: FALSIFY-THREEFRY-003
+    rule: "Uniform range [0,1)"
+    test: "test_threefry_uniform_range"
+  - id: FALSIFY-THREEFRY-004
+    rule: "Uniform mean"
+    test: "test_threefry_uniform_mean"
+  - id: FALSIFY-THREEFRY-005
+    rule: "Normal distribution"
+    test: "test_threefry_normal_mean_and_variance"

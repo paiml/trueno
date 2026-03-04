@@ -103,7 +103,9 @@ let tr = trace(&matrix)?;                   // Trace
 
 ## Random Number Generation (trueno-rand)
 
-Philox 4×32-10 counter-based PRNG (cuRAND parity):
+Two counter-based PRNGs with cuRAND parity:
+
+### Philox 4×32-10 (multiply-based)
 
 ```rust
 use trueno_rand::Philox4x32;
@@ -114,6 +116,19 @@ rng.fill_normal(&mut buffer);    // N(0, 1)
 
 // Stateless generation (GPU-friendly)
 let vals = Philox4x32::generate_at(key, counter);
+```
+
+### Threefry 4×64-20 (rotation-based, no multiply)
+
+```rust
+use trueno_rand::Threefry4x64;
+
+let mut rng = Threefry4x64::new(seed);
+rng.fill_uniform(&mut buffer);   // U[0, 1)
+rng.fill_normal(&mut buffer);    // N(0, 1)
+
+// Stateless generation
+let vals = Threefry4x64::generate_at(key, counter);
 ```
 
 ## Provable Contracts

@@ -1,0 +1,46 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Cholesky factorization for symmetric positive definite matrices"
+  crate: "trueno-solve"
+  references:
+    - "Golub & Van Loan, 'Matrix Computations', 4th ed., Chapter 4.2"
+    - "Higham, 'Accuracy and Stability of Numerical Algorithms', 2nd ed."
+
+equations:
+  cholesky:
+    formula: "A = L * L^T where L is lower triangular"
+    domain: "A in R^{n x n}, A symmetric positive definite"
+    codomain: "L in R^{n x n} lower triangular"
+    invariants:
+      - "Reconstruction: ||A - L*L^T|| < n * u * ||A||"
+      - "Solve accuracy: ||Ax - b|| / (||A|| * ||x||) < n * u"
+      - "L is lower triangular with positive diagonal"
+
+proof_obligations:
+  - type: bound
+    property: "Backward error"
+    formal: "||A - L*L^T||_F / ||A||_F <= n * u"
+    tolerance: "n * f32::EPSILON"
+    applies_to: all
+
+  - type: invariant
+    property: "Solve residual"
+    formal: "||Ax - b|| / (||A|| * ||x||) < n * u"
+    applies_to: all
+
+  - type: invariant
+    property: "Non-SPD rejection"
+    formal: "cholesky(non_spd) returns Err"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-CHOL-001
+    rule: "Reconstruction"
+    test: "test_cholesky_spd_solve"
+  - id: FALSIFY-CHOL-002
+    rule: "Non-SPD rejection"
+    test: "test_cholesky_non_spd"
+  - id: FALSIFY-CHOL-003
+    rule: "Backward error"
+    test: "test_cholesky_residual"

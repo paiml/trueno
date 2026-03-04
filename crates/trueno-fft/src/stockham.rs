@@ -122,6 +122,49 @@ impl FftPlan {
         Ok(())
     }
 
+    /// Complex-to-real inverse FFT (C2R). Input has N/2+1 elements (Hermitian),
+    /// output has N real values.
+    ///
+    /// Reconstructs the full spectrum from Hermitian symmetry, applies inverse FFT,
+    /// and returns the real part.
+    ///
+    /// # Errors
+    ///
+    /// Returns error on dimension mismatch.
+    pub fn inverse_c2r(&self, input: &[Complex], output: &mut [f32]) -> Result<(), FftError> {
+        let expected_in = self.n / 2 + 1;
+        if input.len() != expected_in {
+            return Err(FftError::R2cOutputLengthMismatch {
+                expected: expected_in,
+                got: input.len(),
+            });
+        }
+        if output.len() != self.n {
+            return Err(FftError::OutputLengthMismatch {
+                expected: self.n,
+                got: output.len(),
+            });
+        }
+
+        // Reconstruct full N-point spectrum from Hermitian symmetry: X[N-k] = conj(X[k])
+        let mut full_input = vec![Complex::ZERO; self.n];
+        for (i, &val) in input.iter().enumerate() {
+            full_input[i] = val;
+        }
+        for k in 1..self.n / 2 {
+            full_input[self.n - k] = input[k].conj();
+        }
+
+        let mut full_output = vec![Complex::ZERO; self.n];
+        self.transform(&full_input, &mut full_output, true);
+
+        let scale = 1.0 / self.n as f32;
+        for (i, x) in full_output.iter().enumerate() {
+            output[i] = x.re * scale;
+        }
+        Ok(())
+    }
+
     fn validate_buffers(&self, in_len: usize, out_len: usize) -> Result<(), FftError> {
         if in_len != self.n {
             return Err(FftError::OutputLengthMismatch {
@@ -196,6 +239,26 @@ fn bit_reverse(mut i: usize, bits: u32) -> usize {
         i >>= 1;
     }
     result
+}
+
+/// Free-function R2C forward FFT. Output has N/2+1 complex elements.
+///
+/// # Errors
+///
+/// Returns error if N is not power of two or dimensions mismatch.
+pub fn fft_r2c(input: &[f32], output: &mut [Complex]) -> Result<(), FftError> {
+    let plan = FftPlan::new(input.len())?;
+    plan.forward_r2c(input, output)
+}
+
+/// Free-function C2R inverse FFT. Input has N/2+1 complex elements, output has N reals.
+///
+/// # Errors
+///
+/// Returns error if N is not power of two or dimensions mismatch.
+pub fn fft_c2r(input: &[Complex], output: &mut [f32], n: usize) -> Result<(), FftError> {
+    let plan = FftPlan::new(n)?;
+    plan.inverse_c2r(input, output)
 }
 
 /// 2D FFT via row-column decomposition.
