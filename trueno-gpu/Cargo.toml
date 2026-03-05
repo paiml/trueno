@@ -1,6 +1,6 @@
 [package]
 name = "trueno-gpu"
-version = "0.4.19"
+version = "0.4.22"
 edition = "2021"
 authors = ["Pragmatic AI Labs"]
 license = "MIT"
