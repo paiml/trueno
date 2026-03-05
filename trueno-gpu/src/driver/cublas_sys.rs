@@ -89,6 +89,9 @@ pub type CublasComputeType = c_int;
 
 /// FP32 accumulation (required for training stability)
 pub const CUBLAS_COMPUTE_32F: CublasComputeType = 68;
+/// FP32 inputs with TF32 tensor core acceleration (10-bit mantissa, 2x faster)
+/// Standard for NN training (PyTorch default since v1.7)
+pub const CUBLAS_COMPUTE_32F_FAST_TF32: CublasComputeType = 74;
 /// FP16 accumulation (faster but less precise)
 pub const CUBLAS_COMPUTE_16F: CublasComputeType = 64;
 
@@ -99,10 +102,14 @@ pub const CUBLAS_COMPUTE_16F: CublasComputeType = 64;
 /// cublasMath_t
 pub type CublasMathMode = c_int;
 
-/// Default math mode
+/// Default math mode (no tensor cores for FP32)
 pub const CUBLAS_DEFAULT_MATH: CublasMathMode = 0;
-/// Use tensor cores when possible
+/// Use tensor cores when possible (deprecated since CUDA 11)
 pub const CUBLAS_TENSOR_OP_MATH: CublasMathMode = 1;
+/// Strict FP32, no tensor cores
+pub const CUBLAS_PEDANTIC_MATH: CublasMathMode = 2;
+/// TF32 tensor cores for FP32 ops, tensor cores for FP16/BF16
+pub const CUBLAS_TF32_TENSOR_OP_MATH: CublasMathMode = 3;
 
 // ============================================================================
 // cuBLAS Function Pointers (dynamically loaded)
@@ -384,6 +391,7 @@ mod tests {
     #[test]
     fn test_compute_type_constants() {
         assert_eq!(CUBLAS_COMPUTE_32F, 68);
+        assert_eq!(CUBLAS_COMPUTE_32F_FAST_TF32, 74);
         assert_eq!(CUBLAS_COMPUTE_16F, 64);
     }
 
@@ -391,6 +399,8 @@ mod tests {
     fn test_math_mode_constants() {
         assert_eq!(CUBLAS_DEFAULT_MATH, 0);
         assert_eq!(CUBLAS_TENSOR_OP_MATH, 1);
+        assert_eq!(CUBLAS_PEDANTIC_MATH, 2);
+        assert_eq!(CUBLAS_TF32_TENSOR_OP_MATH, 3);
     }
 
     #[cfg(not(feature = "cuda"))]
