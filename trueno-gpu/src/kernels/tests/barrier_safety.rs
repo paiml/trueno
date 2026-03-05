@@ -81,6 +81,28 @@ fn test_emit_ptx_validated_works() {
     assert!(ptx.contains(".entry"));
 }
 
+/// PARITY-114: MWV Q6K kernel is barrier-safe (GH-118)
+#[test]
+fn test_barrier_safety_mwv_q6k() {
+    let kernel = MultiWarpQ6KGemvKernel::new(1536, 1536);
+    let result = kernel.analyze_barrier_safety();
+    assert!(result.is_safe, "MWV Q6K should be barrier-safe: {:?}", result.violations);
+}
+
+/// PARITY-114: MWV Q6K warp variants are all barrier-safe
+#[test]
+fn test_barrier_safety_mwv_q6k_warp_variants() {
+    for warps in [1, 2, 3, 4, 6, 8] {
+        let kernel = MultiWarpQ6KGemvKernel::with_warps(1536, 1536, warps);
+        let result = kernel.analyze_barrier_safety();
+        assert!(
+            result.is_safe,
+            "MWV Q6K ({warps} warps) should be barrier-safe: {:?}",
+            result.violations
+        );
+    }
+}
+
 /// PARITY-114: Boundary condition - non-divisible dimensions are barrier-safe
 #[test]
 fn test_barrier_safety_boundary_conditions() {

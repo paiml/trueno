@@ -14,14 +14,17 @@
 //! - [`Q6KGemvKernel`]: Basic Q6_K GEMV with warp shuffle reduction
 //! - [`CoalescedQ6KGemvKernel`]: Optimized with vectorized scale loading (PAR-066)
 //! - [`BatchedQ6KGemvKernel`]: Batched version for M>1 processing (PAR-130)
+//! - [`MultiWarpQ6KGemvKernel`]: Multi-warp version for Orin decode throughput (GH-118)
 //! - [`Q6KKernel`]: Fused Q6_K GEMM kernel (PARITY-117)
 
 mod batched;
 mod coalesced;
 mod gemm;
 mod gemv;
+mod multi_warp;
 
 pub use batched::BatchedQ6KGemvKernel;
 pub use coalesced::CoalescedQ6KGemvKernel;
 pub use gemm::Q6KKernel;
 pub use gemv::Q6KGemvKernel;
+pub use multi_warp::MultiWarpQ6KGemvKernel;
