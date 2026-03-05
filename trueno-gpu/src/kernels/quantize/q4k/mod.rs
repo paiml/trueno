@@ -22,11 +22,13 @@
 mod basic;
 mod batched;
 mod coalesced;
+mod dequant;
 mod dp4a;
 mod tiled;
 
 pub use basic::Q4KGemvKernel;
 pub use batched::BatchedQ4KGemvKernel;
+pub use dequant::Q4KDequantKernel;
 pub use coalesced::{
     CoalescedQ4KGemvKernel, MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel,
     VectorizedQ4KGemvKernel, WideQ4KGemvKernel,
