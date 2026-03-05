@@ -27,11 +27,10 @@ impl<'a> KernelBuilder<'a> {
 
     /// Warp shuffle indexed (for broadcasts - gets value from specific lane)
     ///
-    /// Format: shfl.sync.idx.b32 dst, src, srcLane, width, membermask
+    /// Format: shfl.sync.idx.b32 dst, src, srcLane, c, membermask
     ///
-    /// IMPORTANT: For shfl.idx, the third parameter is WIDTH (not clamp!)
-    /// Width must be a power of 2: 1, 2, 4, 8, 16, or 32.
-    /// Use 32 for full-warp broadcasts.
+    /// PTX ISA: c[4:0] = maxLane. Read succeeds when srcLane <= maxLane.
+    /// Use c=31 for full-warp broadcasts (any lane 0-31 readable).
     pub fn shfl_idx_f32(&mut self, val: VirtualReg, src_lane: u32, mask: u32) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::F32);
         self.instructions.push(
@@ -39,7 +38,7 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::ImmU64(src_lane as u64))
-                .src(Operand::ImmU64(32)) // Width for shfl.idx (must be power of 2!)
+                .src(Operand::ImmU64(31)) // maxLane=31: allow reads from any lane
                 .src(Operand::ImmU64(mask as u64)), // membermask
         );
         dst
@@ -47,13 +46,10 @@ impl<'a> KernelBuilder<'a> {
 
     /// Warp shuffle indexed for u32 values (broadcasts, lane selection)
     ///
-    /// Format: shfl.sync.idx.b32 dst, src, srcLane, width, membermask
+    /// Format: shfl.sync.idx.b32 dst, src, srcLane, c, membermask
     ///
-    /// IMPORTANT: For shfl.idx, the third parameter is WIDTH (not clamp!)
-    /// Width must be a power of 2: 1, 2, 4, 8, 16, or 32.
-    /// Use 32 for full-warp broadcasts.
-    ///
-    /// Used for KF-000A hypothesis test: Can shfl.sync values be stored without F081/F082 crash?
+    /// PTX ISA: c[4:0] = maxLane. Read succeeds when srcLane <= maxLane.
+    /// Use c=31 for full-warp broadcasts (any lane 0-31 readable).
     pub fn shfl_idx_u32(&mut self, val: VirtualReg, src_lane: u32, mask: u32) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
@@ -61,7 +57,7 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::ImmU64(src_lane as u64))
-                .src(Operand::ImmU64(32)) // Width for shfl.idx (must be power of 2!)
+                .src(Operand::ImmU64(31)) // maxLane=31: allow reads from any lane
                 .src(Operand::ImmU64(mask as u64)), // membermask
         );
         dst
@@ -69,7 +65,7 @@ impl<'a> KernelBuilder<'a> {
 
     /// Warp shuffle indexed with dynamic lane (from register)
     ///
-    /// Format: shfl.sync.idx.b32 dst, src, srcLane, width, membermask
+    /// Format: shfl.sync.idx.b32 dst, src, srcLane, c, membermask
     /// srcLane comes from a register instead of immediate.
     pub fn shfl_idx_u32_reg(
         &mut self,
@@ -83,7 +79,7 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::Reg(src_lane_reg))
-                .src(Operand::ImmU64(32)) // Width
+                .src(Operand::ImmU64(31)) // maxLane=31: allow reads from any lane
                 .src(Operand::ImmU64(mask as u64)), // membermask
         );
         dst
