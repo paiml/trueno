@@ -63,8 +63,11 @@ pub struct CublasHandle {
     handle: super::cublas_sys::CublasHandle,
 }
 
-// SAFETY: cuBLAS handles are thread-safe within a CUDA context
+// SAFETY: cuBLAS handles are thread-safe within a CUDA context.
+// Sync is safe because CublasHandle is only accessed via &mut self on CudaExecutor
+// (behind RwLock write guard), so no concurrent access occurs.
 unsafe impl Send for CublasHandle {}
+unsafe impl Sync for CublasHandle {}
 
 impl CublasHandle {
     /// Create a new cuBLAS handle
