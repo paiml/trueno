@@ -448,11 +448,11 @@ fn apply_epilogue(
 }
 
 /// Validate that bias is provided when the epilogue requires it.
-fn validate_bias_if_needed<'a>(
+fn validate_bias_if_needed(
     epilogue: Epilogue,
-    bias: Option<&'a [f32]>,
+    bias: Option<&[f32]>,
     n: usize,
-) -> Result<Option<&'a [f32]>, SolverError> {
+) -> Result<Option<&[f32]>, SolverError> {
     let needs_bias = matches!(epilogue, Epilogue::Bias | Epilogue::BiasRelu | Epilogue::BiasGelu);
     if !needs_bias {
         return Ok(None);
