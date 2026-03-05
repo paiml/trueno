@@ -5,7 +5,7 @@
 .DELETE_ON_ERROR:
 .ONESHELL:
 
-.PHONY: help build test test-fast test-quick test-cuda test-viz coverage coverage-ci coverage-check coverage-clean clean-coverage bench bench-ptx lint fmt clean all
+.PHONY: help build test test-fast test-quick test-cuda test-viz coverage coverage-ci coverage-check coverage-clean clean-coverage bench bench-ptx bench-gemm bench-gemm-compare lint fmt clean all
 
 # ============================================================================
 # TESTING
@@ -106,8 +106,13 @@ bench: ## Run all benchmarks
 	cargo bench -p trueno-gpu --no-fail-fast
 
 bench-ptx: ## Run PTX generation benchmarks
-	@echo "🚀 Running PTX generation benchmarks..."
+	@echo "Running PTX generation benchmarks..."
 	cargo bench -p trueno-gpu --bench ptx_gen --no-fail-fast
+
+bench-gemm: ## Run cuBLAS vs PTX GEMM benchmark (requires CUDA)
+	cargo run --example bench_cublas_vs_ptx --features cuda --release
+
+bench-gemm-compare: bench-gemm ## Three-tier GEMM comparison (ALB-075)
 
 # ============================================================================
 # BUILD & LINT
