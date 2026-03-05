@@ -271,6 +271,86 @@ impl CublasHandle {
         })
     }
 
+    /// FP32 Strided Batched GEMM for multi-head attention
+    ///
+    /// Computes: C[i] = alpha * op(A[i]) * op(B[i]) + beta * C[i]
+    /// for i in 0..batch_count
+    ///
+    /// Each batch element is at stride offset from the base pointer.
+    /// Used for attention QK^T and attn·V across all heads simultaneously.
+    ///
+    /// # Arguments
+    ///
+    /// * `transa`, `transb` - Transpose operations
+    /// * `m`, `n`, `k` - Matrix dimensions (per batch element)
+    /// * `alpha`, `beta` - Scalar multipliers
+    /// * `a_ptr` - Device pointer to first A matrix
+    /// * `lda` - Leading dimension of A
+    /// * `stride_a` - Stride between consecutive A matrices (in elements)
+    /// * `b_ptr` - Device pointer to first B matrix
+    /// * `ldb` - Leading dimension of B
+    /// * `stride_b` - Stride between consecutive B matrices (in elements)
+    /// * `c_ptr` - Device pointer to first C matrix
+    /// * `ldc` - Leading dimension of C
+    /// * `stride_c` - Stride between consecutive C matrices (in elements)
+    /// * `batch_count` - Number of GEMM operations in batch
+    ///
+    /// # Errors
+    ///
+    /// Returns error if cublasSgemmStridedBatched fails.
+    pub fn gemm_f32_strided_batched(
+        &self,
+        transa: GemmOp,
+        transb: GemmOp,
+        m: i32,
+        n: i32,
+        k: i32,
+        alpha: f32,
+        a_ptr: CUdeviceptr,
+        lda: i32,
+        stride_a: i64,
+        b_ptr: CUdeviceptr,
+        ldb: i32,
+        stride_b: i64,
+        beta: f32,
+        c_ptr: CUdeviceptr,
+        ldc: i32,
+        stride_c: i64,
+        batch_count: i32,
+    ) -> Result<(), GpuError> {
+        let driver = get_cublas_driver()?;
+
+        let result = unsafe {
+            (driver.cublasSgemmStridedBatched)(
+                self.handle,
+                transa.to_cublas(),
+                transb.to_cublas(),
+                m,
+                n,
+                k,
+                &alpha,
+                a_ptr as *const std::ffi::c_void,
+                lda,
+                stride_a,
+                b_ptr as *const std::ffi::c_void,
+                ldb,
+                stride_b,
+                &beta,
+                c_ptr as *mut std::ffi::c_void,
+                ldc,
+                stride_c,
+                batch_count,
+            )
+        };
+
+        CublasDriver::check(result).map_err(|e| {
+            GpuError::CudaDriver(
+                format!("cublasSgemmStridedBatched(m={m}, n={n}, k={k}, batch={batch_count}): {e}"),
+                0,
+            )
+        })
+    }
+
     /// Get the raw cuBLAS handle
     ///
     /// # Safety
@@ -358,6 +438,44 @@ impl CublasHandle {
             a_ptr, k, // A with leading dim k (row-major stride)
             beta,
             c_ptr, n, // C with leading dim n (row-major stride)
+        )
+    }
+
+    /// Row-major FP32 strided batched GEMM: C[i][m,n] = A[i][m,k] @ B[i][k,n]
+    ///
+    /// All matrices are row-major. Strides are in f32 elements.
+    /// Used for multi-head attention (batch_count = batch_size * num_heads).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if GEMM execution fails.
+    pub fn gemm_f32_strided_batched_row_major(
+        &self,
+        m: i32,
+        n: i32,
+        k: i32,
+        alpha: f32,
+        a_ptr: CUdeviceptr,
+        stride_a: i64,
+        b_ptr: CUdeviceptr,
+        stride_b: i64,
+        beta: f32,
+        c_ptr: CUdeviceptr,
+        stride_c: i64,
+        batch_count: i32,
+    ) -> Result<(), GpuError> {
+        // Row-major C = A @ B => col-major C^T = B^T @ A^T
+        // Swap A/B, use n as leading dim
+        self.gemm_f32_strided_batched(
+            GemmOp::NoTrans,
+            GemmOp::NoTrans,
+            n, m, k,
+            alpha,
+            b_ptr, n, stride_b,
+            a_ptr, k, stride_a,
+            beta,
+            c_ptr, n, stride_c,
+            batch_count,
         )
     }
 
