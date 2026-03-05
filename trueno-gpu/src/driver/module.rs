@@ -145,8 +145,10 @@ impl CudaModule {
         }
 
         // Dump PTX to /tmp for offline diagnosis (#127)
-        let dump_path = format!("/tmp/failed-ptx-sm_{major}{minor}-{}.ptx",
-            kernel_name.replace(|c: char| !c.is_alphanumeric() && c != '_', "_"));
+        let dump_path = format!(
+            "/tmp/failed-ptx-sm_{major}{minor}-{}.ptx",
+            kernel_name.replace(|c: char| !c.is_alphanumeric() && c != '_', "_")
+        );
         if let Ok(()) = std::fs::write(&dump_path, ptx) {
             eprintln!("[PTX-JIT] PTX dumped to {dump_path}");
         }
@@ -154,12 +156,8 @@ impl CudaModule {
         // Try 2: cuModuleLoadData without explicit JIT target (let driver auto-detect)
         eprintln!("[PTX-JIT] Retrying with cuModuleLoadData (no explicit target)...");
         let mut module2: CUmodule = ptr::null_mut();
-        let result2 = unsafe {
-            (driver.cuModuleLoadData)(
-                &mut module2,
-                ptx_cstring.as_ptr() as *const _,
-            )
-        };
+        let result2 =
+            unsafe { (driver.cuModuleLoadData)(&mut module2, ptx_cstring.as_ptr() as *const _) };
 
         if CudaDriver::check(result2).is_ok() {
             eprintln!("[PTX-JIT] Fallback succeeded for {kernel_name}");
