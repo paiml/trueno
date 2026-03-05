@@ -376,6 +376,8 @@ mod tests {
         assert!(ptx.contains(".visible .entry dp4a_q6k_gemv"));
         assert!(ptx.contains("dp4a.u32.s32"), "Must use dp4a instructions");
         assert!(ptx.contains("bar.sync"), "Must have barrier for cross-warp safety");
+        // GH-131: bfi.b32 used for unaligned Q6K loads (replaces shl+or assembly)
+        assert!(ptx.contains("bfi.b32"), "Must use bfi.b32 for unaligned byte packing");
     }
 
     #[test]

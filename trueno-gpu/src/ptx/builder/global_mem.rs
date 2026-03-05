@@ -7,7 +7,7 @@ use crate::ptx::instructions::{Operand, PtxInstruction, PtxOp};
 use crate::ptx::registers::VirtualReg;
 use crate::ptx::types::{PtxStateSpace, PtxType};
 
-use super::{KernelBuilder, PtxArithmetic, PtxControl};
+use super::{KernelBuilder, PtxArithmetic};
 
 impl<'a> KernelBuilder<'a> {
     // ===== Memory Operations (vectorized - not in traits) =====
@@ -154,12 +154,16 @@ impl<'a> KernelBuilder<'a> {
 
     /// Load u32 from potentially unaligned global memory address.
     ///
-    /// Uses 4 byte loads + shifts to assemble a u32, avoiding
+    /// Uses 4 byte loads + `bfi.b32` to assemble a u32, avoiding
     /// `ld.global.u32` alignment requirements (4-byte aligned).
     /// Required for Q6K super-blocks (210 bytes each, not 4-byte aligned).
     ///
     /// sm_87 (Jetson Orin) faults on misaligned ld.global.u32 with
     /// CUDA_ERROR_MISALIGNED_ADDRESS (716).
+    ///
+    /// GH-131: Optimized from shl+or (9 instructions) to bfi.b32 (3 instructions)
+    /// for the byte assembly step. Saves 6 instructions per call × 4 calls per
+    /// Q6K super-block = 24 fewer instructions per super-block.
     pub fn ld_global_u32_unaligned(&mut self, addr: VirtualReg) -> VirtualReg {
         // Load 4 consecutive bytes
         let b0 = self.ld_global_u8(addr);
@@ -173,20 +177,17 @@ impl<'a> KernelBuilder<'a> {
         let addr3 = self.add_u64(addr, off3);
         let b3 = self.ld_global_u8(addr3);
 
-        // Convert u8 (in u16 registers) to u32 and assemble little-endian
+        // Convert u8 (in u16 registers) to u32
         let w0 = self.cvt_u32_u8(b0); // byte 0 → bits [7:0]
         let w1 = self.cvt_u32_u8(b1);
         let w2 = self.cvt_u32_u8(b2);
         let w3 = self.cvt_u32_u8(b3);
-        let eight = self.mov_u32_imm(8);
-        let sixteen = self.mov_u32_imm(16);
-        let twentyfour = self.mov_u32_imm(24);
-        let s1 = self.shl_u32(w1, eight);     // byte 1 → bits [15:8]
-        let s2 = self.shl_u32(w2, sixteen);    // byte 2 → bits [23:16]
-        let s3 = self.shl_u32(w3, twentyfour); // byte 3 → bits [31:24]
-        let t01 = self.or_u32(w0, s1);
-        let t23 = self.or_u32(s2, s3);
-        self.or_u32(t01, t23)
+
+        // Assemble little-endian u32 using bfi.b32 (3 instructions vs 9 with shl+or)
+        // bfi.b32 inserts `len` bits from `insert` into `base` at position `start`
+        let t1 = self.bfi_b32(w1, w0, 8, 8);     // insert byte 1 at bits [15:8]
+        let t2 = self.bfi_b32(w2, t1, 16, 8);     // insert byte 2 at bits [23:16]
+        self.bfi_b32(w3, t2, 24, 8)               // insert byte 3 at bits [31:24]
     }
 
     /// Load u16 from global memory (for f16 as raw bits)
