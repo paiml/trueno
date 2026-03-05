@@ -88,7 +88,10 @@ pub use layernorm::{
 };
 pub use lz4::{Lz4WarpCompressKernel, Lz4WarpDecompressKernel};
 pub use megakernel::TransformerBlockMegakernel;
-pub use optimizer::{AdamStepKernel, AdamWStepKernel, GradientClipKernel, SquaredSumKernel};
+pub use optimizer::{
+    AdamStepKernel, AdamWStepKernel, ClipScaleReduceKernel, GradientClipGpuScaleKernel,
+    GradientClipKernel, SquaredSumKernel,
+};
 pub use persistent::PersistentDecoderKernel;
 pub use quantize::{
     dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu, BatchedQ4KGemvKernel,
