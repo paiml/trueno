@@ -61,7 +61,7 @@ pub fn svd(a: &[f32], m: usize, n: usize) -> Result<SvdResult, SolverError> {
     let u = compute_u_matrix(&work, &sigma, m, n, min_mn);
 
     // Sort and assemble final result
-    assemble_sorted_result(&u, &v, &sigma, m, n, min_mn)
+    Ok(assemble_sorted_result(&u, &v, &sigma, m, n, min_mn))
 }
 
 /// Run one-sided Jacobi rotation sweeps until convergence.
@@ -184,7 +184,7 @@ fn assemble_sorted_result(
     m: usize,
     n: usize,
     min_mn: usize,
-) -> Result<SvdResult, SolverError> {
+) -> SvdResult {
     let mut indices: Vec<usize> = (0..min_mn).collect();
     indices.sort_by(|&a, &b| sigma[b].partial_cmp(&sigma[a]).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -217,5 +217,5 @@ fn assemble_sorted_result(
         }
     }
 
-    Ok(SvdResult { u: u_sorted, sigma: sigma_sorted, vt, m, n })
+    SvdResult { u: u_sorted, sigma: sigma_sorted, vt, m, n }
 }
