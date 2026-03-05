@@ -205,3 +205,8 @@ required-features = ["cuda"]
 name = "gemm_adversarial_correctness"
 path = "examples/gemm_adversarial_correctness.rs"
 required-features = ["cuda"]
+
+[[example]]
+name = "bench_cublas_vs_ptx"
+path = "examples/bench_cublas_vs_ptx.rs"
+required-features = ["cuda"]

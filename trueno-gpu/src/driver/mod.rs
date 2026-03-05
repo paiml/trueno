@@ -76,6 +76,19 @@ pub mod sanitizer;
 #[allow(clippy::borrow_as_ptr)]
 mod stream;
 
+// cuBLAS FFI and safe wrapper (ALB-075)
+#[cfg(feature = "cuda")]
+#[allow(
+    clippy::borrow_as_ptr,
+    clippy::ptr_as_ptr,
+    clippy::cast_sign_loss,
+    clippy::wildcard_imports
+)]
+pub mod cublas_sys;
+#[cfg(feature = "cuda")]
+#[allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr)]
+mod cublas;
+
 // Re-export for use without cuda feature (types only)
 mod types;
 pub use types::*;
@@ -83,6 +96,8 @@ pub use types::*;
 // Re-export CUDA wrappers when feature enabled
 #[cfg(feature = "cuda")]
 pub use context::{cuda_available, device_count, CudaContext};
+#[cfg(feature = "cuda")]
+pub use cublas::{CublasHandle, GemmOp};
 #[cfg(feature = "cuda")]
 pub use graph::{CaptureMode, CudaGraph, CudaGraphExec};
 #[cfg(feature = "cuda")]
@@ -116,6 +131,8 @@ pub fn device_count() -> usize {
 // CUDA hardware tests - REQUIRE RTX 4090
 #[cfg(all(test, feature = "cuda"))]
 mod cuda_tests;
+#[cfg(all(test, feature = "cuda"))]
+mod cublas_tests;
 #[cfg(all(test, feature = "cuda"))]
 mod memory_fuzz_tests;
 
