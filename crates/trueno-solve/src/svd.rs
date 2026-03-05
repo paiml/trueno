@@ -61,7 +61,7 @@ pub fn svd(a: &[f32], m: usize, n: usize) -> Result<SvdResult, SolverError> {
     let u = compute_u_matrix(&work, &sigma, m, n, min_mn);
 
     // Sort and assemble final result
-    assemble_sorted_result(u, v, sigma, m, n, min_mn)
+    assemble_sorted_result(&u, &v, &sigma, m, n, min_mn)
 }
 
 /// Run one-sided Jacobi rotation sweeps until convergence.
@@ -178,9 +178,9 @@ fn compute_u_matrix(work: &[f32], sigma: &[f32], m: usize, n: usize, min_mn: usi
 /// Sort singular values descending and assemble the final SvdResult.
 #[allow(clippy::cast_precision_loss)]
 fn assemble_sorted_result(
-    u: Vec<f32>,
-    v: Vec<f32>,
-    sigma: Vec<f32>,
+    u: &[f32],
+    v: &[f32],
+    sigma: &[f32],
     m: usize,
     n: usize,
     min_mn: usize,
