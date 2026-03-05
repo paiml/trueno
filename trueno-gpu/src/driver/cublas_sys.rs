@@ -245,8 +245,7 @@ mod loading {
 
                 type FnCreate = unsafe extern "C" fn(*mut CublasHandle) -> CublasStatus;
                 type FnDestroy = unsafe extern "C" fn(CublasHandle) -> CublasStatus;
-                type FnSetStream =
-                    unsafe extern "C" fn(CublasHandle, *mut c_void) -> CublasStatus;
+                type FnSetStream = unsafe extern "C" fn(CublasHandle, *mut c_void) -> CublasStatus;
                 type FnSetMathMode =
                     unsafe extern "C" fn(CublasHandle, CublasMathMode) -> CublasStatus;
                 type FnGemmEx = unsafe extern "C" fn(
@@ -297,7 +296,10 @@ mod loading {
                     cublasSetStream_v2: load_sym!(cublasSetStream_v2, FnSetStream),
                     cublasSetMathMode: load_sym!(cublasSetMathMode, FnSetMathMode),
                     cublasGemmEx: load_sym!(cublasGemmEx, FnGemmEx),
-                    cublasSgemmStridedBatched: load_sym!(cublasSgemmStridedBatched, FnSgemmStridedBatched),
+                    cublasSgemmStridedBatched: load_sym!(
+                        cublasSgemmStridedBatched,
+                        FnSgemmStridedBatched
+                    ),
                 })
             }
         }
@@ -307,10 +309,7 @@ mod loading {
             if result == CUBLAS_STATUS_SUCCESS {
                 Ok(())
             } else {
-                Err(GpuError::CudaDriver(
-                    cublas_status_string(result).to_string(),
-                    result,
-                ))
+                Err(GpuError::CudaDriver(cublas_status_string(result).to_string(), result))
             }
         }
     }
@@ -329,9 +328,7 @@ mod loading {
 
         /// Check is a no-op without CUDA
         pub fn check(_result: CublasStatus) -> Result<(), GpuError> {
-            Err(GpuError::CudaNotAvailable(
-                "cuda feature not enabled".to_string(),
-            ))
+            Err(GpuError::CudaNotAvailable("cuda feature not enabled".to_string()))
         }
     }
 }
@@ -372,7 +369,10 @@ mod tests {
     #[test]
     fn test_status_strings() {
         assert_eq!(cublas_status_string(CUBLAS_STATUS_SUCCESS), "CUBLAS_STATUS_SUCCESS");
-        assert_eq!(cublas_status_string(CUBLAS_STATUS_INVALID_VALUE), "CUBLAS_STATUS_INVALID_VALUE");
+        assert_eq!(
+            cublas_status_string(CUBLAS_STATUS_INVALID_VALUE),
+            "CUBLAS_STATUS_INVALID_VALUE"
+        );
         assert_eq!(cublas_status_string(999), "CUBLAS_STATUS_UNKNOWN");
     }
 

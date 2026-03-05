@@ -28,13 +28,13 @@ mod bench_cublas_vs_ptx {
     /// Albor 350M training GEMM shapes (exact dimensions from forward+backward)
     const SHAPES: &[(u32, u32, u32, &str)] = &[
         // Attention projections (S=1024 × batch=4 = 4096 tokens)
-        (4096, 1024, 1024, "attn_qo"),       // Q/O projection: [S,H] × [H,H]
-        (4096, 256, 1024, "attn_kv"),         // K/V projection: [S,H] × [H,kv_dim]
+        (4096, 1024, 1024, "attn_qo"), // Q/O projection: [S,H] × [H,H]
+        (4096, 256, 1024, "attn_kv"),  // K/V projection: [S,H] × [H,kv_dim]
         // FFN projections
-        (4096, 4096, 1024, "ffn_gate_up"),    // gate/up: [S,H] × [H,I]
-        (4096, 1024, 4096, "ffn_down"),       // down: [S,I] × [I,H]
+        (4096, 4096, 1024, "ffn_gate_up"), // gate/up: [S,H] × [H,I]
+        (4096, 1024, 4096, "ffn_down"),    // down: [S,I] × [I,H]
         // LM head
-        (4096, 32768, 1024, "lm_head"),       // [S,H] × [H,V]
+        (4096, 32768, 1024, "lm_head"), // [S,H] × [H,V]
         // Reference squares
         (1024, 1024, 1024, "square_1k"),
         (4096, 4096, 4096, "square_4k"),
@@ -67,11 +67,7 @@ mod bench_cublas_vs_ptx {
             let cublas_tflops = bench_cublas(&ctx, &stream, &cublas, m, n, k);
             let ptx_tflops = bench_ptx(&ctx, &stream, &sm_target, m, n, k);
 
-            let speedup = if ptx_tflops > 0.0 {
-                cublas_tflops / ptx_tflops
-            } else {
-                f64::INFINITY
-            };
+            let speedup = if ptx_tflops > 0.0 { cublas_tflops / ptx_tflops } else { f64::INFINITY };
             // TF32 tensor core peak = 165 TFLOP/s (RTX 4090)
             let pct_peak = cublas_tflops / 165.0 * 100.0;
 
@@ -97,12 +93,9 @@ mod bench_cublas_vs_ptx {
         n: u32,
         k: u32,
     ) -> f64 {
-        let a_buf =
-            GpuBuffer::<f32>::new(ctx, (m * k) as usize).expect("A alloc");
-        let b_buf =
-            GpuBuffer::<f32>::new(ctx, (k * n) as usize).expect("B alloc");
-        let c_buf =
-            GpuBuffer::<f32>::new(ctx, (m * n) as usize).expect("C alloc");
+        let a_buf = GpuBuffer::<f32>::new(ctx, (m * k) as usize).expect("A alloc");
+        let b_buf = GpuBuffer::<f32>::new(ctx, (k * n) as usize).expect("B alloc");
+        let c_buf = GpuBuffer::<f32>::new(ctx, (m * n) as usize).expect("C alloc");
 
         // Warmup
         for _ in 0..WARMUP_ITERS {
@@ -156,15 +149,11 @@ mod bench_cublas_vs_ptx {
         let kernel = GemmKernel::tiled_unrolled(m, n, k, tile);
         let kernel_name = kernel.name().to_string();
         let ptx = kernel.emit_ptx_for_target(sm_target);
-        let mut module = CudaModule::from_ptx(ctx, &ptx)
-            .expect("PTX compile");
+        let mut module = CudaModule::from_ptx(ctx, &ptx).expect("PTX compile");
 
-        let a_buf =
-            GpuBuffer::<f32>::new(ctx, (m * k) as usize).expect("A alloc");
-        let b_buf =
-            GpuBuffer::<f32>::new(ctx, (k * n) as usize).expect("B alloc");
-        let c_buf =
-            GpuBuffer::<f32>::new(ctx, (m * n) as usize).expect("C alloc");
+        let a_buf = GpuBuffer::<f32>::new(ctx, (m * k) as usize).expect("A alloc");
+        let b_buf = GpuBuffer::<f32>::new(ctx, (k * n) as usize).expect("B alloc");
+        let c_buf = GpuBuffer::<f32>::new(ctx, (m * n) as usize).expect("C alloc");
 
         let smem = 2 * tile * tile * 4;
         let config = trueno_gpu::driver::LaunchConfig {

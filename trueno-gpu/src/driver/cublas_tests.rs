@@ -40,11 +40,13 @@ fn test_cublas_gemm_f32_small() {
     // Row-major GEMM: C[2,2] = A[2,2] @ B[2,2]
     handle
         .gemm_f32_row_major(
-            2, 2, 2,   // m, n, k
-            1.0,       // alpha
+            2,
+            2,
+            2,              // m, n, k
+            1.0,            // alpha
             a_buf.as_ptr(), // A
             b_buf.as_ptr(), // B
-            0.0,       // beta
+            0.0,            // beta
             c_buf.as_ptr(), // C
         )
         .expect("gemm_f32_row_major must succeed");
@@ -55,26 +57,10 @@ fn test_cublas_gemm_f32_small() {
     c_buf.copy_to_host(&mut result).expect("D2H");
 
     // C = [[19, 22], [43, 50]]
-    assert!(
-        (result[0] - 19.0).abs() < 1e-3,
-        "C[0,0] = {} expected 19.0",
-        result[0]
-    );
-    assert!(
-        (result[1] - 22.0).abs() < 1e-3,
-        "C[0,1] = {} expected 22.0",
-        result[1]
-    );
-    assert!(
-        (result[2] - 43.0).abs() < 1e-3,
-        "C[1,0] = {} expected 43.0",
-        result[2]
-    );
-    assert!(
-        (result[3] - 50.0).abs() < 1e-3,
-        "C[1,1] = {} expected 50.0",
-        result[3]
-    );
+    assert!((result[0] - 19.0).abs() < 1e-3, "C[0,0] = {} expected 19.0", result[0]);
+    assert!((result[1] - 22.0).abs() < 1e-3, "C[0,1] = {} expected 22.0", result[1]);
+    assert!((result[2] - 43.0).abs() < 1e-3, "C[1,0] = {} expected 43.0", result[2]);
+    assert!((result[3] - 50.0).abs() < 1e-3, "C[1,1] = {} expected 50.0", result[3]);
 }
 
 /// FP16 GEMM on training-relevant shape: [4096, 1024] x [1024, 4096]
@@ -105,7 +91,14 @@ fn test_cublas_gemm_f16_training_shape() {
     for _ in 0..5 {
         handle
             .gemm_f16_row_major(
-                m as i32, n as i32, k as i32, 1.0, a_buf.as_ptr(), b_buf.as_ptr(), 0.0, c_buf.as_ptr(),
+                m as i32,
+                n as i32,
+                k as i32,
+                1.0,
+                a_buf.as_ptr(),
+                b_buf.as_ptr(),
+                0.0,
+                c_buf.as_ptr(),
             )
             .expect("warmup GEMM");
     }
@@ -117,7 +110,14 @@ fn test_cublas_gemm_f16_training_shape() {
     for _ in 0..iters {
         handle
             .gemm_f16_row_major(
-                m as i32, n as i32, k as i32, 1.0, a_buf.as_ptr(), b_buf.as_ptr(), 0.0, c_buf.as_ptr(),
+                m as i32,
+                n as i32,
+                k as i32,
+                1.0,
+                a_buf.as_ptr(),
+                b_buf.as_ptr(),
+                0.0,
+                c_buf.as_ptr(),
             )
             .expect("timed GEMM");
     }
@@ -155,10 +155,7 @@ fn test_cublas_gemm_f16_training_shape() {
         elapsed.as_millis()
     );
 
-    assert!(
-        tflops > 50.0,
-        "cuBLAS FP16 GEMM must exceed 50 TFLOP/s, got {tflops:.1} TFLOP/s"
-    );
+    assert!(tflops > 50.0, "cuBLAS FP16 GEMM must exceed 50 TFLOP/s, got {tflops:.1} TFLOP/s");
 }
 
 /// All 6 training shapes from cublas-gemm-v1.yaml must work
@@ -187,7 +184,16 @@ fn test_cublas_all_training_shapes() {
         let mut c = GpuBuffer::from_host(&ctx, &vec![0u16; m * n]).expect("C");
 
         handle
-            .gemm_f16_row_major(*m as i32, *n as i32, *k as i32, 1.0, a.as_ptr(), b.as_ptr(), 0.0, c.as_ptr())
+            .gemm_f16_row_major(
+                *m as i32,
+                *n as i32,
+                *k as i32,
+                1.0,
+                a.as_ptr(),
+                b.as_ptr(),
+                0.0,
+                c.as_ptr(),
+            )
             .expect(&format!("GEMM {name} [{m}x{k}] x [{k}x{n}] must succeed"));
 
         stream.synchronize().expect("sync");
@@ -200,6 +206,9 @@ fn test_cublas_all_training_shapes() {
         first_elem_buf.copy_to_host(&mut check).expect("D2H check");
         std::mem::forget(first_elem_buf); // Don't free c's memory
 
-        eprintln!("Shape {name} [{m}x{k}] x [{k}x{n}]: C[0,0] = 0x{:04X} (expected ~{k}.0)", check[0]);
+        eprintln!(
+            "Shape {name} [{m}x{k}] x [{k}x{n}]: C[0,0] = 0x{:04X} (expected ~{k}.0)",
+            check[0]
+        );
     }
 }
