@@ -125,14 +125,8 @@ fn test_einsum_trace() -> R {
 
 #[test]
 fn test_einsum_batch_matmul() -> R {
-    let a = Tensor::new(
-        vec![2, 2, 2],
-        vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-    )?;
-    let b = Tensor::new(
-        vec![2, 2, 2],
-        vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0],
-    )?;
+    let a = Tensor::new(vec![2, 2, 2], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0])?;
+    let b = Tensor::new(vec![2, 2, 2], vec![1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0])?;
     let c = batch_matmul(&a, &b)?;
     assert_eq!(c.shape(), &[2, 2, 2]);
     for i in 0..8 {
@@ -278,14 +272,9 @@ fn test_einsum_nary_three_inputs() -> R {
     // (A @ B) @ C = A @ (B @ C) for matmul chain
     // A=2×3, B=3×4, C=4×2
     let a = Tensor::new(vec![2, 3], vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])?;
-    let b = Tensor::new(
-        vec![3, 4],
-        vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0],
-    )?;
-    let c = Tensor::new(
-        vec![4, 2],
-        vec![1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0],
-    )?;
+    let b =
+        Tensor::new(vec![3, 4], vec![1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0])?;
+    let c = Tensor::new(vec![4, 2], vec![1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0])?;
 
     let result = einsum_nary("ij,jk,kl->il", &[&a, &b, &c])?;
     assert_eq!(result.shape(), &[2, 2]);

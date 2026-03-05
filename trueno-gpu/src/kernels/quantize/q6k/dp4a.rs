@@ -231,11 +231,8 @@ impl Kernel for Dp4aQ6KGemvKernel {
                 // === Process 2 halves: n_idx=0 (elements 0-127), n_idx=1 (128-255) ===
                 for n_idx in 0..2u32 {
                     // ql byte offset = 64*n_idx + ql_base_in_half
-                    let ql_full_offset = if n_idx == 0 {
-                        ql_base_in_half
-                    } else {
-                        ctx.add_u32(ql_base_in_half, 64)
-                    };
+                    let ql_full_offset =
+                        if n_idx == 0 { ql_base_in_half } else { ctx.add_u32(ql_base_in_half, 64) };
                     let ql_off_64 = ctx.cvt_u64_u32(ql_full_offset);
                     let ql_addr = ctx.add_u64(sb_addr, ql_off_64);
                     let ql_int32 = ctx.ld_global_u32(ql_addr);
@@ -413,10 +410,7 @@ mod tests {
         for warps in [1, 2, 3, 4, 6, 8] {
             let kernel = Dp4aQ6KGemvKernel::with_warps(1536, 1536, warps);
             let ptx = kernel.emit_ptx();
-            assert!(
-                ptx.contains(".visible .entry"),
-                "Must produce valid PTX for {warps} warps"
-            );
+            assert!(ptx.contains(".visible .entry"), "Must produce valid PTX for {warps} warps");
         }
     }
 

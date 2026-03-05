@@ -11,14 +11,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── COO → CSR ──────────────────────────────────────────
     let coo = CooMatrix::new(
-        4, 4,
+        4,
+        4,
         vec![0, 0, 1, 2, 2, 2, 3],
         vec![0, 2, 1, 0, 2, 3, 3],
         vec![1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
     )?;
     let csr = CsrMatrix::from_coo(&coo);
-    println!("CSR: {}×{}, {} nnz, avg {:.2} nnz/row",
-        csr.rows(), csr.cols(), csr.nnz(), csr.avg_nnz_per_row());
+    println!(
+        "CSR: {}×{}, {} nnz, avg {:.2} nnz/row",
+        csr.rows(),
+        csr.cols(),
+        csr.nnz(),
+        csr.avg_nnz_per_row()
+    );
 
     // ── SpMV ───────────────────────────────────────────────
     let x = vec![1.0, 2.0, 3.0, 4.0_f32];
@@ -62,9 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("SELL storage: {} elements (padded)", sell.storage_size());
 
     // Verify SELL matches CSR
-    let max_diff: f32 = y.iter().zip(y_sell.iter())
-        .map(|(a, b)| (a - b).abs())
-        .fold(0.0, f32::max);
+    let max_diff: f32 = y.iter().zip(y_sell.iter()).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
     println!("SELL vs CSR max diff: {max_diff:.2e}");
 
     println!("\n=== Done ===");

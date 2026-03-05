@@ -9,87 +9,95 @@ use crate::backends::VectorBackend;
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub(crate) unsafe fn dot(a: &[f32], b: &[f32]) -> f32 { unsafe {
-    let len = a.len();
-    let mut i = 0;
-    let mut acc = _mm_setzero_ps();
+pub(crate) unsafe fn dot(a: &[f32], b: &[f32]) -> f32 {
+    unsafe {
+        let len = a.len();
+        let mut i = 0;
+        let mut acc = _mm_setzero_ps();
 
-    while i + 4 <= len {
-        let va = _mm_loadu_ps(a.as_ptr().add(i));
-        let vb = _mm_loadu_ps(b.as_ptr().add(i));
-        acc = _mm_add_ps(acc, _mm_mul_ps(va, vb));
-        i += 4;
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm_loadu_ps(b.as_ptr().add(i));
+            acc = _mm_add_ps(acc, _mm_mul_ps(va, vb));
+            i += 4;
+        }
+
+        let mut result = horizontal_sum_ps(acc);
+        result += a[i..].iter().zip(&b[i..]).map(|(x, y)| x * y).sum::<f32>();
+        result
     }
-
-    let mut result = horizontal_sum_ps(acc);
-    result += a[i..].iter().zip(&b[i..]).map(|(x, y)| x * y).sum::<f32>();
-    result
-}}
+}
 
 /// SSE2 vector sum.
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub(crate) unsafe fn sum(a: &[f32]) -> f32 { unsafe {
-    let len = a.len();
-    let mut i = 0;
-    let mut acc = _mm_setzero_ps();
+pub(crate) unsafe fn sum(a: &[f32]) -> f32 {
+    unsafe {
+        let len = a.len();
+        let mut i = 0;
+        let mut acc = _mm_setzero_ps();
 
-    while i + 4 <= len {
-        acc = _mm_add_ps(acc, _mm_loadu_ps(a.as_ptr().add(i)));
-        i += 4;
+        while i + 4 <= len {
+            acc = _mm_add_ps(acc, _mm_loadu_ps(a.as_ptr().add(i)));
+            i += 4;
+        }
+
+        let mut result = horizontal_sum_ps(acc);
+        result += a[i..].iter().sum::<f32>();
+        result
     }
-
-    let mut result = horizontal_sum_ps(acc);
-    result += a[i..].iter().sum::<f32>();
-    result
-}}
+}
 
 /// SSE2 vector max.
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub(crate) unsafe fn max(a: &[f32]) -> f32 { unsafe {
-    let len = a.len();
-    let mut i = 0;
-    let mut vmax = _mm_set1_ps(a[0]);
+pub(crate) unsafe fn max(a: &[f32]) -> f32 {
+    unsafe {
+        let len = a.len();
+        let mut i = 0;
+        let mut vmax = _mm_set1_ps(a[0]);
 
-    while i + 4 <= len {
-        vmax = _mm_max_ps(vmax, _mm_loadu_ps(a.as_ptr().add(i)));
-        i += 4;
-    }
-
-    let mut result = horizontal_max_ps(vmax);
-    for &val in &a[i..] {
-        if val > result {
-            result = val;
+        while i + 4 <= len {
+            vmax = _mm_max_ps(vmax, _mm_loadu_ps(a.as_ptr().add(i)));
+            i += 4;
         }
+
+        let mut result = horizontal_max_ps(vmax);
+        for &val in &a[i..] {
+            if val > result {
+                result = val;
+            }
+        }
+        result
     }
-    result
-}}
+}
 
 /// SSE2 vector min.
 #[inline]
 #[target_feature(enable = "sse2")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub(crate) unsafe fn min(a: &[f32]) -> f32 { unsafe {
-    let len = a.len();
-    let mut i = 0;
-    let mut vmin = _mm_set1_ps(a[0]);
+pub(crate) unsafe fn min(a: &[f32]) -> f32 {
+    unsafe {
+        let len = a.len();
+        let mut i = 0;
+        let mut vmin = _mm_set1_ps(a[0]);
 
-    while i + 4 <= len {
-        vmin = _mm_min_ps(vmin, _mm_loadu_ps(a.as_ptr().add(i)));
-        i += 4;
-    }
-
-    let mut result = horizontal_min_ps(vmin);
-    for &val in &a[i..] {
-        if val < result {
-            result = val;
+        while i + 4 <= len {
+            vmin = _mm_min_ps(vmin, _mm_loadu_ps(a.as_ptr().add(i)));
+            i += 4;
         }
+
+        let mut result = horizontal_min_ps(vmin);
+        for &val in &a[i..] {
+            if val < result {
+                result = val;
+            }
+        }
+        result
     }
-    result
-}}
+}
 
 /// SSE2 argmax.
 #[inline]
@@ -130,9 +138,9 @@ pub(crate) unsafe fn argmin(a: &[f32]) -> usize {
 /// Kahan sum (delegates to scalar).
 #[inline]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub(crate) unsafe fn sum_kahan(a: &[f32]) -> f32 { unsafe {
-    crate::backends::scalar::ScalarBackend::sum_kahan(a)
-}}
+pub(crate) unsafe fn sum_kahan(a: &[f32]) -> f32 {
+    unsafe { crate::backends::scalar::ScalarBackend::sum_kahan(a) }
+}
 
 // Helper: horizontal sum of 4 floats
 #[inline]

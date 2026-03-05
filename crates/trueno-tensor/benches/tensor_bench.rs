@@ -2,9 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use trueno_tensor::{einsum, matmul, Tensor};
 
 fn make_matrix(m: usize, n: usize) -> Tensor {
-    let data: Vec<f32> = (0..m * n)
-        .map(|i| ((i * 7 + 3) % 97) as f32 / 97.0)
-        .collect();
+    let data: Vec<f32> = (0..m * n).map(|i| ((i * 7 + 3) % 97) as f32 / 97.0).collect();
     Tensor::new(vec![m, n], data).expect("valid tensor")
 }
 

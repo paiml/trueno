@@ -390,12 +390,7 @@ pub fn rms_norm_alloc(input: &[f32], gamma: &[f32], eps: f32) -> Vec<f32> {
 ///
 /// Panics if input, gamma, and beta have different lengths.
 #[must_use]
-pub fn layer_norm_alloc(
-    input: &[f32],
-    gamma: &[f32],
-    beta: &[f32],
-    eps: f32,
-) -> Vec<f32> {
+pub fn layer_norm_alloc(input: &[f32], gamma: &[f32], beta: &[f32], eps: f32) -> Vec<f32> {
     let n = input.len();
     let mut output = vec![0.0f32; n];
     layer_norm(input, gamma, beta, eps, &mut output).expect("layer_norm_alloc: length mismatch");
@@ -416,7 +411,8 @@ mod tests {
     #[test]
     fn test_rmsnorm_finiteness() {
         for n in [4, 8, 16, 32, 64, 128, 4096] {
-            let input: Vec<f32> = (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
+            let input: Vec<f32> =
+                (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
             let gamma = vec![1.0f32; n];
             let mut output = vec![0.0f32; n];
             rms_norm(&input, &gamma, 1e-5, &mut output).unwrap();
@@ -453,7 +449,8 @@ mod tests {
     #[test]
     fn test_rmsnorm_avx2_scalar_parity() {
         for n in [4, 7, 8, 16, 31, 64, 128, 4096] {
-            let input: Vec<f32> = (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
+            let input: Vec<f32> =
+                (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
             let gamma: Vec<f32> = (0..n).map(|i| 0.5 + (i % 5) as f32 * 0.2).collect();
             let mut scalar_out = vec![0.0f32; n];
             let mut dispatch_out = vec![0.0f32; n];
@@ -497,10 +494,7 @@ mod tests {
 
         let sum_sq: f32 = output.iter().map(|x| x * x).sum();
         let rms_out = (sum_sq / output.len() as f32).sqrt();
-        assert!(
-            (rms_out - 1.0).abs() < 1e-3,
-            "RMS of output = {rms_out}, expected ~1.0"
-        );
+        assert!((rms_out - 1.0).abs() < 1e-3, "RMS of output = {rms_out}, expected ~1.0");
     }
 
     #[test]
@@ -525,7 +519,8 @@ mod tests {
     #[test]
     fn test_layernorm_finiteness() {
         for n in [4, 8, 16, 32, 64, 128, 4096] {
-            let input: Vec<f32> = (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
+            let input: Vec<f32> =
+                (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
             let gamma = vec![1.0f32; n];
             let beta = vec![0.0f32; n];
             let mut output = vec![0.0f32; n];
@@ -540,17 +535,15 @@ mod tests {
     #[test]
     fn test_layernorm_zero_mean() {
         for n in [16, 64, 128, 4096] {
-            let input: Vec<f32> = (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
+            let input: Vec<f32> =
+                (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
             let gamma = vec![1.0f32; n];
             let beta = vec![0.0f32; n];
             let mut output = vec![0.0f32; n];
             layer_norm(&input, &gamma, &beta, 1e-5, &mut output).unwrap();
 
             let mean: f32 = output.iter().sum::<f32>() / n as f32;
-            assert!(
-                mean.abs() < 1e-4,
-                "LayerNorm output mean = {mean}, expected ~0 for n={n}"
-            );
+            assert!(mean.abs() < 1e-4, "LayerNorm output mean = {mean}, expected ~0 for n={n}");
         }
     }
 
@@ -558,7 +551,8 @@ mod tests {
     #[test]
     fn test_layernorm_unit_variance() {
         for n in [16, 64, 128, 4096] {
-            let input: Vec<f32> = (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
+            let input: Vec<f32> =
+                (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
             let gamma = vec![1.0f32; n];
             let beta = vec![0.0f32; n];
             let mut output = vec![0.0f32; n];
@@ -601,7 +595,8 @@ mod tests {
     #[test]
     fn test_layernorm_avx2_scalar_parity() {
         for n in [4, 7, 8, 16, 31, 64, 128, 4096] {
-            let input: Vec<f32> = (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
+            let input: Vec<f32> =
+                (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
             let gamma: Vec<f32> = (0..n).map(|i| 0.5 + (i % 5) as f32 * 0.2).collect();
             let beta: Vec<f32> = (0..n).map(|i| (i % 3) as f32 * 0.1 - 0.1).collect();
             let mut scalar_out = vec![0.0f32; n];
@@ -632,10 +627,7 @@ mod tests {
         let mut output = vec![0.0f32; 32];
         layer_norm(&input, &gamma, &beta, 1e-5, &mut output).unwrap();
         for (i, (&o, &b)) in output.iter().zip(beta.iter()).enumerate() {
-            assert!(
-                (o - b).abs() < 1e-3,
-                "Constant input: output[{i}]={o}, expected ~beta={b}"
-            );
+            assert!((o - b).abs() < 1e-3, "Constant input: output[{i}]={o}, expected ~beta={b}");
         }
     }
 

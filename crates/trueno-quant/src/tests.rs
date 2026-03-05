@@ -145,7 +145,8 @@ fn test_q6k_dequantize_nan_scale() {
         assert!(
             v.abs() < f32::EPSILON,
             "Q6K with NaN scale should produce 0.0 at index {}, got {}",
-            i, v
+            i,
+            v
         );
     }
 }
@@ -188,7 +189,11 @@ fn test_q6k_simd_scaling_roundtrip() {
         .map(|i| {
             let base = (i as f32 - 128.0) / 10.0;
             // Introduce sharp scaling change at lane boundary
-            if i % 16 < 8 { base * 0.01 } else { base * 100.0 }
+            if i % 16 < 8 {
+                base * 0.01
+            } else {
+                base * 100.0
+            }
         })
         .collect();
 
@@ -201,16 +206,14 @@ fn test_q6k_simd_scaling_roundtrip() {
     }
 
     // Roundtrip error should be bounded
-    let max_err = data
-        .iter()
-        .zip(dequantized.iter())
-        .map(|(a, b)| (a - b).abs())
-        .fold(0.0f32, f32::max);
+    let max_err =
+        data.iter().zip(dequantized.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
     let range = data.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b))
         - data.iter().fold(f32::INFINITY, |a, &b| a.min(b));
     assert!(
         max_err < range * 0.15,
         "Q6K SIMD scaling roundtrip error {} exceeds 15% of range {}",
-        max_err, range
+        max_err,
+        range
     );
 }

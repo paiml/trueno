@@ -33,8 +33,7 @@ mod trsm;
 mod tests;
 
 pub use blas3::{
-    f32_to_f16, gemm_ex, gemm_ex_epilogue, gemm_strided_batched, symm, syr2k, syrk, trmm,
-    Epilogue,
+    f32_to_f16, gemm_ex, gemm_ex_epilogue, gemm_strided_batched, symm, syr2k, syrk, trmm, Epilogue,
 };
 pub use cholesky::{cholesky, CholeskyFactorization};
 pub use error::SolverError;

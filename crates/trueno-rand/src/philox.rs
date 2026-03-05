@@ -32,10 +32,7 @@ const PHILOX_W1: u32 = 0xBB67_AE85; // sqrt(3)-1
 impl Philox4x32 {
     /// Create a new Philox RNG with the given seed.
     pub fn new(seed: u64) -> Self {
-        Self {
-            key: [seed as u32, (seed >> 32) as u32],
-            counter: [0, 0, 0, 0],
-        }
+        Self { key: [seed as u32, (seed >> 32) as u32], counter: [0, 0, 0, 0] }
     }
 
     /// Create with explicit key and counter (for reproducible parallel generation).
@@ -121,12 +118,7 @@ fn philox4x32_round(ctr: [u32; 4], key: [u32; 2]) -> [u32; 4] {
     let lo1 = (u64::from(PHILOX_M1) * u64::from(ctr[2])) as u32;
     let hi1 = ((u64::from(PHILOX_M1) * u64::from(ctr[2])) >> 32) as u32;
 
-    [
-        hi1 ^ ctr[1] ^ key[0],
-        lo1,
-        hi0 ^ ctr[3] ^ key[1],
-        lo0,
-    ]
+    [hi1 ^ ctr[1] ^ key[0], lo1, hi0 ^ ctr[3] ^ key[1], lo0]
 }
 
 /// Full Philox 4x32-10: 10 rounds with key schedule.

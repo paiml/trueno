@@ -195,52 +195,54 @@ pub unsafe fn madvise_region(
     addr: *mut u8,
     len: usize,
     advice: MemoryAdvice,
-) -> std::io::Result<()> { unsafe {
-    // madvise syscall number is 28 on x86_64
-    #[cfg(target_arch = "x86_64")]
-    const SYS_MADVISE: i64 = 28;
-    #[cfg(target_arch = "aarch64")]
-    const SYS_MADVISE: i64 = 233;
+) -> std::io::Result<()> {
+    unsafe {
+        // madvise syscall number is 28 on x86_64
+        #[cfg(target_arch = "x86_64")]
+        const SYS_MADVISE: i64 = 28;
+        #[cfg(target_arch = "aarch64")]
+        const SYS_MADVISE: i64 = 233;
 
-    let advice_flag: i32 = match advice {
-        MemoryAdvice::Sequential => MADV_SEQUENTIAL,
-        MemoryAdvice::Random => MADV_RANDOM,
-        MemoryAdvice::WillNeed => MADV_WILLNEED,
-        MemoryAdvice::DontNeed => MADV_DONTNEED,
-    };
+        let advice_flag: i32 = match advice {
+            MemoryAdvice::Sequential => MADV_SEQUENTIAL,
+            MemoryAdvice::Random => MADV_RANDOM,
+            MemoryAdvice::WillNeed => MADV_WILLNEED,
+            MemoryAdvice::DontNeed => MADV_DONTNEED,
+        };
 
-    let ret: i64;
-    #[cfg(target_arch = "x86_64")]
-    {
-        core::arch::asm!(
-            "syscall",
-            inout("rax") SYS_MADVISE => ret,
-            in("rdi") addr as usize,
-            in("rsi") len,
-            in("rdx") advice_flag as i64,
-            out("rcx") _,
-            out("r11") _,
-            options(nostack)
-        );
+        let ret: i64;
+        #[cfg(target_arch = "x86_64")]
+        {
+            core::arch::asm!(
+                "syscall",
+                inout("rax") SYS_MADVISE => ret,
+                in("rdi") addr as usize,
+                in("rsi") len,
+                in("rdx") advice_flag as i64,
+                out("rcx") _,
+                out("r11") _,
+                options(nostack)
+            );
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+            core::arch::asm!(
+                "svc 0",
+                inout("x8") SYS_MADVISE => _,
+                inout("x0") addr as usize => ret,
+                in("x1") len,
+                in("x2") advice_flag as i64,
+                options(nostack)
+            );
+        }
+
+        if ret < 0 {
+            return Err(std::io::Error::from_raw_os_error(-ret as i32));
+        }
+
+        Ok(())
     }
-    #[cfg(target_arch = "aarch64")]
-    {
-        core::arch::asm!(
-            "svc 0",
-            inout("x8") SYS_MADVISE => _,
-            inout("x0") addr as usize => ret,
-            in("x1") len,
-            in("x2") advice_flag as i64,
-            options(nostack)
-        );
-    }
-
-    if ret < 0 {
-        return Err(std::io::Error::from_raw_os_error(-ret as i32));
-    }
-
-    Ok(())
-}}
+}
 
 /// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
@@ -263,13 +265,15 @@ pub unsafe fn madvise_region(
 /// The pointer must be valid and the length must not exceed the mapped region.
 #[cfg(target_os = "linux")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn prefetch_for_inference(addr: *mut u8, len: usize) -> std::io::Result<()> { unsafe {
-    // First: tell kernel we'll need this data
-    madvise_region(addr, len, MemoryAdvice::WillNeed)?;
-    // Second: hint random access pattern (disables readahead waste)
-    madvise_region(addr, len, MemoryAdvice::Random)?;
-    Ok(())
-}}
+pub unsafe fn prefetch_for_inference(addr: *mut u8, len: usize) -> std::io::Result<()> {
+    unsafe {
+        // First: tell kernel we'll need this data
+        madvise_region(addr, len, MemoryAdvice::WillNeed)?;
+        // Second: hint random access pattern (disables readahead waste)
+        madvise_region(addr, len, MemoryAdvice::Random)?;
+        Ok(())
+    }
+}
 
 /// Stub for non-Linux platforms.
 #[cfg(not(target_os = "linux"))]
@@ -302,15 +306,17 @@ pub enum PrefetchLocality {
 #[inline]
 #[cfg(target_arch = "x86_64")]
 // SAFETY: caller ensures preconditions are met for this unsafe function
-pub unsafe fn prefetch_ptr<T>(ptr: *const T, locality: PrefetchLocality) { unsafe {
-    use core::arch::x86_64::*;
-    match locality {
-        PrefetchLocality::None => _mm_prefetch(ptr as *const i8, _MM_HINT_NTA),
-        PrefetchLocality::Low => _mm_prefetch(ptr as *const i8, _MM_HINT_T2),
-        PrefetchLocality::Moderate => _mm_prefetch(ptr as *const i8, _MM_HINT_T1),
-        PrefetchLocality::High => _mm_prefetch(ptr as *const i8, _MM_HINT_T0),
+pub unsafe fn prefetch_ptr<T>(ptr: *const T, locality: PrefetchLocality) {
+    unsafe {
+        use core::arch::x86_64::*;
+        match locality {
+            PrefetchLocality::None => _mm_prefetch(ptr as *const i8, _MM_HINT_NTA),
+            PrefetchLocality::Low => _mm_prefetch(ptr as *const i8, _MM_HINT_T2),
+            PrefetchLocality::Moderate => _mm_prefetch(ptr as *const i8, _MM_HINT_T1),
+            PrefetchLocality::High => _mm_prefetch(ptr as *const i8, _MM_HINT_T0),
+        }
     }
-}}
+}
 
 /// Prefetch data into cache (ARM64).
 #[inline]

@@ -16,11 +16,7 @@ fn test_identity_kernel() {
     let out = conv2d(&image, 3, 3, &delta, 3, 3, BorderMode::Zero).expect("ok");
 
     // Interior pixel should be exactly preserved
-    assert!(
-        (out[4] - 5.0).abs() < 1e-6,
-        "Identity kernel failed at center: {}",
-        out[4]
-    );
+    assert!((out[4] - 5.0).abs() < 1e-6, "Identity kernel failed at center: {}", out[4]);
 }
 
 #[test]
@@ -94,10 +90,7 @@ fn test_gaussian_blur_constant_image() {
 
     // Blurring a constant image should give the same constant
     for (i, &v) in blurred.iter().enumerate() {
-        assert!(
-            (v - 5.0).abs() < 1e-3,
-            "Gaussian blur changed constant at {i}: {v}"
-        );
+        assert!((v - 5.0).abs() < 1e-3, "Gaussian blur changed constant at {i}: {v}");
     }
 }
 
@@ -112,10 +105,7 @@ fn test_gaussian_blur_reduces_range() {
     let max_blurred = blurred.iter().copied().fold(0.0f32, f32::max);
 
     // Blurring should reduce the peak
-    assert!(
-        max_blurred < 100.0,
-        "Gaussian blur didn't reduce peak: {max_blurred}"
-    );
+    assert!(max_blurred < 100.0, "Gaussian blur didn't reduce peak: {max_blurred}");
     // Total energy should be approximately conserved
     let sum_orig: f32 = image.iter().sum();
     let sum_blurred: f32 = blurred.iter().sum();
@@ -169,11 +159,7 @@ fn test_sobel_horizontal_edge() {
     let edge_y = h / 2;
     let center_x = w / 2;
     let idx = edge_y * w + center_x;
-    assert!(
-        gy[idx].abs() > 0.1,
-        "Expected vertical gradient at edge: gy={}",
-        gy[idx]
-    );
+    assert!(gy[idx].abs() > 0.1, "Expected vertical gradient at edge: gy={}", gy[idx]);
 }
 
 // ============================================================================
@@ -244,7 +230,7 @@ fn test_conv2d_buffer_mismatch() {
 fn test_border_clamp() {
     let image = vec![1.0, 2.0, 3.0, 4.0_f32]; // 2×2
     let k = [0.0, 1.0, 0.0_f32]; // 3×1 horizontal kernel (just right neighbor)
-    // Actually let's use a 3x1 → need it as 1x3 for conv2d (kw=3, kh=1)
+                                 // Actually let's use a 3x1 → need it as 1x3 for conv2d (kw=3, kh=1)
     let out = conv2d(&image, 2, 2, &k, 3, 1, BorderMode::Clamp).expect("ok");
 
     // At (0,0): neighbors are clamp(-1,0)=image[0]=1, image[0]=1, image[1]=2
@@ -502,7 +488,12 @@ fn test_hsv_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
 
     for i in 0..colors.len() {
         let err = (colors[i] - recovered[i]).abs();
-        assert!(err < 1e-4, "HSV roundtrip at {i}: orig={}, rec={}, err={err}", colors[i], recovered[i]);
+        assert!(
+            err < 1e-4,
+            "HSV roundtrip at {i}: orig={}, rec={}, err={err}",
+            colors[i],
+            recovered[i]
+        );
     }
     Ok(())
 }
@@ -687,8 +678,7 @@ fn test_conv_wrap_periodic() -> Result<(), Box<dyn std::error::Error>> {
     for (i, &v) in out.iter().enumerate() {
         assert!((v - 3.0).abs() < 1e-5, "Wrap identity at {i}: {v}");
     }
-    Ok(()
-)
+    Ok(())
 }
 
 // ── ImageBuf tests ──────────────────────────────────────────────
@@ -990,10 +980,7 @@ fn test_falsify_canny_binary_output() {
     }
     let edges = canny(&image, w, h, 1.0, 0.05, 0.15).expect("ok");
     for (i, &v) in edges.iter().enumerate() {
-        assert!(
-            v.abs() < 1e-5 || (v - 1.0).abs() < 1e-5,
-            "Canny output not binary at {i}: {v}"
-        );
+        assert!(v.abs() < 1e-5 || (v - 1.0).abs() < 1e-5, "Canny output not binary at {i}: {v}");
     }
 }
 
@@ -1017,7 +1004,12 @@ fn test_falsify_resize_same_size() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_falsify_resize_1x1() -> Result<(), Box<dyn std::error::Error>> {
     let image = vec![0.42_f32];
-    for interp in [Interpolation::Nearest, Interpolation::Bilinear, Interpolation::Bicubic, Interpolation::Lanczos] {
+    for interp in [
+        Interpolation::Nearest,
+        Interpolation::Bilinear,
+        Interpolation::Bicubic,
+        Interpolation::Lanczos,
+    ] {
         let result = resize(&image, 1, 1, 1, 1, interp)?;
         assert!((result[0] - 0.42).abs() < 0.01, "1×1 resize ({interp:?}): {}", result[0]);
     }

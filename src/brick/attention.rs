@@ -110,34 +110,36 @@ impl AttentionOp {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_dot(a: &[f32], b: &[f32]) -> f32 { unsafe {
-        use std::arch::x86_64::*;
+    unsafe fn avx2_dot(a: &[f32], b: &[f32]) -> f32 {
+        unsafe {
+            use std::arch::x86_64::*;
 
-        let mut sum = _mm256_setzero_ps();
-        let chunks = a.len() / 8;
+            let mut sum = _mm256_setzero_ps();
+            let chunks = a.len() / 8;
 
-        for i in 0..chunks {
-            let base = i * 8;
-            let va = _mm256_loadu_ps(a.as_ptr().add(base));
-            let vb = _mm256_loadu_ps(b.as_ptr().add(base));
-            sum = _mm256_fmadd_ps(va, vb, sum);
+            for i in 0..chunks {
+                let base = i * 8;
+                let va = _mm256_loadu_ps(a.as_ptr().add(base));
+                let vb = _mm256_loadu_ps(b.as_ptr().add(base));
+                sum = _mm256_fmadd_ps(va, vb, sum);
+            }
+
+            // Horizontal sum
+            let high = _mm256_extractf128_ps(sum, 1);
+            let low = _mm256_castps256_ps128(sum);
+            let sum128 = _mm_add_ps(high, low);
+            let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
+            let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
+            let mut result = _mm_cvtss_f32(sum32);
+
+            // Handle remainder
+            for i in (chunks * 8)..a.len() {
+                result += a[i] * b[i];
+            }
+
+            result
         }
-
-        // Horizontal sum
-        let high = _mm256_extractf128_ps(sum, 1);
-        let low = _mm256_castps256_ps128(sum);
-        let sum128 = _mm_add_ps(high, low);
-        let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
-        let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
-        let mut result = _mm_cvtss_f32(sum32);
-
-        // Handle remainder
-        for i in (chunks * 8)..a.len() {
-            result += a[i] * b[i];
-        }
-
-        result
-    }}
+    }
 
     /// Row-wise softmax with SIMD max/sum.
     #[inline]

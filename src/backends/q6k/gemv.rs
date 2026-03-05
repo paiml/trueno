@@ -123,37 +123,39 @@ unsafe fn process_q6k_superblock_avx2(
     input_offset: usize,
     in_dim: usize,
     acc: &mut std::arch::x86_64::__m256,
-) { unsafe {
-    use std::arch::x86_64::*;
+) {
+    unsafe {
+        use std::arch::x86_64::*;
 
-    let ql = sb_data.get(0..128).expect("Q6_K: need ≥128 bytes for ql");
-    let qh = sb_data.get(128..192).expect("Q6_K: need ≥192 bytes for qh");
-    let scales = sb_data.get(192..208).expect("Q6_K: need ≥208 bytes for scales");
-    let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
-    let d_vec = _mm256_set1_ps(d);
+        let ql = sb_data.get(0..128).expect("Q6_K: need ≥128 bytes for ql");
+        let qh = sb_data.get(128..192).expect("Q6_K: need ≥192 bytes for qh");
+        let scales = sb_data.get(192..208).expect("Q6_K: need ≥208 bytes for scales");
+        let d = f16_to_f32(u16::from_le_bytes([sb_data[208], sb_data[209]]));
+        let d_vec = _mm256_set1_ps(d);
 
-    for group in 0..16 {
-        let scale = (scales[group] as i8) as f32;
-        let ds_vec = _mm256_mul_ps(d_vec, _mm256_set1_ps(scale));
-        let group_offset = group * 16;
-        let input_group = input_offset + group_offset;
+        for group in 0..16 {
+            let scale = (scales[group] as i8) as f32;
+            let ds_vec = _mm256_mul_ps(d_vec, _mm256_set1_ps(scale));
+            let group_offset = group * 16;
+            let input_group = input_offset + group_offset;
 
-        for half in 0..2 {
-            let half_offset = half * 8;
-            let input_base = input_group + half_offset;
-            if input_base + 8 > in_dim {
-                continue;
+            for half in 0..2 {
+                let half_offset = half * 8;
+                let input_base = input_group + half_offset;
+                if input_base + 8 > in_dim {
+                    continue;
+                }
+
+                let q6_vals = extract_q6k_values(ql, qh, group_offset + half_offset);
+                let q6_i32 = _mm256_loadu_si256(q6_vals.as_ptr() as *const __m256i);
+                let q6_f32 = _mm256_cvtepi32_ps(q6_i32);
+                let x = _mm256_loadu_ps(input.as_ptr().add(input_base));
+                let dequant = _mm256_mul_ps(ds_vec, q6_f32);
+                *acc = _mm256_fmadd_ps(dequant, x, *acc);
             }
-
-            let q6_vals = extract_q6k_values(ql, qh, group_offset + half_offset);
-            let q6_i32 = _mm256_loadu_si256(q6_vals.as_ptr() as *const __m256i);
-            let q6_f32 = _mm256_cvtepi32_ps(q6_i32);
-            let x = _mm256_loadu_ps(input.as_ptr().add(input_base));
-            let dequant = _mm256_mul_ps(ds_vec, q6_f32);
-            *acc = _mm256_fmadd_ps(dequant, x, *acc);
         }
     }
-}}
+}
 
 /// Fused Q6_K matrix-vector multiply with AVX2 SIMD
 ///
@@ -167,33 +169,35 @@ unsafe fn matmul_q6k_f32_avx2(
     input: &[f32],
     out_dim: usize,
     in_dim: usize,
-) -> Vec<f32> { unsafe {
-    use std::arch::x86_64::*;
+) -> Vec<f32> {
+    unsafe {
+        use std::arch::x86_64::*;
 
-    let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
-    let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
+        let num_blocks_per_row = (in_dim + SUPER_BLOCK_SIZE - 1) / SUPER_BLOCK_SIZE;
+        let row_bytes = num_blocks_per_row * SUPER_BLOCK_BYTES;
 
-    let mut output = vec![0.0f32; out_dim];
+        let mut output = vec![0.0f32; out_dim];
 
-    for out_idx in 0..out_dim {
-        let row_start = out_idx * row_bytes;
-        let mut acc = _mm256_setzero_ps();
+        for out_idx in 0..out_dim {
+            let row_start = out_idx * row_bytes;
+            let mut acc = _mm256_setzero_ps();
 
-        for sb_idx in 0..num_blocks_per_row {
-            let sb_start = row_start + sb_idx * SUPER_BLOCK_BYTES;
-            if sb_start + SUPER_BLOCK_BYTES > q6k_data.len() {
-                break;
+            for sb_idx in 0..num_blocks_per_row {
+                let sb_start = row_start + sb_idx * SUPER_BLOCK_BYTES;
+                if sb_start + SUPER_BLOCK_BYTES > q6k_data.len() {
+                    break;
+                }
+                let sb_data = &q6k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
+                let input_offset = sb_idx * SUPER_BLOCK_SIZE;
+                process_q6k_superblock_avx2(sb_data, input, input_offset, in_dim, &mut acc);
             }
-            let sb_data = &q6k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-            let input_offset = sb_idx * SUPER_BLOCK_SIZE;
-            process_q6k_superblock_avx2(sb_data, input, input_offset, in_dim, &mut acc);
+
+            output[out_idx] = hsum_q6k_avx2(acc);
         }
 
-        output[out_idx] = hsum_q6k_avx2(acc);
+        output
     }
-
-    output
-}}
+}
 
 /// Runtime dispatch for Q6K matmul - uses AVX2 if available
 ///
@@ -331,31 +335,33 @@ unsafe fn compute_chunk_avx2(
     in_dim: usize,
     num_blocks_per_row: usize,
     row_bytes: usize,
-) { unsafe {
-    use std::arch::x86_64::*;
+) {
+    unsafe {
+        use std::arch::x86_64::*;
 
-    for (local_idx, out_val) in chunk.iter_mut().enumerate() {
-        let out_idx = start_row + local_idx;
-        if out_idx >= out_dim {
-            break;
-        }
-
-        let row_start = out_idx * row_bytes;
-        let mut acc = _mm256_setzero_ps();
-
-        for sb_idx in 0..num_blocks_per_row {
-            let sb_start = row_start + sb_idx * SUPER_BLOCK_BYTES;
-            if sb_start + SUPER_BLOCK_BYTES > q6k_data.len() {
+        for (local_idx, out_val) in chunk.iter_mut().enumerate() {
+            let out_idx = start_row + local_idx;
+            if out_idx >= out_dim {
                 break;
             }
-            let sb_data = &q6k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
-            let input_offset = sb_idx * SUPER_BLOCK_SIZE;
-            process_q6k_superblock_avx2(sb_data, input, input_offset, in_dim, &mut acc);
-        }
 
-        *out_val = hsum_q6k_avx2(acc);
+            let row_start = out_idx * row_bytes;
+            let mut acc = _mm256_setzero_ps();
+
+            for sb_idx in 0..num_blocks_per_row {
+                let sb_start = row_start + sb_idx * SUPER_BLOCK_BYTES;
+                if sb_start + SUPER_BLOCK_BYTES > q6k_data.len() {
+                    break;
+                }
+                let sb_data = &q6k_data[sb_start..sb_start + SUPER_BLOCK_BYTES];
+                let input_offset = sb_idx * SUPER_BLOCK_SIZE;
+                process_q6k_superblock_avx2(sb_data, input, input_offset, in_dim, &mut acc);
+            }
+
+            *out_val = hsum_q6k_avx2(acc);
+        }
     }
-}}
+}
 
 pub(crate) fn compute_chunk_scalar(
     q6k_data: &[u8],

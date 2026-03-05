@@ -24,13 +24,7 @@ use crate::error::SparseError;
 /// available backend at runtime.
 pub trait SparseBackend {
     /// Perform SpMV: `y = alpha * A * x + beta * y` using this backend.
-    fn spmv_kernel(
-        a: &CsrMatrix<f32>,
-        alpha: f32,
-        x: &[f32],
-        beta: f32,
-        y: &mut [f32],
-    );
+    fn spmv_kernel(a: &CsrMatrix<f32>, alpha: f32, x: &[f32], beta: f32, y: &mut [f32]);
 
     /// Perform SpMM: `C = alpha * A * B + beta * C` using this backend.
     ///

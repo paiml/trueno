@@ -91,10 +91,10 @@ impl Kernel for Nf4GemmKernel {
         let smem_size = 16 * 4;
 
         PtxKernel::new("nf4_gemm_fused")
-            .param(PtxType::U64, "a_ptr")        // Activations [M × K], f32
-            .param(PtxType::U64, "b_nf4_ptr")    // Packed nibbles
-            .param(PtxType::U64, "b_scales_ptr")  // Per-block scales, f32
-            .param(PtxType::U64, "c_ptr")         // Output [M × N], f32
+            .param(PtxType::U64, "a_ptr") // Activations [M × K], f32
+            .param(PtxType::U64, "b_nf4_ptr") // Packed nibbles
+            .param(PtxType::U64, "b_scales_ptr") // Per-block scales, f32
+            .param(PtxType::U64, "c_ptr") // Output [M × N], f32
             .param(PtxType::U32, "m")
             .param(PtxType::U32, "n")
             .param(PtxType::U32, "k")
