@@ -85,10 +85,23 @@ impl CublasHandle {
         CublasDriver::check(result)
             .map_err(|e| GpuError::CudaDriver(format!("cublasCreate_v2: {e}"), 0))?;
 
-        // Enable TF32 tensor cores for FP32 GEMMs (2x throughput on Ampere+)
-        // TF32: 10-bit mantissa, 8-bit exponent — standard for NN training
-        // (PyTorch default since v1.7). Also enables tensor cores for FP16/BF16.
-        let result = unsafe { (driver.cublasSetMathMode)(handle, CUBLAS_TF32_TENSOR_OP_MATH) };
+        // ALB-076: Use CUBLAS_DEFAULT_MATH (no tensor cores for FP32 GEMMs).
+        //
+        // Root cause: CUBLAS_TF32_TENSOR_OP_MATH + CUBLAS_GEMM_DEFAULT_TENSOR_OP
+        // produce NaN for transposed backward GEMMs (Trans/NoTrans, NoTrans/Trans)
+        // when input gradient magnitudes reach ~1e5 (around block 18 of 24-layer
+        // backward). Forward NoTrans/NoTrans is unaffected.
+        //
+        // Five Whys analysis:
+        // 1. Why NaN weights? → optimizer reads NaN gradients
+        // 2. Why NaN gradients? → cuBLAS backward_a/b output ALL NaN
+        // 3. Why NaN output from valid inputs? → tensor core GEMM algorithm
+        // 4. Why only backward? → backward uses Trans flag, forward doesn't
+        // 5. Why only after ~5 blocks? → gradient magnification reaches ~1e5
+        //
+        // CUBLAS_DEFAULT_MATH disables tensor cores for FP32, yielding correct
+        // results. cuBLAS SIMD GEMM is still 6-14x faster than hand-written PTX.
+        let result = unsafe { (driver.cublasSetMathMode)(handle, CUBLAS_DEFAULT_MATH) };
         if result != CUBLAS_STATUS_SUCCESS {
             // Cleanup on failure
             unsafe { (driver.cublasDestroy_v2)(handle) };
@@ -211,16 +224,17 @@ impl CublasHandle {
             .map_err(|e| GpuError::CudaDriver(format!("cublasGemmEx(m={m}, n={n}, k={k}): {e}"), 0))
     }
 
-    /// FP32 GEMM with TF32 tensor core acceleration
+    /// FP32 GEMM via cuBLAS SIMD (no tensor cores)
     ///
     /// Computes: C = alpha * op(A) * op(B) + beta * C
-    /// All inputs/outputs are FP32. Internal computation uses TF32
-    /// (10-bit mantissa) via tensor cores for ~2x throughput on Ampere+.
+    /// All inputs/outputs are FP32 with strict FP32 accumulation.
     ///
-    /// # Contract
+    /// # Contract (ALB-076)
     ///
-    /// TF32 is the standard compute mode for NN training (PyTorch default
-    /// since v1.7). Acceptable precision for forward/backward GEMMs.
+    /// Uses CUBLAS_COMPUTE_32F + CUBLAS_GEMM_DEFAULT (no tensor cores).
+    /// Tensor core algorithms (CUBLAS_GEMM_DEFAULT_TENSOR_OP) produce NaN
+    /// for transposed backward GEMMs when gradient magnitudes reach ~1e5.
+    /// SIMD path is 6-14x faster than hand-written PTX — sufficient.
     ///
     /// # Errors
     ///
@@ -262,8 +276,8 @@ impl CublasHandle {
                 c_ptr as *mut std::ffi::c_void,
                 CUDA_R_32F,
                 ldc,
-                CUBLAS_COMPUTE_32F_FAST_TF32,
-                CUBLAS_GEMM_DEFAULT_TENSOR_OP,
+                CUBLAS_COMPUTE_32F,
+                CUBLAS_GEMM_DEFAULT,
             )
         };
 
