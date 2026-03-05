@@ -237,7 +237,9 @@ impl Kernel for Dp4aQ6KGemvKernel {
                         if n_idx == 0 { ql_base_in_half } else { ctx.add_u32(ql_base_in_half, 64) };
                     let ql_off_64 = ctx.cvt_u64_u32(ql_full_offset);
                     let ql_addr = ctx.add_u64(sb_addr, ql_off_64);
-                    let ql_int32 = ctx.ld_global_u32(ql_addr);
+                    // GH-129: Use unaligned load — Q6K super-blocks are 210 bytes
+                    // (not 4-byte aligned), causing MISALIGNED_ADDRESS on sm_87.
+                    let ql_int32 = ctx.ld_global_u32_unaligned(ql_addr);
 
                     // Extract nibbles: shift by nibble_shift (0 or 4), mask 0x0F
                     let ql_shifted = ctx.shr_u32(ql_int32, nibble_shift);
@@ -248,7 +250,8 @@ impl Kernel for Dp4aQ6KGemvKernel {
                     let qh_full_offset = ctx.add_u32(pos_in_group, qh_base_val);
                     let qh_off_64 = ctx.cvt_u64_u32(qh_full_offset);
                     let qh_addr = ctx.add_u64(sb_addr, qh_off_64);
-                    let qh_int32 = ctx.ld_global_u32(qh_addr);
+                    // GH-129: Use unaligned load — same Q6K alignment issue.
+                    let qh_int32 = ctx.ld_global_u32_unaligned(qh_addr);
 
                     // Extract 2-bit pairs: shift by qh_shift (0,2,4,6), mask 0x03
                     let qh_shifted = ctx.shr_u32(qh_int32, qh_shift);
