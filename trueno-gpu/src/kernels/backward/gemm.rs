@@ -730,7 +730,7 @@ impl GemmBackwardBKernel {
 
                 // --- Load grad_c tile: grad_c[tile_m + tid_y, block_n + tid_x] ---
                 let gc_m_row = a_m_row; // same M position
-                let gc_n_col = col;     // block_n + tid_x
+                let gc_n_col = col; // block_n + tid_x
 
                 let zero_gc = ctx.mov_f32_imm(0.0);
                 ctx.st_shared_f32(smem_gc_offset, zero_gc);

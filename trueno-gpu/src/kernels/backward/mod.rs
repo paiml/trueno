@@ -134,7 +134,10 @@ mod tests {
         assert_eq!(SoftmaxBackwardKernel::new(16, 16).name(), "softmax_backward");
         assert_eq!(BatchedSoftmaxBackwardKernel::new(16, 64).name(), "batched_softmax_backward");
         assert_eq!(RmsNormBackwardKernel::new(16, 16, 1e-5).name(), "rms_norm_backward");
-        assert_eq!(BatchedRmsNormBackwardKernel::new(16, 64, 1e-5).name(), "batched_rms_norm_backward");
+        assert_eq!(
+            BatchedRmsNormBackwardKernel::new(16, 64, 1e-5).name(),
+            "batched_rms_norm_backward"
+        );
         assert_eq!(LayerNormBackwardKernel::new(16, 16).name(), "layer_norm_backward");
         assert_eq!(GemmBackwardAKernel::new(32, 32, 32).name(), "gemm_backward_a");
         assert_eq!(GemmBackwardBKernel::new(32, 32, 32).name(), "gemm_backward_b");

@@ -210,10 +210,7 @@ pub fn sobel(
 
 /// Gradient magnitude from Sobel output.
 pub fn gradient_magnitude(gx: &[f32], gy: &[f32]) -> Vec<f32> {
-    gx.iter()
-        .zip(gy.iter())
-        .map(|(&x, &y)| (x * x + y * y).sqrt())
-        .collect()
+    gx.iter().zip(gy.iter()).map(|(&x, &y)| (x * x + y * y).sqrt()).collect()
 }
 
 /// Canny edge detection.
@@ -234,10 +231,7 @@ pub fn canny(
     high_threshold: f32,
 ) -> Result<Vec<f32>, ImageError> {
     if low_threshold < 0.0 || high_threshold < low_threshold || high_threshold > 1.0 {
-        return Err(ImageError::InvalidThresholds {
-            low: low_threshold,
-            high: high_threshold,
-        });
+        return Err(ImageError::InvalidThresholds { low: low_threshold, high: high_threshold });
     }
 
     // Step 1: Gaussian blur
@@ -249,11 +243,8 @@ pub fn canny(
 
     // Normalize magnitude to [0, 1]
     let max_mag = mag.iter().copied().fold(0.0f32, f32::max);
-    let mag_norm: Vec<f32> = if max_mag > 0.0 {
-        mag.iter().map(|&m| m / max_mag).collect()
-    } else {
-        mag
-    };
+    let mag_norm: Vec<f32> =
+        if max_mag > 0.0 { mag.iter().map(|&m| m / max_mag).collect() } else { mag };
 
     // Step 3: Non-maximum suppression
     let nms = non_maximum_suppression(&mag_norm, &gx, &gy, width, height);
@@ -277,7 +268,8 @@ fn non_maximum_suppression(
             let angle = gy[idx].atan2(gx[idx]);
             let m = mag[idx];
 
-            let dir = ((angle + std::f32::consts::PI) / std::f32::consts::FRAC_PI_4).round() as usize % 4;
+            let dir =
+                ((angle + std::f32::consts::PI) / std::f32::consts::FRAC_PI_4).round() as usize % 4;
             let (n1, n2) = match dir {
                 0 => (mag[idx - 1], mag[idx + 1]),
                 1 => (mag[(y - 1) * width + x + 1], mag[(y + 1) * width + x - 1]),
@@ -294,13 +286,7 @@ fn non_maximum_suppression(
 }
 
 /// Hysteresis thresholding: connect weak edges to strong edges.
-fn hysteresis_threshold(
-    nms: &[f32],
-    width: usize,
-    height: usize,
-    low: f32,
-    high: f32,
-) -> Vec<f32> {
+fn hysteresis_threshold(nms: &[f32], width: usize, height: usize, low: f32, high: f32) -> Vec<f32> {
     let mut edges = vec![0.0f32; width * height];
     for y in 1..height.saturating_sub(1) {
         for x in 1..width.saturating_sub(1) {
@@ -309,9 +295,14 @@ fn hysteresis_threshold(
                 edges[idx] = 1.0;
             } else if nms[idx] >= low {
                 let has_strong = [
-                    (y - 1, x - 1), (y - 1, x), (y - 1, x + 1),
-                    (y, x - 1),                   (y, x + 1),
-                    (y + 1, x - 1), (y + 1, x), (y + 1, x + 1),
+                    (y - 1, x - 1),
+                    (y - 1, x),
+                    (y - 1, x + 1),
+                    (y, x - 1),
+                    (y, x + 1),
+                    (y + 1, x - 1),
+                    (y + 1, x),
+                    (y + 1, x + 1),
                 ]
                 .iter()
                 .any(|&(ny, nx)| nms[ny * width + nx] >= high);
@@ -424,12 +415,7 @@ pub fn canny_rgb(
 ) -> Result<Vec<f32>, ImageError> {
     let expected = width * height * channels;
     if image.len() != expected {
-        return Err(ImageError::BufferLengthMismatch {
-            expected,
-            got: image.len(),
-            width,
-            height,
-        });
+        return Err(ImageError::BufferLengthMismatch { expected, got: image.len(), width, height });
     }
 
     // Convert to grayscale (BT.601 weights: 0.299R + 0.587G + 0.114B)

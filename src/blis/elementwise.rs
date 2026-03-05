@@ -307,7 +307,8 @@ mod tests {
     #[test]
     fn test_relu_large() {
         let n = 11008; // FFN intermediate size
-        let input: Vec<f32> = (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
+        let input: Vec<f32> =
+            (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
         let mut output = vec![0.0f32; n];
         relu(&input, &mut output).unwrap();
         for (i, (&inp, &out)) in input.iter().zip(output.iter()).enumerate() {
@@ -318,7 +319,8 @@ mod tests {
     #[test]
     fn test_relu_avx2_scalar_parity() {
         for n in [1, 7, 8, 15, 16, 31, 32, 63, 64, 128, 4096] {
-            let input: Vec<f32> = (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 500.0 - 1.0).collect();
+            let input: Vec<f32> =
+                (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 500.0 - 1.0).collect();
             let mut output = vec![0.0f32; n];
             relu(&input, &mut output).unwrap();
             for (i, (&inp, &out)) in input.iter().zip(output.iter()).enumerate() {
@@ -402,7 +404,8 @@ mod tests {
     #[test]
     fn test_mul_scalar_avx2_scalar_parity() {
         for n in [1, 7, 8, 15, 16, 31, 32, 63, 64, 128, 4096] {
-            let input: Vec<f32> = (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 500.0 - 1.0).collect();
+            let input: Vec<f32> =
+                (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 500.0 - 1.0).collect();
             let mut output = vec![0.0f32; n];
             mul_scalar(&input, 2.718, &mut output).unwrap();
             for i in 0..n {

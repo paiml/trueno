@@ -27,9 +27,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Roundtrip
     let mut recovered = vec![Complex::ZERO; 8];
     plan.inverse(&output, &mut recovered)?;
-    let max_err: f32 = input.iter().zip(recovered.iter())
-        .map(|(a, b)| (*a - *b).abs())
-        .fold(0.0f32, f32::max);
+    let max_err: f32 =
+        input.iter().zip(recovered.iter()).map(|(a, b)| (*a - *b).abs()).fold(0.0f32, f32::max);
     println!("Roundtrip max error: {max_err:.2e}");
 
     // ── Bluestein (arbitrary length) ───────────────────────
@@ -45,39 +44,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Bluestein roundtrip
     let mut rec5 = vec![Complex::ZERO; 5];
     bluestein_fft(&output5, &mut rec5, true)?;
-    let err5: f32 = input5.iter().zip(rec5.iter())
-        .map(|(a, b)| (*a - *b).abs())
-        .fold(0.0f32, f32::max);
+    let err5: f32 =
+        input5.iter().zip(rec5.iter()).map(|(a, b)| (*a - *b).abs()).fold(0.0f32, f32::max);
     println!("Bluestein roundtrip error: {err5:.2e}");
 
     // ── 3D FFT ─────────────────────────────────────────────
     println!("\n--- 3D FFT ---");
     let (nx, ny, nz) = (2, 4, 2);
     let total = nx * ny * nz;
-    let input3d: Vec<Complex> = (0..total)
-        .map(|i| Complex::new((i as f32).sin(), (i as f32).cos()))
-        .collect();
+    let input3d: Vec<Complex> =
+        (0..total).map(|i| Complex::new((i as f32).sin(), (i as f32).cos())).collect();
     let mut freq3d = vec![Complex::ZERO; total];
     let mut rec3d = vec![Complex::ZERO; total];
     fft_3d(&input3d, &mut freq3d, nx, ny, nz)?;
     ifft_3d(&freq3d, &mut rec3d, nx, ny, nz)?;
-    let err3d: f32 = input3d.iter().zip(rec3d.iter())
-        .map(|(a, b)| (*a - *b).abs())
-        .fold(0.0f32, f32::max);
+    let err3d: f32 =
+        input3d.iter().zip(rec3d.iter()).map(|(a, b)| (*a - *b).abs()).fold(0.0f32, f32::max);
     println!("3D FFT {nx}×{ny}×{nz} roundtrip error: {err3d:.2e}");
 
     // ── Batched FFT ────────────────────────────────────────
     println!("\n--- Batched FFT ---");
     let n = 4;
     let batch = 3;
-    let batch_input: Vec<Complex> = (0..n * batch)
-        .map(|i| Complex::new(i as f32, 0.0))
-        .collect();
+    let batch_input: Vec<Complex> = (0..n * batch).map(|i| Complex::new(i as f32, 0.0)).collect();
     let mut batch_freq = vec![Complex::ZERO; n * batch];
     let mut batch_rec = vec![Complex::ZERO; n * batch];
     fft_batched(&batch_input, &mut batch_freq, n, batch, false)?;
     fft_batched(&batch_freq, &mut batch_rec, n, batch, true)?;
-    let err_batch: f32 = batch_input.iter().zip(batch_rec.iter())
+    let err_batch: f32 = batch_input
+        .iter()
+        .zip(batch_rec.iter())
         .map(|(a, b)| (*a - *b).abs())
         .fold(0.0f32, f32::max);
     println!("{batch} batches of size {n}: roundtrip error = {err_batch:.2e}");
@@ -92,9 +88,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // C2R roundtrip
     let mut c2r_out = vec![0.0f32; 8];
     fft_c2r(&r2c_out, &mut c2r_out, 8)?;
-    let c2r_err: f32 = real_input.iter().zip(c2r_out.iter())
-        .map(|(a, b)| (a - b).abs())
-        .fold(0.0f32, f32::max);
+    let c2r_err: f32 =
+        real_input.iter().zip(c2r_out.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
     println!("R2C → C2R roundtrip error: {c2r_err:.2e}");
 
     println!("\n=== All FFT demos passed ===");

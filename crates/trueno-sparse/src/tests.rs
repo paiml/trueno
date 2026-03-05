@@ -11,8 +11,9 @@ use crate::*;
 #[test]
 fn test_reject_non_monotonic_offsets() {
     let result = CsrMatrix::<f32>::new(
-        3, 3,
-        vec![0, 2, 1, 3],  // non-monotonic: offsets[1]=2 > offsets[2]=1
+        3,
+        3,
+        vec![0, 2, 1, 3], // non-monotonic: offsets[1]=2 > offsets[2]=1
         vec![0, 1, 0],
         vec![1.0, 2.0, 3.0],
     );
@@ -26,8 +27,9 @@ fn test_reject_non_monotonic_offsets() {
 #[test]
 fn test_reject_nonzero_first_offset() {
     let result = CsrMatrix::<f32>::new(
-        2, 2,
-        vec![1, 2, 3],  // offsets[0] != 0
+        2,
+        2,
+        vec![1, 2, 3], // offsets[0] != 0
         vec![0, 1, 0],
         vec![1.0, 2.0, 3.0],
     );
@@ -41,8 +43,9 @@ fn test_reject_nonzero_first_offset() {
 #[test]
 fn test_reject_offsets_nnz_mismatch() {
     let result = CsrMatrix::<f32>::new(
-        2, 2,
-        vec![0, 1, 5],  // offsets[2]=5 but only 2 elements
+        2,
+        2,
+        vec![0, 1, 5], // offsets[2]=5 but only 2 elements
         vec![0, 1],
         vec![1.0, 2.0],
     );
@@ -56,8 +59,9 @@ fn test_reject_offsets_nnz_mismatch() {
 #[test]
 fn test_reject_wrong_offsets_length() {
     let result = CsrMatrix::<f32>::new(
-        3, 3,
-        vec![0, 1],  // length 2, expected 4 (rows+1)
+        3,
+        3,
+        vec![0, 1], // length 2, expected 4 (rows+1)
         vec![0],
         vec![1.0],
     );
@@ -75,9 +79,10 @@ fn test_reject_wrong_offsets_length() {
 #[test]
 fn test_reject_column_out_of_bounds() {
     let result = CsrMatrix::<f32>::new(
-        2, 3,
+        2,
+        3,
         vec![0, 1, 2],
-        vec![0, 5],  // col=5 >= cols=3
+        vec![0, 5], // col=5 >= cols=3
         vec![1.0, 2.0],
     );
     assert!(result.is_err());
@@ -90,7 +95,7 @@ fn test_reject_column_out_of_bounds() {
 #[test]
 fn test_spmv_dimension_mismatch() {
     let a = CsrMatrix::<f32>::new(2, 3, vec![0, 1, 2], vec![0, 1], vec![1.0, 2.0]).unwrap();
-    let x = vec![1.0, 2.0];  // length 2, but cols=3
+    let x = vec![1.0, 2.0]; // length 2, but cols=3
     let mut y = vec![0.0; 2];
     let result = a.spmv(1.0, &x, 0.0, &mut y);
     assert!(result.is_err());
@@ -100,7 +105,7 @@ fn test_spmv_dimension_mismatch() {
 fn test_spmv_output_dimension_mismatch() {
     let a = CsrMatrix::<f32>::new(2, 3, vec![0, 1, 2], vec![0, 1], vec![1.0, 2.0]).unwrap();
     let x = vec![1.0, 2.0, 3.0];
-    let mut y = vec![0.0; 5];  // length 5, but rows=2
+    let mut y = vec![0.0; 5]; // length 5, but rows=2
     let result = a.spmv(1.0, &x, 0.0, &mut y);
     assert!(result.is_err());
 }
@@ -122,7 +127,8 @@ fn test_spmv_identity() {
         assert!(
             (y[i] - x[i]).abs() < 1e-7,
             "Identity SpMV failed at i={i}: y={}, x={}",
-            y[i], x[i]
+            y[i],
+            x[i]
         );
     }
 }
@@ -147,11 +153,13 @@ fn test_spmv_sparse_matrix() {
     //      [0, 3, 0],
     //      [4, 0, 5]]
     let a = CsrMatrix::<f32>::new(
-        3, 3,
+        3,
+        3,
         vec![0, 2, 3, 5],
         vec![0, 2, 1, 0, 2],
         vec![1.0, 2.0, 3.0, 4.0, 5.0],
-    ).unwrap();
+    )
+    .unwrap();
 
     let x = vec![1.0, 2.0, 3.0];
     let mut y = vec![0.0; 3];
@@ -171,12 +179,7 @@ fn test_spmv_empty_rows() {
     // A = [[0, 0],
     //      [1, 0],
     //      [0, 0]]
-    let a = CsrMatrix::<f32>::new(
-        3, 2,
-        vec![0, 0, 1, 1],
-        vec![0],
-        vec![1.0],
-    ).unwrap();
+    let a = CsrMatrix::<f32>::new(3, 2, vec![0, 0, 1, 1], vec![0], vec![1.0]).unwrap();
 
     let x = vec![5.0, 3.0];
     let mut y = vec![0.0; 3];
@@ -193,12 +196,9 @@ fn test_spmv_empty_rows() {
 
 #[test]
 fn test_coo_to_csr_basic() {
-    let coo = CooMatrix::new(
-        3, 3,
-        vec![0, 1, 2, 0],
-        vec![0, 1, 2, 2],
-        vec![1.0_f32, 2.0, 3.0, 4.0],
-    ).unwrap();
+    let coo =
+        CooMatrix::new(3, 3, vec![0, 1, 2, 0], vec![0, 1, 2, 2], vec![1.0_f32, 2.0, 3.0, 4.0])
+            .unwrap();
 
     let csr = CsrMatrix::from_coo(&coo);
     assert_eq!(csr.rows(), 3);
@@ -282,12 +282,7 @@ fn test_spmm_sparse() {
 
 #[test]
 fn test_to_dense_roundtrip() {
-    let coo = CooMatrix::new(
-        2, 3,
-        vec![0, 0, 1],
-        vec![0, 2, 1],
-        vec![1.0_f32, 2.0, 3.0],
-    ).unwrap();
+    let coo = CooMatrix::new(2, 3, vec![0, 0, 1], vec![0, 2, 1], vec![1.0_f32, 2.0, 3.0]).unwrap();
 
     let csr = CsrMatrix::from_coo(&coo);
     let dense = csr.to_dense();
@@ -308,12 +303,8 @@ fn test_to_dense_roundtrip() {
 #[test]
 fn test_avg_nnz_per_row() {
     // 3 rows, 5 nonzeros
-    let a = CsrMatrix::<f32>::new(
-        3, 3,
-        vec![0, 2, 3, 5],
-        vec![0, 1, 2, 0, 1],
-        vec![1.0; 5],
-    ).unwrap();
+    let a =
+        CsrMatrix::<f32>::new(3, 3, vec![0, 2, 3, 5], vec![0, 1, 2, 0, 1], vec![1.0; 5]).unwrap();
     let avg = a.avg_nnz_per_row();
     assert!((avg - 5.0 / 3.0).abs() < 1e-10);
 }
@@ -321,12 +312,8 @@ fn test_avg_nnz_per_row() {
 #[test]
 fn test_row_length_variance() {
     // Row lengths: [2, 1, 2], mean = 5/3
-    let a = CsrMatrix::<f32>::new(
-        3, 3,
-        vec![0, 2, 3, 5],
-        vec![0, 1, 2, 0, 1],
-        vec![1.0; 5],
-    ).unwrap();
+    let a =
+        CsrMatrix::<f32>::new(3, 3, vec![0, 2, 3, 5], vec![0, 1, 2, 0, 1], vec![1.0; 5]).unwrap();
     let var = a.row_length_variance();
     // Variance = ((2-5/3)^2 + (1-5/3)^2 + (2-5/3)^2) / 3
     //          = (1/9 + 4/9 + 1/9) / 3 = 6/27 = 2/9
@@ -350,15 +337,17 @@ mod proptests {
 
     /// Generate a random CSR matrix via COO.
     fn arb_csr(max_dim: usize, max_nnz: usize) -> impl Strategy<Value = CsrMatrix<f32>> {
-        (1..=max_dim, 1..=max_dim, 0..=max_nnz).prop_flat_map(|(rows, cols, nnz)| {
-            let row_idx = proptest::collection::vec(0..rows as u32, nnz);
-            let col_idx = proptest::collection::vec(0..cols as u32, nnz);
-            let vals = proptest::collection::vec(-100.0_f32..100.0, nnz);
-            (Just(rows), Just(cols), row_idx, col_idx, vals)
-        }).prop_map(|(rows, cols, ri, ci, vals)| {
-            let coo = CooMatrix::new(rows, cols, ri, ci, vals).unwrap();
-            CsrMatrix::from_coo(&coo)
-        })
+        (1..=max_dim, 1..=max_dim, 0..=max_nnz)
+            .prop_flat_map(|(rows, cols, nnz)| {
+                let row_idx = proptest::collection::vec(0..rows as u32, nnz);
+                let col_idx = proptest::collection::vec(0..cols as u32, nnz);
+                let vals = proptest::collection::vec(-100.0_f32..100.0, nnz);
+                (Just(rows), Just(cols), row_idx, col_idx, vals)
+            })
+            .prop_map(|(rows, cols, ri, ci, vals)| {
+                let coo = CooMatrix::new(rows, cols, ri, ci, vals).unwrap();
+                CsrMatrix::from_coo(&coo)
+            })
     }
 
     proptest! {
@@ -551,12 +540,7 @@ fn test_bsr_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_spgemm_identity() -> Result<(), Box<dyn std::error::Error>> {
     // A * I = A
-    let a = CsrMatrix::new(
-        2, 2,
-        vec![0, 1, 2],
-        vec![0, 1],
-        vec![3.0_f32, 5.0],
-    )?;
+    let a = CsrMatrix::new(2, 2, vec![0, 1, 2], vec![0, 1], vec![3.0_f32, 5.0])?;
     let eye = CsrMatrix::<f32>::identity(2);
     let c = crate::spgemm::spgemm(&a, &eye)?;
     let dense = c.to_dense();
@@ -570,12 +554,7 @@ fn test_spgemm_identity() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_spgemm_identity_left() -> Result<(), Box<dyn std::error::Error>> {
     // I * A = A
-    let a = CsrMatrix::new(
-        3, 3,
-        vec![0, 2, 3, 4],
-        vec![0, 2, 1, 0],
-        vec![1.0_f32, 2.0, 3.0, 4.0],
-    )?;
+    let a = CsrMatrix::new(3, 3, vec![0, 2, 3, 4], vec![0, 2, 1, 0], vec![1.0_f32, 2.0, 3.0, 4.0])?;
     let eye = CsrMatrix::<f32>::identity(3);
     let c = crate::spgemm::spgemm(&eye, &a)?;
     assert_eq!(c.to_dense(), a.to_dense());
@@ -642,7 +621,8 @@ fn test_sell_identity_spmv() -> Result<(), Box<dyn std::error::Error>> {
 fn test_sell_matches_csr_spmv() -> Result<(), Box<dyn std::error::Error>> {
     // Sparse matrix with variable row lengths
     let csr = CsrMatrix::new(
-        4, 4,
+        4,
+        4,
         vec![0, 2, 3, 5, 6],
         vec![0, 1, 2, 1, 3, 0],
         vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0_f32],
@@ -660,7 +640,8 @@ fn test_sell_matches_csr_spmv() -> Result<(), Box<dyn std::error::Error>> {
         assert!(
             (y_csr[i] - y_sell[i]).abs() < 1e-5,
             "SELL vs CSR mismatch at {i}: csr={}, sell={}",
-            y_csr[i], y_sell[i]
+            y_csr[i],
+            y_sell[i]
         );
     }
     Ok(())
@@ -692,12 +673,7 @@ fn test_sell_dimension_mismatch() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_sell_properties() -> Result<(), Box<dyn std::error::Error>> {
-    let csr = CsrMatrix::new(
-        3, 3,
-        vec![0, 2, 3, 3],
-        vec![0, 1, 2],
-        vec![1.0, 2.0, 3.0_f32],
-    )?;
+    let csr = CsrMatrix::new(3, 3, vec![0, 2, 3, 3], vec![0, 1, 2], vec![1.0, 2.0, 3.0_f32])?;
     let sell = SellMatrix::from_csr(&csr, 2);
     assert_eq!(sell.rows(), 3);
     assert_eq!(sell.cols(), 3);
@@ -712,12 +688,7 @@ use crate::ops::{ScalarBackend, SparseBackend};
 #[test]
 fn test_scalar_backend_spmv() -> Result<(), Box<dyn std::error::Error>> {
     // 3×3 identity via scalar backend
-    let csr = CsrMatrix::new(
-        3, 3,
-        vec![0, 1, 2, 3],
-        vec![0, 1, 2],
-        vec![1.0, 1.0, 1.0_f32],
-    )?;
+    let csr = CsrMatrix::new(3, 3, vec![0, 1, 2, 3], vec![0, 1, 2], vec![1.0, 1.0, 1.0_f32])?;
     let x = [2.0, 3.0, 4.0_f32];
     let mut y = [0.0_f32; 3];
     ScalarBackend::spmv_kernel(&csr, 1.0, &x, 0.0, &mut y);
@@ -729,12 +700,7 @@ fn test_scalar_backend_spmv() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn test_scalar_backend_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
-    let csr = CsrMatrix::new(
-        2, 2,
-        vec![0, 1, 2],
-        vec![0, 1],
-        vec![3.0, 5.0_f32],
-    )?;
+    let csr = CsrMatrix::new(2, 2, vec![0, 1, 2], vec![0, 1], vec![3.0, 5.0_f32])?;
     let x = [1.0, 1.0_f32];
     let mut y = [10.0, 20.0_f32];
     ScalarBackend::spmv_kernel(&csr, 2.0, &x, 0.5, &mut y);

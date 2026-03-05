@@ -54,7 +54,8 @@ fn main() {
     let mut tf4 = Threefry4x64::new(101);
     let mut tf_normal = vec![0.0f32; 10000];
     tf4.fill_normal(&mut tf_normal);
-    let tf_n_mean: f64 = tf_normal.iter().map(|&v| f64::from(v)).sum::<f64>() / tf_normal.len() as f64;
+    let tf_n_mean: f64 =
+        tf_normal.iter().map(|&v| f64::from(v)).sum::<f64>() / tf_normal.len() as f64;
     println!("Normal mean: {tf_n_mean:.4} (expected: 0.0)");
 
     let tf_key = [42u64, 0, 0, 0];

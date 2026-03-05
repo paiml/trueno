@@ -201,14 +201,14 @@ impl Kernel for MultiWarpQ6KGemvKernel {
                 // is = 0 for lanes 0-15, 1 for lanes 16-31
                 // ds_even = ds[8*n + 2*g], ds_odd = ds[8*n + 2*g + 1]
                 let offset_params: [(u32, u32, u32, usize, usize); 8] = [
-                    (0,   0, 0, 0,  1),   // n=0, g=0: scale_idx = 0 or 1
-                    (32,  0, 1, 2,  3),   // n=0, g=1: scale_idx = 2 or 3
-                    (64,  0, 2, 4,  5),   // n=0, g=2: scale_idx = 4 or 5
-                    (96,  0, 3, 6,  7),   // n=0, g=3: scale_idx = 6 or 7
-                    (128, 1, 0, 8,  9),   // n=1, g=0: scale_idx = 8 or 9
-                    (160, 1, 1, 10, 11),  // n=1, g=1: scale_idx = 10 or 11
-                    (192, 1, 2, 12, 13),  // n=1, g=2: scale_idx = 12 or 13
-                    (224, 1, 3, 14, 15),  // n=1, g=3: scale_idx = 14 or 15
+                    (0, 0, 0, 0, 1),     // n=0, g=0: scale_idx = 0 or 1
+                    (32, 0, 1, 2, 3),    // n=0, g=1: scale_idx = 2 or 3
+                    (64, 0, 2, 4, 5),    // n=0, g=2: scale_idx = 4 or 5
+                    (96, 0, 3, 6, 7),    // n=0, g=3: scale_idx = 6 or 7
+                    (128, 1, 0, 8, 9),   // n=1, g=0: scale_idx = 8 or 9
+                    (160, 1, 1, 10, 11), // n=1, g=1: scale_idx = 10 or 11
+                    (192, 1, 2, 12, 13), // n=1, g=2: scale_idx = 12 or 13
+                    (224, 1, 3, 14, 15), // n=1, g=3: scale_idx = 14 or 15
                 ];
 
                 // Precompute lane_is: 0 for lanes 0-15, 1 for lanes 16-31
@@ -413,11 +413,7 @@ mod tests {
     fn test_mwv_q6k_barrier_safety() {
         let kernel = MultiWarpQ6KGemvKernel::new(1536, 1536);
         let result = kernel.analyze_barrier_safety();
-        assert!(
-            result.is_safe,
-            "MWV Q6K must be barrier-safe: {:?}",
-            result.violations
-        );
+        assert!(result.is_safe, "MWV Q6K must be barrier-safe: {:?}", result.violations);
     }
 
     /// Contract: kernel name is deterministic
@@ -435,14 +431,8 @@ mod tests {
         for warps in [1, 2, 3, 4, 6, 8] {
             let kernel = MultiWarpQ6KGemvKernel::with_warps(1536, 1536, warps);
             let ptx = kernel.emit_ptx();
-            assert!(
-                ptx.contains(".visible .entry"),
-                "Must produce valid PTX for {warps} warps"
-            );
-            assert!(
-                ptx.contains("bar.sync"),
-                "Must have barrier even for 1 warp (PARITY-114)"
-            );
+            assert!(ptx.contains(".visible .entry"), "Must produce valid PTX for {warps} warps");
+            assert!(ptx.contains("bar.sync"), "Must have barrier even for 1 warp (PARITY-114)");
         }
     }
 }

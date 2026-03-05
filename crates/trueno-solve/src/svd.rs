@@ -85,7 +85,13 @@ fn jacobi_sweeps(work: &mut [f32], v: &mut [f32], m: usize, n: usize, tol: f32) 
 /// Apply a single Jacobi rotation to column pair (p, q).
 /// Returns true if a rotation was applied (columns were not orthogonal).
 fn apply_jacobi_rotation(
-    work: &mut [f32], v: &mut [f32], m: usize, n: usize, p: usize, q: usize, tol: f32,
+    work: &mut [f32],
+    v: &mut [f32],
+    m: usize,
+    n: usize,
+    p: usize,
+    q: usize,
+    tol: f32,
 ) -> bool {
     let (app, apq, aqq) = gram_elements(work, m, n, p, q);
 
@@ -172,7 +178,12 @@ fn compute_u_matrix(work: &[f32], sigma: &[f32], m: usize, n: usize, min_mn: usi
 /// Sort singular values descending and assemble the final SvdResult.
 #[allow(clippy::cast_precision_loss)]
 fn assemble_sorted_result(
-    u: Vec<f32>, v: Vec<f32>, sigma: Vec<f32>, m: usize, n: usize, min_mn: usize,
+    u: Vec<f32>,
+    v: Vec<f32>,
+    sigma: Vec<f32>,
+    m: usize,
+    n: usize,
+    min_mn: usize,
 ) -> Result<SvdResult, SolverError> {
     let mut indices: Vec<usize> = (0..min_mn).collect();
     indices.sort_by(|&a, &b| sigma[b].partial_cmp(&sigma[a]).unwrap_or(std::cmp::Ordering::Equal));
@@ -206,11 +217,5 @@ fn assemble_sorted_result(
         }
     }
 
-    Ok(SvdResult {
-        u: u_sorted,
-        sigma: sigma_sorted,
-        vt,
-        m,
-        n,
-    })
+    Ok(SvdResult { u: u_sorted, sigma: sigma_sorted, vt, m, n })
 }

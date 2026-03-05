@@ -38,10 +38,7 @@ fn test_different_counters_differ() {
     let key = [42u32, 0];
     let c1 = [0, 0, 0, 0];
     let c2 = [1, 0, 0, 0];
-    assert_ne!(
-        Philox4x32::generate_at(key, c1),
-        Philox4x32::generate_at(key, c2)
-    );
+    assert_ne!(Philox4x32::generate_at(key, c1), Philox4x32::generate_at(key, c2));
 }
 
 // ============================================================================
@@ -66,10 +63,7 @@ fn test_uniform_mean() {
     rng.fill_uniform(&mut buf);
 
     let mean: f32 = buf.iter().sum::<f32>() / buf.len() as f32;
-    assert!(
-        (mean - 0.5).abs() < 0.01,
-        "Uniform mean {mean} too far from 0.5"
-    );
+    assert!((mean - 0.5).abs() < 0.01, "Uniform mean {mean} too far from 0.5");
 }
 
 #[test]
@@ -89,10 +83,7 @@ fn test_uniform_variance() {
         / buf.len() as f64;
 
     // Uniform[0,1) variance = 1/12 ≈ 0.0833
-    assert!(
-        (var - 1.0 / 12.0).abs() < 0.005,
-        "Uniform variance {var} too far from 1/12"
-    );
+    assert!((var - 1.0 / 12.0).abs() < 0.005, "Uniform variance {var} too far from 1/12");
 }
 
 // ============================================================================
@@ -115,14 +106,8 @@ fn test_normal_mean_and_variance() {
         .sum::<f64>()
         / buf.len() as f64;
 
-    assert!(
-        mean.abs() < 0.02,
-        "Normal mean {mean} too far from 0"
-    );
-    assert!(
-        (var - 1.0).abs() < 0.05,
-        "Normal variance {var} too far from 1.0"
-    );
+    assert!(mean.abs() < 0.02, "Normal mean {mean} too far from 0");
+    assert!((var - 1.0).abs() < 0.05, "Normal variance {var} too far from 1.0");
 }
 
 #[test]
@@ -176,10 +161,7 @@ fn test_chi_squared_uniformity() {
         .sum();
 
     // Chi-squared critical value for 99 df, p=0.001 ≈ 148.2
-    assert!(
-        chi_sq < 150.0,
-        "Chi-squared {chi_sq} exceeds threshold (poor uniformity)"
-    );
+    assert!(chi_sq < 150.0, "Chi-squared {chi_sq} exceeds threshold (poor uniformity)");
 }
 
 // ============================================================================
@@ -221,10 +203,7 @@ fn test_threefry_different_counters_differ() {
     let key = [42u64, 0, 0, 0];
     let c1 = [0, 0, 0, 0];
     let c2 = [1, 0, 0, 0];
-    assert_ne!(
-        Threefry4x64::generate_at(key, c1),
-        Threefry4x64::generate_at(key, c2)
-    );
+    assert_ne!(Threefry4x64::generate_at(key, c1), Threefry4x64::generate_at(key, c2));
 }
 
 #[test]
@@ -245,10 +224,7 @@ fn test_threefry_uniform_mean() {
     rng.fill_uniform(&mut buf);
 
     let mean: f32 = buf.iter().sum::<f32>() / buf.len() as f32;
-    assert!(
-        (mean - 0.5).abs() < 0.01,
-        "Threefry uniform mean {mean} too far from 0.5"
-    );
+    assert!((mean - 0.5).abs() < 0.01, "Threefry uniform mean {mean} too far from 0.5");
 }
 
 #[test]
@@ -267,14 +243,8 @@ fn test_threefry_normal_mean_and_variance() {
         .sum::<f64>()
         / buf.len() as f64;
 
-    assert!(
-        mean.abs() < 0.02,
-        "Threefry normal mean {mean} too far from 0"
-    );
-    assert!(
-        (var - 1.0).abs() < 0.05,
-        "Threefry normal variance {var} too far from 1.0"
-    );
+    assert!(mean.abs() < 0.02, "Threefry normal mean {mean} too far from 0");
+    assert!((var - 1.0).abs() < 0.05, "Threefry normal variance {var} too far from 1.0");
 }
 
 #[test]
@@ -478,10 +448,7 @@ fn test_falsify_kolmogorov_smirnov_uniform() {
         }
     }
     // KS critical value at α=0.01 for n=10000 ≈ 1.63/sqrt(n) ≈ 0.0163
-    assert!(
-        max_d < 0.02,
-        "KS statistic {max_d} exceeds threshold (distribution not uniform)"
-    );
+    assert!(max_d < 0.02, "KS statistic {max_d} exceeds threshold (distribution not uniform)");
 }
 
 #[test]

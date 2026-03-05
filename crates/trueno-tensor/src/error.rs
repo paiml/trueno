@@ -28,7 +28,9 @@ pub enum TensorError {
     InvalidSubscript(String),
 
     /// Contracted dimensions don't match.
-    #[error("contracted dimension mismatch: index '{index}' has size {size_a} in A but {size_b} in B")]
+    #[error(
+        "contracted dimension mismatch: index '{index}' has size {size_a} in A but {size_b} in B"
+    )]
     ContractionDimensionMismatch {
         /// Index label.
         index: char,

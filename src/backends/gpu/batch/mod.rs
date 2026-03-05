@@ -103,14 +103,7 @@ pub(crate) enum GpuOp {
 
     /// Matrix multiplication: C = A × B
     /// A is M×K, B is K×N, C is M×N (all row-major)
-    Matmul {
-        a: BufferId,
-        b: BufferId,
-        output: BufferId,
-        m: u32,
-        k: u32,
-        n: u32,
-    },
+    Matmul { a: BufferId, b: BufferId, output: BufferId, m: u32, k: u32, n: u32 },
 }
 
 /// Command batch for async GPU execution
@@ -382,14 +375,7 @@ impl GpuCommandBatch {
     pub fn import_buffer(&mut self, buffer: Arc<wgpu::Buffer>, size: usize) -> BufferId {
         let id = BufferId(self.next_buffer_id);
         self.next_buffer_id += 1;
-        self.buffers.insert(
-            id,
-            BufferInfo {
-                size,
-                data: None,
-                gpu_buffer: Some(buffer),
-            },
-        );
+        self.buffers.insert(id, BufferInfo { size, data: None, gpu_buffer: Some(buffer) });
         id
     }
 

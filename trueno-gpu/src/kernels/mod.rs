@@ -93,13 +93,14 @@ pub use persistent::PersistentDecoderKernel;
 pub use quantize::{
     dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu, BatchedQ4KGemvKernel,
     BatchedQ6KGemvKernel, ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel,
-    CoalescedQ6KGemvKernel, Dp4aQ4KGemvKernel, Dp4aQ6KGemvKernel, Fp16Q4KGemvKernel, FusedGateUpQ4KGemvKernel, MultiWarpQ6KGemvKernel,
-    FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormQ4KGemvKernel, MultiWarpVectorizedQ4KGemvKernel,
-    MwvDp4aQ4KGemvKernel, Nf4GemmKernel, Nf4Quantized, PackedDp4aQ4KQ8Kernel, Q4KGemvKernel,
-    Q4KQ8DotKernel, Q4_0GemvKernel, Q4_1GemvKernel, Q5KGemvKernel, Q5KKernel, Q5_0GemvKernel,
-    Q6KGemvKernel, Q6KKernel, Q8QuantizeKernel, Q8_0GemvKernel, QuantizeKernel,
-    TensorCoreQ4KGemmKernel, TiledQ4KGemvKernel, TrueDp4aQ4KGemvKernel,
-    VectorizedQ4KGemvKernel, WideQ4KGemvKernel, NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,
+    CoalescedQ6KGemvKernel, Dp4aQ4KGemvKernel, Dp4aQ6KGemvKernel, Fp16Q4KGemvKernel,
+    FusedGateUpQ4KGemvKernel, FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormQ4KGemvKernel,
+    MultiWarpQ6KGemvKernel, MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel, Nf4GemmKernel,
+    Nf4Quantized, PackedDp4aQ4KQ8Kernel, Q4KGemvKernel, Q4KQ8DotKernel, Q4_0GemvKernel,
+    Q4_1GemvKernel, Q5KGemvKernel, Q5KKernel, Q5_0GemvKernel, Q6KGemvKernel, Q6KKernel,
+    Q8QuantizeKernel, Q8_0GemvKernel, QuantizeKernel, TensorCoreQ4KGemmKernel, TiledQ4KGemvKernel,
+    TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel, WideQ4KGemvKernel, NF4_BLOCK_BYTES,
+    NF4_BLOCK_SIZE, NF4_LUT,
 };
 pub use softmax::{LongRowSoftmaxKernel, SoftmaxKernel};
 

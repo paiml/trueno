@@ -181,29 +181,31 @@ impl DotQ5KOp {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_dot_block(block: &BlockQ5K, x: &[f32]) -> f32 { unsafe {
-        use std::arch::x86_64::*;
+    unsafe fn avx2_dot_block(block: &BlockQ5K, x: &[f32]) -> f32 {
+        unsafe {
+            use std::arch::x86_64::*;
 
-        let mut acc = _mm256_setzero_ps();
-        let mut dequant = [0.0f32; BlockQ5K::BLOCK_SIZE];
-        block.dequantize(&mut dequant);
+            let mut acc = _mm256_setzero_ps();
+            let mut dequant = [0.0f32; BlockQ5K::BLOCK_SIZE];
+            block.dequantize(&mut dequant);
 
-        let mut i = 0;
-        while i + 8 <= BlockQ5K::BLOCK_SIZE {
-            let vd = _mm256_loadu_ps(dequant.as_ptr().add(i));
-            let vx = _mm256_loadu_ps(x.as_ptr().add(i));
-            acc = _mm256_fmadd_ps(vd, vx, acc);
-            i += 8;
+            let mut i = 0;
+            while i + 8 <= BlockQ5K::BLOCK_SIZE {
+                let vd = _mm256_loadu_ps(dequant.as_ptr().add(i));
+                let vx = _mm256_loadu_ps(x.as_ptr().add(i));
+                acc = _mm256_fmadd_ps(vd, vx, acc);
+                i += 8;
+            }
+
+            // Horizontal sum
+            let high = _mm256_extractf128_ps(acc, 1);
+            let low = _mm256_castps256_ps128(acc);
+            let sum128 = _mm_add_ps(high, low);
+            let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
+            let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
+            _mm_cvtss_f32(sum32)
         }
-
-        // Horizontal sum
-        let high = _mm256_extractf128_ps(acc, 1);
-        let low = _mm256_castps256_ps128(acc);
-        let sum128 = _mm_add_ps(high, low);
-        let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
-        let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
-        _mm_cvtss_f32(sum32)
-    }}
+    }
 }
 
 impl ComputeOp for DotQ5KOp {
@@ -278,29 +280,31 @@ impl DotQ6KOp {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_dot_block(block: &BlockQ6K, x: &[f32]) -> f32 { unsafe {
-        use std::arch::x86_64::*;
+    unsafe fn avx2_dot_block(block: &BlockQ6K, x: &[f32]) -> f32 {
+        unsafe {
+            use std::arch::x86_64::*;
 
-        let mut acc = _mm256_setzero_ps();
-        let mut dequant = [0.0f32; BlockQ6K::BLOCK_SIZE];
-        block.dequantize(&mut dequant);
+            let mut acc = _mm256_setzero_ps();
+            let mut dequant = [0.0f32; BlockQ6K::BLOCK_SIZE];
+            block.dequantize(&mut dequant);
 
-        let mut i = 0;
-        while i + 8 <= BlockQ6K::BLOCK_SIZE {
-            let vd = _mm256_loadu_ps(dequant.as_ptr().add(i));
-            let vx = _mm256_loadu_ps(x.as_ptr().add(i));
-            acc = _mm256_fmadd_ps(vd, vx, acc);
-            i += 8;
+            let mut i = 0;
+            while i + 8 <= BlockQ6K::BLOCK_SIZE {
+                let vd = _mm256_loadu_ps(dequant.as_ptr().add(i));
+                let vx = _mm256_loadu_ps(x.as_ptr().add(i));
+                acc = _mm256_fmadd_ps(vd, vx, acc);
+                i += 8;
+            }
+
+            // Horizontal sum
+            let high = _mm256_extractf128_ps(acc, 1);
+            let low = _mm256_castps256_ps128(acc);
+            let sum128 = _mm_add_ps(high, low);
+            let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
+            let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
+            _mm_cvtss_f32(sum32)
         }
-
-        // Horizontal sum
-        let high = _mm256_extractf128_ps(acc, 1);
-        let low = _mm256_castps256_ps128(acc);
-        let sum128 = _mm_add_ps(high, low);
-        let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
-        let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
-        _mm_cvtss_f32(sum32)
-    }}
+    }
 }
 
 impl ComputeOp for DotQ6KOp {

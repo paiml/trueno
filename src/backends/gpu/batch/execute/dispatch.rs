@@ -50,11 +50,10 @@ impl GpuCommandBatch {
 
         // Get or create cached pipeline
         if !cache.contains_key(&key) {
-            let shader =
-                self.device.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                    label: Some(&format!("{} Shader", label)),
-                    source: wgpu::ShaderSource::Wgsl(shader_source.into()),
-                });
+            let shader = self.device.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(&format!("{} Shader", label)),
+                source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+            });
 
             let mut layout_entries = vec![
                 wgpu::BindGroupLayoutEntry {
@@ -193,11 +192,10 @@ impl GpuCommandBatch {
 
         // Get or create cached pipeline
         if !cache.contains_key(&key) {
-            let shader =
-                self.device.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                    label: Some(&format!("{} Shader", label)),
-                    source: wgpu::ShaderSource::Wgsl(shader_source.into()),
-                });
+            let shader = self.device.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(&format!("{} Shader", label)),
+                source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+            });
 
             let bind_group_layout =
                 self.device.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -331,11 +329,10 @@ impl GpuCommandBatch {
 
         // Get or create cached pipeline
         if !cache.contains_key(&key) {
-            let shader =
-                self.device.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                    label: Some(&format!("{} Shader", label)),
-                    source: wgpu::ShaderSource::Wgsl(shader_source.into()),
-                });
+            let shader = self.device.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(&format!("{} Shader", label)),
+                source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+            });
 
             let bind_group_layout =
                 self.device.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

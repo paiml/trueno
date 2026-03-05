@@ -123,11 +123,7 @@ pub fn quantize_nf4(values: &[f32], rows: usize, cols: usize) -> Nf4Quantized {
         n % NF4_BLOCK_SIZE == 0,
         "C-NF4-002: value count {n} not divisible by NF4 block size {NF4_BLOCK_SIZE}"
     );
-    assert_eq!(
-        rows * cols,
-        n,
-        "C-NF4-002: shape ({rows}, {cols}) does not match value count {n}"
-    );
+    assert_eq!(rows * cols, n, "C-NF4-002: shape ({rows}, {cols}) does not match value count {n}");
 
     let num_blocks = n / NF4_BLOCK_SIZE;
     let mut scales = Vec::with_capacity(num_blocks);
@@ -138,9 +134,7 @@ pub fn quantize_nf4(values: &[f32], rows: usize, cols: usize) -> Nf4Quantized {
         let block = &values[start..start + NF4_BLOCK_SIZE];
 
         // Compute absmax for this block
-        let absmax = block
-            .iter()
-            .fold(0.0f32, |acc, &v| acc.max(v.abs()));
+        let absmax = block.iter().fold(0.0f32, |acc, &v| acc.max(v.abs()));
 
         scales.push(absmax);
 
@@ -340,10 +334,7 @@ mod tests {
 
         // Monotonically increasing
         for i in 1..16 {
-            assert!(
-                NF4_LUT[i] > NF4_LUT[i - 1],
-                "NF4_LUT not monotonic at index {i}"
-            );
+            assert!(NF4_LUT[i] > NF4_LUT[i - 1], "NF4_LUT not monotonic at index {i}");
         }
     }
 
