@@ -50,11 +50,13 @@ pub struct Dp4aQ6KGemvKernel {
 }
 
 impl Dp4aQ6KGemvKernel {
+    /// Create a new dp4a Q6K GEMV kernel with default warp count (3).
     #[must_use]
     pub fn new(k: u32, n: u32) -> Self {
         Self { k, n, num_warps: 3 }
     }
 
+    /// Create a new dp4a Q6K GEMV kernel with a custom warp count.
     #[must_use]
     pub fn with_warps(k: u32, n: u32, num_warps: u32) -> Self {
         debug_assert!(
