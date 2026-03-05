@@ -7,7 +7,7 @@ use crate::ptx::instructions::{Operand, PtxInstruction, PtxOp};
 use crate::ptx::registers::VirtualReg;
 use crate::ptx::types::{PtxStateSpace, PtxType};
 
-use super::KernelBuilder;
+use super::{KernelBuilder, PtxArithmetic, PtxControl};
 
 impl<'a> KernelBuilder<'a> {
     // ===== Memory Operations (vectorized - not in traits) =====
@@ -150,6 +150,43 @@ impl<'a> KernelBuilder<'a> {
                 .src(Operand::Reg(val))
                 .space(PtxStateSpace::Global),
         );
+    }
+
+    /// Load u32 from potentially unaligned global memory address.
+    ///
+    /// Uses 4 byte loads + shifts to assemble a u32, avoiding
+    /// `ld.global.u32` alignment requirements (4-byte aligned).
+    /// Required for Q6K super-blocks (210 bytes each, not 4-byte aligned).
+    ///
+    /// sm_87 (Jetson Orin) faults on misaligned ld.global.u32 with
+    /// CUDA_ERROR_MISALIGNED_ADDRESS (716).
+    pub fn ld_global_u32_unaligned(&mut self, addr: VirtualReg) -> VirtualReg {
+        // Load 4 consecutive bytes
+        let b0 = self.ld_global_u8(addr);
+        let off1 = self.mov_u64_imm(1);
+        let addr1 = self.add_u64(addr, off1);
+        let b1 = self.ld_global_u8(addr1);
+        let off2 = self.mov_u64_imm(2);
+        let addr2 = self.add_u64(addr, off2);
+        let b2 = self.ld_global_u8(addr2);
+        let off3 = self.mov_u64_imm(3);
+        let addr3 = self.add_u64(addr, off3);
+        let b3 = self.ld_global_u8(addr3);
+
+        // Convert u8 (in u16 registers) to u32 and assemble little-endian
+        let w0 = self.cvt_u32_u8(b0); // byte 0 → bits [7:0]
+        let w1 = self.cvt_u32_u8(b1);
+        let w2 = self.cvt_u32_u8(b2);
+        let w3 = self.cvt_u32_u8(b3);
+        let eight = self.mov_u32_imm(8);
+        let sixteen = self.mov_u32_imm(16);
+        let twentyfour = self.mov_u32_imm(24);
+        let s1 = self.shl_u32(w1, eight);     // byte 1 → bits [15:8]
+        let s2 = self.shl_u32(w2, sixteen);    // byte 2 → bits [23:16]
+        let s3 = self.shl_u32(w3, twentyfour); // byte 3 → bits [31:24]
+        let t01 = self.or_u32(w0, s1);
+        let t23 = self.or_u32(s2, s3);
+        self.or_u32(t01, t23)
     }
 
     /// Load u16 from global memory (for f16 as raw bits)
