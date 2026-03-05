@@ -157,6 +157,33 @@ pub struct CublasDriver {
         compute_type: CublasComputeType,
         algo: c_int,
     ) -> CublasStatus,
+
+    /// cublasSgemmStridedBatched — Batched FP32 GEMM with strided memory
+    ///
+    /// C[i] = alpha * op(A[i]) * op(B[i]) + beta * C[i]  for i in 0..batch_count
+    ///
+    /// Used for multi-head attention: QK^T and attn·V across all heads.
+    #[allow(clippy::type_complexity)]
+    pub cublasSgemmStridedBatched: unsafe extern "C" fn(
+        handle: CublasHandle,
+        transa: CublasOperation,
+        transb: CublasOperation,
+        m: c_int,
+        n: c_int,
+        k: c_int,
+        alpha: *const f32,
+        a: *const c_void,
+        lda: c_int,
+        stride_a: i64,
+        b: *const c_void,
+        ldb: c_int,
+        stride_b: i64,
+        beta: *const f32,
+        c: *mut c_void,
+        ldc: c_int,
+        stride_c: i64,
+        batch_count: c_int,
+    ) -> CublasStatus,
 }
 
 // ============================================================================
@@ -236,6 +263,26 @@ mod loading {
                     CublasComputeType,
                     c_int,
                 ) -> CublasStatus;
+                type FnSgemmStridedBatched = unsafe extern "C" fn(
+                    CublasHandle,
+                    CublasOperation,
+                    CublasOperation,
+                    c_int,
+                    c_int,
+                    c_int,
+                    *const f32,
+                    *const c_void,
+                    c_int,
+                    i64,
+                    *const c_void,
+                    c_int,
+                    i64,
+                    *const f32,
+                    *mut c_void,
+                    c_int,
+                    i64,
+                    c_int,
+                ) -> CublasStatus;
 
                 Some(CublasDriver {
                     cublasCreate_v2: load_sym!(cublasCreate_v2, FnCreate),
@@ -243,6 +290,7 @@ mod loading {
                     cublasSetStream_v2: load_sym!(cublasSetStream_v2, FnSetStream),
                     cublasSetMathMode: load_sym!(cublasSetMathMode, FnSetMathMode),
                     cublasGemmEx: load_sym!(cublasGemmEx, FnGemmEx),
+                    cublasSgemmStridedBatched: load_sym!(cublasSgemmStridedBatched, FnSgemmStridedBatched),
                 })
             }
         }
