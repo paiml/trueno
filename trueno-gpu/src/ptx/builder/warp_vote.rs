@@ -167,6 +167,32 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
+    /// Bit field insert: insert `len` bits from `insert` into `base` at position `start`
+    ///
+    /// PTX: `bfi.b32 dst, insert, base, start, len;`
+    /// dst = base with bits [start..start+len-1] replaced by insert[0..len-1]
+    ///
+    /// GH-131: Used to pack bytes into u32 for unaligned Q6K loads on sm_87.
+    /// Replaces 3 instructions (mov+shl+or) with 1 instruction per byte insertion.
+    pub fn bfi_b32(
+        &mut self,
+        insert: VirtualReg,
+        base: VirtualReg,
+        start: u32,
+        len: u32,
+    ) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::U32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Bfi, PtxType::B32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(insert))
+                .src(Operand::Reg(base))
+                .src(Operand::ImmI64(start as i64))
+                .src(Operand::ImmI64(len as i64)),
+        );
+        dst
+    }
+
     /// Load f32 immediate constant
     ///
     /// PAR-062: Used for NEG_INFINITY initialization
