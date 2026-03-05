@@ -81,14 +81,14 @@ impl Kernel for FusedCrossEntropyKernel {
         // Phases 1-2 complete all logit reads before phase 3 writes (barrier-protected).
         PtxKernel::new("fused_cross_entropy")
             .param(PtxType::U64, "logits_grad_ptr") // [seq_len, vocab_size] f32 — logits in, grad out
-            .param(PtxType::U64, "targets_ptr")     // [seq_len] u32
-            .param(PtxType::U64, "loss_ptr")        // [seq_len] f32 (output)
+            .param(PtxType::U64, "targets_ptr") // [seq_len] u32
+            .param(PtxType::U64, "loss_ptr") // [seq_len] f32 (output)
             .param(PtxType::U32, "vocab_size")
-            .param(PtxType::F32, "scale")            // 1.0 / seq_len (or 1/(seq_len * accum_steps))
+            .param(PtxType::F32, "scale") // 1.0 / seq_len (or 1/(seq_len * accum_steps))
             .shared_memory(smem_size as usize)
             .build(|ctx| {
                 let tid = ctx.special_reg(PtxReg::TidX);
-                let pos = ctx.special_reg(PtxReg::CtaIdX);  // block = position
+                let pos = ctx.special_reg(PtxReg::CtaIdX); // block = position
                 let ntid = ctx.special_reg(PtxReg::NtidX);
 
                 let lane_mask = ctx.mov_u32_imm(31);
@@ -398,8 +398,8 @@ impl Kernel for FusedCausalCrossEntropyKernel {
             .param(PtxType::U64, "loss_ptr")
             .param(PtxType::U32, "vocab_size")
             .param(PtxType::F32, "scale")
-            .param(PtxType::U32, "loss_start")  // KAIZEN-064: first loss position
-            .param(PtxType::U32, "loss_end")    // KAIZEN-064: one-past-last loss position
+            .param(PtxType::U32, "loss_start") // KAIZEN-064: first loss position
+            .param(PtxType::U32, "loss_end") // KAIZEN-064: one-past-last loss position
             .shared_memory(smem_size as usize)
             .build(|ctx| {
                 let tid = ctx.special_reg(PtxReg::TidX);

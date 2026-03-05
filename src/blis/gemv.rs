@@ -37,13 +37,7 @@ const GEMV_TILE_THRESHOLD: usize = 4096;
 /// - `c` has length >= `n`
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
-pub unsafe fn gemv_avx2(
-    k: usize,
-    n: usize,
-    a: &[f32],
-    b: &[f32],
-    c: &mut [f32],
-) {
+pub unsafe fn gemv_avx2(k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32]) {
     unsafe {
         use std::arch::x86_64::*;
 
@@ -129,13 +123,7 @@ pub unsafe fn gemv_avx2(
 /// Requires AVX2+FMA CPU features.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
-unsafe fn gemv_tiled_avx2(
-    k: usize,
-    n: usize,
-    a: &[f32],
-    b: &[f32],
-    c: &mut [f32],
-) {
+unsafe fn gemv_tiled_avx2(k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32]) {
     unsafe {
         use std::arch::x86_64::*;
 
@@ -309,11 +297,10 @@ unsafe fn gemv_tiled_avx2(
                 }
                 while j < rem_n {
                     let idx = nt_end + j;
-                    *c.get_unchecked_mut(idx) +=
-                        *a.get_unchecked(ki) * *b.get_unchecked(b0 + j)
-                            + *a.get_unchecked(ki + 1) * *b.get_unchecked(b1 + j)
-                            + *a.get_unchecked(ki + 2) * *b.get_unchecked(b2 + j)
-                            + *a.get_unchecked(ki + 3) * *b.get_unchecked(b3 + j);
+                    *c.get_unchecked_mut(idx) += *a.get_unchecked(ki) * *b.get_unchecked(b0 + j)
+                        + *a.get_unchecked(ki + 1) * *b.get_unchecked(b1 + j)
+                        + *a.get_unchecked(ki + 2) * *b.get_unchecked(b2 + j)
+                        + *a.get_unchecked(ki + 3) * *b.get_unchecked(b3 + j);
                     j += 1;
                 }
                 ki += 4;
@@ -328,7 +315,10 @@ unsafe fn gemv_tiled_avx2(
                 while j < rem8 {
                     let cv = _mm256_loadu_ps(c.get_unchecked(nt_end + j));
                     let bv = _mm256_loadu_ps(b.get_unchecked(bk + j));
-                    _mm256_storeu_ps(c.get_unchecked_mut(nt_end + j), _mm256_fmadd_ps(ak_v, bv, cv));
+                    _mm256_storeu_ps(
+                        c.get_unchecked_mut(nt_end + j),
+                        _mm256_fmadd_ps(ak_v, bv, cv),
+                    );
                     j += 8;
                 }
                 while j < rem_n {
@@ -342,13 +332,7 @@ unsafe fn gemv_tiled_avx2(
 }
 
 /// Scalar fallback GEMV for non-x86 or non-AVX2 platforms
-pub fn gemv_scalar(
-    k: usize,
-    n: usize,
-    a: &[f32],
-    b: &[f32],
-    c: &mut [f32],
-) {
+pub fn gemv_scalar(k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32]) {
     // 4-way K-unrolled axpy (auto-vectorizable)
     let k4 = k / 4 * 4;
     for ki in (0..k4).step_by(4) {
@@ -376,13 +360,7 @@ pub fn gemv_scalar(
 }
 
 /// Dispatch GEMV to best available implementation
-pub fn gemv(
-    k: usize,
-    n: usize,
-    a: &[f32],
-    b: &[f32],
-    c: &mut [f32],
-) {
+pub fn gemv(k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32]) {
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
@@ -409,11 +387,7 @@ mod tests {
     fn test_gemv_basic() {
         // 1×3 @ 3×4 → 1×4
         let a = [1.0, 2.0, 3.0];
-        let b = [
-            1.0, 2.0, 3.0, 4.0,
-            5.0, 6.0, 7.0, 8.0,
-            9.0, 10.0, 11.0, 12.0,
-        ];
+        let b = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0];
         let mut c = [0.0f32; 4];
 
         gemv(3, 4, &a, &b, &mut c);
@@ -429,11 +403,7 @@ mod tests {
     fn test_gemv_identity_row_select() {
         // e_1 @ B should give B[1,:]
         let a = [0.0, 1.0, 0.0];
-        let b = [
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-            7.0, 8.0, 9.0,
-        ];
+        let b = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let mut c = [0.0f32; 3];
 
         gemv(3, 3, &a, &b, &mut c);
@@ -481,9 +451,7 @@ mod tests {
         let n = 8192; // > 4096 → tiled path
 
         let a: Vec<f32> = (0..k).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0 - 0.5).collect();
-        let b: Vec<f32> = (0..k * n)
-            .map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5)
-            .collect();
+        let b: Vec<f32> = (0..k * n).map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5).collect();
         let mut c_tiled = vec![0.0f32; n];
         let mut c_scalar = vec![0.0f32; n];
 
@@ -492,12 +460,7 @@ mod tests {
 
         for j in 0..n {
             let diff = (c_tiled[j] - c_scalar[j]).abs();
-            assert!(
-                diff < 1e-2,
-                "j={j}: tiled={} scalar={} diff={diff}",
-                c_tiled[j],
-                c_scalar[j]
-            );
+            assert!(diff < 1e-2, "j={j}: tiled={} scalar={} diff={diff}", c_tiled[j], c_scalar[j]);
         }
     }
 
@@ -508,9 +471,7 @@ mod tests {
         let n = 11008;
 
         let a: Vec<f32> = (0..k).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
-        let b: Vec<f32> = (0..k * n)
-            .map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5)
-            .collect();
+        let b: Vec<f32> = (0..k * n).map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5).collect();
         let mut c_tiled = vec![0.0f32; n];
         let mut c_scalar = vec![0.0f32; n];
 
@@ -519,12 +480,7 @@ mod tests {
 
         for j in 0..n {
             let diff = (c_tiled[j] - c_scalar[j]).abs();
-            assert!(
-                diff < 1e-1,
-                "j={j}: tiled={} scalar={} diff={diff}",
-                c_tiled[j],
-                c_scalar[j]
-            );
+            assert!(diff < 1e-1, "j={j}: tiled={} scalar={} diff={diff}", c_tiled[j], c_scalar[j]);
         }
     }
 
@@ -535,9 +491,7 @@ mod tests {
         let n = 5000; // > 4096, not multiple of 64 → remainder = 5000 - 4992 = 8
 
         let a: Vec<f32> = (0..k).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0 - 0.5).collect();
-        let b: Vec<f32> = (0..k * n)
-            .map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5)
-            .collect();
+        let b: Vec<f32> = (0..k * n).map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5).collect();
         let mut c_tiled = vec![0.0f32; n];
         let mut c_scalar = vec![0.0f32; n];
 
@@ -546,12 +500,7 @@ mod tests {
 
         for j in 0..n {
             let diff = (c_tiled[j] - c_scalar[j]).abs();
-            assert!(
-                diff < 1e-2,
-                "j={j}: tiled={} scalar={} diff={diff}",
-                c_tiled[j],
-                c_scalar[j]
-            );
+            assert!(diff < 1e-2, "j={j}: tiled={} scalar={} diff={diff}", c_tiled[j], c_scalar[j]);
         }
     }
 
@@ -562,9 +511,7 @@ mod tests {
         let n = 8192;
 
         let a: Vec<f32> = (0..k).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0 - 0.5).collect();
-        let b: Vec<f32> = (0..k * n)
-            .map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5)
-            .collect();
+        let b: Vec<f32> = (0..k * n).map(|i| ((i * 13 + 7) % 1000) as f32 / 1000.0 - 0.5).collect();
         let mut c_tiled = vec![0.0f32; n];
         let mut c_scalar = vec![0.0f32; n];
 
@@ -573,12 +520,7 @@ mod tests {
 
         for j in 0..n {
             let diff = (c_tiled[j] - c_scalar[j]).abs();
-            assert!(
-                diff < 1e-2,
-                "j={j}: tiled={} scalar={} diff={diff}",
-                c_tiled[j],
-                c_scalar[j]
-            );
+            assert!(diff < 1e-2, "j={j}: tiled={} scalar={} diff={diff}", c_tiled[j], c_scalar[j]);
         }
     }
 }

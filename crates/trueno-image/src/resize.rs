@@ -37,10 +37,7 @@ pub fn resize(
         });
     }
     if dst_w == 0 || dst_h == 0 {
-        return Err(ImageError::ZeroDimension {
-            width: dst_w,
-            height: dst_h,
-        });
+        return Err(ImageError::ZeroDimension { width: dst_w, height: dst_h });
     }
 
     let mut output = vec![0.0f32; dst_w * dst_h];
@@ -61,15 +58,9 @@ pub fn resize(
                     let iy = iy.min(src_h - 1);
                     image[iy * src_w + ix]
                 }
-                Interpolation::Bilinear => {
-                    bilinear_sample(image, src_w, src_h, sx, sy)
-                }
-                Interpolation::Bicubic => {
-                    bicubic_sample(image, src_w, src_h, sx, sy)
-                }
-                Interpolation::Lanczos => {
-                    lanczos_sample(image, src_w, src_h, sx, sy)
-                }
+                Interpolation::Bilinear => bilinear_sample(image, src_w, src_h, sx, sy),
+                Interpolation::Bicubic => bicubic_sample(image, src_w, src_h, sx, sy),
+                Interpolation::Lanczos => lanczos_sample(image, src_w, src_h, sx, sy),
             };
         }
     }

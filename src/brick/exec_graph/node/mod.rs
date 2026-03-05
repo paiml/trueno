@@ -295,8 +295,15 @@ impl BrickCategory {
     pub const COUNT: usize = 7;
 
     /// All BrickCategory variants in order, for safe index-based iteration.
-    pub const ALL: [BrickCategory; Self::COUNT] =
-        [Self::Norm, Self::Attention, Self::Ffn, Self::Other, Self::Sparse, Self::Fft, Self::Solver];
+    pub const ALL: [BrickCategory; Self::COUNT] = [
+        Self::Norm,
+        Self::Attention,
+        Self::Ffn,
+        Self::Other,
+        Self::Sparse,
+        Self::Fft,
+        Self::Solver,
+    ];
 
     /// Get the string name of this category.
     #[inline]

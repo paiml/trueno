@@ -261,11 +261,7 @@ pub fn gemm_blis(
     }
 
     if let (Some(prof), Some(s)) = (profiler, start) {
-        prof.record(
-            BlisProfileLevel::Macro,
-            s.elapsed().as_nanos() as u64,
-            (2 * m * n * k) as u64,
-        );
+        prof.record(BlisProfileLevel::Macro, s.elapsed().as_nanos() as u64, (2 * m * n * k) as u64);
     }
 
     Ok(())

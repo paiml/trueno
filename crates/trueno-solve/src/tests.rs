@@ -286,12 +286,7 @@ fn test_cholesky_2x2() {
     }
 
     for i in 0..4 {
-        assert!(
-            (recon[i] - a[i]).abs() < 1e-5,
-            "LL^T[{i}]={}, A[{i}]={}",
-            recon[i],
-            a[i]
-        );
+        assert!((recon[i] - a[i]).abs() < 1e-5, "LL^T[{i}]={}, A[{i}]={}", recon[i], a[i]);
     }
 }
 
@@ -333,12 +328,7 @@ fn test_cholesky_3x3() {
     }
 
     for i in 0..9 {
-        assert!(
-            (recon[i] - a[i]).abs() < 1e-3,
-            "LL^T[{i}]={}, A[{i}]={}",
-            recon[i],
-            a[i]
-        );
+        assert!((recon[i] - a[i]).abs() < 1e-3, "LL^T[{i}]={}, A[{i}]={}", recon[i], a[i]);
     }
 }
 
@@ -592,7 +582,7 @@ fn test_symm_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
     let a = [1.0, 0.0, 0.0, 1.0_f32]; // I
     let b = [2.0, 3.0_f32]; // 2×1
     let mut c = [10.0, 20.0_f32]; // 2×1
-    // C = 2·I·B + 0.5·C = [4+5, 6+10] = [9, 16]
+                                  // C = 2·I·B + 0.5·C = [4+5, 6+10] = [9, 16]
     symm(&a, &b, &mut c, 2, 1, 2.0, 0.5)?;
     assert!((c[0] - 9.0).abs() < 1e-5);
     assert!((c[1] - 16.0).abs() < 1e-5);
@@ -692,7 +682,8 @@ fn test_gemm_ex_alpha_beta() -> Result<(), Box<dyn std::error::Error>> {
 fn test_gemm_ex_matmul_2x3_3x2() -> Result<(), Box<dyn std::error::Error>> {
     // A = [[1,2,3],[4,5,6]], B = [[7,8],[9,10],[11,12]]
     let a: Vec<u16> = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
-    let b: Vec<u16> = [7.0, 8.0, 9.0, 10.0, 11.0, 12.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
+    let b: Vec<u16> =
+        [7.0, 8.0, 9.0, 10.0, 11.0, 12.0_f32].iter().map(|&v| f32_to_f16(v)).collect();
     let mut c = [0.0_f32; 4];
     gemm_ex(&a, &b, &mut c, 2, 2, 3, 1.0, 0.0)?;
     // C = [[58, 64], [139, 154]]
@@ -711,8 +702,7 @@ fn test_f16_roundtrip() {
         let h = f32_to_f16(v);
         // Use gemm_ex with 1×1 identity to convert back (α=1, β=0)
         let mut c = [0.0_f32];
-        gemm_ex(&[h], &[f32_to_f16(1.0)], &mut c, 1, 1, 1, 1.0, 0.0)
-            .expect("gemm_ex roundtrip ok");
+        gemm_ex(&[h], &[f32_to_f16(1.0)], &mut c, 1, 1, 1, 1.0, 0.0).expect("gemm_ex roundtrip ok");
         assert!((c[0] - v).abs() < 0.01, "f16 roundtrip failed for {v}: got {}", c[0]);
     }
 }

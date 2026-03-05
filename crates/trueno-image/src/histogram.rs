@@ -9,7 +9,12 @@ use crate::error::ImageError;
 /// # Errors
 ///
 /// Returns error if dimensions don't match buffer or bins is zero.
-pub fn histogram(image: &[f32], width: usize, height: usize, bins: usize) -> Result<Vec<u32>, ImageError> {
+pub fn histogram(
+    image: &[f32],
+    width: usize,
+    height: usize,
+    bins: usize,
+) -> Result<Vec<u32>, ImageError> {
     if image.len() != width * height {
         return Err(ImageError::BufferLengthMismatch {
             expected: width * height,
@@ -51,7 +56,12 @@ pub fn cumulative_histogram(hist: &[u32]) -> Vec<u32> {
 /// # Errors
 ///
 /// Returns error if dimensions don't match.
-pub fn equalize(image: &[f32], width: usize, height: usize, bins: usize) -> Result<Vec<f32>, ImageError> {
+pub fn equalize(
+    image: &[f32],
+    width: usize,
+    height: usize,
+    bins: usize,
+) -> Result<Vec<f32>, ImageError> {
     let hist = histogram(image, width, height, bins)?;
     let cdf = cumulative_histogram(&hist);
     let total = (width * height) as f32;

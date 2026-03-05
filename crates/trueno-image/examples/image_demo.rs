@@ -6,8 +6,8 @@
 
 use trueno_image::{
     canny, canny_rgb, connected_components, conv2d, dilate, equalize, erode, gaussian_blur,
-    gradient_magnitude, histogram, hsv_to_rgb, resize, rgb_to_gray, rgb_to_hsv, sobel,
-    BorderMode, ImageBuf, ImageOps, Interpolation,
+    gradient_magnitude, histogram, hsv_to_rgb, resize, rgb_to_gray, rgb_to_hsv, sobel, BorderMode,
+    ImageBuf, ImageOps, Interpolation,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,8 +27,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Convolution ────────────────────────────────────────
     let delta = [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0_f32];
     let id_out = conv2d(&image, w, h, &delta, 3, 3, BorderMode::Zero)?;
-    let conv_err: f32 = image.iter().zip(id_out.iter())
-        .map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+    let conv_err: f32 =
+        image.iter().zip(id_out.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
     println!("Identity conv max error: {conv_err:.2e}");
 
     // ── Gaussian blur ──────────────────────────────────────
@@ -85,13 +85,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         1.0, 1.0, 1.0_f32, // white
     ];
     let gray = rgb_to_gray(&rgb, 4, 1)?;
-    println!("RGB→Gray: red={:.3}, green={:.3}, blue={:.3}, white={:.3}",
-        gray[0], gray[1], gray[2], gray[3]);
+    println!(
+        "RGB→Gray: red={:.3}, green={:.3}, blue={:.3}, white={:.3}",
+        gray[0], gray[1], gray[2], gray[3]
+    );
 
     let hsv = rgb_to_hsv(&rgb, 4, 1)?;
     let recovered = hsv_to_rgb(&hsv, 4, 1)?;
-    let hsv_err: f32 = rgb.iter().zip(recovered.iter())
-        .map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
+    let hsv_err: f32 =
+        rgb.iter().zip(recovered.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
     println!("RGB→HSV→RGB roundtrip error: {hsv_err:.2e}");
 
     // ── Connected components ───────────────────────────────
@@ -108,10 +110,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let num_labels = *labels.iter().max().unwrap_or(&0);
     println!("5×5 binary image → {num_labels} connected components");
     for y in 0..5 {
-        let row: String = (0..5).map(|x| {
-            let l = labels[y * 5 + x];
-            if l == 0 { '.' } else { (b'A' + (l - 1) as u8) as char }
-        }).collect();
+        let row: String = (0..5)
+            .map(|x| {
+                let l = labels[y * 5 + x];
+                if l == 0 {
+                    '.'
+                } else {
+                    (b'A' + (l - 1) as u8) as char
+                }
+            })
+            .collect();
         println!("  {row}");
     }
 
@@ -162,7 +170,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resized = buf.apply_resize(8, 8, Interpolation::Bilinear)?;
     println!(
         "ImageBuf.apply_resize(8×8): {}×{} × {} ch",
-        resized.width(), resized.height(), resized.channels()
+        resized.width(),
+        resized.height(),
+        resized.channels()
     );
 
     let hist = gray_buf.compute_histogram(10)?;

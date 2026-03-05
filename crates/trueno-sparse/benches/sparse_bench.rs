@@ -45,7 +45,8 @@ fn bench_spmm(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |bench, _| {
             bench.iter(|| {
                 c_out.fill(0.0);
-                csr.spmm(black_box(1.0), black_box(&b_dense), black_box(k), 0.0, &mut c_out).expect("spmm ok");
+                csr.spmm(black_box(1.0), black_box(&b_dense), black_box(k), 0.0, &mut c_out)
+                    .expect("spmm ok");
                 black_box(&c_out);
             });
         });

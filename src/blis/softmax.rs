@@ -208,9 +208,7 @@ mod tests {
     use super::*;
 
     fn deterministic_f32(len: usize) -> Vec<f32> {
-        (0..len)
-            .map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5)
-            .collect()
+        (0..len).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect()
     }
 
     /// FALSIFY-SM-001: sum(softmax(x)) ≈ 1.0
@@ -220,10 +218,7 @@ mod tests {
             let data = deterministic_f32(n);
             let result = softmax_1d_alloc(&data);
             let sum: f32 = result.iter().sum();
-            assert!(
-                (sum - 1.0).abs() < 1e-5,
-                "sum = {sum} for n={n}, expected 1.0"
-            );
+            assert!((sum - 1.0).abs() < 1e-5, "sum = {sum} for n={n}, expected 1.0");
         }
     }
 
@@ -262,10 +257,7 @@ mod tests {
         let result_b = softmax_1d_alloc(&shifted);
 
         for (i, (&a, &b)) in result_a.iter().zip(result_b.iter()).enumerate() {
-            assert!(
-                (a - b).abs() < 1e-6,
-                "Shift invariance broken at [{i}]: {a} vs {b}"
-            );
+            assert!((a - b).abs() < 1e-6, "Shift invariance broken at [{i}]: {a} vs {b}");
         }
     }
 
@@ -277,10 +269,7 @@ mod tests {
             let result = softmax_1d_alloc(&data);
             let expected = 1.0 / n as f32;
             for (i, &v) in result.iter().enumerate() {
-                assert!(
-                    (v - expected).abs() < 1e-6,
-                    "Uniform at [{i}]: {v} vs {expected}"
-                );
+                assert!((v - expected).abs() < 1e-6, "Uniform at [{i}]: {v} vs {expected}");
             }
         }
     }
@@ -294,10 +283,7 @@ mod tests {
             let scalar_result = softmax_scalar(&data);
 
             for (i, (&a, &s)) in avx2_result.iter().zip(scalar_result.iter()).enumerate() {
-                assert!(
-                    (a - s).abs() < 1e-7,
-                    "AVX2/scalar mismatch at [{i}] n={n}: {a} vs {s}"
-                );
+                assert!((a - s).abs() < 1e-7, "AVX2/scalar mismatch at [{i}] n={n}: {a} vs {s}");
             }
         }
     }
@@ -309,10 +295,7 @@ mod tests {
             let data = deterministic_f32(n);
             let result = softmax_1d_alloc(&data);
             let sum: f32 = result.iter().sum();
-            assert!(
-                (sum - 1.0).abs() < 1e-5,
-                "sum = {sum} for n={n}, expected 1.0"
-            );
+            assert!((sum - 1.0).abs() < 1e-5, "sum = {sum} for n={n}, expected 1.0");
             assert_eq!(result.len(), n);
         }
     }

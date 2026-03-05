@@ -88,12 +88,9 @@ impl Matrix<f32> {
         // BLIS transpose handles AVX2 dispatch, remainder edges, and shape-adaptive
         // loop ordering internally. Dimensions are correct by construction so
         // the only possible error (size mismatch) cannot occur.
-        if let Err(e) = crate::blis::transpose::transpose(
-            self.rows,
-            self.cols,
-            &self.data,
-            &mut result.data,
-        ) {
+        if let Err(e) =
+            crate::blis::transpose::transpose(self.rows, self.cols, &self.data, &mut result.data)
+        {
             // Unreachable: result is allocated as cols×rows which matches rows×cols elements.
             // If somehow triggered, fall back to scalar element-wise transpose.
             debug_assert!(false, "BLIS transpose dimension mismatch: {e}");

@@ -19,11 +19,7 @@ use crate::error::ImageError;
 /// # Errors
 ///
 /// Returns error if buffer lengths don't match dimensions.
-pub fn rgb_to_gray(
-    rgb: &[f32],
-    width: usize,
-    height: usize,
-) -> Result<Vec<f32>, ImageError> {
+pub fn rgb_to_gray(rgb: &[f32], width: usize, height: usize) -> Result<Vec<f32>, ImageError> {
     let pixels = width * height;
     if rgb.len() != pixels * 3 {
         return Err(ImageError::BufferLengthMismatch {
@@ -53,11 +49,7 @@ pub fn rgb_to_gray(
 /// # Errors
 ///
 /// Returns error if buffer length doesn't match dimensions.
-pub fn rgb_to_hsv(
-    rgb: &[f32],
-    width: usize,
-    height: usize,
-) -> Result<Vec<f32>, ImageError> {
+pub fn rgb_to_hsv(rgb: &[f32], width: usize, height: usize) -> Result<Vec<f32>, ImageError> {
     let pixels = width * height;
     if rgb.len() != pixels * 3 {
         return Err(ImageError::BufferLengthMismatch {
@@ -108,11 +100,7 @@ fn rgb_pixel_to_hsv(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
 /// # Errors
 ///
 /// Returns error if buffer length doesn't match dimensions.
-pub fn hsv_to_rgb(
-    hsv: &[f32],
-    width: usize,
-    height: usize,
-) -> Result<Vec<f32>, ImageError> {
+pub fn hsv_to_rgb(hsv: &[f32], width: usize, height: usize) -> Result<Vec<f32>, ImageError> {
     let pixels = width * height;
     if hsv.len() != pixels * 3 {
         return Err(ImageError::BufferLengthMismatch {

@@ -49,17 +49,20 @@ pub use fused::{
     FusedGateUpQ4KGemvKernel, FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormQ4KGemvKernel,
 };
 pub use legacy::{Q4_0GemvKernel, Q4_1GemvKernel, Q5_0GemvKernel, Q8_0GemvKernel};
+pub use nf4::Nf4GemmKernel;
+pub use nf4_cpu::{
+    dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu, Nf4Quantized,
+    NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,
+};
 pub use q4k::{
     BatchedQ4KGemvKernel, ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel, Dp4aQ4KGemvKernel,
     MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel, Q4KGemvKernel, TiledQ4KGemvKernel,
     TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel, WideQ4KGemvKernel,
 };
 pub use q5k::{Q5KGemvKernel, Q5KKernel};
-pub use q6k::{BatchedQ6KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ6KGemvKernel, MultiWarpQ6KGemvKernel, Q6KGemvKernel, Q6KKernel};
-pub use nf4::Nf4GemmKernel;
-pub use nf4_cpu::{
-    dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu, Nf4Quantized,
-    NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,
+pub use q6k::{
+    BatchedQ6KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ6KGemvKernel, MultiWarpQ6KGemvKernel,
+    Q6KGemvKernel, Q6KKernel,
 };
 pub use q8::Q8QuantizeKernel;
 

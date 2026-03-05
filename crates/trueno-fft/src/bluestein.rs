@@ -31,10 +31,7 @@ pub fn bluestein_fft(
         return Err(FftError::ZeroLength);
     }
     if output.len() != n {
-        return Err(FftError::OutputLengthMismatch {
-            expected: n,
-            got: output.len(),
-        });
+        return Err(FftError::OutputLengthMismatch { expected: n, got: output.len() });
     }
 
     // For power-of-two sizes, delegate directly

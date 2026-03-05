@@ -289,145 +289,153 @@ impl SoftmaxOp {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_max(input: &[f32]) -> f32 { unsafe {
-        use std::arch::x86_64::*;
-        let len = input.len();
-        let mut i = 0;
-        let mut vmax = _mm256_set1_ps(f32::NEG_INFINITY);
+    unsafe fn avx2_max(input: &[f32]) -> f32 {
+        unsafe {
+            use std::arch::x86_64::*;
+            let len = input.len();
+            let mut i = 0;
+            let mut vmax = _mm256_set1_ps(f32::NEG_INFINITY);
 
-        while i + 8 <= len {
-            let v = _mm256_loadu_ps(input.as_ptr().add(i));
-            vmax = _mm256_max_ps(vmax, v);
-            i += 8;
+            while i + 8 <= len {
+                let v = _mm256_loadu_ps(input.as_ptr().add(i));
+                vmax = _mm256_max_ps(vmax, v);
+                i += 8;
+            }
+
+            // Horizontal max
+            let high = _mm256_extractf128_ps(vmax, 1);
+            let low = _mm256_castps256_ps128(vmax);
+            let max128 = _mm_max_ps(high, low);
+            let max64 = _mm_max_ps(max128, _mm_movehl_ps(max128, max128));
+            let max32 = _mm_max_ss(max64, _mm_shuffle_ps(max64, max64, 1));
+            let mut result = _mm_cvtss_f32(max32);
+
+            // Handle remainder
+            for &val in &input[i..] {
+                result = result.max(val);
+            }
+            result
         }
-
-        // Horizontal max
-        let high = _mm256_extractf128_ps(vmax, 1);
-        let low = _mm256_castps256_ps128(vmax);
-        let max128 = _mm_max_ps(high, low);
-        let max64 = _mm_max_ps(max128, _mm_movehl_ps(max128, max128));
-        let max32 = _mm_max_ss(max64, _mm_shuffle_ps(max64, max64, 1));
-        let mut result = _mm_cvtss_f32(max32);
-
-        // Handle remainder
-        for &val in &input[i..] {
-            result = result.max(val);
-        }
-        result
-    }}
+    }
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2", enable = "fma")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_exp(input: &[f32], output: &mut [f32]) { unsafe {
-        use std::arch::x86_64::*;
+    unsafe fn avx2_exp(input: &[f32], output: &mut [f32]) {
+        unsafe {
+            use std::arch::x86_64::*;
 
-        let len = input.len();
-        let mut i = 0;
+            let len = input.len();
+            let mut i = 0;
 
-        // Constants for range reduction (matches llama.cpp ggml_v_expf)
-        let log2e = _mm256_set1_ps(std::f32::consts::LOG2_E);
-        let ln2 = _mm256_set1_ps(std::f32::consts::LN_2);
-        let half = _mm256_set1_ps(0.5);
-        let one = _mm256_set1_ps(1.0);
+            // Constants for range reduction (matches llama.cpp ggml_v_expf)
+            let log2e = _mm256_set1_ps(std::f32::consts::LOG2_E);
+            let ln2 = _mm256_set1_ps(std::f32::consts::LN_2);
+            let half = _mm256_set1_ps(0.5);
+            let one = _mm256_set1_ps(1.0);
 
-        // Remez minimax polynomial coefficients for e^r on [-ln(2)/2, ln(2)/2]
-        let c1 = _mm256_set1_ps(1.0);
-        let c2 = _mm256_set1_ps(0.5);
-        let c3 = _mm256_set1_ps(0.166_666_67);
-        let c4 = _mm256_set1_ps(0.041_666_668);
-        let c5 = _mm256_set1_ps(0.008_333_334);
-        let c6 = _mm256_set1_ps(0.001_388_889);
+            // Remez minimax polynomial coefficients for e^r on [-ln(2)/2, ln(2)/2]
+            let c1 = _mm256_set1_ps(1.0);
+            let c2 = _mm256_set1_ps(0.5);
+            let c3 = _mm256_set1_ps(0.166_666_67);
+            let c4 = _mm256_set1_ps(0.041_666_668);
+            let c5 = _mm256_set1_ps(0.008_333_334);
+            let c6 = _mm256_set1_ps(0.001_388_889);
 
-        let exp_hi = _mm256_set1_ps(88.376_26);
-        let exp_lo = _mm256_set1_ps(-87.336_55);
+            let exp_hi = _mm256_set1_ps(88.376_26);
+            let exp_lo = _mm256_set1_ps(-87.336_55);
 
-        while i + 8 <= len {
-            let x = _mm256_loadu_ps(input.as_ptr().add(i));
-            let x = _mm256_max_ps(_mm256_min_ps(x, exp_hi), exp_lo);
+            while i + 8 <= len {
+                let x = _mm256_loadu_ps(input.as_ptr().add(i));
+                let x = _mm256_max_ps(_mm256_min_ps(x, exp_hi), exp_lo);
 
-            // Range reduction: x' = x * log2(e), k = round(x'), r = (x' - k) * ln2
-            let fx = _mm256_fmadd_ps(x, log2e, half);
-            let fx = _mm256_floor_ps(fx);
-            let r = _mm256_fnmadd_ps(fx, ln2, x);
+                // Range reduction: x' = x * log2(e), k = round(x'), r = (x' - k) * ln2
+                let fx = _mm256_fmadd_ps(x, log2e, half);
+                let fx = _mm256_floor_ps(fx);
+                let r = _mm256_fnmadd_ps(fx, ln2, x);
 
-            // Polynomial: e^r ≈ 1 + r + r²/2 + r³/6 + r⁴/24 + r⁵/120 + r⁶/720
-            // Using Horner's method for efficient evaluation
-            let p = _mm256_fmadd_ps(c6, r, c5);
-            let p = _mm256_fmadd_ps(p, r, c4);
-            let p = _mm256_fmadd_ps(p, r, c3);
-            let p = _mm256_fmadd_ps(p, r, c2);
-            let p = _mm256_fmadd_ps(p, r, c1);
-            let p = _mm256_fmadd_ps(p, r, one);
+                // Polynomial: e^r ≈ 1 + r + r²/2 + r³/6 + r⁴/24 + r⁵/120 + r⁶/720
+                // Using Horner's method for efficient evaluation
+                let p = _mm256_fmadd_ps(c6, r, c5);
+                let p = _mm256_fmadd_ps(p, r, c4);
+                let p = _mm256_fmadd_ps(p, r, c3);
+                let p = _mm256_fmadd_ps(p, r, c2);
+                let p = _mm256_fmadd_ps(p, r, c1);
+                let p = _mm256_fmadd_ps(p, r, one);
 
-            // Scale by 2^k using integer exponent manipulation
-            let k = _mm256_cvtps_epi32(fx);
-            let k = _mm256_add_epi32(k, _mm256_set1_epi32(127));
-            let k = _mm256_slli_epi32(k, 23);
-            let pow2k = _mm256_castsi256_ps(k);
-            let result = _mm256_mul_ps(p, pow2k);
+                // Scale by 2^k using integer exponent manipulation
+                let k = _mm256_cvtps_epi32(fx);
+                let k = _mm256_add_epi32(k, _mm256_set1_epi32(127));
+                let k = _mm256_slli_epi32(k, 23);
+                let pow2k = _mm256_castsi256_ps(k);
+                let result = _mm256_mul_ps(p, pow2k);
 
-            _mm256_storeu_ps(output.as_mut_ptr().add(i), result);
-            i += 8;
+                _mm256_storeu_ps(output.as_mut_ptr().add(i), result);
+                i += 8;
+            }
+
+            // Scalar remainder
+            for j in i..len {
+                output[j] = input[j].exp();
+            }
         }
-
-        // Scalar remainder
-        for j in i..len {
-            output[j] = input[j].exp();
-        }
-    }}
+    }
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_sum(input: &[f32]) -> f32 { unsafe {
-        use std::arch::x86_64::*;
-        let len = input.len();
-        let mut i = 0;
-        let mut acc = _mm256_setzero_ps();
+    unsafe fn avx2_sum(input: &[f32]) -> f32 {
+        unsafe {
+            use std::arch::x86_64::*;
+            let len = input.len();
+            let mut i = 0;
+            let mut acc = _mm256_setzero_ps();
 
-        while i + 8 <= len {
-            let v = _mm256_loadu_ps(input.as_ptr().add(i));
-            acc = _mm256_add_ps(acc, v);
-            i += 8;
+            while i + 8 <= len {
+                let v = _mm256_loadu_ps(input.as_ptr().add(i));
+                acc = _mm256_add_ps(acc, v);
+                i += 8;
+            }
+
+            // Horizontal sum
+            let high = _mm256_extractf128_ps(acc, 1);
+            let low = _mm256_castps256_ps128(acc);
+            let sum128 = _mm_add_ps(high, low);
+            let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
+            let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
+            let mut result = _mm_cvtss_f32(sum32);
+
+            // Handle remainder
+            for &val in &input[i..] {
+                result += val;
+            }
+            result
         }
-
-        // Horizontal sum
-        let high = _mm256_extractf128_ps(acc, 1);
-        let low = _mm256_castps256_ps128(acc);
-        let sum128 = _mm_add_ps(high, low);
-        let sum64 = _mm_add_ps(sum128, _mm_movehl_ps(sum128, sum128));
-        let sum32 = _mm_add_ss(sum64, _mm_shuffle_ps(sum64, sum64, 1));
-        let mut result = _mm_cvtss_f32(sum32);
-
-        // Handle remainder
-        for &val in &input[i..] {
-            result += val;
-        }
-        result
-    }}
+    }
 
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     // SAFETY: caller verifies AVX2 support, input slices meet alignment/length requirements
-    unsafe fn avx2_scale(input: &[f32], scalar: f32, output: &mut [f32]) { unsafe {
-        use std::arch::x86_64::*;
-        let len = input.len();
-        let mut i = 0;
-        let vscalar = _mm256_set1_ps(scalar);
+    unsafe fn avx2_scale(input: &[f32], scalar: f32, output: &mut [f32]) {
+        unsafe {
+            use std::arch::x86_64::*;
+            let len = input.len();
+            let mut i = 0;
+            let vscalar = _mm256_set1_ps(scalar);
 
-        while i + 8 <= len {
-            let v = _mm256_loadu_ps(input.as_ptr().add(i));
-            let result = _mm256_mul_ps(v, vscalar);
-            _mm256_storeu_ps(output.as_mut_ptr().add(i), result);
-            i += 8;
-        }
+            while i + 8 <= len {
+                let v = _mm256_loadu_ps(input.as_ptr().add(i));
+                let result = _mm256_mul_ps(v, vscalar);
+                _mm256_storeu_ps(output.as_mut_ptr().add(i), result);
+                i += 8;
+            }
 
-        // Scalar remainder
-        for j in i..len {
-            output[j] = input[j] * scalar;
+            // Scalar remainder
+            for j in i..len {
+                output[j] = input[j] * scalar;
+            }
         }
-    }}
+    }
 }
 
 #[cfg(test)]

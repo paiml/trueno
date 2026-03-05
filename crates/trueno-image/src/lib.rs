@@ -60,12 +60,7 @@ pub trait ImageOps {
     fn sobel_gradients(&self) -> Result<(ImageBuf, ImageBuf), ImageError>;
 
     /// Apply Canny edge detection (converts multi-channel to grayscale).
-    fn canny_edges(
-        &self,
-        sigma: f32,
-        low: f32,
-        high: f32,
-    ) -> Result<ImageBuf, ImageError>;
+    fn canny_edges(&self, sigma: f32, low: f32, high: f32) -> Result<ImageBuf, ImageError>;
 
     /// Morphological dilation with structuring element.
     fn apply_dilate(&self, se: &[f32], sw: usize, sh: usize) -> Result<ImageBuf, ImageError>;
@@ -151,21 +146,9 @@ impl ImageOps for ImageBuf {
         ))
     }
 
-    fn canny_edges(
-        &self,
-        sigma: f32,
-        low: f32,
-        high: f32,
-    ) -> Result<ImageBuf, ImageError> {
-        let edges = canny_rgb(
-            self.data(),
-            self.width(),
-            self.height(),
-            self.channels(),
-            sigma,
-            low,
-            high,
-        )?;
+    fn canny_edges(&self, sigma: f32, low: f32, high: f32) -> Result<ImageBuf, ImageError> {
+        let edges =
+            canny_rgb(self.data(), self.width(), self.height(), self.channels(), sigma, low, high)?;
         ImageBuf::new(edges, self.width(), self.height(), 1)
     }
 
@@ -219,8 +202,7 @@ impl ImageOps for ImageBuf {
             let mut out = vec![0.0_f32; new_npix * self.channels()];
             for c in 0..self.channels() {
                 let ch = self.channel(c)?;
-                let resized =
-                    resize(ch.data(), self.width(), self.height(), new_w, new_h, interp)?;
+                let resized = resize(ch.data(), self.width(), self.height(), new_w, new_h, interp)?;
                 for i in 0..new_npix {
                     out[i * self.channels() + c] = resized[i];
                 }

@@ -326,7 +326,11 @@ fn f16_to_f32(h: u16) -> f32 {
     if exp == 31 {
         // Inf or NaN
         return if mant == 0 {
-            if sign == 1 { f32::NEG_INFINITY } else { f32::INFINITY }
+            if sign == 1 {
+                f32::NEG_INFINITY
+            } else {
+                f32::INFINITY
+            }
         } else {
             f32::NAN
         };
@@ -334,9 +338,7 @@ fn f16_to_f32(h: u16) -> f32 {
 
     // Normal: value = (-1)^sign * 2^(exp-15) * (1 + mant/1024)
     let f32_exp = (exp as i32) - 15 + 127;
-    let f32_bits = ((sign as u32) << 31)
-        | ((f32_exp as u32) << 23)
-        | ((mant as u32) << 13);
+    let f32_bits = ((sign as u32) << 31) | ((f32_exp as u32) << 23) | ((mant as u32) << 13);
     f32::from_bits(f32_bits)
 }
 
@@ -455,9 +457,7 @@ fn validate_bias_if_needed<'a>(
     if !needs_bias {
         return Ok(None);
     }
-    let bv = bias.ok_or(SolverError::InvalidInput {
-        reason: "epilogue requires bias vector",
-    })?;
+    let bv = bias.ok_or(SolverError::InvalidInput { reason: "epilogue requires bias vector" })?;
     if bv.len() != n {
         return Err(SolverError::BufferLengthMismatch {
             expected: n,
@@ -502,14 +502,14 @@ fn gelu(x: f32) -> f32 {
 }
 
 /// Validate buffer length matches expected dimensions.
-fn validate_buffer(buf: &[f32], expected: usize, rows: usize, cols: usize) -> Result<(), SolverError> {
+fn validate_buffer(
+    buf: &[f32],
+    expected: usize,
+    rows: usize,
+    cols: usize,
+) -> Result<(), SolverError> {
     if buf.len() != expected {
-        return Err(SolverError::BufferLengthMismatch {
-            expected,
-            got: buf.len(),
-            rows,
-            cols,
-        });
+        return Err(SolverError::BufferLengthMismatch { expected, got: buf.len(), rows, cols });
     }
     Ok(())
 }

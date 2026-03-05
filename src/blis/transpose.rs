@@ -171,11 +171,16 @@ pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(
 /// Requires AVX2 support.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
-unsafe fn transpose_avx2_impl(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(), TruenoError> {
+unsafe fn transpose_avx2_impl(
+    rows: usize,
+    cols: usize,
+    a: &[f32],
+    b: &mut [f32],
+) -> Result<(), TruenoError> {
     use std::arch::x86_64::*;
 
     const TILE: usize = 64; // L1-resident outer tile
-    const BLOCK: usize = 8;  // AVX2 micro-kernel
+    const BLOCK: usize = 8; // AVX2 micro-kernel
 
     let rb_end = rows / BLOCK * BLOCK;
     let cb_end = cols / BLOCK * BLOCK;
@@ -351,9 +356,8 @@ mod tests {
     fn test_attention_shape() {
         let rows = 2048;
         let cols = 128;
-        let a: Vec<f32> = (0..rows * cols)
-            .map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5)
-            .collect();
+        let a: Vec<f32> =
+            (0..rows * cols).map(|i| ((i * 17 + 31) % 1000) as f32 / 1000.0 - 0.5).collect();
         let mut b_test = vec![0.0f32; rows * cols];
         let mut b_ref = vec![0.0f32; rows * cols];
 

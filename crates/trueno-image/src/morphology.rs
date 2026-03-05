@@ -80,7 +80,11 @@ fn neighborhood_max(
             }
         }
     }
-    if max_val == f32::NEG_INFINITY { 0.0 } else { max_val }
+    if max_val == f32::NEG_INFINITY {
+        0.0
+    } else {
+        max_val
+    }
 }
 
 /// Compute min over SE neighborhood at pixel (px, py).
@@ -113,7 +117,11 @@ fn neighborhood_min(
             }
         }
     }
-    if min_val == f32::INFINITY { 0.0 } else { min_val }
+    if min_val == f32::INFINITY {
+        0.0
+    } else {
+        min_val
+    }
 }
 
 /// Morphological opening: erode then dilate.

@@ -48,16 +48,10 @@ pub fn trsm(
     diag: DiagonalType,
 ) -> Result<TrsmResult, SolverError> {
     if a.len() != n * n {
-        return Err(SolverError::DimensionMismatch {
-            matrix_n: n,
-            rhs_len: a.len(),
-        });
+        return Err(SolverError::DimensionMismatch { matrix_n: n, rhs_len: a.len() });
     }
     if b.len() != n * nrhs {
-        return Err(SolverError::DimensionMismatch {
-            matrix_n: n,
-            rhs_len: b.len(),
-        });
+        return Err(SolverError::DimensionMismatch { matrix_n: n, rhs_len: b.len() });
     }
 
     let mut x = b.to_vec();
@@ -71,7 +65,13 @@ pub fn trsm(
 }
 
 /// Apply diagonal scaling (unit or non-unit) to a substitution result.
-fn apply_diagonal(a: &[f32], n: usize, i: usize, sum: f32, diag: DiagonalType) -> Result<f32, SolverError> {
+fn apply_diagonal(
+    a: &[f32],
+    n: usize,
+    i: usize,
+    sum: f32,
+    diag: DiagonalType,
+) -> Result<f32, SolverError> {
     match diag {
         DiagonalType::Unit => Ok(sum),
         DiagonalType::NonUnit => {
