@@ -121,6 +121,8 @@ pub const CU_TARGET_COMPUTE_75: c_uint = 75;
 pub const CU_TARGET_COMPUTE_80: c_uint = 80;
 /// SM 8.6 (Ampere consumer)
 pub const CU_TARGET_COMPUTE_86: c_uint = 86;
+/// SM 8.7 (Jetson Orin)
+pub const CU_TARGET_COMPUTE_87: c_uint = 87;
 /// SM 8.9 (Ada Lovelace)
 pub const CU_TARGET_COMPUTE_89: c_uint = 89;
 /// SM 9.0 (Hopper)

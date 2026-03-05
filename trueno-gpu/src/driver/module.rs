@@ -26,6 +26,11 @@ use super::sys::{
 };
 use crate::GpuError;
 
+/// CU_JIT_INFO_LOG_BUFFER - Pointer to buffer for info log
+const CU_JIT_INFO_LOG_BUFFER: c_uint = 3;
+/// CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES - Size of info log buffer
+const CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES: c_uint = 4;
+
 // ============================================================================
 // CUDA Module
 // ============================================================================
@@ -83,15 +88,23 @@ impl CudaModule {
         let ptx_cstring = CString::new(ptx)
             .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
 
-        // JIT error log buffer for diagnostics on failure
+        // Try 1: cuModuleLoadDataEx with explicit JIT target + log buffers
+        let mut info_log = vec![0u8; 4096];
         let mut error_log = vec![0u8; 4096];
+        let info_log_size: usize = info_log.len();
         let error_log_size: usize = error_log.len();
 
-        // Set up JIT options: target architecture + error log
-        let mut options: [c_uint; 3] =
-            [CU_JIT_TARGET, CU_JIT_ERROR_LOG_BUFFER, CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES];
-        let mut option_values: [*mut c_void; 3] = [
+        let mut options: [c_uint; 5] = [
+            CU_JIT_TARGET,
+            CU_JIT_INFO_LOG_BUFFER,
+            CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES,
+            CU_JIT_ERROR_LOG_BUFFER,
+            CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
+        ];
+        let mut option_values: [*mut c_void; 5] = [
             jit_target as *mut c_void,
+            info_log.as_mut_ptr() as *mut c_void,
+            info_log_size as *mut c_void,
             error_log.as_mut_ptr() as *mut c_void,
             error_log_size as *mut c_void,
         ];
@@ -103,31 +116,61 @@ impl CudaModule {
             (driver.cuModuleLoadDataEx)(
                 &mut module,
                 ptx_cstring.as_ptr() as *const _,
-                3,
+                5,
                 options.as_mut_ptr(),
                 option_values.as_mut_ptr(),
             )
         };
 
-        if let Err(e) = CudaDriver::check(result) {
-            // Extract JIT error log
-            let jit_log = String::from_utf8_lossy(&error_log).trim_end_matches('\0').to_string();
-            if !jit_log.is_empty() {
-                eprintln!("[PTX-JIT] Error log: {jit_log}");
-            }
-
-            // Extract kernel name from PTX for diagnostics
-            let kernel_name =
-                ptx.lines().find(|l| l.contains(".entry")).map(|l| l.trim()).unwrap_or("<unknown>");
-            eprintln!(
-                "[PTX-JIT] Failed kernel: {kernel_name}, target: sm_{major}{minor}, \
-                 PTX length: {} bytes",
-                ptx.len()
-            );
-            return Err(GpuError::ModuleLoad(format!("{e} (JIT target: sm_{major}{minor})")));
+        if CudaDriver::check(result).is_ok() {
+            return Ok(Self { module, functions: HashMap::new() });
         }
 
-        Ok(Self { module, functions: HashMap::new() })
+        // Try 1 failed — capture diagnostics
+        let kernel_name =
+            ptx.lines().find(|l| l.contains(".entry")).map(|l| l.trim()).unwrap_or("<unknown>");
+        let jit_info = String::from_utf8_lossy(&info_log).trim_end_matches('\0').to_string();
+        let jit_err = String::from_utf8_lossy(&error_log).trim_end_matches('\0').to_string();
+
+        eprintln!(
+            "[PTX-JIT] Try 1 failed: {kernel_name}, target: sm_{major}{minor}, \
+             PTX: {} bytes, result: {result}",
+            ptx.len()
+        );
+        if !jit_info.is_empty() {
+            eprintln!("[PTX-JIT] Info log: {jit_info}");
+        }
+        if !jit_err.is_empty() {
+            eprintln!("[PTX-JIT] Error log: {jit_err}");
+        }
+
+        // Dump PTX to /tmp for offline diagnosis (#127)
+        let dump_path = format!("/tmp/failed-ptx-sm_{major}{minor}-{}.ptx",
+            kernel_name.replace(|c: char| !c.is_alphanumeric() && c != '_', "_"));
+        if let Ok(()) = std::fs::write(&dump_path, ptx) {
+            eprintln!("[PTX-JIT] PTX dumped to {dump_path}");
+        }
+
+        // Try 2: cuModuleLoadData without explicit JIT target (let driver auto-detect)
+        eprintln!("[PTX-JIT] Retrying with cuModuleLoadData (no explicit target)...");
+        let mut module2: CUmodule = ptr::null_mut();
+        let result2 = unsafe {
+            (driver.cuModuleLoadData)(
+                &mut module2,
+                ptx_cstring.as_ptr() as *const _,
+            )
+        };
+
+        if CudaDriver::check(result2).is_ok() {
+            eprintln!("[PTX-JIT] Fallback succeeded for {kernel_name}");
+            return Ok(Self { module: module2, functions: HashMap::new() });
+        }
+
+        // Both attempts failed
+        eprintln!("[PTX-JIT] Both attempts failed for {kernel_name}");
+        Err(GpuError::ModuleLoad(format!(
+            "CUDA module loading failed: try1={result} try2={result2} (JIT target: sm_{major}{minor})"
+        )))
     }
 
     /// Get kernel function handle by name
