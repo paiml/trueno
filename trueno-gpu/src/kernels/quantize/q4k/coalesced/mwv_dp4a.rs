@@ -310,64 +310,37 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let q8_d_high_f16 = ctx.ld_global_f16(q8_d_addr_high);
                 let q8_d_high = ctx.cvt_f32_f16(q8_d_high_f16);
 
-                // Select per-sub-block scales (same selp chain as MWV)
-                let lsi = ctx.shl_u32(ci, one);
-                let hsi = ctx.add_u32(lsi, 1);
+                // Binary tree scale selection: 14 selps instead of 56
+                // ci = lane_id / 8 ∈ {0,1,2,3}
+                // LOW sub-block index: lsi = ci * 2
+                // HIGH sub-block index: hsi = ci * 2 + 1
+                //
+                // bit0 = ci & 1, bit1 = ci >> 1
+                let ci_bit0 = ctx.and_u32(ci, one);
+                let ci_bit1 = ctx.shr_u32(ci, one);
+                let zero_u = ctx.mov_u32_imm(0);
+                let p0 = ctx.setp_ne_u32(ci_bit0, zero_u);
+                let p1 = ctx.setp_ne_u32(ci_bit1, zero_u);
 
-                // Select LOW scale
-                let dl = ds0;
-                let ml = dm0;
-                let p = ctx.setp_eq_u32(lsi, one);
-                let dl = ctx.selp_f32(p, ds1, dl);
-                let ml = ctx.selp_f32(p, dm1, ml);
-                let two_u = ctx.mov_u32_imm(2);
-                let p = ctx.setp_eq_u32(lsi, two_u);
-                let dl = ctx.selp_f32(p, ds2, dl);
-                let ml = ctx.selp_f32(p, dm2, ml);
-                let three_u = ctx.mov_u32_imm(3);
-                let p = ctx.setp_eq_u32(lsi, three_u);
-                let dl = ctx.selp_f32(p, ds3, dl);
-                let ml = ctx.selp_f32(p, dm3, ml);
-                let p = ctx.setp_eq_u32(lsi, four);
-                let dl = ctx.selp_f32(p, ds4, dl);
-                let ml = ctx.selp_f32(p, dm4, ml);
-                let five_u = ctx.mov_u32_imm(5);
-                let p = ctx.setp_eq_u32(lsi, five_u);
-                let dl = ctx.selp_f32(p, ds5, dl);
-                let ml = ctx.selp_f32(p, dm5, ml);
-                let six_u = ctx.mov_u32_imm(6);
-                let p = ctx.setp_eq_u32(lsi, six_u);
-                let dl = ctx.selp_f32(p, ds6, dl);
-                let ml = ctx.selp_f32(p, dm6, ml);
-                let seven_u = ctx.mov_u32_imm(7);
-                let p = ctx.setp_eq_u32(lsi, seven_u);
-                let dl = ctx.selp_f32(p, ds7, dl);
-                let ml = ctx.selp_f32(p, dm7, ml);
+                // LOW scale (ds[ci*2]): binary tree over ds0,ds2,ds4,ds6
+                let dl_01 = ctx.selp_f32(p0, ds2, ds0);
+                let dl_23 = ctx.selp_f32(p0, ds6, ds4);
+                let dl = ctx.selp_f32(p1, dl_23, dl_01);
 
-                // Select HIGH scale
-                let dh = ds0;
-                let mh = dm0;
-                let p = ctx.setp_eq_u32(hsi, one);
-                let dh = ctx.selp_f32(p, ds1, dh);
-                let mh = ctx.selp_f32(p, dm1, mh);
-                let p = ctx.setp_eq_u32(hsi, two_u);
-                let dh = ctx.selp_f32(p, ds2, dh);
-                let mh = ctx.selp_f32(p, dm2, mh);
-                let p = ctx.setp_eq_u32(hsi, three_u);
-                let dh = ctx.selp_f32(p, ds3, dh);
-                let mh = ctx.selp_f32(p, dm3, mh);
-                let p = ctx.setp_eq_u32(hsi, four);
-                let dh = ctx.selp_f32(p, ds4, dh);
-                let mh = ctx.selp_f32(p, dm4, mh);
-                let p = ctx.setp_eq_u32(hsi, five_u);
-                let dh = ctx.selp_f32(p, ds5, dh);
-                let mh = ctx.selp_f32(p, dm5, mh);
-                let p = ctx.setp_eq_u32(hsi, six_u);
-                let dh = ctx.selp_f32(p, ds6, dh);
-                let mh = ctx.selp_f32(p, dm6, mh);
-                let p = ctx.setp_eq_u32(hsi, seven_u);
-                let dh = ctx.selp_f32(p, ds7, dh);
-                let mh = ctx.selp_f32(p, dm7, mh);
+                // LOW min (dm[ci*2]): binary tree over dm0,dm2,dm4,dm6
+                let ml_01 = ctx.selp_f32(p0, dm2, dm0);
+                let ml_23 = ctx.selp_f32(p0, dm6, dm4);
+                let ml = ctx.selp_f32(p1, ml_23, ml_01);
+
+                // HIGH scale (ds[ci*2+1]): binary tree over ds1,ds3,ds5,ds7
+                let dh_01 = ctx.selp_f32(p0, ds3, ds1);
+                let dh_23 = ctx.selp_f32(p0, ds7, ds5);
+                let dh = ctx.selp_f32(p1, dh_23, dh_01);
+
+                // HIGH min (dm[ci*2+1]): binary tree over dm1,dm3,dm5,dm7
+                let mh_01 = ctx.selp_f32(p0, dm3, dm1);
+                let mh_23 = ctx.selp_f32(p0, dm7, dm5);
+                let mh = ctx.selp_f32(p1, mh_23, mh_01);
 
                 // Convert DP4A results to f32
                 let dot_low_f = ctx.cvt_f32_s32(dot_low);

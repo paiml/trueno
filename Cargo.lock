@@ -5590,13 +5590,14 @@ dependencies = [
 name = "trueno-fft"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "thiserror 2.0.17",
 ]
 
 [[package]]
 name = "trueno-gpu"
-version = "0.4.19"
+version = "0.4.23"
 dependencies = [
  "batuta-common",
  "bytemuck",
@@ -5636,6 +5637,7 @@ dependencies = [
 name = "trueno-image"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "thiserror 2.0.17",
 ]
@@ -5668,6 +5670,7 @@ dependencies = [
 name = "trueno-rand"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "thiserror 2.0.17",
 ]
@@ -5676,6 +5679,7 @@ dependencies = [
 name = "trueno-solve"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "thiserror 2.0.17",
 ]
@@ -5684,6 +5688,7 @@ dependencies = [
 name = "trueno-sparse"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "thiserror 2.0.17",
 ]
@@ -5692,6 +5697,7 @@ dependencies = [
 name = "trueno-tensor"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "thiserror 2.0.17",
 ]

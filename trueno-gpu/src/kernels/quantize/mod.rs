@@ -55,7 +55,7 @@ pub use q4k::{
     TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel, WideQ4KGemvKernel,
 };
 pub use q5k::{Q5KGemvKernel, Q5KKernel};
-pub use q6k::{BatchedQ6KGemvKernel, CoalescedQ6KGemvKernel, MultiWarpQ6KGemvKernel, Q6KGemvKernel, Q6KKernel};
+pub use q6k::{BatchedQ6KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ6KGemvKernel, MultiWarpQ6KGemvKernel, Q6KGemvKernel, Q6KKernel};
 pub use nf4::Nf4GemmKernel;
 pub use nf4_cpu::{
     dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu, Nf4Quantized,
