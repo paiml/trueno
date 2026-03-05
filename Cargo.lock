@@ -5597,7 +5597,7 @@ dependencies = [
 
 [[package]]
 name = "trueno-gpu"
-version = "0.4.23"
+version = "0.4.25"
 dependencies = [
  "batuta-common",
  "bytemuck",
