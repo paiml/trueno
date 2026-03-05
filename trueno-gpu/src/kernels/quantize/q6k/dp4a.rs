@@ -168,6 +168,17 @@ impl Kernel for Dp4aQ6KGemvKernel {
                 let p_bit1 = ctx.setp_ne_u32(bit1_val, zero_c);
                 let p_bit2 = ctx.setp_ne_u32(bit2_val, zero_c);
 
+                // Byte-pack constants for unaligned u32 loads (Tegra alignment fix)
+                // Q6K super-blocks are 210 bytes — NOT 4-byte aligned for odd indices.
+                // Tegra (Jetson Orin) enforces alignment on ld.global.u32, causing
+                // CUDA_ERROR_MISALIGNED_ADDRESS (716). Use 4× byte loads + pack instead.
+                let byte_off_1 = ctx.mov_u64_imm(1);
+                let byte_off_2 = ctx.mov_u64_imm(2);
+                let byte_off_3 = ctx.mov_u64_imm(3);
+                let shift_8 = ctx.mov_u32_imm(8);
+                let shift_16 = ctx.mov_u32_imm(16);
+                let shift_24 = ctx.mov_u32_imm(24);
+
                 // === Super-block loop ===
                 let sb_idx = ctx.mov_u32_imm(0);
                 ctx.add_u32_reg_inplace(sb_idx, warp_id);
@@ -238,7 +249,24 @@ impl Kernel for Dp4aQ6KGemvKernel {
                     };
                     let ql_off_64 = ctx.cvt_u64_u32(ql_full_offset);
                     let ql_addr = ctx.add_u64(sb_addr, ql_off_64);
-                    let ql_int32 = ctx.ld_global_u32(ql_addr);
+                    // Byte-level load: Q6K sb is 210 bytes (not 4-byte aligned)
+                    let ql_b0 = ctx.ld_global_u8(ql_addr);
+                    let ql_a1 = ctx.add_u64(ql_addr, byte_off_1);
+                    let ql_b1 = ctx.ld_global_u8(ql_a1);
+                    let ql_a2 = ctx.add_u64(ql_addr, byte_off_2);
+                    let ql_b2 = ctx.ld_global_u8(ql_a2);
+                    let ql_a3 = ctx.add_u64(ql_addr, byte_off_3);
+                    let ql_b3 = ctx.ld_global_u8(ql_a3);
+                    let ql_w0 = ctx.cvt_u32_u8(ql_b0);
+                    let ql_w1 = ctx.cvt_u32_u8(ql_b1);
+                    let ql_w2 = ctx.cvt_u32_u8(ql_b2);
+                    let ql_w3 = ctx.cvt_u32_u8(ql_b3);
+                    let ql_s1 = ctx.shl_u32(ql_w1, shift_8);
+                    let ql_s2 = ctx.shl_u32(ql_w2, shift_16);
+                    let ql_s3 = ctx.shl_u32(ql_w3, shift_24);
+                    let ql_t0 = ctx.or_u32(ql_w0, ql_s1);
+                    let ql_t1 = ctx.or_u32(ql_t0, ql_s2);
+                    let ql_int32 = ctx.or_u32(ql_t1, ql_s3);
 
                     // Extract nibbles: shift by nibble_shift (0 or 4), mask 0x0F
                     let ql_shifted = ctx.shr_u32(ql_int32, nibble_shift);
@@ -249,7 +277,24 @@ impl Kernel for Dp4aQ6KGemvKernel {
                     let qh_full_offset = ctx.add_u32(pos_in_group, qh_base_val);
                     let qh_off_64 = ctx.cvt_u64_u32(qh_full_offset);
                     let qh_addr = ctx.add_u64(sb_addr, qh_off_64);
-                    let qh_int32 = ctx.ld_global_u32(qh_addr);
+                    // Byte-level load: same Tegra alignment fix
+                    let qh_b0 = ctx.ld_global_u8(qh_addr);
+                    let qh_a1 = ctx.add_u64(qh_addr, byte_off_1);
+                    let qh_b1 = ctx.ld_global_u8(qh_a1);
+                    let qh_a2 = ctx.add_u64(qh_addr, byte_off_2);
+                    let qh_b2 = ctx.ld_global_u8(qh_a2);
+                    let qh_a3 = ctx.add_u64(qh_addr, byte_off_3);
+                    let qh_b3 = ctx.ld_global_u8(qh_a3);
+                    let qh_w0 = ctx.cvt_u32_u8(qh_b0);
+                    let qh_w1 = ctx.cvt_u32_u8(qh_b1);
+                    let qh_w2 = ctx.cvt_u32_u8(qh_b2);
+                    let qh_w3 = ctx.cvt_u32_u8(qh_b3);
+                    let qh_s1 = ctx.shl_u32(qh_w1, shift_8);
+                    let qh_s2 = ctx.shl_u32(qh_w2, shift_16);
+                    let qh_s3 = ctx.shl_u32(qh_w3, shift_24);
+                    let qh_t0 = ctx.or_u32(qh_w0, qh_s1);
+                    let qh_t1 = ctx.or_u32(qh_t0, qh_s2);
+                    let qh_int32 = ctx.or_u32(qh_t1, qh_s3);
 
                     // Extract 2-bit pairs: shift by qh_shift (0,2,4,6), mask 0x03
                     let qh_shifted = ctx.shr_u32(qh_int32, qh_shift);
