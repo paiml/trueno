@@ -1,5 +1,5 @@
-use trueno_gpu::kernels::{Kernel, ElementwiseMulKernel, GemmKernel};
 use trueno_gpu::kernels::optimizer::AdamWStepKernel;
+use trueno_gpu::kernels::{ElementwiseMulKernel, GemmKernel, Kernel};
 
 fn main() {
     // elementwise_mul

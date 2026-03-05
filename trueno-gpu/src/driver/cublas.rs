@@ -207,12 +207,8 @@ impl CublasHandle {
             )
         };
 
-        CublasDriver::check(result).map_err(|e| {
-            GpuError::CudaDriver(
-                format!("cublasGemmEx(m={m}, n={n}, k={k}): {e}"),
-                0,
-            )
-        })
+        CublasDriver::check(result)
+            .map_err(|e| GpuError::CudaDriver(format!("cublasGemmEx(m={m}, n={n}, k={k}): {e}"), 0))
     }
 
     /// FP32 GEMM with TF32 tensor core acceleration
@@ -272,10 +268,7 @@ impl CublasHandle {
         };
 
         CublasDriver::check(result).map_err(|e| {
-            GpuError::CudaDriver(
-                format!("cublasGemmEx_f32(m={m}, n={n}, k={k}): {e}"),
-                0,
-            )
+            GpuError::CudaDriver(format!("cublasGemmEx_f32(m={m}, n={n}, k={k}): {e}"), 0)
         })
     }
 
@@ -442,10 +435,13 @@ impl CublasHandle {
             m,               // cols of op(A^T) = rows of A = m
             k,               // shared dimension
             alpha,
-            b_ptr, n, // B with leading dim n (row-major stride)
-            a_ptr, k, // A with leading dim k (row-major stride)
+            b_ptr,
+            n, // B with leading dim n (row-major stride)
+            a_ptr,
+            k, // A with leading dim k (row-major stride)
             beta,
-            c_ptr, n, // C with leading dim n (row-major stride)
+            c_ptr,
+            n, // C with leading dim n (row-major stride)
         )
     }
 
@@ -477,12 +473,20 @@ impl CublasHandle {
         self.gemm_f32_strided_batched(
             GemmOp::NoTrans,
             GemmOp::NoTrans,
-            n, m, k,
+            n,
+            m,
+            k,
             alpha,
-            b_ptr, n, stride_b,
-            a_ptr, k, stride_a,
+            b_ptr,
+            n,
+            stride_b,
+            a_ptr,
+            k,
+            stride_a,
             beta,
-            c_ptr, n, stride_c,
+            c_ptr,
+            n,
+            stride_c,
             batch_count,
         )
     }
@@ -506,7 +510,17 @@ impl CublasHandle {
         self.gemm_f32(
             GemmOp::NoTrans,
             GemmOp::NoTrans,
-            n, m, k, alpha, b_ptr, n, a_ptr, k, beta, c_ptr, n,
+            n,
+            m,
+            k,
+            alpha,
+            b_ptr,
+            n,
+            a_ptr,
+            k,
+            beta,
+            c_ptr,
+            n,
         )
     }
 }

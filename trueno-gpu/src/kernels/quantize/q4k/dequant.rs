@@ -60,7 +60,7 @@ impl Kernel for Q4KDequantKernel {
     fn build_ptx(&self) -> PtxKernel {
         PtxKernel::new("q4k_dequant_to_f32")
             .param(PtxType::U64, "out_ptr") // F32 output [N × K]
-            .param(PtxType::U64, "w_ptr")   // Q4K weights
+            .param(PtxType::U64, "w_ptr") // Q4K weights
             .param(PtxType::U32, "k_dim")
             .param(PtxType::U32, "n_dim")
             .build(|ctx| {
