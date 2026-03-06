@@ -214,7 +214,7 @@ impl Kernel for Q6KDequantKernel {
                     let ds_lo = scale_f32s[sb_base]; // for lanes 0-15
                     let ds_hi = scale_f32s[sb_base + 1]; // for lanes 16-31
                     let is_hi = ctx.setp_ge_u32(thread_id, sixteen);
-                    let ds = ctx.selp_f32(ds_hi, ds_lo, is_hi);
+                    let ds = ctx.selp_f32(is_hi, ds_hi, ds_lo);
 
                     let dequant = ctx.mul_f32(ds, q6_centered);
 
