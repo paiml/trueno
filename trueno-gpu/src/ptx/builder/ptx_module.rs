@@ -265,11 +265,11 @@ impl PtxKernel {
                 writeln!(ptx, "    .param {} {}{}", param.ty.to_ptx_string(), param.name, comma);
         }
 
-        ptx.push_str(") {\n");
-
-        // Performance directives
+        // Performance directives go between closing paren and opening brace
         if let Some(max) = self.max_regs {
-            let _ = writeln!(ptx, "    .maxnreg {};", max);
+            let _ = write!(ptx, ") .maxnreg {} {{\n", max);
+        } else {
+            ptx.push_str(") {\n");
         }
 
         // Register declarations
