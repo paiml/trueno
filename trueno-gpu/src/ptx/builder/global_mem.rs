@@ -185,9 +185,9 @@ impl<'a> KernelBuilder<'a> {
 
         // Assemble little-endian u32 using bfi.b32 (3 instructions vs 9 with shl+or)
         // bfi.b32 inserts `len` bits from `insert` into `base` at position `start`
-        let t1 = self.bfi_b32(w1, w0, 8, 8);     // insert byte 1 at bits [15:8]
-        let t2 = self.bfi_b32(w2, t1, 16, 8);     // insert byte 2 at bits [23:16]
-        self.bfi_b32(w3, t2, 24, 8)               // insert byte 3 at bits [31:24]
+        let t1 = self.bfi_b32(w1, w0, 8, 8); // insert byte 1 at bits [15:8]
+        let t2 = self.bfi_b32(w2, t1, 16, 8); // insert byte 2 at bits [23:16]
+        self.bfi_b32(w3, t2, 24, 8) // insert byte 3 at bits [31:24]
     }
 
     /// Load u16 from global memory (for f16 as raw bits)
