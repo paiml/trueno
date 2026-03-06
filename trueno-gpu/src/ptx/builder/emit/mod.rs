@@ -169,7 +169,7 @@ fn write_destinations(instr: &PtxInstruction, out: &mut String) {
 
 /// Write source operands with proper memory addressing
 fn write_sources(instr: &PtxInstruction, out: &mut String) {
-    let is_memory_op = matches!(instr.op, PtxOp::Ld | PtxOp::LdVolatile | PtxOp::St);
+    let is_memory_op = matches!(instr.op, PtxOp::Ld | PtxOp::LdVolatile | PtxOp::St | PtxOp::Prefetch);
     let is_atomic_op = matches!(
         instr.op,
         PtxOp::AtomAdd | PtxOp::AtomMin | PtxOp::AtomMax | PtxOp::AtomExch | PtxOp::AtomCas

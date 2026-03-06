@@ -152,6 +152,18 @@ pub trait PtxMemory: KernelBuilderCore {
         dst
     }
 
+    /// Prefetch a cache line from global memory to L2 cache.
+    ///
+    /// This is a non-faulting hint — invalid addresses are silently ignored.
+    /// Use to prefetch data for the next loop iteration while computing the current one.
+    fn prefetch_global_l2(&mut self, addr: VirtualReg) {
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::Prefetch, PtxType::U8)
+                .space(PtxStateSpace::Global)
+                .src(Operand::Reg(addr)),
+        );
+    }
+
     /// Store f16 to shared memory (stored as b16)
     ///
     /// Half-precision floats are stored using b16 type in PTX.
