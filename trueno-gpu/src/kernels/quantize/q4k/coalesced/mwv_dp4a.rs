@@ -52,6 +52,7 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
             .param(PtxType::U32, "k_dim")
             .param(PtxType::U32, "n_dim")
             .shared_memory(smem_size)
+            .max_regs(255)
             .build(move |ctx| {
                 let block_id = ctx.special_reg(PtxReg::CtaIdX);
                 let thread_id = ctx.special_reg(PtxReg::TidX);
@@ -207,11 +208,11 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let sb8 = ctx.mul_u32_reg(sb_idx, eight_c);
                 let ci2 = ctx.shl_u32(ci, one);
                 let blk_low = ctx.add_u32_reg(sb8, ci2);
-                let blk_high = ctx.add_u32(blk_low, 1);
 
                 let thirty_six = ctx.mov_u32_imm(36);
                 let q8_off_low = ctx.mul_wide_u32_reg(blk_low, thirty_six);
-                let q8_off_high = ctx.mul_wide_u32_reg(blk_high, thirty_six);
+                let thirty_six_64 = ctx.mov_u64_imm(36);
+                let q8_off_high = ctx.add_u64(q8_off_low, thirty_six_64);
 
                 let lic_x4 = ctx.mul_u32_reg(lic, four);
                 let lic_x4_64 = ctx.cvt_u64_u32(lic_x4);
