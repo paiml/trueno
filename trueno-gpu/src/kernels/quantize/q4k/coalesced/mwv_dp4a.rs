@@ -57,25 +57,33 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let thread_id = ctx.special_reg(PtxReg::TidX);
                 let lane_id = ctx.rem_u32(thread_id, 32);
                 let warp_id = ctx.div_u32(thread_id, 32);
+                // GH-174: Grid-stride loop
+                let grid_dim = ctx.special_reg(PtxReg::NctaIdX);
 
                 let n_dim = ctx.load_param_u32("n_dim");
-                let oob = ctx.setp_ge_u32(block_id, n_dim);
-                ctx.branch_if(oob, "dp4a_exit");
-
                 let k_dim = ctx.load_param_u32("k_dim");
                 let y_ptr = ctx.load_param_u64("y_ptr");
                 let w_ptr = ctx.load_param_u64("w_ptr");
                 let q8_ptr = ctx.load_param_u64("q8_ptr");
-
-                let acc = ctx.mov_f32_imm(0.0);
 
                 let k_rounded = ctx.add_u32(k_dim, Q4K_SUPER_BLOCK_SIZE - 1);
                 let num_super_blocks = ctx.div_u32(k_rounded, Q4K_SUPER_BLOCK_SIZE);
 
                 let sb_bytes_c = ctx.mov_u32_imm(Q4K_SUPER_BLOCK_BYTES);
                 let row_bytes = ctx.mul_u32_reg(num_super_blocks, sb_bytes_c);
-                let row_offset = ctx.mul_wide_u32_reg(block_id, row_bytes);
+
+                // GH-174: Grid-stride outer loop over rows
+                let row_idx = ctx.mov_u32_imm(0);
+                ctx.add_u32_reg_inplace(row_idx, block_id);
+
+                ctx.label("dp4a_row_loop");
+                let row_oob = ctx.setp_ge_u32(row_idx, n_dim);
+                ctx.branch_if(row_oob, "dp4a_exit");
+
+                let row_offset = ctx.mul_wide_u32_reg(row_idx, row_bytes);
                 let row_base = ctx.add_u64(w_ptr, row_offset);
+
+                let acc = ctx.mov_f32_imm(0.0);
 
                 // Each warp starts at warp_id, strides by num_warps
                 let sb_idx_z = ctx.mov_u32_imm(0);
@@ -321,7 +329,7 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 ctx.bar_sync(0);
 
                 let is_t0 = ctx.setp_eq_u32(thread_id, z);
-                ctx.branch_if_not(is_t0, "dp4a_exit");
+                ctx.branch_if_not(is_t0, "dp4a_skip_store");
 
                 let fs = ctx.mov_f32_imm(0.0);
                 for w in 0..num_warps {
@@ -330,9 +338,18 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                     ctx.add_f32_inplace(fs, pv);
                 }
 
-                let yo = ctx.mul_wide_u32(block_id, 4);
+                // GH-174: Store to row_idx (not block_id) for grid-stride
+                let yo = ctx.mul_wide_u32(row_idx, 4);
                 let ya = ctx.add_u64(y_ptr, yo);
                 ctx.st_global_f32(ya, fs);
+
+                ctx.label("dp4a_skip_store");
+
+                // GH-174: Advance to next row (grid-stride)
+                ctx.add_u32_reg_inplace(row_idx, grid_dim);
+                // Barrier before next row iteration to protect shared memory
+                ctx.bar_sync(0);
+                ctx.branch("dp4a_row_loop");
 
                 ctx.label("dp4a_exit");
                 ctx.ret();
