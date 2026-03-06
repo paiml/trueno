@@ -27,7 +27,7 @@
 #![allow(clippy::similar_names)]
 
 use crate::kernels::Kernel;
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// GPU-side clip scale reduction kernel (ALB-078).
@@ -67,7 +67,6 @@ impl Kernel for ClipScaleReduceKernel {
                 let output_ptr = ctx.load_param_u64("output_ptr");
 
                 let four = ctx.mov_u32_imm(4);
-                let zero_u32 = ctx.mov_u32_imm(0);
 
                 // Accumulate all partial sums in f32.
                 // Precision: ~1800 partials × eps_f32 ≈ 0.01% relative error.
