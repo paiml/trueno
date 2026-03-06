@@ -83,6 +83,16 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let row_offset = ctx.mul_wide_u32_reg(row_idx, row_bytes);
                 let row_base = ctx.add_u64(w_ptr, row_offset);
 
+                // GH-175: Prefetch next row's weight data to L2 while computing current row.
+                // Each row has ceil(K/256) super-blocks × 144 bytes. Prefetch the qs section
+                // (offset 16) of the first super-block of the next row.
+                let next_row = ctx.add_u32_reg(row_idx, grid_dim);
+                let next_offset = ctx.mul_wide_u32_reg(next_row, row_bytes);
+                let next_base = ctx.add_u64(w_ptr, next_offset);
+                let sixteen_pf = ctx.mov_u64_imm(16);
+                let pf_addr0 = ctx.add_u64(next_base, sixteen_pf);
+                ctx.prefetch_global_l2(pf_addr0);
+
                 let acc = ctx.mov_f32_imm(0.0);
 
                 // Each warp starts at warp_id, strides by num_warps

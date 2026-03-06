@@ -118,6 +118,14 @@ impl Kernel for Dp4aQ6KGemvKernel {
                 let row_offset = ctx.mul_wide_u32_reg(row_idx, row_bytes);
                 let row_base = ctx.add_u64(w_ptr, row_offset);
 
+                // GH-175: Prefetch next row's ql data to L2 while computing current row.
+                // Critical for LM head (n=151936): 593 rows per block, ~700 cycles per row
+                // gives enough lead time to cover ~400 cycle DRAM latency.
+                let next_row = ctx.add_u32_reg(row_idx, grid_dim);
+                let next_offset = ctx.mul_wide_u32_reg(next_row, row_bytes);
+                let next_base = ctx.add_u64(w_ptr, next_offset);
+                ctx.prefetch_global_l2(next_base);
+
                 let acc = ctx.mov_f32_imm(0.0);
 
                 // === Per-lane constants (derived from lane_id) ===
@@ -395,6 +403,8 @@ mod tests {
         assert!(ptx.contains(".visible .entry dp4a_q6k_gemv"));
         assert!(ptx.contains("dp4a.u32.s32"), "Must use dp4a instructions");
         assert!(ptx.contains("bar.sync"), "Must have barrier for cross-warp safety");
+        // GH-175: Prefetch next row's data in grid-stride loop
+        assert!(ptx.contains("prefetch.global.L2"), "Must prefetch next row data");
         // GH-131: bfi.b32 used for unaligned Q6K loads (replaces shl+or assembly)
         assert!(ptx.contains("bfi.b32"), "Must use bfi.b32 for unaligned byte packing");
     }
