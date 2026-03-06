@@ -121,93 +121,47 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let sc47 = ctx.shfl_idx_u32(sc47r, 0, 0xFFFF_FFFF);
                 let sc811 = ctx.shfl_idx_u32(sc811r, 0, 0xFFFF_FFFF);
 
-                // Decode 8 scale/min pairs (identical to MWV)
-                let m8 = ctx.mov_u32_imm(0xFF);
-                let sh8 = ctx.mov_u32_imm(8);
-                let sh16 = ctx.mov_u32_imm(16);
-                let sh24 = ctx.mov_u32_imm(24);
+                // GH-173: Parallel byte-masked scale extraction (llama.cpp approach)
+                // Instead of decoding all 16 scales individually (~57 instructions)
+                // then selecting 4 via binary tree selp (~14 instructions),
+                // use SIMD-style byte masks to extract all scales in parallel,
+                // then each thread picks its 2 needed bytes with a dynamic shift.
+                //
+                // Q4K scale encoding (12 bytes = 3 × u32):
+                //   sc03[i] & 0x3F = scale[i] for blocks 0-3
+                //   sc47[i] & 0x3F = min[i] for blocks 0-3
+                //   sc811 + high bits from sc03/sc47 = scale/min for blocks 4-7
+                //
+                // Savings: ~79 → ~35 instructions for scale handling (56% reduction)
 
-                let s0 = ctx.and_u32(sc03, m8);
-                let t = ctx.shr_u32(sc03, sh8);
-                let s1 = ctx.and_u32(t, m8);
-                let t = ctx.shr_u32(sc03, sh16);
-                let s2 = ctx.and_u32(t, m8);
-                let s3 = ctx.shr_u32(sc03, sh24);
-
-                let s4 = ctx.and_u32(sc47, m8);
-                let t = ctx.shr_u32(sc47, sh8);
-                let s5 = ctx.and_u32(t, m8);
-                let t = ctx.shr_u32(sc47, sh16);
-                let s6 = ctx.and_u32(t, m8);
-                let s7 = ctx.shr_u32(sc47, sh24);
-
-                let s8 = ctx.and_u32(sc811, m8);
-                let t = ctx.shr_u32(sc811, sh8);
-                let s9 = ctx.and_u32(t, m8);
-                let t = ctx.shr_u32(sc811, sh16);
-                let s10 = ctx.and_u32(t, m8);
-                let s11 = ctx.shr_u32(sc811, sh24);
-
-                let m6 = ctx.mov_u32_imm(0x3F);
-                let m4 = ctx.mov_u32_imm(0x0F);
+                // Step 1: Parallel extraction of all 8 scale/min pairs packed as bytes
+                let mask_3f = ctx.mov_u32_imm(0x3F3F_3F3F);
+                let mask_0f4 = ctx.mov_u32_imm(0x0F0F_0F0F);
+                let mask_03 = ctx.mov_u32_imm(0x0303_0303);
                 let four_c = ctx.mov_u32_imm(4);
                 let six_c = ctx.mov_u32_imm(6);
 
-                // Blocks 0-3
-                let sc0 = ctx.and_u32(s0, m6);
-                let mn0 = ctx.and_u32(s4, m6);
-                let sc1 = ctx.and_u32(s1, m6);
-                let mn1 = ctx.and_u32(s5, m6);
-                let sc2 = ctx.and_u32(s2, m6);
-                let mn2 = ctx.and_u32(s6, m6);
-                let sc3 = ctx.and_u32(s3, m6);
-                let mn3 = ctx.and_u32(s7, m6);
+                // Blocks 0-3: just mask low 6 bits of each byte
+                let sc_lo4 = ctx.and_u32(sc03, mask_3f);   // 4 scale bytes packed
+                let mn_lo4 = ctx.and_u32(sc47, mask_3f);   // 4 min bytes packed
 
-                // Blocks 4-7
-                let t = ctx.and_u32(s8, m4);
-                let u = ctx.shr_u32(s0, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let sc4 = ctx.or_u32(t, u);
-                let t = ctx.shr_u32(s8, four_c);
-                let u = ctx.shr_u32(s4, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let mn4 = ctx.or_u32(t, u);
+                // Blocks 4-7: combine low 4 bits from sc811 with high 2 bits from sc03/sc47
+                let sc_hi_low = ctx.and_u32(sc811, mask_0f4);
+                let t = ctx.shr_u32(sc03, six_c);
+                let t = ctx.and_u32(t, mask_03);
+                let sc_hi_top = ctx.shl_u32(t, four_c);
+                let sc_hi4 = ctx.or_u32(sc_hi_low, sc_hi_top);
 
-                let t = ctx.and_u32(s9, m4);
-                let u = ctx.shr_u32(s1, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let sc5 = ctx.or_u32(t, u);
-                let t = ctx.shr_u32(s9, four_c);
-                let u = ctx.shr_u32(s5, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let mn5 = ctx.or_u32(t, u);
+                let mn_hi_raw = ctx.shr_u32(sc811, four_c);
+                let mn_hi_low = ctx.and_u32(mn_hi_raw, mask_0f4);
+                let t = ctx.shr_u32(sc47, six_c);
+                let t = ctx.and_u32(t, mask_03);
+                let mn_hi_top = ctx.shl_u32(t, four_c);
+                let mn_hi4 = ctx.or_u32(mn_hi_low, mn_hi_top);
 
-                let t = ctx.and_u32(s10, m4);
-                let u = ctx.shr_u32(s2, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let sc6 = ctx.or_u32(t, u);
-                let t = ctx.shr_u32(s10, four_c);
-                let u = ctx.shr_u32(s6, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let mn6 = ctx.or_u32(t, u);
+                // === DP4A HOT PATH ===
 
-                let t = ctx.and_u32(s11, m4);
-                let u = ctx.shr_u32(s3, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let sc7 = ctx.or_u32(t, u);
-                let t = ctx.shr_u32(s11, four_c);
-                let u = ctx.shr_u32(s7, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let mn7 = ctx.or_u32(t, u);
-
-                // GH-131: Deferred scale conversion — select u32 scales first,
-                // then convert only the 2 needed pairs to f32 (saves 24 instructions).
-                // Previously: 16 cvt_f32_u32 + 16 mul_f32 = 32 instructions for all 8 pairs.
-                // Now: binary tree on u32, then 4 cvt + 4 mul = 8 instructions for 2 pairs.
-
-                // === DP4A HOT PATH (replaces nibble unpack + f32 loads + FMA) ===
-
-                // COALESCED u32 LOAD of Q4K weights (same as MWV)
+                // COALESCED u32 LOAD of Q4K weights
                 let sixteen_64 = ctx.mov_u64_imm(16);
                 let qs_base = ctx.add_u64(sb_addr, sixteen_64);
                 let four = ctx.mov_u32_imm(4);
@@ -216,7 +170,7 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let qa = ctx.add_u64(qs_base, tbo64);
                 let packed = ctx.ld_global_u32(qa);
 
-                // Extract nibble packs: low = 4 unsigned bytes, high = 4 unsigned bytes
+                // Extract nibble packs
                 let mask_0f = ctx.mov_u32_imm(0x0F0F_0F0F);
                 let sh4 = ctx.mov_u32_imm(4);
                 let low_nibs = ctx.and_u32(packed, mask_0f);
@@ -230,30 +184,25 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let sm = ctx.mov_u32_imm(7);
                 let lic = ctx.and_u32(lane_id, sm);
 
-                // Q8 block indices:
-                //   LOW sub-block: sb_idx * 8 + ci * 2
-                //   HIGH sub-block: sb_idx * 8 + ci * 2 + 1
+                // Q8 block indices
                 let eight_c = ctx.mov_u32_imm(8);
                 let sb8 = ctx.mul_u32_reg(sb_idx, eight_c);
                 let ci2 = ctx.shl_u32(ci, one);
                 let blk_low = ctx.add_u32_reg(sb8, ci2);
                 let blk_high = ctx.add_u32(blk_low, 1);
 
-                // Q8_1 block stride = 36 bytes
                 let thirty_six = ctx.mov_u32_imm(36);
                 let q8_off_low = ctx.mul_wide_u32_reg(blk_low, thirty_six);
                 let q8_off_high = ctx.mul_wide_u32_reg(blk_high, thirty_six);
 
-                // Q8 qs offset within block = lic * 4
                 let lic_x4 = ctx.mul_u32_reg(lic, four);
                 let lic_x4_64 = ctx.cvt_u64_u32(lic_x4);
 
-                // Load Q8 packed bytes (LOW sub-block)
+                // Load Q8 packed bytes
                 let q8_base_low = ctx.add_u64(q8_ptr, q8_off_low);
                 let q8_addr_low = ctx.add_u64(q8_base_low, lic_x4_64);
                 let q8_low = ctx.ld_global_u32(q8_addr_low);
 
-                // Load Q8 packed bytes (HIGH sub-block)
                 let q8_base_high = ctx.add_u64(q8_ptr, q8_off_high);
                 let q8_addr_high = ctx.add_u64(q8_base_high, lic_x4_64);
                 let q8_high = ctx.ld_global_u32(q8_addr_high);
@@ -271,7 +220,7 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let sum_high = ctx.mov_u32_imm(0);
                 ctx.dp4a_u32_s32_inplace(sum_high, ones, q8_high);
 
-                // Load Q8 scales (d = f16 at offset 32 within Q8 block)
+                // Load Q8 scales
                 let thirty_two_64 = ctx.mov_u64_imm(32);
                 let q8_d_addr_low = ctx.add_u64(q8_base_low, thirty_two_64);
                 let q8_d_low_f16 = ctx.ld_global_f16(q8_d_addr_low);
@@ -281,34 +230,34 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let q8_d_high_f16 = ctx.ld_global_f16(q8_d_addr_high);
                 let q8_d_high = ctx.cvt_f32_f16(q8_d_high_f16);
 
-                // GH-131: Binary tree scale selection on u32 (deferred conversion)
-                // ci = lane_id / 8 ∈ {0,1,2,3}
-                // bit0 = ci & 1, bit1 = ci >> 1
-                let ci_bit0 = ctx.and_u32(ci, one);
-                let ci_bit1 = ctx.shr_u32(ci, one);
-                let zero_u = ctx.mov_u32_imm(0);
-                let p0 = ctx.setp_ne_u32(ci_bit0, zero_u);
-                let p1 = ctx.setp_ne_u32(ci_bit1, zero_u);
+                // Step 2: Per-thread byte extraction using dynamic shift
+                // ci ∈ {0,1,2,3}: ci=0,1 use blocks 0-3 (lo4), ci=2,3 use blocks 4-7 (hi4)
+                // Byte position within the packed u32: (ci % 2) * 2 → shift = (ci%2)*16
+                // LOW byte at shift, HIGH byte at shift+8
+                let two_c = ctx.mov_u32_imm(2);
+                let ci_mod2 = ctx.and_u32(ci, one);
+                let sh16 = ctx.mov_u32_imm(16);
+                let byte_shift = ctx.mul_u32_reg(ci_mod2, sh16);
+                let sh8_c = ctx.mov_u32_imm(8);
+                let byte_shift_hi = ctx.add_u32_reg(byte_shift, sh8_c);
+                let m8 = ctx.mov_u32_imm(0xFF);
 
-                // LOW scale (sc[ci*2]): binary tree over sc0,sc2,sc4,sc6
-                let sl_01 = ctx.selp_u32(p0, sc2, sc0);
-                let sl_23 = ctx.selp_u32(p0, sc6, sc4);
-                let sl = ctx.selp_u32(p1, sl_23, sl_01);
+                // Select source: lo4 for ci<2, hi4 for ci>=2
+                let p_hi = ctx.setp_ge_u32(ci, two_c);
+                let sc_src = ctx.selp_u32(p_hi, sc_hi4, sc_lo4);
+                let mn_src = ctx.selp_u32(p_hi, mn_hi4, mn_lo4);
 
-                // LOW min (mn[ci*2]): binary tree over mn0,mn2,mn4,mn6
-                let ml_01 = ctx.selp_u32(p0, mn2, mn0);
-                let ml_23 = ctx.selp_u32(p0, mn6, mn4);
-                let ml_u = ctx.selp_u32(p1, ml_23, ml_01);
+                // Extract LOW scale/min: byte at byte_shift
+                let t = ctx.shr_u32(sc_src, byte_shift);
+                let sl = ctx.and_u32(t, m8);
+                let t = ctx.shr_u32(mn_src, byte_shift);
+                let ml_u = ctx.and_u32(t, m8);
 
-                // HIGH scale (sc[ci*2+1]): binary tree over sc1,sc3,sc5,sc7
-                let sh_01 = ctx.selp_u32(p0, sc3, sc1);
-                let sh_23 = ctx.selp_u32(p0, sc7, sc5);
-                let sh = ctx.selp_u32(p1, sh_23, sh_01);
-
-                // HIGH min (mn[ci*2+1]): binary tree over mn1,mn3,mn5,mn7
-                let mh_01 = ctx.selp_u32(p0, mn3, mn1);
-                let mh_23 = ctx.selp_u32(p0, mn7, mn5);
-                let mh_u = ctx.selp_u32(p1, mh_23, mh_01);
+                // Extract HIGH scale/min: byte at byte_shift + 8
+                let t = ctx.shr_u32(sc_src, byte_shift_hi);
+                let sh = ctx.and_u32(t, m8);
+                let t = ctx.shr_u32(mn_src, byte_shift_hi);
+                let mh_u = ctx.and_u32(t, m8);
 
                 // Convert only the 2 selected pairs to f32 and multiply by d/dmin
                 let sl_f = ctx.cvt_f32_u32(sl);
