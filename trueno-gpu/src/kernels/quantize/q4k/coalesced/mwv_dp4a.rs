@@ -200,39 +200,10 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let u = ctx.shl_u32(u, four_c);
                 let mn7 = ctx.or_u32(t, u);
 
-                // d*scale and dmin*min (same as MWV)
-                let f0 = ctx.cvt_f32_u32(sc0);
-                let g0 = ctx.cvt_f32_u32(mn0);
-                let ds0 = ctx.mul_f32(d, f0);
-                let dm0 = ctx.mul_f32(dmin, g0);
-                let f1 = ctx.cvt_f32_u32(sc1);
-                let g1 = ctx.cvt_f32_u32(mn1);
-                let ds1 = ctx.mul_f32(d, f1);
-                let dm1 = ctx.mul_f32(dmin, g1);
-                let f2 = ctx.cvt_f32_u32(sc2);
-                let g2 = ctx.cvt_f32_u32(mn2);
-                let ds2 = ctx.mul_f32(d, f2);
-                let dm2 = ctx.mul_f32(dmin, g2);
-                let f3 = ctx.cvt_f32_u32(sc3);
-                let g3 = ctx.cvt_f32_u32(mn3);
-                let ds3 = ctx.mul_f32(d, f3);
-                let dm3 = ctx.mul_f32(dmin, g3);
-                let f4 = ctx.cvt_f32_u32(sc4);
-                let g4 = ctx.cvt_f32_u32(mn4);
-                let ds4 = ctx.mul_f32(d, f4);
-                let dm4 = ctx.mul_f32(dmin, g4);
-                let f5 = ctx.cvt_f32_u32(sc5);
-                let g5 = ctx.cvt_f32_u32(mn5);
-                let ds5 = ctx.mul_f32(d, f5);
-                let dm5 = ctx.mul_f32(dmin, g5);
-                let f6 = ctx.cvt_f32_u32(sc6);
-                let g6 = ctx.cvt_f32_u32(mn6);
-                let ds6 = ctx.mul_f32(d, f6);
-                let dm6 = ctx.mul_f32(dmin, g6);
-                let f7 = ctx.cvt_f32_u32(sc7);
-                let g7 = ctx.cvt_f32_u32(mn7);
-                let ds7 = ctx.mul_f32(d, f7);
-                let dm7 = ctx.mul_f32(dmin, g7);
+                // GH-131: Deferred scale conversion — select u32 scales first,
+                // then convert only the 2 needed pairs to f32 (saves 24 instructions).
+                // Previously: 16 cvt_f32_u32 + 16 mul_f32 = 32 instructions for all 8 pairs.
+                // Now: binary tree on u32, then 4 cvt + 4 mul = 8 instructions for 2 pairs.
 
                 // === DP4A HOT PATH (replaces nibble unpack + f32 loads + FMA) ===
 
@@ -310,11 +281,8 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let q8_d_high_f16 = ctx.ld_global_f16(q8_d_addr_high);
                 let q8_d_high = ctx.cvt_f32_f16(q8_d_high_f16);
 
-                // Binary tree scale selection: 14 selps instead of 56
+                // GH-131: Binary tree scale selection on u32 (deferred conversion)
                 // ci = lane_id / 8 ∈ {0,1,2,3}
-                // LOW sub-block index: lsi = ci * 2
-                // HIGH sub-block index: hsi = ci * 2 + 1
-                //
                 // bit0 = ci & 1, bit1 = ci >> 1
                 let ci_bit0 = ctx.and_u32(ci, one);
                 let ci_bit1 = ctx.shr_u32(ci, one);
@@ -322,25 +290,35 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let p0 = ctx.setp_ne_u32(ci_bit0, zero_u);
                 let p1 = ctx.setp_ne_u32(ci_bit1, zero_u);
 
-                // LOW scale (ds[ci*2]): binary tree over ds0,ds2,ds4,ds6
-                let dl_01 = ctx.selp_f32(p0, ds2, ds0);
-                let dl_23 = ctx.selp_f32(p0, ds6, ds4);
-                let dl = ctx.selp_f32(p1, dl_23, dl_01);
+                // LOW scale (sc[ci*2]): binary tree over sc0,sc2,sc4,sc6
+                let sl_01 = ctx.selp_u32(p0, sc2, sc0);
+                let sl_23 = ctx.selp_u32(p0, sc6, sc4);
+                let sl = ctx.selp_u32(p1, sl_23, sl_01);
 
-                // LOW min (dm[ci*2]): binary tree over dm0,dm2,dm4,dm6
-                let ml_01 = ctx.selp_f32(p0, dm2, dm0);
-                let ml_23 = ctx.selp_f32(p0, dm6, dm4);
-                let ml = ctx.selp_f32(p1, ml_23, ml_01);
+                // LOW min (mn[ci*2]): binary tree over mn0,mn2,mn4,mn6
+                let ml_01 = ctx.selp_u32(p0, mn2, mn0);
+                let ml_23 = ctx.selp_u32(p0, mn6, mn4);
+                let ml_u = ctx.selp_u32(p1, ml_23, ml_01);
 
-                // HIGH scale (ds[ci*2+1]): binary tree over ds1,ds3,ds5,ds7
-                let dh_01 = ctx.selp_f32(p0, ds3, ds1);
-                let dh_23 = ctx.selp_f32(p0, ds7, ds5);
-                let dh = ctx.selp_f32(p1, dh_23, dh_01);
+                // HIGH scale (sc[ci*2+1]): binary tree over sc1,sc3,sc5,sc7
+                let sh_01 = ctx.selp_u32(p0, sc3, sc1);
+                let sh_23 = ctx.selp_u32(p0, sc7, sc5);
+                let sh = ctx.selp_u32(p1, sh_23, sh_01);
 
-                // HIGH min (dm[ci*2+1]): binary tree over dm1,dm3,dm5,dm7
-                let mh_01 = ctx.selp_f32(p0, dm3, dm1);
-                let mh_23 = ctx.selp_f32(p0, dm7, dm5);
-                let mh = ctx.selp_f32(p1, mh_23, mh_01);
+                // HIGH min (mn[ci*2+1]): binary tree over mn1,mn3,mn5,mn7
+                let mh_01 = ctx.selp_u32(p0, mn3, mn1);
+                let mh_23 = ctx.selp_u32(p0, mn7, mn5);
+                let mh_u = ctx.selp_u32(p1, mh_23, mh_01);
+
+                // Convert only the 2 selected pairs to f32 and multiply by d/dmin
+                let sl_f = ctx.cvt_f32_u32(sl);
+                let dl = ctx.mul_f32(d, sl_f);
+                let ml_f = ctx.cvt_f32_u32(ml_u);
+                let ml = ctx.mul_f32(dmin, ml_f);
+                let sh_f = ctx.cvt_f32_u32(sh);
+                let dh = ctx.mul_f32(d, sh_f);
+                let mh_f = ctx.cvt_f32_u32(mh_u);
+                let mh = ctx.mul_f32(dmin, mh_f);
 
                 // Convert DP4A results to f32
                 let dot_low_f = ctx.cvt_f32_s32(dot_low);
@@ -348,14 +326,14 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let sum_low_f = ctx.cvt_f32_s32(sum_low);
                 let sum_high_f = ctx.cvt_f32_s32(sum_high);
 
-                // LOW contribution: q8_d * (ds * dot - dm * sum)
+                // LOW contribution: q8_d * (d*scale * dot - dmin*min * sum)
                 let t1 = ctx.mul_f32(dl, dot_low_f);
                 let t2 = ctx.mul_f32(ml, sum_low_f);
                 let t3 = ctx.sub_f32(t1, t2);
                 let t4 = ctx.mul_f32(q8_d_low, t3);
                 ctx.add_f32_inplace(acc, t4);
 
-                // HIGH contribution: q8_d * (ds * dot - dm * sum)
+                // HIGH contribution: q8_d * (d*scale * dot - dmin*min * sum)
                 let t1 = ctx.mul_f32(dh, dot_high_f);
                 let t2 = ctx.mul_f32(mh, sum_high_f);
                 let t3 = ctx.sub_f32(t1, t2);
