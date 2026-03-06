@@ -238,9 +238,8 @@ impl Matrix<f32> {
     /// //         = [9, 12, 15]
     /// assert_eq!(result.as_slice(), &[9.0, 12.0, 15.0]);
     /// ```
-    // KAIZEN-041: Delegate to crate::blis::gemv which uses AVX2 VFMADD
-    // with 4-way K-unrolling and N-tiled accumulators. Previous implementation
-    // created 3 temporary Vector allocations per row (from_slice + scale + add).
+    // KAIZEN-041: Uses crate::blis::gemv with AVX2 VFMADD,
+    // 4-way K-unrolling and N-tiled accumulators.
     pub fn vecmat(v: &Vector<f32>, m: &Matrix<f32>) -> Result<Vector<f32>, TruenoError> {
         if v.len() != m.rows {
             return Err(TruenoError::InvalidInput(format!(
