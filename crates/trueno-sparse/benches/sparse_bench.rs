@@ -1,4 +1,5 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use trueno_sparse::{CooMatrix, CsrMatrix, SparseOps};
 
 fn make_sparse_system(n: usize, nnz_per_row: usize) -> (CsrMatrix<f32>, Vec<f32>) {
