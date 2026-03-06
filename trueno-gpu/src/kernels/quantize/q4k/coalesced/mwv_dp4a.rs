@@ -1,5 +1,5 @@
 use crate::kernels::quantize::{Kernel, Q4K_SUPER_BLOCK_BYTES, Q4K_SUPER_BLOCK_SIZE};
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory, PtxSync};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// Multi-warp DP4A Q4_K GEMV kernel (PAR-082-V4)
@@ -121,84 +121,53 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 let sc47 = ctx.shfl_idx_u32(sc47r, 0, 0xFFFF_FFFF);
                 let sc811 = ctx.shfl_idx_u32(sc811r, 0, 0xFFFF_FFFF);
 
-                // Decode 8 scale/min pairs (identical to MWV)
-                let m8 = ctx.mov_u32_imm(0xFF);
-                let sh8 = ctx.mov_u32_imm(8);
-                let sh16 = ctx.mov_u32_imm(16);
-                let sh24 = ctx.mov_u32_imm(24);
+                // GH-131: Decode 8 scale/min pairs using BFE (bit field extract)
+                // Q4K scale format: 12 bytes packed in 3×u32 (sc03, sc47, sc811)
+                // Blocks 0-3: 6-bit fields from low bytes of sc03/sc47
+                // Blocks 4-7: 4-bit low from sc811 + 2-bit high from sc03/sc47 bits [7:6]
+                //
+                // BFE replaces shr+and pairs: bfe.u32(val, start, len) extracts bits [start+len-1:start]
+                // Saves ~20 instructions per super-block vs previous shr+and+mov approach.
 
-                let s0 = ctx.and_u32(sc03, m8);
-                let t = ctx.shr_u32(sc03, sh8);
-                let s1 = ctx.and_u32(t, m8);
-                let t = ctx.shr_u32(sc03, sh16);
-                let s2 = ctx.and_u32(t, m8);
-                let s3 = ctx.shr_u32(sc03, sh24);
+                // Blocks 0-3: extract 6-bit low fields directly from packed u32
+                let sc0 = ctx.bfe_u32(sc03, 0, 6);
+                let sc1 = ctx.bfe_u32(sc03, 8, 6);
+                let sc2 = ctx.bfe_u32(sc03, 16, 6);
+                let sc3 = ctx.bfe_u32(sc03, 24, 6);
+                let mn0 = ctx.bfe_u32(sc47, 0, 6);
+                let mn1 = ctx.bfe_u32(sc47, 8, 6);
+                let mn2 = ctx.bfe_u32(sc47, 16, 6);
+                let mn3 = ctx.bfe_u32(sc47, 24, 6);
 
-                let s4 = ctx.and_u32(sc47, m8);
-                let t = ctx.shr_u32(sc47, sh8);
-                let s5 = ctx.and_u32(t, m8);
-                let t = ctx.shr_u32(sc47, sh16);
-                let s6 = ctx.and_u32(t, m8);
-                let s7 = ctx.shr_u32(sc47, sh24);
+                // Blocks 4-7: 4-bit low from sc811 + 2-bit high from sc03/sc47 bits [7:6]
+                // BFI inserts the 2-bit high part at position 4: result = low4 | (high2 << 4)
+                let lo4 = ctx.bfe_u32(sc811, 0, 4);
+                let hi2 = ctx.bfe_u32(sc03, 6, 2);
+                let sc4 = ctx.bfi_b32(hi2, lo4, 4, 2);
+                let lo4 = ctx.bfe_u32(sc811, 4, 4);
+                let hi2 = ctx.bfe_u32(sc47, 6, 2);
+                let mn4 = ctx.bfi_b32(hi2, lo4, 4, 2);
 
-                let s8 = ctx.and_u32(sc811, m8);
-                let t = ctx.shr_u32(sc811, sh8);
-                let s9 = ctx.and_u32(t, m8);
-                let t = ctx.shr_u32(sc811, sh16);
-                let s10 = ctx.and_u32(t, m8);
-                let s11 = ctx.shr_u32(sc811, sh24);
+                let lo4 = ctx.bfe_u32(sc811, 8, 4);
+                let hi2 = ctx.bfe_u32(sc03, 14, 2);
+                let sc5 = ctx.bfi_b32(hi2, lo4, 4, 2);
+                let lo4 = ctx.bfe_u32(sc811, 12, 4);
+                let hi2 = ctx.bfe_u32(sc47, 14, 2);
+                let mn5 = ctx.bfi_b32(hi2, lo4, 4, 2);
 
-                let m6 = ctx.mov_u32_imm(0x3F);
-                let m4 = ctx.mov_u32_imm(0x0F);
-                let four_c = ctx.mov_u32_imm(4);
-                let six_c = ctx.mov_u32_imm(6);
+                let lo4 = ctx.bfe_u32(sc811, 16, 4);
+                let hi2 = ctx.bfe_u32(sc03, 22, 2);
+                let sc6 = ctx.bfi_b32(hi2, lo4, 4, 2);
+                let lo4 = ctx.bfe_u32(sc811, 20, 4);
+                let hi2 = ctx.bfe_u32(sc47, 22, 2);
+                let mn6 = ctx.bfi_b32(hi2, lo4, 4, 2);
 
-                // Blocks 0-3
-                let sc0 = ctx.and_u32(s0, m6);
-                let mn0 = ctx.and_u32(s4, m6);
-                let sc1 = ctx.and_u32(s1, m6);
-                let mn1 = ctx.and_u32(s5, m6);
-                let sc2 = ctx.and_u32(s2, m6);
-                let mn2 = ctx.and_u32(s6, m6);
-                let sc3 = ctx.and_u32(s3, m6);
-                let mn3 = ctx.and_u32(s7, m6);
-
-                // Blocks 4-7
-                let t = ctx.and_u32(s8, m4);
-                let u = ctx.shr_u32(s0, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let sc4 = ctx.or_u32(t, u);
-                let t = ctx.shr_u32(s8, four_c);
-                let u = ctx.shr_u32(s4, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let mn4 = ctx.or_u32(t, u);
-
-                let t = ctx.and_u32(s9, m4);
-                let u = ctx.shr_u32(s1, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let sc5 = ctx.or_u32(t, u);
-                let t = ctx.shr_u32(s9, four_c);
-                let u = ctx.shr_u32(s5, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let mn5 = ctx.or_u32(t, u);
-
-                let t = ctx.and_u32(s10, m4);
-                let u = ctx.shr_u32(s2, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let sc6 = ctx.or_u32(t, u);
-                let t = ctx.shr_u32(s10, four_c);
-                let u = ctx.shr_u32(s6, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let mn6 = ctx.or_u32(t, u);
-
-                let t = ctx.and_u32(s11, m4);
-                let u = ctx.shr_u32(s3, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let sc7 = ctx.or_u32(t, u);
-                let t = ctx.shr_u32(s11, four_c);
-                let u = ctx.shr_u32(s7, six_c);
-                let u = ctx.shl_u32(u, four_c);
-                let mn7 = ctx.or_u32(t, u);
+                let lo4 = ctx.bfe_u32(sc811, 24, 4);
+                let hi2 = ctx.bfe_u32(sc03, 30, 2);
+                let sc7 = ctx.bfi_b32(hi2, lo4, 4, 2);
+                let lo4 = ctx.bfe_u32(sc811, 28, 4);
+                let hi2 = ctx.bfe_u32(sc47, 30, 2);
+                let mn7 = ctx.bfi_b32(hi2, lo4, 4, 2);
 
                 // GH-131: Deferred scale conversion — select u32 scales first,
                 // then convert only the 2 needed pairs to f32 (saves 24 instructions).
