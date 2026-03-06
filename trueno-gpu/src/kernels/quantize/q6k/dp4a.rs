@@ -83,6 +83,7 @@ impl Kernel for Dp4aQ6KGemvKernel {
             .param(PtxType::U32, "k_dim")
             .param(PtxType::U32, "n_dim")
             .shared_memory(smem_size)
+            .max_regs(255)
             .build(move |ctx| {
                 let block_id = ctx.special_reg(PtxReg::CtaIdX);
                 let thread_id = ctx.special_reg(PtxReg::TidX);

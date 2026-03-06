@@ -147,6 +147,8 @@ fn test_mwv_dp4a_q4k_gemv_ptx_generation() {
     // Uses DP4A integer dot products for Q8_1 activations
     assert!(ptx.contains("dp4a"));
     assert!(ptx.contains("ld.global"));
+    // GH-176: Low-occupancy/high-ILP strategy — maximize registers per thread
+    assert!(ptx.contains(".maxnreg 255"), "Must emit .maxnreg 255 for max ILP");
 }
 
 #[test]
