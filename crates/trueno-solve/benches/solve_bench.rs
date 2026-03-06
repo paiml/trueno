@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::hint::black_box;
 use trueno_solve::{cholesky, lu_factorize, qr_factorize, svd};
