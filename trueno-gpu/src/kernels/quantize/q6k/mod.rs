@@ -19,6 +19,7 @@
 
 mod batched;
 mod coalesced;
+mod dequant;
 mod dp4a;
 mod gemm;
 mod gemv;
@@ -26,6 +27,7 @@ mod multi_warp;
 
 pub use batched::BatchedQ6KGemvKernel;
 pub use coalesced::CoalescedQ6KGemvKernel;
+pub use dequant::Q6KDequantKernel;
 pub use dp4a::Dp4aQ6KGemvKernel;
 pub use gemm::Q6KKernel;
 pub use gemv::Q6KGemvKernel;
