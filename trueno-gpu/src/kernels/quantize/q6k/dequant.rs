@@ -36,11 +36,13 @@ pub struct Q6KDequantKernel {
 }
 
 impl Q6KDequantKernel {
+    /// Create a new Q6K dequantization kernel for the given dimensions.
     #[must_use]
     pub fn new(k: u32, n: u32) -> Self {
         Self { k, n }
     }
 
+    /// Number of Q6K super-blocks per row (ceiling division).
     #[must_use]
     pub const fn num_super_blocks_per_row(&self) -> u32 {
         (self.k + Q6K_SUPER_BLOCK_SIZE - 1) / Q6K_SUPER_BLOCK_SIZE

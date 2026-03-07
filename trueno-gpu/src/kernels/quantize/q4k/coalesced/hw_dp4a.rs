@@ -37,6 +37,7 @@ pub struct HalfWarpDp4aQ4KGemvKernel {
 }
 
 impl HalfWarpDp4aQ4KGemvKernel {
+    /// Create a new HW DP4A Q4K GEMV kernel with default 3 warps per CTA.
     pub fn new(k: u32, n: u32) -> Self {
         Self { k, n, num_warps: 3 }
     }
