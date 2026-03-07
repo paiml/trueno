@@ -62,8 +62,9 @@ pub use q4k::{
 };
 pub use q5k::{Q5KGemvKernel, Q5KKernel};
 pub use q6k::{
-    BatchedQ6KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ6KGemvKernel, MultiWarpQ6KGemvKernel,
-    Q6KDequantKernel, Q6KGemvKernel, Q6KKernel,
+    BatchedQ6KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ6KGemvKernel,
+    HalfWarpDp4aQ6KGemvKernel, MultiWarpQ6KGemvKernel, Q6KDequantKernel, Q6KGemvKernel,
+    Q6KKernel,
 };
 pub use q8::Q8QuantizeKernel;
 
