@@ -56,9 +56,9 @@ pub use nf4_cpu::{
 };
 pub use q4k::{
     BatchedQ4KGemvKernel, ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel, Dp4aQ4KGemvKernel,
-    HalfWarpDp4aQ4KGemvKernel, MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel,
-    Q4KDequantKernel, Q4KGemvKernel, TiledQ4KGemvKernel, TrueDp4aQ4KGemvKernel,
-    VectorizedQ4KGemvKernel, WideQ4KGemvKernel,
+    FusedGateUpSwigluHwDp4aQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel,
+    MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel, Q4KDequantKernel, Q4KGemvKernel,
+    TiledQ4KGemvKernel, TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel, WideQ4KGemvKernel,
 };
 pub use q5k::{Q5KGemvKernel, Q5KKernel};
 pub use q6k::{

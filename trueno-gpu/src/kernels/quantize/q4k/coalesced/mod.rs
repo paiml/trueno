@@ -6,6 +6,7 @@
 //! - `HalfWarpDp4aQ4KGemvKernel`: Half-warp (16 threads/SB) DP4A, 2x fewer insn/SB
 
 mod coalesced_kernel;
+mod fused_gate_up_swiglu_hw_dp4a;
 mod hw_dp4a;
 mod multi_warp_vectorized;
 mod mwv_dp4a;
@@ -13,6 +14,7 @@ mod vectorized_kernel;
 mod wide_kernel;
 
 pub use coalesced_kernel::CoalescedQ4KGemvKernel;
+pub use fused_gate_up_swiglu_hw_dp4a::FusedGateUpSwigluHwDp4aQ4KGemvKernel;
 pub use hw_dp4a::HalfWarpDp4aQ4KGemvKernel;
 pub use multi_warp_vectorized::MultiWarpVectorizedQ4KGemvKernel;
 pub use mwv_dp4a::MwvDp4aQ4KGemvKernel;
