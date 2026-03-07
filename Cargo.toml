@@ -173,6 +173,10 @@ web-sys = { version = "0.3", optional = true, features = ["console"] }
 # Hostname detection only on native (not available on WASM)
 hostname = "0.4"
 
+[build-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_yaml_ng = "0.10"
+
 [dev-dependencies]
 proptest = "1.9"
 criterion = "0.7"
