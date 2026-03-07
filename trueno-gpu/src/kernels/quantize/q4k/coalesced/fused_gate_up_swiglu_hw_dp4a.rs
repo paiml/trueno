@@ -59,10 +59,10 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
         let smem_size = (num_half_warps * 2 * 4) as usize;
 
         PtxKernel::new("fused_gate_up_swiglu_hw_dp4a_q4k_gemv")
-            .param(PtxType::U64, "y_ptr")      // Output: SwiGLU result (N)
-            .param(PtxType::U64, "wg_ptr")     // Q4K gate weights
-            .param(PtxType::U64, "wu_ptr")     // Q4K up weights
-            .param(PtxType::U64, "q8_ptr")     // Q8-quantized input activation
+            .param(PtxType::U64, "y_ptr") // Output: SwiGLU result (N)
+            .param(PtxType::U64, "wg_ptr") // Q4K gate weights
+            .param(PtxType::U64, "wu_ptr") // Q4K up weights
+            .param(PtxType::U64, "q8_ptr") // Q8-quantized input activation
             .param(PtxType::U32, "k_dim")
             .param(PtxType::U32, "n_dim")
             .shared_memory(smem_size)
