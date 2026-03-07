@@ -438,7 +438,7 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
                 // SwiGLU: result = silu(gate) * up = gate * sigmoid(gate) * up
                 // sigmoid(x) = 1 / (1 + exp(-x)) = 1 / (1 + 2^(-x * log2(e)))
                 let neg_gate = ctx.neg_f32(gate_sum);
-                let log2e = ctx.mov_f32_imm(1.442_695_04); // log2(e)
+                let log2e = ctx.mov_f32_imm(std::f32::consts::LOG2_E);
                 let neg_gate_log2e = ctx.mul_f32(neg_gate, log2e);
                 let exp_neg = ctx.ex2_f32(neg_gate_log2e);
                 let one = ctx.mov_f32_imm(1.0);
