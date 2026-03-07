@@ -42,6 +42,9 @@ pub(crate) fn emit_memory_opcode(instr: &PtxInstruction, s: &mut String) {
             s.push_str(space);
             s.push_str(ty);
         }
+        PtxOp::Prefetch => {
+            s.push_str("prefetch.global.L2");
+        }
         PtxOp::AtomAdd => emit_atomic_opcode(instr, s, "add"),
         PtxOp::AtomMin => emit_atomic_opcode(instr, s, "min"),
         PtxOp::AtomMax => emit_atomic_opcode(instr, s, "max"),
@@ -114,12 +117,13 @@ pub(crate) fn is_memory_op(op: &PtxOp) -> bool {
             | PtxOp::AtomMax
             | PtxOp::AtomExch
             | PtxOp::AtomCas
+            | PtxOp::Prefetch
     )
 }
 
 /// Check if this op requires skipping the type suffix
 pub(crate) fn skip_type_for_memory_op(op: &PtxOp) -> bool {
-    matches!(op, PtxOp::Cvt | PtxOp::Cvta)
+    matches!(op, PtxOp::Cvt | PtxOp::Cvta | PtxOp::Prefetch)
 }
 
 #[cfg(test)]

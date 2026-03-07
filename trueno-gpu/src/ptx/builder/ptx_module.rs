@@ -144,6 +144,13 @@ pub struct PtxKernel {
     pub(crate) params: Vec<KernelParam>,
     /// Shared memory size in bytes
     shared_memory: usize,
+    /// Maximum registers per thread (`.maxnreg` directive)
+    ///
+    /// When set, ptxas allocates up to this many registers per thread,
+    /// potentially limiting occupancy but maximizing ILP.
+    /// llama.cpp uses `__launch_bounds__(128, 1)` which achieves the same
+    /// effect — 1 block/SM means max registers available.
+    max_regs: Option<u32>,
     /// Instructions
     instructions: Vec<PtxInstruction>,
     /// Register allocator
@@ -160,6 +167,7 @@ impl PtxKernel {
             name: name.into(),
             params: Vec::new(),
             shared_memory: 0,
+            max_regs: None,
             instructions: Vec::new(),
             registers: RegisterAllocator::new(),
             labels: Vec::new(),
@@ -184,6 +192,17 @@ impl PtxKernel {
     #[must_use]
     pub const fn shared_memory_bytes(&self) -> usize {
         self.shared_memory
+    }
+
+    /// Set maximum registers per thread (`.maxnreg` directive)
+    ///
+    /// Tells ptxas to use up to `n` registers per thread. Higher values
+    /// reduce occupancy but increase ILP and register availability.
+    /// Use 255 to match llama.cpp's `__launch_bounds__(N, 1)` strategy.
+    #[must_use]
+    pub const fn max_regs(mut self, n: u32) -> Self {
+        self.max_regs = Some(n);
+        self
     }
 
     /// Build kernel body with a closure
@@ -246,7 +265,12 @@ impl PtxKernel {
                 writeln!(ptx, "    .param {} {}{}", param.ty.to_ptx_string(), param.name, comma);
         }
 
-        ptx.push_str(") {\n");
+        // Performance directives go between closing paren and opening brace
+        if let Some(max) = self.max_regs {
+            let _ = write!(ptx, ") .maxnreg {} {{\n", max);
+        } else {
+            ptx.push_str(") {\n");
+        }
 
         // Register declarations
         ptx.push_str(&self.registers.emit_declarations());
