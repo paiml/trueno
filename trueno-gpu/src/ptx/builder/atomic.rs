@@ -94,6 +94,19 @@ pub trait PtxAtomic: KernelBuilderCore {
         dst
     }
 
+    /// Atomic add f32 (global memory) — requires compute capability ≥ 2.0
+    fn atom_add_global_f32(&mut self, addr: VirtualReg, val: VirtualReg) -> VirtualReg {
+        let dst = self.registers_mut().allocate_virtual(PtxType::F32);
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::AtomAdd, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr))
+                .src(Operand::Reg(val))
+                .space(PtxStateSpace::Global),
+        );
+        dst
+    }
+
     // ===== Shared Memory Atomics =====
 
     /// Atomic add (shared memory)
