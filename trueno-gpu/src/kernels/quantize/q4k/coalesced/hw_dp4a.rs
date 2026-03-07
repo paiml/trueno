@@ -17,9 +17,10 @@ use crate::ptx::{PtxKernel, PtxReg, PtxType};
 ///   each group covers 64 values (qs bytes `[32*g..32*g+31]`).
 ///   QR=2 inner loop extracts low + high nibbles: 4 threads x 8 bytes x 2 nibbles = 64.
 ///
-/// - **C3 (Instruction density)**: ~112 inner loop instructions for 16 values
-///   = 7.0 insn/value. MWV: 99 instructions for 8 values = 12.4 insn/value.
-///   Total thread-instructions per SB: 16 x 112 = 1792 vs 32 x 99 = 3168 (1.77x).
+/// - **C3 (Instruction density)**: ~108 inner loop instructions for 16 values
+///   = 6.75 insn/value. MWV: 99 instructions for 8 values = 12.4 insn/value.
+///   Total thread-instructions per SB: 16 x 108 = 1728 vs 32 x 99 = 3168 (1.83x).
+///   PMAT-033: FMA chain saves 4 insn/SB (neg_dmin hoisted, fma replaces mul+sub).
 ///
 /// - **C4 (Reduction correctness)**: Full-warp `shfl.sync.down` with delta=8,4,2,1
 ///   yields correct half-warp sums at lanes 0 and 16. Proof: shfl reads happen
@@ -159,6 +160,8 @@ impl Kernel for HalfWarpDp4aQ4KGemvKernel {
                 let dmin_addr = ctx.add_u64(sb_addr, c_2_64);
                 let dmin_f16 = ctx.ld_global_f16(dmin_addr);
                 let dmin = ctx.cvt_f32_f16(dmin_f16);
+                // PMAT-033: Negate dmin once per SB for FMA accumulation (saves 4 insn/SB)
+                let neg_dmin = ctx.neg_f32(dmin);
 
                 // ===== Scale loading: all threads load (L1 coalesced) =====
                 let sc_base = ctx.add_u64(sb_addr, c_4_64);
@@ -235,17 +238,16 @@ impl Kernel for HalfWarpDp4aQ4KGemvKernel {
                 let q8_d0_f16 = ctx.ld_global_f16(q8_d0_addr);
                 let q8_d0 = ctx.cvt_f32_f16(q8_d0_f16);
 
-                // Accumulate: q8_d * (d * scale * dot - dmin * min * sum)
-                // Integer scale x dot avoids 2 cvt_f32_u32 per sub-block
+                // Accumulate: acc += q8_d * (d * sc*dot - dmin * mn*sum)
+                // PMAT-033: FMA chain reduces 9 → 7 instructions per QR iteration
                 let sdot0 = ctx.mul_lo_s32(sc0, dot0);
                 let msum0 = ctx.mul_lo_s32(mn0, sum0);
                 let sdot0_f = ctx.cvt_f32_s32(sdot0);
                 let msum0_f = ctx.cvt_f32_s32(msum0);
                 let t1 = ctx.mul_f32(d, sdot0_f);
-                let t2 = ctx.mul_f32(dmin, msum0_f);
-                let t3 = ctx.sub_f32(t1, t2);
-                let t4 = ctx.mul_f32(q8_d0, t3);
-                ctx.add_f32_inplace(acc, t4);
+                let t3 = ctx.fma_f32(neg_dmin, msum0_f, t1); // d*sc*dot - dmin*mn*sum
+                let q8_d0_t3 = ctx.mul_f32(q8_d0, t3);
+                ctx.add_f32_inplace(acc, q8_d0_t3);
 
                 // ===== QR=1: High nibbles =====
                 let v0_hi = ctx.shr_u32_imm(v0, 4);
@@ -273,15 +275,15 @@ impl Kernel for HalfWarpDp4aQ4KGemvKernel {
                 let q8_d1_f16 = ctx.ld_global_f16(q8_d1_addr);
                 let q8_d1 = ctx.cvt_f32_f16(q8_d1_f16);
 
+                // PMAT-033: FMA chain (same as QR=0)
                 let sdot1 = ctx.mul_lo_s32(sc1, dot1);
                 let msum1 = ctx.mul_lo_s32(mn1, sum1);
                 let sdot1_f = ctx.cvt_f32_s32(sdot1);
                 let msum1_f = ctx.cvt_f32_s32(msum1);
                 let t1 = ctx.mul_f32(d, sdot1_f);
-                let t2 = ctx.mul_f32(dmin, msum1_f);
-                let t3 = ctx.sub_f32(t1, t2);
-                let t4 = ctx.mul_f32(q8_d1, t3);
-                ctx.add_f32_inplace(acc, t4);
+                let t3 = ctx.fma_f32(neg_dmin, msum1_f, t1);
+                let q8_d1_t3 = ctx.mul_f32(q8_d1, t3);
+                ctx.add_f32_inplace(acc, q8_d1_t3);
 
                 // Stride by num_half_warps
                 ctx.add_u32_reg_inplace(sb_idx, num_hw);
