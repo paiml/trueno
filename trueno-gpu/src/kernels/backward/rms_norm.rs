@@ -22,7 +22,7 @@
 #![allow(clippy::similar_names)]
 
 use crate::kernels::Kernel;
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
+use crate::ptx::builder::{PtxArithmetic, PtxAtomic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// RMSNorm Backward Kernel (warp-parallel, one row per warp)
@@ -213,7 +213,7 @@ impl Kernel for RmsNormBackwardKernel {
 /// - `gamma_ptr`: Learned scale parameter (γ) [hidden_dim]
 /// - `grad_output_ptr`: Gradient from upstream (∂L/∂y) [num_rows, hidden_dim]
 /// - `grad_input_ptr`: Output gradient for input (∂L/∂x) [num_rows, hidden_dim]
-/// - `grad_gamma_ptr`: Placeholder for gamma gradient (currently unused)
+/// - `grad_gamma_ptr`: Output gradient for gamma (∂L/∂γ) [hidden_dim] — accumulated via atomicAdd
 /// - `num_rows`: Number of rows (batch size × seq_len)
 /// - `hidden_dim`: Hidden dimension (no upper limit)
 /// - `eps`: Epsilon for numerical stability
@@ -273,6 +273,7 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 let gamma_ptr = ctx.load_param_u64("gamma_ptr");
                 let grad_output_ptr = ctx.load_param_u64("grad_output_ptr");
                 let grad_input_ptr = ctx.load_param_u64("grad_input_ptr");
+                let grad_gamma_ptr = ctx.load_param_u64("grad_gamma_ptr");
                 let hidden_dim_reg = ctx.mov_u32_imm(hidden_dim);
 
                 // Calculate row base addresses
@@ -384,6 +385,13 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 // grad_x = (1/rms) * adjusted
                 let grad_x = ctx.mul_f32(inv_rms, adjusted);
                 ctx.st_global_f32(gx_addr, grad_x);
+
+                // ∂L/∂γ_i += ∂L/∂y[r][i] × x[r][i] / rms
+                // Accumulated across rows via atomicAdd (buffer must be zeroed by caller)
+                let gg_addr = ctx.add_u64(grad_gamma_ptr, offset);
+                let grad_gamma_contrib = ctx.mul_f32(gy_val, x_val);
+                let grad_gamma_contrib = ctx.mul_f32(grad_gamma_contrib, inv_rms);
+                let _ = ctx.atom_add_global_f32(gg_addr, grad_gamma_contrib);
 
                 ctx.add_u32_inplace(i_pass2, 32);
                 ctx.branch("pass2_loop");
