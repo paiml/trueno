@@ -29,8 +29,9 @@ mod tiled;
 pub use basic::Q4KGemvKernel;
 pub use batched::BatchedQ4KGemvKernel;
 pub use coalesced::{
-    CoalescedQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel, MultiWarpVectorizedQ4KGemvKernel,
-    MwvDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel, WideQ4KGemvKernel,
+    CoalescedQ4KGemvKernel, FusedGateUpSwigluHwDp4aQ4KGemvKernel,
+    HalfWarpDp4aQ4KGemvKernel, MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel,
+    VectorizedQ4KGemvKernel, WideQ4KGemvKernel,
 };
 pub use dequant::Q4KDequantKernel;
 pub use dp4a::{Dp4aQ4KGemvKernel, TrueDp4aQ4KGemvKernel};
