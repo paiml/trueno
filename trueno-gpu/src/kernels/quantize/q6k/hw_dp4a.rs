@@ -25,12 +25,16 @@ use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// Half-warp DP4A Q6_K GEMV kernel.
 pub struct HalfWarpDp4aQ6KGemvKernel {
+    /// Number of elements per row (K dimension).
     pub k: u32,
+    /// Number of rows (N dimension).
     pub n: u32,
+    /// Number of warps per CTA.
     pub num_warps: u32,
 }
 
 impl HalfWarpDp4aQ6KGemvKernel {
+    /// Create a new HW DP4A Q6K GEMV kernel with default 3 warps per CTA.
     pub fn new(k: u32, n: u32) -> Self {
         Self { k, n, num_warps: 3 }
     }
@@ -102,7 +106,7 @@ impl Kernel for HalfWarpDp4aQ6KGemvKernel {
                 let c3 = ctx.mov_u32_imm(3);
                 let c4 = ctx.mov_u32_imm(4);
                 let c7 = ctx.mov_u32_imm(7);
-                let c8 = ctx.mov_u32_imm(8);
+                let _c8 = ctx.mov_u32_imm(8);
                 let c16 = ctx.mov_u32_imm(16);
                 let c32 = ctx.mov_u32_imm(32);
                 let c64 = ctx.mov_u32_imm(64);
@@ -154,10 +158,10 @@ impl Kernel for HalfWarpDp4aQ6KGemvKernel {
                 let ones_packed = ctx.mov_u32_imm(0x0101_0101);
                 let c5 = ctx.mov_u32_imm(5);
 
-                // Hoisted 64-bit constants
-                let c4_64 = ctx.mov_u64_imm(4);
-                let c8_64 = ctx.mov_u64_imm(8);
-                let c12_64 = ctx.mov_u64_imm(12);
+                // Hoisted 64-bit constants (reserved for multi-word load patterns)
+                let _c4_64 = ctx.mov_u64_imm(4);
+                let _c8_64 = ctx.mov_u64_imm(8);
+                let _c12_64 = ctx.mov_u64_imm(12);
                 let c32_64 = ctx.mov_u64_imm(32);
                 let c192_64 = ctx.mov_u64_imm(192);
                 let c208_64 = ctx.mov_u64_imm(208);

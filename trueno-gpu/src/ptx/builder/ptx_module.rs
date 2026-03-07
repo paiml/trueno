@@ -267,7 +267,7 @@ impl PtxKernel {
 
         // Performance directives go between closing paren and opening brace
         if let Some(max) = self.max_regs {
-            let _ = write!(ptx, ") .maxnreg {} {{\n", max);
+            let _ = writeln!(ptx, ") .maxnreg {} {{", max);
         } else {
             ptx.push_str(") {\n");
         }
