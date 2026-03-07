@@ -4685,6 +4685,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_yaml_ng"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b4db627b98b36d4203a7b458cf3573730f2bb591b28871d916dfa9efabfd41f"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
+]
+
+[[package]]
 name = "serial_test"
 version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5512,6 +5525,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
  "simular",
  "thiserror 2.0.17",
  "tokio",
@@ -5597,7 +5611,7 @@ dependencies = [
 
 [[package]]
 name = "trueno-gpu"
-version = "0.4.26"
+version = "0.4.28"
 dependencies = [
  "batuta-common",
  "bytemuck",
