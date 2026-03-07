@@ -265,6 +265,26 @@ impl CudaContext {
         Ok(format!("sm_{major}{minor}"))
     }
 
+    /// Get number of streaming multiprocessors (SMs) on the device
+    ///
+    /// Used for scaling kernel grid dimensions to GPU size.
+    /// E.g., Jetson Orin Nano = 8, RTX 4090 = 128.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::CudaDriver)` if query fails.
+    pub fn multiprocessor_count(&self) -> Result<i32, GpuError> {
+        let driver = get_driver()?;
+
+        // CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT = 16
+        let mut count: i32 = 0;
+        // SAFETY: pointer is valid, device is valid
+        let result = unsafe { (driver.cuDeviceGetAttribute)(&mut count, 16, self.device) };
+        CudaDriver::check(result)?;
+
+        Ok(count)
+    }
+
     /// Get total device memory in bytes
     ///
     /// # Errors

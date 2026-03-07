@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+#![allow(missing_docs)]
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use trueno_rand::{Philox4x32, Threefry4x64};
 
 fn bench_philox_uniform(c: &mut Criterion) {

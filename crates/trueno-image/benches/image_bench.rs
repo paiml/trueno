@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+#![allow(missing_docs)]
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use trueno_image::{canny, conv2d, gaussian_blur, resize, BorderMode, Interpolation};
 
 fn make_image(w: usize, h: usize) -> Vec<f32> {

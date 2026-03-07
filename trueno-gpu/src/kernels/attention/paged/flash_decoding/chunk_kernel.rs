@@ -256,7 +256,12 @@ impl Kernel for FlashDecodingChunkKernel {
                 let score = ctx.mul_f32(dot, scale_reg);
 
                 // Online softmax update
-                let old_max = max_score;
+                // CRITICAL: Copy max_score to a NEW register before in-place update.
+                // `let old_max = max_score` would alias the same VirtualReg, so after
+                // max_f32_inplace clobbers max_score, old_max would also be clobbered,
+                // making correction = exp2(0) = 1.0 always (no rescaling).
+                let old_max = ctx.mov_f32_imm(0.0);
+                ctx.mov_f32_reg(old_max, max_score);
                 ctx.max_f32_inplace(max_score, score);
                 let score_minus_max = ctx.sub_f32(score, max_score);
                 let score_log2 = ctx.mul_f32(score_minus_max, log2e);

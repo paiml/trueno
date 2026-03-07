@@ -171,6 +171,10 @@ pub enum PtxOp {
     /// Load volatile (bypass cache)
     LdVolatile,
 
+    // ===== Cache Hints =====
+    /// Prefetch global memory to L2 cache (no-fault hint)
+    Prefetch,
+
     // ===== Warp Vote =====
     /// Generic warp vote (ballot)
     Vote,

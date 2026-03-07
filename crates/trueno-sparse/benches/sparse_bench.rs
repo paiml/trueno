@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+#![allow(missing_docs)]
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::hint::black_box;
 use trueno_sparse::{CooMatrix, CsrMatrix, SparseOps};
 
 fn make_sparse_system(n: usize, nnz_per_row: usize) -> (CsrMatrix<f32>, Vec<f32>) {
@@ -10,6 +12,7 @@ fn make_sparse_system(n: usize, nnz_per_row: usize) -> (CsrMatrix<f32>, Vec<f32>
             let j = (i + k) % n;
             row_idx.push(i as u32);
             col_idx.push(j as u32);
+            #[allow(clippy::cast_precision_loss)]
             vals.push(1.0 / (1 + k) as f32);
         }
     }
