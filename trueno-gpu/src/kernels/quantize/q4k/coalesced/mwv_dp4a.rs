@@ -97,20 +97,20 @@ impl Kernel for MwvDp4aQ4KGemvKernel {
                 // ===== HOISTED PER-THREAD INVARIANTS =====
                 // These depend on lane_id but are constant across all loop iterations.
                 let c_three = ctx.mov_u32_imm(3);
-                let ci = ctx.shr_u32(lane_id, c_three);               // lane_id / 8
+                let ci = ctx.shr_u32(lane_id, c_three); // lane_id / 8
                 let c_seven = ctx.mov_u32_imm(7);
-                let lic = ctx.and_u32(lane_id, c_seven);              // lane_id & 7
-                let ci2 = ctx.shl_u32(ci, c_one);                      // ci * 2
-                let tbo = ctx.mul_u32_reg(lane_id, c_four);            // lane_id * 4
+                let lic = ctx.and_u32(lane_id, c_seven); // lane_id & 7
+                let ci2 = ctx.shl_u32(ci, c_one); // ci * 2
+                let tbo = ctx.mul_u32_reg(lane_id, c_four); // lane_id * 4
                 let tbo64 = ctx.cvt_u64_u32(tbo);
                 let lic_x4 = ctx.mul_u32_reg(lic, c_four);
                 let lic_x4_64 = ctx.cvt_u64_u32(lic_x4);
 
                 // Per-thread scale extraction invariants
                 let ci_mod2 = ctx.and_u32(ci, c_one);
-                let byte_shift = ctx.mul_u32_reg(ci_mod2, c_sixteen);   // (ci%2)*16
+                let byte_shift = ctx.mul_u32_reg(ci_mod2, c_sixteen); // (ci%2)*16
                 let byte_shift_hi = ctx.add_u32_reg(byte_shift, c_eight); // byte_shift+8
-                let p_hi = ctx.setp_ge_u32(ci, c_two);                  // ci >= 2
+                let p_hi = ctx.setp_ge_u32(ci, c_two); // ci >= 2
 
                 // Lane 0 predicate for scale loading
                 let is_lane0 = ctx.setp_lt_u32(lane_id, c_one);

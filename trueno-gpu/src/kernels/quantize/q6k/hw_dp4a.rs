@@ -378,9 +378,12 @@ mod tests {
 
             // Scale index for position start_pos should be start_pos / 16 = half_lane
             assert_eq!(
-                start_pos / 16, half_lane,
+                start_pos / 16,
+                half_lane,
                 "half_lane {} maps to values starting at {}, scale should be {}",
-                half_lane, start_pos, half_lane
+                half_lane,
+                start_pos,
+                half_lane
             );
         }
     }

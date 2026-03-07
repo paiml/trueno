@@ -224,6 +224,65 @@ impl CublasHandle {
             .map_err(|e| GpuError::CudaDriver(format!("cublasGemmEx(m={m}, n={n}, k={k}): {e}"), 0))
     }
 
+    /// FP16 inputs → FP32 output GEMM via tensor cores
+    ///
+    /// Computes: C = alpha * op(A) * op(B) + beta * C
+    /// A, B are FP16; C is FP32. Accumulation is FP32.
+    /// Uses tensor cores (CUBLAS_GEMM_DEFAULT_TENSOR_OP) for maximum throughput.
+    ///
+    /// This is the standard mixed-precision pattern for inference prefill:
+    /// cached FP16 weights × FP16 activations → FP32 output.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if cublasGemmEx fails.
+    pub fn gemm_f16_to_f32(
+        &self,
+        transa: GemmOp,
+        transb: GemmOp,
+        m: i32,
+        n: i32,
+        k: i32,
+        alpha: f32,
+        a_ptr: CUdeviceptr,
+        lda: i32,
+        b_ptr: CUdeviceptr,
+        ldb: i32,
+        beta: f32,
+        c_ptr: CUdeviceptr,
+        ldc: i32,
+    ) -> Result<(), GpuError> {
+        let driver = get_cublas_driver()?;
+
+        let result = unsafe {
+            (driver.cublasGemmEx)(
+                self.handle,
+                transa.to_cublas(),
+                transb.to_cublas(),
+                m,
+                n,
+                k,
+                &alpha as *const f32 as *const std::ffi::c_void,
+                a_ptr as *const std::ffi::c_void,
+                CUDA_R_16F,
+                lda,
+                b_ptr as *const std::ffi::c_void,
+                CUDA_R_16F,
+                ldb,
+                &beta as *const f32 as *const std::ffi::c_void,
+                c_ptr as *mut std::ffi::c_void,
+                CUDA_R_32F,
+                ldc,
+                CUBLAS_COMPUTE_32F,
+                CUBLAS_GEMM_DEFAULT_TENSOR_OP,
+            )
+        };
+
+        CublasDriver::check(result).map_err(|e| {
+            GpuError::CudaDriver(format!("cublasGemmEx_f16_f32(m={m}, n={n}, k={k}): {e}"), 0)
+        })
+    }
+
     /// FP32 GEMM via cuBLAS SIMD (no tensor cores)
     ///
     /// Computes: C = alpha * op(A) * op(B) + beta * C
