@@ -158,7 +158,7 @@ pub trait PtxSync: KernelBuilderCore {
         dst
     }
 
-    /// Bit field extract
+    /// Bit field extract (immediate start position)
     fn bfe_u32(&mut self, val: VirtualReg, start: u32, len: u32) -> VirtualReg {
         let dst = self.registers_mut().allocate_virtual(PtxType::U32);
         self.instructions_mut().push(
@@ -166,6 +166,20 @@ pub trait PtxSync: KernelBuilderCore {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(val))
                 .src(Operand::ImmI64(start as i64))
+                .src(Operand::ImmI64(len as i64)),
+        );
+        dst
+    }
+
+    /// Bit field extract with register start position.
+    /// Extracts `len` bits starting at bit position `start` from `val`.
+    fn bfe_u32_reg(&mut self, val: VirtualReg, start: VirtualReg, len: u32) -> VirtualReg {
+        let dst = self.registers_mut().allocate_virtual(PtxType::U32);
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::Bfe, PtxType::U32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(val))
+                .src(Operand::Reg(start))
                 .src(Operand::ImmI64(len as i64)),
         );
         dst

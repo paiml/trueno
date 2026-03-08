@@ -1,5 +1,5 @@
 use crate::kernels::quantize::{Kernel, Q4K_SUPER_BLOCK_BYTES, Q4K_SUPER_BLOCK_SIZE};
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory, PtxSync};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// Fused Gate+Up+SwiGLU HW DP4A Q4_K GEMV kernel (PMAT-034)
@@ -214,14 +214,11 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
 
                 let scg_src = ctx.selp_u32(p_hi, scg_hi4, scg_lo4);
                 let mng_src = ctx.selp_u32(p_hi, mng_hi4, mng_lo4);
-                let t = ctx.shr_u32(scg_src, byte_shift);
-                let scg0 = ctx.and_u32_imm(t, 0xFF);
-                let t = ctx.shr_u32(scg_src, byte_shift_hi);
-                let scg1 = ctx.and_u32_imm(t, 0xFF);
-                let t = ctx.shr_u32(mng_src, byte_shift);
-                let mng0 = ctx.and_u32_imm(t, 0xFF);
-                let t = ctx.shr_u32(mng_src, byte_shift_hi);
-                let mng1 = ctx.and_u32_imm(t, 0xFF);
+                // PMAT-039: BFE replaces shr+and (4 insn saved per SB)
+                let scg0 = ctx.bfe_u32_reg(scg_src, byte_shift, 8);
+                let scg1 = ctx.bfe_u32_reg(scg_src, byte_shift_hi, 8);
+                let mng0 = ctx.bfe_u32_reg(mng_src, byte_shift, 8);
+                let mng1 = ctx.bfe_u32_reg(mng_src, byte_shift_hi, 8);
 
                 // ===== Scale extraction — UP =====
                 let scu_lo4 = ctx.and_u32_imm(scu03, 0x3F3F_3F3F);
@@ -240,14 +237,11 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
 
                 let scu_src = ctx.selp_u32(p_hi, scu_hi4, scu_lo4);
                 let mnu_src = ctx.selp_u32(p_hi, mnu_hi4, mnu_lo4);
-                let t = ctx.shr_u32(scu_src, byte_shift);
-                let scu0 = ctx.and_u32_imm(t, 0xFF);
-                let t = ctx.shr_u32(scu_src, byte_shift_hi);
-                let scu1 = ctx.and_u32_imm(t, 0xFF);
-                let t = ctx.shr_u32(mnu_src, byte_shift);
-                let mnu0 = ctx.and_u32_imm(t, 0xFF);
-                let t = ctx.shr_u32(mnu_src, byte_shift_hi);
-                let mnu1 = ctx.and_u32_imm(t, 0xFF);
+                // PMAT-039: BFE replaces shr+and (4 insn saved per SB)
+                let scu0 = ctx.bfe_u32_reg(scu_src, byte_shift, 8);
+                let scu1 = ctx.bfe_u32_reg(scu_src, byte_shift_hi, 8);
+                let mnu0 = ctx.bfe_u32_reg(mnu_src, byte_shift, 8);
+                let mnu1 = ctx.bfe_u32_reg(mnu_src, byte_shift_hi, 8);
 
                 // ===== Load Q4K data: GATE =====
                 let q4g_addr = ctx.add_u64(wg_sb_addr, q4_off_64);
