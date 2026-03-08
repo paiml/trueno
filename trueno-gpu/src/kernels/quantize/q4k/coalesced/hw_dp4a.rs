@@ -1,5 +1,5 @@
 use crate::kernels::quantize::{Kernel, Q4K_SUPER_BLOCK_BYTES, Q4K_SUPER_BLOCK_SIZE};
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory, PtxSync};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// Half-warp DP4A Q4_K GEMV kernel (GH-176)
@@ -194,14 +194,11 @@ impl Kernel for HalfWarpDp4aQ4KGemvKernel {
                 let sc_src = ctx.selp_u32(p_hi, sc_hi4, sc_lo4);
                 let mn_src = ctx.selp_u32(p_hi, mn_hi4, mn_lo4);
 
-                let t = ctx.shr_u32(sc_src, byte_shift);
-                let sc0 = ctx.and_u32_imm(t, 0xFF);
-                let t = ctx.shr_u32(sc_src, byte_shift_hi);
-                let sc1 = ctx.and_u32_imm(t, 0xFF);
-                let t = ctx.shr_u32(mn_src, byte_shift);
-                let mn0 = ctx.and_u32_imm(t, 0xFF);
-                let t = ctx.shr_u32(mn_src, byte_shift_hi);
-                let mn1 = ctx.and_u32_imm(t, 0xFF);
+                // PMAT-039: BFE replaces shr+and (4 insn saved per SB)
+                let sc0 = ctx.bfe_u32_reg(sc_src, byte_shift, 8);
+                let sc1 = ctx.bfe_u32_reg(sc_src, byte_shift_hi, 8);
+                let mn0 = ctx.bfe_u32_reg(mn_src, byte_shift, 8);
+                let mn1 = ctx.bfe_u32_reg(mn_src, byte_shift_hi, 8);
 
                 // ===== Load Q4K data: 2 aligned ints =====
                 let q4_addr = ctx.add_u64(sb_addr, q4_off_64);
