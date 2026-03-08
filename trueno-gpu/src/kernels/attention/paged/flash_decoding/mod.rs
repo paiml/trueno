@@ -24,6 +24,15 @@ mod reduce_kernel;
 pub use chunk_kernel::FlashDecodingChunkKernel;
 pub use reduce_kernel::FlashDecodingReduceKernel;
 
-/// Chunk size for Flash Decoding split-K attention
-/// Trade-off: smaller = more parallelism, larger = less reduction overhead
-pub const FLASH_DECODE_CHUNK_SIZE: u32 = 128;
+/// Chunk size for Flash Decoding split-K attention.
+///
+/// PMAT-040: Reduced from 128 to 32 to enable actual parallelism at typical
+/// decode sequence lengths (32-256 tokens). With chunk_size=128, sequences <128
+/// got only 1 chunk = zero parallelism (Flash Decoding degenerated to sequential).
+///
+/// Trade-offs at chunk_size=32:
+/// - seq_len=64: 2 chunks (2x parallelism vs 1x with 128)
+/// - seq_len=128: 4 chunks × 28 heads = 112 blocks → 88% SM util on 4090
+/// - max_seq_len=4096: 128 chunks → partials buffer ~945KB (negligible)
+/// - Reduction overhead: max 128 iterations in reduce kernel (single block)
+pub const FLASH_DECODE_CHUNK_SIZE: u32 = 32;
