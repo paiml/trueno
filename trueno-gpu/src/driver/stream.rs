@@ -89,6 +89,29 @@ impl CudaStream {
         CudaDriver::check(result).map_err(|e| GpuError::StreamSync(e.to_string()))
     }
 
+    /// PMAT-044: Synchronous device-to-device memory copy.
+    ///
+    /// Copies `size_bytes` from `src_ptr` to `dst_ptr` on the device.
+    /// Both pointers must be valid device pointers with sufficient allocated memory.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure both device pointers are valid and the copy
+    /// does not exceed allocated memory bounds.
+    pub fn memcpy_dtod_sync(
+        &self,
+        dst_ptr: u64,
+        src_ptr: u64,
+        size_bytes: usize,
+    ) -> Result<(), GpuError> {
+        if size_bytes == 0 {
+            return Ok(());
+        }
+        let driver = get_driver()?;
+        let result = unsafe { (driver.cuMemcpyDtoD)(dst_ptr, src_ptr, size_bytes) };
+        CudaDriver::check(result).map_err(|e| GpuError::Transfer(format!("D2D copy failed: {e}")))
+    }
+
     /// Launch a kernel on this stream
     ///
     /// # Arguments
