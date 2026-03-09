@@ -8,6 +8,7 @@
 //! - Loop 2 (jr): Microkernel columns
 //! - Loop 1 (ir): Microkernel rows
 
+use std::cell::RefCell;
 use std::time::Instant;
 
 use crate::error::TruenoError;
@@ -19,6 +20,15 @@ use super::packing::{pack_a_block, pack_b_block, packed_a_size, packed_b_size};
 use super::profiler::{BlisProfileLevel, BlisProfiler};
 use super::reference::gemm_reference;
 use super::{KC, MC, MR, NC, NR};
+
+// Thread-local workspace buffers to eliminate allocation churn in gemm_blis.
+// These grow to the high-water mark and are reused across calls, avoiding
+// ~4.3 MB of allocation+deallocation per GEMM invocation.
+thread_local! {
+    static TL_PACKED_A: RefCell<Vec<f32>> = RefCell::new(Vec::new());
+    static TL_PACKED_B: RefCell<Vec<f32>> = RefCell::new(Vec::new());
+    static TL_C_MICRO: RefCell<Vec<f32>> = RefCell::new(Vec::new());
+}
 
 /// Load a tile of C into the micro workspace for accumulation.
 #[inline(always)]
@@ -222,47 +232,77 @@ pub fn gemm_blis(
     let nc = NC.min(n);
     let kc = KC.min(k);
 
-    let mut packed_a = vec![0.0f32; packed_a_size(mc, kc)];
-    let mut packed_b = vec![0.0f32; packed_b_size(kc, nc)];
-    let mut c_micro = vec![0.0f32; MR * NR];
+    let needed_a = packed_a_size(mc, kc);
+    let needed_b = packed_b_size(kc, nc);
+    let needed_c = MR * NR;
 
-    for jc in (0..n).step_by(NC) {
-        let nc_block = NC.min(n - jc);
+    // Borrow thread-local workspace buffers, growing if necessary.
+    // This eliminates ~4.3 MB of allocation churn per gemm_blis call.
+    TL_PACKED_A.with(|tl_a| {
+        TL_PACKED_B.with(|tl_b| {
+            TL_C_MICRO.with(|tl_c| {
+                let mut packed_a = tl_a.borrow_mut();
+                let mut packed_b = tl_b.borrow_mut();
+                let mut c_micro = tl_c.borrow_mut();
 
-        for pc in (0..k).step_by(KC) {
-            let kc_block = KC.min(k - pc);
+                // Grow buffers to required size (high-water mark).
+                // Zero-fill to match the semantics of the original vec![0.0; N].
+                if packed_a.len() < needed_a {
+                    packed_a.resize(needed_a, 0.0);
+                } else {
+                    packed_a[..needed_a].fill(0.0);
+                }
+                if packed_b.len() < needed_b {
+                    packed_b.resize(needed_b, 0.0);
+                } else {
+                    packed_b[..needed_b].fill(0.0);
+                }
+                if c_micro.len() < needed_c {
+                    c_micro.resize(needed_c, 0.0);
+                } else {
+                    c_micro[..needed_c].fill(0.0);
+                }
 
-            let pack_start = if track_time { Some(Instant::now()) } else { None };
-            pack_b_block(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
-            record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
+                for jc in (0..n).step_by(NC) {
+                    let nc_block = NC.min(n - jc);
 
-            for ic in (0..m).step_by(MC) {
-                let mc_block = MC.min(m - ic);
+                    for pc in (0..k).step_by(KC) {
+                        let kc_block = KC.min(k - pc);
 
-                let pack_start = if track_time { Some(Instant::now()) } else { None };
-                pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
-                record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
+                        let pack_start = if track_time { Some(Instant::now()) } else { None };
+                        pack_b_block(b, n, pc, jc, kc_block, nc_block, &mut packed_b);
+                        record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
 
-                compute_macroblock(
-                    c,
-                    &packed_a,
-                    &packed_b,
-                    &mut c_micro,
-                    ic,
-                    jc,
-                    mc_block,
-                    nc_block,
-                    kc_block,
-                    n,
-                    &mut profiler,
-                );
-            }
-        }
-    }
+                        for ic in (0..m).step_by(MC) {
+                            let mc_block = MC.min(m - ic);
 
-    if let (Some(prof), Some(s)) = (profiler, start) {
-        prof.record(BlisProfileLevel::Macro, s.elapsed().as_nanos() as u64, (2 * m * n * k) as u64);
-    }
+                            let pack_start = if track_time { Some(Instant::now()) } else { None };
+                            pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
+                            record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
+
+                            compute_macroblock(
+                                c,
+                                &packed_a,
+                                &packed_b,
+                                &mut c_micro,
+                                ic,
+                                jc,
+                                mc_block,
+                                nc_block,
+                                kc_block,
+                                n,
+                                &mut profiler,
+                            );
+                        }
+                    }
+                }
+
+                if let (Some(prof), Some(s)) = (profiler, start) {
+                    prof.record(BlisProfileLevel::Macro, s.elapsed().as_nanos() as u64, (2 * m * n * k) as u64);
+                }
+            });
+        });
+    });
 
     Ok(())
 }
