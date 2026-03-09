@@ -132,44 +132,51 @@ impl TunerFeatures {
         TunerFeaturesBuilder::default()
     }
 
+    /// ALB-099: Convert to fixed-size stack array — zero heap allocation.
+    /// dhat profiling showed 140K Vec allocations from to_vector() in tests.
+    pub fn to_array(&self) -> [f32; Self::DIM] {
+        let mut a = [0.0f32; Self::DIM];
+        let mut i = 0;
+
+        // Static features (11)
+        a[i] = self.model_params_b; i += 1;
+        a[i] = self.hidden_dim_norm; i += 1;
+        a[i] = self.num_layers_norm; i += 1;
+        a[i] = self.num_heads_norm; i += 1;
+        a[i] = self.head_dim_norm; i += 1;
+        a[i] = self.vocab_size_log; i += 1;
+        a[i] = self.batch_size_norm; i += 1;
+        a[i] = self.seq_len_log; i += 1;
+        a[i] = self.cuda_graphs; i += 1;
+        a[i] = self.kv_cache_ratio; i += 1;
+        a[i] = self.is_prefill; i += 1;
+
+        // One-hot encodings (8 + 16)
+        a[i..i + 8].copy_from_slice(&self.quant_type_onehot); i += 8;
+        a[i..i + 16].copy_from_slice(&self.kernel_type_onehot); i += 16;
+
+        // Hardware features (5)
+        a[i] = self.gpu_mem_bw_norm; i += 1;
+        a[i] = self.gpu_compute_norm; i += 1;
+        a[i] = self.gpu_sm_norm; i += 1;
+        a[i] = self.gpu_l2_cache_norm; i += 1;
+        a[i] = self.is_zero_copy; i += 1;
+
+        // Derived features (2)
+        a[i] = self.arithmetic_intensity; i += 1;
+        a[i] = self.theoretical_efficiency;
+
+        a
+    }
+
     /// Convert to flat vector for model input
     pub fn to_vector(&self) -> Vec<f32> {
-        let mut v = Vec::with_capacity(Self::DIM);
-
-        // Static features
-        v.push(self.model_params_b);
-        v.push(self.hidden_dim_norm);
-        v.push(self.num_layers_norm);
-        v.push(self.num_heads_norm);
-        v.push(self.head_dim_norm);
-        v.push(self.vocab_size_log);
-        v.push(self.batch_size_norm);
-        v.push(self.seq_len_log);
-        v.push(self.cuda_graphs);
-        v.push(self.kv_cache_ratio);
-        v.push(self.is_prefill);
-
-        // One-hot encodings
-        v.extend_from_slice(&self.quant_type_onehot);
-        v.extend_from_slice(&self.kernel_type_onehot);
-
-        // Hardware features (5) [v1.1.0]
-        v.push(self.gpu_mem_bw_norm);
-        v.push(self.gpu_compute_norm);
-        v.push(self.gpu_sm_norm);
-        v.push(self.gpu_l2_cache_norm); // v1.1.0
-        v.push(self.is_zero_copy); // v1.1.0
-
-        // Derived features
-        v.push(self.arithmetic_intensity);
-        v.push(self.theoretical_efficiency);
-
-        v
+        self.to_array().to_vec()
     }
 
     /// Validate features (F021-F030 falsification criteria)
     pub fn validate(&self) -> Result<(), TunerError> {
-        let v = self.to_vector();
+        let v = self.to_array();
 
         // F021: No NaN features
         if v.iter().any(|x| x.is_nan()) {
