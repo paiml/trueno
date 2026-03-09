@@ -48,6 +48,10 @@ use trueno_gpu::monitor::{CudaDeviceInfo, CudaMemoryInfo};
 #[cfg(feature = "cuda")]
 use trueno_gpu::driver::CudaContext;
 
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 #[cfg(feature = "cuda")]
 fn vram_stats(ctx: &CudaContext, info: &CudaDeviceInfo) -> (f64, f64, f64) {
     const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
@@ -337,6 +341,9 @@ fn run_event_loop(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
     let _log_guard = init_logging();
 
     let args: Vec<String> = std::env::args().collect();

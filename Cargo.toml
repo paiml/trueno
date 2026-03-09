@@ -151,6 +151,7 @@ ratatui = { version = "0.29", optional = true }
 crossterm = { version = "0.28", optional = true }
 # Stress test reporting types compatible with renacer (TRUENO-SPEC-025)
 # Note: renacer 0.9.1 has compilation issue; using compatible local types instead
+dhat = { version = "0.3", optional = true }
 trueno-quant = { version = "0.1", path = "crates/trueno-quant" }
 num_cpus = "1.17.0"
 anyhow = "1.0.100"
@@ -220,6 +221,8 @@ execution-graph = ["trueno-graph"]
 # TUI visualization for execution graphs (PAR-201)
 # Uses presentar-terminal Tree widget for hierarchical display
 presentar-tui = ["presentar-terminal"]
+# Heap profiling via dhat-rs (DHAT viewer: https://nnethercote.github.io/dh_view/dh_view.html)
+dhat-heap = ["dep:dhat"]
 
 [profile.release]
 opt-level = 3
