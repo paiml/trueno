@@ -124,13 +124,23 @@ pub struct QuantizeKernel {
     pub block_size: u32,
     /// Format variant (GGML super-block or simplified)
     pub format: Q4KFormat,
+    /// M-dimension tiling factor (default 1 = serial, >1 = tiled weight reuse)
+    pub tile_m: u32,
 }
 
 impl QuantizeKernel {
     /// Create a new Q4_K quantized GEMM kernel (simplified format for compatibility)
     #[must_use]
     pub fn new(m: u32, n: u32, k: u32) -> Self {
-        Self { m, n, k, tile_size: 32, block_size: Q4K_BLOCK_SIZE, format: Q4KFormat::Simplified }
+        Self {
+            m,
+            n,
+            k,
+            tile_size: 32,
+            block_size: Q4K_BLOCK_SIZE,
+            format: Q4KFormat::Simplified,
+            tile_m: 1,
+        }
     }
 
     /// Create a Q4_K kernel using real GGML super-block format (PARITY-041)
@@ -148,6 +158,26 @@ impl QuantizeKernel {
             tile_size: 32,
             block_size: Q4K_SUPER_BLOCK_SIZE,
             format: Q4KFormat::GgmlSuperBlock,
+            tile_m: 1,
+        }
+    }
+
+    /// Create a tiled Q4_K GGML kernel (GH-182: weight reuse across M rows)
+    ///
+    /// Each thread computes `tile_m` output rows for one column, loading weights
+    /// once and reusing across all rows. Reduces weight bandwidth by `tile_m`×.
+    ///
+    /// Grid: (ceil(N/blockDim.x), ceil(M/tile_m))
+    #[must_use]
+    pub fn ggml_tiled(m: u32, n: u32, k: u32, tile_m: u32) -> Self {
+        Self {
+            m,
+            n,
+            k,
+            tile_size: 32,
+            block_size: Q4K_SUPER_BLOCK_SIZE,
+            format: Q4KFormat::GgmlSuperBlock,
+            tile_m,
         }
     }
 
@@ -155,6 +185,13 @@ impl QuantizeKernel {
     #[must_use]
     pub const fn with_tile_size(mut self, tile_size: u32) -> Self {
         self.tile_size = tile_size;
+        self
+    }
+
+    /// Set M-dimension tiling factor
+    #[must_use]
+    pub const fn with_tile_m(mut self, tile_m: u32) -> Self {
+        self.tile_m = tile_m;
         self
     }
 
@@ -173,16 +210,18 @@ impl QuantizeKernel {
 
 impl Kernel for QuantizeKernel {
     fn name(&self) -> &str {
-        match self.format {
-            Q4KFormat::Simplified => "q4k_gemm_fused",
-            Q4KFormat::GgmlSuperBlock => "q4k_gemm_ggml",
+        match (self.format, self.tile_m > 1) {
+            (Q4KFormat::Simplified, _) => "q4k_gemm_fused",
+            (Q4KFormat::GgmlSuperBlock, false) => "q4k_gemm_ggml",
+            (Q4KFormat::GgmlSuperBlock, true) => "q4k_gemm_ggml_tiled",
         }
     }
 
     fn build_ptx(&self) -> PtxKernel {
-        match self.format {
-            Q4KFormat::Simplified => self.build_fused_gemm_simplified(),
-            Q4KFormat::GgmlSuperBlock => self.build_fused_gemm_ggml(),
+        match (self.format, self.tile_m > 1) {
+            (Q4KFormat::Simplified, _) => self.build_fused_gemm_simplified(),
+            (Q4KFormat::GgmlSuperBlock, false) => self.build_fused_gemm_ggml(),
+            (Q4KFormat::GgmlSuperBlock, true) => self.build_fused_gemm_ggml_tiled(),
         }
     }
 }

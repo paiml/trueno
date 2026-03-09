@@ -360,3 +360,142 @@ fn test_simplified_vs_ggml_different_ptx() {
     assert!(ptx_simplified.contains("q4k_gemm_fused"));
     assert!(ptx_ggml.contains("q4k_gemm_ggml"));
 }
+
+// =========================================================================
+// GH-182: TILED Q4_K GEMM TESTS
+// Verify the tiled variant that reuses weights across TILE_M rows.
+// =========================================================================
+
+#[test]
+fn test_tiled_kernel_name() {
+    let kernel = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+    assert_eq!(kernel.name(), "q4k_gemm_ggml_tiled");
+}
+
+#[test]
+fn test_tiled_kernel_config() {
+    let kernel = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+    assert_eq!(kernel.tile_m, 4);
+    assert_eq!(kernel.block_size, Q4K_SUPER_BLOCK_SIZE);
+    assert_eq!(kernel.format, Q4KFormat::GgmlSuperBlock);
+}
+
+#[test]
+fn test_tiled_ptx_generation() {
+    let kernel = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains("q4k_gemm_ggml_tiled"), "Should have tiled kernel name");
+    assert!(ptx.contains(".param .u64 a_ptr"));
+    assert!(ptx.contains(".param .u64 b_quant_ptr"));
+    assert!(ptx.contains(".param .u64 c_ptr"));
+}
+
+#[test]
+fn test_tiled_has_triple_nested_loops() {
+    let kernel = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains("sb_loop"), "Should have super-block loop");
+    assert!(ptx.contains("sub_loop"), "Should have sub-block loop");
+    assert!(ptx.contains("val_loop"), "Should have value loop");
+}
+
+#[test]
+fn test_tiled_has_multiple_fma() {
+    // FALSIFIABLE: tile_m=4 should produce 4 FMA instructions per value
+    let kernel = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+    let ptx = kernel.emit_ptx();
+
+    let fma_count = ptx.matches("fma.rn.f32").count();
+    // Each val_loop iteration has tile_m FMAs (4)
+    assert!(
+        fma_count >= 4,
+        "tile_m=4 should have at least 4 FMA instructions, found {}",
+        fma_count
+    );
+}
+
+#[test]
+fn test_tiled_has_multiple_stores() {
+    // FALSIFIABLE: tile_m=4 should produce 4 st.global.f32 (one per row)
+    let kernel = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+    let ptx = kernel.emit_ptx();
+
+    let store_count = ptx.matches("st.global.f32").count();
+    assert_eq!(
+        store_count, 4,
+        "tile_m=4 should have exactly 4 global stores, found {}",
+        store_count
+    );
+}
+
+#[test]
+fn test_tiled_serial_accumulation() {
+    // No warp shuffle — serial FMA per thread (same as serial kernel)
+    let kernel = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains("fma"), "Should use FMA");
+    assert!(!ptx.contains("shfl"), "Should NOT have warp shuffle");
+}
+
+#[test]
+fn test_tiled_scale_extraction() {
+    let kernel = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+    let ptx = kernel.emit_ptx();
+
+    assert!(ptx.contains("selp"), "Should have selp for split scale format");
+    assert!(ptx.contains("shr"), "Should have shift for scale extraction");
+}
+
+#[test]
+fn test_tiled_vs_serial_different_ptx() {
+    let serial = QuantizeKernel::ggml(1024, 1024, 4096);
+    let tiled = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+
+    let ptx_serial = serial.emit_ptx();
+    let ptx_tiled = tiled.emit_ptx();
+
+    assert_ne!(ptx_serial, ptx_tiled, "Serial and tiled should produce different PTX");
+    assert!(ptx_serial.contains("q4k_gemm_ggml"));
+    assert!(ptx_tiled.contains("q4k_gemm_ggml_tiled"));
+
+    // Tiled should have more FMAs (tile_m copies)
+    let serial_fma = ptx_serial.matches("fma.rn.f32").count();
+    let tiled_fma = ptx_tiled.matches("fma.rn.f32").count();
+    assert!(
+        tiled_fma > serial_fma,
+        "Tiled ({}) should have more FMAs than serial ({})",
+        tiled_fma,
+        serial_fma
+    );
+}
+
+#[test]
+fn test_tiled_with_tile_m_builder() {
+    let kernel = QuantizeKernel::ggml(1024, 1024, 4096).with_tile_m(8);
+    assert_eq!(kernel.tile_m, 8);
+    assert_eq!(kernel.name(), "q4k_gemm_ggml_tiled");
+
+    let ptx = kernel.emit_ptx();
+    assert!(ptx.contains("q4k_gemm_ggml_tiled"));
+
+    // tile_m=8 should produce 8 stores
+    let store_count = ptx.matches("st.global.f32").count();
+    assert_eq!(store_count, 8, "tile_m=8 should have 8 stores, found {}", store_count);
+}
+
+#[test]
+fn test_tiled_all_loops_branch_back() {
+    let kernel = QuantizeKernel::ggml_tiled(1024, 1024, 4096, 4);
+    let ptx = kernel.emit_ptx();
+
+    let sb_count = ptx.matches("sb_loop").count();
+    let sub_count = ptx.matches("sub_loop").count();
+    let val_count = ptx.matches("val_loop").count();
+
+    assert!(sb_count >= 2, "sb_loop: label + branch back, found {}", sb_count);
+    assert!(sub_count >= 2, "sub_loop: label + branch back, found {}", sub_count);
+    assert!(val_count >= 2, "val_loop: label + branch back, found {}", val_count);
+}
