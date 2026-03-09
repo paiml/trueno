@@ -108,14 +108,13 @@ impl Matrix<f32> {
             }
             #[cfg(not(target_arch = "wasm32"))]
             {
-                crate::blis::gemm_blis(
+                crate::blis::parallel::gemm_blis_parallel(
                     self.rows,
                     other.cols,
                     self.cols,
                     &self.data,
                     &other.data,
                     &mut result.data,
-                    None,
                 )?;
             }
         } else {
