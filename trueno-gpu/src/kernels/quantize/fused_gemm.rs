@@ -195,36 +195,42 @@ impl QuantizeKernel {
             })
     }
 
-    /// Build kernel for real GGML Q4_K super-block format (PARITY-041)
+    /// Build kernel for real GGML Q4_K super-block format (GH-182 rewrite)
     ///
     /// Super-block layout (144 bytes for 256 values):
     /// - Offset 0-1: d (f16 super-block scale)
     /// - Offset 2-3: dmin (f16 super-block min)
-    /// - Offset 4-15: scales (12 bytes, packed 6-bit scale+min × 8 sub-blocks)
+    /// - Offset 4-15: scales (12 bytes, split format — see below)
     /// - Offset 16-143: qs (128 bytes, 256 × 4-bit values packed)
     ///
-    /// Dequantization: val = d × scale_b × quant - dmin × min_b
+    /// Scale format (12 bytes):
+    ///   bytes[0..3]: bits[5:0] = scale SB 0-3, bits[7:6] = high2 of scale SB 4-7
+    ///   bytes[4..7]: bits[5:0] = min SB 0-3, bits[7:6] = high2 of min SB 4-7
+    ///   bytes[8..11]: bits[3:0] = low4 of scale SB 4-7, bits[7:4] = low4 of min SB 4-7
+    ///
+    /// qs packing (sub-block pairs share 32 bytes):
+    ///   Even SB (0,2,4,6): low nibble of qs[(i/2)*32 + val]
+    ///   Odd SB (1,3,5,7): high nibble of qs[(i/2)*32 + val]
+    ///
+    /// Dequantization: val = d × sc_int × quant - dmin × mn_int
+    ///
+    /// Design: 1-thread-per-output-element, serial accumulation (no warp reduction).
+    /// Grid: (ceil(N/blockDim.x), M) 2D. Each thread computes C[row][col].
     pub(super) fn build_fused_gemm_ggml(&self) -> PtxKernel {
-        let tile_size = self.tile_size;
-
-        // Shared memory for dequantized values
-        let smem_size = Q4K_SUPER_BLOCK_SIZE * 4; // 256 f32 values
-
         PtxKernel::new("q4k_gemm_ggml")
-            .param(PtxType::U64, "a_ptr") // Input activations (f32)
-            .param(PtxType::U64, "b_quant_ptr") // Quantized weights (Q4_K GGML)
-            .param(PtxType::U64, "c_ptr") // Output (f32)
+            .param(PtxType::U64, "a_ptr") // Input activations [M × K] (f32)
+            .param(PtxType::U64, "b_quant_ptr") // Quantized weights [N × (K/256) × 144B]
+            .param(PtxType::U64, "c_ptr") // Output [M × N] (f32)
             .param(PtxType::U32, "m") // Output rows
             .param(PtxType::U32, "n") // Output columns
             .param(PtxType::U32, "k") // Inner dimension
-            .shared_memory(smem_size as usize)
             .build(|ctx| {
-                // Thread and block indices
+                // Thread → output element mapping (2D grid)
                 let tid = ctx.special_reg(PtxReg::TidX);
                 let ctaid_x = ctx.special_reg(PtxReg::CtaIdX);
                 let ctaid_y = ctx.special_reg(PtxReg::CtaIdY);
+                let ntid_x = ctx.special_reg(PtxReg::NtidX);
 
-                // Load parameters
                 let m_param = ctx.load_param_u32("m");
                 let n_param = ctx.load_param_u32("n");
                 let k_param = ctx.load_param_u32("k");
@@ -232,205 +238,197 @@ impl QuantizeKernel {
                 let b_quant_ptr = ctx.load_param_u64("b_quant_ptr");
                 let c_ptr = ctx.load_param_u64("c_ptr");
 
-                // Calculate output position
-                let tile_size_reg = ctx.mov_u32_imm(tile_size);
-                let out_row = ctx.mul_u32_reg(ctaid_y, tile_size_reg);
-                let out_col = ctx.mul_u32_reg(ctaid_x, tile_size_reg);
+                // row = ctaid_y, col = ctaid_x * blockDim.x + tid
+                let row = ctaid_y;
+                let col = ctx.mul_u32_reg(ctaid_x, ntid_x);
+                let col = ctx.add_u32_reg(col, tid);
 
-                // Thread's position within tile
-                let local_row = ctx.div_u32(tid, tile_size);
-                let local_col = ctx.rem_u32(tid, tile_size);
+                // Bounds check — exit early for OOB threads
+                let row_oob = ctx.setp_ge_u32(row, m_param);
+                ctx.branch_if(row_oob, "exit");
+                let col_oob = ctx.setp_ge_u32(col, n_param);
+                ctx.branch_if(col_oob, "exit");
 
-                // Global output position
-                let global_row = ctx.add_u32_reg(out_row, local_row);
-                let global_col = ctx.add_u32_reg(out_col, local_col);
-
-                // Bounds check - compute predicates for later store
-                let row_oob = ctx.setp_ge_u32(global_row, m_param);
-                let col_oob = ctx.setp_ge_u32(global_col, n_param);
-
-                // Clamp global_row and global_col to valid range [0, m-1] and [0, n-1]
-                // This ensures all memory accesses are valid even for out-of-bounds threads.
-                // Out-of-bounds threads will compute redundant values but won't store them.
-                // This is necessary because all threads in a warp must participate in
-                // warp shuffle reductions (shfl.sync with mask 0xFFFFFFFF).
-                let one = ctx.mov_u32_imm(1);
-                let m_minus_1 = ctx.sub_u32_reg(m_param, one);
-                let n_minus_1 = ctx.sub_u32_reg(n_param, one);
-                let clamped_row = ctx.min_u32(global_row, m_minus_1);
-                let clamped_col = ctx.min_u32(global_col, n_minus_1);
-
-                // Initialize accumulator (all threads, including out-of-bounds)
+                // Initialize accumulator
                 let acc = ctx.mov_f32_imm(0.0);
 
-                // Calculate number of super-blocks in K dimension (K / 256)
-                let num_k_super_blocks = ctx.div_u32(k_param, Q4K_SUPER_BLOCK_SIZE);
+                // Number of super-blocks per row (K / 256)
+                let num_sb = ctx.div_u32(k_param, Q4K_SUPER_BLOCK_SIZE);
 
-                // Loop over K super-blocks
+                // ===== Outer loop: super-blocks =====
                 let sb_idx = ctx.mov_u32_imm(0);
-
                 ctx.label("sb_loop");
-                let sb_done = ctx.setp_ge_u32(sb_idx, num_k_super_blocks);
+                let sb_done = ctx.setp_ge_u32(sb_idx, num_sb);
                 ctx.branch_if(sb_done, "sb_loop_done");
 
-                // ===== Load Q4_K super-block header =====
-                // Super-block address = b_quant_ptr + clamped_col * (K/256) * 144 + sb_idx * 144
-                // Use clamped_col to ensure valid memory access for all threads
-                let sb_per_row = num_k_super_blocks;
-                let row_sb_offset = ctx.mul_u32_reg(clamped_col, sb_per_row);
+                // Super-block address = b_quant_ptr + col * num_sb * 144 + sb_idx * 144
+                let row_sb_offset = ctx.mul_u32_reg(col, num_sb);
                 let total_sb_offset = ctx.add_u32_reg(row_sb_offset, sb_idx);
-                let byte_offset = ctx.mul_wide_u32(total_sb_offset, Q4K_SUPER_BLOCK_BYTES);
-                let sb_addr = ctx.add_u64(b_quant_ptr, byte_offset);
+                let sb_byte_offset = ctx.mul_wide_u32(total_sb_offset, Q4K_SUPER_BLOCK_BYTES);
+                let sb_addr = ctx.add_u64(b_quant_ptr, sb_byte_offset);
 
-                // Load d (f16 at offset 0)
+                // Load d (f16 at offset 0) and dmin (f16 at offset 2)
                 let d_f16 = ctx.ld_global_f16(sb_addr);
                 let d = ctx.cvt_f32_f16(d_f16);
-
-                // Load dmin (f16 at offset 2)
-                let two = ctx.mov_u64_imm(2);
-                let dmin_addr = ctx.add_u64(sb_addr, two);
+                let c_2_64 = ctx.mov_u64_imm(2);
+                let dmin_addr = ctx.add_u64(sb_addr, c_2_64);
                 let dmin_f16 = ctx.ld_global_f16(dmin_addr);
                 let dmin = ctx.cvt_f32_f16(dmin_f16);
 
-                // ===== Process 8 sub-blocks of 32 values each =====
-                // Each thread handles multiple values within the sub-block
-                let sub_block_idx = ctx.mov_u32_imm(0);
-                let eight = ctx.mov_u32_imm(8);
-                let thirty_two = ctx.mov_u32_imm(32);
+                // ===== Middle loop: 8 sub-blocks =====
+                let sub_idx = ctx.mov_u32_imm(0);
+                ctx.label("sub_loop");
+                let c_8_u32 = ctx.mov_u32_imm(8);
+                let sub_done = ctx.setp_ge_u32(sub_idx, c_8_u32);
+                ctx.branch_if(sub_done, "sub_loop_done");
 
-                ctx.label("sub_block_loop");
-                let sub_done = ctx.setp_ge_u32(sub_block_idx, eight);
-                ctx.branch_if(sub_done, "sub_block_done");
+                // --- Scale/min extraction (correct GGML split format) ---
+                // Compute is_high = sub_idx >= 4
+                let c_4_u32 = ctx.mov_u32_imm(4);
+                let is_high = ctx.setp_ge_u32(sub_idx, c_4_u32);
 
-                // ===== Extract 6-bit scale and min for this sub-block =====
-                // scales[12] contains packed 12-bit entries (6-bit scale + 6-bit min)
-                // bit_offset = sub_block_idx * 12
-                let bit_offset = ctx.mul_u32(sub_block_idx, 12);
-                let byte_idx = ctx.div_u32(bit_offset, 8);
-                let bit_in_byte = ctx.rem_u32(bit_offset, 8);
+                // Clamp i_hi = min(sub_idx - 4, 3) for safe high-path loads
+                let i_hi_raw = ctx.sub_u32_reg(sub_idx, c_4_u32);
+                let c_3_u32 = ctx.mov_u32_imm(3);
+                let i_hi = ctx.min_u32(i_hi_raw, c_3_u32);
 
-                // Load 2-3 bytes from scales (offset 4 in super-block)
-                let four = ctx.mov_u64_imm(4);
-                let scales_base = ctx.add_u64(sb_addr, four);
-                let byte_idx_64 = ctx.cvt_u64_u32(byte_idx);
-                let scales_addr = ctx.add_u64(scales_base, byte_idx_64);
-                let scale_b0 = ctx.ld_global_u8(scales_addr);
-                let one_64 = ctx.mov_u64_imm(1);
-                let scales_addr1 = ctx.add_u64(scales_addr, one_64);
-                let scale_b1 = ctx.ld_global_u8(scales_addr1);
+                let c_4_64 = ctx.mov_u64_imm(4);
+                let scales_base = ctx.add_u64(sb_addr, c_4_64);
 
-                // Combine bytes and extract 12 bits
-                let b0_32 = ctx.cvt_u32_u8(scale_b0);
-                let b1_32 = ctx.cvt_u32_u8(scale_b1);
-                let eight_shift = ctx.mov_u32_imm(8);
-                let b1_shifted = ctx.shl_u32(b1_32, eight_shift);
-                let combined = ctx.or_u32(b0_32, b1_shifted);
-                let bits_12 = ctx.shr_u32(combined, bit_in_byte);
+                // -- Low path (SB 0-3): scale = scales[sub_idx] & 0x3F --
+                let sub_idx_64 = ctx.cvt_u64_u32(sub_idx);
+                let lo_sc_addr = ctx.add_u64(scales_base, sub_idx_64);
+                let lo_sc_byte = ctx.ld_global_u8(lo_sc_addr);
+                let lo_sc_32 = ctx.cvt_u32_u8(lo_sc_byte);
+                let mask_6 = ctx.mov_u32_imm(0x3F);
+                let lo_scale = ctx.and_u32(lo_sc_32, mask_6);
 
-                // Extract 6-bit scale (lower 6 bits) and min (upper 6 bits)
-                let mask_6bit = ctx.mov_u32_imm(0x3F);
-                let scale_6bit = ctx.and_u32(bits_12, mask_6bit);
-                let six_shift = ctx.mov_u32_imm(6);
-                let min_shifted = ctx.shr_u32(bits_12, six_shift);
-                let min_6bit = ctx.and_u32(min_shifted, mask_6bit);
+                // min = scales[4 + sub_idx] & 0x3F
+                let lo_mn_base = ctx.add_u64(scales_base, c_4_64);
+                let lo_mn_addr = ctx.add_u64(lo_mn_base, sub_idx_64);
+                let lo_mn_byte = ctx.ld_global_u8(lo_mn_addr);
+                let lo_mn_32 = ctx.cvt_u32_u8(lo_mn_byte);
+                let lo_min = ctx.and_u32(lo_mn_32, mask_6);
 
-                // Convert to floats and normalize to [0,1]
-                let scale_f32 = ctx.cvt_f32_u32(scale_6bit);
-                let min_f32 = ctx.cvt_f32_u32(min_6bit);
-                let inv_63 = ctx.mov_f32_imm(1.0 / 63.0);
-                let scale_norm = ctx.mul_f32(scale_f32, inv_63);
-                let min_norm = ctx.mul_f32(min_f32, inv_63);
+                // -- High path (SB 4-7): split extraction --
+                let i_hi_64 = ctx.cvt_u64_u32(i_hi);
+                // combo = scales[8 + i_hi]
+                let c_8_64 = ctx.mov_u64_imm(8);
+                let combo_base = ctx.add_u64(scales_base, c_8_64);
+                let combo_addr = ctx.add_u64(combo_base, i_hi_64);
+                let combo_byte = ctx.ld_global_u8(combo_addr);
+                let combo_32 = ctx.cvt_u32_u8(combo_byte);
 
-                // ===== Process 32 values in this sub-block =====
-                // Thread tid handles value (tid % 32) within sub-block
-                let lane = ctx.rem_u32(tid, 32);
+                // sc_low4 = combo & 0x0F
+                let mask_4 = ctx.mov_u32_imm(0x0F);
+                let sc_low4 = ctx.and_u32(combo_32, mask_4);
 
-                // Load quantized 4-bit value
-                // qs offset = 16 + sub_block_idx * 16 + lane/2
-                let sixteen = ctx.mov_u64_imm(16);
-                let qs_base = ctx.add_u64(sb_addr, sixteen);
-                let sub_block_offset = ctx.mul_u32(sub_block_idx, 16);
-                let sub_block_offset_64 = ctx.cvt_u64_u32(sub_block_offset);
-                let qs_sub_base = ctx.add_u64(qs_base, sub_block_offset_64);
+                // sc_high2 = (scales[i_hi] >> 6) & 0x03
+                let hi_sc_addr = ctx.add_u64(scales_base, i_hi_64);
+                let hi_sc_byte = ctx.ld_global_u8(hi_sc_addr);
+                let hi_sc_32 = ctx.cvt_u32_u8(hi_sc_byte);
+                let c_6_u32 = ctx.mov_u32_imm(6);
+                let sc_shifted = ctx.shr_u32(hi_sc_32, c_6_u32);
+                let mask_2 = ctx.mov_u32_imm(0x03);
+                let sc_high2 = ctx.and_u32(sc_shifted, mask_2);
+                let sc_high_pos = ctx.shl_u32(sc_high2, c_4_u32);
+                let hi_scale = ctx.or_u32(sc_low4, sc_high_pos);
 
-                let byte_in_sub = ctx.div_u32(lane, 2);
-                let nibble_idx = ctx.rem_u32(lane, 2);
-                let byte_in_sub_64 = ctx.cvt_u64_u32(byte_in_sub);
-                let qs_addr = ctx.add_u64(qs_sub_base, byte_in_sub_64);
+                // mn_low4 = (combo >> 4) & 0x0F
+                let mn_shifted = ctx.shr_u32(combo_32, c_4_u32);
+                let mn_low4 = ctx.and_u32(mn_shifted, mask_4);
+
+                // mn_high2 = (scales[4 + i_hi] >> 6) & 0x03
+                let hi_mn_base = ctx.add_u64(scales_base, c_4_64);
+                let hi_mn_addr = ctx.add_u64(hi_mn_base, i_hi_64);
+                let hi_mn_byte = ctx.ld_global_u8(hi_mn_addr);
+                let hi_mn_32 = ctx.cvt_u32_u8(hi_mn_byte);
+                let mn_hi_shifted = ctx.shr_u32(hi_mn_32, c_6_u32);
+                let mn_high2 = ctx.and_u32(mn_hi_shifted, mask_2);
+                let mn_high_pos = ctx.shl_u32(mn_high2, c_4_u32);
+                let hi_min = ctx.or_u32(mn_low4, mn_high_pos);
+
+                // Select: low path for SB 0-3, high path for SB 4-7
+                let scale_int = ctx.selp_u32(is_high, hi_scale, lo_scale);
+                let min_int = ctx.selp_u32(is_high, hi_min, lo_min);
+
+                // Convert to float (integer scales, NO normalization by 63)
+                let scale_f32 = ctx.cvt_f32_u32(scale_int);
+                let min_f32 = ctx.cvt_f32_u32(min_int);
+
+                // Pre-compute d*scale and dmin*min for this sub-block
+                let d_scale = ctx.mul_f32(d, scale_f32);
+                let dmin_min = ctx.mul_f32(dmin, min_f32);
+
+                // qs mapping: pair = sub_idx / 2, nibble = sub_idx & 1
+                let pair = ctx.div_u32(sub_idx, 2);
+                let pair_byte_base = ctx.mul_u32(pair, 32);
+                let nibble_sel = ctx.rem_u32(sub_idx, 2);
+                let nibble_shift = ctx.mul_u32(nibble_sel, 4); // 0 or 4
+
+                // K offset: sb_idx*256 + pair*32 + (sub_idx&1)*128 + val_idx
+                let sb_k_base = ctx.mul_u32(sb_idx, Q4K_SUPER_BLOCK_SIZE);
+                let pair_k_offset = ctx.add_u32_reg(sb_k_base, pair_byte_base);
+                let half_offset = ctx.mul_u32(nibble_sel, 128); // 0 or 128
+                let base_k = ctx.add_u32_reg(pair_k_offset, half_offset);
+
+                // ===== Inner loop: 32 values per sub-block =====
+                let val_idx = ctx.mov_u32_imm(0);
+                let c_32_u32 = ctx.mov_u32_imm(32);
+                ctx.label("val_loop");
+                let val_done = ctx.setp_ge_u32(val_idx, c_32_u32);
+                ctx.branch_if(val_done, "val_loop_done");
+
+                // Load qs byte: offset 16 + pair*32 + val_idx
+                let qs_offset = ctx.add_u32_reg(pair_byte_base, val_idx);
+                let qs_offset_16 = ctx.add_u32(qs_offset, 16);
+                let qs_offset_64 = ctx.cvt_u64_u32(qs_offset_16);
+                let qs_addr = ctx.add_u64(sb_addr, qs_offset_64);
                 let packed = ctx.ld_global_u8(qs_addr);
-
-                // Extract 4-bit value
-                let shift_amt = ctx.mul_u32(nibble_idx, 4);
                 let packed_32 = ctx.cvt_u32_u8(packed);
-                let shifted = ctx.shr_u32(packed_32, shift_amt);
+
+                // Extract 4-bit value using nibble_shift (0=low, 4=high)
+                let shifted = ctx.shr_u32(packed_32, nibble_shift);
                 let mask_4bit = ctx.mov_u32_imm(0xF);
                 let quant = ctx.and_u32(shifted, mask_4bit);
-
-                // Dequantize: val = d × scale × quant - dmin × min
                 let quant_f32 = ctx.cvt_f32_u32(quant);
-                let d_scale = ctx.mul_f32(d, scale_norm);
-                let scaled = ctx.mul_f32(d_scale, quant_f32);
-                let dmin_min = ctx.mul_f32(dmin, min_norm);
-                let dequant = ctx.sub_f32(scaled, dmin_min);
 
-                // ===== Load activation and accumulate =====
-                // A[clamped_row][sb_idx * 256 + sub_block_idx * 32 + lane]
-                // Use clamped_row to ensure valid memory access for all threads
-                let two_fifty_six = ctx.mov_u32_imm(256);
-                let sb_k_offset = ctx.mul_u32_reg(sb_idx, two_fifty_six);
-                let sub_k_offset = ctx.mul_u32_reg(sub_block_idx, thirty_two);
-                let k_offset = ctx.add_u32_reg(sb_k_offset, sub_k_offset);
-                let k_offset_full = ctx.add_u32_reg(k_offset, lane);
+                // Dequantize: val = d*scale*quant - dmin*min
+                let weighted = ctx.mul_f32(d_scale, quant_f32);
+                let dequant = ctx.sub_f32(weighted, dmin_min);
 
-                let a_row_offset = ctx.mul_wide_u32_reg(clamped_row, k_param);
-                let k_offset_64 = ctx.cvt_u64_u32(k_offset_full);
-                let a_elem_offset = ctx.add_u64(a_row_offset, k_offset_64);
+                // Load activation A[row][k_offset]
+                let k_offset = ctx.add_u32_reg(base_k, val_idx);
+                let a_row_base = ctx.mul_wide_u32_reg(row, k_param);
+                let k_offset_64 = ctx.cvt_u64_u32(k_offset);
+                let a_elem_offset = ctx.add_u64(a_row_base, k_offset_64);
                 let a_elem_bytes = ctx.mul_u64(a_elem_offset, 4);
                 let a_addr = ctx.add_u64(a_ptr, a_elem_bytes);
-
                 let a_val = ctx.ld_global_f32(a_addr);
 
-                // Multiply and reduce
-                let prod = ctx.mul_f32(a_val, dequant);
+                // FMA: acc += a_val * dequant
+                ctx.fma_f32_inplace(acc, a_val, dequant);
 
-                // Warp reduce for dot product
-                let shuffled_16 = ctx.shfl_down_f32(prod, 16, 0xFFFF_FFFF);
-                let prod_1 = ctx.add_f32(prod, shuffled_16);
-                let shuffled_8 = ctx.shfl_down_f32(prod_1, 8, 0xFFFF_FFFF);
-                let prod_2 = ctx.add_f32(prod_1, shuffled_8);
-                let shuffled_4 = ctx.shfl_down_f32(prod_2, 4, 0xFFFF_FFFF);
-                let prod_3 = ctx.add_f32(prod_2, shuffled_4);
-                let shuffled_2 = ctx.shfl_down_f32(prod_3, 2, 0xFFFF_FFFF);
-                let prod_4 = ctx.add_f32(prod_3, shuffled_2);
-                let shuffled_1 = ctx.shfl_down_f32(prod_4, 1, 0xFFFF_FFFF);
-                let sub_block_sum = ctx.add_f32(prod_4, shuffled_1);
-
-                // Broadcast and accumulate
-                let broadcast_sum = ctx.shfl_idx_f32(sub_block_sum, 0, 0xFFFF_FFFF);
-                ctx.add_f32_inplace(acc, broadcast_sum);
+                ctx.add_u32_inplace(val_idx, 1);
+                ctx.branch("val_loop");
+                ctx.label("val_loop_done");
 
                 // Next sub-block
-                ctx.add_u32_inplace(sub_block_idx, 1);
-                ctx.branch("sub_block_loop");
-
-                ctx.label("sub_block_done");
+                ctx.add_u32_inplace(sub_idx, 1);
+                ctx.branch("sub_loop");
+                ctx.label("sub_loop_done");
 
                 // Next super-block
                 ctx.add_u32_inplace(sb_idx, 1);
                 ctx.branch("sb_loop");
-
                 ctx.label("sb_loop_done");
 
-                // ===== Store result =====
-                ctx.branch_if(row_oob, "exit");
-                ctx.branch_if(col_oob, "exit");
-
-                let c_row_offset = ctx.mul_wide_u32_reg(global_row, n_param);
-                let global_col_64 = ctx.cvt_u64_u32(global_col);
-                let c_elem_offset = ctx.add_u64(c_row_offset, global_col_64);
+                // Store result C[row][col]
+                let c_row_offset = ctx.mul_wide_u32_reg(row, n_param);
+                let col_64 = ctx.cvt_u64_u32(col);
+                let c_elem_offset = ctx.add_u64(c_row_offset, col_64);
                 let c_elem_bytes = ctx.mul_u64(c_elem_offset, 4);
                 let c_addr = ctx.add_u64(c_ptr, c_elem_bytes);
-
                 ctx.st_global_f32(c_addr, acc);
 
                 ctx.label("exit");
