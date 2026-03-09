@@ -187,26 +187,25 @@ impl Kernel for Nf4GemmKernel {
                 let data_block_byte_offset = ctx.mul_wide_u32(scale_idx, 32);
                 let data_block_addr = ctx.add_u64(b_nf4_ptr, data_block_byte_offset);
 
-                // Process 64 values via 2 sub-iterations of 32 (warp width)
-                let sub_iter = ctx.mov_u32_imm(0);
-                let two = ctx.mov_u32_imm(2);
+                // Process all 64 values in this block sequentially per thread.
+                // Each thread independently accumulates its own dot product for
+                // its output column — no warp reduction (threads have different cols).
+                let sixty_four = ctx.mov_u32_imm(NF4_BLOCK_SIZE_U32);
+                let block_k_base = ctx.mul_u32_reg(block_idx, sixty_four);
+                let a_row_offset = ctx.mul_wide_u32_reg(clamped_row, k_param);
 
-                ctx.label("sub_iter_loop");
-                let sub_done = ctx.setp_ge_u32(sub_iter, two);
-                ctx.branch_if(sub_done, "sub_iter_done");
+                let elem_idx = ctx.mov_u32_imm(0);
 
-                // Lane within the 32-value half-block
-                let lane = ctx.rem_u32(tid, 32);
+                ctx.label("elem_loop");
+                let elem_done = ctx.setp_ge_u32(elem_idx, sixty_four);
+                ctx.branch_if(elem_done, "elem_loop_done");
 
-                // Byte index: sub_iter*16 + lane/2
-                let sixteen = ctx.mov_u32_imm(16);
-                let sub_byte_base = ctx.mul_u32_reg(sub_iter, sixteen);
-                let byte_in_half = ctx.div_u32(lane, 2);
-                let nibble_idx = ctx.rem_u32(lane, 2);
-                let byte_offset_in_block = ctx.add_u32_reg(sub_byte_base, byte_in_half);
+                // NF4 byte index: elem_idx / 2; nibble: elem_idx % 2
+                let byte_in_block = ctx.div_u32(elem_idx, 2);
+                let nibble_idx = ctx.rem_u32(elem_idx, 2);
 
-                // Load packed byte from global memory
-                let byte_offset_64 = ctx.cvt_u64_u32(byte_offset_in_block);
+                // Load packed byte from B_nf4
+                let byte_offset_64 = ctx.cvt_u64_u32(byte_in_block);
                 let nibble_addr = ctx.add_u64(data_block_addr, byte_offset_64);
                 let packed_byte = ctx.ld_global_u8(nibble_addr);
                 let packed_u32 = ctx.cvt_u32_u8(packed_byte);
@@ -227,42 +226,22 @@ impl Kernel for Nf4GemmKernel {
                 // Dequantize: val = scale × codebook_value
                 let dequant = ctx.mul_f32(scale, normalized_val);
 
-                // Load activation A[clamped_row, k_offset]
-                let sixty_four = ctx.mov_u32_imm(NF4_BLOCK_SIZE_U32);
-                let block_k_base = ctx.mul_u32_reg(block_idx, sixty_four);
-                let thirty_two = ctx.mov_u32_imm(32);
-                let sub_k_base = ctx.mul_u32_reg(sub_iter, thirty_two);
-                let k_offset = ctx.add_u32_reg(block_k_base, sub_k_base);
-                let k_offset_full = ctx.add_u32_reg(k_offset, lane);
-
-                let a_row_offset = ctx.mul_wide_u32_reg(clamped_row, k_param);
-                let k_offset_64 = ctx.cvt_u64_u32(k_offset_full);
+                // Load activation A[clamped_row, block_k_base + elem_idx]
+                let k_offset = ctx.add_u32_reg(block_k_base, elem_idx);
+                let k_offset_64 = ctx.cvt_u64_u32(k_offset);
                 let a_elem_offset = ctx.add_u64(a_row_offset, k_offset_64);
                 let a_elem_bytes = ctx.mul_u64(a_elem_offset, 4);
                 let a_addr = ctx.add_u64(a_ptr, a_elem_bytes);
 
                 let a_val = ctx.ld_global_f32(a_addr);
-                let prod = ctx.mul_f32(a_val, dequant);
 
-                // Warp reduction (32 threads → one sum)
-                let shuffled_16 = ctx.shfl_down_f32(prod, 16, 0xFFFF_FFFF);
-                let prod_1 = ctx.add_f32(prod, shuffled_16);
-                let shuffled_8 = ctx.shfl_down_f32(prod_1, 8, 0xFFFF_FFFF);
-                let prod_2 = ctx.add_f32(prod_1, shuffled_8);
-                let shuffled_4 = ctx.shfl_down_f32(prod_2, 4, 0xFFFF_FFFF);
-                let prod_3 = ctx.add_f32(prod_2, shuffled_4);
-                let shuffled_2 = ctx.shfl_down_f32(prod_3, 2, 0xFFFF_FFFF);
-                let prod_4 = ctx.add_f32(prod_3, shuffled_2);
-                let shuffled_1 = ctx.shfl_down_f32(prod_4, 1, 0xFFFF_FFFF);
-                let sub_block_sum = ctx.add_f32(prod_4, shuffled_1);
+                // acc += a_val * dequant (FMA)
+                ctx.fma_f32_inplace(acc, a_val, dequant);
 
-                let broadcast_sum = ctx.shfl_idx_f32(sub_block_sum, 0, 0xFFFF_FFFF);
-                ctx.add_f32_inplace(acc, broadcast_sum);
+                ctx.add_u32_inplace(elem_idx, 1);
+                ctx.branch("elem_loop");
 
-                ctx.add_u32_inplace(sub_iter, 1);
-                ctx.branch("sub_iter_loop");
-
-                ctx.label("sub_iter_done");
+                ctx.label("elem_loop_done");
 
                 ctx.add_u32_inplace(block_idx, 1);
                 ctx.branch("block_loop");
@@ -281,6 +260,200 @@ impl Kernel for Nf4GemmKernel {
                 let c_elem_bytes = ctx.mul_u64(c_elem_offset, 4);
                 let c_addr = ctx.add_u64(c_ptr, c_elem_bytes);
 
+                ctx.st_global_f32(c_addr, acc);
+
+                ctx.label("exit");
+                ctx.ret();
+            })
+    }
+}
+
+/// NF4 transposed GEMM kernel for backward pass (QLoRA gradient propagation).
+///
+/// Computes `C[M×K] = A[M×N] @ dequant(B_nf4[K×N])^T` where B is stored in NF4 format.
+/// Equivalently: `C[i,j] = sum_n A[i,n] * B[j,n]` — reduces over B's column dimension.
+///
+/// Used in backward pass to propagate gradients through frozen NF4 projections:
+/// `grad_input = grad_output @ W^T` where W is the NF4-quantized weight.
+///
+/// # Memory Layout
+///
+/// - `A`: row-major f32 `[M × N]` (grad_output)
+/// - `b_nf4`: packed nibbles, column-major block order (same as forward)
+/// - `b_scales`: per-block scales, column-major block order (same as forward)
+/// - `C`: row-major f32 `[M × K]` (grad_input)
+#[derive(Debug, Clone)]
+pub struct Nf4GemmTransposeKernel {
+    /// Output rows (M) — same as grad_output rows
+    pub m: u32,
+    /// Reduction dimension (N) — columns of B / cols of grad_output
+    pub n: u32,
+    /// Output columns (K) — rows of B / input hidden size
+    pub k: u32,
+    /// Tile size for output (default: 16, smaller than forward due to irregular access)
+    pub tile_size: u32,
+}
+
+impl Nf4GemmTransposeKernel {
+    /// Create a new NF4 transposed GEMM kernel.
+    #[must_use]
+    pub fn new(m: u32, n: u32, k: u32) -> Self {
+        Self { m, n, k, tile_size: 16 }
+    }
+
+    /// Number of NF4 blocks per column of B (K / 64).
+    #[must_use]
+    pub const fn num_blocks_per_col(&self) -> u32 {
+        self.k / NF4_BLOCK_SIZE_U32
+    }
+}
+
+impl Kernel for Nf4GemmTransposeKernel {
+    fn name(&self) -> &str {
+        "nf4_gemm_transpose"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        let tile_size = self.tile_size;
+        let smem_size = 16 * 4; // NF4 codebook LUT
+
+        PtxKernel::new("nf4_gemm_transpose")
+            .param(PtxType::U64, "a_ptr") // grad_output [M × N], f32
+            .param(PtxType::U64, "b_nf4_ptr") // NF4 weight data
+            .param(PtxType::U64, "b_scales_ptr") // NF4 weight scales
+            .param(PtxType::U64, "c_ptr") // grad_input [M × K], f32
+            .param(PtxType::U32, "m")
+            .param(PtxType::U32, "n")
+            .param(PtxType::U32, "k")
+            .shared_memory(smem_size)
+            .build(|ctx| {
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let ctaid_x = ctx.special_reg(PtxReg::CtaIdX);
+                let ctaid_y = ctx.special_reg(PtxReg::CtaIdY);
+
+                let m_param = ctx.load_param_u32("m");
+                let n_param = ctx.load_param_u32("n");
+                let k_param = ctx.load_param_u32("k");
+                let a_ptr = ctx.load_param_u64("a_ptr");
+                let b_nf4_ptr = ctx.load_param_u64("b_nf4_ptr");
+                let b_scales_ptr = ctx.load_param_u64("b_scales_ptr");
+                let c_ptr = ctx.load_param_u64("c_ptr");
+
+                // Load NF4 codebook into shared memory
+                let smem_base = ctx.shared_base_addr();
+                for (i, &val) in NF4_LUT.iter().enumerate() {
+                    let imm_i = ctx.mov_u32_imm(i as u32);
+                    let is_i = ctx.setp_eq_u32(tid, imm_i);
+                    ctx.branch_if_not(is_i, &format!("skip_lut_{i}"));
+                    let val_reg = ctx.mov_f32_imm(val);
+                    let offset = ctx.mov_u64_imm((i * 4) as u64);
+                    let addr = ctx.add_u64(smem_base, offset);
+                    ctx.st_generic_f32(addr, val_reg);
+                    ctx.label(&format!("skip_lut_{i}"));
+                }
+                ctx.bar_sync(0);
+
+                // Output position: C[global_row, global_col] where col is in K-dimension
+                let tile_size_reg = ctx.mov_u32_imm(tile_size);
+                let out_row = ctx.mul_u32_reg(ctaid_y, tile_size_reg);
+                let out_col = ctx.mul_u32_reg(ctaid_x, tile_size_reg);
+
+                let local_row = ctx.div_u32(tid, tile_size);
+                let local_col = ctx.rem_u32(tid, tile_size);
+
+                let global_row = ctx.add_u32_reg(out_row, local_row);
+                let global_col = ctx.add_u32_reg(out_col, local_col);
+
+                let row_oob = ctx.setp_ge_u32(global_row, m_param);
+                let col_oob = ctx.setp_ge_u32(global_col, k_param);
+
+                let one = ctx.mov_u32_imm(1);
+                let m_minus_1 = ctx.sub_u32_reg(m_param, one);
+                let k_minus_1 = ctx.sub_u32_reg(k_param, one);
+                let clamped_row = ctx.min_u32(global_row, m_minus_1);
+                let clamped_col = ctx.min_u32(global_col, k_minus_1); // col in K-dim
+
+                let acc = ctx.mov_f32_imm(0.0);
+
+                // Number of K-blocks per column of B
+                let num_k_blocks = ctx.div_u32(k_param, NF4_BLOCK_SIZE_U32);
+
+                // clamped_col is in K-dimension. Find which block and position within block.
+                let col_block_idx = ctx.div_u32(clamped_col, NF4_BLOCK_SIZE_U32);
+                let col_elem_in_block = ctx.rem_u32(clamped_col, NF4_BLOCK_SIZE_U32);
+
+                // NF4 byte and nibble for this K-position (fixed for all N iterations)
+                let byte_in_block = ctx.div_u32(col_elem_in_block, 2);
+                let nibble_idx = ctx.rem_u32(col_elem_in_block, 2);
+                let four = ctx.mov_u32_imm(4);
+                let nibble_shift = ctx.mul_u32_reg(nibble_idx, four);
+                let mask_4bit = ctx.mov_u32_imm(0xF);
+
+                // A row base: A[clamped_row, :] starts at a_ptr + clamped_row * N * 4
+                let a_row_offset = ctx.mul_wide_u32_reg(clamped_row, n_param);
+
+                // Loop over N (reduction dimension — columns of B)
+                let n_idx = ctx.mov_u32_imm(0);
+
+                ctx.label("n_loop");
+                let n_done = ctx.setp_ge_u32(n_idx, n_param);
+                ctx.branch_if(n_done, "n_loop_done");
+
+                // B[clamped_col, n_idx]:
+                // Block index = n_idx * num_k_blocks + col_block_idx
+                let n_block_base = ctx.mul_u32_reg(n_idx, num_k_blocks);
+                let block_idx = ctx.add_u32_reg(n_block_base, col_block_idx);
+
+                // Load scale
+                let scale_byte_off = ctx.mul_wide_u32(block_idx, 4);
+                let scale_addr = ctx.add_u64(b_scales_ptr, scale_byte_off);
+                let scale = ctx.ld_global_f32(scale_addr);
+
+                // Load packed byte from NF4 data
+                let data_block_off = ctx.mul_wide_u32(block_idx, 32);
+                let data_block_addr = ctx.add_u64(b_nf4_ptr, data_block_off);
+                let byte_off_64 = ctx.cvt_u64_u32(byte_in_block);
+                let nibble_addr = ctx.add_u64(data_block_addr, byte_off_64);
+                let packed_byte = ctx.ld_global_u8(nibble_addr);
+                let packed_u32 = ctx.cvt_u32_u8(packed_byte);
+
+                // Extract nibble
+                let shifted = ctx.shr_u32(packed_u32, nibble_shift);
+                let nf4_idx = ctx.and_u32(shifted, mask_4bit);
+
+                // Codebook lookup
+                let nf4_idx_64 = ctx.cvt_u64_u32(nf4_idx);
+                let lut_byte_off = ctx.mul_u64(nf4_idx_64, 4);
+                let lut_addr = ctx.add_u64(smem_base, lut_byte_off);
+                let normalized_val = ctx.ld_generic_f32(lut_addr);
+
+                // Dequantize
+                let dequant = ctx.mul_f32(scale, normalized_val);
+
+                // Load A[clamped_row, n_idx]
+                let n_idx_64 = ctx.cvt_u64_u32(n_idx);
+                let a_elem_off = ctx.add_u64(a_row_offset, n_idx_64);
+                let a_elem_bytes = ctx.mul_u64(a_elem_off, 4);
+                let a_addr = ctx.add_u64(a_ptr, a_elem_bytes);
+                let a_val = ctx.ld_global_f32(a_addr);
+
+                // acc += a_val * dequant
+                ctx.fma_f32_inplace(acc, a_val, dequant);
+
+                ctx.add_u32_inplace(n_idx, 1);
+                ctx.branch("n_loop");
+
+                ctx.label("n_loop_done");
+
+                // Store result
+                ctx.branch_if(row_oob, "exit");
+                ctx.branch_if(col_oob, "exit");
+
+                let c_row_off = ctx.mul_wide_u32_reg(global_row, k_param);
+                let global_col_64 = ctx.cvt_u64_u32(global_col);
+                let c_elem_off = ctx.add_u64(c_row_off, global_col_64);
+                let c_elem_bytes = ctx.mul_u64(c_elem_off, 4);
+                let c_addr = ctx.add_u64(c_ptr, c_elem_bytes);
                 ctx.st_global_f32(c_addr, acc);
 
                 ctx.label("exit");
@@ -323,8 +496,8 @@ mod tests {
         // Verify shared memory usage (LUT)
         assert!(ptx.contains(".shared"), "PTX missing shared memory");
 
-        // Verify warp shuffles present
-        assert!(ptx.contains("shfl"), "PTX missing warp shuffle instructions");
+        // Verify FMA instruction present (serial per-element accumulation)
+        assert!(ptx.contains("fma"), "PTX missing fma instruction");
     }
 
     #[test]
@@ -346,6 +519,30 @@ mod tests {
         // Should still emit valid PTX
         let ptx = kernel.emit_ptx();
         assert!(ptx.contains("nf4_gemm_fused"));
+    }
+
+    #[test]
+    fn test_nf4_gemm_transpose_kernel_name() {
+        let kernel = Nf4GemmTransposeKernel::new(128, 896, 896);
+        assert_eq!(kernel.name(), "nf4_gemm_transpose");
+    }
+
+    #[test]
+    fn test_nf4_gemm_transpose_ptx_emits() {
+        let kernel = Nf4GemmTransposeKernel::new(128, 896, 896);
+        let ptx = kernel.emit_ptx();
+
+        assert!(ptx.contains("nf4_gemm_transpose"), "PTX missing kernel name");
+        assert!(ptx.contains("a_ptr"), "PTX missing a_ptr param");
+        assert!(ptx.contains("b_nf4_ptr"), "PTX missing b_nf4_ptr param");
+        assert!(ptx.contains("c_ptr"), "PTX missing c_ptr param");
+        assert!(ptx.contains("fma"), "PTX missing fma instruction");
+    }
+
+    #[test]
+    fn test_nf4_gemm_transpose_num_blocks() {
+        let kernel = Nf4GemmTransposeKernel::new(128, 2560, 2560);
+        assert_eq!(kernel.num_blocks_per_col(), 40); // 2560/64
     }
 
     #[test]
