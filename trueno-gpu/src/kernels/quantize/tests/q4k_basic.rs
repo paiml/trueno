@@ -280,13 +280,14 @@ fn test_ggml_ptx_contains_f16_loads() {
 }
 
 #[test]
-fn test_ggml_ptx_contains_nested_loops() {
+fn test_ggml_ptx_contains_triple_nested_loops() {
+    // GH-182: Rewritten with serial accumulation — triple-nested loops
     let kernel = QuantizeKernel::ggml(1024, 1024, 4096);
     let ptx = kernel.emit_ptx();
 
-    // GGML kernel has nested loops: super-block loop and sub-block loop
     assert!(ptx.contains("sb_loop"), "Should have super-block loop");
-    assert!(ptx.contains("sub_block_loop"), "Should have sub-block loop for 8 sub-blocks");
+    assert!(ptx.contains("sub_loop"), "Should have sub-block loop for 8 sub-blocks");
+    assert!(ptx.contains("val_loop"), "Should have value loop for 32 values per sub-block");
 }
 
 #[test]
@@ -294,42 +295,52 @@ fn test_ggml_ptx_contains_scale_extraction() {
     let kernel = QuantizeKernel::ggml(1024, 1024, 4096);
     let ptx = kernel.emit_ptx();
 
-    // Scale extraction involves bit manipulation (12-bit packed entries)
+    // GH-182: Scale extraction uses selp for SB 0-3 vs 4-7 split format
     assert!(
         ptx.contains("shr") || ptx.contains("shl"),
         "Should have shift operations for scale extraction"
     );
-    assert!(ptx.contains("and"), "Should have AND operations for 6-bit masking");
+    assert!(ptx.contains("and"), "Should have AND operations for masking");
+    assert!(ptx.contains("selp"), "Should have selp for low/high sub-block selection");
 }
 
 #[test]
-fn test_ggml_ptx_contains_warp_reduce() {
+fn test_ggml_ptx_serial_accumulation() {
+    // GH-182: No warp reduction — serial FMA accumulation per thread
     let kernel = QuantizeKernel::ggml(1024, 1024, 4096);
     let ptx = kernel.emit_ptx();
 
-    // Warp shuffle reduction for dot product
-    assert!(ptx.contains("shfl"), "Should have warp shuffle for reduction");
+    assert!(ptx.contains("fma"), "Should use FMA for serial accumulation");
+    assert!(
+        !ptx.contains("shfl"),
+        "Should NOT have warp shuffle (serial accumulation, not warp reduction)"
+    );
 }
 
 #[test]
-fn test_ggml_both_loop_branches_back() {
-    // FALSIFIABLE: Both loops should branch back to their start
+fn test_ggml_all_loop_branches_back() {
+    // FALSIFIABLE: All three loops should branch back to their start
     let kernel = QuantizeKernel::ggml(1024, 1024, 4096);
     let ptx = kernel.emit_ptx();
 
     let sb_loop_count = ptx.matches("sb_loop").count();
-    let sub_block_loop_count = ptx.matches("sub_block_loop").count();
+    let sub_loop_count = ptx.matches("sub_loop").count();
+    let val_loop_count = ptx.matches("val_loop").count();
 
-    // Each loop should have: label definition + branch back = 2 references
     assert!(
         sb_loop_count >= 2,
         "sb_loop should appear at least twice (label + branch back), found {}",
         sb_loop_count
     );
     assert!(
-        sub_block_loop_count >= 2,
-        "sub_block_loop should appear at least twice (label + branch back), found {}",
-        sub_block_loop_count
+        sub_loop_count >= 2,
+        "sub_loop should appear at least twice (label + branch back), found {}",
+        sub_loop_count
+    );
+    assert!(
+        val_loop_count >= 2,
+        "val_loop should appear at least twice (label + branch back), found {}",
+        val_loop_count
     );
 }
 
