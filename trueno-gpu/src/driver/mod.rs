@@ -89,6 +89,19 @@ mod cublas;
 )]
 pub mod cublas_sys;
 
+// cuBLASLt FFI and safe wrapper (PMAT-053: FP8 E4M3 GEMM)
+#[cfg(feature = "cuda")]
+#[allow(clippy::borrow_as_ptr, clippy::ptr_as_ptr)]
+mod cublaslt;
+#[cfg(feature = "cuda")]
+#[allow(
+    clippy::borrow_as_ptr,
+    clippy::ptr_as_ptr,
+    clippy::cast_sign_loss,
+    clippy::wildcard_imports
+)]
+pub mod cublaslt_sys;
+
 // Re-export for use without cuda feature (types only)
 mod types;
 pub use types::*;
@@ -98,6 +111,8 @@ pub use types::*;
 pub use context::{cuda_available, device_count, CudaContext};
 #[cfg(feature = "cuda")]
 pub use cublas::{CublasHandle, GemmOp};
+#[cfg(feature = "cuda")]
+pub use cublaslt::CublasLtHandle;
 #[cfg(feature = "cuda")]
 pub use graph::{CaptureMode, CudaGraph, CudaGraphExec};
 #[cfg(feature = "cuda")]

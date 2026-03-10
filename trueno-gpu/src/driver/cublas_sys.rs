@@ -79,6 +79,9 @@ pub const CUDA_R_16F: CudaDataType = 2;
 pub const CUDA_R_32F: CudaDataType = 0;
 /// 16-bit brain floating point
 pub const CUDA_R_16BF: CudaDataType = 14;
+/// 8-bit floating point E4M3 (sign=1, exponent=4, mantissa=3)
+/// Range: ±448, precision: ~1/16. Requires sm_89+ (Ada Lovelace).
+pub const CUDA_R_8F_E4M3: CudaDataType = 28;
 
 // ============================================================================
 // cuBLAS Compute Types
@@ -134,6 +137,16 @@ pub struct CublasDriver {
     /// cublasSetMathMode — Set math mode (enable tensor cores)
     pub cublasSetMathMode:
         unsafe extern "C" fn(handle: CublasHandle, mode: CublasMathMode) -> CublasStatus,
+
+    /// cublasSetWorkspace — Pre-allocate workspace for CUDA graph capture
+    ///
+    /// PMAT-063: cuBLAS requires pre-allocated workspace during graph capture.
+    /// Without this, cuBLAS falls back to workspace-free algorithms (7x slower).
+    pub cublasSetWorkspace: unsafe extern "C" fn(
+        handle: CublasHandle,
+        workspace: *mut c_void,
+        workspace_size: usize,
+    ) -> CublasStatus,
 
     /// cublasGemmEx — General matrix multiply with mixed precision
     ///
@@ -248,6 +261,8 @@ mod loading {
                 type FnSetStream = unsafe extern "C" fn(CublasHandle, *mut c_void) -> CublasStatus;
                 type FnSetMathMode =
                     unsafe extern "C" fn(CublasHandle, CublasMathMode) -> CublasStatus;
+                type FnSetWorkspace =
+                    unsafe extern "C" fn(CublasHandle, *mut c_void, usize) -> CublasStatus;
                 type FnGemmEx = unsafe extern "C" fn(
                     CublasHandle,
                     CublasOperation,
@@ -295,6 +310,12 @@ mod loading {
                     cublasDestroy_v2: load_sym!(cublasDestroy_v2, FnDestroy),
                     cublasSetStream_v2: load_sym!(cublasSetStream_v2, FnSetStream),
                     cublasSetMathMode: load_sym!(cublasSetMathMode, FnSetMathMode),
+                    cublasSetWorkspace: {
+                        // cuBLAS exports this as cublasSetWorkspace_v2 (CUDA 11.0+)
+                        let sym: Symbol<'_, FnSetWorkspace> =
+                            lib.get(b"cublasSetWorkspace_v2").ok()?;
+                        *sym
+                    },
                     cublasGemmEx: load_sym!(cublasGemmEx, FnGemmEx),
                     cublasSgemmStridedBatched: load_sym!(
                         cublasSgemmStridedBatched,
