@@ -97,8 +97,8 @@ pub use persistent::PersistentDecoderKernel;
 pub use quantize::{
     dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu,
     BatchedHwDp4aQ4KGemvKernel, BatchedQ4KGemvKernel, BatchedQ6KGemvKernel,
-    ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ4KGemvKernel,
-    Dp4aQ6KGemvKernel, Fp16Q4KGemvKernel, FusedGateUpQ4KGemvKernel,
+    ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ4KGemmKernel,
+    Dp4aQ4KGemvKernel, Dp4aQ6KGemvKernel, Fp16Q4KGemvKernel, FusedGateUpQ4KGemvKernel,
     FusedGateUpSwigluHwDp4aQ4KGemvKernel, FusedRmsNormGateUpSwigluQ4KKernel,
     FusedRmsNormQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel, HalfWarpDp4aQ6KGemvKernel,
     MultiWarpQ6KGemvKernel, MultiWarpTensorCoreQ4KGemmKernel, MultiWarpVectorizedQ4KGemvKernel,
