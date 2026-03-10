@@ -33,6 +33,6 @@ pub use coalesced::{
     HalfWarpDp4aQ4KGemvKernel, MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel,
     VectorizedQ4KGemvKernel, WideQ4KGemvKernel,
 };
-pub use dequant::Q4KDequantKernel;
+pub use dequant::{Q4KDequantFp16Kernel, Q4KDequantKernel};
 pub use dp4a::{Dp4aQ4KGemvKernel, TrueDp4aQ4KGemvKernel};
 pub use tiled::{ChunkedTiledQ4KGemvKernel, TiledQ4KGemvKernel};
