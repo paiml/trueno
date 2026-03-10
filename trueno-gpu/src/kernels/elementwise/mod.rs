@@ -65,8 +65,8 @@ pub use activations::{ElementwiseMulKernel, GeluKernel, ReluKernel, ScaleKernel,
 pub use kv_cache::{KvCacheScatterIndirectKernel, KvCacheScatterKernel};
 pub use residual::{BatchedResidualAddKernel, FusedResidualRmsNormKernel, ResidualAddKernel};
 pub use rope::{
-    BatchedRopeKernel, PreciseRopeIndirectKernel, PreciseRopeKernel, RopeIndirectKernel,
-    RopeKernel, RopeNeoxIndirectKernel, RopeNeoxKernel,
+    BatchedRopeBackwardKernel, BatchedRopeKernel, PreciseRopeIndirectKernel, PreciseRopeKernel,
+    RopeIndirectKernel, RopeKernel, RopeNeoxIndirectKernel, RopeNeoxKernel,
 };
 pub use swiglu::{BatchedSwigluKernel, FusedSwigluKernel};
 pub use transform::{

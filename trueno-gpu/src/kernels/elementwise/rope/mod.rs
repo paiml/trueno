@@ -17,7 +17,7 @@ mod neox;
 mod precise;
 mod standard;
 
-pub use batched::BatchedRopeKernel;
+pub use batched::{BatchedRopeBackwardKernel, BatchedRopeKernel};
 pub use neox::{RopeNeoxIndirectKernel, RopeNeoxKernel};
 pub use precise::{PreciseRopeIndirectKernel, PreciseRopeKernel};
 pub use standard::{RopeIndirectKernel, RopeKernel};

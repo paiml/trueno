@@ -131,6 +131,32 @@ impl CublasHandle {
             .map_err(|e| GpuError::CudaDriver(format!("cublasSetStream_v2: {e}"), 0))
     }
 
+    /// PMAT-063: Pre-allocate cuBLAS workspace for CUDA graph capture.
+    ///
+    /// cuBLAS internally allocates workspace for fast algorithm selection.
+    /// During CUDA graph capture, dynamic allocation is forbidden, causing
+    /// cuBLAS to fall back to workspace-free algorithms (7x slower).
+    ///
+    /// Call this with a pre-allocated GPU buffer before graph capture
+    /// to enable fast algorithms. Recommended size: 4-32 MB.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if cublasSetWorkspace fails.
+    pub fn set_workspace(&self, workspace_ptr: u64, workspace_size: usize) -> Result<(), GpuError> {
+        let driver = get_cublas_driver()?;
+        let result = unsafe {
+            (driver.cublasSetWorkspace)(
+                self.handle,
+                workspace_ptr as *mut std::ffi::c_void,
+                workspace_size,
+            )
+        };
+        CublasDriver::check(result).map_err(|e| {
+            GpuError::CudaDriver(format!("cublasSetWorkspace({workspace_size}): {e}"), 0)
+        })
+    }
+
     /// FP16 GEMM with FP32 accumulation via tensor cores
     ///
     /// Computes: C = alpha * op(A) * op(B) + beta * C
@@ -280,6 +306,67 @@ impl CublasHandle {
 
         CublasDriver::check(result).map_err(|e| {
             GpuError::CudaDriver(format!("cublasGemmEx_f16_f32(m={m}, n={n}, k={k}): {e}"), 0)
+        })
+    }
+
+    /// FP8 (E4M3) GEMM via cuBLAS tensor cores — both A and B are FP8 E4M3.
+    ///
+    /// PMAT-053: FP8 weight cache reduces data from 2 B/elem (FP16) to 1 B/elem (FP8),
+    /// halving memory bandwidth for prefill and batched decode HGEMM operations.
+    /// Requires sm_89+ (Ada Lovelace) for FP8 tensor core support.
+    ///
+    /// A (weights) and B (activations) are FP8 E4M3. C (output) is FP32.
+    /// FP32 accumulation preserves numerical stability.
+    ///
+    /// cuBLAS FP8 constraints: transa=Trans, transb=NoTrans.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if cublasGemmEx fails (e.g., FP8 not supported on hardware).
+    pub fn gemm_f8e4m3_to_f32(
+        &self,
+        transa: GemmOp,
+        transb: GemmOp,
+        m: i32,
+        n: i32,
+        k: i32,
+        alpha: f32,
+        a_ptr: CUdeviceptr,
+        lda: i32,
+        b_ptr: CUdeviceptr,
+        ldb: i32,
+        beta: f32,
+        c_ptr: CUdeviceptr,
+        ldc: i32,
+    ) -> Result<(), GpuError> {
+        let driver = get_cublas_driver()?;
+
+        let result = unsafe {
+            (driver.cublasGemmEx)(
+                self.handle,
+                transa.to_cublas(),
+                transb.to_cublas(),
+                m,
+                n,
+                k,
+                &alpha as *const f32 as *const std::ffi::c_void,
+                a_ptr as *const std::ffi::c_void,
+                CUDA_R_8F_E4M3,
+                lda,
+                b_ptr as *const std::ffi::c_void,
+                CUDA_R_8F_E4M3,
+                ldb,
+                &beta as *const f32 as *const std::ffi::c_void,
+                c_ptr as *mut std::ffi::c_void,
+                CUDA_R_32F,
+                ldc,
+                CUBLAS_COMPUTE_32F,
+                CUBLAS_GEMM_DEFAULT_TENSOR_OP,
+            )
+        };
+
+        CublasDriver::check(result).map_err(|e| {
+            GpuError::CudaDriver(format!("cublasGemmEx_f8e4m3_f32(m={m}, n={n}, k={k}): {e}"), 0)
         })
     }
 
