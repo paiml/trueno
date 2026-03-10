@@ -91,14 +91,17 @@ fn test_tensor_core_q4k_gemm_generates_ptx() {
 }
 
 #[test]
-fn test_tensor_core_q4k_gemm_has_fp16_io() {
+fn test_tensor_core_q4k_gemm_has_wmma_ops() {
     let kernel = TensorCoreQ4KGemmKernel::new(16, 3584, 4096);
     let ptx = kernel.emit_ptx();
-    // Should have FP16 loads and stores
-    assert!(ptx.contains("ld.global"));
-    assert!(ptx.contains("st.global"));
-    // Should have FP16 conversions
-    assert!(ptx.contains("cvt.f32.f16") || ptx.contains("cvt"));
+    // PMAT-064: Should have WMMA tensor core operations
+    assert!(ptx.contains("wmma.load.a"), "missing wmma.load.a");
+    assert!(ptx.contains("wmma.load.b"), "missing wmma.load.b");
+    assert!(ptx.contains("wmma.mma"), "missing wmma.mma");
+    assert!(ptx.contains("wmma.store.d"), "missing wmma.store.d");
+    // Should have Q4K dequant (FP16 conversions)
+    assert!(ptx.contains("cvt.f32.f16"), "missing Q4K dequant f32←f16");
+    assert!(ptx.contains("cvt.rn.f16.f32"), "missing f16←f32 for SHMEM");
 }
 
 #[test]
