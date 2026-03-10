@@ -5,7 +5,8 @@
 
 use crate::error::TruenoError;
 
-use super::compute::gemm_blis;
+use super::compute::{gemm_blis, gemm_blis_with_prepacked_b};
+use super::prepacked::PrepackedB;
 #[cfg(feature = "parallel")]
 use super::MC;
 
@@ -126,4 +127,78 @@ pub fn gemm_blis_parallel(
     c: &mut [f32],
 ) -> Result<(), TruenoError> {
     gemm_blis(m, n, k, a, b, c, None)
+}
+
+/// Parallel BLIS GEMM with pre-packed B matrix.
+///
+/// Key optimization: the pre-packed B is shared immutably across all threads.
+/// Each thread only packs A (which differs per M partition). This eliminates
+/// N_threads × redundant B packings per GEMM call.
+///
+/// # WAPR-KAIZEN Cycle 12
+///
+/// For 16-thread encoder FFN: eliminates 15 redundant B packings per GEMM call
+/// (128 total across 2 GEMMs × 4 layers).
+#[cfg(feature = "parallel")]
+pub fn gemm_blis_parallel_with_prepacked_b(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    prepacked_b: &PrepackedB,
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    use rayon::prelude::*;
+
+    if a.len() != m * k || c.len() != m * n {
+        return Err(TruenoError::InvalidInput("Dimension mismatch".to_string()));
+    }
+    if prepacked_b.k != k || prepacked_b.n != n {
+        return Err(TruenoError::InvalidInput(format!(
+            "PrepackedB dimension mismatch: expected ({}, {}), got ({}, {})",
+            k, n, prepacked_b.k, prepacked_b.n
+        )));
+    }
+
+    // Small matrices: single-threaded
+    if m * n * k < 1_000_000 {
+        return gemm_blis_with_prepacked_b(m, n, k, a, prepacked_b, c, None);
+    }
+
+    let scheduler = HeijunkaScheduler::default();
+    let partitions = scheduler.partition_m(m, MC);
+
+    let c_ptr = c.as_mut_ptr() as usize;
+
+    // Key: prepacked_b is shared (immutable &) across all threads — zero redundant packing
+    partitions.into_par_iter().for_each(|m_range| {
+        let m_local = m_range.len();
+        let m_start = m_range.start;
+
+        let a_local = &a[m_start * k..(m_start + m_local) * k];
+
+        // SAFETY: Each thread accesses a disjoint row range of C.
+        // Partitions are non-overlapping by construction in HeijunkaScheduler::partition_m.
+        let c_local = unsafe {
+            let ptr = c_ptr as *mut f32;
+            std::slice::from_raw_parts_mut(ptr.add(m_start * n), m_local * n)
+        };
+
+        let _ = gemm_blis_with_prepacked_b(m_local, n, k, a_local, prepacked_b, c_local, None);
+    });
+
+    Ok(())
+}
+
+/// Non-parallel fallback for pre-packed B
+#[cfg(not(feature = "parallel"))]
+pub fn gemm_blis_parallel_with_prepacked_b(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    prepacked_b: &PrepackedB,
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    gemm_blis_with_prepacked_b(m, n, k, a, prepacked_b, c, None)
 }

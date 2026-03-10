@@ -17,6 +17,7 @@ use crate::error::TruenoError;
 use super::microkernels::microkernel_8x6_true_asm;
 use super::microkernels::microkernel_scalar;
 use super::packing::{pack_a_block, pack_b_block, packed_a_size, packed_b_size};
+use super::prepacked::PrepackedB;
 use super::profiler::{BlisProfileLevel, BlisProfiler};
 use super::reference::gemm_reference;
 use super::{KC, MC, MR, NC, NR};
@@ -298,9 +299,134 @@ pub fn gemm_blis(
                 }
 
                 if let (Some(prof), Some(s)) = (profiler, start) {
-                    prof.record(BlisProfileLevel::Macro, s.elapsed().as_nanos() as u64, (2 * m * n * k) as u64);
+                    prof.record(
+                        BlisProfileLevel::Macro,
+                        s.elapsed().as_nanos() as u64,
+                        (2 * m * n * k) as u64,
+                    );
                 }
             });
+        });
+    });
+
+    Ok(())
+}
+
+/// BLIS-style blocked GEMM with pre-packed B matrix.
+///
+/// Identical to [`gemm_blis`] but skips B packing entirely, reading packed
+/// tiles from `prepacked_b` instead. This eliminates redundant B packing
+/// when the same weight matrix is reused across calls (e.g., in parallel GEMM
+/// where each thread would otherwise pack B independently).
+///
+/// # WAPR-KAIZEN Cycle 12
+///
+/// For encoder FFN: 16 threads × 2 GEMMs × 4 layers = 128 B packings eliminated.
+pub fn gemm_blis_with_prepacked_b(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    prepacked_b: &PrepackedB,
+    c: &mut [f32],
+    mut profiler: Option<&mut BlisProfiler>,
+) -> Result<(), TruenoError> {
+    if a.len() != m * k {
+        return Err(TruenoError::InvalidInput(format!(
+            "A size mismatch: expected {}, got {}",
+            m * k,
+            a.len()
+        )));
+    }
+    if c.len() != m * n {
+        return Err(TruenoError::InvalidInput(format!(
+            "C size mismatch: expected {}, got {}",
+            m * n,
+            c.len()
+        )));
+    }
+    if prepacked_b.k != k || prepacked_b.n != n {
+        return Err(TruenoError::InvalidInput(format!(
+            "PrepackedB dimension mismatch: expected ({}, {}), got ({}, {})",
+            k, n, prepacked_b.k, prepacked_b.n
+        )));
+    }
+
+    if m == 0 || n == 0 || k == 0 {
+        return Ok(());
+    }
+
+    let track_time = profiler.is_some();
+    let start = if track_time { Some(Instant::now()) } else { None };
+
+    let mc = MC.min(m);
+    let kc = KC.min(k);
+
+    let needed_a = packed_a_size(mc, kc);
+    let needed_c = MR * NR;
+
+    // Only need A and C micro buffers — B is already packed
+    TL_PACKED_A.with(|tl_a| {
+        TL_C_MICRO.with(|tl_c| {
+            let mut packed_a = tl_a.borrow_mut();
+            let mut c_micro = tl_c.borrow_mut();
+
+            if packed_a.len() < needed_a {
+                packed_a.resize(needed_a, 0.0);
+            } else {
+                packed_a[..needed_a].fill(0.0);
+            }
+            if c_micro.len() < needed_c {
+                c_micro.resize(needed_c, 0.0);
+            } else {
+                c_micro[..needed_c].fill(0.0);
+            }
+
+            let mut jc_idx = 0;
+            for jc in (0..n).step_by(NC) {
+                let nc_block = NC.min(n - jc);
+
+                let mut pc_idx = 0;
+                for pc in (0..k).step_by(KC) {
+                    let kc_block = KC.min(k - pc);
+
+                    // Use pre-packed B tile instead of runtime packing
+                    let packed_b_tile = prepacked_b.tile(jc_idx, pc_idx);
+
+                    for ic in (0..m).step_by(MC) {
+                        let mc_block = MC.min(m - ic);
+
+                        let pack_start = if track_time { Some(Instant::now()) } else { None };
+                        pack_a_block(a, k, ic, pc, mc_block, kc_block, &mut packed_a);
+                        record_prof(&mut profiler, BlisProfileLevel::Pack, pack_start, 0);
+
+                        compute_macroblock(
+                            c,
+                            &packed_a,
+                            packed_b_tile,
+                            &mut c_micro,
+                            ic,
+                            jc,
+                            mc_block,
+                            nc_block,
+                            kc_block,
+                            n,
+                            &mut profiler,
+                        );
+                    }
+
+                    pc_idx += 1;
+                }
+                jc_idx += 1;
+            }
+
+            if let (Some(prof), Some(s)) = (profiler, start) {
+                prof.record(
+                    BlisProfileLevel::Macro,
+                    s.elapsed().as_nanos() as u64,
+                    (2 * m * n * k) as u64,
+                );
+            }
         });
     });
 

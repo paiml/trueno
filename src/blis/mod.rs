@@ -39,6 +39,7 @@ pub mod microkernels;
 pub mod norms;
 pub mod packing;
 pub mod parallel;
+pub mod prepacked;
 pub mod profiler;
 pub mod reference;
 pub mod softmax;
@@ -70,10 +71,13 @@ pub use reference::{gemm_reference, gemm_reference_with_jidoka};
 pub use packing::{pack_a, pack_b, packed_a_size, packed_b_size};
 
 // Re-export compute
-pub use compute::gemm_blis;
+pub use compute::{gemm_blis, gemm_blis_with_prepacked_b};
 
 // Re-export parallel
-pub use parallel::{gemm_blis_parallel, HeijunkaScheduler};
+pub use parallel::{gemm_blis_parallel, gemm_blis_parallel_with_prepacked_b, HeijunkaScheduler};
+
+// Re-export prepacked
+pub use prepacked::PrepackedB;
 
 // Re-export transpose
 pub use transpose::transpose;
