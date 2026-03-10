@@ -283,7 +283,7 @@ impl QuantizeKernel {
                 ctx.branch_if(sub_done, "sub_loop_done");
 
                 // --- Scale/min extraction (correct GGML split format) ---
-                // Compute is_high = sub_idx >= 4
+                // Scale index = sub_idx directly (blocks 0-7 map sequentially)
                 let c_4_u32 = ctx.mov_u32_imm(4);
                 let is_high = ctx.setp_ge_u32(sub_idx, c_4_u32);
 
@@ -360,17 +360,23 @@ impl QuantizeKernel {
                 let d_scale = ctx.mul_f32(d, scale_f32);
                 let dmin_min = ctx.mul_f32(dmin, min_f32);
 
-                // qs mapping: pair = sub_idx / 2, nibble = sub_idx & 1
+                // GH-182: qs byte + K offset mapping
+                // GGML Q4K: each 64-element group uses 32 qs bytes (low+high nibbles)
+                //   pair = sub_idx / 2 → which 32-byte qs chunk
+                //   nibble_sel = sub_idx % 2 → low (0) or high (4) nibble shift
+                // qs byte: qs_base + pair*32 + val_idx
+                // K offset: sb*256 + pair*64 + nibble*32 + val_idx
                 let pair = ctx.div_u32(sub_idx, 2);
-                let pair_byte_base = ctx.mul_u32(pair, 32);
                 let nibble_sel = ctx.rem_u32(sub_idx, 2);
+                let pair_byte_base = ctx.mul_u32(pair, 32); // for qs addressing
                 let nibble_shift = ctx.mul_u32(nibble_sel, 4); // 0 or 4
 
-                // K offset: sb_idx*256 + pair*32 + (sub_idx&1)*128 + val_idx
+                // K offset: sb_idx*256 + pair*64 + nibble*32
                 let sb_k_base = ctx.mul_u32(sb_idx, Q4K_SUPER_BLOCK_SIZE);
-                let pair_k_offset = ctx.add_u32_reg(sb_k_base, pair_byte_base);
-                let half_offset = ctx.mul_u32(nibble_sel, 128); // 0 or 128
-                let base_k = ctx.add_u32_reg(pair_k_offset, half_offset);
+                let pair_k_base = ctx.mul_u32(pair, 64);
+                let pair_k_offset = ctx.add_u32_reg(sb_k_base, pair_k_base);
+                let nibble_k_offset = ctx.mul_u32(nibble_sel, 32);
+                let base_k = ctx.add_u32_reg(pair_k_offset, nibble_k_offset);
 
                 // ===== Inner loop: 32 values per sub-block =====
                 let val_idx = ctx.mov_u32_imm(0);
@@ -532,7 +538,10 @@ impl QuantizeKernel {
                 let sub_done = ctx.setp_ge_u32(sub_idx, c_8_u32);
                 ctx.branch_if(sub_done, "sub_loop_done");
 
-                // --- Scale/min extraction (identical to serial kernel) ---
+                // --- Scale/min extraction ---
+                // Scale index = sub_idx (0-7 maps to GGML blocks 0-7 sequentially).
+                // GGML Q4K: each pair of qs bytes shares low/high nibbles for two
+                // consecutive 32-element blocks. sub_idx directly indexes scales.
                 let c_4_u32 = ctx.mov_u32_imm(4);
                 let is_high = ctx.setp_ge_u32(sub_idx, c_4_u32);
 
@@ -600,17 +609,23 @@ impl QuantizeKernel {
                 let d_scale = ctx.mul_f32(d, scale_f32);
                 let dmin_min = ctx.mul_f32(dmin, min_f32);
 
-                // qs mapping: pair = sub_idx / 2, nibble = sub_idx & 1
+                // GH-182: qs byte + K offset mapping
+                // GGML Q4K: each 64-element group uses 32 qs bytes (low+high nibbles)
+                //   pair = sub_idx / 2 → which 32-byte qs chunk
+                //   nibble_sel = sub_idx % 2 → low (0) or high (4) nibble shift
+                // qs byte: qs_base + pair*32 + val_idx
+                // K offset: sb*256 + pair*64 + nibble*32 + val_idx
                 let pair = ctx.div_u32(sub_idx, 2);
-                let pair_byte_base = ctx.mul_u32(pair, 32);
                 let nibble_sel = ctx.rem_u32(sub_idx, 2);
-                let nibble_shift = ctx.mul_u32(nibble_sel, 4);
+                let pair_byte_base = ctx.mul_u32(pair, 32); // for qs addressing
+                let nibble_shift = ctx.mul_u32(nibble_sel, 4); // 0 or 4 bit shift
 
-                // K offset base: sb_idx*256 + pair*32 + (sub_idx&1)*128
+                // K offset base: sb_idx*256 + pair*64 + nibble*32
                 let sb_k_base = ctx.mul_u32(sb_idx, Q4K_SUPER_BLOCK_SIZE);
-                let pair_k_offset = ctx.add_u32_reg(sb_k_base, pair_byte_base);
-                let half_offset = ctx.mul_u32(nibble_sel, 128);
-                let base_k = ctx.add_u32_reg(pair_k_offset, half_offset);
+                let pair_k_base = ctx.mul_u32(pair, 64);
+                let pair_k_offset = ctx.add_u32_reg(sb_k_base, pair_k_base);
+                let nibble_k_offset = ctx.mul_u32(nibble_sel, 32);
+                let base_k = ctx.add_u32_reg(pair_k_offset, nibble_k_offset);
 
                 // ===== Inner loop: 32 values per sub-block =====
                 let val_idx = ctx.mov_u32_imm(0);
