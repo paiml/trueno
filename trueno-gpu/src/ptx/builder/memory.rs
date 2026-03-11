@@ -175,6 +175,20 @@ pub trait PtxMemory: KernelBuilderCore {
                 .src(Operand::Reg(val)),
         );
     }
+
+    /// Load f16 from shared memory (loaded as b16)
+    ///
+    /// Half-precision floats are loaded using b16 type in PTX.
+    fn ld_shared_f16(&mut self, addr: VirtualReg) -> VirtualReg {
+        let dst = self.registers_mut().allocate_virtual(PtxType::F16);
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::Ld, PtxType::B16)
+                .space(PtxStateSpace::Shared)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(addr)),
+        );
+        dst
+    }
 }
 
 // Blanket implementation
