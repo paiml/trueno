@@ -47,6 +47,11 @@ pub type CublasLtMatmulDescAttribute = u32;
 pub const CUBLASLT_MATMUL_DESC_TRANSA: CublasLtMatmulDescAttribute = 3;
 /// cublasOperation_t for B (attribute index 4 per cublasLt.h)
 pub const CUBLASLT_MATMUL_DESC_TRANSB: CublasLtMatmulDescAttribute = 4;
+/// Device pointer to FP32 scale factor for A matrix (attribute 21)
+/// D = alpha * A_scale * B_scale * (A_fp8 × B_fp8) + beta * C
+pub const CUBLASLT_MATMUL_DESC_A_SCALE_POINTER: CublasLtMatmulDescAttribute = 21;
+/// Device pointer to FP32 scale factor for B matrix (attribute 22)
+pub const CUBLASLT_MATMUL_DESC_B_SCALE_POINTER: CublasLtMatmulDescAttribute = 22;
 
 // ============================================================================
 // cuBLASLt Matrix Layout Attributes
