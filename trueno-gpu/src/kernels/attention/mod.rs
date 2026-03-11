@@ -24,8 +24,9 @@ mod flash_tests;
 #[cfg(test)]
 mod paged_tests;
 
-// Re-export FlashAttention kernel
+// Re-export FlashAttention kernels
 pub use flash::AttentionKernel;
+pub use flash::PrefillAttentionKernel;
 
 // Re-export Paged/Incremental attention kernels
 pub use paged::{

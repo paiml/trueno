@@ -43,7 +43,7 @@ pub use argmax::{ArgMaxFinalKernel, ArgMaxKernel};
 pub use attention::{
     AttentionKernel, BatchedIncrementalAttentionKernel, FlashDecodingChunkKernel,
     FlashDecodingReduceKernel, IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel,
-    FLASH_DECODE_CHUNK_SIZE,
+    PrefillAttentionKernel, FLASH_DECODE_CHUNK_SIZE,
 };
 pub use bias_activation::{Activation, BiasActivationKernel};
 pub use conv1d::{Conv1dKernel, TiledConv1dKernel};

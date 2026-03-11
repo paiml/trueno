@@ -139,31 +139,50 @@ impl TunerFeatures {
         let mut i = 0;
 
         // Static features (11)
-        a[i] = self.model_params_b; i += 1;
-        a[i] = self.hidden_dim_norm; i += 1;
-        a[i] = self.num_layers_norm; i += 1;
-        a[i] = self.num_heads_norm; i += 1;
-        a[i] = self.head_dim_norm; i += 1;
-        a[i] = self.vocab_size_log; i += 1;
-        a[i] = self.batch_size_norm; i += 1;
-        a[i] = self.seq_len_log; i += 1;
-        a[i] = self.cuda_graphs; i += 1;
-        a[i] = self.kv_cache_ratio; i += 1;
-        a[i] = self.is_prefill; i += 1;
+        a[i] = self.model_params_b;
+        i += 1;
+        a[i] = self.hidden_dim_norm;
+        i += 1;
+        a[i] = self.num_layers_norm;
+        i += 1;
+        a[i] = self.num_heads_norm;
+        i += 1;
+        a[i] = self.head_dim_norm;
+        i += 1;
+        a[i] = self.vocab_size_log;
+        i += 1;
+        a[i] = self.batch_size_norm;
+        i += 1;
+        a[i] = self.seq_len_log;
+        i += 1;
+        a[i] = self.cuda_graphs;
+        i += 1;
+        a[i] = self.kv_cache_ratio;
+        i += 1;
+        a[i] = self.is_prefill;
+        i += 1;
 
         // One-hot encodings (8 + 16)
-        a[i..i + 8].copy_from_slice(&self.quant_type_onehot); i += 8;
-        a[i..i + 16].copy_from_slice(&self.kernel_type_onehot); i += 16;
+        a[i..i + 8].copy_from_slice(&self.quant_type_onehot);
+        i += 8;
+        a[i..i + 16].copy_from_slice(&self.kernel_type_onehot);
+        i += 16;
 
         // Hardware features (5)
-        a[i] = self.gpu_mem_bw_norm; i += 1;
-        a[i] = self.gpu_compute_norm; i += 1;
-        a[i] = self.gpu_sm_norm; i += 1;
-        a[i] = self.gpu_l2_cache_norm; i += 1;
-        a[i] = self.is_zero_copy; i += 1;
+        a[i] = self.gpu_mem_bw_norm;
+        i += 1;
+        a[i] = self.gpu_compute_norm;
+        i += 1;
+        a[i] = self.gpu_sm_norm;
+        i += 1;
+        a[i] = self.gpu_l2_cache_norm;
+        i += 1;
+        a[i] = self.is_zero_copy;
+        i += 1;
 
         // Derived features (2)
-        a[i] = self.arithmetic_intensity; i += 1;
+        a[i] = self.arithmetic_intensity;
+        i += 1;
         a[i] = self.theoretical_efficiency;
 
         a
