@@ -228,6 +228,206 @@ impl CublasLtHandle {
             })
         }
     }
+
+    /// FP8 E4M3 × FP8 E4M3 → FP16 GEMM with per-tensor scaling
+    ///
+    /// D_f16 = alpha * a_scale * b_scale * (A_fp8 × B_fp8)
+    ///
+    /// a_scale_ptr, b_scale_ptr: device pointers to single FP32 values.
+    /// cuBLASLt multiplies the GEMM result by (a_scale * b_scale) internally,
+    /// recovering the original dynamic range lost during FP8 quantization.
+    #[allow(clippy::too_many_arguments)]
+    pub fn gemm_fp8_e4m3_to_f16_scaled(
+        &self,
+        transa: super::cublas::GemmOp,
+        transb: super::cublas::GemmOp,
+        m: i32,
+        n: i32,
+        k: i32,
+        alpha: f32,
+        a_ptr: u64,
+        lda: i32,
+        a_scale_ptr: u64, // device pointer to FP32 scale
+        b_ptr: u64,
+        ldb: i32,
+        b_scale_ptr: u64, // device pointer to FP32 scale
+        beta: f32,
+        d_ptr: u64,
+        ldd: i32,
+        stream: &CudaStream,
+    ) -> Result<(), GpuError> {
+        let driver = CublasLtDriver::load()
+            .ok_or_else(|| GpuError::CudaNotAvailable("cuBLASLt not loaded".to_string()))?;
+
+        let op_a: CublasOperation = match transa {
+            super::cublas::GemmOp::NoTrans => CUBLAS_OP_N,
+            super::cublas::GemmOp::Trans => CUBLAS_OP_T,
+        };
+        let op_b: CublasOperation = match transb {
+            super::cublas::GemmOp::NoTrans => CUBLAS_OP_N,
+            super::cublas::GemmOp::Trans => CUBLAS_OP_T,
+        };
+
+        unsafe {
+            // 1. Create matmul descriptor
+            let mut matmul_desc: CublasLtMatmulDesc = std::ptr::null_mut();
+            CublasLtDriver::check((driver.cublasLtMatmulDescCreate)(
+                &mut matmul_desc,
+                CUBLAS_COMPUTE_32F,
+                CUDA_R_32F,
+            ))?;
+
+            // Set transa/transb
+            CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
+                matmul_desc,
+                CUBLASLT_MATMUL_DESC_TRANSA,
+                &op_a as *const _ as *const c_void,
+                std::mem::size_of::<CublasOperation>(),
+            ))?;
+            CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
+                matmul_desc,
+                CUBLASLT_MATMUL_DESC_TRANSB,
+                &op_b as *const _ as *const c_void,
+                std::mem::size_of::<CublasOperation>(),
+            ))?;
+
+            // Set per-tensor scale pointers (device pointers to FP32 scalars)
+            let a_scale_device_ptr = a_scale_ptr as *const c_void;
+            CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
+                matmul_desc,
+                CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
+                &a_scale_device_ptr as *const _ as *const c_void,
+                std::mem::size_of::<*const c_void>(),
+            ))?;
+            let b_scale_device_ptr = b_scale_ptr as *const c_void;
+            CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
+                matmul_desc,
+                CUBLASLT_MATMUL_DESC_B_SCALE_POINTER,
+                &b_scale_device_ptr as *const _ as *const c_void,
+                std::mem::size_of::<*const c_void>(),
+            ))?;
+
+            // 2. Create matrix layouts (same as unscaled)
+            let (a_rows, a_cols) =
+                if op_a == CUBLAS_OP_T { (k as u64, m as u64) } else { (m as u64, k as u64) };
+            let mut a_layout: CublasLtMatrixLayout = std::ptr::null_mut();
+            CublasLtDriver::check((driver.cublasLtMatrixLayoutCreate)(
+                &mut a_layout,
+                CUDA_R_8F_E4M3,
+                a_rows,
+                a_cols,
+                lda as i64,
+            ))?;
+
+            let (b_rows, b_cols) =
+                if op_b == CUBLAS_OP_T { (n as u64, k as u64) } else { (k as u64, n as u64) };
+            let mut b_layout: CublasLtMatrixLayout = std::ptr::null_mut();
+            CublasLtDriver::check((driver.cublasLtMatrixLayoutCreate)(
+                &mut b_layout,
+                CUDA_R_8F_E4M3,
+                b_rows,
+                b_cols,
+                ldb as i64,
+            ))?;
+
+            let mut c_layout: CublasLtMatrixLayout = std::ptr::null_mut();
+            CublasLtDriver::check((driver.cublasLtMatrixLayoutCreate)(
+                &mut c_layout,
+                CUDA_R_16F,
+                m as u64,
+                n as u64,
+                ldd as i64,
+            ))?;
+
+            let mut d_layout: CublasLtMatrixLayout = std::ptr::null_mut();
+            CublasLtDriver::check((driver.cublasLtMatrixLayoutCreate)(
+                &mut d_layout,
+                CUDA_R_16F,
+                m as u64,
+                n as u64,
+                ldd as i64,
+            ))?;
+
+            // 3. Get algorithm
+            let mut pref: CublasLtMatmulPreference = std::ptr::null_mut();
+            CublasLtDriver::check((driver.cublasLtMatmulPreferenceCreate)(&mut pref))?;
+
+            let max_workspace: usize = 0;
+            CublasLtDriver::check((driver.cublasLtMatmulPreferenceSetAttribute)(
+                pref,
+                CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
+                &max_workspace as *const _ as *const c_void,
+                std::mem::size_of::<usize>(),
+            ))?;
+
+            let mut heur_result = std::mem::zeroed::<CublasLtMatmulHeuristicResult>();
+            let mut returned_count: i32 = 0;
+
+            let heur_status = (driver.cublasLtMatmulAlgoGetHeuristic)(
+                self.handle,
+                matmul_desc,
+                a_layout,
+                b_layout,
+                c_layout,
+                d_layout,
+                pref,
+                1,
+                &mut heur_result,
+                &mut returned_count,
+            );
+
+            if heur_status != CUBLASLT_STATUS_SUCCESS || returned_count == 0 {
+                (driver.cublasLtMatmulPreferenceDestroy)(pref);
+                (driver.cublasLtMatrixLayoutDestroy)(d_layout);
+                (driver.cublasLtMatrixLayoutDestroy)(c_layout);
+                (driver.cublasLtMatrixLayoutDestroy)(b_layout);
+                (driver.cublasLtMatrixLayoutDestroy)(a_layout);
+                (driver.cublasLtMatmulDescDestroy)(matmul_desc);
+
+                return Err(GpuError::CudaDriver(
+                    format!(
+                        "cublasLtMatmulAlgoGetHeuristic fp8_scaled failed: status={heur_status}, m={m}, n={n}, k={k}"
+                    ),
+                    heur_status,
+                ));
+            }
+
+            // 4. Execute scaled matmul
+            let matmul_status = (driver.cublasLtMatmul)(
+                self.handle,
+                matmul_desc,
+                &alpha as *const f32 as *const c_void,
+                a_ptr as *const c_void,
+                a_layout,
+                b_ptr as *const c_void,
+                b_layout,
+                &beta as *const f32 as *const c_void,
+                d_ptr as *const c_void,
+                c_layout,
+                d_ptr as *mut c_void,
+                d_layout,
+                &heur_result.algo,
+                std::ptr::null_mut(),
+                0,
+                stream.raw(),
+            );
+
+            // Cleanup
+            (driver.cublasLtMatmulPreferenceDestroy)(pref);
+            (driver.cublasLtMatrixLayoutDestroy)(d_layout);
+            (driver.cublasLtMatrixLayoutDestroy)(c_layout);
+            (driver.cublasLtMatrixLayoutDestroy)(b_layout);
+            (driver.cublasLtMatrixLayoutDestroy)(a_layout);
+            (driver.cublasLtMatmulDescDestroy)(matmul_desc);
+
+            CublasLtDriver::check(matmul_status).map_err(|e| {
+                GpuError::CudaDriver(
+                    format!("cublasLtMatmul_fp8_scaled(m={m}, n={n}, k={k}): {e}"),
+                    0,
+                )
+            })
+        }
+    }
 }
 
 impl Drop for CublasLtHandle {
