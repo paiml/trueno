@@ -16,9 +16,26 @@ use super::stream::CudaStream;
 use crate::GpuError;
 use std::ffi::c_void;
 
+/// PMAT-086: Cached cuBLASLt execution plan for a specific (M, N, K) shape.
+///
+/// Creating matmul descriptors + layouts + running the heuristic algorithm search
+/// costs ~20-50μs per GEMM call. With 168 GEMMs per prefill (7 per layer × 28 layers),
+/// this adds ~3-8ms of CPU-side overhead. Caching plans for the 4 unique shapes
+/// reduces this to a one-time cost of ~0.1ms.
+struct CachedFp8Plan {
+    matmul_desc: CublasLtMatmulDesc,
+    a_layout: CublasLtMatrixLayout,
+    b_layout: CublasLtMatrixLayout,
+    c_layout: CublasLtMatrixLayout,
+    d_layout: CublasLtMatrixLayout,
+    algo: CublasLtMatmulAlgo,
+}
+
 /// Safe wrapper around cuBLASLt handle
 pub struct CublasLtHandle {
     handle: CublasLtHandle_Raw,
+    /// PMAT-086: Cached FP8→FP16 GEMM plans keyed by (m_padded, n, k)
+    fp8_plan_cache: std::collections::HashMap<(i32, i32, i32), CachedFp8Plan>,
 }
 
 // SAFETY: cuBLASLt handles are thread-safe when used with proper stream synchronization.
@@ -38,7 +55,7 @@ impl CublasLtHandle {
         let status = unsafe { (driver.cublasLtCreate)(&mut handle) };
         CublasLtDriver::check(status)?;
 
-        Ok(Self { handle })
+        Ok(Self { handle, fp8_plan_cache: std::collections::HashMap::new() })
     }
 
     /// FP8 E4M3 × FP8 E4M3 → FP16 GEMM via cuBLASLt
@@ -428,12 +445,204 @@ impl CublasLtHandle {
             })
         }
     }
+
+    /// PMAT-086: Cached FP8 E4M3 × FP8 E4M3 → FP16 GEMM
+    ///
+    /// Same as `gemm_fp8_e4m3_to_f16` but caches the matmul descriptors, layouts,
+    /// and algorithm selection per unique (m, n, k) shape. Eliminates ~20-50μs of
+    /// cuBLASLt API overhead per GEMM call (descriptor creation + heuristic search).
+    ///
+    /// For prefill with 168 GEMMs across 4 unique shapes, this reduces CPU overhead
+    /// from ~5ms to ~0.1ms.
+    #[allow(clippy::too_many_arguments)]
+    pub fn gemm_fp8_e4m3_to_f16_cached(
+        &mut self,
+        m: i32,
+        n: i32,
+        k: i32,
+        alpha: f32,
+        a_ptr: u64,
+        lda: i32,
+        b_ptr: u64,
+        ldb: i32,
+        beta: f32,
+        d_ptr: u64,
+        ldd: i32,
+        stream: &CudaStream,
+    ) -> Result<(), GpuError> {
+        let driver = CublasLtDriver::load()
+            .ok_or_else(|| GpuError::CudaNotAvailable("cuBLASLt not loaded".to_string()))?;
+
+        let cache_key = (m, n, k);
+
+        // PMAT-086: Build and cache plan on first use for this shape
+        if !self.fp8_plan_cache.contains_key(&cache_key) {
+            unsafe {
+                let mut matmul_desc: CublasLtMatmulDesc = std::ptr::null_mut();
+                CublasLtDriver::check((driver.cublasLtMatmulDescCreate)(
+                    &mut matmul_desc,
+                    CUBLAS_COMPUTE_32F,
+                    CUDA_R_32F,
+                ))?;
+
+                let op_a = CUBLAS_OP_T;
+                let op_b = CUBLAS_OP_N;
+                CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
+                    matmul_desc,
+                    CUBLASLT_MATMUL_DESC_TRANSA,
+                    &op_a as *const _ as *const c_void,
+                    std::mem::size_of::<CublasOperation>(),
+                ))?;
+                CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
+                    matmul_desc,
+                    CUBLASLT_MATMUL_DESC_TRANSB,
+                    &op_b as *const _ as *const c_void,
+                    std::mem::size_of::<CublasOperation>(),
+                ))?;
+
+                // A: FP8 physical [K, M] col-major → transposed to logical [M, K]
+                let mut a_layout: CublasLtMatrixLayout = std::ptr::null_mut();
+                CublasLtDriver::check((driver.cublasLtMatrixLayoutCreate)(
+                    &mut a_layout,
+                    CUDA_R_8F_E4M3,
+                    k as u64,
+                    m as u64,
+                    lda as i64,
+                ))?;
+
+                // B: FP8 physical [K, N] col-major (NoTrans)
+                let mut b_layout: CublasLtMatrixLayout = std::ptr::null_mut();
+                CublasLtDriver::check((driver.cublasLtMatrixLayoutCreate)(
+                    &mut b_layout,
+                    CUDA_R_8F_E4M3,
+                    k as u64,
+                    n as u64,
+                    ldb as i64,
+                ))?;
+
+                // C/D: FP16 [M, N] col-major
+                let mut c_layout: CublasLtMatrixLayout = std::ptr::null_mut();
+                CublasLtDriver::check((driver.cublasLtMatrixLayoutCreate)(
+                    &mut c_layout,
+                    CUDA_R_16F,
+                    m as u64,
+                    n as u64,
+                    ldd as i64,
+                ))?;
+
+                let mut d_layout: CublasLtMatrixLayout = std::ptr::null_mut();
+                CublasLtDriver::check((driver.cublasLtMatrixLayoutCreate)(
+                    &mut d_layout,
+                    CUDA_R_16F,
+                    m as u64,
+                    n as u64,
+                    ldd as i64,
+                ))?;
+
+                // Heuristic algorithm search (expensive — ~10-50μs)
+                let mut pref: CublasLtMatmulPreference = std::ptr::null_mut();
+                CublasLtDriver::check((driver.cublasLtMatmulPreferenceCreate)(&mut pref))?;
+
+                let max_workspace: usize = 0;
+                CublasLtDriver::check((driver.cublasLtMatmulPreferenceSetAttribute)(
+                    pref,
+                    CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
+                    &max_workspace as *const _ as *const c_void,
+                    std::mem::size_of::<usize>(),
+                ))?;
+
+                let mut heur_result = std::mem::zeroed::<CublasLtMatmulHeuristicResult>();
+                let mut returned_count: i32 = 0;
+
+                let heur_status = (driver.cublasLtMatmulAlgoGetHeuristic)(
+                    self.handle,
+                    matmul_desc,
+                    a_layout,
+                    b_layout,
+                    c_layout,
+                    d_layout,
+                    pref,
+                    1,
+                    &mut heur_result,
+                    &mut returned_count,
+                );
+
+                (driver.cublasLtMatmulPreferenceDestroy)(pref);
+
+                if heur_status != CUBLASLT_STATUS_SUCCESS || returned_count == 0 {
+                    (driver.cublasLtMatrixLayoutDestroy)(d_layout);
+                    (driver.cublasLtMatrixLayoutDestroy)(c_layout);
+                    (driver.cublasLtMatrixLayoutDestroy)(b_layout);
+                    (driver.cublasLtMatrixLayoutDestroy)(a_layout);
+                    (driver.cublasLtMatmulDescDestroy)(matmul_desc);
+
+                    return Err(GpuError::CudaDriver(
+                        format!(
+                            "cublasLtMatmulAlgoGetHeuristic fp8_cached failed: status={heur_status}, m={m}, n={n}, k={k}"
+                        ),
+                        heur_status,
+                    ));
+                }
+
+                self.fp8_plan_cache.insert(
+                    cache_key,
+                    CachedFp8Plan {
+                        matmul_desc,
+                        a_layout,
+                        b_layout,
+                        c_layout,
+                        d_layout,
+                        algo: heur_result.algo,
+                    },
+                );
+            }
+        }
+
+        // Execute with cached plan — only the cublasLtMatmul call, no descriptor overhead
+        let plan = self.fp8_plan_cache.get(&cache_key).expect("just inserted");
+
+        unsafe {
+            let matmul_status = (driver.cublasLtMatmul)(
+                self.handle,
+                plan.matmul_desc,
+                &alpha as *const f32 as *const c_void,
+                a_ptr as *const c_void,
+                plan.a_layout,
+                b_ptr as *const c_void,
+                plan.b_layout,
+                &beta as *const f32 as *const c_void,
+                d_ptr as *const c_void,
+                plan.c_layout,
+                d_ptr as *mut c_void,
+                plan.d_layout,
+                &plan.algo,
+                std::ptr::null_mut(),
+                0,
+                stream.raw(),
+            );
+
+            CublasLtDriver::check(matmul_status).map_err(|e| {
+                GpuError::CudaDriver(
+                    format!("cublasLtMatmul_fp8_cached(m={m}, n={n}, k={k}): {e}"),
+                    0,
+                )
+            })
+        }
+    }
 }
 
 impl Drop for CublasLtHandle {
     fn drop(&mut self) {
         if let Some(driver) = CublasLtDriver::load() {
             unsafe {
+                // PMAT-086: Clean up cached plans
+                for plan in self.fp8_plan_cache.values() {
+                    (driver.cublasLtMatrixLayoutDestroy)(plan.d_layout);
+                    (driver.cublasLtMatrixLayoutDestroy)(plan.c_layout);
+                    (driver.cublasLtMatrixLayoutDestroy)(plan.b_layout);
+                    (driver.cublasLtMatrixLayoutDestroy)(plan.a_layout);
+                    (driver.cublasLtMatmulDescDestroy)(plan.matmul_desc);
+                }
                 (driver.cublasLtDestroy)(self.handle);
             }
         }

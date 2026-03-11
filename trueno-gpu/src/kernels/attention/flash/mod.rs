@@ -26,8 +26,11 @@
 
 #![allow(clippy::similar_names)]
 
+mod prefill_fused;
 mod standard;
 mod tensor_core;
+
+pub use prefill_fused::PrefillAttentionKernel;
 
 use crate::kernels::Kernel;
 use crate::ptx::PtxKernel;
