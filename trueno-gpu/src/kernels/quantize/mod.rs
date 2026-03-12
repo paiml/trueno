@@ -48,7 +48,7 @@ pub use dot::{PackedDp4aQ4KQ8Kernel, Q4KQ8DotKernel};
 pub use dp4a_gemm::Dp4aQ4KGemmKernel;
 pub use fp16_tensor::{
     Fp16Q4KGemvKernel, InterleavedWmmaQ4KGemmKernel, MultiWarpTensorCoreQ4KGemmKernel,
-    TensorCoreQ4KGemmKernel,
+    TensorCoreQ4KGemmKernel, W4a16WmmaQ4KGemmKernel,
 };
 pub use fused::{
     FusedGateUpQ4KGemvKernel, FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormQ4KGemvKernel,
@@ -60,6 +60,7 @@ pub use nf4_cpu::{
     NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,
 };
 pub use q4k::interleaved::repack_q4k_interleaved;
+pub use q4k::w4a16::repack_q4k_w4a16;
 pub use q4k::{
     BatchedHwDp4aQ4KGemvKernel, BatchedQ4KGemvKernel, ChunkedTiledQ4KGemvKernel,
     CoalescedQ4KGemvKernel, Dp4aQ4KGemvKernel, FusedGateUpSwigluHwDp4aQ4KGemvKernel,
