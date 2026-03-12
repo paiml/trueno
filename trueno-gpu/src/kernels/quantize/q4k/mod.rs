@@ -26,6 +26,7 @@ mod dequant;
 mod dp4a;
 pub mod interleaved;
 mod tiled;
+pub mod w4a16;
 
 pub use basic::Q4KGemvKernel;
 pub use batched::BatchedQ4KGemvKernel;
