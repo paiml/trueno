@@ -186,6 +186,11 @@ impl Kernel for Dp4aQ4KGemmKernel {
                 // DP4A constant
                 let c_ones = ctx.mov_u32_imm(0x0101_0101);
 
+                // PMAT-029: Hoist repeated bitmask constants before inner loop
+                let c_mask_6bit = ctx.mov_u32_imm(0x3F3F_3F3F);
+                let c_mask_4bit = ctx.mov_u32_imm(0x0F0F_0F0F);
+                let c_mask_2bit = ctx.mov_u32_imm(0x0303_0303);
+
                 // ===== C2: TILE_M accumulators (compile-time unrolled) =====
                 let f32_zero = ctx.mov_f32_imm(0.0);
                 let mut accs = Vec::with_capacity(tile_m as usize);
@@ -220,19 +225,19 @@ impl Kernel for Dp4aQ4KGemmKernel {
                 let sc811_addr = ctx.add_u64(sc_base, c_8_64);
                 let sc811 = ctx.ld_global_u32(sc811_addr);
 
-                // Scale extraction (identical to HW DP4A GEMV)
-                let sc_lo4 = ctx.and_u32_imm(sc03, 0x3F3F_3F3F);
-                let mn_lo4 = ctx.and_u32_imm(sc47, 0x3F3F_3F3F);
-                let sc_hi_low = ctx.and_u32_imm(sc811, 0x0F0F_0F0F);
+                // Scale extraction (PMAT-029 hoisted constants)
+                let sc_lo4 = ctx.and_u32(sc03, c_mask_6bit);
+                let mn_lo4 = ctx.and_u32(sc47, c_mask_6bit);
+                let sc_hi_low = ctx.and_u32(sc811, c_mask_4bit);
                 let t = ctx.shr_u32_imm(sc03, 6);
-                let t = ctx.and_u32_imm(t, 0x0303_0303);
+                let t = ctx.and_u32(t, c_mask_2bit);
                 let sc_hi_top = ctx.shl_u32_imm(t, 4);
                 let sc_hi4 = ctx.or_u32(sc_hi_low, sc_hi_top);
 
                 let mn_hi_raw = ctx.shr_u32_imm(sc811, 4);
-                let mn_hi_low = ctx.and_u32_imm(mn_hi_raw, 0x0F0F_0F0F);
+                let mn_hi_low = ctx.and_u32(mn_hi_raw, c_mask_4bit);
                 let t = ctx.shr_u32_imm(sc47, 6);
-                let t = ctx.and_u32_imm(t, 0x0303_0303);
+                let t = ctx.and_u32(t, c_mask_2bit);
                 let mn_hi_top = ctx.shl_u32_imm(t, 4);
                 let mn_hi4 = ctx.or_u32(mn_hi_low, mn_hi_top);
 
@@ -250,12 +255,12 @@ impl Kernel for Dp4aQ4KGemmKernel {
                 let v1_addr = ctx.add_u64(q4_addr, c_16_64);
                 let v1 = ctx.ld_global_u32(v1_addr);
 
-                let v0_lo = ctx.and_u32_imm(v0, 0x0F0F_0F0F);
-                let v1_lo = ctx.and_u32_imm(v1, 0x0F0F_0F0F);
+                let v0_lo = ctx.and_u32(v0, c_mask_4bit);
+                let v1_lo = ctx.and_u32(v1, c_mask_4bit);
                 let v0_hi = ctx.shr_u32_imm(v0, 4);
-                let v0_hi = ctx.and_u32_imm(v0_hi, 0x0F0F_0F0F);
+                let v0_hi = ctx.and_u32(v0_hi, c_mask_4bit);
                 let v1_hi = ctx.shr_u32_imm(v1, 4);
-                let v1_hi = ctx.and_u32_imm(v1_hi, 0x0F0F_0F0F);
+                let v1_hi = ctx.and_u32(v1_hi, c_mask_4bit);
 
                 // ===== Per-row Q8 loading + DP4A (C2: compile-time unrolled) =====
                 let q8_sb_off_base = ctx.mul_wide_u32_reg(sb_idx, c_288_u32);

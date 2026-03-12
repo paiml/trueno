@@ -129,6 +129,12 @@ impl Kernel for HalfWarpDp4aQ4KGemvKernel {
                 // DP4A constant
                 let c_ones = ctx.mov_u32_imm(0x0101_0101);
 
+                // PMAT-029: Hoist repeated bitmask constants before inner loop.
+                // and_u32_imm emits mov+and per call — hoisting saves 7 movs/SB.
+                let c_mask_6bit = ctx.mov_u32_imm(0x3F3F_3F3F);
+                let c_mask_4bit = ctx.mov_u32_imm(0x0F0F_0F0F);
+                let c_mask_2bit = ctx.mov_u32_imm(0x0303_0303);
+
                 // ===== Grid-stride row loop =====
                 let row_idx = ctx.mov_u32_imm(0);
                 ctx.add_u32_reg_inplace(row_idx, block_id);
@@ -172,21 +178,22 @@ impl Kernel for HalfWarpDp4aQ4KGemvKernel {
                 let sc811 = ctx.ld_global_u32(sc811_addr);
 
                 // GH-173: Parallel byte-masked scale extraction
+                // PMAT-029: Use hoisted constant registers (saves 7 mov/SB)
                 // Blocks 0-3: low 6 bits
-                let sc_lo4 = ctx.and_u32_imm(sc03, 0x3F3F_3F3F);
-                let mn_lo4 = ctx.and_u32_imm(sc47, 0x3F3F_3F3F);
+                let sc_lo4 = ctx.and_u32(sc03, c_mask_6bit);
+                let mn_lo4 = ctx.and_u32(sc47, c_mask_6bit);
 
                 // Blocks 4-7: combine low 4 + high 2
-                let sc_hi_low = ctx.and_u32_imm(sc811, 0x0F0F_0F0F);
+                let sc_hi_low = ctx.and_u32(sc811, c_mask_4bit);
                 let t = ctx.shr_u32_imm(sc03, 6);
-                let t = ctx.and_u32_imm(t, 0x0303_0303);
+                let t = ctx.and_u32(t, c_mask_2bit);
                 let sc_hi_top = ctx.shl_u32_imm(t, 4);
                 let sc_hi4 = ctx.or_u32(sc_hi_low, sc_hi_top);
 
                 let mn_hi_raw = ctx.shr_u32_imm(sc811, 4);
-                let mn_hi_low = ctx.and_u32_imm(mn_hi_raw, 0x0F0F_0F0F);
+                let mn_hi_low = ctx.and_u32(mn_hi_raw, c_mask_4bit);
                 let t = ctx.shr_u32_imm(sc47, 6);
-                let t = ctx.and_u32_imm(t, 0x0303_0303);
+                let t = ctx.and_u32(t, c_mask_2bit);
                 let mn_hi_top = ctx.shl_u32_imm(t, 4);
                 let mn_hi4 = ctx.or_u32(mn_hi_low, mn_hi_top);
 
@@ -213,8 +220,8 @@ impl Kernel for HalfWarpDp4aQ4KGemvKernel {
                 let q8_data = ctx.add_u64(q8_blk, lig_x4_64);
 
                 // ===== QR=0: Low nibbles =====
-                let v0_lo = ctx.and_u32_imm(v0, 0x0F0F_0F0F);
-                let v1_lo = ctx.and_u32_imm(v1, 0x0F0F_0F0F);
+                let v0_lo = ctx.and_u32(v0, c_mask_4bit);
+                let v1_lo = ctx.and_u32(v1, c_mask_4bit);
 
                 let u0_lo = ctx.ld_global_u32(q8_data);
                 let u1_lo_addr = ctx.add_u64(q8_data, c_16_64);
@@ -248,9 +255,9 @@ impl Kernel for HalfWarpDp4aQ4KGemvKernel {
 
                 // ===== QR=1: High nibbles =====
                 let v0_hi = ctx.shr_u32_imm(v0, 4);
-                let v0_hi = ctx.and_u32_imm(v0_hi, 0x0F0F_0F0F);
+                let v0_hi = ctx.and_u32(v0_hi, c_mask_4bit);
                 let v1_hi = ctx.shr_u32_imm(v1, 4);
-                let v1_hi = ctx.and_u32_imm(v1_hi, 0x0F0F_0F0F);
+                let v1_hi = ctx.and_u32(v1_hi, c_mask_4bit);
 
                 // Q8 block +1 (36 bytes later)
                 let q8_blk_hi = ctx.add_u64(q8_blk, c_36_64);
