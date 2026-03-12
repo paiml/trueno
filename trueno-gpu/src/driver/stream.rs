@@ -174,7 +174,9 @@ impl CudaStream {
             )
         };
 
-        CudaDriver::check(result).map_err(|e| GpuError::KernelLaunch(e.to_string()))
+        CudaDriver::check(result).map_err(|e| GpuError::KernelLaunch(e.to_string()))?;
+
+        Ok(())
     }
 
     // ========================================================================
