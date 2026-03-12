@@ -34,20 +34,21 @@ use crate::ptx::{PtxKernel, PtxReg, PtxType};
 ///   each load one half-warp partial from shared memory, then `shfl_down` with
 ///   deltas 4,2,1 reduces to thread 0. Threads >= num_half_warps contribute 0.0.
 ///   Replaces serial thread-0 loop (O(num_half_warps) → O(log2) = 3 shuffles).
+///   4-warp hypothesis FALSIFIED (register pressure, -2% decode on RTX 4060L).
 pub struct HalfWarpDp4aQ4KGemvKernel {
     /// K dimension (input dimension, must be multiple of 256)
     pub k: u32,
     /// N dimension (output dimension)
     pub n: u32,
-    /// Number of warps per block (default: 4, giving 8 half-warps).
-    /// PMAT-089: increased from 3→4 for better SM occupancy and latency hiding.
+    /// Number of warps per block (default: 3, giving 6 half-warps).
+    /// PMAT-089: 4 warps FALSIFIED (register pressure, -2% decode). 3 is optimal.
     pub num_warps: u32,
 }
 
 impl HalfWarpDp4aQ4KGemvKernel {
-    /// Create a new HW DP4A Q4K GEMV kernel with default 4 warps per CTA.
+    /// Create a new HW DP4A Q4K GEMV kernel with default 3 warps per CTA.
     pub fn new(k: u32, n: u32) -> Self {
-        Self { k, n, num_warps: 4 }
+        Self { k, n, num_warps: 3 }
     }
 }
 

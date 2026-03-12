@@ -32,15 +32,15 @@ pub struct BatchedHwDp4aQ4KGemvKernel {
     pub n: u32,
     /// Batch size M (number of sequences)
     pub m: u32,
-    /// Number of warps per block (default: 4, giving 8 half-warps).
-    /// PMAT-089: increased from 3→4 for better SM occupancy.
+    /// Number of warps per block (default: 3, giving 6 half-warps).
+    /// PMAT-089: 4 warps FALSIFIED (register pressure, -2% decode). 3 is optimal.
     pub num_warps: u32,
 }
 
 impl BatchedHwDp4aQ4KGemvKernel {
     /// Create a new batched HW DP4A Q4K GEMV kernel.
     pub fn new(k: u32, n: u32, m: u32) -> Self {
-        Self { k, n, m, num_warps: 4 }
+        Self { k, n, m, num_warps: 3 }
     }
 }
 
