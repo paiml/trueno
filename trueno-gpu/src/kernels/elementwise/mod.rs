@@ -63,7 +63,10 @@ mod transform_tests;
 // Re-export all kernel types
 pub use activations::{ElementwiseMulKernel, GeluKernel, ReluKernel, ScaleKernel, SiluKernel};
 pub use kv_cache::{KvCacheScatterIndirectKernel, KvCacheScatterKernel};
-pub use residual::{BatchedResidualAddKernel, FusedResidualRmsNormKernel, ResidualAddKernel};
+pub use residual::{
+    BatchedFusedResidualRmsNormKernel, BatchedResidualAddKernel, FusedResidualRmsNormKernel,
+    ResidualAddKernel,
+};
 pub use rope::{
     BatchedRopeBackwardKernel, BatchedRopeKernel, PreciseRopeIndirectKernel, PreciseRopeKernel,
     RopeIndirectKernel, RopeKernel, RopeNeoxIndirectKernel, RopeNeoxKernel,
