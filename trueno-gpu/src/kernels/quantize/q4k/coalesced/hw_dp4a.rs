@@ -17,10 +17,11 @@ use crate::ptx::{PtxKernel, PtxReg, PtxType};
 ///   each group covers 64 values (qs bytes `[32*g..32*g+31]`).
 ///   QR=2 inner loop extracts low + high nibbles: 4 threads x 8 bytes x 2 nibbles = 64.
 ///
-/// - **C3 (Instruction density)**: ~108 inner loop instructions for 16 values
-///   = 6.75 insn/value. MWV: 99 instructions for 8 values = 12.4 insn/value.
-///   Total thread-instructions per SB: 16 x 108 = 1728 vs 32 x 99 = 3168 (1.83x).
+/// - **C3 (Instruction density)**: ~93 inner loop instructions for 16 values
+///   = 5.8 insn/value. MWV: 99 instructions for 8 values = 12.4 insn/value.
+///   Total thread-instructions per SB: 16 x 93 = 1488 vs 32 x 99 = 3168 (2.13x).
 ///   PMAT-033: FMA chain saves 4 insn/SB (neg_dmin hoisted, fma replaces mul+sub).
+///   PMAT-029: Hoisted bitmask constants save 10 insn/SB (103→93).
 ///
 /// - **C4 (Reduction correctness)**: Full-warp `shfl.sync.down` with delta=8,4,2,1
 ///   yields correct half-warp sums at lanes 0 and 16. Proof: shfl reads happen
@@ -388,12 +389,13 @@ mod tests {
         // Count semicolons as proxy for instructions (each PTX instruction ends with ;)
         let insn_count = inner.matches(';').count();
 
-        // Contract: <= 120 instructions for 16 values (7.5 insn/value)
+        // Contract: <= 100 instructions for 16 values (6.25 insn/value)
         // MWV baseline: 99 instructions for 8 values (12.4 insn/value)
-        // Thread-insn/SB: 16×120=1920 vs 32×99=3168 (1.65x fewer)
+        // Thread-insn/SB: 16×100=1600 vs 32×99=3168 (1.98x fewer)
+        // PMAT-029: Tightened from 120 to 100 after bitmask constant hoisting
         assert!(
-            insn_count <= 120,
-            "C3 violated: inner loop has {} instructions (limit 120)",
+            insn_count <= 100,
+            "C3 violated: inner loop has {} instructions (limit 100)",
             insn_count
         );
 
