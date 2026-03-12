@@ -32,14 +32,15 @@ pub struct BatchedHwDp4aQ4KGemvKernel {
     pub n: u32,
     /// Batch size M (number of sequences)
     pub m: u32,
-    /// Number of warps per block (default: 3, giving 6 half-warps)
+    /// Number of warps per block (default: 4, giving 8 half-warps).
+    /// PMAT-089: increased from 3→4 for better SM occupancy.
     pub num_warps: u32,
 }
 
 impl BatchedHwDp4aQ4KGemvKernel {
     /// Create a new batched HW DP4A Q4K GEMV kernel.
     pub fn new(k: u32, n: u32, m: u32) -> Self {
-        Self { k, n, m, num_warps: 3 }
+        Self { k, n, m, num_warps: 4 }
     }
 }
 
@@ -337,18 +338,39 @@ impl Kernel for BatchedHwDp4aQ4KGemvKernel {
                 ctx.label("bhw_skip_sm");
                 ctx.bar_sync(0);
 
-                // Thread 0 reduces all half-warps for each batch element and stores
-                let is_t0 = ctx.setp_eq_u32(thread_id, z);
-                ctx.branch_if_not(is_t0, "bhw_skip_store");
+                // ===== PMAT-089: Parallel warp-0 reduction for M batch elements =====
+                // Warp 0 threads load from smem and shfl_down reduce.
+                let is_warp0 = ctx.setp_eq_u32(warp_id, z);
+                ctx.branch_if_not(is_warp0, "bhw_skip_store");
+
+                let in_range = ctx.setp_lt_u32_imm(lane_id, num_half_warps);
+                let zero_f = ctx.mov_f32_imm(0.0);
+
+                // Lane 0 predicate for store (computed once outside loop)
+                let is_l0 = ctx.setp_eq_u32(lane_id, z);
 
                 for mi in 0..m {
-                    let result = ctx.mov_f32_imm(0.0);
-                    for hw in 0..num_half_warps {
-                        let off_val = (hw * m + mi) * 4;
-                        let off = ctx.mov_u64_imm(u64::from(off_val));
-                        let val = ctx.ld_shared_f32(off);
-                        ctx.add_f32_inplace(result, val);
-                    }
+                    // Thread i loads smem[i * M + mi] if i < num_half_warps
+                    // Layout: smem[hw * M + mi], stride = M between half-warps
+                    let mi_off = ctx.mov_u32_imm(mi);
+                    let hw_m = ctx.mul_u32(lane_id, m);
+                    let idx = ctx.add_u32_reg(hw_m, mi_off);
+                    let sm_off = ctx.shl_u32_imm(idx, 2);
+                    let sm_addr = ctx.cvt_u64_u32(sm_off);
+                    let loaded = ctx.ld_shared_f32(sm_addr);
+                    let partial = ctx.selp_f32(in_range, loaded, zero_f);
+
+                    // Warp shuffle reduce: 3 steps for up to 8 half-warps
+                    let t = ctx.shfl_down_f32(partial, 4, 0xFFFF_FFFF);
+                    let partial = ctx.add_f32(partial, t);
+                    let t = ctx.shfl_down_f32(partial, 2, 0xFFFF_FFFF);
+                    let partial = ctx.add_f32(partial, t);
+                    let t = ctx.shfl_down_f32(partial, 1, 0xFFFF_FFFF);
+                    let result = ctx.add_f32(partial, t);
+
+                    // Lane 0 stores the final sum (predicated branch per mi)
+                    let skip_label = format!("bhw_skip_mi{mi}");
+                    ctx.branch_if_not(is_l0, &skip_label);
 
                     // y[mi * N + row] — row-major output for batch element mi
                     let mi_reg = ctx.mov_u32_imm(mi);
@@ -357,6 +379,8 @@ impl Kernel for BatchedHwDp4aQ4KGemvKernel {
                     let y_off = ctx.add_u64(y_mi_base, y_row_off);
                     let y_addr = ctx.add_u64(y_ptr, y_off);
                     ctx.st_global_f32(y_addr, result);
+
+                    ctx.label(&skip_label);
                 }
 
                 ctx.label("bhw_skip_store");

@@ -29,19 +29,25 @@ use crate::ptx::{PtxKernel, PtxReg, PtxType};
 ///   lane in half-warp 0 is also in half-warp 0 (delta <= 8, max source = 15).
 ///   Cross-contamination at lane 8 (reads lane 16) propagates only to lanes 8+,
 ///   which are never read by lane 0's reduction chain.
+///
+/// - **C5 (Parallel final reduction, PMAT-089)**: Warp 0 threads 0..num_half_warps
+///   each load one half-warp partial from shared memory, then `shfl_down` with
+///   deltas 4,2,1 reduces to thread 0. Threads >= num_half_warps contribute 0.0.
+///   Replaces serial thread-0 loop (O(num_half_warps) → O(log2) = 3 shuffles).
 pub struct HalfWarpDp4aQ4KGemvKernel {
     /// K dimension (input dimension, must be multiple of 256)
     pub k: u32,
     /// N dimension (output dimension)
     pub n: u32,
-    /// Number of warps per block (default: 3, giving 6 half-warps)
+    /// Number of warps per block (default: 4, giving 8 half-warps).
+    /// PMAT-089: increased from 3→4 for better SM occupancy and latency hiding.
     pub num_warps: u32,
 }
 
 impl HalfWarpDp4aQ4KGemvKernel {
-    /// Create a new HW DP4A Q4K GEMV kernel with default 3 warps per CTA.
+    /// Create a new HW DP4A Q4K GEMV kernel with default 4 warps per CTA.
     pub fn new(k: u32, n: u32) -> Self {
-        Self { k, n, num_warps: 3 }
+        Self { k, n, num_warps: 4 }
     }
 }
 
@@ -320,16 +326,31 @@ impl Kernel for HalfWarpDp4aQ4KGemvKernel {
                 ctx.label("hw_skip_sm");
                 ctx.bar_sync(0);
 
-                // Thread 0 reduces all half-warps and stores
-                let is_t0 = ctx.setp_eq_u32(thread_id, z);
-                ctx.branch_if_not(is_t0, "hw_skip_store");
+                // ===== C5: Parallel warp-0 reduction (PMAT-089) =====
+                // Warp 0 threads each load one half-warp partial, then shfl_down.
+                // Replaces serial thread-0 loop with O(log2) shuffles.
+                let is_warp0 = ctx.setp_eq_u32(warp_id, z);
+                ctx.branch_if_not(is_warp0, "hw_skip_store");
 
-                let result = ctx.mov_f32_imm(0.0);
-                for hw in 0..num_half_warps {
-                    let off = ctx.mov_u64_imm(u64::from(hw * 4));
-                    let val = ctx.ld_shared_f32(off);
-                    ctx.add_f32_inplace(result, val);
-                }
+                // Thread i in warp 0 loads smem[i] if i < num_half_warps, else 0.0
+                let in_range = ctx.setp_lt_u32_imm(lane_id, num_half_warps);
+                let my_off = ctx.shl_u32_imm(lane_id, 2);
+                let my_addr = ctx.cvt_u64_u32(my_off);
+                let loaded = ctx.ld_shared_f32(my_addr);
+                let zero_f = ctx.mov_f32_imm(0.0);
+                let partial = ctx.selp_f32(in_range, loaded, zero_f);
+
+                // Warp shuffle reduce: 3 steps for up to 8 half-warps
+                let t = ctx.shfl_down_f32(partial, 4, 0xFFFF_FFFF);
+                let partial = ctx.add_f32(partial, t);
+                let t = ctx.shfl_down_f32(partial, 2, 0xFFFF_FFFF);
+                let partial = ctx.add_f32(partial, t);
+                let t = ctx.shfl_down_f32(partial, 1, 0xFFFF_FFFF);
+                let result = ctx.add_f32(partial, t);
+
+                // Lane 0 of warp 0 = thread 0 stores the final sum
+                let is_t0 = ctx.setp_eq_u32(lane_id, z);
+                ctx.branch_if_not(is_t0, "hw_skip_store");
 
                 let y_off = ctx.mul_wide_u32(row_idx, 4);
                 let y_addr = ctx.add_u64(y_ptr, y_off);
