@@ -36,14 +36,15 @@ pub struct FusedGateUpSwigluHwDp4aQ4KGemvKernel {
     pub k: u32,
     /// N dimension (intermediate size, output dimension)
     pub n: u32,
-    /// Number of warps per block (default: 3, giving 6 half-warps)
+    /// Number of warps per block (default: 4, giving 8 half-warps).
+    /// PMAT-089: increased from 3→4 for better SM occupancy.
     pub num_warps: u32,
 }
 
 impl FusedGateUpSwigluHwDp4aQ4KGemvKernel {
-    /// Create a new fused gate+up+SwiGLU HW DP4A Q4K GEMV kernel with default 3 warps.
+    /// Create a new fused gate+up+SwiGLU HW DP4A Q4K GEMV kernel with default 4 warps.
     pub fn new(k: u32, n: u32) -> Self {
-        Self { k, n, num_warps: 3 }
+        Self { k, n, num_warps: 4 }
     }
 }
 
@@ -419,21 +420,43 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
                 ctx.label("fgs_skip_sm");
                 ctx.bar_sync(0);
 
-                // ===== Thread 0: final reduction + C5: SwiGLU =====
-                let is_t0 = ctx.setp_eq_u32(thread_id, z);
+                // ===== PMAT-089: Parallel warp-0 reduction + C5: SwiGLU =====
+                let is_warp0 = ctx.setp_eq_u32(warp_id, z);
+                ctx.branch_if_not(is_warp0, "fgs_skip_store");
+
+                let in_range = ctx.setp_lt_u32_imm(lane_id, num_half_warps);
+                let zero_f = ctx.mov_f32_imm(0.0);
+
+                // Reduce gate partials: thread i loads smem[i] if i < nhw
+                let gate_sm_off = ctx.shl_u32_imm(lane_id, 2);
+                let gate_sm_addr = ctx.cvt_u64_u32(gate_sm_off);
+                let gate_loaded = ctx.ld_shared_f32(gate_sm_addr);
+                let gate_partial = ctx.selp_f32(in_range, gate_loaded, zero_f);
+
+                let t = ctx.shfl_down_f32(gate_partial, 4, 0xFFFF_FFFF);
+                let gate_partial = ctx.add_f32(gate_partial, t);
+                let t = ctx.shfl_down_f32(gate_partial, 2, 0xFFFF_FFFF);
+                let gate_partial = ctx.add_f32(gate_partial, t);
+                let t = ctx.shfl_down_f32(gate_partial, 1, 0xFFFF_FFFF);
+                let gate_sum = ctx.add_f32(gate_partial, t);
+
+                // Reduce up partials: thread i loads smem[nhw + i] if i < nhw
+                let nhw_bytes = ctx.mov_u32_imm(num_half_warps * 4);
+                let up_sm_off = ctx.add_u32_reg(gate_sm_off, nhw_bytes);
+                let up_sm_addr = ctx.cvt_u64_u32(up_sm_off);
+                let up_loaded = ctx.ld_shared_f32(up_sm_addr);
+                let up_partial = ctx.selp_f32(in_range, up_loaded, zero_f);
+
+                let t = ctx.shfl_down_f32(up_partial, 4, 0xFFFF_FFFF);
+                let up_partial = ctx.add_f32(up_partial, t);
+                let t = ctx.shfl_down_f32(up_partial, 2, 0xFFFF_FFFF);
+                let up_partial = ctx.add_f32(up_partial, t);
+                let t = ctx.shfl_down_f32(up_partial, 1, 0xFFFF_FFFF);
+                let up_sum = ctx.add_f32(up_partial, t);
+
+                // Thread 0: SwiGLU + store
+                let is_t0 = ctx.setp_eq_u32(lane_id, z);
                 ctx.branch_if_not(is_t0, "fgs_skip_store");
-
-                let gate_sum = ctx.mov_f32_imm(0.0);
-                let up_sum = ctx.mov_f32_imm(0.0);
-                for hw in 0..num_half_warps {
-                    let gate_off = ctx.mov_u64_imm(u64::from(hw * 4));
-                    let gate_val = ctx.ld_shared_f32(gate_off);
-                    ctx.add_f32_inplace(gate_sum, gate_val);
-
-                    let up_off = ctx.mov_u64_imm(u64::from((num_half_warps + hw) * 4));
-                    let up_val = ctx.ld_shared_f32(up_off);
-                    ctx.add_f32_inplace(up_sum, up_val);
-                }
 
                 // SwiGLU: result = silu(gate) * up = gate * sigmoid(gate) * up
                 // sigmoid(x) = 1 / (1 + exp(-x)) = 1 / (1 + 2^(-x * log2(e)))
