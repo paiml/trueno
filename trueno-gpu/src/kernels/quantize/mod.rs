@@ -59,6 +59,7 @@ pub use nf4_cpu::{
     dequantize_nf4, pack_nf4_for_gpu, quantize_nf4, unpack_nf4_from_gpu, Nf4Quantized,
     NF4_BLOCK_BYTES, NF4_BLOCK_SIZE, NF4_LUT,
 };
+pub use q4k::interleaved::repack_q4k_interleaved;
 pub use q4k::{
     BatchedHwDp4aQ4KGemvKernel, BatchedQ4KGemvKernel, ChunkedTiledQ4KGemvKernel,
     CoalescedQ4KGemvKernel, Dp4aQ4KGemvKernel, FusedGateUpSwigluHwDp4aQ4KGemvKernel,
