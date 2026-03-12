@@ -47,7 +47,8 @@ mod q8;
 pub use dot::{PackedDp4aQ4KQ8Kernel, Q4KQ8DotKernel};
 pub use dp4a_gemm::Dp4aQ4KGemmKernel;
 pub use fp16_tensor::{
-    Fp16Q4KGemvKernel, MultiWarpTensorCoreQ4KGemmKernel, TensorCoreQ4KGemmKernel,
+    Fp16Q4KGemvKernel, InterleavedWmmaQ4KGemmKernel, MultiWarpTensorCoreQ4KGemmKernel,
+    TensorCoreQ4KGemmKernel,
 };
 pub use fused::{
     FusedGateUpQ4KGemvKernel, FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormQ4KGemvKernel,
