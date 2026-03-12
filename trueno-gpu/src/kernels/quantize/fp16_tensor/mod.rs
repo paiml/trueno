@@ -14,8 +14,10 @@ mod fp16_gemv;
 mod interleaved_wmma_gemm;
 mod mw_tensor_core_gemm;
 mod tensor_core_gemm;
+mod w4a16_wmma_gemm;
 
 pub use fp16_gemv::Fp16Q4KGemvKernel;
 pub use interleaved_wmma_gemm::InterleavedWmmaQ4KGemmKernel;
 pub use mw_tensor_core_gemm::MultiWarpTensorCoreQ4KGemmKernel;
 pub use tensor_core_gemm::TensorCoreQ4KGemmKernel;
+pub use w4a16_wmma_gemm::W4a16WmmaQ4KGemmKernel;
