@@ -80,79 +80,99 @@ impl CudaModule {
         // F-PTX-002: Ensure context is current on this thread before JIT compilation.
         ctx.make_current()?;
 
-        // Detect device compute capability for JIT target
+        // Detect device compute capability for JIT target.
+        // Clamp to sm_90 — PTX 8.0 only supports up to sm_90 (Hopper).
+        // Newer architectures (Blackwell sm_100+, GB10 sm_121) are
+        // forward-compatible: sm_90 PTX runs correctly via driver JIT.
         let (major, minor) = ctx.compute_capability()?;
-        // Clamp to sm_70 for Blackwell compat (trueno#184).
-        // sm_121 is rejected by PTX 8.0 assembler. sm_70 JIT works via driver.
-        let (cm, cn) = if major > 7 { (7, 0) } else { (major, minor) };
-        let jit_target: c_uint = (cm * 10 + cn) as c_uint;
+        let (clamped_major, clamped_minor) =
+            if major > 9 || (major == 9 && minor > 0) { (9, 0) } else { (major, minor) };
+        let jit_target: c_uint = (clamped_major * 10 + clamped_minor) as c_uint;
 
         // Ensure PTX is null-terminated
         let ptx_cstring = CString::new(ptx)
             .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
 
-        // On Blackwell+ (sm_100+), cuModuleLoadDataEx with CU_JIT_TARGET always
-        // fails (error 300) because no PTX 8.0 target maps to sm_100+. Skip it
-        // and go straight to cuModuleLoadData (trueno#184).
-        if major < 10 {
-            // Pre-Blackwell: try cuModuleLoadDataEx with explicit JIT target
-            let mut info_log = vec![0u8; 4096];
-            let mut error_log = vec![0u8; 4096];
-            let info_log_size: usize = info_log.len();
-            let error_log_size: usize = error_log.len();
+        // Try 1: cuModuleLoadDataEx with explicit JIT target + log buffers
+        let mut info_log = vec![0u8; 4096];
+        let mut error_log = vec![0u8; 4096];
+        let info_log_size: usize = info_log.len();
+        let error_log_size: usize = error_log.len();
 
-            let mut options: [c_uint; 5] = [
-                CU_JIT_TARGET,
-                CU_JIT_INFO_LOG_BUFFER,
-                CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES,
-                CU_JIT_ERROR_LOG_BUFFER,
-                CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
-            ];
-            let mut option_values: [*mut c_void; 5] = [
-                jit_target as *mut c_void,
-                info_log.as_mut_ptr() as *mut c_void,
-                info_log_size as *mut c_void,
-                error_log.as_mut_ptr() as *mut c_void,
-                error_log_size as *mut c_void,
-            ];
+        let mut options: [c_uint; 5] = [
+            CU_JIT_TARGET,
+            CU_JIT_INFO_LOG_BUFFER,
+            CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES,
+            CU_JIT_ERROR_LOG_BUFFER,
+            CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
+        ];
+        let mut option_values: [*mut c_void; 5] = [
+            jit_target as *mut c_void,
+            info_log.as_mut_ptr() as *mut c_void,
+            info_log_size as *mut c_void,
+            error_log.as_mut_ptr() as *mut c_void,
+            error_log_size as *mut c_void,
+        ];
 
-            let mut module: CUmodule = ptr::null_mut();
-            let result = unsafe {
-                (driver.cuModuleLoadDataEx)(
-                    &mut module,
-                    ptx_cstring.as_ptr() as *const _,
-                    5,
-                    options.as_mut_ptr(),
-                    option_values.as_mut_ptr(),
-                )
-            };
+        // SAFETY: ptx_cstring is valid null-terminated string, options arrays
+        // are valid for the lifetime of this call, context is current.
+        let mut module: CUmodule = ptr::null_mut();
+        let result = unsafe {
+            (driver.cuModuleLoadDataEx)(
+                &mut module,
+                ptx_cstring.as_ptr() as *const _,
+                5,
+                options.as_mut_ptr(),
+                option_values.as_mut_ptr(),
+            )
+        };
 
-            if CudaDriver::check(result).is_ok() {
-                return Ok(Self { module, functions: HashMap::new() });
-            }
-
-            let kernel_name =
-                ptx.lines().find(|l| l.contains(".entry")).map(|l| l.trim()).unwrap_or("<unknown>");
-            eprintln!(
-                "[PTX-JIT] cuModuleLoadDataEx failed for {kernel_name} (sm_{cm}{cn}), \
-                 falling back to cuModuleLoadData"
-            );
+        if CudaDriver::check(result).is_ok() {
+            return Ok(Self { module, functions: HashMap::new() });
         }
 
-        // cuModuleLoadData: driver auto-detects GPU and JIT-compiles.
-        // Primary path for Blackwell+, fallback for older GPUs.
+        // Try 1 failed — capture diagnostics
+        let kernel_name =
+            ptx.lines().find(|l| l.contains(".entry")).map(|l| l.trim()).unwrap_or("<unknown>");
+        let jit_info = String::from_utf8_lossy(&info_log).trim_end_matches('\0').to_string();
+        let jit_err = String::from_utf8_lossy(&error_log).trim_end_matches('\0').to_string();
+
+        eprintln!(
+            "[PTX-JIT] Try 1 failed: {kernel_name}, target: sm_{major}{minor}, \
+             PTX: {} bytes, result: {result}",
+            ptx.len()
+        );
+        if !jit_info.is_empty() {
+            eprintln!("[PTX-JIT] Info log: {jit_info}");
+        }
+        if !jit_err.is_empty() {
+            eprintln!("[PTX-JIT] Error log: {jit_err}");
+        }
+
+        // Dump PTX to /tmp for offline diagnosis (#127)
+        let dump_path = format!(
+            "/tmp/failed-ptx-sm_{major}{minor}-{}.ptx",
+            kernel_name.replace(|c: char| !c.is_alphanumeric() && c != '_', "_")
+        );
+        if let Ok(()) = std::fs::write(&dump_path, ptx) {
+            eprintln!("[PTX-JIT] PTX dumped to {dump_path}");
+        }
+
+        // Try 2: cuModuleLoadData without explicit JIT target (let driver auto-detect)
+        eprintln!("[PTX-JIT] Retrying with cuModuleLoadData (no explicit target)...");
         let mut module2: CUmodule = ptr::null_mut();
         let result2 =
             unsafe { (driver.cuModuleLoadData)(&mut module2, ptx_cstring.as_ptr() as *const _) };
 
         if CudaDriver::check(result2).is_ok() {
+            eprintln!("[PTX-JIT] Fallback succeeded for {kernel_name}");
             return Ok(Self { module: module2, functions: HashMap::new() });
         }
 
-        let kernel_name =
-            ptx.lines().find(|l| l.contains(".entry")).map(|l| l.trim()).unwrap_or("<unknown>");
+        // Both attempts failed
+        eprintln!("[PTX-JIT] Both attempts failed for {kernel_name}");
         Err(GpuError::ModuleLoad(format!(
-            "CUDA module loading failed for {kernel_name}: error={result2} (sm_{major}{minor})"
+            "CUDA module loading failed: try1={result} try2={result2} (JIT target: sm_{major}{minor})"
         )))
     }
 

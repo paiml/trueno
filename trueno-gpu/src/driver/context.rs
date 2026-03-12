@@ -262,12 +262,12 @@ impl CudaContext {
     /// Returns `Err(GpuError::CudaDriver)` if query fails.
     pub fn sm_target(&self) -> Result<String, GpuError> {
         let (major, minor) = self.compute_capability()?;
-        // Clamp to sm_70 (Volta) for PTX compatibility.
-        // Blackwell (sm_100+, GB10 sm_121) uses JIT to retarget
-        // sm_70 PTX to native SASS. sm_90 targeting causes
-        // CUDA_ERROR_INVALID_IMAGE on some Blackwell drivers (trueno#184).
-        let (cm, cn) = if major > 7 { (7, 0) } else { (major, minor) };
-        Ok(format!("sm_{cm}{cn}"))
+        // Clamp to sm_90 — PTX 8.0 only supports up to sm_90 (Hopper).
+        // Newer architectures (Blackwell sm_100+, GB10 sm_121) are
+        // forward-compatible: sm_90 PTX runs correctly via JIT.
+        let (clamped_major, clamped_minor) =
+            if major > 9 || (major == 9 && minor > 0) { (9, 0) } else { (major, minor) };
+        Ok(format!("sm_{clamped_major}{clamped_minor}"))
     }
 
     /// Get number of streaming multiprocessors (SMs) on the device
