@@ -36,15 +36,15 @@ pub struct FusedGateUpSwigluHwDp4aQ4KGemvKernel {
     pub k: u32,
     /// N dimension (intermediate size, output dimension)
     pub n: u32,
-    /// Number of warps per block (default: 4, giving 8 half-warps).
-    /// PMAT-089: increased from 3→4 for better SM occupancy.
+    /// Number of warps per block (default: 3, giving 6 half-warps).
+    /// PMAT-089: 4 warps FALSIFIED (register pressure, -2% decode). 3 is optimal.
     pub num_warps: u32,
 }
 
 impl FusedGateUpSwigluHwDp4aQ4KGemvKernel {
-    /// Create a new fused gate+up+SwiGLU HW DP4A Q4K GEMV kernel with default 4 warps.
+    /// Create a new fused gate+up+SwiGLU HW DP4A Q4K GEMV kernel with default 3 warps.
     pub fn new(k: u32, n: u32) -> Self {
-        Self { k, n, num_warps: 4 }
+        Self { k, n, num_warps: 3 }
     }
 }
 
