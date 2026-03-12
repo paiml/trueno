@@ -135,6 +135,11 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
                 // DP4A constant
                 let c_ones = ctx.mov_u32_imm(0x0101_0101);
 
+                // PMAT-029: Hoist repeated bitmask constants before inner loop
+                let c_mask_6bit = ctx.mov_u32_imm(0x3F3F_3F3F);
+                let c_mask_4bit = ctx.mov_u32_imm(0x0F0F_0F0F);
+                let c_mask_2bit = ctx.mov_u32_imm(0x0303_0303);
+
                 // ===== Grid-stride row loop =====
                 let row_idx = ctx.mov_u32_imm(0);
                 ctx.add_u32_reg_inplace(row_idx, block_id);
@@ -198,17 +203,18 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
                 let scu811 = ctx.ld_global_u32(scu811_addr);
 
                 // ===== GH-173: Parallel byte-masked scale extraction — GATE =====
-                let scg_lo4 = ctx.and_u32_imm(scg03, 0x3F3F_3F3F);
-                let mng_lo4 = ctx.and_u32_imm(scg47, 0x3F3F_3F3F);
-                let scg_hi_low = ctx.and_u32_imm(scg811, 0x0F0F_0F0F);
+                // PMAT-029: Use hoisted constant registers
+                let scg_lo4 = ctx.and_u32(scg03, c_mask_6bit);
+                let mng_lo4 = ctx.and_u32(scg47, c_mask_6bit);
+                let scg_hi_low = ctx.and_u32(scg811, c_mask_4bit);
                 let t = ctx.shr_u32_imm(scg03, 6);
-                let t = ctx.and_u32_imm(t, 0x0303_0303);
+                let t = ctx.and_u32(t, c_mask_2bit);
                 let scg_hi_top = ctx.shl_u32_imm(t, 4);
                 let scg_hi4 = ctx.or_u32(scg_hi_low, scg_hi_top);
                 let mng_hi_raw = ctx.shr_u32_imm(scg47, 6);
-                let mng_hi_low = ctx.and_u32_imm(mng_hi_raw, 0x0F0F_0F0F);
+                let mng_hi_low = ctx.and_u32(mng_hi_raw, c_mask_4bit);
                 let t = ctx.shr_u32_imm(scg47, 6);
-                let t = ctx.and_u32_imm(t, 0x0303_0303);
+                let t = ctx.and_u32(t, c_mask_2bit);
                 let mng_hi_top = ctx.shl_u32_imm(t, 4);
                 let mng_hi4 = ctx.or_u32(mng_hi_low, mng_hi_top);
 
@@ -221,17 +227,17 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
                 let mng1 = ctx.bfe_u32_reg(mng_src, byte_shift_hi, 8);
 
                 // ===== Scale extraction — UP =====
-                let scu_lo4 = ctx.and_u32_imm(scu03, 0x3F3F_3F3F);
-                let mnu_lo4 = ctx.and_u32_imm(scu47, 0x3F3F_3F3F);
-                let scu_hi_low = ctx.and_u32_imm(scu811, 0x0F0F_0F0F);
+                let scu_lo4 = ctx.and_u32(scu03, c_mask_6bit);
+                let mnu_lo4 = ctx.and_u32(scu47, c_mask_6bit);
+                let scu_hi_low = ctx.and_u32(scu811, c_mask_4bit);
                 let t = ctx.shr_u32_imm(scu03, 6);
-                let t = ctx.and_u32_imm(t, 0x0303_0303);
+                let t = ctx.and_u32(t, c_mask_2bit);
                 let scu_hi_top = ctx.shl_u32_imm(t, 4);
                 let scu_hi4 = ctx.or_u32(scu_hi_low, scu_hi_top);
                 let mnu_hi_raw = ctx.shr_u32_imm(scu47, 6);
-                let mnu_hi_low = ctx.and_u32_imm(mnu_hi_raw, 0x0F0F_0F0F);
+                let mnu_hi_low = ctx.and_u32(mnu_hi_raw, c_mask_4bit);
                 let t = ctx.shr_u32_imm(scu47, 6);
-                let t = ctx.and_u32_imm(t, 0x0303_0303);
+                let t = ctx.and_u32(t, c_mask_2bit);
                 let mnu_hi_top = ctx.shl_u32_imm(t, 4);
                 let mnu_hi4 = ctx.or_u32(mnu_hi_low, mnu_hi_top);
 
@@ -262,10 +268,10 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
                 let q8_data = ctx.add_u64(q8_blk, lig_x4_64);
 
                 // ===== QR=0: Low nibbles =====
-                let vg0_lo = ctx.and_u32_imm(vg0, 0x0F0F_0F0F);
-                let vg1_lo = ctx.and_u32_imm(vg1, 0x0F0F_0F0F);
-                let vu0_lo = ctx.and_u32_imm(vu0, 0x0F0F_0F0F);
-                let vu1_lo = ctx.and_u32_imm(vu1, 0x0F0F_0F0F);
+                let vg0_lo = ctx.and_u32(vg0, c_mask_4bit);
+                let vg1_lo = ctx.and_u32(vg1, c_mask_4bit);
+                let vu0_lo = ctx.and_u32(vu0, c_mask_4bit);
+                let vu1_lo = ctx.and_u32(vu1, c_mask_4bit);
 
                 let u0_lo = ctx.ld_global_u32(q8_data);
                 let u1_lo_addr = ctx.add_u64(q8_data, c_16_64);
@@ -313,13 +319,13 @@ impl Kernel for FusedGateUpSwigluHwDp4aQ4KGemvKernel {
 
                 // ===== QR=1: High nibbles =====
                 let vg0_hi = ctx.shr_u32_imm(vg0, 4);
-                let vg0_hi = ctx.and_u32_imm(vg0_hi, 0x0F0F_0F0F);
+                let vg0_hi = ctx.and_u32(vg0_hi, c_mask_4bit);
                 let vg1_hi = ctx.shr_u32_imm(vg1, 4);
-                let vg1_hi = ctx.and_u32_imm(vg1_hi, 0x0F0F_0F0F);
+                let vg1_hi = ctx.and_u32(vg1_hi, c_mask_4bit);
                 let vu0_hi = ctx.shr_u32_imm(vu0, 4);
-                let vu0_hi = ctx.and_u32_imm(vu0_hi, 0x0F0F_0F0F);
+                let vu0_hi = ctx.and_u32(vu0_hi, c_mask_4bit);
                 let vu1_hi = ctx.shr_u32_imm(vu1, 4);
-                let vu1_hi = ctx.and_u32_imm(vu1_hi, 0x0F0F_0F0F);
+                let vu1_hi = ctx.and_u32(vu1_hi, c_mask_4bit);
 
                 // Q8 block +1 (36 bytes later)
                 let q8_blk_hi = ctx.add_u64(q8_blk, c_36_64);
