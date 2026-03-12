@@ -48,6 +48,7 @@ pub use attention::{
 pub use bias_activation::{Activation, BiasActivationKernel};
 pub use conv1d::{Conv1dKernel, TiledConv1dKernel};
 pub use elementwise::{
+    BatchedFusedResidualRmsNormKernel,
     BatchedResidualAddKernel,
     BatchedRopeBackwardKernel,
     BatchedRopeKernel,
