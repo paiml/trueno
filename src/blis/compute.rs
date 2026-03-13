@@ -26,9 +26,9 @@ use super::{KC, MC, MR, NC, NR};
 // These grow to the high-water mark and are reused across calls, avoiding
 // ~4.3 MB of allocation+deallocation per GEMM invocation.
 thread_local! {
-    static TL_PACKED_A: RefCell<Vec<f32>> = RefCell::new(Vec::new());
-    static TL_PACKED_B: RefCell<Vec<f32>> = RefCell::new(Vec::new());
-    static TL_C_MICRO: RefCell<Vec<f32>> = RefCell::new(Vec::new());
+    static TL_PACKED_A: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static TL_PACKED_B: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static TL_C_MICRO: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Load a tile of C into the micro workspace for accumulation.
@@ -382,12 +382,10 @@ pub fn gemm_blis_with_prepacked_b(
                 c_micro[..needed_c].fill(0.0);
             }
 
-            let mut jc_idx = 0;
-            for jc in (0..n).step_by(NC) {
+            for (jc_idx, jc) in (0..n).step_by(NC).enumerate() {
                 let nc_block = NC.min(n - jc);
 
-                let mut pc_idx = 0;
-                for pc in (0..k).step_by(KC) {
+                for (pc_idx, pc) in (0..k).step_by(KC).enumerate() {
                     let kc_block = KC.min(k - pc);
 
                     // Use pre-packed B tile instead of runtime packing
@@ -414,10 +412,7 @@ pub fn gemm_blis_with_prepacked_b(
                             &mut profiler,
                         );
                     }
-
-                    pc_idx += 1;
                 }
-                jc_idx += 1;
             }
 
             if let (Some(prof), Some(s)) = (profiler, start) {
