@@ -118,6 +118,7 @@ fn metal_03_performance_target() {
 /// Note: This test checks for unified memory capability.
 /// - Apple Silicon (M1/M2/M3): Always has unified memory
 /// - Intel Macs with discrete GPUs: Do NOT have unified memory
+///
 /// Both configurations are valid - the test verifies correct detection.
 #[test]
 fn metal_04_unified_memory() {

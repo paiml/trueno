@@ -232,6 +232,7 @@ pub fn w4a16_size(n: usize, k: usize) -> usize {
 }
 
 #[cfg(test)]
+#[allow(clippy::identity_op, clippy::erasing_op)]
 mod tests {
     use super::*;
 

@@ -110,7 +110,7 @@ fn test_f061_ptx_validates_with_ptxas() {
 
     // Check if ptxas is available
     let ptxas_check = Command::new("which").arg("ptxas").output();
-    if ptxas_check.is_err() || !ptxas_check.unwrap().status.success() {
+    if ptxas_check.is_err() || !ptxas_check.expect("test").status.success() {
         eprintln!("ptxas not available, skipping validation");
         return;
     }
@@ -126,7 +126,7 @@ fn test_f061_ptx_validates_with_ptxas() {
 
     // Validate with ptxas
     let output = Command::new("ptxas")
-        .args(["-arch=sm_89", tmpfile.to_str().unwrap(), "-o", "/dev/null"])
+        .args(["-arch=sm_89", tmpfile.to_str().expect("test"), "-o", "/dev/null"])
         .output()
         .expect("Failed to run ptxas");
 

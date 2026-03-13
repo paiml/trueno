@@ -248,7 +248,7 @@ mod tests {
             // Simple PRNG to approximate normal distribution
             let u1 = ((i * 1103515245 + 12345) % 65536) as f32 / 65536.0;
             let u2 = ((i * 6364136223 + 1442695) % 65536) as f32 / 65536.0;
-            let u1_clamped = u1.max(1e-6).min(1.0 - 1e-6);
+            let u1_clamped = u1.clamp(1e-6, 1.0 - 1e-6);
             let z = (-2.0 * u1_clamped.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos();
             values.push(z);
         }

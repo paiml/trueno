@@ -4,9 +4,7 @@
 //!
 //! IMMUTABLE GUARDIAN - DO NOT MODIFY WITHOUT FALSIFICATION EVIDENCE
 
-use trueno_gpu::ptx::{
-    PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxMemory, PtxReg, PtxType,
-};
+use trueno_gpu::ptx::{PtxComparison, PtxControl, PtxKernel, PtxReg, PtxType};
 
 mod global_mem_and_types;
 mod operations_and_helpers;

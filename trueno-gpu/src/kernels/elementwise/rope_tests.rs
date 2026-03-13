@@ -2,8 +2,6 @@
 //!
 //! Tests for all RoPE kernel variants to achieve coverage.
 
-#![cfg(test)]
-
 use super::rope::{
     BatchedRopeKernel, PreciseRopeIndirectKernel, PreciseRopeKernel, RopeIndirectKernel,
     RopeKernel, RopeNeoxIndirectKernel, RopeNeoxKernel,

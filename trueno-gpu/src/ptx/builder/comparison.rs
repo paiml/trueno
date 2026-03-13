@@ -210,7 +210,7 @@ mod tests {
         assert_eq!(builder.instructions.len(), 6);
 
         let labels: Vec<_> =
-            builder.instructions.iter().map(|i| i.label.as_deref().unwrap()).collect();
+            builder.instructions.iter().map(|i| i.label.as_deref().expect("test")).collect();
         assert_eq!(labels, vec!["ge", "eq", "ne", "lt", "gt", "le"]);
     }
 

@@ -2,8 +2,6 @@
 //!
 //! Tests for all paged/incremental attention kernels to achieve coverage.
 
-#![cfg(test)]
-
 use super::paged::{
     BatchedIncrementalAttentionKernel, FlashDecodingChunkKernel, FlashDecodingReduceKernel,
     IncrementalAttentionKernel, MultiWarpIncrementalAttentionKernel, FLASH_DECODE_CHUNK_SIZE,
@@ -195,8 +193,9 @@ fn test_flash_decoding_chunk_kernel_large_seq() {
 #[test]
 fn test_flash_decode_chunk_size_constant() {
     // Verify the chunk size constant is a reasonable value
-    assert!(FLASH_DECODE_CHUNK_SIZE > 0);
-    assert!(FLASH_DECODE_CHUNK_SIZE <= 2048);
+    let chunk_size = FLASH_DECODE_CHUNK_SIZE;
+    assert!(chunk_size > 0);
+    assert!(chunk_size <= 2048);
 }
 
 // ============================================================================

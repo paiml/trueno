@@ -109,7 +109,7 @@ fn h004_device_snapshot_capture() {
     let snapshot = DeviceSnapshot::capture(&cpu);
     assert!(snapshot.is_ok());
 
-    let snap = snapshot.unwrap();
+    let snap = snapshot.expect("test");
     assert_eq!(snap.device_id, DeviceId::cpu());
     assert!(snap.timestamp_ms > 0);
 }
@@ -167,7 +167,7 @@ fn h006_memory_usage_percent() {
     let percent = cpu.memory_usage_percent();
     // On Linux, this should always succeed
     assert!(percent.is_ok());
-    let p = percent.unwrap();
+    let p = percent.expect("test");
     assert!(p >= 0.0 && p <= 100.0);
 }
 
@@ -175,8 +175,8 @@ fn h006_memory_usage_percent() {
 fn h006_memory_available_bytes() {
     let cpu = CpuDevice::new();
     // On Linux, these should always succeed
-    let avail = cpu.memory_available_bytes().unwrap();
-    let total = cpu.memory_total_bytes().unwrap();
+    let avail = cpu.memory_available_bytes().expect("test");
+    let total = cpu.memory_total_bytes().expect("test");
     assert!(avail <= total);
 }
 
@@ -184,8 +184,8 @@ fn h006_memory_available_bytes() {
 fn h006_memory_mb_helpers() {
     let cpu = CpuDevice::new();
     // On Linux, these should always succeed
-    let used_mb = cpu.memory_used_mb().unwrap();
-    let total_mb = cpu.memory_total_mb().unwrap();
+    let used_mb = cpu.memory_used_mb().expect("test");
+    let total_mb = cpu.memory_total_mb().expect("test");
     assert!(used_mb <= total_mb);
 }
 
@@ -193,7 +193,7 @@ fn h006_memory_mb_helpers() {
 fn h006_memory_gb_helper() {
     let cpu = CpuDevice::new();
     // On Linux, this should always succeed
-    let total_gb = cpu.memory_total_gb().unwrap();
+    let total_gb = cpu.memory_total_gb().expect("test");
     // Should be positive (most systems have > 1GB)
     assert!(total_gb > 0.0);
 }
@@ -371,21 +371,21 @@ impl ComputeDevice for MockDevice {
 fn h011_memory_usage_percent_zero_total() {
     let mock = MockDevice::new(0, 0, 0.0, 0.0, 0.0);
     // Zero total should return 0.0, not divide by zero
-    assert!((mock.memory_usage_percent().unwrap() - 0.0).abs() < 0.01);
+    assert!((mock.memory_usage_percent().expect("test") - 0.0).abs() < 0.01);
 }
 
 #[test]
 fn h011_memory_usage_percent_normal() {
     let mock = MockDevice::new(50 * 1024 * 1024 * 1024, 100 * 1024 * 1024 * 1024, 0.0, 0.0, 0.0);
     // 50% usage
-    assert!((mock.memory_usage_percent().unwrap() - 50.0).abs() < 0.01);
+    assert!((mock.memory_usage_percent().expect("test") - 50.0).abs() < 0.01);
 }
 
 #[test]
 fn h011_memory_available_bytes() {
     let mock = MockDevice::new(30 * 1024 * 1024 * 1024, 100 * 1024 * 1024 * 1024, 0.0, 0.0, 0.0);
     // 70GB available
-    let available = mock.memory_available_bytes().unwrap();
+    let available = mock.memory_available_bytes().expect("test");
     assert_eq!(available, 70 * 1024 * 1024 * 1024);
 }
 
@@ -393,53 +393,53 @@ fn h011_memory_available_bytes() {
 fn h011_memory_mb_gb_conversions() {
     let mock = MockDevice::new(1024 * 1024 * 1024, 16 * 1024 * 1024 * 1024, 0.0, 0.0, 0.0);
     // 1GB used = 1024MB
-    assert_eq!(mock.memory_used_mb().unwrap(), 1024);
+    assert_eq!(mock.memory_used_mb().expect("test"), 1024);
     // 16GB total = 16384MB
-    assert_eq!(mock.memory_total_mb().unwrap(), 16384);
+    assert_eq!(mock.memory_total_mb().expect("test"), 16384);
     // 16GB as f64
-    assert!((mock.memory_total_gb().unwrap() - 16.0).abs() < 0.01);
+    assert!((mock.memory_total_gb().expect("test") - 16.0).abs() < 0.01);
 }
 
 #[test]
 fn h011_power_usage_percent_zero_limit() {
     let mock = MockDevice::new(0, 0, 100.0, 0.0, 0.0);
     // Zero limit should return 0.0, not divide by zero
-    assert!((mock.power_usage_percent().unwrap() - 0.0).abs() < 0.01);
+    assert!((mock.power_usage_percent().expect("test") - 0.0).abs() < 0.01);
 }
 
 #[test]
 fn h011_power_usage_percent_normal() {
     let mock = MockDevice::new(0, 0, 150.0, 300.0, 0.0);
     // 50% power usage
-    assert!((mock.power_usage_percent().unwrap() - 50.0).abs() < 0.01);
+    assert!((mock.power_usage_percent().expect("test") - 50.0).abs() < 0.01);
 }
 
 #[test]
 fn h011_thermal_throttling_below_threshold() {
     let mock = MockDevice::new(0, 0, 0.0, 0.0, 75.0);
     // Below 80C - no throttling
-    assert!(!mock.is_thermal_throttling().unwrap());
+    assert!(!mock.is_thermal_throttling().expect("test"));
 }
 
 #[test]
 fn h011_thermal_throttling_above_threshold() {
     let mock = MockDevice::new(0, 0, 0.0, 0.0, 85.0);
     // Above 80C - throttling
-    assert!(mock.is_thermal_throttling().unwrap());
+    assert!(mock.is_thermal_throttling().expect("test"));
 }
 
 #[test]
 fn h011_power_throttling_below_threshold() {
     let mock = MockDevice::new(0, 0, 90.0, 100.0, 0.0);
     // 90% - below 95% threshold
-    assert!(!mock.is_power_throttling().unwrap());
+    assert!(!mock.is_power_throttling().expect("test"));
 }
 
 #[test]
 fn h011_power_throttling_above_threshold() {
     let mock = MockDevice::new(0, 0, 98.0, 100.0, 0.0);
     // 98% - above 95% threshold
-    assert!(mock.is_power_throttling().unwrap());
+    assert!(mock.is_power_throttling().expect("test"));
 }
 
 // =========================================================================
@@ -449,7 +449,7 @@ fn h011_power_throttling_above_threshold() {
 #[test]
 fn h012_device_snapshot_from_mock() {
     let mock = MockDevice::new(8 * 1024 * 1024 * 1024, 16 * 1024 * 1024 * 1024, 150.0, 300.0, 65.0);
-    let snapshot = DeviceSnapshot::capture(&mock).unwrap();
+    let snapshot = DeviceSnapshot::capture(&mock).expect("test");
 
     assert_eq!(snapshot.device_id, DeviceId::cpu());
     assert!((snapshot.compute_utilization - 50.0).abs() < 0.01);

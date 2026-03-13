@@ -27,7 +27,7 @@ fn f034_shared_memory_sizing() {
 
     // Verify optimal is in valid range
     assert!(
-        optimal_smem >= 64 && optimal_smem <= 16384,
+        (64..=16384).contains(&optimal_smem),
         "F034 FALSIFIED: Optimal shared memory {} not in valid range",
         optimal_smem
     );
@@ -219,7 +219,7 @@ fn f039_stride_aware_offsets() {
     let block_id = 5usize;
     let base_offset = block_id * tile_size * tile_size * element_size;
     assert!(
-        base_offset % 128 == 0 || tile_size < 32,
+        base_offset.is_multiple_of(128) || tile_size < 32,
         "F039: Block offset should be cache-aligned for large tiles"
     );
 

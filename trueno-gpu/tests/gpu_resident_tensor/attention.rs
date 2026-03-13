@@ -73,15 +73,15 @@ fn test_batched_attention_fused_softmax() {
     // // attention_output = softmax(Q @ K^T / sqrt(d_k)) @ V
     // // ALL IN ONE KERNEL (no separate softmax launch)
     //
-    // let ctx = CudaContext::new(0).unwrap();
-    // let output = batched_multihead_attention_with_stats(&ctx, &q, &k, &v, n_heads, head_dim).unwrap();
+    // let ctx = CudaContext::new(0).expect("test");
+    // let output = batched_multihead_attention_with_stats(&ctx, &q, &k, &v, n_heads, head_dim).expect("test");
     //
     // // Stats should show:
     // assert_eq!(output.stats.kernel_launches, 1);
     // assert_eq!(output.stats.softmax_kernel_launches, 0); // Fused!
     // assert!(output.stats.has_fused_softmax);
 
-    assert!(true, "TDD: fused softmax not implemented");
+    // TODO: "TDD: fused softmax not implemented"
 }
 
 /// Test: Simple 2x2 matmul correctness

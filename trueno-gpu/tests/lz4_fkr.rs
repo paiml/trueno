@@ -144,7 +144,7 @@ fn lz4_fkr_ptx_validates_with_ptxas() {
 
     // Check if ptxas is available
     let ptxas_check = Command::new("which").arg("ptxas").output();
-    if ptxas_check.is_err() || !ptxas_check.unwrap().status.success() {
+    if ptxas_check.is_err() || !ptxas_check.expect("test").status.success() {
         eprintln!("ptxas not available, skipping validation");
         return;
     }
@@ -160,7 +160,7 @@ fn lz4_fkr_ptx_validates_with_ptxas() {
 
     // Validate with ptxas
     let output = Command::new("ptxas")
-        .args(["-arch=sm_89", tmpfile.to_str().unwrap(), "-o", "/dev/null"])
+        .args(["-arch=sm_89", tmpfile.to_str().expect("test"), "-o", "/dev/null"])
         .output()
         .expect("Failed to run ptxas");
 
@@ -233,8 +233,9 @@ fn lz4_fkr_scalar_roundtrip_small() {
     let mut compressed = [0u8; 64];
     let mut decompressed = [0u8; 64];
 
-    let comp_size = lz4_compress_block(input, &mut compressed).unwrap();
-    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let comp_size = lz4_compress_block(input, &mut compressed).expect("test");
+    let decomp_size =
+        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).expect("test");
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..decomp_size], input.as_slice());
@@ -247,8 +248,9 @@ fn lz4_fkr_scalar_roundtrip_repeated() {
     let mut compressed = [0u8; 1024];
     let mut decompressed = [0u8; 512];
 
-    let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let comp_size = lz4_compress_block(&input, &mut compressed).expect("test");
+    let decomp_size =
+        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).expect("test");
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..], &input[..]);
@@ -267,7 +269,7 @@ fn lz4_fkr_scalar_zero_page() {
     let input = [0u8; PAGE_SIZE as usize];
     let mut compressed = [0u8; PAGE_SIZE as usize];
 
-    let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
+    let comp_size = lz4_compress_block(&input, &mut compressed).expect("test");
 
     assert!(comp_size < 100, "Zero page should compress to <100 bytes, got {}", comp_size);
 }
@@ -276,14 +278,15 @@ fn lz4_fkr_scalar_zero_page() {
 #[test]
 fn lz4_fkr_scalar_roundtrip_page() {
     let mut input = [0u8; PAGE_SIZE as usize];
-    for i in 0..PAGE_SIZE as usize {
-        input[i] = ((i * 7) % 256) as u8;
+    for (i, byte) in input.iter_mut().enumerate() {
+        *byte = ((i * 7) % 256) as u8;
     }
     let mut compressed = [0u8; PAGE_SIZE as usize + 1024];
     let mut decompressed = [0u8; PAGE_SIZE as usize];
 
-    let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let comp_size = lz4_compress_block(&input, &mut compressed).expect("test");
+    let decomp_size =
+        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).expect("test");
 
     assert_eq!(decomp_size, PAGE_SIZE as usize);
     assert_eq!(&decompressed[..], &input[..]);
@@ -296,8 +299,8 @@ fn lz4_fkr_scalar_deterministic() {
     let mut compressed1 = [0u8; 128];
     let mut compressed2 = [0u8; 128];
 
-    let size1 = lz4_compress_block(input, &mut compressed1).unwrap();
-    let size2 = lz4_compress_block(input, &mut compressed2).unwrap();
+    let size1 = lz4_compress_block(input, &mut compressed1).expect("test");
+    let size2 = lz4_compress_block(input, &mut compressed2).expect("test");
 
     assert_eq!(size1, size2);
     assert_eq!(&compressed1[..size1], &compressed2[..size2]);

@@ -15,7 +15,7 @@
 //! SHMEM: 2048 bytes (A[32×16 FP16] + B[16×32 FP16])
 
 use crate::kernels::quantize::q4k::w4a16::{
-    W4A16_MIN_OFFSET, W4A16_QS_OFFSET, W4A16_SCALE_OFFSET, W4A16_TILE_BYTES, W4A16_TILE_COLS,
+    W4A16_MIN_OFFSET, W4A16_QS_OFFSET, W4A16_SCALE_OFFSET, W4A16_TILE_BYTES,
 };
 use crate::kernels::quantize::Q4K_SUPER_BLOCK_SIZE;
 use crate::kernels::Kernel;
@@ -41,11 +41,13 @@ pub struct W4a16WmmaQ4KGemmKernel {
 }
 
 impl W4a16WmmaQ4KGemmKernel {
+    /// Creates a new W4A16 WMMA Q4K GEMM kernel with the given dimensions.
     #[must_use]
     pub fn new(m: u32, k: u32, n: u32) -> Self {
         Self { m, n, k }
     }
 
+    /// Returns the number of Q4K super-blocks along the K dimension.
     #[must_use]
     pub fn num_super_blocks(&self) -> u32 {
         (self.k + Q4K_SUPER_BLOCK_SIZE - 1) / Q4K_SUPER_BLOCK_SIZE

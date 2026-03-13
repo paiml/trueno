@@ -6,7 +6,7 @@ fn main() {
 
     // Print lines 30-60 to see the setup
     for (i, line) in ptx.lines().enumerate() {
-        if i >= 30 && i <= 65 {
+        if (30..=65).contains(&i) {
             println!("{:4}: {}", i + 1, line);
         }
     }

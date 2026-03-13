@@ -8,10 +8,10 @@ fn test_profitability_with_heavy_ops() {
     let light_instr = PtxInstruction::new(PtxOp::Add, PtxType::F32);
 
     // Heavy op should trigger split
-    assert!(is_split_profitable(&[heavy_instr.clone()], 10));
+    assert!(is_split_profitable(std::slice::from_ref(&heavy_instr), 10));
 
     // Light ops below threshold should not
-    assert!(!is_split_profitable(&[light_instr.clone()], 10));
+    assert!(!is_split_profitable(std::slice::from_ref(&light_instr), 10));
 
     // Light ops at threshold should trigger
     let many_light: Vec<_> = (0..10).map(|_| light_instr.clone()).collect();
@@ -130,7 +130,7 @@ fn test_normalize_comparison_lhs_induction_var() {
 
     let result = normalize_comparison(&cmp, iv);
     assert!(result.is_some());
-    let (pred, _bound) = result.unwrap();
+    let (pred, _bound) = result.expect("test");
     assert_eq!(pred, LoopPredicate::LessThan);
 }
 
@@ -145,7 +145,7 @@ fn test_normalize_comparison_rhs_induction_var() {
 
     let result = normalize_comparison(&cmp, iv);
     assert!(result.is_some());
-    let (pred, _bound) = result.unwrap();
+    let (pred, _bound) = result.expect("test");
     // Flipped predicate
     assert_eq!(pred, LoopPredicate::GreaterThan);
 }

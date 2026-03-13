@@ -192,7 +192,6 @@ impl Kernel for Dp4aQ4KGemmKernel {
                 let c_mask_2bit = ctx.mov_u32_imm(0x0303_0303);
 
                 // ===== C2: TILE_M accumulators (compile-time unrolled) =====
-                let f32_zero = ctx.mov_f32_imm(0.0);
                 let mut accs = Vec::with_capacity(tile_m as usize);
                 for _ in 0..tile_m {
                     accs.push(ctx.mov_f32_imm(0.0));

@@ -118,7 +118,7 @@ mod tests {
     fn test_emit_operand_reg() {
         let vreg = VirtualReg::new(0, PtxType::F32);
         let result = emit_operand(&Operand::Reg(vreg));
-        assert!(result.contains("r") || result.contains("f"));
+        assert!(result.contains('r') || result.contains('f'));
     }
 
     #[test]
@@ -159,8 +159,8 @@ mod tests {
     fn test_emit_operand_addr_zero_offset() {
         let vreg = VirtualReg::new(0, PtxType::U64);
         let result = emit_operand(&Operand::Addr { base: vreg, offset: 0 });
-        assert!(result.starts_with("[") && result.ends_with("]"));
-        assert!(!result.contains("+"));
+        assert!(result.starts_with('[') && result.ends_with(']'));
+        assert!(!result.contains('+'));
     }
 
     #[test]
@@ -173,15 +173,15 @@ mod tests {
     fn test_emit_shared_mem_operand_reg() {
         let vreg = VirtualReg::new(0, PtxType::U64);
         let result = emit_shared_mem_operand(&Operand::Reg(vreg));
-        assert!(result.starts_with("[") && result.ends_with("]"));
+        assert!(result.starts_with('[') && result.ends_with(']'));
     }
 
     #[test]
     fn test_emit_shared_mem_operand_addr_zero() {
         let vreg = VirtualReg::new(0, PtxType::U64);
         let result = emit_shared_mem_operand(&Operand::Addr { base: vreg, offset: 0 });
-        assert!(result.starts_with("[") && result.ends_with("]"));
-        assert!(!result.contains("+"));
+        assert!(result.starts_with('[') && result.ends_with(']'));
+        assert!(!result.contains('+'));
     }
 
     #[test]
@@ -194,14 +194,14 @@ mod tests {
     fn test_emit_global_mem_operand_reg() {
         let vreg = VirtualReg::new(0, PtxType::U64);
         let result = emit_global_mem_operand(&Operand::Reg(vreg));
-        assert!(result.starts_with("[") && result.ends_with("]"));
+        assert!(result.starts_with('[') && result.ends_with(']'));
     }
 
     #[test]
     fn test_emit_global_mem_operand_addr_zero() {
         let vreg = VirtualReg::new(0, PtxType::U64);
         let result = emit_global_mem_operand(&Operand::Addr { base: vreg, offset: 0 });
-        assert!(!result.contains("+"));
+        assert!(!result.contains('+'));
     }
 
     #[test]
@@ -265,7 +265,7 @@ mod tests {
         let vreg = VirtualReg::new(0, PtxType::U64);
         let mut out = String::new();
         write_operand(&Operand::Addr { base: vreg, offset: 0 }, &mut out);
-        assert!(!out.contains("+"));
+        assert!(!out.contains('+'));
     }
 
     #[test]
@@ -288,7 +288,7 @@ mod tests {
         let vreg = VirtualReg::new(0, PtxType::U64);
         let mut out = String::new();
         write_mem_operand(&Operand::Reg(vreg), &mut out);
-        assert!(out.starts_with("[") && out.ends_with("]"));
+        assert!(out.starts_with('[') && out.ends_with(']'));
     }
 
     #[test]
@@ -296,7 +296,7 @@ mod tests {
         let vreg = VirtualReg::new(0, PtxType::U64);
         let mut out = String::new();
         write_mem_operand(&Operand::Addr { base: vreg, offset: 0 }, &mut out);
-        assert!(!out.contains("+"));
+        assert!(!out.contains('+'));
     }
 
     #[test]

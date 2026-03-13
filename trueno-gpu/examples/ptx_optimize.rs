@@ -37,13 +37,13 @@ fn demo_fma_fusion() {
     let r3 = VirtualReg::new(3, PtxType::F32);
 
     let mul = PtxInstruction::new(PtxOp::Mul, PtxType::F32)
-        .dst(Operand::Reg(r2.clone()))
-        .src(Operand::Reg(r0.clone()))
-        .src(Operand::Reg(r1.clone()));
+        .dst(Operand::Reg(r2))
+        .src(Operand::Reg(r0))
+        .src(Operand::Reg(r1));
 
     let add = PtxInstruction::new(PtxOp::Add, PtxType::F32)
-        .dst(Operand::Reg(r3.clone()))
-        .src(Operand::Reg(r2.clone()))
+        .dst(Operand::Reg(r3))
+        .src(Operand::Reg(r2))
         .src(Operand::ImmF32(1.0));
 
     let instructions = vec![mul, add];
@@ -72,13 +72,13 @@ fn demo_loop_splitting() {
     println!("Heavy operations (Ld, St, WmmaMma, WmmaLoad*, WmmaStoreD):");
     println!(
         "  is_split_profitable([Ld], threshold=10) = {}",
-        loop_split::is_split_profitable(&[heavy_op.clone()], 10)
+        loop_split::is_split_profitable(std::slice::from_ref(&heavy_op), 10)
     );
 
     println!("\nLight operations (Add, Mul, etc.):");
     println!(
         "  is_split_profitable([Add], threshold=10) = {}",
-        loop_split::is_split_profitable(&[light_op.clone()], 10)
+        loop_split::is_split_profitable(std::slice::from_ref(&light_op), 10)
     );
 
     // Split point alignment demo

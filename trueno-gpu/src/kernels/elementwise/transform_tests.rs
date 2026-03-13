@@ -2,8 +2,6 @@
 //!
 //! Tests for all transform/layout conversion kernels to achieve coverage.
 
-#![cfg(test)]
-
 use super::transform::{
     BatchedScaleKernel, BatchedSoftmaxKernel, BatchedToInterleavedKernel, BatchedTransposeKernel,
     CopySingleHeadKernel, ExtractSingleHeadKernel, InterleavedToBatchedKernel, TransposeKernel,

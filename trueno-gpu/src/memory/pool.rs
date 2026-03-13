@@ -240,7 +240,7 @@ mod tests {
         let config = PoolConfig { total_bytes: 1024 * 1024, page_size: 4096 };
         let mut pool = MemoryPool::new(config);
 
-        let id = pool.allocate(8192).unwrap();
+        let id = pool.allocate(8192).expect("test");
         assert!(pool.free(id));
 
         let stats = pool.stats();
@@ -257,11 +257,11 @@ mod tests {
         let mut pool = MemoryPool::new(config);
 
         // Allocate every other page to create fragmentation
-        let id1 = pool.allocate(4096).unwrap();
-        let _id2 = pool.allocate(4096).unwrap();
-        let id3 = pool.allocate(4096).unwrap();
-        let _id4 = pool.allocate(4096).unwrap();
-        let id5 = pool.allocate(4096).unwrap();
+        let id1 = pool.allocate(4096).expect("test");
+        let _id2 = pool.allocate(4096).expect("test");
+        let id3 = pool.allocate(4096).expect("test");
+        let _id4 = pool.allocate(4096).expect("test");
+        let id5 = pool.allocate(4096).expect("test");
 
         // Free alternating pages
         pool.free(id1);
@@ -281,7 +281,7 @@ mod tests {
         };
         let mut pool = MemoryPool::new(config);
 
-        let _id1 = pool.allocate(4096).unwrap();
+        let _id1 = pool.allocate(4096).expect("test");
         let id2 = pool.allocate(4096);
         assert!(id2.is_none());
     }

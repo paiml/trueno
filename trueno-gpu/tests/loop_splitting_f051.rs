@@ -24,7 +24,7 @@ fn f051_loop_splitting_eliminates_divergence() {
     let instructions = vec![
         // setp.lt.u32 p0, tid, boundary
         PtxInstruction::new(PtxOp::Setp, PtxType::Pred)
-            .dst(Operand::Reg(pred_reg.clone()))
+            .dst(Operand::Reg(pred_reg))
             .src(Operand::ImmU64(0))
             .src(Operand::ImmU64(512)),
         // @p0 ld.shared.f32 (divergent branch)
@@ -67,7 +67,8 @@ fn f052_split_preserves_semantics() {
     let _config = LoopSplitConfig::default();
 
     // Heavy ops always profitable
-    assert!(is_split_profitable(&heavy_instrs, 10));
+    let heavy_profitable = is_split_profitable(&heavy_instrs, 10);
+    assert!(heavy_profitable);
 
     // Light ops below threshold not profitable (but semantics same)
     let light_profitable = is_split_profitable(&light_instrs, 10);
@@ -80,7 +81,7 @@ fn f052_split_preserves_semantics() {
 
     println!(
         "F052 PASSED: Loop splitting preserves semantics (heavy={}, light={})",
-        true, light_profitable
+        heavy_profitable, light_profitable
     );
 }
 
@@ -99,11 +100,11 @@ fn f053_nested_conditional_handling() {
     // }
     let instructions = vec![
         PtxInstruction::new(PtxOp::Setp, PtxType::Pred)
-            .dst(Operand::Reg(pred1.clone()))
+            .dst(Operand::Reg(pred1))
             .src(Operand::ImmU64(0))
             .src(Operand::ImmU64(256)),
         PtxInstruction::new(PtxOp::Setp, PtxType::Pred)
-            .dst(Operand::Reg(pred2.clone()))
+            .dst(Operand::Reg(pred2))
             .src(Operand::ImmU64(0))
             .src(Operand::ImmU64(128)),
         PtxInstruction::new(PtxOp::Ld, PtxType::F32),
@@ -115,7 +116,7 @@ fn f053_nested_conditional_handling() {
 
     // Should identify both levels of nesting
     assert!(
-        splittable.len() >= 1,
+        !splittable.is_empty(),
         "F053 FALSIFIED: Should identify nested conditionals (found {})",
         splittable.len()
     );
@@ -239,7 +240,7 @@ fn f065_overhead_threshold() {
     for i in 0..1000 {
         instructions.push(
             PtxInstruction::new(PtxOp::Setp, PtxType::Pred)
-                .dst(Operand::Reg(pred_reg.clone()))
+                .dst(Operand::Reg(pred_reg))
                 .src(Operand::ImmU64(i as u64))
                 .src(Operand::ImmU64(1000)),
         );
@@ -322,7 +323,7 @@ fn test_heavy_ops_detection() {
 
     // Single light op below threshold should not trigger
     assert!(
-        !is_split_profitable(&light_ops[..1].to_vec(), 100),
+        !is_split_profitable(&light_ops[..1], 100),
         "Single light op should not trigger split at high threshold"
     );
 

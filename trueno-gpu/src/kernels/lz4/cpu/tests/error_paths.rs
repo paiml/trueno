@@ -21,7 +21,7 @@ fn test_lz4_encode_extended_literal_length_over_255() {
     let mut pos = 0;
     let literals = vec![b'X'; 300]; // 300 bytes (15 + 255 + 30)
 
-    lz4_encode_sequence(&mut output, &mut pos, &literals, 0, 0).unwrap();
+    lz4_encode_sequence(&mut output, &mut pos, &literals, 0, 0).expect("test");
 
     // Token should have 0xF0 (15 literals, 0 match)
     assert_eq!(output[0] & 0xF0, 0xF0);
@@ -37,7 +37,7 @@ fn test_lz4_encode_very_long_literal_multiple_255s() {
     let mut pos = 0;
     let literals = vec![b'Y'; 600]; // 600 bytes (15 + 255 + 255 + 75)
 
-    lz4_encode_sequence(&mut output, &mut pos, &literals, 0, 0).unwrap();
+    lz4_encode_sequence(&mut output, &mut pos, &literals, 0, 0).expect("test");
 
     // Extended length bytes
     assert_eq!(output[1], 255);
@@ -65,10 +65,10 @@ fn test_lz4_decompress_extended_literal_with_255() {
     input.push(255); // Extended: +255, continue reading
     input.push(10); // Extended: +10, stop (total = 15 + 255 + 10 = 280)
                     // Now we need 280 literal bytes
-    input.extend(std::iter::repeat(b'A').take(280));
+    input.extend(std::iter::repeat_n(b'A', 280));
 
     let mut output = [0u8; 512];
-    let result = lz4_decompress_block(&input, &mut output).unwrap();
+    let result = lz4_decompress_block(&input, &mut output).expect("test");
     assert_eq!(result, 280);
     assert!(output[..280].iter().all(|&b| b == b'A'));
 }
@@ -134,12 +134,13 @@ fn test_lz4_decompress_offset_exceeds_output() {
 fn test_lz4_decompress_truncated_match_length() {
     // Cover line 209: "Truncated match length" error
     // Token has match_len_base=15, needs extension but none provided
-    let mut input = Vec::new();
-    input.push(0x1F); // Token: 1 literal, 15 match (needs extension)
-    input.push(b'A'); // 1 literal
-    input.push(0x01); // offset low
-    input.push(0x00); // offset high (offset=1, valid since out_pos will be 1)
-                      // No match length extension byte
+    let input = vec![
+        0x1F, // Token: 1 literal, 15 match (needs extension)
+        b'A', // 1 literal
+        0x01, // offset low
+        0x00, // offset high (offset=1, valid since out_pos will be 1)
+              // No match length extension byte
+    ];
 
     let mut output = [0u8; 64];
     let result = lz4_decompress_block(&input, &mut output);
@@ -150,12 +151,13 @@ fn test_lz4_decompress_truncated_match_length() {
 fn test_lz4_decompress_output_overflow_match() {
     // Cover line 222: "Output buffer overflow (match)" error
     // Valid match that would overflow output buffer
-    let mut input = Vec::new();
-    input.push(0x10); // Token: 1 literal, 0 match len (actual = 4)
-    input.push(b'A'); // 1 literal
-    input.push(0x01); // offset low
-    input.push(0x00); // offset high (offset=1)
-                      // match_len = 0 + 4 = 4 bytes to copy
+    let input = vec![
+        0x10, // Token: 1 literal, 0 match len (actual = 4)
+        b'A', // 1 literal
+        0x01, // offset low
+        0x00, // offset high (offset=1)
+              // match_len = 0 + 4 = 4 bytes to copy
+    ];
 
     let mut output = [0u8; 3]; // Too small: 1 literal + 4 match = 5 needed
 
@@ -169,7 +171,7 @@ fn test_lz4_compress_input_smaller_than_minmatch() {
     let input = [b'A', b'B', b'C']; // 3 bytes, less than MIN_MATCH (4)
     let mut output = [0u8; 32];
 
-    let size = lz4_compress_block(&input, &mut output).unwrap();
+    let size = lz4_compress_block(&input, &mut output).expect("test");
     assert!(size > 0);
     // Should emit all 3 bytes as literals
     assert_eq!(output[0] >> 4, 3); // Token: 3 literals
@@ -181,7 +183,7 @@ fn test_lz4_compress_single_byte() {
     let input = [b'X'];
     let mut output = [0u8; 32];
 
-    let size = lz4_compress_block(&input, &mut output).unwrap();
+    let size = lz4_compress_block(&input, &mut output).expect("test");
     assert!(size > 0);
     assert_eq!(output[0] >> 4, 1); // Token: 1 literal
 }
@@ -192,7 +194,7 @@ fn test_lz4_compress_two_bytes() {
     let input = [b'A', b'B'];
     let mut output = [0u8; 32];
 
-    let size = lz4_compress_block(&input, &mut output).unwrap();
+    let size = lz4_compress_block(&input, &mut output).expect("test");
     assert!(size > 0);
     assert_eq!(output[0] >> 4, 2); // Token: 2 literals
 }

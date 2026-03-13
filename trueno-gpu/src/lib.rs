@@ -124,6 +124,7 @@
 #![allow(clippy::elidable_lifetime_names)]
 // Allow manual slice size calculation - clearer intent
 #![allow(clippy::manual_slice_size_calculation)]
+#![allow(clippy::large_stack_arrays)]
 
 pub mod backend;
 pub mod driver;

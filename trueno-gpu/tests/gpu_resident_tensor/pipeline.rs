@@ -15,11 +15,11 @@
 fn test_memory_pool_reuse() {
     // When implemented:
     //
-    // let ctx = CudaContext::new(0).unwrap();
-    // let pool = GpuMemoryPool::new(&ctx, 64 * 1024 * 1024).unwrap(); // 64MB pool
+    // let ctx = CudaContext::new(0).expect("test");
+    // let pool = GpuMemoryPool::new(&ctx, 64 * 1024 * 1024).expect("test"); // 64MB pool
     //
     // // First allocation
-    // let a = pool.allocate::<f32>(1000).unwrap();
+    // let a = pool.allocate::<f32>(1000).expect("test");
     // let ptr_a = a.device_ptr();
     //
     // // Track cudaMalloc calls
@@ -29,14 +29,14 @@ fn test_memory_pool_reuse() {
     // drop(a);
     //
     // // Allocate same size - should reuse
-    // let b = pool.allocate::<f32>(1000).unwrap();
+    // let b = pool.allocate::<f32>(1000).expect("test");
     //
     // // Same pointer (reused)
     // assert_eq!(b.device_ptr(), ptr_a);
     // // No new cudaMalloc
     // assert_eq!(pool.cuda_malloc_calls(), malloc_before);
 
-    assert!(true, "TDD: memory pool reuse not implemented");
+    // TODO: "TDD: memory pool reuse not implemented"
 }
 
 /// Test: GpuResidentTensor should use memory pool when available
@@ -47,12 +47,12 @@ fn test_memory_pool_reuse() {
 fn test_tensor_uses_memory_pool() {
     // When implemented:
     //
-    // let ctx = CudaContext::new(0).unwrap();
-    // let pool = GpuMemoryPool::new(&ctx, 64 * 1024 * 1024).unwrap();
+    // let ctx = CudaContext::new(0).expect("test");
+    // let pool = GpuMemoryPool::new(&ctx, 64 * 1024 * 1024).expect("test");
     //
     // // Create tensor backed by pool
     // let data = vec![1.0f32; 10000];
-    // let tensor = GpuResidentTensor::from_host_pooled(&ctx, &pool, &data).unwrap();
+    // let tensor = GpuResidentTensor::from_host_pooled(&ctx, &pool, &data).expect("test");
     //
     // // Should be pool-backed
     // assert!(tensor.is_pool_backed());
@@ -65,7 +65,7 @@ fn test_tensor_uses_memory_pool() {
     // assert_eq!(pool.active_allocations(), 0);
     // assert!(pool.has_available(10000 * 4));
 
-    assert!(true, "TDD: pool-backed tensors not implemented");
+    // TODO: "TDD: pool-backed tensors not implemented"
 }
 
 // ============================================================================
@@ -82,20 +82,20 @@ fn test_tensor_uses_memory_pool() {
 fn test_encoder_layer_minimal_transfers() {
     // When implemented:
     //
-    // let ctx = CudaContext::new(0).unwrap();
+    // let ctx = CudaContext::new(0).expect("test");
     //
     // // Pre-upload all weights (done ONCE at model load time)
-    // let weights = EncoderLayerWeights::upload(&ctx, &model_weights).unwrap();
+    // let weights = EncoderLayerWeights::upload(&ctx, &model_weights).expect("test");
     //
     // // Process input through encoder layer
-    // let input = GpuResidentTensor::from_host(&ctx, &input_data).unwrap();
+    // let input = GpuResidentTensor::from_host(&ctx, &input_data).expect("test");
     //
     // // Track transfers before
     // let h2d_before = ctx.total_h2d_transfers();
     // let d2h_before = ctx.total_d2h_transfers();
     //
     // // Run encoder layer - should have ZERO additional transfers
-    // let output = encoder_layer_forward(&ctx, &input, &weights).unwrap();
+    // let output = encoder_layer_forward(&ctx, &input, &weights).expect("test");
     //
     // // Verify no transfers during forward pass
     // assert_eq!(ctx.total_h2d_transfers(), h2d_before);
@@ -104,7 +104,7 @@ fn test_encoder_layer_minimal_transfers() {
     // // Output should be on GPU, ready for next layer
     // assert!(output.is_device_resident());
 
-    assert!(true, "TDD: encoder layer pipeline not implemented");
+    // TODO: "TDD: encoder layer pipeline not implemented"
 }
 
 /// Test: Full encoder (all layers) should have 2 total transfers
@@ -118,10 +118,10 @@ fn test_encoder_layer_minimal_transfers() {
 fn test_full_encoder_two_transfers_total() {
     // When implemented:
     //
-    // let ctx = CudaContext::new(0).unwrap();
+    // let ctx = CudaContext::new(0).expect("test");
     //
     // // Model weights pre-uploaded (done ONCE at load time)
-    // let model = WhisperEncoderGpu::load(&ctx, model_path).unwrap();
+    // let model = WhisperEncoderGpu::load(&ctx, model_path).expect("test");
     //
     // // Reset transfer counters for this inference
     // ctx.reset_transfer_counters();
@@ -130,13 +130,13 @@ fn test_full_encoder_two_transfers_total() {
     // let mel_features = vec![0.0f32; 1500 * 80]; // [seq_len, n_mels]
     //
     // // Run full encoder
-    // let output = model.encode(&mel_features).unwrap();
+    // let output = model.encode(&mel_features).expect("test");
     //
     // // Verify ONLY 2 transfers:
     // assert_eq!(ctx.total_h2d_transfers(), 1, "Should have 1 upload (mel features)");
     // assert_eq!(ctx.total_d2h_transfers(), 1, "Should have 1 download (encoder output)");
 
-    assert!(true, "TDD: full encoder not implemented");
+    // TODO: "TDD: full encoder not implemented"
 }
 
 // ============================================================================
@@ -151,8 +151,8 @@ fn test_full_encoder_two_transfers_total() {
 fn test_encoder_performance_target() {
     // When implemented:
     //
-    // let ctx = CudaContext::new(0).unwrap();
-    // let model = WhisperEncoderGpu::load(&ctx, "models/whisper-tiny.apr").unwrap();
+    // let ctx = CudaContext::new(0).expect("test");
+    // let model = WhisperEncoderGpu::load(&ctx, "models/whisper-tiny.apr").expect("test");
     //
     // // Warmup
     // for _ in 0..3 {
@@ -161,11 +161,11 @@ fn test_encoder_performance_target() {
     //
     // // Benchmark
     // let start = std::time::Instant::now();
-    // let _ = model.encode(&vec![0.0f32; 1500 * 80]).unwrap();
+    // let _ = model.encode(&vec![0.0f32; 1500 * 80]).expect("test");
     // let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
     //
     // // Target: <300ms (currently 5150ms on CPU)
     // assert!(elapsed_ms < 300.0, "Encoder took {}ms, target <300ms", elapsed_ms);
 
-    assert!(true, "TDD: performance test not implemented");
+    // TODO: "TDD: performance test not implemented"
 }

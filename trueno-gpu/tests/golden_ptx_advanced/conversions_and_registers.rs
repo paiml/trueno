@@ -2,7 +2,7 @@
 //!
 //! IMMUTABLE GUARDIAN - DO NOT MODIFY WITHOUT FALSIFICATION EVIDENCE
 
-use trueno_gpu::ptx::{PtxControl, PtxKernel, PtxMemory, PtxReg, PtxType};
+use trueno_gpu::ptx::{PtxControl, PtxKernel, PtxMemory, PtxReg};
 
 // ============================================================================
 // TYPE CONVERSION OPERATIONS - Golden Tests

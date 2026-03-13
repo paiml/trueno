@@ -19,8 +19,8 @@ fn is_rd11_setup(line: &str) -> bool {
 fn print_line_range(ptx: &str, start: usize, end: usize) {
     println!("\n=== Lines {}-{} (around hash table access) ===", start + 1, end);
     let lines: Vec<&str> = ptx.lines().collect();
-    for i in start..end.min(lines.len()) {
-        println!("{:4}: {}", i + 1, lines[i]);
+    for (i, line) in lines.iter().enumerate().take(end.min(lines.len())).skip(start) {
+        println!("{:4}: {}", i + 1, line);
     }
 }
 

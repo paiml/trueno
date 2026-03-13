@@ -39,7 +39,7 @@ fn test_emit_with_predicate() {
     instr.srcs = vec![Operand::Reg(vreg(1, PtxType::F32)), Operand::Reg(vreg(2, PtxType::F32))];
     instr.predicate = Some(Predicate { reg: vreg(10, PtxType::Pred), negated: false });
     let result = emit_instruction(&instr);
-    assert!(result.contains("@"));
+    assert!(result.contains('@'));
 }
 
 #[test]
@@ -149,8 +149,8 @@ fn test_emit_multiple_dsts() {
     instr.dsts = vec![Operand::Reg(vreg(0, PtxType::F32)), Operand::Reg(vreg(1, PtxType::F32))];
     instr.srcs = vec![Operand::Reg(vreg(2, PtxType::U64))];
     let result = emit_instruction(&instr);
-    assert!(result.contains("{"));
-    assert!(result.contains("}"));
+    assert!(result.contains('{'));
+    assert!(result.contains('}'));
 }
 
 #[test]
@@ -164,7 +164,7 @@ fn test_emit_multiple_srcs() {
     ];
     let result = emit_instruction(&instr);
     assert!(result.contains("fma"));
-    assert!(result.matches(",").count() >= 2);
+    assert!(result.matches(',').count() >= 2);
 }
 
 // === write_instruction tests ===
@@ -186,7 +186,7 @@ fn test_write_with_predicate() {
     instr.predicate = Some(Predicate { reg: vreg(10, PtxType::Pred), negated: false });
     let mut out = String::new();
     write_instruction(&instr, &mut out);
-    assert!(out.contains("@"));
+    assert!(out.contains('@'));
 }
 
 #[test]
@@ -263,8 +263,8 @@ fn test_write_multiple_dsts() {
     instr.srcs = vec![Operand::Reg(vreg(2, PtxType::U64))];
     let mut out = String::new();
     write_instruction(&instr, &mut out);
-    assert!(out.contains("{"));
-    assert!(out.contains("}"));
+    assert!(out.contains('{'));
+    assert!(out.contains('}'));
 }
 
 #[test]

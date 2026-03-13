@@ -229,7 +229,7 @@ fn h0_cuda_mon_51_device_info_debug() {
     assert!(debug_str.contains("CudaDeviceInfo"));
     assert!(debug_str.contains("Debug GPU"));
     // 16 GB = 17179869184 bytes - check for index
-    assert!(debug_str.contains("2"), "Should contain the index value");
+    assert!(debug_str.contains('2'), "Should contain the index value");
 }
 
 #[test]

@@ -209,7 +209,7 @@ mod tests {
         let debug_str = format!("{kernel:?}");
         assert!(debug_str.contains("LayerNormBackwardKernel"));
         assert!(debug_str.contains("256"));
-        assert!(debug_str.contains("8"));
+        assert!(debug_str.contains('8'));
     }
 
     #[test]

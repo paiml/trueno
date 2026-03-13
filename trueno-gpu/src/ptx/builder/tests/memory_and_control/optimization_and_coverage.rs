@@ -21,7 +21,7 @@ fn test_build_optimized_basic() {
         });
 
     assert!(kernel.is_ok(), "build_optimized should succeed for simple kernel");
-    let kernel = kernel.unwrap();
+    let kernel = kernel.expect("test");
     let ptx = kernel.emit();
     assert!(ptx.contains(".entry test_optimized"));
     assert!(ptx.contains("ret;"));
@@ -45,7 +45,7 @@ fn test_build_optimized_with_mul_add_fusion() {
         });
 
     assert!(kernel.is_ok(), "build_optimized should succeed");
-    let kernel = kernel.unwrap();
+    let kernel = kernel.expect("test");
     let ptx = kernel.emit();
 
     // After FMA fusion, we should have fma.rn.f32 instead of separate mul + add
@@ -83,7 +83,7 @@ fn test_build_vs_build_optimized_difference() {
             ctx.st_global_f32(ptr, add_result);
             ctx.ret();
         })
-        .unwrap();
+        .expect("test");
 
     let ptx_unopt = kernel_unopt.emit();
     let ptx_opt = kernel_opt.emit();
@@ -125,7 +125,7 @@ fn test_build_optimized_preserves_barriers() {
     });
 
     assert!(kernel.is_ok());
-    let kernel = kernel.unwrap();
+    let kernel = kernel.expect("test");
     let ptx = kernel.emit();
     assert!(ptx.contains("bar.sync"), "Barriers should be preserved");
 }
@@ -311,7 +311,7 @@ fn test_mul_lo_for_integer() {
 fn test_float_multiply_no_lo() {
     // Test floating point multiply (no .lo modifier)
     let kernel = PtxKernel::new("test_float_mul").param(PtxType::U64, "ptr").build(|ctx| {
-        let a = ctx.mov_f32_imm(3.14);
+        let a = ctx.mov_f32_imm(3.125);
         let b = ctx.mov_f32_imm(2.71);
         let result = ctx.mul_f32(a, b);
         let ptr = ctx.load_param_u64("ptr");

@@ -16,6 +16,7 @@ fn main() {
     // Warm up
     let _ = GemmKernel::naive(32, 32, 32).emit_ptx();
 
+    #[allow(clippy::type_complexity)]
     let tests: Vec<(&str, Box<dyn Fn() -> String>)> = vec![
         ("gemm_naive_64", Box::new(|| GemmKernel::naive(64, 64, 64).emit_ptx())),
         ("gemm_tiled_128", Box::new(|| GemmKernel::tiled(128, 128, 128, 32).emit_ptx())),

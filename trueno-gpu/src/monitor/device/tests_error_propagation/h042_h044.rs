@@ -52,38 +52,38 @@ fn h042_partial_error_device_id() {
 #[test]
 fn h042_partial_error_compute_utilization() {
     let mock = PartialErrorMockDevice::with_total_error();
-    assert!((mock.compute_utilization().unwrap() - 50.0).abs() < 0.01);
+    assert!((mock.compute_utilization().expect("test") - 50.0).abs() < 0.01);
 }
 
 #[test]
 fn h042_partial_error_compute_clock() {
     let mock = PartialErrorMockDevice::with_total_error();
-    assert_eq!(mock.compute_clock_mhz().unwrap(), 3000);
+    assert_eq!(mock.compute_clock_mhz().expect("test"), 3000);
 }
 
 #[test]
 fn h042_partial_error_compute_temperature() {
     let mock = PartialErrorMockDevice::with_total_error();
-    assert!((mock.compute_temperature_c().unwrap() - 50.0).abs() < 0.01);
+    assert!((mock.compute_temperature_c().expect("test") - 50.0).abs() < 0.01);
 }
 
 #[test]
 fn h042_partial_error_compute_power() {
     let mock = PartialErrorMockDevice::with_total_error();
-    assert!((mock.compute_power_watts().unwrap() - 100.0).abs() < 0.01);
+    assert!((mock.compute_power_watts().expect("test") - 100.0).abs() < 0.01);
 }
 
 #[test]
 fn h042_partial_error_memory_used() {
     let mock = PartialErrorMockDevice::with_total_error();
-    assert_eq!(mock.memory_used_bytes().unwrap(), 1024);
+    assert_eq!(mock.memory_used_bytes().expect("test"), 1024);
 }
 
 #[test]
 fn h042_partial_error_compute_units() {
     let mock = PartialErrorMockDevice::with_total_error();
     assert_eq!(mock.compute_unit_count(), 8);
-    assert_eq!(mock.active_compute_units().unwrap(), 8);
+    assert_eq!(mock.active_compute_units().expect("test"), 8);
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn h042_partial_error_refresh() {
 #[test]
 fn h043_device_snapshot_timestamp_non_zero() {
     let mock = MockDevice::new(1024, 2048, 100.0, 200.0, 50.0);
-    let snapshot = DeviceSnapshot::capture(&mock).unwrap();
+    let snapshot = DeviceSnapshot::capture(&mock).expect("test");
 
     // Timestamp should be non-zero (based on system time)
     assert!(snapshot.timestamp_ms > 0);
@@ -123,7 +123,7 @@ fn h043_device_snapshot_timestamp_non_zero() {
 #[test]
 fn h043_device_snapshot_all_fields_populated() {
     let mock = MockDevice::new(1024, 2048, 100.0, 200.0, 50.0);
-    let snapshot = DeviceSnapshot::capture(&mock).unwrap();
+    let snapshot = DeviceSnapshot::capture(&mock).expect("test");
 
     // Verify all fields are populated from the mock
     assert_eq!(snapshot.device_id, DeviceId::cpu());

@@ -242,7 +242,7 @@ fn test_cvt_instruction_emission() {
 #[test]
 fn test_float_mul_no_lo() {
     let kernel = PtxKernel::new("test_float_mul").build(|ctx| {
-        let a = ctx.mov_f32_imm(3.14);
+        let a = ctx.mov_f32_imm(3.125);
         let b = ctx.mov_f32_imm(2.0);
         let _result = ctx.mul_f32(a, b);
         ctx.ret();
