@@ -186,7 +186,7 @@ fn test_virtual_register_display() {
 fn test_virtual_register_write_to() {
     let vreg = VirtualReg::new(3, PtxType::F32);
     let mut buffer = String::new();
-    vreg.write_to(&mut buffer).unwrap();
+    vreg.write_to(&mut buffer).expect("test");
     assert_eq!(buffer, "%f3");
 }
 

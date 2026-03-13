@@ -273,7 +273,7 @@ fn test_validate_parity_shared_memory_mismatch() {
         .violations
         .iter()
         .find(|v| v.kind == ParityViolationKind::SharedMemoryMismatch)
-        .unwrap();
+        .expect("test");
     assert!(violation.message.contains("32"));
     assert!(violation.message.contains("64"));
 }
@@ -340,7 +340,7 @@ norm_loop:
         .violations
         .iter()
         .find(|v| v.kind == ParityViolationKind::LoopStructureMismatch)
-        .unwrap();
+        .expect("test");
     assert!(violation.message.contains("sum_loop"));
     assert!(violation.message.contains("norm_loop"));
 }

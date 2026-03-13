@@ -15,7 +15,7 @@ fn check_writes_rd11(line: &str) -> bool {
     trimmed
         .split_whitespace()
         .nth(1)
-        .map_or(false, |rest| rest.starts_with("%rd11,") || rest == "%rd11,")
+        .is_some_and(|rest| rest.starts_with("%rd11,") || rest == "%rd11,")
 }
 
 fn dump_rd11_lines(ptx: &str) {

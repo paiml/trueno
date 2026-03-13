@@ -11,9 +11,9 @@ fn is_barrier_related(line: &str) -> bool {
 fn print_context(lines: &[&str], center: usize) {
     let start = center.saturating_sub(2);
     let end = (center + 3).min(lines.len());
-    for j in start..end {
+    for (j, line) in lines.iter().enumerate().take(end).skip(start) {
         let marker = if j == center { ">>>" } else { "   " };
-        println!("{} {:4}: {}", marker, j + 1, lines[j]);
+        println!("{} {:4}: {}", marker, j + 1, line);
     }
     println!();
 }

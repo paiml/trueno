@@ -163,9 +163,9 @@ mod tests {
         assert!(builder.instructions[0].predicate.is_some());
         assert!(builder.instructions[1].predicate.is_some());
         // First one not negated
-        assert!(!builder.instructions[0].predicate.as_ref().unwrap().negated);
+        assert!(!builder.instructions[0].predicate.as_ref().expect("test").negated);
         // Second one negated
-        assert!(builder.instructions[1].predicate.as_ref().unwrap().negated);
+        assert!(builder.instructions[1].predicate.as_ref().expect("test").negated);
     }
 
     #[test]
@@ -174,7 +174,7 @@ mod tests {
 
         let _a = builder.mov_u32_imm(42);
         let _b = builder.mov_u64_imm(12345);
-        let _c = builder.mov_f32_imm(3.14);
+        let _c = builder.mov_f32_imm(3.125);
 
         assert_eq!(builder.instructions.len(), 3);
         for instr in &builder.instructions {
@@ -231,7 +231,7 @@ mod tests {
         let mut builder = MockBuilder::new();
 
         // Create f32 source register
-        let src = builder.mov_f32_imm(3.14);
+        let src = builder.mov_f32_imm(3.125);
 
         // Copy to another f32 register
         let dst = builder.mov_reg(src, PtxType::F32);
@@ -291,7 +291,7 @@ mod tests {
         builder.branch_if(pred, "target_label");
 
         let instr = &builder.instructions[0];
-        let predicate = instr.predicate.as_ref().unwrap();
+        let predicate = instr.predicate.as_ref().expect("test");
 
         assert_eq!(predicate.reg, pred);
         assert!(!predicate.negated);
@@ -305,7 +305,7 @@ mod tests {
         builder.branch_if_not(pred, "other_label");
 
         let instr = &builder.instructions[0];
-        let predicate = instr.predicate.as_ref().unwrap();
+        let predicate = instr.predicate.as_ref().expect("test");
 
         assert_eq!(predicate.reg, pred);
         assert!(predicate.negated);

@@ -102,8 +102,8 @@ fn test_boundary_conditions_tensor_core() {
         assert!(ptx.contains(".entry"));
         assert!(ptx.contains("bar.sync"));
 
-        let bar_sync_pos = ptx.find("bar.sync").unwrap();
-        let k_tile_end_pos = ptx.find("k_tile_end:").unwrap();
+        let bar_sync_pos = ptx.find("bar.sync").expect("test");
+        let k_tile_end_pos = ptx.find("k_tile_end:").expect("test");
         assert!(bar_sync_pos < k_tile_end_pos);
     }
 }

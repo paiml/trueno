@@ -205,7 +205,7 @@ fn golden_add_u32_reg_inplace_instruction() {
 #[test]
 fn golden_mov_f32_reg_instruction() {
     let kernel = PtxKernel::new("test_mov_f32_reg").build(|ctx| {
-        let src = ctx.mov_f32_imm(3.14);
+        let src = ctx.mov_f32_imm(3.125);
         let dst = ctx.mov_f32_imm(0.0);
         ctx.mov_f32_reg(dst, src);
         ctx.ret();

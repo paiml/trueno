@@ -92,7 +92,7 @@ fn h032_device_snapshot_with_errors() {
     let snapshot = DeviceSnapshot::capture(&mock);
     assert!(snapshot.is_ok());
 
-    let snap = snapshot.unwrap();
+    let snap = snapshot.expect("test");
     // Should use defaults when metrics fail
     assert_eq!(snap.compute_utilization, 0.0);
     assert_eq!(snap.memory_used_bytes, 0);

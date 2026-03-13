@@ -149,12 +149,12 @@ fn h014_mock_device_all_methods() {
     assert_eq!(mock.device_name(), "Mock");
     assert!(matches!(mock.device_type(), DeviceType::Cpu));
     assert_eq!(mock.compute_unit_count(), 8);
-    assert_eq!(mock.memory_used_bytes().unwrap(), 1024);
-    assert_eq!(mock.memory_total_bytes().unwrap(), 2048);
-    assert!((mock.compute_utilization().unwrap() - 50.0).abs() < 0.01); // MockDevice always returns 50.0
-    assert!((mock.compute_temperature_c().unwrap() - 30.0).abs() < 0.01);
-    assert!((mock.compute_power_watts().unwrap() - 10.0).abs() < 0.01);
-    assert_eq!(mock.compute_clock_mhz().unwrap(), 3000);
+    assert_eq!(mock.memory_used_bytes().expect("test"), 1024);
+    assert_eq!(mock.memory_total_bytes().expect("test"), 2048);
+    assert!((mock.compute_utilization().expect("test") - 50.0).abs() < 0.01); // MockDevice always returns 50.0
+    assert!((mock.compute_temperature_c().expect("test") - 30.0).abs() < 0.01);
+    assert!((mock.compute_power_watts().expect("test") - 10.0).abs() < 0.01);
+    assert_eq!(mock.compute_clock_mhz().expect("test"), 3000);
 }
 
 #[test]
@@ -162,10 +162,10 @@ fn h014_mock_device_derived_metrics() {
     let mock = MockDevice::new(1024, 2048, 10.0, 100.0, 30.0);
 
     // Derived metrics
-    let usage_percent = mock.memory_usage_percent().unwrap();
+    let usage_percent = mock.memory_usage_percent().expect("test");
     assert!((usage_percent - 50.0).abs() < 0.01); // 1024/2048 = 50%
 
-    let available = mock.memory_available_bytes().unwrap();
+    let available = mock.memory_available_bytes().expect("test");
     assert_eq!(available, 1024); // 2048 - 1024
 }
 
@@ -173,10 +173,10 @@ fn h014_mock_device_derived_metrics() {
 fn h014_mock_device_mb_gb_helpers() {
     let mock = MockDevice::new(1024 * 1024 * 1024, 2 * 1024 * 1024 * 1024, 10.0, 100.0, 30.0);
 
-    let used_mb = mock.memory_used_mb().unwrap();
+    let used_mb = mock.memory_used_mb().expect("test");
     assert_eq!(used_mb, 1024); // 1 GB = 1024 MB
 
-    let total_gb = mock.memory_total_gb().unwrap();
+    let total_gb = mock.memory_total_gb().expect("test");
     assert!((total_gb - 2.0).abs() < 0.1); // 2 GB
 }
 
@@ -213,7 +213,7 @@ fn h015_device_id_clone() {
 #[test]
 fn h016_snapshot_debug() {
     let mock = MockDevice::new(1024, 2048, 10.0, 100.0, 30.0);
-    let snapshot = DeviceSnapshot::capture(&mock).unwrap();
+    let snapshot = DeviceSnapshot::capture(&mock).expect("test");
     let debug_str = format!("{:?}", snapshot);
     assert!(debug_str.contains("DeviceSnapshot"));
 }
@@ -221,7 +221,7 @@ fn h016_snapshot_debug() {
 #[test]
 fn h016_snapshot_clone() {
     let mock = MockDevice::new(1024, 2048, 10.0, 100.0, 30.0);
-    let snapshot1 = DeviceSnapshot::capture(&mock).unwrap();
+    let snapshot1 = DeviceSnapshot::capture(&mock).expect("test");
     let snapshot2 = snapshot1.clone();
     assert_eq!(snapshot1.device_id, snapshot2.device_id);
     assert_eq!(snapshot1.memory_used_bytes, snapshot2.memory_used_bytes);
@@ -288,7 +288,7 @@ fn h019_cpu_active_compute_units() {
     // active_compute_units should return the core count
     let active = cpu.active_compute_units();
     assert!(active.is_ok());
-    let count = active.unwrap();
+    let count = active.expect("test");
     assert!(count > 0, "Should have at least one active compute unit");
     assert_eq!(count, cpu.compute_unit_count(), "Active should equal total cores");
 }
@@ -314,7 +314,7 @@ fn h020_mock_device_active_compute_units() {
 
     let active = mock.active_compute_units();
     assert!(active.is_ok());
-    assert_eq!(active.unwrap(), 8); // MockDevice returns 8 compute units
+    assert_eq!(active.expect("test"), 8); // MockDevice returns 8 compute units
 }
 
 #[test]
@@ -344,7 +344,7 @@ fn h021_cpu_device_memory_mb_conversion() {
     if let Ok(used_bytes) = cpu.memory_used_bytes() {
         let used_mb = cpu.memory_used_mb();
         assert!(used_mb.is_ok());
-        assert_eq!(used_mb.unwrap(), used_bytes / (1024 * 1024));
+        assert_eq!(used_mb.expect("test"), used_bytes / (1024 * 1024));
     }
 }
 
@@ -355,7 +355,7 @@ fn h021_cpu_device_memory_total_mb() {
     if let Ok(total_bytes) = cpu.memory_total_bytes() {
         let total_mb = cpu.memory_total_mb();
         assert!(total_mb.is_ok());
-        assert_eq!(total_mb.unwrap(), total_bytes / (1024 * 1024));
+        assert_eq!(total_mb.expect("test"), total_bytes / (1024 * 1024));
     }
 }
 
@@ -367,7 +367,7 @@ fn h021_cpu_device_memory_total_gb() {
         let total_gb = cpu.memory_total_gb();
         assert!(total_gb.is_ok());
         let expected_gb = total_bytes as f64 / (1024.0 * 1024.0 * 1024.0);
-        assert!((total_gb.unwrap() - expected_gb).abs() < 0.001);
+        assert!((total_gb.expect("test") - expected_gb).abs() < 0.001);
     }
 }
 
@@ -378,7 +378,7 @@ fn h021_cpu_device_memory_available() {
     if let (Ok(used), Ok(total)) = (cpu.memory_used_bytes(), cpu.memory_total_bytes()) {
         let available = cpu.memory_available_bytes();
         assert!(available.is_ok());
-        assert_eq!(available.unwrap(), total.saturating_sub(used));
+        assert_eq!(available.expect("test"), total.saturating_sub(used));
     }
 }
 

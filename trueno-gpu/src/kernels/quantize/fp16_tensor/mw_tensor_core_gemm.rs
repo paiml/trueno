@@ -36,11 +36,13 @@ pub struct MultiWarpTensorCoreQ4KGemmKernel {
 }
 
 impl MultiWarpTensorCoreQ4KGemmKernel {
+    /// Creates a new multi-warp tensor core Q4K GEMM kernel with the given dimensions.
     #[must_use]
     pub fn new(m: u32, k: u32, n: u32) -> Self {
         Self { m, n, k }
     }
 
+    /// Returns the number of Q4K super-blocks along the K dimension.
     #[must_use]
     pub fn num_super_blocks(&self) -> u32 {
         (self.k + Q4K_SUPER_BLOCK_SIZE - 1) / Q4K_SUPER_BLOCK_SIZE

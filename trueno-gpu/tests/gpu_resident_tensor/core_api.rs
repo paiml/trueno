@@ -126,21 +126,21 @@ fn test_gpu_operations_stay_on_device() {}
 fn test_operation_chain_no_intermediate_transfers() {
     // When implemented:
     //
-    // let ctx = CudaContext::new(0).unwrap();
+    // let ctx = CudaContext::new(0).expect("test");
     //
     // // Upload Q, K, V (3 H2D transfers)
-    // let q = GpuResidentTensor::from_host(&ctx, &q_data).unwrap();
-    // let k = GpuResidentTensor::from_host(&ctx, &k_data).unwrap();
-    // let v = GpuResidentTensor::from_host(&ctx, &v_data).unwrap();
+    // let q = GpuResidentTensor::from_host(&ctx, &q_data).expect("test");
+    // let k = GpuResidentTensor::from_host(&ctx, &k_data).expect("test");
+    // let v = GpuResidentTensor::from_host(&ctx, &v_data).expect("test");
     //
     // // Chain: scores = Q @ K^T (stays on GPU)
-    // let scores = q.matmul_transposed(&k).unwrap();
+    // let scores = q.matmul_transposed(&k).expect("test");
     //
     // // Chain: attn = softmax(scores) (stays on GPU)
-    // let attn = scores.softmax(-1).unwrap();
+    // let attn = scores.softmax(-1).expect("test");
     //
     // // Chain: output = attn @ V (stays on GPU)
-    // let output = attn.matmul(&v).unwrap();
+    // let output = attn.matmul(&v).expect("test");
     //
     // // Verify NO intermediate transfers
     // assert_eq!(scores.device_to_host_transfers(), 0);
@@ -148,9 +148,9 @@ fn test_operation_chain_no_intermediate_transfers() {
     // assert_eq!(output.device_to_host_transfers(), 0);
     //
     // // Only transfer on explicit request
-    // let result = output.to_host().unwrap();
+    // let result = output.to_host().expect("test");
     // // Now we have 1 D2H transfer
     // assert_eq!(output.device_to_host_transfers(), 1);
 
-    assert!(true, "TDD: Operation chaining not implemented");
+    // TODO: "TDD: Operation chaining not implemented"
 }

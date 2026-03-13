@@ -6,7 +6,7 @@ fn main() {
 
     println!("=== All labels ===");
     for (i, line) in ptx.lines().enumerate() {
-        if line.trim().starts_with("L_") && line.trim().ends_with(":") {
+        if line.trim().starts_with("L_") && line.trim().ends_with(':') {
             println!("{:4}: {}", i + 1, line);
         }
     }

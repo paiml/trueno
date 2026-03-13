@@ -8,8 +8,9 @@ fn test_f001_roundtrip_hello() {
     let mut compressed = [0u8; 64];
     let mut decompressed = [0u8; 64];
 
-    let comp_size = lz4_compress_block(input, &mut compressed).unwrap();
-    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let comp_size = lz4_compress_block(input, &mut compressed).expect("test");
+    let decomp_size =
+        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).expect("test");
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..decomp_size], input.as_slice());
@@ -21,8 +22,9 @@ fn test_f001_roundtrip_zeros() {
     let mut compressed = [0u8; 512];
     let mut decompressed = [0u8; 256];
 
-    let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let comp_size = lz4_compress_block(&input, &mut compressed).expect("test");
+    let decomp_size =
+        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).expect("test");
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..], &input[..]);
@@ -37,8 +39,9 @@ fn test_f001_roundtrip_repeated_pattern() {
     let mut compressed = [0u8; 1024];
     let mut decompressed = [0u8; 512];
 
-    let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let comp_size = lz4_compress_block(&input, &mut compressed).expect("test");
+    let decomp_size =
+        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).expect("test");
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..], &input[..]);
@@ -50,8 +53,9 @@ fn test_f001_roundtrip_text() {
     let mut compressed = [0u8; 256];
     let mut decompressed = [0u8; 256];
 
-    let comp_size = lz4_compress_block(input, &mut compressed).unwrap();
-    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let comp_size = lz4_compress_block(input, &mut compressed).expect("test");
+    let decomp_size =
+        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).expect("test");
 
     assert_eq!(decomp_size, input.len());
     assert_eq!(&decompressed[..decomp_size], input.as_slice());
@@ -68,8 +72,9 @@ fn test_f001_roundtrip_page_size() {
     let mut compressed = [0u8; PAGE_SIZE as usize + 1024];
     let mut decompressed = [0u8; PAGE_SIZE as usize];
 
-    let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
-    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let comp_size = lz4_compress_block(&input, &mut compressed).expect("test");
+    let decomp_size =
+        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).expect("test");
 
     assert_eq!(decomp_size, PAGE_SIZE as usize);
     assert_eq!(&decompressed[..], &input[..]);
@@ -82,7 +87,7 @@ fn test_f006_zero_page_compression_ratio() {
     let input = [0u8; PAGE_SIZE as usize];
     let mut compressed = [0u8; PAGE_SIZE as usize];
 
-    let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
+    let comp_size = lz4_compress_block(&input, &mut compressed).expect("test");
 
     assert!(comp_size < 100, "Zero page should compress to <100 bytes, got {}", comp_size);
 }
@@ -94,7 +99,7 @@ fn test_f007_repeated_pattern_ratio() {
     let input = [b'A'; PAGE_SIZE as usize];
     let mut compressed = [0u8; PAGE_SIZE as usize];
 
-    let comp_size = lz4_compress_block(&input, &mut compressed).unwrap();
+    let comp_size = lz4_compress_block(&input, &mut compressed).expect("test");
     let ratio = PAGE_SIZE as usize / comp_size;
 
     assert!(ratio >= 100, "Should achieve >100:1 ratio, got {}:1 ({} bytes)", ratio, comp_size);
@@ -106,8 +111,9 @@ fn test_f003_empty_page() {
     let mut compressed = [0u8; 32];
     let mut decompressed = [0u8; 32];
 
-    let comp_size = lz4_compress_block(&[], &mut compressed).unwrap();
-    let decomp_size = lz4_decompress_block(&compressed[..comp_size], &mut decompressed).unwrap();
+    let comp_size = lz4_compress_block(&[], &mut compressed).expect("test");
+    let decomp_size =
+        lz4_decompress_block(&compressed[..comp_size], &mut decompressed).expect("test");
 
     assert_eq!(comp_size, 0);
     assert_eq!(decomp_size, 0);
@@ -120,8 +126,8 @@ fn test_f018_deterministic_output() {
     let mut compressed1 = [0u8; 128];
     let mut compressed2 = [0u8; 128];
 
-    let size1 = lz4_compress_block(input, &mut compressed1).unwrap();
-    let size2 = lz4_compress_block(input, &mut compressed2).unwrap();
+    let size1 = lz4_compress_block(input, &mut compressed1).expect("test");
+    let size2 = lz4_compress_block(input, &mut compressed2).expect("test");
 
     assert_eq!(size1, size2);
     assert_eq!(&compressed1[..size1], &compressed2[..size2]);

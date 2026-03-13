@@ -76,7 +76,7 @@ fn test_cvt_s32_u8_sx() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(ptx.len() > 0);
+    assert!(!ptx.is_empty());
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn test_cvt_s32_u32() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(ptx.len() > 0);
+    assert!(!ptx.is_empty());
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn test_cvt_u8_s32() {
         ctx.ret();
     });
     let ptx = kernel.emit();
-    assert!(ptx.len() > 0);
+    assert!(!ptx.is_empty());
 }
 
 #[test]

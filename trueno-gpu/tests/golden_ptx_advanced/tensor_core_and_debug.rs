@@ -3,9 +3,7 @@
 //!
 //! IMMUTABLE GUARDIAN - DO NOT MODIFY WITHOUT FALSIFICATION EVIDENCE
 
-use trueno_gpu::ptx::{
-    PtxArithmetic, PtxControl, PtxKernel, PtxMemory, PtxReg, PtxType, WmmaLayout,
-};
+use trueno_gpu::ptx::{PtxControl, PtxKernel, PtxReg, PtxType, WmmaLayout};
 
 // ============================================================================
 // F16 OPERATIONS - Golden Tests
@@ -14,7 +12,7 @@ use trueno_gpu::ptx::{
 #[test]
 fn golden_cvt_f16_f32_instruction() {
     let kernel = PtxKernel::new("test_cvt_f16_f32").build(|ctx| {
-        let f32_val = ctx.mov_f32_imm(3.14);
+        let f32_val = ctx.mov_f32_imm(3.125);
         let _f16_val = ctx.cvt_f16_f32(f32_val);
         ctx.ret();
     });
@@ -65,7 +63,7 @@ fn golden_ld_global_f16_instruction() {
 fn golden_st_global_f16_instruction() {
     let kernel = PtxKernel::new("test_st_global_f16").param(PtxType::U64, "ptr").build(|ctx| {
         let ptr = ctx.load_param_u64("ptr");
-        let f32_val = ctx.mov_f32_imm(3.14);
+        let f32_val = ctx.mov_f32_imm(3.125);
         let f16_val = ctx.cvt_f16_f32(f32_val);
         ctx.st_global_f16(ptr, f16_val);
         ctx.ret();

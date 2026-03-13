@@ -107,8 +107,6 @@ impl Kernel for HalfWarpDp4aQ6KGemvKernel {
                 // Q8 data is identical for all output rows — load once, reuse across all.
                 let q8_total_u32s = q8_total_bytes / 4;
                 let q8_smem_base = ctx.mov_u32_imm(q8_smem_off);
-                let q8_smem_base_64 = ctx.cvt_u64_u32(q8_smem_base);
-
                 // Cooperative load: thread_id strides by num_threads
                 let load_idx = ctx.mov_u32_imm(0);
                 ctx.add_u32_reg_inplace(load_idx, thread_id);

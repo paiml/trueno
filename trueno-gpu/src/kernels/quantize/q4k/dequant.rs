@@ -346,11 +346,13 @@ pub struct Q4KDequantFp16Kernel {
 }
 
 impl Q4KDequantFp16Kernel {
+    /// Creates a new Q4K dequantization-to-FP16 kernel with the given dimensions.
     #[must_use]
     pub fn new(k: u32, n: u32) -> Self {
         Self { k, n }
     }
 
+    /// Returns the number of Q4K super-blocks per row along the K dimension.
     #[must_use]
     pub const fn num_super_blocks_per_row(&self) -> u32 {
         (self.k + Q4K_SUPER_BLOCK_SIZE - 1) / Q4K_SUPER_BLOCK_SIZE

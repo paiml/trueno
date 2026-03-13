@@ -3,9 +3,7 @@
 //!
 //! IMMUTABLE GUARDIAN - DO NOT MODIFY WITHOUT FALSIFICATION EVIDENCE
 
-use trueno_gpu::ptx::{
-    PtxArithmetic, PtxComparison, PtxControl, PtxKernel, PtxMemory, PtxReg, PtxType,
-};
+use trueno_gpu::ptx::{PtxControl, PtxKernel, PtxMemory, PtxType};
 
 // ============================================================================
 // INTEGER DIVISION/REMAINDER - Golden Tests

@@ -10,11 +10,11 @@ use super::*;
 #[test]
 fn h036_cpu_device_memory_used_realistic() {
     let mut cpu = CpuDevice::new();
-    cpu.refresh().unwrap();
+    cpu.refresh().expect("test");
 
     // memory_used should be between 0 and total
-    let used = cpu.memory_used_bytes().unwrap();
-    let total = cpu.memory_total_bytes().unwrap();
+    let used = cpu.memory_used_bytes().expect("test");
+    let total = cpu.memory_total_bytes().expect("test");
     assert!(used <= total);
 }
 
@@ -26,33 +26,33 @@ fn h036_cpu_device_memory_used_realistic() {
 fn h037_memory_usage_percent_boundary_values() {
     // Test 0% usage
     let mock_empty = MockDevice::new(0, 1000, 0.0, 0.0, 0.0);
-    assert!((mock_empty.memory_usage_percent().unwrap() - 0.0).abs() < 0.01);
+    assert!((mock_empty.memory_usage_percent().expect("test") - 0.0).abs() < 0.01);
 
     // Test 100% usage
     let mock_full = MockDevice::new(1000, 1000, 0.0, 0.0, 0.0);
-    assert!((mock_full.memory_usage_percent().unwrap() - 100.0).abs() < 0.01);
+    assert!((mock_full.memory_usage_percent().expect("test") - 100.0).abs() < 0.01);
 }
 
 #[test]
 fn h037_memory_available_boundary() {
     // All memory available
     let mock_empty = MockDevice::new(0, 1000, 0.0, 0.0, 0.0);
-    assert_eq!(mock_empty.memory_available_bytes().unwrap(), 1000);
+    assert_eq!(mock_empty.memory_available_bytes().expect("test"), 1000);
 
     // No memory available
     let mock_full = MockDevice::new(1000, 1000, 0.0, 0.0, 0.0);
-    assert_eq!(mock_full.memory_available_bytes().unwrap(), 0);
+    assert_eq!(mock_full.memory_available_bytes().expect("test"), 0);
 }
 
 #[test]
 fn h037_power_usage_percent_boundary() {
     // 0% power
     let mock_idle = MockDevice::new(0, 0, 0.0, 100.0, 0.0);
-    assert!((mock_idle.power_usage_percent().unwrap() - 0.0).abs() < 0.01);
+    assert!((mock_idle.power_usage_percent().expect("test") - 0.0).abs() < 0.01);
 
     // 100% power
     let mock_max = MockDevice::new(0, 0, 100.0, 100.0, 0.0);
-    assert!((mock_max.power_usage_percent().unwrap() - 100.0).abs() < 0.01);
+    assert!((mock_max.power_usage_percent().expect("test") - 100.0).abs() < 0.01);
 }
 
 // =========================================================================
@@ -116,7 +116,7 @@ fn h039_cpu_device_device_id_and_type() {
 fn h039_cpu_utilization_initial() {
     let cpu = CpuDevice::new();
     // Initially cpu_usage is 0.0 before refresh
-    let util = cpu.compute_utilization().unwrap();
+    let util = cpu.compute_utilization().expect("test");
     assert!(util >= 0.0 && util <= 100.0);
 }
 
@@ -124,7 +124,7 @@ fn h039_cpu_utilization_initial() {
 fn h039_cpu_memory_used_initial() {
     let cpu = CpuDevice::new();
     // Initially memory_used is 0 before refresh
-    let used = cpu.memory_used_bytes().unwrap();
+    let used = cpu.memory_used_bytes().expect("test");
     assert!(used >= 0);
 }
 
@@ -132,7 +132,7 @@ fn h039_cpu_memory_used_initial() {
 fn h039_cpu_active_units_equals_total() {
     let cpu = CpuDevice::new();
     let total = cpu.compute_unit_count();
-    let active = cpu.active_compute_units().unwrap();
+    let active = cpu.active_compute_units().expect("test");
     assert_eq!(total, active);
 }
 
@@ -143,14 +143,14 @@ fn h039_cpu_active_units_equals_total() {
 #[test]
 fn h040_mock_device_power_limit_access() {
     let mock = MockDevice::new(0, 0, 50.0, 100.0, 0.0);
-    let limit = mock.compute_power_limit_watts().unwrap();
+    let limit = mock.compute_power_limit_watts().expect("test");
     assert!((limit - 100.0).abs() < 0.01);
 }
 
 #[test]
 fn h040_mock_device_memory_total_access() {
     let mock = MockDevice::new(500, 1000, 0.0, 0.0, 0.0);
-    let total = mock.memory_total_bytes().unwrap();
+    let total = mock.memory_total_bytes().expect("test");
     assert_eq!(total, 1000);
 }
 
@@ -174,7 +174,7 @@ fn h041_error_mock_device_type() {
 fn h041_error_mock_compute_units() {
     let mock = ErrorMockDevice::new(false);
     assert_eq!(mock.compute_unit_count(), 8);
-    assert_eq!(mock.active_compute_units().unwrap(), 8);
+    assert_eq!(mock.active_compute_units().expect("test"), 8);
 }
 
 #[test]

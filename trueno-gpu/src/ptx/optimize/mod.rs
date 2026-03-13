@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn test_optimize_empty() {
         let instructions = vec![];
-        let result = optimize(instructions).unwrap();
+        let result = optimize(instructions).expect("test");
         assert!(result.is_empty());
     }
 
@@ -90,7 +90,7 @@ mod tests {
     fn test_optimize_passthrough() {
         // Instructions that shouldn't be modified
         let instructions = vec![PtxInstruction::new(PtxOp::Ret, PtxType::Pred)];
-        let result = optimize(instructions).unwrap();
+        let result = optimize(instructions).expect("test");
         assert_eq!(result.len(), 1);
     }
 }

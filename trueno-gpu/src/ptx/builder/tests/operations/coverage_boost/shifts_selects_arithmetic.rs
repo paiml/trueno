@@ -125,7 +125,7 @@ fn test_rcp_f32() {
 #[test]
 fn test_abs_f32() {
     let kernel = PtxKernel::new("test_abs").build(|ctx| {
-        let val = ctx.mov_f32_imm(-3.14);
+        let val = ctx.mov_f32_imm(-3.125);
         let _result = ctx.abs_f32(val);
         ctx.ret();
     });

@@ -136,7 +136,7 @@ fn h012_memory_metrics_gb_helpers() {
     let mut metrics = MemoryMetrics::default();
     metrics.ram_used_bytes = 32 * 1024 * 1024 * 1024;
     metrics.ram_total_bytes = 64 * 1024 * 1024 * 1024;
-    metrics.swap_used_bytes = 1 * 1024 * 1024 * 1024;
+    metrics.swap_used_bytes = 1024 * 1024 * 1024;
     metrics.swap_total_bytes = 16 * 1024 * 1024 * 1024;
 
     assert!((metrics.ram_used_gb() - 32.0).abs() < 0.01);

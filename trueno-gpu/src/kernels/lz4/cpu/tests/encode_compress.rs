@@ -10,7 +10,7 @@ fn test_lz4_encode_literals_only() {
     let mut pos = 0;
     let literals = b"HELLO";
 
-    lz4_encode_sequence(&mut output, &mut pos, literals, 0, 0).unwrap();
+    lz4_encode_sequence(&mut output, &mut pos, literals, 0, 0).expect("test");
 
     // Token: 5 literals, 0 match = 0x50
     assert_eq!(output[0], 0x50);
@@ -24,7 +24,7 @@ fn test_lz4_encode_match_only() {
     let mut pos = 0;
 
     // Match of 4 bytes at offset 10
-    lz4_encode_sequence(&mut output, &mut pos, &[], 10, 4).unwrap();
+    lz4_encode_sequence(&mut output, &mut pos, &[], 10, 4).expect("test");
 
     // Token: 0 literals, 0 match (4 - 4 = 0)
     assert_eq!(output[0], 0x00);
@@ -40,7 +40,7 @@ fn test_lz4_encode_literals_and_match() {
     let mut pos = 0;
 
     // 3 literals, match of 5 bytes at offset 20
-    lz4_encode_sequence(&mut output, &mut pos, b"ABC", 20, 5).unwrap();
+    lz4_encode_sequence(&mut output, &mut pos, b"ABC", 20, 5).expect("test");
 
     // Token: 3 literals, 1 match (5 - 4 = 1)
     assert_eq!(output[0], 0x31);
@@ -57,7 +57,7 @@ fn test_lz4_encode_extended_literal_length() {
 
     // 20 literals (> 15, needs extension)
     let literals = b"12345678901234567890";
-    lz4_encode_sequence(&mut output, &mut pos, literals, 0, 0).unwrap();
+    lz4_encode_sequence(&mut output, &mut pos, literals, 0, 0).expect("test");
 
     // Token: 15 literals (max), 0 match
     assert_eq!(output[0], 0xF0);
@@ -73,7 +73,7 @@ fn test_lz4_encode_extended_literal_length() {
 #[test]
 fn test_lz4_compress_empty() {
     let mut output = [0u8; 32];
-    let size = lz4_compress_block(&[], &mut output).unwrap();
+    let size = lz4_compress_block(&[], &mut output).expect("test");
     assert_eq!(size, 0);
 }
 
@@ -81,7 +81,7 @@ fn test_lz4_compress_empty() {
 fn test_lz4_compress_small() {
     let input = b"HELLO";
     let mut output = [0u8; 32];
-    let size = lz4_compress_block(input, &mut output).unwrap();
+    let size = lz4_compress_block(input, &mut output).expect("test");
 
     // Small input should be stored as literals
     assert!(size > 0);
@@ -96,7 +96,7 @@ fn test_lz4_compress_repeated_pattern() {
         input[i] = (i % 4) as u8; // Repeating 0,1,2,3,0,1,2,3...
     }
     let mut output = [0u8; 128];
-    let size = lz4_compress_block(&input, &mut output).unwrap();
+    let size = lz4_compress_block(&input, &mut output).expect("test");
 
     // Should compress (matches found)
     assert!(size < 64, "Should compress, got {} bytes", size);
@@ -107,7 +107,7 @@ fn test_lz4_compress_zeros() {
     // Zero page should compress extremely well
     let input = [0u8; 256];
     let mut output = [0u8; 512];
-    let size = lz4_compress_block(&input, &mut output).unwrap();
+    let size = lz4_compress_block(&input, &mut output).expect("test");
 
     // Should achieve good compression
     assert!(size < 128, "Zeros should compress well, got {} bytes", size);
@@ -118,7 +118,7 @@ fn test_lz4_compress_all_same_byte() {
     // F007: Repeated patterns compress well
     let input = [b'A'; 512];
     let mut output = [0u8; 1024];
-    let size = lz4_compress_block(&input, &mut output).unwrap();
+    let size = lz4_compress_block(&input, &mut output).expect("test");
 
     // Should achieve >10:1 ratio
     assert!(size < 52, "Repeated pattern should achieve >10:1 ratio, got {} bytes", size);

@@ -26,7 +26,7 @@
 //! EPL = elements per lane = head_dim / 32
 
 use crate::kernels::Kernel;
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// Fused prefill attention kernel for inference with GQA.
@@ -317,6 +317,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "head_dim must be multiple of 32")]
     fn test_prefill_attention_invalid_head_dim() {
-        PrefillAttentionKernel::new(48, 6);
+        let _kernel = PrefillAttentionKernel::new(48, 6);
     }
 }

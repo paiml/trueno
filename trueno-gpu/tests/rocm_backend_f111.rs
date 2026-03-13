@@ -274,9 +274,9 @@ fn test_hip_memory_patterns() {
 
     // Stub: Verify memory allocation sizes align to LDS requirements
     const LDS_ALIGNMENT: usize = 256; // 256-byte alignment for optimal LDS access
-    let allocation_size = 1024;
+    let allocation_size: usize = 1024;
 
-    let aligned_size = (allocation_size + LDS_ALIGNMENT - 1) / LDS_ALIGNMENT * LDS_ALIGNMENT;
+    let aligned_size = allocation_size.div_ceil(LDS_ALIGNMENT) * LDS_ALIGNMENT;
     assert_eq!(aligned_size % LDS_ALIGNMENT, 0, "Memory allocation should be LDS-aligned");
 
     println!("HIP memory patterns verified (alignment={})", LDS_ALIGNMENT);

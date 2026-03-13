@@ -7,7 +7,7 @@ fn main() {
     println!("=== ALL barrier instructions and labels around them ===");
     let lines: Vec<&str> = ptx.lines().collect();
     for (i, line) in lines.iter().enumerate() {
-        if line.contains("bar.sync") || line.contains("L_") && line.trim().ends_with(":") {
+        if line.contains("bar.sync") || line.contains("L_") && line.trim().ends_with(':') {
             // Print 2 lines before for context
             if i >= 2 {
                 println!("{:4}: {}", i - 1, lines[i - 2]);
