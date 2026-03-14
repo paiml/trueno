@@ -20,6 +20,7 @@ use std::ffi::c_void;
 use std::os::raw::c_uint;
 
 use super::context::{get_driver, CudaContext};
+use super::ptx_patch::patch_backward_branches_sm121;
 use super::sys::{
     CUfunction, CUmodule, CudaDriver, CU_JIT_ERROR_LOG_BUFFER, CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
     CU_JIT_TARGET,
@@ -92,8 +93,15 @@ impl CudaModule {
             if major > 9 || (major == 9 && minor > 0) { (9, 0) } else { (major, minor) };
         let jit_target: c_uint = (jit_major * 10 + jit_minor) as c_uint;
 
+        // GH-480: Patch unconditional backward branches for Blackwell (sm_121+).
+        // The CUDA 13.0 JIT miscompiles while-loops (unconditional backward
+        // branches) on sm_121, silently dropping loop iterations. Converting
+        // them to conditional branches avoids the buggy JIT optimizer path.
+        let ptx_patched = if major >= 12 { patch_backward_branches_sm121(ptx) } else { None };
+        let ptx: &str = ptx_patched.as_deref().unwrap_or(ptx);
+
         // Ensure PTX is null-terminated
-        let ptx_cstring = CString::new(ptx)
+        let ptx_cstring = CString::new(ptx.as_bytes().to_vec())
             .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
 
         // Try 1: cuModuleLoadDataEx with explicit JIT target + log buffers
