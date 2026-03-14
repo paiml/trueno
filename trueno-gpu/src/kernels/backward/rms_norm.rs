@@ -285,13 +285,15 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 let four = ctx.mov_u32_imm(4);
 
                 // === Pass 1: Compute sum(x²) and sum(x·grad_y·γ) via stride loop ===
+                // GH-480: Do-while loop avoids CUDA 13.0 JIT bug on sm_121.
                 let local_sum_x2 = ctx.mov_f32_imm(0.0);
                 let local_sum_xgg = ctx.mov_f32_imm(0.0);
                 let i_pass1 = ctx.mov_u32_imm(0);
                 ctx.add_u32_reg_inplace(i_pass1, tid);
+                let has_p1_work = ctx.setp_lt_u32(i_pass1, hidden_dim_reg);
+                ctx.branch_if_not(has_p1_work, "pass1_done");
+
                 ctx.label("pass1_loop");
-                let done1 = ctx.setp_ge_u32(i_pass1, hidden_dim_reg);
-                ctx.branch_if(done1, "pass1_done");
 
                 let offset = ctx.mul_wide_u32_reg(i_pass1, four);
                 let x_addr = ctx.add_u64(input_row_base, offset);
@@ -312,7 +314,8 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 ctx.add_f32_inplace(local_sum_xgg, xgyg);
 
                 ctx.add_u32_inplace(i_pass1, 32);
-                ctx.branch("pass1_loop");
+                let p1_continue = ctx.setp_lt_u32(i_pass1, hidden_dim_reg);
+                ctx.branch_if(p1_continue, "pass1_loop");
 
                 ctx.label("pass1_done");
 
@@ -354,13 +357,15 @@ impl Kernel for BatchedRmsNormBackwardKernel {
 
                 // === Pass 2: Compute and store grad_x via stride loop ===
                 // grad_x[i] = (1/rms) * (gamma[i] * grad_y[i] - x[i] / variance_eps * mean_xgg)
+                // GH-480: Do-while loop (see pass1_loop comment)
                 let one = ctx.mov_f32_imm(1.0);
                 let inv_rms = ctx.div_f32(one, rms);
                 let i_pass2 = ctx.mov_u32_imm(0);
                 ctx.add_u32_reg_inplace(i_pass2, tid);
+                let has_p2_work = ctx.setp_lt_u32(i_pass2, hidden_dim_reg);
+                ctx.branch_if_not(has_p2_work, "exit");
+
                 ctx.label("pass2_loop");
-                let done2 = ctx.setp_ge_u32(i_pass2, hidden_dim_reg);
-                ctx.branch_if(done2, "exit");
 
                 let offset = ctx.mul_wide_u32_reg(i_pass2, four);
                 let x_addr = ctx.add_u64(input_row_base, offset);
@@ -394,7 +399,8 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 let _ = ctx.atom_add_global_f32(gg_addr, grad_gamma_contrib);
 
                 ctx.add_u32_inplace(i_pass2, 32);
-                ctx.branch("pass2_loop");
+                let p2_continue = ctx.setp_lt_u32(i_pass2, hidden_dim_reg);
+                ctx.branch_if(p2_continue, "pass2_loop");
 
                 ctx.label("exit");
                 ctx.ret();

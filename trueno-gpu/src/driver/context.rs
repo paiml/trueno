@@ -262,12 +262,12 @@ impl CudaContext {
     /// Returns `Err(GpuError::CudaDriver)` if query fails.
     pub fn sm_target(&self) -> Result<String, GpuError> {
         let (major, minor) = self.compute_capability()?;
-        // Clamp to sm_90 — PTX 8.0 only supports up to sm_90 (Hopper).
-        // Newer architectures (Blackwell sm_100+, GB10 sm_121) are
-        // forward-compatible: sm_90 PTX runs correctly via JIT.
-        let (clamped_major, clamped_minor) =
+        // GH-480: PTX source `.target` must use a version PTX 8.0 supports (max sm_90).
+        // The JIT compiler receives the REAL compute capability via CU_JIT_TARGET
+        // (in module.rs) so it compiles natively for the actual device.
+        let (ptx_major, ptx_minor) =
             if major > 9 || (major == 9 && minor > 0) { (9, 0) } else { (major, minor) };
-        Ok(format!("sm_{clamped_major}{clamped_minor}"))
+        Ok(format!("sm_{ptx_major}{ptx_minor}"))
     }
 
     /// Get number of streaming multiprocessors (SMs) on the device

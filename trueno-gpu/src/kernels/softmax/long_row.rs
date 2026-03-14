@@ -73,11 +73,12 @@ impl Kernel for LongRowSoftmaxKernel {
                 let local_max = neg_inf;
 
                 // Grid-stride loop: idx = tid; idx < row_size; idx += ntid
+                // GH-480: Do-while loop avoids CUDA 13.0 JIT bug on sm_121.
                 let idx = ctx.add_u32(tid, 0); // Copy tid to new register
+                let has_max_work = ctx.setp_lt_u32(idx, row_size);
+                ctx.branch_if_not(has_max_work, "max_loop_done");
 
                 ctx.label("max_loop");
-                let done_max = ctx.setp_ge_u32(idx, row_size);
-                ctx.branch_if(done_max, "max_loop_done");
 
                 // Load input[idx]
                 let byte_offset = ctx.mul_wide_u32(idx, 4);
@@ -89,7 +90,8 @@ impl Kernel for LongRowSoftmaxKernel {
 
                 // idx += ntid
                 ctx.add_u32_reg_inplace(idx, ntid);
-                ctx.branch("max_loop");
+                let max_continue = ctx.setp_lt_u32(idx, row_size);
+                ctx.branch_if(max_continue, "max_loop");
 
                 ctx.label("max_loop_done");
 
@@ -162,10 +164,12 @@ impl Kernel for LongRowSoftmaxKernel {
                 let local_sum = ctx.mov_f32_imm(0.0);
                 let log2_e = ctx.mov_f32_imm(std::f32::consts::LOG2_E);
 
+                // GH-480: Do-while loop (see max_loop comment)
                 let idx2 = ctx.add_u32(tid, 0);
+                let has_sum_work = ctx.setp_lt_u32(idx2, row_size);
+                ctx.branch_if_not(has_sum_work, "sum_loop_done");
+
                 ctx.label("sum_loop");
-                let done_sum = ctx.setp_ge_u32(idx2, row_size);
-                ctx.branch_if(done_sum, "sum_loop_done");
 
                 // Load input[idx]
                 let byte_offset2 = ctx.mul_wide_u32(idx2, 4);
@@ -181,7 +185,8 @@ impl Kernel for LongRowSoftmaxKernel {
                 ctx.add_f32_inplace(local_sum, exp_val);
 
                 ctx.add_u32_reg_inplace(idx2, ntid);
-                ctx.branch("sum_loop");
+                let sum_continue = ctx.setp_lt_u32(idx2, row_size);
+                ctx.branch_if(sum_continue, "sum_loop");
 
                 ctx.label("sum_loop_done");
 
@@ -250,10 +255,12 @@ impl Kernel for LongRowSoftmaxKernel {
                 // =========================================================
                 // Phase 3: Normalize and write output: exp(x - max) / sum
                 // =========================================================
+                // GH-480: Do-while loop (see max_loop comment)
                 let idx3 = ctx.add_u32(tid, 0);
+                let has_write_work = ctx.setp_lt_u32(idx3, row_size);
+                ctx.branch_if_not(has_write_work, "write_loop_done");
+
                 ctx.label("write_loop");
-                let done_write = ctx.setp_ge_u32(idx3, row_size);
-                ctx.branch_if(done_write, "write_loop_done");
 
                 // Load input[idx]
                 let byte_offset3 = ctx.mul_wide_u32(idx3, 4);
@@ -273,7 +280,8 @@ impl Kernel for LongRowSoftmaxKernel {
                 ctx.st_global_f32(out_addr, softmax_val);
 
                 ctx.add_u32_reg_inplace(idx3, ntid);
-                ctx.branch("write_loop");
+                let write_continue = ctx.setp_lt_u32(idx3, row_size);
+                ctx.branch_if(write_continue, "write_loop");
 
                 ctx.label("write_loop_done");
                 ctx.ret();

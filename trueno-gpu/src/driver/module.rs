@@ -81,13 +81,16 @@ impl CudaModule {
         ctx.make_current()?;
 
         // Detect device compute capability for JIT target.
-        // Clamp to sm_90 — PTX 8.0 only supports up to sm_90 (Hopper).
-        // Newer architectures (Blackwell sm_100+, GB10 sm_121) are
-        // forward-compatible: sm_90 PTX runs correctly via driver JIT.
+        // GH-480: CU_JIT_TARGET must match the PTX `.target` directive.
+        // PTX 8.0 only supports up to sm_90, so both PTX source (via
+        // CudaContext::sm_target()) and JIT target must clamp to sm_90.
+        // The sm_90 SASS runs on Blackwell (sm_121) via forward compatibility.
+        // Passing CU_JIT_TARGET=121 with `.target sm_90` PTX causes the driver
+        // to generate incorrect native sm_121 SASS — garbage inference results.
         let (major, minor) = ctx.compute_capability()?;
-        let (clamped_major, clamped_minor) =
+        let (jit_major, jit_minor) =
             if major > 9 || (major == 9 && minor > 0) { (9, 0) } else { (major, minor) };
-        let jit_target: c_uint = (clamped_major * 10 + clamped_minor) as c_uint;
+        let jit_target: c_uint = (jit_major * 10 + jit_minor) as c_uint;
 
         // Ensure PTX is null-terminated
         let ptx_cstring = CString::new(ptx)
