@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn test_softmax_uniform() {
         for n in [4, 100, 1000] {
-            let data = vec![3.14f32; n];
+            let data = vec![std::f32::consts::PI; n];
             let result = softmax_1d_alloc(&data);
             let expected = 1.0 / n as f32;
             for (i, &v) in result.iter().enumerate() {

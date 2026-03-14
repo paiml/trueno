@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Backend Story Integration Tests
 //!
 //! CRITICAL: These tests enforce that ALL operations in trueno support the complete

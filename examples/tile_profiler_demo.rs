@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Tile Profiler Demo
 //!
 //! Demonstrates BrickProfiler tile-level profiling for hierarchical

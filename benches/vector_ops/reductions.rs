@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Benchmarks for reduction operations: dot, sum, max, min, argmax, argmin
 
 use crate::generate_test_data;

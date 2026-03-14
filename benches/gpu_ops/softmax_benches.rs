@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! GPU softmax and log-softmax benchmarks
 
 use criterion::{BenchmarkId, Criterion, Throughput};

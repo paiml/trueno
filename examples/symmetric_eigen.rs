@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Symmetric Eigendecomposition Example
 //!
 //! Demonstrates trueno's SymmetricEigen for PCA and spectral analysis.

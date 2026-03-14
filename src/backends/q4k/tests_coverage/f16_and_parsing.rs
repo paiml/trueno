@@ -94,6 +94,7 @@ fn test_dequantize_q4k_multi_block() {
 
 /// Test that colmajor skips zero input values
 #[test]
+#[allow(deprecated)]
 fn test_colmajor_sparse_input() {
     let in_dim = 256;
     let out_dim = 2;

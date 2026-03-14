@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Phase 14: ML-Tuner Evolution Demo
 //!
 //! Demonstrates the advanced ML features added in Phase 14:

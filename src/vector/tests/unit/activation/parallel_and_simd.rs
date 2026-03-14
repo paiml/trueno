@@ -263,7 +263,7 @@ fn test_lerp_avx512_path() {
     let result = va.lerp(&vb, 0.5).unwrap();
     // lerp(a, b, 0.5) = a + 0.5 * (b - a) = 0.5*a + 0.5*b = (a + b) / 2
     for i in 0..32 {
-        let expected = (i as f32 + i as f32 * 2.0) / 2.0;
+        let expected = f32::midpoint(i as f32, i as f32 * 2.0);
         assert!((result.as_slice()[i] - expected).abs() < 1e-5);
     }
 }

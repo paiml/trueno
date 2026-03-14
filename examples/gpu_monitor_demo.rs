@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! GPU Monitoring Demo (TRUENO-SPEC-010)
 //!
 //! Demonstrates GPU device discovery and real-time monitoring capabilities.

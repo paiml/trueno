@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Trueno Quick Start Example
 //!
 //! This example demonstrates the core features of Trueno in a single file.

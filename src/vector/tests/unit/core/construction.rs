@@ -165,7 +165,7 @@ fn test_with_alignment_invalid_zero() {
     match result {
         Err(TruenoError::InvalidInput(msg)) => {
             assert!(msg.contains("power of 2"));
-            assert!(msg.contains("0"));
+            assert!(msg.contains('0'));
         }
         _ => panic!("Expected InvalidInput error for zero alignment"),
     }

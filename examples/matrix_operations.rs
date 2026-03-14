@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Matrix Operations Example for Trueno
 //!
 //! Demonstrates the matrix operations available in Trueno including:

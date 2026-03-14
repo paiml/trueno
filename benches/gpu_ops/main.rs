@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! GPU Performance Benchmarks
 //!
 //! **EMPIRICAL FINDINGS (RTX 4090, 2025-11-23):**

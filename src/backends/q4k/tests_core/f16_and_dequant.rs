@@ -82,6 +82,7 @@ fn test_dequantize_q4k_to_f32_varies_scales() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_matmul_q4k_f32_colmajor_basic() {
     let in_dim = 256;
     let out_dim = 2;
@@ -104,6 +105,7 @@ fn test_matmul_q4k_f32_colmajor_basic() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_matmul_q4k_f32_colmajor_dispatch_basic() {
     let in_dim = 256;
     let out_dim = 4;
@@ -127,6 +129,7 @@ fn test_matmul_q4k_f32_colmajor_dispatch_basic() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_matmul_q4k_colmajor_produces_finite() {
     // Column-major layout test: verify it produces valid finite outputs
     // Note: colmajor and rowmajor have different data layout assumptions

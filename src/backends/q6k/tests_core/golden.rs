@@ -66,6 +66,7 @@ fn test_golden_q6k_scalar_vs_dispatch() {
 
 /// Golden Test: Q6K colmajor path consistency
 #[test]
+#[allow(deprecated)]
 fn test_golden_q6k_colmajor_consistency() {
     let in_dim = 512;
     let out_dim = 4;

@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! GPU non-linear activation benchmarks (sigmoid, tanh, swish, gelu)
 
 use criterion::{BenchmarkId, Criterion, Throughput};

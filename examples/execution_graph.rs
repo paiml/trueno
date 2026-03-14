@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! PAR-201: Execution Path Graph Demo
 //!
 //! Run with: cargo run --example execution_graph

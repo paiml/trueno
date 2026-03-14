@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! GPU activation function benchmarks (relu, leaky_relu, elu, clip)
 
 use criterion::{BenchmarkId, Criterion, Throughput};

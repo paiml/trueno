@@ -228,7 +228,7 @@ fn test_calculate_efficiency_with_hardware() {
     let efficiency = extractor.calculate_efficiency(&profiler, &config);
     assert!(efficiency.is_some());
     let eff = efficiency.unwrap();
-    assert!(eff >= 0.0 && eff <= 1.0);
+    assert!((0.0..=1.0).contains(&eff));
 }
 
 #[test]

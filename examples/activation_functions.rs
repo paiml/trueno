@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Activation Functions Example
 //!
 //! Demonstrates all 11 activation functions available in Trueno for neural network

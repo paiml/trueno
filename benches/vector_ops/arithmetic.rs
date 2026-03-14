@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Benchmarks for element-wise arithmetic operations: add, sub, mul, scale, div, fma
 
 use crate::generate_test_data;

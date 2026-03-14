@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! 100-Point Popperian Falsification Test Suite for ML Tuner
 //!
 //! Implements SHOWCASE-BRICK-001 Section 12.7 falsification protocol.

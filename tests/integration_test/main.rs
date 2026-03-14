@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Comprehensive Integration Test Suite
 //!
 //! This integration test serves as the definitive release gate for Trueno.

@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Phase 13: Model-Level Inference Tracing Demo (E.11)
 //!
 //! This example demonstrates the five complementary tracing systems for

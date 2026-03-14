@@ -35,7 +35,7 @@ fn boundary_value_generation() {
 
     // Universal boundaries
     let universal = gen.universal_boundaries();
-    assert!(universal.iter().any(|v| *v == 0.0));
+    assert!(universal.contains(&0.0));
     assert!(universal.iter().any(|v| v.is_nan()));
     assert!(universal.iter().any(|v| v.is_infinite()));
 

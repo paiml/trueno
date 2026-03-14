@@ -239,7 +239,7 @@ fn test_sequential_batch_orderer_interleaved_odd() {
     // All indices should be present
     assert_eq!(order.len(), 5);
     let mut sorted = order.clone();
-    sorted.sort();
+    sorted.sort_unstable();
     assert_eq!(sorted, vec![0, 1, 2, 3, 4]);
 }
 
@@ -386,7 +386,7 @@ fn test_falsify_batch_orderer_covers_all_indices() {
 
             // Sort and verify all indices present
             let mut sorted = batches.clone();
-            sorted.sort();
+            sorted.sort_unstable();
             let expected: Vec<_> = (0..n_batches).collect();
             assert_eq!(
                 sorted, expected,
@@ -525,7 +525,7 @@ fn test_sequential_batch_orderer_interleaved_three() {
     // mid=1, loop i=0: push 0, push 1, then odd: push 2
     assert_eq!(order.len(), 3);
     let mut sorted = order;
-    sorted.sort();
+    sorted.sort_unstable();
     assert_eq!(sorted, vec![0, 1, 2]);
 }
 

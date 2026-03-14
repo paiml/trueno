@@ -73,6 +73,7 @@ fn test_f16_to_f32_largest_subnormal() {
 
 /// Test colmajor sparse input optimization path (x_j == 0.0 skip)
 #[test]
+#[allow(deprecated)]
 fn test_colmajor_sparse_input() {
     let in_dim = 256;
     let out_dim = 2;
@@ -97,6 +98,7 @@ fn test_colmajor_sparse_input() {
 
 /// Test colmajor with fully sparse input (all zeros)
 #[test]
+#[allow(deprecated)]
 fn test_colmajor_all_zero_input() {
     let in_dim = 256;
     let out_dim = 2;
@@ -195,6 +197,7 @@ fn test_q6k_small_input_dim() {
 
 /// Test colmajor with unaligned output dimension (ne0 not multiple of 256)
 #[test]
+#[allow(deprecated)]
 fn test_colmajor_unaligned_output_dim() {
     let ne0 = 300; // Not multiple of 256
     let ne1 = 2; // 2 input columns

@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! ML Tuner Demo - Learned Kernel Selection and Throughput Prediction
 //!
 //! This example demonstrates the ML-based tuner for ComputeBrick optimization.

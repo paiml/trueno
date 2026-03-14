@@ -112,6 +112,7 @@ fn test_f16_to_f32_subnormal() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_q6k_colmajor_basic() {
     let in_dim = 256;
     let out_dim = 2;
@@ -135,6 +136,7 @@ fn test_q6k_colmajor_basic() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_q6k_colmajor_dispatch() {
     let in_dim = 256;
     let out_dim = 4;

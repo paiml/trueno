@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 use std::time::Instant;
 use trueno::Matrix;
 

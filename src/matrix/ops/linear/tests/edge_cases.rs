@@ -61,8 +61,8 @@ fn test_matvec_dimension_mismatch_error_message() {
     let err = m.matvec(&v).unwrap_err();
     match err {
         TruenoError::InvalidInput(msg) => {
-            assert!(msg.contains("2"), "Error should mention vector length 2: {msg}");
-            assert!(msg.contains("3"), "Error should mention matrix cols 3: {msg}");
+            assert!(msg.contains('2'), "Error should mention vector length 2: {msg}");
+            assert!(msg.contains('3'), "Error should mention matrix cols 3: {msg}");
         }
         other => panic!("Expected InvalidInput, got {other:?}"),
     }

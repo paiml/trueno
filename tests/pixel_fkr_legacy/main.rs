@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! TRUENO-SPEC-013: Pixel FKR (Falsification Kernel Regression) Test Suites
 //!
 //! Visual pixel-level regression tests using Popperian falsification methodology.

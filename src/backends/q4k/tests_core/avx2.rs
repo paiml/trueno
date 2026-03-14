@@ -56,6 +56,7 @@ fn test_avx2_large_matrix_mul() {
 /// Test colmajor AVX2 path with realistic dimensions
 #[cfg(target_arch = "x86_64")]
 #[test]
+#[allow(deprecated)]
 fn test_avx2_colmajor_large() {
     if !is_x86_feature_detected!("avx2") || !is_x86_feature_detected!("fma") {
         eprintln!("Skipping AVX2 colmajor test - CPU doesn't support AVX2+FMA");

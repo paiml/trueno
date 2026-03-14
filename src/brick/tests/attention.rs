@@ -197,7 +197,7 @@ mod att_proptest_falsify {
     use super::super::super::*;
     use proptest::prelude::*;
 
-    /// FALSIFY-ATT-001-prop: Softmax normalization for random inputs
+    // FALSIFY-ATT-001-prop: Softmax normalization for random inputs
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(200))]
 
@@ -219,7 +219,7 @@ mod att_proptest_falsify {
         }
     }
 
-    /// FALSIFY-ATT-005-prop: Softmax outputs bounded in (0, 1)
+    // FALSIFY-ATT-005-prop: Softmax outputs bounded in (0, 1)
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(200))]
 
@@ -236,7 +236,7 @@ mod att_proptest_falsify {
             for (i, &w) in scores.iter().enumerate() {
                 // Note: w can be 0.0 due to f32 exp() underflow for extreme inputs
                 prop_assert!(
-                    w >= 0.0 && w <= 1.0 + 1e-6,
+                    (0.0..=1.0 + 1e-6).contains(&w),
                     "FALSIFIED ATT-005-prop: weight[{}] = {} outside [0,1] (n={}, scale={})",
                     i, w, n, scale
                 );
@@ -244,7 +244,7 @@ mod att_proptest_falsify {
         }
     }
 
-    /// FALSIFY-ATT-002-prop: Output convexity for random V
+    // FALSIFY-ATT-002-prop: Output convexity for random V
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(100))]
 

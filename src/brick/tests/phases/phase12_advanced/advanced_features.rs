@@ -119,7 +119,7 @@ fn test_f195_batch_orderer_interleaved() {
     assert_eq!(order.len(), 5);
     // All indices present
     let mut sorted = order.clone();
-    sorted.sort();
+    sorted.sort_unstable();
     assert_eq!(sorted, vec![0, 1, 2, 3, 4]);
 }
 

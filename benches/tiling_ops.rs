@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Benchmarks for Tiling Compute Blocks
 //!
 //! Profiles:

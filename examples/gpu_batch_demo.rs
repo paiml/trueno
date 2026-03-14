@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! GPU Command Batching Demo
 //!
 //! Demonstrates the async GPU batch API that reduces CPU↔GPU transfers

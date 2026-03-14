@@ -11,7 +11,7 @@ fn test_jidoka_error_display() {
     let display = format!("{}", err);
     assert!(display.contains("numerical deviation"));
     assert!(display.contains("1.5"));
-    assert!(display.contains("1"));
+    assert!(display.contains('1'));
     assert!(display.contains("0.5"));
 
     // NaNDetected

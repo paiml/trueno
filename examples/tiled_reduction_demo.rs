@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Tiled Reduction Demo
 //!
 //! Demonstrates the CUDA-tile-behavior inspired memory hierarchy abstractions:

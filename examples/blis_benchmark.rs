@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! BLIS GEMM Benchmark
 //!
 //! Measures performance of the BLIS-style matrix multiplication implementation.

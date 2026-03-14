@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Regression test for matmul_rectangular performance
 //!
 //! Specifically tests 128x512 @ 512x256 case that showed +9.8% regression

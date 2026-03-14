@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! GPU vector operation benchmarks (vec_add, dot product)
 
 use criterion::{BenchmarkId, Criterion, Throughput};

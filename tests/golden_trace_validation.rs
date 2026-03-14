@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Golden Trace Validation Tests
 //!
 //! Validates that SIMD performance matches golden trace baselines.
@@ -12,7 +13,7 @@ use std::path::Path;
 
 /// Test that backend detection example matches golden trace performance
 #[test]
-#[ignore] // Requires renacer binary to be installed
+#[ignore = "requires golden trace files"]
 fn test_backend_detection_golden_trace() {
     let golden_trace = Path::new("golden_traces/backend_detection_summary.txt");
 
@@ -31,7 +32,7 @@ fn test_backend_detection_golden_trace() {
 
 /// Test that performance demo matches golden trace
 #[test]
-#[ignore] // Requires renacer binary to be installed
+#[ignore = "requires golden trace files"]
 fn test_performance_demo_golden_trace() {
     let golden_trace = Path::new("golden_traces/performance_demo_summary.txt");
 
@@ -50,7 +51,7 @@ fn test_performance_demo_golden_trace() {
 
 /// Test that matrix operations match golden trace
 #[test]
-#[ignore] // Requires renacer binary to be installed
+#[ignore = "requires golden trace files"]
 fn test_matrix_operations_golden_trace() {
     let golden_trace = Path::new("golden_traces/matrix_operations_summary.txt");
 
@@ -69,7 +70,7 @@ fn test_matrix_operations_golden_trace() {
 
 /// Test that activation functions match golden trace
 #[test]
-#[ignore] // Requires renacer binary to be installed
+#[ignore = "requires golden trace files"]
 fn test_activation_functions_golden_trace() {
     let golden_trace = Path::new("golden_traces/activation_functions_summary.txt");
 
@@ -88,7 +89,7 @@ fn test_activation_functions_golden_trace() {
 
 /// Test that ML similarity operations match golden trace
 #[test]
-#[ignore] // Requires renacer binary to be installed
+#[ignore = "requires golden trace files"]
 fn test_ml_similarity_golden_trace() {
     let golden_trace = Path::new("golden_traces/ml_similarity_summary.txt");
 
