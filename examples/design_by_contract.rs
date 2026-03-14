@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Design by Contract in Trueno
 //!
 //! Demonstrates kernel-level contracts: quantization format validation,

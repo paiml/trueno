@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! GPU Edge-Case Testing with trueno-cuda-edge
 //!
 //! This test suite applies trueno-cuda-edge's falsification frameworks to

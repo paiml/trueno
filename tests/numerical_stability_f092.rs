@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Numerical Stability Tests (PMAT-009)
 //!
 //! Implements falsification tests F092-F099 per PMAT-009 specification.

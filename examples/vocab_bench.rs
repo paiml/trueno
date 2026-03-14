@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Benchmark vector-matrix multiply (vocab projection pattern)
 use std::time::Instant;
 use trueno::{Matrix, Vector};

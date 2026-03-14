@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! TUI Compute Monitor Falsification Tests (TRUENO-SPEC-020)
 //!
 //! Implementation of the 100-point Popperian Falsification Suite.
@@ -48,7 +49,7 @@ fn test_h009_unified_device_trait_structure() {
         fn device_id(&self) -> DeviceId {
             DeviceId(0)
         }
-        fn device_name(&self) -> &str {
+        fn device_name(&self) -> &'static str {
             "Mock CPU"
         }
         fn device_type(&self) -> DeviceType {

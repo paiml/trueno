@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! GPU Tiled Reduction Demo
 //!
 //! Demonstrates the tiled reduction shader for efficient GPU-based

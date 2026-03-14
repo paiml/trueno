@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Hash Module Demo - SIMD-optimized key hashing for KV stores
 //!
 //! Run with: `cargo run --example hash_demo`

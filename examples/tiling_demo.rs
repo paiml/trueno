@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Tiling Compute Blocks (TCB) Demo
 //!
 //! Demonstrates hierarchical cache-blocked tiling for high-performance GEMM

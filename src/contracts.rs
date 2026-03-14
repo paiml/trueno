@@ -381,7 +381,7 @@ mod tests {
     fn test_non_aligned_cols() {
         // 100 cols doesn't divide evenly into 256-element blocks
         // ceil(100/256) = 1 block per row
-        assert_eq!(Q4_K.expected_bytes(10, 100), 10 * 1 * 144);
+        assert_eq!(Q4_K.expected_bytes(10, 100), 10 * 144);
         // 300 cols: ceil(300/256) = 2 blocks per row
         assert_eq!(Q4_K.expected_bytes(10, 300), 10 * 2 * 144);
     }

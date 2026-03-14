@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Benchmarks for activation functions: relu, softmax, log_softmax, clip, sigmoid, gelu, swish, tanh
 
 use criterion::{BenchmarkId, Criterion, Throughput};

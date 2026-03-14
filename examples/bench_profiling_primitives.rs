@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! F150-F155: High-Performance Profiling Primitives Benchmark
 //!
 //! This example validates the low-overhead profiling primitives from E.9.

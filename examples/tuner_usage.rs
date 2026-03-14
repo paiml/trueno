@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! ML Tuner Usage Examples
 //!
 //! This file contains examples that are included in the book documentation

@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Benchmark: Scalar vs Trueno SIMD for load generation
 use std::hint::black_box;
 use std::time::Instant;

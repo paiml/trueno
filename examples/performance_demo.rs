@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Performance demonstration comparing Scalar vs SSE2 backends
 //!
 //! This example demonstrates the performance characteristics documented

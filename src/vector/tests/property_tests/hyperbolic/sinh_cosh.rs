@@ -146,7 +146,7 @@ proptest! {
         for (i, (&input, &output)) in a.iter()
             .zip(result.as_slice().iter())
             .enumerate() {
-            let expected = (input.exp() + (-input).exp()) / 2.0;
+            let expected = f32::midpoint(input.exp(), (-input).exp());
             let tolerance = if expected.abs() > 1.0 {
                 expected.abs() * 1e-5
             } else {

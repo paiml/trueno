@@ -224,8 +224,8 @@ fn test_e079_error_messages() {
     let err_msg = format!("{:?}", result.err().unwrap());
     // Error message should mention the sizes
     assert!(
-        err_msg.contains("3")
-            || err_msg.contains("2")
+        err_msg.contains('3')
+            || err_msg.contains('2')
             || err_msg.contains("mismatch")
             || err_msg.contains("Mismatch"),
         "E-079 FALSIFIED: Error message not actionable: {}",

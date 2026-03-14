@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Benchmark comparing synchronous GPU API vs async batch API
 //!
 //! Success Criteria (v0.3.0):

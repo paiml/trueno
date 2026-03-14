@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Machine Learning: Vector Similarity and Normalization
 //!
 //! This example demonstrates common ML operations using Trueno:

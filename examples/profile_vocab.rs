@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Profile vocab projection with renacer
 //!
 //! Run with: renacer -s -- cargo run --release --features tracing --example profile_vocab

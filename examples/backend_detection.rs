@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Example demonstrating runtime CPU feature detection
 //!
 //! Run with:

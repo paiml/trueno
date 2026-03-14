@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! PAR-200: BrickProfiler v2 Demo
 //!
 //! Run with: cargo run --example brick_profiler_v2

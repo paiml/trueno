@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! SIMD Softmax and Quantization Demo (SIMD-EXP, QUANT-Q5K)
 //!
 //! This example demonstrates:

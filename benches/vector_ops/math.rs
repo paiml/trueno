@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Benchmarks for math/unary operations: norms, abs, exp, ln, log2, log10, sqrt, recip
 
 use crate::generate_test_data;

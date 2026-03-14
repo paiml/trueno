@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! B4 CPU Performance Issue Simulation
 //!
 //! This example simulates the "B4 CPU Performance" issue from E.9.1,

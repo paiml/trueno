@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Benchmarks for Vector operations comparing Scalar vs SSE2 vs AVX2 backends
 //!
 //! This benchmark suite verifies SIMD performance improvements across backends.

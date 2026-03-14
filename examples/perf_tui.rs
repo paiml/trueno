@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! TUI Performance Test - Visual performance regression detection
 //!
 //! Run with: cargo run --release --example perf_tui

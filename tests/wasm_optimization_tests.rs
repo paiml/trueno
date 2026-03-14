@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! WASM Optimization Falsification Tests
 //!
 //! Tests from Appendix C of wasm-optimization-spec.md

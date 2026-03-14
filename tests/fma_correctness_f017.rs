@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! FMA Fusion Correctness Tests (PMAT-003)
 //!
 //! Implements falsification tests F017-F029 per PMAT-003 specification.

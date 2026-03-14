@@ -323,11 +323,11 @@ mod tests {
         assert_ne!(StressAnomalyKind::SlowOperation, StressAnomalyKind::TestFailure);
 
         // Test all variants exist
-        let _slow = StressAnomalyKind::SlowOperation;
-        let _mem = StressAnomalyKind::HighMemory;
-        let _fail = StressAnomalyKind::TestFailure;
-        let _spike = StressAnomalyKind::TimingSpike;
-        let _ndet = StressAnomalyKind::NonDeterministic;
+        let _ = StressAnomalyKind::SlowOperation;
+        let _ = StressAnomalyKind::HighMemory;
+        let _ = StressAnomalyKind::TestFailure;
+        let _ = StressAnomalyKind::TimingSpike;
+        let _ = StressAnomalyKind::NonDeterministic;
     }
 
     #[test]

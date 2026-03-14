@@ -1,3 +1,4 @@
+#[cfg(feature = "parallel")]
 use super::*;
 
 #[test]

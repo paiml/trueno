@@ -395,9 +395,12 @@ mod tests {
         let n = 4096;
         let input: Vec<f32> = (0..n).map(|i| i as f32).collect();
         let mut output = vec![0.0f32; n];
-        mul_scalar(&input, 3.14, &mut output).unwrap();
+        mul_scalar(&input, std::f32::consts::PI, &mut output).unwrap();
         for i in 0..n {
-            assert!((output[i] - input[i] * 3.14).abs() < 1e-5, "Mul scalar mismatch at {i}");
+            assert!(
+                (output[i] - input[i] * std::f32::consts::PI).abs() < 1e-5,
+                "Mul scalar mismatch at {i}"
+            );
         }
     }
 
@@ -407,10 +410,10 @@ mod tests {
             let input: Vec<f32> =
                 (0..n).map(|i| ((i * 17 + 31) % 1000) as f32 / 500.0 - 1.0).collect();
             let mut output = vec![0.0f32; n];
-            mul_scalar(&input, 2.718, &mut output).unwrap();
+            mul_scalar(&input, std::f32::consts::E, &mut output).unwrap();
             for i in 0..n {
                 assert!(
-                    (output[i] - input[i] * 2.718).abs() < 1e-4,
+                    (output[i] - input[i] * std::f32::consts::E).abs() < 1e-4,
                     "Mul scalar parity at [{i}] n={n}",
                 );
             }

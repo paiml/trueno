@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests (TRUENO-SPEC-012)
 //!
 //! Implementation of the 100 falsifiable QA claims from the simulation testing specification.

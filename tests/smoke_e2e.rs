@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! TRUENO-SPEC-013: E2E Smoke Tests for Backend Equivalence
 //!
 //! This module implements the smoke test requirements from TRUENO-SPEC-013 Section 3.2.

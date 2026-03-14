@@ -420,7 +420,7 @@ fn test_tanh_avx2_backend() {
     let v = Vector::from_slice_with_backend(&data, Backend::AVX2);
     let result = v.tanh().unwrap();
     for &val in result.as_slice() {
-        assert!(val >= -1.0 && val <= 1.0, "tanh AVX2 out of range: {}", val);
+        assert!((-1.0..=1.0).contains(&val), "tanh AVX2 out of range: {}", val);
     }
 }
 
@@ -435,7 +435,7 @@ fn test_tanh_avx512_backend() {
     let v = Vector::from_slice_with_backend(&data, Backend::AVX512);
     let result = v.tanh().unwrap();
     for (i, &val) in result.as_slice().iter().enumerate() {
-        assert!(val >= -1.0 && val <= 1.0, "tanh AVX512 out of range at {}: {}", i, val);
+        assert!((-1.0..=1.0).contains(&val), "tanh AVX512 out of range at {}: {}", i, val);
         let expected = data[i].tanh();
         assert!(
             (val - expected).abs() < 1e-3,

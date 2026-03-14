@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Hardware Canary Tests
 //!
 //! These tests verify that the hardware is correctly detected and available.

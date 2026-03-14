@@ -50,7 +50,7 @@ fn test_avx512_sigmoid_large() {
             Avx512Backend::sigmoid(&a, &mut result);
         }
         for (i, &val) in result.iter().enumerate() {
-            assert!(val >= 0.0 && val <= 1.0, "sigmoid out of range at {i}: {val}");
+            assert!((0.0..=1.0).contains(&val), "sigmoid out of range at {i}: {val}");
             let expected = 1.0 / (1.0 + (-a[i]).exp());
             assert!(
                 (val - expected).abs() < 1e-4,

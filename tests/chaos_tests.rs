@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Chaos Engineering Property-Based Tests
 //!
 //! These tests use proptest to verify chaos configuration behavior under
@@ -105,7 +106,7 @@ fn test_chaos_error_display_messages() {
         ChaosError::SignalInjectionFailed { signal: 9, reason: "permission denied".to_string() };
     let msg = format!("{}", signal_err);
     assert!(msg.contains("Signal injection failed"));
-    assert!(msg.contains("9"));
+    assert!(msg.contains('9'));
     assert!(msg.contains("permission denied"));
 }
 

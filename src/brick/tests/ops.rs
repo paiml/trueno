@@ -131,7 +131,7 @@ mod mm_proptest_falsify {
     use super::super::super::*;
     use proptest::prelude::*;
 
-    /// FALSIFY-MM-001-prop: Shape correctness for random dimensions
+    // FALSIFY-MM-001-prop: Shape correctness for random dimensions
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(100))]
 
@@ -149,7 +149,7 @@ mod mm_proptest_falsify {
         }
     }
 
-    /// FALSIFY-MM-005-prop: Identity matrix for random dims
+    // FALSIFY-MM-005-prop: Identity matrix for random dims
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(50))]
 

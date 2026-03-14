@@ -67,6 +67,7 @@ fn test_parallel_dispatch_large_matrix() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn test_parallel_colmajor_large_matrix() {
     // Test colmajor path
     // ne0 = output dimension, ne1 = input dimension
