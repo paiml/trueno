@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-030: Thermal Trend Prediction
 //!
 //! F1221-F1230: Thermal prediction falsification tests

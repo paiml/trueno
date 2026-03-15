@@ -96,9 +96,9 @@ fn f1320_clear_all() {
 /// Test constants
 #[test]
 fn test_constants() {
-    assert!(DEFAULT_COLD_START_MARGIN > 0.0);
-    assert!(MIN_SAMPLES_FOR_CONTEXT > 0);
-    assert!(DEFAULT_STALENESS_SEC > 0);
+    assert_ne!(DEFAULT_COLD_START_MARGIN, 0.0);
+    assert_ne!(MIN_SAMPLES_FOR_CONTEXT, 0);
+    assert_ne!(DEFAULT_STALENESS_SEC, 0);
 }
 
 /// Test default system context

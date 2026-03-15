@@ -120,14 +120,14 @@ fn test_bug_severity_correct() {
 
 #[test]
 fn test_count_by_severity() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .local .b8 __local[32];
     .shared .b8 smem[1024];
     st.shared.f32 [%rd0], %f0;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
 
     // Should have: SharedMemU64Addressing (P0) and RegisterSpills (P1)
@@ -141,14 +141,14 @@ fn test_count_by_severity() {
 
 #[test]
 fn test_bug_report_formatting() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .local .b8 __local[32];
     .shared .b8 smem[1024];
     st.shared.f32 [%rd0], %f0;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     let report = result.format_report();
 

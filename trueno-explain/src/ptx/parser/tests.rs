@@ -1,6 +1,6 @@
 use super::*;
 
-const SAMPLE_PTX: &str = r#"
+const SAMPLE_PTX: &str = r"
 .version 8.0
 .target sm_70
 .address_size 64
@@ -43,7 +43,7 @@ const SAMPLE_PTX: &str = r#"
 exit:
     ret;
 }
-"#;
+";
 
 #[test]
 fn test_parse_registers() {
@@ -113,10 +113,10 @@ fn test_detect_spills() {
     assert!(spill_warnings.is_empty());
 
     // PTX with spills
-    let ptx_with_spills = r#"
+    let ptx_with_spills = r"
         .local .align 4 .b8 __local_depot[32];
         .reg .f32 %f<4>;
-    "#;
+    ";
     let spill_warning = analyzer.detect_spills(ptx_with_spills);
     assert!(spill_warning.is_some());
 }
@@ -125,13 +125,13 @@ fn test_detect_spills() {
 fn test_detect_high_register_pressure() {
     let analyzer = PtxAnalyzer::new();
 
-    let high_reg_ptx = r#"
+    let high_reg_ptx = r"
         .entry big_kernel()
         {
             .reg .f32 %f<200>;
             ret;
         }
-    "#;
+    ";
 
     let warnings = analyzer.detect_muda(high_reg_ptx);
     let reg_warnings: Vec<_> =
@@ -178,7 +178,7 @@ fn f030_memory_identifies_coalesced_pattern() {
     let analyzer = PtxAnalyzer::new();
 
     // PTX with tid-based indexing (coalesced pattern)
-    let coalesced_ptx = r#"
+    let coalesced_ptx = r"
         .entry coalesced_kernel()
         {
             .reg .f32 %f<4>;
@@ -191,7 +191,7 @@ fn f030_memory_identifies_coalesced_pattern() {
             st.global.f32 [%rd0], %f0;
             ret;
         }
-    "#;
+    ";
 
     let memory = analyzer.parse_memory_ops(coalesced_ptx);
 
@@ -207,7 +207,7 @@ fn f034_warn_low_coalescing() {
     let analyzer = PtxAnalyzer::new();
 
     // PTX with many global loads but no tid references (uncoalesced pattern)
-    let uncoalesced_ptx = r#"
+    let uncoalesced_ptx = r"
         .entry uncoalesced_kernel()
         {
             .reg .f32 %f<4>;
@@ -223,7 +223,7 @@ fn f034_warn_low_coalescing() {
             st.global.f32 [%rd3], %f3;
             ret;
         }
-    "#;
+    ";
 
     let warnings = analyzer.detect_muda(uncoalesced_ptx);
     let coalescing_warnings: Vec<_> = warnings

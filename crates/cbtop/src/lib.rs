@@ -3,6 +3,7 @@
 //! Real-time load testing and hardware monitoring TUI built on the Brick Architecture.
 //!
 // Allow new_without_default - explicit new() is clearer for these types
+#![cfg_attr(test, allow(clippy::disallowed_methods, clippy::float_cmp))]
 #![allow(clippy::new_without_default)]
 // Allow derivable_impls - explicit Default is clearer
 #![allow(clippy::derivable_impls)]

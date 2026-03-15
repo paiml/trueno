@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_lines, clippy::disallowed_methods)]
 //! Image processing demonstration — full feature showcase.
 //!
 //! ```sh

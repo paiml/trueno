@@ -31,6 +31,8 @@
 //! ```
 
 // Allow some pedantic lints for this CLI tool
+#![cfg_attr(test, allow(clippy::disallowed_methods))] // Tests use unwrap() freely
+#![cfg_attr(test, allow(clippy::float_cmp))] // Tests compare exact float values
 #![allow(clippy::cast_precision_loss)] // Acceptable for display percentages
 #![allow(clippy::cast_possible_truncation)] // Instruction counts won't exceed u32
 #![allow(clippy::format_push_string)] // Performance not critical for CLI

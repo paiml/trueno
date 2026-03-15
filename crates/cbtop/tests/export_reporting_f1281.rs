@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-036: Multi-Format Export System
 //!
 //! F1281-F1290: Export reporting falsification tests

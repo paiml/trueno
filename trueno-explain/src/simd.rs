@@ -211,12 +211,12 @@ mod tests {
 
     #[test]
     fn test_count_avx_instructions() {
-        let asm = r#"
+        let asm = r"
             vmovaps ymm0, [rdi]
             vmovaps ymm1, [rsi]
             vaddps ymm2, ymm0, ymm1
             vmovaps [rdx], ymm2
-        "#;
+        ";
 
         let analyzer = SimdAnalyzer::new(SimdArch::Avx2);
         let counts = analyzer.count_instructions(asm);
@@ -226,12 +226,12 @@ mod tests {
 
     #[test]
     fn test_count_sse_instructions() {
-        let asm = r#"
+        let asm = r"
             movaps xmm0, [rdi]
             movaps xmm1, [rsi]
             addps xmm0, xmm1
             movaps [rdx], xmm0
-        "#;
+        ";
 
         let analyzer = SimdAnalyzer::new(SimdArch::Sse2);
         let counts = analyzer.count_instructions(asm);
@@ -255,11 +255,11 @@ mod tests {
 
     #[test]
     fn test_detect_scalar_fallback() {
-        let asm = r#"
+        let asm = r"
             movss xmm0, [rdi]
             mulss xmm0, xmm1
             addss xmm0, xmm2
-        "#;
+        ";
 
         let analyzer = SimdAnalyzer::new(SimdArch::Avx2);
         let warnings = analyzer.detect_muda(asm);
@@ -280,10 +280,10 @@ mod tests {
     /// F055: Calculates vectorization ratio
     #[test]
     fn f055_vectorization_ratio_positive() {
-        let asm = r#"
+        let asm = r"
             vmovaps ymm0, [rdi]
             vaddps ymm0, ymm0, ymm1
-        "#;
+        ";
 
         let analyzer = SimdAnalyzer::new(SimdArch::Avx2);
         let report = analyzer.analyze(asm).unwrap();

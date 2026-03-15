@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-038: CPU Frequency Control Backend
 //!
 //! F1301-F1310: CPU frequency control falsification tests

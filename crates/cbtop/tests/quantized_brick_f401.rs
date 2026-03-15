@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! PMAT-013: QuantizedBrick Falsification Tests
 //!
 //! Falsification criteria F401-F410 from cbtop spec §17.

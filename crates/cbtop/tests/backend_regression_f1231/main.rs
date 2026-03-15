@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-031: Cross-Backend Regression Detector
 //!
 //! F1231-F1240: Backend regression falsification tests

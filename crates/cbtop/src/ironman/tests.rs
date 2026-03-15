@@ -104,7 +104,7 @@ fn test_scorecard_skipped_gates() {
 
     let skipped = scorecard.skipped_gates();
     // Should include F909 plus all others not recorded
-    assert!(skipped.len() >= 1);
+    assert!(!skipped.is_empty());
 }
 
 #[test]

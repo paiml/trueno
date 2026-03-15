@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Predictive Scheduling Optimizer Demo
 //!
 //! Demonstrates SLO-aware workload scheduling with cost optimization.

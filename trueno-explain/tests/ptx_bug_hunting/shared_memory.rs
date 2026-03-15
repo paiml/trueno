@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn test_shared_mem_u64_addressing_bug() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .u64 %rd<5>;
     .reg .f32 %f<2>;
@@ -12,7 +12,7 @@ fn test_shared_mem_u64_addressing_bug() {
     st.shared.f32 [%rd0], %f0;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(
         result.has_bug(&PtxBugClass::SharedMemU64Addressing),
@@ -22,7 +22,7 @@ fn test_shared_mem_u64_addressing_bug() {
 
 #[test]
 fn test_shared_mem_ld_u64_addressing() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .u64 %rd<5>;
     .reg .f32 %f<2>;
@@ -30,7 +30,7 @@ fn test_shared_mem_ld_u64_addressing() {
     ld.shared.f32 %f0, [%rd0];
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(
         result.has_bug(&PtxBugClass::SharedMemU64Addressing),
@@ -40,7 +40,7 @@ fn test_shared_mem_ld_u64_addressing() {
 
 #[test]
 fn test_shared_mem_u32_addressing_valid() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .u32 %r<5>;
     .reg .f32 %f<2>;
@@ -48,7 +48,7 @@ fn test_shared_mem_u32_addressing_valid() {
     st.shared.f32 [%r0], %f0;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(
         !result.has_bug(&PtxBugClass::SharedMemU64Addressing),

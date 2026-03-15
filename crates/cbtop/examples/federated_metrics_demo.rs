@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Federated Metrics Aggregation Demo
 //!
 //! Demonstrates CRDT-based multi-host metrics aggregation.

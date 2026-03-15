@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-028: Profile Persistence and Rotation
 //!
 //! F1201-F1210: Profile persistence falsification tests

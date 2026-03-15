@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-034: Anomaly Detection Engine
 //!
 //! F1261-F1270: Anomaly detection falsification tests

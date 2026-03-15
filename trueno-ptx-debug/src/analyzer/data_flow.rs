@@ -354,8 +354,8 @@ mod tests {
                 ret;
             }
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let analyzer = DataFlowAnalyzer::from_module(&module);
         let bugs = analyzer.detect_loaded_value_bug();
@@ -381,8 +381,8 @@ mod tests {
                 ret;
             }
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let analyzer = DataFlowAnalyzer::from_module(&module);
         let bugs = analyzer.detect_computed_addr_from_loaded();
@@ -406,8 +406,8 @@ mod tests {
                 ret;
             }
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let _analyzer = DataFlowAnalyzer::from_module(&module);
         // The analyzer should track value sources

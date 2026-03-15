@@ -7,6 +7,7 @@
 
 // Development-phase lint allows
 #![allow(clippy::useless_vec)]
+#![cfg_attr(test, allow(clippy::disallowed_methods))]
 
 mod check_simd;
 mod install_hooks;

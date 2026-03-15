@@ -259,8 +259,8 @@ mod tests {
                 ret;
             }
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let mut checker = TypeChecker::new();
         let errors = checker.analyze(&module);
@@ -286,8 +286,8 @@ mod tests {
                 ret;
             }
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let mut checker = TypeChecker::new();
         let errors = checker.analyze(&module);

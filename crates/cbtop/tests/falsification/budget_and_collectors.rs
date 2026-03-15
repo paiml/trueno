@@ -19,7 +19,7 @@ fn f021_budget_60fps_correct() {
     let total = budget.collect_ms + budget.layout_ms + budget.render_ms;
     // 60fps = 16.67ms per frame
     assert!(
-        total <= 17 && total >= 10,
+        (10..=17).contains(&total),
         "F021 FALSIFIED: 60FPS budget total {} is not ~16ms",
         total
     );
@@ -136,7 +136,7 @@ fn f046_zram_collector_valid_metrics() {
     if metrics.comp_size > 0 {
         let ratio = metrics.compression_ratio();
         assert!(
-            ratio >= 0.5 && ratio <= 100.0,
+            (0.5..=100.0).contains(&ratio),
             "F046 FALSIFIED: Invalid compression ratio {}",
             ratio
         );

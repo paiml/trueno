@@ -1,3 +1,14 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::disallowed_methods,
+        clippy::float_cmp,
+        clippy::panic,
+        clippy::useless_vec
+    )
+)]
 //! Dense linear algebra solvers with provable contracts.
 //!
 //! # Solvers

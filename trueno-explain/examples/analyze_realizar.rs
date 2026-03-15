@@ -31,7 +31,7 @@ fn print_bug_details(result: &trueno_explain::PtxBugReport) {
     }
 }
 
-/// Analyze a single PTX file and return (total_bugs, p0, p1, p2) counts.
+/// Analyze a single PTX file and return `(total_bugs, p0, p1, p2)` counts.
 fn analyze_file(
     analyzer: &PtxBugAnalyzer,
     ptx_dir: &str,

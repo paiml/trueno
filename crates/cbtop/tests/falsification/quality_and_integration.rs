@@ -379,5 +379,5 @@ fn f200_falsification_coverage() {
     // 3. Integration tests via `cargo test -p cbtop`
     // 4. Property-based tests (if added)
 
-    assert!(true, "F200: Falsification framework operational");
+    // F200: Falsification framework operational - verified by test reaching this point
 }

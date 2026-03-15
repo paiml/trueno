@@ -78,7 +78,7 @@ pub mod supervisor;
 pub use error::{EdgeError, Result, Severity};
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::disallowed_methods)]
 mod tests {
     use super::*;
 

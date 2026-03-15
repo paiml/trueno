@@ -1,9 +1,8 @@
-//! tests_extended - Part 1
+//! `tests_extended` - Part 1
 
 use crate::validate_examples::helpers::*;
 use crate::validate_examples::results::*;
 use crate::validate_examples::steps::*;
-use regex::Regex;
 use serial_test::serial;
 use std::fs;
 use std::io::Write;
@@ -233,7 +232,7 @@ fn test_count_validation_errors_all_fail() {
 fn test_format_validation_summary_empty() {
     let results = ValidationResults { steps: vec![] };
     let summary = format_validation_summary(&results);
-    assert!(summary.contains("0"));
+    assert!(summary.contains('0'));
 }
 
 #[test]

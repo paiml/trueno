@@ -2,6 +2,8 @@
 //!
 //! Tests the analyzer against real trueno-gpu kernels
 
+#![allow(clippy::disallowed_methods)]
+
 use std::process::Command;
 use trueno_explain::{Analyzer, PtxAnalyzer};
 use trueno_gpu::kernels::{
@@ -64,7 +66,7 @@ fn f008_json_flag_valid_json() {
     assert!(json.get("registers").is_some(), "JSON should have 'registers' field");
 }
 
-/// F011: Analyze vector_add reports <20 registers for f32
+/// F011: Analyze `vector_add` reports <20 registers for f32
 #[test]
 fn f011_vector_add_low_register_usage() {
     let ptx = include_str!("../data/vector_add.ptx.data");
@@ -93,7 +95,7 @@ fn f019_occupancy_calculation() {
 /// F020: Warns when registers > 128
 #[test]
 fn f020_high_register_warning() {
-    let high_reg_ptx = r#"
+    let high_reg_ptx = r"
 .version 8.0
 .target sm_70
 .entry big_kernel()
@@ -101,7 +103,7 @@ fn f020_high_register_warning() {
     .reg .f32 %f<200>;
     ret;
 }
-"#;
+";
     let analyzer = PtxAnalyzer::new();
     let report = analyzer.analyze(high_reg_ptx).unwrap();
 

@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Adaptive ML Thresholds Demo
 //!
 //! Demonstrates workload-specific threshold learning with ML.

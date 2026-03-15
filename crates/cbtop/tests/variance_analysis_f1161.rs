@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-027: Variance Source Analysis
 //!
 //! F1161-F1175: Variance source analysis falsification tests

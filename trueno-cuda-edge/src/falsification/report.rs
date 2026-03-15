@@ -124,6 +124,7 @@ impl Default for FalsificationReport {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods, clippy::redundant_closure_for_method_calls)]
 mod tests {
     use super::*;
 

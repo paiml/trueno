@@ -4,14 +4,14 @@ use super::*;
 
 #[test]
 fn test_missing_barrier_strict_mode() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .shared .b8 smem[1024];
     st.shared.f32 [%r0], %f0;
     ld.shared.f32 %f1, [%r1];
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     assert!(
         result.has_bug(&PtxBugClass::MissingBarrierSync),
@@ -21,7 +21,7 @@ fn test_missing_barrier_strict_mode() {
 
 #[test]
 fn test_barrier_present_valid() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .shared .b8 smem[1024];
     st.shared.f32 [%r0], %f0;
@@ -29,7 +29,7 @@ fn test_barrier_present_valid() {
     ld.shared.f32 %f1, [%r1];
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     // With barrier present, the specific st/ld bug should not trigger
     let missing_barrier_bugs: Vec<_> = result.bugs_of_class(&PtxBugClass::MissingBarrierSync);
@@ -40,7 +40,7 @@ fn test_barrier_present_valid() {
 
 #[test]
 fn test_multiple_barriers() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .shared .b8 smem[1024];
     st.shared.f32 [%r0], %f0;
@@ -51,7 +51,7 @@ fn test_multiple_barriers() {
     ld.shared.f32 %f3, [%r3];
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     // Check that we don't have false positives for properly synchronized code
     let missing_barrier_bugs: Vec<_> = result.bugs_of_class(&PtxBugClass::MissingBarrierSync);

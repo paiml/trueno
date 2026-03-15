@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! F301: TUI Pixel-Level Acceptance Tests
 //!
 //! Uses jugar-probar for Playwright-style TUI testing with frame assertions.

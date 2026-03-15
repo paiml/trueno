@@ -5,12 +5,12 @@ use super::*;
 /// Extended bug hunt: All trueno kernels pass with new detectors
 ///
 /// This tests the new bug detectors added after analyzing realizar bugs:
-/// - EmptyLoopBody: Loop without computation
-/// - MissingBoundsCheck: No thread bounds check
-/// - DeadCode: Unreachable code after ret/bra
-/// - HighRegisterPressure: >64 registers (with whitelist for quantized kernels)
-/// - PredicateOverflow: >8 predicates
-/// - PlaceholderCode: Comments indicating incomplete code
+/// - `EmptyLoopBody`: Loop without computation
+/// - `MissingBoundsCheck`: No thread bounds check
+/// - `DeadCode`: Unreachable code after ret/bra
+/// - `HighRegisterPressure`: >64 registers (with whitelist for quantized kernels)
+/// - `PredicateOverflow`: >8 predicates
+/// - `PlaceholderCode`: Comments indicating incomplete code
 #[test]
 fn test_extended_bug_hunt_all_kernels() {
     use trueno_gpu::kernels::{AttentionKernel, LayerNormKernel};
@@ -89,7 +89,7 @@ fn test_extended_bug_hunt_all_kernels() {
 /// Test: New detectors don't produce false positives on clean kernels
 #[test]
 fn test_new_detectors_no_false_positives() {
-    let clean_ptx = r#"
+    let clean_ptx = r"
 .version 8.0
 .target sm_89
 .address_size 64
@@ -128,7 +128,7 @@ fn test_new_detectors_no_false_positives() {
 DONE:
     ret;
 }
-"#;
+";
 
     let result = PtxBugAnalyzer::new().analyze(clean_ptx);
 
@@ -176,33 +176,33 @@ fn test_whitelist_quantized_kernels() {
     assert!(result_q6k.is_valid(), "Q6K should be valid with whitelist");
 }
 
-/// Test: EmptyLoopBody detection works
+/// Test: `EmptyLoopBody` detection works
 #[test]
 fn test_empty_loop_body_detection() {
-    let ptx_with_empty_loop = r#"
+    let ptx_with_empty_loop = r"
 .visible .entry test() {
 empty_loop:
     // Nothing here
     bra empty_loop;
     ret;
 }
-"#;
+";
 
     let result = PtxBugAnalyzer::new().analyze(ptx_with_empty_loop);
     assert!(result.has_bug(&PtxBugClass::EmptyLoopBody), "Should detect empty loop body");
 }
 
-/// Test: DeadCode detection works
+/// Test: `DeadCode` detection works
 #[test]
 fn test_dead_code_detection() {
-    let ptx_with_dead_code = r#"
+    let ptx_with_dead_code = r"
 .visible .entry test() {
     .reg .f32 %f<4>;
     mul.f32 %f0, %f1, %f2;
     ret;
     add.f32 %f3, %f0, %f1;
 }
-"#;
+";
 
     let result = PtxBugAnalyzer::new().analyze(ptx_with_dead_code);
     assert!(result.has_bug(&PtxBugClass::DeadCode), "Should detect dead code after ret");

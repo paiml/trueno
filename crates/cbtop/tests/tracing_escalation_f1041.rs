@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Tracing Escalation Tests (F1041-F1050)
 //!
 //! Popperian falsification criteria for tracing escalation per §35.2.

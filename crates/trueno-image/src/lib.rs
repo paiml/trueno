@@ -1,3 +1,13 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::disallowed_methods,
+        clippy::float_cmp,
+        clippy::panic
+    )
+)]
 //! GPU image processing primitives.
 //!
 //! # Contract: image-conv2d-v1.yaml

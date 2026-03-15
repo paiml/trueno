@@ -26,7 +26,7 @@ proptest! {
             ..Default::default()
         };
         let occ = usage.estimated_occupancy();
-        prop_assert!(occ >= 0.0 && occ <= 1.0);
+        prop_assert!((0.0..=1.0).contains(&occ));
     }
 
     #[test]

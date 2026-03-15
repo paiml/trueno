@@ -1,3 +1,13 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::disallowed_methods,
+        clippy::float_cmp,
+        clippy::panic
+    )
+)]
 //! N-dimensional tensor contractions — Einstein summation via TTGT.
 //!
 //! This crate provides a dense tensor type and Einstein summation (`einsum`)

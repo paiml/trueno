@@ -2,7 +2,7 @@
 //!
 //! Falsification tests from Section 8.2, F5 (claims 41-50).
 
-#![allow(clippy::unwrap_used, clippy::similar_names)]
+#![allow(clippy::unwrap_used, clippy::similar_names, clippy::disallowed_methods)]
 
 use trueno_cuda_edge::ptx_poison::{
     default_mutators, MutantResult, PoisonTrapReport, PtxMutator, PtxVerificationError,

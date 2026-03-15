@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! PMAT-014: PagedKvCache Falsification Tests
 //!
 //! Falsification criteria F411-F420 from cbtop spec §18.

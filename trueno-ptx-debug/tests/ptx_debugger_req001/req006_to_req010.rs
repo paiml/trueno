@@ -256,7 +256,8 @@ fn test_report_methods() {
 
     // Test report methods
     let passed_categories = report.categories_with_all_tests_passed();
-    assert!(passed_categories >= 0, "Should have non-negative passed categories");
+    // passed_categories is usize, always non-negative; verify it is within expected range
+    assert!(passed_categories <= 10, "Should have at most 10 passed categories");
 
     let critical_absent = report.critical_bugs_absent();
     // Should be true for clean PTX

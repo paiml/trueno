@@ -1,9 +1,8 @@
-//! tests_extended - Part 2
+//! `tests_extended` - Part 2
 
 use crate::validate_examples::helpers::*;
 use crate::validate_examples::results::*;
 use crate::validate_examples::steps::*;
-use regex::Regex;
 use serial_test::serial;
 use std::fs;
 use std::io::Write;
@@ -120,7 +119,7 @@ fn test_format_validation_summary_single_step() {
         }],
     };
     let summary = format_validation_summary(&results);
-    assert!(summary.contains("1"));
+    assert!(summary.contains('1'));
     assert!(summary.contains("Passed: 1"));
 }
 
