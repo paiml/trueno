@@ -138,8 +138,9 @@ impl Vector<f32> {
         // Compute sum of exponentials
         let sum_exp: f32 = exp_vals.iter().sum();
 
-        // Normalize by sum
-        let data: Vec<f32> = exp_vals.iter().map(|&e| e / sum_exp).collect();
+        // Normalize by sum (guard against sum=0 from underflow)
+        let safe_sum = sum_exp.max(f32::EPSILON);
+        let data: Vec<f32> = exp_vals.iter().map(|&e| e / safe_sum).collect();
 
         Ok(Vector::from_vec(data))
     }
