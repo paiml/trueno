@@ -66,8 +66,8 @@ fn softmax_scalar(logits: &[f32]) -> Vec<f32> {
         sum += v;
     }
 
-    // Pass 4: normalize
-    let inv_sum = 1.0 / sum;
+    // Pass 4: normalize (guard against sum=0 from underflow)
+    let inv_sum = 1.0 / sum.max(f32::EPSILON);
     for v in &mut out {
         *v *= inv_sum;
     }
@@ -178,8 +178,8 @@ unsafe fn softmax_avx2(logits: &[f32]) -> Vec<f32> {
         sum_val += out[i];
     }
 
-    // ── Pass 4: AVX2 normalize (multiply by 1/sum) ───────────────────────
-    let inv_sum = 1.0 / sum_val;
+    // ── Pass 4: AVX2 normalize (multiply by 1/sum, guard zero) ────────────
+    let inv_sum = 1.0 / sum_val.max(f32::EPSILON);
     unsafe {
         let inv = _mm256_set1_ps(inv_sum);
 

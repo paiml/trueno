@@ -192,8 +192,8 @@ impl ComputeOp for SoftmaxOp {
         // Step 3: Sum (SIMD sum)
         let exp_sum = Self::simd_sum(&exp_vals, backend);
 
-        // Step 4: Normalize (SIMD scale)
-        let inv_sum = 1.0 / exp_sum;
+        // Step 4: Normalize (SIMD scale, guard against sum=0)
+        let inv_sum = 1.0 / exp_sum.max(f32::EPSILON);
         let mut result = vec![0.0f32; exp_vals.len()];
         Self::simd_scale(&exp_vals, inv_sum, &mut result, backend);
 

@@ -158,8 +158,8 @@ impl AttentionOp {
             sum += *s;
         }
 
-        // Normalize
-        let inv_sum = 1.0 / sum;
+        // Normalize (guard against sum=0 from underflow)
+        let inv_sum = 1.0 / sum.max(f32::EPSILON);
         for s in scores.iter_mut() {
             *s *= inv_sum;
         }
