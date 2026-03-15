@@ -57,6 +57,12 @@ impl GpuDevice {
         kernel_rows: usize,
         kernel_cols: usize,
     ) -> Result<(), String> {
+        if kernel_rows > input_rows || kernel_cols > input_cols {
+            return Err(format!(
+                "Kernel size ({}x{}) larger than input ({}x{})",
+                kernel_rows, kernel_cols, input_rows, input_cols
+            ));
+        }
         let output_rows = input_rows - kernel_rows + 1;
         let output_cols = input_cols - kernel_cols + 1;
 
