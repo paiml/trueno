@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-032: Multi-Metric Correlation Analysis
 //!
 //! F1241-F1250: Correlation analysis falsification tests

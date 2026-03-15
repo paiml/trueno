@@ -1,10 +1,9 @@
 use super::super::analyzer::*;
-use super::super::coverage::*;
 use super::super::types::*;
 
 #[test]
 fn test_loop_branch_to_end_detection() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
 main_loop:
     // loop body
@@ -12,14 +11,14 @@ main_loop:
 main_loop_end:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::LoopBranchToEnd));
 }
 
 #[test]
 fn test_conditional_branch_not_flagged() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
 loop_start:
     @%p0 bra loop_end;
@@ -27,7 +26,7 @@ loop_start:
 loop_end:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     // Conditional branch should NOT be flagged
     assert!(!result.has_bug(&PtxBugClass::LoopBranchToEnd));
@@ -35,30 +34,30 @@ loop_end:
 
 #[test]
 fn test_register_spills_detection() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .local .align 4 .b8 __local_depot[32];
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::RegisterSpills));
 }
 
 #[test]
 fn test_missing_entry_point_detection() {
-    let ptx = r#"
+    let ptx = r"
 .version 8.0
 .target sm_70
 .reg .f32 %f<4>;
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::MissingEntryPoint));
 }
 
 #[test]
 fn test_valid_kernel_no_bugs() {
-    let ptx = r#"
+    let ptx = r"
 .version 8.0
 .target sm_70
 .visible .entry valid_kernel() {
@@ -66,7 +65,7 @@ fn test_valid_kernel_no_bugs() {
     .reg .u32 %r<4>;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(result.is_valid());
     assert!(!result.has_bugs());
@@ -82,13 +81,13 @@ fn test_bug_severity_classification() {
 
 #[test]
 fn test_bug_report_format() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .shared .b8 smem[1024];
     st.shared.f32 [%rd0], %f0;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     let report = result.format_report();
 
@@ -99,11 +98,11 @@ fn test_bug_report_format() {
 
 #[test]
 fn test_kernel_name_extraction() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry gemm_tiled() {
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert_eq!(result.kernel_name, Some("gemm_tiled".to_string()));
 }
@@ -148,14 +147,14 @@ fn f101_detect_shared_u64_addressing() {
 /// F102: Detect missing `bar.sync`
 #[test]
 fn f102_detect_missing_barrier() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .shared .b8 smem[1024];
     st.shared.f32 [%r0], %f0;
     ld.shared.f32 %f1, [%r1];
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::MissingBarrierSync));
 }
@@ -163,14 +162,14 @@ fn f102_detect_missing_barrier() {
 /// F103: Detect `bra loop_end` in loop
 #[test]
 fn f103_detect_loop_branch_end() {
-    let ptx = r#"
+    let ptx = r"
 .entry test() {
 test_loop:
     bra test_loop_end;
 test_loop_end:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::LoopBranchToEnd));
 }
@@ -178,14 +177,14 @@ test_loop_end:
 /// F104: Valid PTX passes
 #[test]
 fn f104_valid_ptx_passes() {
-    let ptx = r#"
+    let ptx = r"
 .version 8.0
 .target sm_70
 .visible .entry valid() {
     .reg .f32 %f<4>;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(result.is_valid());
 }

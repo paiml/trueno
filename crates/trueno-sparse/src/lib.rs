@@ -1,3 +1,15 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::disallowed_methods,
+        clippy::float_cmp,
+        clippy::panic,
+        clippy::cast_precision_loss,
+        clippy::unnecessary_wraps
+    )
+)]
 //! Trueno Sparse: Sparse matrix formats and operations
 //!
 //! Provides CSR, COO, and BSR sparse matrix formats with SIMD-accelerated

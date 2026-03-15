@@ -1,10 +1,9 @@
 use super::super::analyzer::*;
-use super::super::coverage::*;
 use super::super::types::*;
 
 #[test]
 fn test_shared_mem_u64_detection() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .u64 %rd<5>;
     .reg .f32 %f<2>;
@@ -12,14 +11,14 @@ fn test_shared_mem_u64_detection() {
     st.shared.f32 [%rd0], %f0;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::SharedMemU64Addressing));
 }
 
 #[test]
 fn test_shared_mem_u32_valid() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .u32 %r<5>;
     .reg .f32 %f<2>;
@@ -27,21 +26,21 @@ fn test_shared_mem_u32_valid() {
     st.shared.f32 [%r0], %f0;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(!result.has_bug(&PtxBugClass::SharedMemU64Addressing));
 }
 
 #[test]
 fn test_missing_barrier_sync_strict() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .shared .b8 smem[1024];
     st.shared.f32 [%r0], %f0;
     ld.shared.f32 %f1, [%r1];
     ret;
 }
-"#;
+";
     // Non-strict mode: no warning
     let normal_result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(!normal_result.has_bug(&PtxBugClass::MissingBarrierSync));
@@ -53,7 +52,7 @@ fn test_missing_barrier_sync_strict() {
 
 #[test]
 fn test_barrier_present_valid() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .shared .b8 smem[1024];
     st.shared.f32 [%r0], %f0;
@@ -61,7 +60,7 @@ fn test_barrier_present_valid() {
     ld.shared.f32 %f1, [%r1];
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     // Should not have the broad "no bar.sync" warning
     let missing_barrier_bugs: Vec<_> = result.bugs_of_class(&PtxBugClass::MissingBarrierSync);

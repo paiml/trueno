@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Ironman Falsification Suite Tests (F901-F920)
 //!
 //! PMAT-017: Test the "Ironman" quality gate validators per §34.

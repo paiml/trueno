@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-037: Adaptive Threshold Learning System
 //!
 //! F1291-F1300: Adaptive threshold falsification tests

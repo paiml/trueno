@@ -251,7 +251,7 @@ fn f1009_value_within_bounds_accepted() {
 
 #[test]
 fn f1010_f1011_rust_memory_safety() {
-    let data = vec![1, 2, 3, 4, 5];
+    let data = [1, 2, 3, 4, 5];
     let sum: i32 = data.iter().sum();
     assert_eq!(sum, 15);
 }

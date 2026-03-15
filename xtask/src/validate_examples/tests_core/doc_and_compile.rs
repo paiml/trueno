@@ -1,4 +1,4 @@
-//! tests_core - Part 1
+//! `tests_core` - Part 1
 
 use crate::validate_examples::helpers::*;
 use crate::validate_examples::results::*;
@@ -7,7 +7,6 @@ use regex::Regex;
 use serial_test::serial;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[test]

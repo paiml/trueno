@@ -1,3 +1,14 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::disallowed_methods,
+        clippy::float_cmp,
+        clippy::panic,
+        clippy::cast_precision_loss
+    )
+)]
 //! K-Quantization formats for GGUF/APR model weights (Toyota Way: ONE source of truth)
 //!
 //! This crate provides quantization functions for converting F32 data to

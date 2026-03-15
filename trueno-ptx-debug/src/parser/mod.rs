@@ -361,8 +361,8 @@ mod tests {
             .target sm_70
             .address_size 64
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
         assert!(module.version.0 > 0, "F001: Missing .version directive");
     }
 
@@ -373,8 +373,8 @@ mod tests {
             .target sm_70
             .address_size 64
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
         assert_eq!(module.version, (0, 0), "Should detect missing version");
     }
 
@@ -386,8 +386,8 @@ mod tests {
             .target sm_70
             .address_size 64
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
         assert_ne!(module.target, SmTarget::Unknown, "F002: Missing .target directive");
     }
 
@@ -399,8 +399,8 @@ mod tests {
             .target sm_70
             .address_size 64
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
         assert!(
             module.address_size == 32 || module.address_size == 64,
             "F003: address_size must be 32 or 64"
@@ -426,8 +426,8 @@ mod tests {
                 ret;
             }
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         assert_eq!(module.version, (8, 0));
         assert_eq!(module.target, SmTarget::Sm70);
@@ -453,8 +453,8 @@ mod tests {
                 ret;
             }
         "#;
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let kernel = &module.kernels[0];
         let instructions: Vec<_> = kernel

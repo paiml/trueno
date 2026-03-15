@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-035: Workload Characterization System
 //!
 //! F1271-F1280: Workload characterization falsification tests
@@ -133,7 +134,7 @@ fn f1275_similarity_range() {
     let b = WorkloadFeatures::new().with_intensity(20.0);
 
     let sim = characterizer.workload_similarity(&a, &b);
-    assert!(sim >= 0.0 && sim <= 1.0);
+    assert!((0.0..=1.0).contains(&sim));
 }
 
 /// F1275.2: Identical features have similarity ~1
@@ -155,7 +156,7 @@ fn f1275_cosine_similarity() {
     let b = WorkloadFeatures::new().with_intensity(20.0).with_compute_density(10.0);
 
     let sim = a.cosine_similarity(&b);
-    assert!(sim >= -1.0 && sim <= 1.0);
+    assert!((-1.0..=1.0).contains(&sim));
 }
 
 // =============================================================================

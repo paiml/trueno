@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Grammar of ComputeBlock Falsification Tests (F701-F720)
 //!
 //! PMAT-018: Test the Grammar of ComputeBlock DSL per §32.

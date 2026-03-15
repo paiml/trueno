@@ -125,7 +125,8 @@ mod tests {
             .visible .entry test()\n{\n    .reg .u32 %r<2>;\n    .reg .pred %p<2>;\n\
             mov.u32 %r0, 0;\nloop:\n    add.u32 %r0, %r0, 1;\n\
             setp.lt.u32 %p0, %r0, 10;\n    @%p0 bra done;\n    bra loop;\ndone:\n    ret;\n}";
-        let patched = patch_backward_branches_sm121(ptx).unwrap();
+        let patched =
+            patch_backward_branches_sm121(ptx).expect("single backward branch should be patched");
         assert!(patched.contains("@%p_jw bra loop;"));
         assert!(patched.contains("@%p0 bra done;"));
         assert!(patched.contains(".reg .pred %p_jw;"));
@@ -138,7 +139,8 @@ mod tests {
             .visible .entry test()\n{\n    .reg .u32 %r<4>;\n\
             loop1:\n    add.u32 %r0, %r0, 1;\n    bra loop1;\n\
             loop2:\n    add.u32 %r1, %r1, 1;\n    bra loop2;\n    ret;\n}";
-        let patched = patch_backward_branches_sm121(ptx).unwrap();
+        let patched = patch_backward_branches_sm121(ptx)
+            .expect("multiple backward branches should be patched");
         assert!(patched.contains("@%p_jw bra loop1;"));
         assert!(patched.contains("@%p_jw bra loop2;"));
         assert_eq!(patched.matches(".reg .pred %p_jw;").count(), 1);
@@ -160,7 +162,8 @@ mod tests {
         let ptx = ".version 8.0\n.target sm_90\n.address_size 64\n\
             .visible .entry test()\n{\n    .reg .u32 %r<2>;\n\
             loop:\n        add.u32 %r0, %r0, 1;\n        bra loop;\n    ret;\n}";
-        let patched = patch_backward_branches_sm121(ptx).unwrap();
+        let patched =
+            patch_backward_branches_sm121(ptx).expect("indented backward branch should be patched");
         assert!(patched.contains("        @%p_jw bra loop;"));
     }
 
@@ -172,7 +175,8 @@ mod tests {
             inner:\n    add.u32 %r1, %r1, 1;\n    setp.lt.u32 %p1, %r1, 32;\n\
             @%p1 bra skip;\n    bra inner;\nskip:\n    add.u32 %r0, %r0, 1;\n\
             bra outer;\nexit:\n    ret;\n}";
-        let patched = patch_backward_branches_sm121(ptx).unwrap();
+        let patched =
+            patch_backward_branches_sm121(ptx).expect("nested backward branches should be patched");
         assert!(patched.contains("@%p_jw bra inner;"));
         assert!(patched.contains("@%p_jw bra outer;"));
         // Forward branches preserved
@@ -194,12 +198,16 @@ mod tests {
         let ptx = ".version 8.0\n.target sm_90\n.address_size 64\n\
             .visible .entry test()\n{\n    .reg .u32 %r<2>;\n    .reg .f32 %f<2>;\n\
             mov.u32 %r0, 0;\nloop:\n    add.u32 %r0, %r0, 1;\n    bra loop;\n    ret;\n}";
-        let patched = patch_backward_branches_sm121(ptx).unwrap();
+        let patched =
+            patch_backward_branches_sm121(ptx).expect("backward branch should be patched");
         // The .reg .pred and setp should appear AFTER .reg .f32 but BEFORE mov
-        let pred_pos = patched.find(".reg .pred %p_jw;").unwrap();
-        let setp_pos = patched.find("setp.ne.u32 %p_jw, 1, 0;").unwrap();
-        let first_mov = patched.find("mov.u32 %r0, 0;").unwrap();
-        let last_reg = patched.rfind(".reg .f32").unwrap();
+        let pred_pos =
+            patched.find(".reg .pred %p_jw;").expect("patched PTX must contain pred decl");
+        let setp_pos =
+            patched.find("setp.ne.u32 %p_jw, 1, 0;").expect("patched PTX must contain setp init");
+        let first_mov =
+            patched.find("mov.u32 %r0, 0;").expect("patched PTX must contain mov instruction");
+        let last_reg = patched.rfind(".reg .f32").expect("patched PTX must contain .reg .f32 decl");
         assert!(pred_pos > last_reg, "pred decl must come after last .reg");
         assert!(setp_pos > pred_pos, "setp must come after pred decl");
         assert!(setp_pos < first_mov, "setp must come before first instruction");

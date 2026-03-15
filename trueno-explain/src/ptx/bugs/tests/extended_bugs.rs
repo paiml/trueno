@@ -8,14 +8,14 @@ use super::super::types::*;
 /// Test empty loop body detection
 #[test]
 fn test_empty_loop_body_detected() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
 empty_loop:
     // Just comments here
     bra empty_loop;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::EmptyLoopBody));
 }
@@ -23,7 +23,7 @@ empty_loop:
 /// Test valid loop body not flagged
 #[test]
 fn test_valid_loop_body_not_flagged() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .f32 %f<4>;
     .reg .u32 %r<4>;
@@ -34,7 +34,7 @@ compute_loop:
     @%p0 bra compute_loop;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(!result.has_bug(&PtxBugClass::EmptyLoopBody));
 }
@@ -42,7 +42,7 @@ compute_loop:
 /// Test loop with only conditional branch not flagged
 #[test]
 fn test_loop_with_exit_condition_not_flagged() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .u32 %r<4>;
     .reg .pred %p<2>;
@@ -51,7 +51,7 @@ check_loop:
     @%p0 bra check_loop;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     // Has setp which is computation
     assert!(!result.has_bug(&PtxBugClass::EmptyLoopBody));
@@ -64,7 +64,7 @@ check_loop:
 /// Test missing bounds check detection
 #[test]
 fn test_missing_bounds_check() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .u64 %rd<4>;
     .reg .f32 %f<4>;
@@ -73,7 +73,7 @@ fn test_missing_bounds_check() {
     st.global.f32 [%rd1], %f0;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::MissingBoundsCheck));
 }
@@ -81,7 +81,7 @@ fn test_missing_bounds_check() {
 /// Test proper bounds check not flagged
 #[test]
 fn test_proper_bounds_check_not_flagged() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .u64 %rd<4>;
     .reg .f32 %f<4>;
@@ -97,7 +97,7 @@ do_work:
 done:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(!result.has_bug(&PtxBugClass::MissingBoundsCheck));
 }
@@ -105,14 +105,14 @@ done:
 /// Test kernel without global memory not flagged
 #[test]
 fn test_no_global_mem_no_bounds_check_needed() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .u32 %r<4>;
     mov.u32 %r0, %tid.x;
     add.u32 %r1, %r0, 1;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     // No global memory, so no bounds check needed
     assert!(!result.has_bug(&PtxBugClass::MissingBoundsCheck));
@@ -125,14 +125,14 @@ fn test_no_global_mem_no_bounds_check_needed() {
 /// Test dead code after ret
 #[test]
 fn test_dead_code_after_ret() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .f32 %f<4>;
     add.f32 %f0, %f1, %f2;
     ret;
     mul.f32 %f3, %f0, %f1;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::DeadCode));
 }
@@ -140,7 +140,7 @@ fn test_dead_code_after_ret() {
 /// Test dead code after unconditional branch
 #[test]
 fn test_dead_code_after_branch() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .f32 %f<4>;
     bra skip;
@@ -148,7 +148,7 @@ fn test_dead_code_after_branch() {
 skip:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::DeadCode));
 }
@@ -156,7 +156,7 @@ skip:
 /// Test reachable code not flagged (label after branch)
 #[test]
 fn test_reachable_code_not_flagged() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .f32 %f<4>;
     .reg .pred %p<2>;
@@ -166,7 +166,7 @@ skip:
     mul.f32 %f3, %f0, %f1;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     // Conditional branch, code after is reachable
     assert!(!result.has_bug(&PtxBugClass::DeadCode));
@@ -175,7 +175,7 @@ skip:
 /// Test code after label is reachable
 #[test]
 fn test_code_after_label_reachable() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .f32 %f<4>;
     bra middle;
@@ -183,7 +183,7 @@ middle:
     add.f32 %f0, %f1, %f2;
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::new().analyze(ptx);
     // The add after middle: label is reachable via the branch
     assert!(!result.has_bug(&PtxBugClass::DeadCode));
@@ -216,7 +216,7 @@ fn test_extended_bug_codes() {
 /// PARITY-114: Detect conditional early exit before barrier
 #[test]
 fn test_parity114_conditional_exit_before_barrier() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry kernel() {
     mov.u32 %r0, %tid.x;
     setp.lt.u32 %p0, %r0, 32;
@@ -232,7 +232,7 @@ loop_start_end:
 done:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
     // Verify it's P0 Critical
@@ -242,7 +242,7 @@ done:
 /// PARITY-114: Detect unconditional early exit before barrier
 #[test]
 fn test_parity114_unconditional_exit_before_barrier() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry kernel() {
 loop_start:
     bra exit;
@@ -253,7 +253,7 @@ loop_start_end:
 done:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     assert!(result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
 }
@@ -261,7 +261,7 @@ done:
 /// PARITY-114: Safe kernel with barrier before any possible exit
 #[test]
 fn test_parity114_safe_barrier_first() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry kernel() {
     mov.u32 %r0, %tid.x;
     setp.lt.u32 %p0, %r0, 32;
@@ -278,7 +278,7 @@ loop_start_end:
 exit:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     assert!(!result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
 }
@@ -286,7 +286,7 @@ exit:
 /// PARITY-114: Exit after loop end is safe
 #[test]
 fn test_parity114_exit_after_loop_is_safe() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry kernel() {
 k_tile_loop:
     bar.sync 0;
@@ -299,7 +299,7 @@ k_tile_end:
 done:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     assert!(!result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
 }
@@ -307,7 +307,7 @@ done:
 /// PARITY-114: Non-strict mode does not flag barrier issues
 #[test]
 fn test_parity114_non_strict_mode() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry kernel() {
 loop_start:
     @!%p0 bra exit;
@@ -318,7 +318,7 @@ loop_start_end:
 done:
     ret;
 }
-"#;
+";
     // Non-strict mode should NOT flag this
     let result = PtxBugAnalyzer::new().analyze(ptx);
     assert!(!result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
@@ -335,10 +335,10 @@ fn test_parity114_bug_class_properties() {
     assert_eq!(PtxBugClass::EarlyExitBeforeBarrier.severity(), BugSeverity::Critical);
 }
 
-/// PARITY-114: kv_loop pattern (attention kernels) - safe after fix
+/// PARITY-114: `kv_loop` pattern (attention kernels) - safe after fix
 #[test]
 fn test_parity114_attention_kv_loop_safe() {
-    let ptx = r#"
+    let ptx = r"
 .visible .entry flash_attention() {
 kv_loop:
     bar.sync 0;
@@ -351,7 +351,7 @@ kv_loop_end:
 done:
     ret;
 }
-"#;
+";
     let result = PtxBugAnalyzer::strict().analyze(ptx);
     assert!(!result.has_bug(&PtxBugClass::EarlyExitBeforeBarrier));
 }

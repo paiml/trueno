@@ -28,8 +28,8 @@ fn test_valid_ptx_passes() {
                 ret;
             }
         "#;
-    let mut parser = Parser::new(ptx).unwrap();
-    let module = parser.parse().unwrap();
+    let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+    let module = parser.parse().expect("parsing should succeed");
 
     let registry = FalsificationRegistry::new();
     let report = registry.evaluate(&module);
@@ -50,8 +50,8 @@ fn test_missing_version_fails() {
                 ret;
             }
         "#;
-    let mut parser = Parser::new(ptx).unwrap();
-    let module = parser.parse().unwrap();
+    let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+    let module = parser.parse().expect("parsing should succeed");
 
     let registry = FalsificationRegistry::new();
     let report = registry.evaluate(&module);
@@ -60,7 +60,7 @@ fn test_missing_version_fails() {
     let f001_result =
         report.results.iter().find(|(id, _, _, _)| id == "F001").map(|(_, _, _, r)| r);
     assert!(f001_result.is_some());
-    assert!(f001_result.unwrap().is_fail());
+    assert!(f001_result.expect("F001 test should exist").is_fail());
 }
 
 #[test]

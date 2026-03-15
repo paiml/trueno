@@ -50,8 +50,8 @@ mod category_tests {
             }
         "#;
 
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let registry = FalsificationRegistry::new();
         let report = registry.evaluate(&module);
@@ -100,8 +100,8 @@ mod category_tests {
             }
         "#;
 
-        let mut parser = Parser::new(buggy_ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(buggy_ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let registry = FalsificationRegistry::new();
         let report = registry.evaluate(&module);
@@ -139,8 +139,8 @@ mod category_tests {
             }
         "#;
 
-        let mut parser = Parser::new(good_ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(good_ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let registry = FalsificationRegistry::new();
         let report = registry.evaluate(&module);
@@ -165,8 +165,8 @@ mod category_tests {
             }
         "#;
 
-        let mut parser = Parser::new(ptx).unwrap();
-        let module = parser.parse().unwrap();
+        let mut parser = Parser::new(ptx).expect("parser creation should succeed");
+        let module = parser.parse().expect("parsing should succeed");
 
         let registry = FalsificationRegistry::new();
         let report = registry.evaluate(&module);

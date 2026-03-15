@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Adversarial Falsification Tests (F1001-F1020)
 //!
 //! Popperian falsification criteria for adversarial testing per S36.

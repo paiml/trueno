@@ -2,7 +2,7 @@
 //!
 //! Falsification tests from Section 8.2, F1 (claims 1-10).
 
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::disallowed_methods)]
 
 use trueno_cuda_edge::null_fuzzer::{
     InjectionStrategy, NonNullDevicePtr, NullFuzzerConfig, NullSentinelFuzzer, PropagationTracker,

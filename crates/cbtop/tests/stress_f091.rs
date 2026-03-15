@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! F091: Stress Test - Graceful Degradation
 //!
 //! Tests that cbtop components handle edge cases without panic.
@@ -170,10 +171,7 @@ fn f098_zram_graceful_degradation() {
     // Should return mock/default data if ZRAM unavailable
     // Verify structure is valid - orig_size is u64 so always >= 0
     // This is a sanity check that the struct was populated
-    assert!(
-        metrics.orig_size == 0 || metrics.orig_size > 0,
-        "F098 FALSIFIED: orig_size should exist"
-    );
+    let _ = metrics.orig_size; // field exists and is accessible
 
     // Compression ratio should be reasonable
     if metrics.comp_size > 0 {

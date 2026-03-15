@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Roofline Model Falsification Tests (F1061-F1070)
 //!
 //! Popperian falsification criteria for Williams Roofline Model per §35.3.

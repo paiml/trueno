@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-025: Cache Efficiency Analysis
 //!
 //! F1121-F1130: Cache analysis falsification tests

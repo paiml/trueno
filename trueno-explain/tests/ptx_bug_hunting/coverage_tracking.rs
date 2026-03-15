@@ -61,12 +61,12 @@ fn test_coverage_tracker_basic() {
         .feature("entry_point")
         .build();
 
-    let ptx = r#"
+    let ptx = r"
 .visible .entry test() {
     .reg .f32 %f<4>;
     ret;
 }
-"#;
+";
 
     coverage.analyze(ptx);
     let report = coverage.generate_report();

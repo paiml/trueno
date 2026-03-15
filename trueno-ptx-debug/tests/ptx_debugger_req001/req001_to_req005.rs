@@ -1,9 +1,7 @@
 //! REQ-001 through REQ-005: Parser, detectors, and framework tests
 
-use trueno_ptx_debug::analyzer::{
-    AddressSpaceValidator, ControlFlowAnalyzer, DataFlowAnalyzer, TypeChecker,
-};
-use trueno_ptx_debug::falsification::{Category, FalsificationRegistry, TestResult};
+use trueno_ptx_debug::analyzer::{AddressSpaceValidator, DataFlowAnalyzer};
+use trueno_ptx_debug::falsification::FalsificationRegistry;
 use trueno_ptx_debug::parser::Parser;
 
 /// REQ-001: Parse valid PTX (unit tests pass)
@@ -77,7 +75,7 @@ fn req001_parse_valid_ptx() {
             result.err()
         );
 
-        let mut parser = result.unwrap();
+        let mut parser = result.expect("Parser creation should succeed");
         let module_result = parser.parse();
         assert!(
             module_result.is_ok(),

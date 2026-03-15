@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! F206: Determinism Test (Hoefler & Belli Stabilizer Test)
 //!
 //! Verifies that cbtop's performance metrics have CV < 5% over 10 runs.

@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods)]
 //! Incremental Profile Snapshots Demo
 //!
 //! Demonstrates delta-compressed profile storage.

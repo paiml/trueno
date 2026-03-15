@@ -84,20 +84,20 @@ fn test_check_fma_feature() {
 #[test]
 fn test_check_target_feature_attribute() {
     let lines = vec![
-        "".to_string(),
+        String::new(),
         "#[target_feature(enable = \"avx2\")]".to_string(),
         "unsafe fn foo() {".to_string(),
     ];
     assert_eq!(check_target_feature_attribute(&lines, 2), Some("avx2".to_string()));
 
     // Test with no attribute
-    let lines = vec!["".to_string(), "unsafe fn foo() {".to_string()];
+    let lines = vec![String::new(), "unsafe fn foo() {".to_string()];
     assert_eq!(check_target_feature_attribute(&lines, 1), None);
 
     // Test with attribute far away (>15 lines)
     let mut lines = vec!["#[target_feature(enable = \"sse2\")]".to_string()];
     for _ in 0..20 {
-        lines.push("".to_string());
+        lines.push(String::new());
     }
     lines.push("unsafe fn foo() {".to_string());
     assert_eq!(check_target_feature_attribute(&lines, 21), None);
@@ -114,7 +114,7 @@ fn test_has_safety_comment() {
     // Test with comment far away (>10 lines)
     let mut lines = vec!["// SAFETY: Safe".to_string()];
     for _ in 0..15 {
-        lines.push("".to_string());
+        lines.push(String::new());
     }
     lines.push("unsafe fn foo() {".to_string());
     assert!(!has_safety_comment(&lines, 16));
@@ -176,11 +176,11 @@ fn test_check_file_with_missing_target_feature() {
     let mut temp_file = NamedTempFile::new().unwrap();
     write!(
         temp_file,
-        r#"
+        r"
 unsafe fn test_func() {{
 let a = _mm256_add_ps(x, y);
 }}
-"#
+"
     )
     .unwrap();
 
@@ -314,11 +314,11 @@ fn test_check_file_no_intrinsics() {
     let mut temp_file = NamedTempFile::new().unwrap();
     write!(
         temp_file,
-        r#"
+        r"
 unsafe fn test_func() {{
 let a = 1 + 2;
 }}
-"#
+"
     )
     .unwrap();
 
@@ -335,11 +335,11 @@ fn test_check_file_unknown_backend() {
     let mut temp_file = NamedTempFile::new().unwrap();
     write!(
         temp_file,
-        r#"
+        r"
 unsafe fn test_func() {{
 let a = _mm256_add_ps(x, y);
 }}
-"#
+"
     )
     .unwrap();
 

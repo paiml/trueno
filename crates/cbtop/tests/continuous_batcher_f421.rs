@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! PMAT-015: ContinuousBatcher Falsification Tests
 //!
 //! Falsification criteria F421-F430 from cbtop spec §19.

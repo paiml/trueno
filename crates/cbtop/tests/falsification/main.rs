@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! 200-Point Falsification Validation Tests
 //!
 //! Implements CBTOP-SPEC-001 §13: Popperian Falsification Protocol

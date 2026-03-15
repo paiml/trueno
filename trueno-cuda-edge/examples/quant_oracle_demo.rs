@@ -35,7 +35,7 @@ fn demo_format_tolerances() {
 }
 
 /// Format a boundary value for display.
-fn format_boundary_value(v: &f32) -> String {
+fn format_boundary_value(v: &f64) -> String {
     if v.is_nan() {
         "NaN".to_string()
     } else if v.is_infinite() {

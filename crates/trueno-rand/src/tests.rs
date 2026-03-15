@@ -334,7 +334,7 @@ mod proptests {
             let mut rng = Philox4x32::new(seed);
             for _ in 0..100 {
                 let v = rng.next_f32();
-                prop_assert!(v >= 0.0 && v < 1.0, "out of range: {v}");
+                prop_assert!((0.0..1.0).contains(&v), "out of range: {v}");
             }
         }
 
@@ -350,7 +350,7 @@ mod proptests {
             let mut rng = Threefry4x64::new(seed);
             for _ in 0..100 {
                 let v = rng.next_f32();
-                prop_assert!(v >= 0.0 && v < 1.0, "out of range: {v}");
+                prop_assert!((0.0..1.0).contains(&v), "out of range: {v}");
             }
         }
     }
@@ -381,7 +381,7 @@ fn test_falsify_fill_uniform_single_element() {
     let mut rng = Philox4x32::new(42);
     let mut buf = vec![0.0_f32; 1];
     rng.fill_uniform(&mut buf);
-    assert!(buf[0] >= 0.0 && buf[0] < 1.0, "Single element out of range: {}", buf[0]);
+    assert!((0.0..1.0).contains(&buf[0]), "Single element out of range: {}", buf[0]);
 }
 
 #[test]

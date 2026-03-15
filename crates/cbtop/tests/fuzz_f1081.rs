@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Fuzz Testing Falsification Tests (F1081-F1095)
 //!
 //! Popperian falsification criteria for fuzz testing per §36.3 Resilience.
@@ -334,7 +335,7 @@ fn f1092_fuzz_failure_records_input() {
 
 #[test]
 fn f1093_test_float_edge_cases_no_ub() {
-    let results = test_float_edge_cases(|x| sanitize_float(x));
+    let results = test_float_edge_cases(sanitize_float);
     // All sanitize operations should succeed
     assert!(results.iter().all(|(_, r)| r.is_ok()));
 }

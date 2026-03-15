@@ -301,11 +301,11 @@ mod tests {
 
     #[test]
     fn test_count_bindings() {
-        let wgsl = r#"
+        let wgsl = r"
             @group(0) @binding(0) var<storage, read> input: array<f32>;
             @group(0) @binding(1) var<storage, read_write> output: array<f32>;
             @group(0) @binding(2) var<uniform> params: Params;
-        "#;
+        ";
         let analyzer = WgpuAnalyzer::new();
         let (storage, uniform, textures) = analyzer.count_bindings(wgsl);
 
@@ -346,12 +346,12 @@ mod tests {
     /// F067: Detects workgroup size
     #[test]
     fn f067_detect_workgroup_size() {
-        let wgsl = r#"
+        let wgsl = r"
             @compute @workgroup_size(64, 4, 1)
             fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 // compute work
             }
-        "#;
+        ";
 
         let analyzer = WgpuAnalyzer::new();
         let report = analyzer.analyze(wgsl).unwrap();
@@ -369,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_analyze_full_wgsl() {
-        let wgsl = r#"
+        let wgsl = r"
             struct Params {
                 size: u32,
             }
@@ -386,7 +386,7 @@ mod tests {
                     result[idx] = a[idx] + b[idx];
                 }
             }
-        "#;
+        ";
 
         let analyzer = WgpuAnalyzer::new();
         let report = analyzer.analyze(wgsl).unwrap();

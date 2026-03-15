@@ -1,8 +1,7 @@
-//! tests_core - Part 2
+//! `tests_core` - Part 2
 
 use crate::validate_examples::helpers::*;
 use crate::validate_examples::results::*;
-use crate::validate_examples::steps::*;
 use regex::Regex;
 use serial_test::serial;
 use std::fs;
@@ -303,8 +302,8 @@ fn test_format_validation_summary_all_pass() {
         steps: vec![StepResult { number: 1, name: "Test".to_string(), success: true, error: None }],
     };
     let summary = format_validation_summary(&results);
-    assert!(summary.contains("1"));
-    assert!(summary.contains("0"));
+    assert!(summary.contains('1'));
+    assert!(summary.contains('0'));
 }
 
 #[test]
@@ -321,7 +320,7 @@ fn test_format_validation_summary_with_failures() {
         ],
     };
     let summary = format_validation_summary(&results);
-    assert!(summary.contains("2"));
-    assert!(summary.contains("1"));
-    assert!(summary.contains("1"));
+    assert!(summary.contains('2'));
+    assert!(summary.contains('1'));
+    assert!(summary.contains('1'));
 }

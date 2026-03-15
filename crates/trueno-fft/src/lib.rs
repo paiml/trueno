@@ -1,3 +1,13 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::disallowed_methods,
+        clippy::float_cmp,
+        clippy::panic
+    )
+)]
 //! Fast Fourier Transform library with Stockham auto-sort algorithm.
 //!
 //! # Contract: fft-stockham-v1.yaml

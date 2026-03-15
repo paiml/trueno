@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! Falsification Tests for PMAT-026: Latency Distribution Analysis
 //!
 //! F1141-F1155: Latency distribution falsification tests

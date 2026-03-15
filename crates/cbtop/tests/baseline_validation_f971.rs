@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_methods, clippy::float_cmp)]
 //! PMAT-016: Industry Baseline Validation Falsification Tests
 //!
 //! Falsification criteria F971-F985 from cbtop spec §21.7 and §21.8.
@@ -78,9 +79,9 @@ fn test_f972_sm_util_accuracy() {
 #[test]
 fn test_f973_memory_overhead_tracked() {
     // Memory overhead is part of ServerBaseline
-    assert!(VLLM_BASELINE.memory_overhead > 0);
-    assert!(TGI_BASELINE.memory_overhead > 0);
-    assert!(TRITON_BASELINE.memory_overhead > 0);
+    assert_ne!(VLLM_BASELINE.memory_overhead, 0);
+    assert_ne!(TGI_BASELINE.memory_overhead, 0);
+    assert_ne!(TRITON_BASELINE.memory_overhead, 0);
 
     // Documented values from Satna 2026
     assert_eq!(VLLM_BASELINE.memory_overhead, 42);
