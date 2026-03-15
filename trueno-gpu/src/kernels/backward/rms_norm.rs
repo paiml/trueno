@@ -285,7 +285,7 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 let four = ctx.mov_u32_imm(4);
 
                 // === Pass 1: Compute sum(x²) and sum(x·grad_y·γ) via stride loop ===
-                // GH-480: Do-while loop avoids CUDA 13.0 JIT bug on sm_121.
+                // Do-while pattern required for sm_121 backward branch compatibility.
                 let local_sum_x2 = ctx.mov_f32_imm(0.0);
                 let local_sum_xgg = ctx.mov_f32_imm(0.0);
                 let i_pass1 = ctx.mov_u32_imm(0);

@@ -73,7 +73,7 @@ impl Kernel for LongRowSoftmaxKernel {
                 let local_max = neg_inf;
 
                 // Grid-stride loop: idx = tid; idx < row_size; idx += ntid
-                // GH-480: Do-while loop avoids CUDA 13.0 JIT bug on sm_121.
+                // Do-while pattern required for sm_121 backward branch compatibility.
                 let idx = ctx.add_u32(tid, 0); // Copy tid to new register
                 let has_max_work = ctx.setp_lt_u32(idx, row_size);
                 ctx.branch_if_not(has_max_work, "max_loop_done");
