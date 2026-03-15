@@ -86,7 +86,7 @@ impl Kernel for BatchedVectorizedRmsNormKernel {
                 let output_ptr = ctx.add_u64(output_base, batch_offset_bytes);
 
                 // Pass 1: Accumulate sum of squares
-                // GH-480: Do-while loop avoids CUDA 13.0 JIT bug on sm_121.
+                // Do-while pattern required for sm_121 backward branch compatibility.
                 let sq_sum = ctx.mov_f32_imm(0.0);
                 let sum_idx = ctx.mov_reg(tid, PtxType::U32);
                 let has_sum_work = ctx.setp_lt_u32(sum_idx, hidden_u32);
@@ -296,7 +296,7 @@ impl Kernel for PreciseRmsNormKernel {
 
                 // Pass 1: Kahan compensated sum of squares
                 // Each thread maintains (sum, compensation) pair
-                // GH-480: Do-while loop avoids CUDA 13.0 JIT bug on sm_121.
+                // Do-while pattern required for sm_121 backward branch compatibility.
                 let sq_sum = ctx.mov_f32_imm(0.0);
                 let compensation = ctx.mov_f32_imm(0.0);
                 let sum_idx = ctx.mov_reg(tid, PtxType::U32);

@@ -192,7 +192,7 @@ impl SoftmaxKernel {
 
                 // ===== Block-level max reduction =====
                 // Tree reduction in shared memory with halving stride
-                // GH-480: Do-while loop avoids CUDA 13.0 JIT bug on sm_121.
+                // Do-while pattern required for sm_121 backward branch compatibility.
                 let stride_reg = ctx.mov_u32_imm(128);
                 let one = ctx.mov_u32_imm(1);
                 let block_size_reg = ctx.mov_u32_imm(block_size);

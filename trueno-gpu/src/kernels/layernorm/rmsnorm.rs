@@ -71,7 +71,7 @@ impl Kernel for RmsNormKernel {
 
                 // Accumulate sum of squares
                 // Each thread processes elements: tid, tid+32, tid+64, ...
-                // GH-480: Do-while loop avoids CUDA 13.0 JIT bug on sm_121.
+                // Do-while pattern required for sm_121 backward branch compatibility.
                 // While-loops (unconditional backward branch) triggered a JIT
                 // optimizer bug where the second loop executed fewer iterations
                 // than required. Do-while (conditional back-edge only) produces
@@ -224,7 +224,7 @@ impl Kernel for VectorizedRmsNormKernel {
 
                 // Pass 1: Accumulate sum of squares
                 // Each thread processes elements: tid, tid+256, tid+512, ...
-                // GH-480: Do-while loop avoids CUDA 13.0 JIT bug on sm_121.
+                // Do-while pattern required for sm_121 backward branch compatibility.
                 let sq_sum = ctx.mov_f32_imm(0.0);
                 let sum_idx = ctx.mov_reg(tid, PtxType::U32);
                 let has_sum_work = ctx.setp_lt_u32(sum_idx, hidden_u32);
