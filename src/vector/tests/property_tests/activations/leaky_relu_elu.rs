@@ -56,8 +56,9 @@ proptest! {
     #[test]
     fn test_leaky_relu_monotonic_property(
         a in prop::collection::vec(-50.0f32..50.0, 2..100),
-        alpha in 0.01f32..0.5
+        alpha_raw in 1u32..50
     ) {
+        let alpha = alpha_raw as f32 / 100.0; // 0.01..0.50, avoids proptest float sampler panic
         let va = Vector::from_slice(&a);
         let result = va.leaky_relu(alpha).unwrap();
 
