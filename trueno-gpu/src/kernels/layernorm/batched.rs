@@ -86,22 +86,21 @@ impl Kernel for BatchedVectorizedRmsNormKernel {
                 let output_ptr = ctx.add_u64(output_base, batch_offset_bytes);
 
                 // Pass 1: Accumulate sum of squares
-                // Do-while pattern required for sm_121 backward branch compatibility.
                 let sq_sum = ctx.mov_f32_imm(0.0);
-                let sum_idx = ctx.mov_reg(tid, PtxType::U32);
-                let has_sum_work = ctx.setp_lt_u32(sum_idx, hidden_u32);
-                ctx.branch_if_not(has_sum_work, "sum_loop_end");
+                let idx = ctx.mov_u32_imm(0);
 
                 ctx.label("sum_loop");
+                let loop_idx = ctx.add_u32_reg(idx, tid);
+                let in_bounds = ctx.setp_lt_u32(loop_idx, hidden_u32);
+                ctx.branch_if_not(in_bounds, "sum_loop_end");
 
-                let elem_offset = ctx.mul_wide_u32_reg(sum_idx, four);
+                let elem_offset = ctx.mul_wide_u32_reg(loop_idx, four);
                 let elem_addr = ctx.add_u64(input_ptr, elem_offset);
                 let val = ctx.ld_global_f32(elem_addr);
 
                 ctx.fma_f32_inplace(sq_sum, val, val);
-                ctx.add_u32_inplace(sum_idx, 256);
-                let sum_continue = ctx.setp_lt_u32(sum_idx, hidden_u32);
-                ctx.branch_if(sum_continue, "sum_loop");
+                ctx.add_u32_inplace(idx, 256);
+                ctx.branch("sum_loop");
 
                 ctx.label("sum_loop_end");
 
@@ -187,14 +186,14 @@ impl Kernel for BatchedVectorizedRmsNormKernel {
                 let rms_inv_shared = ctx.ld_shared_f32(smem_zero);
 
                 // Pass 2: Normalize output = input * rms_inv * gamma
-                // GH-480: Do-while loop (see sum_loop comment)
-                let norm_idx = ctx.mov_reg(tid, PtxType::U32);
-                let has_norm_work = ctx.setp_lt_u32(norm_idx, hidden_u32);
-                ctx.branch_if_not(has_norm_work, "exit");
+                let idx2 = ctx.mov_u32_imm(0);
 
                 ctx.label("norm_loop");
+                let loop_idx2 = ctx.add_u32_reg(idx2, tid);
+                let in_bounds2 = ctx.setp_lt_u32(loop_idx2, hidden_u32);
+                ctx.branch_if_not(in_bounds2, "exit");
 
-                let elem_offset2 = ctx.mul_wide_u32_reg(norm_idx, four);
+                let elem_offset2 = ctx.mul_wide_u32_reg(loop_idx2, four);
                 let in_addr = ctx.add_u64(input_ptr, elem_offset2);
                 let gamma_addr = ctx.add_u64(gamma_ptr, elem_offset2);
                 let out_addr = ctx.add_u64(output_ptr, elem_offset2);
@@ -207,9 +206,8 @@ impl Kernel for BatchedVectorizedRmsNormKernel {
 
                 ctx.st_global_f32(out_addr, result);
 
-                ctx.add_u32_inplace(norm_idx, 256);
-                let norm_continue = ctx.setp_lt_u32(norm_idx, hidden_u32);
-                ctx.branch_if(norm_continue, "norm_loop");
+                ctx.add_u32_inplace(idx2, 256);
+                ctx.branch("norm_loop");
 
                 ctx.label("exit");
                 ctx.ret();
@@ -296,17 +294,17 @@ impl Kernel for PreciseRmsNormKernel {
 
                 // Pass 1: Kahan compensated sum of squares
                 // Each thread maintains (sum, compensation) pair
-                // Do-while pattern required for sm_121 backward branch compatibility.
                 let sq_sum = ctx.mov_f32_imm(0.0);
                 let compensation = ctx.mov_f32_imm(0.0);
-                let sum_idx = ctx.mov_reg(tid, PtxType::U32);
-                let has_sum_work = ctx.setp_lt_u32(sum_idx, hidden_u32);
-                ctx.branch_if_not(has_sum_work, "sum_loop_end");
+                let idx = ctx.mov_u32_imm(0);
 
                 ctx.label("sum_loop");
+                let loop_idx = ctx.add_u32_reg(idx, tid);
+                let in_bounds = ctx.setp_lt_u32(loop_idx, hidden_u32);
+                ctx.branch_if_not(in_bounds, "sum_loop_end");
 
-                // Load input[sum_idx]
-                let elem_offset = ctx.mul_wide_u32_reg(sum_idx, four);
+                // Load input[loop_idx]
+                let elem_offset = ctx.mul_wide_u32_reg(loop_idx, four);
                 let elem_addr = ctx.add_u64(input_ptr, elem_offset);
                 let val = ctx.ld_global_f32(elem_addr);
 
@@ -331,10 +329,9 @@ impl Kernel for PreciseRmsNormKernel {
                 ctx.mul_f32_inplace(sq_sum, zero_f32); // sq_sum = 0
                 ctx.add_f32_inplace(sq_sum, t); // sq_sum = t
 
-                // sum_idx += 256 (stride by block size)
-                ctx.add_u32_inplace(sum_idx, 256);
-                let sum_continue = ctx.setp_lt_u32(sum_idx, hidden_u32);
-                ctx.branch_if(sum_continue, "sum_loop");
+                // idx += 256 (stride by block size)
+                ctx.add_u32_inplace(idx, 256);
+                ctx.branch("sum_loop");
 
                 ctx.label("sum_loop_end");
 
@@ -428,15 +425,15 @@ impl Kernel for PreciseRmsNormKernel {
                 let rms_inv_final = ctx.ld_shared_f32(smem_read_zero);
 
                 // Pass 2: Normalize and scale
-                // GH-480: Do-while loop (see sum_loop comment)
-                let norm_idx = ctx.mov_reg(tid, PtxType::U32);
-                let has_norm_work = ctx.setp_lt_u32(norm_idx, hidden_u32);
-                ctx.branch_if_not(has_norm_work, "exit");
+                let idx2 = ctx.mov_u32_imm(0);
 
                 ctx.label("norm_loop");
+                let loop_idx2 = ctx.add_u32_reg(idx2, tid);
+                let in_bounds2 = ctx.setp_lt_u32(loop_idx2, hidden_u32);
+                ctx.branch_if_not(in_bounds2, "exit");
 
                 // Load input and gamma
-                let elem_offset2 = ctx.mul_wide_u32_reg(norm_idx, four);
+                let elem_offset2 = ctx.mul_wide_u32_reg(loop_idx2, four);
                 let in_addr = ctx.add_u64(input_ptr, elem_offset2);
                 let gamma_addr = ctx.add_u64(gamma_ptr, elem_offset2);
                 let out_addr = ctx.add_u64(output_ptr, elem_offset2);
@@ -450,9 +447,8 @@ impl Kernel for PreciseRmsNormKernel {
 
                 ctx.st_global_f32(out_addr, result);
 
-                ctx.add_u32_inplace(norm_idx, 256);
-                let norm_continue = ctx.setp_lt_u32(norm_idx, hidden_u32);
-                ctx.branch_if(norm_continue, "norm_loop");
+                ctx.add_u32_inplace(idx2, 256);
+                ctx.branch("norm_loop");
 
                 ctx.label("exit");
                 ctx.ret();

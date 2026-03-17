@@ -192,13 +192,14 @@ impl SoftmaxKernel {
 
                 // ===== Block-level max reduction =====
                 // Tree reduction in shared memory with halving stride
-                // Do-while pattern required for sm_121 backward branch compatibility.
                 let stride_reg = ctx.mov_u32_imm(128);
                 let one = ctx.mov_u32_imm(1);
-                let block_size_reg = ctx.mov_u32_imm(block_size);
 
-                // stride starts at 128, always >= 1 initially
                 ctx.label("max_reduce_loop");
+
+                // Exit when stride reaches 0
+                let stride_zero = ctx.setp_lt_u32(stride_reg, one);
+                ctx.branch_if(stride_zero, "max_reduce_done");
 
                 // Only threads with tid < stride participate
                 let should_reduce = ctx.setp_lt_u32(tid, stride_reg);
@@ -206,6 +207,7 @@ impl SoftmaxKernel {
 
                 // Load neighbor value at tid + stride
                 let neighbor_tid = ctx.add_u32_reg(tid, stride_reg);
+                let block_size_reg = ctx.mov_u32_imm(block_size);
                 let neighbor_oob = ctx.setp_ge_u32(neighbor_tid, block_size_reg);
                 ctx.branch_if(neighbor_oob, "max_skip_neighbor");
 
@@ -221,8 +223,7 @@ impl SoftmaxKernel {
 
                 // Halve stride: stride = stride >> 1
                 ctx.shr_u32_inplace(stride_reg, 1);
-                let stride_continue = ctx.setp_ge_u32(stride_reg, one);
-                ctx.branch_if(stride_continue, "max_reduce_loop");
+                ctx.branch("max_reduce_loop"); // Loop back with halved stride
 
                 ctx.label("max_reduce_done");
 
@@ -246,11 +247,13 @@ impl SoftmaxKernel {
 
                 // ===== Block-level sum reduction =====
                 // Tree reduction for sum (same pattern as max)
-                // GH-480: Do-while loop (see max_reduce_loop comment)
                 let sum_stride_reg = ctx.mov_u32_imm(128);
 
-                // stride starts at 128, always >= 1 initially
                 ctx.label("sum_reduce_loop");
+
+                // Exit when stride reaches 0
+                let sum_stride_zero = ctx.setp_lt_u32(sum_stride_reg, one);
+                ctx.branch_if(sum_stride_zero, "sum_reduce_done");
 
                 // Only threads with tid < stride participate
                 let should_sum = ctx.setp_lt_u32(tid, sum_stride_reg);
@@ -273,8 +276,7 @@ impl SoftmaxKernel {
 
                 // Halve stride: stride = stride >> 1
                 ctx.shr_u32_inplace(sum_stride_reg, 1);
-                let sum_stride_continue = ctx.setp_ge_u32(sum_stride_reg, one);
-                ctx.branch_if(sum_stride_continue, "sum_reduce_loop");
+                ctx.branch("sum_reduce_loop"); // Loop back with halved stride
 
                 ctx.label("sum_reduce_done");
 
