@@ -29,7 +29,7 @@ concurrency:
 jobs:
   # ── Gate: clean-room must pass before publish ───────────
   gate:
-    uses: paiml/infra/.github/workflows/clean-room-gate.yml@main
+    uses: paiml/infra/.github/workflows/clean-room-gate.yml@ba2f56a7d9f421feef737b6b642b644bcdaba567 # pin to SHA
     with:
       repo: ${{ github.event.repository.name }}
       pr_sha: ${{ github.sha }}
