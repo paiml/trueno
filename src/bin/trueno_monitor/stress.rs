@@ -97,8 +97,10 @@ impl App {
                 let b = Matrix::from_vec(n, n, data_b).expect("stress test matrix B creation");
 
                 while r.load(Ordering::Relaxed) {
-                    let _c = a.matmul(&b);
-                    o.fetch_add((n * n * n * 2) as u64, Ordering::Relaxed);
+                    // GH-194: Only count FLOPs on successful matmul
+                    if a.matmul(&b).is_ok() {
+                        o.fetch_add((n * n * n * 2) as u64, Ordering::Relaxed);
+                    }
                 }
             });
 
