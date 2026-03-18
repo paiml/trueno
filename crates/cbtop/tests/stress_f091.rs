@@ -75,11 +75,11 @@ fn f093_rapid_collection() {
     let mut gpu = GpuCollectorBrick::new(0);
     let mut mem = MemoryCollectorBrick::new();
 
-    // Rapid-fire 100 collections
+    // Rapid-fire 100 collections (GH-194: verify metrics are produced, not silently lost)
     for _ in 0..100 {
-        let _ = cpu.collect();
-        let _ = gpu.collect();
-        let _ = mem.collect();
+        let _cpu_metrics = cpu.collect();
+        let _gpu_metrics = gpu.collect();
+        let _mem_metrics = mem.collect();
     }
 
     // Verify histories are bounded

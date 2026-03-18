@@ -171,11 +171,17 @@ impl App {
                         let mut result = vec![0.0f32; n];
 
                         while r.load(Ordering::Relaxed) {
+                            // GH-194: Only count bytes for successful transfers
+                            let mut successful_copies = 0usize;
                             for buf in &mut buffers {
-                                let _ = buf.copy_from_host(&data);
+                                if buf.copy_from_host(&data).is_ok() {
+                                    successful_copies += 1;
+                                }
                             }
-                            let _ = buffers[0].copy_to_host(&mut result);
-                            let bytes_transferred = (buffers.len() + 1) * n * 4;
+                            if buffers[0].copy_to_host(&mut result).is_ok() {
+                                successful_copies += 1;
+                            }
+                            let bytes_transferred = successful_copies * n * 4;
                             o.fetch_add(bytes_transferred as u64, Ordering::Relaxed);
                         }
                     }
@@ -223,19 +229,26 @@ impl App {
     }
 
     fn join_all_workers(&mut self) {
-        for worker in &mut self.cpu_workers {
+        // GH-194: Log worker thread panics instead of silently discarding
+        for (i, worker) in self.cpu_workers.iter_mut().enumerate() {
             if let Some(thread) = worker.thread.take() {
-                let _ = thread.join();
+                if let Err(e) = thread.join() {
+                    eprintln!("Warning: CPU stress worker {} panicked: {:?}", i, e);
+                }
             }
         }
         if let Some(ref mut worker) = self.mem_worker {
             if let Some(thread) = worker.thread.take() {
-                let _ = thread.join();
+                if let Err(e) = thread.join() {
+                    eprintln!("Warning: memory stress worker panicked: {:?}", e);
+                }
             }
         }
-        for worker in &mut self.gpu_workers {
+        for (i, worker) in self.gpu_workers.iter_mut().enumerate() {
             if let Some(thread) = worker.thread.take() {
-                let _ = thread.join();
+                if let Err(e) = thread.join() {
+                    eprintln!("Warning: GPU stress worker {} panicked: {:?}", i, e);
+                }
             }
         }
     }

@@ -9,9 +9,10 @@ use super::*;
 #[test]
 fn test_cuda_stress_100_contexts() {
     // Create and destroy 100 contexts rapidly
+    // GH-194: Assert memory_info succeeds instead of silently discarding errors
     for i in 0..100 {
-        let ctx = CudaContext::new(0).expect(&format!("Context {} MUST succeed", i));
-        let _ = ctx.memory_info();
+        let ctx = CudaContext::new(0).unwrap_or_else(|_| panic!("Context {} MUST succeed", i));
+        ctx.memory_info().unwrap_or_else(|e| panic!("memory_info failed on context {}: {}", i, e));
     }
 }
 
