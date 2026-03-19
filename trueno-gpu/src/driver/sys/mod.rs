@@ -61,6 +61,9 @@ pub type CUgraph = *mut c_void;
 /// CUDA graph executable handle (opaque pointer)
 pub type CUgraphExec = *mut c_void;
 
+/// CUDA event handle (opaque pointer)
+pub type CUevent = *mut c_void;
+
 // ============================================================================
 // CUDA Error Codes (subset we handle)
 // ============================================================================
@@ -136,6 +139,15 @@ pub const CU_TARGET_COMPUTE_90: c_uint = 90;
 pub const CU_STREAM_DEFAULT: c_uint = 0;
 /// Non-blocking stream (doesn't synchronize with stream 0)
 pub const CU_STREAM_NON_BLOCKING: c_uint = 1;
+
+// ============================================================================
+// CUDA Event Flags (PMAT-283)
+// ============================================================================
+
+/// Default event creation flag
+pub const CU_EVENT_DEFAULT: c_uint = 0;
+/// Disable timing (faster event operations when timing is not needed)
+pub const CU_EVENT_DISABLE_TIMING: c_uint = 0x02;
 
 // ============================================================================
 // CUDA Driver Function Pointers
@@ -277,6 +289,18 @@ pub struct CudaDriver {
     pub cuStreamBeginCapture: unsafe extern "C" fn(stream: CUstream, mode: c_uint) -> CUresult,
     /// cuStreamEndCapture - End stream capture and return graph
     pub cuStreamEndCapture: unsafe extern "C" fn(stream: CUstream, graph: *mut CUgraph) -> CUresult,
+
+    // Event Management (PMAT-283: CPU-GPU pipelining)
+    /// cuEventCreate - Create an event
+    pub cuEventCreate: unsafe extern "C" fn(event: *mut CUevent, flags: c_uint) -> CUresult,
+    /// cuEventDestroy - Destroy an event
+    pub cuEventDestroy: unsafe extern "C" fn(event: CUevent) -> CUresult,
+    /// cuEventRecord - Record an event on a stream (non-blocking)
+    pub cuEventRecord: unsafe extern "C" fn(event: CUevent, stream: CUstream) -> CUresult,
+    /// cuEventQuery - Query event completion (non-blocking: returns NOT_READY or SUCCESS)
+    pub cuEventQuery: unsafe extern "C" fn(event: CUevent) -> CUresult,
+    /// cuEventSynchronize - Wait for event completion (blocking)
+    pub cuEventSynchronize: unsafe extern "C" fn(event: CUevent) -> CUresult,
 }
 
 // ============================================================================
@@ -412,6 +436,12 @@ mod loading {
                 type FnGraphLaunch = unsafe extern "C" fn(CUgraphExec, CUstream) -> CUresult;
                 type FnStreamBeginCapture = unsafe extern "C" fn(CUstream, c_uint) -> CUresult;
                 type FnStreamEndCapture = unsafe extern "C" fn(CUstream, *mut CUgraph) -> CUresult;
+                // Event types (PMAT-283)
+                type FnEventCreate = unsafe extern "C" fn(*mut CUevent, c_uint) -> CUresult;
+                type FnEventDestroy = unsafe extern "C" fn(CUevent) -> CUresult;
+                type FnEventRecord = unsafe extern "C" fn(CUevent, CUstream) -> CUresult;
+                type FnEventQuery = unsafe extern "C" fn(CUevent) -> CUresult;
+                type FnEventSync = unsafe extern "C" fn(CUevent) -> CUresult;
 
                 Some(CudaDriver {
                     cuInit: load_sym!(cuInit, FnInit),
@@ -458,6 +488,12 @@ mod loading {
                     cuGraphLaunch: load_sym!(cuGraphLaunch, FnGraphLaunch),
                     cuStreamBeginCapture: load_sym!(cuStreamBeginCapture, FnStreamBeginCapture),
                     cuStreamEndCapture: load_sym!(cuStreamEndCapture, FnStreamEndCapture),
+                    // Event functions (PMAT-283)
+                    cuEventCreate: load_sym!(cuEventCreate, FnEventCreate),
+                    cuEventDestroy: load_sym!(cuEventDestroy_v2, FnEventDestroy),
+                    cuEventRecord: load_sym!(cuEventRecord, FnEventRecord),
+                    cuEventQuery: load_sym!(cuEventQuery, FnEventQuery),
+                    cuEventSynchronize: load_sym!(cuEventSynchronize, FnEventSync),
                 })
             }
         }
