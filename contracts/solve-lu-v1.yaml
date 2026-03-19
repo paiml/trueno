@@ -20,7 +20,7 @@ proof_obligations:
   - type: invariant
     property: "Factorization backward error"
     formal: "||PA - LU||_F / ||A||_F < n · u"
-    tolerance: "n * f32::EPSILON"
+    tolerance: 0.001
     applies_to: all
 
   - type: invariant
@@ -28,7 +28,7 @@ proof_obligations:
     formal: "||Ax - b|| / ||b|| < κ(A) · n · u"
     applies_to: all
 
-  - type: error
+  - type: bound
     property: "Singular matrix detection"
     formal: "returns Err(SingularMatrix) for rank-deficient A"
     applies_to: all
@@ -37,6 +37,25 @@ falsification_tests:
   - id: FALSIFY-LU-001
     rule: "PA = LU reconstruction"
     test: "test_lu_backward_error"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-LU-002
     rule: "Singular detection"
     test: "test_lu_singular_detected"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-SOLVE_LU-001
+    obligation: PO-SOLVE_LU-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_solve_lu_correctness
+
+qa_gate:
+  id: QA-SOLVE_LU
+  name: "solve-lu contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

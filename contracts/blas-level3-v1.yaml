@@ -42,18 +42,45 @@ falsification_tests:
   - id: FALSIFY-BLAS3-001
     rule: "syrk identity"
     test: "test_syrk_identity"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-BLAS3-002
     rule: "syrk known value"
     test: "test_syrk_known_value"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-BLAS3-003
     rule: "syrk symmetry"
     test: "test_syrk_symmetry"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-BLAS3-004
     rule: "trmm identity"
     test: "test_trmm_identity"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-BLAS3-005
     rule: "trmm triangular"
     test: "test_trmm_lower_triangular"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-BLAS3-006
     rule: "symm known product"
     test: "test_symm_known_product"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-BLAS_LEVEL3-001
+    obligation: PO-BLAS_LEVEL3-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_blas_level3_correctness
+
+qa_gate:
+  id: QA-BLAS_LEVEL3
+  name: "blas-level3 contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

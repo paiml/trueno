@@ -50,9 +50,30 @@ falsification_tests:
   - id: FALSIFY-HIST-001
     rule: "Histogram sum"
     test: "test_histogram_uniform"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-MORPH-001
     rule: "Dilate-erode duality"
     test: "test_dilate_erode_duality"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-RESIZE-001
     rule: "Resize identity"
     test: "test_resize_nearest_identity"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-IMAGE_HISTOGRAM-001
+    obligation: PO-IMAGE_HISTOGRAM-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_image_histogram_correctness
+
+qa_gate:
+  id: QA-IMAGE_HISTOGRAM
+  name: "image-histogram contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

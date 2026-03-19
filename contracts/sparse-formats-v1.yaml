@@ -32,9 +32,30 @@ falsification_tests:
   - id: FALSIFY-SELL-001
     rule: "CSR equivalence"
     test: "test_sell_matches_csr"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-SELL-002
     rule: "Dimension mismatch"
     test: "test_sell_spmv_dimension_mismatch"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-SELL-003
     rule: "Alpha-beta scaling"
     test: "test_sell_spmv_alpha_beta"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-SPARSE_FORMATS-001
+    obligation: PO-SPARSE_FORMATS-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_sparse_formats_correctness
+
+qa_gate:
+  id: QA-SPARSE_FORMATS
+  name: "sparse-formats contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

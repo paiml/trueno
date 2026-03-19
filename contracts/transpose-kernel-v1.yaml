@@ -214,3 +214,33 @@ qa_gate:
     - "All FALSIFY tests pass"
     - "Performance >= min_ratio for all bounds"
   pass_criteria: "All checks pass"
+
+proof_obligations:
+  - type: equivalence
+    property: "SIMD and scalar implementations produce identical results"
+    formal: "For all valid inputs: simd_transpose-kernel(x) == scalar_transpose-kernel(x)"
+    proof_level: L1
+
+falsification_tests:
+  - id: F-TRANSPOSE_KERNEL-001
+    rule: "Correctness verified" # PO-TRANSPOSE_KERNEL-001
+    test: "test_transpose-kernel_simd_scalar_equivalence"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+    strategy: "Compare SIMD and scalar outputs for random inputs"
+
+kani_harnesses:
+  - id: KANI-TRANSPOSE_KERNEL-001
+    obligation: PO-TRANSPOSE_KERNEL-001
+    property: "SIMD-scalar equivalence for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_transpose-kernel_equivalence
+
+qa_gate:
+  id: F-TRANSPOSE_KERNEL-GATE
+  name: "transpose-kernel kernel contract"
+  min_coverage: 0.90
+  max_complexity: 15
+  required_tests:
+    - "test_transpose-kernel_simd_scalar_equivalence"

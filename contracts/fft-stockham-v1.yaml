@@ -37,7 +37,7 @@ proof_obligations:
     tolerance: 1.0e-4
     applies_to: all
 
-  - type: exact
+  - type: equivalence
     property: "Impulse response"
     formal: "FFT([1, 0, ..., 0]) = [1, 1, ..., 1]"
     tolerance: 1.0e-6
@@ -47,9 +47,30 @@ falsification_tests:
   - id: FALSIFY-FFT-001
     rule: "Parseval energy conservation"
     test: "test_parseval_energy_conservation_size_4, test_parseval_energy_conservation_size_8"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-FFT-002
     rule: "Inverse roundtrip"
     test: "test_inverse_roundtrip_size_4, test_inverse_roundtrip_size_16"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-FFT-003
     rule: "Impulse response"
     test: "test_impulse_response, test_dc_signal"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-FFT_STOCKHAM-001
+    obligation: PO-FFT_STOCKHAM-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_fft_stockham_correctness
+
+qa_gate:
+  id: QA-FFT_STOCKHAM
+  name: "fft-stockham contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

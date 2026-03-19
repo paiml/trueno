@@ -38,12 +38,35 @@ falsification_tests:
   - id: FALSIFY-BLUE-001
     rule: "Roundtrip"
     test: "test_bluestein_size_5_roundtrip"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-BLUE-002
     rule: "Parseval"
     test: "test_bluestein_size_7_parseval"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-BLUE-003
     rule: "Stockham equivalence"
     test: "test_bluestein_power_of_two_matches_stockham"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-BLUE-004
     rule: "Impulse response"
     test: "test_bluestein_size_6_impulse"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-FFT_BLUESTEIN-001
+    obligation: PO-FFT_BLUESTEIN-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_fft_bluestein_correctness
+
+qa_gate:
+  id: QA-FFT_BLUESTEIN
+  name: "fft-bluestein contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

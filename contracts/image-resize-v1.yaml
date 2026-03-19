@@ -38,15 +38,40 @@ falsification_tests:
   - id: FALSIFY-RESIZE-001
     rule: "Nearest identity"
     test: "test_resize_nearest_identity"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-RESIZE-002
     rule: "Bilinear identity"
     test: "test_resize_bilinear_identity"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-RESIZE-003
     rule: "Bicubic constant"
     test: "test_resize_bicubic_constant"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-RESIZE-004
     rule: "Lanczos constant"
     test: "test_resize_lanczos_constant"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-RESIZE-005
     rule: "Zero dimension"
     test: "test_resize_zero_output"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-IMAGE_RESIZE-001
+    obligation: PO-IMAGE_RESIZE-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_image_resize_correctness
+
+qa_gate:
+  id: QA-IMAGE_RESIZE
+  name: "image-resize contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

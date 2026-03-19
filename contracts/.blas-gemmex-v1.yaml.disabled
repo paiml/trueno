@@ -61,3 +61,18 @@ operations:
       - id: P9
         property: "Buffer length mismatch rejected"
         test: test_gemm_ex_buffer_mismatch
+
+kani_harnesses:
+  - id: KANI-BLAS_GEMMEX-001
+    obligation: PO-BLAS_GEMMEX-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_blas_gemmex_correctness
+
+qa_gate:
+  id: QA-BLAS_GEMMEX
+  name: "blas-gemmex contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

@@ -45,9 +45,30 @@ falsification_tests:
   - id: FALSIFY-CANNY-001
     rule: "Edge detection on step function"
     test: "test_canny_detects_edges"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-CANNY-002
     rule: "No edges on constant"
     test: "test_sobel_constant_zero"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-CANNY-003
     rule: "Invalid thresholds"
     test: "test_canny_invalid_thresholds"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-IMAGE_CANNY-001
+    obligation: PO-IMAGE_CANNY-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_image_canny_correctness
+
+qa_gate:
+  id: QA-IMAGE_CANNY
+  name: "image-canny contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

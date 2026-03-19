@@ -37,15 +37,40 @@ falsification_tests:
   - id: FALSIFY-THREEFRY-001
     rule: "Determinism"
     test: "test_threefry_deterministic_same_seed"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-THREEFRY-002
     rule: "Different seeds differ"
     test: "test_threefry_different_seeds_differ"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-THREEFRY-003
     rule: "Uniform range [0,1)"
     test: "test_threefry_uniform_range"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-THREEFRY-004
     rule: "Uniform mean"
     test: "test_threefry_uniform_mean"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-THREEFRY-005
     rule: "Normal distribution"
     test: "test_threefry_normal_mean_and_variance"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-RAND_THREEFRY-001
+    obligation: PO-RAND_THREEFRY-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_rand_threefry_correctness
+
+qa_gate:
+  id: QA-RAND_THREEFRY
+  name: "rand-threefry contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

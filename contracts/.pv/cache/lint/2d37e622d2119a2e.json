@@ -1,0 +1,1 @@
+{"content_hash":"2d37e622d2119a2e","findings":[{"rule_id":"PV-PRV-001","severity":"error","message":"PROVABILITY-001: falsification_tests (3) < proof_obligations (4)","file":"contracts/image-conv2d-v1.yaml","line":null,"contract_stem":"image-conv2d-v1","suppressed":false}]}

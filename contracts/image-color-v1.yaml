@@ -52,15 +52,40 @@ falsification_tests:
   - id: FALSIFY-COLOR-001
     rule: "BT.601"
     test: "test_rgb_to_gray_bt601"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-COLOR-002
     rule: "HSV roundtrip"
     test: "test_hsv_roundtrip"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-COLOR-003
     rule: "Single component"
     test: "test_connected_components_single_blob"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-COLOR-004
     rule: "Multiple components"
     test: "test_connected_components_two_blobs"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-COLOR-005
     rule: "All background"
     test: "test_connected_components_all_background"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-IMAGE_COLOR-001
+    obligation: PO-IMAGE_COLOR-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_image_color_correctness
+
+qa_gate:
+  id: QA-IMAGE_COLOR
+  name: "image-color contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

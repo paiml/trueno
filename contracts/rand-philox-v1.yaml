@@ -22,12 +22,12 @@ proof_obligations:
     formal: "Philox(key, ctr) == Philox(key, ctr) for all inputs"
     applies_to: all
 
-  - type: statistical
+  - type: bound
     property: "Uniform distribution"
     formal: "chi-squared test on 100-bucket histogram < 150 (p=0.001)"
     applies_to: all
 
-  - type: statistical
+  - type: bound
     property: "Normal distribution (Box-Muller)"
     formal: "|mean| < 0.02, |variance - 1.0| < 0.05 for 100k samples"
     applies_to: all
@@ -36,9 +36,30 @@ falsification_tests:
   - id: FALSIFY-RNG-001
     rule: "Determinism"
     test: "test_deterministic_same_seed, test_stateless_generation"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-RNG-002
     rule: "Uniform chi-squared"
     test: "test_chi_squared_uniformity"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-RNG-003
     rule: "Normal distribution"
     test: "test_normal_mean_and_variance"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-RAND_PHILOX-001
+    obligation: PO-RAND_PHILOX-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_rand_philox_correctness
+
+qa_gate:
+  id: QA-RAND_PHILOX
+  name: "rand-philox contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []
