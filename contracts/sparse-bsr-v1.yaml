@@ -31,6 +31,25 @@ falsification_tests:
   - id: FALSIFY-BSR-001
     rule: "BSR-CSR equivalence"
     test: "test_bsr_to_csr_roundtrip"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-BSR-002
     rule: "Alpha-beta scaling"
     test: "test_bsr_alpha_beta"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-SPARSE_BSR-001
+    obligation: PO-SPARSE_BSR-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_sparse_bsr_correctness
+
+qa_gate:
+  id: QA-SPARSE_BSR
+  name: "sparse-bsr contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

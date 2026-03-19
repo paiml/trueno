@@ -32,6 +32,25 @@ falsification_tests:
   - id: FALSIFY-FFT2D-001
     rule: "2D impulse"
     test: "test_fft_2d_impulse"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-FFT2D-002
     rule: "Parseval"
     test: "prop_parseval_conservation"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-FFT_2D-001
+    obligation: PO-FFT_2D-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_fft_2d_correctness
+
+qa_gate:
+  id: QA-FFT_2D
+  name: "fft-2d contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

@@ -45,9 +45,30 @@ falsification_tests:
   - id: FALSIFY-IMG-001
     rule: "Separable equivalence"
     test: "test_separable_matches_2d"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-IMG-002
     rule: "Identity kernel"
     test: "test_identity_kernel, test_identity_kernel_larger"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-IMG-003
     rule: "Canny uniform"
     test: "test_canny_uniform_no_edges"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-IMAGE_CONV2D-001
+    obligation: PO-IMAGE_CONV2D-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_image_conv2d_correctness
+
+qa_gate:
+  id: QA-IMAGE_CONV2D
+  name: "image-conv2d contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

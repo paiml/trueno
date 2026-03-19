@@ -34,12 +34,12 @@ proof_obligations:
     formal: "transpose(transpose(A, p), p^{-1}) = A"
     applies_to: all
 
-  - type: error
+  - type: bound
     property: "Dimension mismatch detection"
     formal: "returns Err when contracted indices have different sizes"
     applies_to: all
 
-  - type: error
+  - type: bound
     property: "Invalid subscript detection"
     formal: "returns Err for malformed subscript strings"
     applies_to: all
@@ -48,15 +48,40 @@ falsification_tests:
   - id: FALSIFY-TENSOR-001
     rule: "Matmul correctness"
     test: "test_matmul_2x3_3x2"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-TENSOR-002
     rule: "Matmul associativity"
     test: "test_contract_matmul_associativity"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-TENSOR-003
     rule: "Transpose involution"
     test: "test_contract_transpose_involution"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-TENSOR-004
     rule: "Dimension mismatch"
     test: "test_einsum_dimension_mismatch"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-TENSOR-005
     rule: "Invalid subscript"
     test: "test_einsum_no_arrow"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-TENSOR_CONTRACTION-001
+    obligation: PO-TENSOR_CONTRACTION-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_tensor_contraction_correctness
+
+qa_gate:
+  id: QA-TENSOR_CONTRACTION
+  name: "tensor-contraction contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

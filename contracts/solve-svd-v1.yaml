@@ -42,9 +42,30 @@ falsification_tests:
   - id: FALSIFY-SVD-001
     rule: "Singular values non-negative decreasing"
     test: "test_svd_singular_values_nonneg_decreasing"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-SVD-002
     rule: "Reconstruction"
     test: "test_svd_reconstruction"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-SVD-003
     rule: "U orthogonality"
     test: "test_svd_orthogonality_u"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-SOLVE_SVD-001
+    obligation: PO-SOLVE_SVD-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_solve_svd_correctness
+
+qa_gate:
+  id: QA-SOLVE_SVD
+  name: "solve-svd contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

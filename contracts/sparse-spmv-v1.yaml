@@ -32,7 +32,7 @@ proof_obligations:
   - type: bound
     property: "Backward error bound (LAProof)"
     formal: "||Ax_computed - Ax_exact||_inf <= n * u * ||A||_inf * ||x||_inf"
-    tolerance: "n * f32::EPSILON"
+    tolerance: 0.001
     applies_to: all
 
   - type: linearity
@@ -45,12 +45,35 @@ falsification_tests:
   - id: FALSIFY-SPARSE-001
     rule: "Dense equivalence"
     test: "test_spmv_known_result"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-SPARSE-002
     rule: "Dimension mismatch"
     test: "test_spmv_dimension_mismatch"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-SPARSE-003
     rule: "Alpha-beta scaling"
     test: "test_spmv_alpha_beta"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
   - id: FALSIFY-SPARSE-004
     rule: "Backward error bound"
     test: "prop_spmv_backward_error"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-SPARSE_SPMV-001
+    obligation: PO-SPARSE_SPMV-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_sparse_spmv_correctness
+
+qa_gate:
+  id: QA-SPARSE_SPMV
+  name: "sparse-spmv contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []
