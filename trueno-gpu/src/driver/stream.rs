@@ -20,7 +20,10 @@ use std::ptr;
 use super::context::{get_driver, CudaContext};
 use super::graph::{CaptureMode, CudaGraph, CudaGraphExec};
 use super::module::CudaModule;
-use super::sys::{CUfunction, CUstream, CudaDriver, CU_STREAM_NON_BLOCKING};
+use super::sys::{
+    CUevent, CUfunction, CUstream, CudaDriver, CUDA_ERROR_NOT_READY, CU_EVENT_DISABLE_TIMING,
+    CU_STREAM_NON_BLOCKING,
+};
 use super::types::LaunchConfig;
 use crate::GpuError;
 
@@ -223,6 +226,103 @@ impl CudaStream {
     /// Returns `Err(GpuError::GraphLaunch)` if launch fails.
     pub fn launch_graph(&self, exec: &CudaGraphExec) -> Result<(), GpuError> {
         exec.launch(self.stream)
+    }
+
+    /// Record an event on this stream (PMAT-283: non-blocking)
+    ///
+    /// The event will be marked as completed when all preceding operations
+    /// on this stream have finished. This does NOT block the CPU.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::EventRecord)` if recording fails.
+    pub fn record_event(&self, event: &CudaEvent) -> Result<(), GpuError> {
+        let driver = get_driver()?;
+        // SAFETY: stream and event are valid from constructors
+        let result = unsafe { (driver.cuEventRecord)(event.event, self.stream) };
+        CudaDriver::check(result).map_err(|e| GpuError::StreamSync(format!("event record: {e}")))
+    }
+}
+
+// ============================================================================
+// CUDA Event (PMAT-283: CPU-GPU pipelining)
+// ============================================================================
+
+/// CUDA event for non-blocking completion queries
+///
+/// Events enable CPU-GPU pipelining: record an event after GPU work,
+/// then query/wait for completion without blocking the CPU thread.
+///
+/// # PMAT-283
+///
+/// This replaces `CudaStream::synchronize()` in the decode loop to enable
+/// serving overhead (HTTP, tokenizer, scheduling) to overlap with GPU decode.
+pub struct CudaEvent {
+    event: CUevent,
+}
+
+// SAFETY: CUevent handles are thread-safe
+unsafe impl Send for CudaEvent {}
+unsafe impl Sync for CudaEvent {}
+
+impl CudaEvent {
+    /// Create a new CUDA event (timing disabled for minimal overhead)
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if event creation fails.
+    pub fn new() -> Result<Self, GpuError> {
+        let driver = get_driver()?;
+        let mut event: CUevent = ptr::null_mut();
+        // SAFETY: event pointer is valid
+        let result = unsafe { (driver.cuEventCreate)(&mut event, CU_EVENT_DISABLE_TIMING) };
+        CudaDriver::check(result)
+            .map_err(|e| GpuError::StreamCreate(format!("event create: {e}")))?;
+        Ok(Self { event })
+    }
+
+    /// Query whether the event has completed (non-blocking)
+    ///
+    /// Returns `true` if all work preceding the event has completed,
+    /// `false` if work is still in progress.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` only on actual errors (not for NOT_READY).
+    pub fn is_complete(&self) -> Result<bool, GpuError> {
+        let driver = get_driver()?;
+        // SAFETY: event is valid from constructor
+        let result = unsafe { (driver.cuEventQuery)(self.event) };
+        if result == CUDA_ERROR_NOT_READY {
+            return Ok(false);
+        }
+        CudaDriver::check(result).map_err(|e| GpuError::StreamSync(format!("event query: {e}")))?;
+        Ok(true)
+    }
+
+    /// Wait for the event to complete (blocking)
+    ///
+    /// Use `is_complete()` for non-blocking polling.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if synchronization fails.
+    pub fn synchronize(&self) -> Result<(), GpuError> {
+        let driver = get_driver()?;
+        // SAFETY: event is valid from constructor
+        let result = unsafe { (driver.cuEventSynchronize)(self.event) };
+        CudaDriver::check(result).map_err(|e| GpuError::StreamSync(format!("event sync: {e}")))
+    }
+}
+
+impl Drop for CudaEvent {
+    fn drop(&mut self) {
+        if let Ok(driver) = get_driver() {
+            // SAFETY: event is valid from constructor
+            unsafe {
+                let _ = (driver.cuEventDestroy)(self.event);
+            }
+        }
     }
 }
 

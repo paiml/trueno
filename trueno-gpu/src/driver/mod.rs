@@ -123,7 +123,7 @@ pub use memory::GpuBuffer;
 #[cfg(feature = "cuda")]
 pub use module::CudaModule;
 #[cfg(feature = "cuda")]
-pub use stream::{CudaStream, DEFAULT_STREAM};
+pub use stream::{CudaEvent, CudaStream, DEFAULT_STREAM};
 
 /// Check if CUDA is available at runtime
 ///
