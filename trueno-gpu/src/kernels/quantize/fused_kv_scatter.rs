@@ -8,9 +8,6 @@
 //! Saves 28 cuLaunchKernel calls per step (1 per layer × 28 layers).
 //! At 17.5µs/launch, this saves ~0.49ms of CPU dispatch time per step.
 
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
-use crate::ptx::{PtxKernel, PtxReg, PtxType};
-
 /// Fused K+V KV-cache scatter kernel (PMAT-286)
 ///
 /// Uses `blockIdx.z` to select K(z=0) or V(z=1) scatter target.
@@ -75,15 +72,21 @@ impl FusedKvScatterKernel {
     setp.ge.u32 %p, %r0, {head_dim};
     @%p bra DONE;
 
-    // Select src/dst based on kv_sel (branchless)
+    // Select src/dst based on kv_sel (branch, not selp.b64 — avoids crash)
     setp.ne.u32 %p_kv, %r10, 0;
-    ld.param.u64 %rd10, [k_src_base];
-    ld.param.u64 %rd11, [v_src_base];
-    selp.b64 %rd4, %rd11, %rd10, %p_kv;   // src = kv_sel ? v_src : k_src
+    @%p_kv bra USE_V;
 
-    ld.param.u64 %rd12, [k_dst_base];
-    ld.param.u64 %rd13, [v_dst_base];
-    selp.b64 %rd7, %rd13, %rd12, %p_kv;   // dst = kv_sel ? v_dst : k_dst
+    // K path (z=0)
+    ld.param.u64 %rd4, [k_src_base];
+    ld.param.u64 %rd7, [k_dst_base];
+    bra SELECTED;
+
+USE_V:
+    // V path (z=1)
+    ld.param.u64 %rd4, [v_src_base];
+    ld.param.u64 %rd7, [v_dst_base];
+
+SELECTED:
 
     // Load positions[seq_idx]
     ld.param.u64 %rd0, [positions_ptr];
