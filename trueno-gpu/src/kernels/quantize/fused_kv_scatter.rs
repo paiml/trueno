@@ -47,7 +47,7 @@ impl FusedKvScatterKernel {
 .target sm_70
 .address_size 64
 
-// PMAT-286: Fused K+V scatter — blockIdx.z selects K(0) or V(1)
+// PMAT-286: Fused K+V scatter -- blockIdx.z selects K(0) or V(1)
 .visible .entry {entry_name}(
     .param .u64 k_src_base,
     .param .u64 k_dst_base,
