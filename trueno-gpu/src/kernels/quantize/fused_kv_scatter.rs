@@ -72,7 +72,7 @@ impl FusedKvScatterKernel {
     setp.ge.u32 %p, %r0, {head_dim};
     @%p bra DONE;
 
-    // Select src/dst based on kv_sel (branch, not selp.b64 — avoids crash)
+    // Select src/dst based on kv_sel (branch, not selp.b64 -- avoids crash)
     setp.ne.u32 %p_kv, %r10, 0;
     @%p_kv bra USE_V;
 
@@ -143,7 +143,7 @@ mod tests {
         let k = FusedKvScatterKernel::new(4, 64, 4096);
         let ptx = k.emit_ptx();
         assert!(ptx.contains(".entry fused_kv_scatter_4_64_4096"));
-        assert!(ptx.contains("selp.b64"));
+        assert!(ptx.contains("bra USE_V"));
         assert!(ptx.contains("ctaid.z"));
         assert!(ptx.contains("PMAT-286"));
     }
