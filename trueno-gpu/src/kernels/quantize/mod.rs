@@ -36,6 +36,7 @@ mod dp4a_gemm;
 mod fp16_tensor;
 mod fused;
 mod fused_gemm;
+pub mod fused_kv_scatter;
 mod legacy;
 mod nf4;
 mod nf4_cpu;
