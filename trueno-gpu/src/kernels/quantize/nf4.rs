@@ -25,7 +25,7 @@
 
 use super::nf4_cpu::{NF4_BLOCK_SIZE, NF4_LUT};
 use super::Kernel;
-use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl, PtxMemory};
+use crate::ptx::builder::{PtxArithmetic, PtxComparison, PtxControl};
 use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// NF4 block size as u32 for PTX constants.
@@ -79,55 +79,16 @@ impl Nf4GemmKernel {
     }
 }
 
-/// Tile dimensions for the shared-memory tiled NF4 GEMM kernel.
-///
-/// TILE_M × TILE_N = 32 × 32 = 1024 threads per block.
-/// TILE_K = 64 matches the NF4 block size, so each K-iteration loads exactly
-/// one NF4 block per column.
-const TILE_M: u32 = 32;
-const TILE_N: u32 = 32;
-const TILE_K: u32 = NF4_BLOCK_SIZE_U32; // 64
-
-/// Shared memory layout offsets (in bytes):
-/// - LUT:  [0, 64)       — 16 × f32 = 64 bytes (NF4 codebook)
-/// - s_A:  [64, 8256)    — TILE_M × TILE_K × 4 = 32 × 64 × 4 = 8192 bytes
-/// - s_B:  [8256, 16448) — TILE_K × TILE_N × 4 = 64 × 32 × 4 = 8192 bytes
-/// Total: 16448 bytes (~16 KB, well within 48 KB limit)
-const SMEM_LUT_OFFSET: u32 = 0;
-const SMEM_LUT_BYTES: u32 = 16 * 4; // 64
-const SMEM_A_OFFSET: u32 = SMEM_LUT_BYTES; // 64
-const SMEM_A_BYTES: u32 = TILE_M * TILE_K * 4; // 8192
-const SMEM_B_OFFSET: u32 = SMEM_A_OFFSET + SMEM_A_BYTES; // 8256
-const SMEM_B_BYTES: u32 = TILE_K * TILE_N * 4; // 8192
-const SMEM_TOTAL: usize = (SMEM_B_OFFSET + SMEM_B_BYTES) as usize; // 16448
-
 impl Kernel for Nf4GemmKernel {
     fn name(&self) -> &str {
         "nf4_gemm_fused"
     }
 
-    /// Build a shared-memory tiled NF4 GEMM kernel.
-    ///
-    /// # Algorithm
-    ///
-    /// For each K-block (stride TILE_K=64):
-    ///   1. ALL threads cooperatively load an A tile [TILE_M × TILE_K] from global → shared
-    ///   2. ALL threads cooperatively load a B_NF4 tile, dequantize on-the-fly → shared as f32
-    ///      [TILE_K × TILE_N]
-    ///   3. `bar.sync 0` — ensure tiles are fully loaded
-    ///   4. Each thread accumulates: for k in 0..TILE_K: acc += s_A[row][k] * s_B[k][col]
-    ///   5. `bar.sync 0` — ensure all threads done before next tile overwrites shared memory
-    /// Write C[row,col] = acc
-    ///
-    /// # Performance (vs. original serial kernel)
-    ///
-    /// - **Global memory bandwidth**: A tile loaded once, shared by 32 columns.
-    ///   B tile loaded once, shared by 32 rows. ~32x reduction in redundant loads.
-    /// - **Shared memory throughput**: ~2 TB/s vs. ~900 GB/s for global memory.
-    /// - **Latency hiding**: Cooperative loading uses all 1024 threads; inner loop
-    ///   has short-latency shared memory reads.
     fn build_ptx(&self) -> PtxKernel {
         let tile_size = self.tile_size;
+
+        // Shared memory: NF4 codebook LUT (16 × f32 = 64 bytes)
+        let smem_size = 16 * 4;
 
         PtxKernel::new("nf4_gemm_fused")
             .param(PtxType::U64, "a_ptr") // Activations [M × K], f32
@@ -137,7 +98,7 @@ impl Kernel for Nf4GemmKernel {
             .param(PtxType::U32, "m")
             .param(PtxType::U32, "n")
             .param(PtxType::U32, "k")
-            .shared_memory(SMEM_TOTAL)
+            .shared_memory(smem_size)
             .build(|ctx| {
                 // Thread and block indices
                 let tid = ctx.special_reg(PtxReg::TidX);
@@ -154,33 +115,35 @@ impl Kernel for Nf4GemmKernel {
                 let c_ptr = ctx.load_param_u64("c_ptr");
 
                 // =========================================================
-                // Phase 0: Load NF4 codebook LUT into shared memory
+                // Load NF4 codebook into shared memory (first 16 threads)
                 // =========================================================
-                // First 16 threads each store one LUT entry at s_lut[tid]
+                let smem_base = ctx.shared_base_addr();
+
+                // All 16 threads store their LUT entry; threads 16+ skip
+                // We use a conditional chain: if tid == i, store NF4_LUT[i]
                 for (i, &val) in NF4_LUT.iter().enumerate() {
                     let imm_i = ctx.mov_u32_imm(i as u32);
                     let is_i = ctx.setp_eq_u32(tid, imm_i);
                     ctx.branch_if_not(is_i, &format!("skip_lut_{i}"));
 
                     let val_reg = ctx.mov_f32_imm(val);
-                    let lut_smem_off = ctx.mov_u32_imm(SMEM_LUT_OFFSET + (i as u32) * 4);
-                    ctx.st_shared_f32(lut_smem_off, val_reg);
+                    let offset = ctx.mov_u64_imm((i * 4) as u64);
+                    let addr = ctx.add_u64(smem_base, offset);
+                    ctx.st_generic_f32(addr, val_reg);
 
                     ctx.label(&format!("skip_lut_{i}"));
                 }
 
+                // Synchronize so all threads see the LUT
                 ctx.bar_sync(0);
 
                 // =========================================================
-                // Calculate output position
+                // Calculate output position (tile-based)
                 // =========================================================
-                // Grid: (ceil(N/TILE_N), ceil(M/TILE_M)), block: (1024,1,1)
-                // Each thread computes C[global_row, global_col]
                 let tile_size_reg = ctx.mov_u32_imm(tile_size);
                 let out_row = ctx.mul_u32_reg(ctaid_y, tile_size_reg);
                 let out_col = ctx.mul_u32_reg(ctaid_x, tile_size_reg);
 
-                // Thread (local_row, local_col) within the 32×32 tile
                 let local_row = ctx.div_u32(tid, tile_size);
                 let local_col = ctx.rem_u32(tid, tile_size);
 
@@ -191,11 +154,12 @@ impl Kernel for Nf4GemmKernel {
                 let row_oob = ctx.setp_ge_u32(global_row, m_param);
                 let col_oob = ctx.setp_ge_u32(global_col, n_param);
 
-                // Clamp bounds (used by cooperative tile loading)
+                // Clamp to valid range (ensures safe memory access for all threads)
                 let one = ctx.mov_u32_imm(1);
                 let m_minus_1 = ctx.sub_u32_reg(m_param, one);
                 let n_minus_1 = ctx.sub_u32_reg(n_param, one);
-                let k_minus_1 = ctx.sub_u32_reg(k_param, one);
+                let clamped_row = ctx.min_u32(global_row, m_minus_1);
+                let clamped_col = ctx.min_u32(global_col, n_minus_1);
 
                 // Initialize accumulator
                 let acc = ctx.mov_f32_imm(0.0);
@@ -204,262 +168,85 @@ impl Kernel for Nf4GemmKernel {
                 let num_k_blocks = ctx.div_u32(k_param, NF4_BLOCK_SIZE_U32);
 
                 // =========================================================
-                // Outer loop: iterate over K in tiles of TILE_K=64
+                // Block loop: iterate over K dimension in chunks of 64
                 // =========================================================
                 let block_idx = ctx.mov_u32_imm(0);
 
-                ctx.label("tile_loop");
-                let tile_done = ctx.setp_ge_u32(block_idx, num_k_blocks);
-                ctx.branch_if(tile_done, "tile_loop_done");
+                ctx.label("block_loop");
+                let block_done = ctx.setp_ge_u32(block_idx, num_k_blocks);
+                ctx.branch_if(block_done, "block_loop_done");
 
-                // Current K offset for this tile
-                let tile_k_imm = ctx.mov_u32_imm(TILE_K);
-                let k_base = ctx.mul_u32_reg(block_idx, tile_k_imm);
+                // Scale layout: scales[col * num_k_blocks + block_idx]
+                let col_block_offset = ctx.mul_u32_reg(clamped_col, num_k_blocks);
+                let scale_idx = ctx.add_u32_reg(col_block_offset, block_idx);
+                let scale_byte_offset = ctx.mul_wide_u32(scale_idx, 4);
+                let scale_addr = ctx.add_u64(b_scales_ptr, scale_byte_offset);
+                let scale = ctx.ld_global_f32(scale_addr);
 
-                // =====================================================
-                // Phase 1: Cooperative load of A tile into shared memory
-                // =====================================================
-                // s_A[TILE_M][TILE_K] = A[out_row..out_row+TILE_M, k_base..k_base+TILE_K]
-                // 1024 threads load 32×64 = 2048 elements → 2 loads per thread
-                //
-                // Thread tid loads elements at positions tid and tid+1024.
-                // For element i: row = i / TILE_K, col = i % TILE_K
-                // Global: A[out_row + row, k_base + col]
-                let tile_m_times_k = ctx.mov_u32_imm(TILE_M * TILE_K); // 2048
-                let block_threads = ctx.mov_u32_imm(TILE_M * TILE_N); // 1024
+                // Data layout: data[(col * num_k_blocks + block_idx) * 32 + byte]
+                let data_block_byte_offset = ctx.mul_wide_u32(scale_idx, 32);
+                let data_block_addr = ctx.add_u64(b_nf4_ptr, data_block_byte_offset);
 
-                // Load pass 0: element at tid
-                {
-                    let a_tile_row = ctx.div_u32(tid, TILE_K);
-                    let a_tile_col = ctx.rem_u32(tid, TILE_K);
+                // Process all 64 values in this block sequentially per thread.
+                // Each thread independently accumulates its own dot product for
+                // its output column — no warp reduction (threads have different cols).
+                let sixty_four = ctx.mov_u32_imm(NF4_BLOCK_SIZE_U32);
+                let block_k_base = ctx.mul_u32_reg(block_idx, sixty_four);
+                let a_row_offset = ctx.mul_wide_u32_reg(clamped_row, k_param);
 
-                    // Global row/col for A
-                    let a_g_row = ctx.add_u32_reg(out_row, a_tile_row);
-                    let a_g_col = ctx.add_u32_reg(k_base, a_tile_col);
+                let elem_idx = ctx.mov_u32_imm(0);
 
-                    // Clamp for safety
-                    let a_g_row_c = ctx.min_u32(a_g_row, m_minus_1);
-                    let a_g_col_c = ctx.min_u32(a_g_col, k_minus_1);
+                ctx.label("elem_loop");
+                let elem_done = ctx.setp_ge_u32(elem_idx, sixty_four);
+                ctx.branch_if(elem_done, "elem_loop_done");
 
-                    // Load from global: A[a_g_row_c, a_g_col_c]
-                    let a_row_off = ctx.mul_wide_u32_reg(a_g_row_c, k_param);
-                    let a_col_off = ctx.cvt_u64_u32(a_g_col_c);
-                    let a_elem_off = ctx.add_u64(a_row_off, a_col_off);
-                    let a_byte_off = ctx.mul_u64(a_elem_off, 4);
-                    let a_addr = ctx.add_u64(a_ptr, a_byte_off);
-                    let a_val = ctx.ld_global_f32(a_addr);
+                // NF4 byte index: elem_idx / 2; nibble: elem_idx % 2
+                let byte_in_block = ctx.div_u32(elem_idx, 2);
+                let nibble_idx = ctx.rem_u32(elem_idx, 2);
 
-                    // Store to shared: s_A[tid] (tid is the linear index into the tile)
-                    let sa_byte = ctx.mul_u32(tid, 4);
-                    let sa_smem = ctx.add_u32(sa_byte, SMEM_A_OFFSET);
-                    ctx.st_shared_f32(sa_smem, a_val);
-                }
+                // Load packed byte from B_nf4
+                let byte_offset_64 = ctx.cvt_u64_u32(byte_in_block);
+                let nibble_addr = ctx.add_u64(data_block_addr, byte_offset_64);
+                let packed_byte = ctx.ld_global_u8(nibble_addr);
+                let packed_u32 = ctx.cvt_u32_u8(packed_byte);
 
-                // Load pass 1: element at tid + 1024 (if < 2048)
-                {
-                    let pass1_idx = ctx.add_u32_reg(tid, block_threads);
-                    let pass1_valid = ctx.setp_lt_u32(pass1_idx, tile_m_times_k);
-                    ctx.branch_if_not(pass1_valid, "skip_a_pass1");
-
-                    let a_tile_row = ctx.div_u32(pass1_idx, TILE_K);
-                    let a_tile_col = ctx.rem_u32(pass1_idx, TILE_K);
-
-                    let a_g_row = ctx.add_u32_reg(out_row, a_tile_row);
-                    let a_g_col = ctx.add_u32_reg(k_base, a_tile_col);
-
-                    let a_g_row_c = ctx.min_u32(a_g_row, m_minus_1);
-                    let a_g_col_c = ctx.min_u32(a_g_col, k_minus_1);
-
-                    let a_row_off = ctx.mul_wide_u32_reg(a_g_row_c, k_param);
-                    let a_col_off = ctx.cvt_u64_u32(a_g_col_c);
-                    let a_elem_off = ctx.add_u64(a_row_off, a_col_off);
-                    let a_byte_off = ctx.mul_u64(a_elem_off, 4);
-                    let a_addr = ctx.add_u64(a_ptr, a_byte_off);
-                    let a_val = ctx.ld_global_f32(a_addr);
-
-                    let sa_byte = ctx.mul_u32(pass1_idx, 4);
-                    let sa_smem = ctx.add_u32(sa_byte, SMEM_A_OFFSET);
-                    ctx.st_shared_f32(sa_smem, a_val);
-
-                    ctx.label("skip_a_pass1");
-                }
-
-                // =====================================================
-                // Phase 2: Cooperative load of B tile with on-the-fly
-                //           NF4 dequantization into shared memory
-                // =====================================================
-                // s_B[TILE_K][TILE_N] = dequant(B_nf4) for columns
-                //   out_col..out_col+TILE_N, block block_idx
-                // TILE_K × TILE_N = 64 × 32 = 2048 elements → 2 loads per thread
-                //
-                // For element i: k_in_block = i / TILE_N, col_in_tile = i % TILE_N
-                // B column = out_col + col_in_tile
-                // NF4 block index = col * num_k_blocks + block_idx
-                let tile_k_times_n = ctx.mov_u32_imm(TILE_K * TILE_N); // 2048
-
-                // Load pass 0: element at tid
-                {
-                    let b_k_local = ctx.div_u32(tid, TILE_N);
-                    let b_col_local = ctx.rem_u32(tid, TILE_N);
-
-                    let b_g_col = ctx.add_u32_reg(out_col, b_col_local);
-                    let b_g_col_c = ctx.min_u32(b_g_col, n_minus_1);
-
-                    // NF4 block index: col * num_k_blocks + block_idx
-                    let col_block_off = ctx.mul_u32_reg(b_g_col_c, num_k_blocks);
-                    let scale_idx = ctx.add_u32_reg(col_block_off, block_idx);
-
-                    // Load scale
-                    let scale_byte_off = ctx.mul_wide_u32(scale_idx, 4);
-                    let scale_addr = ctx.add_u64(b_scales_ptr, scale_byte_off);
-                    let scale = ctx.ld_global_f32(scale_addr);
-
-                    // Load packed NF4 data
-                    let data_block_off = ctx.mul_wide_u32(scale_idx, 32);
-                    let data_block_addr = ctx.add_u64(b_nf4_ptr, data_block_off);
-
-                    // NF4 byte = b_k_local / 2, nibble = b_k_local % 2
-                    let byte_in_blk = ctx.div_u32(b_k_local, 2);
-                    let nibble_sel = ctx.rem_u32(b_k_local, 2);
-
-                    let byte_off_64 = ctx.cvt_u64_u32(byte_in_blk);
-                    let nib_addr = ctx.add_u64(data_block_addr, byte_off_64);
-                    let packed = ctx.ld_global_u8(nib_addr);
-                    let packed_u32 = ctx.cvt_u32_u8(packed);
-
-                    let four = ctx.mov_u32_imm(4);
-                    let shift = ctx.mul_u32_reg(nibble_sel, four);
-                    let shifted = ctx.shr_u32(packed_u32, shift);
-                    let mask = ctx.mov_u32_imm(0xF);
-                    let nf4_idx = ctx.and_u32(shifted, mask);
-
-                    // LUT lookup from shared memory
-                    let lut_off = ctx.mul_u32(nf4_idx, 4);
-                    let lut_smem = ctx.add_u32(lut_off, SMEM_LUT_OFFSET);
-                    let codebook_val = ctx.ld_shared_f32(lut_smem);
-
-                    // Dequantize: val = scale * codebook_val
-                    let dequant = ctx.mul_f32(scale, codebook_val);
-
-                    // Store to s_B[b_k_local * TILE_N + b_col_local]
-                    let sb_byte = ctx.mul_u32(tid, 4);
-                    let sb_smem = ctx.add_u32(sb_byte, SMEM_B_OFFSET);
-                    ctx.st_shared_f32(sb_smem, dequant);
-                }
-
-                // Load pass 1: element at tid + 1024 (if < 2048)
-                {
-                    let pass1_idx = ctx.add_u32_reg(tid, block_threads);
-                    let pass1_valid = ctx.setp_lt_u32(pass1_idx, tile_k_times_n);
-                    ctx.branch_if_not(pass1_valid, "skip_b_pass1");
-
-                    let b_k_local = ctx.div_u32(pass1_idx, TILE_N);
-                    let b_col_local = ctx.rem_u32(pass1_idx, TILE_N);
-
-                    let b_g_col = ctx.add_u32_reg(out_col, b_col_local);
-                    let b_g_col_c = ctx.min_u32(b_g_col, n_minus_1);
-
-                    let col_block_off = ctx.mul_u32_reg(b_g_col_c, num_k_blocks);
-                    let scale_idx = ctx.add_u32_reg(col_block_off, block_idx);
-
-                    let scale_byte_off = ctx.mul_wide_u32(scale_idx, 4);
-                    let scale_addr = ctx.add_u64(b_scales_ptr, scale_byte_off);
-                    let scale = ctx.ld_global_f32(scale_addr);
-
-                    let data_block_off = ctx.mul_wide_u32(scale_idx, 32);
-                    let data_block_addr = ctx.add_u64(b_nf4_ptr, data_block_off);
-
-                    let byte_in_blk = ctx.div_u32(b_k_local, 2);
-                    let nibble_sel = ctx.rem_u32(b_k_local, 2);
-
-                    let byte_off_64 = ctx.cvt_u64_u32(byte_in_blk);
-                    let nib_addr = ctx.add_u64(data_block_addr, byte_off_64);
-                    let packed = ctx.ld_global_u8(nib_addr);
-                    let packed_u32 = ctx.cvt_u32_u8(packed);
-
-                    let four = ctx.mov_u32_imm(4);
-                    let shift = ctx.mul_u32_reg(nibble_sel, four);
-                    let shifted = ctx.shr_u32(packed_u32, shift);
-                    let mask = ctx.mov_u32_imm(0xF);
-                    let nf4_idx = ctx.and_u32(shifted, mask);
-
-                    let lut_off = ctx.mul_u32(nf4_idx, 4);
-                    let lut_smem = ctx.add_u32(lut_off, SMEM_LUT_OFFSET);
-                    let codebook_val = ctx.ld_shared_f32(lut_smem);
-
-                    let dequant = ctx.mul_f32(scale, codebook_val);
-
-                    let sb_byte = ctx.mul_u32(pass1_idx, 4);
-                    let sb_smem = ctx.add_u32(sb_byte, SMEM_B_OFFSET);
-                    ctx.st_shared_f32(sb_smem, dequant);
-
-                    ctx.label("skip_b_pass1");
-                }
-
-                // =====================================================
-                // Phase 3: Barrier — tiles are loaded
-                // =====================================================
-                ctx.bar_sync(0);
-
-                // =====================================================
-                // Phase 4: Compute — each thread accumulates its dot product
-                //   from shared memory tiles
-                // =====================================================
-                // acc += sum_{k=0..TILE_K-1} s_A[local_row][k] * s_B[k][local_col]
-                //
-                // s_A layout: row-major [TILE_M][TILE_K] at SMEM_A_OFFSET
-                //   s_A[r][k] at byte offset = SMEM_A_OFFSET + (r * TILE_K + k) * 4
-                //
-                // s_B layout: row-major [TILE_K][TILE_N] at SMEM_B_OFFSET
-                //   s_B[k][c] at byte offset = SMEM_B_OFFSET + (k * TILE_N + c) * 4
+                // Extract 4-bit index
                 let four = ctx.mov_u32_imm(4);
-                let tile_k_reg = ctx.mov_u32_imm(TILE_K);
-                let tile_n_reg = ctx.mov_u32_imm(TILE_N);
+                let shift = ctx.mul_u32_reg(nibble_idx, four);
+                let shifted = ctx.shr_u32(packed_u32, shift);
+                let mask_4bit = ctx.mov_u32_imm(0xF);
+                let nf4_idx = ctx.and_u32(shifted, mask_4bit);
 
-                // Precompute row base for s_A: SMEM_A_OFFSET + local_row * TILE_K * 4
-                let sa_row_elems = ctx.mul_u32_reg(local_row, tile_k_reg);
-                let sa_row_bytes = ctx.mul_u32_reg(sa_row_elems, four);
-                let sa_row_base = ctx.add_u32(sa_row_bytes, SMEM_A_OFFSET);
+                // Codebook lookup via shared memory
+                let nf4_idx_64 = ctx.cvt_u64_u32(nf4_idx);
+                let lut_byte_offset = ctx.mul_u64(nf4_idx_64, 4);
+                let lut_addr = ctx.add_u64(smem_base, lut_byte_offset);
+                let normalized_val = ctx.ld_generic_f32(lut_addr);
 
-                // Precompute col offset for s_B: local_col * 4
-                let sb_col_bytes = ctx.mul_u32_reg(local_col, four);
+                // Dequantize: val = scale × codebook_value
+                let dequant = ctx.mul_f32(scale, normalized_val);
 
-                // Inner loop: k = 0..TILE_K
-                let k_idx = ctx.mov_u32_imm(0);
+                // Load activation A[clamped_row, block_k_base + elem_idx]
+                let k_offset = ctx.add_u32_reg(block_k_base, elem_idx);
+                let k_offset_64 = ctx.cvt_u64_u32(k_offset);
+                let a_elem_offset = ctx.add_u64(a_row_offset, k_offset_64);
+                let a_elem_bytes = ctx.mul_u64(a_elem_offset, 4);
+                let a_addr = ctx.add_u64(a_ptr, a_elem_bytes);
 
-                ctx.label("k_loop");
-                let k_done = ctx.setp_ge_u32(k_idx, tile_k_reg);
-                ctx.branch_if(k_done, "k_loop_done");
+                let a_val = ctx.ld_global_f32(a_addr);
 
-                // s_A[local_row][k_idx]: offset = sa_row_base + k_idx * 4
-                let sa_k_bytes = ctx.mul_u32_reg(k_idx, four);
-                let sa_addr = ctx.add_u32_reg(sa_row_base, sa_k_bytes);
-                let a_val = ctx.ld_shared_f32(sa_addr);
+                // acc += a_val * dequant (FMA)
+                ctx.fma_f32_inplace(acc, a_val, dequant);
 
-                // s_B[k_idx][local_col]: offset = SMEM_B_OFFSET + (k_idx * TILE_N + local_col) * 4
-                let sb_k_row = ctx.mul_u32_reg(k_idx, tile_n_reg);
-                let sb_k_row_bytes = ctx.mul_u32_reg(sb_k_row, four);
-                let sb_base = ctx.add_u32(sb_k_row_bytes, SMEM_B_OFFSET);
-                let sb_addr = ctx.add_u32_reg(sb_base, sb_col_bytes);
-                let b_val = ctx.ld_shared_f32(sb_addr);
+                ctx.add_u32_inplace(elem_idx, 1);
+                ctx.branch("elem_loop");
 
-                // acc += a_val * b_val
-                ctx.fma_f32_inplace(acc, a_val, b_val);
-
-                ctx.add_u32_inplace(k_idx, 1);
-                ctx.branch("k_loop");
-
-                ctx.label("k_loop_done");
-
-                // =====================================================
-                // Phase 5: Barrier — wait for all threads before next tile
-                // =====================================================
-                ctx.bar_sync(0);
+                ctx.label("elem_loop_done");
 
                 ctx.add_u32_inplace(block_idx, 1);
-                ctx.branch("tile_loop");
+                ctx.branch("block_loop");
 
-                ctx.label("tile_loop_done");
+                ctx.label("block_loop_done");
 
                 // =========================================================
                 // Store result (only for valid threads)
@@ -706,19 +493,11 @@ mod tests {
         assert!(ptx.contains("b_scales_ptr"), "PTX missing b_scales_ptr param");
         assert!(ptx.contains("c_ptr"), "PTX missing c_ptr param");
 
-        // Verify shared memory usage (LUT + A tile + B tile = 16448 bytes)
+        // Verify shared memory usage (LUT)
         assert!(ptx.contains(".shared"), "PTX missing shared memory");
-        assert!(ptx.contains("smem[16448]"), "PTX missing tiled shared memory (16448 bytes)");
 
-        // Verify FMA instruction present (tiled accumulation from shared memory)
+        // Verify FMA instruction present (serial per-element accumulation)
         assert!(ptx.contains("fma"), "PTX missing fma instruction");
-
-        // Verify barrier synchronization present (cooperative tiling requires barriers)
-        assert!(ptx.contains("bar.sync"), "PTX missing bar.sync for tile synchronization");
-
-        // Verify shared memory load/store (tiled kernel uses ld.shared / st.shared)
-        assert!(ptx.contains("ld.shared"), "PTX missing ld.shared for tile reads");
-        assert!(ptx.contains("st.shared"), "PTX missing st.shared for tile writes");
     }
 
     #[test]
@@ -764,51 +543,6 @@ mod tests {
     fn test_nf4_gemm_transpose_num_blocks() {
         let kernel = Nf4GemmTransposeKernel::new(128, 2560, 2560);
         assert_eq!(kernel.num_blocks_per_col(), 40); // 2560/64
-    }
-
-    #[test]
-    fn test_nf4_gemm_tiled_smem_layout() {
-        // Validate shared memory layout constants
-        assert_eq!(SMEM_LUT_OFFSET, 0);
-        assert_eq!(SMEM_LUT_BYTES, 64); // 16 × f32
-        assert_eq!(SMEM_A_OFFSET, 64);
-        assert_eq!(SMEM_A_BYTES, 8192); // 32 × 64 × 4
-        assert_eq!(SMEM_B_OFFSET, 8256); // 64 + 8192
-        assert_eq!(SMEM_B_BYTES, 8192); // 64 × 32 × 4
-        assert_eq!(SMEM_TOTAL, 16448); // 64 + 8192 + 8192
-
-        // Validate tile dimensions
-        assert_eq!(TILE_M, 32);
-        assert_eq!(TILE_N, 32);
-        assert_eq!(TILE_K, NF4_BLOCK_SIZE_U32); // 64
-
-        // 1024 threads per block = TILE_M × TILE_N
-        assert_eq!(TILE_M * TILE_N, 1024);
-
-        // 2048 elements per A tile / B tile, 2 passes of 1024 threads
-        assert_eq!(TILE_M * TILE_K, 2048);
-        assert_eq!(TILE_K * TILE_N, 2048);
-
-        // Total shared memory fits within 48KB hardware limit
-        assert!(SMEM_TOTAL <= 48 * 1024, "Shared memory exceeds 48KB limit");
-    }
-
-    #[test]
-    fn test_nf4_gemm_tiled_barrier_safety() {
-        // The tiled kernel has bar.sync calls inside a loop, which requires
-        // all threads to reach the barrier (no early exit before barrier).
-        // Verify that the OOB check is AFTER the tile loop, not before.
-        let kernel = Nf4GemmKernel::new(128, 128, 128);
-        let ptx = kernel.emit_ptx();
-
-        // Count barriers: should have 3 total (1 for LUT load, 2 per tile iteration in loop)
-        let bar_count = ptx.matches("bar.sync").count();
-        assert!(bar_count >= 3, "Expected at least 3 bar.sync (LUT + tile loop), got {bar_count}");
-
-        // Verify exit label comes AFTER tile_loop_done
-        let tile_done_pos = ptx.find("tile_loop_done").expect("missing tile_loop_done label");
-        let exit_pos = ptx.find("exit:").expect("missing exit label");
-        assert!(exit_pos > tile_done_pos, "exit label must come after tile_loop_done");
     }
 
     #[test]
