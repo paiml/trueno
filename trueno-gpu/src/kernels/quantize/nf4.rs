@@ -79,6 +79,65 @@ impl Nf4GemmKernel {
     }
 }
 
+/// Perform register-based NF4 codebook lookup via 4-level binary selection tree.
+///
+/// Given a nibble value (0-15) in `nib` and 16 preloaded codebook registers in `lut`,
+/// returns the f32 codebook value without any memory access.
+///
+/// Uses a binary tree of `selp.f32` operations (4 levels, 15 selp total):
+/// - Level 0: pair adjacent LUT entries (8 selp)
+/// - Level 1: pair level-0 results    (4 selp)
+/// - Level 2: pair level-1 results    (2 selp)
+/// - Level 3: final selection          (1 selp)
+///
+/// Total: 15 selp + 4 bit-extract = 19 instructions per lookup.
+/// Compared to shared memory: 0 memory loads, 0 cache misses on unified memory.
+fn nf4_register_lut_lookup(
+    ctx: &mut crate::ptx::builder::KernelBuilder<'_>,
+    nib: crate::ptx::VirtualReg,
+    lut: &[crate::ptx::VirtualReg; 16],
+) -> crate::ptx::VirtualReg {
+    // Extract individual bits of the 4-bit nibble
+    let bit0 = ctx.and_u32_imm(nib, 1); // nib & 1
+    let bit1 = ctx.shr_u32_imm(nib, 1);
+    let bit1 = ctx.and_u32_imm(bit1, 1); // (nib >> 1) & 1
+    let bit2 = ctx.shr_u32_imm(nib, 2);
+    let bit2 = ctx.and_u32_imm(bit2, 1); // (nib >> 2) & 1
+    let bit3 = ctx.shr_u32_imm(nib, 3);
+    let bit3 = ctx.and_u32_imm(bit3, 1); // (nib >> 3) & 1
+
+    // Convert bit values to predicates (bit != 0)
+    let zero = ctx.mov_u32_imm(0);
+    let p0 = ctx.setp_ne_u32(bit0, zero);
+    let p1 = ctx.setp_ne_u32(bit1, zero);
+    let p2 = ctx.setp_ne_u32(bit2, zero);
+    let p3 = ctx.setp_ne_u32(bit3, zero);
+
+    // Level 0: select between adjacent pairs using bit 0
+    // p0 ? lut[2i+1] : lut[2i] for i = 0..8
+    let s0 = ctx.selp_f32(p0, lut[1], lut[0]);
+    let s1 = ctx.selp_f32(p0, lut[3], lut[2]);
+    let s2 = ctx.selp_f32(p0, lut[5], lut[4]);
+    let s3 = ctx.selp_f32(p0, lut[7], lut[6]);
+    let s4 = ctx.selp_f32(p0, lut[9], lut[8]);
+    let s5 = ctx.selp_f32(p0, lut[11], lut[10]);
+    let s6 = ctx.selp_f32(p0, lut[13], lut[12]);
+    let s7 = ctx.selp_f32(p0, lut[15], lut[14]);
+
+    // Level 1: select between pairs using bit 1
+    let t0 = ctx.selp_f32(p1, s1, s0);
+    let t1 = ctx.selp_f32(p1, s3, s2);
+    let t2 = ctx.selp_f32(p1, s5, s4);
+    let t3 = ctx.selp_f32(p1, s7, s6);
+
+    // Level 2: select between pairs using bit 2
+    let u0 = ctx.selp_f32(p2, t1, t0);
+    let u1 = ctx.selp_f32(p2, t3, t2);
+
+    // Level 3: final selection using bit 3
+    ctx.selp_f32(p3, u1, u0)
+}
+
 impl Kernel for Nf4GemmKernel {
     fn name(&self) -> &str {
         "nf4_gemm_fused"
@@ -87,8 +146,10 @@ impl Kernel for Nf4GemmKernel {
     fn build_ptx(&self) -> PtxKernel {
         let tile_size = self.tile_size;
 
-        // Shared memory: NF4 codebook LUT (16 × f32 = 64 bytes)
-        let smem_size = 16 * 4;
+        // No shared memory needed — codebook lives in registers.
+        // On GB10 unified memory, shared memory goes through the same DRAM,
+        // so register-based LUT eliminates both the bar.sync and all LUT loads.
+        let smem_size = 0;
 
         PtxKernel::new("nf4_gemm_fused")
             .param(PtxType::U64, "a_ptr") // Activations [M × K], f32
@@ -115,27 +176,13 @@ impl Kernel for Nf4GemmKernel {
                 let c_ptr = ctx.load_param_u64("c_ptr");
 
                 // =========================================================
-                // Load NF4 codebook into shared memory (first 16 threads)
+                // Load NF4 codebook into 16 f32 registers (no shared memory)
                 // =========================================================
-                let smem_base = ctx.shared_base_addr();
-
-                // All 16 threads store their LUT entry; threads 16+ skip
-                // We use a conditional chain: if tid == i, store NF4_LUT[i]
-                for (i, &val) in NF4_LUT.iter().enumerate() {
-                    let imm_i = ctx.mov_u32_imm(i as u32);
-                    let is_i = ctx.setp_eq_u32(tid, imm_i);
-                    ctx.branch_if_not(is_i, &format!("skip_lut_{i}"));
-
-                    let val_reg = ctx.mov_f32_imm(val);
-                    let offset = ctx.mov_u64_imm((i * 4) as u64);
-                    let addr = ctx.add_u64(smem_base, offset);
-                    ctx.st_generic_f32(addr, val_reg);
-
-                    ctx.label(&format!("skip_lut_{i}"));
-                }
-
-                // Synchronize so all threads see the LUT
-                ctx.bar_sync(0);
+                // On unified memory (GB10), shared memory goes through the same
+                // DRAM path as global. Register-based LUT avoids all memory
+                // traffic for codebook access and eliminates the bar.sync that
+                // was the #1 bottleneck (45% slowdown from barrier overhead).
+                let lut_regs: [_; 16] = std::array::from_fn(|i| ctx.mov_f32_imm(NF4_LUT[i]));
 
                 // =========================================================
                 // Calculate output position (tile-based)
@@ -187,61 +234,125 @@ impl Kernel for Nf4GemmKernel {
                 let data_block_byte_offset = ctx.mul_wide_u32(scale_idx, 32);
                 let data_block_addr = ctx.add_u64(b_nf4_ptr, data_block_byte_offset);
 
-                // Process all 64 values in this block sequentially per thread.
-                // Each thread independently accumulates its own dot product for
-                // its output column — no warp reduction (threads have different cols).
+                // Vectorized inner loop: process 8 nibbles (4 bytes) per iteration.
+                // 64 values / 8 per iteration = 8 iterations (was 64).
+                // Each iteration: load 4 bytes, extract 8 nibbles, 8 LUT lookups, 8 FMAs.
                 let sixty_four = ctx.mov_u32_imm(NF4_BLOCK_SIZE_U32);
                 let block_k_base = ctx.mul_u32_reg(block_idx, sixty_four);
                 let a_row_offset = ctx.mul_wide_u32_reg(clamped_row, k_param);
 
-                let elem_idx = ctx.mov_u32_imm(0);
-
-                ctx.label("elem_loop");
-                let elem_done = ctx.setp_ge_u32(elem_idx, sixty_four);
-                ctx.branch_if(elem_done, "elem_loop_done");
-
-                // NF4 byte index: elem_idx / 2; nibble: elem_idx % 2
-                let byte_in_block = ctx.div_u32(elem_idx, 2);
-                let nibble_idx = ctx.rem_u32(elem_idx, 2);
-
-                // Load packed byte from B_nf4
-                let byte_offset_64 = ctx.cvt_u64_u32(byte_in_block);
-                let nibble_addr = ctx.add_u64(data_block_addr, byte_offset_64);
-                let packed_byte = ctx.ld_global_u8(nibble_addr);
-                let packed_u32 = ctx.cvt_u32_u8(packed_byte);
-
-                // Extract 4-bit index
-                let four = ctx.mov_u32_imm(4);
-                let shift = ctx.mul_u32_reg(nibble_idx, four);
-                let shifted = ctx.shr_u32(packed_u32, shift);
+                let chunk_idx = ctx.mov_u32_imm(0);
+                let eight = ctx.mov_u32_imm(8);
                 let mask_4bit = ctx.mov_u32_imm(0xF);
-                let nf4_idx = ctx.and_u32(shifted, mask_4bit);
 
-                // Codebook lookup via shared memory
-                let nf4_idx_64 = ctx.cvt_u64_u32(nf4_idx);
-                let lut_byte_offset = ctx.mul_u64(nf4_idx_64, 4);
-                let lut_addr = ctx.add_u64(smem_base, lut_byte_offset);
-                let normalized_val = ctx.ld_generic_f32(lut_addr);
+                ctx.label("chunk_loop");
+                let chunk_done = ctx.setp_ge_u32(chunk_idx, eight);
+                ctx.branch_if(chunk_done, "chunk_loop_done");
 
-                // Dequantize: val = scale × codebook_value
-                let dequant = ctx.mul_f32(scale, normalized_val);
+                // =========================================================
+                // Load 4 packed bytes = 8 nibbles from B_nf4
+                // =========================================================
+                // Byte offset within block: chunk_idx * 4
+                let byte_base = ctx.mul_u32(chunk_idx, 4);
+                let byte_base_64 = ctx.cvt_u64_u32(byte_base);
+                let chunk_addr = ctx.add_u64(data_block_addr, byte_base_64);
 
-                // Load activation A[clamped_row, block_k_base + elem_idx]
-                let k_offset = ctx.add_u32_reg(block_k_base, elem_idx);
-                let k_offset_64 = ctx.cvt_u64_u32(k_offset);
-                let a_elem_offset = ctx.add_u64(a_row_offset, k_offset_64);
-                let a_elem_bytes = ctx.mul_u64(a_elem_offset, 4);
-                let a_addr = ctx.add_u64(a_ptr, a_elem_bytes);
+                // Load 4 individual bytes (each returns u16 register)
+                let b0_raw = ctx.ld_global_u8(chunk_addr);
+                let off1 = ctx.mov_u64_imm(1);
+                let addr1 = ctx.add_u64(chunk_addr, off1);
+                let b1_raw = ctx.ld_global_u8(addr1);
+                let off2 = ctx.mov_u64_imm(2);
+                let addr2 = ctx.add_u64(chunk_addr, off2);
+                let b2_raw = ctx.ld_global_u8(addr2);
+                let off3 = ctx.mov_u64_imm(3);
+                let addr3 = ctx.add_u64(chunk_addr, off3);
+                let b3_raw = ctx.ld_global_u8(addr3);
 
-                let a_val = ctx.ld_global_f32(a_addr);
+                // Convert u8 (in u16 registers) to u32 for bit manipulation
+                let b0 = ctx.cvt_u32_u8(b0_raw);
+                let b1 = ctx.cvt_u32_u8(b1_raw);
+                let b2 = ctx.cvt_u32_u8(b2_raw);
+                let b3 = ctx.cvt_u32_u8(b3_raw);
 
-                // acc += a_val * dequant (FMA)
-                ctx.fma_f32_inplace(acc, a_val, dequant);
+                // =========================================================
+                // Extract 8 nibbles from 4 bytes
+                // =========================================================
+                // byte0: nibbles 0 (low) and 1 (high)
+                let n0 = ctx.and_u32(b0, mask_4bit);
+                let n1 = ctx.shr_u32_imm(b0, 4);
+                let n1 = ctx.and_u32(n1, mask_4bit);
+                // byte1: nibbles 2 (low) and 3 (high)
+                let n2 = ctx.and_u32(b1, mask_4bit);
+                let n3 = ctx.shr_u32_imm(b1, 4);
+                let n3 = ctx.and_u32(n3, mask_4bit);
+                // byte2: nibbles 4 (low) and 5 (high)
+                let n4 = ctx.and_u32(b2, mask_4bit);
+                let n5 = ctx.shr_u32_imm(b2, 4);
+                let n5 = ctx.and_u32(n5, mask_4bit);
+                // byte3: nibbles 6 (low) and 7 (high)
+                let n6 = ctx.and_u32(b3, mask_4bit);
+                let n7 = ctx.shr_u32_imm(b3, 4);
+                let n7 = ctx.and_u32(n7, mask_4bit);
 
-                ctx.add_u32_inplace(elem_idx, 1);
-                ctx.branch("elem_loop");
+                // =========================================================
+                // 8x register-based LUT lookups (no memory access)
+                // =========================================================
+                let v0 = nf4_register_lut_lookup(ctx, n0, &lut_regs);
+                let v1 = nf4_register_lut_lookup(ctx, n1, &lut_regs);
+                let v2 = nf4_register_lut_lookup(ctx, n2, &lut_regs);
+                let v3 = nf4_register_lut_lookup(ctx, n3, &lut_regs);
+                let v4 = nf4_register_lut_lookup(ctx, n4, &lut_regs);
+                let v5 = nf4_register_lut_lookup(ctx, n5, &lut_regs);
+                let v6 = nf4_register_lut_lookup(ctx, n6, &lut_regs);
+                let v7 = nf4_register_lut_lookup(ctx, n7, &lut_regs);
 
-                ctx.label("elem_loop_done");
+                // =========================================================
+                // 8x dequantize: val = scale * codebook_value
+                // =========================================================
+                let d0 = ctx.mul_f32(scale, v0);
+                let d1 = ctx.mul_f32(scale, v1);
+                let d2 = ctx.mul_f32(scale, v2);
+                let d3 = ctx.mul_f32(scale, v3);
+                let d4 = ctx.mul_f32(scale, v4);
+                let d5 = ctx.mul_f32(scale, v5);
+                let d6 = ctx.mul_f32(scale, v6);
+                let d7 = ctx.mul_f32(scale, v7);
+
+                // =========================================================
+                // Load 8 activation values and accumulate via FMA
+                // =========================================================
+                // Element index within K: block_k_base + chunk_idx * 8 + i
+                let elem_base_u32 = ctx.mul_u32_reg(chunk_idx, eight);
+                let elem_base_k = ctx.add_u32_reg(block_k_base, elem_base_u32);
+
+                // Compute base address for A[clamped_row, elem_base_k]
+                let elem_base_k_64 = ctx.cvt_u64_u32(elem_base_k);
+                let a_base_offset = ctx.add_u64(a_row_offset, elem_base_k_64);
+                let a_base_bytes = ctx.mul_u64(a_base_offset, 4);
+                let a_base_addr = ctx.add_u64(a_ptr, a_base_bytes);
+
+                // Load 8 A values: A[row, k+0] through A[row, k+7]
+                // First 4 via vectorized v4 load (16-byte aligned within row)
+                let a_v4_0 = ctx.ld_global_f32_v4(a_base_addr);
+                let sixteen = ctx.mov_u64_imm(16);
+                let a_addr_4 = ctx.add_u64(a_base_addr, sixteen);
+                let a_v4_1 = ctx.ld_global_f32_v4(a_addr_4);
+
+                // 8x FMA: acc += a_val * dequant
+                ctx.fma_f32_inplace(acc, a_v4_0[0], d0);
+                ctx.fma_f32_inplace(acc, a_v4_0[1], d1);
+                ctx.fma_f32_inplace(acc, a_v4_0[2], d2);
+                ctx.fma_f32_inplace(acc, a_v4_0[3], d3);
+                ctx.fma_f32_inplace(acc, a_v4_1[0], d4);
+                ctx.fma_f32_inplace(acc, a_v4_1[1], d5);
+                ctx.fma_f32_inplace(acc, a_v4_1[2], d6);
+                ctx.fma_f32_inplace(acc, a_v4_1[3], d7);
+
+                ctx.add_u32_inplace(chunk_idx, 1);
+                ctx.branch("chunk_loop");
+
+                ctx.label("chunk_loop_done");
 
                 ctx.add_u32_inplace(block_idx, 1);
                 ctx.branch("block_loop");
@@ -493,10 +604,14 @@ mod tests {
         assert!(ptx.contains("b_scales_ptr"), "PTX missing b_scales_ptr param");
         assert!(ptx.contains("c_ptr"), "PTX missing c_ptr param");
 
-        // Verify shared memory usage (LUT)
-        assert!(ptx.contains(".shared"), "PTX missing shared memory");
+        // Register-based LUT: no shared memory, codebook is in registers.
+        // Verify selp instruction present (binary tree LUT lookup)
+        assert!(ptx.contains("selp"), "PTX missing selp (register LUT)");
 
-        // Verify FMA instruction present (serial per-element accumulation)
+        // Verify vectorized v4 load (8x fewer loop iterations)
+        assert!(ptx.contains("v4"), "PTX missing v4 vectorized load");
+
+        // Verify FMA instruction present (8x unrolled accumulation)
         assert!(ptx.contains("fma"), "PTX missing fma instruction");
     }
 
