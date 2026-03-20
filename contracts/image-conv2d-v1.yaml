@@ -57,6 +57,11 @@ falsification_tests:
     test: "test_canny_uniform_no_edges"
     prediction: "verified"
     if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-IMG-004
+    rule: "Constant image preservation under Gaussian"
+    test: "test_gaussian_constant_image"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
 
 kani_harnesses:
   - id: KANI-IMAGE_CONV2D-001

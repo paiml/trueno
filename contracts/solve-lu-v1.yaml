@@ -44,6 +44,11 @@ falsification_tests:
     test: "test_lu_singular_detected"
     prediction: "verified"
     if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-LU-003
+    rule: "Solution residual"
+    test: "test_lu_solution_residual"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
 
 kani_harnesses:
   - id: KANI-SOLVE_LU-001

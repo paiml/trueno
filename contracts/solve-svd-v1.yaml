@@ -54,6 +54,11 @@ falsification_tests:
     test: "test_svd_orthogonality_u"
     prediction: "verified"
     if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-SVD-004
+    rule: "Singular values non-negative"
+    test: "test_svd_singular_values_nonneg"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
 
 kani_harnesses:
   - id: KANI-SOLVE_SVD-001
