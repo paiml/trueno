@@ -105,6 +105,9 @@ pub mod cublaslt_sys;
 // GH-480: PTX backward branch patcher (not feature-gated — pure string transform)
 pub(crate) mod ptx_patch;
 
+// PTX disk cache utilities (not feature-gated — SHA-256, cache I/O testable without CUDA)
+pub(crate) mod ptx_cache;
+
 // Re-export for use without cuda feature (types only)
 mod types;
 pub use types::*;

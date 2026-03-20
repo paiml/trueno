@@ -64,6 +64,9 @@ pub type CUgraphExec = *mut c_void;
 /// CUDA event handle (opaque pointer)
 pub type CUevent = *mut c_void;
 
+/// CUDA linker state handle (opaque pointer) — for PTX→cubin compilation
+pub type CUlinkState = *mut c_void;
+
 // ============================================================================
 // CUDA Error Codes (subset we handle)
 // ============================================================================
@@ -111,6 +114,13 @@ pub const CU_JIT_TARGET: c_uint = 9;
 pub const CU_JIT_ERROR_LOG_BUFFER: c_uint = 5;
 /// CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES - Size of error log buffer
 pub const CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES: c_uint = 6;
+
+// ============================================================================
+// CUDA JIT Input Types (for cuLinkAddData)
+// ============================================================================
+
+/// CU_JIT_INPUT_PTX - PTX source input for the linker
+pub const CU_JIT_INPUT_PTX: c_uint = 1;
 
 // ============================================================================
 // CUDA Compute Capability Target Values (for CU_JIT_TARGET)
@@ -301,6 +311,40 @@ pub struct CudaDriver {
     pub cuEventQuery: unsafe extern "C" fn(event: CUevent) -> CUresult,
     /// cuEventSynchronize - Wait for event completion (blocking)
     pub cuEventSynchronize: unsafe extern "C" fn(event: CUevent) -> CUresult,
+
+    // Linker API (PTX disk cache: PTX→cubin compilation + extraction)
+    /// cuLinkCreate - Create a linker invocation
+    #[allow(clippy::type_complexity)]
+    pub cuLinkCreate: unsafe extern "C" fn(
+        num_options: c_uint,
+        options: *mut c_uint,
+        option_values: *mut *mut c_void,
+        state_out: *mut CUlinkState,
+    ) -> CUresult,
+    /// cuLinkAddData - Add PTX/cubin data to a linker invocation
+    #[allow(clippy::type_complexity)]
+    pub cuLinkAddData: unsafe extern "C" fn(
+        state: CUlinkState,
+        input_type: c_uint,
+        data: *mut c_void,
+        size: usize,
+        name: *const c_char,
+        num_options: c_uint,
+        options: *mut c_uint,
+        option_values: *mut *mut c_void,
+    ) -> CUresult,
+    /// cuLinkComplete - Complete a linker invocation and get cubin output
+    pub cuLinkComplete: unsafe extern "C" fn(
+        state: CUlinkState,
+        cubin_out: *mut *mut c_void,
+        size_out: *mut usize,
+    ) -> CUresult,
+    /// cuLinkDestroy - Destroy a linker invocation
+    pub cuLinkDestroy: unsafe extern "C" fn(state: CUlinkState) -> CUresult,
+
+    // Driver Version Query (PTX disk cache key component)
+    /// cuDriverGetVersion - Get CUDA driver version
+    pub cuDriverGetVersion: unsafe extern "C" fn(version: *mut c_int) -> CUresult,
 }
 
 // ============================================================================
@@ -442,6 +486,28 @@ mod loading {
                 type FnEventRecord = unsafe extern "C" fn(CUevent, CUstream) -> CUresult;
                 type FnEventQuery = unsafe extern "C" fn(CUevent) -> CUresult;
                 type FnEventSync = unsafe extern "C" fn(CUevent) -> CUresult;
+                // Linker types (PTX disk cache)
+                type FnLinkCreate = unsafe extern "C" fn(
+                    c_uint,
+                    *mut c_uint,
+                    *mut *mut c_void,
+                    *mut CUlinkState,
+                ) -> CUresult;
+                type FnLinkAddData = unsafe extern "C" fn(
+                    CUlinkState,
+                    c_uint,
+                    *mut c_void,
+                    usize,
+                    *const c_char,
+                    c_uint,
+                    *mut c_uint,
+                    *mut *mut c_void,
+                ) -> CUresult;
+                type FnLinkComplete =
+                    unsafe extern "C" fn(CUlinkState, *mut *mut c_void, *mut usize) -> CUresult;
+                type FnLinkDestroy = unsafe extern "C" fn(CUlinkState) -> CUresult;
+                // Driver version type
+                type FnDriverGetVersion = unsafe extern "C" fn(*mut c_int) -> CUresult;
 
                 Some(CudaDriver {
                     cuInit: load_sym!(cuInit, FnInit),
@@ -494,6 +560,13 @@ mod loading {
                     cuEventRecord: load_sym!(cuEventRecord, FnEventRecord),
                     cuEventQuery: load_sym!(cuEventQuery, FnEventQuery),
                     cuEventSynchronize: load_sym!(cuEventSynchronize, FnEventSync),
+                    // Linker functions (PTX disk cache)
+                    cuLinkCreate: load_sym!(cuLinkCreate, FnLinkCreate),
+                    cuLinkAddData: load_sym!(cuLinkAddData_v2, FnLinkAddData),
+                    cuLinkComplete: load_sym!(cuLinkComplete, FnLinkComplete),
+                    cuLinkDestroy: load_sym!(cuLinkDestroy, FnLinkDestroy),
+                    // Driver version
+                    cuDriverGetVersion: load_sym!(cuDriverGetVersion, FnDriverGetVersion),
                 })
             }
         }
