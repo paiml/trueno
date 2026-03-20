@@ -76,13 +76,16 @@ fn compile_ptx_to_cubin(
 
     let mut link_state: CUlinkState = ptr::null_mut();
 
-    // Create linker with JIT target option
-    let mut options: [c_uint; 1] = [CU_JIT_TARGET];
-    let mut option_values: [*mut c_void; 1] = [jit_target as *mut c_void];
+    // Create linker — pass no options (auto-detect target).
+    // On Blackwell (sm_121), passing CU_JIT_TARGET=90 makes the linker
+    // produce sm_90 cubin that cannot load on sm_121. Omitting the target
+    // lets the driver auto-detect and produce native cubin.
+    let num_options: c_uint = 0;
+    let _jit_target = jit_target; // keep parameter for cache key
 
-    // SAFETY: options arrays are valid for the lifetime of this call
+    // SAFETY: no options passed, null pointers are valid for 0-length arrays
     let result = unsafe {
-        (driver.cuLinkCreate)(1, options.as_mut_ptr(), option_values.as_mut_ptr(), &mut link_state)
+        (driver.cuLinkCreate)(num_options, ptr::null_mut(), ptr::null_mut(), &mut link_state)
     };
     CudaDriver::check(result)
         .map_err(|e| GpuError::ModuleLoad(format!("cuLinkCreate failed: {e}")))?;
@@ -257,6 +260,9 @@ impl CudaModule {
         // Try to compile PTX to cubin via linker API for caching
         let cubin_result = compile_ptx_to_cubin(driver, ptx, jit_target);
 
+        if let Err(ref e) = cubin_result {
+            eprintln!("[PTX-CACHE] Linker compilation failed: {e}, falling through to legacy JIT");
+        }
         if let Ok(cubin) = &cubin_result {
             // Save cubin to disk cache (best-effort, failures are silent)
             save_cached_cubin(&cache_key, cubin);
