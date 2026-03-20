@@ -76,16 +76,22 @@ fn compile_ptx_to_cubin(
 
     let mut link_state: CUlinkState = ptr::null_mut();
 
-    // Create linker — pass no options (auto-detect target).
-    // On Blackwell (sm_121), passing CU_JIT_TARGET=90 makes the linker
-    // produce sm_90 cubin that cannot load on sm_121. Omitting the target
-    // lets the driver auto-detect and produce native cubin.
-    let num_options: c_uint = 0;
-    let _jit_target = jit_target; // keep parameter for cache key
+    // PMAT-290: Pass CU_JIT_TARGET to the linker for proper optimization.
+    // Without it, the linker produces cubins ~12% slower than cuModuleLoadDataEx.
+    // Exception: Blackwell (sm_121+) where passing target causes miscompilation.
+    let use_jit_target = jit_target < 120; // sm_89 = 89, Blackwell = 121+
+    let mut opt_keys: [c_uint; 1] = [CU_JIT_TARGET];
+    let mut jit_target_val = jit_target;
+    let mut opt_vals: [*mut c_void; 1] = [std::ptr::from_mut(&mut jit_target_val) as *mut c_void];
 
-    // SAFETY: no options passed, null pointers are valid for 0-length arrays
-    let result = unsafe {
-        (driver.cuLinkCreate)(num_options, ptr::null_mut(), ptr::null_mut(), &mut link_state)
+    // SAFETY: option arrays are valid for the specified count
+    let result = if use_jit_target {
+        unsafe {
+            (driver.cuLinkCreate)(1, opt_keys.as_mut_ptr(), opt_vals.as_mut_ptr(), &mut link_state)
+        }
+    } else {
+        // Blackwell: no target, auto-detect
+        unsafe { (driver.cuLinkCreate)(0, ptr::null_mut(), ptr::null_mut(), &mut link_state) }
     };
     CudaDriver::check(result)
         .map_err(|e| GpuError::ModuleLoad(format!("cuLinkCreate failed: {e}")))?;
