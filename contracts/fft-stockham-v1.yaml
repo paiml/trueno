@@ -59,6 +59,11 @@ falsification_tests:
     test: "test_impulse_response, test_dc_signal"
     prediction: "verified"
     if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-FFT-004
+    rule: "FFT linearity"
+    test: "test_fft_linearity"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
 
 kani_harnesses:
   - id: KANI-FFT_STOCKHAM-001

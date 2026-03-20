@@ -226,30 +226,21 @@ qa_gate:
 
 proof_obligations:
   - type: equivalence
-    property: "SIMD and scalar implementations produce identical results"
-    formal: "For all valid inputs: simd_gemv-kernel(x) == scalar_gemv-kernel(x)"
+    property: "SIMD and scalar GEMV produce identical results"
+    formal: "For all valid inputs: gemv_avx2(a, B, c) == gemv_scalar(a, B, c)"
     proof_level: L1
 
 falsification_tests:
-  - id: F-GEMV_KERNEL-001
-    rule: "Correctness verified" # PO-GEMV_KERNEL-001
-    test: "test_gemv-kernel_simd_scalar_equivalence"
+  - id: F-GEMV-KERNEL-001
+    rule: "SIMD-scalar equivalence"
+    test: "test_gemv_basic"
     prediction: "verified"
-    if_fails: "Contract violation — implementation does not match specification"
-    strategy: "Compare SIMD and scalar outputs for random inputs"
+    if_fails: "Contract violation — SIMD and scalar paths diverge"
 
 kani_harnesses:
-  - id: KANI-GEMV_KERNEL-001
-    obligation: PO-GEMV_KERNEL-001
+  - id: KANI-GEMV-KERNEL-001
+    obligation: PO-GEMV-KERNEL-001
     property: "SIMD-scalar equivalence for bounded inputs"
     bound: 8
     strategy: bounded_int
-    harness: verify_gemv-kernel_equivalence
-
-qa_gate:
-  id: F-GEMV_KERNEL-GATE
-  name: "gemv-kernel kernel contract"
-  min_coverage: 0.90
-  max_complexity: 15
-  required_tests:
-    - "test_gemv-kernel_simd_scalar_equivalence"
+    harness: verify_gemv_kernel_equivalence
