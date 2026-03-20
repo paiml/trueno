@@ -68,3 +68,6 @@ proptest-regressions/
 
 # Machine-specific cargo config (contains local target-dir paths)
 .cargo/config.toml
+
+# Cruft
+*.tmp
