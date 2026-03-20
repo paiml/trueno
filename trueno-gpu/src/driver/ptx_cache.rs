@@ -230,7 +230,6 @@ pub(crate) fn save_cached_cubin(cache_key: &str, cubin: &[u8]) {
         return;
     }
     let path = dir.join(format!("{cache_key}.cubin"));
-    // Write to a temp file then rename for atomicity (prevent partial reads)
     let tmp_path = dir.join(format!("{cache_key}.cubin.tmp"));
     if std::fs::write(&tmp_path, cubin).is_ok() {
         let _ = std::fs::rename(&tmp_path, &path);
