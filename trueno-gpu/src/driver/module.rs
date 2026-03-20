@@ -1,12 +1,23 @@
-//! PTX Module Loading and JIT Compilation
+//! PTX Module Loading and JIT Compilation with Disk Cache
 //!
 //! Loads PTX source into GPU-executable modules.
 //! Uses OUR OWN FFI from driver/sys.rs - no external dependencies.
+//!
+//! # Disk Cache (PTX-CACHE)
+//!
+//! Compiled cubin blobs are cached to `~/.cache/trueno/ptx/{hash}.cubin`
+//! to eliminate the ~35-minute JIT warmup on training restarts.
+//!
+//! Cache key = SHA-256(patched PTX + compute capability + driver version).
+//! On cache hit, `cuModuleLoadData` loads the pre-compiled cubin instantly.
+//! On cache miss, the CUDA linker API compiles PTX to cubin, saves to disk,
+//! then loads the module.
 //!
 //! # Design Philosophy
 //!
 //! PTX is JIT-compiled to SASS (device assembly) at load time.
 //! This incurs one-time cost but enables runtime architecture targeting.
+//! The disk cache amortizes this cost across process restarts.
 //!
 //! # Citation
 //!
@@ -20,10 +31,11 @@ use std::ffi::c_void;
 use std::os::raw::c_uint;
 
 use super::context::{get_driver, CudaContext};
+use super::ptx_cache::{load_cached_cubin, ptx_cache_dir, ptx_cache_key, save_cached_cubin};
 use super::ptx_patch::patch_backward_branches_sm121;
 use super::sys::{
     CUfunction, CUmodule, CudaDriver, CU_JIT_ERROR_LOG_BUFFER, CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
-    CU_JIT_TARGET,
+    CU_JIT_INPUT_PTX, CU_JIT_TARGET,
 };
 use crate::GpuError;
 
@@ -33,6 +45,100 @@ const CU_JIT_INFO_LOG_BUFFER: c_uint = 3;
 const CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES: c_uint = 4;
 
 // ============================================================================
+// PTX Disk Cache Helpers (CUDA-dependent)
+// ============================================================================
+
+/// Query the CUDA driver version via `cuDriverGetVersion`.
+///
+/// Returns 0 if the query fails (cache key still valid, just less specific).
+fn query_driver_version(driver: &CudaDriver) -> i32 {
+    let mut version: i32 = 0;
+    // SAFETY: version is a valid pointer to stack-allocated i32
+    let result = unsafe { (driver.cuDriverGetVersion)(&mut version) };
+    if CudaDriver::check(result).is_ok() {
+        version
+    } else {
+        0
+    }
+}
+
+/// Compile PTX to cubin via the CUDA linker API and return the cubin bytes.
+///
+/// Uses `cuLinkCreate` -> `cuLinkAddData(PTX)` -> `cuLinkComplete` -> copy cubin.
+/// The cubin output pointer is owned by the link state and freed on `cuLinkDestroy`,
+/// so we copy the bytes before destroying.
+fn compile_ptx_to_cubin(
+    driver: &CudaDriver,
+    ptx: &str,
+    jit_target: c_uint,
+) -> Result<Vec<u8>, GpuError> {
+    use super::sys::CUlinkState;
+
+    let mut link_state: CUlinkState = ptr::null_mut();
+
+    // Create linker with JIT target option
+    let mut options: [c_uint; 1] = [CU_JIT_TARGET];
+    let mut option_values: [*mut c_void; 1] = [jit_target as *mut c_void];
+
+    // SAFETY: options arrays are valid for the lifetime of this call
+    let result = unsafe {
+        (driver.cuLinkCreate)(1, options.as_mut_ptr(), option_values.as_mut_ptr(), &mut link_state)
+    };
+    CudaDriver::check(result)
+        .map_err(|e| GpuError::ModuleLoad(format!("cuLinkCreate failed: {e}")))?;
+
+    // Add PTX data to the linker
+    let ptx_bytes = ptx.as_bytes();
+    let ptx_name = CString::new("kernel.ptx").expect("static string has no null bytes");
+
+    // SAFETY: link_state is valid, ptx_bytes is valid for the call duration.
+    // cuLinkAddData takes a mutable pointer but does not modify the data.
+    let result = unsafe {
+        (driver.cuLinkAddData)(
+            link_state,
+            CU_JIT_INPUT_PTX,
+            ptx_bytes.as_ptr() as *mut c_void,
+            ptx_bytes.len(),
+            ptx_name.as_ptr(),
+            0,
+            ptr::null_mut(),
+            ptr::null_mut(),
+        )
+    };
+    if CudaDriver::check(result).is_err() {
+        // Clean up on failure
+        unsafe { (driver.cuLinkDestroy)(link_state) };
+        return Err(GpuError::ModuleLoad(format!("cuLinkAddData failed: result={result}")));
+    }
+
+    // Complete the link and extract cubin
+    let mut cubin_ptr: *mut c_void = ptr::null_mut();
+    let mut cubin_size: usize = 0;
+
+    // SAFETY: link_state is valid, output pointers are valid
+    let result = unsafe { (driver.cuLinkComplete)(link_state, &mut cubin_ptr, &mut cubin_size) };
+    if CudaDriver::check(result).is_err() {
+        unsafe { (driver.cuLinkDestroy)(link_state) };
+        return Err(GpuError::ModuleLoad(format!("cuLinkComplete failed: result={result}")));
+    }
+
+    // Copy the cubin bytes -- the pointer is owned by link_state and freed on destroy
+    let cubin = if !cubin_ptr.is_null() && cubin_size > 0 {
+        // SAFETY: cubin_ptr points to cubin_size bytes of valid memory owned by link_state
+        let slice = unsafe { std::slice::from_raw_parts(cubin_ptr as *const u8, cubin_size) };
+        slice.to_vec()
+    } else {
+        unsafe { (driver.cuLinkDestroy)(link_state) };
+        return Err(GpuError::ModuleLoad("cuLinkComplete returned null cubin".to_string()));
+    };
+
+    // Destroy the link state (frees cubin_ptr)
+    unsafe { (driver.cuLinkDestroy)(link_state) };
+
+    Ok(cubin)
+}
+
+// ============================================================================
 // CUDA Module
 // ============================================================================
 
@@ -40,6 +146,12 @@ const CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES: c_uint = 4;
 ///
 /// Loads PTX source and JIT compiles to device-specific SASS.
 /// Caches function handles for efficient lookup.
+///
+/// # Disk Cache
+///
+/// Compiled cubin blobs are cached to `~/.cache/trueno/ptx/{sha256}.cubin`.
+/// On subsequent loads with identical PTX + device + driver, the cached cubin
+/// is loaded directly via `cuModuleLoadData`, skipping the ~35s JIT per kernel.
 ///
 /// # RAII
 ///
@@ -61,6 +173,13 @@ impl CudaModule {
     /// Uses `cuModuleLoadDataEx` with explicit JIT target architecture
     /// derived from the device's compute capability. This ensures the JIT
     /// compiler knows exactly which SASS to generate.
+    ///
+    /// # Disk Cache
+    ///
+    /// Before JIT compilation, checks `~/.cache/trueno/ptx/` for a cached cubin
+    /// matching the SHA-256 of (patched PTX + compute capability + driver version).
+    /// On cache hit, loads the cubin directly (instant). On miss, compiles via the
+    /// CUDA linker API, saves the cubin to disk, then loads the module.
     ///
     /// # Contract: F-PTX-002 (Context Currency)
     ///
@@ -87,7 +206,7 @@ impl CudaModule {
         // CudaContext::sm_target()) and JIT target must clamp to sm_90.
         // The sm_90 SASS runs on Blackwell (sm_121) via forward compatibility.
         // Passing CU_JIT_TARGET=121 with `.target sm_90` PTX causes the driver
-        // to generate incorrect native sm_121 SASS — garbage inference results.
+        // to generate incorrect native sm_121 SASS -- garbage inference results.
         let (major, minor) = ctx.compute_capability()?;
         let (jit_major, jit_minor) =
             if major > 9 || (major == 9 && minor > 0) { (9, 0) } else { (major, minor) };
@@ -97,9 +216,83 @@ impl CudaModule {
         // The CUDA 13.0 JIT miscompiles while-loops (unconditional backward
         // branches) on sm_121, silently dropping loop iterations. Converting
         // them to conditional branches avoids the buggy JIT optimizer path.
+        //
+        // NOTE: Patching happens BEFORE cache key computation so the cached
+        // cubin matches the patched PTX that was actually compiled.
         let ptx_patched = if major >= 12 { patch_backward_branches_sm121(ptx) } else { None };
         let ptx: &str = ptx_patched.as_deref().unwrap_or(ptx);
 
+        // Query driver version for cache key
+        let driver_version = query_driver_version(driver);
+
+        // Compute cache key: SHA-256(patched PTX + jit_target + driver_version)
+        let cache_key = ptx_cache_key(ptx, jit_target, driver_version);
+
+        // ----------------------------------------------------------------
+        // Cache hit path: load pre-compiled cubin from disk
+        // ----------------------------------------------------------------
+        if let Some(cubin) = load_cached_cubin(&cache_key) {
+            let mut module: CUmodule = ptr::null_mut();
+            // SAFETY: cubin is valid binary data, context is current
+            let result =
+                unsafe { (driver.cuModuleLoadData)(&mut module, cubin.as_ptr() as *const c_void) };
+            if CudaDriver::check(result).is_ok() {
+                return Ok(Self { module, functions: HashMap::new() });
+            }
+            // Cache corruption or stale cubin -- fall through to JIT compilation.
+            // Remove the corrupt cache entry so we don't keep failing.
+            if let Some(dir) = ptx_cache_dir() {
+                let _ = std::fs::remove_file(dir.join(format!("{cache_key}.cubin")));
+            }
+            eprintln!(
+                "[PTX-CACHE] Cache hit but cuModuleLoadData failed (result={result}), \
+                 falling through to JIT compilation"
+            );
+        }
+
+        // ----------------------------------------------------------------
+        // Cache miss path: compile PTX -> cubin via linker API, save, load
+        // ----------------------------------------------------------------
+
+        // Try to compile PTX to cubin via linker API for caching
+        let cubin_result = compile_ptx_to_cubin(driver, ptx, jit_target);
+
+        if let Ok(cubin) = &cubin_result {
+            // Save cubin to disk cache (best-effort, failures are silent)
+            save_cached_cubin(&cache_key, cubin);
+
+            // Load the cubin as a module
+            let mut module: CUmodule = ptr::null_mut();
+            // SAFETY: cubin is valid compiled binary, context is current
+            let result =
+                unsafe { (driver.cuModuleLoadData)(&mut module, cubin.as_ptr() as *const c_void) };
+            if CudaDriver::check(result).is_ok() {
+                return Ok(Self { module, functions: HashMap::new() });
+            }
+            // cubin compiled but wouldn't load -- fall through to legacy path
+            eprintln!(
+                "[PTX-CACHE] Linker produced cubin but cuModuleLoadData failed (result={result}), \
+                 falling through to legacy JIT"
+            );
+        }
+
+        // ----------------------------------------------------------------
+        // Legacy fallback: cuModuleLoadDataEx (original behavior, no caching)
+        // ----------------------------------------------------------------
+        Self::from_ptx_legacy(driver, ptx, jit_target, major, minor)
+    }
+
+    /// Legacy PTX loading path without disk caching.
+    ///
+    /// This is the original `from_ptx` implementation, used as a fallback
+    /// when the linker-based caching path fails.
+    fn from_ptx_legacy(
+        driver: &CudaDriver,
+        ptx: &str,
+        jit_target: c_uint,
+        major: i32,
+        minor: i32,
+    ) -> Result<Self, GpuError> {
         // Ensure PTX is null-terminated
         let ptx_cstring = CString::new(ptx.as_bytes().to_vec())
             .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
@@ -142,7 +335,7 @@ impl CudaModule {
             return Ok(Self { module, functions: HashMap::new() });
         }
 
-        // Try 1 failed — capture diagnostics
+        // Try 1 failed -- capture diagnostics
         let kernel_name =
             ptx.lines().find(|l| l.contains(".entry")).map(|l| l.trim()).unwrap_or("<unknown>");
         let jit_info = String::from_utf8_lossy(&info_log).trim_end_matches('\0').to_string();
