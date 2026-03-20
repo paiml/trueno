@@ -72,21 +72,15 @@ impl FusedKvScatterKernel {
     setp.ge.u32 %p, %r0, {head_dim};
     @%p bra DONE;
 
-    // Select src/dst based on kv_sel (branch, not selp.b64 -- avoids crash)
+    // Select src/dst based on kv_sel (branchless via selp.b64)
     setp.ne.u32 %p_kv, %r10, 0;
-    @%p_kv bra USE_V;
+    ld.param.u64 %rd10, [k_src_base];
+    ld.param.u64 %rd11, [v_src_base];
+    selp.b64 %rd4, %rd11, %rd10, %p_kv;
 
-    // K path (z=0)
-    ld.param.u64 %rd4, [k_src_base];
-    ld.param.u64 %rd7, [k_dst_base];
-    bra SELECTED;
-
-USE_V:
-    // V path (z=1)
-    ld.param.u64 %rd4, [v_src_base];
-    ld.param.u64 %rd7, [v_dst_base];
-
-SELECTED:
+    ld.param.u64 %rd12, [k_dst_base];
+    ld.param.u64 %rd13, [v_dst_base];
+    selp.b64 %rd7, %rd13, %rd12, %p_kv;
 
     // Load positions[seq_idx]
     ld.param.u64 %rd0, [positions_ptr];
@@ -143,7 +137,7 @@ mod tests {
         let k = FusedKvScatterKernel::new(4, 64, 4096);
         let ptx = k.emit_ptx();
         assert!(ptx.contains(".entry fused_kv_scatter_4_64_4096"));
-        assert!(ptx.contains("bra USE_V"));
+        assert!(ptx.contains("selp.b64"));
         assert!(ptx.contains("ctaid.z"));
         assert!(ptx.contains("PMAT-286"));
     }
