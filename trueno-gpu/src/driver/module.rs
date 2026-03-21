@@ -177,6 +177,40 @@ unsafe impl Send for CudaModule {}
 unsafe impl Sync for CudaModule {}
 
 impl CudaModule {
+    /// Load PTX using ONLY cuModuleLoadData (no cuModuleLoadDataEx).
+    ///
+    /// trueno#200: On Blackwell (sm_121), cuModuleLoadDataEx with CU_JIT_TARGET=90
+    /// poisons the CUDA context. This function bypasses that entirely.
+    ///
+    /// Applies GH-480 backward branch patch before compilation.
+    pub fn from_ptx_direct(ctx: &CudaContext, ptx: &str) -> Result<Self, GpuError> {
+        let driver = get_driver()?;
+        ctx.make_current()?;
+
+        let (major, _) = ctx.compute_capability()?;
+        let ptx_patched = if major >= 12 { patch_backward_branches_sm121(ptx) } else { None };
+        let ptx = ptx_patched.as_deref().unwrap_or(ptx);
+
+        let ptx_cstring = CString::new(ptx.as_bytes().to_vec())
+            .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
+
+        let mut module: CUmodule = ptr::null_mut();
+        let result = unsafe {
+            (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _)
+        };
+
+        CudaDriver::check(result).map_err(|e| {
+            let kernel_name = ptx.lines().find(|l| l.contains(".entry")).unwrap_or("unknown");
+            GpuError::ModuleLoad(format!(
+                "cuModuleLoadData failed: result={result} (kernel: {kernel_name}), error: {e}"
+            ))
+        })?;
+
+        Ok(Self { module, functions: HashMap::new() })
+    }
+}
+
+impl CudaModule {
     /// Load PTX source and JIT compile to device code
     ///
     /// Uses `cuModuleLoadDataEx` with explicit JIT target architecture
@@ -204,6 +238,7 @@ impl CudaModule {
     ///
     /// Returns `Err(GpuError::ModuleLoad)` if PTX is invalid or compilation fails.
     pub fn from_ptx(ctx: &CudaContext, ptx: &str) -> Result<Self, GpuError> {
+        eprintln!("[FROM_PTX] called, ptx_len={}", ptx.len());
         let driver = get_driver()?;
 
         // F-PTX-002: Ensure context is current on this thread before JIT compilation.
