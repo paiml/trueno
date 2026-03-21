@@ -224,7 +224,7 @@ proof_obligations:
 falsification_tests:
   - id: F-TRANSPOSE-KERNEL-001
     rule: "SIMD-scalar equivalence"
-    test: "test_transpose_avx2_scalar_parity"
+    test: "test_avx2_scalar_parity"
     prediction: "verified"
     if_fails: "Contract violation — SIMD and scalar paths diverge"
 
