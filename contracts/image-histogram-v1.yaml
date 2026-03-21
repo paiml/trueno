@@ -1,0 +1,79 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Histogram, equalization, morphology, resize — NPP parity"
+  crate: "trueno-image"
+  references:
+    - "NVIDIA Performance Primitives (NPP) documentation"
+
+equations:
+  histogram:
+    formula: "h[k] = |{(x,y) : floor(I(x,y) * bins) == k}|"
+    domain: "I ∈ [0,1]^{w×h}, bins > 0"
+    codomain: "h ∈ ℕ^{bins}, Σh = w*h"
+    invariants:
+      - "Sum of histogram bins equals total pixels"
+      - "Each bin count is non-negative"
+
+  morphology:
+    formula: "dilate(I,S)(x,y) = max{I(x+i,y+j) : S(i,j)=1}"
+    domain: "I ∈ ℝ^{w×h}, S ∈ {0,1}^{sw×sh}"
+    invariants:
+      - "Constant image: dilate = erode = original"
+      - "Opening removes small bright features"
+      - "Closing fills small dark features"
+
+  resize:
+    formula: "R(x,y) = interp(I, x*sx, y*sy)"
+    domain: "I ∈ ℝ^{sw×sh}"
+    invariants:
+      - "Identity resize preserves image exactly"
+      - "Constant image preserved under any resize"
+
+proof_obligations:
+  - type: invariant
+    property: "Histogram sum equals pixel count"
+    formal: "Σ h[k] = w * h"
+    applies_to: all
+
+  - type: invariant
+    property: "Dilate-erode duality on constant"
+    formal: "dilate(C, S) = erode(C, S) = C for constant image C"
+    applies_to: all
+
+  - type: invariant
+    property: "Resize identity"
+    formal: "resize(I, w, h, w, h) = I"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-HIST-001
+    rule: "Histogram sum"
+    test: "test_histogram_uniform"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-MORPH-001
+    rule: "Dilate-erode duality"
+    test: "test_dilate_erode_duality"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-RESIZE-001
+    rule: "Resize identity"
+    test: "test_resize_nearest_identity"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-IMAGE_HISTOGRAM-001
+    obligation: PO-IMAGE_HISTOGRAM-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_image_histogram_correctness
+
+qa_gate:
+  id: QA-IMAGE_HISTOGRAM
+  name: "image-histogram contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

@@ -32,7 +32,7 @@ pub use basic::Q4KGemvKernel;
 pub use batched::BatchedQ4KGemvKernel;
 pub use coalesced::{
     BatchedHwDp4aQ4KGemvKernel, CoalescedQ4KGemvKernel, FusedFp32Q4KGemvKernel,
-    FusedGateUpSwigluHwDp4aQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel,
+    FusedGateUpSwigluHwDp4aQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel, InlineQ8Dp4aQ4KGemvKernel,
     MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel,
     WideQ4KGemvKernel,
 };

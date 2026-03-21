@@ -1,0 +1,54 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Triangular solve AX=B (TRSM) — cuBLAS parity"
+  crate: "trueno-solve"
+  references:
+    - "Golub & Van Loan, 'Matrix Computations', 4th ed., 2013"
+
+equations:
+  trsm:
+    formula: "AX = B where A is triangular (lower or upper)"
+    domain: "A ∈ ℝ^{n×n} triangular non-singular, B ∈ ℝ^{n×nrhs}"
+    codomain: "X ∈ ℝ^{n×nrhs}"
+    invariants:
+      - "||AX - B||_F / ||B||_F < n · u"
+      - "Singular matrix detected (zero diagonal)"
+
+proof_obligations:
+  - type: invariant
+    property: "Backward error"
+    formal: "||AX - B||_F / ||B||_F < n · u"
+    applies_to: all
+
+  - type: bound
+    property: "Singular detection"
+    formal: "returns Err(SingularMatrix) when diagonal is zero"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-TRSM-001
+    rule: "Backward error"
+    test: "test_trsm_backward_error"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-TRSM-002
+    rule: "Singular detection"
+    test: "test_trsm_singular_detected"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-BLAS_TRSM-001
+    obligation: PO-BLAS_TRSM-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_blas_trsm_correctness
+
+qa_gate:
+  id: QA-BLAS_TRSM
+  name: "blas-trsm contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

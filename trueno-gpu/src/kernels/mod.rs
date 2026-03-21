@@ -102,7 +102,7 @@ pub use quantize::{
     ChunkedTiledQ4KGemvKernel, CoalescedQ4KGemvKernel, CoalescedQ6KGemvKernel, Dp4aQ4KGemmKernel,
     Dp4aQ4KGemvKernel, Dp4aQ6KGemvKernel, Fp16Q4KGemvKernel, FusedFp32Q4KGemvKernel,
     FusedGateUpQ4KGemvKernel, FusedGateUpSwigluHwDp4aQ4KGemvKernel,
-    FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel,
+    FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel, InlineQ8Dp4aQ4KGemvKernel,
     HalfWarpDp4aQ6KGemvKernel, InterleavedWmmaQ4KGemmKernel, MultiWarpQ6KGemvKernel,
     MultiWarpTensorCoreQ4KGemmKernel, MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel,
     Nf4GemmKernel, Nf4GemmTransposeKernel, Nf4Quantized, PackedDp4aQ4KQ8Kernel,

@@ -1,0 +1,74 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Canny edge detection (Gaussian + Sobel + NMS + hysteresis)"
+  crate: "trueno-image"
+  references:
+    - "Canny, 'A Computational Approach to Edge Detection', IEEE TPAMI, 1986"
+
+equations:
+  canny:
+    formula: "edges = hysteresis(NMS(|grad(G_sigma * I)|))"
+    domain: "I in R^{W x H}, sigma > 0, 0 <= low <= high <= 1"
+    codomain: "edges in {0, 1}^{W x H}"
+    invariants:
+      - "Output is binary: all values in {0, 1}"
+      - "No edges on constant image"
+      - "Edges detected at sharp boundaries"
+      - "Threshold ordering: 0 <= low <= high <= 1"
+
+  sobel:
+    formula: "G_x = S_x * I, G_y = S_y * I (3x3 Sobel kernels)"
+    domain: "I in R^{W x H}"
+    codomain: "(G_x, G_y) in R^{W x H} x R^{W x H}"
+    invariants:
+      - "Gradient of constant image is zero"
+      - "Gradient detects horizontal/vertical edges"
+
+proof_obligations:
+  - type: invariant
+    property: "Binary output"
+    formal: "all(v in {0.0, 1.0} for v in canny(I))"
+    applies_to: all
+
+  - type: invariant
+    property: "Constant image produces no edges"
+    formal: "canny(constant_image) = zeros"
+    applies_to: all
+
+  - type: invariant
+    property: "Invalid thresholds rejected"
+    formal: "canny(I, sigma, high, low) returns Err when low > high"
+    applies_to: all
+
+falsification_tests:
+  - id: FALSIFY-CANNY-001
+    rule: "Edge detection on step function"
+    test: "test_canny_detects_edges"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-CANNY-002
+    rule: "No edges on constant"
+    test: "test_sobel_constant_zero"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-CANNY-003
+    rule: "Invalid thresholds"
+    test: "test_canny_invalid_thresholds"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-IMAGE_CANNY-001
+    obligation: PO-IMAGE_CANNY-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_image_canny_correctness
+
+qa_gate:
+  id: QA-IMAGE_CANNY
+  name: "image-canny contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []

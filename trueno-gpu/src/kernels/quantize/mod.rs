@@ -65,7 +65,7 @@ pub use q4k::w4a16::repack_q4k_w4a16;
 pub use q4k::{
     BatchedHwDp4aQ4KGemvKernel, BatchedQ4KGemvKernel, ChunkedTiledQ4KGemvKernel,
     CoalescedQ4KGemvKernel, Dp4aQ4KGemvKernel, FusedFp32Q4KGemvKernel,
-    FusedGateUpSwigluHwDp4aQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel,
+    FusedGateUpSwigluHwDp4aQ4KGemvKernel, HalfWarpDp4aQ4KGemvKernel, InlineQ8Dp4aQ4KGemvKernel,
     MultiWarpVectorizedQ4KGemvKernel, MwvDp4aQ4KGemvKernel, Q4KDequantFp16Kernel, Q4KDequantKernel,
     Q4KGemvKernel, TiledQ4KGemvKernel, TrueDp4aQ4KGemvKernel, VectorizedQ4KGemvKernel,
     WideQ4KGemvKernel,

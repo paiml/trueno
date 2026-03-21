@@ -1,0 +1,72 @@
+metadata:
+  version: "1.0.0"
+  author: "Sovereign AI Stack"
+  description: "Bluestein chirp-z FFT for arbitrary lengths"
+  crate: "trueno-fft"
+  references:
+    - "Bluestein, 'A linear filtering approach to the computation of discrete Fourier transform', 1970"
+    - "Rabiner, Schafer & Rader, 'The Chirp z-Transform Algorithm', 1969"
+
+equations:
+  bluestein:
+    formula: "X[k] = chirp[k] · IFFT(FFT(a) · FFT(b))[k]"
+    domain: "x ∈ ℂ^N for any N > 0"
+    codomain: "X ∈ ℂ^N"
+    invariants:
+      - "Parseval: Σ|x_n|² = (1/N)·Σ|X_k|²"
+      - "Roundtrip: IFFT(FFT(x)) = x within tolerance"
+      - "Impulse response: FFT(δ) = 1"
+      - "Matches Stockham for power-of-two sizes"
+
+proof_obligations:
+  - type: invariant
+    property: "Roundtrip accuracy"
+    formal: "||IFFT(FFT(x)) - x||_∞ < ε"
+    applies_to: all
+
+  - type: invariant
+    property: "Parseval conservation"
+    formal: "Σ|x_n|² ≈ (1/N)·Σ|X_k|²"
+    applies_to: all
+
+  - type: invariant
+    property: "Stockham equivalence"
+    formal: "bluestein(x, N) = stockham(x, N) for N = 2^k"
+    applies_to: power_of_two
+
+falsification_tests:
+  - id: FALSIFY-BLUE-001
+    rule: "Roundtrip"
+    test: "test_bluestein_size_5_roundtrip"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-BLUE-002
+    rule: "Parseval"
+    test: "test_bluestein_size_7_parseval"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-BLUE-003
+    rule: "Stockham equivalence"
+    test: "test_bluestein_power_of_two_matches_stockham"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+  - id: FALSIFY-BLUE-004
+    rule: "Impulse response"
+    test: "test_bluestein_size_6_impulse"
+    prediction: "verified"
+    if_fails: "Contract violation — implementation does not match specification"
+
+kani_harnesses:
+  - id: KANI-FFT_BLUESTEIN-001
+    obligation: PO-FFT_BLUESTEIN-001
+    property: "Correctness for bounded inputs"
+    bound: 8
+    strategy: bounded_int
+    harness: verify_fft_bluestein_correctness
+
+qa_gate:
+  id: QA-FFT_BLUESTEIN
+  name: "fft-bluestein contract gate"
+  min_coverage: 0.90
+  max_complexity: 20
+  required_tests: []
