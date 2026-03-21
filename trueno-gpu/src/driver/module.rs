@@ -309,6 +309,24 @@ impl CudaModule {
         let ptx_cstring = CString::new(ptx.as_bytes().to_vec())
             .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
 
+        // GH-480 / trueno#200: On Blackwell (sm_121+), cuModuleLoadDataEx with
+        // CU_JIT_TARGET=90 poisons the CUDA context on failure. Subsequent
+        // cuModuleLoadData calls return CUDA_ERROR_ILLEGAL_ADDRESS (700).
+        // Skip try1 entirely on Blackwell — go straight to cuModuleLoadData.
+        if major >= 12 {
+            let mut module: CUmodule = ptr::null_mut();
+            let result =
+                unsafe { (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _) };
+            if CudaDriver::check(result).is_ok() {
+                return Ok(Self { module, functions: HashMap::new() });
+            }
+
+            let kernel_name = ptx.lines().find(|l| l.contains(".entry")).unwrap_or("unknown");
+            return Err(GpuError::ModuleLoad(format!(
+                "CUDA module loading failed on Blackwell: result={result} (kernel: {kernel_name})"
+            )));
+        }
+
         // Try 1: cuModuleLoadDataEx with explicit JIT target + log buffers
         let mut info_log = vec![0u8; 4096];
         let mut error_log = vec![0u8; 4096];
