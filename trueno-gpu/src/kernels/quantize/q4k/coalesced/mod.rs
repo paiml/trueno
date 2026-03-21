@@ -7,6 +7,7 @@
 
 mod batched_hw_dp4a;
 mod coalesced_kernel;
+mod fused_fp32_dp4a;
 mod fused_gate_up_swiglu_hw_dp4a;
 mod hw_dp4a;
 mod multi_warp_vectorized;
@@ -16,6 +17,7 @@ mod wide_kernel;
 
 pub use batched_hw_dp4a::BatchedHwDp4aQ4KGemvKernel;
 pub use coalesced_kernel::CoalescedQ4KGemvKernel;
+pub use fused_fp32_dp4a::FusedFp32Q4KGemvKernel;
 pub use fused_gate_up_swiglu_hw_dp4a::FusedGateUpSwigluHwDp4aQ4KGemvKernel;
 pub use hw_dp4a::HalfWarpDp4aQ4KGemvKernel;
 pub use multi_warp_vectorized::MultiWarpVectorizedQ4KGemvKernel;
