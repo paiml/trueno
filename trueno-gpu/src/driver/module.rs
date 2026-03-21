@@ -263,6 +263,25 @@ impl CudaModule {
         // Cache miss path: compile PTX -> cubin via linker API, save, load
         // ----------------------------------------------------------------
 
+        // GH-480 / trueno#200: On Blackwell, skip linker API + cuModuleLoadDataEx.
+        // Both poison the CUDA context when they fail with CU_JIT_TARGET=90.
+        // Go straight to cuModuleLoadData (auto-detect) which works reliably.
+        if major >= 12 {
+            let ptx_cstring = CString::new(ptx.as_bytes().to_vec())
+                .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
+            let mut module: CUmodule = ptr::null_mut();
+            let result = unsafe {
+                (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _)
+            };
+            if CudaDriver::check(result).is_ok() {
+                return Ok(Self { module, functions: HashMap::new() });
+            }
+            let kernel_name = ptx.lines().find(|l| l.contains(".entry")).unwrap_or("unknown");
+            return Err(GpuError::ModuleLoad(format!(
+                "Blackwell cuModuleLoadData failed: result={result} (kernel: {kernel_name})"
+            )));
+        }
+
         // Try to compile PTX to cubin via linker API for caching
         let cubin_result = compile_ptx_to_cubin(driver, ptx, jit_target);
 
