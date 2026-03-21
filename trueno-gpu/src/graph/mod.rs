@@ -17,6 +17,10 @@
 //! - [Yu et al., OSDI 2022] Orca iteration-level scheduling
 //! - [Dao, NeurIPS 2022] FlashAttention (arxiv:2205.14135)
 
+pub mod executor;
+
+pub use executor::{execute_graph, KernelDispatch};
+
 /// Tensor operation types for decoder inference.
 ///
 /// Each variant maps to ONE kernel dispatch. The goal is to express
