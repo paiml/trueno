@@ -128,6 +128,8 @@
 
 pub mod backend;
 pub mod driver;
+/// PMAT-291: Tensor compute graph for GPU inference (reduces 430 dispatches to ~15)
+pub mod graph;
 pub mod kernels;
 pub mod memory;
 pub mod monitor;
