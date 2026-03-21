@@ -498,4 +498,13 @@ fn select_x86_backend_for_operation(op_type: OperationType) -> Backend {
 }
 
 #[cfg(test)]
+mod contract_tests;
+
+#[cfg(test)]
+mod contract_tests_image;
+
+#[cfg(test)]
+mod contract_tests_linalg;
+
+#[cfg(test)]
 mod tests;

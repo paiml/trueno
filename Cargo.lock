@@ -5566,6 +5566,8 @@ dependencies = [
  "trueno-gpu",
  "trueno-graph",
  "trueno-quant 0.1.0",
+ "trueno-solve",
+ "trueno-sparse",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
