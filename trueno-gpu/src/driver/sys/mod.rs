@@ -64,6 +64,16 @@ pub type CUgraphExec = *mut c_void;
 /// CUDA event handle (opaque pointer)
 pub type CUevent = *mut c_void;
 
+/// CUDA graph node handle (opaque pointer, for cuGraphExecUpdate error reporting)
+pub type CUgraphNode = *mut c_void;
+
+/// CUDA graph exec update result (PMAT-291)
+pub type CUgraphExecUpdateResult = c_uint;
+/// Update succeeded
+pub const CU_GRAPH_EXEC_UPDATE_SUCCESS: CUgraphExecUpdateResult = 0;
+/// Update failed (topology changed, need re-instantiate)
+pub const CU_GRAPH_EXEC_UPDATE_ERROR: CUgraphExecUpdateResult = 1;
+
 /// CUDA linker state handle (opaque pointer) — for PTX→cubin compilation
 pub type CUlinkState = *mut c_void;
 
@@ -295,6 +305,15 @@ pub struct CudaDriver {
     pub cuGraphExecDestroy: unsafe extern "C" fn(exec: CUgraphExec) -> CUresult,
     /// cuGraphLaunch - Launch graph on stream
     pub cuGraphLaunch: unsafe extern "C" fn(exec: CUgraphExec, stream: CUstream) -> CUresult,
+    /// cuGraphExecUpdate - Update graph executable in-place (PMAT-291)
+    /// Avoids recapture when only kernel arguments change (same topology).
+    /// CUDA 11 API: returns error node + result enum.
+    pub cuGraphExecUpdate: unsafe extern "C" fn(
+        exec: CUgraphExec,
+        graph: CUgraph,
+        error_node: *mut CUgraphNode,
+        update_result: *mut CUgraphExecUpdateResult,
+    ) -> CUresult,
     /// cuStreamBeginCapture - Begin stream capture
     pub cuStreamBeginCapture: unsafe extern "C" fn(stream: CUstream, mode: c_uint) -> CUresult,
     /// cuStreamEndCapture - End stream capture and return graph
@@ -478,6 +497,12 @@ mod loading {
                     unsafe extern "C" fn(*mut CUgraphExec, CUgraph, u64) -> CUresult;
                 type FnGraphExecDestroy = unsafe extern "C" fn(CUgraphExec) -> CUresult;
                 type FnGraphLaunch = unsafe extern "C" fn(CUgraphExec, CUstream) -> CUresult;
+                type FnGraphExecUpdate = unsafe extern "C" fn(
+                    CUgraphExec,
+                    CUgraph,
+                    *mut CUgraphNode,
+                    *mut CUgraphExecUpdateResult,
+                ) -> CUresult;
                 type FnStreamBeginCapture = unsafe extern "C" fn(CUstream, c_uint) -> CUresult;
                 type FnStreamEndCapture = unsafe extern "C" fn(CUstream, *mut CUgraph) -> CUresult;
                 // Event types (PMAT-283)
@@ -552,6 +577,7 @@ mod loading {
                     ),
                     cuGraphExecDestroy: load_sym!(cuGraphExecDestroy, FnGraphExecDestroy),
                     cuGraphLaunch: load_sym!(cuGraphLaunch, FnGraphLaunch),
+                    cuGraphExecUpdate: load_sym!(cuGraphExecUpdate, FnGraphExecUpdate),
                     cuStreamBeginCapture: load_sym!(cuStreamBeginCapture, FnStreamBeginCapture),
                     cuStreamEndCapture: load_sym!(cuStreamEndCapture, FnStreamEndCapture),
                     // Event functions (PMAT-283)

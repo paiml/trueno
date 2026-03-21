@@ -21,7 +21,10 @@
 use std::ptr;
 
 use super::context::get_driver;
-use super::sys::{CUgraph, CUgraphExec, CUstream, CudaDriver};
+use super::sys::{
+    CUgraph, CUgraphExec, CUgraphExecUpdateResult, CUgraphNode, CUstream, CudaDriver,
+    CU_GRAPH_EXEC_UPDATE_SUCCESS,
+};
 use crate::GpuError;
 
 // ============================================================================
@@ -131,6 +134,43 @@ impl CudaGraphExec {
     #[must_use]
     pub fn raw(&self) -> CUgraphExec {
         self.exec
+    }
+
+    /// Update this executable in-place from a new graph (PMAT-291).
+    ///
+    /// Tries to update kernel arguments without re-instantiation.
+    /// Returns `true` if update succeeded, `false` if topology changed
+    /// (caller should re-instantiate).
+    ///
+    /// This is the llama.cpp approach: capture a new graph each step,
+    /// then update the existing executable. Much cheaper than
+    /// destroy + re-instantiate for argument-only changes.
+    pub fn update(&self, new_graph: &CudaGraph) -> Result<bool, GpuError> {
+        let driver = get_driver()?;
+
+        let mut error_node: CUgraphNode = ptr::null_mut();
+        let mut update_result: CUgraphExecUpdateResult = 0;
+
+        // SAFETY: exec, graph, and output pointers are valid
+        let result = unsafe {
+            (driver.cuGraphExecUpdate)(
+                self.exec,
+                new_graph.graph,
+                &mut error_node,
+                &mut update_result,
+            )
+        };
+
+        // CUDA_ERROR_GRAPH_EXEC_UPDATE_FAILURE is not a fatal error --
+        // it means topology changed and we need to re-instantiate
+        if result != 0 && update_result != CU_GRAPH_EXEC_UPDATE_SUCCESS {
+            return Ok(false); // Topology changed, need re-instantiate
+        }
+
+        CudaDriver::check(result)
+            .map_err(|e| GpuError::GraphInstantiate(format!("graph update: {e}")))?;
+
+        Ok(update_result == CU_GRAPH_EXEC_UPDATE_SUCCESS)
     }
 
     /// Launch this graph on a stream
