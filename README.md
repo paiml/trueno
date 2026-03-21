@@ -11,6 +11,7 @@
 [![CI](https://github.com/paiml/trueno/actions/workflows/ci.yml/badge.svg)](https://github.com/paiml/trueno/actions)
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)](https://github.com/paiml/trueno)
 [![Crates.io](https://img.shields.io/crates/v/trueno.svg)](https://crates.io/crates/trueno)
+[![Documentation](https://docs.rs/trueno/badge.svg)](https://docs.rs/trueno)
 
 </div>
 
@@ -151,9 +152,13 @@ cargo run --example backend_detection  # Check available backends
 
 Part of the Pragmatic AI Labs stack:
 - [trueno-gpu](https://crates.io/crates/trueno-gpu) - Pure Rust PTX generation (no nvcc)
+[![Documentation](https://docs.rs/trueno/badge.svg)](https://docs.rs/trueno)
 - [trueno-db](https://crates.io/crates/trueno-db) - GPU-first analytics database
+[![Documentation](https://docs.rs/trueno/badge.svg)](https://docs.rs/trueno)
 - [trueno-graph](https://crates.io/crates/trueno-graph) - Graph algorithms
+[![Documentation](https://docs.rs/trueno/badge.svg)](https://docs.rs/trueno)
 - [trueno-rag](https://crates.io/crates/trueno-rag) - RAG pipeline
+[![Documentation](https://docs.rs/trueno/badge.svg)](https://docs.rs/trueno)
 - 🤖 [Coursera Hugging Face AI Development Specialization](https://www.coursera.org/specializations/hugging-face-ai-development) - Build Production AI systems with Hugging Face in Pure Rust
 
 ## Usage
@@ -190,6 +195,10 @@ Contributions are welcome. Please ensure:
 ## MSRV
 
 Minimum Supported Rust Version: **1.89**
+
+## See Also
+
+- [Cookbook](https://github.com/paiml/sovereign-ai-cookbook)
 
 ## License
 
