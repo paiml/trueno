@@ -267,12 +267,12 @@ impl CudaModule {
         // Both poison the CUDA context when they fail with CU_JIT_TARGET=90.
         // Go straight to cuModuleLoadData (auto-detect) which works reliably.
         if major >= 12 {
+            eprintln!("[BLACKWELL-SKIP] Direct cuModuleLoadData for kernel (major={major})");
             let ptx_cstring = CString::new(ptx.as_bytes().to_vec())
                 .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
             let mut module: CUmodule = ptr::null_mut();
-            let result = unsafe {
-                (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _)
-            };
+            let result =
+                unsafe { (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _) };
             if CudaDriver::check(result).is_ok() {
                 return Ok(Self { module, functions: HashMap::new() });
             }
