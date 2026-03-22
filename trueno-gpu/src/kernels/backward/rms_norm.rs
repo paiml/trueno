@@ -246,10 +246,8 @@ impl Kernel for BatchedRmsNormBackwardKernel {
     }
 
     fn build_ptx(&self) -> PtxKernel {
-        let num_rows = self.num_rows;
-        let hidden_dim = self.hidden_dim;
-        let eps = self.eps;
-
+        // Contract: dimension-independent-kernels-v1.yaml (FALSIFY-DIM-001)
+        // All dimensions loaded from runtime .param — NO baked immediates.
         PtxKernel::new("batched_rms_norm_backward")
             .param(PtxType::U64, "input_ptr")
             .param(PtxType::U64, "gamma_ptr")
@@ -259,13 +257,13 @@ impl Kernel for BatchedRmsNormBackwardKernel {
             .param(PtxType::U32, "num_rows")
             .param(PtxType::U32, "hidden_dim")
             .param(PtxType::F32, "eps")
-            .build(move |ctx| {
+            .build(|ctx| {
                 // One block per row, one warp (32 threads) per block
                 let row_idx = ctx.special_reg(PtxReg::CtaIdX);
                 let tid = ctx.special_reg(PtxReg::TidX);
 
                 // Bounds check: row_idx < num_rows
-                let num_rows_reg = ctx.mov_u32_imm(num_rows);
+                let num_rows_reg = ctx.load_param_u32("num_rows");
                 let valid = ctx.setp_lt_u32(row_idx, num_rows_reg);
                 ctx.branch_if_not(valid, "exit");
 
@@ -274,15 +272,15 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 let grad_output_ptr = ctx.load_param_u64("grad_output_ptr");
                 let grad_input_ptr = ctx.load_param_u64("grad_input_ptr");
                 let grad_gamma_ptr = ctx.load_param_u64("grad_gamma_ptr");
-                let hidden_dim_reg = ctx.mov_u32_imm(hidden_dim);
+                let hidden_dim_reg = ctx.load_param_u32("hidden_dim");
 
-                // Calculate row base addresses
-                let row_offset = ctx.mul_wide_u32(row_idx, hidden_dim * 4);
+                // Calculate row base addresses: row_byte_stride = hidden_dim * 4
+                let four = ctx.mov_u32_imm(4);
+                let row_byte_stride = ctx.mul_lo_u32(hidden_dim_reg, four);
+                let row_offset = ctx.mul_wide_u32_reg(row_idx, row_byte_stride);
                 let input_row_base = ctx.add_u64(input_ptr, row_offset);
                 let grad_out_row_base = ctx.add_u64(grad_output_ptr, row_offset);
                 let grad_in_row_base = ctx.add_u64(grad_input_ptr, row_offset);
-
-                let four = ctx.mov_u32_imm(4);
 
                 // === Pass 1: Compute sum(x²) and sum(x·grad_y·γ) via stride loop ===
                 let local_sum_x2 = ctx.mov_f32_imm(0.0);
@@ -345,7 +343,7 @@ impl Kernel for BatchedRmsNormBackwardKernel {
                 // Compute rms = sqrt(mean(x²) + eps)
                 let hidden_dim_f32 = ctx.cvt_f32_u32(hidden_dim_reg);
                 let mean_x2 = ctx.div_f32(sum_x2, hidden_dim_f32);
-                let eps_const = ctx.mov_f32_imm(eps);
+                let eps_const = ctx.load_param_f32("eps");
                 let variance_eps = ctx.add_f32(mean_x2, eps_const);
                 let rms = ctx.sqrt_f32(variance_eps);
 
