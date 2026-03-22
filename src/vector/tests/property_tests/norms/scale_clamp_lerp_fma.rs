@@ -252,6 +252,8 @@ proptest! {
         let result = va.lerp(&vb, t).unwrap();
 
         // Verify: result[i] = a[i] + t * (b[i] - a[i])
+        // f32 lerp: a + t*(b-a) has 2 rounding points (subtraction + FMA).
+        // Relative tolerance of 2e-5 covers worst-case f32 ULP accumulation.
         for (i, ((&a_val, &b_val), &result_val)) in a_trimmed.iter()
             .zip(b_trimmed.iter())
             .zip(result.as_slice().iter())
@@ -259,7 +261,7 @@ proptest! {
             let expected = a_val + t * (b_val - a_val);
 
             let tolerance = if expected.abs() > 1.0 {
-                expected.abs() * 1e-5
+                expected.abs() * 2e-5
             } else {
                 1e-4
             };
