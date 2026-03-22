@@ -1,0 +1,134 @@
+# Dimension-Independent Kernels Contract v1.0.0
+# THE SOURCE OF TRUTH for eliminating JIT compilation during GPU training
+#
+# STATUS: Authoritative — all trueno-gpu training kernels MUST implement this contract
+# CONSUMERS:
+#   - trueno-gpu/src/kernels/backward/* (backward pass kernels)
+#   - trueno-gpu/src/kernels/elementwise/rope/batched.rs (RoPE forward+backward)
+#   - trueno-gpu/src/kernels/elementwise/transform/* (layout transform kernels)
+#   - entrenar/src/autograd/cuda_forward/cache.rs (kernel pre-warming)
+#   - entrenar/src/autograd/cuda_backward/cache.rs (backward kernel cache)
+#
+# Problem Statement:
+#   trueno-gpu kernels bake dimensions (M, K, N, hidden_dim, num_heads, etc.)
+#   as compile-time immediates in PTX. When entrenar encounters a new dimension
+#   at training time, it JIT-compiles new PTX — but on Blackwell (sm_121),
+#   cuModuleLoadDataEx poisons the CUDA context during active GPU work
+#   (trueno#200). Even with from_ptx_direct fallback, JIT during training adds
+#   latency and creates fragile cache dependencies.
+#
+# Solution:
+#   All training kernels MUST pass dimensions as .param runtime parameters,
+#   NOT as baked immediates. This means:
+#   - ONE PTX per kernel type (not per dimension combination)
+#   - Pre-compile ~15-20 cubins at startup
+#   - Zero JIT during training
+#
+# References:
+#   - trueno#200: Blackwell cuModuleLoadData fails during active GPU work
+#   - trueno#203: Dimension-independent kernels architecture
+#   - S18.10: 8 training failures from JIT during GPU work
+#   - S18.13: ELI5 — PyTorch ships pre-compiled, we JIT-compile
+#   - S18.14: Dimension-independent kernels plan
+
+metadata:
+  version: "1.0.0"
+  created: "2026-03-22"
+  author: "PAIML Engineering"
+  description: "All GPU training kernels must be dimension-independent (runtime params, not baked PTX)"
+  references:
+    - "trueno#200: Blackwell cuModuleLoadDataEx poisons CUDA context"
+    - "trueno#203: Dimension-independent kernels architecture"
+    - "bashrs S18.14: Dimension-independent kernels plan"
+  issues:
+    - "https://github.com/paiml/trueno/issues/200"
+    - "https://github.com/paiml/trueno/issues/203"
+
+# Kernels audited as BAKING dimensions (2026-03-22):
+#
+# BAKED (20 kernels):
+#   backward/gemm.rs: GemmBackwardA/B tiled/tiled_unrolled (tile_size, n/k baked)
+#   backward/rms_norm.rs: RmsNormBackward (hidden_dim structure), BatchedRmsNormBackward (all baked)
+#   backward/softmax.rs: SoftmaxBackward (row_size structure), BatchedSoftmaxBackward (all baked)
+#   backward/layer_norm.rs: LayerNormBackward (hidden_dim structure)
+#   elementwise/rope/batched.rs: BatchedRopeKernel, BatchedRopeBackwardKernel (all baked, NO params)
+#   elementwise/transform/layout.rs: InterleavedToBatched, BatchedToInterleaved, Extract/CopySingleHead
+#   elementwise/transform/element_wise.rs: BatchedScale, BatchedSoftmax
+#   elementwise/transform/transpose.rs: Transpose, BatchedTranspose
+#
+# OK (10 kernels):
+#   backward/activations.rs: Relu/Gelu/SiluBackward (n is runtime param)
+#   backward/gemm.rs: GemmBackwardA/B naive (m,n,k all runtime params)
+#   backward/cross_entropy.rs: FusedCrossEntropy, FusedCausalCrossEntropy (vocab_size runtime)
+#   optimizer/adamw.rs: AdamWStep, AdamStep (all runtime params)
+#   optimizer/clip.rs: GradientClip (all runtime params)
+
+tests:
+  - id: FALSIFY-DIM-001
+    name: "Kernel PTX has no baked dimensions"
+    description: >
+      For each training-critical kernel type, emit PTX with constructor args
+      (M=4, K=64, N=64) and (M=8, K=128, N=256). If the PTX text differs,
+      the kernel bakes dimensions as immediates.
+      Test file: trueno-gpu/src/kernels/tests/dimension_independence.rs
+    prediction: FAIL_BEFORE_FIX
+    if_fails: "Kernel bakes dimensions — needs refactor to use runtime params"
+    severity: critical
+    current_status: "20 kernels FAIL, 10 PASS"
+
+  - id: FALSIFY-DIM-002
+    name: "Same PTX for different dimensions (backward kernels)"
+    description: >
+      For the 7 backward kernel types used in training, generate PTX with
+      two different dimension sets. PTX source MUST be byte-identical.
+      Kernels: silu_backward, batched_rms_norm_backward, batched_softmax_backward,
+      gemm_backward_a, gemm_backward_b, layer_norm_backward, cross_entropy.
+    prediction: PASS_AFTER_FIX
+    if_fails: "Backward kernel PTX differs between dimensions"
+    severity: critical
+
+  - id: FALSIFY-DIM-003
+    name: "Total unique training kernel PTX count <= 20"
+    description: >
+      Enumerate all kernel types used during a Qwen3-4B training step.
+      Count distinct PTX templates. Must be <= 20 to make pre-compilation
+      feasible. Currently ~50+ variants due to dimension baking.
+    prediction: PASS_AFTER_FIX
+    if_fails: "Too many kernel variants for pre-compilation"
+    severity: high
+
+  - id: FALSIFY-DIM-004
+    name: "Layout transform kernels are dimension-independent"
+    description: >
+      InterleavedToBatched, BatchedToInterleaved, BatchedTranspose,
+      BatchedSoftmax, and TransposeKernel must produce identical PTX
+      regardless of constructor dimensions. These are the kernels seen
+      JIT-compiling in Run 12 logs.
+    prediction: FAIL_BEFORE_FIX
+    if_fails: "Layout kernel still bakes dimensions"
+    severity: critical
+    current_status: "All 5 FAIL — these are the Run 12 JIT offenders"
+
+  - id: FALSIFY-DIM-005
+    name: "RoPE kernels are dimension-independent"
+    description: >
+      BatchedRopeKernel and BatchedRopeBackwardKernel must produce identical
+      PTX regardless of num_heads, head_dim, or theta. Currently they have
+      ZERO runtime params for these values — everything is baked.
+    prediction: FAIL_BEFORE_FIX
+    if_fails: "RoPE kernel still bakes head_dim/num_heads/theta"
+    severity: critical
+    current_status: "Both FAIL — no runtime params at all"
+
+  - id: FALSIFY-DIM-006
+    name: "Declared params are actually loaded"
+    description: >
+      Several kernels (BatchedRmsNormBackward, BatchedSoftmaxBackward,
+      TransposeKernel, BatchedTransposeKernel) declare .param entries but
+      never call ld.param to load them. The closure uses baked immediates
+      instead. For each kernel, verify that every declared .param has a
+      corresponding ld.param instruction in the PTX body.
+    prediction: FAIL_BEFORE_FIX
+    if_fails: "Phantom params — declared but never loaded"
+    severity: high
+    current_status: "8+ kernels have phantom params"

@@ -38,37 +38,43 @@ impl Kernel for InterleavedToBatchedKernel {
     }
 
     fn build_ptx(&self) -> PtxKernel {
-        let seq_len = self.seq_len;
-        let n_heads = self.n_heads;
-        let head_dim = self.head_dim;
-        let d_model = n_heads * head_dim;
-        let total_elems = seq_len * d_model;
-
+        // Contract: dimension-independent-kernels-v1.yaml (FALSIFY-DIM-004)
+        // All dimensions passed as runtime .param — NO baked immediates.
         PtxKernel::new("interleaved_to_batched")
             .param(PtxType::U64, "input_ptr")
             .param(PtxType::U64, "output_ptr")
-            .build(move |ctx| {
+            .param(PtxType::U32, "seq_len")
+            .param(PtxType::U32, "n_heads")
+            .param(PtxType::U32, "head_dim")
+            .param(PtxType::U32, "total_elems")
+            .build(|ctx| {
                 let tid = ctx.special_reg(PtxReg::TidX);
                 let ctaid = ctx.special_reg(PtxReg::CtaIdX);
                 let ntid = ctx.special_reg(PtxReg::NtidX);
                 let gid = ctx.mad_lo_u32(ctaid, ntid, tid);
 
-                let total = ctx.mov_u32_imm(total_elems);
+                let total = ctx.load_param_u32("total_elems");
                 let in_bounds = ctx.setp_lt_u32(gid, total);
                 ctx.branch_if_not(in_bounds, "exit");
 
                 let input_ptr = ctx.load_param_u64("input_ptr");
                 let output_ptr = ctx.load_param_u64("output_ptr");
+                let seq_len = ctx.load_param_u32("seq_len");
+                let head_dim = ctx.load_param_u32("head_dim");
 
-                let s = ctx.div_u32(gid, d_model);
-                let remainder = ctx.rem_u32(gid, d_model);
-                let h = ctx.div_u32(remainder, head_dim);
-                let d = ctx.rem_u32(remainder, head_dim);
+                // d_model = n_heads * head_dim (computed from runtime params)
+                let n_heads = ctx.load_param_u32("n_heads");
+                let d_model = ctx.mul_lo_u32(n_heads, head_dim);
 
-                let seq_head = ctx.mov_u32_imm(seq_len * head_dim);
-                let head_dim_reg = ctx.mov_u32_imm(head_dim);
+                let s = ctx.div_u32_reg(gid, d_model);
+                let remainder = ctx.rem_u32_reg(gid, d_model);
+                let h = ctx.div_u32_reg(remainder, head_dim);
+                let d = ctx.rem_u32_reg(remainder, head_dim);
+
+                // seq_head = seq_len * head_dim
+                let seq_head = ctx.mul_lo_u32(seq_len, head_dim);
                 let out_base = ctx.mul_lo_u32(h, seq_head);
-                let out_row = ctx.mad_lo_u32(s, head_dim_reg, d);
+                let out_row = ctx.mad_lo_u32(s, head_dim, d);
                 let out_idx = ctx.add_u32_reg(out_base, out_row);
 
                 let four = ctx.mov_u32_imm(4);
@@ -257,37 +263,43 @@ impl Kernel for BatchedToInterleavedKernel {
     }
 
     fn build_ptx(&self) -> PtxKernel {
-        let seq_len = self.seq_len;
-        let n_heads = self.n_heads;
-        let head_dim = self.head_dim;
-        let d_model = n_heads * head_dim;
-        let total_elems = seq_len * d_model;
-
+        // Contract: dimension-independent-kernels-v1.yaml (FALSIFY-DIM-004)
+        // All dimensions passed as runtime .param — NO baked immediates.
         PtxKernel::new("batched_to_interleaved")
             .param(PtxType::U64, "input_ptr")
             .param(PtxType::U64, "output_ptr")
-            .build(move |ctx| {
+            .param(PtxType::U32, "seq_len")
+            .param(PtxType::U32, "n_heads")
+            .param(PtxType::U32, "head_dim")
+            .param(PtxType::U32, "total_elems")
+            .build(|ctx| {
                 let tid = ctx.special_reg(PtxReg::TidX);
                 let ctaid = ctx.special_reg(PtxReg::CtaIdX);
                 let ntid = ctx.special_reg(PtxReg::NtidX);
                 let gid = ctx.mad_lo_u32(ctaid, ntid, tid);
 
-                let total = ctx.mov_u32_imm(total_elems);
+                let total = ctx.load_param_u32("total_elems");
                 let in_bounds = ctx.setp_lt_u32(gid, total);
                 ctx.branch_if_not(in_bounds, "exit");
 
                 let input_ptr = ctx.load_param_u64("input_ptr");
                 let output_ptr = ctx.load_param_u64("output_ptr");
+                let seq_len = ctx.load_param_u32("seq_len");
+                let head_dim = ctx.load_param_u32("head_dim");
+                let n_heads = ctx.load_param_u32("n_heads");
 
-                let s = ctx.div_u32(gid, d_model);
-                let remainder = ctx.rem_u32(gid, d_model);
-                let h = ctx.div_u32(remainder, head_dim);
-                let d = ctx.rem_u32(remainder, head_dim);
+                // d_model = n_heads * head_dim
+                let d_model = ctx.mul_lo_u32(n_heads, head_dim);
 
-                let seq_head = ctx.mov_u32_imm(seq_len * head_dim);
-                let head_dim_reg = ctx.mov_u32_imm(head_dim);
+                let s = ctx.div_u32_reg(gid, d_model);
+                let remainder = ctx.rem_u32_reg(gid, d_model);
+                let h = ctx.div_u32_reg(remainder, head_dim);
+                let d = ctx.rem_u32_reg(remainder, head_dim);
+
+                // seq_head = seq_len * head_dim
+                let seq_head = ctx.mul_lo_u32(seq_len, head_dim);
                 let in_base = ctx.mul_lo_u32(h, seq_head);
-                let in_row = ctx.mad_lo_u32(s, head_dim_reg, d);
+                let in_row = ctx.mad_lo_u32(s, head_dim, d);
                 let in_idx = ctx.add_u32_reg(in_base, in_row);
 
                 let four = ctx.mov_u32_imm(4);

@@ -1140,3 +1140,41 @@ The RAG index includes 335 documents across:
 Index auto-updates via post-commit hooks and `ora-fresh` on shell login.
 To manually check freshness: `ora-fresh`
 To force full reindex: `batuta oracle --rag-index --force`
+
+## Blackwell Training Infrastructure (trueno#200, trueno#203)
+
+### Blackwell sm_121 JIT Bug (trueno#200)
+
+**Problem**: `cuModuleLoadData` / `cuModuleLoadDataEx` fails with `CUDA_ERROR_UNKNOWN` on Blackwell (sm_121) GPUs when called during active GPU work (concurrent kernels, active streams, etc.). This specifically affects **backward (training) kernels** -- forward kernels work after a pre-warming phase.
+
+**Root Cause**: The NVIDIA JIT compiler on Blackwell has a bug where PTX-to-SASS compilation via the driver API fails non-deterministically when the GPU is already under load. This does NOT affect cuBLAS calls or pre-compiled cubin modules.
+
+**Workaround -- `from_ptx_direct`**: A Blackwell-safe PTX loading path that skips `cuModuleLoadDataEx` entirely:
+- Compiles PTX to cubin offline or at initialization time (before any GPU work)
+- Loads only pre-compiled cubin blobs during training
+- Forward PTX kernels work after pre-warming (loading all kernel variants before training starts)
+
+**Key Distinction**:
+- **Forward kernels**: Work after pre-warming (all variants loaded before first training step)
+- **Backward kernels**: Crash during training because they are compiled on-demand when the GPU is already active
+- **Inference (NOT affected)**: Uses cuBLAS and SIMD paths, no custom PTX compilation at runtime
+
+### Dimension-Independent Kernels Plan (trueno#203)
+
+**Current Architecture**: Dynamic PTX generation with dimensions (M, K, N) baked into the PTX source. This produces **50+ kernel variants** (one per unique shape) and requires JIT compilation for each new shape encountered at runtime.
+
+**Target Architecture**: Dimension-independent kernels that accept M, K, N as runtime parameters. This reduces the total kernel count to **~15 types** (GEMM, softmax, layernorm, attention, backward variants, etc.), each compiled once.
+
+**Pre-Compiled cubin Pipeline** (the real fix for JIT issues):
+```
+build.rs → nvcc (offline) → cubin blobs → include_bytes!() → zero JIT at runtime
+```
+
+- `build.rs` invokes `nvcc` to compile PTX to cubins for target architectures (sm_80, sm_89, sm_121)
+- cubin blobs are embedded in the binary via `include_bytes!()`
+- Runtime loads cubins directly -- no JIT compilation, no `cuModuleLoadDataEx`
+- Eliminates the Blackwell JIT bug entirely since no runtime PTX compilation occurs
+
+**Provable Contract**: `dimension-independent-kernels-v1.yaml`
+
+**Impact on Entrenar**: Training is currently blocked by the backward kernel JIT crash (trueno#200). The dimension-independent kernel architecture (trueno#203) is the permanent fix. Until then, inference via `apr run` is fully operational (uses cuBLAS/SIMD, not custom PTX).
