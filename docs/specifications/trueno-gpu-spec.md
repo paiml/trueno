@@ -1429,3 +1429,105 @@ impl PerformanceGate {
 2. Implement PTX builder (TG-001)
 3. Write acceptance tests for each kernel
 4. Begin GEMM optimization journey
+
+---
+
+## 14. Dimension-Independent Kernel Architecture (trueno#203)
+
+### 14.1 Current Architecture: Dynamic PTX with Baked Dimensions
+
+The current kernel generation system bakes matrix dimensions (M, K, N) directly into PTX source code. Each unique shape produces a distinct PTX module that must be JIT-compiled by the CUDA driver:
+
+```
+Current Flow:
+┌─────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│  Kernel Request  │───▶│ Generate PTX     │───▶│ cuModuleLoadData │
+│  (M=2560, K=896) │    │ with baked dims  │    │ (JIT compile)    │
+└─────────────────┘    └──────────────────┘    └──────────────────┘
+                                                        │
+                        50+ kernel variants              │
+                        (one per unique shape)            ▼
+                                                 ┌──────────────┐
+                                                 │ GPU Execution │
+                                                 └──────────────┘
+```
+
+**Problems with this approach**:
+- **50+ kernel variants**: Every new dimension triplet generates a new PTX module
+- **JIT overhead**: Each variant requires runtime PTX-to-SASS compilation (~50-200ms per kernel)
+- **Blackwell JIT bug (trueno#200)**: `cuModuleLoadDataEx` fails during active GPU work on sm_121
+- **Cache pressure**: Large number of compiled kernels consumes GPU code cache
+
+### 14.2 Target Architecture: Dimension-Independent Kernels
+
+Kernels accept M, K, N as runtime parameters via kernel arguments rather than compile-time constants. This reduces the total kernel count to approximately **15 kernel types**:
+
+| # | Kernel Type | Direction | Notes |
+|---|-------------|-----------|-------|
+| 1 | GEMM (tiled) | Forward | General matrix multiply |
+| 2 | GEMM (NF4 fused) | Forward | Dequant + matmul fused |
+| 3 | Softmax | Forward | Warp shuffle reduction |
+| 4 | LayerNorm (RMS) | Forward | Fused RMSNorm |
+| 5 | RoPE | Forward | Rotary position embedding |
+| 6 | QK-Norm | Forward | Per-head RMS normalization |
+| 7 | SiLU | Forward | Activation function |
+| 8 | GEMM backward | Backward | dL/dW, dL/dx |
+| 9 | Softmax backward | Backward | Jacobian-vector product |
+| 10 | LayerNorm backward | Backward | dL/dgamma, dL/dbeta, dL/dx |
+| 11 | RoPE backward | Backward | Reverse rotation |
+| 12 | LoRA forward | Forward | Low-rank adapter matmul |
+| 13 | LoRA backward | Backward | Adapter gradient accumulation |
+| 14 | Cross-entropy loss | Forward | Log-softmax + NLL |
+| 15 | Adam update | Optimizer | Fused parameter update |
+
+```
+Target Flow:
+┌─────────────────┐    ┌──────────────────────┐    ┌──────────────────┐
+│  build.rs       │───▶│ nvcc --cubin          │───▶│ include_bytes!() │
+│  (compile time) │    │ 15 kernels × 3 archs  │    │ (embedded blobs) │
+└─────────────────┘    └──────────────────────┘    └──────────────────┘
+                                                            │
+                                                            ▼
+┌─────────────────┐    ┌──────────────────────┐    ┌──────────────────┐
+│  Kernel Request  │───▶│ cuModuleLoadData     │───▶│ cuLaunchKernel   │
+│  (M=2560, K=896) │    │ (pre-compiled cubin) │    │ (M,K,N as args)  │
+└─────────────────┘    └──────────────────────┘    └──────────────────┘
+                        Zero JIT compilation          Dims via params
+```
+
+### 14.3 Pre-Compilation Pipeline
+
+```bash
+# build.rs pseudocode
+for arch in [sm_80, sm_89, sm_121] {
+    for kernel in [gemm, softmax, layernorm, ...] {
+        nvcc --cubin --gpu-architecture={arch} {kernel}.ptx -o {kernel}_{arch}.cubin
+    }
+}
+```
+
+The pre-compiled cubin blobs are embedded via `include_bytes!()`:
+```rust
+const GEMM_SM80: &[u8] = include_bytes!("cubins/gemm_sm80.cubin");
+const GEMM_SM89: &[u8] = include_bytes!("cubins/gemm_sm89.cubin");
+const GEMM_SM121: &[u8] = include_bytes!("cubins/gemm_sm121.cubin");
+```
+
+### 14.4 Blackwell Compatibility
+
+This architecture **eliminates the Blackwell JIT bug entirely**:
+- No `cuModuleLoadDataEx` calls at runtime (no PTX JIT)
+- Pre-compiled cubins load via `cuModuleLoadData` which reads binary, no compilation
+- Safe to load modules at any time, even during active GPU work
+- Forward and backward kernels both work without pre-warming
+
+### 14.5 Provable Contract
+
+Contract file: `provable-contracts/contracts/dimension-independent-kernels-v1.yaml`
+
+Key assertions:
+- FALSIFY-DIK-001: All 15 kernel types accept M/K/N as runtime params
+- FALSIFY-DIK-002: Zero `cuModuleLoadDataEx` calls after initialization
+- FALSIFY-DIK-003: cubin blobs present for sm_80, sm_89, sm_121
+- FALSIFY-DIK-004: Dimension-independent GEMM produces identical results to baked-dimension GEMM
+- FALSIFY-DIK-005: Backward kernels work during active GPU training (no JIT crash)
