@@ -120,9 +120,7 @@ mod tests {
                 let start = i0 * d1 * d2 + i1 * d2;
                 let slice: Vec<Complex> = (0..d2).map(|i2| buf[start + i2]).collect();
                 let transformed = dft(&slice);
-                for i2 in 0..d2 {
-                    buf[start + i2] = transformed[i2];
-                }
+                buf[start..(d2 + start)].copy_from_slice(&transformed[..d2]);
             }
         }
         // DFT along axis 1
