@@ -68,17 +68,15 @@ fn assert_ptx_identical<K1: Kernel, K2: Kernel>(kernel_a: &K1, kernel_b: &K2, la
     let ptx_a = normalize_ptx(&kernel_a.emit_ptx());
     let ptx_b = normalize_ptx(&kernel_b.emit_ptx());
     assert_eq!(
-        ptx_a, ptx_b,
+        ptx_a,
+        ptx_b,
         "FALSIFY-DIM: {label} produces different PTX for different dimensions.\n\
          This means dimensions are baked as compile-time immediates.\n\
          PTX length A: {}, PTX length B: {}\n\
          First diff at byte: {:?}",
         ptx_a.len(),
         ptx_b.len(),
-        ptx_a
-            .bytes()
-            .zip(ptx_b.bytes())
-            .position(|(a, b)| a != b)
+        ptx_a.bytes().zip(ptx_b.bytes()).position(|(a, b)| a != b)
     );
 }
 
@@ -238,7 +236,6 @@ fn test_falsify_dim_001_rms_norm_backward_dimension_independent() {
 }
 
 #[test]
-#[ignore = "FALSIFY-DIM-001: BatchedRmsNormBackward bakes ALL dims (params never loaded) — trueno#203"]
 fn test_falsify_dim_001_batched_rms_norm_backward_dimension_independent() {
     let a = BatchedRmsNormBackwardKernel::new(64, 128, 1e-6);
     let b = BatchedRmsNormBackwardKernel::new(128, 256, 1e-5);
@@ -333,7 +330,6 @@ fn test_falsify_dim_004_transpose_dimension_independent() {
 // ============================================================================
 
 #[test]
-#[ignore = "FALSIFY-DIM-006: BatchedRmsNormBackward declares params but uses baked immediates — trueno#203"]
 fn test_falsify_dim_006_batched_rms_norm_backward_params_loaded() {
     let kernel = BatchedRmsNormBackwardKernel::new(64, 128, 1e-6);
     let ptx = kernel.emit_ptx();
@@ -414,9 +410,5 @@ fn test_falsify_dim_003_unique_training_kernel_count() {
     let mut names: Vec<&str> = training_kernel_types.iter().map(|(n, _)| *n).collect();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(
-        names.len(),
-        training_kernel_types.len(),
-        "Duplicate kernel type names detected"
-    );
+    assert_eq!(names.len(), training_kernel_types.len(), "Duplicate kernel type names detected");
 }
