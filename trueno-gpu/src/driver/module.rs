@@ -195,9 +195,8 @@ impl CudaModule {
             .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
 
         let mut module: CUmodule = ptr::null_mut();
-        let result = unsafe {
-            (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _)
-        };
+        let result =
+            unsafe { (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _) };
 
         CudaDriver::check(result).map_err(|e| {
             let kernel_name = ptx.lines().find(|l| l.contains(".entry")).unwrap_or("unknown");
