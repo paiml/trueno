@@ -294,7 +294,6 @@ fn test_falsify_dim_005_batched_rope_dimension_independent() {
 // ============================================================================
 
 #[test]
-#[ignore = "FALSIFY-DIM-004: InterleavedToBatched bakes seq_len/n_heads/head_dim — trueno#203"]
 fn test_falsify_dim_004_interleaved_to_batched_dimension_independent() {
     let a = InterleavedToBatchedKernel::new(512, 32, 128);
     let b = InterleavedToBatchedKernel::new(1024, 8, 64);
@@ -302,7 +301,6 @@ fn test_falsify_dim_004_interleaved_to_batched_dimension_independent() {
 }
 
 #[test]
-#[ignore = "FALSIFY-DIM-004: BatchedToInterleaved bakes seq_len/n_heads/head_dim — trueno#203"]
 fn test_falsify_dim_004_batched_to_interleaved_dimension_independent() {
     let a = BatchedToInterleavedKernel::new(512, 32, 128);
     let b = BatchedToInterleavedKernel::new(1024, 8, 64);
@@ -310,7 +308,6 @@ fn test_falsify_dim_004_batched_to_interleaved_dimension_independent() {
 }
 
 #[test]
-#[ignore = "FALSIFY-DIM-004: BatchedTranspose bakes rows/cols — trueno#203"]
 fn test_falsify_dim_004_batched_transpose_dimension_independent() {
     let a = BatchedTransposeKernel::new(64, 128, 4);
     let b = BatchedTransposeKernel::new(256, 512, 8);
@@ -318,7 +315,6 @@ fn test_falsify_dim_004_batched_transpose_dimension_independent() {
 }
 
 #[test]
-#[ignore = "FALSIFY-DIM-004: BatchedSoftmax bakes total_rows/row_size — trueno#203"]
 fn test_falsify_dim_004_batched_softmax_dimension_independent() {
     let a = BatchedSoftmaxKernel::new(64, 128);
     let b = BatchedSoftmaxKernel::new(256, 512);
@@ -326,7 +322,6 @@ fn test_falsify_dim_004_batched_softmax_dimension_independent() {
 }
 
 #[test]
-#[ignore = "FALSIFY-DIM-004: Transpose bakes rows/cols — trueno#203"]
 fn test_falsify_dim_004_transpose_dimension_independent() {
     let a = TransposeKernel::new(64, 128);
     let b = TransposeKernel::new(256, 512);
@@ -354,7 +349,6 @@ fn test_falsify_dim_006_batched_softmax_backward_params_loaded() {
 }
 
 #[test]
-#[ignore = "FALSIFY-DIM-006: TransposeKernel declares params but uses baked immediates — trueno#203"]
 fn test_falsify_dim_006_transpose_params_loaded() {
     let kernel = TransposeKernel::new(64, 128);
     let ptx = kernel.emit_ptx();
@@ -362,7 +356,6 @@ fn test_falsify_dim_006_transpose_params_loaded() {
 }
 
 #[test]
-#[ignore = "FALSIFY-DIM-006: BatchedTransposeKernel declares params but uses baked immediates — trueno#203"]
 fn test_falsify_dim_006_batched_transpose_params_loaded() {
     let kernel = BatchedTransposeKernel::new(64, 128, 4);
     let ptx = kernel.emit_ptx();
@@ -370,7 +363,6 @@ fn test_falsify_dim_006_batched_transpose_params_loaded() {
 }
 
 #[test]
-#[ignore = "FALSIFY-DIM-006: BatchedSoftmaxKernel declares params but uses baked immediates — trueno#203"]
 fn test_falsify_dim_006_batched_softmax_params_loaded() {
     let kernel = BatchedSoftmaxKernel::new(64, 128);
     let ptx = kernel.emit_ptx();

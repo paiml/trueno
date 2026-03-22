@@ -36,16 +36,14 @@ impl Kernel for TransposeKernel {
     }
 
     fn build_ptx(&self) -> PtxKernel {
-        let rows = self.rows;
-        let cols = self.cols;
-        let total_elems = rows * cols;
-
+        // Contract: dimension-independent-kernels-v1.yaml (FALSIFY-DIM-004)
         PtxKernel::new("transpose")
             .param(PtxType::U64, "input_ptr")
             .param(PtxType::U64, "output_ptr")
             .param(PtxType::U32, "rows")
             .param(PtxType::U32, "cols")
-            .build(move |ctx| {
+            .param(PtxType::U32, "total_elems")
+            .build(|ctx| {
                 let tid = ctx.special_reg(PtxReg::TidX);
                 let ctaid = ctx.special_reg(PtxReg::CtaIdX);
                 let ntid = ctx.special_reg(PtxReg::NtidX);
@@ -53,20 +51,21 @@ impl Kernel for TransposeKernel {
 
                 let input_ptr = ctx.load_param_u64("input_ptr");
                 let output_ptr = ctx.load_param_u64("output_ptr");
+                let rows = ctx.load_param_u32("rows");
+                let cols = ctx.load_param_u32("cols");
+                let total = ctx.load_param_u32("total_elems");
 
-                let total = ctx.mov_u32_imm(total_elems);
                 let in_bounds = ctx.setp_lt_u32(gid, total);
                 ctx.branch_if_not(in_bounds, "exit");
 
-                let row_idx = ctx.div_u32(gid, cols);
-                let col_idx = ctx.rem_u32(gid, cols);
+                let row_idx = ctx.div_u32_reg(gid, cols);
+                let col_idx = ctx.rem_u32_reg(gid, cols);
 
                 let four = ctx.mov_u32_imm(4);
                 let input_offset = ctx.mul_wide_u32_reg(gid, four);
                 let input_addr = ctx.add_u64(input_ptr, input_offset);
 
-                let rows_reg = ctx.mov_u32_imm(rows);
-                let out_linear = ctx.mad_lo_u32(col_idx, rows_reg, row_idx);
+                let out_linear = ctx.mad_lo_u32(col_idx, rows, row_idx);
                 let output_offset = ctx.mul_wide_u32_reg(out_linear, four);
                 let output_addr = ctx.add_u64(output_ptr, output_offset);
 
@@ -108,24 +107,22 @@ impl Kernel for BatchedTransposeKernel {
     }
 
     fn build_ptx(&self) -> PtxKernel {
-        let rows = self.rows;
-        let cols = self.cols;
-        let total_per_batch = rows * cols;
-
+        // Contract: dimension-independent-kernels-v1.yaml (FALSIFY-DIM-004)
         PtxKernel::new("batched_transpose")
             .param(PtxType::U64, "input_ptr")
             .param(PtxType::U64, "output_ptr")
             .param(PtxType::U32, "batch")
             .param(PtxType::U32, "rows")
             .param(PtxType::U32, "cols")
-            .build(move |ctx| {
+            .param(PtxType::U32, "total_per_batch")
+            .build(|ctx| {
                 let batch_idx = ctx.special_reg(PtxReg::CtaIdZ);
                 let tid = ctx.special_reg(PtxReg::TidX);
                 let ctaid = ctx.special_reg(PtxReg::CtaIdX);
                 let ntid = ctx.special_reg(PtxReg::NtidX);
                 let gid = ctx.mad_lo_u32(ctaid, ntid, tid);
 
-                let total = ctx.mov_u32_imm(total_per_batch);
+                let total = ctx.load_param_u32("total_per_batch");
                 let in_bounds = ctx.setp_lt_u32(gid, total);
                 let batch_param = ctx.load_param_u32("batch");
                 let batch_valid = ctx.setp_lt_u32(batch_idx, batch_param);
@@ -134,20 +131,22 @@ impl Kernel for BatchedTransposeKernel {
 
                 let input_ptr = ctx.load_param_u64("input_ptr");
                 let output_ptr = ctx.load_param_u64("output_ptr");
+                let rows = ctx.load_param_u32("rows");
+                let cols = ctx.load_param_u32("cols");
 
-                let row = ctx.div_u32(gid, cols);
-                let col = ctx.rem_u32(gid, cols);
+                let row = ctx.div_u32_reg(gid, cols);
+                let col = ctx.rem_u32_reg(gid, cols);
 
-                let batch_offset = ctx.mul_wide_u32(batch_idx, total_per_batch * 4);
+                // batch_byte_stride = total_per_batch * 4
+                let four = ctx.mov_u32_imm(4);
+                let batch_byte_stride = ctx.mul_lo_u32(total, four);
+                let batch_offset = ctx.mul_wide_u32_reg(batch_idx, batch_byte_stride);
                 let in_batch_ptr = ctx.add_u64(input_ptr, batch_offset);
                 let out_batch_ptr = ctx.add_u64(output_ptr, batch_offset);
 
-                let cols_reg = ctx.mov_u32_imm(cols);
-                let in_idx = ctx.mad_lo_u32(row, cols_reg, col);
-                let rows_reg = ctx.mov_u32_imm(rows);
-                let out_idx = ctx.mad_lo_u32(col, rows_reg, row);
+                let in_idx = ctx.mad_lo_u32(row, cols, col);
+                let out_idx = ctx.mad_lo_u32(col, rows, row);
 
-                let four = ctx.mov_u32_imm(4);
                 let in_offset = ctx.mul_wide_u32_reg(in_idx, four);
                 let out_offset = ctx.mul_wide_u32_reg(out_idx, four);
                 let in_addr = ctx.add_u64(in_batch_ptr, in_offset);
