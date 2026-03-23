@@ -313,3 +313,13 @@ fn test_regular_mul_no_skip() {
     instr.srcs = vec![Operand::Reg(vreg(0, PtxType::U64)), Operand::Reg(vreg(1, PtxType::U64))];
     assert!(!should_skip_type_suffix(&instr));
 }
+
+#[test]
+fn test_mul_wide_op_no_skip_type() {
+    // PtxOp::MulWide uses the source type (U32) as instr.ty,
+    // so the type suffix .u32 must NOT be skipped.
+    let mut instr = make_instr(PtxOp::MulWide);
+    instr.ty = PtxType::U32;
+    instr.srcs = vec![Operand::Reg(vreg(0, PtxType::U32)), Operand::Reg(vreg(1, PtxType::U32))];
+    assert!(!should_skip_type_suffix(&instr));
+}
