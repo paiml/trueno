@@ -91,6 +91,79 @@ fn main(
 }
 "#;
 
+/// PMAT-326: GEMV compute shader (WGSL) — matrix-vector product y = W × x
+///
+/// Optimized for M=1 (single-token decode). Each workgroup computes ONE output
+/// element by cooperatively reducing the dot product along K using shared memory.
+///
+/// - W: [N, K] row-major weight matrix
+/// - x: [K] input vector
+/// - y: [N] output vector
+///
+/// Workgroup: 256 threads. Each workgroup handles 1 output row.
+/// Dispatch: N workgroups (one per output element).
+/// Reduction: tree reduction in shared memory (log2(256) = 8 steps).
+/// PMAT-331: vec4 vectorized GEMV — 4x fewer memory transactions.
+/// Each thread loads vec4<f32> (4 floats per load), dot4 in registers.
+/// K must be divisible by 4 (true for all Qwen dimensions: 1536, 256, 8960).
+pub(crate) const GEMV_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> x: array<vec4<f32>>;     // input [K/4]
+@group(0) @binding(1) var<storage, read> w: array<vec4<f32>>;     // weight [N, K/4]
+@group(0) @binding(2) var<storage, read_write> y: array<f32>;     // output [N]
+
+struct Params {
+    n: u32,  // output dim (number of rows)
+    k: u32,  // input dim (K, NOT K/4 — shader divides internally)
+    _pad1: u32,
+    _pad2: u32,
+}
+@group(0) @binding(3) var<uniform> params: Params;
+
+var<workgroup> sdata: array<f32, 256>;
+
+@compute @workgroup_size(256)
+fn main(@builtin(workgroup_id) wg_id: vec3<u32>,
+        @builtin(local_invocation_id) lid: vec3<u32>) {
+    let row = wg_id.x;
+    let tid = lid.x;
+    let k4 = params.k / 4u;  // Number of vec4 elements per row
+
+    if (row >= params.n) { return; }
+
+    // Phase 1: vec4 dot product — 4 FMAs per iteration
+    var partial_sum: f32 = 0.0;
+    let row_offset = row * k4;
+    var col4 = tid;
+    while (col4 < k4) {
+        let wv = w[row_offset + col4];
+        let xv = x[col4];
+        partial_sum += dot(wv, xv);  // vec4 dot = 4 FMAs
+        col4 += 256u;
+    }
+    sdata[tid] = partial_sum;
+    workgroupBarrier();
+
+    // Phase 2: Tree reduction (256 → 1)
+    if (tid < 128u) { sdata[tid] += sdata[tid + 128u]; }
+    workgroupBarrier();
+    if (tid < 64u) { sdata[tid] += sdata[tid + 64u]; }
+    workgroupBarrier();
+    if (tid < 32u) { sdata[tid] += sdata[tid + 32u]; }
+    workgroupBarrier();
+    if (tid < 16u) { sdata[tid] += sdata[tid + 16u]; }
+    workgroupBarrier();
+    if (tid < 8u) { sdata[tid] += sdata[tid + 8u]; }
+    workgroupBarrier();
+    if (tid < 4u) { sdata[tid] += sdata[tid + 4u]; }
+    workgroupBarrier();
+    if (tid < 2u) { sdata[tid] += sdata[tid + 2u]; }
+    workgroupBarrier();
+    if (tid == 0u) {
+        y[row] = sdata[0] + sdata[1];
+    }
+}
+"#;
+
 /// Vector addition compute shader (WGSL)
 ///
 /// Computes c = a + b element-wise

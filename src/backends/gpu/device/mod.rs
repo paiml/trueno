@@ -11,7 +11,7 @@
 
 mod activations;
 mod eigen;
-mod linalg;
+pub(crate) mod linalg;
 mod reductions;
 
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
