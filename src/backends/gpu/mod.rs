@@ -73,6 +73,10 @@ pub use pool::GpuDevicePool;
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 pub use device::linalg::cached_matmul::GpuMatmulCache;
 
+/// PMAT-324: WGSL transformer forward pass shaders.
+#[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
+pub use device::linalg::wgsl_forward::WgslForwardPass;
+
 #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
 mod backend_ops;
 

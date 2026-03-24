@@ -6,14 +6,27 @@
 
 use std::collections::HashMap;
 
-/// Cached matmul state: pipeline + pre-uploaded weight buffers.
+/// Cached matmul state: pipeline + pre-uploaded weight buffers + persistent I/O.
+///
+/// PMAT-323: Three levels of buffer persistence:
+/// 1. Weight buffers — uploaded once at model init (PMAT-322)
+/// 2. I/O buffers — pre-allocated to max size, reused across calls (PMAT-323)
+/// 3. Pipeline + bind group layout — created once, reused forever
 pub struct GpuMatmulCache {
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::ComputePipeline,
+    /// PMAT-326: Dedicated GEMV pipeline for M=1 (cooperative K-reduction)
+    gemv_pipeline: wgpu::ComputePipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     /// Pre-uploaded weight buffers keyed by name
     weight_buffers: HashMap<String, WeightEntry>,
+    /// PMAT-323: Persistent I/O buffers (grow-only, never deallocated)
+    input_buffer: Option<wgpu::Buffer>,
+    input_size: u64,
+    output_buffer: Option<wgpu::Buffer>,
+    output_size: u64,
+    dims_buffer: Option<wgpu::Buffer>,
     /// Reusable staging buffer (grows as needed)
     staging_size: u64,
     staging_buffer: Option<wgpu::Buffer>,
@@ -79,12 +92,34 @@ impl GpuMatmulCache {
             cache: None,
         });
 
+        // PMAT-326: GEMV pipeline (cooperative K-reduction, optimal for M=1)
+        let gemv_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("GEMV Shader"),
+            source: wgpu::ShaderSource::Wgsl(
+                crate::backends::gpu::shaders::GEMV_SHADER.into(),
+            ),
+        });
+        let gemv_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("GEMV Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &gemv_shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
         Self {
             device,
             queue,
             pipeline,
+            gemv_pipeline,
             bind_group_layout,
             weight_buffers: HashMap::new(),
+            input_buffer: None,
+            input_size: 0,
+            output_buffer: None,
+            output_size: 0,
+            dims_buffer: None,
             staging_size: 0,
             staging_buffer: None,
         }
@@ -120,9 +155,60 @@ impl GpuMatmulCache {
             .sum()
     }
 
-    /// Matmul: result = input × weight^T (for GEMV: M=1, result = [1, rows]).
-    /// `weight_name` must have been uploaded via `upload_weight`.
-    /// Input shape: [m, cols]. Output shape: [m, rows].
+    /// PMAT-323: Ensure persistent I/O buffers are at least `size` bytes.
+    /// Grows only — never shrinks. Returns reference to the buffer.
+    fn ensure_input_buffer(&mut self, size: u64) {
+        if self.input_size < size {
+            self.input_buffer = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("persistent_input"),
+                size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+            self.input_size = size;
+        }
+    }
+
+    fn ensure_output_buffer(&mut self, size: u64) {
+        if self.output_size < size {
+            self.output_buffer = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("persistent_output"),
+                size,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+            self.output_size = size;
+        }
+    }
+
+    fn ensure_dims_buffer(&mut self) {
+        if self.dims_buffer.is_none() {
+            self.dims_buffer = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("persistent_dims"),
+                size: 16,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+        }
+    }
+
+    fn ensure_staging_buffer(&mut self, size: u64) {
+        if self.staging_size < size {
+            self.staging_buffer = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("persistent_staging"),
+                size,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }));
+            self.staging_size = size;
+        }
+    }
+
+    /// PMAT-323: Zero-alloc matmul using persistent I/O buffers.
+    /// Only creates bind group per call (required by WGPU — bind groups reference
+    /// specific buffer instances). Everything else is reused.
     pub fn matmul_cached(
         &mut self,
         weight_name: &str,
@@ -130,13 +216,14 @@ impl GpuMatmulCache {
         output: &mut [f32],
         m: usize,
     ) -> Result<(), String> {
-        let entry = self
-            .weight_buffers
-            .get(weight_name)
-            .ok_or_else(|| format!("Weight '{}' not uploaded", weight_name))?;
-
-        let k = entry.cols;
-        let n = entry.rows;
+        // Extract weight dims first to avoid borrow conflict
+        let (k, n) = {
+            let entry = self
+                .weight_buffers
+                .get(weight_name)
+                .ok_or_else(|| format!("Weight '{}' not uploaded", weight_name))?;
+            (entry.cols, entry.rows)
+        };
 
         if input.len() < m * k {
             return Err(format!("input too small: need {}, have {}", m * k, input.len()));
@@ -145,84 +232,63 @@ impl GpuMatmulCache {
             return Err(format!("output too small: need {}, have {}", m * n, output.len()));
         }
 
-        // Create input buffer (per-call — small, M×K floats)
-        let a_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("input"),
-            size: (m * k * 4) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let input_bytes = (m * k * 4) as u64;
+        let output_bytes = (m * n * 4) as u64;
+
+        // Ensure persistent buffers are large enough (may alloc on first call / size increase)
+        self.ensure_input_buffer(input_bytes);
+        self.ensure_output_buffer(output_bytes);
+        self.ensure_dims_buffer();
+        self.ensure_staging_buffer(output_bytes);
+
+        // Write input + dims to persistent buffers (just memcpy, no alloc)
+        let input_buf = self.input_buffer.as_ref().unwrap();
         self.queue
-            .write_buffer(&a_buffer, 0, bytemuck::cast_slice(&input[..m * k]));
+            .write_buffer(input_buf, 0, bytemuck::cast_slice(&input[..m * k]));
 
-        // Create output buffer (per-call — small, M×N floats)
-        let output_size = (m * n * 4) as u64;
-        let c_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("output"),
-            size: output_size,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        // Dims uniform
         let dims = Dimensions {
             m: m as u32,
             k: k as u32,
             n: n as u32,
             _padding: 0,
         };
-        let dims_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("dims"),
-            size: 16,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let dims_buf = self.dims_buffer.as_ref().unwrap();
         self.queue
-            .write_buffer(&dims_buffer, 0, bytemuck::bytes_of(&dims));
+            .write_buffer(dims_buf, 0, bytemuck::bytes_of(&dims));
 
-        // Bind group (per-call — references cached weight buffer)
+        // Bind group (per-call — WGPU requires new bind group when buffer references change)
+        let output_buf = self.output_buffer.as_ref().unwrap();
+        let weight_buf = &self.weight_buffers.get(weight_name).unwrap().buffer;
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("matmul_cached BG"),
+            label: None,
             layout: &self.bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: a_buffer.as_entire_binding(),
+                    resource: input_buf.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: entry.buffer.as_entire_binding(),
+                    resource: weight_buf.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: c_buffer.as_entire_binding(),
+                    resource: output_buf.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: dims_buffer.as_entire_binding(),
+                    resource: dims_buf.as_entire_binding(),
                 },
             ],
         });
 
-        // Ensure staging buffer is large enough
-        if self.staging_size < output_size {
-            self.staging_buffer = Some(self.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("staging"),
-                size: output_size,
-                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }));
-            self.staging_size = output_size;
-        }
         let staging = self.staging_buffer.as_ref().unwrap();
 
         // Encode + dispatch
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("matmul_cached"),
+                label: None,
             });
 
         {
@@ -230,20 +296,30 @@ impl GpuMatmulCache {
                 label: Some("matmul"),
                 timestamp_writes: None,
             });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
-            pass.dispatch_workgroups(
-                (m as u32).div_ceil(16),
-                (n as u32).div_ceil(16),
-                1,
-            );
+            if m == 1 {
+                // PMAT-326: Use GEMV shader for M=1 — cooperative K-reduction
+                // Each workgroup handles 1 output row with 256 threads reducing K
+                // Dispatch N workgroups (one per output element)
+                pass.set_pipeline(&self.gemv_pipeline);
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.dispatch_workgroups(n as u32, 1, 1);
+            } else {
+                // Tiled GEMM for M>1 (batch/prefill)
+                pass.set_pipeline(&self.pipeline);
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.dispatch_workgroups(
+                    (m as u32).div_ceil(16),
+                    (n as u32).div_ceil(16),
+                    1,
+                );
+            }
         }
 
-        encoder.copy_buffer_to_buffer(&c_buffer, 0, staging, 0, output_size);
+        encoder.copy_buffer_to_buffer(output_buf, 0, staging, 0, output_bytes);
         self.queue.submit(Some(encoder.finish()));
 
         // Readback
-        let slice = staging.slice(..output_size);
+        let slice = staging.slice(..output_bytes);
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| {
             tx.send(r).ok();

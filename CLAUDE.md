@@ -863,6 +863,38 @@ cargo test -p trueno-gpu property_tests
 - No regressions >5% compared to previous baseline
 - Results saved to `target/criterion/` for comparison
 
+## WGPU LLM Inference (PMAT-321→336)
+
+Trueno provides WGSL compute shaders for LLM inference on AMD/Intel/Apple GPUs via Vulkan/Metal/WebGPU. No CUDA required.
+
+**Key types:**
+- `GpuMatmulCache` — persistent weight buffers + cached pipeline + GEMV dispatch
+- `WgslForwardPass` — multi-pass single-submit transformer layer (RMSNorm, GEMV, SiLU, RoPE)
+
+**WGSL shaders** (`src/backends/gpu/shaders/basic_ops.rs`):
+- `GEMV_SHADER` — cooperative K-reduction, vec4 loads, 256 threads/workgroup
+- `MATMUL_SHADER` — tiled 16×16 shared-memory GEMM (for M>1 prefill)
+
+**Performance** (Radeon Pro W5700X, Qwen2.5-Coder-1.5B):
+- 27.6 tok/s decode (81% of CPU SIMD)
+- 1.29ms/layer (28 layers = 36ms full forward)
+- Peak 90.6 GFLOPS
+
+**Provable contracts** (`wgpu-forward-pass-v1.yaml`):
+- `rmsnorm_correctness`: 4.77e-7 max error vs CPU
+- `gemv_dispatch`: M=1→GEMV, M>1→GEMM
+- `vec4_alignment`: K%4==0 enforced by shader
+
+**Usage:**
+```rust
+use trueno::backends::gpu::{GpuDevice, WgslForwardPass};
+
+let dev = GpuDevice::new()?;
+let mut fwd = WgslForwardPass::new(dev.device, dev.queue, 1536, 12, 2, 128, 8960);
+fwd.upload_weight("layer.0.q_proj", &f32_data);
+let logits = fwd.forward_model(token_id, pos, 28, &embed, &norm, &lm_head, 151936, 1e-6)?;
+```
+
 ## Ecosystem Integration
 
 Trueno integrates with the Pragmatic AI Labs transpiler ecosystem:
