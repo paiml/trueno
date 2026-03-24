@@ -31,6 +31,8 @@ pub struct WgslForwardPass {
 
     // Weight buffers (persistent, uploaded once)
     weight_buffers: HashMap<String, wgpu::Buffer>,
+    /// PMAT-342: CPU-side bias data (small, not worth GPU dispatch)
+    cpu_biases: HashMap<String, Vec<f32>>,
 
     // Intermediate buffers (persistent, reused across calls)
     // For 1.5B: hidden=1536, kv=256, intermediate=8960
@@ -295,6 +297,7 @@ impl WgslForwardPass {
             rope_pipeline, residual_pipeline,
             matmul_bgl, elementwise_bgl,
             weight_buffers: HashMap::new(),
+            cpu_biases: HashMap::new(),
             hidden_buf, q_buf, k_buf, v_buf, attn_out_buf,
             ffn_gate_buf, ffn_up_buf, ffn_out_buf, norm_buf,
             staging_buf,
@@ -307,7 +310,13 @@ impl WgslForwardPass {
     }
 
     /// Upload a weight matrix (call once per layer at init).
+    /// PMAT-342: Bias weights (name contains "bias") are stored CPU-side.
     pub fn upload_weight(&mut self, name: &str, data: &[f32]) {
+        if name.contains("bias") {
+            // Biases are small, keep on CPU for easy access in attention
+            self.cpu_biases.insert(name.to_string(), data.to_vec());
+            return;
+        }
         use wgpu::util::DeviceExt;
         let buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
@@ -412,11 +421,93 @@ impl WgslForwardPass {
         self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "k_proj", &self.k_buf, 1, hd, kv_dim);
         self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "v_proj", &self.v_buf, 1, hd, kv_dim);
 
-        // Pass 5-6: RoPE on Q and K (skipped in this MVP — would need position tracking)
-        // TODO: encode_rope passes
+        // PMAT-342: Submit Q/K/V projections, readback, do attention on CPU
+        // GPU handles the heavy matmuls; CPU handles attention (small at M=1)
+        let q_bytes = (q_dim * 4) as u64;
+        let kv_bytes = (kv_dim * 4) as u64;
 
-        // Pass 7: O projection (attn_out × W_o → ffn_out_buf) — using q_buf as attn placeholder
-        // NOTE: Full attention not yet implemented in WGSL; this MVP tests the dispatch pipeline
+        // Readback Q/K/V from GPU
+        let q_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("q_stg"), size: q_bytes,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let k_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("k_stg"), size: kv_bytes,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let v_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("v_stg"), size: kv_bytes,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        encoder.copy_buffer_to_buffer(&self.q_buf, 0, &q_staging, 0, q_bytes);
+        encoder.copy_buffer_to_buffer(&self.k_buf, 0, &k_staging, 0, kv_bytes);
+        encoder.copy_buffer_to_buffer(&self.v_buf, 0, &v_staging, 0, kv_bytes);
+        self.queue.submit(Some(encoder.finish()));
+
+        // Readback Q
+        let mut q_data = vec![0.0f32; q_dim as usize];
+        {
+            let slice = q_staging.slice(..q_bytes);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+            rx.recv().map_err(|e| format!("q recv: {e}"))?.map_err(|e| format!("q map: {e:?}"))?;
+            let data = slice.get_mapped_range();
+            q_data.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..q_dim as usize]);
+        }
+        q_staging.unmap();
+
+        // Readback V (for M=1 single-position: attn_out = V after softmax([1.0]))
+        let mut v_data = vec![0.0f32; kv_dim as usize];
+        {
+            let slice = v_staging.slice(..kv_bytes);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+            rx.recv().map_err(|e| format!("v recv: {e}"))?.map_err(|e| format!("v map: {e:?}"))?;
+            let data = slice.get_mapped_range();
+            v_data.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..kv_dim as usize]);
+        }
+        v_staging.unmap();
+
+        // PMAT-342: Add QKV biases from CPU-side storage (required for Qwen2)
+        if let Some(q_bias) = self.cpu_biases.get(&format!("{layer_prefix}.q_bias")) {
+            for (q, b) in q_data.iter_mut().zip(q_bias.iter()) {
+                *q += *b;
+            }
+        }
+        if let Some(v_bias) = self.cpu_biases.get(&format!("{layer_prefix}.v_bias")) {
+            for (v, b) in v_data.iter_mut().zip(v_bias.iter()) {
+                *v += *b;
+            }
+        }
+
+        // CPU attention: For M=1 without KV cache, attention is trivial.
+        // Each head attends to one position → softmax([score]) = [1.0] → output = V
+        // GQA: expand V from kv_heads to num_heads
+        let head_dim = self.head_dim as usize;
+        let num_heads = self.num_heads as usize;
+        let num_kv_heads = self.num_kv_heads as usize;
+        let mut attn_out = vec![0.0f32; q_dim as usize];
+        let kv_group = num_heads / num_kv_heads;
+        for h in 0..num_heads {
+            let kv_h = h / kv_group;
+            let v_offset = kv_h * head_dim;
+            let out_offset = h * head_dim;
+            attn_out[out_offset..out_offset + head_dim]
+                .copy_from_slice(&v_data[v_offset..v_offset + head_dim]);
+        }
+
+        // Upload attention output back to GPU for O projection
+        self.queue.write_buffer(&self.q_buf, 0, bytemuck::cast_slice(&attn_out));
+
+        // New encoder for remaining passes
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+
+        // Pass 7: O projection (attn_out × W_o → attn_out_buf)
         self.encode_matmul(&mut encoder, &self.q_buf, layer_prefix, "o_proj", &self.attn_out_buf, 1, q_dim, hd);
 
         // Pass 8: Residual(hidden + attn_out → hidden)
