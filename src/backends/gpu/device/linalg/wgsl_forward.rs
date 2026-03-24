@@ -366,19 +366,79 @@ impl WgslForwardPass {
             hidden[i] = (hidden[i] / rms) * output_norm_weight[i];
         }
 
-        // 4. LM head matmul (CPU — vocab_size × hidden_dim, large but one-shot)
-        // TODO: Move to GPU for large vocab_size
-        let mut logits = vec![0.0f32; vocab_size];
-        for v in 0..vocab_size {
-            let mut sum = 0.0f32;
-            let row_start = v * hd;
-            for j in 0..hd {
-                sum += lm_head_weight[row_start + j] * hidden[j];
-            }
-            logits[v] = sum;
-        }
+        // 4. LM head matmul (GPU tiled GEMM — vocab > 65535 exceeds GEMV dispatch limit)
+        // PMAT-338: Use tiled GEMM (1 × ceil(vocab/16) workgroups) instead of GEMV
+        let lm_head_key = "lm_head";
+        if self.weight_buffers.contains_key(lm_head_key) {
+            let input_bytes = (hd * 4) as u64;
+            let output_bytes = (vocab_size * 4) as u64;
 
-        Ok(logits)
+            let input_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("lm_in"), size: input_bytes,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.queue.write_buffer(&input_buf, 0, bytemuck::cast_slice(&hidden));
+
+            let output_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("lm_out"), size: output_bytes,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("lm_stg"), size: output_bytes,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+            let dims = [1u32, hd as u32, vocab_size as u32, 0u32];
+            let dims_buf = self.make_uniform(&dims);
+            let weight_buf = self.weight_buffers.get(lm_head_key).unwrap();
+            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None, layout: &self.matmul_bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: input_buf.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: weight_buf.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 2, resource: output_buf.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 3, resource: dims_buf.as_entire_binding() },
+                ],
+            });
+
+            let mut encoder = self.device.create_command_encoder(&Default::default());
+            {
+                let mut pass = encoder.begin_compute_pass(&Default::default());
+                pass.set_pipeline(&self.matmul_pipeline);
+                pass.set_bind_group(0, &bg, &[]);
+                pass.dispatch_workgroups(1, (vocab_size as u32).div_ceil(16), 1);
+            }
+            encoder.copy_buffer_to_buffer(&output_buf, 0, &staging, 0, output_bytes);
+            self.queue.submit(Some(encoder.finish()));
+
+            let slice = staging.slice(..output_bytes);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+            rx.recv().map_err(|e| format!("recv: {e}"))?.map_err(|e| format!("map: {e:?}"))?;
+            let mut logits = vec![0.0f32; vocab_size];
+            {
+                let data = slice.get_mapped_range();
+                logits.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..vocab_size]);
+            }
+            staging.unmap();
+            Ok(logits)
+        } else {
+            // CPU fallback
+            let mut logits = vec![0.0f32; vocab_size];
+            for v in 0..vocab_size {
+                let mut sum = 0.0f32;
+                let row_start = v * hd;
+                for j in 0..hd {
+                    sum += lm_head_weight[row_start + j] * hidden[j];
+                }
+                logits[v] = sum;
+            }
+            Ok(logits)
+        }
     }
 
     /// PMAT-325: Execute one transformer layer — 14 passes, 1 submit, 1 readback.
