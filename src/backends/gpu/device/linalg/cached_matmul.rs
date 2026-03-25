@@ -246,11 +246,13 @@ impl GpuMatmulCache {
         self.queue
             .write_buffer(input_buf, 0, bytemuck::cast_slice(&input[..m * k]));
 
-        let dims = Dimensions {
-            m: m as u32,
-            k: k as u32,
-            n: n as u32,
-            _padding: 0,
+        // PMAT-346: GEMV shader expects Params { n (output dim), k, _, _ }
+        // but Dimensions struct has { m, k, n, _ }. When m=1, params.n reads m=1
+        // instead of the actual output dimension. Write different layout for GEMV.
+        let dims = if m == 1 {
+            Dimensions { m: n as u32, k: k as u32, n: 0, _padding: 0 }
+        } else {
+            Dimensions { m: m as u32, k: k as u32, n: n as u32, _padding: 0 }
         };
         let dims_buf = self.dims_buffer.as_ref().unwrap();
         self.queue
@@ -354,5 +356,47 @@ fn bgl_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
             min_binding_size: None,
         },
         count: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dimensions_layout() {
+        let dims = Dimensions { m: 1, k: 1536, n: 1536, _padding: 0 };
+        let bytes = bytemuck::bytes_of(&dims);
+        assert_eq!(bytes.len(), 16); // 4 × u32
+        // Verify field order matches shader uniform layout
+        assert_eq!(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]), 1);
+        assert_eq!(u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]), 1536);
+    }
+
+    #[test]
+    fn test_gemv_params_layout() {
+        // PMAT-346: When m=1, first field must be n (output dim), not m
+        let m = 1usize;
+        let k = 1536usize;
+        let n = 256usize;
+        let dims = if m == 1 {
+            Dimensions { m: n as u32, k: k as u32, n: 0, _padding: 0 }
+        } else {
+            Dimensions { m: m as u32, k: k as u32, n: n as u32, _padding: 0 }
+        };
+        let bytes = bytemuck::bytes_of(&dims);
+        // GEMV shader reads params.n (offset 0) as output dimension
+        let gemv_n = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        assert_eq!(gemv_n, 256, "GEMV params.n must be output dimension, not m");
+    }
+
+    #[test]
+    fn test_matmul_params_layout() {
+        let dims = Dimensions { m: 4, k: 1536, n: 1536, _padding: 0 };
+        let bytes = bytemuck::bytes_of(&dims);
+        // Matmul shader reads dims.M, dims.K, dims.N
+        assert_eq!(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]), 4);   // M
+        assert_eq!(u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]), 1536); // K
+        assert_eq!(u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]), 1536); // N
     }
 }
