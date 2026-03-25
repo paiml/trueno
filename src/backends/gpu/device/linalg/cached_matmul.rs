@@ -52,30 +52,27 @@ impl GpuMatmulCache {
     pub fn new(device: wgpu::Device, queue: wgpu::Queue) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("CachedMatmul Shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                crate::backends::gpu::shaders::MATMUL_SHADER.into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(crate::backends::gpu::shaders::MATMUL_SHADER.into()),
         });
 
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("CachedMatmul BGL"),
-                entries: &[
-                    bgl_entry(0, true),  // A (input, read-only)
-                    bgl_entry(1, true),  // B (weight, read-only)
-                    bgl_entry(2, false), // C (output, read-write)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                        },
-                        count: None,
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("CachedMatmul BGL"),
+            entries: &[
+                bgl_entry(0, true),  // A (input, read-only)
+                bgl_entry(1, true),  // B (weight, read-only)
+                bgl_entry(2, false), // C (output, read-write)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
                     },
-                ],
-            });
+                    count: None,
+                },
+            ],
+        });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("CachedMatmul PL"),
@@ -95,9 +92,7 @@ impl GpuMatmulCache {
         // PMAT-326: GEMV pipeline (cooperative K-reduction, optimal for M=1)
         let gemv_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("GEMV Shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                crate::backends::gpu::shaders::GEMV_SHADER.into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(crate::backends::gpu::shaders::GEMV_SHADER.into()),
         });
         let gemv_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("GEMV Pipeline"),
@@ -136,10 +131,7 @@ impl GpuMatmulCache {
             mapped_at_creation: false,
         });
         self.queue.write_buffer(&buffer, 0, bytemuck::cast_slice(data));
-        self.weight_buffers.insert(
-            name.to_string(),
-            WeightEntry { buffer, rows, cols },
-        );
+        self.weight_buffers.insert(name.to_string(), WeightEntry { buffer, rows, cols });
     }
 
     /// Number of pre-uploaded weights.
@@ -149,10 +141,7 @@ impl GpuMatmulCache {
 
     /// Total VRAM used by weight buffers (bytes).
     pub fn weight_bytes(&self) -> usize {
-        self.weight_buffers
-            .values()
-            .map(|w| w.rows * w.cols * 4)
-            .sum()
+        self.weight_buffers.values().map(|w| w.rows * w.cols * 4).sum()
     }
 
     /// PMAT-323: Ensure persistent I/O buffers are at least `size` bytes.
@@ -243,8 +232,7 @@ impl GpuMatmulCache {
 
         // Write input + dims to persistent buffers (just memcpy, no alloc)
         let input_buf = self.input_buffer.as_ref().unwrap();
-        self.queue
-            .write_buffer(input_buf, 0, bytemuck::cast_slice(&input[..m * k]));
+        self.queue.write_buffer(input_buf, 0, bytemuck::cast_slice(&input[..m * k]));
 
         // PMAT-346: GEMV shader expects Params { n (output dim), k, _, _ }
         // but Dimensions struct has { m, k, n, _ }. When m=1, params.n reads m=1
@@ -255,8 +243,7 @@ impl GpuMatmulCache {
             Dimensions { m: m as u32, k: k as u32, n: n as u32, _padding: 0 }
         };
         let dims_buf = self.dims_buffer.as_ref().unwrap();
-        self.queue
-            .write_buffer(dims_buf, 0, bytemuck::bytes_of(&dims));
+        self.queue.write_buffer(dims_buf, 0, bytemuck::bytes_of(&dims));
 
         // Bind group (per-call — WGPU requires new bind group when buffer references change)
         let output_buf = self.output_buffer.as_ref().unwrap();
@@ -265,33 +252,18 @@ impl GpuMatmulCache {
             label: None,
             layout: &self.bind_group_layout,
             entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: input_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: weight_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: output_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: dims_buf.as_entire_binding(),
-                },
+                wgpu::BindGroupEntry { binding: 0, resource: input_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: weight_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: output_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: dims_buf.as_entire_binding() },
             ],
         });
 
         let staging = self.staging_buffer.as_ref().unwrap();
 
         // Encode + dispatch
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: None,
-            });
+        let mut encoder =
+            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -309,11 +281,7 @@ impl GpuMatmulCache {
                 // Tiled GEMM for M>1 (batch/prefill)
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &bind_group, &[]);
-                pass.dispatch_workgroups(
-                    (m as u32).div_ceil(16),
-                    (n as u32).div_ceil(16),
-                    1,
-                );
+                pass.dispatch_workgroups((m as u32).div_ceil(16), (n as u32).div_ceil(16), 1);
             }
         }
 
@@ -326,15 +294,8 @@ impl GpuMatmulCache {
         slice.map_async(wgpu::MapMode::Read, move |r| {
             tx.send(r).ok();
         });
-        self.device
-            .poll(wgpu::PollType::Wait {
-                submission_index: None,
-                timeout: None,
-            })
-            .ok();
-        rx.recv()
-            .map_err(|e| format!("recv: {e}"))?
-            .map_err(|e| format!("map: {e:?}"))?;
+        self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+        rx.recv().map_err(|e| format!("recv: {e}"))?.map_err(|e| format!("map: {e:?}"))?;
 
         {
             let data = slice.get_mapped_range();
@@ -368,7 +329,7 @@ mod tests {
         let dims = Dimensions { m: 1, k: 1536, n: 1536, _padding: 0 };
         let bytes = bytemuck::bytes_of(&dims);
         assert_eq!(bytes.len(), 16); // 4 × u32
-        // Verify field order matches shader uniform layout
+                                     // Verify field order matches shader uniform layout
         assert_eq!(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]), 1);
         assert_eq!(u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]), 1536);
     }
@@ -395,8 +356,9 @@ mod tests {
         let dims = Dimensions { m: 4, k: 1536, n: 1536, _padding: 0 };
         let bytes = bytemuck::bytes_of(&dims);
         // Matmul shader reads dims.M, dims.K, dims.N
-        assert_eq!(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]), 4);   // M
+        assert_eq!(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]), 4); // M
         assert_eq!(u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]), 1536); // K
-        assert_eq!(u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]), 1536); // N
+        assert_eq!(u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]), 1536);
+        // N
     }
 }

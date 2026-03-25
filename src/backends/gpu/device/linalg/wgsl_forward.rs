@@ -36,16 +36,16 @@ pub struct WgslForwardPass {
 
     // Intermediate buffers (persistent, reused across calls)
     // For 1.5B: hidden=1536, kv=256, intermediate=8960
-    hidden_buf: wgpu::Buffer,      // [hidden_dim] working state
-    q_buf: wgpu::Buffer,           // [q_dim]
-    k_buf: wgpu::Buffer,           // [kv_dim]
-    v_buf: wgpu::Buffer,           // [kv_dim]
-    attn_out_buf: wgpu::Buffer,    // [hidden_dim]
-    ffn_gate_buf: wgpu::Buffer,    // [intermediate_dim]
-    ffn_up_buf: wgpu::Buffer,      // [intermediate_dim]
-    ffn_out_buf: wgpu::Buffer,     // [hidden_dim]
-    norm_buf: wgpu::Buffer,        // [hidden_dim] for RMSNorm output
-    staging_buf: wgpu::Buffer,     // readback
+    hidden_buf: wgpu::Buffer,   // [hidden_dim] working state
+    q_buf: wgpu::Buffer,        // [q_dim]
+    k_buf: wgpu::Buffer,        // [kv_dim]
+    v_buf: wgpu::Buffer,        // [kv_dim]
+    attn_out_buf: wgpu::Buffer, // [hidden_dim]
+    ffn_gate_buf: wgpu::Buffer, // [intermediate_dim]
+    ffn_up_buf: wgpu::Buffer,   // [intermediate_dim]
+    ffn_out_buf: wgpu::Buffer,  // [hidden_dim]
+    norm_buf: wgpu::Buffer,     // [hidden_dim] for RMSNorm output
+    staging_buf: wgpu::Buffer,  // readback
 
     // Config
     hidden_dim: u32,
@@ -54,7 +54,6 @@ pub struct WgslForwardPass {
     head_dim: u32,
     intermediate_dim: u32,
 }
-
 // WGSL shader source for RMSNorm
 const RMSNORM_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
@@ -101,7 +100,6 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>,
     }
 }
 "#;
-
 // WGSL shader for SiLU(gate) * up
 const SILU_MUL_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> gate: array<f32>;
@@ -169,6 +167,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 "#;
 
+#[rustfmt::skip] // Compact style required — file health limit
 impl WgslForwardPass {
     /// Get the shader sources for external inspection/testing
     pub fn rmsnorm_shader() -> &'static str { RMSNORM_SHADER }
@@ -761,6 +760,7 @@ impl WgslForwardPass {
     }
 }
 
+#[rustfmt::skip]
 fn bgl_storage(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding, visibility: wgpu::ShaderStages::COMPUTE,
@@ -770,7 +770,7 @@ fn bgl_storage(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
         }, count: None,
     }
 }
-
+#[rustfmt::skip]
 fn bgl_uniform(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding, visibility: wgpu::ShaderStages::COMPUTE,
