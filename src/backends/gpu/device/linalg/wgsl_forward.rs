@@ -55,8 +55,7 @@ pub struct WgslForwardPass {
     intermediate_dim: u32,
 }
 use super::wgsl_shaders::{RESIDUAL_SHADER, RMSNORM_SHADER, ROPE_SHADER, SILU_MUL_SHADER};
-
-#[rustfmt::skip] // Compact style required — file health limit
+#[rustfmt::skip]
 impl WgslForwardPass {
     /// Get the shader sources for external inspection/testing
     pub fn rmsnorm_shader() -> &'static str { RMSNORM_SHADER }
@@ -68,6 +67,7 @@ impl WgslForwardPass {
     ///
     /// Compiles all shader pipelines and allocates persistent intermediate buffers.
     /// Call once at model init. All GPU resources persist until dropped.
+    #[provable_contracts_macros::contract("wgpu-forward-pass-v1", equation = "buffer_size_safety")]
     pub fn new(
         device: wgpu::Device,
         queue: wgpu::Queue,
@@ -214,6 +214,7 @@ impl WgslForwardPass {
     }
     /// PMAT-347: Upload weight transposed from [rows,cols] to [cols,rows].
     /// Required for matmul shader which expects B in [K,N] layout.
+    #[provable_contracts_macros::contract("wgpu-forward-pass-v1", equation = "weight_transpose")]
     pub fn upload_weight_transposed(&mut self, name: &str, data: &[f32], rows: usize, cols: usize) {
         let mut transposed = vec![0.0f32; rows * cols];
         for r in 0..rows {
@@ -597,9 +598,7 @@ impl WgslForwardPass {
 
         Ok(())
     }
-
     // --- Encode helpers (add compute passes to an existing encoder) ---
-
     fn encode_rmsnorm(&self, encoder: &mut wgpu::CommandEncoder,
                       input: &wgpu::Buffer, weight: &wgpu::Buffer,
                       output: &wgpu::Buffer, dim: u32) {
