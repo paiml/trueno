@@ -278,7 +278,7 @@ impl WgslForwardPass {
         let q_buf = buf(q_dim, "q");
         let k_buf = buf(kv_dim, "k");
         let v_buf = buf(kv_dim, "v");
-        let attn_out_buf = buf(hidden_dim, "attn_out");
+        let attn_out_buf = buf(hidden_dim.max(intermediate_dim), "attn_out"); // SiLU writes inter elements
         let ffn_gate_buf = buf(intermediate_dim, "ffn_gate");
         let ffn_up_buf = buf(intermediate_dim, "ffn_up");
         let ffn_out_buf = buf(hidden_dim, "ffn_out");
@@ -508,7 +508,6 @@ impl WgslForwardPass {
         if let Some(v_bias) = self.cpu_biases.get(&format!("{layer_prefix}.v_bias")) {
             for (v, b) in v_data.iter_mut().zip(v_bias.iter()) { *v += *b; }
         }
-
         // PMAT-343: Apply RoPE (NeoX-style interleaved) to Q and K
         let head_dim = self.head_dim as usize;
         let position = _position; // Use the position parameter
@@ -560,6 +559,7 @@ impl WgslForwardPass {
         let kv_group = num_heads / num_kv_heads;
         let scale = 1.0 / (head_dim as f32).sqrt();
         let mut attn_out = vec![0.0f32; q_dim as usize];
+
 
         for h in 0..num_heads {
             let kv_h = h / kv_group;
