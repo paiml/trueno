@@ -342,17 +342,19 @@ impl WgslForwardPass {
     ///
     /// Returns logits [vocab_size] for the given token at the given position.
     /// Embedding lookup and final LM head are CPU-side (not yet GPU-accelerated).
+    /// PMAT-344: Added kv_caches for multi-token context
     #[provable_contracts_macros::contract("wgpu-forward-pass-v1", equation = "rmsnorm_correctness")]
     pub fn forward_model(
         &self,
         token_id: u32,
         position: usize,
         num_layers: usize,
-        token_embedding: &[f32],    // [vocab_size, hidden_dim]
-        output_norm_weight: &[f32], // [hidden_dim]
-        lm_head_weight: &[f32],     // [vocab_size, hidden_dim]
+        token_embedding: &[f32],
+        output_norm_weight: &[f32],
+        lm_head_weight: &[f32],
         vocab_size: usize,
         eps: f32,
+        kv_caches: &mut Vec<(Vec<f32>, Vec<f32>)>,
     ) -> Result<Vec<f32>, String> {
         let hd = self.hidden_dim as usize;
 
@@ -363,10 +365,15 @@ impl WgslForwardPass {
         }
         let mut hidden: Vec<f32> = token_embedding[embed_start..embed_start + hd].to_vec();
 
-        // 2. Transformer layers (GPU via forward_layer)
+        // 2. Transformer layers (GPU via forward_layer with KV cache)
+        // Initialize KV caches if empty
+        while kv_caches.len() < num_layers {
+            kv_caches.push((Vec::new(), Vec::new()));
+        }
         for layer_idx in 0..num_layers {
             let prefix = format!("layer.{layer_idx}");
-            self.forward_layer(&mut hidden, &prefix, position)?;
+            let (ref mut k_cache, ref mut v_cache) = kv_caches[layer_idx];
+            self.forward_layer(&mut hidden, &prefix, position, k_cache, v_cache)?;
         }
 
         // 3. Output RMSNorm (CPU — small, not worth GPU dispatch)
@@ -455,11 +462,14 @@ impl WgslForwardPass {
     /// Input: hidden state [hidden_dim] on CPU.
     /// Output: updated hidden state [hidden_dim] on CPU.
     /// All intermediate computation stays GPU-resident.
+    /// PMAT-344: KV cache parameters for multi-token context
     pub fn forward_layer(
         &self,
         hidden: &mut [f32],
-        layer_prefix: &str,  // e.g., "layer.0"
+        layer_prefix: &str,
         _position: usize,
+        kv_cache_k: &mut Vec<f32>,  // accumulated K: [seq_len * kv_dim]
+        kv_cache_v: &mut Vec<f32>,  // accumulated V: [seq_len * kv_dim]
     ) -> Result<(), String> {
         let hd = self.hidden_dim;
 
@@ -594,20 +604,57 @@ impl WgslForwardPass {
             }
         }
 
-        // CPU attention: For M=1 without KV cache, attention is trivial.
-        // Each head attends to one position → softmax([score]) = [1.0] → output = V
-        // GQA: expand V from kv_heads to num_heads
+        // PMAT-344: Append K,V to cache and compute full attention
         let head_dim = self.head_dim as usize;
         let num_heads = self.num_heads as usize;
         let num_kv_heads = self.num_kv_heads as usize;
-        let mut attn_out = vec![0.0f32; q_dim as usize];
+        let kv_dim_usize = kv_dim as usize;
+
+        kv_cache_k.extend_from_slice(&k_data);
+        kv_cache_v.extend_from_slice(&v_data);
+        let seq_len = kv_cache_k.len() / kv_dim_usize;
+
+        // Scaled dot-product attention with GQA
         let kv_group = num_heads / num_kv_heads;
+        let scale = 1.0 / (head_dim as f32).sqrt();
+        let mut attn_out = vec![0.0f32; q_dim as usize];
+
         for h in 0..num_heads {
             let kv_h = h / kv_group;
-            let v_offset = kv_h * head_dim;
+            let q_offset = h * head_dim;
+
+            // Compute attention scores: Q[h] · K[kv_h, :seq_len]^T / sqrt(d)
+            let mut scores = vec![0.0f32; seq_len];
+            for s in 0..seq_len {
+                let k_offset = s * kv_dim_usize + kv_h * head_dim;
+                let mut dot = 0.0f32;
+                for d in 0..head_dim {
+                    dot += q_data[q_offset + d] * kv_cache_k[k_offset + d];
+                }
+                scores[s] = dot * scale;
+            }
+
+            // Softmax
+            let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let mut sum = 0.0f32;
+            for s in scores.iter_mut() {
+                *s = (*s - max_score).exp();
+                sum += *s;
+            }
+            if sum > 0.0 {
+                for s in scores.iter_mut() { *s /= sum; }
+            }
+
+            // Weighted sum of V
             let out_offset = h * head_dim;
-            attn_out[out_offset..out_offset + head_dim]
-                .copy_from_slice(&v_data[v_offset..v_offset + head_dim]);
+            for d in 0..head_dim {
+                let mut val = 0.0f32;
+                for s in 0..seq_len {
+                    let v_offset = s * kv_dim_usize + kv_h * head_dim;
+                    val += scores[s] * kv_cache_v[v_offset + d];
+                }
+                attn_out[out_offset + d] = val;
+            }
         }
 
         // Upload attention output back to GPU for O projection
