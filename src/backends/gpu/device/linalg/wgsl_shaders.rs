@@ -110,3 +110,18 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     qk[i1] = x0 * sin_a + x1 * cos_a;
 }
 "#;
+
+/// PMAT-356: In-place bias addition for GPU-side QKV bias application.
+/// data[i] += bias[i]. Bindings: data(rw), bias(r), params(uniform).
+pub(super) const BIAS_ADD_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read_write> data: array<f32>;
+@group(0) @binding(1) var<storage, read> bias: array<f32>;
+@group(0) @binding(2) var<uniform> params: vec4<u32>;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.x;
+    if (idx >= params.x) { return; }
+    data[idx] = data[idx] + bias[idx];
+}
+"#;
