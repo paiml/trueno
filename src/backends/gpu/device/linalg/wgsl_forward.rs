@@ -54,118 +54,7 @@ pub struct WgslForwardPass {
     head_dim: u32,
     intermediate_dim: u32,
 }
-// WGSL shader source for RMSNorm
-const RMSNORM_SHADER: &str = r#"
-@group(0) @binding(0) var<storage, read> input: array<f32>;
-@group(0) @binding(1) var<storage, read> weight: array<f32>;
-@group(0) @binding(2) var<storage, read_write> output: array<f32>;
-@group(0) @binding(3) var<uniform> params: vec4<u32>; // (dim, 0, 0, 0)
-
-var<workgroup> shared_sum: array<f32, 256>;
-
-@compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>,
-        @builtin(local_invocation_id) lid: vec3<u32>) {
-    let dim = params.x;
-    let tid = lid.x;
-
-    // Compute sum of squares (reduction)
-    var local_sum: f32 = 0.0;
-    var i = tid;
-    while (i < dim) {
-        let val = input[i];
-        local_sum += val * val;
-        i += 256u;
-    }
-    shared_sum[tid] = local_sum;
-    workgroupBarrier();
-
-    // Tree reduction
-    var stride = 128u;
-    while (stride > 0u) {
-        if (tid < stride) {
-            shared_sum[tid] += shared_sum[tid + stride];
-        }
-        workgroupBarrier();
-        stride >>= 1u;
-    }
-
-    let rms = sqrt(shared_sum[0] / f32(dim) + 1e-6);
-
-    // Normalize and scale
-    i = tid;
-    while (i < dim) {
-        output[i] = (input[i] / rms) * weight[i];
-        i += 256u;
-    }
-}
-"#;
-// WGSL shader for SiLU(gate) * up
-const SILU_MUL_SHADER: &str = r#"
-@group(0) @binding(0) var<storage, read> gate: array<f32>;
-@group(0) @binding(1) var<storage, read> up: array<f32>;
-@group(0) @binding(2) var<storage, read_write> output: array<f32>;
-@group(0) @binding(3) var<uniform> params: vec4<u32>; // (dim, 0, 0, 0)
-
-@compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let idx = gid.x;
-    if (idx >= params.x) { return; }
-    let g = gate[idx];
-    let silu_g = g / (1.0 + exp(-g));
-    output[idx] = silu_g * up[idx];
-}
-"#;
-
-// WGSL shader for residual add: output = a + b
-const RESIDUAL_SHADER: &str = r#"
-@group(0) @binding(0) var<storage, read> a: array<f32>;
-@group(0) @binding(1) var<storage, read> b: array<f32>;
-@group(0) @binding(2) var<storage, read_write> output: array<f32>;
-@group(0) @binding(3) var<uniform> params: vec4<u32>; // (dim, 0, 0, 0)
-
-@compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let idx = gid.x;
-    if (idx >= params.x) { return; }
-    output[idx] = a[idx] + b[idx];
-}
-"#;
-
-// RoPE shader (NeoX-style interleaved)
-const ROPE_SHADER: &str = r#"
-@group(0) @binding(0) var<storage, read_write> qk: array<f32>;
-@group(0) @binding(1) var<uniform> params: vec4<u32>; // (dim, position, num_heads, head_dim)
-
-@compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let idx = gid.x;
-    let dim = params.x;
-    let position = params.y;
-    let head_dim = params.w;
-
-    if (idx >= dim) { return; }
-
-    let half_hd = head_dim / 2u;
-    let head_idx = idx / head_dim;
-    let pos_in_head = idx % head_dim;
-
-    if (pos_in_head >= half_hd) { return; }
-
-    let theta = pow(1000000.0, -f32(pos_in_head * 2u) / f32(head_dim));
-    let angle = f32(position) * theta;
-    let cos_a = cos(angle);
-    let sin_a = sin(angle);
-
-    let i0 = head_idx * head_dim + pos_in_head;
-    let i1 = i0 + half_hd;
-
-    let x0 = qk[i0];
-    let x1 = qk[i1];
-    qk[i0] = x0 * cos_a - x1 * sin_a;
-    qk[i1] = x0 * sin_a + x1 * cos_a;
-}
-"#;
+use super::wgsl_shaders::{RESIDUAL_SHADER, RMSNORM_SHADER, ROPE_SHADER, SILU_MUL_SHADER};
 
 #[rustfmt::skip] // Compact style required — file health limit
 impl WgslForwardPass {
@@ -312,7 +201,6 @@ impl WgslForwardPass {
     /// PMAT-342: Bias weights (name contains "bias") are stored CPU-side.
     pub fn upload_weight(&mut self, name: &str, data: &[f32]) {
         if name.contains("bias") {
-            // Biases are small, keep on CPU for easy access in attention
             self.cpu_biases.insert(name.to_string(), data.to_vec());
             return;
         }
@@ -320,6 +208,23 @@ impl WgslForwardPass {
         let buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
             contents: bytemuck::cast_slice(data),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+        self.weight_buffers.insert(name.to_string(), buffer);
+    }
+    /// PMAT-347: Upload weight transposed from [rows,cols] to [cols,rows].
+    /// Required for matmul shader which expects B in [K,N] layout.
+    pub fn upload_weight_transposed(&mut self, name: &str, data: &[f32], rows: usize, cols: usize) {
+        let mut transposed = vec![0.0f32; rows * cols];
+        for r in 0..rows {
+            for c in 0..cols {
+                transposed[c * rows + r] = data[r * cols + c];
+            }
+        }
+        use wgpu::util::DeviceExt;
+        let buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(name),
+            contents: bytemuck::cast_slice(&transposed),
             usage: wgpu::BufferUsages::STORAGE,
         });
         self.weight_buffers.insert(name.to_string(), buffer);
@@ -381,21 +286,66 @@ impl WgslForwardPass {
             hidden[i] = (hidden[i] / rms) * output_norm_weight[i];
         }
 
-        // 4. LM head — CPU matmul
-        // PMAT-346: GPU tiled GEMM expects weight in [K,N] layout but lm_head is [N,K].
-        // CPU path reads weight[v * hd + j] which matches the [vocab, hidden] layout.
-        // GPU LM head via GEMV is blocked by vocab > 65535 dispatch limit.
-        // TODO: add upload_weight_transposed() for GPU-accelerated LM head.
-        let mut logits = vec![0.0f32; vocab_size];
-        for v in 0..vocab_size {
-            let mut sum = 0.0f32;
-            let row_start = v * hd;
-            for j in 0..hd {
-                sum += lm_head_weight[row_start + j] * hidden[j];
+        // 4. LM head — GPU tiled GEMM if transposed weight uploaded, else CPU
+        // PMAT-347: upload_weight_transposed("lm_head") stores [K,N] layout for matmul
+        if self.weight_buffers.contains_key("lm_head") {
+            let input_bytes = (hd * 4) as u64;
+            let output_bytes = (vocab_size * 4) as u64;
+            let input_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("lm_in"), size: input_bytes,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.queue.write_buffer(&input_buf, 0, bytemuck::cast_slice(&hidden));
+            let output_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("lm_out"), size: output_bytes,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("lm_stg"), size: output_bytes,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let dims = [1u32, hd as u32, vocab_size as u32, 0u32];
+            let dims_buf = self.make_uniform(&dims);
+            let weight_buf = self.weight_buffers.get("lm_head").unwrap();
+            let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None, layout: &self.matmul_bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: input_buf.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: weight_buf.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 2, resource: output_buf.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 3, resource: dims_buf.as_entire_binding() },
+                ],
+            });
+            let mut encoder = self.device.create_command_encoder(&Default::default());
+            { let mut pass = encoder.begin_compute_pass(&Default::default());
+              pass.set_pipeline(&self.matmul_pipeline);
+              pass.set_bind_group(0, &bg, &[]);
+              pass.dispatch_workgroups(1, (vocab_size as u32).div_ceil(16), 1); }
+            encoder.copy_buffer_to_buffer(&output_buf, 0, &staging, 0, output_bytes);
+            self.queue.submit(Some(encoder.finish()));
+            let slice = staging.slice(..output_bytes);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+            rx.recv().map_err(|e| format!("recv: {e}"))?.map_err(|e| format!("map: {e:?}"))?;
+            let mut logits = vec![0.0f32; vocab_size];
+            { let data = slice.get_mapped_range();
+              logits.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..vocab_size]); }
+            staging.unmap();
+            Ok(logits)
+        } else {
+            // CPU fallback (no transposed weight uploaded)
+            let mut logits = vec![0.0f32; vocab_size];
+            for v in 0..vocab_size {
+                let mut sum = 0.0f32;
+                for j in 0..hd { sum += lm_head_weight[v * hd + j] * hidden[j]; }
+                logits[v] = sum;
             }
-            logits[v] = sum;
+            Ok(logits)
         }
-        Ok(logits)
     }
 
     /// PMAT-325: Execute one transformer layer — 14 passes, 1 submit, 1 readback.
@@ -778,5 +728,31 @@ fn bgl_uniform(binding: u32) -> wgpu::BindGroupLayoutEntry {
             ty: wgpu::BufferBindingType::Uniform,
             has_dynamic_offset: false, min_binding_size: None,
         }, count: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_weight_transpose_layout() {
+        // PMAT-347: Verify transpose [2,3] → [3,2]
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]; // [2 rows, 3 cols]
+        let (rows, cols) = (2, 3);
+        let mut transposed = vec![0.0f32; rows * cols];
+        for r in 0..rows {
+            for c in 0..cols {
+                transposed[c * rows + r] = data[r * cols + c];
+            }
+        }
+        // Expected: column-major read gives [1,4,2,5,3,6]
+        assert_eq!(transposed, vec![1.0, 4.0, 2.0, 5.0, 3.0, 6.0]);
+    }
+
+    #[test]
+    fn test_shader_sources_non_empty() {
+        assert!(!super::RMSNORM_SHADER.is_empty());
+        assert!(!super::SILU_MUL_SHADER.is_empty());
+        assert!(!super::RESIDUAL_SHADER.is_empty());
+        assert!(!super::ROPE_SHADER.is_empty());
     }
 }
