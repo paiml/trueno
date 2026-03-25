@@ -9,7 +9,8 @@ use super::wgsl_forward::WgslForwardPass;
 impl WgslForwardPass {
     /// PMAT-325: Execute one transformer layer.
     /// GPU: RMSNorm + QKV GEMV + bias + RoPE → readback → CPU attention → GPU: O proj + FFN.
-    /// PMAT-356: Bias applied on GPU before RoPE (they don't commute).
+    /// PMAT-358: Bias+RoPE on GPU (same encoder). Bias BEFORE RoPE (don't commute).
+    #[provable_contracts_macros::contract("wgpu-forward-pass-v1", equation = "gpu_bias_rope_order")]
     pub fn forward_layer(
         &self, hidden: &mut [f32], layer_prefix: &str, _position: usize,
         kv_cache_k: &mut Vec<f32>, kv_cache_v: &mut Vec<f32>,
