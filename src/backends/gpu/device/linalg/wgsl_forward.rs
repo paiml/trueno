@@ -520,7 +520,20 @@ impl WgslForwardPass {
         }
         q_staging.unmap();
 
-        // Readback V (for M=1 single-position: attn_out = V after softmax([1.0]))
+        // Readback K
+        let mut k_data = vec![0.0f32; kv_dim as usize];
+        {
+            let slice = k_staging.slice(..kv_bytes);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+            rx.recv().map_err(|e| format!("k recv: {e}"))?.map_err(|e| format!("k map: {e:?}"))?;
+            let data = slice.get_mapped_range();
+            k_data.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..kv_dim as usize]);
+        }
+        k_staging.unmap();
+
+        // Readback V
         let mut v_data = vec![0.0f32; kv_dim as usize];
         {
             let slice = v_staging.slice(..kv_bytes);
@@ -533,15 +546,51 @@ impl WgslForwardPass {
         }
         v_staging.unmap();
 
-        // PMAT-342: Add QKV biases from CPU-side storage (required for Qwen2)
+        // PMAT-342: Add QKV biases (required for Qwen2)
         if let Some(q_bias) = self.cpu_biases.get(&format!("{layer_prefix}.q_bias")) {
-            for (q, b) in q_data.iter_mut().zip(q_bias.iter()) {
-                *q += *b;
-            }
+            for (q, b) in q_data.iter_mut().zip(q_bias.iter()) { *q += *b; }
+        }
+        if let Some(k_bias) = self.cpu_biases.get(&format!("{layer_prefix}.k_bias")) {
+            for (k, b) in k_data.iter_mut().zip(k_bias.iter()) { *k += *b; }
         }
         if let Some(v_bias) = self.cpu_biases.get(&format!("{layer_prefix}.v_bias")) {
-            for (v, b) in v_data.iter_mut().zip(v_bias.iter()) {
-                *v += *b;
+            for (v, b) in v_data.iter_mut().zip(v_bias.iter()) { *v += *b; }
+        }
+
+        // PMAT-343: Apply RoPE (NeoX-style interleaved) to Q and K
+        let head_dim = self.head_dim as usize;
+        let position = _position; // Use the position parameter
+        let rope_theta = 1_000_000.0f64; // Qwen2 rope_theta
+
+        // RoPE on Q (num_heads × head_dim)
+        for h in 0..(self.num_heads as usize) {
+            let offset = h * head_dim;
+            let half = head_dim / 2;
+            for i in 0..half {
+                let theta = rope_theta.powf(-((2 * i) as f64) / head_dim as f64);
+                let angle = position as f64 * theta;
+                let cos_a = angle.cos() as f32;
+                let sin_a = angle.sin() as f32;
+                let x0 = q_data[offset + i];
+                let x1 = q_data[offset + i + half];
+                q_data[offset + i] = x0 * cos_a - x1 * sin_a;
+                q_data[offset + i + half] = x0 * sin_a + x1 * cos_a;
+            }
+        }
+
+        // RoPE on K (num_kv_heads × head_dim)
+        for h in 0..(self.num_kv_heads as usize) {
+            let offset = h * head_dim;
+            let half = head_dim / 2;
+            for i in 0..half {
+                let theta = rope_theta.powf(-((2 * i) as f64) / head_dim as f64);
+                let angle = position as f64 * theta;
+                let cos_a = angle.cos() as f32;
+                let sin_a = angle.sin() as f32;
+                let x0 = k_data[offset + i];
+                let x1 = k_data[offset + i + half];
+                k_data[offset + i] = x0 * cos_a - x1 * sin_a;
+                k_data[offset + i + half] = x0 * sin_a + x1 * cos_a;
             }
         }
 
