@@ -30,7 +30,14 @@ impl WgslForwardPass {
         self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "k_proj", &self.k_buf, 1, hd, kv_dim);
         self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "v_proj", &self.v_buf, 1, hd, kv_dim);
 
-        // Submit + readback Q/K/V for CPU bias+RoPE+attention
+        // PMAT-358: GPU bias + RoPE (same encoder, before readback)
+        self.encode_bias_add(&mut encoder, &self.q_buf, layer_prefix, "q_bias", q_dim);
+        self.encode_bias_add(&mut encoder, &self.k_buf, layer_prefix, "k_bias", kv_dim);
+        self.encode_bias_add(&mut encoder, &self.v_buf, layer_prefix, "v_bias", kv_dim);
+        self.encode_rope(&mut encoder, &self.q_buf, q_dim, _position as u32, self.head_dim);
+        self.encode_rope(&mut encoder, &self.k_buf, kv_dim, _position as u32, self.head_dim);
+
+        // Submit + readback Q/K/V (bias+RoPE already applied on GPU)
         let q_bytes = (q_dim * 4) as u64;
         let kv_bytes = (kv_dim * 4) as u64;
         let q_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -80,43 +87,7 @@ impl WgslForwardPass {
           v_data.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..kv_dim as usize]); }
         v_staging.unmap();
         let head_dim = self.head_dim as usize;
-
-        // CPU bias (PMAT-342)
-        if let Some(qb) = self.cpu_biases.get(&format!("{layer_prefix}.q_bias")) {
-            for (q, b) in q_data.iter_mut().zip(qb.iter()) { *q += *b; }
-        }
-        if let Some(kb) = self.cpu_biases.get(&format!("{layer_prefix}.k_bias")) {
-            for (k, b) in k_data.iter_mut().zip(kb.iter()) { *k += *b; }
-        }
-        if let Some(vb) = self.cpu_biases.get(&format!("{layer_prefix}.v_bias")) {
-            for (v, b) in v_data.iter_mut().zip(vb.iter()) { *v += *b; }
-        }
-        // CPU RoPE (PMAT-343, NeoX-style)
-        let rope_theta = 1_000_000.0f64;
-        let position = _position;
-        for h in 0..(self.num_heads as usize) {
-            let off = h * head_dim; let half = head_dim / 2;
-            for i in 0..half {
-                let theta = rope_theta.powf(-((2 * i) as f64) / head_dim as f64);
-                let angle = position as f64 * theta;
-                let (cos_a, sin_a) = (angle.cos() as f32, angle.sin() as f32);
-                let (x0, x1) = (q_data[off + i], q_data[off + i + half]);
-                q_data[off + i] = x0 * cos_a - x1 * sin_a;
-                q_data[off + i + half] = x0 * sin_a + x1 * cos_a;
-            }
-        }
-        for h in 0..(self.num_kv_heads as usize) {
-            let off = h * head_dim; let half = head_dim / 2;
-            for i in 0..half {
-                let theta = rope_theta.powf(-((2 * i) as f64) / head_dim as f64);
-                let angle = position as f64 * theta;
-                let (cos_a, sin_a) = (angle.cos() as f32, angle.sin() as f32);
-                let (x0, x1) = (k_data[off + i], k_data[off + i + half]);
-                k_data[off + i] = x0 * cos_a - x1 * sin_a;
-                k_data[off + i + half] = x0 * sin_a + x1 * cos_a;
-            }
-        }
-
+        // PMAT-358: bias+RoPE already applied on GPU — go straight to attention
         // CPU attention (small at M=1, cheaper than GPU dispatch overhead)
         let head_dim = self.head_dim as usize;
         let num_heads = self.num_heads as usize;
