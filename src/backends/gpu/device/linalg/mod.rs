@@ -8,4 +8,5 @@ mod dot;
 mod matmul;
 mod vec_ops;
 pub mod wgsl_forward;
+mod wgsl_forward_layer;
 mod wgsl_shaders;
