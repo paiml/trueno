@@ -111,6 +111,81 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 "#;
 
+/// PMAT-361: Single-head M=1 attention — one workgroup per Q head.
+/// Computes Q·K^T scores, softmax, weighted V sum for one head.
+/// GQA: kv_head = head / kv_group.
+pub(super) const ATTENTION_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> q: array<f32>;
+@group(0) @binding(1) var<storage, read> k_cache: array<f32>;
+@group(0) @binding(2) var<storage, read> v_cache: array<f32>;
+@group(0) @binding(3) var<storage, read_write> output: array<f32>;
+
+struct Params { num_heads: u32, kv_group: u32, head_dim: u32, seq_len: u32,
+                kv_dim: u32, _p1: u32, _p2: u32, _p3: u32, }
+@group(0) @binding(4) var<uniform> params: Params;
+
+var<workgroup> scores: array<f32, 2048>;
+var<workgroup> smax: array<f32, 256>;
+
+@compute @workgroup_size(256)
+fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+    let head = wg.x;
+    let tid = lid.x;
+    let hd = params.head_dim;
+    let sl = params.seq_len;
+    let kvd = params.kv_dim;
+    let kvh = head / params.kv_group;
+    let scale = 1.0 / sqrt(f32(hd));
+
+    // Phase 1: Q·K scores
+    var lmax: f32 = -1e30;
+    for (var s = tid; s < sl; s += 256u) {
+        var dot: f32 = 0.0;
+        let qo = head * hd; let ko = s * kvd + kvh * hd;
+        for (var d = 0u; d < hd; d++) { dot += q[qo + d] * k_cache[ko + d]; }
+        let sc = dot * scale;
+        scores[s] = sc;
+        lmax = max(lmax, sc);
+    }
+    smax[tid] = lmax;
+    workgroupBarrier();
+    var stride = 128u;
+    while (stride > 0u) {
+        if (tid < stride) { smax[tid] = max(smax[tid], smax[tid + stride]); }
+        workgroupBarrier(); stride >>= 1u;
+    }
+    let mx = smax[0];
+    workgroupBarrier();
+
+    // Phase 2: exp + sum
+    var lsum: f32 = 0.0;
+    for (var s = tid; s < sl; s += 256u) {
+        scores[s] = exp(scores[s] - mx);
+        lsum += scores[s];
+    }
+    smax[tid] = lsum;
+    workgroupBarrier();
+    stride = 128u;
+    while (stride > 0u) {
+        if (tid < stride) { smax[tid] += smax[tid + stride]; }
+        workgroupBarrier(); stride >>= 1u;
+    }
+    let sm = smax[0];
+    workgroupBarrier();
+    for (var s = tid; s < sl; s += 256u) { scores[s] /= sm; }
+    workgroupBarrier();
+
+    // Phase 3: weighted V sum
+    for (var d = tid; d < hd; d += 256u) {
+        var val: f32 = 0.0;
+        for (var s = 0u; s < sl; s++) {
+            val += scores[s] * v_cache[s * kvd + kvh * hd + d];
+        }
+        output[head * hd + d] = val;
+    }
+}
+"#;
+
 /// PMAT-356: In-place bias addition for GPU-side QKV bias application.
 /// data[i] += bias[i]. Bindings: data(rw), bias(r), params(uniform).
 pub(super) const BIAS_ADD_SHADER: &str = r#"

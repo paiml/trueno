@@ -7,12 +7,12 @@ use super::wgsl_forward::WgslForwardPass;
 
 #[rustfmt::skip]
 impl WgslForwardPass {
-    /// PMAT-325: Execute one transformer layer.
-    /// GPU: RMSNorm + QKV GEMV + bias + RoPE → readback → CPU attention → GPU: O proj + FFN.
-    /// PMAT-358: Bias+RoPE on GPU (same encoder). Bias BEFORE RoPE (don't commute).
+    /// PMAT-361: Execute one transformer layer — single submit when GPU KV cache available.
+    /// GPU: RMSNorm + QKV GEMV + bias + RoPE + KV append + attention + O proj + FFN.
     #[provable_contracts_macros::contract("wgpu-forward-pass-v1", equation = "gpu_bias_rope_order")]
     pub fn forward_layer(
         &self, hidden: &mut [f32], layer_prefix: &str, _position: usize,
+        layer_idx: usize, seq_len_before: usize,
         kv_cache_k: &mut Vec<f32>, kv_cache_v: &mut Vec<f32>,
     ) -> Result<(), String> {
         let hd = self.hidden_dim;
@@ -38,101 +38,51 @@ impl WgslForwardPass {
         self.encode_rope(&mut encoder, &self.q_buf, q_dim, _position as u32, self.head_dim);
         self.encode_rope(&mut encoder, &self.k_buf, kv_dim, _position as u32, self.head_dim);
 
-        // Submit + readback Q/K/V (bias+RoPE already applied on GPU)
-        let q_bytes = (q_dim * 4) as u64;
+        // PMAT-361: Append K/V to GPU cache, dispatch attention — ALL in same encoder
         let kv_bytes = (kv_dim * 4) as u64;
-        let q_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("q_stg"), size: q_bytes,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let k_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("k_stg"), size: kv_bytes,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let v_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("v_stg"), size: kv_bytes,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        encoder.copy_buffer_to_buffer(&self.q_buf, 0, &q_staging, 0, q_bytes);
-        encoder.copy_buffer_to_buffer(&self.k_buf, 0, &k_staging, 0, kv_bytes);
-        encoder.copy_buffer_to_buffer(&self.v_buf, 0, &v_staging, 0, kv_bytes);
-        self.queue.submit(Some(encoder.finish()));
-        let mut q_data = vec![0.0f32; q_dim as usize];
-        { let slice = q_staging.slice(..q_bytes);
-          let (tx, rx) = std::sync::mpsc::channel();
-          slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
-          self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
-          rx.recv().map_err(|e| format!("q recv: {e}"))?.map_err(|e| format!("q map: {e:?}"))?;
-          let data = slice.get_mapped_range();
-          q_data.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..q_dim as usize]); }
-        q_staging.unmap();
-        let mut k_data = vec![0.0f32; kv_dim as usize];
-        { let slice = k_staging.slice(..kv_bytes);
-          let (tx, rx) = std::sync::mpsc::channel();
-          slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
-          self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
-          rx.recv().map_err(|e| format!("k recv: {e}"))?.map_err(|e| format!("k map: {e:?}"))?;
-          let data = slice.get_mapped_range();
-          k_data.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..kv_dim as usize]); }
-        k_staging.unmap();
-        let mut v_data = vec![0.0f32; kv_dim as usize];
-        { let slice = v_staging.slice(..kv_bytes);
-          let (tx, rx) = std::sync::mpsc::channel();
-          slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
-          self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
-          rx.recv().map_err(|e| format!("v recv: {e}"))?.map_err(|e| format!("v map: {e:?}"))?;
-          let data = slice.get_mapped_range();
-          v_data.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..kv_dim as usize]); }
-        v_staging.unmap();
-        let head_dim = self.head_dim as usize;
-        // PMAT-358: bias+RoPE already applied on GPU — go straight to attention
-        // CPU attention (small at M=1, cheaper than GPU dispatch overhead)
-        let head_dim = self.head_dim as usize;
-        let num_heads = self.num_heads as usize;
-        let num_kv_heads = self.num_kv_heads as usize;
         let kv_dim_usize = kv_dim as usize;
+        let kv_offset = (seq_len_before * kv_dim_usize * 4) as u64;
+        // Copy current K/V from intermediate bufs to GPU cache at seq_len_before position
+        encoder.copy_buffer_to_buffer(&self.k_buf, 0, &self.kv_cache_k[layer_idx], kv_offset, kv_bytes);
+        encoder.copy_buffer_to_buffer(&self.v_buf, 0, &self.kv_cache_v[layer_idx], kv_offset, kv_bytes);
+        // Also update CPU-side cache for seq_len tracking
+        // (readback K/V for CPU cache happens here — small cost, needed for seq_len bookkeeping)
+        let k_stg = self.make_staging(kv_bytes);
+        let v_stg = self.make_staging(kv_bytes);
+        encoder.copy_buffer_to_buffer(&self.k_buf, 0, &k_stg, 0, kv_bytes);
+        encoder.copy_buffer_to_buffer(&self.v_buf, 0, &v_stg, 0, kv_bytes);
 
-        kv_cache_k.extend_from_slice(&k_data);
-        kv_cache_v.extend_from_slice(&v_data);
-        let seq_len = kv_cache_k.len() / kv_dim_usize;
+        // GPU attention: Q (from q_buf) × K_cache × V_cache → attn_out_buf
+        let new_seq_len = (seq_len_before + 1) as u32;
+        let kv_group = self.num_heads / self.num_kv_heads;
+        let attn_params = [self.num_heads, kv_group, self.head_dim, new_seq_len,
+                           kv_dim, 0u32, 0u32, 0u32];
+        let attn_params_buf = {
+            use wgpu::util::DeviceExt;
+            self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: None, contents: bytemuck::cast_slice(&attn_params),
+                usage: wgpu::BufferUsages::UNIFORM,
+            })
+        };
+        let attn_bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None, layout: &self.attention_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: self.q_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: self.kv_cache_k[layer_idx].as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: self.kv_cache_v[layer_idx].as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: self.attn_out_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 4, resource: attn_params_buf.as_entire_binding() },
+            ],
+        });
+        { let mut pass = encoder.begin_compute_pass(&Default::default());
+          pass.set_pipeline(&self.attention_pipeline);
+          pass.set_bind_group(0, &attn_bg, &[]);
+          pass.dispatch_workgroups(self.num_heads, 1, 1); }
 
-        let kv_group = num_heads / num_kv_heads;
-        let scale = 1.0 / (head_dim as f32).sqrt();
-        let mut attn_out = vec![0.0f32; q_dim as usize];
-
-        for h in 0..num_heads {
-            let kv_h = h / kv_group;
-            let q_offset = h * head_dim;
-            let mut scores = vec![0.0f32; seq_len];
-            for s in 0..seq_len {
-                let k_offset = s * kv_dim_usize + kv_h * head_dim;
-                let mut dot = 0.0f32;
-                for d in 0..head_dim { dot += q_data[q_offset + d] * kv_cache_k[k_offset + d]; }
-                scores[s] = dot * scale;
-            }
-            let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-            let mut sum = 0.0f32;
-            for s in scores.iter_mut() { *s = (*s - max_score).exp(); sum += *s; }
-            if sum > 0.0 { for s in scores.iter_mut() { *s /= sum; } }
-            let out_offset = h * head_dim;
-            for d in 0..head_dim {
-                let mut val = 0.0f32;
-                for s in 0..seq_len {
-                    val += scores[s] * kv_cache_v[s * kv_dim_usize + kv_h * head_dim + d];
-                }
-                attn_out[out_offset + d] = val;
-            }
-        }
-
-        // Upload attention output, continue with O proj + FFN on GPU
-        self.queue.write_buffer(&self.q_buf, 0, bytemuck::cast_slice(&attn_out));
-        let mut encoder = self.device.create_command_encoder(&Default::default());
-
-        self.encode_matmul(&mut encoder, &self.q_buf, layer_prefix, "o_proj", &self.attn_out_buf, 1, q_dim, hd);
-        self.encode_residual(&mut encoder, &self.hidden_buf, &self.attn_out_buf, &self.ffn_out_buf, hd);
+        // O proj: attn_out → norm_buf (reuse norm_buf as scratch)
+        self.encode_matmul(&mut encoder, &self.attn_out_buf, layer_prefix, "o_proj", &self.norm_buf, 1, q_dim, hd);
+        // Residual: hidden + o_proj → ffn_out
+        self.encode_residual(&mut encoder, &self.hidden_buf, &self.norm_buf, &self.ffn_out_buf, hd);
 
         let ffn_norm_w = self.weight_buffers.get(&format!("{layer_prefix}.ffn_norm"))
             .ok_or_else(|| format!("Missing {layer_prefix}.ffn_norm"))?;
@@ -145,9 +95,10 @@ impl WgslForwardPass {
         self.encode_matmul(&mut encoder, &self.attn_out_buf, layer_prefix, "down_proj", &self.norm_buf, 1, inter, hd);
         self.encode_residual(&mut encoder, &self.ffn_out_buf, &self.norm_buf, &self.hidden_buf, hd);
 
-        // Readback hidden state
+        // PMAT-361: Single submit — readback hidden + K/V for CPU cache tracking
         encoder.copy_buffer_to_buffer(&self.hidden_buf, 0, &self.staging_buf, 0, (hd * 4) as u64);
         self.queue.submit(Some(encoder.finish()));
+        // Readback hidden
         let slice = self.staging_buf.slice(..(hd as u64 * 4));
         let (tx, rx) = std::sync::mpsc::channel();
         slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
@@ -156,6 +107,11 @@ impl WgslForwardPass {
         { let data = slice.get_mapped_range();
           hidden.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..self.hidden_dim as usize]); }
         self.staging_buf.unmap();
+        // Readback K/V for CPU-side seq_len tracking
+        let k_data = self.readback_map(&k_stg, kv_dim_usize)?;
+        let v_data = self.readback_map(&v_stg, kv_dim_usize)?;
+        kv_cache_k.extend_from_slice(&k_data);
+        kv_cache_v.extend_from_slice(&v_data);
         Ok(())
     }
 

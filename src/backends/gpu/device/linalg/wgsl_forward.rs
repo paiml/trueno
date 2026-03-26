@@ -45,9 +45,16 @@ pub struct WgslForwardPass {
     pub(super) bias_add_pipeline: wgpu::ComputePipeline,
     pub(super) bias_add_bgl: wgpu::BindGroupLayout,
     pub(super) rope_bgl: wgpu::BindGroupLayout,
+    /// PMAT-361: GPU attention pipeline + per-layer KV cache
+    pub(super) attention_pipeline: wgpu::ComputePipeline,
+    pub(super) attention_bgl: wgpu::BindGroupLayout,
+    pub(super) kv_cache_k: Vec<wgpu::Buffer>, // [num_layers][max_seq * kv_dim]
+    pub(super) kv_cache_v: Vec<wgpu::Buffer>,
+    pub(super) max_seq_len: u32,
 }
 use super::wgsl_shaders::{
-    BIAS_ADD_SHADER, RESIDUAL_SHADER, RMSNORM_SHADER, ROPE_SHADER, SILU_MUL_SHADER,
+    ATTENTION_SHADER, BIAS_ADD_SHADER, RESIDUAL_SHADER, RMSNORM_SHADER, ROPE_SHADER,
+    SILU_MUL_SHADER,
 };
 #[rustfmt::skip]
 impl WgslForwardPass {
@@ -183,11 +190,25 @@ impl WgslForwardPass {
             mapped_at_creation: false,
         });
 
+        // PMAT-361: Attention pipeline (5 bindings: q, k_cache, v_cache, output, params)
+        let attention_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("attn_bgl"),
+            entries: &[
+                bgl_storage(0, true), bgl_storage(1, true), bgl_storage(2, true),
+                bgl_storage(3, false), bgl_uniform(4),
+            ],
+        });
+        let attn_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("attention"), source: wgpu::ShaderSource::Wgsl(ATTENTION_SHADER.into()),
+        });
+        let attention_pipeline = make_pipeline(&attn_shader, &attention_bgl, "attn_pipe");
+
         Self {
             device, queue,
             matmul_pipeline, gemv_pipeline, rmsnorm_pipeline, silu_mul_pipeline,
-            rope_pipeline, residual_pipeline, bias_add_pipeline,
-            matmul_bgl, elementwise_bgl, bias_add_bgl, rope_bgl,
+            rope_pipeline, residual_pipeline, bias_add_pipeline, attention_pipeline,
+            matmul_bgl, elementwise_bgl, bias_add_bgl, rope_bgl, attention_bgl,
+            kv_cache_k: Vec::new(), kv_cache_v: Vec::new(), max_seq_len: 2048,
             weight_buffers: HashMap::new(),
             cpu_biases: HashMap::new(),
             hidden_buf, q_buf, k_buf, v_buf, attn_out_buf,
@@ -246,6 +267,27 @@ impl WgslForwardPass {
         weight_bytes + intermediate_bytes
     }
 
+    /// PMAT-361: Allocate GPU KV cache buffers for all layers.
+    pub fn init_kv_cache(&mut self, num_layers: usize) {
+        let kv_dim = (self.num_kv_heads * self.head_dim) as usize;
+        let max_seq = self.max_seq_len as usize;
+        let size = (max_seq * kv_dim * 4) as u64;
+        for i in 0..num_layers {
+            let k = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("kv_k_{i}")), size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let v = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(&format!("kv_v_{i}")), size,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.kv_cache_k.push(k);
+            self.kv_cache_v.push(v);
+        }
+    }
+
     /// PMAT-336: Full model forward — embedding + all layers + output norm + LM head.
     ///
     /// Returns logits [vocab_size] for the given token at the given position.
@@ -273,15 +315,15 @@ impl WgslForwardPass {
         }
         let mut hidden: Vec<f32> = token_embedding[embed_start..embed_start + hd].to_vec();
 
-        // 2. Transformer layers (GPU via forward_layer with KV cache)
-        // Initialize KV caches if empty
-        while kv_caches.len() < num_layers {
-            kv_caches.push((Vec::new(), Vec::new()));
-        }
+        // 2. Transformer layers (GPU via forward_layer)
+        // Track seq_len per layer from CPU-side cache
+        while kv_caches.len() < num_layers { kv_caches.push((Vec::new(), Vec::new())); }
         for layer_idx in 0..num_layers {
             let prefix = format!("layer.{layer_idx}");
+            let kv_dim = (self.num_kv_heads * self.head_dim) as usize;
+            let seq_len = kv_caches[layer_idx].0.len() / kv_dim.max(1);
             let (ref mut k_cache, ref mut v_cache) = kv_caches[layer_idx];
-            self.forward_layer(&mut hidden, &prefix, position, k_cache, v_cache)?;
+            self.forward_layer(&mut hidden, &prefix, position, layer_idx, seq_len, k_cache, v_cache)?;
         }
 
         // 3. Output RMSNorm (CPU — small, not worth GPU dispatch)
