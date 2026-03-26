@@ -141,9 +141,8 @@ impl WgslForwardPass {
                      input: &wgpu::Buffer, layer_prefix: &str, proj_name: &str,
                      output: &wgpu::Buffer, m: u32, k: u32, n: u32) {
         let weight_key = format!("{layer_prefix}.{proj_name}");
-        // PMAT-364: Q4K fused GEMV — DISABLED pending scale extraction fix
-        // Output was "bbebbe..." — shader nibble/scale logic needs debugging
-        if m == 1 && false {
+        // PMAT-365: Q4K fused GEMV — scale extraction fixed
+        if m == 1 {
             if let Some(q4k_buf) = self.q4k_weights.get(&weight_key) {
                 let params = [n, k, 0u32, 0u32];
                 let params_buf = self.make_uniform(&params);

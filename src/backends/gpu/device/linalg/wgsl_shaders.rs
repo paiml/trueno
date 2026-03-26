@@ -186,89 +186,81 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) lid:
 }
 "#;
 
-/// PMAT-363: Fused Q4K dequant+GEMV — dequantize on-the-fly, 4× bandwidth reduction.
-/// Each workgroup computes one output row: y[row] = sum_k W_q4k[row,k] * x[k]
-/// Q4K superblock: 144 bytes = 2B d(f16) + 2B dmin(f16) + 12B scales + 128B nibbles = 256 elements
+/// PMAT-365: Fused Q4K dequant+GEMV — fixed scale extraction.
+/// Q4K superblock: 144B = 2B d(f16) + 2B dmin(f16) + 12B scales + 128B nibbles = 256 elements.
+/// Scale table: bytes[0..4] = 6-bit scales for blocks 0-3, bytes[4..8] = 6-bit mins for blocks 0-3,
+/// bytes[8..12] = packed 4-bit scale/min for blocks 4-7 (high 2 bits from bytes[0..4]/[4..8]).
 pub(super) const Q4K_GEMV_SHADER: &str = r#"
-@group(0) @binding(0) var<storage, read> x: array<f32>;        // input [K]
-@group(0) @binding(1) var<storage, read> w_q4k: array<u32>;    // Q4K raw bytes as u32
-@group(0) @binding(2) var<storage, read_write> y: array<f32>;  // output [N]
+@group(0) @binding(0) var<storage, read> x: array<f32>;
+@group(0) @binding(1) var<storage, read> w_q4k: array<u32>;
+@group(0) @binding(2) var<storage, read_write> y: array<f32>;
 struct Params { n: u32, k: u32, _p1: u32, _p2: u32, }
 @group(0) @binding(3) var<uniform> params: Params;
-
 var<workgroup> sdata: array<f32, 256>;
 
-// Read f16 from 2 bytes packed in u32 word
-fn read_f16_bits(word: u32, byte_offset: u32) -> f32 {
-    let shifted = (word >> (byte_offset * 8u)) & 0xFFFFu;
-    return unpack2x16float(shifted).x;
+// Read byte `b` from the 12-byte scale table (stored in 3 u32s starting at sc_base)
+fn sc_byte(sb_u32: u32, b: u32) -> u32 {
+    // Scale bytes are at sb_u32+1 (bytes 0-3), sb_u32+2 (bytes 4-7), sb_u32+3 (bytes 8-11)
+    let word_idx = b / 4u;
+    let byte_idx = b % 4u;
+    return (w_q4k[sb_u32 + 1u + word_idx] >> (byte_idx * 8u)) & 0xFFu;
+}
+
+// Extract 6-bit scale and min for block j (0..7) per CPU extract_scale_min()
+fn get_scale_min(sb_u32: u32, j: u32) -> vec2<f32> {
+    var sc: u32; var mn: u32;
+    if (j < 4u) {
+        sc = sc_byte(sb_u32, j) & 63u;
+        mn = sc_byte(sb_u32, j + 4u) & 63u;
+    } else {
+        sc = (sc_byte(sb_u32, j + 4u) & 0x0Fu) | ((sc_byte(sb_u32, j - 4u) >> 6u) << 4u);
+        mn = (sc_byte(sb_u32, j + 4u) >> 4u) | ((sc_byte(sb_u32, j) >> 6u) << 4u);
+    }
+    return vec2<f32>(f32(sc), f32(mn));
 }
 
 @compute @workgroup_size(256)
 fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
-    let row = wg.x;
-    let tid = lid.x;
+    let row = wg.x; let tid = lid.x;
     if (row >= params.n) { return; }
-
     let k = params.k;
-    let sb_count = k / 256u;  // superblocks per row
-    let row_bytes = sb_count * 144u;  // bytes per row in Q4K
-    let row_u32_offset = row * (row_bytes / 4u);  // u32 offset for this row
+    let sb_count = k / 256u;
+    let row_u32_off = row * sb_count * 36u;
+    var psum: f32 = 0.0;
 
-    var partial_sum: f32 = 0.0;
-
-    // Each thread handles some superblocks
     for (var sb = tid; sb < sb_count; sb += 256u) {
-        let sb_u32 = row_u32_offset + sb * 36u;  // 144 bytes = 36 u32s per superblock
+        let sbu = row_u32_off + sb * 36u;
         let x_base = sb * 256u;
+        let hdr = w_q4k[sbu];
+        let d = unpack2x16float(hdr & 0xFFFFu).x;
+        let dmin = unpack2x16float((hdr >> 16u) & 0xFFFFu).x;
 
-        // Read d and dmin (f16 packed in first u32)
-        let hdr0 = w_q4k[sb_u32];
-        let d = unpack2x16float(hdr0 & 0xFFFFu).x;
-        let dmin = unpack2x16float((hdr0 >> 16u) & 0xFFFFu).x;
-
-        // Read 12 scale bytes (3 u32s: sb_u32+1, sb_u32+2, sb_u32+3)
-        let sc0 = w_q4k[sb_u32 + 1u];
-        let sc1 = w_q4k[sb_u32 + 2u];
-        let sc2 = w_q4k[sb_u32 + 3u];
-
-        // Process 4 chunks of 64 values each
         for (var chunk = 0u; chunk < 4u; chunk++) {
             let is = chunk * 2u;
-            // Extract 6-bit scale and min for this chunk's two 32-value halves
-            let s0 = extractBits(sc0, (is % 4u) * 8u, 6u);
-            let m0 = extractBits(sc0, ((is % 4u) + 4u) * 8u % 32u, 6u);
-
-            let d1 = d * f32(s0);
-            let dm1 = dmin * f32(m0);
-
-            // Read 32 bytes of nibbles for this chunk (8 u32s)
-            let q_u32 = sb_u32 + 4u + chunk * 8u;
-
-            // Low nibbles (first 32 values)
+            let sm1 = get_scale_min(sbu, is);
+            let sm2 = get_scale_min(sbu, is + 1u);
+            let d1 = d * sm1.x; let dm1 = dmin * sm1.y;
+            let d2 = d * sm2.x; let dm2 = dmin * sm2.y;
+            let qu = sbu + 4u + chunk * 8u;
+            // Low nibbles (32 values, scale d1/dm1)
             for (var i = 0u; i < 8u; i++) {
-                let word = w_q4k[q_u32 + i];
+                let w = w_q4k[qu + i];
                 for (var b = 0u; b < 4u; b++) {
-                    let nibble = (word >> (b * 8u)) & 0xFu;
                     let xi = x_base + chunk * 64u + i * 4u + b;
-                    if (xi < k) { partial_sum += (d1 * f32(nibble) - dm1) * x[xi]; }
+                    if (xi < k) { psum += (d1 * f32((w >> (b * 8u)) & 0xFu) - dm1) * x[xi]; }
                 }
             }
-            // High nibbles (next 32 values)
+            // High nibbles (32 values, scale d2/dm2)
             for (var i = 0u; i < 8u; i++) {
-                let word = w_q4k[q_u32 + i];
+                let w = w_q4k[qu + i];
                 for (var b = 0u; b < 4u; b++) {
-                    let nibble = (word >> (b * 8u + 4u)) & 0xFu;
                     let xi = x_base + chunk * 64u + 32u + i * 4u + b;
-                    if (xi < k) { partial_sum += (d1 * f32(nibble) - dm1) * x[xi]; }
+                    if (xi < k) { psum += (d2 * f32((w >> (b * 8u + 4u)) & 0xFu) - dm2) * x[xi]; }
                 }
             }
         }
     }
-
-    // Tree reduction
-    sdata[tid] = partial_sum;
-    workgroupBarrier();
+    sdata[tid] = psum; workgroupBarrier();
     if (tid < 128u) { sdata[tid] += sdata[tid + 128u]; } workgroupBarrier();
     if (tid < 64u) { sdata[tid] += sdata[tid + 64u]; } workgroupBarrier();
     if (tid < 32u) { sdata[tid] += sdata[tid + 32u]; } workgroupBarrier();
