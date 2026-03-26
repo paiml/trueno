@@ -127,7 +127,7 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
-    /// Integer division u32 (immediate divisor)
+    /// Integer division u32
     pub fn div_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
@@ -139,22 +139,7 @@ impl<'a> KernelBuilder<'a> {
         dst
     }
 
-    /// Integer division u32 (register divisor)
-    ///
-    /// Contract: dimension-independent-kernels-v1.yaml (FALSIFY-DIM-001)
-    /// Enables runtime dimension parameters instead of baked immediates.
-    pub fn div_u32_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Div, PtxType::U32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b)),
-        );
-        dst
-    }
-
-    /// Integer remainder (modulo) u32 (immediate divisor)
+    /// Integer remainder (modulo) u32
     pub fn rem_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
         let dst = self.registers.allocate_virtual(PtxType::U32);
         self.instructions.push(
@@ -162,21 +147,6 @@ impl<'a> KernelBuilder<'a> {
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(a))
                 .src(Operand::ImmU64(b as u64)),
-        );
-        dst
-    }
-
-    /// Integer remainder (modulo) u32 (register divisor)
-    ///
-    /// Contract: dimension-independent-kernels-v1.yaml (FALSIFY-DIM-001)
-    /// Enables runtime dimension parameters instead of baked immediates.
-    pub fn rem_u32_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
-        let dst = self.registers.allocate_virtual(PtxType::U32);
-        self.instructions.push(
-            PtxInstruction::new(PtxOp::Rem, PtxType::U32)
-                .dst(Operand::Reg(dst))
-                .src(Operand::Reg(a))
-                .src(Operand::Reg(b)),
         );
         dst
     }

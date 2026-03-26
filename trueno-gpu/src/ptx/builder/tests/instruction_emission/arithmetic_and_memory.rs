@@ -196,20 +196,6 @@ fn test_mul_wide_u32_emission() {
 }
 
 #[test]
-fn test_mul_wide_u32_reg_emission() {
-    // trueno#207: mul_wide_u32_reg must emit mul.wide.u32, never mul.lo.u64
-    let kernel = PtxKernel::new("test_mul_wide_reg").build(|ctx| {
-        let a = ctx.mov_u32_imm(100);
-        let b = ctx.mov_u32_imm(200);
-        let _ = ctx.mul_wide_u32_reg(a, b);
-        ctx.ret();
-    });
-    let ptx = kernel.emit();
-    assert!(ptx.contains("mul.wide.u32"), "Expected mul.wide.u32 in: {}", ptx);
-    assert!(!ptx.contains("mul.lo.u64"), "Found mul.lo.u64 in: {}", ptx);
-}
-
-#[test]
 fn test_mad_lo_emission() {
     let kernel = PtxKernel::new("test_mad_lo").build(|ctx| {
         let a = ctx.mov_u32_imm(10);

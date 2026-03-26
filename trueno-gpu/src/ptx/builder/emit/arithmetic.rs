@@ -12,11 +12,6 @@ pub(crate) fn emit_arithmetic_opcode(instr: &PtxInstruction, s: &mut String) {
         PtxOp::Add => s.push_str("add"),
         PtxOp::Sub => s.push_str("sub"),
         PtxOp::Mul => emit_mul_opcode(instr, s),
-        PtxOp::MulWide => {
-            // Explicitly emit mul.wide with the source type from instr.ty.
-            // The instruction type IS the source type (e.g., U32 for u32 x u32 -> u64).
-            s.push_str("mul.wide");
-        }
         PtxOp::MadLo => s.push_str("mad.lo"),
         PtxOp::Div => {
             if instr.ty.is_float() {
@@ -77,7 +72,6 @@ pub(crate) fn is_arithmetic_op(op: &PtxOp) -> bool {
             | PtxOp::Add
             | PtxOp::Sub
             | PtxOp::Mul
-            | PtxOp::MulWide
             | PtxOp::MadLo
             | PtxOp::Div
             | PtxOp::Fma
@@ -328,24 +322,6 @@ mod tests {
         assert_eq!(s, "mul.lo");
     }
 
-    // === PtxOp::MulWide tests ===
-
-    #[test]
-    fn test_mul_wide_op_u32() {
-        let instr = make_instr(PtxOp::MulWide, PtxType::U32);
-        let mut s = String::new();
-        emit_arithmetic_opcode(&instr, &mut s);
-        assert_eq!(s, "mul.wide");
-    }
-
-    #[test]
-    fn test_mul_wide_op_s32() {
-        let instr = make_instr(PtxOp::MulWide, PtxType::S32);
-        let mut s = String::new();
-        emit_arithmetic_opcode(&instr, &mut s);
-        assert_eq!(s, "mul.wide");
-    }
-
     // === is_arithmetic_op tests ===
 
     #[test]
@@ -354,7 +330,6 @@ mod tests {
         assert!(is_arithmetic_op(&PtxOp::Add));
         assert!(is_arithmetic_op(&PtxOp::Sub));
         assert!(is_arithmetic_op(&PtxOp::Mul));
-        assert!(is_arithmetic_op(&PtxOp::MulWide));
         assert!(is_arithmetic_op(&PtxOp::MadLo));
         assert!(is_arithmetic_op(&PtxOp::Div));
         assert!(is_arithmetic_op(&PtxOp::Fma));

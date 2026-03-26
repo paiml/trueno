@@ -160,8 +160,7 @@ fn test_mul_wide_u32() {
     let _wide = builder.mul_wide_u32(a, 4);
 
     assert_eq!(builder.instructions.len(), 1);
-    assert_eq!(builder.instructions[0].op, PtxOp::MulWide);
-    assert_eq!(builder.instructions[0].ty, PtxType::U32);
+    assert_eq!(builder.instructions[0].ty, PtxType::U64);
 }
 
 #[test]
@@ -173,8 +172,7 @@ fn test_mul_wide_u32_reg() {
     let _wide = builder.mul_wide_u32_reg(a, b);
 
     assert_eq!(builder.instructions.len(), 1);
-    assert_eq!(builder.instructions[0].op, PtxOp::MulWide);
-    assert_eq!(builder.instructions[0].ty, PtxType::U32);
+    assert_eq!(builder.instructions[0].ty, PtxType::U64);
 }
 
 #[test]

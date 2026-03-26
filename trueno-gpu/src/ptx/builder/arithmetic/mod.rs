@@ -40,7 +40,7 @@ pub trait PtxArithmetic: KernelBuilderCore {
     fn mul_wide_u32(&mut self, a: VirtualReg, b: u32) -> VirtualReg {
         let dst = self.registers_mut().allocate_virtual(PtxType::U64);
         self.instructions_mut().push(
-            PtxInstruction::new(PtxOp::MulWide, PtxType::U32)
+            PtxInstruction::new(PtxOp::Mul, PtxType::U64)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(a))
                 .src(Operand::ImmU64(b as u64)),
@@ -52,7 +52,7 @@ pub trait PtxArithmetic: KernelBuilderCore {
     fn mul_wide_u32_reg(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
         let dst = self.registers_mut().allocate_virtual(PtxType::U64);
         self.instructions_mut().push(
-            PtxInstruction::new(PtxOp::MulWide, PtxType::U32)
+            PtxInstruction::new(PtxOp::Mul, PtxType::U64)
                 .dst(Operand::Reg(dst))
                 .src(Operand::Reg(a))
                 .src(Operand::Reg(b)),

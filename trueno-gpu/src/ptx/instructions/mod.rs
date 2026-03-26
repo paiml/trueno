@@ -13,12 +13,8 @@ pub enum PtxOp {
     Add,
     /// Subtract
     Sub,
-    /// Multiply (emits mul.lo for integers, mul for floats)
+    /// Multiply
     Mul,
-    /// Multiply wide: u32 x u32 -> u64 (or s32 x s32 -> s64)
-    /// Emits `mul.wide.u32` or `mul.wide.s32`.
-    /// Separate from Mul to avoid fragile source-type inference at emission time.
-    MulWide,
     /// Multiply-add (fused)
     Mad,
     /// Multiply-add low bits
