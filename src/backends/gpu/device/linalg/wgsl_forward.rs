@@ -233,7 +233,13 @@ impl WgslForwardPass {
     }
 
     /// PMAT-356: Biases stored on BOTH CPU and GPU for GPU-side bias+RoPE.
+    /// PMAT-377: Skip GPU upload for buffers > 2 GB (WGPU limit). CPU fallback used.
     pub fn upload_weight(&mut self, name: &str, data: &[f32]) {
+        let size_bytes = data.len() * 4;
+        if size_bytes > 2_000_000_000 {
+            eprintln!("[PMAT-377] Skipping GPU upload for {} ({:.1} GB > 2 GB limit)", name, size_bytes as f64 / 1e9);
+            return;
+        }
         if name.contains("bias") {
             self.cpu_biases.insert(name.to_string(), data.to_vec());
             // Fall through to ALSO store on GPU for encode_bias_add
