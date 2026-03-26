@@ -76,11 +76,10 @@ impl RmsnormKernelV1 for TruenoKernels {
 // ----------------------------------------------------------------------------
 
 impl LayernormKernelV1 for TruenoKernels {
-    fn layernorm(&self, input: &[f32]) -> Vec<f32> {
-        let gamma: Vec<f32> = vec![1.0; input.len()];
-        let beta: Vec<f32> = vec![0.0; input.len()];
+    fn layernorm(&self, xinrd: &[f32], gammainrd: &[f32]) -> Vec<f32> {
+        let beta: Vec<f32> = vec![0.0; xinrd.len()];
         let eps = 1e-5_f32;
-        trueno::blis::norms::layer_norm_alloc(input, &gamma, &beta, eps)
+        trueno::blis::norms::layer_norm_alloc(xinrd, gammainrd, &beta, eps)
     }
 
     fn statistics(&self, input: &[f32]) -> Vec<f32> {
@@ -211,7 +210,8 @@ fn rmsnorm_unit_gamma() {
 fn layernorm_standardization() {
     let k = TruenoKernels;
     let input = [1.0, 2.0, 3.0, 4.0, 5.0];
-    let out = LayernormKernelV1::layernorm(&k, &input);
+    let gamma = vec![1.0f32; input.len()];
+    let out = LayernormKernelV1::layernorm(&k, &input, &gamma);
     assert_eq!(out.len(), input.len());
     // With gamma=1, beta=0: mean should be ~0, variance should be ~1
     let n = out.len() as f32;
