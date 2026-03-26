@@ -316,8 +316,11 @@ impl CudaModule {
             )));
         }
 
-        // Try to compile PTX to cubin via linker API for caching
-        let cubin_result = compile_ptx_to_cubin(driver, ptx, jit_target);
+        // PMAT-369: cuLinkCreate poisons CUDA context on driver 590.48.01 (sm_89)
+        // and driver 540.5.0 (sm_87). Skip entirely — use legacy JIT only.
+        let cubin_result: Result<Vec<u8>, GpuError> = Err(GpuError::ModuleLoad(
+            "cuLinkCreate skipped (PMAT-369: context poisoning)".to_string(),
+        ));
 
         if let Err(ref e) = cubin_result {
             eprintln!("[PTX-CACHE] Linker compilation failed: {e}, falling through to legacy JIT");
