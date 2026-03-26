@@ -194,6 +194,8 @@ trueno-cuda-edge = { version = "0.1", path = "trueno-cuda-edge" }
 # Sparse and solver crates for contract tests
 trueno-sparse = { version = "0.1", path = "crates/trueno-sparse" }
 trueno-solve = { version = "0.1", path = "crates/trueno-solve" }
+# Contract trait enforcement (Section 23)
+provable-contracts = { path = "../provable-contracts/crates/provable-contracts" }
 
 [features]
 default = []
