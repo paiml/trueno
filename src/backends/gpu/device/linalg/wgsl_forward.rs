@@ -51,10 +51,13 @@ pub struct WgslForwardPass {
     pub(super) kv_cache_k: Vec<wgpu::Buffer>, // [num_layers][max_seq * kv_dim]
     pub(super) kv_cache_v: Vec<wgpu::Buffer>,
     pub(super) max_seq_len: u32,
+    /// PMAT-363: Fused Q4K dequant+GEMV
+    pub(super) q4k_gemv_pipeline: wgpu::ComputePipeline,
+    pub(super) q4k_weights: HashMap<String, wgpu::Buffer>,
 }
 use super::wgsl_shaders::{
-    ATTENTION_SHADER, BIAS_ADD_SHADER, RESIDUAL_SHADER, RMSNORM_SHADER, ROPE_SHADER,
-    SILU_MUL_SHADER,
+    ATTENTION_SHADER, BIAS_ADD_SHADER, Q4K_GEMV_SHADER, RESIDUAL_SHADER, RMSNORM_SHADER,
+    ROPE_SHADER, SILU_MUL_SHADER,
 };
 #[rustfmt::skip]
 impl WgslForwardPass {
@@ -203,10 +206,17 @@ impl WgslForwardPass {
         });
         let attention_pipeline = make_pipeline(&attn_shader, &attention_bgl, "attn_pipe");
 
+        // PMAT-363: Q4K fused dequant+GEMV (same BGL as matmul: x, w, y, params)
+        let q4k_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("q4k_gemv"), source: wgpu::ShaderSource::Wgsl(Q4K_GEMV_SHADER.into()),
+        });
+        let q4k_gemv_pipeline = make_pipeline(&q4k_shader, &matmul_bgl, "q4k_gemv_pipe");
+
         Self {
             device, queue,
             matmul_pipeline, gemv_pipeline, rmsnorm_pipeline, silu_mul_pipeline,
             rope_pipeline, residual_pipeline, bias_add_pipeline, attention_pipeline,
+            q4k_gemv_pipeline, q4k_weights: HashMap::new(),
             matmul_bgl, elementwise_bgl, bias_add_bgl, rope_bgl, attention_bgl,
             kv_cache_k: Vec::new(), kv_cache_v: Vec::new(), max_seq_len: 2048,
             weight_buffers: HashMap::new(),
@@ -253,6 +263,17 @@ impl WgslForwardPass {
             usage: wgpu::BufferUsages::STORAGE,
         });
         self.weight_buffers.insert(name.to_string(), buffer);
+    }
+
+    /// PMAT-363: Upload raw Q4K weight bytes (144 bytes per 256-element superblock).
+    /// Stored as u32 array for shader access. Used instead of F32 dequant for 4× BW reduction.
+    pub fn upload_q4k_weight(&mut self, name: &str, raw_data: &[u8]) {
+        use wgpu::util::DeviceExt;
+        let buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(name), contents: raw_data,
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+        self.q4k_weights.insert(name.to_string(), buffer);
     }
 
     /// Total VRAM used by all buffers (bytes).
