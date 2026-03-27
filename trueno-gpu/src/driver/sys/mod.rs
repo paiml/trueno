@@ -233,6 +233,8 @@ pub struct CudaDriver {
     // Memory Management
     /// cuMemAlloc - Allocate device memory
     pub cuMemAlloc: unsafe extern "C" fn(ptr: *mut CUdeviceptr, size: usize) -> CUresult,
+    /// PMAT-394: cuMemAllocManaged - Allocate unified memory (Grace Blackwell zero-copy)
+    pub cuMemAllocManaged: unsafe extern "C" fn(ptr: *mut CUdeviceptr, size: usize, flags: u32) -> CUresult,
     /// cuMemFree - Free device memory
     pub cuMemFree: unsafe extern "C" fn(ptr: CUdeviceptr) -> CUresult,
     /// cuMemcpyHtoD - Copy from host to device
@@ -460,6 +462,7 @@ mod loading {
                 type FnModuleGetFunction =
                     unsafe extern "C" fn(*mut CUfunction, CUmodule, *const c_char) -> CUresult;
                 type FnMemAlloc = unsafe extern "C" fn(*mut CUdeviceptr, usize) -> CUresult;
+                type FnMemAllocManaged = unsafe extern "C" fn(*mut CUdeviceptr, usize, u32) -> CUresult;
                 type FnMemFree = unsafe extern "C" fn(CUdeviceptr) -> CUresult;
                 type FnMemcpyHtoD =
                     unsafe extern "C" fn(CUdeviceptr, *const c_void, usize) -> CUresult;
@@ -556,6 +559,7 @@ mod loading {
                     cuModuleUnload: load_sym!(cuModuleUnload, FnModuleUnload),
                     cuModuleGetFunction: load_sym!(cuModuleGetFunction, FnModuleGetFunction),
                     cuMemAlloc: load_sym!(cuMemAlloc_v2, FnMemAlloc),
+                    cuMemAllocManaged: load_sym!(cuMemAllocManaged, FnMemAllocManaged),
                     cuMemFree: load_sym!(cuMemFree_v2, FnMemFree),
                     cuMemcpyHtoD: load_sym!(cuMemcpyHtoD_v2, FnMemcpyHtoD),
                     cuMemcpyDtoH: load_sym!(cuMemcpyDtoH_v2, FnMemcpyDtoH),

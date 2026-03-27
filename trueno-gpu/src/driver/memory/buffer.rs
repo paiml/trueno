@@ -98,6 +98,24 @@ impl<T> GpuBuffer<T> {
         Ok(Self { ptr, len, _marker: PhantomData })
     }
 
+    /// PMAT-394: Allocate managed (unified) memory for Grace Blackwell.
+    /// GPU accesses via NVLink-C2C, no explicit copy needed.
+    /// `cuMemFree` works for both managed and device allocations.
+    pub fn new_managed(_ctx: &CudaContext, len: usize) -> Result<Self, GpuError> {
+        if len == 0 {
+            return Ok(Self { ptr: 0, len: 0, _marker: PhantomData });
+        }
+        let driver = get_driver()?;
+        let size = len * mem::size_of::<T>();
+        let mut ptr: CUdeviceptr = 0;
+        const CU_MEM_ATTACH_GLOBAL: u32 = 1;
+        let result = unsafe { (driver.cuMemAllocManaged)(&mut ptr, size, CU_MEM_ATTACH_GLOBAL) };
+        CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(
+            format!("cuMemAllocManaged({} bytes): {}", size, e)
+        ))?;
+        Ok(Self { ptr, len, _marker: PhantomData })
+    }
+
     /// Get device pointer as raw u64
     #[must_use]
     pub fn as_ptr(&self) -> CUdeviceptr {
