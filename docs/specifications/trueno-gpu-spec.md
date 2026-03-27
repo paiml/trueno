@@ -1531,3 +1531,58 @@ Key assertions:
 - FALSIFY-DIK-003: cubin blobs present for sm_80, sm_89, sm_121
 - FALSIFY-DIK-004: Dimension-independent GEMM produces identical results to baked-dimension GEMM
 - FALSIFY-DIK-005: Backward kernels work during active GPU training (no JIT crash)
+
+---
+
+## 15. WGSL Backward Shaders for Training (WGPU)
+
+### 15.1 Motivation
+
+The CUDA PTX backward kernels (Section 14) solve the Blackwell JIT bug for NVIDIA hardware, but training on AMD, Intel Arc, and Apple Silicon GPUs requires a different approach. WGSL compute shaders running on the `wgpu` backend provide cross-platform training support via Vulkan, Metal, DX12, and WebGPU.
+
+### 15.2 Architecture
+
+```
+trueno/src/backends/gpu/
+├── shaders/
+│   ├── basic_ops.rs      # Forward pass shaders (GEMV, MATMUL, RMSNorm, SiLU, RoPE)
+│   └── backward.rs       # Backward pass shaders (7 WGSL compute shaders)
+└── device/
+    ├── mod.rs             # GpuDevice (forward dispatch)
+    └── backward.rs        # Backward dispatch functions (7 GPU dispatch methods)
+```
+
+### 15.3 Backward Ops (7 WGSL Compute Shaders)
+
+| Shader | Workgroup Size | Description |
+|--------|---------------|-------------|
+| `silu_backward` | 256 | SiLU activation gradient: `grad * (sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x)))` |
+| `gemm_backward_a` | 16x16 | Weight gradient dL/dA via tiled shared-memory GEMM |
+| `gemm_backward_b` | 16x16 | Input gradient dL/dB via tiled shared-memory GEMM |
+| `rmsnorm_backward` | 256 | RMSNorm gradient with per-row reduction |
+| `rope_backward` | 256 | Rotary position embedding gradient (inverse rotation) |
+| `adamw_step` | 256 | AdamW optimizer: first/second moment update + decoupled weight decay |
+| `nf4_dequant` | 256 | NF4 4-bit dequantization via lookup table (for QLoRA training) |
+
+### 15.4 Verification
+
+All shaders verified on AMD Radeon Pro W5700X via Vulkan backend.
+
+**Contract**: `bashrs/provable-contracts/contracts/wgpu-training-v1.yaml`
+
+8 FALSIFY tests, all PASS:
+- Numerical correctness vs CPU reference (f32 tolerance < 1e-5)
+- Dimension handling (non-power-of-2 sizes)
+- Buffer management (upload/download round-trip)
+
+### 15.5 Cross-Platform GPU Training Path
+
+With both forward (Section 12) and backward (this section) WGSL shaders, trueno provides a complete training loop on non-NVIDIA hardware:
+
+```
+Forward Pass (WGSL):  RMSNorm → GEMV/GEMM → SiLU → RoPE → Attention → Loss
+Backward Pass (WGSL): Loss grad → RMSNorm backward → GEMM backward → SiLU backward → RoPE backward
+Optimizer (WGSL):     AdamW step (with NF4 dequant for QLoRA)
+```
+
+This eliminates the NVIDIA-only dependency for training workloads, enabling the Sovereign AI Stack to train models on AMD Radeon, Intel Arc, and Apple M-series GPUs.
