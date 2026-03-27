@@ -965,7 +965,13 @@ impl GpuDevice {
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &bg, &[]);
-            pass.dispatch_workgroups(n.div_ceil(256), 1, 1);
+            // Use 2D dispatch to handle >65535 workgroups
+            // Each workgroup has 256 threads. Total threads = n.
+            // X = min(ceil(n/256), 65535), Y = ceil(ceil(n/256) / 65535)
+            let total_wg = n.div_ceil(256);
+            let x = total_wg.min(65535);
+            let y = total_wg.div_ceil(65535);
+            pass.dispatch_workgroups(x, y, 1);
         }
         encoder.copy_buffer_to_buffer(&output_buf, 0, &staging, 0, (output.len() * 4) as u64);
         self.queue.submit(Some(encoder.finish()));

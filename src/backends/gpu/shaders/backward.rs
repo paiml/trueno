@@ -509,7 +509,8 @@ struct Params {
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let idx = global_id.x;
+    // 2D dispatch for large tensors (>16M elements): idx = x + y * 65535 * 256
+    let idx = global_id.x + global_id.y * 65535u * 256u;
     if (idx >= params.n) {
         return;
     }
