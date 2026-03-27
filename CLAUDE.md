@@ -895,6 +895,41 @@ fwd.upload_weight("layer.0.q_proj", &f32_data);
 let logits = fwd.forward_model(token_id, pos, 28, &embed, &norm, &lm_head, 151936, 1e-6)?;
 ```
 
+## WGPU Training Shaders
+
+Trueno supports backward pass (training) computation via WGSL compute shaders, enabling neural network training on non-NVIDIA GPUs (AMD, Intel Arc, Apple Silicon) through Vulkan, Metal, DX12, and WebGPU.
+
+### File Locations
+
+- **WGSL shader source**: `src/backends/gpu/shaders/backward.rs` -- 7 WGSL compute shaders
+- **GPU dispatch functions**: `src/backends/gpu/device/backward.rs` -- 7 dispatch functions with buffer management
+- **Contract (CUDA)**: `contracts/dimension-independent-kernels-v1.yaml` -- 6 FALSIFY tests for dimension-independent CUDA kernels
+- **Contract (WGPU)**: Referenced from `bashrs/provable-contracts/contracts/wgpu-training-v1.yaml` -- 8 FALSIFY tests for WGPU backward shaders
+
+### Backward Ops (7 shaders)
+
+| Shader | Purpose |
+|--------|---------|
+| `silu_backward` | SiLU activation gradient |
+| `gemm_backward_a` | Weight gradient (dL/dA) |
+| `gemm_backward_b` | Input gradient (dL/dB) |
+| `rmsnorm_backward` | RMSNorm gradient |
+| `rope_backward` | Rotary position embedding gradient |
+| `adamw_step` | AdamW optimizer parameter update |
+| `nf4_dequant` | NF4 4-bit dequantization for QLoRA |
+
+### FALSIFY Test Results
+
+All 8 FALSIFY tests PASS on AMD Radeon Pro W5700X via Vulkan:
+
+- FALSIFY-WGPU-TRAIN-001 through FALSIFY-WGPU-TRAIN-008
+
+These tests verify numerical correctness of each backward shader against CPU reference implementations, with f32 tolerance < 1e-5.
+
+### Significance
+
+This enables the full training loop (forward + backward + optimizer) on non-NVIDIA hardware. Combined with the existing WGSL forward pass shaders (`WgslForwardPass`), trueno now provides a complete GPU training path that works on AMD, Intel Arc, and Apple Silicon without CUDA.
+
 ## Ecosystem Integration
 
 Trueno integrates with the Pragmatic AI Labs transpiler ecosystem:
