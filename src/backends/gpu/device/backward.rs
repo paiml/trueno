@@ -694,6 +694,296 @@ impl GpuDevice {
 
         Ok(())
     }
+
+    /// RMSNorm backward on GPU
+    ///
+    /// Computes grad_input and accumulates grad_gamma via atomic CAS.
+    /// One workgroup (256 threads) per row.
+    ///
+    /// # Contract (FALSIFY-WGPU-001)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+    pub fn rmsnorm_backward(
+        &self,
+        input: &[f32],
+        gamma: &[f32],
+        grad_output: &[f32],
+        grad_input: &mut [f32],
+        grad_gamma: &mut [f32],
+        num_rows: u32,
+        hidden_dim: u32,
+        eps: f32,
+    ) -> Result<(), String> {
+        runtime::block_on(self.rmsnorm_backward_async(
+            input, gamma, grad_output, grad_input, grad_gamma, num_rows, hidden_dim, eps,
+        ))
+    }
+
+    /// RMSNorm backward (async)
+    pub async fn rmsnorm_backward_async(
+        &self,
+        input: &[f32],
+        gamma: &[f32],
+        grad_output: &[f32],
+        grad_input: &mut [f32],
+        grad_gamma: &mut [f32],
+        num_rows: u32,
+        hidden_dim: u32,
+        eps: f32,
+    ) -> Result<(), String> {
+        use wgpu;
+
+        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("RMSNorm Backward"),
+            source: wgpu::ShaderSource::Wgsl(shaders::backward::RMSNORM_BACKWARD_SHADER.into()),
+        });
+
+        let input_buf = self.create_storage_buffer("rms_bwd input", input, true);
+        let gamma_buf = self.create_storage_buffer("rms_bwd gamma", gamma, true);
+        let grad_out_buf = self.create_storage_buffer("rms_bwd grad_out", grad_output, true);
+        let grad_in_buf =
+            self.create_rw_storage_buffer("rms_bwd grad_in", (grad_input.len() * 4) as u64);
+
+        // grad_gamma: init to zero, accumulated via atomic CAS
+        let grad_gamma_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("rms_bwd grad_gamma"),
+            size: (hidden_dim as usize * 4) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        // Zero-init grad_gamma
+        let zeros = vec![0u8; hidden_dim as usize * 4];
+        self.queue.write_buffer(&grad_gamma_buf, 0, &zeros);
+
+        // Uniform: { num_rows, hidden_dim, eps_bits, pad }
+        let params: [u32; 4] = [num_rows, hidden_dim, eps.to_bits(), 0];
+        let uniform_buf =
+            self.create_uniform_buffer("rms_bwd params", bytemuck::cast_slice(&params));
+
+        let bgl = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                storage_entry(0, true),  // input
+                storage_entry(1, true),  // gamma
+                storage_entry(2, true),  // grad_output
+                storage_entry(3, false), // grad_input
+                storage_entry(4, false), // grad_gamma (atomic)
+                uniform_entry(5),
+            ],
+        });
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: input_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: gamma_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: grad_out_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: grad_in_buf.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: grad_gamma_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry { binding: 5, resource: uniform_buf.as_entire_binding() },
+            ],
+        });
+
+        let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
+        });
+        let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("RMSNorm Backward"),
+            layout: Some(&pl),
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        // Staging for grad_input and grad_gamma
+        let gi_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (grad_input.len() * 4) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let gg_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (hidden_dim as usize * 4) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder =
+            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut pass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            pass.set_pipeline(&pipeline);
+            pass.set_bind_group(0, &bg, &[]);
+            // One workgroup (256 threads) per row
+            pass.dispatch_workgroups(num_rows, 1, 1);
+        }
+        encoder.copy_buffer_to_buffer(
+            &grad_in_buf, 0, &gi_staging, 0, (grad_input.len() * 4) as u64,
+        );
+        encoder.copy_buffer_to_buffer(
+            &grad_gamma_buf, 0, &gg_staging, 0, (hidden_dim as usize * 4) as u64,
+        );
+        self.queue.submit(Some(encoder.finish()));
+
+        // Read back grad_input
+        {
+            let slice = gi_staging.slice(..);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+            rx.recv().map_err(|e| format!("RMSNorm bwd gi: {e}"))?
+                .map_err(|e| format!("RMSNorm bwd gi map: {e}"))?;
+            let data = slice.get_mapped_range();
+            grad_input.copy_from_slice(bytemuck::cast_slice(&data));
+            drop(data);
+            gi_staging.unmap();
+        }
+        // Read back grad_gamma (stored as atomic<u32> = bitcast f32)
+        {
+            let slice = gg_staging.slice(..);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+            rx.recv().map_err(|e| format!("RMSNorm bwd gg: {e}"))?
+                .map_err(|e| format!("RMSNorm bwd gg map: {e}"))?;
+            let data = slice.get_mapped_range();
+            // atomic<u32> stores are bit-identical to f32 after CAS
+            let raw: &[u32] = bytemuck::cast_slice(&data);
+            for (i, &bits) in raw.iter().enumerate() {
+                grad_gamma[i] = f32::from_bits(bits);
+            }
+            drop(data);
+            gg_staging.unmap();
+        }
+
+        Ok(())
+    }
+
+    /// NF4 dequantization on GPU
+    ///
+    /// Converts 4-bit NormalFloat packed weights to fp32 using codebook lookup.
+    ///
+    /// # Contract (FALSIFY-WGPU-003)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+    pub fn nf4_dequant(
+        &self,
+        packed: &[u32],
+        scales: &[f32],
+        output: &mut [f32],
+        n: u32,
+        block_size: u32,
+    ) -> Result<(), String> {
+        runtime::block_on(self.nf4_dequant_async(packed, scales, output, n, block_size))
+    }
+
+    /// NF4 dequant (async)
+    pub async fn nf4_dequant_async(
+        &self,
+        packed: &[u32],
+        scales: &[f32],
+        output: &mut [f32],
+        n: u32,
+        block_size: u32,
+    ) -> Result<(), String> {
+        use wgpu;
+
+        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("NF4 Dequant"),
+            source: wgpu::ShaderSource::Wgsl(shaders::backward::NF4_DEQUANT_SHADER.into()),
+        });
+
+        let packed_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("nf4 packed"),
+            size: (packed.len() * 4) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.queue.write_buffer(&packed_buf, 0, bytemuck::cast_slice(packed));
+
+        let scales_buf = self.create_storage_buffer("nf4 scales", scales, true);
+        let output_buf =
+            self.create_rw_storage_buffer("nf4 output", (output.len() * 4) as u64);
+
+        let params: [u32; 4] = [n, block_size, 0, 0];
+        let uniform_buf =
+            self.create_uniform_buffer("nf4 params", bytemuck::cast_slice(&params));
+
+        let bgl = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                storage_entry(0, true),  // packed
+                storage_entry(1, true),  // scales
+                storage_entry(2, false), // output
+                uniform_entry(3),
+            ],
+        });
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: packed_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: scales_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: output_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: uniform_buf.as_entire_binding() },
+            ],
+        });
+
+        let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
+        });
+        let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("NF4 Dequant"),
+            layout: Some(&pl),
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (output.len() * 4) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder =
+            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut pass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            pass.set_pipeline(&pipeline);
+            pass.set_bind_group(0, &bg, &[]);
+            pass.dispatch_workgroups(n.div_ceil(256), 1, 1);
+        }
+        encoder.copy_buffer_to_buffer(&output_buf, 0, &staging, 0, (output.len() * 4) as u64);
+        self.queue.submit(Some(encoder.finish()));
+
+        let slice = staging.slice(..);
+        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| { sender.send(r).ok(); });
+        self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+        receiver.receive().await
+            .ok_or("NF4 dequant: cancelled".to_string())?
+            .map_err(|e| format!("NF4 dequant: {e}"))?;
+        let data = slice.get_mapped_range();
+        output.copy_from_slice(bytemuck::cast_slice(&data));
+        drop(data);
+        staging.unmap();
+
+        Ok(())
+    }
 }
 
 fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
@@ -1004,6 +1294,144 @@ mod tests {
         assert!(
             max_diff < 1e-4,
             "FALSIFY-WGPU-001: AdamW step max diff = {max_diff} (threshold: 1e-4)"
+        );
+    }
+
+    /// FALSIFY-WGPU-001: RMSNorm backward matches CPU
+    #[test]
+    fn test_falsify_wgpu_001_rmsnorm_backward_parity() {
+        let device = GpuDevice::new().expect("GPU device");
+
+        let (num_rows, hidden_dim) = (3, 8);
+        let eps: f32 = 1e-5;
+        let n = num_rows * hidden_dim;
+
+        let input: Vec<f32> = (0..n).map(|i| (i as f32 - 12.0) * 0.1).collect();
+        let gamma: Vec<f32> = (0..hidden_dim).map(|i| 1.0 + i as f32 * 0.1).collect();
+        let grad_output: Vec<f32> = (0..n).map(|i| (i as f32 - 12.0) * 0.05).collect();
+
+        // CPU reference
+        let mut cpu_grad_input = vec![0.0f32; n];
+        let mut cpu_grad_gamma = vec![0.0f32; hidden_dim];
+        for r in 0..num_rows {
+            let row = &input[r * hidden_dim..(r + 1) * hidden_dim];
+            let grow = &grad_output[r * hidden_dim..(r + 1) * hidden_dim];
+
+            let sum_x2: f32 = row.iter().map(|x| x * x).sum();
+            let mean_x2 = sum_x2 / hidden_dim as f32;
+            let var_eps = mean_x2 + eps;
+            let rms = var_eps.sqrt();
+            let inv_rms = 1.0 / rms;
+
+            let sum_xgg: f32 = row
+                .iter()
+                .zip(grow.iter())
+                .zip(gamma.iter())
+                .map(|((&x, &gy), &g)| x * gy * g)
+                .sum();
+            let mean_xgg = sum_xgg / hidden_dim as f32;
+
+            for i in 0..hidden_dim {
+                let x = row[i];
+                let gy = grow[i];
+                let g = gamma[i];
+                let gamma_gy = g * gy;
+                let correction = (x / var_eps) * mean_xgg;
+                cpu_grad_input[r * hidden_dim + i] = inv_rms * (gamma_gy - correction);
+                cpu_grad_gamma[i] += gy * x * inv_rms;
+            }
+        }
+
+        let mut grad_input = vec![0.0f32; n];
+        let mut grad_gamma = vec![0.0f32; hidden_dim];
+
+        device
+            .rmsnorm_backward(
+                &input,
+                &gamma,
+                &grad_output,
+                &mut grad_input,
+                &mut grad_gamma,
+                num_rows as u32,
+                hidden_dim as u32,
+                eps,
+            )
+            .expect("rmsnorm_backward");
+
+        let gi_max_diff = grad_input
+            .iter()
+            .zip(cpu_grad_input.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+
+        let gg_max_diff = grad_gamma
+            .iter()
+            .zip(cpu_grad_gamma.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+
+        assert!(
+            gi_max_diff < 1e-3,
+            "FALSIFY-WGPU-001: RMSNorm grad_input max diff = {gi_max_diff}"
+        );
+        assert!(
+            gg_max_diff < 1e-2,
+            "FALSIFY-WGPU-001: RMSNorm grad_gamma max diff = {gg_max_diff} (atomic CAS accumulation)"
+        );
+    }
+
+    /// FALSIFY-WGPU-003: NF4 dequant matches CPU
+    #[test]
+    fn test_falsify_wgpu_003_nf4_dequant_parity() {
+        let device = GpuDevice::new().expect("GPU device");
+
+        // NF4 codebook
+        let nf4_lut: [f32; 16] = [
+            -1.0, -0.6961928, -0.5250731, -0.39491749, -0.28444138, -0.18477343,
+            -0.09105004, 0.0, 0.0795803, 0.1609302, 0.24611230, 0.33791524,
+            0.44070983, 0.5626170, 0.7229568, 1.0,
+        ];
+
+        let block_size = 4u32; // small for testing
+        let n = 8u32; // 8 elements = 2 blocks of 4
+
+        // Pack: each byte has 2 nibbles (low=even, high=odd)
+        // Elements: indices [3, 7, 12, 1, 5, 15, 0, 9]
+        // Byte 0: low=3, high=7 → 0x73
+        // Byte 1: low=12, high=1 → 0x1C
+        // Byte 2: low=5, high=15 → 0xF5
+        // Byte 3: low=0, high=9 → 0x90
+        // 8 elements = 4 bytes = 1 u32 (each byte has 2 nibbles)
+        // Byte 0: elem[0]=3,elem[1]=7 → 0x73
+        // Byte 1: elem[2]=12,elem[3]=1 → 0x1C
+        // Byte 2: elem[4]=5,elem[5]=15 → 0xF5
+        // Byte 3: elem[6]=0,elem[7]=9 → 0x90
+        let packed: Vec<u32> = vec![0x90F5_1C73_u32];
+
+        let scales: Vec<f32> = vec![2.0, 0.5]; // 2 blocks
+        let indices = [3, 7, 12, 1, 5, 15, 0, 9];
+
+        // CPU reference
+        let mut expected = vec![0.0f32; n as usize];
+        for i in 0..n as usize {
+            let scale = scales[i / block_size as usize];
+            expected[i] = nf4_lut[indices[i]] * scale;
+        }
+
+        let mut output = vec![0.0f32; n as usize];
+        device
+            .nf4_dequant(&packed, &scales, &mut output, n, block_size)
+            .expect("nf4_dequant");
+
+        let max_diff = output
+            .iter()
+            .zip(expected.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+
+        assert!(
+            max_diff < 1e-6,
+            "FALSIFY-WGPU-003: NF4 dequant max diff = {max_diff} (threshold: 1e-6)"
         );
     }
 }
