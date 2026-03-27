@@ -203,6 +203,201 @@ impl GpuDevice {
         self.queue.write_buffer(&buf, 0, data);
         buf
     }
+
+    /// GEMM backward for A: grad_a[M,K] = grad_c[M,N] @ B^T[N,K]
+    ///
+    /// # Contract (FALSIFY-WGPU-001)
+    ///
+    /// - **Precondition**: grad_c.len() == m*n, b.len() == k*n, grad_a.len() == m*k
+    /// - **Postcondition**: max|grad_a_gpu - grad_a_cpu| < 1e-4
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+    pub fn gemm_backward_a(
+        &self,
+        grad_c: &[f32],
+        b: &[f32],
+        grad_a: &mut [f32],
+        m: u32,
+        k: u32,
+        n: u32,
+    ) -> Result<(), String> {
+        runtime::block_on(self.gemm_backward_a_async(grad_c, b, grad_a, m, k, n))
+    }
+
+    /// GEMM backward for A (async): grad_a = grad_c @ B^T
+    pub async fn gemm_backward_a_async(
+        &self,
+        grad_c: &[f32],
+        b: &[f32],
+        grad_a: &mut [f32],
+        m: u32,
+        k: u32,
+        n: u32,
+    ) -> Result<(), String> {
+        self.execute_backward_gemm(
+            "GEMM Backward A",
+            shaders::backward::GEMM_BACKWARD_A_SHADER,
+            grad_c,
+            b,
+            grad_a,
+            m,
+            k,
+            n,
+        )
+        .await
+    }
+
+    /// GEMM backward for B: grad_b[K,N] = A^T[K,M] @ grad_c[M,N]
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+    pub fn gemm_backward_b(
+        &self,
+        a: &[f32],
+        grad_c: &[f32],
+        grad_b: &mut [f32],
+        m: u32,
+        k: u32,
+        n: u32,
+    ) -> Result<(), String> {
+        runtime::block_on(self.gemm_backward_b_async(a, grad_c, grad_b, m, k, n))
+    }
+
+    /// GEMM backward for B (async): grad_b = A^T @ grad_c
+    pub async fn gemm_backward_b_async(
+        &self,
+        a: &[f32],
+        grad_c: &[f32],
+        grad_b: &mut [f32],
+        m: u32,
+        k: u32,
+        n: u32,
+    ) -> Result<(), String> {
+        self.execute_backward_gemm(
+            "GEMM Backward B",
+            shaders::backward::GEMM_BACKWARD_B_SHADER,
+            a,
+            grad_c,
+            grad_b,
+            m,
+            k,
+            n,
+        )
+        .await
+    }
+
+    /// Generic dispatch for GEMM backward shaders (tiled 16×16)
+    ///
+    /// Binding: 0=buf_a(read), 1=buf_b(read), 2=output(write), 3=uniform{M,K,N}
+    async fn execute_backward_gemm(
+        &self,
+        op_name: &str,
+        shader_source: &str,
+        buf_a: &[f32],
+        buf_b: &[f32],
+        output: &mut [f32],
+        m: u32,
+        k: u32,
+        n: u32,
+    ) -> Result<(), String> {
+        use wgpu;
+
+        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(&format!("{op_name} Shader")),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        let a_buf = self.create_storage_buffer(&format!("{op_name} A"), buf_a, true);
+        let b_buf = self.create_storage_buffer(&format!("{op_name} B"), buf_b, true);
+        let out_buf = self.create_rw_storage_buffer(
+            &format!("{op_name} Output"),
+            (output.len() * 4) as u64,
+        );
+
+        // Uniform: { M, K, N, pad }
+        let dims: [u32; 4] = [m, k, n, 0];
+        let uniform_buf = self.create_uniform_buffer(
+            &format!("{op_name} Dims"),
+            bytemuck::cast_slice(&dims),
+        );
+
+        let bgl = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                storage_entry(0, true),
+                storage_entry(1, true),
+                storage_entry(2, false),
+                uniform_entry(3),
+            ],
+        });
+
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: a_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: b_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: out_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: uniform_buf.as_entire_binding() },
+            ],
+        });
+
+        let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some(&format!("{op_name} Pipeline")),
+            layout: Some(&pl),
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (output.len() * 4) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder =
+            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut pass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            pass.set_pipeline(&pipeline);
+            pass.set_bind_group(0, &bg, &[]);
+
+            // For GEMM backward A: output is [M,K], dispatch ceil(M/16) × ceil(K/16)
+            // For GEMM backward B: output is [K,N], dispatch ceil(K/16) × ceil(N/16)
+            // The output dimensions are encoded in the first two dims of the output buffer.
+            let out_rows = if op_name.contains("A") { m } else { k };
+            let out_cols = if op_name.contains("A") { k } else { n };
+            pass.dispatch_workgroups(out_rows.div_ceil(16), out_cols.div_ceil(16), 1);
+        }
+        encoder.copy_buffer_to_buffer(&out_buf, 0, &staging, 0, (output.len() * 4) as u64);
+        self.queue.submit(Some(encoder.finish()));
+
+        let slice = staging.slice(..);
+        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            sender.send(r).ok();
+        });
+        self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+        receiver
+            .receive()
+            .await
+            .ok_or_else(|| format!("{op_name}: map cancelled"))?
+            .map_err(|e| format!("{op_name}: map failed: {e}"))?;
+
+        let data = slice.get_mapped_range();
+        output.copy_from_slice(bytemuck::cast_slice(&data));
+        drop(data);
+        staging.unmap();
+
+        Ok(())
+    }
 }
 
 fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
@@ -301,5 +496,99 @@ mod tests {
 
         let result = device.silu_backward(&input, &grad_output, &mut grad_input);
         assert!(result.is_err());
+    }
+
+    /// CPU reference: matmul C = A[M,K] @ B[K,N]
+    fn matmul_cpu(a: &[f32], b: &[f32], m: usize, k: usize, n: usize) -> Vec<f32> {
+        let mut c = vec![0.0f32; m * n];
+        for i in 0..m {
+            for j in 0..n {
+                let mut sum = 0.0f32;
+                for p in 0..k {
+                    sum += a[i * k + p] * b[p * n + j];
+                }
+                c[i * n + j] = sum;
+            }
+        }
+        c
+    }
+
+    /// FALSIFY-WGPU-001: GEMM backward A matches CPU within ε < 1e-3
+    ///
+    /// grad_a[M,K] = grad_c[M,N] @ B^T[N,K]
+    /// Which is matmul(grad_c, B^T, M, N, K) but our shader handles the transpose internally.
+    #[test]
+    fn test_falsify_wgpu_001_gemm_backward_a_parity() {
+        let device = GpuDevice::new().expect("GPU device");
+
+        let (m, k, n) = (4, 8, 6);
+
+        // Random-ish test data
+        let grad_c: Vec<f32> = (0..m * n).map(|i| (i as f32 - 12.0) * 0.1).collect();
+        let b: Vec<f32> = (0..k * n).map(|i| (i as f32 - 24.0) * 0.05).collect();
+
+        // CPU reference: grad_a = grad_c @ B^T
+        // B^T[N,K] means we need to transpose B[K,N] → B^T[N,K]
+        let mut b_t = vec![0.0f32; n * k];
+        for i in 0..k {
+            for j in 0..n {
+                b_t[j * k + i] = b[i * n + j];
+            }
+        }
+        let expected = matmul_cpu(&grad_c, &b_t, m, n, k);
+
+        let mut grad_a = vec![0.0f32; m * k];
+        device
+            .gemm_backward_a(&grad_c, &b, &mut grad_a, m as u32, k as u32, n as u32)
+            .expect("gemm_backward_a");
+
+        let max_diff = grad_a
+            .iter()
+            .zip(expected.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+
+        assert!(
+            max_diff < 1e-3,
+            "FALSIFY-WGPU-001: GEMM backward A max diff = {max_diff} (threshold: 1e-3)"
+        );
+    }
+
+    /// FALSIFY-WGPU-001: GEMM backward B matches CPU within ε < 1e-3
+    ///
+    /// grad_b[K,N] = A^T[K,M] @ grad_c[M,N]
+    #[test]
+    fn test_falsify_wgpu_001_gemm_backward_b_parity() {
+        let device = GpuDevice::new().expect("GPU device");
+
+        let (m, k, n) = (4, 8, 6);
+
+        let a: Vec<f32> = (0..m * k).map(|i| (i as f32 - 16.0) * 0.1).collect();
+        let grad_c: Vec<f32> = (0..m * n).map(|i| (i as f32 - 12.0) * 0.05).collect();
+
+        // CPU reference: grad_b = A^T @ grad_c
+        let mut a_t = vec![0.0f32; k * m];
+        for i in 0..m {
+            for j in 0..k {
+                a_t[j * m + i] = a[i * k + j];
+            }
+        }
+        let expected = matmul_cpu(&a_t, &grad_c, k, m, n);
+
+        let mut grad_b = vec![0.0f32; k * n];
+        device
+            .gemm_backward_b(&a, &grad_c, &mut grad_b, m as u32, k as u32, n as u32)
+            .expect("gemm_backward_b");
+
+        let max_diff = grad_b
+            .iter()
+            .zip(expected.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+
+        assert!(
+            max_diff < 1e-3,
+            "FALSIFY-WGPU-001: GEMM backward B max diff = {max_diff} (threshold: 1e-3)"
+        );
     }
 }
