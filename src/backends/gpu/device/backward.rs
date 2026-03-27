@@ -398,6 +398,302 @@ impl GpuDevice {
 
         Ok(())
     }
+
+    /// RoPE backward on GPU: transpose rotation (negated sin)
+    ///
+    /// # Contract (FALSIFY-WGPU-001)
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+    pub fn rope_backward(
+        &self,
+        grad_output: &[f32],
+        grad_input: &mut [f32],
+        num_heads: u32,
+        head_dim: u32,
+        seq_len: u32,
+        theta: f32,
+    ) -> Result<(), String> {
+        runtime::block_on(self.rope_backward_async(
+            grad_output, grad_input, num_heads, head_dim, seq_len, theta,
+        ))
+    }
+
+    /// RoPE backward (async)
+    pub async fn rope_backward_async(
+        &self,
+        grad_output: &[f32],
+        grad_input: &mut [f32],
+        num_heads: u32,
+        head_dim: u32,
+        seq_len: u32,
+        theta: f32,
+    ) -> Result<(), String> {
+        use wgpu;
+
+        let n = grad_output.len();
+        let total_pairs = num_heads * seq_len * (head_dim / 2);
+
+        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("RoPE Backward Shader"),
+            source: wgpu::ShaderSource::Wgsl(shaders::backward::ROPE_BACKWARD_SHADER.into()),
+        });
+
+        let go_buf = self.create_storage_buffer("rope_bwd grad_out", grad_output, true);
+        let gi_buf = self.create_rw_storage_buffer("rope_bwd grad_in", (n * 4) as u64);
+
+        // Uniform: { num_heads, head_dim, seq_len, theta_log2 }
+        let params: [u32; 4] = [
+            num_heads,
+            head_dim,
+            seq_len,
+            theta.log2().to_bits(),
+        ];
+        let uniform_buf =
+            self.create_uniform_buffer("rope_bwd params", bytemuck::cast_slice(&params));
+
+        let bgl = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[storage_entry(0, true), storage_entry(1, false), uniform_entry(2)],
+        });
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: go_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: gi_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: uniform_buf.as_entire_binding() },
+            ],
+        });
+
+        let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
+        });
+        let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("RoPE Backward"),
+            layout: Some(&pl),
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (n * 4) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder =
+            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut pass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            pass.set_pipeline(&pipeline);
+            pass.set_bind_group(0, &bg, &[]);
+            pass.dispatch_workgroups(total_pairs.div_ceil(256), 1, 1);
+        }
+        encoder.copy_buffer_to_buffer(&gi_buf, 0, &staging, 0, (n * 4) as u64);
+        self.queue.submit(Some(encoder.finish()));
+
+        let slice = staging.slice(..);
+        let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| { sender.send(r).ok(); });
+        self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+        receiver.receive().await
+            .ok_or("RoPE backward: cancelled".to_string())?
+            .map_err(|e| format!("RoPE backward: {e}"))?;
+        let data = slice.get_mapped_range();
+        grad_input.copy_from_slice(bytemuck::cast_slice(&data));
+        drop(data);
+        staging.unmap();
+        Ok(())
+    }
+
+    /// AdamW optimizer step on GPU
+    #[cfg(all(feature = "gpu", not(target_arch = "wasm32")))]
+    pub fn adamw_step(
+        &self,
+        params: &mut [f32],
+        grads: &[f32],
+        m: &mut [f32],
+        v: &mut [f32],
+        lr: f32,
+        beta1: f32,
+        beta2: f32,
+        eps: f32,
+        weight_decay: f32,
+        step: u32,
+    ) -> Result<(), String> {
+        runtime::block_on(self.adamw_step_async(
+            params, grads, m, v, lr, beta1, beta2, eps, weight_decay, step,
+        ))
+    }
+
+    /// AdamW step (async)
+    pub async fn adamw_step_async(
+        &self,
+        params: &mut [f32],
+        grads: &[f32],
+        m: &mut [f32],
+        v: &mut [f32],
+        lr: f32,
+        beta1: f32,
+        beta2: f32,
+        eps: f32,
+        weight_decay: f32,
+        step: u32,
+    ) -> Result<(), String> {
+        use wgpu;
+
+        let n = params.len() as u32;
+        let bc1 = 1.0 - beta1.powi(step as i32);
+        let bc2 = 1.0 - beta2.powi(step as i32);
+
+        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("AdamW Step"),
+            source: wgpu::ShaderSource::Wgsl(shaders::backward::ADAMW_STEP_SHADER.into()),
+        });
+
+        // Params buffer is read-write (updated in-place)
+        let params_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("adamw params"),
+            size: (params.len() * 4) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        self.queue.write_buffer(&params_buf, 0, bytemuck::cast_slice(params));
+
+        let grads_buf = self.create_storage_buffer("adamw grads", grads, true);
+
+        let m_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("adamw m"),
+            size: (m.len() * 4) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        self.queue.write_buffer(&m_buf, 0, bytemuck::cast_slice(m));
+
+        let v_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("adamw v"),
+            size: (v.len() * 4) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_DST
+                | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        self.queue.write_buffer(&v_buf, 0, bytemuck::cast_slice(v));
+
+        // Uniform: { n: u32, lr: f32, beta1: f32, beta2: f32, eps: f32, wd: f32, bc1: f32, bc2: f32 }
+        // Pack as raw u32 bytes to handle the mixed u32/f32 layout
+        let hp: [u32; 8] = [
+            n,
+            lr.to_bits(),
+            beta1.to_bits(),
+            beta2.to_bits(),
+            eps.to_bits(),
+            weight_decay.to_bits(),
+            bc1.to_bits(),
+            bc2.to_bits(),
+        ];
+        let uniform_buf =
+            self.create_uniform_buffer("adamw hp", bytemuck::cast_slice(&hp));
+
+        let bgl = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                storage_entry(0, false), // params (read-write)
+                storage_entry(1, true),  // grads
+                storage_entry(2, false), // m
+                storage_entry(3, false), // v
+                uniform_entry(4),
+            ],
+        });
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: params_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: grads_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: m_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: v_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 4, resource: uniform_buf.as_entire_binding() },
+            ],
+        });
+
+        let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
+        });
+        let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("AdamW"),
+            layout: Some(&pl),
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        // Staging buffers for readback
+        let params_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (params.len() * 4) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let m_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (m.len() * 4) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let v_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: (v.len() * 4) as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder =
+            self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut pass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            pass.set_pipeline(&pipeline);
+            pass.set_bind_group(0, &bg, &[]);
+            pass.dispatch_workgroups(n.div_ceil(256), 1, 1);
+        }
+        encoder.copy_buffer_to_buffer(&params_buf, 0, &params_staging, 0, (params.len() * 4) as u64);
+        encoder.copy_buffer_to_buffer(&m_buf, 0, &m_staging, 0, (m.len() * 4) as u64);
+        encoder.copy_buffer_to_buffer(&v_buf, 0, &v_staging, 0, (v.len() * 4) as u64);
+        self.queue.submit(Some(encoder.finish()));
+
+        // Read back all three buffers
+        let read_buf = |staging: &wgpu::Buffer, out: &mut [f32]| -> Result<(), String> {
+            let slice = staging.slice(..);
+            let (tx, rx) = std::sync::mpsc::channel();
+            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+            rx.recv().map_err(|e| format!("AdamW readback: {e}"))?
+                .map_err(|e| format!("AdamW map: {e}"))?;
+            let data = slice.get_mapped_range();
+            out.copy_from_slice(bytemuck::cast_slice(&data));
+            drop(data);
+            staging.unmap();
+            Ok(())
+        };
+        read_buf(&params_staging, params)?;
+        read_buf(&m_staging, m)?;
+        read_buf(&v_staging, v)?;
+
+        Ok(())
+    }
 }
 
 fn storage_entry(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
@@ -589,6 +885,125 @@ mod tests {
         assert!(
             max_diff < 1e-3,
             "FALSIFY-WGPU-001: GEMM backward B max diff = {max_diff} (threshold: 1e-3)"
+        );
+    }
+
+    /// FALSIFY-WGPU-001: RoPE backward matches CPU
+    #[test]
+    fn test_falsify_wgpu_001_rope_backward_parity() {
+        let device = GpuDevice::new().expect("GPU device");
+
+        let (num_heads, head_dim, seq_len) = (2, 4, 3);
+        let theta = 10000.0f32;
+        let n = num_heads * head_dim * seq_len;
+
+        let grad_output: Vec<f32> = (0..n).map(|i| (i as f32 - 12.0) * 0.1).collect();
+
+        // CPU reference: RoPE backward = transpose rotation
+        let half_dim = head_dim / 2;
+        let mut expected = vec![0.0f32; n];
+        for h in 0..num_heads {
+            for s in 0..seq_len {
+                for p in 0..half_dim {
+                    let freq_exp = -((2 * p) as f32) / head_dim as f32 * theta.log2();
+                    let inv_freq = 2.0f32.powf(freq_exp);
+                    let angle = s as f32 * inv_freq;
+                    let (sin_a, cos_a) = angle.sin_cos();
+
+                    let base = h * seq_len * head_dim + s * head_dim;
+                    let even = base + 2 * p;
+                    let odd = base + 2 * p + 1;
+
+                    let dy_even = grad_output[even];
+                    let dy_odd = grad_output[odd];
+
+                    // Backward: transpose of rotation matrix
+                    expected[even] = dy_even * cos_a + dy_odd * sin_a;
+                    expected[odd] = -dy_even * sin_a + dy_odd * cos_a;
+                }
+            }
+        }
+
+        let mut grad_input = vec![0.0f32; n];
+        device
+            .rope_backward(
+                &grad_output,
+                &mut grad_input,
+                num_heads as u32,
+                head_dim as u32,
+                seq_len as u32,
+                theta,
+            )
+            .expect("rope_backward");
+
+        let max_diff = grad_input
+            .iter()
+            .zip(expected.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+
+        assert!(
+            max_diff < 1e-4,
+            "FALSIFY-WGPU-001: RoPE backward max diff = {max_diff} (threshold: 1e-4)"
+        );
+    }
+
+    /// FALSIFY-WGPU-001: AdamW step matches CPU
+    #[test]
+    fn test_falsify_wgpu_001_adamw_step_parity() {
+        let device = GpuDevice::new().expect("GPU device");
+
+        let n = 16;
+        let mut params: Vec<f32> = (0..n).map(|i| i as f32 * 0.1).collect();
+        let grads: Vec<f32> = (0..n).map(|i| (i as f32 - 8.0) * 0.01).collect();
+        let mut m_state = vec![0.0f32; n];
+        let mut v_state = vec![0.0f32; n];
+
+        let lr: f32 = 1e-3;
+        let beta1: f32 = 0.9;
+        let beta2: f32 = 0.999;
+        let eps: f32 = 1e-8;
+        let wd: f32 = 0.01;
+        let step = 1u32;
+
+        // CPU reference
+        let bc1: f32 = 1.0 - beta1.powi(step as i32);
+        let bc2: f32 = 1.0 - beta2.powi(step as i32);
+        let mut cpu_params = params.clone();
+        let mut cpu_m = m_state.clone();
+        let mut cpu_v = v_state.clone();
+        for i in 0..n {
+            cpu_m[i] = beta1 * cpu_m[i] + (1.0 - beta1) * grads[i];
+            cpu_v[i] = beta2 * cpu_v[i] + (1.0 - beta2) * grads[i] * grads[i];
+            let m_hat = cpu_m[i] / bc1;
+            let v_hat = cpu_v[i] / bc2;
+            cpu_params[i] -= lr * (m_hat / (v_hat.sqrt() + eps) + wd * cpu_params[i]);
+        }
+
+        device
+            .adamw_step(
+                &mut params,
+                &grads,
+                &mut m_state,
+                &mut v_state,
+                lr as f32,
+                beta1 as f32,
+                beta2 as f32,
+                eps as f32,
+                wd as f32,
+                step,
+            )
+            .expect("adamw_step");
+
+        let max_diff = params
+            .iter()
+            .zip(cpu_params.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+
+        assert!(
+            max_diff < 1e-4,
+            "FALSIFY-WGPU-001: AdamW step max diff = {max_diff} (threshold: 1e-4)"
         );
     }
 }
