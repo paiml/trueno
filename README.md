@@ -26,6 +26,7 @@
 - [Quick Start](#quick-start)
 - [Performance](#performance)
 - [trueno-gpu: Pure Rust CUDA](#trueno-gpu-pure-rust-cuda)
+- [Training (WGPU)](#training-wgpu)
 - [Operations](#operations)
 - [Development](#development)
 - [Contributing](#contributing)
@@ -122,6 +123,33 @@ let softmax = SoftmaxKernel::new(4096);
 let ptx = softmax.emit_ptx();
 
 // Available kernels: GEMM, Softmax, LayerNorm, Attention, Quantize (Q4K/Q5K/Q6K)
+```
+
+## Training (WGPU)
+
+trueno now supports **backward pass computation** via WGSL compute shaders, enabling neural network training on AMD, Intel Arc, and Apple Silicon GPUs through Vulkan, Metal, DX12, and WebGPU -- no CUDA required.
+
+**7 backward ops implemented**:
+- `silu_backward` -- SiLU activation gradient
+- `gemm_backward_a` -- weight gradient (dL/dA)
+- `gemm_backward_b` -- input gradient (dL/dB)
+- `rmsnorm_backward` -- RMSNorm gradient
+- `rope_backward` -- rotary position embedding gradient
+- `adamw_step` -- AdamW optimizer parameter update
+- `nf4_dequant` -- NF4 4-bit dequantization for QLoRA
+
+All 7 shaders verified on AMD Radeon Pro W5700X via Vulkan with 8 FALSIFY contract tests passing.
+
+```rust
+use trueno::backends::gpu::GpuDevice;
+
+let dev = GpuDevice::new()?;
+
+// Backward pass: compute SiLU gradient
+dev.silu_backward(&input, &grad_output, &mut grad_input)?;
+
+// Optimizer step: AdamW update
+dev.adamw_step(&mut params, &grads, &mut m, &mut v, lr, beta1, beta2, eps, weight_decay, step)?;
 ```
 
 ## Operations
