@@ -36,16 +36,16 @@ pub struct WgslForwardPass {
 
     // Intermediate buffers (persistent, reused across calls)
     // For 1.5B: hidden=1536, kv=256, intermediate=8960
-    hidden_buf: wgpu::Buffer,      // [hidden_dim] working state
-    q_buf: wgpu::Buffer,           // [q_dim]
-    k_buf: wgpu::Buffer,           // [kv_dim]
-    v_buf: wgpu::Buffer,           // [kv_dim]
-    attn_out_buf: wgpu::Buffer,    // [hidden_dim]
-    ffn_gate_buf: wgpu::Buffer,    // [intermediate_dim]
-    ffn_up_buf: wgpu::Buffer,      // [intermediate_dim]
-    ffn_out_buf: wgpu::Buffer,     // [hidden_dim]
-    norm_buf: wgpu::Buffer,        // [hidden_dim] for RMSNorm output
-    staging_buf: wgpu::Buffer,     // readback
+    hidden_buf: wgpu::Buffer,   // [hidden_dim] working state
+    q_buf: wgpu::Buffer,        // [q_dim]
+    k_buf: wgpu::Buffer,        // [kv_dim]
+    v_buf: wgpu::Buffer,        // [kv_dim]
+    attn_out_buf: wgpu::Buffer, // [hidden_dim]
+    ffn_gate_buf: wgpu::Buffer, // [intermediate_dim]
+    ffn_up_buf: wgpu::Buffer,   // [intermediate_dim]
+    ffn_out_buf: wgpu::Buffer,  // [hidden_dim]
+    norm_buf: wgpu::Buffer,     // [hidden_dim] for RMSNorm output
+    staging_buf: wgpu::Buffer,  // readback
 
     // Config
     hidden_dim: u32,
@@ -171,10 +171,18 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 impl WgslForwardPass {
     /// Get the shader sources for external inspection/testing
-    pub fn rmsnorm_shader() -> &'static str { RMSNORM_SHADER }
-    pub fn silu_mul_shader() -> &'static str { SILU_MUL_SHADER }
-    pub fn residual_shader() -> &'static str { RESIDUAL_SHADER }
-    pub fn rope_shader() -> &'static str { ROPE_SHADER }
+    pub fn rmsnorm_shader() -> &'static str {
+        RMSNORM_SHADER
+    }
+    pub fn silu_mul_shader() -> &'static str {
+        SILU_MUL_SHADER
+    }
+    pub fn residual_shader() -> &'static str {
+        RESIDUAL_SHADER
+    }
+    pub fn rope_shader() -> &'static str {
+        ROPE_SHADER
+    }
 
     /// PMAT-325: Create a new WGSL forward pass context.
     ///
@@ -194,55 +202,70 @@ impl WgslForwardPass {
 
         // Compile shaders
         let matmul_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("matmul"), source: wgpu::ShaderSource::Wgsl(
-                crate::backends::gpu::shaders::MATMUL_SHADER.into()),
+            label: Some("matmul"),
+            source: wgpu::ShaderSource::Wgsl(crate::backends::gpu::shaders::MATMUL_SHADER.into()),
         });
         let rmsnorm_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("rmsnorm"), source: wgpu::ShaderSource::Wgsl(RMSNORM_SHADER.into()),
+            label: Some("rmsnorm"),
+            source: wgpu::ShaderSource::Wgsl(RMSNORM_SHADER.into()),
         });
         let silu_mul_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("silu_mul"), source: wgpu::ShaderSource::Wgsl(SILU_MUL_SHADER.into()),
+            label: Some("silu_mul"),
+            source: wgpu::ShaderSource::Wgsl(SILU_MUL_SHADER.into()),
         });
         let rope_shader_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("rope"), source: wgpu::ShaderSource::Wgsl(ROPE_SHADER.into()),
+            label: Some("rope"),
+            source: wgpu::ShaderSource::Wgsl(ROPE_SHADER.into()),
         });
         let residual_shader_mod = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("residual"), source: wgpu::ShaderSource::Wgsl(RESIDUAL_SHADER.into()),
+            label: Some("residual"),
+            source: wgpu::ShaderSource::Wgsl(RESIDUAL_SHADER.into()),
         });
 
         // Bind group layouts
         let matmul_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("matmul_bgl"),
             entries: &[
-                bgl_storage(0, true), bgl_storage(1, true),
-                bgl_storage(2, false), bgl_uniform(3),
+                bgl_storage(0, true),
+                bgl_storage(1, true),
+                bgl_storage(2, false),
+                bgl_uniform(3),
             ],
         });
         let elementwise_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("ew_bgl"),
             entries: &[
-                bgl_storage(0, true), bgl_storage(1, true),
-                bgl_storage(2, false), bgl_uniform(3),
+                bgl_storage(0, true),
+                bgl_storage(1, true),
+                bgl_storage(2, false),
+                bgl_uniform(3),
             ],
         });
 
         // Pipelines
-        let make_pipeline = |shader: &wgpu::ShaderModule, bgl: &wgpu::BindGroupLayout, label: &str| {
-            let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some(label), bind_group_layouts: &[bgl], push_constant_ranges: &[],
-            });
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(label), layout: Some(&pl), module: shader,
-                entry_point: Some("main"), compilation_options: Default::default(), cache: None,
-            })
-        };
+        let make_pipeline =
+            |shader: &wgpu::ShaderModule, bgl: &wgpu::BindGroupLayout, label: &str| {
+                let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some(label),
+                    bind_group_layouts: &[bgl],
+                    push_constant_ranges: &[],
+                });
+                device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(label),
+                    layout: Some(&pl),
+                    module: shader,
+                    entry_point: Some("main"),
+                    compilation_options: Default::default(),
+                    cache: None,
+                })
+            };
 
         let matmul_pipeline = make_pipeline(&matmul_shader, &matmul_bgl, "matmul_pipe");
 
         // PMAT-327: GEMV pipeline — same bind group layout as matmul but cooperative reduction
         let gemv_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("gemv"), source: wgpu::ShaderSource::Wgsl(
-                crate::backends::gpu::shaders::GEMV_SHADER.into()),
+            label: Some("gemv"),
+            source: wgpu::ShaderSource::Wgsl(crate::backends::gpu::shaders::GEMV_SHADER.into()),
         });
         let gemv_pipeline = make_pipeline(&gemv_shader, &matmul_bgl, "gemv_pipe");
 
@@ -257,19 +280,28 @@ impl WgslForwardPass {
         });
         let rope_pipeline = {
             let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("rope_pl"), bind_group_layouts: &[&rope_bgl], push_constant_ranges: &[],
+                label: Some("rope_pl"),
+                bind_group_layouts: &[&rope_bgl],
+                push_constant_ranges: &[],
             });
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("rope_pipe"), layout: Some(&pl), module: &rope_shader_mod,
-                entry_point: Some("main"), compilation_options: Default::default(), cache: None,
+                label: Some("rope_pipe"),
+                layout: Some(&pl),
+                module: &rope_shader_mod,
+                entry_point: Some("main"),
+                compilation_options: Default::default(),
+                cache: None,
             })
         };
 
         // Allocate persistent intermediate buffers
         let buf = |size: usize, label: &str| -> wgpu::Buffer {
             device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some(label), size: (size * 4) as u64,
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                label: Some(label),
+                size: (size * 4) as u64,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             })
         };
@@ -286,20 +318,34 @@ impl WgslForwardPass {
 
         let max_out = hidden_dim.max(intermediate_dim);
         let staging_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("staging"), size: (max_out * 4) as u64,
+            label: Some("staging"),
+            size: (max_out * 4) as u64,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
         Self {
-            device, queue,
-            matmul_pipeline, gemv_pipeline, rmsnorm_pipeline, silu_mul_pipeline,
-            rope_pipeline, residual_pipeline,
-            matmul_bgl, elementwise_bgl,
+            device,
+            queue,
+            matmul_pipeline,
+            gemv_pipeline,
+            rmsnorm_pipeline,
+            silu_mul_pipeline,
+            rope_pipeline,
+            residual_pipeline,
+            matmul_bgl,
+            elementwise_bgl,
             weight_buffers: HashMap::new(),
             cpu_biases: HashMap::new(),
-            hidden_buf, q_buf, k_buf, v_buf, attn_out_buf,
-            ffn_gate_buf, ffn_up_buf, ffn_out_buf, norm_buf,
+            hidden_buf,
+            q_buf,
+            k_buf,
+            v_buf,
+            attn_out_buf,
+            ffn_gate_buf,
+            ffn_up_buf,
+            ffn_out_buf,
+            norm_buf,
             staging_buf,
             hidden_dim: hidden_dim as u32,
             num_heads: num_heads as u32,
@@ -328,9 +374,7 @@ impl WgslForwardPass {
 
     /// Total VRAM used by all buffers (bytes).
     pub fn total_vram_bytes(&self) -> usize {
-        let weight_bytes: usize = self.weight_buffers.values()
-            .map(|b| b.size() as usize)
-            .sum();
+        let weight_bytes: usize = self.weight_buffers.values().map(|b| b.size() as usize).sum();
         let intermediate_bytes = (self.hidden_dim as usize * 4) * 4  // hidden, attn_out, ffn_out, norm
             + (self.num_heads as usize * self.head_dim as usize * 4) // q
             + (self.num_kv_heads as usize * self.head_dim as usize * 4) * 2 // k, v
@@ -361,7 +405,11 @@ impl WgslForwardPass {
         // 1. Embedding lookup (CPU)
         let embed_start = token_id as usize * hd;
         if embed_start + hd > token_embedding.len() {
-            return Err(format!("Token {} out of range (embedding size {})", token_id, token_embedding.len() / hd));
+            return Err(format!(
+                "Token {} out of range (embedding size {})",
+                token_id,
+                token_embedding.len() / hd
+            ));
         }
         let mut hidden: Vec<f32> = token_embedding[embed_start..embed_start + hd].to_vec();
 
@@ -410,8 +458,8 @@ impl WgslForwardPass {
         hidden: &mut [f32],
         layer_prefix: &str,
         _position: usize,
-        kv_cache_k: &mut Vec<f32>,  // accumulated K: [seq_len * kv_dim]
-        kv_cache_v: &mut Vec<f32>,  // accumulated V: [seq_len * kv_dim]
+        kv_cache_k: &mut Vec<f32>, // accumulated K: [seq_len * kv_dim]
+        kv_cache_v: &mut Vec<f32>, // accumulated V: [seq_len * kv_dim]
     ) -> Result<(), String> {
         let hd = self.hidden_dim;
 
@@ -421,7 +469,9 @@ impl WgslForwardPass {
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
         // Pass 1: RMSNorm(hidden → norm_buf)
-        let norm_w = self.weight_buffers.get(&format!("{layer_prefix}.attn_norm"))
+        let norm_w = self
+            .weight_buffers
+            .get(&format!("{layer_prefix}.attn_norm"))
             .ok_or_else(|| format!("Missing {layer_prefix}.attn_norm"))?;
         self.encode_rmsnorm(&mut encoder, &self.hidden_buf, norm_w, &self.norm_buf, hd);
 
@@ -429,9 +479,36 @@ impl WgslForwardPass {
         let q_dim = self.num_heads * self.head_dim;
         let kv_dim = self.num_kv_heads * self.head_dim;
 
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "q_proj", &self.q_buf, 1, hd, q_dim);
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "k_proj", &self.k_buf, 1, hd, kv_dim);
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "v_proj", &self.v_buf, 1, hd, kv_dim);
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "q_proj",
+            &self.q_buf,
+            1,
+            hd,
+            q_dim,
+        );
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "k_proj",
+            &self.k_buf,
+            1,
+            hd,
+            kv_dim,
+        );
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "v_proj",
+            &self.v_buf,
+            1,
+            hd,
+            kv_dim,
+        );
 
         // PMAT-342: Submit Q/K/V projections, readback, do attention on CPU
         // GPU handles the heavy matmuls; CPU handles attention (small at M=1)
@@ -440,17 +517,20 @@ impl WgslForwardPass {
 
         // Readback Q/K/V from GPU
         let q_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("q_stg"), size: q_bytes,
+            label: Some("q_stg"),
+            size: q_bytes,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let k_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("k_stg"), size: kv_bytes,
+            label: Some("k_stg"),
+            size: kv_bytes,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let v_staging = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("v_stg"), size: kv_bytes,
+            label: Some("v_stg"),
+            size: kv_bytes,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -464,7 +544,9 @@ impl WgslForwardPass {
         {
             let slice = q_staging.slice(..q_bytes);
             let (tx, rx) = std::sync::mpsc::channel();
-            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            slice.map_async(wgpu::MapMode::Read, move |r| {
+                tx.send(r).ok();
+            });
             self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
             rx.recv().map_err(|e| format!("q recv: {e}"))?.map_err(|e| format!("q map: {e:?}"))?;
             let data = slice.get_mapped_range();
@@ -477,7 +559,9 @@ impl WgslForwardPass {
         {
             let slice = k_staging.slice(..kv_bytes);
             let (tx, rx) = std::sync::mpsc::channel();
-            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            slice.map_async(wgpu::MapMode::Read, move |r| {
+                tx.send(r).ok();
+            });
             self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
             rx.recv().map_err(|e| format!("k recv: {e}"))?.map_err(|e| format!("k map: {e:?}"))?;
             let data = slice.get_mapped_range();
@@ -490,7 +574,9 @@ impl WgslForwardPass {
         {
             let slice = v_staging.slice(..kv_bytes);
             let (tx, rx) = std::sync::mpsc::channel();
-            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            slice.map_async(wgpu::MapMode::Read, move |r| {
+                tx.send(r).ok();
+            });
             self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
             rx.recv().map_err(|e| format!("v recv: {e}"))?.map_err(|e| format!("v map: {e:?}"))?;
             let data = slice.get_mapped_range();
@@ -500,13 +586,19 @@ impl WgslForwardPass {
 
         // PMAT-342: Add QKV biases (required for Qwen2)
         if let Some(q_bias) = self.cpu_biases.get(&format!("{layer_prefix}.q_bias")) {
-            for (q, b) in q_data.iter_mut().zip(q_bias.iter()) { *q += *b; }
+            for (q, b) in q_data.iter_mut().zip(q_bias.iter()) {
+                *q += *b;
+            }
         }
         if let Some(k_bias) = self.cpu_biases.get(&format!("{layer_prefix}.k_bias")) {
-            for (k, b) in k_data.iter_mut().zip(k_bias.iter()) { *k += *b; }
+            for (k, b) in k_data.iter_mut().zip(k_bias.iter()) {
+                *k += *b;
+            }
         }
         if let Some(v_bias) = self.cpu_biases.get(&format!("{layer_prefix}.v_bias")) {
-            for (v, b) in v_data.iter_mut().zip(v_bias.iter()) { *v += *b; }
+            for (v, b) in v_data.iter_mut().zip(v_bias.iter()) {
+                *v += *b;
+            }
         }
 
         // PMAT-343: Apply RoPE (NeoX-style interleaved) to Q and K
@@ -584,7 +676,9 @@ impl WgslForwardPass {
                 sum += *s;
             }
             if sum > 0.0 {
-                for s in scores.iter_mut() { *s /= sum; }
+                for s in scores.iter_mut() {
+                    *s /= sum;
+                }
             }
 
             // Weighted sum of V
@@ -606,26 +700,76 @@ impl WgslForwardPass {
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
         // Pass 7: O projection (attn_out × W_o → attn_out_buf)
-        self.encode_matmul(&mut encoder, &self.q_buf, layer_prefix, "o_proj", &self.attn_out_buf, 1, q_dim, hd);
+        self.encode_matmul(
+            &mut encoder,
+            &self.q_buf,
+            layer_prefix,
+            "o_proj",
+            &self.attn_out_buf,
+            1,
+            q_dim,
+            hd,
+        );
 
         // Pass 8: Residual(hidden + attn_out → hidden)
-        self.encode_residual(&mut encoder, &self.hidden_buf, &self.attn_out_buf, &self.ffn_out_buf, hd);
+        self.encode_residual(
+            &mut encoder,
+            &self.hidden_buf,
+            &self.attn_out_buf,
+            &self.ffn_out_buf,
+            hd,
+        );
 
         // Pass 9: FFN RMSNorm(ffn_out → norm_buf)
-        let ffn_norm_w = self.weight_buffers.get(&format!("{layer_prefix}.ffn_norm"))
+        let ffn_norm_w = self
+            .weight_buffers
+            .get(&format!("{layer_prefix}.ffn_norm"))
             .ok_or_else(|| format!("Missing {layer_prefix}.ffn_norm"))?;
         self.encode_rmsnorm(&mut encoder, &self.ffn_out_buf, ffn_norm_w, &self.norm_buf, hd);
 
         // Passes 10-11: Gate + Up projections
         let inter = self.intermediate_dim;
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "gate_proj", &self.ffn_gate_buf, 1, hd, inter);
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "up_proj", &self.ffn_up_buf, 1, hd, inter);
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "gate_proj",
+            &self.ffn_gate_buf,
+            1,
+            hd,
+            inter,
+        );
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "up_proj",
+            &self.ffn_up_buf,
+            1,
+            hd,
+            inter,
+        );
 
         // Pass 12: SiLU(gate) × up → ffn_out_buf (reused as intermediate)
-        self.encode_silu_mul(&mut encoder, &self.ffn_gate_buf, &self.ffn_up_buf, &self.attn_out_buf, inter);
+        self.encode_silu_mul(
+            &mut encoder,
+            &self.ffn_gate_buf,
+            &self.ffn_up_buf,
+            &self.attn_out_buf,
+            inter,
+        );
 
         // Pass 13: Down projection
-        self.encode_matmul(&mut encoder, &self.attn_out_buf, layer_prefix, "down_proj", &self.norm_buf, 1, inter, hd);
+        self.encode_matmul(
+            &mut encoder,
+            &self.attn_out_buf,
+            layer_prefix,
+            "down_proj",
+            &self.norm_buf,
+            1,
+            inter,
+            hd,
+        );
 
         // Pass 14: Residual(ffn_out + down → hidden)
         self.encode_residual(&mut encoder, &self.ffn_out_buf, &self.norm_buf, &self.hidden_buf, hd);
@@ -637,12 +781,16 @@ impl WgslForwardPass {
         // Readback
         let slice = self.staging_buf.slice(..(hd as u64 * 4));
         let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            tx.send(r).ok();
+        });
         self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
         rx.recv().map_err(|e| format!("recv: {e}"))?.map_err(|e| format!("map: {e:?}"))?;
         {
             let data = slice.get_mapped_range();
-            hidden.copy_from_slice(&bytemuck::cast_slice::<u8, f32>(&data)[..self.hidden_dim as usize]);
+            hidden.copy_from_slice(
+                &bytemuck::cast_slice::<u8, f32>(&data)[..self.hidden_dim as usize],
+            );
         }
         self.staging_buf.unmap();
 
@@ -651,13 +799,19 @@ impl WgslForwardPass {
 
     // --- Encode helpers (add compute passes to an existing encoder) ---
 
-    fn encode_rmsnorm(&self, encoder: &mut wgpu::CommandEncoder,
-                      input: &wgpu::Buffer, weight: &wgpu::Buffer,
-                      output: &wgpu::Buffer, dim: u32) {
+    fn encode_rmsnorm(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        input: &wgpu::Buffer,
+        weight: &wgpu::Buffer,
+        output: &wgpu::Buffer,
+        dim: u32,
+    ) {
         let params = [dim, 0u32, 0, 0];
         let params_buf = self.make_uniform(&params);
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None, layout: &self.elementwise_bgl,
+            label: None,
+            layout: &self.elementwise_bgl,
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: input.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 1, resource: weight.as_entire_binding() },
@@ -671,9 +825,17 @@ impl WgslForwardPass {
         pass.dispatch_workgroups(1, 1, 1); // Single workgroup for reduction
     }
 
-    fn encode_matmul(&self, encoder: &mut wgpu::CommandEncoder,
-                     input: &wgpu::Buffer, layer_prefix: &str, proj_name: &str,
-                     output: &wgpu::Buffer, m: u32, k: u32, n: u32) {
+    fn encode_matmul(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        input: &wgpu::Buffer,
+        layer_prefix: &str,
+        proj_name: &str,
+        output: &wgpu::Buffer,
+        m: u32,
+        k: u32,
+        n: u32,
+    ) {
         let weight_key = format!("{layer_prefix}.{proj_name}");
         let weight = match self.weight_buffers.get(&weight_key) {
             Some(w) => w,
@@ -682,14 +844,11 @@ impl WgslForwardPass {
         // PMAT-346: GEMV and matmul have different uniform struct layouts.
         // GEMV: Params { n (output dim), k (input dim), _, _ }
         // Matmul: Dimensions { M, K, N, _ }
-        let params = if m == 1 {
-            [n, k, 0u32, 0u32]
-        } else {
-            [m, k, n, 0u32]
-        };
+        let params = if m == 1 { [n, k, 0u32, 0u32] } else { [m, k, n, 0u32] };
         let params_buf = self.make_uniform(&params);
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None, layout: &self.matmul_bgl,
+            label: None,
+            layout: &self.matmul_bgl,
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: input.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 1, resource: weight.as_entire_binding() },
@@ -711,13 +870,19 @@ impl WgslForwardPass {
         }
     }
 
-    fn encode_silu_mul(&self, encoder: &mut wgpu::CommandEncoder,
-                       gate: &wgpu::Buffer, up: &wgpu::Buffer,
-                       output: &wgpu::Buffer, dim: u32) {
+    fn encode_silu_mul(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        gate: &wgpu::Buffer,
+        up: &wgpu::Buffer,
+        output: &wgpu::Buffer,
+        dim: u32,
+    ) {
         let params = [dim, 0u32, 0, 0];
         let params_buf = self.make_uniform(&params);
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None, layout: &self.elementwise_bgl,
+            label: None,
+            layout: &self.elementwise_bgl,
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: gate.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 1, resource: up.as_entire_binding() },
@@ -731,13 +896,19 @@ impl WgslForwardPass {
         pass.dispatch_workgroups(dim.div_ceil(256), 1, 1);
     }
 
-    fn encode_residual(&self, encoder: &mut wgpu::CommandEncoder,
-                       a: &wgpu::Buffer, b: &wgpu::Buffer,
-                       output: &wgpu::Buffer, dim: u32) {
+    fn encode_residual(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        a: &wgpu::Buffer,
+        b: &wgpu::Buffer,
+        output: &wgpu::Buffer,
+        dim: u32,
+    ) {
         let params = [dim, 0u32, 0, 0];
         let params_buf = self.make_uniform(&params);
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None, layout: &self.elementwise_bgl,
+            label: None,
+            layout: &self.elementwise_bgl,
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: a.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 1, resource: b.as_entire_binding() },
@@ -763,20 +934,26 @@ impl WgslForwardPass {
 
 fn bgl_storage(binding: u32, read_only: bool) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
-        binding, visibility: wgpu::ShaderStages::COMPUTE,
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
         ty: wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Storage { read_only },
-            has_dynamic_offset: false, min_binding_size: None,
-        }, count: None,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
     }
 }
 
 fn bgl_uniform(binding: u32) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
-        binding, visibility: wgpu::ShaderStages::COMPUTE,
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
         ty: wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false, min_binding_size: None,
-        }, count: None,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
     }
 }

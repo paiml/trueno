@@ -10,6 +10,7 @@
 //! Use `runtime::sync_available()` to check at runtime.
 
 mod activations;
+mod backward;
 mod eigen;
 pub(crate) mod linalg;
 mod reductions;
