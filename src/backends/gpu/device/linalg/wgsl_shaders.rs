@@ -235,12 +235,22 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) lid:
         let d = unpack2x16float(hdr & 0xFFFFu).x;
         let dmin = unpack2x16float((hdr >> 16u) & 0xFFFFu).x;
 
+        // PMAT-383: Precompute all 8 scale/min pairs from 3 u32 reads
+        let s0 = w_q4k[sbu + 1u]; let s1 = w_q4k[sbu + 2u]; let s2 = w_q4k[sbu + 3u];
+        var sc: array<f32, 8>; var mn: array<f32, 8>;
+        // Blocks 0-3: simple 6-bit
+        sc[0]=f32(s0&63u); sc[1]=f32((s0>>8u)&63u); sc[2]=f32((s0>>16u)&63u); sc[3]=f32((s0>>24u)&63u);
+        mn[0]=f32(s1&63u); mn[1]=f32((s1>>8u)&63u); mn[2]=f32((s1>>16u)&63u); mn[3]=f32((s1>>24u)&63u);
+        // Blocks 4-7: packed (low 4 from s2, high 2 from s0/s1 bit 6-7)
+        sc[4]=f32((s2&0xFu)|((s0>>6u)&3u)<<4u); sc[5]=f32(((s2>>8u)&0xFu)|((s0>>14u)&3u)<<4u);
+        sc[6]=f32(((s2>>16u)&0xFu)|((s0>>22u)&3u)<<4u); sc[7]=f32(((s2>>24u)&0xFu)|((s0>>30u)&3u)<<4u);
+        mn[4]=f32(((s2>>4u)&0xFu)|((s1>>6u)&3u)<<4u); mn[5]=f32(((s2>>12u)&0xFu)|((s1>>14u)&3u)<<4u);
+        mn[6]=f32(((s2>>20u)&0xFu)|((s1>>22u)&3u)<<4u); mn[7]=f32(((s2>>28u)&0xFu)|((s1>>30u)&3u)<<4u);
+
         for (var chunk = 0u; chunk < 4u; chunk++) {
             let is = chunk * 2u;
-            let sm1 = get_scale_min(sbu, is);
-            let sm2 = get_scale_min(sbu, is + 1u);
-            let d1 = d * sm1.x; let dm1 = dmin * sm1.y;
-            let d2 = d * sm2.x; let dm2 = dmin * sm2.y;
+            let d1 = d * sc[is]; let dm1 = dmin * mn[is];
+            let d2 = d * sc[is+1u]; let dm2 = dmin * mn[is+1u];
             // PMAT-381: Vec4 nibble extraction — process 4 values per iteration
             let qu = sbu + 4u + chunk * 8u;
             let lo_base = x_base + chunk * 64u;
