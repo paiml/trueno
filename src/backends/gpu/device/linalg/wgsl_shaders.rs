@@ -241,22 +241,24 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) lid:
             let sm2 = get_scale_min(sbu, is + 1u);
             let d1 = d * sm1.x; let dm1 = dmin * sm1.y;
             let d2 = d * sm2.x; let dm2 = dmin * sm2.y;
+            // PMAT-381: Vec4 nibble extraction — process 4 values per iteration
             let qu = sbu + 4u + chunk * 8u;
-            // Low nibbles (32 values, scale d1/dm1)
+            let lo_base = x_base + chunk * 64u;
+            let hi_base = lo_base + 32u;
             for (var i = 0u; i < 8u; i++) {
                 let w = w_q4k[qu + i];
-                for (var b = 0u; b < 4u; b++) {
-                    let xi = x_base + chunk * 64u + i * 4u + b;
-                    if (xi < k) { psum += (d1 * f32((w >> (b * 8u)) & 0xFu) - dm1) * x[xi]; }
-                }
-            }
-            // High nibbles (32 values, scale d2/dm2)
-            for (var i = 0u; i < 8u; i++) {
-                let w = w_q4k[qu + i];
-                for (var b = 0u; b < 4u; b++) {
-                    let xi = x_base + chunk * 64u + 32u + i * 4u + b;
-                    if (xi < k) { psum += (d2 * f32((w >> (b * 8u + 4u)) & 0xFu) - dm2) * x[xi]; }
-                }
+                let xi = lo_base + i * 4u;
+                // Extract 4 low nibbles as vec4, multiply with 4 input values
+                let nib = vec4<f32>(f32(w & 0xFu), f32((w >> 8u) & 0xFu),
+                                    f32((w >> 16u) & 0xFu), f32((w >> 24u) & 0xFu));
+                let xv = vec4<f32>(x[xi], x[xi+1u], x[xi+2u], x[xi+3u]);
+                psum += dot(nib * d1 - vec4(dm1), xv);
+                // 4 high nibbles
+                let hxi = hi_base + i * 4u;
+                let hnib = vec4<f32>(f32((w >> 4u) & 0xFu), f32((w >> 12u) & 0xFu),
+                                     f32((w >> 20u) & 0xFu), f32((w >> 28u) & 0xFu));
+                let hxv = vec4<f32>(x[hxi], x[hxi+1u], x[hxi+2u], x[hxi+3u]);
+                psum += dot(hnib * d2 - vec4(dm2), hxv);
             }
         }
     }
