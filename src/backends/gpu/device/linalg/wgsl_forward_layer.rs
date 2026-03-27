@@ -137,6 +137,7 @@ impl WgslForwardPass {
         pass.dispatch_workgroups(1, 1, 1);
     }
 
+    #[provable_contracts_macros::contract("wgpu-forward-pass-v1", equation = "gemv_params_safety")]
     pub(super) fn encode_matmul(&self, encoder: &mut wgpu::CommandEncoder,
                      input: &wgpu::Buffer, layer_prefix: &str, proj_name: &str,
                      output: &wgpu::Buffer, m: u32, k: u32, n: u32) {

@@ -198,6 +198,7 @@ impl GpuMatmulCache {
     /// PMAT-323: Zero-alloc matmul using persistent I/O buffers.
     /// Only creates bind group per call (required by WGPU — bind groups reference
     /// specific buffer instances). Everything else is reused.
+    #[provable_contracts_macros::contract("wgpu-forward-pass-v1", equation = "gemv_dispatch")]
     pub fn matmul_cached(
         &mut self,
         weight_name: &str,
