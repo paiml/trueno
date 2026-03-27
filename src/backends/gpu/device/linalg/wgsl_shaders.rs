@@ -245,15 +245,14 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) lid:
             let qu = sbu + 4u + chunk * 8u;
             let lo_base = x_base + chunk * 64u;
             let hi_base = lo_base + 32u;
+            // PMAT-381: Vec4 nibble extraction — process 4 values per iteration
             for (var i = 0u; i < 8u; i++) {
                 let w = w_q4k[qu + i];
                 let xi = lo_base + i * 4u;
-                // Extract 4 low nibbles as vec4, multiply with 4 input values
                 let nib = vec4<f32>(f32(w & 0xFu), f32((w >> 8u) & 0xFu),
                                     f32((w >> 16u) & 0xFu), f32((w >> 24u) & 0xFu));
                 let xv = vec4<f32>(x[xi], x[xi+1u], x[xi+2u], x[xi+3u]);
                 psum += dot(nib * d1 - vec4(dm1), xv);
-                // 4 high nibbles
                 let hxi = hi_base + i * 4u;
                 let hnib = vec4<f32>(f32((w >> 4u) & 0xFu), f32((w >> 12u) & 0xFu),
                                      f32((w >> 20u) & 0xFu), f32((w >> 28u) & 0xFu));
