@@ -284,6 +284,10 @@ required-features = ["gpu"]
 name = "gpu_tiled_reduction"
 required-features = ["gpu"]
 
+[[example]]
+name = "wgpu_backward_demo"
+required-features = ["gpu"]
+
 [package.metadata.release]
 shared-version = true
 
