@@ -87,6 +87,15 @@ impl<T> GpuBuffer<T> {
             return Ok(Self { ptr: 0, len: 0, _marker: PhantomData });
         }
 
+        // PMAT-394: Use managed memory on Grace Blackwell when MANAGED_MEMORY=1
+        static USE_MANAGED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let managed = *USE_MANAGED.get_or_init(||
+            std::env::var("MANAGED_MEMORY").as_deref() == Ok("1")
+        );
+        if managed {
+            return Self::new_managed(_ctx, len);
+        }
+
         let driver = get_driver()?;
         let size = len * mem::size_of::<T>();
 
