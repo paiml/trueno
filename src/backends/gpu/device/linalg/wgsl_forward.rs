@@ -31,8 +31,14 @@ pub struct WgslForwardPass {
 
     // Weight buffers (persistent, uploaded once)
     weight_buffers: HashMap<String, wgpu::Buffer>,
+    /// GH-560: Raw Q4K weight buffers for fused dequant+GEMV.
+    q4k_weights: HashMap<String, wgpu::Buffer>,
     /// PMAT-342: CPU-side bias data (small, not worth GPU dispatch)
     cpu_biases: HashMap<String, Vec<f32>>,
+    /// GH-560: Per-layer GPU KV cache buffers.
+    kv_cache_k: Vec<wgpu::Buffer>,
+    /// GH-560: Per-layer GPU KV cache buffers (values).
+    kv_cache_v: Vec<wgpu::Buffer>,
 
     // Intermediate buffers (persistent, reused across calls)
     // For 1.5B: hidden=1536, kv=256, intermediate=8960
@@ -336,6 +342,9 @@ impl WgslForwardPass {
             matmul_bgl,
             elementwise_bgl,
             weight_buffers: HashMap::new(),
+            q4k_weights: HashMap::new(),
+            kv_cache_k: Vec::new(),
+            kv_cache_v: Vec::new(),
             cpu_biases: HashMap::new(),
             hidden_buf,
             q_buf,
@@ -370,6 +379,43 @@ impl WgslForwardPass {
             usage: wgpu::BufferUsages::STORAGE,
         });
         self.weight_buffers.insert(name.to_string(), buffer);
+    }
+
+    /// GH-560: Upload raw Q4K weight bytes for fused dequant+GEMV on GPU.
+    pub fn upload_q4k_weight(&mut self, name: &str, data: &[u8]) {
+        use wgpu::util::DeviceExt;
+        let buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(name),
+            contents: data,
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+        self.q4k_weights.insert(name.to_string(), buffer);
+    }
+
+    /// GH-560: Initialize per-layer KV cache buffers on GPU.
+    pub fn init_kv_cache(&mut self, num_layers: usize) {
+        let kv_dim = (self.num_kv_heads * self.head_dim) as u64;
+        let max_seq = 2048u64;
+        for _ in 0..num_layers {
+            let k = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("kv_cache_k"),
+                size: max_seq * kv_dim * 4,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            let v = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("kv_cache_v"),
+                size: max_seq * kv_dim * 4,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            self.kv_cache_k.push(k);
+            self.kv_cache_v.push(v);
+        }
     }
 
     /// Total VRAM used by all buffers (bytes).
