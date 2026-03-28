@@ -49,6 +49,7 @@ pub struct WgslForwardPass {
     attn_out_buf: wgpu::Buffer, // [hidden_dim]
     ffn_gate_buf: wgpu::Buffer, // [intermediate_dim]
     ffn_up_buf: wgpu::Buffer,   // [intermediate_dim]
+    ffn_silu_buf: wgpu::Buffer, // [intermediate_dim] — SiLU(gate)×up output (can't alias inputs)
     ffn_out_buf: wgpu::Buffer,  // [hidden_dim]
     norm_buf: wgpu::Buffer,     // [hidden_dim] for RMSNorm output
     staging_buf: wgpu::Buffer,  // readback
@@ -319,6 +320,7 @@ impl WgslForwardPass {
         let attn_out_buf = buf(hidden_dim, "attn_out");
         let ffn_gate_buf = buf(intermediate_dim, "ffn_gate");
         let ffn_up_buf = buf(intermediate_dim, "ffn_up");
+        let ffn_silu_buf = buf(intermediate_dim, "ffn_silu"); // SiLU(gate)×up result
         let ffn_out_buf = buf(hidden_dim, "ffn_out");
         let norm_buf = buf(hidden_dim, "norm");
 
@@ -353,6 +355,7 @@ impl WgslForwardPass {
             attn_out_buf,
             ffn_gate_buf,
             ffn_up_buf,
+            ffn_silu_buf,
             ffn_out_buf,
             norm_buf,
             staging_buf,
@@ -796,19 +799,23 @@ impl WgslForwardPass {
             inter,
         );
 
-        // Pass 12: SiLU(gate) × up → ffn_out_buf (reused as intermediate)
+        // Pass 12: SiLU(gate) × up → ffn_silu_buf [intermediate_dim]
+        // BUG FIX: was writing to attn_out_buf (hidden_dim=3584) but needs intermediate_dim=18944.
+        // attn_out_buf is only hidden_dim — wgpu robustness silently drops OOB writes,
+        // then down_proj reads zeros past hidden_dim → 81% of FFN truncated → garbage output.
+        // Cannot alias gate/up buffers (WGSL read/write aliasing UB), so use dedicated buffer.
         self.encode_silu_mul(
             &mut encoder,
             &self.ffn_gate_buf,
             &self.ffn_up_buf,
-            &self.attn_out_buf,
+            &self.ffn_silu_buf,
             inter,
         );
 
-        // Pass 13: Down projection
+        // Pass 13: Down projection (reads ffn_silu_buf [intermediate_dim] → norm_buf [hidden_dim])
         self.encode_matmul(
             &mut encoder,
-            &self.attn_out_buf,
+            &self.ffn_silu_buf,
             layer_prefix,
             "down_proj",
             &self.norm_buf,
