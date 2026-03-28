@@ -33,6 +33,9 @@ pub fn softmax_1d_alloc(logits: &[f32]) -> Vec<f32> {
         return vec![1.0];
     }
 
+    // Contract: softmax-kernel-v1.yaml precondition (pv codegen)
+    contract_pre_softmax!(logits);
+
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {

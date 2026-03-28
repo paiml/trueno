@@ -123,6 +123,9 @@ pub fn gemm(
     b: &[f32],
     c: &mut [f32],
 ) -> Result<(), TruenoError> {
+    // Contract: matmul-kernel-v1.yaml precondition (pv codegen)
+    contract_pre_matmul!(a);
+
     #[cfg(feature = "parallel")]
     {
         gemm_blis_parallel(m, n, k, a, b, c)

@@ -50,6 +50,9 @@ pub fn rms_norm(
         )));
     }
 
+    // Contract: rmsnorm-kernel-v1.yaml precondition (pv codegen)
+    contract_pre_rmsnorm!(input);
+
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
