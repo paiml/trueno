@@ -68,6 +68,7 @@ pub struct FusedFp32Q4KGemvKernel {
 }
 
 impl FusedFp32Q4KGemvKernel {
+    /// Creates a new fused FP32 Q4K GEMV kernel with the given dimensions and default warp count.
     pub fn new(k: u32, n: u32, m: u32) -> Self {
         Self { k, n, m, num_warps: 3 }
     }
@@ -149,7 +150,7 @@ impl Kernel for FusedFp32Q4KGemvKernel {
                 let c_4_64 = ctx.mov_u64_imm(4);
                 let c_8_64 = ctx.mov_u64_imm(8);
                 let c_16_64 = ctx.mov_u64_imm(16);
-                let c_32_64 = ctx.mov_u64_imm(32);
+                let _c_32_64 = ctx.mov_u64_imm(32);
 
                 // Scale extraction invariants
                 let ci_mod2 = ctx.and_u32_imm(bq8_group, 1);
@@ -320,7 +321,7 @@ impl Kernel for FusedFp32Q4KGemvKernel {
                     ctx.add_f32_inplace(sx_lo, t);
 
                     // Same for v1_lo (second set of 4 values, offset by 16 elements)
-                    let x_lo2_addr = ctx.add_u64(x_lo_addr, c_16_u64);
+                    let _x_lo2_addr = ctx.add_u64(x_lo_addr, c_16_u64);
                     // Wait - the v1 values are at q4_addr + 16 bytes in the Q4K layout,
                     // which maps to activation offset + 16 elements (not bytes).
                     // Actually, v0 and v1 are at different Q4K offsets within the super-block.
@@ -513,7 +514,7 @@ impl Kernel for FusedFp32Q4KGemvKernel {
 
                 let c_m_red = ctx.mov_u32_imm(m);
                 for mi in 0..m {
-                    let mut total = ctx.mov_f32_imm(0.0);
+                    let total = ctx.mov_f32_imm(0.0);
                     for hw in 0..num_half_warps {
                         let mi_reg = ctx.mov_u32_imm(mi);
                         let hw_reg = ctx.mov_u32_imm(hw);

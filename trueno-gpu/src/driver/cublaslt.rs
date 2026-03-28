@@ -33,7 +33,7 @@ struct CachedFp8Plan {
 
 /// Safe wrapper around cuBLASLt handle
 pub struct CublasLtHandle {
-    handle: CublasLtHandle_Raw,
+    handle: CublasLtHandleRaw,
     /// PMAT-086: Cached FP8→FP16 GEMM plans keyed by (m_padded, n, k)
     fp8_plan_cache: std::collections::HashMap<(i32, i32, i32), CachedFp8Plan>,
 }
@@ -43,7 +43,7 @@ pub struct CublasLtHandle {
 unsafe impl Send for CublasLtHandle {}
 unsafe impl Sync for CublasLtHandle {}
 
-type CublasLtHandle_Raw = super::cublaslt_sys::CublasLtHandle;
+type CublasLtHandleRaw = super::cublaslt_sys::CublasLtHandle;
 
 impl CublasLtHandle {
     /// Create a new cuBLASLt handle
@@ -51,7 +51,7 @@ impl CublasLtHandle {
         let driver = CublasLtDriver::load()
             .ok_or_else(|| GpuError::CudaNotAvailable("cuBLASLt library not found".to_string()))?;
 
-        let mut handle: CublasLtHandle_Raw = std::ptr::null_mut();
+        let mut handle: CublasLtHandleRaw = std::ptr::null_mut();
         let status = unsafe { (driver.cublasLtCreate)(&mut handle) };
         CublasLtDriver::check(status)?;
 

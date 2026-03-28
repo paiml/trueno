@@ -140,16 +140,18 @@ impl<T> GpuBuffer<T> {
         let driver = get_driver()?;
         let size = len * mem::size_of::<T>();
         const CU_MEMHOSTREGISTER_DEVICEMAP: u32 = 0x02;
-        let result = (driver.cuMemHostRegister)(
+        // SAFETY: cuMemHostRegister/cuMemHostGetDevicePointer are FFI calls.
+        // host_ptr is a valid allocation provided by the caller.
+        let result = unsafe { (driver.cuMemHostRegister)(
             host_ptr as *mut c_void, size, CU_MEMHOSTREGISTER_DEVICEMAP,
-        );
+        ) };
         CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(
             format!("cuMemHostRegister({} bytes): {}", size, e)
         ))?;
         let mut dev_ptr: CUdeviceptr = 0;
-        let result = (driver.cuMemHostGetDevicePointer)(
+        let result = unsafe { (driver.cuMemHostGetDevicePointer)(
             &mut dev_ptr, host_ptr as *mut c_void, 0,
-        );
+        ) };
         CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(
             format!("cuMemHostGetDevicePointer: {}", e)
         ))?;

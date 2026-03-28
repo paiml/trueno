@@ -37,8 +37,10 @@
 #![allow(clippy::cast_precision_loss)]
 // Allow large stack arrays - SIMD/GPU test data and proptest expansions
 #![allow(clippy::large_stack_arrays)]
+
 // Allow unwrap/float_cmp in test code — safe in assertions, banned in production
 #![cfg_attr(test, allow(clippy::disallowed_methods, clippy::float_cmp))]
+
 
 //! Trueno: Multi-Target High-Performance Compute Library
 //!
@@ -70,6 +72,11 @@
 //! assert_eq!(result.as_slice(), &[6.0, 8.0, 10.0, 12.0]);
 //! ```
 
+
+// Contract assertions from YAML (pv codegen)
+#[macro_use]
+#[allow(unused_macros)]
+mod generated_contracts;
 pub mod activations;
 pub mod backends;
 pub mod blis;

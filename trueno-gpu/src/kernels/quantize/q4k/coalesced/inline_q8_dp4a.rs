@@ -18,13 +18,18 @@ use crate::ptx::{PtxKernel, PtxReg, PtxType};
 
 /// PMAT-295: Batched DP4A Q4K GEMV with inline FP32-to-Q8 quantization.
 pub struct InlineQ8Dp4aQ4KGemvKernel {
+    /// K dimension (input dimension, must be multiple of 256).
     pub k: u32,
+    /// N dimension (output dimension).
     pub n: u32,
+    /// Batch size M.
     pub m: u32,
+    /// Number of warps per block (default: 3).
     pub num_warps: u32,
 }
 
 impl InlineQ8Dp4aQ4KGemvKernel {
+    /// Creates a new inline Q8 DP4A Q4K GEMV kernel with the given dimensions and default warp count.
     pub fn new(k: u32, n: u32, m: u32) -> Self {
         Self { k, n, m, num_warps: 3 }
     }
@@ -481,7 +486,7 @@ impl Kernel for InlineQ8Dp4aQ4KGemvKernel {
 
                 let c_m_red = ctx.mov_u32_imm(m);
                 for mi in 0..m {
-                    let mut total = ctx.mov_f32_imm(0.0);
+                    let total = ctx.mov_f32_imm(0.0);
                     for hw in 0..num_half_warps {
                         let mi_reg = ctx.mov_u32_imm(mi);
                         let hw_reg = ctx.mov_u32_imm(hw);

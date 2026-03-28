@@ -543,12 +543,6 @@ mod loading {
                 type FnLinkComplete =
                     unsafe extern "C" fn(CUlinkState, *mut *mut c_void, *mut usize) -> CUresult;
                 type FnLinkDestroy = unsafe extern "C" fn(CUlinkState) -> CUresult;
-                // Host memory registration types (PMAT-396)
-                type FnMemHostRegister =
-                    unsafe extern "C" fn(*mut c_void, usize, u32) -> CUresult;
-                type FnMemHostUnregister = unsafe extern "C" fn(*mut c_void) -> CUresult;
-                type FnMemHostGetDevicePointer =
-                    unsafe extern "C" fn(*mut CUdeviceptr, *mut c_void, u32) -> CUresult;
                 // Driver version type
                 type FnDriverGetVersion = unsafe extern "C" fn(*mut c_int) -> CUresult;
 
