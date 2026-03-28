@@ -46,7 +46,7 @@ struct Params {
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let idx = global_id.x;
+    let idx = global_id.x + global_id.y * 65535u * 256u;
     if (idx >= params.n) {
         return;
     }
@@ -377,7 +377,7 @@ struct Params {
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let idx = global_id.x;
+    let idx = global_id.x + global_id.y * 65535u * 256u;
     let half_dim = params.head_dim / 2u;
     let total_pairs = params.num_heads * params.seq_len * half_dim;
 
@@ -453,7 +453,7 @@ struct AdamWParams {
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let idx = global_id.x;
+    let idx = global_id.x + global_id.y * 65535u * 256u;
     if (idx >= hp.n) {
         return;
     }

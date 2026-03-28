@@ -142,7 +142,9 @@ impl GpuDevice {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &bg, &[]);
-            pass.dispatch_workgroups(n.div_ceil(256), 1, 1);
+            // 2D dispatch for large tensors (>16M elements)
+            let total_wg = n.div_ceil(256);
+            pass.dispatch_workgroups(total_wg.min(65535), total_wg.div_ceil(65535), 1);
         }
         encoder.copy_buffer_to_buffer(&grad_in_buf, 0, &staging, 0, (grad_input.len() * 4) as u64);
         self.queue.submit(Some(encoder.finish()));
@@ -486,7 +488,8 @@ impl GpuDevice {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &bg, &[]);
-            pass.dispatch_workgroups(total_pairs.div_ceil(256), 1, 1);
+            let total_wg = total_pairs.div_ceil(256);
+            pass.dispatch_workgroups(total_wg.min(65535), total_wg.div_ceil(65535), 1);
         }
         encoder.copy_buffer_to_buffer(&gi_buf, 0, &staging, 0, (n * 4) as u64);
         self.queue.submit(Some(encoder.finish()));
@@ -672,7 +675,9 @@ impl GpuDevice {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &bg, &[]);
-            pass.dispatch_workgroups(n.div_ceil(256), 1, 1);
+            // 2D dispatch for large tensors (>16M elements)
+            let total_wg = n.div_ceil(256);
+            pass.dispatch_workgroups(total_wg.min(65535), total_wg.div_ceil(65535), 1);
         }
         encoder.copy_buffer_to_buffer(
             &params_buf,
