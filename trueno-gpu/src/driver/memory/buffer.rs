@@ -44,6 +44,8 @@ pub struct GpuBuffer<T> {
     pub(super) ptr: CUdeviceptr,
     /// Number of elements
     pub(super) len: usize,
+    /// PMAT-396: Original host pointer for registered buffers (None = device-allocated)
+    host_ptr: Option<*mut c_void>,
     /// Phantom for type parameter
     pub(super) _marker: PhantomData<T>,
 }
@@ -68,7 +70,7 @@ impl<T> GpuBuffer<T> {
     /// without triggering the borrow checker.
     #[must_use]
     pub unsafe fn from_raw_parts(ptr: CUdeviceptr, len: usize) -> Self {
-        Self { ptr, len, _marker: PhantomData }
+        Self { ptr, len, host_ptr: None, _marker: PhantomData }
     }
 
     /// Allocate a new GPU buffer
@@ -84,7 +86,7 @@ impl<T> GpuBuffer<T> {
     /// Returns `Err(GpuError::OutOfMemory)` if insufficient GPU memory.
     pub fn new(_ctx: &CudaContext, len: usize) -> Result<Self, GpuError> {
         if len == 0 {
-            return Ok(Self { ptr: 0, len: 0, _marker: PhantomData });
+            return Ok(Self { ptr: 0, len: 0, host_ptr: None, _marker: PhantomData });
         }
 
         // PMAT-394: Use managed memory on Grace Blackwell when MANAGED_MEMORY=1
@@ -104,7 +106,7 @@ impl<T> GpuBuffer<T> {
         let result = unsafe { (driver.cuMemAlloc)(&mut ptr, size) };
         CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(e.to_string()))?;
 
-        Ok(Self { ptr, len, _marker: PhantomData })
+        Ok(Self { ptr, len, host_ptr: None, _marker: PhantomData })
     }
 
     /// PMAT-394: Allocate managed (unified) memory for Grace Blackwell.
@@ -112,7 +114,7 @@ impl<T> GpuBuffer<T> {
     /// `cuMemFree` works for both managed and device allocations.
     pub fn new_managed(_ctx: &CudaContext, len: usize) -> Result<Self, GpuError> {
         if len == 0 {
-            return Ok(Self { ptr: 0, len: 0, _marker: PhantomData });
+            return Ok(Self { ptr: 0, len: 0, host_ptr: None, _marker: PhantomData });
         }
         let driver = get_driver()?;
         let size = len * mem::size_of::<T>();
@@ -122,7 +124,36 @@ impl<T> GpuBuffer<T> {
         CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(
             format!("cuMemAllocManaged({} bytes): {}", size, e)
         ))?;
-        Ok(Self { ptr, len, _marker: PhantomData })
+        Ok(Self { ptr, len, host_ptr: None, _marker: PhantomData })
+    }
+
+    /// PMAT-396: Register existing host memory for GPU access (zero-copy).
+    /// On Grace Blackwell, GPU accesses same physical pages via NVLink-C2C.
+    ///
+    /// # Safety
+    /// `host_ptr` must be page-aligned, valid for `len * size_of::<T>()`,
+    /// and must outlive this buffer. Drop does NOT free the host memory.
+    pub unsafe fn from_host_registered(host_ptr: *mut T, len: usize) -> Result<Self, GpuError> {
+        if len == 0 {
+            return Ok(Self { ptr: 0, len: 0, host_ptr: None, _marker: PhantomData });
+        }
+        let driver = get_driver()?;
+        let size = len * mem::size_of::<T>();
+        const CU_MEMHOSTREGISTER_DEVICEMAP: u32 = 0x02;
+        let result = (driver.cuMemHostRegister)(
+            host_ptr as *mut c_void, size, CU_MEMHOSTREGISTER_DEVICEMAP,
+        );
+        CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(
+            format!("cuMemHostRegister({} bytes): {}", size, e)
+        ))?;
+        let mut dev_ptr: CUdeviceptr = 0;
+        let result = (driver.cuMemHostGetDevicePointer)(
+            &mut dev_ptr, host_ptr as *mut c_void, 0,
+        );
+        CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(
+            format!("cuMemHostGetDevicePointer: {}", e)
+        ))?;
+        Ok(Self { ptr: dev_ptr, len, host_ptr: Some(host_ptr as *mut c_void), _marker: PhantomData })
     }
 
     /// Get device pointer as raw u64
@@ -218,9 +249,14 @@ impl<T> Drop for GpuBuffer<T> {
     fn drop(&mut self) {
         if self.ptr != 0 {
             if let Ok(driver) = get_driver() {
-                // SAFETY: ptr is valid from constructor
                 unsafe {
-                    let _ = (driver.cuMemFree)(self.ptr);
+                    if let Some(host_ptr) = self.host_ptr {
+                        // PMAT-396: Unregister host memory (don't free it)
+                        let _ = (driver.cuMemHostUnregister)(host_ptr);
+                    } else {
+                        // Standard device/managed memory
+                        let _ = (driver.cuMemFree)(self.ptr);
+                    }
                 }
             }
         }
