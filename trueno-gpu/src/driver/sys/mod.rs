@@ -235,6 +235,12 @@ pub struct CudaDriver {
     pub cuMemAlloc: unsafe extern "C" fn(ptr: *mut CUdeviceptr, size: usize) -> CUresult,
     /// PMAT-394: cuMemAllocManaged - Allocate unified memory (Grace Blackwell zero-copy)
     pub cuMemAllocManaged: unsafe extern "C" fn(ptr: *mut CUdeviceptr, size: usize, flags: u32) -> CUresult,
+    /// PMAT-396: cuMemHostRegister - Register host memory for GPU access (zero-copy on unified)
+    pub cuMemHostRegister: unsafe extern "C" fn(ptr: *mut c_void, size: usize, flags: u32) -> CUresult,
+    /// PMAT-396: cuMemHostUnregister - Unregister previously registered host memory
+    pub cuMemHostUnregister: unsafe extern "C" fn(ptr: *mut c_void) -> CUresult,
+    /// PMAT-396: cuMemHostGetDevicePointer - Get device pointer for registered host memory
+    pub cuMemHostGetDevicePointer: unsafe extern "C" fn(pdptr: *mut CUdeviceptr, p: *mut c_void, flags: u32) -> CUresult,
     /// cuMemFree - Free device memory
     pub cuMemFree: unsafe extern "C" fn(ptr: CUdeviceptr) -> CUresult,
     /// cuMemcpyHtoD - Copy from host to device
@@ -463,6 +469,9 @@ mod loading {
                     unsafe extern "C" fn(*mut CUfunction, CUmodule, *const c_char) -> CUresult;
                 type FnMemAlloc = unsafe extern "C" fn(*mut CUdeviceptr, usize) -> CUresult;
                 type FnMemAllocManaged = unsafe extern "C" fn(*mut CUdeviceptr, usize, u32) -> CUresult;
+                type FnMemHostRegister = unsafe extern "C" fn(*mut c_void, usize, u32) -> CUresult;
+                type FnMemHostUnregister = unsafe extern "C" fn(*mut c_void) -> CUresult;
+                type FnMemHostGetDevicePointer = unsafe extern "C" fn(*mut CUdeviceptr, *mut c_void, u32) -> CUresult;
                 type FnMemFree = unsafe extern "C" fn(CUdeviceptr) -> CUresult;
                 type FnMemcpyHtoD =
                     unsafe extern "C" fn(CUdeviceptr, *const c_void, usize) -> CUresult;
@@ -534,6 +543,12 @@ mod loading {
                 type FnLinkComplete =
                     unsafe extern "C" fn(CUlinkState, *mut *mut c_void, *mut usize) -> CUresult;
                 type FnLinkDestroy = unsafe extern "C" fn(CUlinkState) -> CUresult;
+                // Host memory registration types (PMAT-396)
+                type FnMemHostRegister =
+                    unsafe extern "C" fn(*mut c_void, usize, u32) -> CUresult;
+                type FnMemHostUnregister = unsafe extern "C" fn(*mut c_void) -> CUresult;
+                type FnMemHostGetDevicePointer =
+                    unsafe extern "C" fn(*mut CUdeviceptr, *mut c_void, u32) -> CUresult;
                 // Driver version type
                 type FnDriverGetVersion = unsafe extern "C" fn(*mut c_int) -> CUresult;
 
@@ -560,6 +575,9 @@ mod loading {
                     cuModuleGetFunction: load_sym!(cuModuleGetFunction, FnModuleGetFunction),
                     cuMemAlloc: load_sym!(cuMemAlloc_v2, FnMemAlloc),
                     cuMemAllocManaged: load_sym!(cuMemAllocManaged, FnMemAllocManaged),
+                    cuMemHostRegister: load_sym!(cuMemHostRegister_v2, FnMemHostRegister),
+                    cuMemHostUnregister: load_sym!(cuMemHostUnregister, FnMemHostUnregister),
+                    cuMemHostGetDevicePointer: load_sym!(cuMemHostGetDevicePointer_v2, FnMemHostGetDevicePointer),
                     cuMemFree: load_sym!(cuMemFree_v2, FnMemFree),
                     cuMemcpyHtoD: load_sym!(cuMemcpyHtoD_v2, FnMemcpyHtoD),
                     cuMemcpyDtoH: load_sym!(cuMemcpyDtoH_v2, FnMemcpyDtoH),
