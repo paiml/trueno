@@ -38,50 +38,92 @@ fn main() -> Result<(), String> {
     // --- 1. SiLU Backward ---
     print!("  [1/7] SiLU backward ... ");
     match demo_silu_backward(&device) {
-        Ok(diff) => { println!("PASS (max diff: {diff:.2e})"); passed += 1; }
-        Err(e) => { println!("FAIL: {e}"); failed += 1; }
+        Ok(diff) => {
+            println!("PASS (max diff: {diff:.2e})");
+            passed += 1;
+        }
+        Err(e) => {
+            println!("FAIL: {e}");
+            failed += 1;
+        }
     }
 
     // --- 2. GEMM Backward A ---
     print!("  [2/7] GEMM backward A (dL/dA = dL/dC @ B^T) ... ");
     match demo_gemm_backward_a(&device) {
-        Ok(diff) => { println!("PASS (max diff: {diff:.2e})"); passed += 1; }
-        Err(e) => { println!("FAIL: {e}"); failed += 1; }
+        Ok(diff) => {
+            println!("PASS (max diff: {diff:.2e})");
+            passed += 1;
+        }
+        Err(e) => {
+            println!("FAIL: {e}");
+            failed += 1;
+        }
     }
 
     // --- 3. GEMM Backward B ---
     print!("  [3/7] GEMM backward B (dL/dB = A^T @ dL/dC) ... ");
     match demo_gemm_backward_b(&device) {
-        Ok(diff) => { println!("PASS (max diff: {diff:.2e})"); passed += 1; }
-        Err(e) => { println!("FAIL: {e}"); failed += 1; }
+        Ok(diff) => {
+            println!("PASS (max diff: {diff:.2e})");
+            passed += 1;
+        }
+        Err(e) => {
+            println!("FAIL: {e}");
+            failed += 1;
+        }
     }
 
     // --- 4. RoPE Backward ---
     print!("  [4/7] RoPE backward (transpose rotation) ... ");
     match demo_rope_backward(&device) {
-        Ok(diff) => { println!("PASS (max diff: {diff:.2e})"); passed += 1; }
-        Err(e) => { println!("FAIL: {e}"); failed += 1; }
+        Ok(diff) => {
+            println!("PASS (max diff: {diff:.2e})");
+            passed += 1;
+        }
+        Err(e) => {
+            println!("FAIL: {e}");
+            failed += 1;
+        }
     }
 
     // --- 5. AdamW Optimizer ---
     print!("  [5/7] AdamW step (fused optimizer) ... ");
     match demo_adamw_step(&device) {
-        Ok(diff) => { println!("PASS (max diff: {diff:.2e})"); passed += 1; }
-        Err(e) => { println!("FAIL: {e}"); failed += 1; }
+        Ok(diff) => {
+            println!("PASS (max diff: {diff:.2e})");
+            passed += 1;
+        }
+        Err(e) => {
+            println!("FAIL: {e}");
+            failed += 1;
+        }
     }
 
     // --- 6. RMSNorm Backward ---
     print!("  [6/7] RMSNorm backward (dx + dγ) ... ");
     match demo_rmsnorm_backward(&device) {
-        Ok(diff) => { println!("PASS (max diff: {diff:.2e})"); passed += 1; }
-        Err(e) => { println!("FAIL: {e}"); failed += 1; }
+        Ok(diff) => {
+            println!("PASS (max diff: {diff:.2e})");
+            passed += 1;
+        }
+        Err(e) => {
+            println!("FAIL: {e}");
+            failed += 1;
+        }
     }
 
     // --- 7. NF4 Dequant ---
     print!("  [7/7] NF4 dequant (4-bit → fp32) ... ");
     match demo_nf4_dequant(&device) {
-        Ok(diff) => { println!("PASS (max diff: {diff:.2e})"); passed += 1; }
-        Err(e) => { println!("FAIL: {e}"); failed += 1; }
+        Ok(diff) => {
+            println!("PASS (max diff: {diff:.2e})");
+            passed += 1;
+        }
+        Err(e) => {
+            println!("FAIL: {e}");
+            failed += 1;
+        }
     }
 
     println!("\n=== Results: {passed}/{} passed, {failed} failed ===", passed + failed);
@@ -101,11 +143,15 @@ fn demo_silu_backward(device: &GpuDevice) -> Result<f32, String> {
     let grad_output: Vec<f32> = (0..100).map(|i| (i as f32 - 50.0) * 0.01).collect();
 
     // CPU reference
-    let expected: Vec<f32> = input.iter().zip(grad_output.iter()).map(|(&x, &dy)| {
-        let sig = 1.0 / (1.0 + (-x).exp());
-        let y = x * sig;
-        dy * sig * (1.0 + x - y)
-    }).collect();
+    let expected: Vec<f32> = input
+        .iter()
+        .zip(grad_output.iter())
+        .map(|(&x, &dy)| {
+            let sig = 1.0 / (1.0 + (-x).exp());
+            let y = x * sig;
+            dy * sig * (1.0 + x - y)
+        })
+        .collect();
 
     let mut grad_input = vec![0.0f32; 100];
     device.silu_backward(&input, &grad_output, &mut grad_input)?;
@@ -114,8 +160,8 @@ fn demo_silu_backward(device: &GpuDevice) -> Result<f32, String> {
 
 fn demo_gemm_backward_a(device: &GpuDevice) -> Result<f32, String> {
     let (m, k, n) = (4u32, 8, 6);
-    let grad_c: Vec<f32> = (0..m*n).map(|i| (i as f32 - 12.0) * 0.1).collect();
-    let b: Vec<f32> = (0..k*n).map(|i| (i as f32 - 24.0) * 0.05).collect();
+    let grad_c: Vec<f32> = (0..m * n).map(|i| (i as f32 - 12.0) * 0.1).collect();
+    let b: Vec<f32> = (0..k * n).map(|i| (i as f32 - 24.0) * 0.05).collect();
 
     // CPU: grad_a = grad_c @ B^T
     let mut expected = vec![0.0f32; (m * k) as usize];
@@ -136,8 +182,8 @@ fn demo_gemm_backward_a(device: &GpuDevice) -> Result<f32, String> {
 
 fn demo_gemm_backward_b(device: &GpuDevice) -> Result<f32, String> {
     let (m, k, n) = (4u32, 8, 6);
-    let a: Vec<f32> = (0..m*k).map(|i| (i as f32 - 16.0) * 0.1).collect();
-    let grad_c: Vec<f32> = (0..m*n).map(|i| (i as f32 - 12.0) * 0.05).collect();
+    let a: Vec<f32> = (0..m * k).map(|i| (i as f32 - 16.0) * 0.1).collect();
+    let grad_c: Vec<f32> = (0..m * n).map(|i| (i as f32 - 12.0) * 0.05).collect();
 
     // CPU: grad_b = A^T @ grad_c
     let mut expected = vec![0.0f32; (k * n) as usize];
@@ -229,8 +275,8 @@ fn demo_rmsnorm_backward(device: &GpuDevice) -> Result<f32, String> {
         let sum_x2: f32 = row.iter().map(|x| x * x).sum();
         let var_eps = sum_x2 / h as f32 + eps;
         let inv_rms = 1.0 / var_eps.sqrt();
-        let sum_xgg: f32 = row.iter().zip(grow).zip(gamma.iter())
-            .map(|((&x, &gy), &g)| x * gy * g).sum();
+        let sum_xgg: f32 =
+            row.iter().zip(grow).zip(gamma.iter()).map(|((&x, &gy), &g)| x * gy * g).sum();
         let mean_xgg = sum_xgg / h as f32;
         for i in 0..h {
             let correction = (row[i] / var_eps) * mean_xgg;
@@ -240,23 +286,45 @@ fn demo_rmsnorm_backward(device: &GpuDevice) -> Result<f32, String> {
 
     let mut grad_input = vec![0.0f32; n];
     let mut grad_gamma = vec![0.0f32; h];
-    device.rmsnorm_backward(&input, &gamma, &grad_out, &mut grad_input, &mut grad_gamma,
-        rows as u32, h as u32, eps)?;
+    device.rmsnorm_backward(
+        &input,
+        &gamma,
+        &grad_out,
+        &mut grad_input,
+        &mut grad_gamma,
+        rows as u32,
+        h as u32,
+        eps,
+    )?;
     Ok(max_diff(&grad_input, &cpu_gi))
 }
 
 fn demo_nf4_dequant(device: &GpuDevice) -> Result<f32, String> {
     let nf4_lut: [f32; 16] = [
-        -1.0, -0.6961928, -0.5250731, -0.39491749, -0.28444138, -0.18477343,
-        -0.09105004, 0.0, 0.0795803, 0.1609302, 0.24611230, 0.33791524,
-        0.44070983, 0.5626170, 0.7229568, 1.0,
+        -1.0,
+        -0.6961928,
+        -0.5250731,
+        -0.39491749,
+        -0.28444138,
+        -0.18477343,
+        -0.09105004,
+        0.0,
+        0.0795803,
+        0.1609302,
+        0.24611230,
+        0.33791524,
+        0.44070983,
+        0.5626170,
+        0.7229568,
+        1.0,
     ];
 
     let (n, bs) = (8u32, 4u32);
     let packed: Vec<u32> = vec![0x90F5_1C73_u32]; // indices [3,7,12,1,5,15,0,9]
     let scales: Vec<f32> = vec![2.0, 0.5];
     let indices = [3, 7, 12, 1, 5, 15, 0, 9];
-    let expected: Vec<f32> = (0..8).map(|i| nf4_lut[indices[i]] * scales[i / bs as usize]).collect();
+    let expected: Vec<f32> =
+        (0..8).map(|i| nf4_lut[indices[i]] * scales[i / bs as usize]).collect();
 
     let mut output = vec![0.0f32; 8];
     device.nf4_dequant(&packed, &scales, &mut output, n, bs)?;

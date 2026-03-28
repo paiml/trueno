@@ -112,13 +112,13 @@ impl CublasLtHandle {
             CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
                 matmul_desc,
                 CUBLASLT_MATMUL_DESC_TRANSA,
-                &op_a as *const _ as *const c_void,
+                std::ptr::from_ref(&op_a) as *const c_void,
                 std::mem::size_of::<CublasOperation>(),
             ))?;
             CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
                 matmul_desc,
                 CUBLASLT_MATMUL_DESC_TRANSB,
-                &op_b as *const _ as *const c_void,
+                std::ptr::from_ref(&op_b) as *const c_void,
                 std::mem::size_of::<CublasOperation>(),
             ))?;
 
@@ -175,7 +175,7 @@ impl CublasLtHandle {
             CublasLtDriver::check((driver.cublasLtMatmulPreferenceSetAttribute)(
                 pref,
                 CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
-                &max_workspace as *const _ as *const c_void,
+                std::ptr::from_ref(&max_workspace) as *const c_void,
                 std::mem::size_of::<usize>(),
             ))?;
 
@@ -216,12 +216,12 @@ impl CublasLtHandle {
             let matmul_status = (driver.cublasLtMatmul)(
                 self.handle,
                 matmul_desc,
-                &alpha as *const f32 as *const c_void,
+                std::ptr::from_ref::<f32>(&alpha) as *const c_void,
                 a_ptr as *const c_void,
                 a_layout,
                 b_ptr as *const c_void,
                 b_layout,
-                &beta as *const f32 as *const c_void,
+                std::ptr::from_ref::<f32>(&beta) as *const c_void,
                 d_ptr as *const c_void, // C = D when beta=0
                 c_layout,
                 d_ptr as *mut c_void,
@@ -298,13 +298,13 @@ impl CublasLtHandle {
             CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
                 matmul_desc,
                 CUBLASLT_MATMUL_DESC_TRANSA,
-                &op_a as *const _ as *const c_void,
+                std::ptr::from_ref(&op_a) as *const c_void,
                 std::mem::size_of::<CublasOperation>(),
             ))?;
             CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
                 matmul_desc,
                 CUBLASLT_MATMUL_DESC_TRANSB,
-                &op_b as *const _ as *const c_void,
+                std::ptr::from_ref(&op_b) as *const c_void,
                 std::mem::size_of::<CublasOperation>(),
             ))?;
 
@@ -313,14 +313,14 @@ impl CublasLtHandle {
             CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
                 matmul_desc,
                 CUBLASLT_MATMUL_DESC_A_SCALE_POINTER,
-                &a_scale_device_ptr as *const _ as *const c_void,
+                std::ptr::from_ref(&a_scale_device_ptr) as *const c_void,
                 std::mem::size_of::<*const c_void>(),
             ))?;
             let b_scale_device_ptr = b_scale_ptr as *const c_void;
             CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
                 matmul_desc,
                 CUBLASLT_MATMUL_DESC_B_SCALE_POINTER,
-                &b_scale_device_ptr as *const _ as *const c_void,
+                std::ptr::from_ref(&b_scale_device_ptr) as *const c_void,
                 std::mem::size_of::<*const c_void>(),
             ))?;
 
@@ -373,7 +373,7 @@ impl CublasLtHandle {
             CublasLtDriver::check((driver.cublasLtMatmulPreferenceSetAttribute)(
                 pref,
                 CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
-                &max_workspace as *const _ as *const c_void,
+                std::ptr::from_ref(&max_workspace) as *const c_void,
                 std::mem::size_of::<usize>(),
             ))?;
 
@@ -413,12 +413,12 @@ impl CublasLtHandle {
             let matmul_status = (driver.cublasLtMatmul)(
                 self.handle,
                 matmul_desc,
-                &alpha as *const f32 as *const c_void,
+                std::ptr::from_ref::<f32>(&alpha) as *const c_void,
                 a_ptr as *const c_void,
                 a_layout,
                 b_ptr as *const c_void,
                 b_layout,
-                &beta as *const f32 as *const c_void,
+                std::ptr::from_ref::<f32>(&beta) as *const c_void,
                 d_ptr as *const c_void,
                 c_layout,
                 d_ptr as *mut c_void,
@@ -490,13 +490,13 @@ impl CublasLtHandle {
                 CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
                     matmul_desc,
                     CUBLASLT_MATMUL_DESC_TRANSA,
-                    &op_a as *const _ as *const c_void,
+                    std::ptr::from_ref(&op_a) as *const c_void,
                     std::mem::size_of::<CublasOperation>(),
                 ))?;
                 CublasLtDriver::check((driver.cublasLtMatmulDescSetAttribute)(
                     matmul_desc,
                     CUBLASLT_MATMUL_DESC_TRANSB,
-                    &op_b as *const _ as *const c_void,
+                    std::ptr::from_ref(&op_b) as *const c_void,
                     std::mem::size_of::<CublasOperation>(),
                 ))?;
 
@@ -547,7 +547,7 @@ impl CublasLtHandle {
                 CublasLtDriver::check((driver.cublasLtMatmulPreferenceSetAttribute)(
                     pref,
                     CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
-                    &max_workspace as *const _ as *const c_void,
+                    std::ptr::from_ref(&max_workspace) as *const c_void,
                     std::mem::size_of::<usize>(),
                 ))?;
 
@@ -605,12 +605,12 @@ impl CublasLtHandle {
             let matmul_status = (driver.cublasLtMatmul)(
                 self.handle,
                 plan.matmul_desc,
-                &alpha as *const f32 as *const c_void,
+                std::ptr::from_ref::<f32>(&alpha) as *const c_void,
                 a_ptr as *const c_void,
                 plan.a_layout,
                 b_ptr as *const c_void,
                 plan.b_layout,
-                &beta as *const f32 as *const c_void,
+                std::ptr::from_ref::<f32>(&beta) as *const c_void,
                 d_ptr as *const c_void,
                 plan.c_layout,
                 d_ptr as *mut c_void,

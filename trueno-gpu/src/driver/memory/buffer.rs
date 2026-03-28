@@ -91,9 +91,8 @@ impl<T> GpuBuffer<T> {
 
         // PMAT-394: Use managed memory on Grace Blackwell when MANAGED_MEMORY=1
         static USE_MANAGED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        let managed = *USE_MANAGED.get_or_init(||
-            std::env::var("MANAGED_MEMORY").as_deref() == Ok("1")
-        );
+        let managed =
+            *USE_MANAGED.get_or_init(|| std::env::var("MANAGED_MEMORY").as_deref() == Ok("1"));
         if managed {
             return Self::new_managed(_ctx, len);
         }
@@ -121,9 +120,9 @@ impl<T> GpuBuffer<T> {
         let mut ptr: CUdeviceptr = 0;
         const CU_MEM_ATTACH_GLOBAL: u32 = 1;
         let result = unsafe { (driver.cuMemAllocManaged)(&mut ptr, size, CU_MEM_ATTACH_GLOBAL) };
-        CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(
-            format!("cuMemAllocManaged({} bytes): {}", size, e)
-        ))?;
+        CudaDriver::check(result).map_err(|e| {
+            GpuError::MemoryAllocation(format!("cuMemAllocManaged({} bytes): {}", size, e))
+        })?;
         Ok(Self { ptr, len, host_ptr: None, _marker: PhantomData })
     }
 
@@ -142,20 +141,23 @@ impl<T> GpuBuffer<T> {
         const CU_MEMHOSTREGISTER_DEVICEMAP: u32 = 0x02;
         // SAFETY: cuMemHostRegister/cuMemHostGetDevicePointer are FFI calls.
         // host_ptr is a valid allocation provided by the caller.
-        let result = unsafe { (driver.cuMemHostRegister)(
-            host_ptr as *mut c_void, size, CU_MEMHOSTREGISTER_DEVICEMAP,
-        ) };
-        CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(
-            format!("cuMemHostRegister({} bytes): {}", size, e)
-        ))?;
+        let result = unsafe {
+            (driver.cuMemHostRegister)(host_ptr as *mut c_void, size, CU_MEMHOSTREGISTER_DEVICEMAP)
+        };
+        CudaDriver::check(result).map_err(|e| {
+            GpuError::MemoryAllocation(format!("cuMemHostRegister({} bytes): {}", size, e))
+        })?;
         let mut dev_ptr: CUdeviceptr = 0;
-        let result = unsafe { (driver.cuMemHostGetDevicePointer)(
-            &mut dev_ptr, host_ptr as *mut c_void, 0,
-        ) };
-        CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(
-            format!("cuMemHostGetDevicePointer: {}", e)
-        ))?;
-        Ok(Self { ptr: dev_ptr, len, host_ptr: Some(host_ptr as *mut c_void), _marker: PhantomData })
+        let result =
+            unsafe { (driver.cuMemHostGetDevicePointer)(&mut dev_ptr, host_ptr as *mut c_void, 0) };
+        CudaDriver::check(result)
+            .map_err(|e| GpuError::MemoryAllocation(format!("cuMemHostGetDevicePointer: {}", e)))?;
+        Ok(Self {
+            ptr: dev_ptr,
+            len,
+            host_ptr: Some(host_ptr as *mut c_void),
+            _marker: PhantomData,
+        })
     }
 
     /// Get device pointer as raw u64

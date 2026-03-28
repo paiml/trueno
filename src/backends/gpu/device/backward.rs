@@ -306,17 +306,13 @@ impl GpuDevice {
 
         let a_buf = self.create_storage_buffer(&format!("{op_name} A"), buf_a, true);
         let b_buf = self.create_storage_buffer(&format!("{op_name} B"), buf_b, true);
-        let out_buf = self.create_rw_storage_buffer(
-            &format!("{op_name} Output"),
-            (output.len() * 4) as u64,
-        );
+        let out_buf =
+            self.create_rw_storage_buffer(&format!("{op_name} Output"), (output.len() * 4) as u64);
 
         // Uniform: { M, K, N, pad }
         let dims: [u32; 4] = [m, k, n, 0];
-        let uniform_buf = self.create_uniform_buffer(
-            &format!("{op_name} Dims"),
-            bytemuck::cast_slice(&dims),
-        );
+        let uniform_buf =
+            self.create_uniform_buffer(&format!("{op_name} Dims"), bytemuck::cast_slice(&dims));
 
         let bgl = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
@@ -364,8 +360,7 @@ impl GpuDevice {
         let mut encoder =
             self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
-            let mut pass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &bg, &[]);
 
@@ -413,7 +408,12 @@ impl GpuDevice {
         theta: f32,
     ) -> Result<(), String> {
         runtime::block_on(self.rope_backward_async(
-            grad_output, grad_input, num_heads, head_dim, seq_len, theta,
+            grad_output,
+            grad_input,
+            num_heads,
+            head_dim,
+            seq_len,
+            theta,
         ))
     }
 
@@ -441,12 +441,7 @@ impl GpuDevice {
         let gi_buf = self.create_rw_storage_buffer("rope_bwd grad_in", (n * 4) as u64);
 
         // Uniform: { num_heads, head_dim, seq_len, theta_log2 }
-        let params: [u32; 4] = [
-            num_heads,
-            head_dim,
-            seq_len,
-            theta.log2().to_bits(),
-        ];
+        let params: [u32; 4] = [num_heads, head_dim, seq_len, theta.log2().to_bits()];
         let uniform_buf =
             self.create_uniform_buffer("rope_bwd params", bytemuck::cast_slice(&params));
 
@@ -488,8 +483,7 @@ impl GpuDevice {
         let mut encoder =
             self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
-            let mut pass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &bg, &[]);
             pass.dispatch_workgroups(total_pairs.div_ceil(256), 1, 1);
@@ -499,9 +493,13 @@ impl GpuDevice {
 
         let slice = staging.slice(..);
         let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| { sender.send(r).ok(); });
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            sender.send(r).ok();
+        });
         self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
-        receiver.receive().await
+        receiver
+            .receive()
+            .await
             .ok_or("RoPE backward: cancelled".to_string())?
             .map_err(|e| format!("RoPE backward: {e}"))?;
         let data = slice.get_mapped_range();
@@ -527,7 +525,16 @@ impl GpuDevice {
         step: u32,
     ) -> Result<(), String> {
         runtime::block_on(self.adamw_step_async(
-            params, grads, m, v, lr, beta1, beta2, eps, weight_decay, step,
+            params,
+            grads,
+            m,
+            v,
+            lr,
+            beta1,
+            beta2,
+            eps,
+            weight_decay,
+            step,
         ))
     }
 
@@ -601,8 +608,7 @@ impl GpuDevice {
             bc1.to_bits(),
             bc2.to_bits(),
         ];
-        let uniform_buf =
-            self.create_uniform_buffer("adamw hp", bytemuck::cast_slice(&hp));
+        let uniform_buf = self.create_uniform_buffer("adamw hp", bytemuck::cast_slice(&hp));
 
         let bgl = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
@@ -663,13 +669,18 @@ impl GpuDevice {
         let mut encoder =
             self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
-            let mut pass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &bg, &[]);
             pass.dispatch_workgroups(n.div_ceil(256), 1, 1);
         }
-        encoder.copy_buffer_to_buffer(&params_buf, 0, &params_staging, 0, (params.len() * 4) as u64);
+        encoder.copy_buffer_to_buffer(
+            &params_buf,
+            0,
+            &params_staging,
+            0,
+            (params.len() * 4) as u64,
+        );
         encoder.copy_buffer_to_buffer(&m_buf, 0, &m_staging, 0, (m.len() * 4) as u64);
         encoder.copy_buffer_to_buffer(&v_buf, 0, &v_staging, 0, (v.len() * 4) as u64);
         self.queue.submit(Some(encoder.finish()));
@@ -678,9 +689,12 @@ impl GpuDevice {
         let read_buf = |staging: &wgpu::Buffer, out: &mut [f32]| -> Result<(), String> {
             let slice = staging.slice(..);
             let (tx, rx) = std::sync::mpsc::channel();
-            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            slice.map_async(wgpu::MapMode::Read, move |r| {
+                tx.send(r).ok();
+            });
             self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
-            rx.recv().map_err(|e| format!("AdamW readback: {e}"))?
+            rx.recv()
+                .map_err(|e| format!("AdamW readback: {e}"))?
                 .map_err(|e| format!("AdamW map: {e}"))?;
             let data = slice.get_mapped_range();
             out.copy_from_slice(bytemuck::cast_slice(&data));
@@ -714,7 +728,14 @@ impl GpuDevice {
         eps: f32,
     ) -> Result<(), String> {
         runtime::block_on(self.rmsnorm_backward_async(
-            input, gamma, grad_output, grad_input, grad_gamma, num_rows, hidden_dim, eps,
+            input,
+            gamma,
+            grad_output,
+            grad_input,
+            grad_gamma,
+            num_rows,
+            hidden_dim,
+            eps,
         ))
     }
 
@@ -780,10 +801,7 @@ impl GpuDevice {
                 wgpu::BindGroupEntry { binding: 1, resource: gamma_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 2, resource: grad_out_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 3, resource: grad_in_buf.as_entire_binding() },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: grad_gamma_buf.as_entire_binding(),
-                },
+                wgpu::BindGroupEntry { binding: 4, resource: grad_gamma_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 5, resource: uniform_buf.as_entire_binding() },
             ],
         });
@@ -819,18 +837,25 @@ impl GpuDevice {
         let mut encoder =
             self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
-            let mut pass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &bg, &[]);
             // One workgroup (256 threads) per row
             pass.dispatch_workgroups(num_rows, 1, 1);
         }
         encoder.copy_buffer_to_buffer(
-            &grad_in_buf, 0, &gi_staging, 0, (grad_input.len() * 4) as u64,
+            &grad_in_buf,
+            0,
+            &gi_staging,
+            0,
+            (grad_input.len() * 4) as u64,
         );
         encoder.copy_buffer_to_buffer(
-            &grad_gamma_buf, 0, &gg_staging, 0, (hidden_dim as usize * 4) as u64,
+            &grad_gamma_buf,
+            0,
+            &gg_staging,
+            0,
+            (hidden_dim as usize * 4) as u64,
         );
         self.queue.submit(Some(encoder.finish()));
 
@@ -838,9 +863,12 @@ impl GpuDevice {
         {
             let slice = gi_staging.slice(..);
             let (tx, rx) = std::sync::mpsc::channel();
-            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            slice.map_async(wgpu::MapMode::Read, move |r| {
+                tx.send(r).ok();
+            });
             self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
-            rx.recv().map_err(|e| format!("RMSNorm bwd gi: {e}"))?
+            rx.recv()
+                .map_err(|e| format!("RMSNorm bwd gi: {e}"))?
                 .map_err(|e| format!("RMSNorm bwd gi map: {e}"))?;
             let data = slice.get_mapped_range();
             grad_input.copy_from_slice(bytemuck::cast_slice(&data));
@@ -851,9 +879,12 @@ impl GpuDevice {
         {
             let slice = gg_staging.slice(..);
             let (tx, rx) = std::sync::mpsc::channel();
-            slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+            slice.map_async(wgpu::MapMode::Read, move |r| {
+                tx.send(r).ok();
+            });
             self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
-            rx.recv().map_err(|e| format!("RMSNorm bwd gg: {e}"))?
+            rx.recv()
+                .map_err(|e| format!("RMSNorm bwd gg: {e}"))?
                 .map_err(|e| format!("RMSNorm bwd gg map: {e}"))?;
             let data = slice.get_mapped_range();
             // atomic<u32> stores are bit-identical to f32 after CAS
@@ -910,12 +941,10 @@ impl GpuDevice {
         self.queue.write_buffer(&packed_buf, 0, bytemuck::cast_slice(packed));
 
         let scales_buf = self.create_storage_buffer("nf4 scales", scales, true);
-        let output_buf =
-            self.create_rw_storage_buffer("nf4 output", (output.len() * 4) as u64);
+        let output_buf = self.create_rw_storage_buffer("nf4 output", (output.len() * 4) as u64);
 
         let params: [u32; 4] = [n, block_size, 0, 0];
-        let uniform_buf =
-            self.create_uniform_buffer("nf4 params", bytemuck::cast_slice(&params));
+        let uniform_buf = self.create_uniform_buffer("nf4 params", bytemuck::cast_slice(&params));
 
         let bgl = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
@@ -961,8 +990,7 @@ impl GpuDevice {
         let mut encoder =
             self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
-            let mut pass =
-                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor::default());
             pass.set_pipeline(&pipeline);
             pass.set_bind_group(0, &bg, &[]);
             // Use 2D dispatch to handle >65535 workgroups
@@ -978,9 +1006,13 @@ impl GpuDevice {
 
         let slice = staging.slice(..);
         let (sender, receiver) = futures_intrusive::channel::shared::oneshot_channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| { sender.send(r).ok(); });
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            sender.send(r).ok();
+        });
         self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
-        receiver.receive().await
+        receiver
+            .receive()
+            .await
             .ok_or("NF4 dequant: cancelled".to_string())?
             .map_err(|e| format!("NF4 dequant: {e}"))?;
         let data = slice.get_mapped_range();
@@ -1134,11 +1166,8 @@ mod tests {
             .gemm_backward_a(&grad_c, &b, &mut grad_a, m as u32, k as u32, n as u32)
             .expect("gemm_backward_a");
 
-        let max_diff = grad_a
-            .iter()
-            .zip(expected.iter())
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0f32, f32::max);
+        let max_diff =
+            grad_a.iter().zip(expected.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
 
         assert!(
             max_diff < 1e-3,
@@ -1172,11 +1201,8 @@ mod tests {
             .gemm_backward_b(&a, &grad_c, &mut grad_b, m as u32, k as u32, n as u32)
             .expect("gemm_backward_b");
 
-        let max_diff = grad_b
-            .iter()
-            .zip(expected.iter())
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0f32, f32::max);
+        let max_diff =
+            grad_b.iter().zip(expected.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
 
         assert!(
             max_diff < 1e-3,
@@ -1291,11 +1317,8 @@ mod tests {
             )
             .expect("adamw_step");
 
-        let max_diff = params
-            .iter()
-            .zip(cpu_params.iter())
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0f32, f32::max);
+        let max_diff =
+            params.iter().zip(cpu_params.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
 
         assert!(
             max_diff < 1e-4,
@@ -1393,9 +1416,22 @@ mod tests {
 
         // NF4 codebook
         let nf4_lut: [f32; 16] = [
-            -1.0, -0.6961928, -0.5250731, -0.39491749, -0.28444138, -0.18477343,
-            -0.09105004, 0.0, 0.0795803, 0.1609302, 0.24611230, 0.33791524,
-            0.44070983, 0.5626170, 0.7229568, 1.0,
+            -1.0,
+            -0.6961928,
+            -0.5250731,
+            -0.39491749,
+            -0.28444138,
+            -0.18477343,
+            -0.09105004,
+            0.0,
+            0.0795803,
+            0.1609302,
+            0.24611230,
+            0.33791524,
+            0.44070983,
+            0.5626170,
+            0.7229568,
+            1.0,
         ];
 
         let block_size = 4u32; // small for testing
@@ -1425,15 +1461,10 @@ mod tests {
         }
 
         let mut output = vec![0.0f32; n as usize];
-        device
-            .nf4_dequant(&packed, &scales, &mut output, n, block_size)
-            .expect("nf4_dequant");
+        device.nf4_dequant(&packed, &scales, &mut output, n, block_size).expect("nf4_dequant");
 
-        let max_diff = output
-            .iter()
-            .zip(expected.iter())
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0f32, f32::max);
+        let max_diff =
+            output.iter().zip(expected.iter()).map(|(a, b)| (a - b).abs()).fold(0.0f32, f32::max);
 
         assert!(
             max_diff < 1e-6,

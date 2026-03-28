@@ -35,12 +35,14 @@ pub type CublasLtMatmulPreference = *mut c_void;
 /// cuBLASLt status (same codes as cuBLAS)
 pub type CublasLtStatus = c_int;
 
+/// Success status code.
 pub const CUBLASLT_STATUS_SUCCESS: CublasLtStatus = 0;
 
 // ============================================================================
 // cuBLASLt Matmul Descriptor Attributes
 // ============================================================================
 
+/// Matmul descriptor attribute type.
 pub type CublasLtMatmulDescAttribute = u32;
 
 /// cublasOperation_t for A (attribute index 3 per cublasLt.h)
@@ -57,6 +59,7 @@ pub const CUBLASLT_MATMUL_DESC_B_SCALE_POINTER: CublasLtMatmulDescAttribute = 22
 // cuBLASLt Matrix Layout Attributes
 // ============================================================================
 
+/// Matrix layout attribute type.
 pub type CublasLtMatrixLayoutAttribute = u32;
 
 /// Leading dimension
@@ -70,6 +73,7 @@ pub const CUBLASLT_MATRIX_LAYOUT_COLS: CublasLtMatrixLayoutAttribute = 2;
 // cuBLASLt Matmul Preference Attributes
 // ============================================================================
 
+/// Matmul preference attribute type.
 pub type CublasLtMatmulPreferenceAttribute = u32;
 
 /// Maximum workspace size in bytes
@@ -79,7 +83,7 @@ pub const CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES: CublasLtMatmulPreferenceAttr
 // cuBLASLt Compute Type (reuse from cublas_sys for compute descriptor)
 // ============================================================================
 
-use super::cublas_sys::{CublasComputeType, CublasOperation, CudaDataType};
+use super::cublas_sys::{CublasComputeType, CudaDataType};
 
 // ============================================================================
 // cuBLASLt Heuristic Result
@@ -89,6 +93,7 @@ use super::cublas_sys::{CublasComputeType, CublasOperation, CudaDataType};
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CublasLtMatmulAlgo {
+    /// Opaque algorithm data (64 bytes).
     pub data: [u64; 8],
 }
 
@@ -96,10 +101,15 @@ pub struct CublasLtMatmulAlgo {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CublasLtMatmulHeuristicResult {
+    /// Selected algorithm descriptor.
     pub algo: CublasLtMatmulAlgo,
+    /// Required workspace size in bytes.
     pub workspace_size: usize,
+    /// Status of the heuristic result.
     pub state: CublasLtStatus,
+    /// Estimated GPU wave count.
     pub waves_count: f32,
+    /// Reserved for future use.
     pub reserved: [c_int; 4],
 }
 
@@ -107,12 +117,16 @@ pub struct CublasLtMatmulHeuristicResult {
 // cuBLASLt Function Pointers (dynamically loaded)
 // ============================================================================
 
+/// Dynamically loaded cuBLASLt function pointers.
 #[allow(non_snake_case)]
 pub struct CublasLtDriver {
+    /// Create a cuBLASLt handle.
     pub cublasLtCreate: unsafe extern "C" fn(handle: *mut CublasLtHandle) -> CublasLtStatus,
 
+    /// Destroy a cuBLASLt handle.
     pub cublasLtDestroy: unsafe extern "C" fn(handle: CublasLtHandle) -> CublasLtStatus,
 
+    /// Create a matmul descriptor.
     #[allow(clippy::type_complexity)]
     pub cublasLtMatmulDescCreate: unsafe extern "C" fn(
         desc: *mut CublasLtMatmulDesc,
@@ -120,8 +134,10 @@ pub struct CublasLtDriver {
         scale_type: CudaDataType,
     ) -> CublasLtStatus,
 
+    /// Destroy a matmul descriptor.
     pub cublasLtMatmulDescDestroy: unsafe extern "C" fn(desc: CublasLtMatmulDesc) -> CublasLtStatus,
 
+    /// Set a matmul descriptor attribute.
     #[allow(clippy::type_complexity)]
     pub cublasLtMatmulDescSetAttribute: unsafe extern "C" fn(
         desc: CublasLtMatmulDesc,
@@ -130,6 +146,7 @@ pub struct CublasLtDriver {
         size: usize,
     ) -> CublasLtStatus,
 
+    /// Create a matrix layout descriptor.
     #[allow(clippy::type_complexity)]
     pub cublasLtMatrixLayoutCreate: unsafe extern "C" fn(
         layout: *mut CublasLtMatrixLayout,
@@ -139,15 +156,19 @@ pub struct CublasLtDriver {
         ld: i64,
     ) -> CublasLtStatus,
 
+    /// Destroy a matrix layout descriptor.
     pub cublasLtMatrixLayoutDestroy:
         unsafe extern "C" fn(layout: CublasLtMatrixLayout) -> CublasLtStatus,
 
+    /// Create a matmul preference descriptor.
     pub cublasLtMatmulPreferenceCreate:
         unsafe extern "C" fn(pref: *mut CublasLtMatmulPreference) -> CublasLtStatus,
 
+    /// Destroy a matmul preference descriptor.
     pub cublasLtMatmulPreferenceDestroy:
         unsafe extern "C" fn(pref: CublasLtMatmulPreference) -> CublasLtStatus,
 
+    /// Set a matmul preference attribute.
     #[allow(clippy::type_complexity)]
     pub cublasLtMatmulPreferenceSetAttribute: unsafe extern "C" fn(
         pref: CublasLtMatmulPreference,
@@ -156,6 +177,7 @@ pub struct CublasLtDriver {
         size: usize,
     ) -> CublasLtStatus,
 
+    /// Query heuristic algorithm selection.
     #[allow(clippy::type_complexity)]
     pub cublasLtMatmulAlgoGetHeuristic: unsafe extern "C" fn(
         handle: CublasLtHandle,
@@ -170,6 +192,7 @@ pub struct CublasLtDriver {
         returned_algo_count: *mut c_int,
     ) -> CublasLtStatus,
 
+    /// Execute a matrix multiplication.
     #[allow(clippy::type_complexity)]
     pub cublasLtMatmul: unsafe extern "C" fn(
         handle: CublasLtHandle,
@@ -205,6 +228,7 @@ mod loading {
     static CUBLASLT_LIBRARY: OnceLock<Option<Library>> = OnceLock::new();
 
     impl CublasLtDriver {
+        /// Load the cuBLASLt driver, returning a cached static reference.
         #[must_use]
         pub fn load() -> Option<&'static Self> {
             let _ = CUBLASLT_LIBRARY.get_or_init(|| {
@@ -345,6 +369,7 @@ mod loading {
             }
         }
 
+        /// Check a cuBLASLt status code and convert to Result.
         pub fn check(result: CublasLtStatus) -> Result<(), GpuError> {
             if result == CUBLASLT_STATUS_SUCCESS {
                 Ok(())
@@ -360,11 +385,13 @@ mod loading {
     use super::*;
 
     impl CublasLtDriver {
+        /// Load the cuBLASLt driver (stub, returns None without cuda feature).
         #[must_use]
         pub fn load() -> Option<&'static Self> {
             None
         }
 
+        /// Check a cuBLASLt status code (stub, always errors without cuda feature).
         pub fn check(_result: CublasLtStatus) -> Result<(), GpuError> {
             Err(GpuError::CudaNotAvailable("cuda feature not enabled".to_string()))
         }

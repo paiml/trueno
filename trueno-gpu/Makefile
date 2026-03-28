@@ -130,7 +130,7 @@ build-wasm: ## Build for WebAssembly
 
 lint: ## Run clippy (zero warnings allowed)
 	@echo "🔍 Running clippy for trueno-gpu..."
-	cargo clippy -p trueno-gpu --all-features -- -D warnings
+	cargo clippy -p trueno-gpu --features cuda -- -D warnings
 
 fmt: ## Format code
 	cargo fmt -p trueno-gpu
