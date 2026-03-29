@@ -77,7 +77,14 @@ fn emit_cvt_opcode(instr: &PtxInstruction, s: &mut String) {
     let dst_is_f32 = instr.ty == PtxType::F32;
     let is_f16_to_f32 = src_is_f16 && dst_is_f32;
 
+    // GH-561: f32→f64 promotion is exact — no rounding modifier needed.
+    // Some CUDA drivers reject `cvt.rn.f64.f32` as invalid PTX.
+    let src_is_f32 = actual_src_type == PtxType::F32;
+    let dst_is_f64 = instr.ty == PtxType::F64;
+    let is_f32_to_f64 = src_is_f32 && dst_is_f64;
+
     let needs_rounding = !is_f16_to_f32
+        && !is_f32_to_f64
         && (instr.ty.is_float()
             || instr
                 .srcs

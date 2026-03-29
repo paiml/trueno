@@ -200,6 +200,10 @@ impl CudaModule {
 
         CudaDriver::check(result).map_err(|e| {
             let kernel_name = ptx.lines().find(|l| l.contains(".entry")).unwrap_or("unknown");
+            // GH-561: Dump PTX on compilation failure for debugging
+            let dump_path = format!("/tmp/ptx-fail-{}.ptx", std::process::id());
+            let _ = std::fs::write(&dump_path, ptx);
+            eprintln!("[PTX-FAIL] Invalid PTX dumped to {dump_path} ({} bytes)", ptx.len());
             GpuError::ModuleLoad(format!(
                 "cuModuleLoadData failed: result={result} (kernel: {kernel_name}), error: {e}"
             ))
@@ -311,6 +315,10 @@ impl CudaModule {
                 return Ok(Self { module, functions: HashMap::new() });
             }
             let kernel_name = ptx.lines().find(|l| l.contains(".entry")).unwrap_or("unknown");
+            // GH-561: Dump PTX on compilation failure for debugging
+            let dump_path = format!("/tmp/ptx-fail-{}.ptx", std::process::id());
+            let _ = std::fs::write(&dump_path, ptx);
+            eprintln!("[PTX-FAIL] Invalid PTX dumped to {dump_path} ({} bytes)", ptx.len());
             return Err(GpuError::ModuleLoad(format!(
                 "Blackwell cuModuleLoadData failed: result={result} (kernel: {kernel_name})"
             )));
