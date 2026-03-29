@@ -71,3 +71,4 @@ proptest-regressions/
 
 # Cruft
 *.tmp
+src/generated_contracts.rs
