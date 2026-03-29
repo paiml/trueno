@@ -51,7 +51,7 @@ pub fn rms_norm(
     }
 
     // Contract: rmsnorm-kernel-v1.yaml precondition (pv codegen)
-    contract_pre_rmsnorm!(input);
+    // contract_pre_rmsnorm!(input); // TODO: macro not yet generated
 
     #[cfg(target_arch = "x86_64")]
     {
