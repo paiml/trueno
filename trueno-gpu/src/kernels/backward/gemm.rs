@@ -137,7 +137,8 @@ impl GemmBackwardAKernel {
                 let valid_col = ctx.setp_lt_u32(col, k);
                 ctx.branch_if_not(valid_col, "exit");
 
-                let acc = ctx.mov_f32_imm(0.0);
+                // GH-561: f64 accumulator to prevent NaN on sm_121 (Blackwell)
+                let acc = ctx.mov_f64_imm_zero();
                 let four = ctx.mov_u32_imm(4);
                 let i = ctx.mov_u32_imm(0);
 
@@ -157,8 +158,7 @@ impl GemmBackwardAKernel {
                 let b_addr = ctx.add_u64(b_ptr, b_byte_offset);
                 let b_val = ctx.ld_global_f32(b_addr);
 
-                let prod = ctx.mul_f32(grad_c_val, b_val);
-                ctx.add_f32_inplace(acc, prod);
+                ctx.fma_f64_acc_inplace(acc, grad_c_val, b_val);
 
                 ctx.add_u32_inplace(i, 1);
                 ctx.branch("loop_start");
@@ -169,7 +169,8 @@ impl GemmBackwardAKernel {
                 let grad_a_elem_idx = ctx.add_u32_reg(grad_a_row_offset, col);
                 let grad_a_byte_offset = ctx.mul_wide_u32_reg(grad_a_elem_idx, four);
                 let grad_a_addr = ctx.add_u64(grad_a_ptr, grad_a_byte_offset);
-                ctx.st_global_f32(grad_a_addr, acc);
+                let acc_f32 = ctx.cvt_f32_f64_rn(acc);
+                ctx.st_global_f32(grad_a_addr, acc_f32);
 
                 ctx.label("exit");
                 ctx.ret();
@@ -218,7 +219,8 @@ impl GemmBackwardAKernel {
                 let b_ptr = ctx.load_param_u64("b_ptr");
                 let grad_a_ptr = ctx.load_param_u64("grad_a_ptr");
 
-                let acc = ctx.mov_f32_imm(0.0);
+                // GH-561: f64 accumulator to prevent NaN on sm_121 (Blackwell)
+                let acc = ctx.mov_f64_imm_zero();
 
                 let tile_idx = ctx.mov_u32_imm(0);
                 let n_tiles_reg = ctx.mov_u32_imm(n_tiles);
@@ -298,7 +300,7 @@ impl GemmBackwardAKernel {
                 let b_addr_s = ctx.add_u32_reg(smem_b_base, b_idx_bytes);
                 let b_shared = ctx.ld_shared_f32(b_addr_s);
 
-                ctx.fma_f32_inplace(acc, gc_shared, b_shared);
+                ctx.fma_f64_acc_inplace(acc, gc_shared, b_shared);
 
                 ctx.add_u32_inplace(inner_k, 1);
                 ctx.branch("inner_k_loop");
@@ -320,7 +322,8 @@ impl GemmBackwardAKernel {
                 let ga_col_off = ctx.mul_wide_u32(col, 4);
                 let ga_row_base = ctx.add_u64(grad_a_ptr, ga_row_off);
                 let ga_addr = ctx.add_u64(ga_row_base, ga_col_off);
-                ctx.st_global_f32(ga_addr, acc);
+                let acc_f32 = ctx.cvt_f32_f64_rn(acc);
+                ctx.st_global_f32(ga_addr, acc_f32);
 
                 ctx.label("exit");
                 ctx.ret();
@@ -366,7 +369,8 @@ impl GemmBackwardAKernel {
                 let b_ptr = ctx.load_param_u64("b_ptr");
                 let grad_a_ptr = ctx.load_param_u64("grad_a_ptr");
 
-                let acc = ctx.mov_f32_imm(0.0);
+                // GH-561: f64 accumulator to prevent NaN on sm_121 (Blackwell)
+                let acc = ctx.mov_f64_imm_zero();
 
                 let tile_idx = ctx.mov_u32_imm(0);
                 let n_tiles_reg = ctx.mov_u32_imm(n_tiles);
@@ -441,7 +445,7 @@ impl GemmBackwardAKernel {
                 let b_bytes0 = ctx.mul_u32(b_idx0, 4);
                 let b_addr0 = ctx.add_u32_reg(smem_b_base, b_bytes0);
                 let b_s0 = ctx.ld_shared_f32(b_addr0);
-                ctx.fma_f32_inplace(acc, gc_s0, b_s0);
+                ctx.fma_f64_acc_inplace(acc, gc_s0, b_s0);
 
                 // Iteration 1
                 let k1 = ctx.add_u32(k_base, 1);
@@ -452,7 +456,7 @@ impl GemmBackwardAKernel {
                 let b_bytes1 = ctx.mul_u32(b_idx1, 4);
                 let b_addr1 = ctx.add_u32_reg(smem_b_base, b_bytes1);
                 let b_s1 = ctx.ld_shared_f32(b_addr1);
-                ctx.fma_f32_inplace(acc, gc_s1, b_s1);
+                ctx.fma_f64_acc_inplace(acc, gc_s1, b_s1);
 
                 // Iteration 2
                 let k2 = ctx.add_u32(k_base, 2);
@@ -463,7 +467,7 @@ impl GemmBackwardAKernel {
                 let b_bytes2 = ctx.mul_u32(b_idx2, 4);
                 let b_addr2 = ctx.add_u32_reg(smem_b_base, b_bytes2);
                 let b_s2 = ctx.ld_shared_f32(b_addr2);
-                ctx.fma_f32_inplace(acc, gc_s2, b_s2);
+                ctx.fma_f64_acc_inplace(acc, gc_s2, b_s2);
 
                 // Iteration 3
                 let k3 = ctx.add_u32(k_base, 3);
@@ -474,7 +478,7 @@ impl GemmBackwardAKernel {
                 let b_bytes3 = ctx.mul_u32(b_idx3, 4);
                 let b_addr3 = ctx.add_u32_reg(smem_b_base, b_bytes3);
                 let b_s3 = ctx.ld_shared_f32(b_addr3);
-                ctx.fma_f32_inplace(acc, gc_s3, b_s3);
+                ctx.fma_f64_acc_inplace(acc, gc_s3, b_s3);
 
                 ctx.add_u32_inplace(inner_k, 1);
                 ctx.branch("inner_k_loop");
@@ -495,7 +499,8 @@ impl GemmBackwardAKernel {
                 let ga_col_off = ctx.mul_wide_u32(col, 4);
                 let ga_row_base = ctx.add_u64(grad_a_ptr, ga_row_off);
                 let ga_addr = ctx.add_u64(ga_row_base, ga_col_off);
-                ctx.st_global_f32(ga_addr, acc);
+                let acc_f32 = ctx.cvt_f32_f64_rn(acc);
+                ctx.st_global_f32(ga_addr, acc_f32);
 
                 ctx.label("exit");
                 ctx.ret();
@@ -606,7 +611,8 @@ impl GemmBackwardBKernel {
                 let valid_col = ctx.setp_lt_u32(col, n);
                 ctx.branch_if_not(valid_col, "exit");
 
-                let acc = ctx.mov_f32_imm(0.0);
+                // GH-561: f64 accumulator to prevent NaN on sm_121 (Blackwell)
+                let acc = ctx.mov_f64_imm_zero();
                 let four = ctx.mov_u32_imm(4);
                 let i = ctx.mov_u32_imm(0);
 
@@ -626,8 +632,7 @@ impl GemmBackwardBKernel {
                 let grad_c_addr = ctx.add_u64(grad_c_ptr, grad_c_byte_offset);
                 let grad_c_val = ctx.ld_global_f32(grad_c_addr);
 
-                let prod = ctx.mul_f32(a_val, grad_c_val);
-                ctx.add_f32_inplace(acc, prod);
+                ctx.fma_f64_acc_inplace(acc, a_val, grad_c_val);
 
                 ctx.add_u32_inplace(i, 1);
                 ctx.branch("loop_start");
@@ -638,7 +643,8 @@ impl GemmBackwardBKernel {
                 let grad_b_elem_idx = ctx.add_u32_reg(grad_b_row_offset, col);
                 let grad_b_byte_offset = ctx.mul_wide_u32_reg(grad_b_elem_idx, four);
                 let grad_b_addr = ctx.add_u64(grad_b_ptr, grad_b_byte_offset);
-                ctx.st_global_f32(grad_b_addr, acc);
+                let acc_f32 = ctx.cvt_f32_f64_rn(acc);
+                ctx.st_global_f32(grad_b_addr, acc_f32);
 
                 ctx.label("exit");
                 ctx.ret();
@@ -683,7 +689,8 @@ impl GemmBackwardBKernel {
                 let grad_c_ptr = ctx.load_param_u64("grad_c_ptr");
                 let grad_b_ptr = ctx.load_param_u64("grad_b_ptr");
 
-                let acc = ctx.mov_f32_imm(0.0);
+                // GH-561: f64 accumulator to prevent NaN on sm_121 (Blackwell)
+                let acc = ctx.mov_f64_imm_zero();
 
                 let tile_idx = ctx.mov_u32_imm(0);
                 let m_tiles_reg = ctx.mov_u32_imm(m_tiles);
@@ -766,7 +773,7 @@ impl GemmBackwardBKernel {
                 let gc_addr_s = ctx.add_u32_reg(smem_gc_base, gc_idx_bytes);
                 let gc_shared = ctx.ld_shared_f32(gc_addr_s);
 
-                ctx.fma_f32_inplace(acc, a_shared, gc_shared);
+                ctx.fma_f64_acc_inplace(acc, a_shared, gc_shared);
 
                 ctx.add_u32_inplace(inner_k, 1);
                 ctx.branch("inner_k_loop");
@@ -787,7 +794,8 @@ impl GemmBackwardBKernel {
                 let gb_col_off = ctx.mul_wide_u32(col, 4);
                 let gb_row_base = ctx.add_u64(grad_b_ptr, gb_row_off);
                 let gb_addr = ctx.add_u64(gb_row_base, gb_col_off);
-                ctx.st_global_f32(gb_addr, acc);
+                let acc_f32 = ctx.cvt_f32_f64_rn(acc);
+                ctx.st_global_f32(gb_addr, acc_f32);
 
                 ctx.label("exit");
                 ctx.ret();
@@ -833,7 +841,8 @@ impl GemmBackwardBKernel {
                 let grad_c_ptr = ctx.load_param_u64("grad_c_ptr");
                 let grad_b_ptr = ctx.load_param_u64("grad_b_ptr");
 
-                let acc = ctx.mov_f32_imm(0.0);
+                // GH-561: f64 accumulator to prevent NaN on sm_121 (Blackwell)
+                let acc = ctx.mov_f64_imm_zero();
 
                 let tile_idx = ctx.mov_u32_imm(0);
                 let m_tiles_reg = ctx.mov_u32_imm(m_tiles);
@@ -911,7 +920,7 @@ impl GemmBackwardBKernel {
                 let gc_bytes0 = ctx.mul_u32(gc_idx0, 4);
                 let gc_addr0 = ctx.add_u32_reg(smem_gc_base, gc_bytes0);
                 let gc_s0 = ctx.ld_shared_f32(gc_addr0);
-                ctx.fma_f32_inplace(acc, a_s0, gc_s0);
+                ctx.fma_f64_acc_inplace(acc, a_s0, gc_s0);
 
                 // Iteration 1
                 let k1 = ctx.add_u32(k_base, 1);
@@ -922,7 +931,7 @@ impl GemmBackwardBKernel {
                 let gc_bytes1 = ctx.mul_u32(gc_idx1, 4);
                 let gc_addr1 = ctx.add_u32_reg(smem_gc_base, gc_bytes1);
                 let gc_s1 = ctx.ld_shared_f32(gc_addr1);
-                ctx.fma_f32_inplace(acc, a_s1, gc_s1);
+                ctx.fma_f64_acc_inplace(acc, a_s1, gc_s1);
 
                 // Iteration 2
                 let k2 = ctx.add_u32(k_base, 2);
@@ -933,7 +942,7 @@ impl GemmBackwardBKernel {
                 let gc_bytes2 = ctx.mul_u32(gc_idx2, 4);
                 let gc_addr2 = ctx.add_u32_reg(smem_gc_base, gc_bytes2);
                 let gc_s2 = ctx.ld_shared_f32(gc_addr2);
-                ctx.fma_f32_inplace(acc, a_s2, gc_s2);
+                ctx.fma_f64_acc_inplace(acc, a_s2, gc_s2);
 
                 // Iteration 3
                 let k3 = ctx.add_u32(k_base, 3);
@@ -944,7 +953,7 @@ impl GemmBackwardBKernel {
                 let gc_bytes3 = ctx.mul_u32(gc_idx3, 4);
                 let gc_addr3 = ctx.add_u32_reg(smem_gc_base, gc_bytes3);
                 let gc_s3 = ctx.ld_shared_f32(gc_addr3);
-                ctx.fma_f32_inplace(acc, a_s3, gc_s3);
+                ctx.fma_f64_acc_inplace(acc, a_s3, gc_s3);
 
                 ctx.add_u32_inplace(inner_k, 1);
                 ctx.branch("inner_k_loop");
@@ -965,7 +974,8 @@ impl GemmBackwardBKernel {
                 let gb_col_off = ctx.mul_wide_u32(col, 4);
                 let gb_row_base = ctx.add_u64(grad_b_ptr, gb_row_off);
                 let gb_addr = ctx.add_u64(gb_row_base, gb_col_off);
-                ctx.st_global_f32(gb_addr, acc);
+                let acc_f32 = ctx.cvt_f32_f64_rn(acc);
+                ctx.st_global_f32(gb_addr, acc_f32);
 
                 ctx.label("exit");
                 ctx.ret();
@@ -1025,7 +1035,7 @@ mod tests {
     fn test_gemm_backward_a_tiled_ptx_has_fma() {
         let kernel = GemmBackwardAKernel::tiled(128, 2560, 2560, 32);
         let ptx = kernel.emit_ptx();
-        assert!(ptx.contains("fma.rn.f32"), "C-TILE-BWD-005: tiled must use FMA");
+        assert!(ptx.contains("fma.rn.f64"), "C-TILE-BWD-005: tiled must use f64 FMA (GH-561)");
     }
 
     #[test]
@@ -1048,7 +1058,7 @@ mod tests {
         let kernel = GemmBackwardAKernel::tiled_unrolled(128, 2560, 2560, 32);
         let ptx = kernel.emit_ptx();
         assert!(ptx.contains(".shared"), "must use shared memory");
-        assert!(ptx.contains("fma.rn.f32"), "must use FMA");
+        assert!(ptx.contains("fma.rn.f64"), "must use f64 FMA (GH-561)");
         assert!(ptx.contains("bar.sync"), "must have barriers");
     }
 
@@ -1106,7 +1116,7 @@ mod tests {
     fn test_gemm_backward_b_tiled_ptx_has_fma() {
         let kernel = GemmBackwardBKernel::tiled(128, 2560, 2560, 32);
         let ptx = kernel.emit_ptx();
-        assert!(ptx.contains("fma.rn.f32"), "tiled must use FMA");
+        assert!(ptx.contains("fma.rn.f64"), "tiled must use f64 FMA (GH-561)");
     }
 
     #[test]
@@ -1123,7 +1133,7 @@ mod tests {
         let kernel = GemmBackwardBKernel::tiled_unrolled(128, 2560, 2560, 32);
         let ptx = kernel.emit_ptx();
         assert!(ptx.contains(".shared"), "must use shared memory");
-        assert!(ptx.contains("fma.rn.f32"), "must use FMA");
+        assert!(ptx.contains("fma.rn.f64"), "must use f64 FMA (GH-561)");
         assert!(ptx.contains("bar.sync"), "must have barriers");
         assert_eq!(kernel.name(), "gemm_backward_b_tiled_unrolled");
     }
