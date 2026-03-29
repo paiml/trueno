@@ -208,8 +208,11 @@ impl Kernel for Nf4GemmKernel {
                 let clamped_row = ctx.min_u32(global_row, m_minus_1);
                 let clamped_col = ctx.min_u32(global_col, n_minus_1);
 
-                // Initialize accumulator
-                let acc = ctx.mov_f32_imm(0.0);
+                // GH-561: Initialize accumulator in f64 to eliminate FP32 accumulation
+                // error that causes cosine=-0.005 on sm_121 Blackwell.
+                // 3584 FMA ops in f32 → ~0.02% relative error per matmul × 196 matmuls = NaN.
+                // f64 accumulator (53-bit mantissa) has 2^29× more precision headroom.
+                let acc = ctx.mov_f64_imm_zero();
 
                 // Number of NF4 blocks along K (K / 64)
                 let num_k_blocks = ctx.div_u32(k_param, NF4_BLOCK_SIZE_U32);
@@ -339,15 +342,15 @@ impl Kernel for Nf4GemmKernel {
                 let a_addr_4 = ctx.add_u64(a_base_addr, sixteen);
                 let a_v4_1 = ctx.ld_global_f32_v4(a_addr_4);
 
-                // 8x FMA: acc += a_val * dequant
-                ctx.fma_f32_inplace(acc, a_v4_0[0], d0);
-                ctx.fma_f32_inplace(acc, a_v4_0[1], d1);
-                ctx.fma_f32_inplace(acc, a_v4_0[2], d2);
-                ctx.fma_f32_inplace(acc, a_v4_0[3], d3);
-                ctx.fma_f32_inplace(acc, a_v4_1[0], d4);
-                ctx.fma_f32_inplace(acc, a_v4_1[1], d5);
-                ctx.fma_f32_inplace(acc, a_v4_1[2], d6);
-                ctx.fma_f32_inplace(acc, a_v4_1[3], d7);
+                // GH-561: 8x FMA with f64 accumulator: acc(f64) += f32_to_f64(a) * f32_to_f64(d)
+                ctx.fma_f64_acc_inplace(acc, a_v4_0[0], d0);
+                ctx.fma_f64_acc_inplace(acc, a_v4_0[1], d1);
+                ctx.fma_f64_acc_inplace(acc, a_v4_0[2], d2);
+                ctx.fma_f64_acc_inplace(acc, a_v4_0[3], d3);
+                ctx.fma_f64_acc_inplace(acc, a_v4_1[0], d4);
+                ctx.fma_f64_acc_inplace(acc, a_v4_1[1], d5);
+                ctx.fma_f64_acc_inplace(acc, a_v4_1[2], d6);
+                ctx.fma_f64_acc_inplace(acc, a_v4_1[3], d7);
 
                 ctx.add_u32_inplace(chunk_idx, 1);
                 ctx.branch("chunk_loop");
@@ -371,7 +374,9 @@ impl Kernel for Nf4GemmKernel {
                 let c_elem_bytes = ctx.mul_u64(c_elem_offset, 4);
                 let c_addr = ctx.add_u64(c_ptr, c_elem_bytes);
 
-                ctx.st_global_f32(c_addr, acc);
+                // GH-561: Convert f64 accumulator to f32 for output store
+                let acc_f32 = ctx.cvt_f32_f64_rn(acc);
+                ctx.st_global_f32(c_addr, acc_f32);
 
                 ctx.label("exit");
                 ctx.ret();
@@ -484,7 +489,8 @@ impl Kernel for Nf4GemmTransposeKernel {
                 let clamped_row = ctx.min_u32(global_row, m_minus_1);
                 let clamped_col = ctx.min_u32(global_col, k_minus_1); // col in K-dim
 
-                let acc = ctx.mov_f32_imm(0.0);
+                // GH-561: f64 accumulator (same fix as forward kernel)
+                let acc = ctx.mov_f64_imm_zero();
 
                 // Number of K-blocks per column of B
                 let num_k_blocks = ctx.div_u32(k_param, NF4_BLOCK_SIZE_U32);
@@ -548,8 +554,8 @@ impl Kernel for Nf4GemmTransposeKernel {
                 let a_addr = ctx.add_u64(a_ptr, a_elem_bytes);
                 let a_val = ctx.ld_global_f32(a_addr);
 
-                // acc += a_val * dequant
-                ctx.fma_f32_inplace(acc, a_val, dequant);
+                // GH-561: acc(f64) += f32_to_f64(a_val) * f32_to_f64(dequant)
+                ctx.fma_f64_acc_inplace(acc, a_val, dequant);
 
                 ctx.add_u32_inplace(n_idx, 1);
                 ctx.branch("n_loop");
@@ -565,7 +571,9 @@ impl Kernel for Nf4GemmTransposeKernel {
                 let c_elem_off = ctx.add_u64(c_row_off, global_col_64);
                 let c_elem_bytes = ctx.mul_u64(c_elem_off, 4);
                 let c_addr = ctx.add_u64(c_ptr, c_elem_bytes);
-                ctx.st_global_f32(c_addr, acc);
+                // GH-561: Convert f64 accumulator to f32 for store
+                let acc_f32 = ctx.cvt_f32_f64_rn(acc);
+                ctx.st_global_f32(c_addr, acc_f32);
 
                 ctx.label("exit");
                 ctx.ret();

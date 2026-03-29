@@ -208,6 +208,60 @@ pub trait PtxArithmetic: KernelBuilderCore {
         );
     }
 
+    // ===== F64 Arithmetic (GH-561: FP64 accumulators for GEMM parity) =====
+
+    /// Add f64
+    fn add_f64(&mut self, a: VirtualReg, b: VirtualReg) -> VirtualReg {
+        let dst = self.registers_mut().allocate_virtual(PtxType::F64);
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::Add, PtxType::F64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .rounding(RoundingMode::Rn),
+        );
+        dst
+    }
+
+    /// Fused multiply-add f64: dst = a * b + c
+    fn fma_f64(&mut self, a: VirtualReg, b: VirtualReg, c: VirtualReg) -> VirtualReg {
+        let dst = self.registers_mut().allocate_virtual(PtxType::F64);
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::Fma, PtxType::F64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a))
+                .src(Operand::Reg(b))
+                .src(Operand::Reg(c))
+                .rounding(RoundingMode::Rn),
+        );
+        dst
+    }
+
+    /// Convert f32 → f64 (promotion, exact)
+    fn cvt_f64_f32(&mut self, src: VirtualReg) -> VirtualReg {
+        let dst = self.registers_mut().allocate_virtual(PtxType::F64);
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(src))
+                .with_src_type(PtxType::F32),
+        );
+        dst
+    }
+
+    /// Convert f64 → f32 (truncation, round to nearest)
+    fn cvt_f32_f64(&mut self, src: VirtualReg) -> VirtualReg {
+        let dst = self.registers_mut().allocate_virtual(PtxType::F32);
+        self.instructions_mut().push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(src))
+                .with_src_type(PtxType::F64)
+                .rounding(RoundingMode::Rn),
+        );
+        dst
+    }
+
     /// Negate f32
     fn neg_f32(&mut self, a: VirtualReg) -> VirtualReg {
         let dst = self.registers_mut().allocate_virtual(PtxType::F32);

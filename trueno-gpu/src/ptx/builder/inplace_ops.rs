@@ -78,6 +78,61 @@ impl<'a> KernelBuilder<'a> {
         );
     }
 
+    /// GH-561: Fused multiply-add in-place with f64 accumulator: dst = a * b + dst
+    /// a and b are f32, promoted to f64 before FMA. dst is f64.
+    /// Eliminates FP32 accumulation error that causes cosine=-0.005 on sm_121.
+    pub fn fma_f64_acc_inplace(&mut self, dst: VirtualReg, a_f32: VirtualReg, b_f32: VirtualReg) {
+        self.registers.extend_live_range(dst);
+        // Promote f32 operands to f64
+        let a_f64 = self.registers.allocate_virtual(PtxType::F64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F64)
+                .dst(Operand::Reg(a_f64))
+                .src(Operand::Reg(a_f32))
+                .with_src_type(PtxType::F32),
+        );
+        let b_f64 = self.registers.allocate_virtual(PtxType::F64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F64)
+                .dst(Operand::Reg(b_f64))
+                .src(Operand::Reg(b_f32))
+                .with_src_type(PtxType::F32),
+        );
+        // FMA in f64: dst = a_f64 * b_f64 + dst
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Fma, PtxType::F64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(a_f64))
+                .src(Operand::Reg(b_f64))
+                .src(Operand::Reg(dst))
+                .rounding(RoundingMode::Rn),
+        );
+    }
+
+    /// GH-561: Initialize f64 accumulator to 0.0
+    pub fn mov_f64_imm_zero(&mut self) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F64);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Mov, PtxType::F64)
+                .dst(Operand::Reg(dst))
+                .src(Operand::ImmF64(0.0)),
+        );
+        dst
+    }
+
+    /// GH-561: Convert f64 accumulator to f32 result (round to nearest)
+    pub fn cvt_f32_f64_rn(&mut self, src: VirtualReg) -> VirtualReg {
+        let dst = self.registers.allocate_virtual(PtxType::F32);
+        self.instructions.push(
+            PtxInstruction::new(PtxOp::Cvt, PtxType::F32)
+                .dst(Operand::Reg(dst))
+                .src(Operand::Reg(src))
+                .with_src_type(PtxType::F64)
+                .rounding(RoundingMode::Rn),
+        );
+        dst
+    }
+
     /// Max in-place: dst = max(dst, src)
     /// Used for online softmax running max
     pub fn max_f32_inplace(&mut self, dst: VirtualReg, src: VirtualReg) {
