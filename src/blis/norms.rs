@@ -51,7 +51,7 @@ pub fn rms_norm(
     }
 
     // Contract: rmsnorm-kernel-v1.yaml precondition (pv codegen)
-    // contract_pre_rmsnorm!(input); // TODO: macro not yet generated
+    contract_pre_rmsnorm!(input);
 
     #[cfg(target_arch = "x86_64")]
     {
@@ -60,11 +60,13 @@ pub fn rms_norm(
             unsafe {
                 rms_norm_avx2(input, gamma, eps, output);
             }
+            contract_post_rmsnorm!(output);
             return Ok(());
         }
     }
 
     rms_norm_scalar(input, gamma, eps, output);
+    contract_post_rmsnorm!(output);
     Ok(())
 }
 

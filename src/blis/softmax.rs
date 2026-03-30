@@ -34,17 +34,21 @@ pub fn softmax_1d_alloc(logits: &[f32]) -> Vec<f32> {
     }
 
     // Contract: softmax-kernel-v1.yaml precondition (pv codegen)
-    // contract_pre_softmax!(logits); // TODO: macro not yet generated
+    contract_pre_softmax!(logits);
 
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
             // SAFETY: AVX2 verified by feature detection above.
-            return unsafe { softmax_avx2(logits) };
+            let result = unsafe { softmax_avx2(logits) };
+            contract_post_softmax!(&result);
+            return result;
         }
     }
 
-    softmax_scalar(logits)
+    let result = softmax_scalar(logits);
+    contract_post_softmax!(&result);
+    result
 }
 
 /// Scalar 4-pass softmax — reference implementation.

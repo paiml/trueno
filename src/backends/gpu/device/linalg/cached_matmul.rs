@@ -96,7 +96,9 @@ impl GpuMatmulCache {
         // CUTLASS-style tiled GEMM pipeline (64×64 tiles, 4×4 thread micro-tiles)
         let tiled_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("TiledGEMM Shader"),
-            source: wgpu::ShaderSource::Wgsl(crate::backends::gpu::shaders::TILED_GEMM_SHADER.into()),
+            source: wgpu::ShaderSource::Wgsl(
+                crate::backends::gpu::shaders::TILED_GEMM_SHADER.into(),
+            ),
         });
         let tiled_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("TiledGEMM Pipeline"),

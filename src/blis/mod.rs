@@ -126,14 +126,20 @@ pub fn gemm(
     // Contract: matmul-kernel-v1.yaml precondition (pv codegen)
     contract_pre_matmul!(a);
 
-    #[cfg(feature = "parallel")]
-    {
-        gemm_blis_parallel(m, n, k, a, b, c)
+    let result = {
+        #[cfg(feature = "parallel")]
+        {
+            gemm_blis_parallel(m, n, k, a, b, c)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            gemm_blis(m, n, k, a, b, c, None)
+        }
+    };
+    if result.is_ok() {
+        contract_post_matmul!(c);
     }
-    #[cfg(not(feature = "parallel"))]
-    {
-        gemm_blis(m, n, k, a, b, c, None)
-    }
+    result
 }
 
 /// GEMM with profiling enabled

@@ -31,23 +31,27 @@ impl Backend for CudaBackend {
     }
 
     fn is_available(&self) -> bool {
-        crate::driver::cuda_available()
-    }
-
-    #[cfg(feature = "cuda")]
-    fn device_count(&self) -> usize {
-        if self.is_available() {
-            crate::driver::device_count().unwrap_or(0)
-        } else {
-            0
+        #[cfg(feature = "cuda")]
+        {
+            crate::driver::cuda_available()
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            false
         }
     }
 
-    #[cfg(not(feature = "cuda"))]
     fn device_count(&self) -> usize {
-        if self.is_available() {
-            crate::driver::device_count()
-        } else {
+        #[cfg(feature = "cuda")]
+        {
+            if self.is_available() {
+                crate::driver::device_count().unwrap_or(0)
+            } else {
+                0
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
             0
         }
     }

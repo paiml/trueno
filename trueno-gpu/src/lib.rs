@@ -127,12 +127,22 @@
 #![allow(clippy::large_stack_arrays)]
 
 pub mod backend;
+/// CUDA driver FFI — feature-gated behind `cuda`. Default build has zero unsafe.
+/// Will be deleted entirely once memory/resident is migrated to wgpu (§26 Phase 3).
+#[cfg(feature = "cuda")]
 pub mod driver;
 /// PMAT-291: Tensor compute graph for GPU inference (reduces 430 dispatches to ~15)
 pub mod graph;
+/// PTX kernel generators — feature-gated behind `cuda`. Safe Rust (no unsafe blocks)
+/// but produces PTX text that requires CUDA driver to execute. Dead code without `cuda`.
+#[cfg(feature = "cuda")]
 pub mod kernels;
+/// GPU memory management — feature-gated behind `cuda` (uses driver FFI).
+#[cfg(feature = "cuda")]
 pub mod memory;
 pub mod monitor;
+/// PTX instruction builder — feature-gated behind `cuda`. Safe Rust.
+#[cfg(feature = "cuda")]
 pub mod ptx;
 
 /// Error types for trueno-gpu operations
