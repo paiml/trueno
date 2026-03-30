@@ -30,6 +30,24 @@ impl GpuDevice {
         k: usize,
         n: usize,
     ) -> Result<(), String> {
+        // Guard: skip GPU matmul if any buffer exceeds max_storage_buffer_binding_size
+        let max_binding = self.device.limits().max_storage_buffer_binding_size as u64;
+        let a_bytes = (a.len() * 4) as u64;
+        let b_bytes = (b.len() * 4) as u64;
+        if a_bytes > max_binding || b_bytes > max_binding {
+            // CPU fallback for large matrices (e.g., lm_head > 2 GB)
+            for i in 0..m {
+                for j in 0..n {
+                    let mut sum = 0.0f32;
+                    for kk in 0..k {
+                        sum += a[i * k + kk] * b[kk * n + j];
+                    }
+                    result[i * n + j] = sum;
+                }
+            }
+            return Ok(());
+        }
+
         // Create shader module
         let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Matmul Shader"),
