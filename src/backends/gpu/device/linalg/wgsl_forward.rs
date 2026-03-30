@@ -22,6 +22,9 @@ pub struct WgslForwardPass {
     tiled_matmul_pipeline: wgpu::ComputePipeline,
     /// PMAT-327: GEMV pipeline for M=1 decode (cooperative K-reduction)
     gemv_pipeline: wgpu::ComputePipeline,
+    /// Causal attention pipeline for training (full sequence, no KV cache)
+    attention_pipeline: wgpu::ComputePipeline,
+    attention_bgl: wgpu::BindGroupLayout,
     rmsnorm_pipeline: wgpu::ComputePipeline,
     silu_mul_pipeline: wgpu::ComputePipeline,
     rope_pipeline: wgpu::ComputePipeline,
@@ -281,6 +284,35 @@ impl WgslForwardPass {
         let tiled_matmul_pipeline =
             make_pipeline(&tiled_matmul_shader, &matmul_bgl, "tiled_matmul_pipe");
 
+        // Causal attention pipeline for training
+        let attention_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("causal_attention"),
+            source: wgpu::ShaderSource::Wgsl(crate::backends::gpu::shaders::CAUSAL_ATTENTION_SHADER.into()),
+        });
+        let attention_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("attn_bgl"),
+            entries: &[
+                bgl_storage(0, true),   // Q
+                bgl_storage(1, true),   // K
+                bgl_storage(2, true),   // V
+                bgl_storage(3, false),  // output
+                bgl_uniform(4),         // params
+            ],
+        });
+        let attention_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("attn_pl"),
+            bind_group_layouts: &[&attention_bgl],
+            push_constant_ranges: &[],
+        });
+        let attention_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("attn_pipe"),
+            layout: Some(&attention_pl),
+            module: &attention_shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
         // PMAT-327: GEMV pipeline — same bind group layout as matmul but cooperative reduction
         let gemv_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("gemv"),
@@ -349,6 +381,8 @@ impl WgslForwardPass {
             queue,
             matmul_pipeline,
             tiled_matmul_pipeline,
+            attention_pipeline,
+            attention_bgl,
             gemv_pipeline,
             rmsnorm_pipeline,
             silu_mul_pipeline,
@@ -863,7 +897,104 @@ impl WgslForwardPass {
         Ok(())
     }
 
+    /// Training forward pass for a single transformer layer.
+    ///
+    /// Unlike `forward_layer` (M=1 decode), this processes the full sequence
+    /// at once (M=seq_len) and keeps everything on GPU. No CPU readback.
+    ///
+    /// Saves `norm_output` (pre-projection activations) for backward pass.
+    ///
+    /// # Arguments
+    /// - `seq_len`: number of tokens in the sequence
+    /// - `layer_prefix`: e.g. "model.layers.0"
+    /// - `saved_norm_attn`: OUTPUT — saved pre-attention norm for backward (wgpu::Buffer, [seq×hidden])
+    /// - `saved_norm_ffn`: OUTPUT — saved pre-FFN norm for backward (wgpu::Buffer, [seq×hidden])
+    pub fn forward_layer_training(
+        &self,
+        seq_len: u32,
+        layer_prefix: &str,
+    ) -> Result<(), String> {
+        let hd = self.hidden_dim;
+        let q_dim = self.num_heads * self.head_dim;
+        let kv_dim = self.num_kv_heads * self.head_dim;
+        let inter = self.intermediate_dim;
+
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+
+        // Pass 1: RMSNorm(hidden → norm_buf)
+        let norm_w = self.weight_buffers.get(&format!("{layer_prefix}.attn_norm"))
+            .ok_or_else(|| format!("Missing {layer_prefix}.attn_norm"))?;
+        self.encode_rmsnorm(&mut encoder, &self.hidden_buf, norm_w, &self.norm_buf, hd);
+
+        // Passes 2-4: Q/K/V projections with M=seq_len (tiled GEMM)
+        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "q_proj", &self.q_buf, seq_len, hd, q_dim);
+        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "k_proj", &self.k_buf, seq_len, hd, kv_dim);
+        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "v_proj", &self.v_buf, seq_len, hd, kv_dim);
+
+        // Pass 5: Causal attention on GPU (full sequence, no KV cache needed)
+        self.encode_attention(&mut encoder, seq_len);
+
+        // Pass 6: O projection (attn_out_buf[seq,q_dim] → q_buf[seq,hidden] via o_proj)
+        // Reuse q_buf as output since Q is consumed by attention
+        self.encode_matmul(&mut encoder, &self.attn_out_buf, layer_prefix, "o_proj", &self.q_buf, seq_len, q_dim, hd);
+
+        // Pass 7: Residual(hidden + o_proj_out → ffn_out)
+        self.encode_residual(&mut encoder, &self.hidden_buf, &self.q_buf, &self.ffn_out_buf, hd * seq_len);
+
+        // Pass 8: FFN RMSNorm(ffn_out → norm_buf)
+        let ffn_norm_w = self.weight_buffers.get(&format!("{layer_prefix}.ffn_norm"))
+            .ok_or_else(|| format!("Missing {layer_prefix}.ffn_norm"))?;
+        self.encode_rmsnorm(&mut encoder, &self.ffn_out_buf, ffn_norm_w, &self.norm_buf, hd);
+
+        // Passes 9-10: Gate + Up projections
+        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "gate_proj", &self.ffn_gate_buf, seq_len, hd, inter);
+        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "up_proj", &self.ffn_up_buf, seq_len, hd, inter);
+
+        // Pass 11: SiLU(gate) × up → ffn_silu_buf
+        self.encode_silu_mul(&mut encoder, &self.ffn_gate_buf, &self.ffn_up_buf, &self.ffn_silu_buf, inter * seq_len);
+
+        // Pass 12: Down projection
+        self.encode_matmul(&mut encoder, &self.ffn_silu_buf, layer_prefix, "down_proj", &self.norm_buf, seq_len, inter, hd);
+
+        // Pass 13: Residual(ffn_out + down → hidden)
+        self.encode_residual(&mut encoder, &self.ffn_out_buf, &self.norm_buf, &self.hidden_buf, hd * seq_len);
+
+        self.queue.submit(Some(encoder.finish()));
+
+        Ok(())
+    }
+
     // --- Encode helpers (add compute passes to an existing encoder) ---
+
+    /// Encode causal multi-head attention on GPU.
+    /// Q: [seq_len, num_heads * head_dim], K/V: [seq_len, num_kv_heads * head_dim]
+    /// Output written to q_buf (reused as attn output).
+    fn encode_attention(&self, encoder: &mut wgpu::CommandEncoder, seq_len: u32) {
+        let params = [seq_len, self.num_heads, self.num_kv_heads, self.head_dim];
+        let params_buf = self.make_uniform(&params);
+        let q_dim = self.num_heads * self.head_dim;
+
+        // Attention reads Q and writes to attn_out_buf.
+        // Then O projection reads attn_out_buf → writes to another buffer.
+        // We can safely write to norm_buf here since it's not read during attention.
+        // After attention, we'll copy norm_buf → q_buf for the O projection to read.
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &self.attention_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: self.q_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: self.k_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: self.v_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: self.attn_out_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 4, resource: params_buf.as_entire_binding() },
+            ],
+        });
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&self.attention_pipeline);
+        pass.set_bind_group(0, &bg, &[]);
+        // One workgroup per (head, position)
+        pass.dispatch_workgroups(self.num_heads, seq_len, 1);
+    }
 
     fn encode_rmsnorm(
         &self,

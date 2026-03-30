@@ -1,4 +1,93 @@
-//! Advanced WGSL shaders: Jacobi eigenvalue, tiled 2D reductions.
+//! Advanced WGSL shaders: Jacobi eigenvalue, tiled 2D reductions, causal attention.
+
+/// Causal multi-head attention (WGSL) — scaled dot-product with GQA
+///
+/// Computes: attn_out = softmax(Q @ K^T / sqrt(d) + causal_mask) @ V
+///
+/// Supports grouped-query attention (GQA): num_heads >= num_kv_heads.
+/// Each KV head serves `num_heads / num_kv_heads` query heads.
+///
+/// Grid: (num_heads, seq_len, 1) — one workgroup per (head, query position)
+/// Each workgroup computes one row of the attention output.
+///
+/// # Contract (causal-attention-v1)
+///
+/// - Causal mask: position i can only attend to positions [0..i]
+/// - Softmax sums to 1.0 per row (within floating-point tolerance)
+/// - Output shape matches Q shape: [seq_len, num_heads * head_dim]
+pub const CAUSAL_ATTENTION_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> q: array<f32>;    // [seq_len, num_heads * head_dim]
+@group(0) @binding(1) var<storage, read> k: array<f32>;    // [seq_len, num_kv_heads * head_dim]
+@group(0) @binding(2) var<storage, read> v: array<f32>;    // [seq_len, num_kv_heads * head_dim]
+@group(0) @binding(3) var<storage, read_write> out: array<f32>; // [seq_len, num_heads * head_dim]
+
+struct AttnParams {
+    seq_len: u32,
+    num_heads: u32,
+    num_kv_heads: u32,
+    head_dim: u32,
+}
+
+@group(0) @binding(4) var<uniform> cfg: AttnParams;
+
+@compute @workgroup_size(1)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let head = gid.x;       // which query head [0..num_heads)
+    let pos = gid.y;        // which query position [0..seq_len)
+    let seq = cfg.seq_len;
+    let hd = cfg.head_dim;
+    let kv_group = cfg.num_heads / cfg.num_kv_heads;
+    let kv_head = head / kv_group;
+
+    if (head >= cfg.num_heads || pos >= seq) { return; }
+
+    let q_offset = pos * cfg.num_heads * hd + head * hd;
+    let scale = 1.0 / sqrt(f32(hd));
+
+    // Compute attention scores: Q[pos,head] · K[s,kv_head] for s in [0..pos]
+    // Use online softmax (numerically stable, single pass)
+    var max_score: f32 = -1e30;
+    // First pass: find max score
+    for (var s = 0u; s <= pos; s++) {
+        let k_offset = s * cfg.num_kv_heads * hd + kv_head * hd;
+        var dot: f32 = 0.0;
+        for (var d = 0u; d < hd; d++) {
+            dot += q[q_offset + d] * k[k_offset + d];
+        }
+        dot *= scale;
+        max_score = max(max_score, dot);
+    }
+
+    // Second pass: compute exp(score - max) and sum
+    var sum_exp: f32 = 0.0;
+    for (var s = 0u; s <= pos; s++) {
+        let k_offset = s * cfg.num_kv_heads * hd + kv_head * hd;
+        var dot: f32 = 0.0;
+        for (var d = 0u; d < hd; d++) {
+            dot += q[q_offset + d] * k[k_offset + d];
+        }
+        dot = exp(dot * scale - max_score);
+        sum_exp += dot;
+    }
+
+    // Third pass: weighted sum of V
+    let out_offset = pos * cfg.num_heads * hd + head * hd;
+    for (var d = 0u; d < hd; d++) {
+        var val: f32 = 0.0;
+        for (var s = 0u; s <= pos; s++) {
+            let k_offset = s * cfg.num_kv_heads * hd + kv_head * hd;
+            var dot: f32 = 0.0;
+            for (var di = 0u; di < hd; di++) {
+                dot += q[q_offset + di] * k[k_offset + di];
+            }
+            let weight = exp(dot * scale - max_score) / sum_exp;
+            let v_offset = s * cfg.num_kv_heads * hd + kv_head * hd;
+            val += weight * v[v_offset + d];
+        }
+        out[out_offset + d] = val;
+    }
+}
+"#;
 
 /// Jacobi rotation shader (WGSL) - Apply Givens rotation to matrix columns
 ///

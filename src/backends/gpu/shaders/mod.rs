@@ -5,6 +5,6 @@ pub(crate) mod backward;
 mod basic_ops;
 mod reductions;
 
-pub(crate) use advanced::*;
+pub use advanced::*;
 pub use basic_ops::*;
 pub(crate) use reductions::*;
