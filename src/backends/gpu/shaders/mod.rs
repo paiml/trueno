@@ -1,7 +1,7 @@
 //! WGSL compute shaders for GPU operations
 
 mod advanced;
-pub(crate) mod backward;
+pub mod backward;
 mod basic_ops;
 mod reductions;
 

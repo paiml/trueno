@@ -33,7 +33,7 @@
 /// Binding 1: grad_output dL/dy (read)
 /// Binding 2: grad_input dL/dx (write)
 /// Binding 3: uniform { n: u32 }
-pub(crate) const SILU_BACKWARD_SHADER: &str = r#"
+pub const SILU_BACKWARD_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read> grad_output: array<f32>;
 @group(0) @binding(2) var<storage, read_write> grad_input: array<f32>;
@@ -83,7 +83,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Binding 1: b [K*N] (read) — accessed transposed
 /// Binding 2: grad_a (dL/dA) [M*K] (write)
 /// Binding 3: uniform { M, K, N }
-pub(crate) const GEMM_BACKWARD_A_SHADER: &str = r#"
+pub const GEMM_BACKWARD_A_SHADER: &str = r#"
 const TILE: u32 = 16u;
 
 @group(0) @binding(0) var<storage, read> grad_c: array<f32>;
@@ -160,7 +160,7 @@ fn main(
 /// Binding 1: grad_c (dL/dC) [M*N] (read)
 /// Binding 2: grad_b (dL/dB) [K*N] (write)
 /// Binding 3: uniform { M, K, N }
-pub(crate) const GEMM_BACKWARD_B_SHADER: &str = r#"
+pub const GEMM_BACKWARD_B_SHADER: &str = r#"
 const TILE: u32 = 16u;
 
 @group(0) @binding(0) var<storage, read> a: array<f32>;
@@ -244,7 +244,7 @@ fn main(
 /// Binding 3: grad_input dL/dx [num_rows * hidden_dim] (write)
 /// Binding 4: grad_gamma dL/dγ [hidden_dim] (read_write, atomicAdd)
 /// Binding 5: uniform { num_rows, hidden_dim, eps }
-pub(crate) const RMSNORM_BACKWARD_SHADER: &str = r#"
+pub const RMSNORM_BACKWARD_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read> gamma: array<f32>;
 @group(0) @binding(2) var<storage, read> grad_output: array<f32>;
@@ -362,7 +362,7 @@ fn main(
 /// Binding 0: grad_output [batch * num_heads * seq_len * head_dim] (read)
 /// Binding 1: grad_input [same shape] (write)
 /// Binding 2: uniform { num_heads, head_dim, seq_len, theta_log2 }
-pub(crate) const ROPE_BACKWARD_SHADER: &str = r#"
+pub const ROPE_BACKWARD_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> grad_output: array<f32>;
 @group(0) @binding(1) var<storage, read_write> grad_input: array<f32>;
 
@@ -432,7 +432,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Binding 2: m (first moment, read_write)
 /// Binding 3: v (second moment, read_write)
 /// Binding 4: uniform { n, lr, beta1, beta2, eps, weight_decay, bc1, bc2 }
-pub(crate) const ADAMW_STEP_SHADER: &str = r#"
+pub const ADAMW_STEP_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read_write> params: array<f32>;
 @group(0) @binding(1) var<storage, read> grads: array<f32>;
 @group(0) @binding(2) var<storage, read_write> m: array<f32>;
@@ -487,7 +487,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 /// Binding 1: scales [n/block_size] (read)
 /// Binding 2: output [n] (write)
 /// Binding 3: uniform { n, block_size }
-pub(crate) const NF4_DEQUANT_SHADER: &str = r#"
+pub const NF4_DEQUANT_SHADER: &str = r#"
 // NF4 codebook (same as trueno::quantize::NF4_LUT)
 const NF4_LUT: array<f32, 16> = array<f32, 16>(
     -1.0, -0.6961928009986877, -0.5250730514526367, -0.39491748809814453,
@@ -530,5 +530,134 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let scale = scales[idx / params.block_size];
     output[idx] = NF4_LUT[nibble] * scale;
+}
+"#;
+
+// ============================================================================
+// Fused Cross-Entropy Forward: loss = -log(softmax(logits)[label])
+//
+// One workgroup per token position. Each computes:
+// 1. max(logits) for numerical stability
+// 2. logsumexp = max + log(Σ exp(logit - max))
+// 3. loss = -logits[label] + logsumexp
+//
+// Saves logsumexp per position for backward pass.
+// Response-only masking: positions outside [loss_start, loss_end) contribute 0.
+//
+// Contract: fused-cross-entropy-v1 / fused_forward
+// ============================================================================
+
+/// Fused cross-entropy forward loss shader
+///
+/// Each workgroup computes loss for one token position.
+/// Outputs: losses[pos] and logsumexp[pos] (saved for backward).
+pub const CROSS_ENTROPY_FORWARD_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> logits: array<f32>;   // [seq_len, vocab_size]
+@group(0) @binding(1) var<storage, read> labels: array<u32>;   // [seq_len] — target token IDs
+@group(0) @binding(2) var<storage, read_write> losses: array<f32>;     // [seq_len] — per-token loss
+@group(0) @binding(3) var<storage, read_write> logsumexp: array<f32>;  // [seq_len] — saved for backward
+
+struct CEParams {
+    seq_len: u32,
+    vocab_size: u32,
+    loss_start: u32,   // first response token position
+    loss_end: u32,     // last+1 response token position
+}
+
+@group(0) @binding(4) var<uniform> params: CEParams;
+
+@compute @workgroup_size(1)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let pos = gid.x;
+    if (pos >= params.seq_len) { return; }
+
+    // Skip non-response positions
+    if (pos < params.loss_start || pos >= params.loss_end) {
+        losses[pos] = 0.0;
+        logsumexp[pos] = 0.0;
+        return;
+    }
+
+    let offset = pos * params.vocab_size;
+    let label = labels[pos];
+
+    // Pass 1: find max for numerical stability
+    var max_val: f32 = -1e30;
+    for (var v = 0u; v < params.vocab_size; v++) {
+        max_val = max(max_val, logits[offset + v]);
+    }
+
+    // Pass 2: compute sum(exp(logit - max))
+    var sum_exp: f32 = 0.0;
+    for (var v = 0u; v < params.vocab_size; v++) {
+        sum_exp += exp(logits[offset + v] - max_val);
+    }
+
+    let lse = max_val + log(sum_exp);
+    logsumexp[pos] = lse;
+
+    // Cross-entropy loss: -logits[label] + logsumexp
+    if (label < params.vocab_size) {
+        losses[pos] = -logits[offset + label] + lse;
+    } else {
+        losses[pos] = 0.0;  // padding token
+    }
+}
+"#;
+
+// ============================================================================
+// Fused Cross-Entropy Backward: grad_logits = softmax(logits) - one_hot(label)
+//
+// Writes gradient IN-PLACE into the logits buffer (no allocation).
+// Uses saved logsumexp from forward pass.
+//
+// Contract: fused-cross-entropy-v1 / fused_backward
+// ============================================================================
+
+/// Fused cross-entropy backward shader — writes gradient in-place into logits
+pub const CROSS_ENTROPY_BACKWARD_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read_write> logits: array<f32>; // [seq_len, vocab_size] — overwritten with gradient
+@group(0) @binding(1) var<storage, read> labels: array<u32>;       // [seq_len]
+@group(0) @binding(2) var<storage, read> logsumexp: array<f32>;    // [seq_len] — from forward
+
+struct CEBackParams {
+    seq_len: u32,
+    vocab_size: u32,
+    loss_start: u32,
+    loss_end: u32,
+    scale: f32,    // 1.0 / num_response_tokens
+}
+
+@group(0) @binding(3) var<uniform> params: CEBackParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.x;
+    let total = params.seq_len * params.vocab_size;
+    if (idx >= total) { return; }
+
+    let pos = idx / params.vocab_size;
+    let v = idx % params.vocab_size;
+
+    // Zero gradient for non-response positions
+    if (pos < params.loss_start || pos >= params.loss_end) {
+        logits[idx] = 0.0;
+        return;
+    }
+
+    let lse = logsumexp[pos];
+    let logit = logits[idx];
+
+    // softmax(logit) = exp(logit - logsumexp)
+    var grad = exp(logit - lse);
+
+    // Subtract 1 at the label position
+    let label = labels[pos];
+    if (v == label) {
+        grad -= 1.0;
+    }
+
+    // Scale by 1/num_response_tokens
+    logits[idx] = grad * params.scale;
 }
 "#;
