@@ -143,11 +143,23 @@ impl GpuMatmulCache {
 
     /// Pre-upload a weight matrix (call once at model init).
     /// Weight is stored in row-major f32: shape [rows, cols].
+    /// Silently skips weights that exceed the device's max buffer binding size.
     pub fn upload_weight(&mut self, name: &str, data: &[f32], rows: usize, cols: usize) {
         assert_eq!(data.len(), rows * cols, "weight size mismatch");
+        let size_bytes = (data.len() * 4) as u64;
+        let max_binding = self.device.limits().max_storage_buffer_binding_size as u64;
+        if size_bytes > max_binding {
+            eprintln!(
+                "[wgpu] Skipping weight '{}' ({:.1} MB > {:.1} MB max binding) — will use CPU fallback",
+                name,
+                size_bytes as f64 / 1e6,
+                max_binding as f64 / 1e6
+            );
+            return;
+        }
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(name),
-            size: (data.len() * 4) as u64,
+            size: size_bytes,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
