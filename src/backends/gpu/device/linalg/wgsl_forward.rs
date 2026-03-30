@@ -422,6 +422,16 @@ impl WgslForwardPass {
             self.cpu_biases.insert(name.to_string(), data.to_vec());
             return;
         }
+        // Skip weights that exceed the device's max buffer binding size (e.g., lm_head > 2 GB)
+        let size_bytes = (data.len() * 4) as u64;
+        let max_binding = self.device.limits().max_storage_buffer_binding_size as u64;
+        if size_bytes > max_binding {
+            eprintln!(
+                "[wgpu] Skipping weight '{}' ({:.1} MB > {:.1} MB limit) — CPU fallback",
+                name, size_bytes as f64 / 1e6, max_binding as f64 / 1e6
+            );
+            return;
+        }
         use wgpu::util::DeviceExt;
         let buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(name),
