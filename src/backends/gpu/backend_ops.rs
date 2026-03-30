@@ -250,6 +250,7 @@ impl GpuBackend {
     ///
     /// Vector with softmax applied element-wise
     pub fn softmax(&mut self, input: &[f32]) -> Result<Vec<f32>, String> {
+        contract_pre_softmax!(input);
         let device = self.ensure_device()?;
 
         // Create output buffer
@@ -258,6 +259,7 @@ impl GpuBackend {
         // Execute GPU compute
         device.softmax(input, &mut result)?;
 
+        contract_post_softmax!(&result);
         Ok(result)
     }
 
@@ -277,6 +279,7 @@ impl GpuBackend {
     ///
     /// Vector with log-softmax applied element-wise
     pub fn log_softmax(&mut self, input: &[f32]) -> Result<Vec<f32>, String> {
+        contract_pre_log_softmax!(input);
         let device = self.ensure_device()?;
 
         // Create output buffer

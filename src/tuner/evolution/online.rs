@@ -113,6 +113,10 @@ impl OnlineLearner {
 
     /// Predict throughput
     pub fn predict(&self, features: &[f32]) -> f32 {
+        if features.is_empty() {
+            return self.weights[0]; // bias-only prediction
+        }
+        contract_pre_predict!(features);
         let mut result = self.weights[0]; // bias
         for (i, &x) in features.iter().enumerate() {
             if i + 1 < self.weights.len() {

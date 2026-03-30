@@ -312,6 +312,7 @@ impl VectorBackend for ScalarBackend {
     // 2. Clamping prevents exp() overflow
     // 3. Marked unsafe only to match VectorBackend trait interface
     unsafe fn sigmoid(a: &[f32], result: &mut [f32]) {
+        contract_pre_sigmoid!(a);
         for (i, &val) in a.iter().enumerate() {
             // Handle extreme values for numerical stability
             result[i] = if val < -50.0 {
@@ -330,6 +331,7 @@ impl VectorBackend for ScalarBackend {
     // 3. Marked unsafe only to match VectorBackend trait interface
     unsafe fn gelu(a: &[f32], result: &mut [f32]) {
         // GELU approximation: 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
+        contract_pre_gelu!(a);
         const SQRT_2_OVER_PI: f32 = 0.797_884_6;
         const COEFF: f32 = 0.044715;
 

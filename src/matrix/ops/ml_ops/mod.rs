@@ -62,6 +62,7 @@ impl Matrix<f32> {
     /// ```
     pub fn embedding_lookup(&self, indices: &[usize]) -> Result<Matrix<f32>, TruenoError> {
         // Validate indices
+        contract_pre_embedding_lookup!(indices);
         for (i, &idx) in indices.iter().enumerate() {
             if idx >= self.rows {
                 return Err(TruenoError::InvalidInput(format!(
@@ -90,6 +91,7 @@ impl Matrix<f32> {
                 .copy_from_slice(&self.data[src_start..src_start + embed_dim]);
         }
 
+        contract_post_embedding_lookup!(&result.data);
         Ok(result)
     }
 
