@@ -20,7 +20,7 @@
 /// - **Dispatch**: ceil(M/16) × ceil(N/16) workgroups (unchanged)
 /// - **Result**: bit-identical to naive shader for all M, K, N (f32 associativity aside)
 /// - **Speedup**: 5–15× on real GPUs (bandwidth-bound → compute-bound)
-pub(crate) const MATMUL_SHADER: &str = r#"
+pub const MATMUL_SHADER: &str = r#"
 const TILE: u32 = 16u;
 
 @group(0) @binding(0) var<storage, read> a: array<f32>;
