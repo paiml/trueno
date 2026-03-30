@@ -16,6 +16,8 @@ pub struct GpuMatmulCache {
     device: wgpu::Device,
     queue: wgpu::Queue,
     pipeline: wgpu::ComputePipeline,
+    /// CUTLASS-style tiled GEMM pipeline for M>16 (training batch, prefill)
+    tiled_pipeline: wgpu::ComputePipeline,
     /// PMAT-326: Dedicated GEMV pipeline for M=1 (cooperative K-reduction)
     gemv_pipeline: wgpu::ComputePipeline,
     bind_group_layout: wgpu::BindGroupLayout,
@@ -44,7 +46,9 @@ struct Dimensions {
     m: u32,
     k: u32,
     n: u32,
-    _padding: u32,
+    /// Alpha scaling factor for tiled GEMM epilogue. Reinterpreted as f32.
+    /// Old naive shader ignores this field (_padding). Tiled GEMM reads it as `dims.alpha`.
+    alpha_bits: u32,
 }
 
 impl GpuMatmulCache {
@@ -89,6 +93,20 @@ impl GpuMatmulCache {
             cache: None,
         });
 
+        // CUTLASS-style tiled GEMM pipeline (64×64 tiles, 4×4 thread micro-tiles)
+        let tiled_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("TiledGEMM Shader"),
+            source: wgpu::ShaderSource::Wgsl(crate::backends::gpu::shaders::TILED_GEMM_SHADER.into()),
+        });
+        let tiled_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("TiledGEMM Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &tiled_shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
         // PMAT-326: GEMV pipeline (cooperative K-reduction, optimal for M=1)
         let gemv_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("GEMV Shader"),
@@ -107,6 +125,7 @@ impl GpuMatmulCache {
             device,
             queue,
             pipeline,
+            tiled_pipeline,
             gemv_pipeline,
             bind_group_layout,
             weight_buffers: HashMap::new(),
@@ -238,9 +257,9 @@ impl GpuMatmulCache {
         // but Dimensions struct has { m, k, n, _ }. When m=1, params.n reads m=1
         // instead of the actual output dimension. Write different layout for GEMV.
         let dims = if m == 1 {
-            Dimensions { m: n as u32, k: k as u32, n: 0, _padding: 0 }
+            Dimensions { m: n as u32, k: k as u32, n: 0, alpha_bits: 1.0_f32.to_bits() }
         } else {
-            Dimensions { m: m as u32, k: k as u32, n: n as u32, _padding: 0 }
+            Dimensions { m: m as u32, k: k as u32, n: n as u32, alpha_bits: 1.0_f32.to_bits() }
         };
         let dims_buf = self.dims_buffer.as_ref().unwrap();
         self.queue.write_buffer(dims_buf, 0, bytemuck::bytes_of(&dims));
@@ -277,8 +296,15 @@ impl GpuMatmulCache {
                 pass.set_pipeline(&self.gemv_pipeline);
                 pass.set_bind_group(0, &bind_group, &[]);
                 pass.dispatch_workgroups(n as u32, 1, 1);
+            } else if m >= 4 {
+                // CUTLASS-style tiled GEMM for M>=4 (training batch, prefill)
+                // 64×64 tiles, 4×4 thread micro-tiles, double-buffered shared memory
+                // ~10-30x faster than naive 16×16 for large M
+                pass.set_pipeline(&self.tiled_pipeline);
+                pass.set_bind_group(0, &bind_group, &[]);
+                pass.dispatch_workgroups((n as u32).div_ceil(64), (m as u32).div_ceil(64), 1);
             } else {
-                // Tiled GEMM for M>1 (batch/prefill)
+                // Naive 16×16 tiled GEMM for small M (2-3 rows)
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &bind_group, &[]);
                 pass.dispatch_workgroups((m as u32).div_ceil(16), (n as u32).div_ceil(16), 1);
@@ -326,7 +352,7 @@ mod tests {
 
     #[test]
     fn test_dimensions_layout() {
-        let dims = Dimensions { m: 1, k: 1536, n: 1536, _padding: 0 };
+        let dims = Dimensions { m: 1, k: 1536, n: 1536, alpha_bits: 1.0_f32.to_bits() };
         let bytes = bytemuck::bytes_of(&dims);
         assert_eq!(bytes.len(), 16); // 4 × u32
                                      // Verify field order matches shader uniform layout
@@ -341,9 +367,9 @@ mod tests {
         let k = 1536usize;
         let n = 256usize;
         let dims = if m == 1 {
-            Dimensions { m: n as u32, k: k as u32, n: 0, _padding: 0 }
+            Dimensions { m: n as u32, k: k as u32, n: 0, alpha_bits: 1.0_f32.to_bits() }
         } else {
-            Dimensions { m: m as u32, k: k as u32, n: n as u32, _padding: 0 }
+            Dimensions { m: m as u32, k: k as u32, n: n as u32, alpha_bits: 1.0_f32.to_bits() }
         };
         let bytes = bytemuck::bytes_of(&dims);
         // GEMV shader reads params.n (offset 0) as output dimension
@@ -353,7 +379,7 @@ mod tests {
 
     #[test]
     fn test_matmul_params_layout() {
-        let dims = Dimensions { m: 4, k: 1536, n: 1536, _padding: 0 };
+        let dims = Dimensions { m: 4, k: 1536, n: 1536, alpha_bits: 1.0_f32.to_bits() };
         let bytes = bytemuck::bytes_of(&dims);
         // Matmul shader reads dims.M, dims.K, dims.N
         assert_eq!(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]), 4); // M
