@@ -356,4 +356,5 @@ impl ComputeOp for DotQ6KOp {
 }
 
 #[cfg(test)]
+pub mod nf4;
 mod tests;
