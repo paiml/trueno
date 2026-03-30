@@ -37,7 +37,7 @@ mod device;
 mod pool;
 
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
-mod shaders;
+pub mod shaders;
 
 #[cfg(any(feature = "gpu", feature = "gpu-wasm"))]
 pub mod runtime;

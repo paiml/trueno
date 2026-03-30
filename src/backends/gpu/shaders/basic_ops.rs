@@ -116,7 +116,7 @@ fn main(
 /// - Dispatch: ceil(M/64) × ceil(N/64) workgroups
 /// - Result: matches naive within ε < 1e-4 (f32 reassociation)
 /// - Zero unsafe: entirely via wgpu safe Rust API
-pub(crate) const TILED_GEMM_SHADER: &str = r#"
+pub const TILED_GEMM_SHADER: &str = r#"
 // CUTLASS-derived tiled GEMM — 64×64 tiles, 4×4 thread micro-tiles
 // Algorithm from NVIDIA CUTLASS (MIT licensed), reimplemented in WGSL.
 
