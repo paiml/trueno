@@ -16,10 +16,22 @@
 /// - Softmax sums to 1.0 per row (within floating-point tolerance)
 /// - Output shape matches Q shape: [seq_len, num_heads * head_dim]
 pub const CAUSAL_ATTENTION_SHADER: &str = r#"
-@group(0) @binding(0) var<storage, read> q: array<f32>;    // [seq_len, num_heads * head_dim]
-@group(0) @binding(1) var<storage, read> k: array<f32>;    // [seq_len, num_kv_heads * head_dim]
-@group(0) @binding(2) var<storage, read> v: array<f32>;    // [seq_len, num_kv_heads * head_dim]
-@group(0) @binding(3) var<storage, read_write> out: array<f32>; // [seq_len, num_heads * head_dim]
+// Causal multi-head attention — 2-pass (not 3), no recomputation.
+// Pass 1: compute all QK^T scores, find max, compute softmax weights.
+// Pass 2: weighted sum of V using stored weights.
+// Scores stored in workgroup shared memory (max 2048 positions).
+//
+// Each workgroup: one (head, query_position) pair.
+// @workgroup_size(1) — sequential per position but NO recomputation of QK^T.
+// The old shader computed QK^T 3 times (max, softmax, weighted_sum × head_dim).
+// This shader computes QK^T ONCE, stores scores, then reuses.
+// For head_dim=128: 3× → 1× = 3x fewer dot products.
+// For the weighted sum: eliminates recomputing QK^T per output dimension.
+
+@group(0) @binding(0) var<storage, read> q: array<f32>;
+@group(0) @binding(1) var<storage, read> k: array<f32>;
+@group(0) @binding(2) var<storage, read> v: array<f32>;
+@group(0) @binding(3) var<storage, read_write> out: array<f32>;
 
 struct AttnParams {
     seq_len: u32,
@@ -30,10 +42,13 @@ struct AttnParams {
 
 @group(0) @binding(4) var<uniform> cfg: AttnParams;
 
+// Store softmax weights in workgroup shared memory (max 2048 seq positions)
+var<workgroup> weights: array<f32, 2048>;
+
 @compute @workgroup_size(1)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let head = gid.x;       // which query head [0..num_heads)
-    let pos = gid.y;        // which query position [0..seq_len)
+    let head = gid.x;
+    let pos = gid.y;
     let seq = cfg.seq_len;
     let hd = cfg.head_dim;
     let kv_group = cfg.num_heads / cfg.num_kv_heads;
@@ -44,45 +59,42 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let q_offset = pos * cfg.num_heads * hd + head * hd;
     let scale = 1.0 / sqrt(f32(hd));
 
-    // Compute attention scores: Q[pos,head] · K[s,kv_head] for s in [0..pos]
-    // Use online softmax (numerically stable, single pass)
+    // Pass 1: compute QK^T scores ONCE, find max, compute softmax weights
     var max_score: f32 = -1e30;
-    // First pass: find max score
+
+    // 1a: compute all scores and find max
     for (var s = 0u; s <= pos; s++) {
         let k_offset = s * cfg.num_kv_heads * hd + kv_head * hd;
         var dot: f32 = 0.0;
         for (var d = 0u; d < hd; d++) {
             dot += q[q_offset + d] * k[k_offset + d];
         }
-        dot *= scale;
-        max_score = max(max_score, dot);
+        let score = dot * scale;
+        weights[s] = score;
+        max_score = max(max_score, score);
     }
 
-    // Second pass: compute exp(score - max) and sum
+    // 1b: compute exp(score - max) and sum
     var sum_exp: f32 = 0.0;
     for (var s = 0u; s <= pos; s++) {
-        let k_offset = s * cfg.num_kv_heads * hd + kv_head * hd;
-        var dot: f32 = 0.0;
-        for (var d = 0u; d < hd; d++) {
-            dot += q[q_offset + d] * k[k_offset + d];
-        }
-        dot = exp(dot * scale - max_score);
-        sum_exp += dot;
+        let w = exp(weights[s] - max_score);
+        weights[s] = w;
+        sum_exp += w;
     }
 
-    // Third pass: weighted sum of V
+    // 1c: normalize weights
+    let inv_sum = 1.0 / sum_exp;
+    for (var s = 0u; s <= pos; s++) {
+        weights[s] = weights[s] * inv_sum;
+    }
+
+    // Pass 2: weighted sum of V using stored weights (NO QK^T recomputation)
     let out_offset = pos * cfg.num_heads * hd + head * hd;
     for (var d = 0u; d < hd; d++) {
         var val: f32 = 0.0;
         for (var s = 0u; s <= pos; s++) {
-            let k_offset = s * cfg.num_kv_heads * hd + kv_head * hd;
-            var dot: f32 = 0.0;
-            for (var di = 0u; di < hd; di++) {
-                dot += q[q_offset + di] * k[k_offset + di];
-            }
-            let weight = exp(dot * scale - max_score) / sum_exp;
             let v_offset = s * cfg.num_kv_heads * hd + kv_head * hd;
-            val += weight * v[v_offset + d];
+            val += weights[s] * v[v_offset + d];
         }
         out[out_offset + d] = val;
     }
