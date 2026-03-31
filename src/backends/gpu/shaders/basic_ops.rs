@@ -306,6 +306,73 @@ fn main(
 }
 "#;
 
+/// Column scatter shader — copies chunk columns into a wider row-major matrix.
+///
+/// Replaces N × copy_buffer_to_buffer calls with a single GPU dispatch.
+/// Source: [seq, chunk_n] row-major → Dest: [seq, full_n] at column offset.
+///
+/// Each thread copies one element.
+pub const COLUMN_SCATTER_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> src: array<f32>;
+@group(0) @binding(1) var<storage, read_write> dst: array<f32>;
+
+struct ScatterParams {
+    seq_len: u32,
+    chunk_n: u32,    // width of source
+    full_n: u32,     // width of destination
+    col_offset: u32, // column offset in destination
+}
+
+@group(0) @binding(2) var<uniform> params: ScatterParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.x + gid.y * 65535u * 256u;
+    let total = params.seq_len * params.chunk_n;
+    if (idx >= total) { return; }
+
+    let row = idx / params.chunk_n;
+    let col = idx % params.chunk_n;
+
+    let src_idx = row * params.chunk_n + col;
+    let dst_idx = row * params.full_n + params.col_offset + col;
+
+    dst[dst_idx] = src[src_idx];
+}
+"#;
+
+/// Column gather shader — extracts columns from a wide matrix into a chunk.
+///
+/// Inverse of scatter. Used for backward: extract grad_logits columns per chunk.
+pub const COLUMN_GATHER_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> src: array<f32>;
+@group(0) @binding(1) var<storage, read_write> dst: array<f32>;
+
+struct GatherParams {
+    seq_len: u32,
+    chunk_n: u32,    // width of destination
+    full_n: u32,     // width of source
+    col_offset: u32, // column offset in source
+}
+
+@group(0) @binding(2) var<uniform> params: GatherParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.x + gid.y * 65535u * 256u;
+    let total = params.seq_len * params.chunk_n;
+    if (idx >= total) { return; }
+
+    let row = idx / params.chunk_n;
+    let col = idx % params.chunk_n;
+
+    let src_idx = row * params.full_n + params.col_offset + col;
+    let dst_idx = row * params.chunk_n + col;
+
+    dst[dst_idx] = src[src_idx];
+}
+"#;
+
 /// PMAT-326: GEMV compute shader (WGSL) — matrix-vector product y = W × x
 ///
 /// Optimized for M=1 (single-token decode). Each workgroup computes ONE output
