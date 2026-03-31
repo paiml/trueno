@@ -478,6 +478,47 @@ impl WgslForwardPass {
         }
     }
 
+    /// Number of uploaded weight buffers.
+    pub fn weight_count(&self) -> usize {
+        self.weight_buffers.len()
+    }
+
+    /// Reference to the wgpu queue.
+    pub fn queue_ref(&self) -> &wgpu::Queue {
+        &self.queue
+    }
+
+    /// Reference to the hidden state buffer (for writing input).
+    pub fn hidden_buffer(&self) -> &wgpu::Buffer {
+        &self.hidden_buf
+    }
+
+    /// Download hidden state from GPU.
+    pub fn download_hidden(&self, len: usize) -> Vec<f32> {
+        let size = (len * 4) as u64;
+        let staging = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("hidden_download"),
+            size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        encoder.copy_buffer_to_buffer(&self.hidden_buf, 0, &staging, 0, size);
+        self.queue.submit(Some(encoder.finish()));
+
+        let slice = staging.slice(..size);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+        self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+        rx.recv().unwrap().unwrap();
+
+        let data = slice.get_mapped_range();
+        let result: Vec<f32> = bytemuck::cast_slice(&data)[..len].to_vec();
+        drop(data);
+        staging.unmap();
+        result
+    }
+
     /// Total VRAM used by all buffers (bytes).
     pub fn total_vram_bytes(&self) -> usize {
         let weight_bytes: usize = self.weight_buffers.values().map(|b| b.size() as usize).sum();
