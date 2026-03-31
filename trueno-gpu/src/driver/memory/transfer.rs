@@ -10,6 +10,11 @@ use crate::driver::stream::CudaStream;
 use crate::driver::sys::CudaDriver;
 use crate::GpuError;
 
+// PMAT-420: All transfer methods call self.ensure_context() before any
+// cuMemcpy* call.  Without this, cuMemcpyHtoD/DtoH silently produces
+// zeros when the CUDA context is not current on the calling thread
+// (see paiml/trueno#232).
+
 use super::buffer::GpuBuffer;
 
 // ============================================================================
@@ -39,6 +44,8 @@ impl<T: Copy> GpuBuffer<T> {
         if self.len == 0 {
             return Ok(());
         }
+
+        self.ensure_context()?;
 
         let driver = get_driver()?;
         let size = self.size_bytes();
@@ -70,6 +77,8 @@ impl<T: Copy> GpuBuffer<T> {
         if self.len == 0 {
             return Ok(());
         }
+
+        self.ensure_context()?;
 
         let driver = get_driver()?;
         let size = self.size_bytes();
@@ -111,6 +120,8 @@ impl<T: Copy> GpuBuffer<T> {
             return Ok(());
         }
 
+        self.ensure_context()?;
+
         let driver = get_driver()?;
         let size = self.size_bytes();
 
@@ -151,6 +162,8 @@ impl<T: Copy> GpuBuffer<T> {
         if self.len == 0 {
             return Ok(());
         }
+
+        self.ensure_context()?;
 
         let driver = get_driver()?;
         let size = self.size_bytes();
@@ -209,6 +222,8 @@ impl<T: Copy> GpuBuffer<T> {
             return Ok(());
         }
 
+        self.ensure_context()?;
+
         let driver = get_driver()?;
         let size = std::mem::size_of_val(data);
         let dst_ptr = self.ptr + (offset * std::mem::size_of::<T>()) as u64;
@@ -242,6 +257,8 @@ impl<T: Copy> GpuBuffer<T> {
         if data.is_empty() {
             return Ok(());
         }
+
+        self.ensure_context()?;
 
         let driver = get_driver()?;
         let size = std::mem::size_of_val(data);
@@ -298,6 +315,8 @@ impl<T: Copy> GpuBuffer<T> {
             return Ok(());
         }
 
+        self.ensure_context()?;
+
         let driver = get_driver()?;
         let size = self.size_bytes();
 
@@ -344,6 +363,8 @@ impl<T: Copy> GpuBuffer<T> {
             return Ok(());
         }
 
+        self.ensure_context()?;
+
         let driver = get_driver()?;
         let size = count * std::mem::size_of::<T>();
         let dst_ptr = self.ptr + (dst_offset * std::mem::size_of::<T>()) as u64;
@@ -374,6 +395,8 @@ impl<T: Copy> GpuBuffer<T> {
         if self.len == 0 {
             return Ok(());
         }
+
+        self.ensure_context()?;
 
         let driver = get_driver()?;
         let size = self.size_bytes();
@@ -424,6 +447,8 @@ impl<T: Copy> GpuBuffer<T> {
             return Ok(());
         }
 
+        self.ensure_context()?;
+
         let driver = get_driver()?;
         let size = count * std::mem::size_of::<T>();
         let dst_ptr = self.ptr + (dst_offset * std::mem::size_of::<T>()) as u64;
@@ -467,6 +492,8 @@ impl<T: Copy> GpuBuffer<T> {
         if count == 0 {
             return Ok(());
         }
+
+        self.ensure_context()?;
 
         let driver = get_driver()?;
         let size = count * std::mem::size_of::<T>();

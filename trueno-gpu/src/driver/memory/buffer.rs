@@ -9,7 +9,7 @@ use std::mem;
 use std::ptr;
 
 use crate::driver::context::{get_driver, CudaContext};
-use crate::driver::sys::{CUdeviceptr, CudaDriver};
+use crate::driver::sys::{CUcontext, CUdeviceptr, CudaDriver, CUDA_SUCCESS};
 use crate::GpuError;
 
 // ============================================================================
@@ -46,6 +46,10 @@ pub struct GpuBuffer<T> {
     pub(super) len: usize,
     /// PMAT-396: Original host pointer for registered buffers (None = device-allocated)
     host_ptr: Option<*mut c_void>,
+    /// PMAT-420: Raw CUDA context handle for thread-safe transfers.
+    /// Stored at allocation time so every transfer can call cuCtxSetCurrent
+    /// even when the buffer has been sent to a different thread.
+    pub(crate) ctx: Option<CUcontext>,
     /// Phantom for type parameter
     pub(super) _marker: PhantomData<T>,
 }
@@ -70,7 +74,7 @@ impl<T> GpuBuffer<T> {
     /// without triggering the borrow checker.
     #[must_use]
     pub unsafe fn from_raw_parts(ptr: CUdeviceptr, len: usize) -> Self {
-        Self { ptr, len, host_ptr: None, _marker: PhantomData }
+        Self { ptr, len, host_ptr: None, ctx: None, _marker: PhantomData }
     }
 
     /// Allocate a new GPU buffer
@@ -84,9 +88,17 @@ impl<T> GpuBuffer<T> {
     ///
     /// Returns `Err(GpuError::MemoryAllocation)` if allocation fails.
     /// Returns `Err(GpuError::OutOfMemory)` if insufficient GPU memory.
-    pub fn new(_ctx: &CudaContext, len: usize) -> Result<Self, GpuError> {
+    pub fn new(ctx: &CudaContext, len: usize) -> Result<Self, GpuError> {
+        let ctx_handle = Some(ctx.raw());
+
         if len == 0 {
-            return Ok(Self { ptr: 0, len: 0, host_ptr: None, _marker: PhantomData });
+            return Ok(Self {
+                ptr: 0,
+                len: 0,
+                host_ptr: None,
+                ctx: ctx_handle,
+                _marker: PhantomData,
+            });
         }
 
         // PMAT-394: Use managed memory on Grace Blackwell when MANAGED_MEMORY=1
@@ -94,7 +106,7 @@ impl<T> GpuBuffer<T> {
         let managed =
             *USE_MANAGED.get_or_init(|| std::env::var("MANAGED_MEMORY").as_deref() == Ok("1"));
         if managed {
-            return Self::new_managed(_ctx, len);
+            return Self::new_managed(ctx, len);
         }
 
         let driver = get_driver()?;
@@ -105,15 +117,23 @@ impl<T> GpuBuffer<T> {
         let result = unsafe { (driver.cuMemAlloc)(&mut ptr, size) };
         CudaDriver::check(result).map_err(|e| GpuError::MemoryAllocation(e.to_string()))?;
 
-        Ok(Self { ptr, len, host_ptr: None, _marker: PhantomData })
+        Ok(Self { ptr, len, host_ptr: None, ctx: ctx_handle, _marker: PhantomData })
     }
 
     /// PMAT-394: Allocate managed (unified) memory for Grace Blackwell.
     /// GPU accesses via NVLink-C2C, no explicit copy needed.
     /// `cuMemFree` works for both managed and device allocations.
-    pub fn new_managed(_ctx: &CudaContext, len: usize) -> Result<Self, GpuError> {
+    pub fn new_managed(ctx: &CudaContext, len: usize) -> Result<Self, GpuError> {
+        let ctx_handle = Some(ctx.raw());
+
         if len == 0 {
-            return Ok(Self { ptr: 0, len: 0, host_ptr: None, _marker: PhantomData });
+            return Ok(Self {
+                ptr: 0,
+                len: 0,
+                host_ptr: None,
+                ctx: ctx_handle,
+                _marker: PhantomData,
+            });
         }
         let driver = get_driver()?;
         let size = len * mem::size_of::<T>();
@@ -123,7 +143,7 @@ impl<T> GpuBuffer<T> {
         CudaDriver::check(result).map_err(|e| {
             GpuError::MemoryAllocation(format!("cuMemAllocManaged({} bytes): {}", size, e))
         })?;
-        Ok(Self { ptr, len, host_ptr: None, _marker: PhantomData })
+        Ok(Self { ptr, len, host_ptr: None, ctx: ctx_handle, _marker: PhantomData })
     }
 
     /// PMAT-396: Register existing host memory for GPU access (zero-copy).
@@ -134,7 +154,7 @@ impl<T> GpuBuffer<T> {
     /// and must outlive this buffer. Drop does NOT free the host memory.
     pub unsafe fn from_host_registered(host_ptr: *mut T, len: usize) -> Result<Self, GpuError> {
         if len == 0 {
-            return Ok(Self { ptr: 0, len: 0, host_ptr: None, _marker: PhantomData });
+            return Ok(Self { ptr: 0, len: 0, host_ptr: None, ctx: None, _marker: PhantomData });
         }
         let driver = get_driver()?;
         let size = len * mem::size_of::<T>();
@@ -156,6 +176,7 @@ impl<T> GpuBuffer<T> {
             ptr: dev_ptr,
             len,
             host_ptr: Some(host_ptr as *mut c_void),
+            ctx: None,
             _marker: PhantomData,
         })
     }
@@ -176,6 +197,38 @@ impl<T> GpuBuffer<T> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0
+    }
+
+    /// PMAT-420: Set the CUDA context for thread-safe transfers.
+    ///
+    /// Normally the context is captured automatically at allocation time.
+    /// Use this only for buffers created via `from_raw_parts` or
+    /// `from_host_registered` where no `CudaContext` was available.
+    pub fn set_context(&mut self, ctx: &CudaContext) {
+        self.ctx = Some(ctx.raw());
+    }
+
+    /// PMAT-420: Ensure the CUDA context stored at allocation time is current
+    /// on the calling thread before any driver API call (memcpy, kernel launch).
+    ///
+    /// cuMemcpyHtoD / cuMemcpyDtoH silently produce zeros when the context
+    /// is not current, which is the root cause of paiml/trueno#232.
+    pub(crate) fn ensure_context(&self) -> Result<(), GpuError> {
+        if let Some(ctx_handle) = self.ctx {
+            let driver = get_driver()?;
+            // SAFETY: ctx_handle was obtained from CudaContext::raw() which
+            // returns a primary-context handle that remains valid for the
+            // lifetime of the process (ref-counted by cuDevicePrimaryCtxRetain).
+            let result = unsafe { (driver.cuCtxSetCurrent)(ctx_handle) };
+            if result != CUDA_SUCCESS {
+                return Err(GpuError::DeviceInit(format!(
+                    "PMAT-420: cuCtxSetCurrent failed with code {} — \
+                     context may have been destroyed",
+                    result
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Get size in bytes

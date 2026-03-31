@@ -340,4 +340,87 @@ mod cuda_tests {
             dst.copy_from_buffer_at_async(&src, 0, 0, 0, &stream).unwrap();
         }
     }
+
+    /// PMAT-420 / trueno#232: Verify that GpuBuffer transfers work correctly
+    /// when the buffer is moved to a different thread than where the CUDA
+    /// context was created.
+    ///
+    /// Before the fix, cuMemcpyHtoD returned CUDA_SUCCESS but silently
+    /// transferred zero bytes because no CUDA context was current on the
+    /// worker thread. Now `ensure_context()` pushes the stored context
+    /// handle before every transfer.
+    #[test]
+    fn test_pmat420_cross_thread_transfer_nonzero() {
+        let ctx = cuda_ctx!();
+        let data: Vec<f32> = (1..=256).map(|i| i as f32).collect();
+
+        // Allocate and upload on this thread (context is current here)
+        let mut buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, 256).unwrap();
+        buf.copy_from_host(&data).unwrap();
+
+        // Send the buffer to a new thread where context is NOT current
+        let handle = std::thread::spawn(move || {
+            // This thread has NO CUDA context pushed.
+            // Before PMAT-420 fix, copy_to_host would read back all zeros.
+            let mut result = vec![0.0f32; 256];
+            buf.copy_to_host(&mut result).expect("copy_to_host on foreign thread must succeed");
+
+            // The critical assertion: data must NOT be all zeros
+            let nonzero = result.iter().filter(|&&v| v != 0.0).count();
+            assert_eq!(
+                nonzero, 256,
+                "PMAT-420 regression: GPU readback is zeros on cross-thread transfer \
+                 ({} of 256 elements are nonzero)",
+                nonzero
+            );
+            assert_eq!(result[0], 1.0);
+            assert_eq!(result[255], 256.0);
+
+            buf // return ownership for cleanup
+        });
+
+        let mut buf = handle.join().expect("Worker thread must not panic");
+
+        // Also test cross-thread upload: write on a different thread
+        let handle2 = std::thread::spawn(move || {
+            let new_data: Vec<f32> = (0..256).map(|i| -(i as f32)).collect();
+            buf.copy_from_host(&new_data).expect("copy_from_host on foreign thread must succeed");
+            (buf, new_data)
+        });
+
+        let (buf, new_data) = handle2.join().expect("Worker thread 2 must not panic");
+
+        // Verify the cross-thread upload was correct (read back on original thread)
+        let mut result = vec![0.0f32; 256];
+        buf.copy_to_host(&mut result).unwrap();
+        assert_eq!(result, new_data);
+    }
+
+    /// PMAT-420: Verify copy_from_host_at also works cross-thread
+    #[test]
+    fn test_pmat420_cross_thread_partial_transfer() {
+        let ctx = cuda_ctx!();
+
+        let mut buf: GpuBuffer<f32> = GpuBuffer::new(&ctx, 100).unwrap();
+        let zeros = vec![0.0f32; 100];
+        buf.copy_from_host(&zeros).unwrap();
+
+        // Send to a worker thread and do partial write
+        let handle = std::thread::spawn(move || {
+            let patch: Vec<f32> = vec![42.0f32; 10];
+            buf.copy_from_host_at(&patch, 50)
+                .expect("copy_from_host_at on foreign thread must succeed");
+
+            let mut result = vec![0.0f32; 100];
+            buf.copy_to_host(&mut result).expect("copy_to_host on foreign thread must succeed");
+
+            // Verify the partial write landed correctly
+            assert_eq!(result[49], 0.0);
+            assert_eq!(result[50], 42.0);
+            assert_eq!(result[59], 42.0);
+            assert_eq!(result[60], 0.0);
+        });
+
+        handle.join().expect("Worker thread must not panic");
+    }
 }
