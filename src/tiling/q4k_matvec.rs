@@ -190,37 +190,45 @@ impl TiledQ4KMatvec {
 
         let mut sum = 0.0f32;
 
-        // Process 256 values in 8 chunks of 32
-        for chunk in 0..8 {
-            let (sc, m) = scale_mins[chunk];
-            let d_scale = d * sc;
-            let dm = dmin * m;
+        // Process 256 values in 4 pairs of sub-blocks (GGML Q4_K layout).
+        // Each pair shares 32 qs bytes: even SB uses low nibbles, odd SB uses high nibbles.
+        // pair 0: SB 0 (lo) + SB 1 (hi) → qs[0..31]   → K offsets 0..63
+        // pair 1: SB 2 (lo) + SB 3 (hi) → qs[32..63]  → K offsets 64..127
+        // pair 2: SB 4 (lo) + SB 5 (hi) → qs[64..95]  → K offsets 128..191
+        // pair 3: SB 6 (lo) + SB 7 (hi) → qs[96..127] → K offsets 192..255
+        for pair in 0..4 {
+            let sb_lo = pair * 2;
+            let sb_hi = pair * 2 + 1;
 
-            let q_offset = chunk * 16; // 32 nibbles = 16 bytes
-            let input_offset = chunk * 32;
+            let (sc_lo, mn_lo) = scale_mins[sb_lo];
+            let (sc_hi, mn_hi) = scale_mins[sb_hi];
 
-            // Process 32 values: low nibbles then high nibbles
-            // Manually unroll inner loop for better optimization
-            let mut chunk_sum = 0.0f32;
+            let d_scale_lo = d * sc_lo;
+            let dm_lo = dmin * mn_lo;
+            let d_scale_hi = d * sc_hi;
+            let dm_hi = dmin * mn_hi;
 
-            // Process 16 byte pairs (32 nibbles)
-            for i in 0..16 {
+            let q_offset = pair * 32; // 32 qs bytes per pair
+            let input_lo = pair * 64; // low nibbles: first 32 K values
+            let input_hi = pair * 64 + 32; // high nibbles: next 32 K values
+
+            let mut pair_sum = 0.0f32;
+
+            // 32 qs bytes: low nibble → SB_lo values, high nibble → SB_hi values
+            for i in 0..32 {
                 let byte = qs[q_offset + i];
 
-                // Extract nibbles
                 let q_lo = (byte & 0x0F) as f32;
                 let q_hi = (byte >> 4) as f32;
 
-                // Dequantize: val = d * scale * q - dmin * min
-                let val_lo = d_scale * q_lo - dm;
-                let val_hi = d_scale * q_hi - dm;
+                let val_lo = d_scale_lo * q_lo - dm_lo;
+                let val_hi = d_scale_hi * q_hi - dm_hi;
 
-                // Accumulate dot product
-                chunk_sum += val_lo * input[input_offset + i];
-                chunk_sum += val_hi * input[input_offset + 16 + i];
+                pair_sum += val_lo * input[input_lo + i];
+                pair_sum += val_hi * input[input_hi + i];
             }
 
-            sum += chunk_sum;
+            sum += pair_sum;
         }
 
         sum
@@ -337,47 +345,45 @@ fn f16_special_to_f32(sign: u16, exponent: u16, mantissa: u16) -> f32 {
 
 /// Extract 6-bit scale and min values from packed scales array
 ///
-/// Q4_K uses 6-bit packed scales: 12 bytes encode 8 (scale, min) pairs.
+/// Extract Q4K scale and min for a given sub-block index (0-7).
 ///
-/// # Performance
+/// GGML Q4_K_M split storage format (12 bytes encode 8 scale/min pairs):
+///   bytes[0..3]:  bits[5:0] = scale SB 0-3,  bits[7:6] = high 2 bits of scale SB 4-7
+///   bytes[4..7]:  bits[5:0] = min SB 0-3,    bits[7:6] = high 2 bits of min SB 4-7
+///   bytes[8..11]: bits[3:0] = low 4 bits of scale SB 4-7,
+///                 bits[7:4] = low 4 bits of min SB 4-7
 ///
-/// Uses bitwise operations to avoid branches and bounds checks in the hot path.
-/// The scales array is always 12 bytes, so we use unchecked access after
-/// validating at the entry point.
+/// Reference: ggml `block_q4_K.scales`, llama.cpp `vec_dot_q4_K_q8_1`,
+///            trueno `backends::q4k::parse_q4k_header`.
 #[inline(always)]
 #[allow(clippy::cast_precision_loss)]
-// SAFETY: scale and min are 6-bit values (0–63) stored in u32; lossless in f32.
+// SAFETY: scale and min are 6-bit values (0-63) stored in u32; lossless in f32.
 pub fn extract_scale_min_6bit(scales: &[u8], idx: usize) -> (f32, f32) {
     debug_assert!(scales.len() >= 12, "scales array must be at least 12 bytes");
     debug_assert!(idx < 8, "idx must be < 8");
 
-    // Precomputed base offsets: idx * 3 / 2 for idx 0..8
-    // [0, 1, 3, 4, 6, 7, 9, 10]
-    // Using bitwise: base = idx + (idx >> 1)
-    let base = idx + (idx >> 1);
+    if idx < 4 {
+        // Sub-blocks 0-3: 6-bit values from bytes 0-3 (scale) and 4-7 (min)
+        let scale = (scales[idx] & 0x3F) as u32;
+        let min = (scales[4 + idx] & 0x3F) as u32;
+        (scale as f32, min as f32)
+    } else {
+        // Sub-blocks 4-7: low 4 bits from combo byte, high 2 from upper bits
+        let i = idx - 4;
+        let combo = scales[8 + i];
 
-    // Branchless extraction using bitwise selection
-    // Even indices: scale = byte[base] & 0x3F
-    // Odd indices:  scale = (byte[base] >> 6) | ((byte[base+1] & 0x0F) << 2)
-    let is_odd = idx & 1;
+        // Scale: low 4 bits from combo[3:0], high 2 from scales[i][7:6]
+        let sc_low4 = (combo & 0x0F) as u32;
+        let sc_high2 = ((scales[i] >> 6) & 0x03) as u32;
+        let scale = sc_low4 | (sc_high2 << 4);
 
-    // Safety: base is always < 11 for idx < 8, and scales.len() >= 12
-    let b0 = scales[base];
-    let b1 = scales[base + 1];
+        // Min: low 4 bits from combo[7:4], high 2 from scales[4+i][7:6]
+        let mn_low4 = ((combo >> 4) & 0x0F) as u32;
+        let mn_high2 = ((scales[4 + i] >> 6) & 0x03) as u32;
+        let min = mn_low4 | (mn_high2 << 4);
 
-    // Extract scale: branchless using masking
-    let scale_even = (b0 & 0x3F) as u32;
-    let scale_odd = ((b0 >> 6) | ((b1 & 0x0F) << 2)) as u32;
-    let scale = if is_odd == 0 { scale_even } else { scale_odd };
-
-    // Extract min: branchless using masking
-    let min_even = ((b0 >> 6) | ((b1 & 0x0F) << 2)) as u32;
-    // For odd indices, we need byte at base+2, but use 0 if at boundary
-    let b2 = if base + 2 < scales.len() { scales[base + 2] } else { 0 };
-    let min_odd = ((b1 >> 4) | ((b2 & 0x03) << 4)) as u32;
-    let min = if is_odd == 0 { min_even } else { min_odd };
-
-    (scale as f32, min as f32)
+        (scale as f32, min as f32)
+    }
 }
 
 /// Precompute all 8 scale/min pairs for a Q4_K superblock
