@@ -308,16 +308,18 @@ impl WgslForwardPass {
         // Causal attention pipeline for training
         let attention_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("causal_attention"),
-            source: wgpu::ShaderSource::Wgsl(crate::backends::gpu::shaders::CAUSAL_ATTENTION_SHADER.into()),
+            source: wgpu::ShaderSource::Wgsl(
+                crate::backends::gpu::shaders::CAUSAL_ATTENTION_SHADER.into(),
+            ),
         });
         let attention_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("attn_bgl"),
             entries: &[
-                bgl_storage(0, true),   // Q
-                bgl_storage(1, true),   // K
-                bgl_storage(2, true),   // V
-                bgl_storage(3, false),  // output
-                bgl_uniform(4),         // params
+                bgl_storage(0, true),  // Q
+                bgl_storage(1, true),  // K
+                bgl_storage(2, true),  // V
+                bgl_storage(3, false), // output
+                bgl_uniform(4),        // params
             ],
         });
         let attention_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -378,18 +380,22 @@ impl WgslForwardPass {
             })
         };
 
-        let hidden_buf = buf(hidden_dim, "hidden");
-        let q_buf = buf(q_dim, "q");
-        let k_buf = buf(kv_dim, "k");
-        let v_buf = buf(kv_dim, "v");
-        let attn_out_buf = buf(hidden_dim, "attn_out");
-        let ffn_gate_buf = buf(intermediate_dim, "ffn_gate");
-        let ffn_up_buf = buf(intermediate_dim, "ffn_up");
-        let ffn_silu_buf = buf(intermediate_dim, "ffn_silu"); // SiLU(gate)×up result
-        let ffn_out_buf = buf(hidden_dim, "ffn_out");
-        let norm_buf = buf(hidden_dim, "norm");
+        // Buffer sizes: max_seq × dim for training, or 1 × dim for inference.
+        // Training calls forward_layer_training with seq_len > 1.
+        // Allocate for max_seq=2048 to support both.
+        let max_seq = 2048;
+        let hidden_buf = buf(max_seq * hidden_dim, "hidden");
+        let q_buf = buf(max_seq * q_dim, "q");
+        let k_buf = buf(max_seq * kv_dim, "k");
+        let v_buf = buf(max_seq * kv_dim, "v");
+        let attn_out_buf = buf(max_seq * hidden_dim, "attn_out");
+        let ffn_gate_buf = buf(max_seq * intermediate_dim, "ffn_gate");
+        let ffn_up_buf = buf(max_seq * intermediate_dim, "ffn_up");
+        let ffn_silu_buf = buf(max_seq * intermediate_dim, "ffn_silu");
+        let ffn_out_buf = buf(max_seq * hidden_dim, "ffn_out");
+        let norm_buf = buf(max_seq * hidden_dim, "norm");
 
-        let max_out = hidden_dim.max(intermediate_dim);
+        let max_out = max_seq * hidden_dim.max(intermediate_dim);
         let staging_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("staging"),
             size: (max_out * 4) as u64,
@@ -449,7 +455,9 @@ impl WgslForwardPass {
         if size_bytes > max_binding {
             eprintln!(
                 "[wgpu] Skipping weight '{}' ({:.1} MB > {:.1} MB limit) — CPU fallback",
-                name, size_bytes as f64 / 1e6, max_binding as f64 / 1e6
+                name,
+                size_bytes as f64 / 1e6,
+                max_binding as f64 / 1e6
             );
             return;
         }
@@ -529,7 +537,9 @@ impl WgslForwardPass {
 
         let slice = staging.slice(..size);
         let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |r| { tx.send(r).ok(); });
+        slice.map_async(wgpu::MapMode::Read, move |r| {
+            tx.send(r).ok();
+        });
         self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
         rx.recv().unwrap().unwrap();
 
@@ -1015,53 +1025,162 @@ impl WgslForwardPass {
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
         // Pass 1: RMSNorm(hidden → norm_buf)
-        let norm_w = self.weight_buffers.get(&format!("{layer_prefix}.attn_norm"))
+        let norm_w = self
+            .weight_buffers
+            .get(&format!("{layer_prefix}.attn_norm"))
             .ok_or_else(|| format!("Missing {layer_prefix}.attn_norm"))?;
         self.encode_rmsnorm(&mut encoder, &self.hidden_buf, norm_w, &self.norm_buf, hd);
 
         // SAVE: attn_norm_out (input to Q/K/V projections)
-        encoder.copy_buffer_to_buffer(&self.norm_buf, 0, &saved_attn_norm, 0, (s * hd as usize * 4) as u64);
+        encoder.copy_buffer_to_buffer(
+            &self.norm_buf,
+            0,
+            &saved_attn_norm,
+            0,
+            (s * hd as usize * 4) as u64,
+        );
 
         // Passes 2-4: Q/K/V projections with M=seq_len (tiled GEMM)
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "q_proj", &self.q_buf, seq_len, hd, q_dim);
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "k_proj", &self.k_buf, seq_len, hd, kv_dim);
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "v_proj", &self.v_buf, seq_len, hd, kv_dim);
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "q_proj",
+            &self.q_buf,
+            seq_len,
+            hd,
+            q_dim,
+        );
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "k_proj",
+            &self.k_buf,
+            seq_len,
+            hd,
+            kv_dim,
+        );
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "v_proj",
+            &self.v_buf,
+            seq_len,
+            hd,
+            kv_dim,
+        );
 
         // Pass 5: Causal attention on GPU (full sequence, no KV cache needed)
         self.encode_attention(&mut encoder, seq_len);
 
         // SAVE: attn_output (input to O projection)
-        encoder.copy_buffer_to_buffer(&self.attn_out_buf, 0, &saved_attn_out, 0, (s * q_dim as usize * 4) as u64);
+        encoder.copy_buffer_to_buffer(
+            &self.attn_out_buf,
+            0,
+            &saved_attn_out,
+            0,
+            (s * q_dim as usize * 4) as u64,
+        );
 
         // Pass 6: O projection (attn_out_buf[seq,q_dim] → q_buf[seq,hidden] via o_proj)
-        self.encode_matmul(&mut encoder, &self.attn_out_buf, layer_prefix, "o_proj", &self.q_buf, seq_len, q_dim, hd);
+        self.encode_matmul(
+            &mut encoder,
+            &self.attn_out_buf,
+            layer_prefix,
+            "o_proj",
+            &self.q_buf,
+            seq_len,
+            q_dim,
+            hd,
+        );
 
         // Pass 7: Residual(hidden + o_proj_out → ffn_out)
-        self.encode_residual(&mut encoder, &self.hidden_buf, &self.q_buf, &self.ffn_out_buf, hd * seq_len);
+        self.encode_residual(
+            &mut encoder,
+            &self.hidden_buf,
+            &self.q_buf,
+            &self.ffn_out_buf,
+            hd * seq_len,
+        );
 
         // Pass 8: FFN RMSNorm(ffn_out → norm_buf)
-        let ffn_norm_w = self.weight_buffers.get(&format!("{layer_prefix}.ffn_norm"))
+        let ffn_norm_w = self
+            .weight_buffers
+            .get(&format!("{layer_prefix}.ffn_norm"))
             .ok_or_else(|| format!("Missing {layer_prefix}.ffn_norm"))?;
         self.encode_rmsnorm(&mut encoder, &self.ffn_out_buf, ffn_norm_w, &self.norm_buf, hd);
 
         // SAVE: ffn_norm_out (input to gate/up/down projections)
-        encoder.copy_buffer_to_buffer(&self.norm_buf, 0, &saved_ffn_norm, 0, (s * hd as usize * 4) as u64);
+        encoder.copy_buffer_to_buffer(
+            &self.norm_buf,
+            0,
+            &saved_ffn_norm,
+            0,
+            (s * hd as usize * 4) as u64,
+        );
 
         // Passes 9-10: Gate + Up projections
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "gate_proj", &self.ffn_gate_buf, seq_len, hd, inter);
-        self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "up_proj", &self.ffn_up_buf, seq_len, hd, inter);
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "gate_proj",
+            &self.ffn_gate_buf,
+            seq_len,
+            hd,
+            inter,
+        );
+        self.encode_matmul(
+            &mut encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "up_proj",
+            &self.ffn_up_buf,
+            seq_len,
+            hd,
+            inter,
+        );
 
         // Pass 11: SiLU(gate) × up → ffn_silu_buf
-        self.encode_silu_mul(&mut encoder, &self.ffn_gate_buf, &self.ffn_up_buf, &self.ffn_silu_buf, inter * seq_len);
+        self.encode_silu_mul(
+            &mut encoder,
+            &self.ffn_gate_buf,
+            &self.ffn_up_buf,
+            &self.ffn_silu_buf,
+            inter * seq_len,
+        );
 
         // SAVE: silu_gate_output (input to down projection)
-        encoder.copy_buffer_to_buffer(&self.ffn_silu_buf, 0, &saved_silu, 0, (s * inter as usize * 4) as u64);
+        encoder.copy_buffer_to_buffer(
+            &self.ffn_silu_buf,
+            0,
+            &saved_silu,
+            0,
+            (s * inter as usize * 4) as u64,
+        );
 
         // Pass 12: Down projection
-        self.encode_matmul(&mut encoder, &self.ffn_silu_buf, layer_prefix, "down_proj", &self.norm_buf, seq_len, inter, hd);
+        self.encode_matmul(
+            &mut encoder,
+            &self.ffn_silu_buf,
+            layer_prefix,
+            "down_proj",
+            &self.norm_buf,
+            seq_len,
+            inter,
+            hd,
+        );
 
         // Pass 13: Residual(ffn_out + down → hidden)
-        self.encode_residual(&mut encoder, &self.ffn_out_buf, &self.norm_buf, &self.hidden_buf, hd * seq_len);
+        self.encode_residual(
+            &mut encoder,
+            &self.ffn_out_buf,
+            &self.norm_buf,
+            &self.hidden_buf,
+            hd * seq_len,
+        );
 
         self.queue.submit(Some(encoder.finish()));
 
@@ -1097,7 +1216,10 @@ impl WgslForwardPass {
                 wgpu::BindGroupEntry { binding: 0, resource: self.q_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 1, resource: self.k_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 2, resource: self.v_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: self.attn_out_buf.as_entire_binding() },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.attn_out_buf.as_entire_binding(),
+                },
                 wgpu::BindGroupEntry { binding: 4, resource: params_buf.as_entire_binding() },
             ],
         });
