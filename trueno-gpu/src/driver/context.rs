@@ -253,21 +253,41 @@ impl CudaContext {
         Ok((major, minor))
     }
 
-    /// Get device compute capability as SM target string (e.g. "sm_89")
+    /// Get device compute capability as SM target string (e.g. "sm_89", "sm_121")
     ///
-    /// Suitable for passing to `PtxModule::target()`.
+    /// Returns the REAL compute capability without clamping. The PTX ISA version
+    /// is selected by `ptx_version()` to match -- PTX 8.8 for sm_100+, PTX 8.0
+    /// for sm_90 and below.
+    ///
+    /// trueno#188: Previously clamped to sm_90 on Blackwell (GH-480 workaround).
+    /// Now returns native target so kernels generate sm_121 SASS directly.
     ///
     /// # Errors
     ///
     /// Returns `Err(GpuError::CudaDriver)` if query fails.
     pub fn sm_target(&self) -> Result<String, GpuError> {
         let (major, minor) = self.compute_capability()?;
-        // GH-480: PTX source `.target` must use a version PTX 8.0 supports (max sm_90).
-        // The JIT compiler receives the REAL compute capability via CU_JIT_TARGET
-        // (in module.rs) so it compiles natively for the actual device.
-        let (ptx_major, ptx_minor) =
-            if major > 9 || (major == 9 && minor > 0) { (9, 0) } else { (major, minor) };
-        Ok(format!("sm_{ptx_major}{ptx_minor}"))
+        Ok(format!("sm_{major}{minor}"))
+    }
+
+    /// Get the PTX ISA version required for this device's compute capability.
+    ///
+    /// Returns `(major, minor)` of the PTX version:
+    /// - sm_70..sm_90: PTX 8.0 (baseline)
+    /// - sm_100+:      PTX 8.8 (Blackwell support, requires CUDA 13.0+)
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::CudaDriver)` if compute capability query fails.
+    pub fn ptx_version(&self) -> Result<(u32, u32), GpuError> {
+        let (major, _minor) = self.compute_capability()?;
+        if major >= 10 {
+            // Blackwell (sm_100+) requires PTX 8.8 (CUDA 13.0 toolkit)
+            Ok((8, 8))
+        } else {
+            // Volta through Hopper: PTX 8.0
+            Ok((8, 0))
+        }
     }
 
     /// Get number of streaming multiprocessors (SMs) on the device

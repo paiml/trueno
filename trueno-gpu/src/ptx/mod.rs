@@ -98,6 +98,10 @@ mod tests {
         assert!(validate_target("sm_86").is_ok());
         assert!(validate_target("sm_89").is_ok());
         assert!(validate_target("sm_90").is_ok());
+        // trueno#188: Blackwell support
+        assert!(validate_target("sm_100").is_ok());
+        assert!(validate_target("sm_120").is_ok());
+        assert!(validate_target("sm_121").is_ok());
     }
 
     #[test]

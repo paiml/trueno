@@ -77,21 +77,15 @@ fn compile_ptx_to_cubin(
     let mut link_state: CUlinkState = ptr::null_mut();
 
     // PMAT-290: Pass CU_JIT_TARGET to the linker for proper optimization.
-    // Without it, the linker produces cubins ~12% slower than cuModuleLoadDataEx.
-    // Exception: Blackwell (sm_121+) where passing target causes miscompilation.
-    let use_jit_target = jit_target < 120; // sm_89 = 89, Blackwell = 121+
+    // trueno#188: Now that PTX uses the correct ISA version (8.8 for sm_121),
+    // the linker can use the real JIT target for all architectures.
     let mut opt_keys: [c_uint; 1] = [CU_JIT_TARGET];
     let mut jit_target_val = jit_target;
     let mut opt_vals: [*mut c_void; 1] = [std::ptr::from_mut(&mut jit_target_val) as *mut c_void];
 
     // SAFETY: option arrays are valid for the specified count
-    let result = if use_jit_target {
-        unsafe {
-            (driver.cuLinkCreate)(1, opt_keys.as_mut_ptr(), opt_vals.as_mut_ptr(), &mut link_state)
-        }
-    } else {
-        // Blackwell: no target, auto-detect
-        unsafe { (driver.cuLinkCreate)(0, ptr::null_mut(), ptr::null_mut(), &mut link_state) }
+    let result = unsafe {
+        (driver.cuLinkCreate)(1, opt_keys.as_mut_ptr(), opt_vals.as_mut_ptr(), &mut link_state)
     };
     CudaDriver::check(result)
         .map_err(|e| GpuError::ModuleLoad(format!("cuLinkCreate failed: {e}")))?;
@@ -248,16 +242,12 @@ impl CudaModule {
         ctx.make_current()?;
 
         // Detect device compute capability for JIT target.
-        // GH-480: CU_JIT_TARGET must match the PTX `.target` directive.
-        // PTX 8.0 only supports up to sm_90, so both PTX source (via
-        // CudaContext::sm_target()) and JIT target must clamp to sm_90.
-        // The sm_90 SASS runs on Blackwell (sm_121) via forward compatibility.
-        // Passing CU_JIT_TARGET=121 with `.target sm_90` PTX causes the driver
-        // to generate incorrect native sm_121 SASS -- garbage inference results.
+        // trueno#188: Now that PTX uses the real target (sm_121 with PTX 8.8),
+        // the JIT target should also be the real compute capability.
+        // The previous GH-480 clamp to sm_90 is no longer needed because
+        // PTX ISA 8.8 supports sm_121 natively.
         let (major, minor) = ctx.compute_capability()?;
-        let (jit_major, jit_minor) =
-            if major > 9 || (major == 9 && minor > 0) { (9, 0) } else { (major, minor) };
-        let jit_target: c_uint = (jit_major * 10 + jit_minor) as c_uint;
+        let jit_target: c_uint = (major * 10 + minor) as c_uint;
 
         // GH-480: Patch unconditional backward branches for Blackwell (sm_121+).
         // The CUDA 13.0 JIT miscompiles while-loops (unconditional backward
@@ -301,28 +291,9 @@ impl CudaModule {
         // Cache miss path: compile PTX -> cubin via linker API, save, load
         // ----------------------------------------------------------------
 
-        // GH-480 / trueno#200: On Blackwell, skip linker API + cuModuleLoadDataEx.
-        // Both poison the CUDA context when they fail with CU_JIT_TARGET=90.
-        // Go straight to cuModuleLoadData (auto-detect) which works reliably.
-        if major >= 12 {
-            eprintln!("[BLACKWELL-SKIP] Direct cuModuleLoadData for kernel (major={major})");
-            let ptx_cstring = CString::new(ptx.as_bytes().to_vec())
-                .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
-            let mut module: CUmodule = ptr::null_mut();
-            let result =
-                unsafe { (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _) };
-            if CudaDriver::check(result).is_ok() {
-                return Ok(Self { module, functions: HashMap::new() });
-            }
-            let kernel_name = ptx.lines().find(|l| l.contains(".entry")).unwrap_or("unknown");
-            // GH-561: Dump PTX on compilation failure for debugging
-            let dump_path = format!("/tmp/ptx-fail-{}.ptx", std::process::id());
-            let _ = std::fs::write(&dump_path, ptx);
-            eprintln!("[PTX-FAIL] Invalid PTX dumped to {dump_path} ({} bytes)", ptx.len());
-            return Err(GpuError::ModuleLoad(format!(
-                "Blackwell cuModuleLoadData failed: result={result} (kernel: {kernel_name})"
-            )));
-        }
+        // trueno#188: With PTX 8.8 + sm_121 native target, the normal linker/cache
+        // path works for Blackwell. No more special-case skip needed.
+        // The backward branch patch (above) still applies for the JIT bug.
 
         // Try to compile PTX to cubin via linker API for caching
         let cubin_result = compile_ptx_to_cubin(driver, ptx, jit_target);
@@ -370,23 +341,9 @@ impl CudaModule {
         let ptx_cstring = CString::new(ptx.as_bytes().to_vec())
             .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
 
-        // GH-480 / trueno#200: On Blackwell (sm_121+), cuModuleLoadDataEx with
-        // CU_JIT_TARGET=90 poisons the CUDA context on failure. Subsequent
-        // cuModuleLoadData calls return CUDA_ERROR_ILLEGAL_ADDRESS (700).
-        // Skip try1 entirely on Blackwell — go straight to cuModuleLoadData.
-        if major >= 12 {
-            let mut module: CUmodule = ptr::null_mut();
-            let result =
-                unsafe { (driver.cuModuleLoadData)(&mut module, ptx_cstring.as_ptr() as *const _) };
-            if CudaDriver::check(result).is_ok() {
-                return Ok(Self { module, functions: HashMap::new() });
-            }
-
-            let kernel_name = ptx.lines().find(|l| l.contains(".entry")).unwrap_or("unknown");
-            return Err(GpuError::ModuleLoad(format!(
-                "CUDA module loading failed on Blackwell: result={result} (kernel: {kernel_name})"
-            )));
-        }
+        // trueno#188: With PTX 8.8 + native sm_121, cuModuleLoadDataEx with
+        // CU_JIT_TARGET=121 should work correctly on Blackwell. The previous
+        // GH-480 workaround (skip cuModuleLoadDataEx) is no longer needed.
 
         // Try 1: cuModuleLoadDataEx with explicit JIT target + log buffers
         let mut info_log = vec![0u8; 4096];

@@ -118,6 +118,27 @@ use crate::ptx::optimize::barrier_safety::{self, BarrierSafetyResult};
 use crate::ptx::parity::{self, ParityResult};
 use crate::ptx::{PtxKernel, PtxModule};
 
+/// Select the correct PTX ISA version for a given SM target.
+///
+/// trueno#188: Blackwell (sm_100+) requires PTX 8.8 (CUDA 13.0 toolkit).
+/// Older architectures use PTX 8.0.
+///
+/// Returns `(major, minor)` of the PTX ISA version.
+pub fn ptx_version_for_target(target: &str) -> (u32, u32) {
+    // Parse "sm_XYZ" -> XYZ as integer
+    let sm_num: u32 = target
+        .strip_prefix("sm_")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(70);
+    if sm_num >= 100 {
+        // Blackwell (sm_100, sm_120, sm_121, etc.) requires PTX 8.8
+        (8, 8)
+    } else {
+        // Volta through Hopper: PTX 8.0
+        (8, 0)
+    }
+}
+
 /// Kernel trait for GPU kernels
 pub trait Kernel {
     /// Get kernel name
@@ -126,9 +147,17 @@ pub trait Kernel {
     /// Build PTX kernel
     fn build_ptx(&self) -> PtxKernel;
 
-    /// Get PTX module containing this kernel with specified compute target
+    /// Get PTX module containing this kernel with specified compute target.
+    ///
+    /// trueno#188: Automatically selects the correct PTX ISA version based on
+    /// the target. sm_100+ (Blackwell) requires PTX 8.8; older targets use 8.0.
     fn as_module_for_target(&self, target: &str) -> PtxModule {
-        PtxModule::new().version(8, 0).target(target).address_size(64).add_kernel(self.build_ptx())
+        let (ptx_major, ptx_minor) = ptx_version_for_target(target);
+        PtxModule::new()
+            .version(ptx_major, ptx_minor)
+            .target(target)
+            .address_size(64)
+            .add_kernel(self.build_ptx())
     }
 
     /// Get PTX module containing this kernel
