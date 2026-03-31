@@ -31,6 +31,20 @@ pub struct LayerActivations {
     pub softmax_logsumexp: wgpu::Buffer,
 }
 
+/// Optional LoRA buffers for Q/K/V projections in a layer's forward pass.
+pub struct QkvLoRA<'a> {
+    pub q_a: &'a wgpu::Buffer, pub q_b: &'a wgpu::Buffer,
+    pub k_a: &'a wgpu::Buffer, pub k_b: &'a wgpu::Buffer,
+    pub v_a: &'a wgpu::Buffer, pub v_b: &'a wgpu::Buffer,
+    pub rank: u32,
+    pub scale: f32,
+    pub in_dim: u32,
+    pub q_dim: u32,
+    pub kv_dim: u32,
+    pub lora_pipeline: &'a wgpu::ComputePipeline,
+    pub lora_bgl: &'a wgpu::BindGroupLayout,
+}
+
 /// GPU-resident transformer layer state.
 /// All buffers persist across tokens — only input/output change per step.
 pub struct WgslForwardPass {
@@ -1019,6 +1033,7 @@ impl WgslForwardPass {
         seq_len: u32,
         layer_prefix: &str,
         saved: &LayerActivations,
+        lora: Option<&QkvLoRA<'_>>,
     ) -> Result<(), String> {
         let hd = self.hidden_dim;
         let q_dim = self.num_heads * self.head_dim;
@@ -1074,10 +1089,18 @@ impl WgslForwardPass {
             kv_dim,
         );
 
-        // Attention — requires its own submit (workgroup shared memory barrier)
-        // Cannot batch across attention + post-attention in same encoder pass
-        // because attention writes to attn_out_buf which O proj reads.
-        // wgpu handles this via execution ordering within the encoder.
+        // LoRA addmm on Q/K/V: output += (saved_input @ A) @ B * scale
+        // Must happen BEFORE attention consumes Q/K/V buffers.
+        if let Some(lora) = lora {
+            self.encode_lora_addmm(encoder, &saved.attn_norm_out, lora.q_a, lora.q_b, &self.q_buf,
+                seq_len, lora.in_dim, lora.rank, lora.q_dim, lora.scale, lora.lora_pipeline, lora.lora_bgl);
+            self.encode_lora_addmm(encoder, &saved.attn_norm_out, lora.k_a, lora.k_b, &self.k_buf,
+                seq_len, lora.in_dim, lora.rank, lora.kv_dim, lora.scale, lora.lora_pipeline, lora.lora_bgl);
+            self.encode_lora_addmm(encoder, &saved.attn_norm_out, lora.v_a, lora.v_b, &self.v_buf,
+                seq_len, lora.in_dim, lora.rank, lora.kv_dim, lora.scale, lora.lora_pipeline, lora.lora_bgl);
+        }
+
+        // Attention — wgpu handles execution ordering within the encoder.
         self.encode_attention(encoder, seq_len);
 
         // SAVE attn_output
@@ -1222,7 +1245,7 @@ impl WgslForwardPass {
     ) -> Result<LayerActivations, String> {
         let saved = self.alloc_layer_activations(seq_len);
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        self.encode_forward_layer_training(&mut encoder, seq_len, layer_prefix, &saved)?;
+        self.encode_forward_layer_training(&mut encoder, seq_len, layer_prefix, &saved, None)?;
         self.queue.submit(Some(encoder.finish()));
         Ok(saved)
     }
@@ -1239,7 +1262,7 @@ impl WgslForwardPass {
         for layer_idx in 0..num_layers {
             let prefix = format!("layer.{layer_idx}");
             let saved = self.alloc_layer_activations(seq_len);
-            self.encode_forward_layer_training(&mut encoder, seq_len, &prefix, &saved)?;
+            self.encode_forward_layer_training(&mut encoder, seq_len, &prefix, &saved, None)?;
             all_saved.push(saved);
         }
 
@@ -1280,6 +1303,52 @@ impl WgslForwardPass {
         pass.set_bind_group(0, &bg, &[]);
         // One workgroup per (head, position)
         pass.dispatch_workgroups(self.num_heads, seq_len, 1);
+    }
+
+    /// Encode LoRA addmm: output += (input @ A) @ B * scale
+    #[allow(clippy::too_many_arguments)]
+    fn encode_lora_addmm(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        input: &wgpu::Buffer,
+        lora_a: &wgpu::Buffer,
+        lora_b: &wgpu::Buffer,
+        output: &wgpu::Buffer,
+        seq_len: u32,
+        in_dim: u32,
+        rank: u32,
+        out_dim: u32,
+        scale: f32,
+        pipeline: &wgpu::ComputePipeline,
+        bgl: &wgpu::BindGroupLayout,
+    ) {
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct P { seq_len: u32, in_dim: u32, rank: u32, out_dim: u32, scale: f32, _p0: u32, _p1: u32, _p2: u32 }
+        let params = P { seq_len, in_dim, rank, out_dim, scale, _p0: 0, _p1: 0, _p2: 0 };
+        let pbuf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: None, size: 32,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        self.queue.write_buffer(&pbuf, 0, bytemuck::bytes_of(&params));
+        let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None, layout: bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: input.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: lora_a.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: lora_b.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: output.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 4, resource: pbuf.as_entire_binding() },
+            ],
+        });
+        let total = seq_len * out_dim;
+        let wg = total.div_ceil(256);
+        let (x, y) = if wg <= 65535 { (wg, 1) } else { (65535, wg.div_ceil(65535)) };
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(pipeline);
+        pass.set_bind_group(0, &bg, &[]);
+        pass.dispatch_workgroups(x, y, 1);
     }
 
     fn encode_rmsnorm(
