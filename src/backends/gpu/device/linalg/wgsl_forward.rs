@@ -512,6 +512,11 @@ impl WgslForwardPass {
         self.weight_buffers.len()
     }
 
+    /// Reference to the wgpu device.
+    pub fn device_ref(&self) -> &wgpu::Device {
+        &self.device
+    }
+
     /// Reference to the wgpu queue.
     pub fn queue_ref(&self) -> &wgpu::Queue {
         &self.queue
@@ -1007,17 +1012,52 @@ impl WgslForwardPass {
         let s = seq_len as usize;
 
         // Pass 1: RMSNorm
-        let norm_w = self.weight_buffers.get(&format!("{layer_prefix}.attn_norm"))
+        let norm_w = self
+            .weight_buffers
+            .get(&format!("{layer_prefix}.attn_norm"))
             .ok_or_else(|| format!("Missing {layer_prefix}.attn_norm"))?;
         self.encode_rmsnorm(encoder, &self.hidden_buf, norm_w, &self.norm_buf, hd);
 
         // SAVE attn_norm_out
-        encoder.copy_buffer_to_buffer(&self.norm_buf, 0, &saved.attn_norm_out, 0, (s * hd as usize * 4) as u64);
+        encoder.copy_buffer_to_buffer(
+            &self.norm_buf,
+            0,
+            &saved.attn_norm_out,
+            0,
+            (s * hd as usize * 4) as u64,
+        );
 
         // Q/K/V projections
-        self.encode_matmul(encoder, &self.norm_buf, layer_prefix, "q_proj", &self.q_buf, seq_len, hd, q_dim);
-        self.encode_matmul(encoder, &self.norm_buf, layer_prefix, "k_proj", &self.k_buf, seq_len, hd, kv_dim);
-        self.encode_matmul(encoder, &self.norm_buf, layer_prefix, "v_proj", &self.v_buf, seq_len, hd, kv_dim);
+        self.encode_matmul(
+            encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "q_proj",
+            &self.q_buf,
+            seq_len,
+            hd,
+            q_dim,
+        );
+        self.encode_matmul(
+            encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "k_proj",
+            &self.k_buf,
+            seq_len,
+            hd,
+            kv_dim,
+        );
+        self.encode_matmul(
+            encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "v_proj",
+            &self.v_buf,
+            seq_len,
+            hd,
+            kv_dim,
+        );
 
         // Attention — requires its own submit (workgroup shared memory barrier)
         // Cannot batch across attention + post-attention in same encoder pass
@@ -1026,37 +1066,111 @@ impl WgslForwardPass {
         self.encode_attention(encoder, seq_len);
 
         // SAVE attn_output
-        encoder.copy_buffer_to_buffer(&self.attn_out_buf, 0, &saved.attn_output, 0, (s * q_dim as usize * 4) as u64);
+        encoder.copy_buffer_to_buffer(
+            &self.attn_out_buf,
+            0,
+            &saved.attn_output,
+            0,
+            (s * q_dim as usize * 4) as u64,
+        );
 
         // O projection
-        self.encode_matmul(encoder, &self.attn_out_buf, layer_prefix, "o_proj", &self.q_buf, seq_len, q_dim, hd);
+        self.encode_matmul(
+            encoder,
+            &self.attn_out_buf,
+            layer_prefix,
+            "o_proj",
+            &self.q_buf,
+            seq_len,
+            q_dim,
+            hd,
+        );
 
         // Residual
-        self.encode_residual(encoder, &self.hidden_buf, &self.q_buf, &self.ffn_out_buf, hd * seq_len);
+        self.encode_residual(
+            encoder,
+            &self.hidden_buf,
+            &self.q_buf,
+            &self.ffn_out_buf,
+            hd * seq_len,
+        );
 
         // FFN RMSNorm
-        let ffn_norm_w = self.weight_buffers.get(&format!("{layer_prefix}.ffn_norm"))
+        let ffn_norm_w = self
+            .weight_buffers
+            .get(&format!("{layer_prefix}.ffn_norm"))
             .ok_or_else(|| format!("Missing {layer_prefix}.ffn_norm"))?;
         self.encode_rmsnorm(encoder, &self.ffn_out_buf, ffn_norm_w, &self.norm_buf, hd);
 
         // SAVE ffn_norm_out
-        encoder.copy_buffer_to_buffer(&self.norm_buf, 0, &saved.ffn_norm_out, 0, (s * hd as usize * 4) as u64);
+        encoder.copy_buffer_to_buffer(
+            &self.norm_buf,
+            0,
+            &saved.ffn_norm_out,
+            0,
+            (s * hd as usize * 4) as u64,
+        );
 
         // Gate + Up
-        self.encode_matmul(encoder, &self.norm_buf, layer_prefix, "gate_proj", &self.ffn_gate_buf, seq_len, hd, inter);
-        self.encode_matmul(encoder, &self.norm_buf, layer_prefix, "up_proj", &self.ffn_up_buf, seq_len, hd, inter);
+        self.encode_matmul(
+            encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "gate_proj",
+            &self.ffn_gate_buf,
+            seq_len,
+            hd,
+            inter,
+        );
+        self.encode_matmul(
+            encoder,
+            &self.norm_buf,
+            layer_prefix,
+            "up_proj",
+            &self.ffn_up_buf,
+            seq_len,
+            hd,
+            inter,
+        );
 
         // SiLU
-        self.encode_silu_mul(encoder, &self.ffn_gate_buf, &self.ffn_up_buf, &self.ffn_silu_buf, inter * seq_len);
+        self.encode_silu_mul(
+            encoder,
+            &self.ffn_gate_buf,
+            &self.ffn_up_buf,
+            &self.ffn_silu_buf,
+            inter * seq_len,
+        );
 
         // SAVE silu_gate_output
-        encoder.copy_buffer_to_buffer(&self.ffn_silu_buf, 0, &saved.silu_gate_output, 0, (s * inter as usize * 4) as u64);
+        encoder.copy_buffer_to_buffer(
+            &self.ffn_silu_buf,
+            0,
+            &saved.silu_gate_output,
+            0,
+            (s * inter as usize * 4) as u64,
+        );
 
         // Down projection
-        self.encode_matmul(encoder, &self.ffn_silu_buf, layer_prefix, "down_proj", &self.norm_buf, seq_len, inter, hd);
+        self.encode_matmul(
+            encoder,
+            &self.ffn_silu_buf,
+            layer_prefix,
+            "down_proj",
+            &self.norm_buf,
+            seq_len,
+            inter,
+            hd,
+        );
 
         // Residual
-        self.encode_residual(encoder, &self.ffn_out_buf, &self.norm_buf, &self.hidden_buf, hd * seq_len);
+        self.encode_residual(
+            encoder,
+            &self.ffn_out_buf,
+            &self.norm_buf,
+            &self.hidden_buf,
+            hd * seq_len,
+        );
 
         Ok(())
     }
