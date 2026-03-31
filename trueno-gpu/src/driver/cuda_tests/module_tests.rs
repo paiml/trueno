@@ -187,3 +187,25 @@ fn test_module_drop_multiple() {
         // Module dropped here
     }
 }
+
+/// trueno#207/#231: Verify real backward kernels compile on sm_89 via linker path.
+/// BatchedRmsNormBackwardKernel uses mul_wide_u32_reg (PtxOp::MulWide) which
+/// previously caused CUDA_ERROR_ILLEGAL_ADDRESS (trueno#226).
+#[test]
+fn test_module_backward_kernel_ptx_sm89() {
+    use crate::kernels::backward::BatchedRmsNormBackwardKernel;
+    use crate::kernels::Kernel;
+
+    let ctx = CudaContext::new(0).expect("Context creation MUST succeed");
+    let kernel = BatchedRmsNormBackwardKernel::new(64, 128, 1e-6);
+    let ptx = kernel.emit_ptx();
+
+    // Verify the PTX compiles and loads via the linker path on the real GPU
+    let mut module =
+        CudaModule::from_ptx(&ctx, &ptx).expect("Backward kernel PTX MUST compile on sm_89");
+    assert!(!module.raw().is_null());
+
+    // Verify the entry point is accessible
+    let func = module.get_function("batched_rms_norm_backward");
+    assert!(func.is_ok(), "Entry point MUST be found: {:?}", func.err());
+}

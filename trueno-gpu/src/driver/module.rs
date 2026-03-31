@@ -80,8 +80,12 @@ fn compile_ptx_to_cubin(
     // trueno#188: Now that PTX uses the correct ISA version (8.8 for sm_121),
     // the linker can use the real JIT target for all architectures.
     let mut opt_keys: [c_uint; 1] = [CU_JIT_TARGET];
-    let mut jit_target_val = jit_target;
-    let mut opt_vals: [*mut c_void; 1] = [std::ptr::from_mut(&mut jit_target_val) as *mut c_void];
+    // CU_JIT_TARGET is a value-type option: the integer value is cast directly
+    // to *mut c_void (NOT passed as a pointer). This matches cuModuleLoadDataEx
+    // convention and the CUDA Driver API specification.
+    // Bug fix: previously passed &mut jit_target_val (a pointer TO the value),
+    // which caused CUDA_ERROR_INVALID_VALUE on sm_89 (trueno#231).
+    let mut opt_vals: [*mut c_void; 1] = [jit_target as *mut c_void];
 
     // SAFETY: option arrays are valid for the specified count
     let result = unsafe {
@@ -91,17 +95,23 @@ fn compile_ptx_to_cubin(
         .map_err(|e| GpuError::ModuleLoad(format!("cuLinkCreate failed: {e}")))?;
 
     // Add PTX data to the linker
-    let ptx_bytes = ptx.as_bytes();
+    // cuLinkAddData with CU_JIT_INPUT_PTX requires null-terminated text.
+    // Rust &str is NOT null-terminated, so we must use CString.
+    // Bug fix: previously passed raw bytes without null terminator,
+    // causing CUDA_ERROR_INVALID_PTX (218) on sm_89 (trueno#231).
+    let ptx_cstring = CString::new(ptx.as_bytes().to_vec())
+        .map_err(|_| GpuError::ModuleLoad("PTX contains null bytes".to_string()))?;
     let ptx_name = CString::new("kernel.ptx").expect("static string has no null bytes");
 
-    // SAFETY: link_state is valid, ptx_bytes is valid for the call duration.
+    // SAFETY: link_state is valid, ptx_cstring is valid null-terminated string.
     // cuLinkAddData takes a mutable pointer but does not modify the data.
+    // Size includes the null terminator per CUDA driver API convention.
     let result = unsafe {
         (driver.cuLinkAddData)(
             link_state,
             CU_JIT_INPUT_PTX,
-            ptx_bytes.as_ptr() as *mut c_void,
-            ptx_bytes.len(),
+            ptx_cstring.as_ptr() as *mut c_void,
+            ptx_cstring.as_bytes_with_nul().len(),
             ptx_name.as_ptr(),
             0,
             ptr::null_mut(),
