@@ -30,20 +30,43 @@ impl GpuDevice {
         k: usize,
         n: usize,
     ) -> Result<(), String> {
-        // Guard: skip GPU matmul if any buffer exceeds max_storage_buffer_binding_size
+        // Guard: if B exceeds max buffer binding, chunk along N dimension.
+        // Each chunk computes result[:, n_start..n_end] = A @ B[:, n_start..n_end]
+        // This handles lm_head (152064 × 3584 × 4 = 2.18 GB > 2 GB limit).
         let max_binding = self.device.limits().max_storage_buffer_binding_size as u64;
-        let a_bytes = (a.len() * 4) as u64;
         let b_bytes = (b.len() * 4) as u64;
-        if a_bytes > max_binding || b_bytes > max_binding {
-            // CPU fallback for large matrices (e.g., lm_head > 2 GB)
-            for i in 0..m {
-                for j in 0..n {
-                    let mut sum = 0.0f32;
-                    for kk in 0..k {
-                        sum += a[i * k + kk] * b[kk * n + j];
+        if b_bytes > max_binding {
+            // Chunk B along N: each chunk has at most max_n_chunk columns
+            let max_elements = max_binding as usize / 4; // max f32 elements per buffer
+            let max_n_chunk = max_elements / k; // max columns per chunk
+            let max_n_chunk = max_n_chunk.max(1);
+
+            let mut n_start = 0;
+            while n_start < n {
+                let n_end = (n_start + max_n_chunk).min(n);
+                let chunk_n = n_end - n_start;
+
+                // Extract B chunk: B[:, n_start..n_end] from row-major B[K, N]
+                let mut b_chunk = vec![0.0f32; k * chunk_n];
+                for row in 0..k {
+                    for col in 0..chunk_n {
+                        b_chunk[row * chunk_n + col] = b[row * n + n_start + col];
                     }
-                    result[i * n + j] = sum;
                 }
+
+                // Compute C_chunk = A @ B_chunk
+                let mut c_chunk = vec![0.0f32; m * chunk_n];
+                // Use recursive call — chunk fits in buffer now
+                Box::pin(self.matmul_async(a, &b_chunk, &mut c_chunk, m, k, chunk_n)).await?;
+
+                // Copy chunk into result: result[:, n_start..n_end]
+                for row in 0..m {
+                    for col in 0..chunk_n {
+                        result[row * n + n_start + col] = c_chunk[row * chunk_n + col];
+                    }
+                }
+
+                n_start = n_end;
             }
             return Ok(());
         }
