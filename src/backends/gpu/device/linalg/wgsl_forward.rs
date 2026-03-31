@@ -10,6 +10,27 @@
 
 use std::collections::HashMap;
 
+/// Saved activations for one transformer layer's backward pass.
+///
+/// Contains the 7 tensors needed for LoRA gradient computation
+/// without replaying the forward pass (§26.11.5, falsification-verified).
+pub struct LayerActivations {
+    /// Input to Q/K/V projections (RMSNorm output). [seq, hidden]
+    pub attn_norm_out: wgpu::Buffer,
+    /// Input to O projection (attention output). [seq, q_dim]
+    pub attn_output: wgpu::Buffer,
+    /// Input to gate/up/down projections (FFN RMSNorm output). [seq, hidden]
+    pub ffn_norm_out: wgpu::Buffer,
+    /// Input to down projection (SiLU(gate)×up). [seq, intermediate]
+    pub silu_gate_output: wgpu::Buffer,
+    /// RMSNorm reciprocal std for attention norm. [seq]
+    pub rstd_attn: wgpu::Buffer,
+    /// RMSNorm reciprocal std for FFN norm. [seq]
+    pub rstd_ffn: wgpu::Buffer,
+    /// Softmax logsumexp for attention backward. [num_heads, seq]
+    pub softmax_logsumexp: wgpu::Buffer,
+}
+
 /// GPU-resident transformer layer state.
 /// All buffers persist across tokens — only input/output change per step.
 pub struct WgslForwardPass {
@@ -964,11 +985,32 @@ impl WgslForwardPass {
         &self,
         seq_len: u32,
         layer_prefix: &str,
-    ) -> Result<(), String> {
+    ) -> Result<LayerActivations, String> {
         let hd = self.hidden_dim;
         let q_dim = self.num_heads * self.head_dim;
         let kv_dim = self.num_kv_heads * self.head_dim;
         let inter = self.intermediate_dim;
+
+        // Allocate activation save buffers
+        let save_buf = |size: usize, label: &str| -> wgpu::Buffer {
+            self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: (size * 4) as u64,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_SRC
+                    | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
+
+        let s = seq_len as usize;
+        let saved_attn_norm = save_buf(s * hd as usize, "saved_attn_norm");
+        let saved_attn_out = save_buf(s * q_dim as usize, "saved_attn_out");
+        let saved_ffn_norm = save_buf(s * hd as usize, "saved_ffn_norm");
+        let saved_silu = save_buf(s * inter as usize, "saved_silu");
+        let saved_rstd_attn = save_buf(s, "saved_rstd_attn");
+        let saved_rstd_ffn = save_buf(s, "saved_rstd_ffn");
+        let saved_logsumexp = save_buf(self.num_heads as usize * s, "saved_logsumexp");
 
         let mut encoder = self.device.create_command_encoder(&Default::default());
 
@@ -976,6 +1018,9 @@ impl WgslForwardPass {
         let norm_w = self.weight_buffers.get(&format!("{layer_prefix}.attn_norm"))
             .ok_or_else(|| format!("Missing {layer_prefix}.attn_norm"))?;
         self.encode_rmsnorm(&mut encoder, &self.hidden_buf, norm_w, &self.norm_buf, hd);
+
+        // SAVE: attn_norm_out (input to Q/K/V projections)
+        encoder.copy_buffer_to_buffer(&self.norm_buf, 0, &saved_attn_norm, 0, (s * hd as usize * 4) as u64);
 
         // Passes 2-4: Q/K/V projections with M=seq_len (tiled GEMM)
         self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "q_proj", &self.q_buf, seq_len, hd, q_dim);
@@ -985,8 +1030,10 @@ impl WgslForwardPass {
         // Pass 5: Causal attention on GPU (full sequence, no KV cache needed)
         self.encode_attention(&mut encoder, seq_len);
 
+        // SAVE: attn_output (input to O projection)
+        encoder.copy_buffer_to_buffer(&self.attn_out_buf, 0, &saved_attn_out, 0, (s * q_dim as usize * 4) as u64);
+
         // Pass 6: O projection (attn_out_buf[seq,q_dim] → q_buf[seq,hidden] via o_proj)
-        // Reuse q_buf as output since Q is consumed by attention
         self.encode_matmul(&mut encoder, &self.attn_out_buf, layer_prefix, "o_proj", &self.q_buf, seq_len, q_dim, hd);
 
         // Pass 7: Residual(hidden + o_proj_out → ffn_out)
@@ -997,12 +1044,18 @@ impl WgslForwardPass {
             .ok_or_else(|| format!("Missing {layer_prefix}.ffn_norm"))?;
         self.encode_rmsnorm(&mut encoder, &self.ffn_out_buf, ffn_norm_w, &self.norm_buf, hd);
 
+        // SAVE: ffn_norm_out (input to gate/up/down projections)
+        encoder.copy_buffer_to_buffer(&self.norm_buf, 0, &saved_ffn_norm, 0, (s * hd as usize * 4) as u64);
+
         // Passes 9-10: Gate + Up projections
         self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "gate_proj", &self.ffn_gate_buf, seq_len, hd, inter);
         self.encode_matmul(&mut encoder, &self.norm_buf, layer_prefix, "up_proj", &self.ffn_up_buf, seq_len, hd, inter);
 
         // Pass 11: SiLU(gate) × up → ffn_silu_buf
         self.encode_silu_mul(&mut encoder, &self.ffn_gate_buf, &self.ffn_up_buf, &self.ffn_silu_buf, inter * seq_len);
+
+        // SAVE: silu_gate_output (input to down projection)
+        encoder.copy_buffer_to_buffer(&self.ffn_silu_buf, 0, &saved_silu, 0, (s * inter as usize * 4) as u64);
 
         // Pass 12: Down projection
         self.encode_matmul(&mut encoder, &self.ffn_silu_buf, layer_prefix, "down_proj", &self.norm_buf, seq_len, inter, hd);
@@ -1012,7 +1065,15 @@ impl WgslForwardPass {
 
         self.queue.submit(Some(encoder.finish()));
 
-        Ok(())
+        Ok(LayerActivations {
+            attn_norm_out: saved_attn_norm,
+            attn_output: saved_attn_out,
+            ffn_norm_out: saved_ffn_norm,
+            silu_gate_output: saved_silu,
+            rstd_attn: saved_rstd_attn,
+            rstd_ffn: saved_rstd_ffn,
+            softmax_logsumexp: saved_logsumexp,
+        })
     }
 
     // --- Encode helpers (add compute passes to an existing encoder) ---
