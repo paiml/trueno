@@ -105,18 +105,42 @@ fn main(
     workgroupBarrier();
     max_score = reduce_buf[0];
 
-    // Softmax: exp and sum (thread 0 only — sequential over seq positions)
-    if (tid == 0u) {
-        var sum_exp: f32 = 0.0;
-        for (var s = 0u; s <= pos; s++) {
-            let w = exp(weights[s] - max_score);
-            weights[s] = w;
-            sum_exp += w;
-        }
-        let inv_sum = 1.0 / sum_exp;
-        for (var s = 0u; s <= pos; s++) {
-            weights[s] = weights[s] * inv_sum;
-        }
+    // Parallel softmax: 128 threads process chunks of the seq positions
+    // Each thread handles ceil(pos/128) positions for exp + partial sum
+    let chunk_size = (pos + 128u) / 128u;
+    let s_start = tid * chunk_size;
+    let s_end = min(s_start + chunk_size, pos + 1u);
+
+    // Parallel exp + partial sum
+    var partial_sum: f32 = 0.0;
+    for (var s = s_start; s < s_end; s++) {
+        let w = exp(weights[s] - max_score);
+        weights[s] = w;
+        partial_sum += w;
+    }
+    reduce_buf[tid] = partial_sum;
+    workgroupBarrier();
+
+    // Reduce partial sums (tree reduction)
+    if (tid < 64u) { reduce_buf[tid] += reduce_buf[tid + 64u]; }
+    workgroupBarrier();
+    if (tid < 32u) { reduce_buf[tid] += reduce_buf[tid + 32u]; }
+    workgroupBarrier();
+    if (tid < 16u) { reduce_buf[tid] += reduce_buf[tid + 16u]; }
+    workgroupBarrier();
+    if (tid < 8u) { reduce_buf[tid] += reduce_buf[tid + 8u]; }
+    workgroupBarrier();
+    if (tid < 4u) { reduce_buf[tid] += reduce_buf[tid + 4u]; }
+    workgroupBarrier();
+    if (tid < 2u) { reduce_buf[tid] += reduce_buf[tid + 2u]; }
+    workgroupBarrier();
+    if (tid < 1u) { reduce_buf[tid] += reduce_buf[tid + 1u]; }
+    workgroupBarrier();
+
+    // Parallel normalize
+    let inv_sum = 1.0 / reduce_buf[0];
+    for (var s = s_start; s < s_end; s++) {
+        weights[s] = weights[s] * inv_sum;
     }
     workgroupBarrier();
 
