@@ -65,13 +65,17 @@ fn vram_stats(ctx: &CudaContext, info: &CudaDeviceInfo) -> (f64, f64, f64) {
 impl App {
     fn new() -> Self {
         let mut cpu = CpuDevice::new();
-        let _ = cpu.refresh();
+        if let Err(e) = cpu.refresh() {
+            warn!("CPU refresh failed during init: {e}");
+        }
 
         info!(cpu_name = cpu.device_name(), cores = num_cpus::get(), "CPU detected");
 
         // Try to enumerate real CUDA GPUs
         let cuda_available = cuda_monitoring_available();
+        #[allow(unused_mut)] // mutated inside #[cfg(feature = "cuda")] block
         let mut gpus = Vec::new();
+        #[allow(unused_mut)]
         let mut gpu_vram_history = Vec::new();
 
         debug!(cuda_available, "CUDA monitoring check");
@@ -145,8 +149,10 @@ impl App {
     fn on_tick(&mut self) {
         self.tick += 1;
 
-        // Refresh CPU metrics
-        let _ = self.cpu.refresh();
+        // Refresh CPU metrics — GH-194: log failures instead of discarding
+        if let Err(e) = self.cpu.refresh() {
+            warn!("CPU refresh failed: {e}");
+        }
 
         // Update CPU history
         let cpu_pct = self.cpu.compute_utilization().unwrap_or(0.0) as u64;

@@ -102,7 +102,7 @@ pub(crate) struct App {
     pub(crate) tick: u64,
     /// Real GPU states (from CUDA hardware)
     pub(crate) gpus: Vec<GpuState>,
-    /// GPU VRAM history per device
+    /// GPU VRAM history per device (sparkline data)
     pub(crate) gpu_vram_history: Vec<Vec<u64>>,
     /// CPU stress workers (one per core)
     pub(crate) cpu_workers: Vec<StressWorker>,

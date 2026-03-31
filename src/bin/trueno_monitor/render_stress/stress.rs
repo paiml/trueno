@@ -194,6 +194,10 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
     if has_gpu {
         constraints.push(Constraint::Length(3)); // GPU ops gauge
         constraints.push(Constraint::Length(4)); // GPU ops sparkline
+                                                 // GH-194: Per-GPU VRAM history sparklines (was dead code)
+        for _ in 0..app.gpu_vram_history.len() {
+            constraints.push(Constraint::Length(4)); // VRAM sparkline per GPU
+        }
     }
 
     constraints.push(Constraint::Min(3)); // Stats
@@ -293,7 +297,24 @@ fn render_stress_running(f: &mut Frame, app: &App, area: Rect) {
             .style(Style::default().fg(Color::Yellow));
         f.render_widget(gpu_sparkline, chunks[6]);
 
-        7
+        // GH-194: Per-GPU VRAM history sparklines (was dead code — now displayed)
+        let mut next_chunk = 7;
+        for (i, vram_history) in app.gpu_vram_history.iter().enumerate() {
+            let gpu_name = app.gpus.get(i).map(|g| g.info.name.as_str()).unwrap_or("GPU");
+            let vram_sparkline = Sparkline::default()
+                .block(
+                    Block::default()
+                        .title(format!(" GPU{} VRAM % ({}) ", i, gpu_name))
+                        .borders(Borders::ALL),
+                )
+                .data(vram_history)
+                .max(100)
+                .style(Style::default().fg(Color::Magenta));
+            f.render_widget(vram_sparkline, chunks[next_chunk]);
+            next_chunk += 1;
+        }
+
+        next_chunk
     } else {
         5
     };
