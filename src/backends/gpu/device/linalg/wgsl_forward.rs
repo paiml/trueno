@@ -527,6 +527,21 @@ impl WgslForwardPass {
         &self.hidden_buf
     }
 
+    /// Reference to Q buffer (for LoRA addmm after Q projection).
+    pub fn q_buffer(&self) -> &wgpu::Buffer {
+        &self.q_buf
+    }
+
+    /// Reference to K buffer.
+    pub fn k_buffer(&self) -> &wgpu::Buffer {
+        &self.k_buf
+    }
+
+    /// Reference to V buffer.
+    pub fn v_buffer(&self) -> &wgpu::Buffer {
+        &self.v_buf
+    }
+
     /// Download hidden state from GPU.
     pub fn download_hidden(&self, len: usize) -> Vec<f32> {
         let size = (len * 4) as u64;

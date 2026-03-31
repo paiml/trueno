@@ -306,6 +306,60 @@ fn main(
 }
 "#;
 
+/// Fused LoRA addmm: output += (input @ A) @ B * scale
+///
+/// Computes the LoRA contribution and adds it to the base projection output.
+/// Two matmuls + scaled add in sequence. Uses shared memory for the intermediate.
+/// For rank << hidden_dim, this is much smaller than the base matmul.
+///
+/// Dispatch: one workgroup per output element (output is [seq, out_dim]).
+/// Each thread computes one output element's LoRA delta.
+pub const LORA_ADDMM_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> input: array<f32>;   // [seq, in_dim]
+@group(0) @binding(1) var<storage, read> lora_a: array<f32>;  // [in_dim, rank]
+@group(0) @binding(2) var<storage, read> lora_b: array<f32>;  // [rank, out_dim]
+@group(0) @binding(3) var<storage, read_write> output: array<f32>; // [seq, out_dim] — ADD to existing
+
+struct LoraParams {
+    seq_len: u32,
+    in_dim: u32,
+    rank: u32,
+    out_dim: u32,
+    scale: f32,    // alpha / rank
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
+}
+
+@group(0) @binding(4) var<uniform> params: LoraParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.x + gid.y * 65535u * 256u;
+    let total = params.seq_len * params.out_dim;
+    if (idx >= total) { return; }
+
+    let row = idx / params.out_dim;
+    let col = idx % params.out_dim;
+
+    // Compute (input[row] @ A) @ B[col] * scale
+    // First: h = input[row] @ A → [rank] vector
+    // Then: delta = h @ B[:, col] * scale → scalar
+    var delta: f32 = 0.0;
+    for (var r = 0u; r < params.rank; r++) {
+        // h[r] = sum_k input[row, k] * A[k, r]
+        var h_r: f32 = 0.0;
+        for (var k = 0u; k < params.in_dim; k++) {
+            h_r += input[row * params.in_dim + k] * lora_a[k * params.rank + r];
+        }
+        // delta += h[r] * B[r, col]
+        delta += h_r * lora_b[r * params.out_dim + col];
+    }
+
+    output[row * params.out_dim + col] += delta * params.scale;
+}
+"#;
+
 /// Column scatter shader — copies chunk columns into a wider row-major matrix.
 ///
 /// Replaces N × copy_buffer_to_buffer calls with a single GPU dispatch.
