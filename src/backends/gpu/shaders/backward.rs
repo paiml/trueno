@@ -632,7 +632,8 @@ struct CEBackParams {
 
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let idx = gid.x;
+    // 2D dispatch for large tensors (seq × vocab > 65535 × 256)
+    let idx = gid.x + gid.y * 65535u * 256u;
     let total = params.seq_len * params.vocab_size;
     if (idx >= total) { return; }
 
