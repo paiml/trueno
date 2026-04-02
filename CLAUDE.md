@@ -1,1247 +1,132 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
-**Trueno** (Spanish: "thunder") is a Rust library providing unified, high-performance compute primitives across multiple execution targets:
+**Trueno** — Rust library for unified high-performance compute: CPU SIMD (SSE2/AVX/AVX2/AVX-512/NEON/WASM SIMD128), NVIDIA CUDA (pure Rust PTX via `trueno-gpu`, no nvcc), cross-platform GPU (wgpu: Vulkan/Metal/DX12/WebGPU).
 
-1. **CPU SIMD** - x86 (SSE2/AVX/AVX2/AVX-512), ARM (NEON), WASM (SIMD128)
-2. **NVIDIA CUDA** - Native PTX generation via `trueno-gpu` (no nvcc/LLVM required)
-3. **Cross-Platform GPU** - Vulkan/Metal/DX12/WebGPU via `wgpu`
-4. **WebAssembly** - Portable SIMD128 for browser/edge deployment
+**Canonical spec:** `docs/specifications/trueno-spec.md` (ONE spec, sub-specs in `docs/specifications/sub/`).
 
-**Core Principles**:
-- Write once, optimize everywhere: Single algorithm, multiple backends
-- Runtime dispatch: Auto-select best implementation based on CPU features
-- Zero unsafe in public API: Safety via type system, `unsafe` isolated in backends
-- Benchmarked performance: Every optimization must prove ≥10% speedup
-- Extreme TDD: >90% test coverage, mutation testing, property-based tests
+**Core Principles**: Write once optimize everywhere, runtime dispatch, zero unsafe in public API, every optimization must prove ≥10% speedup, >90% test coverage, **contract-first** (no kernel ships without a YAML contract in `contracts/`).
 
 ## Development Commands
 
-**⚠️ BEFORE YOU START: Coverage must ALWAYS be ≥90%**
-- Use `make coverage` ONLY (never `cargo llvm-cov` or `cargo-tarpaulin`)
-- Check coverage before every commit
-- Never let coverage drop below 90%
-- See detailed requirements in the Coverage section below
-
-### Building
 ```bash
-# Standard build
-cargo build
+# Build
+cargo build                                    # standard
+cargo build --all-features                     # all features
+cargo build --target wasm32-unknown-unknown     # WASM
 
-# Release build (optimized)
-cargo build --release
+# Test
+cargo test --all-features                      # all tests
+cargo test property_tests                      # proptest
+cargo test backend_equivalence                 # cross-backend
+cargo test --test integration_tests            # integration
 
-# Build with all features
-cargo build --all-features
+# Coverage — ONLY use make coverage (never cargo llvm-cov or tarpaulin)
+make coverage                                  # generates report, MUST be ≥90%
+make coverage-check                            # exits with error if <90%
 
-# Build for WASM
-cargo build --target wasm32-unknown-unknown
-```
-
-### Testing
-```bash
-# Run all tests
-cargo test --all-features
-
-# Run tests for a specific module
-cargo test vector
-
-# Run tests with output
-cargo test -- --nocapture
-
-# Run property-based tests
-cargo test property_tests
-
-# Run backend equivalence tests
-cargo test backend_equivalence
-
-# Run integration tests
-cargo test --test integration_tests
-```
-
-### Coverage
-
-**⚠️ CRITICAL REQUIREMENT: COVERAGE MUST NEVER DIP BELOW 90%**
-
-**MANDATORY: Use `make coverage` ONLY**
-- ❌ **NEVER** use `cargo llvm-cov` directly
-- ❌ **NEVER** use `cargo-tarpaulin` (DO NOT install this tool)
-- ❌ **NEVER** use any other coverage tool
-- ✅ **ALWAYS** use `make coverage` exclusively
-
-```bash
-# Generate coverage report (ONLY command allowed)
-make coverage
-
-# This will:
-# 1. Generate lcov.info file
-# 2. Create HTML report at target/coverage/html/index.html
-# 3. Display TOTAL coverage percentage
-# 4. Coverage MUST be ≥90% line coverage at ALL times
-```
-
-**Coverage Quality Gates**:
-- **Minimum**: 90% line coverage (absolute floor, never negotiate)
-- **Target**: 95%+ line coverage
-- **Before ANY commit**: Verify coverage ≥90% with `make coverage`
-- **Before ANY PR**: Coverage must be ≥90%
-- **Adding new code**: New code must have 100% coverage
-- **Removing tests**: Only allowed if coverage remains ≥90%
-
-**AUTOMATIC ENFORCEMENT** (Cannot be bypassed):
-- ✅ **Pre-commit hook installed**: `.git/hooks/pre-commit` BLOCKS commits < 90%
-- ✅ **Make target**: `make coverage-check` exits with error if < 90%
-- ✅ **CI/CD ready**: GitHub Actions workflow template available
-
-**To verify enforcement is active**:
-```bash
-# Check pre-commit hook is installed
-ls -lh .git/hooks/pre-commit
-# Should show: -rwxr-xr-x (executable)
-
-# Test enforcement manually
-make coverage-check
-# Should show: ✅ Coverage threshold met (≥90%)
-```
-
-**What to do if coverage drops below 90%**:
-1. STOP immediately - pre-commit hook will block anyway
-2. Run `make coverage` to see detailed breakdown by component
-3. Check `target/coverage/html/index.html` to identify uncovered lines
-4. Add tests to cover those specific lines (use EXTREME TDD)
-5. Run `make coverage-check` to verify ≥90%
-6. Commit will now succeed automatically
-
-**What happens if you try to commit with < 90% coverage**:
-```
-🔍 Checking test coverage before commit...
-❌ COMMIT BLOCKED
-   Coverage: 89.5%
-   Required: 90%
-   Gap: 0.5%
-
-📊 Run 'make coverage' for detailed report
-✅ Add tests to reach 90%, then commit again
-```
-
-**Coverage is NON-NEGOTIABLE** and **AUTOMATICALLY ENFORCED** - this is a hard requirement for maintaining code quality and catching regressions early.
-
-### Linting
-```bash
-# Run clippy (no warnings allowed)
+# Lint
 cargo clippy --all-features -- -D warnings
-
-# Format code
-cargo fmt
-
-# Check formatting without modifying
 cargo fmt -- --check
-```
 
-### Benchmarking
-```bash
-# Run all benchmarks
+# Bench
 cargo bench --no-fail-fast
 
-# Run specific benchmark
-cargo bench vector_ops
+# Profile (Renacer v0.5.0+)
+make profile                                   # benchmark profiling
+make profile-flamegraph                        # flamegraph
+make profile-otlp-jaeger                       # OTLP traces → Jaeger (localhost:16686)
 
-# Compare with baseline
-cargo bench -- --save-baseline main
-cargo bench -- --baseline main
-```
-
-### Profiling
-```bash
-# Install Renacer v0.5.0+ (syscall tracing and function profiling)
-cargo install renacer
-
-# Profile benchmarks to identify bottlenecks
-make profile
-
-# Generate flamegraph visualization
-make profile-flamegraph
-
-# Profile specific benchmark
-make profile-bench BENCH=vector_ops
-
-# Profile test suite to find slow tests
-make profile-test
-
-# Advanced: I/O bottleneck detection (>1ms threshold)
-renacer --function-time --source -- cargo bench vector_ops
-
-# Advanced: Generate flamegraph from profiling output
-renacer --function-time --source -- cargo bench | flamegraph.pl > flame.svg
-```
-
-**Profiling Use Cases**:
-- **SIMD Validation**: Verify SIMD optimizations show expected speedups
-- **Backend Selection**: Identify if backend dispatch overhead is significant
-- **Hot Path Analysis**: Find top 10 functions consuming most time
-- **Memory Access**: Detect cache misses and memory bottlenecks
-- **GPU Transfer**: Profile PCIe transfer overhead for GPU backend
-
-### Distributed Tracing with OpenTelemetry (Renacer v0.5.0+)
-
-**NEW:** Export syscall traces to observability backends (Jaeger, Grafana Tempo, etc.)
-
-```bash
-# Profile with Jaeger (easiest - single Docker container)
-make profile-otlp-jaeger
-
-# View traces at: http://localhost:16686
-# Stop Jaeger: docker stop jaeger-trueno && docker rm jaeger-trueno
-
-# Profile with Grafana Tempo (production-ready stack)
-make profile-otlp-tempo
-
-# View traces at: http://localhost:3000 (admin/admin)
-# Stop stack: docker-compose -f docs/profiling/docker-compose-tempo.yml down
-```
-
-**OTLP Features**:
-- **Span Hierarchy**: Process root span → syscall child spans
-- **Rich Attributes**: syscall name, result, duration, source location (file:line)
-- **Distributed Context**: Trace benchmark execution across all syscalls
-- **Integration**: Works with all Renacer features (--source, -T, --function-time)
-- **Backends**: Jaeger, Grafana Tempo, Elastic APM, Honeycomb, any OTLP-compatible collector
-
-**Use Cases**:
-- **End-to-End Visibility**: See entire benchmark execution timeline
-- **Cross-Service Tracing**: Correlate Trueno benchmarks with production traces
-- **Performance Regression Detection**: Compare trace spans across releases
-- **Team Collaboration**: Share trace links for performance discussions
-
-**OTLP Profiling Best Practices** (Institutionalized Workflow):
-
-1. **Pre-Release Performance Validation**
-   ```bash
-   # Baseline current release
-   make profile-otlp-jaeger
-   curl "localhost:16686/api/traces?service=trueno-benchmarks" > traces-v0.4.0.json
-
-   # After changes
-   make profile-otlp-jaeger
-   curl "localhost:16686/api/traces?service=trueno-benchmarks" > traces-v0.4.1.json
-
-   # Compare syscall distributions
-   python3 scripts/compare_traces.py traces-v0.4.0.json traces-v0.4.1.json
-   ```
-
-2. **Debug Performance Regression**
-   - **Symptom**: Benchmark shows slowdown
-   - **Action**: Profile with `make profile-otlp-jaeger`
-   - **Investigate**: Check for unexpected syscalls (mmap, futex, munmap)
-   - **Validate**: Zero-allocation in hot path (no mmap during compute)
-   - **Fix**: Reduce syscall overhead, pre-allocate buffers
-   - **Verify**: Re-profile and compare trace data
-
-3. **Team Collaboration Protocol**
-   - Share Jaeger UI link: `http://localhost:16686/trace/<trace-id>`
-   - Export trace JSON for async review: `curl "localhost:16686/api/traces?..."`
-   - Tag releases in Grafana Tempo for historical comparison
-   - Include trace links in performance PRs
-
-4. **CI/CD Integration**
-   ```yaml
-   # .github/workflows/performance.yml
-   - name: Profile with OTLP
-     run: make profile-otlp-export  # Exports traces to S3/GCS
-   - name: Compare with baseline
-     run: make profile-compare BASELINE=main
-   ```
-
-5. **Production Observability**
-   - Deploy Grafana Tempo in staging/production
-   - Export Trueno operation traces alongside API traces
-   - Correlate slow requests with specific syscalls
-   - Alert on unexpected syscall patterns (e.g., >10 mmap per request)
-
-**Key Insights from Empirical Analysis** (Renacer 0.5.0):
-- **Futex overhead**: Thread sync dominates for <1μs operations (up to 22x slowdown)
-- **Test harness cost**: Cargo test adds 0.9ms overhead (1600x for 547ns operation)
-- **Zero-allocation validation**: Confirmed no mmap/munmap in hot path
-- **Failed syscalls**: 19 statx ENOENT errors during test discovery (expected)
-- **Recommendation**: Use raw binaries for micro-benchmarks, avoid async for <10μs ops
-
-### Golden Trace Validation (Renacer 0.6.2)
-
-**Purpose**: Syscall-level performance regression detection for SIMD/GPU compute operations
-
-```bash
-# Capture golden traces (performance baselines)
-./scripts/capture_golden_traces.sh
-
-# View trace summary
-cat golden_traces/backend_detection_summary.txt
-
-# Validate performance assertions
+# Golden trace validation
 renacer --assert renacer.toml -- ./target/release/examples/backend_detection
+
+# Quality gates
+pmat analyze tdg --min-grade B+                # TDG ≥ B+
+pmat repo-score . --min-score 90               # repo score ≥ 90/110
+cargo mutants --timeout 120 --minimum-pass-rate 80  # mutation ≥ 80%
 ```
 
-**Captured Operations** (v0.7.0):
-- `backend_detection`: 0.73ms, 87 syscalls (SIMD backend selection)
-- `matrix_operations`: 1.56ms, 168 syscalls (matmul, transpose)
-- `activation_functions`: 1.30ms, 159 syscalls (ReLU, sigmoid, tanh, GELU, swish)
-- `performance_demo`: 1.51ms, 138 syscalls (comprehensive benchmark)
-- `ml_similarity`: 0.82ms, 109 syscalls (cosine, Euclidean, Manhattan)
+## Code Search
 
-**Performance Assertions** (`renacer.toml`):
-```toml
-[[assertion]]
-name = "example_startup_latency"
-type = "critical_path"
-max_duration_ms = 100
-fail_on_violation = true  # CI fails on regression
-
-[[assertion]]
-name = "max_syscall_budget"
-type = "span_count"
-max_spans = 500
-fail_on_violation = true  # Detect I/O regressions
-
-[[assertion]]
-name = "detect_pcie_bottleneck"
-type = "anti_pattern"
-pattern = "PCIeBottleneck"
-threshold = 0.7
-fail_on_violation = false  # Warning: GPU transfers >> compute
-```
-
-**Use Cases**:
-- **Regression Detection**: CI fails if syscall count/latency exceeds budget
-- **PCIe Bottleneck Detection**: Warns if GPU transfer overhead dominates compute
-- **Source Correlation**: Map syscalls to Rust source code (`renacer -s`)
-- **OTLP Export**: Visualize syscall timelines in Jaeger/Grafana
-- **Build-Time Assertions**: Enforce performance contracts automatically
-
-**Documentation**:
-- Full integration report: `docs/integration-report-golden-trace.md`
-- Book chapter: `book/src/performance/golden-trace-validation.md`
-
-### Quality Gates
-```bash
-# PMAT Technical Debt Grading (minimum: B+ / 85/100)
-pmat analyze tdg --min-grade B+
-
-# Repository health score (minimum: 90/110)
-pmat repo-score . --min-score 90
-
-# Mutation testing (minimum: 80% kill rate)
-cargo mutants --timeout 120 --minimum-pass-rate 80
-```
-
-## Code Search (pmat query)
-
-**NEVER use grep or rg for code discovery.** Use `pmat query` instead -- it returns quality-annotated, ranked results with TDG scores and fault annotations.
+**Use `pmat query` for code discovery, not grep/rg.** See global CLAUDE.md for full flag reference.
 
 ```bash
-# Find functions by intent
 pmat query "simd kernel" --limit 10
-
-# Find high-quality code
 pmat query "matrix multiply" --min-grade A --exclude-tests
-
-# Find with fault annotations (unwrap, panic, unsafe, etc.)
-pmat query "compression lz4" --faults
-
-# Filter by complexity
-pmat query "gpu compute" --max-complexity 10
-
-# Cross-project search (e.g., find how realizar uses trueno)
-pmat query "fused q4k" --include-project ../realizar
-
-# Search across the stack
-pmat query "tensor operations" --include-project ../aprender
-pmat query "backward gradient" --include-project ../entrenar
-
-# Git history search (find code by commit intent via RRF fusion)
-pmat query "fix simd alignment" -G
-pmat query "avx512 kernel" --git-history
-
-# Enrichment flags (combine freely)
-pmat query "matrix multiply" --churn               # git volatility (commit count, churn score)
-pmat query "compression lz4" --duplicates          # code clone detection (MinHash+LSH)
-pmat query "gpu compute" --entropy                 # pattern diversity (repetitive vs unique)
-pmat query "simd kernel" --churn --duplicates --entropy --faults -G  # full audit
+pmat query "gpu compute" --faults --churn --duplicates --entropy -G  # full audit
 ```
 
-## Architecture
+## Backend Story Policy (NEVER VIOLATE)
 
-### Multi-Backend Design
+Every operation MUST work on ALL backends: Scalar, SSE2, AVX/AVX2, AVX-512, NEON, WASM SIMD128, CUDA, wgpu. **NO EXCEPTIONS.** If GPU acceleration isn't beneficial, the GPU method must fall back to CPU.
 
-```
-┌─────────────────────────────────────────────────┐
-│           Trueno Public API (Safe)              │
-│  compute(), map(), reduce(), transform()        │
-└─────────────────────────────────────────────────┘
-                      │
-        ┌─────────────┼─────────────┬─────────────┐
-        ▼             ▼             ▼             ▼
-   ┌────────┐   ┌─────────┐   ┌──────────┐   ┌──────────┐
-   │  SIMD  │   │  CUDA   │   │   wgpu   │   │   WASM   │
-   │ Backend│   │ Backend │   │  Backend │   │  Backend │
-   └────────┘   └─────────┘   └──────────┘   └──────────┘
-        │             │             │             │
-   ┌────┴────┐   ┌────┴────┐   ┌───┴─────┐   ┌───┴─────┐
-   │ Runtime │   │ Pure PTX│   │ Vulkan/ │   │ SIMD128 │
-   │ Detect  │   │ Gen(Rust)│  │ Metal   │   │ Portable│
-   └─────────┘   └─────────┘   └─────────┘   └─────────┘
-   │  │  │  │         │
-   SSE2 AVX NEON   trueno-gpu
-        AVX512     (no nvcc!)
-```
+When adding a new operation:
+1. **Write contract FIRST** (`contracts/my-op-v1.yaml`) — equations, FALSIFY tests, proof obligations
+2. Add to `VectorBackend` trait in `src/backends/mod.rs`
+3. Implement in ALL backend modules: `scalar.rs`, `sse2.rs`, `avx2.rs`, `avx512.rs`, `neon.rs`, `wasm.rs`, `gpu/`
+4. Add WGSL shader if GPU-accelerable (`src/backends/gpu/shaders.rs`)
+5. Add sync + async device methods (`src/backends/gpu/device.rs`)
+6. Add integration test in `tests/backend_story.rs`
 
-### Backend Selection Priority
+Enforcement: pre-commit hook + CI blocks violations.
 
-1. **CUDA** (if NVIDIA GPU available + workload benefits from parallelism)
-2. **wgpu** (if cross-platform GPU available + workload size > 100,000 elements)
-3. **AVX-512** (if CPU supports, for compute-bound operations)
-4. **AVX2** (preferred for most operations - best balance)
-5. **AVX** (if CPU supports)
-6. **SSE2** (baseline x86_64)
-7. **NEON** (ARM64)
-8. **SIMD128** (WASM)
-9. **Scalar** fallback (always available)
+## Provable-Contracts Integration
 
-### Project Structure
+**Contract-first design:** `build.rs` reads `../provable-contracts/contracts/trueno/binding.yaml` (38/38 bindings implemented), sets `CONTRACT_*` env vars, enforces **AllImplemented** policy — any `not_implemented` binding fails the build.
 
-```
-trueno/                     # Main crate (CPU SIMD + wgpu)
-├── src/
-│   ├── lib.rs              # Public API exports
-│   ├── error.rs            # TruenoError types
-│   ├── vector.rs           # Vector<T> type and VectorOps trait
-│   ├── matrix.rs           # Matrix operations (matmul, transpose)
-│   ├── backends/
-│   │   ├── mod.rs          # Backend enum and dispatch logic
-│   │   ├── scalar.rs       # Scalar fallback (baseline correctness)
-│   │   ├── sse2.rs         # x86_64 baseline (guaranteed available)
-│   │   ├── avx2.rs         # 256-bit with FMA (preferred)
-│   │   ├── avx512.rs       # 512-bit (Zen4/Sapphire Rapids+)
-│   │   ├── neon.rs         # ARM64 SIMD
-│   │   └── wasm.rs         # WASM SIMD128
-│   └── backends/gpu/       # wgpu integration
-│       ├── mod.rs          # GPU device management
-│       └── shaders/        # WGSL compute shaders
-│
-trueno-gpu/                 # CUDA sub-crate (Pure Rust PTX generation)
-├── src/
-│   ├── lib.rs              # Public API
-│   ├── ptx/                # PTX code generation (no nvcc!)
-│   │   ├── mod.rs          # PTX module builder
-│   │   ├── builder.rs      # Fluent PTX kernel API
-│   │   ├── instructions.rs # PTX ISA instruction emission
-│   │   ├── registers/       # Register allocation with liveness
-│   │   └── types.rs        # PTX types (f32, f16, u32, etc.)
-│   ├── kernels/            # Pre-built optimized kernels
-│   │   ├── gemm.rs         # Matrix multiplication (naive, tiled, tensor core)
-│   │   ├── softmax.rs      # Numerically stable softmax
-│   │   ├── layernorm.rs    # Fused layer normalization
-│   │   ├── attention.rs    # FlashAttention-style tiled attention
-│   │   └── quantize.rs     # Q4_K dequantization
-│   ├── driver/             # CUDA driver FFI (minimal)
-│   │   ├── mod.rs          # CudaContext, CudaModule
-│   │   └── types.rs        # CUresult, CUdevice, etc.
-│   └── memory/             # GPU memory management
-│       ├── mod.rs          # DeviceBuffer, HostBuffer
-│       └── pool.rs         # Memory pool with fragmentation tracking
-└── tests/
-    └── pixel_fkr.rs        # PTX visual regression tests
+**Escape-proof pipeline:** Equation → Lean proof → YAML validation → build.rs codegen → `#[contract]` proc macro → FALSIFY tests. See `docs/specifications/sub/contracts.md` for full details.
+
+```bash
+pv lint contracts/                           # 4-gate quality check
+pv verify-bindings                           # check binding registry
+pv score                                     # PVScore metric
 ```
 
-### Key Implementation Patterns
+## Quality Standards
 
-**SIMD Backend Pattern**:
-```rust
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+**Every commit**: clippy clean, all tests pass, ≥90% coverage (`make coverage`), rustfmt, PMAT TDG ≥B+.
 
-#[target_feature(enable = "avx2")]
-unsafe fn add_f32_avx2(a: &[f32], b: &[f32], out: &mut [f32]) {
-    // Process 8 elements at a time (256-bit / 32-bit = 8)
-    let chunks = a.len() / 8;
-    for i in 0..chunks {
-        let a_vec = _mm256_loadu_ps(a.as_ptr().add(i * 8));
-        let b_vec = _mm256_loadu_ps(b.as_ptr().add(i * 8));
-        let result = _mm256_add_ps(a_vec, b_vec);
-        _mm256_storeu_ps(out.as_mut_ptr().add(i * 8), result);
-    }
-    // Handle remainder with scalar fallback
-    for i in (chunks * 8)..a.len() {
-        out[i] = a[i] + b[i];
-    }
-}
-```
+**Every PR**: Tests for new code (unit, property, backend equivalence, mutation, benchmark), rustdoc updated, benchmarks prove ≥10% improvement.
 
-**CUDA PTX Generation Pattern** (trueno-gpu):
-```rust
-use trueno_gpu::kernels::{GemmKernel, Kernel};
+**Test categories**: Unit (edge cases: empty, NaN, subnormal), property-based (proptest: commutativity, associativity), backend equivalence (f32 tolerance < 1e-5), mutation (≥80% kill rate), benchmarks.
 
-// Generate PTX at compile-time or runtime - NO nvcc required!
-let kernel = GemmKernel::tiled(m, n, k, tile_size);
-let ptx: String = kernel.emit_ptx();
+## LAYOUT-002: Row-Major Mandate (Q4K/Q6K)
 
-// PTX is pure Rust string generation
-assert!(ptx.contains(".version 8.0"));
-assert!(ptx.contains(".entry gemm_tiled"));
-```
-
-**wgpu GPU Dispatch Pattern**:
-```rust
-pub struct GpuBackend {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    pipeline: wgpu::ComputePipeline,
-}
-
-// Only use GPU for large workloads (transfer overhead)
-const GPU_MIN_SIZE: usize = 100_000;
-
-fn should_use_gpu(size: usize) -> bool {
-    size >= GPU_MIN_SIZE && gpu_available()
-}
-```
-
-## LAYOUT-002: Row-Major Mandate (Q4K/Q6K Kernels)
-
-**Critical for APR/GGUF integration:** Trueno provides BOTH row-major and column-major Q4K/Q6K kernels. **The Sovereign AI Stack uses ROW-MAJOR exclusively.**
-
-### Kernel Selection Guide
-
-```rust
-// ❌ WRONG - Column-major kernels (DO NOT use for APR/GGUF data)
-use trueno::backends::q4k::matmul_q4k_f32_colmajor;
-use trueno::backends::q6k::matmul_q6k_f32_colmajor;
-
-// ✅ CORRECT - Row-major kernels (ALWAYS use for APR/GGUF data)
-// Note: realizar has its own fused kernels that use trueno internally
-// For direct trueno usage, ensure data is row-major before calling
-```
-
-### Why Two Layouts Exist
-
-| Layout | Use Case | Who Uses It |
-|--------|----------|-------------|
-| **Row-major** | APR format, SafeTensors, PyTorch | aprender, realizar |
-| **Column-major** | Internal BLAS-style ops, transposed matmul | Advanced users only |
-
-### Layout Conversion (Done by aprender)
-
-Trueno does NOT handle layout conversion. Aprender's converter (`src/format/converter/write.rs`) transposes GGUF data during import:
-
-```
-GGUF (column-major) → aprender transpose → APR (row-major) → realizar → trueno kernels
-```
-
-### Garbage Output = Wrong Kernel
-
-If inference produces garbage like `"olumbia+lsi nunca/localENTS"`:
-1. Check if column-major kernel was used with row-major data
-2. Verify APR file was created via `apr import` (not raw GGUF passthrough)
-3. See `aprender/CLAUDE.md` LAYOUT-002 and `realizar/CLAUDE.md` LAYOUT-002
-
-### Fused Q4K Specification
-
-See `book/src/advanced/phase15-fused-q4k.md` for the fused dequant+dot kernel spec targeting 2x Ollama throughput.
-
-## Testing Requirements
-
-### Coverage Standards
-
-| Component | Minimum Coverage | Target Coverage |
-|-----------|-----------------|-----------------|
-| Public API | 100% | 100% |
-| SIMD backends | 90% | 95% |
-| GPU backend | 85% | 90% |
-| WASM backend | 90% | 95% |
-| **Overall** | **90%** | **95%+** |
-
-### Test Categories
-
-1. **Unit Tests** - Correctness for all operations
-   - Empty inputs, single element, non-aligned sizes
-   - Edge cases: NaN, infinity, subnormal numbers
-
-2. **Property-Based Tests** (using `proptest`)
-   - Commutativity: `a + b == b + a`
-   - Associativity: `(a + b) + c == a + (b + c)`
-   - Distributivity: `a * (b + c) == (a * b) + (a * c)`
-
-3. **Backend Equivalence Tests**
-   - All backends must produce identical results
-   - Compare scalar vs SSE2 vs AVX2 vs GPU vs WASM
-   - Floating-point tolerance: `< 1e-5` for f32
-
-4. **Mutation Testing**
-   - Must achieve ≥80% mutation kill rate
-   - Run with: `cargo mutants --timeout 120`
-
-5. **Benchmark Tests**
-   - Every optimization must prove ≥10% speedup
-   - Test sizes: 100, 1K, 10K, 100K, 1M, 10M elements
-   - Compare against scalar baseline
-
-### Writing Tests
-
-Always include all test categories when adding new operations:
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add_correctness() { /* ... */ }
-
-    #[test]
-    fn test_add_empty() { /* ... */ }
-
-    #[test]
-    fn test_add_non_aligned() { /* ... */ }
-}
-
-#[cfg(test)]
-mod property_tests {
-    use proptest::prelude::*;
-
-    proptest! {
-        #[test]
-        fn test_add_commutative(
-            a in prop::collection::vec(-1000.0f32..1000.0, 1..10000),
-            b in prop::collection::vec(-1000.0f32..1000.0, 1..10000)
-        ) {
-            // Test implementation
-        }
-    }
-}
-
-#[test]
-fn test_backend_equivalence() {
-    let a = vec![1.0f32; 10000];
-    let b = vec![2.0f32; 10000];
-
-    let scalar = add_vectors_scalar(&a, &b);
-    let sse2 = unsafe { add_vectors_sse2(&a, &b) };
-    let avx2 = unsafe { add_vectors_avx2(&a, &b) };
-
-    assert_eq!(scalar, sse2);
-    assert_eq!(scalar, avx2);
-}
-```
-
-## Quality Standards (EXTREME TDD)
-
-### Every Commit Must:
-- ✅ Compile without warnings (`cargo clippy -- -D warnings`)
-- ✅ Pass all tests (`cargo test --all-features`)
-- ✅ Maintain ≥90% coverage (`make coverage` - MANDATORY, see Coverage section)
-- ✅ Pass rustfmt (`cargo fmt -- --check`)
-- ✅ Pass PMAT TDG ≥B+ (`pmat analyze tdg --min-grade B+`)
-
-**CRITICAL**: Before committing, ALWAYS run `make coverage` and verify line coverage is ≥90%. This is NON-NEGOTIABLE.
-
-### Every PR Must:
-- ✅ Include tests for new functionality (all 5 categories)
-- ✅ Update rustdoc documentation
-- ✅ Benchmark new optimizations (prove ≥10% improvement)
-- ✅ Pass mutation testing (≥80% kill rate)
-- ✅ Include integration test if adding backend
-
-### Every Release Must:
-- ✅ Pass full CI pipeline
-- ✅ Repository score ≥90/110 (`pmat repo-score`)
-- ✅ Changelog updated (keep-a-changelog format)
-- ✅ Version bumped (semver)
-- ✅ Git tag created (`vX.Y.Z`)
-
-## Backend Story Policy (CRITICAL - NEVER VIOLATE)
-
-**⚠️ ZERO TOLERANCE: ALL OPERATIONS MUST SUPPORT ALL BACKENDS**
-
-Every operation in trueno MUST work on ALL backends:
-- ✅ **Scalar** - Baseline fallback (always works)
-- ✅ **SSE2** - x86_64 baseline SIMD
-- ✅ **AVX/AVX2** - x86_64 256-bit SIMD
-- ✅ **AVX-512** - x86_64 512-bit SIMD
-- ✅ **NEON** - ARM64 SIMD
-- ✅ **WASM SIMD128** - WebAssembly portable SIMD
-- ✅ **CUDA** - NVIDIA GPU via trueno-gpu (pure Rust PTX)
-- ✅ **wgpu** - Cross-platform GPU compute shaders
-
-### Enforcement
-
-1. **Integration Test**: `tests/backend_story.rs` verifies all backends
-2. **Pre-commit Hook**: Blocks commits that break backend story
-3. **CI Pipeline**: Runs backend story tests on every PR
-
-### Adding New Operations
-
-When adding a new operation (e.g., `frobulate()`), you MUST:
-
-1. **Add to VectorBackend trait** (if applicable):
-   ```rust
-   // src/backends/mod.rs
-   pub trait VectorBackend {
-       // ... existing methods ...
-       unsafe fn frobulate(a: &[f32], result: &mut [f32]);
-   }
-   ```
-
-2. **Implement in ALL backend modules**:
-   - `src/backends/scalar.rs` - Pure Rust implementation
-   - `src/backends/sse2.rs` - SSE2 intrinsics
-   - `src/backends/avx2.rs` - AVX2 intrinsics
-   - `src/backends/avx512.rs` - AVX-512 intrinsics
-   - `src/backends/neon.rs` - ARM NEON intrinsics
-   - `src/backends/wasm.rs` - WASM SIMD128
-   - `src/backends/gpu/` - WGSL shader + device method
-
-3. **Add GPU shader** (if GPU-accelerable):
-   ```rust
-   // src/backends/gpu/shaders.rs
-   pub const FROBULATE_SHADER: &str = r#"..."#;
-   ```
-
-4. **Add device methods**:
-   ```rust
-   // src/backends/gpu/device.rs
-   pub fn frobulate(&self, ...) -> Result<...> { ... }
-   pub async fn frobulate_async(&self, ...) -> Result<...> { ... }
-   ```
-
-5. **Add integration test**:
-   ```rust
-   // tests/backend_story.rs
-   #[test]
-   fn test_frobulate_all_backends() {
-       // Test that frobulate works regardless of backend
-   }
-   ```
-
-### What Happens if You Violate This Policy
-
-```
-❌ COMMIT BLOCKED: Backend Story Violation
-
-The following operations are missing backend implementations:
-- frobulate: Missing CUDA kernel implementation
-
-All operations MUST work on: Scalar, SSE2, AVX2, AVX512, NEON, WASM, CUDA, wgpu
-
-Fix: Implement missing backends before committing.
-See: CLAUDE.md "Backend Story Policy"
-```
-
-### Exceptions
-
-**NO EXCEPTIONS.** If an operation cannot be GPU-accelerated (e.g., inherently sequential), it must still:
-1. Have a GPU method that falls back to CPU
-2. Document why GPU acceleration is not beneficial
-3. Still pass the backend story integration test
-
-Example:
-```rust
-/// GPU eigendecomposition - uses CPU fallback for small matrices
-/// where GPU transfer overhead exceeds compute benefit.
-pub fn symmetric_eigen(&self, matrix: &[f32], n: usize) -> Result<...> {
-    if n < 64 {
-        return self.symmetric_eigen_cpu(matrix, n); // CPU fallback
-    }
-    // GPU implementation for large matrices
-}
-```
+The Sovereign AI Stack uses **ROW-MAJOR exclusively** for APR/GGUF data. Column-major kernels exist for internal BLAS-style ops only. Garbage inference output = wrong kernel layout. Aprender handles GGUF→APR transpose during import. See `book/src/advanced/phase15-fused-q4k.md` for fused dequant+dot spec.
 
 ## Safety Rules
 
-### Unsafe Usage
-- `unsafe` is ONLY allowed in backend implementations (never in public API)
-- Every `unsafe` block must have safety comment explaining invariants
-- SIMD intrinsics must be wrapped in `#[target_feature]` functions
-- All public APIs must be safe (bounds-checked, validated inputs)
+- `unsafe` ONLY in backend implementations, never in public API
+- Every `unsafe` block needs a safety comment
+- SIMD intrinsics wrapped in `#[target_feature]` functions
+- Always handle SIMD remainder with scalar fallback
+- GPU only for >100K elements (PCIe transfer ~0.5ms)
+- f32 comparisons: tolerance < 1e-5
 
-### Example Safe Wrapper:
-```rust
-// SAFE public API
-pub fn add_f32(a: &[f32], b: &[f32]) -> Result<Vec<f32>> {
-    if a.len() != b.len() {
-        return Err(TruenoError::SizeMismatch {
-            expected: a.len(),
-            actual: b.len()
-        });
-    }
+## trueno-gpu (Pure Rust CUDA)
 
-    let mut result = vec![0.0; a.len()];
-
-    // UNSAFE internal implementation (isolated)
-    #[cfg(target_arch = "x86_64")]
-    if is_x86_feature_detected!("avx2") {
-        unsafe { add_f32_avx2(a, b, &mut result) };
-        return Ok(result);
-    }
-
-    // Safe scalar fallback
-    add_f32_scalar(a, b, &mut result);
-    Ok(result)
-}
-```
-
-## trueno-gpu: Pure Rust CUDA Support
-
-**Philosophy**: Own the Stack - build everything from first principles.
-
-### What trueno-gpu Provides
-
-- **Pure Rust PTX Generation** - No nvcc, no LLVM, no external toolchains
-- **Fluent Kernel Builder API** - `PtxModule`, `PtxKernel`, `KernelBuilder`
-- **Pre-built Optimized Kernels** - GEMM (naive/tiled/tensor core), Softmax, LayerNorm, Attention
-- **Register Allocation** - With liveness tracking
-- **Memory Pool** - Fragmentation tracking for GPU memory
-
-### Available Kernels
-
-| Kernel | Description | Variants |
-|--------|-------------|----------|
-| `GemmKernel` | Matrix multiplication | naive, tiled, tensor_core |
-| `SoftmaxKernel` | Numerically stable softmax | warp shuffle reduction |
-| `LayerNormKernel` | Fused layer normalization | with gamma/beta |
-| `AttentionKernel` | FlashAttention-style | standard, causal |
-| `QuantizeKernel` | Q4_K dequantization | fused with matmul |
-
-### Usage Example
-
-```rust
-use trueno_gpu::kernels::{GemmKernel, Kernel};
-
-// Create tiled GEMM kernel for 1024×1024×1024
-let kernel = GemmKernel::tiled(1024, 1024, 1024, 32);
-
-// Generate PTX source code (no external tools!)
-let ptx: String = kernel.emit_ptx();
-
-// PTX is valid and loadable by CUDA driver
-assert!(ptx.contains(".version 8.0"));
-assert!(ptx.contains(".target sm_70"));
-assert!(ptx.contains(".entry gemm_tiled"));
-```
-
-### Testing with CUDA Hardware
+Pure Rust PTX generation — no nvcc, no LLVM. Kernels: GEMM (naive/tiled/tensor core), Softmax, LayerNorm, Attention (FlashAttention-style), Q4_K dequantization.
 
 ```bash
-# Run CUDA-specific tests (requires NVIDIA GPU)
-cargo test -p trueno-gpu --features cuda
-
-# Run PTX pixel regression tests
-cargo test -p trueno-gpu --test pixel_fkr --features "cuda gpu-pixels"
-
-# Validate PTX generation without hardware
-cargo test -p trueno-gpu property_tests
+cargo test -p trueno-gpu --features cuda          # requires GPU
+cargo test -p trueno-gpu property_tests            # no hardware needed
 ```
 
-## Performance Targets
+## WGPU Inference & Training
 
-### Expected Speedups (vs Scalar Baseline)
+**Inference**: `WgslForwardPass` — RMSNorm, GEMV, SiLU, RoPE. 27.6 tok/s on Radeon Pro W5700X.
+**Training**: 7 backward shaders (silu, gemm_backward_a/b, rmsnorm, rope, adamw, nf4_dequant) in `src/backends/gpu/shaders/backward.rs`. All FALSIFY tests pass. Enables full training loop on AMD/Intel/Apple without CUDA.
 
-| Operation | Size | SSE2 | AVX2 | AVX-512 | CUDA | wgpu | WASM |
-|-----------|------|------|------|---------|------|------|------|
-| add_f32 | 1K | 2x | 4x | 8x | - | - | 2x |
-| add_f32 | 100K | 2x | 4x | 8x | 5x | 3x | 2x |
-| add_f32 | 1M | 2x | 4x | 8x | 20x | 10x | 2x |
-| add_f32 | 10M | 2x | 4x | 8x | 100x | 50x | - |
-| dot_product | 1K | 3x | 6x | 12x | - | - | 3x |
-| dot_product | 1M | 3x | 6x | 12x | 30x | 20x | 3x |
-| matmul | 256×256 | 2x | 6x | - | 50x | 20x | - |
-| matmul | 1024×1024 | 2x | 6x | - | 200x | 80x | - |
+## Blackwell (trueno#200, trueno#203)
 
-### Benchmark Validation
-- Minimum 100 iterations per benchmark
-- Coefficient of variation (CV) must be <5%
-- No regressions >5% compared to previous baseline
-- Results saved to `target/criterion/` for comparison
+**JIT Bug (#200)**: `cuModuleLoadDataEx` fails on sm_121 during active GPU work. Forward kernels work after pre-warming; backward kernels crash. Inference unaffected (uses cuBLAS/SIMD).
 
-## WGPU LLM Inference (PMAT-321→336)
+**Fix (#203)**: Dimension-independent kernels (M,K,N as runtime params, ~15 types vs 50+ variants) + pre-compiled cubin pipeline (`build.rs → nvcc → include_bytes!()` → zero JIT at runtime).
 
-Trueno provides WGSL compute shaders for LLM inference on AMD/Intel/Apple GPUs via Vulkan/Metal/WebGPU. No CUDA required.
-
-**Key types:**
-- `GpuMatmulCache` — persistent weight buffers + cached pipeline + GEMV dispatch
-- `WgslForwardPass` — multi-pass single-submit transformer layer (RMSNorm, GEMV, SiLU, RoPE)
-
-**WGSL shaders** (`src/backends/gpu/shaders/basic_ops.rs`):
-- `GEMV_SHADER` — cooperative K-reduction, vec4 loads, 256 threads/workgroup
-- `MATMUL_SHADER` — tiled 16×16 shared-memory GEMM (for M>1 prefill)
-
-**Performance** (Radeon Pro W5700X, Qwen2.5-Coder-1.5B):
-- 27.6 tok/s decode (81% of CPU SIMD)
-- 1.29ms/layer (28 layers = 36ms full forward)
-- Peak 90.6 GFLOPS
-
-**Provable contracts** (`wgpu-forward-pass-v1.yaml`):
-- `rmsnorm_correctness`: 4.77e-7 max error vs CPU
-- `gemv_dispatch`: M=1→GEMV, M>1→GEMM
-- `vec4_alignment`: K%4==0 enforced by shader
-
-**Usage:**
-```rust
-use trueno::backends::gpu::{GpuDevice, WgslForwardPass};
-
-let dev = GpuDevice::new()?;
-let mut fwd = WgslForwardPass::new(dev.device, dev.queue, 1536, 12, 2, 128, 8960);
-fwd.upload_weight("layer.0.q_proj", &f32_data);
-let logits = fwd.forward_model(token_id, pos, 28, &embed, &norm, &lm_head, 151936, 1e-6)?;
-```
-
-## WGPU Training Shaders
-
-Trueno supports backward pass (training) computation via WGSL compute shaders, enabling neural network training on non-NVIDIA GPUs (AMD, Intel Arc, Apple Silicon) through Vulkan, Metal, DX12, and WebGPU.
-
-### File Locations
-
-- **WGSL shader source**: `src/backends/gpu/shaders/backward.rs` -- 7 WGSL compute shaders
-- **GPU dispatch functions**: `src/backends/gpu/device/backward.rs` -- 7 dispatch functions with buffer management
-- **Contract (CUDA)**: `contracts/dimension-independent-kernels-v1.yaml` -- 6 FALSIFY tests for dimension-independent CUDA kernels
-- **Contract (WGPU)**: Referenced from `bashrs/provable-contracts/contracts/wgpu-training-v1.yaml` -- 8 FALSIFY tests for WGPU backward shaders
-
-### Backward Ops (7 shaders)
-
-| Shader | Purpose |
-|--------|---------|
-| `silu_backward` | SiLU activation gradient |
-| `gemm_backward_a` | Weight gradient (dL/dA) |
-| `gemm_backward_b` | Input gradient (dL/dB) |
-| `rmsnorm_backward` | RMSNorm gradient |
-| `rope_backward` | Rotary position embedding gradient |
-| `adamw_step` | AdamW optimizer parameter update |
-| `nf4_dequant` | NF4 4-bit dequantization for QLoRA |
-
-### FALSIFY Test Results
-
-All 8 FALSIFY tests PASS on AMD Radeon Pro W5700X via Vulkan:
-
-- FALSIFY-WGPU-TRAIN-001 through FALSIFY-WGPU-TRAIN-008
-
-These tests verify numerical correctness of each backward shader against CPU reference implementations, with f32 tolerance < 1e-5.
-
-### Significance
-
-This enables the full training loop (forward + backward + optimizer) on non-NVIDIA hardware. Combined with the existing WGSL forward pass shaders (`WgslForwardPass`), trueno now provides a complete GPU training path that works on AMD, Intel Arc, and Apple Silicon without CUDA.
-
-## Ecosystem Integration
-
-Trueno integrates with the Pragmatic AI Labs transpiler ecosystem:
-
-1. **Ruchy** - Language-level vector operations
-   - `let v = Vector([1.0, 2.0]) + Vector([3.0, 4.0])` → `trueno::Vector::add()`
-
-2. **Depyler** (Python → Rust)
-   - `np.dot(a, b)` → `trueno::Vector::dot(&a, &b)`
-
-3. **Decy** (C → Rust)
-   - `_mm256_add_ps()` → `trueno::Vector::add()` (eliminates unsafe)
-
-4. **ruchy-lambda** - AWS Lambda optimization
-   - Drop-in performance boost for data processing
-
-5. **ruchy-docker** - Cross-language benchmarking
-   - Prove transpiler-generated code matches hand-written performance
-
-6. **paiml-mcp-agent-toolkit (PMAT)** - Quality gates
-   - Pre-commit hooks enforce >90% coverage
-   - TDG grading (target: A- / 92+)
-
-7. **Renacer** - Syscall tracing and function profiling
-   - Identify performance bottlenecks and hot paths
-   - I/O bottleneck detection (>1ms threshold)
-   - Flamegraph generation for visualization
-   - Validate SIMD optimizations show expected speedups
-
-## Documentation Standards
-
-### Rustdoc Requirements
-- 100% coverage of public API
-- Every function has example code that compiles
-- Document panics, errors, safety invariants
-- Performance characteristics documented
-
-### Example:
-```rust
-/// Add two vectors element-wise using optimal SIMD backend.
-///
-/// # Performance
-///
-/// Auto-selects the best available backend:
-/// - **AVX2**: ~4x faster than scalar for 1K+ elements
-/// - **GPU**: ~50x faster than scalar for 10M+ elements
-///
-/// # Examples
-///
-/// ```
-/// use trueno::Vector;
-///
-/// let a = Vector::from_slice(&[1.0, 2.0, 3.0]);
-/// let b = Vector::from_slice(&[4.0, 5.0, 6.0]);
-/// let result = a.add(&b).unwrap();
-///
-/// assert_eq!(result.as_slice(), &[5.0, 7.0, 9.0]);
-/// ```
-///
-/// # Errors
-///
-/// Returns [`TruenoError::SizeMismatch`] if vectors have different lengths.
-pub fn add(&self, other: &Self) -> Result<Self> {
-    // Implementation
-}
-```
-
-## Rationale: Why Assembly/SIMD Matters
-
-**FFmpeg Case Study** (real-world evidence):
-- **390 assembly files**, ~180,000 lines (11% of codebase)
-- **Speedups**: SSE2 (2-4x), AVX2 (4-8x), AVX-512 (8-16x)
-- **Critical operations**: IDCT transforms, motion compensation, deblocking filters
-
-**Why Not Hand-Written Assembly?**
-- ❌ Unsafe (raw pointers, no bounds checking)
-- ❌ Unmaintainable (390 files, platform-specific)
-- ❌ Non-portable (separate implementations per CPU)
-
-**Trueno's Value**:
-- ✅ Safety: Zero unsafe in public API
-- ✅ Portability: Single source → x86/ARM/WASM
-- ✅ Performance: 85-95% of hand-tuned assembly
-- ✅ Maintainability: Rust type system catches errors
-
-## Common Pitfalls
-
-1. **Don't forget remainder handling in SIMD loops**
-   - AVX2 processes 8 f32s at a time
-   - Must handle `len % 8` with scalar fallback
-
-2. **GPU transfer overhead**
-   - Only use GPU for >100K elements
-   - PCIe transfer costs ~0.5ms
-
-3. **Floating-point precision**
-   - SIMD can reorder operations (different rounding)
-   - Use tolerance `< 1e-5` for f32 comparisons
-
-4. **Target feature detection**
-   - Always check `is_x86_feature_detected!()` before using intrinsics
-   - Wrap intrinsics in `#[target_feature]` functions
-
-5. **WASM limitations**
-   - SIMD128 only (4x f32), not 8x like AVX2
-   - No GPU support in standard WASM (WebGPU is separate)
-
-## Toyota Way & Kaizen Improvements
-
-This project follows Toyota Production System principles:
-
-### Jidoka (Built-in Quality)
-- EXTREME TDD (>90% coverage) builds quality in, doesn't inspect it in later
-- Pre-commit hooks act as "Andon cord" - stop the line on defects
-- Mutation testing catches defects traditional unit tests miss
-
-### Kaizen (Continuous Improvement)
-- Every optimization must prove ≥10% speedup (data-driven)
-- Backend selection optimized to resolve once at Vector creation (eliminates redundant CPU detection)
-- OpComplexity explicitly defined to prevent GPU threshold mistakes
-
-### Key Improvements Applied
-
-1. **Backend Selection Efficiency** (v1.0.0)
-   - `Backend::Auto` resolved at Vector creation, not on every operation
-   - Eliminates redundant CPU feature detection
-   - See: `Vector::from_slice()` implementation
-
-2. **OpComplexity Definition** (v1.0.0)
-   - Low: Simple operations (add, mul) - prefer SIMD
-   - Medium: Moderate operations (dot, reduce) - GPU at 100K+
-   - High: Complex operations (matmul, conv2d) - GPU at 10K+
-
-3. **Future: Async GPU API** (planned v2.0)
-   - Current synchronous API simple but inefficient for chained operations
-   - Future async API will enable operation batching to reduce transfer overhead
-
-### Academic Foundations
-
-Key publications informing Trueno's design:
-- **Halide (PLDI 2013)**: Write once, optimize everywhere philosophy
-- **Rayon (PLDI 2017)**: Safe zero-cost abstractions in Rust
-- **WebAssembly (PLDI 2017)**: WASM SIMD performance model
-- **TVM (OSDI 2018)**: Multi-target compiler architecture
-
-See specification section 16.3 for complete list with links.
-
-## Trueno Analyze Tool (`trueno-analyze`)
-
-**Purpose**: Static analysis and runtime profiling tool to identify vectorization opportunities in existing code.
-
-### Usage
+## Stack Search
 
 ```bash
-# Analyze Rust source code
-trueno-analyze --source ./src --lang rust
-
-# Profile binary to find hotspots
-trueno-analyze --profile ./target/release/myapp --duration 30s
-
-# Generate flamegraph
-trueno-analyze --profile ./myapp --flamegraph --output report.svg
-
-# Analyze for transpiler integration
-trueno-analyze --source ./src --lang python --transpiler depyler --output json
+batuta oracle --rag "your question here"    # search Sovereign AI Stack docs
+batuta oracle --rag-index                   # reindex
 ```
-
-### Analysis Modes
-
-**Mode 1: Static Analysis**
-- Detects vectorizable patterns (scalar loops, iterator chains, SIMD intrinsics)
-- Identifies existing unsafe SIMD code that could be replaced with safe Trueno API
-- Estimates speedup potential (2-50x depending on operation and backend)
-- Suggests specific Trueno functions to use
-
-**Mode 2: Binary Profiling** (perf + DWARF)
-- Profiles runtime execution to find hotspots (>5% runtime)
-- Analyzes assembly to detect missed auto-vectorization
-- Correlates with source code using debug symbols
-- Recommends GPU usage for large workloads
-
-**Mode 3: Transpiler Integration**
-- Guides Depyler/Decy on which operations to transpile to Trueno
-- Outputs JSON for automated tooling
-- Confidence scores for each suggestion
-
-### Example Output
-
-```
-Trueno Analysis Report
-======================
-Project: image-processor v0.3.0
-
-VECTORIZATION OPPORTUNITIES: 5
-===============================
-
-[1] src/filters/blur.rs:234-245
-    Pattern: Scalar element-wise multiply-add
-    Suggestion: trueno::Vector::mul().add()
-    Est. Speedup: 4-8x (AVX2)
-    LOC to change: 3 lines
-
-[2] src/math/matmul.rs:45-67
-    Pattern: Naive matrix multiplication
-    Suggestion: trueno::matmul() [Phase 2]
-    Est. Speedup: 10-50x (GPU for large matrices)
-    GPU Eligible: Yes (matrix size > 1000x1000)
-
-SUMMARY
-=======
-Total Opportunities: 5
-Estimated Overall Speedup: 3.2-6.8x
-Estimated Effort: 42 LOC to change
-Safety Wins: 37 lines of unsafe eliminated
-```
-
-### Key Features
-
-**Pattern Detection**:
-- Element-wise operations (add, mul, sub, div)
-- Dot products and reductions
-- Matrix multiplication
-- Existing SIMD intrinsics (AVX2, SSE2, NEON)
-- NumPy operations (for Python/Depyler)
-
-**Speedup Estimation**:
-- Backend-specific models (SSE2: 2-4x, AVX2: 4-8x, GPU: 10-50x)
-- Accounts for memory access patterns (sequential vs strided vs random)
-- GPU transfer overhead modeling
-- Conservative to optimistic range
-
-**CI Integration**:
-- GitHub Actions workflow for PR analysis
-- JSON output for automated tooling
-- Posts PR comments with optimization suggestions
-
-### Development Roadmap
-
-- **v1.1**: Static analysis (Rust AST, pattern database)
-- **v1.2**: Binary profiling (perf, DWARF, flamegraphs)
-- **v1.3**: Multi-language support (C, Python)
-- **v1.4**: ML-based pattern detection, automated migration tool
-
-See specification section 17 for complete details.
-
-
-## Stack Documentation Search
-
-**IMPORTANT: Proactively use the batuta RAG oracle when:**
-- Looking up how other stack components use trueno primitives
-- Finding SIMD patterns for AVX2/AVX-512/NEON operations
-- Understanding GPU compute patterns with wgpu
-- Researching compression algorithms (LZ4, ZSTD)
-
-```bash
-# Search across the entire Sovereign AI Stack
-batuta oracle --rag "your question here"
-
-# Examples for trueno development
-batuta oracle --rag "AVX-512 matrix multiplication"
-batuta oracle --rag "wgpu compute shader patterns"
-batuta oracle --rag "LZ4 SIMD compression"
-batuta oracle --rag "how does aprender use trueno tensors"
-batuta oracle --rag "realizar GPU kernel implementation"
-
-# Reindex if needed (persists to ~/.cache/batuta/rag/)
-batuta oracle --rag-index
-```
-
-The RAG index includes 335 documents across:
-- All Sovereign AI Stack repos (aprender, realizar, entrenar, etc.)
-- Python ground truth corpora (HuggingFace, JAX, vLLM patterns)
-- Rust ground truth corpora (TGI inference, MLOps patterns)
-
-Index auto-updates via post-commit hooks and `ora-fresh` on shell login.
-To manually check freshness: `ora-fresh`
-To force full reindex: `batuta oracle --rag-index --force`
-
-## Blackwell Training Infrastructure (trueno#200, trueno#203)
-
-### Blackwell sm_121 JIT Bug (trueno#200)
-
-**Problem**: `cuModuleLoadData` / `cuModuleLoadDataEx` fails with `CUDA_ERROR_UNKNOWN` on Blackwell (sm_121) GPUs when called during active GPU work (concurrent kernels, active streams, etc.). This specifically affects **backward (training) kernels** -- forward kernels work after a pre-warming phase.
-
-**Root Cause**: The NVIDIA JIT compiler on Blackwell has a bug where PTX-to-SASS compilation via the driver API fails non-deterministically when the GPU is already under load. This does NOT affect cuBLAS calls or pre-compiled cubin modules.
-
-**Workaround -- `from_ptx_direct`**: A Blackwell-safe PTX loading path that skips `cuModuleLoadDataEx` entirely:
-- Compiles PTX to cubin offline or at initialization time (before any GPU work)
-- Loads only pre-compiled cubin blobs during training
-- Forward PTX kernels work after pre-warming (loading all kernel variants before training starts)
-
-**Key Distinction**:
-- **Forward kernels**: Work after pre-warming (all variants loaded before first training step)
-- **Backward kernels**: Crash during training because they are compiled on-demand when the GPU is already active
-- **Inference (NOT affected)**: Uses cuBLAS and SIMD paths, no custom PTX compilation at runtime
-
-### Dimension-Independent Kernels Plan (trueno#203)
-
-**Current Architecture**: Dynamic PTX generation with dimensions (M, K, N) baked into the PTX source. This produces **50+ kernel variants** (one per unique shape) and requires JIT compilation for each new shape encountered at runtime.
-
-**Target Architecture**: Dimension-independent kernels that accept M, K, N as runtime parameters. This reduces the total kernel count to **~15 types** (GEMM, softmax, layernorm, attention, backward variants, etc.), each compiled once.
-
-**Pre-Compiled cubin Pipeline** (the real fix for JIT issues):
-```
-build.rs → nvcc (offline) → cubin blobs → include_bytes!() → zero JIT at runtime
-```
-
-- `build.rs` invokes `nvcc` to compile PTX to cubins for target architectures (sm_80, sm_89, sm_121)
-- cubin blobs are embedded in the binary via `include_bytes!()`
-- Runtime loads cubins directly -- no JIT compilation, no `cuModuleLoadDataEx`
-- Eliminates the Blackwell JIT bug entirely since no runtime PTX compilation occurs
-
-**Provable Contract**: `dimension-independent-kernels-v1.yaml`
-
-**Impact on Entrenar**: Training is currently blocked by the backward kernel JIT crash (trueno#200). The dimension-independent kernel architecture (trueno#203) is the permanent fix. Until then, inference via `apr run` is fully operational (uses cuBLAS/SIMD, not custom PTX).

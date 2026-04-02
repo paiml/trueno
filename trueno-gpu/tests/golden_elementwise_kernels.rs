@@ -6,6 +6,10 @@
 //! To modify: First demonstrate a falsifying test case (black swan).
 //!
 //! Verifies that each elementwise kernel emits valid PTX with expected structure.
+//!
+//! Requires `cuda` feature: `cargo test -p trueno-gpu --test golden_elementwise_kernels --features cuda`
+
+#![cfg(feature = "cuda")]
 
 use trueno_gpu::kernels::{
     BatchedResidualAddKernel, BatchedScaleKernel, BatchedSwigluKernel, BatchedTransposeKernel,

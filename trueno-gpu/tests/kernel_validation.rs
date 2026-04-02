@@ -4,8 +4,10 @@
 //! requiring CUDA hardware. Run with:
 //!
 //! ```bash
-//! cargo test -p trueno-gpu --test kernel_validation
+//! cargo test -p trueno-gpu --test kernel_validation --features cuda
 //! ```
+
+#![cfg(feature = "cuda")]
 
 use trueno_gpu::kernels::{Activation, AttentionKernel, BiasActivationKernel, GemvKernel, Kernel};
 

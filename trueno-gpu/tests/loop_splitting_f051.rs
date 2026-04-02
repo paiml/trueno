@@ -7,6 +7,10 @@
 //! - [Allen & Kennedy 1987] "Automatic Translation of Fortran to Vector Form" DOI:10.1145/29873.29875
 //! - [Ryoo et al. 2008] "Optimization Principles for GPUs Using CUDA" DOI:10.1145/1345206.1345220
 //! - [Yang et al. 2010] "GPGPU Compiler for Memory Optimization" DOI:10.1145/1806596.1806606
+//!
+//! Requires `cuda` feature: `cargo test -p trueno-gpu --test loop_splitting_f051 --features cuda`
+
+#![cfg(feature = "cuda")]
 
 use trueno_gpu::ptx::optimize::loop_split::{
     align_split_point, analyze, is_split_profitable, LoopPredicate, LoopSplitConfig,

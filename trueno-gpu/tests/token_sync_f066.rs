@@ -7,6 +7,10 @@
 //! - [Alglave et al. 2015] "GPU Concurrency: Weak Behaviours" DOI:10.1145/2694344.2694391
 //! - [Lustig et al. 2019] "NVIDIA PTX Memory Consistency Model" DOI:10.1145/3297858.3304043
 //! - [Sorensen & Donaldson 2016] "Cross-Platform OpenCL Development" DOI:10.1145/2909437.2909440
+//!
+//! Requires `cuda` feature: `cargo test -p trueno-gpu --test token_sync_f066 --features cuda`
+
+#![cfg(feature = "cuda")]
 
 use trueno_gpu::ptx::optimize::tko::{
     join_tokens, MemoryOrdering, MemoryScope, TkoAnalysis, Token, TokenGraph,

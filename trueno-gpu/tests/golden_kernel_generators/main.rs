@@ -5,6 +5,10 @@
 //!
 //! These tests verify the INTENT of each kernel generator, ensuring correct
 //! PTX structure and instruction patterns.
+//!
+//! Requires `cuda` feature: `cargo test -p trueno-gpu --test golden_kernel_generators --features cuda`
+
+#![cfg(feature = "cuda")]
 
 mod gemm;
 mod params_and_boundaries;

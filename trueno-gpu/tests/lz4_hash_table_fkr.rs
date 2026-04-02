@@ -2,6 +2,10 @@
 //!
 //! These tests isolate specific hypotheses about hash table crashes.
 //! Each test is designed to FAIL if the hypothesis is correct.
+//!
+//! Requires `cuda` feature: `cargo test -p trueno-gpu --test lz4_hash_table_fkr --features cuda`
+
+#![cfg(feature = "cuda")]
 
 use trueno_gpu::kernels::lz4::{LZ4_HASH_SIZE, PAGE_SIZE};
 

@@ -1,6 +1,6 @@
 // build.rs — Read provable-contracts binding.yaml and set CONTRACT_* env vars
 //
-// Policy: AllImplemented. Trueno has 21/21 bindings implemented (100%),
+// Policy: AllImplemented. Trueno has 38/38 bindings implemented (100%),
 // so any gap is a build failure.
 //
 // The env vars follow the pattern:

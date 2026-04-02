@@ -13,6 +13,8 @@
 //! - Phase 1: Scalar baseline validation
 //! - Phase 2: PTX vs Scalar comparison (requires CUDA)
 
+#![cfg(feature = "cuda")]
+
 use trueno_gpu::kernels::{Kernel, Lz4WarpCompressKernel};
 
 // Import LZ4 internals directly from the module

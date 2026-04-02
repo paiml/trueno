@@ -4,6 +4,10 @@
 //! that were identified as coverage gaps by `pmat query --coverage-gaps`.
 //!
 //! These are pure Rust PTX string generators — no GPU hardware required.
+//!
+//! Requires `cuda` feature: `cargo test -p trueno-gpu --test coverage_ptx_generators --features cuda`
+
+#![cfg(feature = "cuda")]
 
 use trueno_gpu::kernels::{
     AttentionKernel, Batched4DGemmKernel, BatchedGemmKernel, BatchedIncrementalAttentionKernel,

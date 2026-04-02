@@ -7,6 +7,10 @@
 //! - [Volkov & Demmel 2008] "Benchmarking GPUs for Dense Linear Algebra" DOI:10.1109/SC.2008.5214359
 //! - [Ruetsch & Micikevicius 2009] "Optimizing Matrix Transpose in CUDA" NVIDIA TR
 //! - [Mei & Chu 2017] "GPU Memory Hierarchy" DOI:10.1109/TPDS.2016.2549523
+//!
+//! Requires `cuda` feature: `cargo test -p trueno-gpu --test memory_coalescing_f034 --features cuda`
+
+#![cfg(feature = "cuda")]
 
 use trueno_gpu::ptx::optimize::tile_validation::{
     validate_shape, validate_wmma_shape, TileError, MAX_TILE_DIM, MAX_TILE_ELEMENTS,
