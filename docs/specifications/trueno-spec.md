@@ -402,7 +402,7 @@ Benchmark validation: ≥100 iterations, CV <5%, results saved to `target/criter
 
 `src/blis/` implements BLIS-style blocked GEMM with cache hierarchy optimization (L3→L2→L1→registers). Micro-kernels: `8x6` AVX2, `8x8` NEON.
 
-**Block sizes:** MC=128, KC=512, NC=720, MR=8, NR=6. Tuned for Zen 4 (1MB L2). Packing: `pack_a()`, `pack_b()`, `PrepackedB` for weight caching.
+**Block sizes:** MC=128, KC=512, NC=720, MR=8, NR=6. Tuned for Zen 4 1MB L2. Packing: `pack_a()`, `pack_b()`, `PrepackedB` for weight caching.
 
 **Toyota Production System integration:**
 - **Jidoka** — `JidokaGuard` stops on numerical error (NaN, divergence >1e-3 from reference)
