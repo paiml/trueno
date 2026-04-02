@@ -160,6 +160,82 @@ fn compute_macroblock(
     }
 }
 
+/// Small-matrix stride-based GEMM — no packing, no c_micro buffer.
+/// For m,n,k <= 96 where packing overhead > cache benefit.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+unsafe fn gemm_small_strided_avx2(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    use std::arch::x86_64::*;
+    unsafe {
+        for jr in (0..n).step_by(NR) {
+            let nr = NR.min(n - jr);
+            for ir in (0..m).step_by(MR) {
+                let mr = MR.min(m - ir);
+                let mut cv = [_mm256_setzero_ps(); 6];
+                for j in 0..nr {
+                    if mr == MR {
+                        cv[j] = _mm256_set_ps(
+                            *c.get_unchecked((ir + 7) * n + jr + j),
+                            *c.get_unchecked((ir + 6) * n + jr + j),
+                            *c.get_unchecked((ir + 5) * n + jr + j),
+                            *c.get_unchecked((ir + 4) * n + jr + j),
+                            *c.get_unchecked((ir + 3) * n + jr + j),
+                            *c.get_unchecked((ir + 2) * n + jr + j),
+                            *c.get_unchecked((ir + 1) * n + jr + j),
+                            *c.get_unchecked(ir * n + jr + j),
+                        );
+                    } else {
+                        let mut t = [0.0f32; 8];
+                        for i in 0..mr {
+                            t[i] = *c.get_unchecked((ir + i) * n + jr + j);
+                        }
+                        cv[j] = _mm256_loadu_ps(t.as_ptr());
+                    }
+                }
+                for p in 0..k {
+                    let a_col = if mr == MR {
+                        _mm256_set_ps(
+                            *a.get_unchecked((ir + 7) * k + p),
+                            *a.get_unchecked((ir + 6) * k + p),
+                            *a.get_unchecked((ir + 5) * k + p),
+                            *a.get_unchecked((ir + 4) * k + p),
+                            *a.get_unchecked((ir + 3) * k + p),
+                            *a.get_unchecked((ir + 2) * k + p),
+                            *a.get_unchecked((ir + 1) * k + p),
+                            *a.get_unchecked(ir * k + p),
+                        )
+                    } else {
+                        let mut t = [0.0f32; 8];
+                        for i in 0..mr {
+                            t[i] = *a.get_unchecked((ir + i) * k + p);
+                        }
+                        _mm256_loadu_ps(t.as_ptr())
+                    };
+                    let bp = b.as_ptr().add(p * n + jr);
+                    for j in 0..nr {
+                        cv[j] = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(j)), cv[j]);
+                    }
+                }
+                for j in 0..nr {
+                    let mut t = [0.0f32; 8];
+                    _mm256_storeu_ps(t.as_mut_ptr(), cv[j]);
+                    for i in 0..mr {
+                        *c.get_unchecked_mut((ir + i) * n + jr + j) = t[i];
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Validate GEMM dimension inputs (Poka-yoke).
 fn validate_gemm_dims(
     m: usize,
@@ -230,6 +306,20 @@ pub fn gemm_blis(
     }
     if m * n * k < 4096 {
         return gemm_reference(m, n, k, a, b, c);
+    }
+
+    // Small: stride-based GEMM without packing (skip when profiler active).
+    #[cfg(target_arch = "x86_64")]
+    if profiler.is_none()
+        && m <= 96
+        && n <= 96
+        && k <= 96
+        && is_x86_feature_detected!("avx2")
+        && is_x86_feature_detected!("fma")
+    {
+        unsafe {
+            return gemm_small_strided_avx2(m, n, k, a, b, c);
+        }
     }
 
     // KAIZEN-038: Only call Instant::now() when profiler is active

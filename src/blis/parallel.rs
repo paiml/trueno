@@ -8,7 +8,6 @@ use crate::error::TruenoError;
 use super::compute::{gemm_blis, gemm_blis_with_prepacked_b};
 use super::prepacked::PrepackedB;
 use super::{MC, MR};
-#[cfg(feature = "parallel")]
 
 /// Heijunka (load-leveling) scheduler for parallel GEMM
 #[derive(Debug, Clone)]
