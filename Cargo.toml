@@ -275,6 +275,10 @@ name = "tiling_ops"
 name = "gemm_comparison"
 harness = false
 
+[[bench]]
+name = "gemm_comparison"
+harness = false
+
 [[bin]]
 name = "trueno-monitor"
 path = "src/bin/trueno_monitor/main.rs"
