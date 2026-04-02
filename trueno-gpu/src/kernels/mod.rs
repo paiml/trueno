@@ -126,10 +126,7 @@ use crate::ptx::{PtxKernel, PtxModule};
 /// Returns `(major, minor)` of the PTX ISA version.
 pub fn ptx_version_for_target(target: &str) -> (u32, u32) {
     // Parse "sm_XYZ" -> XYZ as integer
-    let sm_num: u32 = target
-        .strip_prefix("sm_")
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(70);
+    let sm_num: u32 = target.strip_prefix("sm_").and_then(|s| s.parse().ok()).unwrap_or(70);
     if sm_num >= 100 {
         // Blackwell (sm_100, sm_120, sm_121, etc.) requires PTX 8.8
         (8, 8)

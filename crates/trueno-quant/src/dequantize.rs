@@ -1,6 +1,6 @@
 //! K-Quant dequantization functions (`Q4_K`, `Q5_K`, `Q6_K`)
 
-use crate::{f16_to_f32, F16_MIN_NORMAL};
+use crate::f16_to_f32;
 
 /// Dequantize `Q4_K` bytes to F32
 #[must_use]
@@ -32,11 +32,16 @@ pub fn dequantize_q4_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
     result
 }
 
-/// Sanitize an f16-encoded scale value: return 0.0 for NaN, infinity, or subnormals.
+/// Sanitize an f16-encoded scale value: return 0.0 for NaN or infinity.
+///
+/// BUG-IMPORT-002 FIX: Subnormal F16 values (< 6.1e-5) are VALID in GGML quantization.
+/// Q6_K/Q4_K super-block scales can be 1e-6 to 1e-4 for small-weight tensors.
+/// Clamping subnormals to 0.0 destroys >99% of dequantized data, producing
+/// all-zero tensors and Q8 density violations downstream.
 #[inline]
 fn sanitize_f16_scale(lo: u8, hi: u8) -> f32 {
     let raw = f16_to_f32(u16::from_le_bytes([lo, hi]));
-    if raw.is_nan() || raw.is_infinite() || raw.abs() < F16_MIN_NORMAL {
+    if raw.is_nan() || raw.is_infinite() {
         0.0
     } else {
         raw

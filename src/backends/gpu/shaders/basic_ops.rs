@@ -427,6 +427,38 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 "#;
 
+/// Scaled transpose: B[j,i] = scale * A[i,j]
+/// Contract: wgsl-transpose-v1
+///
+/// Dispatch: ceil(M*N / 256) workgroups (with 2D for >65535).
+/// Params: { M, N, scale, _pad }
+pub const TRANSPOSE_SHADER: &str = r#"
+@group(0) @binding(0) var<storage, read> src: array<f32>;
+@group(0) @binding(1) var<storage, read_write> dst: array<f32>;
+
+struct TransposeParams {
+    m: u32,      // rows of source
+    n: u32,      // cols of source
+    scale: f32,  // output scaling (1.0 for identity)
+    _pad: u32,
+}
+
+@group(0) @binding(2) var<uniform> params: TransposeParams;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let idx = gid.x + gid.y * 65535u * 256u;
+    let total = params.m * params.n;
+    if (idx >= total) { return; }
+
+    let i = idx / params.n;  // source row
+    let j = idx % params.n;  // source col
+
+    // src[i, j] = src[i * N + j]  → dst[j, i] = dst[j * M + i]
+    dst[j * params.m + i] = params.scale * src[i * params.n + j];
+}
+"#;
+
 /// PMAT-326: GEMV compute shader (WGSL) — matrix-vector product y = W × x
 ///
 /// Optimized for M=1 (single-token decode). Each workgroup computes ONE output

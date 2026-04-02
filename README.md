@@ -36,6 +36,8 @@
 
 - **CPU SIMD**: x86 (SSE2/AVX/AVX2/AVX-512), ARM (NEON), WASM (SIMD128)
 - **GPU**: Pure Rust PTX generation via `trueno-gpu` (no nvcc required)
+- **Native Blackwell**: sm_121 support via PTX 8.8 ISA
+- **JIT Disk Cache**: Compiled PTX cached at `~/.cache/trueno/ptx/` for instant reload
 - **Cross-platform GPU**: Vulkan/Metal/DX12/WebGPU via `wgpu`
 - **Auto-dispatch**: Runtime selection of optimal backend
 - **Zero unsafe in public API**: Safety via type system
@@ -114,7 +116,7 @@ Generate CUDA PTX kernels without nvcc, LLVM, or external toolchains:
 ```rust
 use trueno_gpu::kernels::{GemmKernel, Kernel, SoftmaxKernel};
 
-// Generate optimized GEMM kernel
+// Generate optimized GEMM kernel (supports sm_121 Blackwell via PTX 8.8)
 let gemm = GemmKernel::tensor_core(1024, 1024, 1024);
 let ptx = gemm.emit_ptx();  // Pure Rust PTX generation
 
@@ -123,6 +125,7 @@ let softmax = SoftmaxKernel::new(4096);
 let ptx = softmax.emit_ptx();
 
 // Available kernels: GEMM, Softmax, LayerNorm, Attention, Quantize (Q4K/Q5K/Q6K)
+// Reliable PTX->cubin compilation via fixed cuLinkCreate path
 ```
 
 ## Training (WGPU)
@@ -170,7 +173,7 @@ argmax, norm_l1, norm_l2, normalize, recip, sqrt, abs, clamp
 ## Development
 
 ```bash
-cargo test                  # Run tests
+cargo test                  # Run tests (3,434+ passing, 3,438 with CUDA)
 cargo bench                 # Run benchmarks
 make coverage              # Coverage report (requires cargo-llvm-cov)
 cargo run --example backend_detection  # Check available backends

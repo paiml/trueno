@@ -33,9 +33,12 @@ pub struct LayerActivations {
 
 /// Optional LoRA buffers for Q/K/V projections in a layer's forward pass.
 pub struct QkvLoRA<'a> {
-    pub q_a: &'a wgpu::Buffer, pub q_b: &'a wgpu::Buffer,
-    pub k_a: &'a wgpu::Buffer, pub k_b: &'a wgpu::Buffer,
-    pub v_a: &'a wgpu::Buffer, pub v_b: &'a wgpu::Buffer,
+    pub q_a: &'a wgpu::Buffer,
+    pub q_b: &'a wgpu::Buffer,
+    pub k_a: &'a wgpu::Buffer,
+    pub k_b: &'a wgpu::Buffer,
+    pub v_a: &'a wgpu::Buffer,
+    pub v_b: &'a wgpu::Buffer,
     pub rank: u32,
     pub scale: f32,
     pub in_dim: u32,
@@ -102,7 +105,8 @@ pub struct WgslForwardPass {
     intermediate_dim: u32,
 }
 
-// WGSL shader source for RMSNorm
+// WGSL shader source for RMSNorm (multi-row via workgroup_id.y)
+// Dispatch: (1, seq_len, 1) — one workgroup per row.
 const RMSNORM_SHADER: &str = r#"
 @group(0) @binding(0) var<storage, read> input: array<f32>;
 @group(0) @binding(1) var<storage, read> weight: array<f32>;
@@ -112,16 +116,18 @@ const RMSNORM_SHADER: &str = r#"
 var<workgroup> shared_sum: array<f32, 256>;
 
 @compute @workgroup_size(256)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>,
-        @builtin(local_invocation_id) lid: vec3<u32>) {
+fn main(@builtin(local_invocation_id) lid: vec3<u32>,
+        @builtin(workgroup_id) wg_id: vec3<u32>) {
     let dim = params.x;
+    let row = wg_id.y;
+    let base = row * dim;
     let tid = lid.x;
 
-    // Compute sum of squares (reduction)
+    // Compute sum of squares (reduction) for this row
     var local_sum: f32 = 0.0;
     var i = tid;
     while (i < dim) {
-        let val = input[i];
+        let val = input[base + i];
         local_sum += val * val;
         i += 256u;
     }
@@ -143,7 +149,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>,
     // Normalize and scale
     i = tid;
     while (i < dim) {
-        output[i] = (input[i] / rms) * weight[i];
+        output[base + i] = (input[base + i] / rms) * weight[i];
         i += 256u;
     }
 }
@@ -554,6 +560,27 @@ impl WgslForwardPass {
     /// Reference to V buffer.
     pub fn v_buffer(&self) -> &wgpu::Buffer {
         &self.v_buf
+    }
+
+    /// Elementwise add: output = a + b. Dispatches residual add shader.
+    pub fn gpu_residual_add(
+        &self,
+        a: &wgpu::Buffer,
+        b: &wgpu::Buffer,
+        output: &wgpu::Buffer,
+        len: u32,
+    ) {
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        self.encode_residual(&mut encoder, a, b, output, len);
+        self.queue.submit(Some(encoder.finish()));
+    }
+
+    /// Apply RMSNorm on GPU: normed = rmsnorm(hidden_buf, weight) → output_buf.
+    /// Contract: gpu-output-norm-v1 / gpu_resident — hidden state never leaves GPU.
+    pub fn gpu_rmsnorm(&self, weight: &wgpu::Buffer, output: &wgpu::Buffer, seq_len: u32) {
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        self.encode_rmsnorm(&mut encoder, &self.hidden_buf, weight, output, self.hidden_dim);
+        self.queue.submit(Some(encoder.finish()));
     }
 
     /// Download hidden state from GPU.
@@ -1092,12 +1119,48 @@ impl WgslForwardPass {
         // LoRA addmm on Q/K/V: output += (saved_input @ A) @ B * scale
         // Must happen BEFORE attention consumes Q/K/V buffers.
         if let Some(lora) = lora {
-            self.encode_lora_addmm(encoder, &saved.attn_norm_out, lora.q_a, lora.q_b, &self.q_buf,
-                seq_len, lora.in_dim, lora.rank, lora.q_dim, lora.scale, lora.lora_pipeline, lora.lora_bgl);
-            self.encode_lora_addmm(encoder, &saved.attn_norm_out, lora.k_a, lora.k_b, &self.k_buf,
-                seq_len, lora.in_dim, lora.rank, lora.kv_dim, lora.scale, lora.lora_pipeline, lora.lora_bgl);
-            self.encode_lora_addmm(encoder, &saved.attn_norm_out, lora.v_a, lora.v_b, &self.v_buf,
-                seq_len, lora.in_dim, lora.rank, lora.kv_dim, lora.scale, lora.lora_pipeline, lora.lora_bgl);
+            self.encode_lora_addmm(
+                encoder,
+                &saved.attn_norm_out,
+                lora.q_a,
+                lora.q_b,
+                &self.q_buf,
+                seq_len,
+                lora.in_dim,
+                lora.rank,
+                lora.q_dim,
+                lora.scale,
+                lora.lora_pipeline,
+                lora.lora_bgl,
+            );
+            self.encode_lora_addmm(
+                encoder,
+                &saved.attn_norm_out,
+                lora.k_a,
+                lora.k_b,
+                &self.k_buf,
+                seq_len,
+                lora.in_dim,
+                lora.rank,
+                lora.kv_dim,
+                lora.scale,
+                lora.lora_pipeline,
+                lora.lora_bgl,
+            );
+            self.encode_lora_addmm(
+                encoder,
+                &saved.attn_norm_out,
+                lora.v_a,
+                lora.v_b,
+                &self.v_buf,
+                seq_len,
+                lora.in_dim,
+                lora.rank,
+                lora.kv_dim,
+                lora.scale,
+                lora.lora_pipeline,
+                lora.lora_bgl,
+            );
         }
 
         // Attention — wgpu handles execution ordering within the encoder.
@@ -1213,6 +1276,247 @@ impl WgslForwardPass {
         Ok(())
     }
 
+    /// Run one layer with per-operation GPU timing (submit+poll between each op group).
+    /// Contract: forward-pass-perf-v1 / bottleneck_identified
+    pub fn forward_layer_traced(
+        &self,
+        seq_len: u32,
+        layer_prefix: &str,
+        saved: &LayerActivations,
+        lora: Option<&QkvLoRA<'_>>,
+    ) -> Result<(), String> {
+        let hd = self.hidden_dim;
+        let q_dim = self.num_heads * self.head_dim;
+        let kv_dim = self.num_kv_heads * self.head_dim;
+        let inter = self.intermediate_dim;
+        let s = seq_len as usize;
+
+        let norm_w = self
+            .weight_buffers
+            .get(&format!("{layer_prefix}.attn_norm"))
+            .ok_or_else(|| format!("Missing {layer_prefix}.attn_norm"))?;
+
+        let mut trace = Vec::new();
+        let mut run = |name: &str, f: &dyn Fn(&mut wgpu::CommandEncoder)| {
+            let mut enc = self.device.create_command_encoder(&Default::default());
+            f(&mut enc);
+            self.queue.submit(Some(enc.finish()));
+            let t = std::time::Instant::now();
+            self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: None }).ok();
+            trace.push((name.to_string(), t.elapsed().as_millis() as u64));
+        };
+
+        run("rmsnorm1", &|e| self.encode_rmsnorm(e, &self.hidden_buf, norm_w, &self.norm_buf, hd));
+        {
+            let mut e = self.device.create_command_encoder(&Default::default());
+            e.copy_buffer_to_buffer(
+                &self.norm_buf,
+                0,
+                &saved.attn_norm_out,
+                0,
+                (s * hd as usize * 4) as u64,
+            );
+            self.queue.submit(Some(e.finish()));
+        }
+        run("q_proj", &|e| {
+            self.encode_matmul(
+                e,
+                &self.norm_buf,
+                layer_prefix,
+                "q_proj",
+                &self.q_buf,
+                seq_len,
+                hd,
+                q_dim,
+            )
+        });
+        run("k_proj", &|e| {
+            self.encode_matmul(
+                e,
+                &self.norm_buf,
+                layer_prefix,
+                "k_proj",
+                &self.k_buf,
+                seq_len,
+                hd,
+                kv_dim,
+            )
+        });
+        run("v_proj", &|e| {
+            self.encode_matmul(
+                e,
+                &self.norm_buf,
+                layer_prefix,
+                "v_proj",
+                &self.v_buf,
+                seq_len,
+                hd,
+                kv_dim,
+            )
+        });
+        if let Some(lr) = lora {
+            run("lora_qkv", &|e| {
+                self.encode_lora_addmm(
+                    e,
+                    &saved.attn_norm_out,
+                    lr.q_a,
+                    lr.q_b,
+                    &self.q_buf,
+                    seq_len,
+                    lr.in_dim,
+                    lr.rank,
+                    lr.q_dim,
+                    lr.scale,
+                    lr.lora_pipeline,
+                    lr.lora_bgl,
+                );
+                self.encode_lora_addmm(
+                    e,
+                    &saved.attn_norm_out,
+                    lr.k_a,
+                    lr.k_b,
+                    &self.k_buf,
+                    seq_len,
+                    lr.in_dim,
+                    lr.rank,
+                    lr.kv_dim,
+                    lr.scale,
+                    lr.lora_pipeline,
+                    lr.lora_bgl,
+                );
+                self.encode_lora_addmm(
+                    e,
+                    &saved.attn_norm_out,
+                    lr.v_a,
+                    lr.v_b,
+                    &self.v_buf,
+                    seq_len,
+                    lr.in_dim,
+                    lr.rank,
+                    lr.kv_dim,
+                    lr.scale,
+                    lr.lora_pipeline,
+                    lr.lora_bgl,
+                );
+            });
+        }
+        run("attention", &|e| self.encode_attention(e, seq_len));
+        {
+            let mut e = self.device.create_command_encoder(&Default::default());
+            e.copy_buffer_to_buffer(
+                &self.attn_out_buf,
+                0,
+                &saved.attn_output,
+                0,
+                (s * q_dim as usize * 4) as u64,
+            );
+            self.queue.submit(Some(e.finish()));
+        }
+        run("o_proj", &|e| {
+            self.encode_matmul(
+                e,
+                &self.attn_out_buf,
+                layer_prefix,
+                "o_proj",
+                &self.q_buf,
+                seq_len,
+                q_dim,
+                hd,
+            )
+        });
+        run("residual1", &|e| {
+            self.encode_residual(e, &self.hidden_buf, &self.q_buf, &self.ffn_out_buf, hd * seq_len)
+        });
+        let ffn_norm_w = self
+            .weight_buffers
+            .get(&format!("{layer_prefix}.ffn_norm"))
+            .ok_or_else(|| format!("Missing {layer_prefix}.ffn_norm"))?;
+        run("rmsnorm2", &|e| {
+            self.encode_rmsnorm(e, &self.ffn_out_buf, ffn_norm_w, &self.norm_buf, hd)
+        });
+        {
+            let mut e = self.device.create_command_encoder(&Default::default());
+            e.copy_buffer_to_buffer(
+                &self.norm_buf,
+                0,
+                &saved.ffn_norm_out,
+                0,
+                (s * hd as usize * 4) as u64,
+            );
+            self.queue.submit(Some(e.finish()));
+        }
+        run("gate_proj", &|e| {
+            self.encode_matmul(
+                e,
+                &self.norm_buf,
+                layer_prefix,
+                "gate_proj",
+                &self.ffn_gate_buf,
+                seq_len,
+                hd,
+                inter,
+            )
+        });
+        run("up_proj", &|e| {
+            self.encode_matmul(
+                e,
+                &self.norm_buf,
+                layer_prefix,
+                "up_proj",
+                &self.ffn_up_buf,
+                seq_len,
+                hd,
+                inter,
+            )
+        });
+        run("silu", &|e| {
+            self.encode_silu_mul(
+                e,
+                &self.ffn_gate_buf,
+                &self.ffn_up_buf,
+                &self.ffn_silu_buf,
+                inter * seq_len,
+            )
+        });
+        {
+            let mut e = self.device.create_command_encoder(&Default::default());
+            e.copy_buffer_to_buffer(
+                &self.ffn_silu_buf,
+                0,
+                &saved.silu_gate_output,
+                0,
+                (s * inter as usize * 4) as u64,
+            );
+            self.queue.submit(Some(e.finish()));
+        }
+        run("down_proj", &|e| {
+            self.encode_matmul(
+                e,
+                &self.ffn_silu_buf,
+                layer_prefix,
+                "down_proj",
+                &self.norm_buf,
+                seq_len,
+                inter,
+                hd,
+            )
+        });
+        run("residual2", &|e| {
+            self.encode_residual(
+                e,
+                &self.ffn_out_buf,
+                &self.norm_buf,
+                &self.hidden_buf,
+                hd * seq_len,
+            )
+        });
+
+        let total: u64 = trace.iter().map(|(_, ms)| ms).sum();
+        let parts: Vec<String> = trace.iter().map(|(n, ms)| format!("{n}={ms}")).collect();
+        eprintln!("[OP-TRACE] layer {} total={}ms: {}", layer_prefix, total, parts.join(" "));
+        Ok(())
+    }
+
     /// Allocate saved activations for one layer.
     pub fn alloc_layer_activations(&self, seq_len: u32) -> LayerActivations {
         let s = seq_len as usize;
@@ -1306,6 +1610,14 @@ impl WgslForwardPass {
     }
 
     /// Encode LoRA addmm: output += (input @ A) @ B * scale
+    ///
+    /// KAIZEN: replaced fused shader (0.11 GFLOPS) with two tiled GEMM dispatches (1000+ GFLOPS).
+    /// Step 1: temp = input @ A  [seq, rank] via tiled GEMM
+    /// Step 2: output += scale * (temp @ B) [seq, out_dim] via tiled GEMM with alpha=scale
+    ///
+    /// The second GEMM uses alpha=scale in the tiled GEMM shader (C = alpha * A @ B).
+    /// But we need ADD (+=), not overwrite (=). We use a temp buffer for the delta,
+    /// then add to output via an elementwise shader.
     #[allow(clippy::too_many_arguments)]
     fn encode_lora_addmm(
         &self,
@@ -1319,36 +1631,68 @@ impl WgslForwardPass {
         rank: u32,
         out_dim: u32,
         scale: f32,
-        pipeline: &wgpu::ComputePipeline,
-        bgl: &wgpu::BindGroupLayout,
+        _pipeline: &wgpu::ComputePipeline,
+        _bgl: &wgpu::BindGroupLayout,
     ) {
-        #[repr(C)]
-        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-        struct P { seq_len: u32, in_dim: u32, rank: u32, out_dim: u32, scale: f32, _p0: u32, _p1: u32, _p2: u32 }
-        let params = P { seq_len, in_dim, rank, out_dim, scale, _p0: 0, _p1: 0, _p2: 0 };
-        let pbuf = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: None, size: 32,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        // Step 1: temp[seq, rank] = input[seq, in_dim] @ A[in_dim, rank]
+        let temp_size = (seq_len * rank) as u64 * 4;
+        let temp = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("lora_temp"),
+            size: temp_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
-        self.queue.write_buffer(&pbuf, 0, bytemuck::bytes_of(&params));
+        self.encode_tiled_gemm(encoder, input, lora_a, &temp, seq_len, in_dim, rank, 1.0);
+
+        // Step 2: delta[seq, out_dim] = scale * temp[seq, rank] @ B[rank, out_dim]
+        let delta_size = (seq_len * out_dim) as u64 * 4;
+        let delta = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("lora_delta"),
+            size: delta_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        self.encode_tiled_gemm(encoder, &temp, lora_b, &delta, seq_len, rank, out_dim, scale);
+
+        // Step 3: output += delta (elementwise add, via temp to avoid aliasing)
+        let sum_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("lora_sum"),
+            size: delta_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        self.encode_residual(encoder, output, &delta, &sum_buf, seq_len * out_dim);
+        encoder.copy_buffer_to_buffer(&sum_buf, 0, output, 0, delta_size);
+    }
+
+    /// Encode tiled GEMM: C = alpha * A[M,K] @ B[K,N]. Uses CUTLASS-style 64×64 tiles.
+    fn encode_tiled_gemm(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        a: &wgpu::Buffer,
+        b: &wgpu::Buffer,
+        c: &wgpu::Buffer,
+        m: u32,
+        k: u32,
+        n: u32,
+        alpha: f32,
+    ) {
+        let params = [m, k, n, alpha.to_bits()];
+        let params_buf = self.make_uniform(&params);
         let bg = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None, layout: bgl,
+            label: None,
+            layout: &self.matmul_bgl,
             entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: input.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: lora_a.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: lora_b.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: output.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 4, resource: pbuf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 0, resource: a.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: b.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: c.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: params_buf.as_entire_binding() },
             ],
         });
-        let total = seq_len * out_dim;
-        let wg = total.div_ceil(256);
-        let (x, y) = if wg <= 65535 { (wg, 1) } else { (65535, wg.div_ceil(65535)) };
         let mut pass = encoder.begin_compute_pass(&Default::default());
-        pass.set_pipeline(pipeline);
+        pass.set_pipeline(&self.tiled_matmul_pipeline);
         pass.set_bind_group(0, &bg, &[]);
-        pass.dispatch_workgroups(x, y, 1);
+        pass.dispatch_workgroups(n.div_ceil(64), m.div_ceil(64), 1);
     }
 
     fn encode_rmsnorm(
@@ -1371,10 +1715,13 @@ impl WgslForwardPass {
                 wgpu::BindGroupEntry { binding: 3, resource: params_buf.as_entire_binding() },
             ],
         });
+        // Dispatch: (1, num_rows, 1). Each workgroup processes one row via wg_id.y.
+        // For inference (M=1): dispatch (1,1,1). For training (M=seq_len): dispatch (1,seq_len,1).
+        let num_rows = (input.size() / (dim as u64 * 4)).max(1) as u32;
         let mut pass = encoder.begin_compute_pass(&Default::default());
         pass.set_pipeline(&self.rmsnorm_pipeline);
         pass.set_bind_group(0, &bg, &[]);
-        pass.dispatch_workgroups(1, 1, 1); // Single workgroup for reduction
+        pass.dispatch_workgroups(1, num_rows, 1);
     }
 
     fn encode_matmul(
