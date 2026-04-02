@@ -58,6 +58,8 @@ pub struct WgslForwardPass {
     matmul_pipeline: wgpu::ComputePipeline,
     /// CUTLASS-style tiled GEMM for M>=4 (training batch, prefill)
     tiled_matmul_pipeline: wgpu::ComputePipeline,
+    /// Cooperative matrix GEMM for tensor core acceleration (wgpu 29+, optional)
+    coop_matmul_pipeline: Option<wgpu::ComputePipeline>,
     /// PMAT-327: GEMV pipeline for M=1 decode (cooperative K-reduction)
     gemv_pipeline: wgpu::ComputePipeline,
     /// Causal attention pipeline for training (full sequence, no KV cache)
@@ -325,6 +327,12 @@ impl WgslForwardPass {
         let tiled_matmul_pipeline =
             make_pipeline(&tiled_matmul_shader, &matmul_bgl, "tiled_matmul_pipe");
 
+        // Cooperative matrix GEMM (optional — requires EXPERIMENTAL_COOPERATIVE_MATRIX)
+        // Cooperative matrix GEMM: disabled by default until WGSL shader validated on gx10.
+        // Enable with `WgslForwardPass::enable_cooperative_matrix()` after verification.
+        // Contract: FALSIFY-COOP-003 (fallback to tiled GEMM)
+        let coop_matmul_pipeline: Option<wgpu::ComputePipeline> = None;
+
         // Causal attention pipeline for training
         let attention_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("causal_attention"),
@@ -428,6 +436,7 @@ impl WgslForwardPass {
             queue,
             matmul_pipeline,
             tiled_matmul_pipeline,
+            coop_matmul_pipeline,
             attention_pipeline,
             attention_bgl,
             gemv_pipeline,
@@ -1690,6 +1699,16 @@ impl WgslForwardPass {
             ],
         });
         let mut pass = encoder.begin_compute_pass(&Default::default());
+        // Use cooperative matrix GEMM when available and dimensions align to 16
+        if let Some(ref coop_pipe) = self.coop_matmul_pipeline {
+            if m >= 16 && k >= 16 && n >= 16 {
+                pass.set_pipeline(coop_pipe);
+                pass.set_bind_group(0, &bg, &[]);
+                pass.dispatch_workgroups(n.div_ceil(16), m.div_ceil(16), 1);
+                return;
+            }
+        }
+        // Fallback: software tiled GEMM (contract: FALSIFY-COOP-003)
         pass.set_pipeline(&self.tiled_matmul_pipeline);
         pass.set_bind_group(0, &bg, &[]);
         pass.dispatch_workgroups(n.div_ceil(64), m.div_ceil(64), 1);
