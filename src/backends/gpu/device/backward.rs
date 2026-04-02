@@ -114,8 +114,8 @@ impl GpuDevice {
 
         let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("{op_name} PL")),
-            bind_group_layouts: &[Some(&bgl)],
-            immediate_size: 0,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
         });
 
         let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -339,8 +339,8 @@ impl GpuDevice {
 
         let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[Some(&bgl)],
-            immediate_size: 0,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
         });
 
         let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -463,8 +463,8 @@ impl GpuDevice {
 
         let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[Some(&bgl)],
-            immediate_size: 0,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
         });
         let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("RoPE Backward"),
@@ -637,8 +637,8 @@ impl GpuDevice {
 
         let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[Some(&bgl)],
-            immediate_size: 0,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
         });
         let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("AdamW"),
@@ -813,8 +813,8 @@ impl GpuDevice {
 
         let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[Some(&bgl)],
-            immediate_size: 0,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
         });
         let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("RMSNorm Backward"),
@@ -973,8 +973,8 @@ impl GpuDevice {
 
         let pl = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[Some(&bgl)],
-            immediate_size: 0,
+            bind_group_layouts: &[&bgl],
+            push_constant_ranges: &[],
         });
         let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("NF4 Dequant"),

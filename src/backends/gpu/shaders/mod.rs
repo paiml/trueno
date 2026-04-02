@@ -3,7 +3,6 @@
 mod advanced;
 pub mod backward;
 mod basic_ops;
-pub mod cooperative;
 mod reductions;
 
 pub use advanced::*;

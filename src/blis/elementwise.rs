@@ -378,12 +378,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic] // contract_pre_add! panics before Err path in debug builds
     fn test_add_error_mismatch() {
         let a = vec![1.0f32; 4];
         let b = vec![1.0f32; 3];
         let mut output = vec![0.0f32; 4];
-        let _ = add(&a, &b, &mut output);
+        assert!(add(&a, &b, &mut output).is_err());
     }
 
     // ── Mul scalar tests ──────────────────────────────────────────────────
