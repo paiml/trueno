@@ -181,6 +181,18 @@ impl<T> GpuBuffer<T> {
         })
     }
 
+    /// Zero buffer on GPU asynchronously (no PCIe transfer).
+    pub fn zero_async(&mut self, stream: &crate::driver::CudaStream) -> Result<(), GpuError> {
+        if self.len == 0 { return Ok(()); }
+        self.ensure_context()?;
+        let driver = get_driver()?;
+        let result = unsafe { (driver.cuMemsetD32Async)(self.ptr, 0, self.len, stream.raw()) };
+        if result != CUDA_SUCCESS {
+            return Err(GpuError::Transfer(format!("cuMemsetD32Async failed: {result}")));
+        }
+        Ok(())
+    }
+
     /// Get device pointer as raw u64
     #[must_use]
     pub fn as_ptr(&self) -> CUdeviceptr {

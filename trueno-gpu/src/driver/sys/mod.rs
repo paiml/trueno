@@ -276,6 +276,13 @@ pub struct CudaDriver {
         size: usize,
         stream: CUstream,
     ) -> CUresult,
+    /// cuMemsetD32Async - GPU-side memset (entrenar#318 Tier 1)
+    pub cuMemsetD32Async: unsafe extern "C" fn(
+        dst: CUdeviceptr,
+        value: u32,
+        count: usize,
+        stream: CUstream,
+    ) -> CUresult,
     /// cuMemGetInfo - Get free and total memory
     pub cuMemGetInfo: unsafe extern "C" fn(free: *mut usize, total: *mut usize) -> CUresult,
 
@@ -494,6 +501,8 @@ mod loading {
                     unsafe extern "C" fn(CUdeviceptr, CUdeviceptr, usize) -> CUresult;
                 type FnMemcpyDtoDAsync =
                     unsafe extern "C" fn(CUdeviceptr, CUdeviceptr, usize, CUstream) -> CUresult;
+                type FnMemsetD32Async =
+                    unsafe extern "C" fn(CUdeviceptr, u32, usize, CUstream) -> CUresult;
                 type FnMemGetInfo = unsafe extern "C" fn(*mut usize, *mut usize) -> CUresult;
                 type FnStreamCreate = unsafe extern "C" fn(*mut CUstream, c_uint) -> CUresult;
                 type FnStreamDestroy = unsafe extern "C" fn(CUstream) -> CUresult;
@@ -593,6 +602,7 @@ mod loading {
                     cuMemcpyDtoHAsync: load_sym!(cuMemcpyDtoHAsync_v2, FnMemcpyDtoHAsync),
                     cuMemcpyDtoD: load_sym!(cuMemcpyDtoD_v2, FnMemcpyDtoD),
                     cuMemcpyDtoDAsync: load_sym!(cuMemcpyDtoDAsync_v2, FnMemcpyDtoDAsync),
+                    cuMemsetD32Async: load_sym!(cuMemsetD32Async, FnMemsetD32Async),
                     cuMemGetInfo: load_sym!(cuMemGetInfo_v2, FnMemGetInfo),
                     cuStreamCreate: load_sym!(cuStreamCreate, FnStreamCreate),
                     cuStreamDestroy: load_sym!(cuStreamDestroy_v2, FnStreamDestroy),
