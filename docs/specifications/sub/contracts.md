@@ -31,7 +31,7 @@ A. Equation (YAML)           — mathematical ground truth
    ↓ must exist
 B. Lean 4 Proof              — theorem with no sorry
    ↓ must discharge all obligations
-C. YAML Contract Validation  — pv lint Gates 1-4 pass
+C. YAML Contract Validation  — pv lint Gates 1-7 pass
    ↓ schema valid, internally consistent
 D. build.rs Codegen          — generates debug_assert!() from pre/postconditions
    ↓ sets CONTRACT_* env vars from binding.yaml
@@ -156,7 +156,7 @@ Generate traits: `pv scaffold --trait contracts/softmax-kernel-v1.yaml`
 
 ## 7. `pv lint` Quality Gates
 
-`pv lint` is the single-command quality gate. 4 gates, any failure exits non-zero:
+`pv lint` is the single-command quality gate. 7 gates, any failure exits non-zero:
 
 | Gate | What it checks |
 |------|---------------|
@@ -164,6 +164,9 @@ Generate traits: `pv scaffold --trait contracts/softmax-kernel-v1.yaml`
 | Gate 2 (audit) | Internal consistency: obligations match harnesses |
 | Gate 3 (score) | Completeness metrics above threshold |
 | Gate 4 (verify) | All `test:` references resolve to `fn test_*` in source |
+| Gate 5 (enforce) | Equations have preconditions/postconditions |
+| Gate 6 (enforcement-level) | Contracts meet minimum enforcement level |
+| Gate 7 (reverse-coverage) | Binding registry coverage (with `--binding`) |
 
 ```bash
 pv lint contracts/                                  # run all gates

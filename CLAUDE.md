@@ -97,7 +97,7 @@ macro → FALSIFY tests.
 See `docs/specifications/sub/contracts.md` for details.
 
 ```bash
-pv lint contracts/                  # 4-gate quality check
+pv lint contracts/                  # 7-gate quality check
 pv verify-bindings                  # check binding registry
 pv score                            # PVScore metric
 ```

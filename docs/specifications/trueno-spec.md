@@ -70,7 +70,7 @@ Trueno exists because hand-written assembly is unsafe, unmaintainable, and non-p
 5. Register binding           → ../provable-contracts/contracts/trueno/binding.yaml
 6. Generate scaffold          → pv generate contracts/my-kernel-v1.yaml
 7. Implement kernel           → fill in scaffold with real logic
-8. Run FALSIFY tests + lint   → pv test + pv lint (4 gates)
+8. Run FALSIFY tests + lint   → pv test + pv lint (7 gates)
 9. Run Kani harnesses         → cargo kani (bounded model checking)
 10. Merge only if all pass
 ```
@@ -82,7 +82,7 @@ It must be *impossible* to ship code that violates a contract. Six stages, each 
 ```
 A. Equation (YAML)          → mathematical ground truth must exist
 B. Lean 4 Proof             → theorem must have no sorry
-C. YAML Validation          → pv lint Gates 1-4 must pass
+C. YAML Validation          → pv lint Gates 1-7 must pass
 D. build.rs Codegen         → sets CONTRACT_* env vars from binding.yaml
 E. #[contract] Proc Macro   → checks env vars, inserts debug_assert pre/post
 F. Test Execution           → cargo test runs FALSIFY tests
