@@ -186,40 +186,18 @@ unsafe fn transpose_avx2_impl(
     let rb_end = rows / BLOCK * BLOCK;
     let cb_end = cols / BLOCK * BLOCK;
 
-    // Tall-skinny: rows >> cols → destination stride (=rows) is large.
-    // Swap loop order so inner loop walks consecutive r0 values,
-    // making destination writes sequential within each cache line.
-    let tall_skinny = rows >= 4 * cols;
-
     unsafe {
-        // Outer loop: destination tile rows (ct) first for write locality
+        // Outer: destination tile rows (ct) first for write locality.
+        // Inner: destination-first (c0) for better write cache line reuse.
         for ct in (0..cb_end).step_by(TILE) {
             let ct_end = (ct + TILE).min(cb_end);
             for rt in (0..rb_end).step_by(TILE) {
                 let rt_end = (rt + TILE).min(rb_end);
-
-        for ct in (0..cb_end).step_by(TILE) {
-            let ct_end = (ct + TILE).min(cb_end);
-            for rt in (0..rb_end).step_by(TILE) {
-                let rt_end = (rt + TILE).min(rb_end);
-
-                if dest_first_inner {
-                    for c0 in (ct..ct_end).step_by(BLOCK) {
-                        for r0 in (rt..rt_end).step_by(BLOCK) {
-                            let src = a.as_ptr().add(r0 * cols + c0);
-                            let dst = b.as_mut_ptr().add(c0 * rows + r0);
-                            transpose_8x8_avx2(src, cols, dst, rows);
-                        }
-                    }
-                } else {
-                    // Square/wide: destination-first inner loop (c0 first)
-                    // for better write locality within each 64x64 tile
-                    for c0 in (ct..ct_end).step_by(BLOCK) {
-                        for r0 in (rt..rt_end).step_by(BLOCK) {
-                            let src = a.as_ptr().add(r0 * cols + c0);
-                            let dst = b.as_mut_ptr().add(c0 * rows + r0);
-                            transpose_8x8_avx2(src, cols, dst, rows);
-                        }
+                for c0 in (ct..ct_end).step_by(BLOCK) {
+                    for r0 in (rt..rt_end).step_by(BLOCK) {
+                        let src = a.as_ptr().add(r0 * cols + c0);
+                        let dst = b.as_mut_ptr().add(c0 * rows + r0);
+                        transpose_8x8_avx2(src, cols, dst, rows);
                     }
                 }
             }
