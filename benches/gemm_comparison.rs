@@ -4,6 +4,7 @@ use std::hint::black_box;
 fn gen(n: usize) -> Vec<f32> {
     (0..n).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0).collect()
 }
+
 fn bench_transpose(c: &mut Criterion) {
     let mut g = c.benchmark_group("transpose");
     for &n in &[64, 128, 256, 512] {
@@ -12,13 +13,16 @@ fn bench_transpose(c: &mut Criterion) {
             let mut o = vec![0.0f32; n * n];
             b.iter(|| trueno::blis::transpose(n, n, black_box(&d), black_box(&mut o)).unwrap());
         });
+        // FAIR comparison: as_standard_layout forces real data rearrangement
+        // (not just memcpy with swapped strides)
         g.bench_with_input(BenchmarkId::new("ndarray", n), &n, |b, &n| {
             let a = ndarray::Array2::from_shape_vec((n, n), d.clone()).unwrap();
-            b.iter(|| black_box(black_box(&a).t().to_owned()));
+            b.iter(|| black_box(black_box(&a).t().as_standard_layout().into_owned()));
         });
     }
     g.finish();
 }
+
 fn bench_gemm(c: &mut Criterion) {
     let mut g = c.benchmark_group("gemm");
     g.sample_size(20);
@@ -40,5 +44,26 @@ fn bench_gemm(c: &mut Criterion) {
     }
     g.finish();
 }
-criterion_group!(benches, bench_transpose, bench_gemm);
+
+fn bench_gemv(c: &mut Criterion) {
+    let mut g = c.benchmark_group("gemv");
+    for &n in &[64, 128, 256, 512, 1024] {
+        let m = gen(n * n);
+        let v = gen(n);
+        g.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &n| {
+            let mut o = vec![0.0f32; n];
+            bench.iter(|| {
+                trueno::blis::gemv::gemv(n, n, black_box(&m), black_box(&v), black_box(&mut o));
+            });
+        });
+        g.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &n| {
+            let a = ndarray::Array2::from_shape_vec((n, n), m.clone()).unwrap();
+            let x = ndarray::Array1::from_vec(v.clone());
+            bench.iter(|| black_box(black_box(&a).dot(black_box(&x))));
+        });
+    }
+    g.finish();
+}
+
+criterion_group!(benches, bench_transpose, bench_gemm, bench_gemv);
 criterion_main!(benches);
