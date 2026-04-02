@@ -9,9 +9,8 @@
 **≥90% line coverage is non-negotiable.** Automatically enforced — cannot be bypassed.
 
 **Enforcement layers:**
-1. Pre-commit hook (`.git/hooks/pre-commit`) blocks commits < 90%
-2. `make coverage-check` exits with error if < 90%
-3. CI pipeline rejects PRs below threshold
+1. `make coverage-check` exits with error if < 90%
+2. CI pipeline rejects PRs below threshold
 
 **Commands:**
 ```bash

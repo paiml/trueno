@@ -38,16 +38,17 @@ Below threshold → SIMD. Above → GPU (if available).
 Implementation checklist for new operation `frobulate()`:
 
 1. **Contract first:** `contracts/frobulate-v1.yaml`
-2. **Trait method:** `VectorBackend::frobulate()` in `src/backends/mod.rs`
-3. **Scalar:** `src/backends/scalar.rs` — pure Rust, baseline correctness
-4. **SSE2:** `src/backends/sse2.rs` — 4x f32 per iteration
-5. **AVX2:** `src/backends/avx2.rs` — 8x f32, FMA if applicable
-6. **AVX-512:** `src/backends/avx512.rs` — 16x f32
-7. **NEON:** `src/backends/neon.rs` — 4x f32 (ARM)
-8. **WASM:** `src/backends/wasm.rs` — 4x f32 (SIMD128)
-9. **wgpu shader:** `src/backends/gpu/shaders.rs`
-10. **wgpu device:** `src/backends/gpu/device.rs` — sync + async methods
-11. **Integration test:** `tests/backend_story.rs`
+2. **Register binding:** `../provable-contracts/contracts/trueno/binding.yaml`
+3. **Trait method:** `VectorBackend::frobulate()` in `src/backends/mod.rs`
+4. **Scalar:** `src/backends/scalar/` — pure Rust, baseline correctness
+5. **SSE2:** `src/backends/sse2/` — 4x f32 per iteration
+6. **AVX2:** `src/backends/avx2/` — 8x f32, FMA if applicable
+7. **AVX-512:** `src/backends/avx512/` — 16x f32
+8. **NEON:** `src/backends/neon/` — 4x f32 (ARM)
+9. **WASM:** `src/backends/wasm/` — 4x f32 (SIMD128)
+10. **wgpu shader:** `src/backends/gpu/shaders/`
+11. **wgpu device:** `src/backends/gpu/device/` — sync + async methods
+12. **Integration test:** `tests/backend_story.rs`
 
 If GPU acceleration is not beneficial (e.g., inherently sequential), the GPU method MUST:
 - Fall back to CPU implementation
@@ -70,7 +71,6 @@ match self.backend {
 
 ## 5. Enforcement
 
-- **Pre-commit hook:** blocks commits that break backend story
 - **Integration test:** `tests/backend_story.rs` tests all backends
 - **CI:** runs backend story tests on every PR
 - **Contract:** FALSIFY tests verify backend equivalence (tolerance < 1e-5)

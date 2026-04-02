@@ -154,12 +154,13 @@ See [sub/backends.md](sub/backends.md) for dispatch logic and OpComplexity thres
 **ZERO TOLERANCE: every operation MUST work on ALL backends.** No exceptions. If GPU acceleration is not beneficial, the GPU method falls back to CPU and documents why.
 
 When adding a new operation:
-1. Add to `VectorBackend` trait (`src/backends/mod.rs`)
-2. Implement in all 7 backend modules: scalar, sse2, avx2, avx512, neon, wasm, gpu
-3. Add WGSL shader if GPU-accelerable
-4. Add sync + async device methods
-5. Add integration test in `tests/backend_story.rs`
-6. **Write contract FIRST** (`contracts/my-op-v1.yaml`)
+1. **Write contract FIRST** (`contracts/my-op-v1.yaml`) — equations, FALSIFY tests, proof obligations
+2. Register binding in `../provable-contracts/contracts/trueno/binding.yaml`
+3. Add to `VectorBackend` trait (`src/backends/mod.rs`)
+4. Implement in all backend modules: `scalar/`, `sse2/`, `avx2/`, `avx512/`, `neon/`, `wasm/`, `gpu/`, `q4k/`, `q6k/`
+5. Add WGSL shader if GPU-accelerable
+6. Add sync + async device methods
+7. Add integration test in `tests/backend_story.rs`
 
 Enforcement: pre-commit hook + `tests/backend_story.rs` + CI.
 
@@ -236,21 +237,28 @@ See [sub/layout.md](sub/layout.md) for kernel selection guide and fused Q4K spec
 
 ```
 trueno/                  Main crate (CPU SIMD + wgpu)
-├── src/backends/        scalar, sse2, avx2, avx512, neon, wasm, gpu/
-├── src/vector.rs        Vector<T> + VectorOps trait
-├── src/matrix.rs        matmul, transpose
+├── src/backends/        scalar/, sse2/, avx2/, avx512/, neon/, wasm/, gpu/, q4k/, q6k/
+├── src/vector/          Vector<T> + VectorOps trait
+├── src/matrix/          matmul, transpose
+├── src/blis/            BLIS micro-kernel delegation
+├── src/brick/           ComputeBrick, BrickProfiler, quant_ops
+├── src/eigen/           Eigendecomposition
+├── src/monitor/         GPU monitoring, ComputeDevice trait
+├── src/tiling/          Cache-aware tiling
+├── src/tuner/           ML-based backend tuner
 └── src/error.rs         TruenoError
 
 trueno-gpu/              CUDA sub-crate (pure Rust PTX)
-├── src/ptx/             PTX builder, instructions, registers
-├── src/kernels/         gemm, softmax, layernorm, attention, quantize
+├── src/ptx/             PTX builder, instructions, registers, optimizer
+├── src/kernels/         gemm, softmax, layernorm, attention, quantize, backward, lz4
 ├── src/driver/          CUDA driver FFI
 └── src/memory/          DeviceBuffer, HostBuffer, pool
 
 crates/                  Domain sub-crates
+├── cbtop                Compute Block Top TUI + adaptive ML
 ├── trueno-fft           FFT (Stockham, Bluestein, 2D, 3D)
 ├── trueno-image         Image processing (conv2d, resize, canny)
-├── trueno-quant         Quantization
+├── trueno-quant         Quantization (Q4K, Q5K, Q6K, NF4)
 ├── trueno-rand          RNG (Philox, ThreeFry)
 ├── trueno-solve         Solvers (Cholesky, LU, QR, SVD)
 ├── trueno-sparse        Sparse (CSR, SELL, BSR, SpMV, SpGEMM)
@@ -296,11 +304,10 @@ Five mandatory test categories for every operation:
 
 ## 13. Coverage
 
-**≥90% line coverage is non-negotiable.** Enforced by pre-commit hook, `make coverage-check`, and CI.
+**≥90% line coverage is non-negotiable.** Enforced by `make coverage-check` and CI.
 
 - ONLY use `make coverage` — never `cargo llvm-cov` directly, never `cargo-tarpaulin`
 - New code must have 100% coverage
-- Pre-commit hook blocks commits below 90%
 - HTML report: `target/coverage/html/index.html`
 
 | Component | Minimum | Target |
