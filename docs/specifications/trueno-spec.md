@@ -38,8 +38,9 @@ Version 1.0 · April 2026 · Pragmatic AI Labs · [paiml/trueno](https://github.
 | 20 | [PTX Optimizer](#20-ptx-optimizer) | [sub/cuda.md](sub/cuda.md) |
 | 21 | [Runtime Contracts](#21-runtime-contracts) | [sub/contracts.md](sub/contracts.md) |
 | 22 | [Activation One Path Rule](#22-activation-one-path-rule) | |
-| 23 | [Stack Integration](#23-stack-integration) | |
-| 24 | [Development Commands](#24-development-commands) | |
+| 23 | [Contract-Aware Tracing (Tier 3)](#23-contract-aware-tracing-tier-3) | [sub/deep-integration.md](sub/deep-integration.md) |
+| 24 | [Stack Integration](#24-stack-integration) | |
+| 25 | [Development Commands](#25-development-commands) | |
 
 ---
 
@@ -452,7 +453,58 @@ Generated contracts use `debug_assert!()` — zero cost in release builds. Cover
 
 ---
 
-## 23. Stack Integration
+## 23. Contract-Aware Tracing (Tier 3)
+
+Tiers 1 (compile-time) and 2 (CI) enforce contracts statically. Tier 3 enforces at runtime via tracing integration — closing the gap between "contract says X" and "system does X in production."
+
+### Architecture
+
+```
+Contract YAML → ContractRegistry (startup)
+                    ↓
+BrickProfiler ──→ budget check ──→ violation event
+ModelTracer   ──→ postcondition check ──→ violation event
+                    ↓
+ContractTracingLayer (tracing::Layer)
+                    ↓
+Structured diagnostics (SARIF-compatible)
+```
+
+### Gap Closures
+
+| Gap | Problem | Fix |
+|-----|---------|-----|
+| Gap 2 | ComputeBrick budget is hardcoded | `ComputeBrick::from_contract()` derives `TokenBudget` from roofline YAML |
+| Gap 3 | ModelTracer observes but doesn't verify | `end_forward()` checks MLT-01..05 against contract invariants |
+
+### ContractTracingLayer
+
+A `tracing::Layer` that intercepts spans tagged with `contract.id` and verifies postconditions on span close. Violations emit structured `tracing::error!` events with contract ID, obligation, and measured value.
+
+**Performance budget:** ≤130ns per check (NCCLbpf demonstrates this is achievable for GPU data paths). BrickProfiler's deferred sync mode batches checks with existing finalization — zero per-kernel overhead on hot path.
+
+### ModelTracer Contract Hooks
+
+`end_forward()` verifies existing trace data against contract invariants:
+- **MLT-01**: no NaN/Inf in activations (activation-kernel-v1 postcondition)
+- **MLT-02**: attention weights sum to 1 per row (softmax-kernel-v1 postcondition)
+- **MLT-03**: logit magnitudes within bounds (model-config-algebra-v1)
+- **MLT-04**: quantization error ≤ contract threshold (quantization-ordering-v1)
+- **MLT-05**: KV cache utilization ≤ capacity (gpu-decode-profiling-v1)
+
+Zero additional collection overhead — reuses existing trace data.
+
+### Rust-Native Path (Future)
+
+When Rust MCP-759 contracts stabilize (`#[contracts::requires]`/`#[contracts::ensures]`), YAML postcondition checks can migrate to compiler-inserted assertions with zero cost in release builds via `-Z contract-checks=off`.
+
+**References:** ProofWright (arXiv:2511.12294), Volta (arXiv:2511.12638), NCCLbpf (arXiv:2603.11438), Rust MCP-759
+
+See [sub/deep-integration.md](sub/deep-integration.md) for full design, code examples, and enforcement pipeline.
+
+---
+
+## 24. Stack Integration
 
 Trueno is the compute foundation for the Sovereign AI Stack:
 - **aprender** — tensor operations, format conversion
@@ -465,7 +517,7 @@ Stack-wide search: `batuta oracle --rag "your question"`
 
 ---
 
-## 24. Development Commands
+## 25. Development Commands
 
 ```bash
 # Build
