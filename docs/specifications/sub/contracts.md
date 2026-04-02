@@ -192,6 +192,18 @@ Trueno's verification depth across levels:
 
 **L0 through L2 enforce on every `cargo build` + `cargo test`.** L3 enforces on debug builds. L4/L5 defined in YAML but not yet in CI.
 
+### L5 Coverage Detail
+
+30 Lean 4 theorems across 18 domains, 0 sorry, `lake build` passes.
+
+**Proven (14/37 equations):** softmax (5), elementwise/relu/add/mul_scalar (3), sigmoid (3), matmul (2), cholesky, svd, gemv, spmv, syrk, transpose, layernorm (2), rmsnorm (2), fft/dft, cross_entropy (2), quantization, lu, qr, adamw.
+
+**trueno-gpu L5 coverage:** softmax (5), elementwise (3), gemm/matmul (2), gemv (1), layernorm (2), quantize (1) — 6/12 kernel domains covered.
+
+**trueno-gpu L5 gaps:** attention, backward, fused, lz4, optimizer, megakernel — 6 kernel domains have no Lean theorems.
+
+**Contract L5 gaps (23 equations with `lean_theorem` ref but no proof):** image-* (canny, sobel, conv2d, histogram, morphology, resize, rgb_to_gray, hsv_roundtrip, connected_components), rand-* (philox, threefry), sparse-* (bsr_spmv, sell_spmv, spgemm, spmm), fft-* (bluestein, fft_2d, fft_3d, fft_batched), blas (trmm, trsm), tensor (einsum), gpu (dimension_independence).
+
 ## 9. KAIZEN Workflow (Performance Contracts)
 
 KAIZEN tickets follow the contract-first pattern:
