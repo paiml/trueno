@@ -7,8 +7,8 @@ use crate::error::TruenoError;
 
 use super::compute::{gemm_blis, gemm_blis_with_prepacked_b};
 use super::prepacked::PrepackedB;
+use super::{MC, MR};
 #[cfg(feature = "parallel")]
-use super::MC;
 
 /// Heijunka (load-leveling) scheduler for parallel GEMM
 #[derive(Debug, Clone)]
@@ -84,7 +84,8 @@ pub fn gemm_blis_parallel(
     }
 
     let scheduler = HeijunkaScheduler::default();
-    let partitions = scheduler.partition_m(m, MC);
+    let ps = if m <= MC { MR.max(m / rayon::current_num_threads()) } else { MC };
+    let partitions = scheduler.partition_m(m, ps);
 
     // KAIZEN-042: Removed dead packed_b allocation that was never used.
     // Each thread packs B internally via gemm_blis. Sharing packed B across

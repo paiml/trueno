@@ -42,10 +42,17 @@ fn load_c_tile(
     nr: usize,
     n: usize,
 ) {
-    c_micro.fill(0.0);
     for jj in 0..nr {
         for ii in 0..mr {
             c_micro[jj * MR + ii] = c[(row + ii) * n + (col + jj)];
+        }
+        for ii in mr..MR {
+            c_micro[jj * MR + ii] = 0.0;
+        }
+    }
+    for jj in nr..NR {
+        for ii in 0..MR {
+            c_micro[jj * MR + ii] = 0.0;
         }
     }
 }
@@ -121,10 +128,10 @@ fn compute_macroblock(
     let track_time = profiler.is_some();
     let midi_start = if track_time { Some(Instant::now()) } else { None };
 
-    for jr in (0..nc_block).step_by(NR) {
-        let nr_block = NR.min(nc_block - jr);
-        for ir in (0..mc_block).step_by(MR) {
-            let mr_block = MR.min(mc_block - ir);
+    for ir in (0..mc_block).step_by(MR) {
+        let mr_block = MR.min(mc_block - ir);
+        for jr in (0..nc_block).step_by(NR) {
+            let nr_block = NR.min(nc_block - jr);
             let micro_start = if track_time { Some(Instant::now()) } else { None };
 
             let a_panel = &packed_a[(ir / MR) * MR * kc_block..];
@@ -250,18 +257,12 @@ pub fn gemm_blis(
                 // Zero-fill to match the semantics of the original vec![0.0; N].
                 if packed_a.len() < needed_a {
                     packed_a.resize(needed_a, 0.0);
-                } else {
-                    packed_a[..needed_a].fill(0.0);
                 }
                 if packed_b.len() < needed_b {
                     packed_b.resize(needed_b, 0.0);
-                } else {
-                    packed_b[..needed_b].fill(0.0);
                 }
                 if c_micro.len() < needed_c {
                     c_micro.resize(needed_c, 0.0);
-                } else {
-                    c_micro[..needed_c].fill(0.0);
                 }
 
                 for jc in (0..n).step_by(NC) {
