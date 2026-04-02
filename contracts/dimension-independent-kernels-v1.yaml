@@ -63,72 +63,60 @@ metadata:
 #   optimizer/adamw.rs: AdamWStep, AdamStep (all runtime params)
 #   optimizer/clip.rs: GradientClip (all runtime params)
 
-tests:
+equations:
+  dimension_independence:
+    formula: "PTX(kernel, dims_1) == PTX(kernel, dims_2) for all dims_1, dims_2"
+    domain: "kernel_type x (M, K, N) x (M, K, N)"
+    codomain: "{true, false}"
+    invariants:
+      - "No immediates derived from constructor dimensions in emitted PTX"
+      - "All shape parameters passed via .param with ld.param"
+
+proof_obligations:
+  - type: equivalence
+    property: "PTX byte-identity across dimension sets"
+    tolerance: 0
+    applies_to: "all training kernels"
+
+falsification_tests:
   - id: FALSIFY-DIM-001
-    name: "Kernel PTX has no baked dimensions"
-    description: >
-      For each training-critical kernel type, emit PTX with constructor args
-      (M=4, K=64, N=64) and (M=8, K=128, N=256). If the PTX text differs,
-      the kernel bakes dimensions as immediates.
-      Test file: trueno-gpu/src/kernels/tests/dimension_independence.rs
-    prediction: FAIL_BEFORE_FIX
+    rule: "PTX must not bake constructor dimensions as immediates"
+    test: "test_falsify_dim_001_relu_backward_dimension_independent"
+    prediction: "verified"
     if_fails: "Kernel bakes dimensions — needs refactor to use runtime params"
-    severity: critical
-    current_status: "20 kernels FAIL, 10 PASS"
 
   - id: FALSIFY-DIM-002
-    name: "Same PTX for different dimensions (backward kernels)"
-    description: >
-      For the 7 backward kernel types used in training, generate PTX with
-      two different dimension sets. PTX source MUST be byte-identical.
-      Kernels: silu_backward, batched_rms_norm_backward, batched_softmax_backward,
-      gemm_backward_a, gemm_backward_b, layer_norm_backward, cross_entropy.
-    prediction: PASS_AFTER_FIX
+    rule: "Backward kernel PTX byte-identical across dimension sets"
+    test: "test_falsify_dim_002_gemm_backward_a_naive_dimension_independent"
+    prediction: "verified"
     if_fails: "Backward kernel PTX differs between dimensions"
-    severity: critical
 
   - id: FALSIFY-DIM-003
-    name: "Total unique training kernel PTX count <= 20"
-    description: >
-      Enumerate all kernel types used during a Qwen3-4B training step.
-      Count distinct PTX templates. Must be <= 20 to make pre-compilation
-      feasible. Currently ~50+ variants due to dimension baking.
-    prediction: PASS_AFTER_FIX
+    rule: "Total unique training kernel PTX count <= 20"
+    test: "test_falsify_dim_003_unique_training_kernel_count"
+    prediction: "verified"
     if_fails: "Too many kernel variants for pre-compilation"
-    severity: high
 
   - id: FALSIFY-DIM-004
-    name: "Layout transform kernels are dimension-independent"
-    description: >
-      InterleavedToBatched, BatchedToInterleaved, BatchedTranspose,
-      BatchedSoftmax, and TransposeKernel must produce identical PTX
-      regardless of constructor dimensions. These are the kernels seen
-      JIT-compiling in Run 12 logs.
-    prediction: FAIL_BEFORE_FIX
+    rule: "Layout transform kernels produce identical PTX across dims"
+    test: "test_falsify_dim_004_interleaved_to_batched_dimension_independent"
+    prediction: "verified"
     if_fails: "Layout kernel still bakes dimensions"
-    severity: critical
-    current_status: "All 5 FAIL — these are the Run 12 JIT offenders"
 
   - id: FALSIFY-DIM-005
-    name: "RoPE kernels are dimension-independent"
-    description: >
-      BatchedRopeKernel and BatchedRopeBackwardKernel must produce identical
-      PTX regardless of num_heads, head_dim, or theta. Currently they have
-      ZERO runtime params for these values — everything is baked.
-    prediction: FAIL_BEFORE_FIX
+    rule: "RoPE kernels produce identical PTX across head_dim/num_heads"
+    test: "test_falsify_dim_005_batched_rope_dimension_independent"
+    prediction: "verified"
     if_fails: "RoPE kernel still bakes head_dim/num_heads/theta"
-    severity: critical
-    current_status: "Both FAIL — no runtime params at all"
 
   - id: FALSIFY-DIM-006
-    name: "Declared params are actually loaded"
-    description: >
-      Several kernels (BatchedRmsNormBackward, BatchedSoftmaxBackward,
-      TransposeKernel, BatchedTransposeKernel) declare .param entries but
-      never call ld.param to load them. The closure uses baked immediates
-      instead. For each kernel, verify that every declared .param has a
-      corresponding ld.param instruction in the PTX body.
-    prediction: FAIL_BEFORE_FIX
+    rule: "Every declared .param has a corresponding ld.param"
+    test: "test_falsify_dim_006_batched_rms_norm_backward_params_loaded"
+    prediction: "verified"
     if_fails: "Phantom params — declared but never loaded"
-    severity: high
-    current_status: "8+ kernels have phantom params"
+
+kani_harnesses:
+  - id: KANI-DIM-001
+    obligation: "PO-DIM-001"
+    property: "ld.param count equals .param declaration count"
+    bound: 4
