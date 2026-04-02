@@ -14,9 +14,9 @@
 |-----------|-------|---------|
 | MR | 8 | Micro-kernel rows (register tile) |
 | NR | 6 | Micro-kernel columns |
-| KC | 256 | L1 cache block (inner dimension) |
-| MC | 72 | L2 cache block (rows of A) |
-| NC | 4096 | L3 cache block (columns of B) |
+| KC | 512 | L2 cache block (packed_a panel = 16KB fits L1) |
+| MC | 128 | L2 cache block (packed_a = 256KB) |
+| NC | 720 | L2/L3 block (packed_b = 1.4MB, tuned for Zen 4) |
 
 ## 3. Micro-kernels
 

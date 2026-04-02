@@ -375,16 +375,26 @@ performance:
 
 Benchmark validation: ≥100 iterations, CV <5%, results saved to `target/criterion/`.
 
-### Measured GEMM Performance (AVX2+FMA, single-threaded)
+### Measured GEMM Performance (Zen 4 Threadripper 7960X, 5.3GHz)
 
-| Size | Trueno | ndarray | Ratio | Root cause |
-|------|--------|---------|-------|------------|
-| 128x128 | 45 GFLOP/s | ~84 | 0.54x | C tile load/store overhead |
-| 256x256 | 65 GFLOP/s | ~134 | 0.48x | Same |
-| 512x512 | 75 GFLOP/s | ~158 | 0.48x | Same |
-| 1024x1024 | 71 GFLOP/s | ~195 | 0.37x | + L2 pressure at scale |
+**With `--features parallel` (production):**
 
-**Root cause:** C tile is loaded from main memory into `c_micro` buffer (scalar loop), microkernel FMAs into `c_micro`, then stored back (scalar loop) — per KC block. matrixmultiply keeps C in YMM registers across KC iterations with zero extra memory traffic. Fix requires microkernel architecture change (direct C register accumulation).
+| Size | Trueno | ndarray | vs ndarray |
+|------|--------|---------|------------|
+| 512x512 | 220 GFLOP/s | 120 | **1.84x** |
+| 1024x1024 | 457 GFLOP/s | 121 | **3.77x** |
+
+**Single-threaded (microkernel comparison):**
+
+| Size | Trueno | ndarray | vs ndarray |
+|------|--------|---------|------------|
+| 64x64 | 29 GFLOP/s | 98 | 0.30x |
+| 128x128 | 46 GFLOP/s | 110 | 0.42x |
+| 256x256 | 66 GFLOP/s | 120 | 0.55x |
+| 512x512 | 81 GFLOP/s | 120 | 0.68x |
+| 1024x1024 | 83 GFLOP/s | 119 | 0.70x |
+
+**Single-threaded gap:** trueno microkernel at 49% of Zen 4 peak (170 GFLOP/s) vs ndarray at 70%. Root cause: c_micro buffer overhead (scalar row↔column copy per micro-tile). Parallel GEMM via HeijunkaScheduler more than compensates at ≥512.
 
 ---
 
@@ -392,7 +402,7 @@ Benchmark validation: ≥100 iterations, CV <5%, results saved to `target/criter
 
 `src/blis/` implements BLIS-style blocked GEMM with cache hierarchy optimization (L3→L2→L1→registers). Micro-kernels: `8x6` AVX2, `8x8` NEON.
 
-**Block sizes:** MC=72, KC=256, NC=4096, MR=8, NR=6. Packing: `pack_a()`, `pack_b()`, `PrepackedB` for weight caching.
+**Block sizes:** MC=128, KC=512, NC=720, MR=8, NR=6. Tuned for Zen 4 (1MB L2). Packing: `pack_a()`, `pack_b()`, `PrepackedB` for weight caching.
 
 **Toyota Production System integration:**
 - **Jidoka** — `JidokaGuard` stops on numerical error (NaN, divergence >1e-3 from reference)
