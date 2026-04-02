@@ -182,7 +182,7 @@ fn bench_relu(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &_n| {
             let a = ndarray::Array1::from_vec(data.clone());
-            bench.iter(|| black_box(black_box(&a).mapv(|x| x.max(0.0))));
+            bench.iter(|| black_box(black_box(&a).mapv(|x: f32| x.max(0.0))));
         });
     }
     group.finish();
