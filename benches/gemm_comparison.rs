@@ -65,5 +65,72 @@ fn bench_gemv(c: &mut Criterion) {
     g.finish();
 }
 
-criterion_group!(benches, bench_transpose, bench_gemm, bench_gemv);
+fn bench_add(c: &mut Criterion) {
+    let mut g = c.benchmark_group("vec_add");
+    for &n in &[1000, 10_000, 100_000, 1_000_000] {
+        let a = gen(n);
+        let b = gen(n);
+        g.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &n| {
+            let mut o = vec![0.0f32; n];
+            bench.iter(|| {
+                trueno::blis::elementwise::add(black_box(&a), black_box(&b), black_box(&mut o))
+                    .unwrap()
+            });
+        });
+        g.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &_n| {
+            let a = ndarray::Array1::from_vec(a.clone());
+            let b = ndarray::Array1::from_vec(b.clone());
+            bench.iter(|| black_box(black_box(&a) + black_box(&b)));
+        });
+    }
+    g.finish();
+}
+
+fn bench_relu(c: &mut Criterion) {
+    let mut g = c.benchmark_group("relu");
+    for &n in &[1000, 10_000, 100_000, 1_000_000] {
+        let d: Vec<f32> = (0..n).map(|i| (i as f32 - n as f32 / 2.0) / 100.0).collect();
+        g.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &n| {
+            let mut o = vec![0.0f32; n];
+            bench.iter(|| {
+                trueno::blis::elementwise::relu(black_box(&d), black_box(&mut o)).unwrap()
+            });
+        });
+        g.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &_n| {
+            let a = ndarray::Array1::from_vec(d.clone());
+            bench.iter(|| black_box(black_box(&a).mapv(|x: f32| x.max(0.0))));
+        });
+    }
+    g.finish();
+}
+
+fn bench_softmax(c: &mut Criterion) {
+    let mut g = c.benchmark_group("softmax");
+    for &n in &[128, 1024, 4096, 32768] {
+        let d = gen(n);
+        g.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &_n| {
+            bench.iter(|| black_box(trueno::blis::softmax::softmax_1d_alloc(black_box(&d))));
+        });
+        g.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &_n| {
+            let a = ndarray::Array1::from_vec(d.clone());
+            bench.iter(|| {
+                let mx = a.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+                let e: ndarray::Array1<f32> = a.mapv(|x| (x - mx).exp());
+                let s = e.sum();
+                black_box(e / s)
+            });
+        });
+    }
+    g.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_transpose,
+    bench_gemm,
+    bench_gemv,
+    bench_add,
+    bench_relu,
+    bench_softmax
+);
 criterion_main!(benches);

@@ -3152,6 +3152,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ndarray"
+version = "0.17.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "520080814a7a6b4a6e9070823bb24b4531daac8c4627e08ba5de8c5ef2f2752d"
+dependencies = [
+ "matrixmultiply",
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "portable-atomic",
+ "portable-atomic-util",
+ "rawpointer",
+]
+
+[[package]]
 name = "ndk-sys"
 version = "0.5.0+25.2.9519653"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5486,7 +5501,7 @@ name = "trueno"
 version = "0.16.4"
 dependencies = [
  "anyhow",
- "aprender 0.26.0",
+ "aprender 0.27.5",
  "bytemuck",
  "chrono",
  "criterion",
@@ -5496,6 +5511,7 @@ dependencies = [
  "futures-intrusive",
  "hostname",
  "nalgebra",
+ "ndarray",
  "num_cpus",
  "pollster",
  "presentar-terminal",
