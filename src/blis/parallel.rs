@@ -78,8 +78,9 @@ pub fn gemm_blis_parallel(
         return Err(TruenoError::InvalidInput("Dimension mismatch".to_string()));
     }
 
-    // Small matrices: single-threaded
-    if m * n * k < 1_000_000 {
+    // Parallel threshold: rayon overhead ~5µs per task, serial 256x256 ~500µs.
+    // Only parallelize when serial time would exceed ~2ms (roughly 400^3 = 64M).
+    if m * n * k < 64_000_000 {
         return gemm_blis(m, n, k, a, b, c, None);
     }
 
