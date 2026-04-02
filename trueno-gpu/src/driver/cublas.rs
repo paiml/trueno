@@ -58,9 +58,11 @@ impl GemmOp {
 /// - Created in `new()` via cublasCreate_v2
 /// - Destroyed in `Drop` via cublasDestroy_v2
 /// - Stream set once per step via `set_stream()`
-/// - Tensor core math mode enabled on creation
+/// - Math mode: SIMD (default) or TF32 tensor cores (opt-in)
 pub struct CublasHandle {
     handle: super::cublas_sys::CublasHandle,
+    /// Whether tensor cores are enabled (TF32 mode)
+    pub tensor_cores: bool,
 }
 
 // SAFETY: cuBLAS handles are thread-safe within a CUDA context.
@@ -103,7 +105,6 @@ impl CublasHandle {
         // results. cuBLAS SIMD GEMM is still 6-14x faster than hand-written PTX.
         let result = unsafe { (driver.cublasSetMathMode)(handle, CUBLAS_DEFAULT_MATH) };
         if result != CUBLAS_STATUS_SUCCESS {
-            // Cleanup on failure
             unsafe { (driver.cublasDestroy_v2)(handle) };
             return Err(GpuError::CudaDriver(
                 format!("cublasSetMathMode: {}", cublas_status_string(result)),
@@ -111,7 +112,35 @@ impl CublasHandle {
             ));
         }
 
-        Ok(Self { handle })
+        Ok(Self { handle, tensor_cores: false })
+    }
+
+    /// Create a cuBLAS handle with TF32 tensor cores enabled.
+    ///
+    /// entrenar#318: ~41x faster than SIMD for fp32 GEMMs on sm_89.
+    ///
+    /// # Safety
+    ///
+    /// ALB-076: TF32 tensor cores produce NaN for transposed GEMMs (Trans flag)
+    /// when gradient magnitudes reach ~1e5. ONLY safe for NoTrans/NoTrans (forward).
+    /// Use the default handle (SIMD) for backward GEMMs with Trans flag.
+    pub fn new_with_tensor_cores(_ctx: &CudaContext) -> Result<Self, GpuError> {
+        let driver = get_cublas_driver()?;
+        let mut handle: super::cublas_sys::CublasHandle = ptr::null_mut();
+        let result = unsafe { (driver.cublasCreate_v2)(&mut handle) };
+        CublasDriver::check(result)
+            .map_err(|e| GpuError::CudaDriver(format!("cublasCreate_v2 (TC): {e}"), 0))?;
+
+        let result = unsafe { (driver.cublasSetMathMode)(handle, CUBLAS_TF32_TENSOR_OP_MATH) };
+        if result != CUBLAS_STATUS_SUCCESS {
+            unsafe { (driver.cublasDestroy_v2)(handle) };
+            return Err(GpuError::CudaDriver(
+                format!("cublasSetMathMode TF32: {}", cublas_status_string(result)),
+                result,
+            ));
+        }
+
+        Ok(Self { handle, tensor_cores: true })
     }
 
     /// Bind this handle to a CUDA stream
