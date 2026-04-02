@@ -375,40 +375,13 @@ performance:
 
 Benchmark validation: ≥100 iterations, CV <5%, results saved to `target/criterion/`.
 
-### Measured Performance vs ndarray (Zen 4, 5.3GHz, criterion)
-
-**GEMM with `--features parallel`:**
-
-| Size | Trueno | ndarray | vs ndarray | Status |
-|------|--------|---------|------------|--------|
-| 512 | 220 GFLOP/s | 120 | **1.84x** | 1.5x target met |
-| 1024 | 457 GFLOP/s | 121 | **3.77x** | 1.5x target met |
-
-**GEMM single-threaded (microkernel comparison):**
-
-| Size | Trueno | ndarray | vs ndarray |
-|------|--------|---------|------------|
-| 64 | 29 GFLOP/s | 98 | 0.30x |
-| 128 | 46 GFLOP/s | 110 | 0.42x |
-| 256 | 66 GFLOP/s | 120 | 0.55x |
-
-Single-threaded gap: trueno at 49% peak vs ndarray at 70%. Root cause: c_micro buffer scalar copy. Requires stride-based microkernel to close.
-
-**Non-GEMM (all ≥ ndarray equivalent):**
-
-| Op | Size | Trueno | Status |
-|----|------|--------|--------|
-| GEMV | 256 | 50 GFLOP/s | Bandwidth-bound (optimal) |
-| Transpose | 128 | 56 GB/s | Near cache BW ceiling |
-| Vector add | 10K | 110 GB/s | Near DRAM BW ceiling |
-
 ---
 
 ## 18. BLIS GEMM Engine
 
 `src/blis/` implements BLIS-style blocked GEMM with cache hierarchy optimization (L3→L2→L1→registers). Micro-kernels: `8x6` AVX2, `8x8` NEON.
 
-**Block sizes:** MC=128, KC=512, NC=720, MR=8, NR=6. Tuned for Zen 4 1MB L2. Packing: `pack_a()`, `pack_b()`, `PrepackedB` for weight caching.
+**Block sizes:** MC=72, KC=256, NC=4096, MR=8, NR=6. Packing: `pack_a()`, `pack_b()`, `PrepackedB` for weight caching.
 
 **Toyota Production System integration:**
 - **Jidoka** — `JidokaGuard` stops on numerical error (NaN, divergence >1e-3 from reference)

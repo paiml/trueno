@@ -19,8 +19,8 @@ pub(crate) fn query_wgpu_device_info(device_index: u32) -> Result<GpuDeviceInfo,
     runtime::block_on(async {
         let instance = wgpu::Instance::default();
 
-        // Get all adapters (wgpu 29+ enumerate_adapters is async)
-        let adapters = instance.enumerate_adapters(wgpu::Backends::all()).await;
+        // Get all adapters (wgpu 27+ returns Vec directly)
+        let adapters = instance.enumerate_adapters(wgpu::Backends::all());
 
         if adapters.is_empty() {
             return Err(MonitorError::NoDevice);
@@ -29,7 +29,7 @@ pub(crate) fn query_wgpu_device_info(device_index: u32) -> Result<GpuDeviceInfo,
         let adapter =
             adapters.get(device_index as usize).ok_or(MonitorError::InvalidDevice(device_index))?;
 
-        let info: wgpu::AdapterInfo = adapter.get_info();
+        let info = adapter.get_info();
 
         // Map wgpu backend to our backend enum
         let backend = match info.backend {
@@ -62,7 +62,7 @@ pub(crate) fn enumerate_wgpu_devices() -> Result<Vec<GpuDeviceInfo>, MonitorErro
 
     runtime::block_on(async {
         let instance = wgpu::Instance::default();
-        let adapters = instance.enumerate_adapters(wgpu::Backends::all()).await;
+        let adapters = instance.enumerate_adapters(wgpu::Backends::all());
 
         if adapters.is_empty() {
             return Err(MonitorError::NoDevice);

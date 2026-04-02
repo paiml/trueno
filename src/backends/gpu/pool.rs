@@ -42,14 +42,14 @@ impl GpuDevicePool {
     /// Open all available non-CPU GPU adapters (async)
     pub async fn all_async() -> Result<Self, String> {
         let instance = wgpu::Instance::default();
-        let adapters = instance.enumerate_adapters(wgpu::Backends::all()).await;
+        let adapters = instance.enumerate_adapters(wgpu::Backends::all());
 
         if adapters.is_empty() {
             return Err("No GPU adapters found".to_string());
         }
 
         // Filter out CPU/Noop backends
-        let gpu_adapters: Vec<(usize, wgpu::Adapter)> = adapters
+        let gpu_adapters: Vec<(usize, _)> = adapters
             .into_iter()
             .enumerate()
             .filter(|(_, adapter)| adapter.get_info().backend != wgpu::Backend::Noop)
