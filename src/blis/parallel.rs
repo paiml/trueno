@@ -78,8 +78,7 @@ pub fn gemm_blis_parallel(
         return Err(TruenoError::InvalidInput("Dimension mismatch".to_string()));
     }
 
-    // Parallel threshold: rayon overhead ~5µs per task, serial 256x256 ~500µs.
-    // Only parallelize when serial time would exceed ~2ms (roughly 400^3 = 64M).
+    // Parallel threshold: rayon overhead dominates below ~400^3
     if m * n * k < 64_000_000 {
         return gemm_blis(m, n, k, a, b, c, None);
     }

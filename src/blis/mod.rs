@@ -94,18 +94,13 @@ pub const MR: usize = 8;
 /// Microkernel column dimension (6 columns fit in remaining registers)
 pub const NR: usize = 6;
 
-/// K-dimension blocking for L2 cache
-/// packed_a panel = MR*KC*4 = 8*512*4 = 16KB (fits L1 32KB)
-/// Total packed_a = MC*KC*4 = 128*512*4 = 256KB (fits L2 alongside packed_b)
+/// K-dimension blocking (packed_a panel = MR*KC*4 = 16KB fits L1)
 pub const KC: usize = 512;
 
-/// M-dimension blocking for L2 cache
-/// packed_a = MC*KC*4 = 128*512*4 = 256KB
+/// M-dimension blocking (packed_a = MC*KC*4 = 256KB fits L2)
 pub const MC: usize = 128;
 
-/// N-dimension blocking for L2/L3 cache (Zen 4: 1MB L2)
-/// packed_b = KC*NC*4 = 512*720*4 = 1.4MB (streams from L3)
-/// Rounded to NR multiple: 720 = 120*6
+/// N-dimension blocking (packed_b = KC*NC*4 = 1.4MB, Zen 4 L2 tuned)
 pub const NC: usize = 720;
 
 // ============================================================================
