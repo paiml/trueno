@@ -142,7 +142,7 @@ wasm-bindgen = { version = "0.2", optional = true }
 # Native CUDA monitoring via trueno-gpu (TRUENO-SPEC-010)
 trueno-gpu = { version = "0.4.0", path = "trueno-gpu", optional = true }
 # PMAT-336: Provable contracts compile-time enforcement
-provable-contracts-macros = { path = "../provable-contracts/crates/provable-contracts-macros" }
+provable-contracts-macros = { version = "0.2", path = "../provable-contracts/crates/provable-contracts-macros" }
 # Tracing/profiling support (renacer integration)
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"], optional = true }
