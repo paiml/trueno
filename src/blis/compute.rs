@@ -246,6 +246,87 @@ unsafe fn gemm_small_strided_avx2(
     Ok(())
 }
 
+/// Small-matrix 8x8 GEMM — stack-packed A/B, striped 8x8 AVX2 kernel.
+/// Fewer tiles than 8x6 (64 outputs vs 48 per tile = 33% fewer tiles).
+/// For dimensions that are multiples of 8.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+unsafe fn gemm_small_8x8(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    use crate::blis::microkernels::microkernel_8x8_avx2_fma;
+    // Stack pack buffers (max 128*128 = 64KB each for 128x128)
+    let mut packed_a = vec![0.0f32; m * k];
+    let mut packed_b = vec![0.0f32; k * n];
+    let mut c_micro = [0.0f32; 8 * 8]; // 8x8 tile
+
+    // Pack A: row-major a[i*k+p] → column-major packed_a[p*8 + (i%8)] per 8-row panel
+    let panels_m = (m + 7) / 8;
+    for panel in 0..panels_m {
+        let ir = panel * 8;
+        let mr = 8.min(m - ir);
+        for p in 0..k {
+            for i in 0..8 {
+                unsafe {
+                    packed_a[panel * 8 * k + p * 8 + i] =
+                        if i < mr { *a.get_unchecked((ir + i) * k + p) } else { 0.0 };
+                }
+            }
+        }
+    }
+    // Pack B: row-major b[p*n+j] → row-major packed_b[panel*8*k + p*8 + (j%8)]
+    let panels_n = (n + 7) / 8;
+    for panel in 0..panels_n {
+        let jr = panel * 8;
+        let nr = 8.min(n - jr);
+        for p in 0..k {
+            for j in 0..8 {
+                unsafe {
+                    packed_b[panel * 8 * k + p * 8 + j] =
+                        if j < nr { *b.get_unchecked(p * n + jr + j) } else { 0.0 };
+                }
+            }
+        }
+    }
+
+    // Run 8x8 micro-tiles
+    unsafe {
+        for ir_panel in 0..panels_m {
+            let ir = ir_panel * 8;
+            let mr = 8.min(m - ir);
+            for jr_panel in 0..panels_n {
+                let jr = jr_panel * 8;
+                let nr = 8.min(n - jr);
+                // Load C tile (8x8 column-major)
+                for jj in 0..8 {
+                    for ii in 0..8 {
+                        c_micro[jj * 8 + ii] = if ii < mr && jj < nr {
+                            *c.get_unchecked((ir + ii) * n + jr + jj)
+                        } else {
+                            0.0
+                        };
+                    }
+                }
+                let ap = packed_a.as_ptr().add(ir_panel * 8 * k);
+                let bp = packed_b.as_ptr().add(jr_panel * 8 * k);
+                microkernel_8x8_avx2_fma(k, ap, bp, c_micro.as_mut_ptr(), 8);
+                // Store C tile
+                for jj in 0..nr {
+                    for ii in 0..mr {
+                        *c.get_unchecked_mut((ir + ii) * n + jr + jj) = c_micro[jj * 8 + ii];
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Validate GEMM dimension inputs (Poka-yoke).
 fn validate_gemm_dims(
     m: usize,
@@ -321,11 +402,14 @@ pub fn gemm_blis(
     // Small: stride-based GEMM without packing (skip when profiler active).
     #[cfg(target_arch = "x86_64")]
     if profiler.is_none()
-        && ((m <= 96 && n <= 96 && k <= 96) || (m <= MR && n <= 256 && k <= 256))
+        && ((m <= 256 && n <= 256 && k <= 256) || (m <= MR && n <= 256 && k <= 256))
         && is_x86_feature_detected!("avx2")
         && is_x86_feature_detected!("fma")
     {
         unsafe {
+            if m % 8 == 0 && n % 8 == 0 {
+                return gemm_small_8x8(m, n, k, a, b, c);
+            }
             return gemm_small_strided_avx2(m, n, k, a, b, c);
         }
     }

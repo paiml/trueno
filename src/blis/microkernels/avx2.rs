@@ -476,3 +476,54 @@ pub unsafe fn microkernel_8x6_true_asm(
         }
     }
 }
+
+/// 8x8 AVX2+FMA microkernel — standard broadcast accumulation.
+/// 8 columns of C in 8 YMM registers, 1 A load + 8 B broadcasts per K step.
+/// A: 8×K packed column-major. B: K×8 packed row-major.
+/// C: 8×8 column-major with stride ldc.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+pub unsafe fn microkernel_8x8_avx2_fma(
+    k: usize,
+    a: *const f32,
+    b: *const f32,
+    c: *mut f32,
+    ldc: usize,
+) {
+    unsafe {
+        use std::arch::x86_64::*;
+
+        // Load C (8 columns of 8 elements)
+        let mut c0 = _mm256_loadu_ps(c);
+        let mut c1 = _mm256_loadu_ps(c.add(ldc));
+        let mut c2 = _mm256_loadu_ps(c.add(2 * ldc));
+        let mut c3 = _mm256_loadu_ps(c.add(3 * ldc));
+        let mut c4 = _mm256_loadu_ps(c.add(4 * ldc));
+        let mut c5 = _mm256_loadu_ps(c.add(5 * ldc));
+        let mut c6 = _mm256_loadu_ps(c.add(6 * ldc));
+        let mut c7 = _mm256_loadu_ps(c.add(7 * ldc));
+
+        for p in 0..k {
+            let a_col = _mm256_loadu_ps(a.add(p * 8));
+            let bp = b.add(p * 8);
+            c0 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp), c0);
+            c1 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(1)), c1);
+            c2 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(2)), c2);
+            c3 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(3)), c3);
+            c4 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(4)), c4);
+            c5 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(5)), c5);
+            c6 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(6)), c6);
+            c7 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(7)), c7);
+        }
+
+        // Store C
+        _mm256_storeu_ps(c, c0);
+        _mm256_storeu_ps(c.add(ldc), c1);
+        _mm256_storeu_ps(c.add(2 * ldc), c2);
+        _mm256_storeu_ps(c.add(3 * ldc), c3);
+        _mm256_storeu_ps(c.add(4 * ldc), c4);
+        _mm256_storeu_ps(c.add(5 * ldc), c5);
+        _mm256_storeu_ps(c.add(6 * ldc), c6);
+        _mm256_storeu_ps(c.add(7 * ldc), c7);
+    }
+}
