@@ -33,8 +33,13 @@ Version 1.0 · April 2026 · Pragmatic AI Labs · [paiml/trueno](https://github.
 | 15 | [Blackwell Infrastructure](#15-blackwell-infrastructure) | [sub/cuda.md](sub/cuda.md) |
 | 16 | [Safety Model](#16-safety-model) | |
 | 17 | [Performance Contracts](#17-performance-contracts) | [sub/contracts.md](sub/contracts.md) |
-| 18 | [Stack Integration](#18-stack-integration) | |
-| 19 | [Development Commands](#19-development-commands) | |
+| 18 | [BLIS GEMM Engine](#18-blis-gemm-engine) | [sub/blis.md](sub/blis.md) |
+| 19 | [ComputeBrick & Profiling](#19-computebrick--profiling) | [sub/brick.md](sub/brick.md) |
+| 20 | [PTX Optimizer](#20-ptx-optimizer) | [sub/cuda.md](sub/cuda.md) |
+| 21 | [Runtime Contracts](#21-runtime-contracts) | [sub/contracts.md](sub/contracts.md) |
+| 22 | [Activation One Path Rule](#22-activation-one-path-rule) | |
+| 23 | [Stack Integration](#23-stack-integration) | |
+| 24 | [Development Commands](#24-development-commands) | |
 
 ---
 
@@ -371,7 +376,83 @@ Benchmark validation: ≥100 iterations, CV <5%, results saved to `target/criter
 
 ---
 
-## 18. Stack Integration
+## 18. BLIS GEMM Engine
+
+`src/blis/` implements BLIS-style blocked GEMM with cache hierarchy optimization (L3→L2→L1→registers). Micro-kernels: `8x6` AVX2, `8x8` NEON.
+
+**Block sizes:** MC=72, KC=256, NC=4096, MR=8, NR=6. Packing: `pack_a()`, `pack_b()`, `PrepackedB` for weight caching.
+
+**Toyota Production System integration:**
+- **Jidoka** — `JidokaGuard` stops on numerical error (NaN, divergence >1e-3 from reference)
+- **Heijunka** — `HeijunkaScheduler` for load-balanced parallel GEMM
+- **Kaizen** — `BlisProfiler` tracks per-level (L3/L2/L1/micro) timing
+
+Backend selection via `BackendCostModel` with roofline analysis. `gemm_profiled()` returns profiling stats alongside results.
+
+See [sub/blis.md](sub/blis.md) for micro-kernel patterns, packing layout, and cost model.
+
+---
+
+## 19. ComputeBrick & Profiling
+
+`src/brick/` provides token-centric compute units — self-verifying blocks with budgets, assertions, and backends.
+
+**Key types:**
+- `ComputeBrick` — Composable compute unit with pre/postconditions
+- `BrickProfiler` — O(1) hot-path profiling via `BrickId` enum (PAR-200)
+- `ExecutionGraph` — Full execution path tracking with kernel checksums
+- `ModelTracer` — Model-level inference tracing with tensor stats, attention weights, logit evolution
+
+**Quantization ops:** `BlockQ5K`, `BlockQ6K`, `DotQ5KOp`, `DotQ6KOp` (llama.cpp compatible). Fused ops: `FusedQKVOp`, `FusedGateUpOp` for transformer inference.
+
+**Integration:** `BrickProfiler::get_tuner_recommendations()` feeds into the ML tuner (`src/tuner/`). SyncMode (Eager/Deferred) controls GPU synchronization granularity.
+
+See [sub/brick.md](sub/brick.md) for the full brick taxonomy, profiling protocol, and tracing API.
+
+---
+
+## 20. PTX Optimizer
+
+`trueno-gpu/src/ptx/optimize/` implements multi-pass PTX optimization:
+
+| Pass | What it does | Reference |
+|------|-------------|-----------|
+| FMA fusion | `mul` + `add` → `fma` pattern matching | Click & Paleczny 1995 |
+| Tile validation | Validate tile constraints, prevent register spill | Volkov & Demmel 2008 |
+| Loop splitting | Split loops at conditional boundaries | NVIDIA CUDA Tile IR |
+| TKO (Token ordering) | Memory dependency tracking, barrier elimination | NVIDIA Tile IR model |
+| Barrier safety | Detect early-exit-before-barrier bugs (PARITY-114) | Five Whys 2026 |
+
+Applied via `optimize()` in sequence. All passes are pure functions on PTX AST — no GPU required for testing.
+
+---
+
+## 21. Runtime Contracts
+
+`src/contracts.rs` enforces kernel-level preconditions/postconditions at runtime. `src/generated_contracts.rs` is auto-generated from YAML via `pv codegen`.
+
+**Three-layer contract hierarchy:**
+1. **aprender** (import) — `enforce_architecture_completeness()`: validate tensor names
+2. **realizar** (load) — `contract_gate::validate_model_load()`: validate architecture
+3. **trueno** (kernel) — `contracts::validate_weight_buffer()`: validate bytes & layout
+
+`STACK_LAYOUT = RowMajor` — the ONLY layout trueno kernels accept. Hard-errors on violation (no silent defaults).
+
+Generated contracts use `debug_assert!()` — zero cost in release builds. Covers: activation kernels (gelu, relu, silu), matmul pre/postconditions, position encoding, active learning.
+
+---
+
+## 22. Activation One Path Rule
+
+`src/activations.rs` defines canonical scalar activation functions per UCBD §4 (One Path Rule):
+
+`silu_scalar()`, `gelu_scalar()`, `sigmoid_scalar()`, `relu_scalar()`, `tanh_scalar()`, plus `f16_to_f32()`/`f32_to_f16()` conversions.
+
+**Downstream crates (aprender, realizar, entrenar, whisper-apr) MUST import from here** — re-implementing is a contract violation. SIMD-vectorized versions exist in `backends/*/ops/activations` but delegate to these canonical implementations for correctness.
+
+---
+
+## 23. Stack Integration
 
 Trueno is the compute foundation for the Sovereign AI Stack:
 - **aprender** — tensor operations, format conversion
@@ -384,7 +465,7 @@ Stack-wide search: `batuta oracle --rag "your question"`
 
 ---
 
-## 19. Development Commands
+## 24. Development Commands
 
 ```bash
 # Build
