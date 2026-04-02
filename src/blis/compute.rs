@@ -219,8 +219,18 @@ unsafe fn gemm_small_strided_avx2(
                         _mm256_loadu_ps(t.as_ptr())
                     };
                     let bp = b.as_ptr().add(p * n + jr);
-                    for j in 0..nr {
-                        cv[j] = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(j)), cv[j]);
+                    // Unrolled FMA for NR=6 common case
+                    if nr == NR {
+                        cv[0] = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp), cv[0]);
+                        cv[1] = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(1)), cv[1]);
+                        cv[2] = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(2)), cv[2]);
+                        cv[3] = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(3)), cv[3]);
+                        cv[4] = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(4)), cv[4]);
+                        cv[5] = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(5)), cv[5]);
+                    } else {
+                        for j in 0..nr {
+                            cv[j] = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bp.add(j)), cv[j]);
+                        }
                     }
                 }
                 for j in 0..nr {
