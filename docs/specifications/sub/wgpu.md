@@ -27,7 +27,7 @@ Cross-platform GPU compute via Vulkan/Metal/DX12/WebGPU. Enables GPU acceleratio
 
 ## 3. Training Path
 
-7 backward shaders in `src/backends/gpu/shaders/backward.rs`:
+9 shaders in `src/backends/gpu/shaders/backward.rs`:
 
 | Shader | Purpose |
 |--------|---------|
@@ -36,6 +36,8 @@ Cross-platform GPU compute via Vulkan/Metal/DX12/WebGPU. Enables GPU acceleratio
 | `gemm_backward_b` | Input gradient (dL/dB) |
 | `rmsnorm_backward` | RMSNorm gradient |
 | `rope_backward` | Rotary position embedding gradient |
+| `cross_entropy_backward` | Cross-entropy loss gradient |
+| `cross_entropy_forward` | Cross-entropy forward (used in training loop) |
 | `adamw_step` | AdamW optimizer update |
 | `nf4_dequant` | NF4 4-bit dequantization (QLoRA) |
 

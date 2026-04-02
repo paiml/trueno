@@ -173,7 +173,7 @@ Enforcement: pre-commit hook + `tests/backend_story.rs` + CI.
 | SSE2 | 128-bit | 4 | Baseline x86_64 |
 | AVX | 256-bit | 8 | `is_x86_feature_detected!("avx")` |
 | AVX2+FMA | 256-bit | 8 | Preferred for most ops |
-| AVX-512 | 512-bit | 16 | Zen4/Sapphire Rapids+ |
+| AVX-512 | 512-bit | 16 | ComputeBound ops only (`avx512f` feature flag) |
 | NEON | 128-bit | 4 | Baseline ARM64 |
 
 **Critical patterns:**
@@ -189,7 +189,7 @@ See [sub/simd.md](sub/simd.md) for lane widths, FMA patterns, and horizontal red
 
 Pure Rust PTX generation — no nvcc, no LLVM, no external toolchains. The `trueno-gpu` crate generates PTX strings from Rust at compile-time or runtime.
 
-**Available kernels:** GEMM (naive/tiled/tensor core), Softmax, LayerNorm, Attention (FlashAttention-style), Q4_K dequantization, 7 backward (training) kernels.
+**Available kernels:** GEMM (naive/tiled/tensor core), Softmax, LayerNorm, Attention (FlashAttention-style), Q4_K dequantization, 6 backward kernels (activations, cross_entropy, gemm, layer_norm, rms_norm, softmax).
 
 **Key APIs:** `PtxModule`, `PtxKernel`, `KernelBuilder`, `Kernel::emit_ptx()`.
 
@@ -205,7 +205,7 @@ Cross-platform GPU compute via Vulkan/Metal/DX12/WebGPU. No CUDA required.
 
 **Inference:** `WgslForwardPass` — RMSNorm, GEMV (cooperative K-reduction, vec4 loads), SiLU, RoPE. GEMV for M=1, tiled GEMM for M>1. 27.6 tok/s on Radeon Pro W5700X.
 
-**Training:** 7 backward shaders in `src/backends/gpu/shaders/backward.rs` — silu_backward, gemm_backward_a/b, rmsnorm_backward, rope_backward, adamw_step, nf4_dequant. All FALSIFY tests pass. Enables full training loop on AMD/Intel/Apple.
+**Training:** 9 shaders in `src/backends/gpu/shaders/backward.rs` — 6 backward (silu, gemm_a, gemm_b, rmsnorm, rope, cross_entropy), plus adamw_step optimizer, nf4_dequant, and cross_entropy_forward. All FALSIFY tests pass. Enables full training loop on AMD/Intel/Apple.
 
 **GPU threshold:** Only dispatch to GPU for >100K elements (PCIe transfer ~0.5ms).
 
@@ -362,13 +362,9 @@ Every contract in `contracts/` tracks measured performance:
 ```yaml
 performance:
   baseline: scalar
-  measured:
-    sse2: 2.1x
-    avx2: 4.3x
-    avx512: 8.1x
-    cuda: 50x      # for 1M+ elements
-    wgpu: 20x      # for 1M+ elements
-  regression_threshold: 5%   # CI fails on >5% regression
+  measured_ratio: 1.53           # vs scalar baseline
+  measured_throughput: "16.3 Gelem/s"
+  regression_threshold: 5%      # CI fails on >5% regression
 ```
 
 Benchmark validation: ≥100 iterations, CV <5%, results saved to `target/criterion/`.

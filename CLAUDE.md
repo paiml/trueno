@@ -116,7 +116,7 @@ cargo test -p trueno-gpu property_tests            # no hardware needed
 ## WGPU Inference & Training
 
 **Inference**: `WgslForwardPass` — RMSNorm, GEMV, SiLU, RoPE. 27.6 tok/s on Radeon Pro W5700X.
-**Training**: 7 backward shaders (silu, gemm_backward_a/b, rmsnorm, rope, adamw, nf4_dequant) in `src/backends/gpu/shaders/backward.rs`. All FALSIFY tests pass. Enables full training loop on AMD/Intel/Apple without CUDA.
+**Training**: 9 shaders in `src/backends/gpu/shaders/backward.rs` (6 backward + adamw + nf4_dequant + cross_entropy_forward). All FALSIFY tests pass. Enables full training loop on AMD/Intel/Apple without CUDA.
 
 ## Blackwell (trueno#200, trueno#203)
 
