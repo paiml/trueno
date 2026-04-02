@@ -64,6 +64,16 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", binding_path.display());
 
+    // Ensure generated_contracts.rs exists (empty stub for crates.io builds)
+    let gen_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("generated_contracts.rs");
+    if !gen_path.exists() {
+        std::fs::write(
+            &gen_path,
+            "// Auto-generated stub — pv codegen populates this when provable-contracts is available\n",
+        )
+        .ok();
+    }
+
     if !binding_path.exists() {
         println!(
             "cargo:warning=provable-contracts binding.yaml not found at {}; \

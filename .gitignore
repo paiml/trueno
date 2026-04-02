@@ -71,4 +71,5 @@ proptest-regressions/
 
 # Cruft
 *.tmp
-src/generated_contracts.rs
+# generated_contracts.rs is now tracked — required for crates.io builds
+# src/generated_contracts.rs
