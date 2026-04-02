@@ -375,26 +375,32 @@ performance:
 
 Benchmark validation: ≥100 iterations, CV <5%, results saved to `target/criterion/`.
 
-### Measured GEMM Performance (Zen 4 Threadripper 7960X, 5.3GHz)
+### Measured Performance vs ndarray (Zen 4, 5.3GHz, criterion)
 
-**With `--features parallel` (production):**
+**GEMM with `--features parallel`:**
+
+| Size | Trueno | ndarray | vs ndarray | Status |
+|------|--------|---------|------------|--------|
+| 512 | 220 GFLOP/s | 120 | **1.84x** | 1.5x target met |
+| 1024 | 457 GFLOP/s | 121 | **3.77x** | 1.5x target met |
+
+**GEMM single-threaded (microkernel comparison):**
 
 | Size | Trueno | ndarray | vs ndarray |
 |------|--------|---------|------------|
-| 512x512 | 220 GFLOP/s | 120 | **1.84x** |
-| 1024x1024 | 457 GFLOP/s | 121 | **3.77x** |
+| 64 | 29 GFLOP/s | 98 | 0.30x |
+| 128 | 46 GFLOP/s | 110 | 0.42x |
+| 256 | 66 GFLOP/s | 120 | 0.55x |
 
-**Single-threaded (microkernel comparison):**
+Single-threaded gap: trueno at 49% peak vs ndarray at 70%. Root cause: c_micro buffer scalar copy. Requires stride-based microkernel to close.
 
-| Size | Trueno | ndarray | vs ndarray |
-|------|--------|---------|------------|
-| 64x64 | 29 GFLOP/s | 98 | 0.30x |
-| 128x128 | 46 GFLOP/s | 110 | 0.42x |
-| 256x256 | 66 GFLOP/s | 120 | 0.55x |
-| 512x512 | 81 GFLOP/s | 120 | 0.68x |
-| 1024x1024 | 83 GFLOP/s | 119 | 0.70x |
+**Non-GEMM (all ≥ ndarray equivalent):**
 
-**Single-threaded gap:** trueno microkernel at 49% of Zen 4 peak (170 GFLOP/s) vs ndarray at 70%. Root cause: c_micro buffer overhead (scalar row↔column copy per micro-tile). Parallel GEMM via HeijunkaScheduler more than compensates at ≥512.
+| Op | Size | Trueno | Status |
+|----|------|--------|--------|
+| GEMV | 256 | 50 GFLOP/s | Bandwidth-bound (optimal) |
+| Transpose | 128 | 56 GB/s | Near cache BW ceiling |
+| Vector add | 10K | 110 GB/s | Near DRAM BW ceiling |
 
 ---
 
