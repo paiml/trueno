@@ -124,7 +124,7 @@ binding.yaml → parse → CONTRACT_SOFTMAX_KERNEL_V1_SOFTMAX=implemented
 
 | Level | Method | Tool | Trueno status |
 |-------|--------|------|--------------|
-| L5 | Theorem proving | Lean 4 | 3 theorems (softmax) |
+| L5 | Theorem proving | Lean 4 | 30 theorems, 18 domains, 0 sorry |
 | L4 | Bounded model check | Kani | YAML-defined, not yet in CI |
 | L3 | Property-based test | proptest | Active |
 | L2 | Falsification test | `#[test]` | Active, all contracts |

@@ -183,7 +183,7 @@ Trueno's verification depth across levels:
 
 | Level | Method | Tool | Trueno status |
 |-------|--------|------|--------------|
-| L5 | Theorem proving | Lean 4 | 3 theorems (softmax partition-of-unity) |
+| L5 | Theorem proving | Lean 4 | 30 theorems, 18 domains, 0 sorry (Mathlib) |
 | L4 | Bounded model checking | Kani | YAML-defined harnesses, not yet in CI |
 | L3 | Property-based testing | proptest | Active: commutativity, associativity |
 | L2 | Falsification tests | `#[test]` | Active: FALSIFY tests in all contracts |
