@@ -402,7 +402,12 @@ pub fn gemm_blis(
     // Small: stride-based GEMM without packing (skip when profiler active).
     #[cfg(target_arch = "x86_64")]
     if profiler.is_none()
-        && ((m <= 256 && n <= 256 && k <= 256) || (m <= MR && n <= 256 && k <= 256))
+        && m <= 256
+        && n <= 256
+        && k <= 256
+        && m > MR
+        && m % 8 == 0
+        && n % 8 == 0
         && is_x86_feature_detected!("avx2")
         && is_x86_feature_detected!("fma")
     {

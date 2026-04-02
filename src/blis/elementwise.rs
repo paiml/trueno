@@ -36,6 +36,28 @@ pub fn relu(input: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
         )));
     }
 
+    // Parallel for large arrays (bandwidth-bound — need multiple cores to saturate DRAM)
+    #[cfg(feature = "parallel")]
+    if n >= 10_000_000 {
+        use rayon::prelude::*;
+        input
+            .par_chunks(n / rayon::current_num_threads())
+            .zip(output.par_chunks_mut(n / rayon::current_num_threads()))
+            .for_each(|(inp, out)| {
+                #[cfg(target_arch = "x86_64")]
+                if is_x86_feature_detected!("avx2") {
+                    unsafe {
+                        relu_avx2(inp, out);
+                    }
+                    return;
+                }
+                for i in 0..inp.len() {
+                    out[i] = inp[i].max(0.0);
+                }
+            });
+        return Ok(());
+    }
+
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
@@ -113,6 +135,28 @@ pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> 
             b.len(),
             output.len()
         )));
+    }
+
+    // Parallel for large arrays (bandwidth-bound)
+    #[cfg(feature = "parallel")]
+    if n >= 10_000_000 {
+        use rayon::prelude::*;
+        let chunk = n / rayon::current_num_threads();
+        a.par_chunks(chunk).zip(b.par_chunks(chunk)).zip(output.par_chunks_mut(chunk)).for_each(
+            |((ac, bc), oc)| {
+                #[cfg(target_arch = "x86_64")]
+                if is_x86_feature_detected!("avx2") {
+                    unsafe {
+                        add_avx2(ac, bc, oc);
+                    }
+                    return;
+                }
+                for i in 0..ac.len() {
+                    oc[i] = ac[i] + bc[i];
+                }
+            },
+        );
+        return Ok(());
     }
 
     #[cfg(target_arch = "x86_64")]
