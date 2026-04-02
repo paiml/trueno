@@ -58,30 +58,29 @@ impl<T: Copy> GpuBuffer<T> {
 
     /// Copy data from device to host (synchronous)
     ///
-    /// # Arguments
-    ///
-    /// * `data` - Host buffer to copy into (must have same length as buffer)
+    /// Supports partial readback: if `data.len() < self.len`, copies only the first
+    /// `data.len()` elements. This is safe because cuMemcpyDtoH respects the size parameter.
     ///
     /// # Errors
     ///
-    /// Returns `Err(GpuError::Transfer)` if copy fails.
+    /// Returns `Err(GpuError::Transfer)` if `data.len() > self.len` or copy fails.
     pub fn copy_to_host(&self, data: &mut [T]) -> Result<(), GpuError> {
-        if data.len() != self.len {
+        if data.len() > self.len {
             return Err(GpuError::Transfer(format!(
-                "Length mismatch: host {} vs device {}",
+                "Host buffer too large: host {} > device {}",
                 data.len(),
                 self.len
             )));
         }
 
-        if self.len == 0 {
+        if data.is_empty() {
             return Ok(());
         }
 
         self.ensure_context()?;
 
         let driver = get_driver()?;
-        let size = self.size_bytes();
+        let size = data.len() * std::mem::size_of::<T>();
 
         // SAFETY: data is valid for size bytes, ptr is valid device pointer
         let result =
