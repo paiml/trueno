@@ -11,6 +11,7 @@
 /// Dispatch: ceil(N/16) × ceil(M/16) workgroups, @workgroup_size(32)
 /// Fallback: if cooperative matrix not available, use TILED_GEMM_SHADER.
 pub const COOPERATIVE_GEMM_SHADER: &str = r#"
+enable f16;
 enable wgpu_cooperative_matrix;
 
 @group(0) @binding(0) var<storage, read> a: array<f32>;
@@ -30,22 +31,25 @@ struct Dimensions {
 fn main(
     @builtin(workgroup_id) wg_id: vec3<u32>,
 ) {
+    // No early return — cooperative ops require uniform control flow
     let tile_row = wg_id.y * 16u;
     let tile_col = wg_id.x * 16u;
-    if (tile_row >= dims.M || tile_col >= dims.N) { return; }
 
-    var acc = coop_mat16x16<f32, accumulator>();
+    var acc = coop_mat16x16<f32, C>();
     let num_k_tiles = (dims.K + 15u) / 16u;
     for (var kt = 0u; kt < num_k_tiles; kt++) {
         let k_offset = kt * 16u;
-        let a_tile = coopLoad<coop_mat16x16<f16, matrix_a>>(
+        let a_tile = coopLoad<coop_mat16x16<f16, A>>(
             &a[tile_row * dims.K + k_offset], dims.K
         );
-        let b_tile = coopLoad<coop_mat16x16<f16, matrix_b>>(
+        let b_tile = coopLoad<coop_mat16x16<f16, B>>(
             &b[k_offset * dims.N + tile_col], dims.N
         );
         acc = coopMultiplyAdd(a_tile, b_tile, acc);
     }
-    coopStore(acc, &c[tile_row * dims.N + tile_col], dims.N);
+    // Only store if within bounds (uniform control flow maintained above)
+    if (tile_row < dims.M && tile_col < dims.N) {
+        coopStore(acc, &c[tile_row * dims.N + tile_col], dims.N);
+    }
 }
 "#;

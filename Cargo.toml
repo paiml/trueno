@@ -194,6 +194,7 @@ trueno-cuda-edge = { version = "0.1", path = "trueno-cuda-edge" }
 # Sparse and solver crates for contract tests
 trueno-sparse = { version = "0.1", path = "crates/trueno-sparse" }
 trueno-solve = { version = "0.1", path = "crates/trueno-solve" }
+ndarray = "0.17.2"
 
 [features]
 default = []
@@ -269,6 +270,10 @@ harness = false
 
 [[bench]]
 name = "tiling_ops"
+harness = false
+
+[[bench]]
+name = "gemm_comparison"
 harness = false
 
 [[bin]]

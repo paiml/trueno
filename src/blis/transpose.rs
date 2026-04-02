@@ -194,35 +194,19 @@ unsafe fn transpose_avx2_impl(
     let tall_skinny = rows >= 4 * cols;
 
     unsafe {
-        for rt in (0..rb_end).step_by(TILE) {
-            let rt_end = (rt + TILE).min(rb_end);
-            for ct in (0..cb_end).step_by(TILE) {
-                let ct_end = (ct + TILE).min(cb_end);
+        // Outer loop over DESTINATION tile rows (ct) for sequential write
+        // pattern. B[ct*rows..] is the destination base for each outer tile.
+        for ct in (0..cb_end).step_by(TILE) {
+            let ct_end = (ct + TILE).min(cb_end);
+            for rt in (0..rb_end).step_by(TILE) {
+                let rt_end = (rt + TILE).min(rb_end);
 
-                if tall_skinny {
-                    // Outer c0, inner r0: destination writes are sequential
-                    for c0 in (ct..ct_end).step_by(BLOCK) {
-                        for r0 in (rt..rt_end).step_by(BLOCK) {
-                            // Prefetch next micro-kernel's destination
-                            if r0 + BLOCK < rt_end {
-                                let pf_dst = b.as_ptr().add(c0 * rows + r0 + BLOCK);
-                                _mm_prefetch(pf_dst as *const i8, _MM_HINT_T0);
-                                _mm_prefetch(pf_dst.add(rows) as *const i8, _MM_HINT_T0);
-                            }
-                            let src = a.as_ptr().add(r0 * cols + c0);
-                            let dst = b.as_mut_ptr().add(c0 * rows + r0);
-                            transpose_8x8_avx2(src, cols, dst, rows);
-                        }
-                    }
-                } else {
-                    // Square/wide: standard order (no prefetch — at large strides
-                    // the destination is too far apart for L1 prefetch to help)
+                // Inner loop: destination rows (c0) first for write locality
+                for c0 in (ct..ct_end).step_by(BLOCK) {
                     for r0 in (rt..rt_end).step_by(BLOCK) {
-                        for c0 in (ct..ct_end).step_by(BLOCK) {
-                            let src = a.as_ptr().add(r0 * cols + c0);
-                            let dst = b.as_mut_ptr().add(c0 * rows + r0);
-                            transpose_8x8_avx2(src, cols, dst, rows);
-                        }
+                        let src = a.as_ptr().add(r0 * cols + c0);
+                        let dst = b.as_mut_ptr().add(c0 * rows + r0);
+                        transpose_8x8_avx2(src, cols, dst, rows);
                     }
                 }
             }

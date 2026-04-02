@@ -27,7 +27,8 @@ fn main() {
     }
 
     // Request cooperative matrix feature
-    let required_features = wgpu::Features::empty(); // coop matrix is experimental
+    // Request cooperative matrix feature (experimental)
+    let required_features = adapter.features(); // request ALL supported features
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: Some("coop_bench"),
         required_features,
@@ -37,7 +38,8 @@ fn main() {
             ..Default::default()
         },
         memory_hints: wgpu::MemoryHints::Performance,
-        experimental_features: Default::default(),
+        // SAFETY: we acknowledge experimental feature risks per wgpu docs
+        experimental_features: unsafe { wgpu::ExperimentalFeatures::enabled() },
         trace: Default::default(),
     }))
     .expect("Device creation failed");
