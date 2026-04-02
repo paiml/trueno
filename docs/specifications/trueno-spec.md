@@ -140,15 +140,15 @@ See [sub/contracts.md](sub/contracts.md) for binding.yaml schema, escape analysi
 Public API (safe) → Backend Dispatch → {SIMD, CUDA, wgpu, WASM, Scalar}
 ```
 
-**Backend selection priority** (highest to lowest):
-1. CUDA — NVIDIA GPU, workload benefits from parallelism
-2. wgpu — cross-platform GPU, workload >100K elements
-3. AVX-512 → AVX2 → AVX → SSE2 — x86_64, detected at runtime
-4. NEON — ARM64
-5. SIMD128 — WASM
-6. Scalar — always available fallback
+**Default backend selection** (`Backend::Auto`, resolved once at `Vector` creation via OnceLock):
+1. **AVX2+FMA** — preferred x86_64 (safer than AVX-512 for memory-bound ops)
+2. **AVX** — fallback x86_64
+3. **SSE2** — baseline x86_64
+4. **NEON** — ARM64
+5. **SIMD128** — WASM
+6. **Scalar** — always available
 
-`Backend::Auto` resolves once at `Vector` creation via `is_x86_feature_detected!()`, not per-operation.
+**AVX-512** is NOT auto-selected — only used for ComputeBound operations via `select_backend_for_operation()`. GPU backends (CUDA, wgpu) are dispatched separately based on workload size and OpComplexity.
 
 See [sub/backends.md](sub/backends.md) for dispatch logic and OpComplexity thresholds.
 
@@ -167,7 +167,7 @@ When adding a new operation:
 6. Add sync + async device methods
 7. Add integration test in `tests/backend_story.rs`
 
-Enforcement: pre-commit hook + `tests/backend_story.rs` + CI.
+Enforcement: `tests/backend_story.rs` + CI.
 
 ---
 
@@ -405,7 +405,7 @@ See [sub/blis.md](sub/blis.md) for micro-kernel patterns, packing layout, and co
 
 **Quantization ops:** `BlockQ5K`, `BlockQ6K`, `DotQ5KOp`, `DotQ6KOp` (llama.cpp compatible). Fused ops: `FusedQKVOp`, `FusedGateUpOp` for transformer inference.
 
-**Integration:** `BrickProfiler::get_tuner_recommendations()` feeds into the ML tuner (`src/tuner/`). SyncMode (Eager/Deferred) controls GPU synchronization granularity.
+**Integration:** `BrickTuner::get_tuner_recommendations()` in `src/tuner/` uses profiler data for kernel selection. SyncMode (Eager/Deferred) controls GPU synchronization granularity.
 
 See [sub/brick.md](sub/brick.md) for the full brick taxonomy, profiling protocol, and tracing API.
 

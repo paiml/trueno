@@ -43,12 +43,12 @@
 ## 7. API
 
 ```rust
-// Standard GEMM
-blis::gemm(a, b, m, n, k) -> Vec<f32>
+// Standard GEMM (writes result into c in-place)
+blis::gemm(m, n, k, a, b, c) -> Result<(), TruenoError>
 
-// Profiled GEMM (returns timing at each level)
-blis::gemm_profiled(a, b, m, n, k) -> (Vec<f32>, BlisProfiler)
+// Profiled GEMM (profiler collects per-level timing)
+blis::gemm_profiled(m, n, k, a, b, c, &mut profiler) -> Result<(), TruenoError>
 
 // Parallel GEMM with prepacked weights
-blis::gemm_blis_parallel(a, &prepacked_b, m, n, k) -> Vec<f32>
+blis::gemm_blis_parallel(m, n, k, a, b, c) -> Result<(), TruenoError>
 ```

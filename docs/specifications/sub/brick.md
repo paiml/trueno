@@ -28,7 +28,6 @@ O(1) per-brick tracking via fixed-size array indexed by `BrickId`. No heap alloc
 - `total_tokens()` — elements processed
 - `brick_stats(id)` — per-brick statistics
 - `set_sync_mode(mode)` — Eager (debug) or Deferred (production)
-- `get_tuner_recommendations()` — feed into ML tuner
 
 **SyncMode:**
 - `Eager` — synchronize after every brick (debug, profiling)
