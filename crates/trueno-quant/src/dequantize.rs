@@ -35,7 +35,7 @@ pub fn dequantize_q4_k_to_f32(data: &[u8], num_elements: usize) -> Vec<f32> {
 /// Sanitize an f16-encoded scale value: return 0.0 for NaN or infinity.
 ///
 /// BUG-IMPORT-002 FIX: Subnormal F16 values (< 6.1e-5) are VALID in GGML quantization.
-/// Q6_K/Q4_K super-block scales can be 1e-6 to 1e-4 for small-weight tensors.
+/// `Q6_K`/`Q4_K` super-block scales can be 1e-6 to 1e-4 for small-weight tensors.
 /// Clamping subnormals to 0.0 destroys >99% of dequantized data, producing
 /// all-zero tensors and Q8 density violations downstream.
 #[inline]
