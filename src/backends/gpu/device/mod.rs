@@ -84,7 +84,7 @@ impl GpuDevice {
     /// Adapter indices correspond to `Instance::enumerate_adapters()` ordering.
     pub async fn new_with_adapter_index_async(index: u32) -> Result<Self, String> {
         let instance = wgpu::Instance::default();
-        let adapters = instance.enumerate_adapters(wgpu::Backends::all());
+        let adapters = instance.enumerate_adapters(wgpu::Backends::all()).await;
 
         if adapters.is_empty() {
             return Err("No GPU adapters found".to_string());
@@ -125,7 +125,7 @@ impl GpuDevice {
     /// List all available GPU adapters (async, all platforms)
     pub async fn list_adapters_async() -> Vec<(u32, String, String)> {
         let instance = wgpu::Instance::default();
-        let adapters = instance.enumerate_adapters(wgpu::Backends::all());
+        let adapters = instance.enumerate_adapters(wgpu::Backends::all()).await;
 
         adapters
             .iter()
@@ -286,8 +286,8 @@ impl GpuDevice {
         // Create pipeline
         let pipeline_layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("{} Pipeline Layout", op_name)),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&bind_group_layout)],
+            immediate_size: 0,
         });
 
         let pipeline = self.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {

@@ -300,8 +300,8 @@ impl WgslForwardPass {
             |shader: &wgpu::ShaderModule, bgl: &wgpu::BindGroupLayout, label: &str| {
                 let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some(label),
-                    bind_group_layouts: &[bgl],
-                    push_constant_ranges: &[],
+                    bind_group_layouts: &[Some(bgl)],
+                    immediate_size: 0,
                 });
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(label),
@@ -344,8 +344,8 @@ impl WgslForwardPass {
         });
         let attention_pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("attn_pl"),
-            bind_group_layouts: &[&attention_bgl],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&attention_bgl)],
+            immediate_size: 0,
         });
         let attention_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("attn_pipe"),
@@ -375,8 +375,8 @@ impl WgslForwardPass {
         let rope_pipeline = {
             let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("rope_pl"),
-                bind_group_layouts: &[&rope_bgl],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&rope_bgl)],
+                immediate_size: 0,
             });
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("rope_pipe"),

@@ -42,7 +42,7 @@ impl GpuDevicePool {
     /// Open all available non-CPU GPU adapters (async)
     pub async fn all_async() -> Result<Self, String> {
         let instance = wgpu::Instance::default();
-        let adapters = instance.enumerate_adapters(wgpu::Backends::all());
+        let adapters = instance.enumerate_adapters(wgpu::Backends::all()).await;
 
         if adapters.is_empty() {
             return Err("No GPU adapters found".to_string());
