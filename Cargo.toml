@@ -270,6 +270,9 @@ harness = false
 
 [[bench]]
 name = "tiling_ops"
+
+[[bench]]
+name = "gemm_comparison"
 harness = false
 
 [[bench]]

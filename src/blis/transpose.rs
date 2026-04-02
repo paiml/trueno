@@ -145,8 +145,6 @@ pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") {
-            // SAFETY: AVX2 verified by feature detection above.
-            // Slice bounds: 8×8 blocks within rows×cols guaranteed by loop bounds.
             unsafe {
                 return transpose_avx2_impl(rows, cols, a, b);
             }
@@ -194,11 +192,11 @@ unsafe fn transpose_avx2_impl(
     let tall_skinny = rows >= 4 * cols;
 
     unsafe {
-        // Destination-first outer loop for write locality.
-        // Inner loop order adapts to matrix shape:
-        // - Small (fits L2): destination-first inner for write throughput
-        // - Large: source-first inner to amortize read cache misses
-        let dest_first_inner = rows * cols * 4 <= 256 * 1024; // ≤256KB fits L2
+        // Outer loop: destination tile rows (ct) first for write locality
+        for ct in (0..cb_end).step_by(TILE) {
+            let ct_end = (ct + TILE).min(cb_end);
+            for rt in (0..rb_end).step_by(TILE) {
+                let rt_end = (rt + TILE).min(rb_end);
 
         for ct in (0..cb_end).step_by(TILE) {
             let ct_end = (ct + TILE).min(cb_end);
@@ -214,8 +212,10 @@ unsafe fn transpose_avx2_impl(
                         }
                     }
                 } else {
-                    for r0 in (rt..rt_end).step_by(BLOCK) {
-                        for c0 in (ct..ct_end).step_by(BLOCK) {
+                    // Square/wide: destination-first inner loop (c0 first)
+                    // for better write locality within each 64x64 tile
+                    for c0 in (ct..ct_end).step_by(BLOCK) {
+                        for r0 in (rt..rt_end).step_by(BLOCK) {
                             let src = a.as_ptr().add(r0 * cols + c0);
                             let dst = b.as_mut_ptr().add(c0 * rows + r0);
                             transpose_8x8_avx2(src, cols, dst, rows);
@@ -239,23 +239,24 @@ unsafe fn transpose_avx2_impl(
     Ok(())
 }
 
-/// Sequential-write transpose for large matrices.
-/// Iterates output in row order (sequential writes), reading input with stride.
-/// Cache-blocked to keep the read working set in L1.
-#[inline(always)]
-fn transpose_sequential_write(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) {
-    const BLOCK: usize = 64; // L1 cache block: 64*64*4 = 16KB
+/// Destination-sequential transpose for large matrices.
+/// Iterates output in row order (sequential writes), reads input with stride.
+/// Cache-blocked: processes BLOCK input rows at a time to keep reads in L1.
+/// The inner loop writes b[j*rows + ib..ib+BLOCK] sequentially — LLVM
+/// auto-vectorizes this into 256-bit stores.
+#[inline(never)]
+fn transpose_dest_sequential(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) {
+    const BLOCK: usize = 32; // 32 rows * max_cols * 4 bytes fits L1
 
-    // Output is b[j * rows + i] = a[i * cols + j]
-    // Iterate output rows (j) then within each row, iterate i
-    for jb in (0..cols).step_by(BLOCK) {
-        let j_end = (jb + BLOCK).min(cols);
-        for ib in (0..rows).step_by(BLOCK) {
-            let i_end = (ib + BLOCK).min(rows);
-            for j in jb..j_end {
-                for i in ib..i_end {
-                    b[j * rows + i] = a[i * cols + j];
-                }
+    for ib in (0..rows).step_by(BLOCK) {
+        let i_end = (ib + BLOCK).min(rows);
+        for j in 0..cols {
+            let dst_base = j * rows + ib;
+            let src_col = j;
+            // Inner loop: sequential writes to b[dst_base..dst_base+(i_end-ib)]
+            // LLVM vectorizes this with ymm stores
+            for i in ib..i_end {
+                b[dst_base + i - ib] = a[i * cols + src_col];
             }
         }
     }
