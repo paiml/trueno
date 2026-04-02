@@ -124,6 +124,9 @@ unsafe fn transpose_8x8_avx2(src: *const f32, src_stride: usize, dst: *mut f32, 
 ///
 /// `Ok(())` on success, `Err` if dimensions mismatch
 pub fn transpose(rows: usize, cols: usize, a: &[f32], b: &mut [f32]) -> Result<(), TruenoError> {
+    // Contract: transpose-kernel-v1.yaml, equation = transpose
+    debug_assert!(!a.is_empty(), "Contract transpose: input is empty");
+    debug_assert!(rows > 0 && cols > 0, "Contract transpose: zero dimensions");
     let expected = rows * cols;
     if a.len() != expected || b.len() != expected {
         return Err(TruenoError::InvalidInput(format!(

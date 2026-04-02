@@ -26,6 +26,7 @@ use crate::error::TruenoError;
 ///
 /// Returns `Err` if input and output lengths don't match.
 pub fn relu(input: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
+    contract_pre_relu!(input);
     let n = input.len();
     if n != output.len() {
         return Err(TruenoError::InvalidInput(format!(
@@ -103,6 +104,7 @@ unsafe fn relu_avx2(input: &[f32], output: &mut [f32]) {
 ///
 /// Returns `Err` if a, b, and output lengths don't match.
 pub fn add(a: &[f32], b: &[f32], output: &mut [f32]) -> Result<(), TruenoError> {
+    contract_pre_add!(a, b);
     let n = a.len();
     if n != b.len() || n != output.len() {
         return Err(TruenoError::InvalidInput(format!(
@@ -182,6 +184,9 @@ unsafe fn add_avx2(a: &[f32], b: &[f32], output: &mut [f32]) {
 ///
 /// Returns `Err` if input and output lengths don't match.
 pub fn mul_scalar(input: &[f32], scalar: f32, output: &mut [f32]) -> Result<(), TruenoError> {
+    // Contract: elementwise-kernel-v1.yaml, equation = mul_scalar
+    debug_assert!(!input.is_empty(), "Contract mul_scalar: input is empty");
+    debug_assert!(scalar.is_finite(), "Contract mul_scalar: scalar is not finite");
     let n = input.len();
     if n != output.len() {
         return Err(TruenoError::InvalidInput(format!(

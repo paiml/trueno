@@ -361,6 +361,7 @@ pub fn gemv_scalar(k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32]) {
 
 /// Dispatch GEMV to best available implementation
 pub fn gemv(k: usize, n: usize, a: &[f32], b: &[f32], c: &mut [f32]) {
+    contract_pre_gemv!(a, b);
     #[cfg(target_arch = "x86_64")]
     {
         if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {

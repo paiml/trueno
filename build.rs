@@ -170,4 +170,6 @@ fn main() {
     println!("cargo:rustc-env=CONTRACT_IMPLEMENTED={implemented}");
     println!("cargo:rustc-env=CONTRACT_PARTIAL={partial}");
     println!("cargo:rustc-env=CONTRACT_GAPS={not_implemented}");
+    // CB-1204: emit_contract marker for pmat comply pipeline detection
+    println!("cargo:rustc-env=CONTRACT_PRE_COUNT={implemented}");
 }
