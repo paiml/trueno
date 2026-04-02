@@ -17,6 +17,9 @@ equations:
       - "Period: 2^256 per key"
       - "Uniform distribution: passes basic statistical tests"
 
+    preconditions:
+      - "rounds >= 1"
+    lean_theorem: "Theorems.Threefry"
 proof_obligations:
   - type: invariant
     property: "Determinism"

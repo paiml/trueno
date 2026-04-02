@@ -53,6 +53,10 @@ equations:
       - identity_positive: "x_i > 0 → y_i = x_i (bitwise exact)"
       - zero_negative: "x_i ≤ 0 → y_i = 0.0"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "input.iter().all(|x| x.is_finite())"
+    lean_theorem: "Theorems.Relu"
   add:
     formula: "y_i = a_i + b_i"
     domain: "a, b ∈ R^N"
@@ -61,6 +65,10 @@ equations:
       - associative: "add(add(a, b), c) == add(a, add(b, c)) (within f32 precision)"
       - identity: "add(a, 0) == a (bitwise exact)"
 
+    preconditions:
+      - "!a.is_empty()"
+      - "a.len() == b.len()"
+    lean_theorem: "Theorems.Add"
   mul_scalar:
     formula: "y_i = x_i * s"
     domain: "x ∈ R^N, s ∈ R"
@@ -73,6 +81,10 @@ equations:
 # IMPLEMENTATION MANDATES
 # =============================================================================
 
+    preconditions:
+      - "!input.is_empty()"
+      - "scalar.is_finite()"
+    lean_theorem: "Theorems.MulScalar"
 implementation:
   avx2_32_wide_pattern:
     description: "All three ops use identical 32-wide unrolled AVX2 pattern"

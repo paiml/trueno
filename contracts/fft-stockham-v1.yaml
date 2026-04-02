@@ -18,6 +18,10 @@ equations:
       - "Linearity: DFT(αx + βy) = α·DFT(x) + β·DFT(y)"
       - "Inverse: IDFT(DFT(x)) = x"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "input.len().is_power_of_two()"
+    lean_theorem: "Theorems.Dft"
 proof_obligations:
   - type: conservation
     property: "Parseval energy conservation"

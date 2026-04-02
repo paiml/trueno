@@ -17,6 +17,10 @@ equations:
       - "Separable kernel matches 2D convolution"
       - "Gaussian blur preserves constant images"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "!kernel.is_empty()"
+    lean_theorem: "Theorems.Conv2d"
 proof_obligations:
   - type: invariant
     property: "Identity kernel"

@@ -15,6 +15,9 @@ equations:
       - "Sum of histogram bins equals total pixels"
       - "Each bin count is non-negative"
 
+    preconditions:
+      - "!input.is_empty()"
+    lean_theorem: "Theorems.Histogram"
   morphology:
     formula: "dilate(I,S)(x,y) = max{I(x+i,y+j) : S(i,j)=1}"
     domain: "I ∈ ℝ^{w×h}, S ∈ {0,1}^{sw×sh}"
@@ -23,6 +26,10 @@ equations:
       - "Opening removes small bright features"
       - "Closing fills small dark features"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "!kernel.is_empty()"
+    lean_theorem: "Theorems.Morphology"
   resize:
     formula: "R(x,y) = interp(I, x*sx, y*sy)"
     domain: "I ∈ ℝ^{sw×sh}"
@@ -30,6 +37,11 @@ equations:
       - "Identity resize preserves image exactly"
       - "Constant image preserved under any resize"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "new_width > 0"
+      - "new_height > 0"
+    lean_theorem: "Theorems.Resize"
 proof_obligations:
   - type: invariant
     property: "Histogram sum equals pixel count"

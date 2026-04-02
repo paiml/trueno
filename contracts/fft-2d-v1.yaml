@@ -16,6 +16,11 @@ equations:
       - "Separability: 2D FFT = FFT_rows then FFT_cols"
       - "Impulse: FFT_2D(delta) = 1 everywhere"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "rows > 0"
+      - "cols > 0"
+    lean_theorem: "Theorems.Fft2d"
 proof_obligations:
   - type: invariant
     property: "2D impulse response"

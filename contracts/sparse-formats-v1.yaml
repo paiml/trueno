@@ -16,6 +16,10 @@ equations:
       - "Sliced storage: column-major within each slice"
       - "Padding: rows within a slice padded to max width"
 
+    preconditions:
+      - "!values.is_empty()"
+      - "x.len() == cols"
+    lean_theorem: "Theorems.SellSpmv"
 proof_obligations:
   - type: equivalence
     property: "SELL SpMV matches CSR SpMV"

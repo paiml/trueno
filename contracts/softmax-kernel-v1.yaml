@@ -64,6 +64,10 @@ equations:
 # IMPLEMENTATION MANDATES
 # =============================================================================
 
+    preconditions:
+      - "!logits.is_empty()"
+      - "logits.iter().all(|x| x.is_finite())"
+    lean_theorem: "Theorems.Softmax"
 implementation:
   four_pass_architecture:
     description: |

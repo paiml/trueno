@@ -72,6 +72,9 @@ equations:
       - "No immediates derived from constructor dimensions in emitted PTX"
       - "All shape parameters passed via .param with ld.param"
 
+    preconditions:
+      - "kernel_type.is_valid()"
+    lean_theorem: "Theorems.DimensionIndependence"
 proof_obligations:
   - type: equivalence
     property: "PTX byte-identity across dimension sets"
@@ -120,3 +123,11 @@ kani_harnesses:
     obligation: "PO-DIM-001"
     property: "ld.param count equals .param declaration count"
     bound: 4
+
+qa_gate:
+  id: "QA-DIM-001"
+  name: "Dimension Independence Quality Gate"
+  checks:
+    - "All training kernels use runtime params (not baked immediates)"
+    - "Zero JIT compilation during training"
+    - "Total unique kernel types ≤ 20"

@@ -56,6 +56,11 @@ equations:
 # IMPLEMENTATION MANDATES
 # =============================================================================
 
+    preconditions:
+      - "!a.is_empty()"
+      - "!x.is_empty()"
+      - "a.len() == m * n"
+    lean_theorem: "Theorems.Gemv"
 implementation:
   dispatch:
     description: "Runtime CPU feature detection selects AVX2+FMA or scalar fallback"

@@ -16,6 +16,9 @@ equations:
       - "Roundtrip: IFFT3D(FFT3D(x)) = x within tolerance"
       - "Parseval: Σ|x|² = (1/N)·Σ|X|²"
 
+    preconditions:
+      - "!input.is_empty()"
+    lean_theorem: "Theorems.Fft3d"
   fft_batched:
     formula: "For each batch b: X_b = FFT(x_b)"
     domain: "x_b ∈ ℂ^N for b = 0..B-1"
@@ -24,6 +27,10 @@ equations:
       - "Each batch independently satisfies 1D FFT contract"
       - "Impulse per batch: FFT(δ) = 1"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "batch_size > 0"
+    lean_theorem: "Theorems.FftBatched"
 proof_obligations:
   - type: invariant
     property: "3D impulse response"

@@ -18,6 +18,9 @@ equations:
       - "Impulse response: FFT(δ) = 1"
       - "Matches Stockham for power-of-two sizes"
 
+    preconditions:
+      - "!input.is_empty()"
+    lean_theorem: "Theorems.Bluestein"
 proof_obligations:
   - type: invariant
     property: "Roundtrip accuracy"

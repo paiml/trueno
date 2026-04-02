@@ -16,6 +16,10 @@ equations:
       - "BSR SpMV matches CSR SpMV for same matrix"
       - "Identity block matrix: y = α·x + β·y"
 
+    preconditions:
+      - "!values.is_empty()"
+      - "block_size > 0"
+    lean_theorem: "Theorems.BsrSpmv"
 proof_obligations:
   - type: invariant
     property: "BSR-CSR SpMV equivalence"

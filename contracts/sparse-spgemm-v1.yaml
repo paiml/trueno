@@ -17,6 +17,10 @@ equations:
       - "Dimension: C.rows = A.rows, C.cols = B.cols"
       - "Diagonal: diag(a) * diag(b) = diag(a.*b)"
 
+    preconditions:
+      - "!a_values.is_empty()"
+      - "!b_values.is_empty()"
+    lean_theorem: "Theorems.Spgemm"
 proof_obligations:
   - type: invariant
     property: "Right identity"

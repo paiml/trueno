@@ -49,6 +49,11 @@ equations:
 # IMPLEMENTATION MANDATES
 # =============================================================================
 
+    preconditions:
+      - "!input.is_empty()"
+      - "rows > 0"
+      - "cols > 0"
+    lean_theorem: "Theorems.Transpose"
 implementation:
   avx2_8x8_microkernel:
     description: "In-register 8×8 f32 transpose using AVX2 shuffle/permute"

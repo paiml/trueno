@@ -15,6 +15,11 @@ equations:
       - "Q^T Q = I (orthogonality)"
       - "||A - QR||_F / ||A||_F < √n · u"
 
+    preconditions:
+      - "!a.is_empty()"
+      - "m >= n"
+      - "m > 0"
+    lean_theorem: "Theorems.QrFactorization"
 proof_obligations:
   - type: invariant
     property: "Orthogonality"

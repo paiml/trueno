@@ -17,6 +17,10 @@ equations:
       - "Backward error bounded: |Ay - y_exact| <= nnz_per_row * u * |A| * |x|"
       - "SpMV is linear in x"
 
+    preconditions:
+      - "!values.is_empty()"
+      - "x.len() == cols"
+    lean_theorem: "Theorems.Spmv"
 proof_obligations:
   - type: invariant
     property: "Output dimension correctness"

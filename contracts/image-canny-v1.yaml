@@ -17,6 +17,10 @@ equations:
       - "Edges detected at sharp boundaries"
       - "Threshold ordering: 0 <= low <= high <= 1"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "low_threshold < high_threshold"
+    lean_theorem: "Theorems.Canny"
   sobel:
     formula: "G_x = S_x * I, G_y = S_y * I (3x3 Sobel kernels)"
     domain: "I in R^{W x H}"
@@ -25,6 +29,10 @@ equations:
       - "Gradient of constant image is zero"
       - "Gradient detects horizontal/vertical edges"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "width > 2"
+    lean_theorem: "Theorems.Sobel"
 proof_obligations:
   - type: invariant
     property: "Binary output"

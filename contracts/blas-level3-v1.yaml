@@ -14,12 +14,19 @@ equations:
       - "Output is symmetric: C = Cᵀ"
       - "Identity: syrk(I, n, n, α, β) = α·I + β·C"
 
+    preconditions:
+      - "!a.is_empty()"
+    lean_theorem: "Theorems.Syrk"
   trmm:
     formula: "B = α·A·B where A is lower triangular"
     domain: "A ∈ ℝ^{n×n} (triangular), B ∈ ℝ^{n×m}"
     invariants:
       - "Identity: trmm(I, B) = α·B"
 
+    preconditions:
+      - "!a.is_empty()"
+      - "!b.is_empty()"
+    lean_theorem: "Theorems.Trmm"
   symm:
     formula: "C = α·A·B + β·C where A is symmetric"
     domain: "A ∈ ℝ^{n×n} (symmetric), B ∈ ℝ^{n×m}"
@@ -27,6 +34,10 @@ equations:
       - "Identity: symm(I, B, C, α, β) = α·B + β·C"
       - "Equivalent to GEMM when A is stored full"
 
+    preconditions:
+      - "!a.is_empty()"
+      - "!b.is_empty()"
+    lean_theorem: "Theorems.Symm"
 proof_obligations:
   - type: invariant
     property: "syrk symmetry"

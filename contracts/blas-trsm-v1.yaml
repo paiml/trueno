@@ -15,6 +15,10 @@ equations:
       - "||AX - B||_F / ||B||_F < n · u"
       - "Singular matrix detected (zero diagonal)"
 
+    preconditions:
+      - "!a.is_empty()"
+      - "!b.is_empty()"
+    lean_theorem: "Theorems.Trsm"
 proof_obligations:
   - type: invariant
     property: "Backward error"

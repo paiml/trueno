@@ -18,6 +18,9 @@ equations:
       - "Matrix multiply is associative: (AB)C = A(BC)"
       - "Transpose is involutory: (A^T)^T = A"
 
+    preconditions:
+      - "!operands.is_empty()"
+    lean_theorem: "Theorems.Einsum"
 proof_obligations:
   - type: invariant
     property: "Matmul correctness"

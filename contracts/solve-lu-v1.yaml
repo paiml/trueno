@@ -16,6 +16,11 @@ equations:
       - "L[i][j] = 0 for j > i, L[i][i] = 1"
       - "U[i][j] = 0 for j < i"
 
+    preconditions:
+      - "!a.is_empty()"
+      - "m > 0"
+      - "n > 0"
+    lean_theorem: "Theorems.LuFactorization"
 proof_obligations:
   - type: invariant
     property: "Factorization backward error"

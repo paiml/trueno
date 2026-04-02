@@ -16,6 +16,9 @@ equations:
       - "Period: 2^128 per key"
       - "Statistical quality: passes BigCrush"
 
+    preconditions:
+      - "rounds >= 1"
+    lean_theorem: "Theorems.Philox"
 proof_obligations:
   - type: determinism
     property: "Reproducibility"

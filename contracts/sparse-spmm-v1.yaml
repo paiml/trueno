@@ -15,6 +15,10 @@ equations:
       - "Output dimensions: C.rows = A.rows, C.cols = B.cols"
       - "Matches dense reference within backward error"
 
+    preconditions:
+      - "!values.is_empty()"
+      - "b_cols > 0"
+    lean_theorem: "Theorems.Spmm"
 proof_obligations:
   - type: equivalence
     property: "Sparse-dense result matches dense-dense reference"

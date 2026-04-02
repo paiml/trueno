@@ -17,12 +17,20 @@ equations:
       - "Black maps to 0.0"
       - "Coefficients sum to 1.0"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "input.len() % 3 == 0"
+    lean_theorem: "Theorems.RgbToGray"
   hsv_roundtrip:
     formula: "HSV→RGB→HSV = identity"
     domain: "H ∈ [0,360), S ∈ [0,1], V ∈ [0,1]"
     invariants:
       - "RGB→HSV→RGB = identity within tolerance"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "input.len() % 3 == 0"
+    lean_theorem: "Theorems.HsvRoundtrip"
   connected_components:
     formula: "Label(p) = Label(q) ⟺ p and q are 4-connected in foreground"
     domain: "Binary image ∈ {0, nonzero}^{W×H}"
@@ -32,6 +40,10 @@ equations:
       - "Connected pixels share the same label"
       - "Disconnected pixels have different labels"
 
+    preconditions:
+      - "!input.is_empty()"
+      - "width > 0"
+    lean_theorem: "Theorems.ConnectedComponents"
 proof_obligations:
   - type: invariant
     property: "BT.601 weights"

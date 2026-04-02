@@ -17,6 +17,11 @@ equations:
       - "Solve accuracy: ||Ax - b|| / (||A|| * ||x||) < n * u"
       - "L is lower triangular with positive diagonal"
 
+    preconditions:
+      - "!a.is_empty()"
+      - "n > 0"
+      - "a.len() == n * n"
+    lean_theorem: "Theorems.Cholesky"
 proof_obligations:
   - type: bound
     property: "Backward error"
