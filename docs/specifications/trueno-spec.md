@@ -375,6 +375,17 @@ performance:
 
 Benchmark validation: ≥100 iterations, CV <5%, results saved to `target/criterion/`.
 
+### Measured GEMM Performance (AVX2+FMA, single-threaded)
+
+| Size | Trueno | ndarray | Ratio | Root cause |
+|------|--------|---------|-------|------------|
+| 128x128 | 45 GFLOP/s | ~84 | 0.54x | C tile load/store overhead |
+| 256x256 | 65 GFLOP/s | ~134 | 0.48x | Same |
+| 512x512 | 75 GFLOP/s | ~158 | 0.48x | Same |
+| 1024x1024 | 71 GFLOP/s | ~195 | 0.37x | + L2 pressure at scale |
+
+**Root cause:** C tile is loaded from main memory into `c_micro` buffer (scalar loop), microkernel FMAs into `c_micro`, then stored back (scalar loop) — per KC block. matrixmultiply keeps C in YMM registers across KC iterations with zero extra memory traffic. Fix requires microkernel architecture change (direct C register accumulation).
+
 ---
 
 ## 18. BLIS GEMM Engine
