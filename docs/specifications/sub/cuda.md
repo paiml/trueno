@@ -26,7 +26,7 @@ Own the stack. trueno-gpu generates PTX from pure Rust — no nvcc, no LLVM, no 
 | `LayerNormKernel` | with gamma/beta | — |
 | `AttentionKernel` | standard, causal | — |
 | `QuantizeKernel` | Q4_K fused with matmul | — |
-| 7 backward kernels | silu, gemm_a/b, rmsnorm, rope, adamw, nf4 | `dimension-independent-kernels-v1.yaml` |
+| 6 backward kernels | activations, cross_entropy, gemm, layer_norm, rms_norm, softmax | `dimension-independent-kernels-v1.yaml` |
 
 ## 4. Testing Without GPU
 
