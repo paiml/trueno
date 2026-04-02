@@ -341,6 +341,10 @@ pub struct CudaDriver {
     pub cuEventQuery: unsafe extern "C" fn(event: CUevent) -> CUresult,
     /// cuEventSynchronize - Wait for event completion (blocking)
     pub cuEventSynchronize: unsafe extern "C" fn(event: CUevent) -> CUresult,
+    /// cuStreamWaitEvent - Make stream wait for event (non-blocking cross-stream dependency)
+    /// GH-559-PERF: Replaces cuStreamSynchronize for cross-stream ordering.
+    pub cuStreamWaitEvent:
+        unsafe extern "C" fn(stream: CUstream, event: CUevent, flags: c_uint) -> CUresult,
 
     // Linker API (PTX disk cache: PTX→cubin compilation + extraction)
     /// cuLinkCreate - Create a linker invocation
@@ -528,6 +532,8 @@ mod loading {
                 type FnEventRecord = unsafe extern "C" fn(CUevent, CUstream) -> CUresult;
                 type FnEventQuery = unsafe extern "C" fn(CUevent) -> CUresult;
                 type FnEventSync = unsafe extern "C" fn(CUevent) -> CUresult;
+                type FnStreamWaitEvent =
+                    unsafe extern "C" fn(CUstream, CUevent, c_uint) -> CUresult;
                 // Linker types (PTX disk cache)
                 type FnLinkCreate = unsafe extern "C" fn(
                     c_uint,
@@ -610,6 +616,7 @@ mod loading {
                     cuEventRecord: load_sym!(cuEventRecord, FnEventRecord),
                     cuEventQuery: load_sym!(cuEventQuery, FnEventQuery),
                     cuEventSynchronize: load_sym!(cuEventSynchronize, FnEventSync),
+                    cuStreamWaitEvent: load_sym!(cuStreamWaitEvent, FnStreamWaitEvent),
                     // Linker functions (PTX disk cache)
                     cuLinkCreate: load_sym!(cuLinkCreate, FnLinkCreate),
                     cuLinkAddData: load_sym!(cuLinkAddData_v2, FnLinkAddData),

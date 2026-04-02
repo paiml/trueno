@@ -242,6 +242,23 @@ impl CudaStream {
         let result = unsafe { (driver.cuEventRecord)(event.event, self.stream) };
         CudaDriver::check(result).map_err(|e| GpuError::StreamSync(format!("event record: {e}")))
     }
+
+    /// GH-559-PERF: Make this stream wait for an event recorded on another stream.
+    ///
+    /// Non-blocking cross-stream dependency: all future work on this stream will
+    /// wait until the event completes, but the CPU is NOT blocked. This replaces
+    /// `compute_stream.synchronize()` which blocks both GPU and CPU.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(GpuError::StreamSync)` if the wait fails.
+    pub fn wait_event(&self, event: &CudaEvent) -> Result<(), GpuError> {
+        let driver = get_driver()?;
+        // SAFETY: stream and event are valid from constructors. flags=0 per CUDA spec.
+        let result = unsafe { (driver.cuStreamWaitEvent)(self.stream, event.event, 0) };
+        CudaDriver::check(result)
+            .map_err(|e| GpuError::StreamSync(format!("stream wait event: {e}")))
+    }
 }
 
 // ============================================================================
