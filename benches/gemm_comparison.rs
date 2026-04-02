@@ -8,9 +8,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::hint::black_box;
 
 fn gen_data(len: usize) -> Vec<f32> {
-    (0..len)
-        .map(|i| ((i * 7 + 3) % 100) as f32 / 100.0)
-        .collect()
+    (0..len).map(|i| ((i * 7 + 3) % 100) as f32 / 100.0).collect()
 }
 
 // ── GEMM ──────────────────────────────────────────────────────────────
@@ -27,7 +25,15 @@ fn bench_gemm(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &n| {
             let mut c_data = vec![0.0f32; n * n];
             bench.iter(|| {
-                trueno::blis::gemm(n, n, n, black_box(&a_data), black_box(&b_data), black_box(&mut c_data)).unwrap();
+                trueno::blis::gemm(
+                    n,
+                    n,
+                    n,
+                    black_box(&a_data),
+                    black_box(&b_data),
+                    black_box(&mut c_data),
+                )
+                .unwrap();
             });
         });
 
@@ -54,7 +60,13 @@ fn bench_gemv(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &n| {
             let mut out = vec![0.0f32; n];
             bench.iter(|| {
-                trueno::blis::gemv::gemv(n, n, black_box(&mat_data), black_box(&vec_data), black_box(&mut out));
+                trueno::blis::gemv::gemv(
+                    n,
+                    n,
+                    black_box(&mat_data),
+                    black_box(&vec_data),
+                    black_box(&mut out),
+                );
             });
         });
 
@@ -82,8 +94,11 @@ fn bench_add(c: &mut Criterion) {
             let mut out = vec![0.0f32; n];
             bench.iter(|| {
                 trueno::blis::elementwise::add(
-                    black_box(&a_data), black_box(&b_data), black_box(&mut out),
-                ).unwrap();
+                    black_box(&a_data),
+                    black_box(&b_data),
+                    black_box(&mut out),
+                )
+                .unwrap();
             });
         });
 
@@ -107,9 +122,7 @@ fn bench_softmax(c: &mut Criterion) {
         let data = gen_data(n);
 
         group.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &_n| {
-            bench.iter(|| {
-                black_box(trueno::blis::softmax::softmax_1d_alloc(black_box(&data)))
-            });
+            bench.iter(|| black_box(trueno::blis::softmax::softmax_1d_alloc(black_box(&data))));
         });
 
         group.bench_with_input(BenchmarkId::new("ndarray", n), &n, |bench, &_n| {
@@ -163,9 +176,7 @@ fn bench_relu(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("trueno", n), &n, |bench, &n| {
             let mut out = vec![0.0f32; n];
             bench.iter(|| {
-                trueno::blis::elementwise::relu(
-                    black_box(&data), black_box(&mut out),
-                ).unwrap();
+                trueno::blis::elementwise::relu(black_box(&data), black_box(&mut out)).unwrap();
             });
         });
 
@@ -177,5 +188,13 @@ fn bench_relu(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_gemm, bench_gemv, bench_add, bench_softmax, bench_transpose, bench_relu);
+criterion_group!(
+    benches,
+    bench_gemm,
+    bench_gemv,
+    bench_add,
+    bench_softmax,
+    bench_transpose,
+    bench_relu
+);
 criterion_main!(benches);
