@@ -53,6 +53,7 @@ impl Kernel for Nf4TensorCoreGemmKernel {
     #[allow(clippy::too_many_lines)]
     fn build_ptx(&self) -> PtxKernel {
         let k_const = self.k;
+        let n_const = self.n;
         let n_k_tiles = k_const / 16;
         let num_k_blocks = k_const / NF4_BLOCK_SIZE_U32;
         let smem_bytes = 16 * 16 * 2 * 2; // A[16×16]+B[16×16] in FP16
@@ -230,9 +231,9 @@ impl Kernel for Nf4TensorCoreGemmKernel {
                 ctx.bar_sync(0);
 
                 // ====== PHASE 3: WMMA mma.sync ======
-                let frag_a = ctx.wmma_load_a(smem_a_base, 16, WmmaLayout::RowMajor);
-                let frag_b = ctx.wmma_load_b(smem_b_base, 16, WmmaLayout::ColMajor);
-                ctx.wmma_mma_inplace(frag_c, frag_a, frag_b);
+                let frag_a = ctx.wmma_load_a_f16(smem_a_base, 16, WmmaLayout::RowMajor);
+                let frag_b = ctx.wmma_load_b_f16(smem_b_base, 16, WmmaLayout::ColMajor);
+                let frag_c = ctx.wmma_mma_f16_f32(&frag_a, &frag_b, &frag_c);
 
                 // Barrier before next tile
                 ctx.bar_sync(1);
@@ -249,7 +250,7 @@ impl Kernel for Nf4TensorCoreGemmKernel {
                 let c_base = ctx.mul_u64(c_base, 4);
                 let c_addr = ctx.add_u64(c_ptr, c_base);
 
-                ctx.wmma_store_c(c_addr, n_param, frag_c, WmmaLayout::RowMajor);
+                ctx.wmma_store_d_f32(c_addr, &frag_c, n_const, WmmaLayout::RowMajor);
 
                 ctx.label("exit");
                 ctx.ret();
