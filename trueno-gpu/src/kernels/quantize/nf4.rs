@@ -92,7 +92,7 @@ impl Nf4GemmKernel {
 ///
 /// Total: 15 selp + 4 bit-extract = 19 instructions per lookup.
 /// Compared to shared memory: 0 memory loads, 0 cache misses on unified memory.
-fn nf4_register_lut_lookup(
+pub(crate) fn nf4_register_lut_lookup(
     ctx: &mut crate::ptx::builder::KernelBuilder<'_>,
     nib: crate::ptx::VirtualReg,
     lut: &[crate::ptx::VirtualReg; 16],
