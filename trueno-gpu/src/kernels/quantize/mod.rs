@@ -52,8 +52,8 @@ pub use fp16_tensor::{
     TensorCoreQ4KGemmKernel, W4a16WmmaQ4KGemmKernel,
 };
 pub use fused::{
-    FusedGateUpQ4KGemvKernel, FusedRmsNormGateUpSwigluQ4KKernel, FusedRmsNormNf4GemvKernel,
-    FusedRmsNormQ4KGemvKernel,
+    FusedGateUpQ4KGemvKernel, FusedNf4GateUpGemmKernel, FusedRmsNormGateUpSwigluQ4KKernel,
+    FusedRmsNormNf4GemvKernel, FusedRmsNormQ4KGemvKernel,
 };
 pub use legacy::{Q4_0GemvKernel, Q4_1GemvKernel, Q5_0GemvKernel, Q8_0GemvKernel};
 pub use nf4::{Nf4GemmKernel, Nf4GemmTransposeKernel};
