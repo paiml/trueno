@@ -74,5 +74,6 @@ pub use rope::{
 pub use swiglu::{BatchedSwigluKernel, FusedSwigluKernel};
 pub use transform::{
     BatchedScaleKernel, BatchedSoftmaxKernel, BatchedToInterleavedKernel, BatchedTransposeKernel,
-    CopySingleHeadKernel, ExtractSingleHeadKernel, InterleavedToBatchedKernel, TransposeKernel,
+    CastF32ToF16Kernel, CopySingleHeadKernel, ExtractSingleHeadKernel, InterleavedToBatchedKernel,
+    TransposeKernel,
 };

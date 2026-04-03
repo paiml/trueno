@@ -212,3 +212,55 @@ impl Kernel for BatchedSoftmaxKernel {
             })
     }
 }
+
+/// Cast f32 to f16 kernel: output[i] = cvt.rn.f16.f32(input[i])
+///
+/// Enables FP16 GEMM dispatch by casting fp32 activations to fp16.
+/// 256 threads per block, one element per thread.
+#[derive(Debug, Clone)]
+pub struct CastF32ToF16Kernel;
+
+impl Kernel for CastF32ToF16Kernel {
+    fn name(&self) -> &str {
+        "cast_f32_to_f16"
+    }
+
+    fn build_ptx(&self) -> PtxKernel {
+        PtxKernel::new("cast_f32_to_f16")
+            .param(PtxType::U64, "input_ptr")
+            .param(PtxType::U64, "output_ptr")
+            .param(PtxType::U32, "n")
+            .build(|ctx| {
+                let tid = ctx.special_reg(PtxReg::TidX);
+                let ctaid = ctx.special_reg(PtxReg::CtaIdX);
+                let ntid = ctx.special_reg(PtxReg::NtidX);
+                let gid = ctx.mad_lo_u32(ctaid, ntid, tid);
+
+                let n = ctx.load_param_u32("n");
+                let input_ptr = ctx.load_param_u64("input_ptr");
+                let output_ptr = ctx.load_param_u64("output_ptr");
+
+                // Bounds check
+                let in_bounds = ctx.setp_lt_u32(gid, n);
+                ctx.branch_if_not(in_bounds, "done");
+
+                // Input: f32 at input_ptr + gid * 4
+                let four = ctx.mov_u32_imm(4);
+                let in_off = ctx.mul_wide_u32_reg(gid, four);
+                let in_addr = ctx.add_u64(input_ptr, in_off);
+
+                // Output: f16 at output_ptr + gid * 2
+                let two = ctx.mov_u32_imm(2);
+                let out_off = ctx.mul_wide_u32_reg(gid, two);
+                let out_addr = ctx.add_u64(output_ptr, out_off);
+
+                // Load f32, convert to f16, store
+                let val = ctx.ld_global_f32(in_addr);
+                let half = ctx.cvt_f16_f32(val);
+                ctx.st_global_f16(out_addr, half);
+
+                ctx.label("done");
+                ctx.ret();
+            })
+    }
+}

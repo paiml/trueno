@@ -57,6 +57,7 @@ pub use elementwise::{
     BatchedSwigluKernel,
     BatchedToInterleavedKernel,
     BatchedTransposeKernel,
+    CastF32ToF16Kernel,
     CopySingleHeadKernel,
     ElementwiseMulKernel,
     ExtractSingleHeadKernel,

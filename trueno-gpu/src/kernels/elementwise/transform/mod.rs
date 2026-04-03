@@ -23,7 +23,7 @@ mod element_wise;
 mod layout;
 mod transpose;
 
-pub use element_wise::{BatchedScaleKernel, BatchedSoftmaxKernel};
+pub use element_wise::{BatchedScaleKernel, BatchedSoftmaxKernel, CastF32ToF16Kernel};
 pub use layout::{
     BatchedToInterleavedKernel, CopySingleHeadKernel, ExtractSingleHeadKernel,
     InterleavedToBatchedKernel,

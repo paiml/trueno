@@ -246,6 +246,162 @@ unsafe fn gemm_small_strided_avx2(
     Ok(())
 }
 
+/// No-alloc 8x8 GEMM: stack buffers, SIMD transpose packing, K-unrolled micro-kernel.
+/// For m,n divisible by 8 and m,n,k ≤ 256.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2", enable = "fma")]
+unsafe fn gemm_small_nopack_8x8(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    c: &mut [f32],
+) -> Result<(), TruenoError> {
+    use std::arch::x86_64::*;
+
+    let panels_m = m / 8;
+    let panels_n = n / 8;
+
+    // Stack buffers — no heap allocation.
+    // A panel: 8×K col-major. B panel: K×8 row-major.
+    let mut packed_a = [0.0f32; 8 * 256];
+    let mut packed_b = [0.0f32; 256 * 8];
+    let mut c_micro = [0.0f32; 64];
+
+    unsafe {
+        for ir_panel in 0..panels_m {
+            let ir = ir_panel * 8;
+
+            // Pack A panel: SIMD 8×8 transpose blocks
+            let k_blocks = k / 8;
+            let k_rem = k_blocks * 8;
+            for kb in 0..k_blocks {
+                let p = kb * 8;
+                let r0 = _mm256_loadu_ps(a.as_ptr().add(ir * k + p));
+                let r1 = _mm256_loadu_ps(a.as_ptr().add((ir + 1) * k + p));
+                let r2 = _mm256_loadu_ps(a.as_ptr().add((ir + 2) * k + p));
+                let r3 = _mm256_loadu_ps(a.as_ptr().add((ir + 3) * k + p));
+                let r4 = _mm256_loadu_ps(a.as_ptr().add((ir + 4) * k + p));
+                let r5 = _mm256_loadu_ps(a.as_ptr().add((ir + 5) * k + p));
+                let r6 = _mm256_loadu_ps(a.as_ptr().add((ir + 6) * k + p));
+                let r7 = _mm256_loadu_ps(a.as_ptr().add((ir + 7) * k + p));
+
+                let t0 = _mm256_unpacklo_ps(r0, r1);
+                let t1 = _mm256_unpackhi_ps(r0, r1);
+                let t2 = _mm256_unpacklo_ps(r2, r3);
+                let t3 = _mm256_unpackhi_ps(r2, r3);
+                let t4 = _mm256_unpacklo_ps(r4, r5);
+                let t5 = _mm256_unpackhi_ps(r4, r5);
+                let t6 = _mm256_unpacklo_ps(r6, r7);
+                let t7 = _mm256_unpackhi_ps(r6, r7);
+
+                let u0 = _mm256_shuffle_ps(t0, t2, 0x44);
+                let u1 = _mm256_shuffle_ps(t0, t2, 0xEE);
+                let u2 = _mm256_shuffle_ps(t1, t3, 0x44);
+                let u3 = _mm256_shuffle_ps(t1, t3, 0xEE);
+                let u4 = _mm256_shuffle_ps(t4, t6, 0x44);
+                let u5 = _mm256_shuffle_ps(t4, t6, 0xEE);
+                let u6 = _mm256_shuffle_ps(t5, t7, 0x44);
+                let u7 = _mm256_shuffle_ps(t5, t7, 0xEE);
+
+                let dst = packed_a.as_mut_ptr().add(p * 8);
+                _mm256_storeu_ps(dst, _mm256_permute2f128_ps(u0, u4, 0x20));
+                _mm256_storeu_ps(dst.add(8), _mm256_permute2f128_ps(u1, u5, 0x20));
+                _mm256_storeu_ps(dst.add(16), _mm256_permute2f128_ps(u2, u6, 0x20));
+                _mm256_storeu_ps(dst.add(24), _mm256_permute2f128_ps(u3, u7, 0x20));
+                _mm256_storeu_ps(dst.add(32), _mm256_permute2f128_ps(u0, u4, 0x31));
+                _mm256_storeu_ps(dst.add(40), _mm256_permute2f128_ps(u1, u5, 0x31));
+                _mm256_storeu_ps(dst.add(48), _mm256_permute2f128_ps(u2, u6, 0x31));
+                _mm256_storeu_ps(dst.add(56), _mm256_permute2f128_ps(u3, u7, 0x31));
+            }
+            for p in k_rem..k {
+                for i in 0..8 {
+                    *packed_a.get_unchecked_mut(p * 8 + i) = *a.get_unchecked((ir + i) * k + p);
+                }
+            }
+
+            for jr_panel in 0..panels_n {
+                let jr = jr_panel * 8;
+
+                // Pack B panel: SIMD 8-wide contiguous copies (only once per M-iteration
+                // but B changes per N-panel, so pack here — still only panels_n × K copies)
+                for p in 0..k {
+                    _mm256_storeu_ps(
+                        packed_b.as_mut_ptr().add(p * 8),
+                        _mm256_loadu_ps(b.as_ptr().add(p * n + jr)),
+                    );
+                }
+
+                // Zero C tile accumulator
+                for v in c_micro.iter_mut() {
+                    *v = 0.0;
+                }
+
+                // 8×8 micro-kernel: K-unrolled by 4 for ILP
+                let ap = packed_a.as_ptr();
+                let bp = packed_b.as_ptr();
+                let k4 = k / 4;
+                let k4_rem = k4 * 4;
+
+                let mut c0 = _mm256_setzero_ps();
+                let mut c1 = _mm256_setzero_ps();
+                let mut c2 = _mm256_setzero_ps();
+                let mut c3 = _mm256_setzero_ps();
+                let mut c4 = _mm256_setzero_ps();
+                let mut c5 = _mm256_setzero_ps();
+                let mut c6 = _mm256_setzero_ps();
+                let mut c7 = _mm256_setzero_ps();
+
+                for p4 in 0..k4 {
+                    let p = p4 * 4;
+                    // Unroll K by 4: 4 A loads, 4×8 B broadcasts, 4×8 FMAs
+                    for dp in 0..4 {
+                        let pp = p + dp;
+                        let a_col = _mm256_loadu_ps(ap.add(pp * 8));
+                        let bpp = bp.add(pp * 8);
+                        c0 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp), c0);
+                        c1 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(1)), c1);
+                        c2 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(2)), c2);
+                        c3 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(3)), c3);
+                        c4 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(4)), c4);
+                        c5 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(5)), c5);
+                        c6 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(6)), c6);
+                        c7 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(7)), c7);
+                    }
+                }
+                // K remainder
+                for pp in k4_rem..k {
+                    let a_col = _mm256_loadu_ps(ap.add(pp * 8));
+                    let bpp = bp.add(pp * 8);
+                    c0 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp), c0);
+                    c1 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(1)), c1);
+                    c2 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(2)), c2);
+                    c3 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(3)), c3);
+                    c4 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(4)), c4);
+                    c5 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(5)), c5);
+                    c6 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(6)), c6);
+                    c7 = _mm256_fmadd_ps(a_col, _mm256_set1_ps(*bpp.add(7)), c7);
+                }
+
+                // Accumulate into C (row-major output)
+                // c_micro is column-major (col j at offset j*8), but we write row-major
+                for ii in 0..8 {
+                    let row_base = (ir + ii) * n + jr;
+                    let ci = [c0, c1, c2, c3, c4, c5, c6, c7];
+                    for jj in 0..8 {
+                        // Extract element ii from column jj accumulator
+                        let mut tmp = [0.0f32; 8];
+                        _mm256_storeu_ps(tmp.as_mut_ptr(), ci[jj]);
+                        *c.get_unchecked_mut(row_base + jj) += tmp[ii];
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Small-matrix 8x8 GEMM — stack-packed A/B, striped 8x8 AVX2 kernel.
 /// Fewer tiles than 8x6 (64 outputs vs 48 per tile = 33% fewer tiles).
 /// For dimensions that are multiples of 8.
@@ -399,21 +555,19 @@ pub fn gemm_blis(
         return gemm_reference(m, n, k, a, b, c);
     }
 
-    // Small: stride-based GEMM without packing (skip when profiler active).
+    // Small: optimized no-pack GEMM for ≤256 (skip when profiler active).
     #[cfg(target_arch = "x86_64")]
     if profiler.is_none()
         && m <= 256
         && n <= 256
         && k <= 256
         && m > MR
-        && m % 8 == 0
-        && n % 8 == 0
         && is_x86_feature_detected!("avx2")
         && is_x86_feature_detected!("fma")
     {
         unsafe {
             if m % 8 == 0 && n % 8 == 0 {
-                return gemm_small_8x8(m, n, k, a, b, c);
+                return gemm_small_nopack_8x8(m, n, k, a, b, c);
             }
             return gemm_small_strided_avx2(m, n, k, a, b, c);
         }
